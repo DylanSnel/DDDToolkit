@@ -15,11 +15,9 @@ namespace Examples.Tenancy.Projects.Application.Access.Queries;
 /// is another question, and a key on a project another one still (<see cref="KeysOnProjects"/>).
 /// </remarks>
 /// <param name="Keys">Permission keys, as the request names them.</param>
+[InTenant]
 public sealed record KeysHeldAtRoot(IReadOnlyCollection<string> Keys) : IQuery<IReadOnlyList<string>>, IProjectsRequest
 {
-    /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.InTenant();
-
     /// <summary>
     /// <paramref name="keys"/>, each once and without the retired ones, which are held nowhere; refused when the
     /// catalogue does not know one. The questions treat an unknown key as a mistake in the code that asks, and

@@ -4,27 +4,34 @@ using Mediator;
 namespace Examples.Tenancy.Tenants.Application.Seats.Queries;
 
 /// <summary>
-/// The roles one seat of the caller's tenant holds, where and for which period: another person's access, as the
-/// tenant's administration reads it before it changes any.
+/// The roles one seat of the caller's tenant holds, where and for which period, at every unit or at one: another
+/// person's access, as the tenant's administration reads it before it changes any.
 /// </summary>
 /// <remarks>
 /// Who may read another person's access is this application's choice, and this request is where it makes it: the
 /// package's overview of a seat asks no key, as no question of its directory does. This application lets whoever
-/// holds <see cref="RequiredKey"/> for the whole tenant read it, since it shows a person's roles in every unit, so a
-/// key held at one unit does not. An application that lets a unit's managers see the people of their units would ask
-/// <c>TenancyAccess.InTenant()</c> here, and on Postgres leave the rest to Tenancy's policies, which give a seat
+/// holds <see cref="RequiredKey"/> for the whole tenant read the roles a person holds in every unit, and whoever holds
+/// it at a unit, or above it, read the roles held at that unit, <see cref="At"/>. Which of the two the request asks
+/// depends on its value, so it answers <see cref="IRequireAccess.RequiredAccess"/> itself rather than with an
+/// attribute: no attribute says one case or the other. On Postgres Tenancy's policies ask again, and give a seat
 /// another seat's grants only at the units where it manages grants, seats or units, and all of them to a seat that
-/// manages roles for the whole tenant. Where no policy applies, on another database, this requirement is the only
+/// manages roles for the whole tenant; where no policy applies, on another database, this requirement is the only
 /// rule. A seat reads its own roles in its overview, <see cref="OverviewOfMine"/>, which needs no key.
 /// </remarks>
 /// <param name="Seat">The seat whose roles are read.</param>
-public sealed record SeatGrants(SeatId Seat) : IQuery<IReadOnlyList<SeatGrant>>, ITenantsRequest
+/// <param name="At">
+/// A unit, to read the roles held there, for a caller who holds the key there; <see langword="null"/> for every unit,
+/// which takes the key for the whole tenant.
+/// </param>
+public sealed record SeatGrants(SeatId Seat, OrganizationUnitId? At = null) : IQuery<IReadOnlyList<SeatGrant>>, ITenantsRequest
 {
-    /// <summary>The key the caller holds for the whole tenant: this application's choice.</summary>
+    /// <summary>The key the caller holds, for the whole tenant or at the unit asked about: this application's choice.</summary>
     public const string RequiredKey = TenancyKeys.SeatsManage;
 
-    /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.ForTheWholeTenant(RequiredKey);
+    /// <summary>The key at the unit asked about, there or above it; for the whole tenant where every unit is.</summary>
+    AccessRequirement IRequireAccess.RequiredAccess => At is { } unit
+        ? TenancyAccess.AtUnit(RequiredKey, unit)
+        : TenancyAccess.ForTheWholeTenant(RequiredKey);
 }
 
 /// <summary>A role a seat holds at a unit, for a period: what <see cref="SeatGrants"/> answers, one per grant.</summary>
@@ -60,10 +67,11 @@ public sealed class SeatGrantsHandler(ITenancyReads reads) : IQueryHandler<SeatG
 
         // The placements and grants are the seat's own; the path and the role's name are what the package read beside
         // them, and whether a grant applies is asked at the moment the overview holds for. A role a filter on the role
-        // class would hide has no name, and its grant is shown all the same.
+        // class would hide has no name, and its grant is shown all the same. Asked at a unit, the roles held there.
         return
         [
             .. overview.Seat.Placements
+                .Where(placement => query.At is not { } unit || placement.UnitId == unit)
                 .SelectMany(placement => placement.Grants.Select(grant => new SeatGrant(
                     placement.UnitId,
                     overview.UnitOf(placement.UnitId).Path,

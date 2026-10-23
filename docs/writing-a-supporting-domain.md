@@ -1015,6 +1015,32 @@ the package's docs has to have explained. These can be the package's to write:
   The application calls `services.AddDocumentMemberAccess<IFilingRequest>()`. Two registrations that take
   the same template are refused together, each under its own name, where its class is declared twice.
 
+- **What a request requires, as an attribute.** A package that ships cases of `AccessRequirement` ships an attribute
+  for each case a request names without computing anything, and says, on the attribute's class, which call it stands
+  for. The toolkit's generator writes that call for every request that carries the attribute, one line in the
+  module's interface, and knows no package's attribute by name:
+
+  ```csharp
+  [StatesRequirement(typeof(BillingAccess), nameof(BillingAccess.OnAccount))]   // [OnAccount]: BillingAccess.OnAccount()
+  [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, Inherited = false)]
+  public sealed class OnAccountAttribute : Attribute;
+
+  [KeyMarker(typeof(BillingAccess), nameof(BillingAccess.OnLedger), IdOf = typeof(LedgerAttribute<>))]
+  [AttributeUsage(AttributeTargets.Parameter | AttributeTargets.Property, Inherited = false)]
+  public sealed class OnLedgerAttribute : Attribute;                             // [RequiresKey(key)] with [OnLedger]: OnLedger(key, request.Ledger)
+  ```
+
+  `[StatesRequirement]` hands the call the attribute's constructor arguments in their order and its type arguments as
+  the method's, as `[SeenWith<DocumentId>(key)]` is `MemberAccess.SeenWith<DocumentId>(key)`, and `QueriesOnly = true`
+  says the requirement is for queries only ([DDD00082](diagnostics.md#ddd00082)). `[KeyMarker]` marks where the key of
+  the core's one `[RequiresKey(key)]` is held: the call takes the key and the marked member, and `IdOf` names the
+  template whose classes' ids the member is, as a `[TemplateType]` names one, `Argument` and `IdOfArgument` included,
+  so a marker on another id is [DDD00081](diagnostics.md#ddd00081) where the application's classes are seen.
+  `[KeyMarkerArgument(typeof(OnLedgerAttribute))]` marks one more argument of that call, as Membership's
+  `[ExpectedVersion]` is of `[OnResource]`'s, and `[assembly: KeyWithoutMarker(typeof(...), nameof(...))]` says what a
+  key without any marker means, which one package of an application says: Tenancy, for the whole tenant. The call's
+  types are checked by the compiler in the line written, so a declaration that does not fit is the package's to find
+  in its own tests of a request that carries the attribute.
 - **The package's texts.** The registration that knows the codes offers the texts under them, and an
   application that localizes its failures adds no line: `services.AddFailureTexts<MembershipFailures>(codes.TextKeys)`.
   An offer changes nothing for an application that does not, and the application's own texts come first

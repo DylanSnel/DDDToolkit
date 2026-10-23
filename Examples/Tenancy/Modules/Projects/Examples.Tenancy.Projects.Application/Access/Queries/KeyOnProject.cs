@@ -16,13 +16,11 @@ namespace Examples.Tenancy.Projects.Application.Access.Queries;
 /// </remarks>
 /// <param name="Project">The project.</param>
 /// <param name="Key">A permission key, as the request names it.</param>
+[SeenWith<ProjectId>(RequiredKey)]
 public sealed record KeyOnProject(ProjectId Project, string Key) : IQuery<ProjectKeyHeld>, IProjectsRequest
 {
     /// <summary>The key that decides whether the project is there for the caller at all.</summary>
     public const string RequiredKey = ProjectKeys.View;
-
-    /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => MemberAccess.SeenWith<ProjectId>(RequiredKey);
 }
 
 /// <summary>Whether a caller holds a key on a project, and how it reaches the project when it does.</summary>

@@ -12,6 +12,7 @@ namespace Examples.Tenancy.Projects.Application.Overview.Queries;
 /// of the handler's one statement, not a check made before it.
 /// </remarks>
 /// <param name="Ids">The projects asked about, at most <see cref="MostProjects"/> different ones.</param>
+[SeenWith<ProjectId>(RequiredKey)]
 public sealed record ProjectsById(IReadOnlyList<ProjectId> Ids) : IQuery<IReadOnlyList<ProjectOverview>>, IProjectsRequest
 {
     /// <summary>The key that decides whether a project is there for the caller at all.</summary>
@@ -19,9 +20,6 @@ public sealed record ProjectsById(IReadOnlyList<ProjectId> Ids) : IQuery<IReadOn
 
     /// <summary>The most projects one question is about.</summary>
     public const int MostProjects = 200;
-
-    /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => MemberAccess.SeenWith<ProjectId>(RequiredKey);
 
     /// <summary>
     /// <paramref name="ids"/>, each once; refused when they are more than a question may be about. Every query of

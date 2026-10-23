@@ -441,7 +441,7 @@ The toolkit writes six messages itself, and ships them in English and Dutch:
 | `access.refused` | `ToolkitRefusals.Refused`: a save that a row level security policy or a guard of the database denied, refused by `DDDToolkit.EntityFramework` | none |
 | `access.role-not-allowed` | `ToolkitRefusals.RoleNotAllowed`: a token whose role is on no list of the host's, refused by `DDDToolkit.EntityFramework.Postgres` before anything runs for it | `{Role}` |
 | `access.not-signed-in` | `ToolkitRefusals.NotSignedIn`: a request that requires a signed-in user (`AccessRequirement.SignedIn()`), sent by anybody else | none |
-| `access.system-only` | `ToolkitRefusals.SystemOnly`: a request only the application itself sends (`AccessRequirement.RequiresSystemWork()`), sent by a user or by work nobody began a caller for, and Tenancy's use cases that only system work calls, called by a seat | none |
+| `access.system-only` | `ToolkitRefusals.SystemOnly`: what only the application's own work may do, past the door: Tenancy's use cases that only system work calls, and a handler that only system work may run, reached by a user or by work nobody began a caller for | none |
 
 They are asked last, so a key of the same name in your own resx overrides them, and adding another
 language is adding those six keys to it.

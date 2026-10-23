@@ -21,9 +21,10 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// A closed set: the constructor is private, so the cases nested here are all there are, and each is a record,
 /// so two requirements that say the same are equal and a test can hold every request to the one it is meant to
 /// declare. What is about who is calling and nothing else is the core's: anyone
-/// (<see cref="AccessRequirement.AllowAnonymous"/>), a signed-in user who need not have a seat yet
-/// (<see cref="AccessRequirement.SignedIn"/>), and the application itself
-/// (<see cref="AccessRequirement.RequiresSystemWork"/>).
+/// (<see cref="AccessRequirement.AllowAnonymous"/>) and a signed-in user who need not have a seat yet
+/// (<see cref="AccessRequirement.SignedIn"/>). The application's own work is no case: it is a scope trusted code
+/// begins around the work, <c>TenancyUseCases.BeginSystem()</c> and its kin, and what only it may do the package's
+/// use cases refuse everyone else, with <c>access.system-only</c>.
 /// <para>
 /// A case says the first thing a request requires, the one the request itself can name. What Tenancy's own use
 /// cases ask beyond it, such as who may give a role that manages access, or whether a unit may move with what

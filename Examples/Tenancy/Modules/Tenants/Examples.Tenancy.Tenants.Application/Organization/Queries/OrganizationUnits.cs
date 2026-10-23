@@ -9,11 +9,8 @@ namespace Examples.Tenancy.Tenants.Application.Organization.Queries;
 /// <remarks>
 /// It requires a caller who works in the tenant. Which units a seat reads is the package's to say: its directory answers.
 /// </remarks>
-public sealed record OrganizationUnits : IQuery<IReadOnlyList<UnitListing>>, ITenantsRequest
-{
-    /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.InTenant();
-}
+[InTenant]
+public sealed record OrganizationUnits : IQuery<IReadOnlyList<UnitListing>>, ITenantsRequest;
 
 /// <summary>
 /// Answers <see cref="OrganizationUnits"/> from the Tenancy package's directory: the module's own units, each

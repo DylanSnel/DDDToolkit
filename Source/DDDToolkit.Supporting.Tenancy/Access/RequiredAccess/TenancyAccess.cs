@@ -12,7 +12,12 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// AccessRequirement IRequireAccess.RequiredAccess =&gt; TenancyAccess.RequiresOperator();
 /// </code>
 /// Each answers one of <see cref="TenancyRequirement"/>'s cases, which the check that
-/// <c>services.AddTenancyAccess&lt;TRequests, TContext&gt;()</c> adds holds the caller to.
+/// <c>services.AddTenancyAccess&lt;TRequests, TContext&gt;()</c> adds holds the caller to. Where the requirement reads
+/// no value of the request but the key and a unit it carries, the request says it with an attribute instead, and the
+/// toolkit's generator writes the same call: <see cref="InTenantAttribute"/>, <c>[RequiresKey(key)]</c> for the
+/// whole tenant, with <see cref="AtUnitAttribute"/> on the unit for a key there, and
+/// <see cref="RequiresOperatorAttribute"/>. These methods stay for a requirement computed from the request's
+/// values: <c>Unit is { } unit ? TenancyAccess.AtUnit(key, unit) : TenancyAccess.ForTheWholeTenant(key)</c>.
 /// </summary>
 /// <remarks>
 /// They are the one spelling: the cases' constructors are internal, as the core's are, and these methods make
@@ -60,8 +65,8 @@ public static class TenancyAccess
     /// system work (<see cref="TenancyRequirement.Operator"/>). For queries only.
     /// </summary>
     /// <remarks>
-    /// Named as <c>AccessRequirement.RequiresSystemWork()</c> is, the other case that lets exactly one kind of
-    /// caller through.
+    /// Named for the one kind of caller it lets through. A query says it with <see cref="RequiresOperatorAttribute"/>
+    /// as well.
     /// </remarks>
     public static TenancyRequirement.Operator RequiresOperator() => new();
 }

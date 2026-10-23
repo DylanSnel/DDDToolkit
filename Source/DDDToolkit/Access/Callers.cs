@@ -1,5 +1,6 @@
 using System.Text.Json;
 using DDDToolkit.Abstractions.Access;
+using DDDToolkit.Exceptions;
 
 namespace DDDToolkit.Access;
 
@@ -58,6 +59,58 @@ public static class Callers
         AmbientCaller.Value = null;
         return new Scope(previous);
     }
+
+    /// <summary>
+    /// Refuses everyone but the application's own work that trusted code began on purpose for this flow:
+    /// <see cref="Caller.System"/> or a scoped <see cref="Caller.SystemIn"/>, made current with <see cref="Begin"/>
+    /// or a supporting domain's own way, such as Tenancy's <c>TenancyUseCases.BeginSystem()</c>. For a handler, a
+    /// job's step or a use case that only system work may run: it asks past the door, where the request has passed
+    /// its requirement, who may send it, and the handler says what only the application itself may do.
+    /// <code>
+    /// public async Task HandleAsync(ImportPrices command, CancellationToken cancellationToken)
+    /// {
+    ///     Callers.RequireSystemWork(callers);          // access.system-only for anyone else
+    ///     // ... the import
+    /// }
+    /// </code>
+    /// </summary>
+    /// <remarks>
+    /// Begun means begun: the host's accessor answers system work, and the caller begun for the flow is system work
+    /// too. A flow nobody began a caller for is refused, even where the accessor answers <see cref="Caller.System"/>
+    /// for it, as an <see cref="AmbientCallerAccessor"/> does in a host that does not require explicit callers: in
+    /// such a host that answer is also what a web request gets when no accessor knows requests, so asking
+    /// <c>callers.Current.Kind</c> alone would let it through. Work inside <see cref="BeginNone"/> is refused too, and
+    /// system work begun beside an accessor that answers somebody else for the flow does not run as the system, so it
+    /// is refused as well. The host is asked first, so a host that does require explicit callers fails un-begun work
+    /// with <see cref="NoCallerException"/> instead.
+    /// <para>
+    /// It is no requirement, and a request declares none for system work: the request says who may send it, and the
+    /// scope is begun around the send or inside the handler (see the access requirements guide).
+    /// </para>
+    /// </remarks>
+    /// <param name="callers">The host's accessor, which says who the work runs as.</param>
+    /// <returns>The caller the work runs as: <see cref="Caller.System"/>, or the <see cref="Caller.SystemIn"/> of its scope.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="callers"/> is null.</exception>
+    /// <exception cref="RefusalException">
+    /// <see cref="ToolkitRefusals.SystemOnly"/> for a user, whatever they hold, a caller who did not sign in,
+    /// and work nobody began a caller for.
+    /// </exception>
+    /// <exception cref="NoCallerException">Nobody is calling, and the host requires every flow of work to say who it runs as.</exception>
+    public static Caller RequireSystemWork(ICallerAccessor callers)
+    {
+        ArgumentNullException.ThrowIfNull(callers);
+
+        var current = callers.Current;
+        if (!IsSystemWork(current) || !IsSystemWork(AmbientCaller.Value))
+        {
+            throw ToolkitRefusals.Refuse(ToolkitRefusals.SystemOnly);
+        }
+
+        return current;
+    }
+
+    /// <summary>Whether <paramref name="caller"/> is the application's own work, above the policies or in a scope.</summary>
+    private static bool IsSystemWork(Caller? caller) => caller?.Kind is CallerKind.System or CallerKind.SystemIn;
 
     /// <summary>
     /// The user an access token names, from its claims: <c>sub</c> is the user's id, <c>role</c> their

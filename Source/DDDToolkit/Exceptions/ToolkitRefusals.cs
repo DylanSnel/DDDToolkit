@@ -46,11 +46,12 @@ public static class ToolkitRefusals
     public const string NotSignedIn = "access.not-signed-in";
 
     /// <summary>
-    /// A request requires system work (<c>AccessRequirement.RequiresSystemWork()</c>), and the caller is not the
-    /// application itself: a signed-in user, whatever they hold, a caller who did not sign in, or work nobody began
-    /// a caller for. It is <see cref="RefusalKind.NotPermitted"/>, and no key or role gives it. The core's
-    /// <c>CallerAccessCheck</c> makes it, before the handler runs, and a supporting domain's use case that only
-    /// system work may call refuses a seat with it too, so "only the application itself" has one code. No arguments.
+    /// What only the application's own work may do, and the caller is not that work: a signed-in user, whatever
+    /// they hold, a caller who did not sign in, or work nobody began a caller for. It is
+    /// <see cref="RefusalKind.NotPermitted"/>, and no key or role gives it. System work is a scope trusted code
+    /// begins around the work, not a requirement a request declares, so this is made past the door: by a
+    /// supporting domain's use case that only system work may call, such as Tenancy's provisioning of a tenant,
+    /// and by a handler that only system work may run. So "only the application itself" has one code. No arguments.
     /// </summary>
     public const string SystemOnly = "access.system-only";
 

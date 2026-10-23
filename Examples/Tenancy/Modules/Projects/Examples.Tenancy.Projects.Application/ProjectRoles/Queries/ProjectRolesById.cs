@@ -12,13 +12,11 @@ namespace Examples.Tenancy.Projects.Application.ProjectRoles.Queries;
 /// alike. The keys of each are answered as <see cref="TenantProjectRoles"/> answers them.
 /// </remarks>
 /// <param name="Ids">The roles asked about, at most <see cref="MostRoles"/> different ones.</param>
+[InTenant]
 public sealed record ProjectRolesById(IReadOnlyList<ProjectRoleId> Ids) : IQuery<IReadOnlyList<ProjectRoleListing>>, IProjectsRequest
 {
     /// <summary>The most roles one question is about.</summary>
     public const int MostRoles = 200;
-
-    /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.InTenant();
 }
 
 /// <summary>

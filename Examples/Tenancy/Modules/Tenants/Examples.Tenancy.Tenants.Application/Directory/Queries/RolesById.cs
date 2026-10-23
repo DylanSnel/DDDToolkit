@@ -15,11 +15,8 @@ namespace Examples.Tenancy.Tenants.Application.Directory.Queries;
 /// (<see cref="RoleListing.KeysKey"/>), as in the list of them.
 /// </remarks>
 /// <param name="Ids">The roles asked about.</param>
-public sealed record RolesById(IReadOnlyList<RoleId> Ids) : IQuery<IReadOnlyList<RoleListing>>, ITenantsRequest
-{
-    /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.InTenant();
-}
+[InTenant]
+public sealed record RolesById(IReadOnlyList<RoleId> Ids) : IQuery<IReadOnlyList<RoleListing>>, ITenantsRequest;
 
 /// <summary>
 /// Answers <see cref="RolesById"/> from the Tenancy package's directory, and whether the caller is answered the

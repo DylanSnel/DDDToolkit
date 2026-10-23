@@ -29,11 +29,9 @@ namespace Examples.Tenancy.Tenants.Application.Invitations.Commands;
 /// requires (<c>tenants.seat.display-name</c>). Tenancy keeps none, and the invitation suggests none. Sent again for
 /// an invitation the person accepted before, it changes nothing: the answer is the seat that acceptance made.
 /// </param>
+[SignedIn]
 public sealed record AcceptInvitation(string Token, string? DisplayName) : ICommand<SeatId>, ITenantsRequest
 {
-    /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.SignedIn();
-
     /// <summary>Says that it accepts and not with which token: a record prints its members, and a token must not end up in a log.</summary>
     public override string ToString() => nameof(AcceptInvitation);
 }

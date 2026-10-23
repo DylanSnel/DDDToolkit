@@ -11,11 +11,8 @@ namespace Examples.Tenancy.Projects.Application.ProjectRoles.Queries;
 /// Whoever works in the tenant reads them, and the keys of each for a caller who holds
 /// <see cref="ProjectRoleListing.KeysKey"/> for the whole tenant (<see cref="ProjectRoleListing"/>).
 /// </remarks>
-public sealed record TenantProjectRoles : IQuery<IReadOnlyList<ProjectRoleListing>>, IProjectsRequest
-{
-    /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.InTenant();
-}
+[InTenant]
+public sealed record TenantProjectRoles : IQuery<IReadOnlyList<ProjectRoleListing>>, IProjectsRequest;
 
 /// <summary>Answers <see cref="TenantProjectRoles"/> in two statements, on a reading of this query's own.</summary>
 /// <param name="reads">Where project roles are read: a context per query.</param>

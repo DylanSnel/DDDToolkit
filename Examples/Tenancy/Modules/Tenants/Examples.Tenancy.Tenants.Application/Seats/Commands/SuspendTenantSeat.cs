@@ -11,11 +11,8 @@ namespace Examples.Tenancy.Tenants.Application.Seats.Commands;
 /// for what taking each of the seat's roles away would need; and it keeps the tenant an administrator.
 /// </remarks>
 /// <param name="Seat">The seat.</param>
-public sealed record SuspendTenantSeat(SeatId Seat) : ICommand, ITenantsRequest
-{
-    /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage);
-}
+[RequiresKey(TenancyKeys.SeatsManage)]
+public sealed record SuspendTenantSeat(SeatId Seat) : ICommand, ITenantsRequest;
 
 /// <summary>Handles <see cref="SuspendTenantSeat"/> with the Tenancy package's use case, which checks the caller, decides and saves.</summary>
 /// <param name="seats">The package's use cases that change a seat.</param>

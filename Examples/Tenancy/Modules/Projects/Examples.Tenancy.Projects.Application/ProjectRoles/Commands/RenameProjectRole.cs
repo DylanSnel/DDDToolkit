@@ -11,13 +11,11 @@ namespace Examples.Tenancy.Projects.Application.ProjectRoles.Commands;
 /// <param name="Id">The role.</param>
 /// <param name="Name">Its name, as it is to be.</param>
 /// <param name="Description">What it is for, as it is to be; <see langword="null"/> clears it.</param>
+[RequiresKey(RequiredKey)]
 public sealed record RenameProjectRole(ProjectRoleId Id, string Name, string? Description) : ICommand, IProjectsRequest
 {
     /// <summary>The key the caller holds for the whole tenant.</summary>
     public const string RequiredKey = ProjectRoleListing.KeysKey;
-
-    /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.ForTheWholeTenant(RequiredKey);
 }
 
 /// <summary>Handles <see cref="RenameProjectRole"/>: loads the role, renames it and saves.</summary>

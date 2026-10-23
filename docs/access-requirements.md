@@ -1,14 +1,61 @@
 # Access requirements
 
-A command or a query says beforehand what it takes to send it: a signed-in user, a key held on the thing it
-is about, a key for the whole tenant, or only the application itself. `DDDToolkit.Access` has the types for
-saying that on the request and for holding the caller to it before the handler runs. They are part of the
-core package, free of any dispatcher and of any [supporting domain](writing-a-supporting-domain.md):
+Three questions stand between a caller and a row of your database, and each is answered in one place of its own:
+
+- **Who may send the request.** Its requirement, which the request states and the module's checks hold the caller
+  to at the door, before the handler runs: anyone, a signed-in user, a key held for the whole tenant, at a unit or on
+  the thing the request is about. One attribute on the request, where a review reads it.
+- **With what rights the code runs.** The caller the work runs as: the person who sent the request, or system work,
+  which trusted code begins on purpose for what no caller may do, a handler, a job or a seeder, around the work it
+  does, and which ends with it.
+- **Which rows it may touch.** Row level security, which holds every row the work reads or writes to the caller it
+  runs as, whatever the code above it did ([Row level security](row-level-security.md)).
+
+The three are kept apart on purpose. A requirement never says what the work may then do, so a request anyone may
+send gives its sender nothing by being sent; system work is never something a request requires, so no door opens
+because the code behind it runs with more; and the database asks again, so a door that let too much through is not
+the last word.
+
+```mermaid
+flowchart LR
+    Caller["a caller"] --> Door["who may send it:<br/>the requirement"]
+    Door -- "not met" --> Refused["refused,<br/>with a code"]
+    Door -- "met" --> Work["with what rights:<br/>the caller, or system<br/>work begun on purpose"]
+    Work -- "a rule only it reads" --> Refused
+    Work --> Rows[("which rows:<br/>row level security")]
+    Rows -- "a row the policies refuse" --> Refused
+```
+
+<details>
+<summary>Show the code: the three, for a form anyone may send</summary>
+
+```csharp shortened
+[AllowAnonymousCallers]                                                         // who may send it: anyone
+public sealed record RequestQuote(string Email, string Product) : IBillingRequest;
+
+public sealed class RequestQuoteHandler(IQuoteStore quotes) : IHandler<RequestQuote>
+{
+    public async Task HandleAsync(RequestQuote command, CancellationToken cancellationToken)
+    {
+        using (Callers.Begin(Caller.SystemIn("billing")))                         // with what rights: system work, begun here
+        {
+            await quotes.AddAsync(command.Email, command.Product, cancellationToken);   // which rows: billing's policies
+        }
+    }
+}
+```
+
+</details>
+
+`DDDToolkit.Access` has the types for the first: saying it on the request, and holding the caller to it before the
+handler runs. They are part of the core package, free of any dispatcher and of any
+[supporting domain](writing-a-supporting-domain.md):
 
 | Type | What it is |
 |---|---|
 | `IRequireAccess` | What a request implements: one member, `RequiredAccess`. |
-| `AccessRequirement` | What a request answers it with: a record that says what is required. The core spells the cases about who is calling; the others come from whoever can decide them. |
+| `[AllowAnonymousCallers]`, `[SignedIn]`, `[RequiresKey(key)]` | The core's attributes a request states its requirement with; a package ships the rest of the vocabulary the same way. |
+| `AccessRequirement` | What `RequiredAccess` answers: a record that says what is required. The core spells the cases about who is calling; the others come from whoever can decide them. |
 | `IAccessCheck` | What decides the cases of one owner: a package ships one, a module writes one for its own. |
 | `CallerAccessCheck` | The core's check of who is calling, first in every module's set. |
 | `AccessChecks<TRequests>` | The checks of one module. `RequireAsync(request)` holds a request to what it declared, and fails closed. |
@@ -22,131 +69,272 @@ Who is calling is a separate question, answered by the host: [running queries as
 A module declares one interface of its own that derives from `IRequireAccess`, and every command and query
 of the module implements it. The interface is yours to write because it is what tells one module's requests
 from another's: the checks are registered for it, so a request of billing is never held to the checks of
-shipping.
+shipping. Mark it `[AccessRequests]` and declare it `partial`, so the toolkit's generator can write into it what its
+requests' attributes say.
+
+A request says what it requires with an attribute where the requirement reads no value of the request but a key and
+an id it carries, which is nearly always. It answers `RequiredAccess` itself where the requirement is computed from
+its values, and for a case of your module's own, which no attribute stands for:
 
 ```csharp
 [EntityId<Guid>] public readonly partial record struct InvoiceId;
 
-public interface IBillingRequest : IRequireAccess;              // one interface per module
+[AccessRequests]
+public partial interface IBillingRequest : IRequireAccess;      // one interface per module
+
+[SignedIn]
+public sealed record MyInvoices : IBillingRequest;
+
+[AllowAnonymousCallers]
+public sealed record ListPlans : IBillingRequest;
 
 public sealed record CloseInvoice(InvoiceId Invoice) : IBillingRequest
 {
     AccessRequirement IRequireAccess.RequiredAccess => new BillingAccess.OnInvoice("billing.close", Invoice);
 }
-
-public sealed record MyInvoices : IBillingRequest
-{
-    AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.SignedIn();
-}
-
-public sealed record ListPlans : IBillingRequest
-{
-    AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.AllowAnonymous();
-}
 ```
 
-- **The member is implemented explicitly,** so the requirement stands next to the request's own fields
-  without becoming one of them: it is not serialized with the request and not part of its shape.
+- **The attribute is plain C# by the time it runs.** The generator turns it into the call it stands for at compile
+  time, one line per request, in the module's interface, which implements `RequiredAccess` with it:
+  `MyInvoices => AccessRequirement.SignedIn()`. Nothing is read by reflection, nothing is looked up when a request
+  is sent, and the request need not be partial. A request that answers `RequiredAccess` itself answers with its own,
+  which C# takes over the interface's, so every reader of the property reads the same requirement either way: the
+  module's checks, a handler that asks them again, a test.
+- **One requirement, said one way.** An attribute and the property on one request is
+  [DDD00078](diagnostics.md#ddd00078); two requirement attributes, [DDD00079](diagnostics.md#ddd00079). An
+  interface that is not `partial` has nothing written into it, and a request's attributes there are
+  [DDD00083](diagnostics.md#ddd00083), with the line to write.
+- **The member is implemented explicitly,** where a request answers it, so the requirement stands next to the
+  request's own fields without becoming one of them: it is not serialized with the request and not part of its
+  shape.
 - **A requirement says what is asked, never who may.** It carries a key and the ids the request names. The
   check reads the rest where it is kept. What a requirement cannot say, a second key or a rule about what is
   given to whom, stays in the handler, in plain sight, or in the use case of the package the handler calls.
 - **There is no requirement that says nothing.** A request that declares none is stopped, so a requirement
-  somebody forgot never opens a door. A request anyone may send says so: `AccessRequirement.AllowAnonymous()`,
-  named as ASP.NET Core's `[AllowAnonymous]` is, so it reads as meant in a review where `None` would read as
-  forgotten.
+  somebody forgot never opens a door, and where the interface is partial it is [DDD00077](diagnostics.md#ddd00077)
+  when it builds (the compiler's own CS0535 where it is not). A request anyone may send says so:
+  `[AllowAnonymousCallers]`, or `AccessRequirement.AllowAnonymous()`, so it reads as meant in a review where `None`
+  would read as forgotten. The attribute is not called `[AllowAnonymous]`, because ASP.NET Core's
+  `Microsoft.AspNetCore.Authorization` and HotChocolate's `HotChocolate.Authorization` each have an attribute of
+  that name: a route or a resolver that imports either beside `DDDToolkit.Access` would not compile where it wrote
+  it.
 - **A requirement is a record,** so two that say the same are equal, and a test can hold every request to
   the one it is meant to declare.
+
+<details>
+<summary>Show the code: what the generator writes into the interface</summary>
+
+```csharp title="BillingAccessBehavior.g.cs, shortened"
+partial interface IBillingRequest
+{
+    AccessRequirement IRequireAccess.RequiredAccess => this switch
+    {
+        ListPlans => AccessRequirement.AllowAnonymous(),
+        MyInvoices => AccessRequirement.SignedIn(),
+        _ => throw new InvalidOperationException("... declares no access requirement ..."),   // a request of another project
+    };
+}
+```
+
+`CloseInvoice` has no line: it answers the property itself. The same file holds the
+[behavior](#the-generated-behavior-with-mediator) where the project uses Mediator, and the lines alone where it does
+not, since whatever asks the checks reads them.
+
+</details>
 
 ## The vocabulary
 
 Every request says what it requires with one of a few requirements, each named for what it requires and
-spelled on whoever decides it:
+spelled on whoever decides it. The attribute is the short way to say it; the call beside it is what the attribute
+stands for, and what a request that computes its requirement writes:
 
-| A request requires | It answers `RequiredAccess` with | Let through | Anyone else is refused with |
-|---|---|---|---|
-| anyone, a caller who did not sign in too | `AccessRequirement.AllowAnonymous()` | everyone: nobody is asked | |
-| a signed-in user, who need not hold anything yet | `AccessRequirement.SignedIn()` | a user who signed in, an anonymous sign-in of the identity provider too | `access.not-signed-in` |
-| a caller who works in the tenant | `TenancyAccess.InTenant()`, of [Tenancy](tenancy.md#what-a-request-requires-of-its-caller) | a seat in the tenant the request was sent for, and system work there | the caller's own reason, such as `tenancy.not-seated` |
-| a key for the whole tenant | `TenancyAccess.ForTheWholeTenant(key)` | whoever holds the key at the tenant's root now | `tenancy.not-permitted`, naming the key |
-| a key at a unit | `TenancyAccess.AtUnit(key, unit)` | whoever holds the key at that unit now, there or above it | `tenancy.not-permitted`, with the key and the unit |
-| a key on a resource | `MemberAccess.On(key, resource)`, of [Membership](membership.md#a-document-and-the-people-it-is-shared-with) | whoever holds the key on it, through its members or from above | the resource's `not-found` or `not-permitted` |
-| a query that shows the resources a key is held on | `MemberAccess.SeenWith<TResourceId>(key)`, of [Membership](membership.md#inside-your-own-statements) | every caller who signed in, and system work: the query's own statement leaves out what the caller does not hold the key on | the caller's own reason where it is nobody; the resource's `not-permitted`, naming the key, for a caller who did not sign in |
-| one of the application's operators | `TenancyAccess.RequiresOperator()` | a signed-in user with an [operator's token role](tenancy.md#operators) | `tenancy.operators-only` |
-| only the application itself | `AccessRequirement.RequiresSystemWork()` | system work trusted code began: `Caller.System`, or `Caller.SystemIn(scope)` | `access.system-only`, for every user whatever they hold, and for work nobody began a caller for |
-| something only your module knows | a record of your own | what your check lets through | your module's code |
+| A request requires | Its attribute | Or, computed, `RequiredAccess =>` | Let through | Anyone else is refused with |
+|---|---|---|---|---|
+| anyone, a caller who did not sign in too | `[AllowAnonymousCallers]` | `AccessRequirement.AllowAnonymous()` | everyone: nobody is asked | |
+| a signed-in user, who need not hold anything yet | `[SignedIn]` | `AccessRequirement.SignedIn()` | a user who signed in, an anonymous sign-in of the identity provider too | `access.not-signed-in` |
+| a caller who works in the tenant | `[InTenant]`, of [Tenancy](tenancy.md#what-a-request-requires-of-its-caller) | `TenancyAccess.InTenant()` | a seat in the tenant the request was sent for, and system work there | the caller's own reason, such as `tenancy.not-seated` |
+| a key for the whole tenant | `[RequiresKey(key)]` | `TenancyAccess.ForTheWholeTenant(key)` | whoever holds the key at the tenant's root now | `tenancy.not-permitted`, naming the key |
+| a key at a unit | `[RequiresKey(key)]`, `[AtUnit]` on the unit | `TenancyAccess.AtUnit(key, unit)` | whoever holds the key at that unit now, there or above it | `tenancy.not-permitted`, with the key and the unit |
+| a key on a resource | `[RequiresKey(key)]`, `[OnResource]` on the resource, `[ExpectedVersion]` on the version read, of [Membership](membership.md#a-document-and-the-people-it-is-shared-with) | `MemberAccess.On(key, resource, expectedVersion)` | whoever holds the key on it, through its members or from above | the resource's `not-found` or `not-permitted` |
+| a query that shows the resources a key is held on | `[SeenWith<TResourceId>(key)]`, of [Membership](membership.md#inside-your-own-statements) | `MemberAccess.SeenWith<TResourceId>(key)` | every caller who signed in, and system work: the query's own statement leaves out what the caller does not hold the key on | the caller's own reason where it is nobody; the resource's `not-permitted`, naming the key, for a caller who did not sign in |
+| one of the application's operators, on a query | `[RequiresOperator]` | `TenancyAccess.RequiresOperator()` | a signed-in user with an [operator's token role](tenancy.md#operators) | `tenancy.operators-only` |
+| something only your module knows | | a record of your own | what your check lets through | your module's code |
 
-The three of `AccessRequirement` are about who is calling and nothing else, so the core decides them, and a
-host without any supporting domain has them. Who is calling is what the host's `ICallerAccessor` answers; in a
-host that [requires explicit callers](row-level-security.md#fail-closed-callers), work nobody began a caller
-for fails with `NoCallerException` before it is let through or refused.
+The two of `AccessRequirement` are about who is calling and nothing else, so the core decides them, and a host
+without any supporting domain has them. Who is calling is what the host's `ICallerAccessor` answers; in a host that
+[requires explicit callers](row-level-security.md#fail-closed-callers), work nobody began a caller for fails with
+`NoCallerException` before it is let through or refused.
 
-- **`SignedIn()`** asks whether the caller's token names a user. An anonymous sign-in, such as Supabase Auth
+- **`[SignedIn]`** asks whether the caller's token names a user. An anonymous sign-in, such as Supabase Auth
   makes for a visitor without an account, names one too, marked with the `is_anonymous` claim. A handler that
   should take only an account with a verified identity refuses that claim itself, as the registration that
   [provisions a tenant](tenancy.md#who-may-ask-and-what-the-work-runs-as) does, and as Tenancy's acceptance of
-  an invitation does.
-- **`RequiresSystemWork()`** takes only system work that trusted code began, with
-  `Callers.Begin(Caller.System)`, `Callers.Begin(Caller.SystemIn(scope))` or a supporting domain's own way,
-  such as Tenancy's `TenancyWork`. A host that does not require explicit callers answers the application
-  itself for work nobody began a caller for, and with no accessor that knows requests a web request gets the
-  same answer; the door does not take that default for system work.
+  an invitation does. The application's own work is nobody's sign-in, and is refused.
+- **There is no requirement for the application's own work.** System work is a scope, not a door:
+  [System work is a scope](#system-work-is-a-scope) says how a request sent by it, or a handler that needs it,
+  is written.
 
-Each is a method on the class of whoever decides it, so the requirements read alike side by side:
+Each call is a method on the class of whoever decides it, so the requirements read alike side by side:
 `AccessRequirement.SignedIn()`, `TenancyAccess.InTenant()`, `MemberAccess.On(key, resource)`. A method rather
 than a constructor, so a case closed over your own id takes it from the argument: `TenancyAccess.AtUnit(key,
-unit)` is closed over your unit id without your writing it. And `AllowAnonymous()`, `SignedIn()` and
-`RequiresSystemWork()` say who is let through rather than what is checked, as the name a reviewer looks for.
+unit)` is closed over your unit id without your writing it. And `AllowAnonymous()` and `SignedIn()` say who is let
+through rather than what is checked, as the name a reviewer looks for. What each attribute stands for is its
+package's to say, with an attribute of the core's on the attribute's class, `[StatesRequirement]` or
+`[KeyMarker]`: the generator knows none of them by name, and a module can declare one for a case of its own the
+same way ([Writing your own supporting domain](writing-a-supporting-domain.md)).
 
-## Who may send it, and what it runs with
+### Where the key is held
 
-Three things stand between a caller and a row, and each asks what it alone can answer.
+`[RequiresKey(key)]` is one attribute, wherever the key is held. A marker on one of the request's members says
+where: none for the whole tenant, `[AtUnit]` at that unit or above it, `[OnResource]` on that resource through its
+members, with `[ExpectedVersion]` beside it on the version the caller read, which the check compares only once the
+caller may act. A marker goes on a positional parameter of a record as it is, or on a property; `[property: AtUnit]`
+is read as well. Nothing is named by a string: no `nameof`, no member's name in an attribute.
 
-- **The request's requirement** says who may send the request, and the module's checks hold the caller to it
-  before the handler runs. It is one line on the request, where a review reads it.
-- **The handler**, and the use case of a package it hands the request to, asks what only it can read: who
-  may give a role that manages access, where a unit hangs now, whether a project is still open. A package
-  keeps such rules inside its use cases; a request never spells them.
-- **Row level security** holds every row the work reads or writes to the caller it runs as, whatever the code
-  above it did ([Row level security](row-level-security.md)).
+```csharp
+[RequiresKey(BillingKeys.CloseTheBooks)]                                     // for the whole tenant
+public sealed record CloseTheBooks(int Year) : IBillingRequest;
 
-**Who may send a request is not what its handler runs with.** The requirement decides who gets as far as the
-handler. The work then runs as the caller, unless the handler begins system work itself, in trusted code, for
-what no caller of the request could do: a registration form is `AllowAnonymous()`, and the handler that
-provisions a tenant for it begins the system work that provisions it. With `SignedIn()`, for a signed-in user
-who registers an organization, or `RequiresSystemWork()`, for a job only the application runs, the handler
-begins the same system work. What changes with the requirement is who gets that far, and where the handler
-finds what system work cannot tell it, such as who becomes the first administrator: the caller's own token
-for `SignedIn()`, an account the handler makes for the address on the form for `AllowAnonymous()`, and the
-request itself for a job. The caller gets nothing more by it, since the handler alone says what that system
-work does. [Provisioning a tenant](tenancy.md#who-may-ask-and-what-the-work-runs-as) shows it with Tenancy.
+[RequiresKey(BillingKeys.OpenLedger)]                                        // at the unit, or above it
+public sealed record OpenLedger(string Name, [AtUnit] OrganizationUnitId Unit) : IBillingRequest;
+
+[RequiresKey(DocumentKeys.Share)]                                            // on the document, through its members
+public sealed record ShareDocument([OnResource] DocumentId Document, UserId With, [ExpectedVersion] long? ExpectedVersion = null) : IDocumentsRequest;
+
+[RequiresKey(BillingKeys.ArchiveLedger)]                                     // an ordinary property takes a marker too
+public sealed class ArchiveLedger : IBillingRequest
+{
+    [AtUnit] public required OrganizationUnitId Unit { get; init; }
+}
+```
+
+The key is a constant, one of the catalogue's, as an attribute's argument is: a request may name its own constant,
+`[RequiresKey(RequiredKey)]` beside `public const string RequiredKey = ProjectKeys.Edit;`, where its handler or a
+list of abilities reads the same key.
+
+### What combines
+
+A request carries one requirement, and a marker says where for the key of that one. What does not combine is
+reported where it is written, as an error, since a request that reads as if it said what it requires and says
+something else is a door a review would take for closed:
+
+| `[RequiresKey(key)]` with | no marker | `[AtUnit]` | `[OnResource]` | `[OnResource]` and `[ExpectedVersion]` |
+|---|---|---|---|---|
+| is | `ForTheWholeTenant(key)` | `AtUnit(key, unit)` | `On(key, resource)` | `On(key, resource, version)` |
+
+| On one request | Goes with | Reported otherwise |
+|---|---|---|
+| a requirement attribute | nothing else that says what is required: no second attribute, and not the property | [DDD00079](diagnostics.md#ddd00079), [DDD00078](diagnostics.md#ddd00078) |
+| `[AtUnit]` or `[OnResource]` | `[RequiresKey]`, one of the two, on a member of the id it marks that is never null | [DDD00080](diagnostics.md#ddd00080), [DDD00081](diagnostics.md#ddd00081) |
+| `[ExpectedVersion]` | `[OnResource]`, on a `long?` | [DDD00080](diagnostics.md#ddd00080), [DDD00081](diagnostics.md#ddd00081) |
+| `[RequiresKey]` without a marker | a package that says where such a key is held, Tenancy | [DDD00080](diagnostics.md#ddd00080) |
+| `[SeenWith<TResourceId>(key)]`, `[RequiresOperator]` | a query | [DDD00082](diagnostics.md#ddd00082) on a command or a plain request of Mediator's |
+| any of them | one module interface of the same project, `[AccessRequests]` and `partial` | [DDD00083](diagnostics.md#ddd00083) |
+
+`[AllowAnonymousCallers]` with `[RequiresKey]` would open the door the key closes, and `[InTenant]` with
+`[RequiresKey]` says less than the key alone: a caller who holds a key at a tenant's unit works in that tenant.
+
+### A requirement computed from the request
+
+Where the request's values decide which requirement it is, no attribute can say it, and the request answers the
+property itself. The Tenancy sample's `SeatGrants` reads the roles a seat holds in every unit with the key for the
+whole tenant, and those at one unit with the key there:
+
+```csharp
+public sealed record ListLedgers(OrganizationUnitId? Unit) : IBillingRequest
+{
+    AccessRequirement IRequireAccess.RequiredAccess => Unit is { } unit
+        ? TenancyAccess.AtUnit(BillingKeys.Read, unit)
+        : TenancyAccess.ForTheWholeTenant(BillingKeys.Read);
+}
+```
+
+A unit that may be left out marked `[AtUnit]` is [DDD00081](diagnostics.md#ddd00081) for that reason: the
+requirement is computed from whether it is given.
+
+## System work is a scope
+
+A requirement says who may send a request, and nothing about what the work then runs with. The application's own
+work, system work, is no requirement at all: it is a scope that trusted code begins on purpose around the work,
+`Callers.Begin(Caller.System)`, `Callers.Begin(Caller.SystemIn(scope))` or a supporting domain's own way, such as
+Tenancy's `TenancyUseCases.BeginSystem()` and `BeginSystemIn(tenant)`. When its result is disposed, the caller before
+it is current again.
+
+- **Trusted code begins it, around the send or inside the handler.** A seeder, a job or an import begins it and
+  calls the use case inside it, sending no request at all, as the sample's seeding provisions its tenants, or sends
+  a request inside it, as the same seeding sends `MarkTenantAsDemo` in each tenant. A handler begins it itself for
+  the one thing its caller could not do, as the registration that
+  [provisions a tenant](tenancy.md#who-may-ask-and-what-the-work-runs-as) does.
+- **The request says who may send it, as any other does.** A request system work sends in a tenant is sent by a
+  caller in that tenant, `[InTenant]`, which lets the system work there through; a development route that
+  provisions is `[AllowAnonymousCallers]`, a registration a signed-in person sends `[SignedIn]`. System work is
+  nobody's sign-in, so a request that only system work outside any tenant sends, or one of a module without
+  Tenancy, passes `[AllowAnonymousCallers]` alone: declare that, hold it to the list of requests anyone may send
+  ([Holding it with a test](#holding-it-with-a-test)), so it is a decision a review sees, and refuse everyone else
+  in its handler. Where nothing but trusted code ever sends it, calling the work inside the scope needs no request.
+- **What only system work may do is refused past the door.** The handler, or the use case of the package it calls,
+  asks who it runs as and refuses everyone else with `access.system-only` (`ToolkitRefusals.SystemOnly`).
+  `Callers.RequireSystemWork(callers)` does it in any host; in a tenant, Tenancy's own answer says it with the
+  tenant, `answers.RequireTenant().BySystem`, as the sample's `MarkTenantAsDemo` does, and Tenancy's provisioning
+  refuses everyone else itself. A caller who sent the request gets nothing more by it, since the handler alone says
+  what the system work does.
+- **Begun means begun.** Ask `Callers.RequireSystemWork`, not `callers.Current.Kind`. In a host that does not
+  [require explicit callers](row-level-security.md#fail-closed-callers), the accessor answers the application
+  itself for any flow nobody began a caller for, a web request it does not know included; only the caller begun for
+  the flow, `Callers.Ambient`, shows that trusted code began the work, and the method asks both.
 
 ```mermaid
-flowchart TB
-    Caller["a caller"] --> Door["the request's<br/>requirement"]
-    Door -- "not met" --> Refused["refused,<br/>with a code"]
-    Door -- "met" --> Handler["the handler, and the<br/>use case it calls"]
-    Handler -- "a rule only it can read" --> Refused
-    Handler -- "as the caller, or as<br/>system work it begins" --> Database[("row level<br/>security")]
-    Database -- "a row the policies refuse" --> Refused
+sequenceDiagram
+    participant Seeder
+    participant Door as Requirement
+    participant Handler as MarkTenantAsDemo's handler
+    Seeder->>Seeder: begins system work in the tenant
+    Seeder->>Door: MarkTenantAsDemo
+    Door->>Handler: [InTenant]: let through
+    Handler->>Handler: only system work: it is
+    Handler-->>Seeder: marked
+    Seeder->>Seeder: the scope ends
 ```
 
 <details>
-<summary>Show the code: a form anyone may send, whose handler begins system work</summary>
+<summary>Show the code: system work begun around the send, and a handler that lets only it through</summary>
 
-```csharp
-public sealed record RequestQuote(string Email, string Product) : IBillingRequest
+```csharp shortened
+// The seeding, trusted code: system work in the tenant, around what it sends
+using (TenancyUseCases.BeginSystemIn(tenant.Id))
 {
-    AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.AllowAnonymous();  // who may send it
+    await sender.Send(new MarkTenantAsDemo(), cancellationToken);
 }
 
-public sealed class RequestQuoteHandler(IQuoteStore quotes) : IHandler<RequestQuote>
+// Who may send it: a caller in the tenant, which the system work there is
+[InTenant]
+public sealed record MarkTenantAsDemo : ICommand, ITenantsRequest;
+
+public sealed class MarkTenantAsDemoHandler(TenancyUseCases.IStore store, SampleAnswers answers) : ICommandHandler<MarkTenantAsDemo>
 {
-    public async Task HandleAsync(RequestQuote command, CancellationToken cancellationToken)
+    public async ValueTask<Unit> Handle(MarkTenantAsDemo command, CancellationToken cancellationToken)
     {
-        using (Callers.Begin(Caller.SystemIn("billing")))                                  // what it runs with
+        var scope = answers.RequireTenant();
+        if (!scope.BySystem)
         {
-            await quotes.AddAsync(command.Email, command.Product, cancellationToken);    // the one thing it does so
+            throw ToolkitRefusals.Refuse(ToolkitRefusals.SystemOnly);           // what only system work may do
         }
+
+        // ... load the tenant, mark it, save
+    }
+}
+
+// A module without Tenancy: an import a job sends inside Callers.Begin(Caller.System)
+[AllowAnonymousCallers]                                                       // system work is nobody's sign-in
+public sealed record ImportPrices(string File) : ICommand, IBillingRequest;
+
+public sealed class ImportPricesHandler(ICallerAccessor callers, IPriceList prices) : ICommandHandler<ImportPrices>
+{
+    public async ValueTask<Unit> Handle(ImportPrices command, CancellationToken cancellationToken)
+    {
+        Callers.RequireSystemWork(callers);                                   // access.system-only for anyone else
+        await prices.ImportAsync(command.File, cancellationToken);
+        return Unit.Value;
     }
 }
 ```
@@ -160,9 +348,9 @@ with the `IAccessCheck` that does:
 
 | The case is about | Its requirement | Its check is added with |
 |---|---|---|
-| who is calling: anyone, a signed-in user, the application itself | `AccessRequirement.AllowAnonymous()`, `SignedIn()` and `RequiresSystemWork()`, of the core | nothing: every module's set asks the core's `CallerAccessCheck` first, and nobody has to decide that anyone may send a request |
-| a tenant: a seat in it, a key for the whole of it or at a unit, operators | `TenancyAccess.InTenant()` and the rest of `TenancyRequirement`'s cases, of [Tenancy](tenancy.md#what-a-request-requires-of-its-caller) | `services.AddTenancyAccess<...>()`, for each module |
-| a resource with members: a key held on it | `MemberAccess.On(key, resource)`, of [Membership](membership.md#a-document-and-the-people-it-is-shared-with) | `services.AddDocumentMemberAccess<IFilingRequest>()`, generated for each resource |
+| who is calling: anyone, a signed-in user | `[AllowAnonymousCallers]` and `[SignedIn]`, `AccessRequirement.AllowAnonymous()` and `SignedIn()`, of the core | nothing: every module's set asks the core's `CallerAccessCheck` first, and nobody has to decide that anyone may send a request |
+| a tenant: a seat in it, a key for the whole of it or at a unit, operators | `[InTenant]`, `[RequiresKey(key)]` with `[AtUnit]` or without a marker, `[RequiresOperator]`: `TenancyAccess.InTenant()` and the rest of `TenancyRequirement`'s cases, of [Tenancy](tenancy.md#what-a-request-requires-of-its-caller) | `services.AddTenancyAccess<...>()`, for each module |
+| a resource with members: a key held on it | `[RequiresKey(key)]` with `[OnResource]`, `[SeenWith<TResourceId>(key)]`: `MemberAccess.On(key, resource)` and `SeenWith`, of [Membership](membership.md#a-document-and-the-people-it-is-shared-with) | `services.AddDocumentMemberAccess<IFilingRequest>()`, generated for each resource |
 | something only your module knows | a record of your own | `services.AddAccessCheck<IBillingRequest, BillingAccessCheck>()` |
 
 A check of your own is two methods. `Decides` says whether a requirement is one of its cases, and only looks
@@ -372,7 +560,7 @@ names Mediator is written into your project.
 
 ```csharp
 [AccessRequests]
-public interface IBillingRequest : IRequireAccess;
+public partial interface IBillingRequest : IRequireAccess;
 
 // Written beside the interface: BillingAccessBehavior<TMessage, TResponse>, for every message that implements
 // it and for no other, and the call that puts it in the pipeline with the set of checks it asks.
@@ -424,8 +612,9 @@ public static class BillingAccessBehaviorRegistration
 - A notification is published to its handlers through neither pipeline, so nothing asks what one requires:
   a notification that implements the interface is [DDD00058](diagnostics.md#ddd00058). What needs a check is
   sent as a command or a query.
-- Without the library nothing is generated, and the attribute changes nothing: you call `RequireAsync`
-  yourself, [as above](#asking-the-checks-without-mediator).
+- Without the library no behavior is generated: you call `RequireAsync` yourself,
+  [as above](#asking-the-checks-without-mediator). What the requests' attributes say is written into a partial
+  interface all the same, since your call reads it.
 
 Mediator's own generator registers the behaviors a host lists in `MediatorOptions.PipelineBehaviors`. It reads
 that list from the code as you wrote it, and one generator never sees what another writes. So it depends on
@@ -562,14 +751,19 @@ A few things no check can see are worth a test of your own, over the requests of
 - **Every requirement has a check.** `AccessChecks<TRequests>.Decides(requirement)` says whether a request
   that declares a requirement can pass at all, without reading anything. Ask it for every requirement the
   module's requests declare, and a case added without its check fails the build rather than a request.
-- **A requirement that refuses nobody for want of the key is a query's.** `MemberAccess.SeenWith(key)` lets
+- **A requirement that refuses nobody for want of the key is a query's.** `[SeenWith<TResourceId>(key)]` lets
   a signed-in caller through, one that holds nothing too, and refuses a caller who did not sign in, who
   reaches nothing under any rules: it says what a query's own statement filters by, and that filter is the check.
-  Declared on a command, it lets the handler run unchecked. Hold every request that declares it to being a
-  query, as the Tenancy sample's `AccessDeclarationTests.Only_a_query_declares_what_it_shows` does.
+  Declared on a message of Mediator's that is no query, a command or a plain `IRequest`, it is
+  [DDD00082](diagnostics.md#ddd00082) when it builds; a requirement of your own that works the same way, the same
+  requirement answered as `RequiredAccess`, and a request of another dispatcher the build cannot tell for a query
+  are a test's to hold, as the Tenancy sample's `AccessDeclarationTests.Only_a_query_declares_what_it_shows` does.
 - **A request anyone may send is one somebody meant.** List the requests that declare
-  `AccessRequirement.AllowAnonymous()` and hold them to a list of your own, so a new one is a decision a
-  review sees. The Tenancy sample holds it to none: every route of it takes a token.
+  `AccessRequirement.AllowAnonymous()`, with the attribute or the property, and hold them to a list of your own, so
+  a new one is a decision a review sees. The Tenancy sample holds it to none: every route of it takes a token.
+- **The property is for what an attribute cannot say.** Hold the requests that answer `RequiredAccess` themselves
+  to a case of your module's own or a requirement computed from their values, as the Tenancy sample's
+  `AccessDeclarationTests` does, so one that could be an attribute is written as one.
 
 Because a requirement is a record, the same test can pin which request declares which: a table of request
 types and the requirement each is meant to answer, compared with what they do answer.

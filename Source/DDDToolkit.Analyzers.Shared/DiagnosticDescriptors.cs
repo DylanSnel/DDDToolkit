@@ -666,4 +666,67 @@ internal static class DiagnosticDescriptors
         DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
         description: "[assembly: TemplateFacadeName(\"TenancyUseCases\", \"CustomersTenancy\")] gives the class a package's use cases are named through, which the toolkit's generator writes into the project that declares the classes and calls after the package's class, a name of the application's own. It names the class by the package's class's name without its type parameters, or by that name with its namespace where two packages' classes of one name meet in the project. A module whose classes are split over two projects may give the line in either: the project that writes the class reads it in the projects of its module it takes classes from. A line that names a class no package the project references asks for, two such classes, a class a line before it names already, or that gives a name no class can have, a keyword or one with a space, changes nothing, while it reads as if it did; so does a line in a project that declares none of the classes, such as an application project above the domain project, since the class is written, and named, where they are declared. A line that gives a name a namespace or a type in the global namespace has already, the module's root namespace say, would leave the class out without a word, and the projects above with only CS0234; it is reported too, while an alias of that name the project writes itself stays its own. A line of a project the class's module takes classes from that gives another name than the one the class has is reported where the class is written. Each is reported at the line, with what the project can name. Correct the line, or move it into the project that declares the classes.");
+
+    public static readonly DiagnosticDescriptor RequestStatesNoRequirement = Create(
+        id: "DDD00077",
+        title: "A request says what it requires of its caller",
+        messageFormat: "'{0}' implements '{1}' and says nothing of what it requires of its caller: {2}. Put a requirement attribute on it, [SignedIn] say, or [RequiresKey(key)] with a marker of where the key is held, or answer RequiredAccess where the requirement is computed; [AllowAnonymousCallers] where anyone may send it.",
+        category: Access,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "Every command and query of a module says what it requires of its caller, who may send it, and the module's checks hold the caller to that before the handler runs. A request says it with an attribute, which the generator turns into RequiredAccess in its module's interface, [AccessRequests] and partial, or by answering RequiredAccess itself. Where the module's interface is partial the compiler no longer asks a request for RequiredAccess, since the interface implements it, so a request that says neither is reported here: it would be stopped every time it is sent, with an exception that says it declares nothing, and a forgotten requirement never opens a door. A request whose module's interface is declared in another project gets no line from this one either, and is reported the same way. An abstract request is not reported: what derives from it is.");
+
+    public static readonly DiagnosticDescriptor RequestStatesRequirementTwice = Create(
+        id: "DDD00078",
+        title: "A request says what it requires in one way",
+        messageFormat: "'{0}' carries {1} and answers RequiredAccess as well{2}, and the property wins over the attribute: keep one, the attribute where the requirement reads no value of the request, the property where it computes one",
+        category: Access,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "A request says what it requires with an attribute, [SignedIn], [InTenant] or [RequiresKey(key)] with its marker, or by answering RequiredAccess itself, for a requirement computed from the request's values. Both on one request read as two requirements, while C# takes the request's own property and the attribute does nothing: a review that reads the attribute is misled. So it is an error. A request that derives from one that answers RequiredAccess answers it too, and carries no requirement attribute of its own; so does a request whose interface between it and the module's gives RequiredAccess a default of its own, which C# takes over the module's.");
+
+    public static readonly DiagnosticDescriptor RequestCarriesTwoRequirements = Create(
+        id: "DDD00079",
+        title: "A request carries one requirement attribute",
+        messageFormat: "'{0}' carries {1}: a request requires one thing of its caller, so keep the one it requires",
+        category: Access,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "A request requires one thing of its caller, and its module's checks hold the caller to that one: [AllowAnonymousCallers], [SignedIn], [InTenant], [RequiresOperator], [RequiresKey(key)] or [SeenWith<TResourceId>(key)]. Two of them on one request, [AllowAnonymousCallers] with [RequiresKey] or [InTenant] with [RequiresKey], say two things no check can hold together: one would open the door the other closes. A caller who holds a key is let through whoever else it is, so [RequiresKey] needs nothing beside it; a requirement only a computation can say, one thing or another depending on the request's values, is written as RequiredAccess.");
+
+    public static readonly DiagnosticDescriptor KeyMarkerOutOfPlace = Create(
+        id: "DDD00080",
+        title: "A marker on a request says where the key of its [RequiresKey] is held",
+        messageFormat: "'{0}' {1}",
+        category: Access,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "[RequiresKey(key)] says the key a request's caller holds, and a marker on one of the request's members says where: none for the whole tenant (Tenancy's), [AtUnit] at that unit or above it (Tenancy's), [OnResource] on that resource through its members (Membership's), with [ExpectedVersion] beside it for the version the caller read. So a marker without [RequiresKey] says where nothing is held; two markers of where, or [AtUnit] with [OnResource], say two places for one key; [ExpectedVersion] without [OnResource] is the version of nothing; a marker twice of one kind gives the call two arguments for one. A marker goes on a positional parameter of a record, which is its property, or on a property: a parameter of a class's primary constructor is no member the requirement can read, and neither is a private or protected property, since the line is written in the module's interface. A key without a marker is held where a package says, [assembly: KeyWithoutMarker], which Tenancy does: a project that references no such package, or two, cannot tell, and asks for a marker.");
+
+    public static readonly DiagnosticDescriptor KeyMarkerOnWrongType = Create(
+        id: "DDD00081",
+        title: "A marker is on a member of the id it marks",
+        messageFormat: "'{0}' marks '{1}' [{2}], {3}",
+        category: Access,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "A marker of where a key is held reads the member it marks: [AtUnit] the application's unit id, the id its class declared with [OrganizationUnit<TUnitId>] has, and [OnResource] the id of a resource with members, an aggregate root a class declared with [Member<TId, TMemberId, TRoleId, TResource>] names. The call it gives takes any id, so a unit marked on a seat's id compiles, and lets nobody through: the package's check stops a case over an id it does not decide. So a member of another type is reported, where the project sees the classes the package's marker names; where it sees none, nothing can be told, and the check says it when the request is sent. A member that may be null, OrganizationUnitId?, is a requirement computed from whether it is given, which the request writes as RequiredAccess. [ExpectedVersion] marks a member of the type the call takes there, a long?.");
+
+    public static readonly DiagnosticDescriptor QueryRequirementOnCommand = Create(
+        id: "DDD00082",
+        title: "A requirement for queries only is on a query",
+        messageFormat: "'{0}' is {2} and carries [{1}], which its package declares for queries only: on anything but a query it holds the caller to nothing the request changes. Where it only reads, make it a query, IQuery or IStreamQuery; where it changes something, require of its caller what the change needs, [RequiresKey(key)] with a marker of where the key is held, and carry out what no caller may do as system work behind that requirement.",
+        category: Access,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "Some requirements are for queries only, and their packages say so ([StatesRequirement(..., QueriesOnly = true)]). Membership's [SeenWith<TResourceId>(key)] refuses nobody for want of the key: it lets a signed-in caller through, one that holds nothing too, and says what the query's own statement filters by, which is the check; on a command the handler would run unchecked. Tenancy's [RequiresOperator] lets an operator through, who holds no seat and no key and changes nothing itself: what an operator asks for is carried out by trusted code as system work that names the operator, TenancyUseCases.BeginOperatorIn, behind a requirement of the module's own. A message of the Mediator library that is no query and carries either is reported: a command, ICommand or IStreamCommand, and a plain IRequest or IStreamRequest, which may change as much as a command. A request of another dispatcher, which the generator cannot tell for a command or a query, is not; nor is the same requirement written as RequiredAccess, which a test holds.");
+
+    public static readonly DiagnosticDescriptor RequirementAttributesNotRead = Create(
+        id: "DDD00083",
+        title: "A request's requirement attributes are read where its module's interface is partial",
+        messageFormat: "'{0}' carries {1}, which nothing turns into what it requires: {2}",
+        category: Access,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "The generator turns a request's requirement attributes into RequiredAccess at compile time, one line per request, in the request's module's interface: the interface marked [AccessRequests] that the request implements, declared partial in the same project, so the generator can write the property into it. Without that, the attributes are read by nothing, and the request reads as if it said what it requires while it says nothing: an interface that is not partial, a request that implements no marked interface, one whose interface is declared in another project, one with type parameters, which a line cannot name, one the interface cannot see, nested private in another type, and one that implements two such interfaces, each of which implements the property, so C# takes neither (CS8705). So each is reported, with what to change: declare the interface partial, implement the module's interface, or answer RequiredAccess.");
 }

@@ -20,13 +20,11 @@ namespace Examples.Tenancy.Projects.Application.ProjectRoles.Commands;
 /// <param name="Name">Its name, unique among the tenant's project roles.</param>
 /// <param name="Description">What it is for, or <see langword="null"/>.</param>
 /// <param name="Keys">The keys it gives: keys of the catalogue that a crew role may give.</param>
+[RequiresKey(RequiredKey)]
 public sealed record MakeProjectRole(string Name, string? Description, IReadOnlyCollection<string> Keys) : ICommand<ProjectRoleId>, IProjectsRequest
 {
     /// <summary>The key the caller holds for the whole tenant.</summary>
     public const string RequiredKey = ProjectRoleListing.KeysKey;
-
-    /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.ForTheWholeTenant(RequiredKey);
 
     /// <summary>
     /// <paramref name="keys"/>, when the catalogue knows every one of them: a key it does not know is a wrong

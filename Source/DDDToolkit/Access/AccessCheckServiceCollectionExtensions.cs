@@ -19,11 +19,10 @@ public static class AccessCheckServiceCollectionExtensions
     /// <para>
     /// The set asks the core's <see cref="CallerAccessCheck"/> first, so the requirements that are about who is
     /// calling and nothing else work in every module, with no check added:
-    /// <see cref="AccessRequirement.AllowAnonymous"/>, <see cref="AccessRequirement.SignedIn"/> and
-    /// <see cref="AccessRequirement.RequiresSystemWork"/>. Who is calling is what the host's
-    /// <see cref="ICallerAccessor"/> answers, and without one what <see cref="Callers.Begin"/> made current
-    /// (<see cref="AmbientCallerAccessor"/>); system work counts only where trusted code began it. Anything else
-    /// a request declares is stopped unless a check the module added decides it.
+    /// <see cref="AccessRequirement.AllowAnonymous"/> and <see cref="AccessRequirement.SignedIn"/>. Who is calling
+    /// is what the host's <see cref="ICallerAccessor"/> answers, and without one what <see cref="Callers.Begin"/>
+    /// made current (<see cref="AmbientCallerAccessor"/>). Anything else a request declares is stopped unless a
+    /// check the module added decides it.
     /// </para>
     /// <para>
     /// Everything is registered per scope: the set, and <see cref="Checked{T}"/> for what a check keeps for a

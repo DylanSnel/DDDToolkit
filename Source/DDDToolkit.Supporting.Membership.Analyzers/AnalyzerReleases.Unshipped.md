@@ -75,3 +75,10 @@ DDD00073 | DDDToolkit.Supabase | Warning | What [assembly: LeaveOutRowAccessCont
 DDD00074 | DDDToolkit.EntityFramework | Warning | A design-time factory keeps the migration history where the application does
 DDD00075 | DDDToolkit.Entities | Warning | Every class a package's use cases are named through has a name of its own where a project sees it
 DDD00076 | DDDToolkit.Entities | Warning | [assembly: TemplateFacadeName] names, once, a class this project gets
+DDD00077 | DDDToolkit.Access | Error | A request says what it requires of its caller
+DDD00078 | DDDToolkit.Access | Error | A request says what it requires in one way
+DDD00079 | DDDToolkit.Access | Error | A request carries one requirement attribute
+DDD00080 | DDDToolkit.Access | Error | A marker on a request says where the key of its [RequiresKey] is held
+DDD00081 | DDDToolkit.Access | Error | A marker is on a member of the id it marks
+DDD00082 | DDDToolkit.Access | Error | A requirement for queries only is on a query
+DDD00083 | DDDToolkit.Access | Error | A request's requirement attributes are read where its module's interface is partial

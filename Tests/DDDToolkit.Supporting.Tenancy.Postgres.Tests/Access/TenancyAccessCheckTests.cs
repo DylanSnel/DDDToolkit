@@ -66,6 +66,31 @@ public abstract class TenancyAccessCheckTests(TenancyPostgres postgres, TenancyN
     }
 
     [Fact]
+    public async Task A_key_stated_with_an_attribute_is_asked_under_the_policies_as_the_property_is()
+    {
+        // The requests say the key with [RequiresKey], for the whole tenant and with [AtUnit] at a unit: the line the
+        // generator wrote is the same case, so the database answers it the same, for the same people.
+        var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
+        var recorder = new CommandRecorder();
+        await using var services = new TenancyServices(database, contexts: options => options.AddInterceptors(recorder));
+
+        recorder.Clear();
+        await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => RequireAsync<IHostRequest>(scoped, new StatedRequests.ManageEverySeat()));
+        recorder.Sent.Should().ContainSingle("the key is asked in one statement").Which.Caller!.UserId.Should().Be(Ada.Identity);
+        (await RefusedWithAsync(TenancyRefusals.NotPermitted, () => services.BySeat(Seth.Identity, Harbor, Seth.Seat, scoped => RequireAsync<IHostRequest>(scoped, new StatedRequests.ManageEverySeat()))))
+            .Arguments["Key"].Should().Be(TenancyKeys.SeatsManage);
+
+        // Seth manages seats at North: there and below the key is his, at the root it is not.
+        await services.BySeat(Seth.Identity, Harbor, Seth.Seat, scoped => RequireAsync<IHostRequest>(scoped, new StatedRequests.ManageSeatsAt(North)));
+        await services.BySeat(Seth.Identity, Harbor, Seth.Seat, scoped => RequireAsync<IHostRequest>(scoped, new StatedRequests.ManageSeatsAt(NorthPier)));
+        (await RefusedWithAsync(TenancyRefusals.NotPermitted, () => services.BySeat(Seth.Identity, Harbor, Seth.Seat, scoped => RequireAsync<IHostRequest>(scoped, new StatedRequests.ManageSeatsAt(HarborRoot)))))
+            .Arguments["Unit"].Should().Be(HarborRoot);
+
+        // System work in the tenant, begun around the send, holds every key there.
+        await services.BySystemIn(Harbor, scoped => RequireAsync<IHostRequest>(scoped, new StatedRequests.ManageSeatsAt(South)));
+    }
+
+    [Fact]
     public async Task A_module_s_check_asks_tenancy_s_functions_over_the_module_s_own_context()
     {
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);

@@ -23,11 +23,10 @@ namespace Examples.Tenancy.Tenants.Application.Invitations.Commands;
 /// <param name="Unit">The unit the seat is placed in.</param>
 /// <param name="Role">The role the seat holds there, which must be active.</param>
 /// <param name="Until">When that role ends, later than the invitation itself, or <see langword="null"/> for no end.</param>
+[RequiresKey(TenancyKeys.SeatsManage)]
 public sealed record InvitePerson(string Address, OrganizationUnitId Unit, RoleId Role, DateTimeOffset? Until)
     : ICommand<TenancyUseCases.IssuedInvitation<InvitationId>>, ITenantsRequest
 {
-    /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage);
 }
 
 /// <summary>

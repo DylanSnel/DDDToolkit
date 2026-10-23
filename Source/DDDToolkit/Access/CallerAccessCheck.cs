@@ -4,9 +4,8 @@ using DDDToolkit.Exceptions;
 namespace DDDToolkit.Access;
 
 /// <summary>
-/// Decides the core's requirements about who is calling: <see cref="AccessRequirement.SignedIn"/> and
-/// <see cref="AccessRequirement.RequiresSystemWork"/>. It asks the host who is calling, and nothing else, so a
-/// host without any supporting domain has both.
+/// Decides the core's requirement about who is calling, <see cref="AccessRequirement.SignedIn"/>. It asks the host
+/// who is calling, and nothing else, so a host without any supporting domain has it.
 /// </summary>
 /// <remarks>
 /// <c>AddAccessChecks</c> puts it first in every module's set, before the checks the module adds: the core's
@@ -16,13 +15,12 @@ namespace DDDToolkit.Access;
 /// var checks = new AccessChecks&lt;IBillingRequest&gt;([new CallerAccessCheck(callers), new BillingAccessCheck(...)]);
 /// </code>
 /// <para>
-/// System work is what trusted code began on purpose: <c>Callers.Begin(Caller.System)</c> or
-/// <c>Callers.Begin(Caller.SystemIn(scope))</c> around seeding, an import or a job, or a supporting domain's own
-/// way to begin it, such as Tenancy's <c>TenancyWork</c>. The host's accessor must answer system work, and the
-/// caller begun for the flow must be system work too. A flow nobody began a caller for is not, even where the
-/// accessor answers <see cref="Caller.System"/> for it, as an <see cref="AmbientCallerAccessor"/> does in a host
-/// that does not require explicit callers: in such a host that answer is also what a web request gets when no
-/// accessor knows requests, and a request only the application may send must not pass on a default.
+/// The application's own work is no case of it. System work is a scope trusted code begins around the work,
+/// <c>Callers.Begin(Caller.System)</c> or a supporting domain's own way such as Tenancy's
+/// <c>TenancyUseCases.BeginSystem()</c>, and a request it sends declares who may send it like any other: what only
+/// system work may do, a supporting domain's use case refuses everyone else, with
+/// <see cref="ToolkitRefusals.SystemOnly"/>. System work is nobody's sign-in, so it is refused here as any caller
+/// who did not sign in is.
 /// </para>
 /// <para>
 /// It reads nothing and keeps nothing. A host that requires every flow of work to say who it runs as
@@ -35,12 +33,11 @@ namespace DDDToolkit.Access;
 public sealed class CallerAccessCheck(ICallerAccessor callers) : IAccessCheck
 {
     /// <inheritdoc />
-    public bool Decides(AccessRequirement requirement) => requirement is AccessRequirement.SignedInUser or AccessRequirement.SystemWork;
+    public bool Decides(AccessRequirement requirement) => requirement is AccessRequirement.SignedInUser;
 
     /// <inheritdoc />
     /// <exception cref="RefusalException">
-    /// <see cref="ToolkitRefusals.NotSignedIn"/> for a caller that is no signed-in user where one is required;
-    /// <see cref="ToolkitRefusals.SystemOnly"/> for a caller that is not the application itself where only it may send the request.
+    /// <see cref="ToolkitRefusals.NotSignedIn"/> for a caller that is no signed-in user where one is required.
     /// </exception>
     /// <exception cref="InvalidOperationException">The requirement is not one of this check's cases.</exception>
     /// <exception cref="NoCallerException">Nobody is calling, and the host requires every flow of work to say who it runs as.</exception>
@@ -62,9 +59,6 @@ public sealed class CallerAccessCheck(ICallerAccessor callers) : IAccessCheck
         }
     }
 
-    /// <summary>Whether <paramref name="caller"/> is the application's own work: <see cref="Caller.System"/>, or a scoped <see cref="Caller.SystemIn"/>.</summary>
-    private static bool IsSystemWork(Caller? caller) => caller?.Kind is CallerKind.System or CallerKind.SystemIn;
-
     /// <summary>Returns when the current caller is who <paramref name="requirement"/> lets through, and throws otherwise.</summary>
     private void Require(AccessRequirement requirement, IRequireAccess request)
     {
@@ -74,19 +68,6 @@ public sealed class CallerAccessCheck(ICallerAccessor callers) : IAccessCheck
                 if (!callers.Current.IsSignedIn)
                 {
                     throw ToolkitRefusals.Refuse(ToolkitRefusals.NotSignedIn);
-                }
-
-                return;
-
-            case AccessRequirement.SystemWork:
-                // The application itself, above the policies or confined to a scope: both are system work, and no
-                // user is either. Only system work that trusted code began counts. A host that does not require
-                // explicit callers answers the application itself for any flow nobody began a caller for, a web
-                // request its accessor does not know included, and that is no proof that the application sent it.
-                // The host is asked first, so a host that does require them still fails such work instead.
-                if (!IsSystemWork(callers.Current) || !IsSystemWork(Callers.Ambient))
-                {
-                    throw ToolkitRefusals.Refuse(ToolkitRefusals.SystemOnly);
                 }
 
                 return;

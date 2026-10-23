@@ -13,13 +13,11 @@ namespace Examples.Tenancy.Tenants.Application.Operators.Queries;
 /// </remarks>
 /// <param name="After">The marker the page before answered as its next, or <see langword="null"/> for the first page.</param>
 /// <param name="Size">How many tenants a page holds: 1 to <see cref="TenancyUseCases.TenantDirectory.MostPerPage"/>.</param>
+[RequiresOperator]
 public sealed record AllTenants(string? After = null, int Size = AllTenants.DefaultPage) : IQuery<TenancyUseCases.TenantDirectoryPage>, ITenantsRequest
 {
     /// <summary>How many tenants a page holds when the caller does not say.</summary>
     public const int DefaultPage = 50;
-
-    /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.RequiresOperator();
 }
 
 /// <summary>Answers <see cref="AllTenants"/> from the Tenancy package's directory of tenants.</summary>

@@ -237,8 +237,8 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
                 Cancellation);
         }
 
-        // Its administrator holds every key that manages access, and may not: the request requires system work,
-        // and no key gives that.
+        // Its administrator holds every key that manages access, and may not: a caller in the tenant may send it, and
+        // its handler lets only system work mark a tenant, which no key gives.
         using (AsSeatOf(DemoPeople.Ada))
         {
             var refused = await RefusalOfAsync(host, new MarkTenantAsDemo());
@@ -248,7 +248,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
 
         using (Callers.Begin(Caller.Anonymous))
         {
-            (await RefusalOfAsync(host, new MarkTenantAsDemo())).Code.Should().Be(ToolkitRefusals.SystemOnly, "a caller who did not sign in is no system work either");
+            (await RefusalOfAsync(host, new MarkTenantAsDemo())).Code.Should().Be(TenancyRefusals.NotSeated, "a caller who did not sign in works in no tenant, so the door refuses it");
         }
 
         // Work nobody began a caller for fails in a host that requires explicit callers, before it is refused or

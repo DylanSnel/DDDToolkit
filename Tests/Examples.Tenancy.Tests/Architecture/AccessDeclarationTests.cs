@@ -70,7 +70,7 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
         (new RenameProjectRole(ProjectRoleId.CreateSequential(), "Rigger", null), TenancyAccess.ForTheWholeTenant(TenancyKeys.RolesManage)),
         (new SetProjectRoleKeys(ProjectRoleId.CreateSequential(), []), TenancyAccess.ForTheWholeTenant(TenancyKeys.RolesManage)),
         (new ArchiveProjectRole(ProjectRoleId.CreateSequential()), TenancyAccess.ForTheWholeTenant(TenancyKeys.RolesManage)),
-        (new SetUpProjectRoles(), AccessRequirement.RequiresSystemWork()),
+        (new SetUpProjectRoles(), TenancyAccess.InTenant()),
         (new SeatsOfMine(), AccessRequirement.SignedIn()),
         (new OverviewOfMine(), TenancyAccess.InTenant()),
         (new OrganizationUnits(), TenancyAccess.InTenant()),
@@ -97,7 +97,7 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
         (new CreateTenantRole("Storekeeper", "Keeps the stores", []), TenancyAccess.ForTheWholeTenant(TenancyKeys.RolesManage)),
         (new SetRoleKeys(RoleId.CreateSequential(), []), TenancyAccess.ForTheWholeTenant(TenancyKeys.RolesManage)),
         (new ArchiveTenantRole(RoleId.CreateSequential()), TenancyAccess.ForTheWholeTenant(TenancyKeys.RolesManage)),
-        (new MarkTenantAsDemo(), AccessRequirement.RequiresSystemWork()),
+        (new MarkTenantAsDemo(), TenancyAccess.InTenant()),
         (new AccessHistory(new PagingArguments(first: 10)), TenancyAccess.ForTheWholeTenant(TenancyKeys.HistoryView)),
         (new InvitePerson("wren@example.test", TheUnit, RoleId.CreateSequential(), Until: null), TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage)),
         (new OpenInvitations(), TenancyAccess.InTenant()),
@@ -167,7 +167,13 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
             request.IsDefined(typeof(DDDToolkit.Abstractions.Attributes.AccessRequestsAttribute), inherit: false)
                 .Should().BeTrue("{0}'s request interface is marked, so the toolkit writes its behavior", module);
             request.GetInterfaces().Should().Equal([typeof(IRequireAccess)], "a request says what it requires through the toolkit's interface");
-            request.GetMembers().Should().BeEmpty("{0} has no member of its own", request.Name);
+            request.GetMembers().Should().BeEmpty("{0} has no public member of its own", request.Name);
+
+            // Its one member is the toolkit's: RequiredAccess, written from its requests' attributes into the partial
+            // interface, and explicit, so a request that answers it itself answers with its own.
+            request.GetProperties(BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+                .Should().ContainSingle("the generator implements RequiredAccess in {0}", request.Name)
+                .Which.Name.Should().Be(typeof(IRequireAccess).FullName + "." + nameof(IRequireAccess.RequiredAccess));
 
             // The behavior is nobody's source file: the generator wrote it, over the module's own set of checks.
             SampleLayout.SourceFilesIn(SampleLayout.DirectoryOf(SampleLayout.Project(module, Layer.Application)))
@@ -204,7 +210,6 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
         {
             Decides(scope.ServiceProvider, module, TenancyAccess.ForTheWholeTenant(TenancyKeys.RolesManage)).Should().BeTrue("{0} registers Tenancy's check", module);
             Decides(scope.ServiceProvider, module, AccessRequirement.SignedIn()).Should().BeTrue("{0}'s set asks the toolkit who is calling", module);
-            Decides(scope.ServiceProvider, module, AccessRequirement.RequiresSystemWork()).Should().BeTrue();
         }
 
         Declared.Select(row => row.Declares.GetType().DeclaringType ?? row.Declares.GetType()).Distinct().Should().BeEquivalentTo(
@@ -223,6 +228,47 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
         {
             DeclaredBy(request).Should().Be(declares, "that is what {0} requires of its caller", request.GetType().Name);
         }
+    }
+
+    [Fact]
+    public void A_request_says_what_it_requires_with_an_attribute_unless_it_computes_it_or_it_is_its_module_s_own()
+    {
+        // A requirement that reads no value of the request but a key and an id it carries is an attribute on it, and
+        // the line the generator writes; the property is for what an attribute cannot say: a case of the module's own,
+        // which no package's attribute stands for, and a requirement computed from the request's values.
+        var answeringItself = Requests
+            .Where(request => request.Type.GetInterfaceMap(typeof(IRequireAccess)).TargetMethods.Single().DeclaringType == request.Type)
+            .ToDictionary(request => request.Type, request => DeclaredBy(Declared.Single(row => row.Request.GetType() == request.Type).Request)!);
+
+        answeringItself.Should().NotBeEmpty("or this proves nothing");
+        foreach (var (type, declares) in answeringItself)
+        {
+            (declares is ProjectsRequirement or InspectionsRequirement || type == typeof(SeatGrants)).Should().BeTrue(
+                "{0} answers RequiredAccess itself, so it declares a case of its module's own or computes it, and {1} is neither", type.Name, declares.GetType().Name);
+        }
+
+        answeringItself.Should().ContainKey(typeof(SeatGrants), "the sample keeps a requirement computed from the request's values");
+        Requests.Where(request => !answeringItself.ContainsKey(request.Type)).Should().NotBeEmpty("and the others say it with an attribute");
+    }
+
+    [Fact]
+    public void A_requirement_computed_from_the_request_s_values_is_the_property_s_answer()
+    {
+        // The roles a seat holds in every unit take the key for the whole tenant; the roles at one unit take it there.
+        var seat = SeatId.CreateSequential();
+
+        DeclaredBy(new SeatGrants(seat)).Should().Be(TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage));
+        DeclaredBy(new SeatGrants(seat, TheUnit)).Should().Be(TenancyAccess.AtUnit(TenancyKeys.SeatsManage, TheUnit));
+    }
+
+    [Fact]
+    public void Nothing_requires_system_work_and_what_only_it_may_do_is_sent_by_a_caller_in_the_tenant()
+    {
+        // System work is a scope the seeding begins around what it sends, never a requirement. The two commands only it
+        // sends say who may send them, a caller in the tenant, and their handlers refuse everyone but system work.
+        typeof(AccessRequirement).GetNestedTypes().Select(each => each.Name).Should().BeEquivalentTo(["Anyone", "SignedInUser"]);
+        DeclaredBy(new MarkTenantAsDemo()).Should().Be(TenancyAccess.InTenant());
+        DeclaredBy(new SetUpProjectRoles()).Should().Be(TenancyAccess.InTenant());
     }
 
     [Fact]
@@ -303,7 +349,7 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
         // cases and Tenancy's, and has no case of its own, and no check of its own.
         Declared.Where(row => ModuleOf(row.Request) == "Tenants").Select(row => row.Declares)
             .Should().OnlyContain(
-                declares => declares is TenancyRequirement || declares is AccessRequirement.SignedInUser || declares is AccessRequirement.SystemWork,
+                declares => declares is TenancyRequirement || declares is AccessRequirement.SignedInUser,
                 "the Tenants module has no case of its own, and so no check of its own");
         Requests.Select(request => request.Module).Distinct().Should().BeEquivalentTo(SampleLayout.Modules, "every module's requests are held to it");
 

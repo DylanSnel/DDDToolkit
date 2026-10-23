@@ -1,6 +1,7 @@
 using DDDToolkit.Access;
 using DDDToolkit.Exceptions;
 using DDDToolkit.Supporting.Membership.UseCases;
+using DDDToolkit.Supporting.Tenancy.Access;
 using Mediator;
 
 namespace Examples.Tenancy.Projects.Application.ProjectRoles.Commands;
@@ -18,23 +19,27 @@ namespace Examples.Tenancy.Projects.Application.ProjectRoles.Commands;
 /// role whose name the tenant already gave a role of its own refuses the set-up, <c>projects.role-name-taken</c>,
 /// and makes none of them until that role is renamed. A tenant without the crew lead's role cannot open a
 /// project: there is no role to give its owner (<c>projects.no-lead-role</c>).
+/// <para>
+/// Who may send it is a caller in the tenant, <c>[InTenant]</c>, the one requirement that lets the system work that
+/// sends it through: nothing requires system work at the door, since system work is a scope the sender begins around
+/// the send, <c>TenancyUseCases.BeginSystemIn(tenant)</c>, as the seeding does. What the work then may do is the
+/// handler's to say, and it says only system work in the tenant sets a tenant up: a seat that sends it gets past the
+/// door and is refused there, <c>access.system-only</c>.
+/// </para>
 /// </remarks>
 /// <param name="Ids">
 /// The ids of the roles to make, by the key of the starter role each is made from, for seeding and imports whose
 /// ids are known beforehand; the rest get new ones.
 /// </param>
-public sealed record SetUpProjectRoles(IReadOnlyDictionary<string, ProjectRoleId>? Ids = null) : ICommand, IProjectsRequest
-{
-    /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.RequiresSystemWork();
-}
+[InTenant]
+public sealed record SetUpProjectRoles(IReadOnlyDictionary<string, ProjectRoleId>? Ids = null) : ICommand, IProjectsRequest;
 
 /// <summary>Handles <see cref="SetUpProjectRoles"/>: reads the tenant's roles, makes the starter roles it lacks and saves.</summary>
 /// <remarks>
-/// Nothing of a package's stands between this command and the role, and nothing else asks who may send it, so the
-/// handler asks again what its request declared, of the very checks the pipeline asks, and then narrower: system
-/// work in the very tenant it sets up, which is where the roles are made. It then decides the same wherever it
-/// runs, in a program that left the module's access behavior out of the pipeline as much as in the host.
+/// Nothing of a package's stands between this command and the role, so the handler asks again what its request
+/// declared, of the very checks the pipeline asks, and then narrower: system work in the very tenant it sets up,
+/// which is where the roles are made, and nobody else. It then decides the same wherever it runs, in a program that
+/// left the module's access behavior out of the pipeline as much as in the host.
 /// </remarks>
 /// <param name="store">Where project roles are read, added and saved.</param>
 /// <param name="membership">The projects' rules and starter roles.</param>

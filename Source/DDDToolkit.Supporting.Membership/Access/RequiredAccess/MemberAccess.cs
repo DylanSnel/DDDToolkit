@@ -14,6 +14,19 @@ namespace DDDToolkit.Supporting.Membership.Access;
 /// about, which is what tells the requirements of one kind of resource from those of another:
 /// <see cref="MemberAccessCheck{TResource, TResourceId}"/> decides the cases of its own resource and no other.
 /// <para>
+/// Where the requirement reads no value of the request but the key, the resource and the version it carries, the
+/// request says it with attributes instead, and the toolkit's generator writes the same call:
+/// <code>
+/// [RequiresKey(DocumentKeys.Share)]
+/// public sealed record ShareDocument([OnResource] DocumentId Document, UserId With, NamedRole Role, [ExpectedVersion] long? ExpectedVersion = null) : IDocumentsRequest;
+///
+/// [SeenWith&lt;DocumentId&gt;(DocumentKeys.View)]
+/// public sealed record ListDocuments : IDocumentsRequest;
+/// </code>
+/// (<see cref="OnResourceAttribute"/>, <see cref="ExpectedVersionAttribute"/>, <see cref="SeenWithAttribute{TResourceId}"/>).
+/// These methods stay for a requirement computed from the request's values.
+/// </para>
+/// <para>
 /// Which key a request requires is the application's to say, for the commands that change the members as
 /// for any other: the package has no key of its own for adding a member, giving a role or handing a resource
 /// on. A command an application wants only some callers to run requires a key those callers hold.

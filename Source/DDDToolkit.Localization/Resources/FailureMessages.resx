@@ -26,7 +26,7 @@
   </data>
   <data name="access.system-only" xml:space="preserve">
     <value>Only the application itself can do this.</value>
-    <comment>ToolkitRefusals.SystemOnly: a request requires system work, and the caller is a user or did not sign in. No arguments.</comment>
+    <comment>ToolkitRefusals.SystemOnly: what only the application's own work may do, refused past the door by a use case or a handler, and the caller is a user or did not sign in. No arguments.</comment>
   </data>
   <data name="Unspecified" xml:space="preserve">
     <value>{ValueObject} is not valid.</value>

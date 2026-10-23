@@ -138,15 +138,17 @@ the resource it names. `HasMembers` adds two tables to your model, `DocumentShar
 `DocumentShareRoles`: add a migration for them, as for any change to it.
 
 **A request and its handler.** A request says what it requires, and its handler changes the document the
-request names, which is the one that was checked:
+request names, which is the one that was checked. The key is held on the document, so the request requires it with
+`[RequiresKey]` and marks the document `[OnResource]`, and the version the caller read `[ExpectedVersion]`; the
+toolkit's generator writes `MemberAccess.On("documents.share", request.Document, request.ExpectedVersion)` for it,
+into the module's interface, which is partial for that:
 
 ```csharp
-public interface IFilingRequest : IRequireAccess;                   // what every request of your module implements
+[AccessRequests]
+public partial interface IFilingRequest : IRequireAccess;           // what every request of your module implements
 
-public sealed record ShareDocument(DocumentId Document, UserId With, string Role, DateTimeOffset? Until, long? ExpectedVersion = null) : IFilingRequest
-{
-    AccessRequirement IRequireAccess.RequiredAccess => MemberAccess.On("documents.share", Document, ExpectedVersion);
-}
+[RequiresKey("documents.share")]
+public sealed record ShareDocument([OnResource] DocumentId Document, UserId With, string Role, DateTimeOffset? Until, [ExpectedVersion] long? ExpectedVersion = null) : IFilingRequest;
 
 public sealed class DocumentHandlers(
     FilingContext db,
@@ -185,12 +187,15 @@ public sealed class DocumentHandlers(
 Something asks the checks in front of the handler: `AccessChecks<IFilingRequest>.RequireAsync(request)`, one
 call from your dispatcher or an endpoint filter, or, with the Mediator library, the behavior the generator
 writes for an interface marked `[AccessRequests]`. [Access requirements](access-requirements.md) has both,
-and what `IRequireAccess`, `AccessRequirement` and `Checked<T>` are. `MemberAccess.On(key, resource)`, and
-`MemberAccess.SeenWith<TResourceId>(key)` for a query that shows the resources a key is held on
-([Inside your own statements](#inside-your-own-statements)), are two of
+and what `IRequireAccess`, `AccessRequirement` and `Checked<T>` are. A key on a resource, `[RequiresKey(key)]` with
+`[OnResource]` on the resource and `[ExpectedVersion]` on the version read (`MemberAccess.On(key, resource,
+expectedVersion)`), and `[SeenWith<TResourceId>(key)]` for a query that shows the resources a key is held on
+(`MemberAccess.SeenWith<TResourceId>(key)`, [Inside your own statements](#inside-your-own-statements)), are two of
 [the requirements every request picks from](access-requirements.md#the-vocabulary), beside the toolkit's
-`AccessRequirement.SignedIn()` and the rest, and Tenancy's `TenancyAccess.InTenant()` and the rest: a request
-of a module with members says which, and none leaves it to a package. With the behavior, `AddDocumentMemberAccess`
+`[SignedIn]` and the rest, and Tenancy's `[InTenant]` and the rest: a request of a module with members says which,
+and none leaves it to a package. `[OnResource]` marks the id of a resource with members, an aggregate root a class
+declared with `[Member<...>]` names; on another id it is [DDD00081](diagnostics.md#ddd00081). A requirement computed
+from the request's values answers `RequiredAccess` with the calls instead. With the behavior, `AddDocumentMemberAccess`
 also brings the start-up check that the behavior is in the pipeline, and a handler called past it is a warning;
 see [When nothing asks the checks](access-requirements.md#when-nothing-asks-the-checks).
 
@@ -249,7 +254,8 @@ questions only as the caller your host began.
 | `AddDocumentMembership<FilingContext>(rules)` | Closed over your classes already. Which context maps the document, and which rules apply, only you know. |
 | `AddDocumentMemberAccess<IFilingRequest>()` | A check is added for one request interface, and a module may have several resources, or ask about another module's: this says whose requests the document's check decides. |
 | `IFilingRequest` | What tells your module's requests from another's: the [checks are registered for it](access-requirements.md#what-a-request-declares). |
-| `RequiredAccess`, explicitly, with `ExpectedVersion` | Which key a command takes is yours to say. Explicitly, so it is no field of the request. The version is the one the caller read, for a command that sends it: it is compared after the key, so a caller without access learns nothing from it. |
+| `[RequiresKey]`, `[OnResource]` and `[ExpectedVersion]` | Which key a command takes is yours to say, and on which of the request's ids it is held; the generator writes the call, so it is no field of the request. The version is the one the caller read, for a command that sends it: it is compared after the key, so a caller without access learns nothing from it. |
+| `partial` on `IFilingRequest` | The generator writes `RequiredAccess` into it from its requests' attributes, one line per request. |
 | `MemberAdmission<DocumentId, UserId, NamedRole>` in the constructor | Membership's use cases are small classes generic over your ids alone, three at most, so they read where they are taken, and a module with several kinds of resource names each one's by its own ids. None is nested in one class over your classes, as Tenancy's use cases are, so there is no class such as Tenancy's `TenancyUseCases` to name them through, and no alias to write ([Calling a use case](tenancy.md#calling-a-use-case)). |
 | `RequireRoleAsync` in the handler | The member list takes any role: it cannot know which roles there are. `MemberAdmission` asks the rules, and, where you registered them, whether the one to be made a member is known (`RequireMemberAsync` and an `IMemberDirectory`) and whether a role goes to a member at all (`IMemberRolePolicy`). |
 | `ExpectVersion` after the load | The check and the load are two statements. The version the caller named is held again where the handler loads, so a change in between is a lost race; a caller that named none asked for the document as it is. The rest is there already ([from the check to the save](#from-the-check-to-the-save)). |
@@ -311,7 +317,7 @@ The check runs before the handler, and the handler loads, changes and saves afte
 requests go on: somebody renames the document, takes a role from the caller, revokes what reached it from
 above. What holds a change through that, on the default path, is what is already there, each doing one thing:
 
-1. **The request's requirement**, `MemberAccess.On(key, document, ExpectedVersion)`, before the handler: who
+1. **The request's requirement**, `[RequiresKey(key)]` on the `[OnResource]` document with its `[ExpectedVersion]`, before the handler: who
    may, and, where the caller named the version it read, that the document is still at it.
 2. **The load by id.** The handler loads the document its request names, which is the one that was checked,
    and holds it to the version the caller named, with one line: `db.ExpectVersion(document, command.ExpectedVersion)`.
@@ -410,10 +416,8 @@ holds the key, in one statement, so "nobody gives a role for longer than they ho
 few lines:
 
 ```csharp
-public sealed record AdmitStaff(FolderId Folder, StaffCode Staff, NamedRole Role, DateTimeOffset? Until, long? ExpectedVersion = null) : IFilingRequest
-{
-    AccessRequirement IRequireAccess.RequiredAccess => MemberAccess.On("folders.staff", Folder, ExpectedVersion);
-}
+[RequiresKey("folders.staff")]
+public sealed record AdmitStaff([OnResource] FolderId Folder, StaffCode Staff, NamedRole Role, DateTimeOffset? Until, [ExpectedVersion] long? ExpectedVersion = null) : IFilingRequest;
 
 // In the handler:
 var hold = await questions.RequireAsync(command.Folder, "folders.staff", cancellationToken);   // IMemberQuestions<FolderId>
@@ -542,10 +546,8 @@ first:
 
 ```csharp
 // The query that lists: nothing is refused, the statement leaves out what the caller does not reach
-public sealed record ListDocuments : IFilingRequest
-{
-    AccessRequirement IRequireAccess.RequiredAccess => MemberAccess.SeenWith<DocumentId>("documents.view");
-}
+[SeenWith<DocumentId>("documents.view")]
+public sealed record ListDocuments : IFilingRequest;
 
 var seen = questions.Reach("documents.view");                    // IMemberQuestions<DocumentId>
 var page = await db.Documents.Within(seen).OrderBy(document => document.Id).Take(20).ToListAsync(cancellationToken);
@@ -565,10 +567,12 @@ var keys = await db.Documents.Where(document => ids.Contains(document.Id))
     .ToListAsync(cancellationToken);
 ```
 
-A query declares `MemberAccess.SeenWith(key)`: the checks [fail closed](access-requirements.md#what-answers-it),
+A query declares `[SeenWith<DocumentId>(key)]`: the checks [fail closed](access-requirements.md#what-answers-it),
 so a request that declares nothing is stopped, and this is what a list declares. It refuses nobody for want
-of the key. The reach is the filter. So it is a query's to declare: on a command it lets the handler run
-unchecked, which a test of yours can hold ([holding it with a test](access-requirements.md#holding-it-with-a-test)).
+of the key. The reach is the filter. So it is a query's to declare: on a message of Mediator's that is no query, a
+command or a plain `IRequest`, it is [DDD00082](diagnostics.md#ddd00082), since there it would let the handler run
+unchecked, and a test of yours holds
+the rest ([holding it with a test](access-requirements.md#holding-it-with-a-test)).
 A caller who did not sign in reaches nothing under any rules, so the check refuses it, `documents.not-permitted`
 naming the key, and the query's statement is never sent: a database that checks every row may refuse that
 caller's role your schema outright rather than answer nothing. With [Tenancy](#with-tenancy), a list that

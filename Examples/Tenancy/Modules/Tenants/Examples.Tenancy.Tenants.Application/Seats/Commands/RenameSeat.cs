@@ -23,13 +23,11 @@ namespace Examples.Tenancy.Tenants.Application.Seats.Commands;
 /// </remarks>
 /// <param name="Seat">The seat.</param>
 /// <param name="DisplayName">The name it is shown by from now on.</param>
+[InTenant]
 public sealed record RenameSeat(SeatId Seat, string? DisplayName) : ICommand, ITenantsRequest
 {
     /// <summary>The key a caller holds for the whole tenant to rename a seat that is not its own.</summary>
     public const string RequiredKey = TenancyKeys.SeatsManage;
-
-    /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.InTenant();
 }
 
 /// <summary>

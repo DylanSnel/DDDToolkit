@@ -17,11 +17,8 @@ namespace Examples.Tenancy.Tenants.Application.Access.Queries;
 /// </para>
 /// </remarks>
 /// <param name="Key">A permission key, as the request names it.</param>
-public sealed record UnitsWhereIHold(string Key) : IQuery<HeldUnits>, ITenantsRequest
-{
-    /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.InTenant();
-}
+[InTenant]
+public sealed record UnitsWhereIHold(string Key) : IQuery<HeldUnits>, ITenantsRequest;
 
 /// <summary>Where a caller holds a key: the units, and whether it holds the key tenant-wide.</summary>
 /// <param name="Units">Each unit where the key applies, by its id, ordered by the id's value so the answer is the same every time.</param>

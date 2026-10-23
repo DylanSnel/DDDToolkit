@@ -347,6 +347,33 @@ registers them. Registering the interface's checks reads it to bring the start-u
 `access.behaviors-registered`, which stops a host that handles a request of the interface without the behavior in
 its pipeline ([When nothing asks the checks](access-requirements.md#when-nothing-asks-the-checks)).
 
+### What a request's attributes say
+
+A request that says who may send it with an attribute gets one line, in the same file, in the interface, which is
+declared `partial` for it: the call the attribute stands for, written out. It is written with the library and
+without it, since whatever asks the checks reads it ([What a request declares](access-requirements.md#what-a-request-declares)):
+
+```csharp
+[AccessRequests]
+public partial interface IShopRequest : IRequireAccess;
+
+[RequiresKey("shop.orders.cancel")]
+public sealed record CancelOrder([OnResource] OrderId Order, [ExpectedVersion] long? ExpectedVersion = null) : IShopRequest;
+```
+
+```csharp title="ShopAccessBehavior.g.cs, shortened"
+partial interface IShopRequest
+{
+    AccessRequirement IRequireAccess.RequiredAccess => this switch
+    {
+        CancelOrder request => MemberAccess.On("shop.orders.cancel", request.Order, request.ExpectedVersion),
+        _ => throw new InvalidOperationException(GetType().FullName + " declares no access requirement: ..."),
+    };
+}
+```
+
+A request that answers `RequiredAccess` itself gets no line: C# takes its own over the interface's.
+
 ## `DDDToolkit.EntityFramework`
 
 With the Entity Framework package referenced, its generator adds the mapping. Each id gets a value

@@ -14,11 +14,8 @@ namespace Examples.Tenancy.Tenants.Application.Invitations.Commands;
 /// else that there is no such invitation, as it is not among the ones they list.
 /// </remarks>
 /// <param name="Invitation">The invitation.</param>
-public sealed record CancelInvitation(InvitationId Invitation) : ICommand, ITenantsRequest
-{
-    /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.InTenant();
-}
+[InTenant]
+public sealed record CancelInvitation(InvitationId Invitation) : ICommand, ITenantsRequest;
 
 /// <summary>
 /// Handles <see cref="CancelInvitation"/> with the Tenancy package's use case, which checks the caller, decides

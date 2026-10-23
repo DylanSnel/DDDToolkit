@@ -19,8 +19,7 @@ namespace DDDToolkit.Access;
 /// The checks are asked in the order they were given, and the first that decides a requirement is the one that
 /// holds the caller to it. <see cref="AccessRequirement.AllowAnonymous"/> is decided here, by asking nobody. The
 /// set dependency injection makes asks the core's <see cref="CallerAccessCheck"/> first, for
-/// <see cref="AccessRequirement.SignedIn"/> and <see cref="AccessRequirement.RequiresSystemWork"/>, and then the
-/// checks the module added.
+/// <see cref="AccessRequirement.SignedIn"/>, and then the checks the module added.
 /// </para>
 /// <para>
 /// It keeps nothing between two requests and nothing during one, so requests sent side by side within one
@@ -40,7 +39,7 @@ public sealed class AccessChecks<TRequests>
     /// A set of the given checks, asked in this order. Dependency injection makes one per scope, of the core's
     /// <see cref="CallerAccessCheck"/> and then the checks registered for <typeparamref name="TRequests"/>; a test
     /// makes one by hand, and gives it the <see cref="CallerAccessCheck"/> where its requests require a signed-in
-    /// user or system work.
+    /// user.
     /// </summary>
     /// <param name="checks">The checks of the module, in the order they are asked.</param>
     /// <exception cref="ArgumentNullException"><paramref name="checks"/> is null.</exception>
@@ -93,11 +92,12 @@ public sealed class AccessChecks<TRequests>
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        // Read once: a request may make its requirement anew each time it is asked.
+        // Read once: a request may make its requirement anew each time it is asked. A request that states it with
+        // attributes answers it the same way, from the line the generator wrote into its module's interface.
         var requirement = request.RequiredAccess
             ?? throw new InvalidOperationException(
                 $"{NameOf(request.GetType())} declares no access requirement. A request that declares nothing lets nobody through: "
-                + "answer RequiredAccess with what it requires, or with AccessRequirement.AllowAnonymous() where anyone may send it.");
+                + "state what it requires with an attribute, such as [SignedIn], or answer RequiredAccess with it, and say [AllowAnonymousCallers] where anyone may send it.");
 
         var check = requirement is AccessRequirement.Anyone
             ? null

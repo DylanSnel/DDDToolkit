@@ -12,11 +12,8 @@ namespace Examples.Tenancy.Tenants.Application.Invitations.Queries;
 /// reason, such as <c>tenancy.not-seated</c>. No answer carries a token: that was shown once, when the invitation
 /// was issued.
 /// </remarks>
-public sealed record OpenInvitations : IQuery<IReadOnlyList<TenancyUseCases.OpenInvitation<InvitationId>>>, ITenantsRequest
-{
-    /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.InTenant();
-}
+[InTenant]
+public sealed record OpenInvitations : IQuery<IReadOnlyList<TenancyUseCases.OpenInvitation<InvitationId>>>, ITenantsRequest;
 
 /// <summary>Answers <see cref="OpenInvitations"/> from the Tenancy package, which checks the caller and reads.</summary>
 /// <param name="reads">Where Tenancy is read.</param>

@@ -283,24 +283,25 @@ database guards on a seat".
   `Crew/Rest/CrewEndpoints.cs`, `Crew/GraphQL/CrewMutations.cs`. A route and a field only send the
   feature's command or query.
 - **The namespace of a type is its folder**, in every project and in the tests.
-- **A request says what it requires of its caller**, by implementing its module's request interface. The
-  interface is marked `[AccessRequests]`, so the module's pipeline behavior is generated: it asks the
-  module's checks before the handler runs. A module writes a check (`IAccessCheck`) only for cases of its
-  own; `AddTenancyAccess` adds the package's check for Tenancy's cases, and
-  `AddProjectMemberAccess<IProjectsRequest>()`, generated for the Membership package's member class, the
-  check for a key held on a project. Every request picks one requirement that says what it requires: the
-  toolkit's `AccessRequirement.AllowAnonymous()`, `SignedIn()` or `RequiresSystemWork()`, Tenancy's
-  `TenancyAccess.InTenant()`, `ForTheWholeTenant(key)`, `AtUnit(key, unit)` or `RequiresOperator()`, or
-  Membership's `MemberAccess.On(key, resource)`, or `MemberAccess.SeenWith<TResourceId>(key)` for a query that
-  shows the resources the key is held on. None leaves the decision to a package: a request handed to
-  Tenancy's use case says what that use case asks first, and the use case keeps the rest. A test fails for a
-  request that declares nothing.
+- **A request says who may send it**, by implementing its module's request interface and carrying one
+  requirement attribute. The interface is marked `[AccessRequests]` and declared `partial`, so the module's
+  pipeline behavior is generated, which asks the module's checks before the handler runs, and `RequiredAccess` is
+  written into it from the attributes. A module writes a check (`IAccessCheck`) only for cases of its own;
+  `AddTenancyAccess` adds the package's check for Tenancy's cases, and `AddProjectMemberAccess<IProjectsRequest>()`,
+  generated for the Membership package's member class, the check for a key held on a project. The attributes:
+  the toolkit's `[AllowAnonymousCallers]` and `[SignedIn]`, Tenancy's `[InTenant]` and `[RequiresOperator]` (queries
+  only), `[RequiresKey(key)]` for the whole tenant, with Tenancy's `[AtUnit]` on the unit for a key there, or with
+  Membership's `[OnResource]` on the resource and `[ExpectedVersion]` on the version read, and Membership's
+  `[SeenWith<TResourceId>(key)]` for a query that shows the resources the key is held on. A request answers
+  `RequiredAccess` itself only for a case of the module's own or a requirement computed from its values
+  (`SeatGrants`). None leaves the decision to a package: a request handed to Tenancy's use case says what that use
+  case asks first, and the use case keeps the rest. System work is no requirement: trusted code begins it around
+  the work (`TenancyUseCases.BeginSystemIn(tenant)`), a request it sends in a tenant is `[InTenant]`, and the
+  handler refuses everyone else (`access.system-only`). A request that declares nothing is DDD00077.
 
   ```csharp
-  public sealed record CloseProject(ProjectId Id, long? ExpectedVersion = null) : ICommand, IProjectsRequest
-  {
-      AccessRequirement IRequireAccess.RequiredAccess => MemberAccess.On(ProjectKeys.Close, Id, ExpectedVersion);   // the Membership package's case
-  }
+  [RequiresKey(ProjectKeys.Close)]                                           // the Membership package's case
+  public sealed record CloseProject([OnResource] ProjectId Id, [ExpectedVersion] long? ExpectedVersion = null) : ICommand, IProjectsRequest;
   ```
 
 - **A command saves through a store port, a query reads through a read port** on a context of its own

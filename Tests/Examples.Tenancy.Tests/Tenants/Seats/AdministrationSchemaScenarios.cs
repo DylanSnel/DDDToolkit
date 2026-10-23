@@ -74,6 +74,35 @@ public sealed class AdministrationSchemaScenarios(SampleHosts sample) : IClassFi
     }
 
     [Fact]
+    public async Task Rhea_reads_the_roles_held_at_a_unit_of_her_region_when_she_asks_at_it()
+    {
+        // The request computes what it requires: asked at a unit, the seats key there or above it, which she holds at
+        // North. So she reads Vic's role at North Inland, below North, and is refused for every unit, at the root and at
+        // South, beside North.
+        using var rhea = await sample.ClientAsync("rhea", Harbor.Slug);
+        var vic = Harbor.SeatOf(DemoPeople.Vic).Value;
+
+        var grant = (await rhea.GetFromJsonAsync<JsonElement>($"/tenancy/seats/{vic}/grants?unit={Harbor.UnitNamed("North Inland").Value}", Cancellation))
+            .EnumerateArray().Should().ContainSingle().Subject;
+        grant.GetProperty("unitId").GetGuid().Should().Be(Harbor.UnitNamed("North Inland").Value);
+
+        using (var response = await rhea.GetAsync($"/tenancy/seats/{vic}/grants", Cancellation))
+        {
+            await response.ShouldBeRefusedAsync(HttpStatusCode.Forbidden, TenancyRefusals.NotPermitted);
+        }
+
+        using (var response = await rhea.GetAsync($"/tenancy/seats/{vic}/grants?unit={Harbor.Root.Value}", Cancellation))
+        {
+            await response.ShouldBeRefusedAsync(HttpStatusCode.Forbidden, TenancyRefusals.NotPermitted);
+        }
+
+        using (var response = await rhea.GetAsync($"/tenancy/seats/{vic}/grants?unit={Harbor.UnitNamed("South").Value}", Cancellation))
+        {
+            await response.ShouldBeRefusedAsync(HttpStatusCode.Forbidden, TenancyRefusals.NotPermitted);
+        }
+    }
+
+    [Fact]
     public async Task A_seat_of_another_tenant_is_not_found_at_the_field_or_on_the_route()
     {
         // Tove is meadow's administrator, with the key for the whole of meadow: her own seat there has her role.

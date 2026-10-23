@@ -15,11 +15,8 @@ namespace Examples.Tenancy.Tenants.Application.Directory.Queries;
 /// are refused.
 /// </remarks>
 /// <param name="Ids">The units asked about.</param>
-public sealed record OrganizationUnitsById(IReadOnlyList<OrganizationUnitId> Ids) : IQuery<IReadOnlyList<UnitListing>>, ITenantsRequest
-{
-    /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.InTenant();
-}
+[InTenant]
+public sealed record OrganizationUnitsById(IReadOnlyList<OrganizationUnitId> Ids) : IQuery<IReadOnlyList<UnitListing>>, ITenantsRequest;
 
 /// <summary>
 /// Answers <see cref="OrganizationUnitsById"/> from the Tenancy package's directory: the module's own units, each

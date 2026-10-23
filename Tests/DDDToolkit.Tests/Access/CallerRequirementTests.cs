@@ -8,9 +8,11 @@ using Microsoft.Extensions.DependencyInjection;
 namespace DDDToolkit.Tests.Access;
 
 /// <summary>
-/// The requirements that are about who is calling and nothing else: anyone, a signed-in user, the application
-/// itself. The core decides them, so every module has them with no check of its own, and the same caller is let
-/// through or refused the same way in each.
+/// The requirements that are about who is calling and nothing else: anyone, and a signed-in user. The core decides
+/// them, so every module has them with no check of its own, and the same caller is let through or refused the same way
+/// in each. The application's own work is none of them: it is a scope trusted code begins around the work, a request
+/// it sends says who may send it like any other, and what only system work may do is refused past the door, with
+/// <see cref="Callers.RequireSystemWork"/>.
 /// </summary>
 public class CallerRequirementTests
 {
@@ -102,35 +104,36 @@ public class CallerRequirementTests
         refusal.Message.Should().Be("Only a signed-in user can do this.");
     }
 
-    [Theory]
-    [MemberData(nameof(Kinds))]
-    public async Task Only_the_application_itself_passes_a_request_that_requires_system_work(string kind, bool signedIn, bool system)
+    [Fact]
+    public async Task System_work_is_a_scope_begun_around_the_send_and_the_caller_before_it_is_current_again_after()
     {
-        _ = signedIn;
-        using var provider = Provider(services => services.AddSingleton<ICallerAccessor>(new Answering(CallerOf(kind))));
+        // No request requires the application's own work. Trusted code begins it around the work, a request it sends
+        // says who may send it, as any other does, and once the scope ends the caller before it is current again.
+        using var provider = Provider(_ => { });
         using var scope = provider.CreateScope();
-        var require = () => Checks(scope).RequireAsync(new Checkout(AccessRequirement.RequiresSystemWork()), TestContext.Current.CancellationToken).AsTask();
+        var anyone = new Checkout(AccessRequirement.AllowAnonymous());
+        var signedIn = new Checkout(AccessRequirement.SignedIn());
 
-        // The caller is begun for the flow of work, as trusted code begins system work, and the host answers it.
-        using var begun = Callers.Begin(CallerOf(kind));
-
-        if (system)
+        using (Callers.Begin(Signed))
         {
-            await require();
-            return;
-        }
+            using (Callers.Begin(Caller.System))
+            {
+                await Checks(scope).RequireAsync(anyone, TestContext.Current.CancellationToken);
+                (await FluentActions.Awaiting(() => Checks(scope).RequireAsync(signedIn, TestContext.Current.CancellationToken).AsTask())
+                    .Should().ThrowAsync<RefusalException>("the application's own work is nobody's sign-in")).Which.Code.Should().Be(ToolkitRefusals.NotSignedIn);
+                Callers.Ambient.Should().Be(Caller.System);
+            }
 
-        var refusal = (await require.Should().ThrowAsync<RefusalException>(kind)).Which;
-        refusal.Code.Should().Be(ToolkitRefusals.SystemOnly, "{0} is not the application, whatever it holds", kind);
-        refusal.Kind.Should().Be(RefusalKind.NotPermitted);
-        refusal.Message.Should().Be("Only the application itself can do this.");
+            Callers.Ambient.Should().Be(Signed, "the scope ended, and the caller before it is current again");
+            await Checks(scope).RequireAsync(signedIn, TestContext.Current.CancellationToken);
+        }
     }
 
     [Fact]
     public void There_is_one_way_to_spell_each_case()
     {
-        // A request writes AccessRequirement.SignedIn(), never a constructor: nothing else makes one.
-        foreach (var each in new[] { typeof(AccessRequirement.Anyone), typeof(AccessRequirement.SignedInUser), typeof(AccessRequirement.SystemWork) })
+        // A request writes [SignedIn] or AccessRequirement.SignedIn(), never a constructor: nothing else makes one.
+        foreach (var each in new[] { typeof(AccessRequirement.Anyone), typeof(AccessRequirement.SignedInUser) })
         {
             each.IsSealed.Should().BeTrue();
             each.GetConstructors(BindingFlags.Instance | BindingFlags.Public).Should().BeEmpty("{0} is made by its method alone", each.Name);
@@ -138,9 +141,29 @@ public class CallerRequirementTests
 
         AccessRequirement.AllowAnonymous().Should().BeOfType<AccessRequirement.Anyone>();
         AccessRequirement.SignedIn().Should().BeOfType<AccessRequirement.SignedInUser>();
-        AccessRequirement.RequiresSystemWork().Should().BeOfType<AccessRequirement.SystemWork>();
         typeof(AccessRequirement).GetNestedTypes().Select(each => each.Name)
-            .Should().BeEquivalentTo(["Anyone", "SignedInUser", "SystemWork"], "the core's cases are about who is calling, and there is no case that says nothing");
+            .Should().BeEquivalentTo(["Anyone", "SignedInUser"], "the core's cases are about who may send a request, there is no case that says nothing, and system work is no case but a scope");
+        typeof(AccessRequirement).GetMethods(BindingFlags.Public | BindingFlags.Static).Where(method => !method.IsSpecialName).Select(method => method.Name)
+            .Should().BeEquivalentTo(["AllowAnonymous", "SignedIn"], "the record's operators aside, a spelling for each case and none for system work");
+    }
+
+    [Fact]
+    public void Each_case_has_its_attribute_marked_with_the_call_the_generator_writes()
+    {
+        // What the generator reads: the attribute's class says which call it stands for, so nothing knows it by name.
+        StatedBy(typeof(AllowAnonymousCallersAttribute)).Should().Be((typeof(AccessRequirement), nameof(AccessRequirement.AllowAnonymous)));
+        StatedBy(typeof(SignedInAttribute)).Should().Be((typeof(AccessRequirement), nameof(AccessRequirement.SignedIn)));
+        typeof(AccessRequirement).GetMethod(nameof(AccessRequirement.AllowAnonymous))!.Invoke(null, null).Should().Be(AccessRequirement.AllowAnonymous());
+
+        foreach (var attribute in new[] { typeof(AllowAnonymousCallersAttribute), typeof(SignedInAttribute), typeof(RequiresKeyAttribute) })
+        {
+            var usage = attribute.GetCustomAttribute<AttributeUsageAttribute>()!;
+            usage.ValidOn.Should().Be(AttributeTargets.Class | AttributeTargets.Struct, "{0} goes on a request", attribute.Name);
+            usage.Inherited.Should().BeFalse();
+        }
+
+        static (Type Factory, string Method) StatedBy(Type attribute)
+            => attribute.GetCustomAttribute<StatesRequirementAttribute>() is { } states ? (states.Factory, states.Method) : default;
     }
 
     // ------------------------------------------------------------------ in front of the module's own checks
@@ -158,8 +181,6 @@ public class CallerRequirementTests
         using var scope = provider.CreateScope();
 
         await FluentActions.Awaiting(() => Checks(scope).RequireAsync(new Checkout(AccessRequirement.SignedIn()), TestContext.Current.CancellationToken).AsTask())
-            .Should().ThrowAsync<RefusalException>();
-        await FluentActions.Awaiting(() => Checks(scope).RequireAsync(new Checkout(AccessRequirement.RequiresSystemWork()), TestContext.Current.CancellationToken).AsTask())
             .Should().ThrowAsync<RefusalException>();
         asked.Should().BeEmpty();
 
@@ -186,60 +207,9 @@ public class CallerRequirementTests
         }
 
         // Outside any caller, a host that requires nothing answers the application itself, as in every 3.x host,
-        // and that is still no system work: only work trusted code began is.
-        (await FluentActions.Awaiting(() => Checks(scope).RequireAsync(new Checkout(AccessRequirement.RequiresSystemWork()), TestContext.Current.CancellationToken).AsTask())
-            .Should().ThrowAsync<RefusalException>()).Which.Code.Should().Be(ToolkitRefusals.SystemOnly);
-
-        using (Callers.Begin(Caller.System))
-        {
-            await Checks(scope).RequireAsync(new Checkout(AccessRequirement.RequiresSystemWork()), TestContext.Current.CancellationToken);
-        }
-    }
-
-    [Fact]
-    public async Task System_work_passes_only_where_trusted_code_began_it()
-    {
-        var systemWork = new Checkout(AccessRequirement.RequiresSystemWork());
-
-        // A host that requires nothing answers the application itself for work nobody began a caller for: a web
-        // request no accessor knows gets that answer too, so it lets nobody through a door only the application
-        // may pass.
-        new AmbientCallerAccessor().Current.Should().Be(Caller.System, "that is the 3.x default, which this test is about");
-        using (var provider = Provider(_ => { }))
-        using (var scope = provider.CreateScope())
-        {
-            await RefusedAsSystemOnly(scope, systemWork, "nobody began a caller for the flow");
-
-            using (Callers.Begin(Caller.System))
-            {
-                await Checks(scope).RequireAsync(systemWork, TestContext.Current.CancellationToken);
-
-                using (Callers.BeginNone())
-                {
-                    await RefusedAsSystemOnly(scope, systemWork, "the toolkit hid the system caller from the handler it runs");
-                }
-            }
-
-            using (Callers.Begin(Caller.SystemIn("billing")))
-            {
-                await Checks(scope).RequireAsync(systemWork, TestContext.Current.CancellationToken);
-            }
-        }
-
-        // A host's own accessor that answers the application itself where nothing was begun is not believed either.
-        using (var provider = Provider(services => services.AddSingleton<ICallerAccessor>(new Answering(Caller.System))))
-        using (var scope = provider.CreateScope())
-        {
-            await RefusedAsSystemOnly(scope, systemWork, "the host's answer is a default, not work anybody began");
-        }
-
-        // And system work begun beside a host that answers somebody else does not run as the system, so it does not pass.
-        using (var provider = Provider(services => services.AddSingleton<ICallerAccessor>(new Answering(Signed))))
-        using (var scope = provider.CreateScope())
-        using (Callers.Begin(Caller.System))
-        {
-            await RefusedAsSystemOnly(scope, systemWork, "the host says the work runs as a user");
-        }
+        // and that is nobody's sign-in.
+        (await FluentActions.Awaiting(() => Checks(scope).RequireAsync(signedIn, TestContext.Current.CancellationToken).AsTask())
+            .Should().ThrowAsync<RefusalException>()).Which.Code.Should().Be(ToolkitRefusals.NotSignedIn);
     }
 
     [Fact]
@@ -248,12 +218,12 @@ public class CallerRequirementTests
         using var provider = Provider(services => services.RequireExplicitCallers());
         using var scope = provider.CreateScope();
 
-        await FluentActions.Awaiting(() => Checks(scope).RequireAsync(new Checkout(AccessRequirement.RequiresSystemWork()), TestContext.Current.CancellationToken).AsTask())
+        await FluentActions.Awaiting(() => Checks(scope).RequireAsync(new Checkout(AccessRequirement.SignedIn()), TestContext.Current.CancellationToken).AsTask())
             .Should().ThrowAsync<NoCallerException>("such work is a mistake to fix, not a caller to refuse or to let through");
 
-        using (Callers.Begin(Caller.System))
+        using (Callers.Begin(Signed))
         {
-            await Checks(scope).RequireAsync(new Checkout(AccessRequirement.RequiresSystemWork()), TestContext.Current.CancellationToken);
+            await Checks(scope).RequireAsync(new Checkout(AccessRequirement.SignedIn()), TestContext.Current.CancellationToken);
         }
     }
 
@@ -281,7 +251,6 @@ public class CallerRequirementTests
         var check = new CallerAccessCheck(new Answering(Signed));
 
         check.Decides(AccessRequirement.SignedIn()).Should().BeTrue();
-        check.Decides(AccessRequirement.RequiresSystemWork()).Should().BeTrue();
         check.Decides(AccessRequirement.AllowAnonymous()).Should().BeFalse("nobody has to decide that anyone may send a request");
         check.Decides(new OnBasket(4)).Should().BeFalse();
 
@@ -293,11 +262,74 @@ public class CallerRequirementTests
             .Should().ThrowAsync<ArgumentNullException>();
     }
 
-    private static AccessChecks<IShopRequest> Checks(IServiceScope scope) => scope.ServiceProvider.GetRequiredService<AccessChecks<IShopRequest>>();
+    // ------------------------------------------------------------------ past the door: what only system work may do
 
-    private static async Task RefusedAsSystemOnly(IServiceScope scope, Checkout request, string because)
-        => (await FluentActions.Awaiting(() => Checks(scope).RequireAsync(request, TestContext.Current.CancellationToken).AsTask())
-            .Should().ThrowAsync<RefusalException>(because)).Which.Code.Should().Be(ToolkitRefusals.SystemOnly, because);
+    [Theory]
+    [MemberData(nameof(Kinds))]
+    public void Only_system_work_trusted_code_began_passes_what_only_the_application_itself_may_do(string kind, bool signedIn, bool system)
+    {
+        _ = signedIn;
+        var callers = new AmbientCallerAccessor();
+
+        // The caller is begun for the flow of work, as trusted code begins system work, and the host answers it.
+        using var begun = Callers.Begin(CallerOf(kind));
+        var require = () => Callers.RequireSystemWork(callers);
+
+        if (system)
+        {
+            require().Should().BeSameAs(Callers.Ambient, "it answers who the work runs as");
+            return;
+        }
+
+        var refusal = require.Should().Throw<RefusalException>(kind).Which;
+        refusal.Code.Should().Be(ToolkitRefusals.SystemOnly, "{0} is not the application, whatever it holds", kind);
+        refusal.Kind.Should().Be(RefusalKind.NotPermitted);
+        refusal.Message.Should().Be("Only the application itself can do this.");
+    }
+
+    [Fact]
+    public void Work_nobody_began_is_no_system_work_even_where_the_host_answers_the_application_itself()
+    {
+        // A host that requires nothing answers the application itself for work nobody began a caller for: a web
+        // request no accessor knows gets that answer too, so asking the accessor alone would let it through.
+        var callers = new AmbientCallerAccessor();
+        callers.Current.Should().Be(Caller.System, "that is the 3.x default, which this test is about");
+        RefusedAsSystemOnly(() => Callers.RequireSystemWork(callers), "nobody began a caller for the flow");
+
+        using (Callers.Begin(Caller.System))
+        {
+            Callers.RequireSystemWork(callers).Should().BeSameAs(Caller.System);
+
+            using (Callers.BeginNone())
+            {
+                RefusedAsSystemOnly(() => Callers.RequireSystemWork(callers), "the toolkit hid the system caller from the handler it runs");
+            }
+        }
+
+        using (Callers.Begin(Caller.SystemIn("billing")))
+        {
+            Callers.RequireSystemWork(callers).Scope.Should().Be("billing", "it answers the scope the work runs in");
+        }
+
+        // A host's own accessor that answers the application itself where nothing was begun is not believed either.
+        RefusedAsSystemOnly(() => Callers.RequireSystemWork(new Answering(Caller.System)), "the host's answer is a default, not work anybody began");
+
+        // And system work begun beside a host that answers somebody else does not run as the system.
+        using (Callers.Begin(Caller.System))
+        {
+            RefusedAsSystemOnly(() => Callers.RequireSystemWork(new Answering(Signed)), "the host says the work runs as a user");
+        }
+
+        // A host that requires explicit callers fails such work instead of refusing it.
+        FluentActions.Invoking(() => Callers.RequireSystemWork(new AmbientCallerAccessor(new CallerOptions { RequireExplicitCallers = true })))
+            .Should().Throw<NoCallerException>("such work is a mistake to fix, not a caller to refuse");
+        FluentActions.Invoking(() => Callers.RequireSystemWork(null!)).Should().Throw<ArgumentNullException>();
+    }
+
+    private static void RefusedAsSystemOnly(Func<Caller> require, string because)
+        => require.Should().Throw<RefusalException>(because).Which.Code.Should().Be(ToolkitRefusals.SystemOnly, because);
+
+    private static AccessChecks<IShopRequest> Checks(IServiceScope scope) => scope.ServiceProvider.GetRequiredService<AccessChecks<IShopRequest>>();
 
     private static ServiceProvider Provider(Action<IServiceCollection> register)
     {

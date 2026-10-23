@@ -8,13 +8,11 @@ namespace Examples.Tenancy.Projects.Application.Overview.Queries;
 /// at once, where a project out of reach is simply left out, it is <see cref="ProjectsById"/>.
 /// </remarks>
 /// <param name="Id">The project.</param>
-public sealed record ProjectDetail(ProjectId Id) : IQuery<ProjectOverview>, IProjectsRequest
+[RequiresKey(RequiredKey)]
+public sealed record ProjectDetail([OnResource] ProjectId Id) : IQuery<ProjectOverview>, IProjectsRequest
 {
     /// <summary>The key the caller holds on the project.</summary>
     public const string RequiredKey = ProjectKeys.View;
-
-    /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => MemberAccess.On(RequiredKey, Id);
 }
 
 /// <summary>Answers <see cref="ProjectDetail"/> in one statement, on a reading of this query's own.</summary>

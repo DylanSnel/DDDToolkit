@@ -29,6 +29,7 @@ namespace Examples.Tenancy.Projects.Application.Overview.Queries;
 /// have a case is the database's to say, and Postgres folds every letter: a capital outside A to Z in a name,
 /// as in "Écluse", is found in either case.
 /// </param>
+[SeenWith<ProjectId>(RequiredKey)]
 public sealed record VisibleProjects(
     PagingArguments Paging = default,
     ProjectState? State = null,
@@ -43,9 +44,6 @@ public sealed record VisibleProjects(
 
     /// <summary>The most projects a page holds.</summary>
     public const int LargestPage = 200;
-
-    /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => MemberAccess.SeenWith<ProjectId>(RequiredKey);
 }
 
 /// <summary>

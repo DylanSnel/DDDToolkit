@@ -661,6 +661,70 @@ classes from (keep one), the name is no name a class can have, or a namespace or
 such as the module's root namespace (give another). In a module split over two projects the line may sit beside the
 module in either.
 
+## DDD00077
+
+Error, on a request whose module's interface is `partial` (so the compiler no longer asks for the property) and
+that says nothing of what it requires. Put the requirement attribute on it that says who may send it: `[SignedIn]`,
+`[InTenant]`, `[RequiresKey(key)]` with `[AtUnit]` or `[OnResource]` on the member where the key is held,
+`[SeenWith<TResourceId>(key)]` on a list, `[RequiresOperator]` on an operator's query, `[AllowAnonymousCallers]` only
+where anyone may send it. Answer `RequiredAccess` instead only for a case of the module's own or a requirement
+computed from the request's values. A request of another project than its interface answers `RequiredAccess`. Never
+answer it with `[AllowAnonymousCallers]` to make it build, and never with system work: there is no such requirement.
+
+## DDD00078
+
+Error: a requirement attribute and `RequiredAccess` on one request; the property wins and the attribute does
+nothing. Keep the attribute where the requirement reads no value of the request (delete the property), keep the
+property where it computes one (delete the attribute). "Through 'ISomeRequest'" in the message: an interface between
+the request and its module's gives the property a default, which C# takes; implement the module's interface instead,
+or drop the attribute.
+
+## DDD00079
+
+Error: two requirement attributes on one request (`[AllowAnonymousCallers]` with `[RequiresKey]`, `[InTenant]` with
+`[RequiresKey]`, `[SignedIn]` with `[InTenant]`). Keep the one the request requires: a key needs nothing beside it. A
+requirement that is one or the other depending on the request is `RequiredAccess`, computed.
+
+## DDD00080
+
+Error, at a marker or the request. A marker says where the key of `[RequiresKey(key)]` is held. Read the message:
+a marker without `[RequiresKey]` (add the key, or take the marker off); two markers of where, or `[AtUnit]` with
+`[OnResource]` (keep one; compute it as `RequiredAccess` where it depends on the request); `[ExpectedVersion]` without
+`[OnResource]` (mark the resource, or take it off); a marker twice; a marker on a class's primary-constructor
+parameter (mark the property; a positional record parameter is fine); a marker on a private or protected property
+(give it a public or internal getter); `[RequiresKey]` without a marker where no referenced package says where such a
+key is held, as in a project with Membership and no Tenancy (mark `[OnResource]` on the resource). An abstract
+record that carries the unit is not reported; a request that derives from it and "inherits" a marker without
+`[RequiresKey]` is (add the key). A derived record's positional parameter may carry `[AtUnit]` even where its base
+declares the property.
+
+## DDD00081
+
+Error, at the marker: it is on a member of the wrong type. `[AtUnit]` goes on the application's unit id (the id of
+the class declared `[OrganizationUnit<TUnitId>]`), `[OnResource]` on the id of a resource with members (the aggregate
+root a `[Member<..., TResource>]` class names), `[ExpectedVersion]` on a `long?`. Move the marker to the member the
+message names, or fix the member's type. A unit or resource that may be null is computed:
+`RequiredAccess => Unit is { } unit ? TenancyAccess.AtUnit(key, unit) : TenancyAccess.ForTheWholeTenant(key)`.
+
+## DDD00082
+
+Error, on a message of the Mediator library that is no query (a command, `ICommand` or `IStreamCommand`, or a plain
+`IRequest` or `IStreamRequest`) and carries a requirement its package declares for queries only:
+`[SeenWith<TResourceId>(key)]` (refuses nobody, the query's statement filters) or `[RequiresOperator]`. Make it a query
+(`IQuery`, `IStreamQuery`) if it only reads. If it changes something: for `[SeenWith]`, require the key where it acts,
+`[RequiresKey(key)]` with `[OnResource]` on the resource; for `[RequiresOperator]`, never a key (an operator holds
+none), but trusted code that carries the operator's ask out as system work naming the operator,
+`TenancyUseCases.BeginOperatorIn(tenant, identity)`, behind a requirement of the module's own. The same requirement
+written as `RequiredAccess` on a command is not reported; do not write it so.
+
+## DDD00083
+
+Error, on a request whose requirement attributes nothing turns into `RequiredAccess`. Read the message: declare the
+module's interface `partial` (`[AccessRequests] public partial interface IBillingRequest : IRequireAccess;`), implement
+the module's interface, move the request into the project that declares it, or, for a generic request, one nested
+private, or one that implements two partial module interfaces (C# takes neither's property, CS8705), answer
+`RequiredAccess` itself (or make the nested type internal, or implement one interface).
+
 ## Not a diagnostic: the owned type must carry the key part
 
 An exception when the Entity Framework model is built, not at compile time: an aggregate with a

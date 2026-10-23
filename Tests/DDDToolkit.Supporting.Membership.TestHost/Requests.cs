@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.Access;
 
 namespace DDDToolkit.Supporting.Membership.TestHost;
@@ -12,47 +13,39 @@ namespace DDDToolkit.Supporting.Membership.TestHost;
 /// rule the host wrote itself applies, which reads until when the caller holds that key
 /// (<see cref="AdmitStaff"/>, <see cref="AdmitStaffHandler"/>).
 /// </para>
+/// <para>
+/// Each request says what it requires with Membership's attributes, and the toolkit's generator writes the call each
+/// stands for into this interface, which is marked and partial for that: <c>[RequiresKey(key)]</c> with
+/// <c>[OnResource]</c> on the resource and <c>[ExpectedVersion]</c> on the version the caller read, and
+/// <c>[SeenWith&lt;TResourceId&gt;(key)]</c> on a list.
+/// </para>
 /// </summary>
-public interface IFilingRequest : IRequireAccess;
+[AccessRequests]
+public partial interface IFilingRequest : IRequireAccess;
 
 /// <summary>
 /// Shares a document with a user, in a role or in none, until a moment or with no end. Whoever holds the key
-/// that shares, on that document, may: the line below is the whole of this host's rule about it.
+/// that shares, on that document, may: the attribute below is the whole of this host's rule about it.
 /// </summary>
-public sealed record ShareDocument(DocumentId Document, UserId With, NamedRole? Role = null, DateTimeOffset? Until = null, long? ExpectedVersion = null) : IFilingRequest
-{
-    /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => MemberAccess.On(DocumentKeys.Share, Document, ExpectedVersion);
-}
+[RequiresKey(DocumentKeys.Share)]
+public sealed record ShareDocument([OnResource] DocumentId Document, UserId With, NamedRole? Role = null, DateTimeOffset? Until = null, [ExpectedVersion] long? ExpectedVersion = null) : IFilingRequest;
 
 /// <summary>
 /// Puts a member of staff on a folder, in a role, until a moment or with no end. The key that decides a
 /// folder's staff is required on it, and the handler adds the host's own rule: for no longer than the caller
 /// holds that key.
 /// </summary>
-public sealed record AdmitStaff(FolderId Folder, StaffCode Staff, NamedRole Role, DateTimeOffset? Until = null, long? ExpectedVersion = null) : IFilingRequest
-{
-    /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => MemberAccess.On(FolderKeys.Staff, Folder, ExpectedVersion);
-}
+[RequiresKey(FolderKeys.Staff)]
+public sealed record AdmitStaff([OnResource] FolderId Folder, StaffCode Staff, NamedRole Role, DateTimeOffset? Until = null, [ExpectedVersion] long? ExpectedVersion = null) : IFilingRequest;
 
 /// <summary>Lists the documents the caller sees: nothing is refused, the statement filters.</summary>
-public sealed record ListDocuments : IFilingRequest
-{
-    /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => MemberAccess.SeenWith<DocumentId>(DocumentKeys.View);
-}
+[SeenWith<DocumentId>(DocumentKeys.View)]
+public sealed record ListDocuments : IFilingRequest;
 
 /// <summary>Puts something in a folder: requires the key that files, on that folder.</summary>
-public sealed record FileInFolder(FolderId Folder, long? ExpectedVersion = null) : IFilingRequest
-{
-    /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => MemberAccess.On(FolderKeys.File, Folder, ExpectedVersion);
-}
+[RequiresKey(FolderKeys.File)]
+public sealed record FileInFolder([OnResource] FolderId Folder, [ExpectedVersion] long? ExpectedVersion = null) : IFilingRequest;
 
 /// <summary>Lists the folders the caller sees.</summary>
-public sealed record ListFolders : IFilingRequest
-{
-    /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => MemberAccess.SeenWith<FolderId>(FolderKeys.Read);
-}
+[SeenWith<FolderId>(FolderKeys.Read)]
+public sealed record ListFolders : IFilingRequest;

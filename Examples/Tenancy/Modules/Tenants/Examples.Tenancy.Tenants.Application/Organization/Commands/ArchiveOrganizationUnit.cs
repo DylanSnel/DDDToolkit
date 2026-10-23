@@ -10,11 +10,8 @@ namespace Examples.Tenancy.Tenants.Application.Organization.Commands;
 /// where the unit hangs: <c>tenancy.units.manage</c> at the unit's parent.
 /// </remarks>
 /// <param name="Unit">The unit to archive.</param>
-public sealed record ArchiveOrganizationUnit(OrganizationUnitId Unit) : ICommand, ITenantsRequest
-{
-    /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.InTenant();
-}
+[InTenant]
+public sealed record ArchiveOrganizationUnit(OrganizationUnitId Unit) : ICommand, ITenantsRequest;
 
 /// <summary>Handles <see cref="ArchiveOrganizationUnit"/> with the Tenancy package's use case, which checks the caller, decides and saves.</summary>
 /// <param name="organization">The package's use cases that change the organization.</param>

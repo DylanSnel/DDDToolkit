@@ -15,13 +15,11 @@ namespace Examples.Tenancy.Projects.Application.ProjectRoles.Commands;
 /// </remarks>
 /// <param name="Id">The role.</param>
 /// <param name="Keys">Every key it is to give.</param>
+[RequiresKey(RequiredKey)]
 public sealed record SetProjectRoleKeys(ProjectRoleId Id, IReadOnlyCollection<string> Keys) : ICommand, IProjectsRequest
 {
     /// <summary>The key the caller holds for the whole tenant.</summary>
     public const string RequiredKey = ProjectRoleListing.KeysKey;
-
-    /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.ForTheWholeTenant(RequiredKey);
 }
 
 /// <summary>Handles <see cref="SetProjectRoleKeys"/>: loads the role, sets its keys and saves.</summary>

@@ -240,7 +240,7 @@ public class TenantCommandsTests
     {
         var harness = Harness.OfHarbor();
 
-        // The toolkit's code for "only the application itself", which a request that requires system work is refused with too.
+        // The toolkit's code for "only the application itself", which a handler that only system work may run refuses with too.
         await Refused.WithCodeAsync(ToolkitRefusals.SystemOnly, () => harness.As(harness.Administrator, h => h.Tenants.ProvisionAsync(Harbor(slug: "wharf"), default)));
         await FluentActions.Awaiting(() => harness.BySystemWork(h => h.Tenants.ProvisionAsync(Harbor(slug: "wharf"), default)))
             .Should().ThrowAsync<InvalidOperationException>().WithMessage("*Begin TenancyUseCases.BeginSystem() for it, or TenancyWork.BeginSystem<TenantId, SeatId>() in a project that sees only the ids*");

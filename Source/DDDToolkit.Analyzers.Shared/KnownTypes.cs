@@ -128,6 +128,42 @@ internal static class KnownTypes
     /// <summary>The access checks of one module, closed over its request interface: what a generated behavior asks.</summary>
     public const string AccessChecksUsage = "global::DDDToolkit.Access.AccessChecks";
 
+    /// <summary>
+    /// On an attribute a package ships: it states a request's requirement, and names the static call that makes it.
+    /// The core's <c>[SignedIn]</c>, Tenancy's <c>[InTenant]</c> and Membership's <c>[SeenWith&lt;T&gt;]</c> are marked so.
+    /// </summary>
+    public const string StatesRequirementAttribute = "DDDToolkit.Access.StatesRequirementAttribute";
+
+    /// <summary>On a request: the key its caller holds, where a marker on one of its members says, or for the whole tenant.</summary>
+    public const string RequiresKeyAttribute = "DDDToolkit.Access.RequiresKeyAttribute";
+
+    /// <summary>On an attribute a package ships: it marks where the key of <c>[RequiresKey]</c> is held, and names the call.</summary>
+    public const string KeyMarkerAttribute = "DDDToolkit.Access.KeyMarkerAttribute";
+
+    /// <summary>On an attribute a package ships: it marks one more argument of a key marker's call, such as the version read.</summary>
+    public const string KeyMarkerArgumentAttribute = "DDDToolkit.Access.KeyMarkerArgumentAttribute";
+
+    /// <summary>On a package's assembly: what <c>[RequiresKey]</c> means on a request that marks no member.</summary>
+    public const string KeyWithoutMarkerAttribute = "DDDToolkit.Access.KeyWithoutMarkerAttribute";
+
+    /// <summary>What every command of the Mediator library implements: a requirement for queries only is not stated on one.</summary>
+    public const string MediatorBaseCommand = "Mediator.IBaseCommand";
+
+    /// <summary>What every command of the Mediator library answered with a stream implements.</summary>
+    public const string MediatorBaseStreamCommand = "Mediator.IBaseStreamCommand";
+
+    /// <summary>What every query of the Mediator library implements: the one kind of its messages a requirement for queries only is stated on.</summary>
+    public const string MediatorBaseQuery = "Mediator.IBaseQuery";
+
+    /// <summary>What every query of the Mediator library answered with a stream implements.</summary>
+    public const string MediatorBaseStreamQuery = "Mediator.IBaseStreamQuery";
+
+    /// <summary>What every message of the Mediator library answered once implements: a command, a query, a plain request.</summary>
+    public const string MediatorMessage = "Mediator.IMessage";
+
+    /// <summary>What every message of the Mediator library answered with a stream implements.</summary>
+    public const string MediatorStreamMessage = "Mediator.IStreamMessage";
+
     /// <summary>Where the set of a module's access checks is registered, which a generated behavior's registration calls.</summary>
     public const string AccessCheckRegistration = "DDDToolkit.Access.AccessCheckServiceCollectionExtensions";
 

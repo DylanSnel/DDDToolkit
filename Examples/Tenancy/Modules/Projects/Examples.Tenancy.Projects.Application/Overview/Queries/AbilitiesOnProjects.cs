@@ -15,13 +15,11 @@ namespace Examples.Tenancy.Projects.Application.Overview.Queries;
 /// exist.
 /// </remarks>
 /// <param name="Projects">The projects asked about, at most <see cref="ProjectsById.MostProjects"/> different ones.</param>
+[SeenWith<ProjectId>(RequiredKey)]
 public sealed record AbilitiesOnProjects(IReadOnlyList<ProjectId> Projects) : IQuery<IReadOnlyDictionary<ProjectId, ProjectAbilities>>, IProjectsRequest
 {
     /// <summary>The key that decides whether a project is there for the caller at all.</summary>
     public const string RequiredKey = ProjectKeys.View;
-
-    /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => MemberAccess.SeenWith<ProjectId>(RequiredKey);
 }
 
 /// <summary>

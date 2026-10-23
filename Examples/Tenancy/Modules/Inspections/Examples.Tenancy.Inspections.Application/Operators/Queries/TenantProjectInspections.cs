@@ -15,11 +15,8 @@ namespace Examples.Tenancy.Inspections.Application.Operators.Queries;
 /// </remarks>
 /// <param name="Tenant">The tenant the project is of.</param>
 /// <param name="Project">The project.</param>
-public sealed record TenantProjectInspections(TenantId Tenant, ProjectId Project) : IQuery<IReadOnlyList<InspectionOverview>>, IInspectionsRequest
-{
-    /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.RequiresOperator();
-}
+[RequiresOperator]
+public sealed record TenantProjectInspections(TenantId Tenant, ProjectId Project) : IQuery<IReadOnlyList<InspectionOverview>>, IInspectionsRequest;
 
 /// <summary>Answers <see cref="TenantProjectInspections"/> in one statement, on a context of this query's own.</summary>
 /// <param name="reads">Where inspections are read: a context per query.</param>

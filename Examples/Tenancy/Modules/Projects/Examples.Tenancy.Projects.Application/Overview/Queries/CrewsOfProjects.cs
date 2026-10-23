@@ -15,13 +15,11 @@ namespace Examples.Tenancy.Projects.Application.Overview.Queries;
 /// statement: on a crew the caller does not manage, each member is answered without them.
 /// </remarks>
 /// <param name="Projects">The projects asked about, at most <see cref="ProjectsById.MostProjects"/> different ones.</param>
+[SeenWith<ProjectId>(RequiredKey)]
 public sealed record CrewsOfProjects(IReadOnlyList<ProjectId> Projects) : IQuery<IReadOnlyDictionary<ProjectId, ProjectCrew>>, IProjectsRequest
 {
     /// <summary>The key that decides whether a project, and with it its crew, is there for the caller at all.</summary>
     public const string RequiredKey = ProjectKeys.View;
-
-    /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => MemberAccess.SeenWith<ProjectId>(RequiredKey);
 }
 
 /// <summary>The crew of one project, and the caller's own place on it.</summary>

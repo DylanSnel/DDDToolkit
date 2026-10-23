@@ -15,11 +15,8 @@ namespace Examples.Tenancy.Tenants.Application.Seats.Queries;
 /// package's rule, and the package applies it: a user whose token role holds no seat is answered no seats,
 /// whatever their identity has.
 /// </remarks>
-public sealed record SeatsOfMine : IQuery<IReadOnlyList<SeatOfMine>>, ITenantsRequest
-{
-    /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.SignedIn();
-}
+[SignedIn]
+public sealed record SeatsOfMine : IQuery<IReadOnlyList<SeatOfMine>>, ITenantsRequest;
 
 /// <summary>
 /// Answers <see cref="SeatsOfMine"/> from the Tenancy package, for the identity of the caller's token: the module's own

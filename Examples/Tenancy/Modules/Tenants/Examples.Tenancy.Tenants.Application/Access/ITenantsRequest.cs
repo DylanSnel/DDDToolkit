@@ -6,13 +6,21 @@ namespace Examples.Tenancy.Tenants.Application.Access;
 /// What every command and query of this module implements, to say what it requires of its caller.
 /// </summary>
 /// <remarks>
-/// The one line of access plumbing the module writes. A request answers <see cref="IRequireAccess.RequiredAccess"/>
-/// with what it requires: one of Tenancy's cases (<see cref="TenancyAccess"/>), such as a key held for the whole
-/// tenant, or one of the toolkit's, such as a signed-in user (<see cref="AccessRequirement.SignedIn"/>) or system
-/// work (<see cref="AccessRequirement.RequiresSystemWork"/>). It implements the member explicitly, so the
-/// requirement is said next to the request's own fields without becoming one of them. The checks registered for
-/// this interface hold the caller to it, and the pipeline behavior the toolkit's generator writes for the
-/// interface, <c>TenantsAccessBehavior&lt;TMessage, TResponse&gt;</c>, asks them before every handler of the module.
+/// The one line of access plumbing the module writes. A request says who may send it with an attribute: one of
+/// Tenancy's cases, such as <c>[RequiresKey(TenancyKeys.RolesManage)]</c> for a key held for the whole tenant,
+/// <c>[AtUnit]</c> on the unit for a key held there, or <c>[InTenant]</c>; or one of the toolkit's, such as
+/// <c>[SignedIn]</c> for a signed-in user who has no seat yet. Where the requirement is computed from the request's
+/// values it answers <see cref="IRequireAccess.RequiredAccess"/> itself, as <c>SeatGrants</c> does. The interface is
+/// partial because the toolkit's generator writes <see cref="IRequireAccess.RequiredAccess"/> into it, one line per
+/// request that says it with an attribute, and the pipeline behavior beside it,
+/// <c>TenantsAccessBehavior&lt;TMessage, TResponse&gt;</c>, which asks the checks registered for this interface
+/// before every handler of the module.
+/// <para>
+/// A requirement says who may send a request, not what the work runs with. System work is no requirement but a
+/// scope trusted code begins around the work, <c>TenancyUseCases.BeginSystemIn(tenant)</c> as the seeding does, and
+/// what only system work may do the handler or the package's use case refuses everyone else, with
+/// <c>access.system-only</c>, as <c>MarkTenantAsDemo</c>'s does.
+/// </para>
 /// <para>
 /// Most of this module's requests are handed to a use case of the Tenancy package, which asks again for what the
 /// request requires and then for what only it can read, such as who may give a role that manages access. The
@@ -24,4 +32,4 @@ namespace Examples.Tenancy.Tenants.Application.Access;
 /// </para>
 /// </remarks>
 [AccessRequests]
-public interface ITenantsRequest : IRequireAccess;
+public partial interface ITenantsRequest : IRequireAccess;

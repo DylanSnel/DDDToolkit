@@ -10,11 +10,8 @@ namespace Examples.Tenancy.Tenants.Application.Seats.Queries;
 /// It requires a caller who works in the tenant. Only a seat has a self, so the package's directory refuses
 /// everyone else with <c>tenancy.not-seated</c>, system work included.
 /// </remarks>
-public sealed record OverviewOfMine : IQuery<SeatOverviewListing>, ITenantsRequest
-{
-    /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.InTenant();
-}
+[InTenant]
+public sealed record OverviewOfMine : IQuery<SeatOverviewListing>, ITenantsRequest;
 
 /// <summary>
 /// Answers <see cref="OverviewOfMine"/> from the Tenancy package's directory: the module's own seat, whole, with the

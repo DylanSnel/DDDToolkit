@@ -13,11 +13,8 @@ namespace Examples.Tenancy.Tenants.Application.Placements.Commands;
 /// <param name="Seat">The seat.</param>
 /// <param name="Unit">The unit, which must be active.</param>
 /// <param name="Primary">Whether this becomes the seat's primary placement.</param>
-public sealed record MakePlacement(SeatId Seat, OrganizationUnitId Unit, bool Primary) : ICommand, ITenantsRequest
-{
-    /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.AtUnit(TenancyKeys.SeatsManage, Unit);
-}
+[RequiresKey(TenancyKeys.SeatsManage)]
+public sealed record MakePlacement(SeatId Seat, [AtUnit] OrganizationUnitId Unit, bool Primary) : ICommand, ITenantsRequest;
 
 /// <summary>Handles <see cref="MakePlacement"/> with the Tenancy package's use case, which checks the caller, decides and saves.</summary>
 /// <param name="seats">The package's use cases that change a seat.</param>

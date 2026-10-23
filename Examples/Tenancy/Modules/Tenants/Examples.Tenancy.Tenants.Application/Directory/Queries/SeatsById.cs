@@ -13,11 +13,8 @@ namespace Examples.Tenancy.Tenants.Application.Directory.Queries;
 /// one question takes are refused.
 /// </remarks>
 /// <param name="Ids">The seats asked about.</param>
-public sealed record SeatsById(IReadOnlyList<SeatId> Ids) : IQuery<IReadOnlyList<SeatListing>>, ITenantsRequest
-{
-    /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.InTenant();
-}
+[InTenant]
+public sealed record SeatsById(IReadOnlyList<SeatId> Ids) : IQuery<IReadOnlyList<SeatListing>>, ITenantsRequest;
 
 /// <summary>
 /// Answers <see cref="SeatsById"/> from the Tenancy package's directory: the module's own seats, each selected with

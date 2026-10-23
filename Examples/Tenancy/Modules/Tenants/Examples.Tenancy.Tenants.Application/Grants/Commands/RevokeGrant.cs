@@ -14,11 +14,8 @@ namespace Examples.Tenancy.Tenants.Application.Grants.Commands;
 /// <param name="Seat">The seat.</param>
 /// <param name="Unit">The unit the role is held at.</param>
 /// <param name="Role">The role.</param>
-public sealed record RevokeGrant(SeatId Seat, OrganizationUnitId Unit, RoleId Role) : ICommand, ITenantsRequest
-{
-    /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.AtUnit(TenancyKeys.GrantsManage, Unit);
-}
+[RequiresKey(TenancyKeys.GrantsManage)]
+public sealed record RevokeGrant(SeatId Seat, [AtUnit] OrganizationUnitId Unit, RoleId Role) : ICommand, ITenantsRequest;
 
 /// <summary>Handles <see cref="RevokeGrant"/> with the Tenancy package's use case, which checks the caller, decides and saves.</summary>
 /// <param name="seats">The package's use cases that change a seat.</param>

@@ -12,11 +12,8 @@ namespace Examples.Tenancy.Tenants.Application.Roles.Queries;
 /// this application's to keep to those who decide it (<see cref="RoleListing.KeysKey"/>), and the handler holds
 /// that itself, so the route and the GraphQL field answer alike.
 /// </remarks>
-public sealed record TenantRoles : IQuery<IReadOnlyList<RoleListing>>, ITenantsRequest
-{
-    /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.InTenant();
-}
+[InTenant]
+public sealed record TenantRoles : IQuery<IReadOnlyList<RoleListing>>, ITenantsRequest;
 
 /// <summary>
 /// Answers <see cref="TenantRoles"/> from the Tenancy package's directory, and whether the caller is answered the

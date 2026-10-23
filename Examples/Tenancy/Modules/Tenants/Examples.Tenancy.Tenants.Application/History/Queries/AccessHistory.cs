@@ -15,13 +15,11 @@ namespace Examples.Tenancy.Tenants.Application.History.Queries;
 /// the tenant it reads: the caller's own, and never one a request could supply.
 /// </remarks>
 /// <param name="Paging">Which page: how many rows, and after which marker.</param>
+[RequiresKey(RequiredKey)]
 public sealed record AccessHistory(PagingArguments Paging) : IQuery<Page<AccessHistoryEntry>>, ITenantsRequest
 {
     /// <summary>The key the caller holds for the whole tenant.</summary>
     public const string RequiredKey = TenancyKeys.HistoryView;
-
-    /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.ForTheWholeTenant(RequiredKey);
 }
 
 /// <summary>Answers <see cref="AccessHistory"/> for the tenant the caller works in, on a context of the read's own.</summary>

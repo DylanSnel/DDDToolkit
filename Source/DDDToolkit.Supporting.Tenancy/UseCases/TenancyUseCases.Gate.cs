@@ -102,9 +102,9 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
 
         /// <summary>Only system work outside any tenant provisions one.</summary>
         /// <remarks>
-        /// A seat is refused with the toolkit's <c>access.system-only</c>, the code a request that requires system
-        /// work is refused with at the door, so a client reads one code for "only the application itself" wherever
-        /// it is refused.
+        /// A seat is refused with the toolkit's <c>access.system-only</c>, the code of what only the application's own
+        /// work may do, wherever a use case or a handler refuses it past the door, so a client reads one code for
+        /// "only the application itself" wherever it is refused.
         /// </remarks>
         /// <exception cref="Exceptions.RefusalException"><c>access.system-only</c> for a seat; the caller's own refusal for nobody.</exception>
         /// <exception cref="InvalidOperationException">The caller is system work in a tenant.</exception>

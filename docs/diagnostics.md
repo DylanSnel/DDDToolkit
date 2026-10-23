@@ -75,6 +75,13 @@ type looks annotated and behaves like a plain class. Every misuse below reports 
 | [DDD00074](#ddd00074) | Warning | A design-time factory keeps the migration history where the application does |
 | [DDD00075](#ddd00075) | Warning | Every class a package's use cases are named through has a name of its own where a project sees it |
 | [DDD00076](#ddd00076) | Warning | [assembly: TemplateFacadeName] names, once, a class this project gets |
+| [DDD00077](#ddd00077) | Error | A request says what it requires of its caller |
+| [DDD00078](#ddd00078) | Error | A request says what it requires in one way |
+| [DDD00079](#ddd00079) | Error | A request carries one requirement attribute |
+| [DDD00080](#ddd00080) | Error | A marker on a request says where the key of its [RequiresKey] is held |
+| [DDD00081](#ddd00081) | Error | A marker is on a member of the id it marks |
+| [DDD00082](#ddd00082) | Error | A requirement for queries only is on a query |
+| [DDD00083](#ddd00083) | Error | A request's requirement attributes are read where its module's interface is partial |
 
 Most of these say the generator could not do what you asked. The rest are a different kind: they are
 rules about the model rather than about the declaration, and each of them names code that compiles,
@@ -104,7 +111,9 @@ it is a stored row or a message read back as the wrong type, or as the wrong sha
 enforces differently from the C# that states it, asks more often than it has to, or not at all.
 [DDD00056](#ddd00056) to [DDD00058](#ddd00058) and [DDD00061](#ddd00061) are about the
 [access behavior written for a request interface](access-requirements.md#the-generated-behavior-with-mediator), where it
-is a message that reaches its handler with nothing having asked what it requires.
+is a message that reaches its handler with nothing having asked what it requires, and [DDD00077](#ddd00077) to
+[DDD00083](#ddd00083) about [what a request declares](access-requirements.md#what-a-request-declares), where it is a
+request that says nothing, or reads as if it said one thing with its attributes and says another.
 [DDD00059](#ddd00059) and [DDD00060](#ddd00060) are about the
 [member list of a resource](membership.md#the-member-list-is-written-for-you), and say what the generator of
 the Membership package could not tell, and which member class names the wrong resource.
@@ -2732,6 +2741,181 @@ its name:
 A line in another project of the module is reported in the project that writes the class, on the line that stands
 there or on its first class, with the project the line is in. An alias of the name at the top of one of the
 project's own files is your own way of naming the classes, and the class stands back for it without a word.
+
+## DDD00077
+
+**A request says what it requires of its caller.**
+
+```csharp
+[AccessRequests]
+public partial interface IBillingRequest : IRequireAccess;
+
+public sealed record CloseInvoice(InvoiceId Invoice) : IBillingRequest;   // DDD00077: says nothing of what it requires
+```
+
+Every command and query says who may send it, and the module's checks hold the caller to that before the handler
+runs: with an attribute, `[SignedIn]` or `[RequiresKey(key)]` with a marker of where the key is held, or by answering
+`RequiredAccess` itself where the requirement is computed
+([What a request declares](access-requirements.md#what-a-request-declares)). Where the module's interface is
+`partial`, the generator implements `RequiredAccess` in it, so the compiler no longer asks a request for the
+property, and a request that says neither is reported here instead: sent, it would be stopped every time with an
+exception that says it declares nothing. A request anyone may send says `[AllowAnonymousCallers]`.
+
+```csharp
+[RequiresKey(BillingKeys.Close)]
+public sealed record CloseInvoice(InvoiceId Invoice) : IBillingRequest;
+```
+
+A request of a project other than its interface's is reported too: the line written into the interface where it is
+declared knows only that project's requests, so this one answers `RequiredAccess` itself. An abstract request is not
+reported; what derives from it is. Where the interface is not `partial`, the compiler's own CS0535 says the same.
+
+## DDD00078
+
+**A request says what it requires in one way.**
+
+```csharp
+[SignedIn]                                                          // DDD00078: and the property as well
+public sealed record MyInvoices : IBillingRequest
+{
+    AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.AllowAnonymous();
+}
+```
+
+C# takes the request's own property over the line the generator writes from the attribute, so the attribute does
+nothing while a review reads it as the requirement. Keep one: the attribute where the requirement reads no value of
+the request, the property where it computes one from them. The same holds for an interface between the request and
+its module's that gives `RequiredAccess` a default of its own, `interface IPublicBillingRequest : IBillingRequest`
+say: C# takes that default over the module's, so the message says the request answers it through that interface.
+
+## DDD00079
+
+**A request carries one requirement attribute.**
+
+```csharp
+[AllowAnonymousCallers, RequiresKey(BillingKeys.Close)]            // DDD00079: two requirements
+public sealed record CloseInvoice(InvoiceId Invoice) : IBillingRequest;
+```
+
+A request requires one thing of its caller, and its module's checks hold the caller to that one. Two requirement
+attributes say two things no check can hold together: `[AllowAnonymousCallers]` with `[RequiresKey]` would open the
+door the key closes, and `[InTenant]` with `[RequiresKey]` says less than the key alone. Keep the one it requires. A
+requirement that is one thing or another depending on the request's values is computed, and written as
+`RequiredAccess` ([A requirement computed from the request](access-requirements.md#a-requirement-computed-from-the-request)).
+
+## DDD00080
+
+**A marker on a request says where the key of its `[RequiresKey]` is held.**
+
+```csharp
+[InTenant]
+public sealed record OpenLedger([AtUnit] OrganizationUnitId Unit) : IBillingRequest;                  // DDD00080: no key to hold there
+
+[RequiresKey(BillingKeys.Move)]
+public sealed record MoveLedger([AtUnit] OrganizationUnitId From, [OnResource] LedgerId Ledger) : IBillingRequest;   // DDD00080: two places
+```
+
+`[RequiresKey(key)]` says the key, and one marker on one of the request's members says where it is held: none for
+the whole tenant, `[AtUnit]` at that unit or above it, `[OnResource]` on that resource through its members, with
+`[ExpectedVersion]` beside `[OnResource]` for the version the caller read
+([Where the key is held](access-requirements.md#where-the-key-is-held)). Reported, at the marker or the request:
+
+| It | Because |
+|---|---|
+| marks a member, and requires no key | a marker says where the key of `[RequiresKey]` is held |
+| marks where its key is held twice, or `[AtUnit]` with `[OnResource]` | a key is held in one place; one or the other, depending on the request, is computed as `RequiredAccess` |
+| marks `[ExpectedVersion]` and no member `[OnResource]` | the version is of the resource it goes with |
+| marks one argument twice, two `[ExpectedVersion]` | the call takes it once |
+| marks a parameter of a class's primary constructor | it is no member the requirement reads: mark the property; a positional record's parameter is its property, and is fine |
+| marks a private or protected property | the requirement is read in the module's interface, which needs a public or internal getter |
+| requires a key and marks nothing, where no package says where such a key is held | Tenancy says it for the whole tenant, `[assembly: KeyWithoutMarker]`; a project with Membership alone, or two such packages, asks for a marker |
+
+An abstract request is a shape the requests that derive from it share, a record that carries the unit say, so it is
+not reported for a marker without a key: each request that derives from it says its key, and one that does not is
+reported where it is declared, for the marker it inherits. A record's positional parameter is the property a record
+it derives from declares, where that one has it, so `[AtUnit]` goes on the derived record's parameter as well:
+
+```csharp
+public abstract record UnitCommand(OrganizationUnitId Unit) : IBillingRequest;
+
+[RequiresKey(BillingKeys.OpenLedger)]
+public sealed record OpenLedger([AtUnit] OrganizationUnitId Unit) : UnitCommand(Unit);
+```
+
+## DDD00081
+
+**A marker is on a member of the id it marks.**
+
+```csharp
+[RequiresKey(TenancyKeys.SeatsManage)]
+public sealed record MakePlacement(SeatId Seat, [AtUnit] SeatId Unit) : ITenantsRequest;           // DDD00081: a seat's id, no unit's
+
+[RequiresKey(BillingKeys.Read)]
+public sealed record ListLedgers([AtUnit] OrganizationUnitId? Unit) : IBillingRequest;              // DDD00081: may be null
+```
+
+The call a marker stands for takes any id, so a unit marked on a seat's id compiles and lets nobody through: the
+package's check stops a case over an id it does not decide. `[AtUnit]` marks your unit id, the one your class
+declared with `[OrganizationUnit<TUnitId>]` is declared over, and `[OnResource]` the id of a resource with members,
+the aggregate root a class declared with `[Member<TId, TMemberId, TRoleId, TResource>]` names; the package says which
+with `[KeyMarker(..., IdOf = ...)]`. It is reported where the project sees such classes, as a module's application
+project sees its domain's; where it sees none, nothing can be told, and the check says so when the request is sent. A
+member that may be null is a requirement computed from whether it is given, written as `RequiredAccess`:
+`Unit is { } unit ? TenancyAccess.AtUnit(key, unit) : TenancyAccess.ForTheWholeTenant(key)`. `[ExpectedVersion]` marks
+a member of the type the call takes there, a `long?` or a `long`.
+
+## DDD00082
+
+**A requirement for queries only is on a query.**
+
+```csharp
+[SeenWith<DocumentId>(DocumentKeys.View)]
+public sealed record ArchiveDocuments : ICommand, IDocumentsRequest;                                // DDD00082
+```
+
+Membership's `[SeenWith<TResourceId>(key)]` refuses nobody for want of the key: it lets a signed-in caller through,
+one that holds nothing too, and says what the query's own statement filters by, which is the check. On a command
+the handler would run unchecked. Tenancy's `[RequiresOperator]` lets through an operator, who holds no seat and no
+key and changes nothing itself. Their packages declare them for queries only, `[StatesRequirement(..., QueriesOnly
+= true)]`, and a message of the Mediator library that is no query and carries one is reported: a command, `ICommand`
+or `IStreamCommand`, and a plain `IRequest` or `IStreamRequest`, which may change as much as a command does. What
+to do instead:
+
+| The request | Instead |
+|---|---|
+| only reads | make it a query, `IQuery` or `IStreamQuery` |
+| changes something, `[SeenWith]` on it | require the key where it acts, `[RequiresKey(key)]` with `[OnResource]` on the resource |
+| carries out what an operator asks, `[RequiresOperator]` on it | let trusted code carry it out as system work that names the operator, `TenancyUseCases.BeginOperatorIn(tenant, identity)`, behind a requirement of the module's own ([Operators](tenancy.md#operators)) |
+
+A request of another dispatcher, which the generator cannot tell for a command or a query, is not reported, and
+neither is the same requirement answered as `RequiredAccess` on a command: a test holds both
+([Holding it with a test](access-requirements.md#holding-it-with-a-test)).
+
+## DDD00083
+
+**A request's requirement attributes are read where its module's interface is partial.**
+
+```csharp
+[AccessRequests]
+public interface IBillingRequest : IRequireAccess;                  // not partial
+
+[SignedIn]                                                          // DDD00083: nothing turns this into what it requires
+public sealed record MyInvoices : IBillingRequest;
+```
+
+The generator turns a request's attributes into `RequiredAccess` at compile time, one line per request, in the
+interface marked `[AccessRequests]` that the request implements, declared `partial` in the same project. Without
+that, the attributes are read by nothing, and the request reads as if it said what it requires. Reported, with what
+to change:
+
+| The request | Change |
+|---|---|
+| implements an interface that is not `partial` | declare it `public partial interface IBillingRequest : IRequireAccess;` |
+| implements no interface marked `[AccessRequests]` | implement the module's request interface |
+| implements one declared in another project | declare the request in that project, or answer `RequiredAccess` |
+| has type parameters | answer `RequiredAccess`: a line names one type |
+| is nested private in another type | make it internal, or answer `RequiredAccess`: the interface cannot name it |
+| implements two module interfaces that are both `partial` | answer `RequiredAccess`, or implement one of them: each implements the property, and C# takes neither (its CS8705) |
 
 ## Building the model fails: the owned type must carry the key part
 

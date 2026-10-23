@@ -12,11 +12,8 @@ namespace Examples.Tenancy.Projects.Application.Operators.Queries;
 /// empty list. It answers no crew: who is on a project, with which role, is the tenant's own business.
 /// </remarks>
 /// <param name="Tenant">The tenant whose projects are read.</param>
-public sealed record TenantProjects(TenantId Tenant) : IQuery<IReadOnlyList<TenantProject>>, IProjectsRequest
-{
-    /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.RequiresOperator();
-}
+[RequiresOperator]
+public sealed record TenantProjects(TenantId Tenant) : IQuery<IReadOnlyList<TenantProject>>, IProjectsRequest;
 
 /// <summary>Answers <see cref="TenantProjects"/> in one statement, on a reading of this query's own.</summary>
 /// <param name="reads">Where projects are read: a context per query.</param>

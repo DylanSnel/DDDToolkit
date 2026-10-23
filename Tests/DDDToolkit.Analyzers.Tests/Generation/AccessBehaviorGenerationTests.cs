@@ -709,7 +709,6 @@ public class AccessBehaviorGenerationTests
         var decides = checks.GetType().GetMethod("Decides")!;
         decides.Invoke(checks, [global::DDDToolkit.Access.AccessRequirement.AllowAnonymous()]).Should().Be(true);
         decides.Invoke(checks, [global::DDDToolkit.Access.AccessRequirement.SignedIn()]).Should().Be(true, "the core decides who is calling in every set");
-        decides.Invoke(checks, [global::DDDToolkit.Access.AccessRequirement.RequiresSystemWork()]).Should().Be(true);
         decides.Invoke(checks, [emitted.New("Shop.Billing.MayClose")]).Should().Be(false, "a requirement no check decides lets nobody through");
     }
 

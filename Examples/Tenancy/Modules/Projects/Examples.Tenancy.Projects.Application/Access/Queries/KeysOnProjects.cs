@@ -16,6 +16,7 @@ namespace Examples.Tenancy.Projects.Application.Access.Queries;
 /// </remarks>
 /// <param name="Projects">The projects asked about, at most <see cref="MostProjects"/> different ones.</param>
 /// <param name="Keys">Permission keys, as the request names them.</param>
+[SeenWith<ProjectId>(RequiredKey)]
 public sealed record KeysOnProjects(IReadOnlyCollection<ProjectId> Projects, IReadOnlyCollection<string> Keys) : IQuery<ProjectKeySets>, IProjectsRequest
 {
     /// <summary>The key that decides whether a project is there for the caller at all.</summary>
@@ -23,9 +24,6 @@ public sealed record KeysOnProjects(IReadOnlyCollection<ProjectId> Projects, IRe
 
     /// <summary>The most projects one question is about.</summary>
     public const int MostProjects = 200;
-
-    /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => MemberAccess.SeenWith<ProjectId>(RequiredKey);
 }
 
 /// <summary>The keys a caller holds: for the whole tenant, and on each project asked about.</summary>

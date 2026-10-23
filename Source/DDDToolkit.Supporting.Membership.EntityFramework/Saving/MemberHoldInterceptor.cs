@@ -226,8 +226,8 @@ internal sealed class MemberHoldInterceptor : SaveChangesInterceptor
 
     /// <summary>
     /// Whether the save is the application's own work on the resource: the host answers it, and trusted code
-    /// began it for this flow, as <see cref="AccessRequirement.RequiresSystemWork"/> takes it. A flow nobody began
-    /// a caller for is not, even where the host answers the system for it.
+    /// began it for this flow, with <c>Callers.Begin</c> or a supporting domain's own way. A flow nobody began a
+    /// caller for is not, even where the host answers the system for it.
     /// </summary>
     private bool IsOwnWork(MembershipRules rules)
         => rules.IsOwnWork(_callers.Current) && Callers.Ambient?.Kind is CallerKind.System or CallerKind.SystemIn;

@@ -55,6 +55,29 @@ namespace DDDToolkit.Analyzers;
 /// only where the project can see <c>IServiceCollection</c>, which the toolkit's own package brings.
 /// </para>
 /// <para>
+/// <b>What a request requires, from its attributes.</b> A request says what it requires of its caller with an attribute
+/// where the requirement reads no value of the request but a key and an id it carries: <c>[SignedIn]</c>,
+/// <c>[InTenant]</c>, <c>[RequiresKey(key)]</c> with a marker of where the key is held, <c>[AtUnit]</c> on the unit.
+/// Where the interface is declared <c>partial</c>, the file implements <c>IRequireAccess.RequiredAccess</c> in it, with one
+/// line per request of the project that states its requirement so, the call the attributes stand for written out:
+/// <code>
+/// partial interface IBillingRequest
+/// {
+///     AccessRequirement IRequireAccess.RequiredAccess =&gt; this switch
+///     {
+///         OpenLedger request =&gt; TenancyAccess.AtUnit("billing.open-ledger", request.Unit),
+///         MyInvoices =&gt; AccessRequirement.SignedIn(),
+///         _ =&gt; throw new InvalidOperationException(...),
+///     };
+/// }
+/// </code>
+/// A request that answers the property itself answers with its own, which C# takes over the interface's, so the line
+/// is read wherever the property is read: by the behavior below, by a handler that asks the checks again, by a test. It
+/// is written whether or not the project uses the library. What each attribute stands for is its package's to say
+/// (<c>[StatesRequirement]</c>, <c>[KeyMarker]</c>, <c>[KeyWithoutMarker]</c>), and what is wrong with a request's
+/// attributes is DDD00077 to DDD00083 (<see cref="RequestRequirement"/>).
+/// </para>
+/// <para>
 /// The file also says what it wrote, in an assembly attribute,
 /// <c>[assembly: AccessBehavior(typeof(IBillingRequest), typeof(BillingAccessBehavior&lt;,&gt;), ...)]</c>, where the
 /// project can see that attribute. The registration of the checks reads it to bring the start-up check
@@ -73,13 +96,30 @@ public sealed class AccessBehaviorGenerator : IIncrementalGenerator
             predicate: static (node, _) => node is InterfaceDeclarationSyntax,
             transform: static (syntaxContext, cancellationToken) => AccessRequestsInterface.Create(syntaxContext, cancellationToken));
 
+        // Every class, record and struct that may be a request, read for what its attributes say it requires: the
+        // lines of its module's interface, and what is wrong with them.
+        var requests = context.SyntaxProvider.CreateSyntaxProvider(
+                predicate: static (node, cancellationToken) => RequestRequirement.MayBeOne(node, cancellationToken),
+                transform: static (syntaxContext, cancellationToken) => RequestRequirement.Read(syntaxContext, cancellationToken))
+            .Where(static request => request is not null)
+            .Select(static (request, _) => request!)
+            .Collect();
+
         // Collected, because two interfaces of one namespace may give their behaviors one name, and only all of
-        // them together show it.
-        context.RegisterSourceOutput(interfaces.Collect(), static (productionContext, all) => Execute(productionContext, all));
+        // them together show it; and the lines of an interface come from every request that implements it.
+        context.RegisterSourceOutput(interfaces.Collect().Combine(requests), static (productionContext, all) => Execute(productionContext, all.Left, all.Right));
     }
 
-    private static void Execute(SourceProductionContext context, ImmutableArray<AccessRequestsInterface> all)
+    /// <summary>The name the generated file gives <c>IRequireAccess</c>, one no module's own type or namespace has.</summary>
+    internal const string RequireAccessAlias = "DDDToolkit_Generated_IRequireAccess";
+
+    private static void Execute(SourceProductionContext context, ImmutableArray<AccessRequestsInterface> all, ImmutableArray<RequestRequirement> declared)
     {
+        foreach (var diagnostic in declared.SelectMany(static request => request.Diagnostics).Distinct())
+        {
+            diagnostic.Report(context);
+        }
+
         // An interface declared in parts is found once per part that carries the attribute.
         var interfaces = all
             .GroupBy(static each => each.FullyQualifiedName, StringComparer.Ordinal)
@@ -122,29 +162,51 @@ public sealed class AccessBehaviorGenerator : IIncrementalGenerator
                 DiagnosticInfo.Create(DiagnosticDescriptors.PipelineBehaviorShapeUnknown, requests.Location, requests.Name, unknownStream, "IStreamPipelineBehavior<,>").Report(context);
             }
 
-            if (requests.PipelineProblem is not null || requests.StreamPipelineProblem is not null)
-            {
-                continue;
-            }
-
-            // A project that does not use the library: the interface says which checks a request is held to,
-            // and the application asks them itself.
-            if (requests.Pipeline is not { } pipeline)
+            // A project that does not use the library, or one whose library the generator does not know: the
+            // interface says which checks a request is held to, and the application asks them itself. What its
+            // requests' attributes say is written all the same, since it is read by whatever asks.
+            var pipeline = requests.PipelineProblem is null && requests.StreamPipelineProblem is null ? requests.Pipeline : null;
+            if (pipeline is null && !requests.IsPartial)
             {
                 continue;
             }
 
             context.AddSource(
                 TypeDeclarationInfo.HintNameFor(requests.BehaviorName, requests.FullyQualifiedName, string.Empty),
-                SourceText.From(Emit(requests, pipeline, requests.StreamPipeline), Encoding.UTF8));
+                SourceText.From(Emit(requests, pipeline, pipeline is null ? null : requests.StreamPipeline, LinesOf(requests, declared)), Encoding.UTF8));
         }
     }
 
-    private static string Emit(AccessRequestsInterface requests, PipelineShape pipeline, PipelineShape? streams)
+    /// <summary>
+    /// The lines of a partial interface's <c>RequiredAccess</c>: one per request of the project that states its
+    /// requirement with attributes, a derived request before the one it derives from, so each is matched by its own.
+    /// <see langword="null"/> for an interface that is not partial, which gets none.
+    /// </summary>
+    private static List<string>? LinesOf(AccessRequestsInterface requests, ImmutableArray<RequestRequirement> all)
+        => requests.IsPartial
+            ? all.Where(request => request.Arm is not null && request.WrittenInto.Contains(requests.FullyQualifiedName))
+                .GroupBy(static request => request.FullyQualifiedName, StringComparer.Ordinal)
+                .Select(static parts => parts.First())
+                .OrderByDescending(static request => request.Depth)
+                .ThenBy(static request => request.FullyQualifiedName, StringComparer.Ordinal)
+                .Select(static request => request.Arm!)
+                .ToList()
+            : null;
+
+    private static string Emit(AccessRequestsInterface requests, PipelineShape? pipeline, PipelineShape? streams, List<string>? lines)
     {
         var behavior = requests.BehaviorName;
         var writer = new CodeWriter().Header();
-        if (requests.CanDescribe)
+        if (lines is not null)
+        {
+            // The interface the property is implemented for, named through an alias: written out, its name would be
+            // looked up from the module's namespace, where a namespace of the module's own called DDDToolkit, as in
+            // Contoso.DDDToolkit.Billing, takes it; and global:: would stay in the member's name. A using goes first.
+            writer.Line("using " + RequireAccessAlias + " = global::" + KnownTypes.RequireAccessInterface + ";");
+            writer.Line();
+        }
+
+        if (requests.CanDescribe && pipeline is not null)
         {
             EmitDescription(writer, requests, behavior, streams is not null);
         }
@@ -152,6 +214,21 @@ public sealed class AccessBehaviorGenerator : IIncrementalGenerator
         if (requests.Namespace.Length > 0)
         {
             writer.Line("namespace " + requests.Namespace + ";");
+            writer.Line();
+        }
+
+        if (lines is not null)
+        {
+            EmitRequirements(writer, requests, lines);
+        }
+
+        if (pipeline is null)
+        {
+            return writer.ToString();
+        }
+
+        if (lines is not null)
+        {
             writer.Line();
         }
 
@@ -208,6 +285,35 @@ public sealed class AccessBehaviorGenerator : IIncrementalGenerator
         }
 
         return writer.ToString();
+    }
+
+    /// <summary>
+    /// The interface's part that implements <c>IRequireAccess.RequiredAccess</c> from its requests' attributes: one line
+    /// per request, and for any other type a request that states nothing, which lets nobody through.
+    /// </summary>
+    private static void EmitRequirements(CodeWriter writer, AccessRequestsInterface requests, List<string> lines)
+    {
+        const string RequireAccess = "global::" + KnownTypes.RequireAccessInterface;
+
+        writer.Line("// What the requests of " + requests.Name + " that state their requirement with attributes require of their caller: the");
+        writer.Line("// call each attribute stands for, written out by DDDToolkit, one line per request. A request that answers");
+        writer.Line("// RequiredAccess itself answers with its own, which C# takes over this one, so it is never asked here.");
+        using (writer.Block("partial interface " + requests.Name))
+        {
+            writer.Line("/// <inheritdoc cref=\"" + RequireAccess + ".RequiredAccess\"/>");
+            // Through the alias the member's name is the interface's own, DDDToolkit.Access.IRequireAccess.RequiredAccess.
+            writer.Line("global::DDDToolkit.Access.AccessRequirement " + RequireAccessAlias + ".RequiredAccess => this switch");
+            writer.Line("{");
+            foreach (var line in lines)
+            {
+                writer.Line("    " + line + ",");
+            }
+
+            writer.Line("    _ => throw new global::System.InvalidOperationException(");
+            writer.Line("        this.GetType().FullName + \" declares no access requirement: it carries no requirement attribute, and does not answer RequiredAccess itself. \"");
+            writer.Line("        + \"A request that declares nothing lets nobody through.\"),");
+            writer.Line("};");
+        }
     }
 
     /// <summary>
@@ -373,6 +479,7 @@ public sealed class AccessBehaviorGenerator : IIncrementalGenerator
 /// <param name="StreamPipelineProblem">How the library's behavior for streams differs from what the generator knows (DDD00057), or <see langword="null"/>.</param>
 /// <param name="CanRegister">Whether the project can see what the registration is written with.</param>
 /// <param name="CanDescribe">Whether the project can see the attribute that says what was written for the interface.</param>
+/// <param name="IsPartial">Whether the interface is declared <c>partial</c>, so its requests' attributes can be written into it.</param>
 /// <param name="Location">Where the interface is named.</param>
 internal sealed record AccessRequestsInterface(
     string Name,
@@ -388,6 +495,7 @@ internal sealed record AccessRequestsInterface(
     string? StreamPipelineProblem,
     bool CanRegister,
     bool CanDescribe,
+    bool IsPartial,
     LocationInfo? Location)
 {
     public static AccessRequestsInterface Create(GeneratorAttributeSyntaxContext context, CancellationToken cancellationToken)
@@ -423,6 +531,7 @@ internal sealed record AccessRequestsInterface(
                 && compilation.GetTypeByMetadataName(KnownTypes.AccessCheckRegistration) is { } registration
                 && registration.GetMembers("AddAccessChecks").Length > 0,
             CanDescribe: compilation.GetTypeByMetadataName(KnownTypes.AccessBehaviorAttribute) is not null,
+            IsPartial: symbol.DeclaringSyntaxReferences.Any(reference => reference.GetSyntax(cancellationToken) is InterfaceDeclarationSyntax declaration && declaration.Modifiers.Any(SyntaxKind.PartialKeyword)),
             Location: LocationInfo.From(syntax.Identifier));
     }
 
@@ -453,7 +562,7 @@ internal sealed record AccessRequestsInterface(
     }
 
     /// <summary>Why no behavior can be written for the interface as it is declared, or <see langword="null"/>.</summary>
-    private static string? ProblemWith(INamedTypeSymbol symbol, Compilation compilation)
+    internal static string? ProblemWith(INamedTypeSymbol symbol, Compilation compilation)
     {
         if (symbol.ContainingType is { } outer)
         {

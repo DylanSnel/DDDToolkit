@@ -147,10 +147,7 @@ public class AccessChecksTests
         new BillingAccess.OnInvoice("billing.close", 7).Should().Be(MayClose).And.NotBe(new BillingAccess.OnInvoice("billing.close", 8));
         AccessRequirement.AllowAnonymous().Should().Be(AccessRequirement.AllowAnonymous());
         AccessRequirement.SignedIn().Should().Be(AccessRequirement.SignedIn());
-        AccessRequirement.RequiresSystemWork().Should().Be(AccessRequirement.RequiresSystemWork());
-        ((AccessRequirement)AccessRequirement.AllowAnonymous()).Should().NotBe(AccessRequirement.SignedIn(), "two cases are never each other")
-            .And.NotBe(AccessRequirement.RequiresSystemWork());
-        ((AccessRequirement)AccessRequirement.SignedIn()).Should().NotBe(AccessRequirement.RequiresSystemWork());
+        ((AccessRequirement)AccessRequirement.AllowAnonymous()).Should().NotBe(AccessRequirement.SignedIn(), "two cases are never each other");
     }
 
     // ------------------------------------------------------------------ holding a request to it
@@ -271,7 +268,7 @@ public class AccessChecksTests
         var failure = await FluentActions.Awaiting(() => checks.RequireAsync(new CloseInvoice(7, null!), TestContext.Current.CancellationToken).AsTask())
             .Should().ThrowAsync<InvalidOperationException>();
 
-        failure.Which.Message.Should().Contain("CloseInvoice declares no access requirement").And.Contain("AccessRequirement.AllowAnonymous()");
+        failure.Which.Message.Should().Contain("CloseInvoice declares no access requirement").And.Contain("[AllowAnonymousCallers]");
         asked.Entries.Should().BeEmpty("not even a check that decides everything is asked about nothing");
     }
 
@@ -384,7 +381,6 @@ public class AccessChecksTests
 
         await checks.RequireAsync(new CloseInvoice(7, AccessRequirement.AllowAnonymous()), TestContext.Current.CancellationToken);
         checks.Decides(AccessRequirement.SignedIn()).Should().BeTrue("the core's check is in every set dependency injection makes");
-        checks.Decides(AccessRequirement.RequiresSystemWork()).Should().BeTrue();
         await FluentActions.Awaiting(() => checks.RequireAsync(new CloseInvoice(7, MayClose), TestContext.Current.CancellationToken).AsTask())
             .Should().ThrowAsync<InvalidOperationException>("a set that holds no check of the module's is closed to everything else");
         scope.ServiceProvider.GetRequiredService<Checked<int>>().Should().NotBeNull("what a check keeps for a handler is registered with the set");

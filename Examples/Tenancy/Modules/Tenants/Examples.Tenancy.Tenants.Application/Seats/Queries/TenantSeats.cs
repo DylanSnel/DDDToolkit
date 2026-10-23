@@ -7,11 +7,8 @@ namespace Examples.Tenancy.Tenants.Application.Seats.Queries;
 /// status, never an identity.
 /// </summary>
 /// <remarks>It requires a caller who works in the tenant, whom the package's directory answers.</remarks>
-public sealed record TenantSeats : IQuery<IReadOnlyList<SeatListing>>, ITenantsRequest
-{
-    /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.InTenant();
-}
+[InTenant]
+public sealed record TenantSeats : IQuery<IReadOnlyList<SeatListing>>, ITenantsRequest;
 
 /// <summary>
 /// Answers <see cref="TenantSeats"/> from the Tenancy package's directory: the module's own seats, each selected with

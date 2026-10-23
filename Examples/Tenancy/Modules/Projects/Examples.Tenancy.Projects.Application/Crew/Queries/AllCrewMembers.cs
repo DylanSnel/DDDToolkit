@@ -21,13 +21,11 @@ namespace Examples.Tenancy.Projects.Application.Crew.Queries;
 /// </para>
 /// </remarks>
 /// <param name="Project">The project.</param>
+[SeenWith<ProjectId>(RequiredKey)]
 public sealed record AllCrewMembers(ProjectId Project) : IQuery<IReadOnlyList<CrewOverview>>, IProjectsRequest
 {
     /// <summary>The key that decides whether the project, and with it its crew, is there for the caller at all.</summary>
     public const string RequiredKey = ProjectKeys.View;
-
-    /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => MemberAccess.SeenWith<ProjectId>(RequiredKey);
 }
 
 /// <summary>

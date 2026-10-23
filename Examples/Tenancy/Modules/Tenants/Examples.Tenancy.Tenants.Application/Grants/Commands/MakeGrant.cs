@@ -18,11 +18,8 @@ namespace Examples.Tenancy.Tenants.Application.Grants.Commands;
 /// <param name="Role">The role, which must be active.</param>
 /// <param name="Until">When the grant ends, or <see langword="null"/> for no end.</param>
 /// <param name="Reason">Why, or <see langword="null"/>.</param>
-public sealed record MakeGrant(SeatId Seat, OrganizationUnitId Unit, RoleId Role, DateTimeOffset? Until, string? Reason) : ICommand, ITenantsRequest
-{
-    /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.AtUnit(TenancyKeys.GrantsManage, Unit);
-}
+[RequiresKey(TenancyKeys.GrantsManage)]
+public sealed record MakeGrant(SeatId Seat, [AtUnit] OrganizationUnitId Unit, RoleId Role, DateTimeOffset? Until, string? Reason) : ICommand, ITenantsRequest;
 
 /// <summary>Handles <see cref="MakeGrant"/> with the Tenancy package's use case, which checks the caller, decides and saves.</summary>
 /// <param name="seats">The package's use cases that change a seat.</param>

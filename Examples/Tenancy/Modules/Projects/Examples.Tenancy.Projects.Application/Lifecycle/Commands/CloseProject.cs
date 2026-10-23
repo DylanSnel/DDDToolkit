@@ -8,13 +8,11 @@ namespace Examples.Tenancy.Projects.Application.Lifecycle.Commands;
 /// The version of the project the caller last read, or <see langword="null"/> to change it as it is now. Any other
 /// version than the project's is a lost race: somebody changed it since, so the caller reads again and decides again.
 /// </param>
-public sealed record CloseProject(ProjectId Id, long? ExpectedVersion = null) : ICommand, IProjectsRequest
+[RequiresKey(RequiredKey)]
+public sealed record CloseProject([OnResource] ProjectId Id, [ExpectedVersion] long? ExpectedVersion = null) : ICommand, IProjectsRequest
 {
     /// <summary>The key the caller holds on the project.</summary>
     public const string RequiredKey = ProjectKeys.Close;
-
-    /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => MemberAccess.On(RequiredKey, Id, ExpectedVersion);
 }
 
 /// <summary>Handles <see cref="CloseProject"/>: loads the project its command names, closes it and saves.</summary>

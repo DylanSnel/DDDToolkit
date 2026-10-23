@@ -11,11 +11,8 @@ namespace Examples.Tenancy.Tenants.Application.Catalogue.Queries;
 /// Every tenant has the same catalogue, and it holds nothing of any of them, so whoever works in a tenant may
 /// read it: no key is asked for. A caller in no tenant has no screen to show it on, and is refused as everywhere.
 /// </remarks>
-public sealed record CatalogueContents : IQuery<CatalogueOverview>, ITenantsRequest
-{
-    /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.InTenant();
-}
+[InTenant]
+public sealed record CatalogueContents : IQuery<CatalogueOverview>, ITenantsRequest;
 
 /// <summary>The catalogue as a client reads it.</summary>
 /// <param name="Permissions">Every permission key, retired ones included, in the catalogue's order.</param>

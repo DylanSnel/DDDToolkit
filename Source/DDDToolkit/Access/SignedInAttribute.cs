@@ -1,0 +1,21 @@
+namespace DDDToolkit.Access;
+
+/// <summary>
+/// Says on a request that its caller is a signed-in user, who need not hold anything yet: what
+/// <see cref="AccessRequirement.SignedIn"/> says, written where the request is declared.
+/// <code>
+/// [SignedIn]
+/// public sealed record MyInvoices : IBillingRequest;
+/// </code>
+/// Anyone else is refused with <see cref="Exceptions.ToolkitRefusals.NotSignedIn"/>: a caller who did not sign in,
+/// and the application's own work, which is nobody's sign-in.
+/// </summary>
+/// <remarks>
+/// The toolkit's generator turns it into <c>AccessRequirement.SignedIn()</c> at compile time, in the module's
+/// request interface (<c>[AccessRequests]</c>, declared <c>partial</c>), so the request answers
+/// <see cref="IRequireAccess.RequiredAccess"/> with it wherever that is read. A request carries one requirement:
+/// this, another requirement attribute, or the property it computes itself.
+/// </remarks>
+[StatesRequirement(typeof(AccessRequirement), nameof(AccessRequirement.SignedIn))]
+[AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, Inherited = false)]
+public sealed class SignedInAttribute : Attribute;

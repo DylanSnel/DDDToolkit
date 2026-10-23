@@ -25,11 +25,12 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// </para>
 /// <para>
 /// Who may send a request is not what its handler runs with. A handler that provisions a tenant begins system
-/// work here itself, in trusted code, whatever its request requires: <c>AccessRequirement.AllowAnonymous()</c>
-/// for a registration form anyone may fill in, <c>AccessRequirement.SignedIn()</c> for a signed-in user who
-/// registers an organization, <c>AccessRequirement.RequiresSystemWork()</c> for a tool only the application
-/// runs. The requirement decides who gets as far as the handler; what the work may then do is what is begun
-/// here, and nothing of the caller's.
+/// work here itself, in trusted code, whatever its request requires: <c>[AllowAnonymousCallers]</c> for a
+/// registration form anyone may fill in, <c>[SignedIn]</c> for a signed-in user who registers an organization. A
+/// tool only the application runs is trusted code itself: it begins the work here and calls the use case, or sends
+/// its request inside it. The requirement decides who gets as far as the handler; what the work may then do is
+/// what is begun here, and nothing of the caller's. System work is no requirement a request declares: it is this
+/// scope, and once its result is disposed the caller before it is current again.
 /// </para>
 /// <para>
 /// Each method begins two callers, and ends both when its result is disposed: the Tenancy caller, which says

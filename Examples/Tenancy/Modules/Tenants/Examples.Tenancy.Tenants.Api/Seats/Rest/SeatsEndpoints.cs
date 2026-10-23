@@ -56,10 +56,10 @@ internal static class SeatsEndpoints
             => Results.Ok((await sender.Send(new TenantSeats(), cancellationToken)).Select(Describe)));
 
         // Another seat's roles, where and for when, from the package's overview of that seat: for whoever holds
-        // tenancy.seats.manage for the whole tenant, which is this application's choice. A seat of another tenant, or
-        // of nobody, is not found: 404.
-        group.MapGet("/tenancy/seats/{seatId}/grants", async (SeatId seatId, ISender sender, CancellationToken cancellationToken)
-            => Results.Ok((await sender.Send(new SeatGrants(seatId), cancellationToken)).Select(grant => new
+        // tenancy.seats.manage for the whole tenant, which is this application's choice, and with ?unit= the roles held
+        // at that unit, for whoever holds the key there. A seat of another tenant, or of nobody, is not found: 404.
+        group.MapGet("/tenancy/seats/{seatId}/grants", async (SeatId seatId, OrganizationUnitId? unit, ISender sender, CancellationToken cancellationToken)
+            => Results.Ok((await sender.Send(new SeatGrants(seatId, unit), cancellationToken)).Select(grant => new
             {
                 grant.UnitId,
                 grant.UnitPath,

@@ -10,13 +10,11 @@ namespace Examples.Tenancy.Projects.Application.ProjectRoles.Commands;
 /// archived.
 /// </summary>
 /// <param name="Id">The role.</param>
+[RequiresKey(RequiredKey)]
 public sealed record ArchiveProjectRole(ProjectRoleId Id) : ICommand, IProjectsRequest
 {
     /// <summary>The key the caller holds for the whole tenant.</summary>
     public const string RequiredKey = ProjectRoleListing.KeysKey;
-
-    /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.ForTheWholeTenant(RequiredKey);
 }
 
 /// <summary>Handles <see cref="ArchiveProjectRole"/>: loads the role, archives it and saves.</summary>

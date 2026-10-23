@@ -9,13 +9,11 @@ namespace Examples.Tenancy.Projects.Application.Lifecycle.Commands;
 /// The version of the project the caller last read, or <see langword="null"/> to change it as it is now. Any other
 /// version than the project's is a lost race: somebody changed it since, so the caller reads again and decides again.
 /// </param>
-public sealed record ChangeProjectName(ProjectId Id, string Name, long? ExpectedVersion = null) : ICommand, IProjectsRequest
+[RequiresKey(RequiredKey)]
+public sealed record ChangeProjectName([OnResource] ProjectId Id, string Name, [ExpectedVersion] long? ExpectedVersion = null) : ICommand, IProjectsRequest
 {
     /// <summary>The key the caller holds on the project.</summary>
     public const string RequiredKey = ProjectKeys.Edit;
-
-    /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => MemberAccess.On(RequiredKey, Id, ExpectedVersion);
 }
 
 /// <summary>Handles <see cref="ChangeProjectName"/>: loads the project its command names, renames it and saves.</summary>

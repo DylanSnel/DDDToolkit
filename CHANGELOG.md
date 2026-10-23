@@ -201,21 +201,24 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   log is written from a pooled context without a scope as well.
 - **Access requirements.** A request says what it requires of its caller, and the checks of its module hold it
   to that before its handler runs, without the toolkit knowing how requests are dispatched. A command or query
-  implements its module's interface, which derives from `IRequireAccess`, and answers `RequiredAccess` with an
-  `AccessRequirement` that says what it requires, from a small vocabulary: the core's own three, which are about
-  who is calling and nothing else, `AccessRequirement.AllowAnonymous()` (anyone, a caller who did not sign in
-  too), `AccessRequirement.SignedIn()` (a signed-in user, who need not hold anything yet) and
-  `AccessRequirement.RequiresSystemWork()` (only the application itself: system work trusted code began,
-  `Caller.System` or `Caller.SystemIn(scope)`; work nobody began a caller for is refused too, also where the
-  host's accessor answers the system for it), and the cases a package or a module declares. There is no requirement that says
-  nothing, and none that leaves the decision to a package: a request that declares nothing is stopped, and a
-  request anyone may send says so, named as ASP.NET Core's `[AllowAnonymous]` is. `CallerAccessCheck` decides
-  `SignedIn()` and `RequiresSystemWork()` from the host's `ICallerAccessor`, and every module's set asks it
-  first, so a host without any supporting domain has them and no check of a module can take them over; a
-  caller who is not who they require is refused with `access.not-signed-in` or `access.system-only`
-  (`ToolkitRefusals.NotSignedIn` and `SystemOnly`, of the kind `NotPermitted`, in English and Dutch). Who may
-  send a request is not what its handler runs with: a handler that does what no caller of its request could,
-  such as provisioning a tenant for a registration form, begins system work itself, in trusted code. An
+  implements its module's interface, which derives from `IRequireAccess`, and says who may send it with an
+  attribute, or answers `RequiredAccess` with an `AccessRequirement` where it computes the requirement (see
+  Requirements as attributes, below). The vocabulary is small: the core's own two, which are about who is calling
+  and nothing else, `[AllowAnonymousCallers]` or `AccessRequirement.AllowAnonymous()` (anyone, a caller who did not
+  sign in too) and `[SignedIn]` or `AccessRequirement.SignedIn()` (a signed-in user, who need not hold anything
+  yet), and the cases a package or a module declares. There is no requirement that says nothing, none that leaves
+  the decision to a package, and none for the application's own work, which is a scope trusted code begins around
+  the work and not a door: a request that declares nothing is stopped, and a request anyone may send says so.
+  `CallerAccessCheck` decides `SignedIn()` from the host's `ICallerAccessor`, and every module's set asks it
+  first, so a host without any supporting domain has it and no check of a module can take it over; a caller who
+  is not a signed-in user is refused with `access.not-signed-in` (`ToolkitRefusals.NotSignedIn`, of the kind
+  `NotPermitted`, in English and Dutch). What only system work may do is refused past the door, by a supporting
+  domain's use case or a handler, with `access.system-only` (`ToolkitRefusals.SystemOnly`): in any host
+  `Callers.RequireSystemWork(callers)` does it, which lets through only system work trusted code began for the flow,
+  never the accessor's answer for a flow nobody began a caller for, which in a host that does not require explicit
+  callers is the application itself, a web request the accessor does not know included. Who may send a request
+  is not what its handler runs with: a handler that does what no caller of its request could, such as
+  provisioning a tenant for a registration form, begins system work itself, in trusted code. An
   `IAccessCheck` decides the cases of one owner, `services.AddAccessCheck<TRequests, TCheck>()` adds it to the
   set of one request interface, and `AccessChecks<TRequests>.RequireAsync(request)` asks the first check that
   decides the requirement. It fails closed: a request that declares nothing, or
@@ -236,6 +239,42 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   registers the set alone, for whoever asks it in front of the handlers of a module that adds no check, since
   its requests require only what the core decides. All of it is in `DDDToolkit.Access`. See
   [Access requirements](docs/access-requirements.md) and [the vocabulary](docs/access-requirements.md#the-vocabulary).
+- **Requirements as attributes.** A request says who may send it with an attribute where the requirement reads no
+  value of the request but a key and an id it carries: the core's `[AllowAnonymousCallers]`, `[SignedIn]` and one
+  `[RequiresKey(key)]`, whose marker on one of the request's members says where the key is held (none for the whole
+  tenant, Tenancy's `[AtUnit]` at a unit, Membership's `[OnResource]` on a resource, with `[ExpectedVersion]` on the
+  version read), Tenancy's `[InTenant]` and `[RequiresOperator]`, and Membership's `[SeenWith<TResourceId>(key)]`. A
+  marker goes on a positional parameter of a record as it is, or on a property, and `[property: X]` is read as
+  well; nothing names a member by a string. The generator turns the attributes into plain C# at compile time: a
+  module's interface marked `[AccessRequests]` and declared `partial` gets `IRequireAccess.RequiredAccess`
+  implemented with one line per request of its project that states its requirement so,
+  `AddUnit request => TenancyAccess.AtUnit("units.manage", request.Parent)`, in the file of the access behavior
+  where the project uses Mediator and in a file of its own where it does not. Nothing is read by reflection, nothing
+  costs anything when a request is sent, the request need not be partial, and a request that answers
+  `RequiredAccess` itself, for a requirement computed from its values or a case of its module's own, answers with
+  its own, which C# takes over the interface's. So every reader of the property reads the same requirement: the
+  checks, a handler that asks them again, a test. The attribute is not `[AllowAnonymous]`, because ASP.NET Core and
+  HotChocolate each have one of that name, and a route or a resolver that imports either beside `DDDToolkit.Access`
+  would not compile. What an attribute stands for is its package's to say, with the core's
+  `[StatesRequirement(typeof(Factory), "Method", QueriesOnly = ...)]` on the attribute's class, `[KeyMarker(...,
+  IdOf = ...)]` and `[KeyMarkerArgument(...)]` on a marker's, and `[assembly: KeyWithoutMarker(...)]` for a key
+  without a marker, which Tenancy says; the generator knows no package's attribute by name. DDD00077 to DDD00083
+  report, as errors: a request that says nothing of what it requires where its interface is partial (DDD00077, as
+  the compiler's CS0535 still does where it is not), an attribute and the property on one request (DDD00078), two
+  requirement attributes (DDD00079), a marker without `[RequiresKey]`, two markers of where, `[ExpectedVersion]`
+  without `[OnResource]`, a marker on a member the requirement cannot read, and a key without a marker where no
+  package says where it is held (DDD00080), a marker on a member of another id than it marks, the application's unit
+  id for `[AtUnit]` and a resource with members for `[OnResource]`, or on one that may be null (DDD00081), a
+  requirement for queries only on a message of Mediator's that is no query, a command or a plain `IRequest`
+  (DDD00082), and attributes on a request whose interface is not partial, implements no marked interface, has type
+  parameters, is hidden from it, or implements two partial module interfaces (DDD00083). A request declared in parts
+  is read whichever part carries its attributes, an abstract record may carry the marked unit its requests share, a
+  derived record's parameter may be marked where its base declares the property, and an interface between a request
+  and its module's that answers `RequiredAccess` counts as the request answering it. The line is written through a
+  using alias of `IRequireAccess`, so a module's own namespace called `DDDToolkit`, `Contoso.DDDToolkit.Billing`,
+  takes nothing from it. See
+  [What a request declares](docs/access-requirements.md#what-a-request-declares) and
+  [What combines](docs/access-requirements.md#what-combines).
 - **An access behavior, written where the Mediator library is used.** Mark a module's request interface,
   `[AccessRequests] public interface IBillingRequest : IRequireAccess;`, and in a project that references
   [Mediator](https://github.com/martinothamar/Mediator) (`Mediator.Abstractions`) the generator writes
@@ -1497,13 +1536,15 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   package says the first thing that use case asks, which the request itself can name, and the use case asks
   again past the check and keeps the rules only it can read, such as who may give a role that manages access or
   whether a unit may move; so a caller it would refuse first is refused at the door with the same code and key.
-  System work is the core's `AccessRequirement.RequiresSystemWork()`, whatever tenant it acts in: a handler that
-  acts in one asks Tenancy which, and Tenancy refuses system work outside any tenant there. Tenancy's own use
-  cases that only system work may call, provisioning a tenant and suspending, reactivating or closing one,
-  refuse a seat with the same `access.system-only`. Every name for
-  system work in the C# API follows `Caller.System`: `Caller.SystemIn(scope)`, `TenancyWork.BeginSystem`,
-  `TenancyWork.BeginSystemIn` and `RequiresSystemWork()`; the database roles `ddd_system` and
-  `ddd_system_in` keep their names.
+  A request says each case with Tenancy's attributes, `[InTenant]`, `[RequiresKey(key)]` for the whole tenant or
+  with `[AtUnit]` on the unit, and `[RequiresOperator]` on a query, which the generator turns into the call. System
+  work is no requirement but a scope, begun around the work with `TenancyUseCases.BeginSystem()` and its kin: a
+  request it sends in a tenant says `[InTenant]`, and a handler that acts in one asks Tenancy which, and whether it
+  runs as system work, and Tenancy refuses system work outside any tenant there. Tenancy's own use cases that only
+  system work may call, provisioning a tenant and suspending, reactivating or closing one, refuse everyone else
+  with `access.system-only`. Every name for system work in the C# API follows `Caller.System`:
+  `Caller.SystemIn(scope)`, `TenancyWork.BeginSystem` and `TenancyWork.BeginSystemIn`; the database roles
+  `ddd_system` and `ddd_system_in` keep their names.
   `services.AddTenancyAccess<TRequests, TContext>()`, in `DDDToolkit.Supporting.Tenancy.EntityFramework`, adds
   the check that decides them to the checks of one module's request interface. It is generated closed over the
   application's four ids in the module that declares Tenancy's classes, and called with the ids written out
@@ -2367,15 +2408,19 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   callers run as; `LoginRoleFileTests` applies the file the export writes to Supabase's own Postgres and starts
   the host as the role it made.
 - **The Tenancy sample: every request says what it requires.** The Tenants module's requests declare the
-  first thing the package's use case asks: `TenancyAccess.InTenant()` for the directory's queries, a key for
-  the whole tenant or at the unit the request names for the commands, `AccessRequirement.SignedIn()` for a
-  person's own seats and for accepting an invitation, and `AccessRequirement.RequiresSystemWork()` for marking a
-  tenant as a demonstration and for setting up its project roles, whose handlers ask again for system work in
-  the tenant they act in. Archiving and moving a unit, and cancelling an invitation, declare a caller of the
-  tenant, since the key they take is at a unit only the use case reads. The operators' queries declare
-  `TenancyAccess.RequiresOperator()`. `AccessDeclarationTests` holds every request to what it declares, finds no
-  request anyone may send, and holds every request handed to the package to a requirement the use case asks
-  first; `RequestPipelineTests` holds the door and the use case to refusing a caller alike.
+  first thing the package's use case asks, with an attribute: `[InTenant]` for the directory's queries,
+  `[RequiresKey(key)]` for the whole tenant or with `[AtUnit]` on the unit the request names for the commands,
+  `[SignedIn]` for a person's own seats and for accepting an invitation, and `[InTenant]` for marking a tenant as a
+  demonstration and for setting up its project roles, which the seeding sends as system work in the tenant, begun
+  around the send, and whose handlers let only that system work through. Archiving and moving a unit, and
+  cancelling an invitation, declare a caller of the tenant, since the key they take is at a unit only the use case
+  reads. The operators' queries declare `[RequiresOperator]`, and Projects' requests `[RequiresKey(RequiredKey)]` with
+  `[OnResource]` and `[ExpectedVersion]`, or `[SeenWith<ProjectId>(RequiredKey)]`. `SeatGrants` computes its
+  requirement, the key for the whole tenant or at the unit it is asked about, and answers `RequiredAccess` itself, as
+  the cases of Projects' and Inspections' own do. `AccessDeclarationTests` holds every request to what it declares,
+  finds no request anyone may send, holds every request handed to the package to a requirement the use case asks
+  first and every request that answers the property itself to a reason to; `RequestPipelineTests` holds the door and
+  the use case to refusing a caller alike.
 - **The Tenancy sample keeps a unit's kind itself.** Its `OrganizationUnit` has a `UnitKind` enum (company,
   region, area, site), stored by its key in lower case (`UnitKindKeyConverter`), as the rows from before hold
   it and as REST spells it; `AddOrganizationUnit` sets it in the package's callback, and the seeder sets the
@@ -2654,6 +2699,48 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   request in hand, and as the caller otherwise, so a handler reached around its check is refused by the
   database there too. `AccessChecks.RequireAsync` puts the request in hand for the flow that asked
   (`RequestInHand`).
+- **For the 3.2.0 previews: system work is no requirement, and a request says what it requires with an
+  attribute.** `3.2.0-preview.3` had every request answer `AccessRequirement IRequireAccess.RequiredAccess => ...`,
+  and a requirement for the application's own work. System work is a scope trusted code begins around the work, not
+  a door, so `AccessRequirement.RequiresSystemWork()` and its case `AccessRequirement.SystemWork` are gone, and a
+  request that still declares it no longer compiles; `CallerAccessCheck` decides `SignedIn()` alone. From
+  3.2.0-preview.3:
+  - `AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.RequiresSystemWork();` says who may send
+    the request instead: `[InTenant]` where system work in a tenant sends it, as the seeding does,
+    `[AllowAnonymousCallers]` for a development route, `[SignedIn]` for a signed-in person's registration. Begin the
+    system work around the send or inside the handler, `using (TenancyUseCases.BeginSystemIn(tenant)) { ... }`, and
+    refuse everyone else where only system work may go on, `if (!answers.RequireTenant().BySystem) throw
+    ToolkitRefusals.Refuse(ToolkitRefusals.SystemOnly);`, as the sample's `MarkTenantAsDemo` does; Tenancy's
+    provisioning refuses everyone else itself. A job that sends nothing calls the use case inside the scope.
+  - A request that only system work outside any tenant sends, or one of a module without Tenancy, passes
+    `[AllowAnonymousCallers]` alone, since system work is nobody's sign-in: declare that, hold it to the list of
+    requests anyone may send, and refuse everyone else in its handler with `Callers.RequireSystemWork(callers)`,
+    which throws `access.system-only` unless trusted code began system work for the flow, as the removed requirement
+    did at the door. Never test `callers.Current.Kind` for it: a host that does not require explicit callers answers
+    the application itself for any flow nobody began a caller for.
+  - What a client is answered changes where a caller who is no system work sends such a request: past the door it is
+    the handler's `access.system-only`, as before, and at the door the requirement's own refusal, `tenancy.not-seated`
+    for a caller in no tenant where it was `access.system-only`.
+  - `AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.AllowAnonymous();` is `[AllowAnonymousCallers]`
+    on the request, `=> AccessRequirement.SignedIn();` is `[SignedIn]`, `=> TenancyAccess.InTenant();` is `[InTenant]`,
+    `=> TenancyAccess.RequiresOperator();` is `[RequiresOperator]`, `=> TenancyAccess.ForTheWholeTenant(key);` is
+    `[RequiresKey(key)]`, `=> TenancyAccess.AtUnit(key, Unit);` is `[RequiresKey(key)]` with `[AtUnit]` on `Unit`,
+    `=> MemberAccess.On(key, Document, ExpectedVersion);` is `[RequiresKey(key)]` with `[OnResource]` on `Document`
+    and `[ExpectedVersion]` on `ExpectedVersion`, and `=> MemberAccess.SeenWith<DocumentId>(key);` is
+    `[SeenWith<DocumentId>(key)]`; declare the module's interface `partial`, `[AccessRequests] public partial
+    interface IBillingRequest : IRequireAccess;`. The property still compiles and means what it meant, and stays the
+    way for a requirement computed from the request's values; the attributes are the shorter way for the rest. A
+    request that keeps the property where its interface is partial needs nothing else.
+  - `RequiredAccess` no longer has to be written on every request where the module's interface is partial, so a
+    request that says nothing is DDD00077 there instead of the compiler's CS0535.
+  - The message of a request that declares nothing names the attributes: `state what it requires with an attribute,
+    such as [SignedIn], or answer RequiredAccess with it, and say [AllowAnonymousCallers] where anyone may send it`.
+  - The Tenancy sample follows: every request that reads no computed value says its requirement with an attribute,
+    its three request interfaces are partial, `SeatGrants(SeatId Seat, OrganizationUnitId? At = null)` reads the roles
+    at one unit for a caller who manages seats there (`GET /tenancy/seats/{seatId}/grants?unit=`) and computes its
+    requirement, and `MarkTenantAsDemo` and `SetUpProjectRoles` declare `[InTenant]`. The Tenancy and Membership test
+    hosts' request interfaces are marked and partial, and their requests say what they require with attributes.
+    See [System work is a scope](docs/access-requirements.md#system-work-is-a-scope).
 - **For the 3.2.0 previews: every request says what it requires.** `3.2.0-preview.1` and `3.2.0-preview.2`
   shipped `AccessRequirement.Open(reason)` and Tenancy's `DecidedByThePackage`, `SystemWorkInTenant` and
   `OperatorsOnly`. They are gone, so a request that still declares one no longer compiles; each maps onto the
@@ -2665,11 +2752,10 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     unit)`, and `AccessRequirement.SignedIn()` for accepting an invitation or listing one's own seats. The use
     case still asks the rest. The sample's requests show each
     ([What a request requires of its caller](docs/tenancy.md#what-a-request-requires-of-its-caller)).
-  - `new TenancyRequirement.SystemWorkInTenant()`: `AccessRequirement.RequiresSystemWork()`, which takes system
-    work that trusted code began and says who may send the request, not where the work acts: it lets system
-    work outside any tenant through as well. A handler that must act in a tenant asks Tenancy which
-    (`RequireTenant()`, and `BySystem` where only system work may go on), as the sample's `MarkTenantAsDemo`
-    does.
+  - `new TenancyRequirement.SystemWorkInTenant()`: `[InTenant]`, with system work in the tenant begun around the
+    send, since 3.2.0 has no requirement for system work (see the entry above). A handler that must act in a tenant
+    as system work asks Tenancy which (`RequireTenant()`, and `BySystem` where only system work may go on), as the
+    sample's `MarkTenantAsDemo` does.
   - `new TenancyRequirement.OperatorsOnly()`: `TenancyAccess.RequiresOperator()`, whose record is now
     `TenancyRequirement.Operator`.
   - `new TenancyRequirement.InTenant()`, `new TenancyRequirement.ForTheWholeTenant(key)` and
@@ -2680,7 +2766,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     (`TenancyRefusals.SystemOnly` is gone). `access.not-signed-in` for a caller who did not sign in, on a
     request that requires a signed-in user, where listing one's own seats answered `tenancy.not-seated` and
     accepting an invitation `tenancy.identity-required`. And in a host that requires explicit callers, a
-    request that requires system work and runs as nobody fails with `NoCallerException`.
+    request that requires a signed-in user and runs as nobody fails with `NoCallerException`.
 - **For the 3.2.0 previews: a package's row access contribution is written because the application references
   the package.** `3.2.0-preview.1` and `3.2.0-preview.2` wrote one only when the project that runs the export
   listed it, through a class of the application's that handed it the catalogue or a resource's rules, and warned

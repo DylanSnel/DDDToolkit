@@ -13,11 +13,8 @@ namespace Examples.Tenancy.Tenants.Application.Roles.Commands;
 /// <param name="Name">Its name, unique in the tenant.</param>
 /// <param name="Description">What it is for.</param>
 /// <param name="Keys">The keys it grants; the keys they imply are added.</param>
-public sealed record CreateTenantRole(string Name, string Description, IReadOnlyList<string> Keys) : ICommand<RoleId>, ITenantsRequest
-{
-    /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.ForTheWholeTenant(TenancyKeys.RolesManage);
-}
+[RequiresKey(TenancyKeys.RolesManage)]
+public sealed record CreateTenantRole(string Name, string Description, IReadOnlyList<string> Keys) : ICommand<RoleId>, ITenantsRequest;
 
 /// <summary>Handles <see cref="CreateTenantRole"/> with the Tenancy package's use case, which checks the caller, decides and saves.</summary>
 /// <param name="roles">The package's use cases that change a role.</param>
