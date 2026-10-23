@@ -88,8 +88,8 @@ public sealed class PostgresRowAccessScaleTests(PostgresRowAccessScaleDatabase d
         // script granted; the probe asks them itself.
         await RunAsync(connection, "GRANT EXECUTE ON FUNCTION desk_scale.tickets_i_watch(), desk_scale.tickets_i_watch_from_the_root() TO authenticated");
 
-        (await BodyAsync(connection, "tickets_i_watch")).Should().Contain("""FROM desk_scale."TicketWatcher" e1""").And.NotContain("\"Tickets\"");
-        (await BodyAsync(connection, "tickets_i_watch_from_the_root")).Should().Contain("""FROM desk_scale."Tickets" root""");
+        (await BodyAsync(connection, "tickets_i_watch")).Should().Contain("""FROM "desk_scale"."TicketWatcher" e1""").And.NotContain("\"Tickets\"");
+        (await BodyAsync(connection, "tickets_i_watch_from_the_root")).Should().Contain("""FROM "desk_scale"."Tickets" root""");
 
         await PostgresRowAccessScaleDatabase.BecomeAsync(connection, PostgresRowAccessScaleDatabase.Watcher, Cancellation);
         var fromTheEntities = await BuffersAsync(connection, "desk_scale.tickets_i_watch()");

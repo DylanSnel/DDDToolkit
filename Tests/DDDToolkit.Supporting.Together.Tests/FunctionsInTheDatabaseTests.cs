@@ -15,11 +15,11 @@ namespace DDDToolkit.Supporting.Together.Tests;
 /// </summary>
 public abstract class FunctionsInTheDatabaseTests(CampusPostgresServer postgres)
 {
-    /// <summary>The courses' schema as SQL names it, with the dot a name in it follows: <c>campus.</c>, <c>"Campus_Life".</c>.</summary>
-    private string Campus => postgres.Delimited(postgres.Schemas.Campus) + ".";
+    /// <summary>The courses' schema as the access files name it, with the dot a name in it follows: <c>"campus".</c>, <c>"Campus_Life".</c>.</summary>
+    private string Campus => postgres.Quoted(postgres.Schemas.Campus) + ".";
 
-    /// <summary>Tenancy's schema as SQL names it: <c>tenancy</c>, <c>"Tenancy"</c>.</summary>
-    private string Tenancy => postgres.Delimited(postgres.Schemas.Tenancy);
+    /// <summary>Tenancy's schema as the access files name it: <c>"tenancy"</c>, <c>"Tenancy"</c>.</summary>
+    private string Tenancy => postgres.Quoted(postgres.Schemas.Tenancy);
 
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
@@ -276,7 +276,7 @@ public abstract class FunctionsInTheDatabaseTests(CampusPostgresServer postgres)
     }
 
     [Fact]
-    public void Every_function_the_access_files_name_is_named_in_its_schema_as_entity_framework_names_that_schema()
+    public void Every_schema_the_access_files_name_is_in_double_quotes()
     {
         var scripts = CampusPostgres.AccessScripts(schemas: postgres.Schemas);
 
@@ -288,16 +288,18 @@ public abstract class FunctionsInTheDatabaseTests(CampusPostgresServer postgres)
         scripts[1].Should().Contain($"(SELECT {Tenancy}.caller_seat())")
             .And.Contain($"({RowAccessModel.Literal(postgres.Schemas.Campus)}, 'courses_i_see')");
 
-        // A schema Postgres would fold to lower case without its quotes never goes without them.
-        foreach (var schema in new[] { postgres.Schemas.Tenancy, postgres.Schemas.Campus }.Where(schema => postgres.Delimited(schema) != schema))
+        // No schema goes without its quotes, one Postgres would keep as it is written without them included: not before
+        // a function, not before a table, not in a string Postgres reads as a name, to_regprocedure's, and not the
+        // toolkit's own. A setting's name in a string, which no parenthesis or quote follows, is no schema.
+        foreach (var schema in new[] { postgres.Schemas.Tenancy, postgres.Schemas.Campus, "ddd" })
         {
-            var unquoted = new Regex(@"(?<![\w""'.])" + Regex.Escape(schema) + @"\.\w+\(", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
-            scripts.Should().AllSatisfy(script => unquoted.Matches(script).Select(match => match.Value).Should().BeEmpty("{0} is a schema Postgres keeps only in double quotes", schema));
+            var unquoted = new Regex(@"(?<![\w"".])" + Regex.Escape(schema) + @"\.(\w+\(|"")", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+            scripts.Should().AllSatisfy(script => unquoted.Matches(script).Select(match => match.Value).Should().BeEmpty("the toolkit writes {0} in double quotes wherever it names it", schema));
         }
     }
 }
 
-/// <summary>The functions in the campus' own schemas, <c>tenancy</c> and <c>campus</c>, which SQL writes as they are.</summary>
+/// <summary>The functions in the campus' own schemas, <c>tenancy</c> and <c>campus</c>, which Postgres keeps as they are written.</summary>
 public sealed class FunctionsInTheDatabaseTestsOnPostgres(CampusPostgres postgres) : FunctionsInTheDatabaseTests(postgres);
 
 /// <summary>The functions in <c>"Tenancy"</c> and <c>"Campus_Life"</c>, schemas Postgres keeps only in double quotes.</summary>

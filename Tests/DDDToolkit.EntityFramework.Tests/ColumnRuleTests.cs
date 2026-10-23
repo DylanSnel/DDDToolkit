@@ -33,27 +33,27 @@ public sealed class ColumnRuleTests
 
         Policies(with).Should().Equal(Policies(without), "a policy is about a row, and the rules for the row are what they were");
         with.Should().Contain(
-            "\n-- A change of \"Status\" of desk.\"Tickets\" is held to the column rule 'Owners close their tickets'.\n" +
-            "CREATE OR REPLACE FUNCTION desk.tickets_status_column_rule() RETURNS trigger\n" +
+            "\n-- A change of \"Status\" of \"desk\".\"Tickets\" is held to the column rule 'Owners close their tickets'.\n" +
+            "CREATE OR REPLACE FUNCTION \"desk\".tickets_status_column_rule() RETURNS trigger\n" +
             "    LANGUAGE plpgsql SET search_path = '' AS $body$\n" +
             "BEGIN\n" +
             "    -- The roles a caller's statement runs as are held; the application's own work and the tables' owner are not.\n" +
             "    IF CURRENT_USER IN ('anon', 'authenticated') THEN\n" +
-            "        IF (((SELECT ddd.caller_id()) IS NOT NULL) AND (OLD.\"Owner\" IS NOT DISTINCT FROM (SELECT ddd.caller_id()))) IS NOT TRUE" +
-            " OR (((SELECT ddd.caller_id()) IS NOT NULL) AND (NEW.\"Owner\" IS NOT DISTINCT FROM (SELECT ddd.caller_id()))) IS NOT TRUE THEN\n" +
-            "            RAISE EXCEPTION USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'tickets_status_column_rule', HINT = 'ddd:access.refused', MESSAGE = 'The column rule ''Owners close their tickets'' does not let this caller change \"Status\" of desk.\"Tickets\".';\n" +
+            "        IF (((SELECT \"ddd\".caller_id()) IS NOT NULL) AND (OLD.\"Owner\" IS NOT DISTINCT FROM (SELECT \"ddd\".caller_id()))) IS NOT TRUE" +
+            " OR (((SELECT \"ddd\".caller_id()) IS NOT NULL) AND (NEW.\"Owner\" IS NOT DISTINCT FROM (SELECT \"ddd\".caller_id()))) IS NOT TRUE THEN\n" +
+            "            RAISE EXCEPTION USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'tickets_status_column_rule', HINT = 'ddd:access.refused', MESSAGE = 'The column rule ''Owners close their tickets'' does not let this caller change \"Status\" of \"desk\".\"Tickets\".';\n" +
             "        END IF;\n" +
             "    END IF;\n" +
             "    RETURN NEW;\n" +
             "END\n" +
             "$body$;\n" +
-            "COMMENT ON FUNCTION desk.tickets_status_column_rule() IS 'DDDToolkit access function of DeskContext';\n" +
-            "REVOKE ALL ON FUNCTION desk.tickets_status_column_rule() FROM PUBLIC;\n" +
-            "DROP TRIGGER IF EXISTS tickets_status_column_rule ON desk.\"Tickets\";\n" +
-            "CREATE TRIGGER tickets_status_column_rule BEFORE UPDATE OF \"Status\" ON desk.\"Tickets\"\n" +
+            "COMMENT ON FUNCTION \"desk\".tickets_status_column_rule() IS 'DDDToolkit access function of DeskContext';\n" +
+            "REVOKE ALL ON FUNCTION \"desk\".tickets_status_column_rule() FROM PUBLIC;\n" +
+            "DROP TRIGGER IF EXISTS tickets_status_column_rule ON \"desk\".\"Tickets\";\n" +
+            "CREATE TRIGGER tickets_status_column_rule BEFORE UPDATE OF \"Status\" ON \"desk\".\"Tickets\"\n" +
             "    FOR EACH ROW WHEN (OLD.\"Status\" IS DISTINCT FROM NEW.\"Status\")\n" +
-            "    EXECUTE FUNCTION desk.tickets_status_column_rule();\n" +
-            "COMMENT ON TRIGGER tickets_status_column_rule ON desk.\"Tickets\" IS 'DDDToolkit column rule';\n",
+            "    EXECUTE FUNCTION \"desk\".tickets_status_column_rule();\n" +
+            "COMMENT ON TRIGGER tickets_status_column_rule ON \"desk\".\"Tickets\" IS 'DDDToolkit column rule';\n",
             "the rule is asked of the row as it was and as it is about to be, as a policy for UPDATE asks it, for the roles it is for, and the trigger fires only where the status changes");
         without.Should().NotContain("CREATE TRIGGER", "a script without column rules writes no trigger");
     }
@@ -66,17 +66,17 @@ public sealed class ColumnRuleTests
         var script = PostgresRowAccess.Script(desk, [DeskRules.Owners, DeskRules.TeamWork, DeskRules.OwnersClose, DeskRules.LeadsClose]);
 
         Regex.Matches(script, "CREATE TRIGGER ").Should().HaveCount(1, "both rules hold the status");
-        script.Should().Contain("-- A change of \"Status\" of desk.\"Tickets\" is held to the column rules 'Leads close the teams tickets' and 'Owners close their tickets': a change one of them allows is allowed.\n");
+        script.Should().Contain("-- A change of \"Status\" of \"desk\".\"Tickets\" is held to the column rules 'Leads close the teams tickets' and 'Owners close their tickets': a change one of them allows is allowed.\n");
         script.Should().Contain(
             "    IF CURRENT_USER = 'anon' THEN\n" +
-            "        IF (((SELECT ddd.caller_id()) IS NOT NULL) AND (OLD.\"Owner\" IS NOT DISTINCT FROM (SELECT ddd.caller_id()))) IS NOT TRUE",
+            "        IF (((SELECT \"ddd\".caller_id()) IS NOT NULL) AND (OLD.\"Owner\" IS NOT DISTINCT FROM (SELECT \"ddd\".caller_id()))) IS NOT TRUE",
             "the leads' rule is for signed-in users alone, so a caller without a user is asked the owners' rule");
         script.Should().Contain(
             "    ELSIF CURRENT_USER = 'authenticated' THEN\n" +
-            "        IF ((((OLD.\"Team\" IS NOT NULL) AND (OLD.\"Team\" IS NOT DISTINCT FROM (SELECT ddd.caller_claims() #>> '{app_metadata,team}'))) AND ((SELECT ddd.caller_claims() #>> '{app_metadata,lead}') IS NOT DISTINCT FROM 'yes'))" +
-            " OR (((SELECT ddd.caller_id()) IS NOT NULL) AND (OLD.\"Owner\" IS NOT DISTINCT FROM (SELECT ddd.caller_id())))) IS NOT TRUE",
+            "        IF ((((OLD.\"Team\" IS NOT NULL) AND (OLD.\"Team\" IS NOT DISTINCT FROM (SELECT \"ddd\".caller_claims() #>> '{app_metadata,team}'))) AND ((SELECT \"ddd\".caller_claims() #>> '{app_metadata,lead}') IS NOT DISTINCT FROM 'yes'))" +
+            " OR (((SELECT \"ddd\".caller_id()) IS NOT NULL) AND (OLD.\"Owner\" IS NOT DISTINCT FROM (SELECT \"ddd\".caller_id())))) IS NOT TRUE",
             "a signed-in user is asked both, OR-ed together");
-        script.Should().Contain("MESSAGE = 'None of the column rules ''Leads close the teams tickets'' and ''Owners close their tickets'' lets this caller change \"Status\" of desk.\"Tickets\".';");
+        script.Should().Contain("MESSAGE = 'None of the column rules ''Leads close the teams tickets'' and ''Owners close their tickets'' lets this caller change \"Status\" of \"desk\".\"Tickets\".';");
     }
 
     [Fact]
@@ -93,7 +93,7 @@ public sealed class ColumnRuleTests
             "a rule that reads nothing of the row is asked once");
         Function(script, "crates_label_column_rule").Should().Contain(
             "    ELSIF CURRENT_USER = 'shelf_auditor' THEN\n" +
-            "        RAISE EXCEPTION USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'crates_label_column_rule', HINT = 'ddd:access.refused', MESSAGE = 'No column rule is for this caller''s role, so it may not change \"Label\" of shelf.\"Crates\".';\n",
+            "        RAISE EXCEPTION USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'crates_label_column_rule', HINT = 'ddd:access.refused', MESSAGE = 'No column rule is for this caller''s role, so it may not change \"Label\" of \"shelf\".\"Crates\".';\n",
             "a mapped token role is a caller's, and no rule for it lets it change the column");
         Function(script, "crates_label_column_rule").Should().NotContain("ddd_system_in", "the scoped system role is the application's own work, and passes");
 
@@ -111,17 +111,17 @@ public sealed class ColumnRuleTests
         using var shelf = ShelfContext.Create();
 
         Trigger(PostgresRowAccess.Script(shelf, [PackersChangeCrates, RowAccessRule.ForColumns<Crate>("Measurers size crates", [nameof(Crate.Size)], "TRUE")], null, Shelf), "crates_size_depth_size_width_column_rule")
-            .Should().StartWith("CREATE TRIGGER crates_size_depth_size_width_column_rule BEFORE UPDATE OF \"Size_Depth\", \"Size_Width\" ON shelf.\"Crates\"\n" +
+            .Should().StartWith("CREATE TRIGGER crates_size_depth_size_width_column_rule BEFORE UPDATE OF \"Size_Depth\", \"Size_Width\" ON \"shelf\".\"Crates\"\n" +
                                 "    FOR EACH ROW WHEN ((OLD.\"Size_Depth\", OLD.\"Size_Width\") IS DISTINCT FROM (NEW.\"Size_Depth\", NEW.\"Size_Width\"))\n",
                 "a complex property is the columns of its properties");
         Trigger(PostgresRowAccess.Script(shelf, [PackersChangeCrates, RowAccessRule.ForColumns<Crate>("Sealers seal crates", [nameof(Crate.Seal)], "TRUE")], null, Shelf), "crates_seal_code_seal_until_column_rule")
-            .Should().StartWith("CREATE TRIGGER crates_seal_code_seal_until_column_rule BEFORE UPDATE OF \"Seal_Code\", \"Seal_Until\" ON shelf.\"Crates\"",
+            .Should().StartWith("CREATE TRIGGER crates_seal_code_seal_until_column_rule BEFORE UPDATE OF \"Seal_Code\", \"Seal_Until\" ON \"shelf\".\"Crates\"",
                 "an owned type stored in the row is the columns of its properties, and not the key it shares with the row");
         Trigger(PostgresRowAccess.Script(shelf, [PackersChangeCrates, RowAccessRule.ForColumns<Crate>("Sealers recode crates", ["Seal.Code"], "TRUE")], null, Shelf), "crates_seal_code_column_rule")
-            .Should().StartWith("CREATE TRIGGER crates_seal_code_column_rule BEFORE UPDATE OF \"Seal_Code\" ON shelf.\"Crates\"",
+            .Should().StartWith("CREATE TRIGGER crates_seal_code_column_rule BEFORE UPDATE OF \"Seal_Code\" ON \"shelf\".\"Crates\"",
                 "a property of a value object is its one column");
         Trigger(PostgresRowAccess.Script(shelf, [PackersChangeCrates, RowAccessRule.ForColumns<Crate>("Taggers tag crates", [nameof(Crate.Tags)], "TRUE")], null, Shelf), "crates_tags_column_rule")
-            .Should().StartWith("CREATE TRIGGER crates_tags_column_rule BEFORE UPDATE OF \"Tags\" ON shelf.\"Crates\"",
+            .Should().StartWith("CREATE TRIGGER crates_tags_column_rule BEFORE UPDATE OF \"Tags\" ON \"shelf\".\"Crates\"",
                 "a collection of values is stored in the row, as an array, and is its one column");
     }
 
@@ -142,9 +142,9 @@ public sealed class ColumnRuleTests
 
         var function = Function(script, "crates_state_column_rule");
         function.Should().Contain("    IF CURRENT_USER = 'authenticated' THEN\n", "the same question, for another role, is another rule");
-        function.Should().Contain("MESSAGE = 'The column rule ''Users close crates'' does not let this caller change \"State\" of shelf.\"Crates\".';");
+        function.Should().Contain("MESSAGE = 'The column rule ''Users close crates'' does not let this caller change \"State\" of \"shelf\".\"Crates\".';");
         function.Should().Contain("    ELSIF CURRENT_USER = 'shelf_auditor' THEN\n");
-        function.Should().Contain("MESSAGE = 'The column rule ''Auditors close crates'' does not let this caller change \"State\" of shelf.\"Crates\".';");
+        function.Should().Contain("MESSAGE = 'The column rule ''Auditors close crates'' does not let this caller change \"State\" of \"shelf\".\"Crates\".';");
         function.Should().NotContain("None of the column rules", "each refusal names the rule that was asked of the caller");
     }
 
@@ -175,7 +175,7 @@ public sealed class ColumnRuleTests
 
         Function(script, "crates_label_column_rule").Should().Contain(
             "    ELSIF CURRENT_USER IN ('anon', 'shelf_auditor', 'shelf_clerk', 'shelf_keeper', 'shelf_mover') THEN\n" +
-            "        RAISE EXCEPTION USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'crates_label_column_rule', HINT = 'ddd:access.refused', MESSAGE = 'No column rule is for this caller''s role, so it may not change \"Label\" of shelf.\"Crates\".';\n",
+            "        RAISE EXCEPTION USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'crates_label_column_rule', HINT = 'ddd:access.refused', MESSAGE = 'No column rule is for this caller''s role, so it may not change \"Label\" of \"shelf\".\"Crates\".';\n",
             "a role that a rule for Change, a contribution's policy for UPDATE or for ALL lets change a crate is a caller's, and no column rule is for it");
         Function(script, "crates_label_column_rule").Should().NotContain("shelf_counter", "a role that only reads changes no column")
             .And.NotContain("shelf_inspector", "a restrictive policy lets nobody change anything");
@@ -201,8 +201,8 @@ public sealed class ColumnRuleTests
             "crates_label_column_rule: \"Label\"",
             "crates_seal_code_size_depth_size_width_column_rule: \"Seal_Code\", \"Size_Depth\", \"Size_Width\"",
             "crates_state_column_rule: \"State\"");
-        script.Should().Contain("-- A change of \"Label\" of shelf.\"Crates\" is held to the column rules 'Anyone labels' and 'Checkers relabel crates': a change one of them allows is allowed.\n");
-        script.Should().Contain("-- A change of \"State\" of shelf.\"Crates\" is held to the column rule 'Checkers relabel crates'.\n");
+        script.Should().Contain("-- A change of \"Label\" of \"shelf\".\"Crates\" is held to the column rules 'Anyone labels' and 'Checkers relabel crates': a change one of them allows is allowed.\n");
+        script.Should().Contain("-- A change of \"State\" of \"shelf\".\"Crates\" is held to the column rule 'Checkers relabel crates'.\n");
     }
 
     [Fact]
@@ -213,11 +213,11 @@ public sealed class ColumnRuleTests
         var script = PostgresRowAccess.Script(shelf, [PackersChangeCrates, RowAccessRule.ForColumns<ColdCrate>("Cold keepers set the temperature", [nameof(ColdCrate.Temperature)], "{caller:signedin}")], null, Shelf);
 
         Trigger(script, "crates_temperature_column_rule").Should().StartWith(
-            "CREATE TRIGGER crates_temperature_column_rule BEFORE UPDATE OF \"Temperature\" ON shelf.\"Crates\"\n" +
+            "CREATE TRIGGER crates_temperature_column_rule BEFORE UPDATE OF \"Temperature\" ON \"shelf\".\"Crates\"\n" +
             "    FOR EACH ROW WHEN ((OLD.\"Temperature\" IS DISTINCT FROM NEW.\"Temperature\") AND (OLD.\"Kind\" = 'cold' OR NEW.\"Kind\" = 'cold'))\n",
             "the other crates in the table are no business of a rule about cold ones");
         Function(script, "crates_temperature_column_rule").Should().Contain(
-            "IF (((SELECT ddd.caller_id()) IS NOT NULL) AND OLD.\"Kind\" = 'cold') IS NOT TRUE OR (((SELECT ddd.caller_id()) IS NOT NULL) AND NEW.\"Kind\" = 'cold') IS NOT TRUE THEN",
+            "IF (((SELECT \"ddd\".caller_id()) IS NOT NULL) AND OLD.\"Kind\" = 'cold') IS NOT TRUE OR (((SELECT \"ddd\".caller_id()) IS NOT NULL) AND NEW.\"Kind\" = 'cold') IS NOT TRUE THEN",
             "a crate that stops being a cold one is no longer one the rule allows");
     }
 
@@ -320,9 +320,9 @@ public sealed class ColumnRuleTests
     /// <summary>The <c>CREATE FUNCTION</c> statement of <paramref name="script"/> for the trigger <paramref name="name"/>.</summary>
     private static string Function(string script, string name)
     {
-        var start = script.IndexOf($"CREATE OR REPLACE FUNCTION shelf.{name}()", StringComparison.Ordinal) is var shelf and >= 0
+        var start = script.IndexOf($"CREATE OR REPLACE FUNCTION \"shelf\".{name}()", StringComparison.Ordinal) is var shelf and >= 0
             ? shelf
-            : script.IndexOf($"CREATE OR REPLACE FUNCTION desk.{name}()", StringComparison.Ordinal);
+            : script.IndexOf($"CREATE OR REPLACE FUNCTION \"desk\".{name}()", StringComparison.Ordinal);
         start.Should().BeGreaterThanOrEqualTo(0, "the script writes the function {0}", name);
         return script[start..(script.IndexOf("$body$;", start, StringComparison.Ordinal) + "$body$;".Length)];
     }

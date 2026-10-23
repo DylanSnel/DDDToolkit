@@ -92,7 +92,8 @@ public static class PostgresRowAccessChecks
     /// owns a schema there: it made the schema, so it is the role the migrations run as, and its fix is another
     /// role to log in as. A membership counts when the role has the member's privileges without switching to
     /// it: since Postgres 16 that is said per membership, before it by the role's own attribute, and reading the
-    /// membership as JSON asks for the newer answer without naming a column an older server lacks.
+    /// membership as JSON asks for the newer answer without naming a column an older server lacks. A schema a
+    /// finding names is in double quotes, as the access files write every schema, so its fix runs as it is written.
     /// <para>
     /// A role it may switch to counts when that role is past the policies itself: a superuser, a role that
     /// bypasses row level security, or the owner of a table, a function or a schema there. Whether it may switch
@@ -110,12 +111,12 @@ public static class PostgresRowAccessChecks
             SELECT r.oid, r.rolname, pg_catalog.quote_ident(r.rolname) AS name, r.rolsuper, r.rolbypassrls, r.rolcreaterole, r.rolreplication, r.rolinherit
             FROM pg_catalog.pg_roles r WHERE r.rolname = SESSION_USER::pg_catalog.text),
         relations AS (
-            SELECT c.oid, c.relowner, c.relacl, c.relkind, pg_catalog.quote_ident(n.nspname) || '.' || pg_catalog.quote_ident(c.relname) AS name,
+            SELECT c.oid, c.relowner, c.relacl, c.relkind, '"' || pg_catalog.replace(n.nspname, '"', '""') || '".' || pg_catalog.quote_ident(c.relname) AS name,
                    CASE c.relkind WHEN 'S' THEN 'sequence' WHEN 'v' THEN 'view' WHEN 'm' THEN 'materialized view' WHEN 'f' THEN 'foreign table' ELSE 'table' END AS kind
             FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
             WHERE n.nspname = ANY ($1) AND c.relkind IN ('r', 'p', 'v', 'm', 'S', 'f'))
         SELECT 0, 'it owns ' || CASE WHEN pg_catalog.count(*) = 1 THEN 'the schema ' ELSE 'the schemas ' END
-                   || pg_catalog.string_agg(pg_catalog.quote_ident(n.nspname), ', ' ORDER BY n.nspname) || ' and what the migrations made there, as the role that runs them does',
+                   || pg_catalog.string_agg('"' || pg_catalog.replace(n.nspname, '"', '""') || '"', ', ' ORDER BY n.nspname) || ' and what the migrations made there, as the role that runs them does',
                'log in as a role of its own, one that owns and holds nothing and may switch to the roles callers run as, and keep ' || login.name || ' for running the migrations.', login.rolname
         FROM login JOIN pg_catalog.pg_namespace n ON n.nspowner = login.oid WHERE n.nspname = ANY ($1)
         GROUP BY login.name, login.rolname
@@ -134,7 +135,7 @@ public static class PostgresRowAccessChecks
         FROM login JOIN pg_catalog.pg_auth_members m ON m.member = login.oid JOIN pg_catalog.pg_roles granted ON granted.oid = m.roleid
         WHERE coalesce((pg_catalog.to_jsonb(m) ->> 'inherit_option')::pg_catalog.bool, login.rolinherit)
         UNION ALL
-        SELECT 6, 'it owns the schema ' || pg_catalog.quote_ident(n.nspname), 'ALTER SCHEMA ' || pg_catalog.quote_ident(n.nspname) || ' OWNER TO {owner};', login.rolname
+        SELECT 6, 'it owns the schema "' || pg_catalog.replace(n.nspname, '"', '""') || '"', 'ALTER SCHEMA "' || pg_catalog.replace(n.nspname, '"', '""') || '" OWNER TO {owner};', login.rolname
         FROM login JOIN pg_catalog.pg_namespace n ON n.nspowner = login.oid WHERE n.nspname = ANY ($1)
         UNION ALL
         SELECT 7, 'it owns the ' || relations.kind || ' ' || relations.name,
@@ -144,7 +145,7 @@ public static class PostgresRowAccessChecks
         UNION ALL
         SELECT 8, 'it owns the function ' || signature.name, 'ALTER ROUTINE ' || signature.name || ' OWNER TO {owner};', login.rolname
         FROM login JOIN pg_catalog.pg_proc p ON p.proowner = login.oid JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
-        CROSS JOIN LATERAL (SELECT pg_catalog.quote_ident(n.nspname) || '.' || pg_catalog.quote_ident(p.proname) || '(' || pg_catalog.pg_get_function_identity_arguments(p.oid) || ')' AS name) signature
+        CROSS JOIN LATERAL (SELECT '"' || pg_catalog.replace(n.nspname, '"', '""') || '".' || pg_catalog.quote_ident(p.proname) || '(' || pg_catalog.pg_get_function_identity_arguments(p.oid) || ')' AS name) signature
         WHERE n.nspname = ANY ($1)
         UNION ALL
         SELECT 9, CASE WHEN held.grantee = 0 THEN 'it has ' ELSE 'it holds ' END || held.privileges || ' on the ' || relations.kind || ' ' || relations.name
@@ -182,9 +183,9 @@ public static class PostgresRowAccessChecks
           AND pg_catalog.pg_has_role(login.oid, reached.oid,
                   CASE WHEN pg_catalog.current_setting('server_version_num')::pg_catalog.int4 >= 160000 THEN 'SET' ELSE 'MEMBER' END)
         UNION ALL
-        SELECT 11, CASE WHEN held.grantee = 0 THEN 'it has ' ELSE 'it holds ' END || 'CREATE on the schema ' || pg_catalog.quote_ident(n.nspname)
+        SELECT 11, CASE WHEN held.grantee = 0 THEN 'it has ' ELSE 'it holds ' END || 'CREATE on the schema "' || pg_catalog.replace(n.nspname, '"', '""') || '"'
                    || CASE WHEN held.grantee = 0 THEN ' through PUBLIC' ELSE '' END,
-               'REVOKE CREATE ON SCHEMA ' || pg_catalog.quote_ident(n.nspname) || ' FROM ' || CASE WHEN held.grantee = 0 THEN 'PUBLIC' ELSE login.name END || ';', login.rolname
+               'REVOKE CREATE ON SCHEMA "' || pg_catalog.replace(n.nspname, '"', '""') || '" FROM ' || CASE WHEN held.grantee = 0 THEN 'PUBLIC' ELSE login.name END || ';', login.rolname
         FROM login JOIN pg_catalog.pg_namespace n ON n.nspname = ANY ($1) AND n.nspowner <> login.oid
         CROSS JOIN LATERAL (
             SELECT DISTINCT acl.grantee FROM pg_catalog.aclexplode(n.nspacl) acl
@@ -231,11 +232,11 @@ public static class PostgresRowAccessChecks
     /// The functions in the schemas of a context's model and in <c>ddd</c> that run as their owner, and whose
     /// owner neither bypasses row level security nor is a superuser: each with its owner. None while no table
     /// in those schemas forces row level security: a table's owner is then exempt from its policies, and such a
-    /// function answers as it should.
+    /// function answers as it should. Each is named with its schema in double quotes, as the access files name it.
     /// </summary>
     private const string DefinerFindings =
         """
-        SELECT pg_catalog.quote_ident(n.nspname) || '.' || pg_catalog.quote_ident(p.proname) || '(' || pg_catalog.pg_get_function_identity_arguments(p.oid) || ')',
+        SELECT '"' || pg_catalog.replace(n.nspname, '"', '""') || '".' || pg_catalog.quote_ident(p.proname) || '(' || pg_catalog.pg_get_function_identity_arguments(p.oid) || ')',
                pg_catalog.quote_ident(owner.rolname)
         FROM pg_catalog.pg_proc p
         JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
@@ -313,7 +314,7 @@ public static class PostgresRowAccessChecks
     /// callers run as: the user's, the anonymous caller's, the scoped system role, the role the system caller runs
     /// as, and the role of every mapped token role, as its row level security interceptor was configured. Where the
     /// settings last one transaction (<see cref="RowLevelSecurityScope.Transaction"/>), it also throws unless the
-    /// login role may call <c>ddd.use_caller</c>, which sets them.
+    /// login role may call <c>"ddd".use_caller</c>, which sets them.
     /// <para>
     /// A role is switched to when a caller of that kind connects, not when the application starts. Without this,
     /// an application whose login role was never granted one of them starts, passes its other checks, and fails the
@@ -383,7 +384,7 @@ public static class PostgresRowAccessChecks
             message.Append("\n- ").Append(finding[0].Length == 0
                 ? missing
                     ? $"{name}, which sets the caller of each transaction, does not exist. Fix: apply the access files, or PostgresRowAccess.SetupScript(), which make it."
-                    : $"it may not call {name}, which sets the caller of each transaction. Fix: GRANT USAGE ON SCHEMA ddd TO {login}; GRANT EXECUTE ON PROCEDURE {name} TO {login};"
+                    : $"it may not call {name}, which sets the caller of each transaction. Fix: GRANT USAGE ON SCHEMA \"ddd\" TO {login}; GRANT EXECUTE ON PROCEDURE {name} TO {login};"
                 : missing
                     ? $"{name}, {what}, does not exist. Fix: run the migrations that make it, or CREATE ROLE {name} NOLOGIN NOINHERIT; GRANT {name} TO {login}; {MappedOnSupabase(pair)}"
                     : $"it may not switch to {name}, {what}. Fix: GRANT {name} TO {login}; {MappedOnSupabase(pair)}");

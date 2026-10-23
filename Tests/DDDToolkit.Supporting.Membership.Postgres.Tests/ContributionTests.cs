@@ -259,8 +259,8 @@ public sealed class ContributionTests(FilingPostgres postgres)
         // The application's rules get the rules' own names: the documents' rules ask by the document's id, and the
         // folders' through questions that name that owner and those names.
         var script = FilingPostgres.AccessScript();
-        script.Should().Contain("USING (\"Id\" = ANY (ARRAY(SELECT filing.documents_i_see())))")
-            .And.Contain("USING (\"Id\" = ANY (ARRAY(SELECT filing.folder_ids_seen())))");
+        script.Should().Contain("USING (\"Id\" = ANY (ARRAY(SELECT \"filing\".documents_i_see())))")
+            .And.Contain("USING (\"Id\" = ANY (ARRAY(SELECT \"filing\".folder_ids_seen())))");
         (DocumentMembership.Rules.Functions.Seen, DocumentMembership.Rules.Functions.HeldOn).Should().Be(("documents_i_see", "documents_where_i_hold"));
         (FolderMembership.Rules.Functions.Seen, FolderMembership.Rules.Functions.HeldOn).Should().Be(("folder_ids_seen", "folder_ids_held"));
     }

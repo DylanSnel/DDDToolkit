@@ -20,7 +20,7 @@ namespace Examples.Tenancy.Tests.Tenants;
 public sealed class TenancyChoicesExportTests
 {
     /// <summary>The Tenants module's access file the sample's build wrote last.</summary>
-    private const string TenantsAccessFile = "20261006170417_access.tenants.ddd.sql";
+    private const string TenantsAccessFile = "20261023170856_access.tenants.ddd.sql";
 
     /// <summary>
     /// A read rule on the sample's seat the sample does not have, as the generator writes one:
@@ -42,9 +42,9 @@ public sealed class TenancyChoicesExportTests
         removed.Should().BeEquivalentTo(
             [
                 "-- Members and the person read seats (select) for authenticated asks the policy 'Members and the person read seats' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.",
-                "CREATE POLICY \"Members and the person read seats (select) for authenticated\" ON tenancy.\"Seats\" FOR SELECT TO authenticated",
-                "    USING (\"TenantId\" = (SELECT tenancy.caller_tenant()) OR \"Identity\" = (SELECT auth.uid()));",
-                "COMMENT ON POLICY \"Members and the person read seats (select) for authenticated\" ON tenancy.\"Seats\" IS 'DDDToolkit row access rule';",
+                "CREATE POLICY \"Members and the person read seats (select) for authenticated\" ON \"tenancy\".\"Seats\" FOR SELECT TO authenticated",
+                "    USING (\"TenantId\" = (SELECT \"tenancy\".caller_tenant()) OR \"Identity\" = (SELECT auth.uid()));",
+                "COMMENT ON POLICY \"Members and the person read seats (select) for authenticated\" ON \"tenancy\".\"Seats\" IS 'DDDToolkit row access rule';",
             ],
             "Tenancy's default read of the seats is the one policy that goes");
 
@@ -52,11 +52,11 @@ public sealed class TenancyChoicesExportTests
             .Contain("-- Seats (select) for authenticated asks the rule 'Members read the people of their units' (which names no role, so it is for the roles of the default) " +
                      "in place of the default 'Members and the person read seats' of the row access contribution " +
                      "DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres")
-            .And.Contain("CREATE POLICY \"Seats (select) for authenticated\" ON tenancy.\"Seats\" FOR SELECT TO authenticated")
+            .And.Contain("CREATE POLICY \"Seats (select) for authenticated\" ON \"tenancy\".\"Seats\" FOR SELECT TO authenticated")
             .And.Contain(
-                "    USING ((\"Identity\" = (SELECT auth.uid()) OR ((\"TenantId\" = (SELECT tenancy.caller_tenant())) AND ((SELECT tenancy.holds_key('tenancy.seats.manage')) " +
-                "OR (SELECT tenancy.holds_key('tenancy.grants.manage')) OR (SELECT tenancy.holds_key('tenancy.units.manage')) OR (SELECT tenancy.holds_tenant_wide('tenancy.roles.manage')))))" +
-                " OR ((\"TenantId\" = (SELECT tenancy.caller_tenant())) AND (\"Id\" = ANY (ARRAY(SELECT tenancy.seats_in_my_units())))));",
+                "    USING ((\"Identity\" = (SELECT auth.uid()) OR ((\"TenantId\" = (SELECT \"tenancy\".caller_tenant())) AND ((SELECT \"tenancy\".holds_key('tenancy.seats.manage')) " +
+                "OR (SELECT \"tenancy\".holds_key('tenancy.grants.manage')) OR (SELECT \"tenancy\".holds_key('tenancy.units.manage')) OR (SELECT \"tenancy\".holds_tenant_wide('tenancy.roles.manage')))))" +
+                " OR ((\"TenantId\" = (SELECT \"tenancy\".caller_tenant())) AND (\"Id\" = ANY (ARRAY(SELECT \"tenancy\".seats_in_my_units())))));",
                 "the rule decides within the calling seat's tenant, beside a person's own seats and what Tenancy's managers read, for authenticated, the user's role, which nothing had to say");
         added.Should().OnlyContain(line => line.Contains("Seats (select) for authenticated") || line.StartsWith("    USING ((\"Identity\"", StringComparison.Ordinal),
             "the rule's policy is all that comes in its place, and no other policy, function or grant changes");

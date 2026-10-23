@@ -11,7 +11,7 @@ namespace DDDToolkit.Abstractions.Attributes;
 /// // in a rule
 /// =&gt; Questions.IdsIFollow&lt;ProjectId&gt;("projects").Contains(project.Id);
 /// </code>
-/// The policy asks it once per statement, <c>"Id" = ANY (ARRAY(SELECT projects.ids_i_follow('projects')))</c>,
+/// The policy asks it once per statement, <c>"Id" = ANY (ARRAY(SELECT "projects".ids_i_follow('projects')))</c>,
 /// so its arguments are constants, the caller or the function's own parameters, never the row: an argument
 /// that reads the row is DDD00051.
 /// </summary>

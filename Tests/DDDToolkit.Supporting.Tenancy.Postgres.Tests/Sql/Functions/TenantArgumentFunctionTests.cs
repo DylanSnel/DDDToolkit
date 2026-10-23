@@ -293,7 +293,7 @@ public abstract class TenantArgumentFunctionTests(TenancyPostgres postgres, Tena
 
         var scripts = TenancyPostgres.AccessScripts(functions: [WidgetRules.ReadableInTenant], names: names);
         scripts[1].Should().Contain("CREATE OR REPLACE FUNCTION widgets.readable_in_tenant(uuid, bigint) RETURNS boolean")
-            .And.Contain($"WHERE root.\"{names.Of("Id")}\" = $1 AND ((root.\"{names.Of("TenantId")}\" = $2) AND (root.\"{names.Of("UnitId")}\" = ANY (ARRAY(SELECT tenancy.units_where_i_hold_in_tenant($2, 'widget.read')))))");
+            .And.Contain($"WHERE root.\"{names.Of("Id")}\" = $1 AND ((root.\"{names.Of("TenantId")}\" = $2) AND (root.\"{names.Of("UnitId")}\" = ANY (ARRAY(SELECT \"tenancy\".units_where_i_hold_in_tenant($2, 'widget.read')))))");
         foreach (var script in scripts)
         {
             await TenancyPostgres.ExecuteAsync(database.ConnectionString, script, Cancellation);
@@ -352,10 +352,10 @@ public abstract class TenantArgumentFunctionTests(TenancyPostgres postgres, Tena
 
         var scripts = TenancyPostgres.AccessScripts(functions: [WidgetRules.ReadAsInTenant], names: names);
         scripts[1].Should().Contain("CREATE OR REPLACE FUNCTION widgets.read_as_in_tenant(uuid, bigint, uuid, uuid) RETURNS boolean")
-            .And.Contain("tenancy.seated_in_tenant($2)")
-            .And.Contain("tenancy.holds_key_in_tenant($2, 'widget.read')")
-            .And.Contain("tenancy.seat_in_tenant($2)")
-            .And.Contain("tenancy.roles_with_key_in_tenant($2, 'widget.read')");
+            .And.Contain("\"tenancy\".seated_in_tenant($2)")
+            .And.Contain("\"tenancy\".holds_key_in_tenant($2, 'widget.read')")
+            .And.Contain("\"tenancy\".seat_in_tenant($2)")
+            .And.Contain("\"tenancy\".roles_with_key_in_tenant($2, 'widget.read')");
         foreach (var script in scripts)
         {
             await TenancyPostgres.ExecuteAsync(database.ConnectionString, script, Cancellation);

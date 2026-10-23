@@ -417,13 +417,16 @@ every module with its one `AddSupabaseMigrations()`. The host's project file tur
 locally and `Check` in CI, and `supabase/migrations` holds the committed files. See
 [its README](../Examples/README.md#on-supabase) to run it against a local Supabase.
 
-### A schema with capitals
+### A schema of any name
 
-A module's schema may have capitals, `HasDefaultSchema("Tenancy")`, as any name Entity Framework takes may
-be. Entity Framework creates it in double quotes, `CREATE SCHEMA "Tenancy"`, and the exported files name it
-the same way wherever Postgres needs the quotes, the access files' functions, policies, triggers and grants
-included. Where a project does serve such a schema through the Data API, it lists it as the model spells it,
-without quotes, in `config.toml` and in `SupabaseMigrationOptions.RowLevelSecuritySchemas` alike:
+A module's schema may be any name Entity Framework takes: `tenancy`, `Tenancy` with a capital, `Help_Desk`, or
+a word of SQL's own such as `order`. Entity Framework creates it as it names it, `CREATE SCHEMA "Tenancy"`, and
+an access file writes every schema in double quotes, the sample's lower-case ones included: its functions,
+policies, triggers and grants name `"tenancy"`, `"Tenancy"`, `"Help_Desk"` and `"order"` alike
+([Schema names](row-level-security.md#schema-names)). A migration's own file is Entity Framework's SQL, and
+names the schema as Entity Framework does. Where a project serves a module's schema through the Data API, it
+lists the schema as the model spells it, without quotes, in `config.toml` and in
+`SupabaseMigrationOptions.RowLevelSecuritySchemas` alike:
 
 ```toml title="supabase/config.toml"
 [api]
@@ -780,47 +783,47 @@ DO $ddd$ ... $ddd$;   -- drops the policies the previous file made on the module
                       -- of its column rules
 
 DO $ddd$ ... $ddd$;   -- makes what the policies below ask, where the database lacks it:
-                      -- the ddd schema, ddd.written_in_this_transaction(xid), the scoped system role,
-                      -- and for every role a policy names GRANT USAGE ON SCHEMA ddd and
-                      -- GRANT EXECUTE ON FUNCTION ddd.written_in_this_transaction(xid)
+                      -- the ddd schema, "ddd".written_in_this_transaction(xid), the scoped system role,
+                      -- and for every role a policy names GRANT USAGE ON SCHEMA "ddd" and
+                      -- GRANT EXECUTE ON FUNCTION "ddd".written_in_this_transaction(xid)
 
-ALTER TABLE ordering."Orders" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE ordering."Orders" FORCE ROW LEVEL SECURITY;
+ALTER TABLE "ordering"."Orders" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "ordering"."Orders" FORCE ROW LEVEL SECURITY;
 
-CREATE POLICY "A customer has their orders (select) for anon" ON ordering."Orders" FOR SELECT TO anon
+CREATE POLICY "A customer has their orders (select) for anon" ON "ordering"."Orders" FOR SELECT TO anon
     USING (("PlacedBy" IS NULL) OR ("PlacedBy" IS NOT DISTINCT FROM (SELECT auth.uid())));
-COMMENT ON POLICY "A customer has their orders (select) for anon" ON ordering."Orders" IS 'DDDToolkit row access rule';
+COMMENT ON POLICY "A customer has their orders (select) for anon" ON "ordering"."Orders" IS 'DDDToolkit row access rule';
 -- and one for authenticated, and one per role for every other command a rule grants
 
 -- OrderLine belongs to the aggregate: it is read with its Orders, and written as the rules let a caller write its Orders.
-ALTER TABLE ordering."OrderLine" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE ordering."OrderLine" FORCE ROW LEVEL SECURITY;
-CREATE POLICY "OrderLine (select) for anon" ON ordering."OrderLine" FOR SELECT TO anon
-    USING (EXISTS (SELECT 1 FROM ordering."Orders" parent WHERE parent."Id" = ordering."OrderLine"."OrderId"));
-CREATE POLICY "OrderLine (insert) for anon" ON ordering."OrderLine" FOR INSERT TO anon
-    WITH CHECK (EXISTS (SELECT 1 FROM ordering."Orders" r WHERE r."Id" = ordering."OrderLine"."OrderId"
+ALTER TABLE "ordering"."OrderLine" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "ordering"."OrderLine" FORCE ROW LEVEL SECURITY;
+CREATE POLICY "OrderLine (select) for anon" ON "ordering"."OrderLine" FOR SELECT TO anon
+    USING (EXISTS (SELECT 1 FROM "ordering"."Orders" parent WHERE parent."Id" = "ordering"."OrderLine"."OrderId"));
+CREATE POLICY "OrderLine (insert) for anon" ON "ordering"."OrderLine" FOR INSERT TO anon
+    WITH CHECK (EXISTS (SELECT 1 FROM "ordering"."Orders" r WHERE r."Id" = "ordering"."OrderLine"."OrderId"
         AND (((r."PlacedBy" IS NULL) OR (r."PlacedBy" IS NOT DISTINCT FROM (SELECT auth.uid())))
-          OR ((r."PlacedBy" IS NOT DISTINCT FROM (SELECT auth.uid())) AND ddd.written_in_this_transaction(r.xmin)))));
+          OR ((r."PlacedBy" IS NOT DISTINCT FROM (SELECT auth.uid())) AND "ddd".written_in_this_transaction(r.xmin)))));
 -- and the same for authenticated, and for UPDATE and DELETE, each from the rules that grant it
 
 -- Privileges, from the policies above: what a table gave the roles of this file before is taken back, and a
 -- role then gets the commands a permissive policy allows it, and no more.
-GRANT USAGE ON SCHEMA ordering TO anon, authenticated, ddd_system, ddd_system_in;
-REVOKE ALL ON TABLE ordering."Orders" FROM PUBLIC, anon, authenticated, ddd_system, ddd_system_in;
-GRANT SELECT, INSERT ON TABLE ordering."Orders" TO anon;
-GRANT UPDATE ("ConfirmedAt", "Paid", "Status", ...) ON TABLE ordering."Orders" TO anon;
+GRANT USAGE ON SCHEMA "ordering" TO anon, authenticated, ddd_system, ddd_system_in;
+REVOKE ALL ON TABLE "ordering"."Orders" FROM PUBLIC, anon, authenticated, ddd_system, ddd_system_in;
+GRANT SELECT, INSERT ON TABLE "ordering"."Orders" TO anon;
+GRANT UPDATE ("ConfirmedAt", "Paid", "Status", ...) ON TABLE "ordering"."Orders" TO anon;
 -- and the same for authenticated, and for OrderLine
 
 -- The outbox takes a row from whoever saves, and nobody but the bookkeeping reads, marks or deletes one.
-REVOKE ALL ON TABLE ordering."OutboxMessages" FROM PUBLIC, anon, authenticated, ddd_system, ddd_system_in;
-GRANT INSERT ON TABLE ordering."OutboxMessages" TO anon, authenticated, ddd_system_in;
-GRANT SELECT, DELETE ON TABLE ordering."OutboxMessages" TO ddd_system;
+REVOKE ALL ON TABLE "ordering"."OutboxMessages" FROM PUBLIC, anon, authenticated, ddd_system, ddd_system_in;
+GRANT INSERT ON TABLE "ordering"."OutboxMessages" TO anon, authenticated, ddd_system_in;
+GRANT SELECT, DELETE ON TABLE "ordering"."OutboxMessages" TO ddd_system;
 -- and UPDATE of the four columns that say how a delivery went, and the inbox, which the scoped system role
 -- reads and adds to
 
 -- The roles the policies and the privileges above are written for, recorded on the ddd schema, where the
 -- host's start-up check reads them.
-DO $ddd$ ... COMMENT ON SCHEMA ddd IS 'DDDToolkit row access roles: {"user":"authenticated",...}' ... $ddd$;
+DO $ddd$ ... COMMENT ON SCHEMA "ddd" IS 'DDDToolkit row access roles: {"user":"authenticated",...}' ... $ddd$;
 ```
 
 The `FORCE` after each `ENABLE` and the privileges at the end are written unless the project turns them off;

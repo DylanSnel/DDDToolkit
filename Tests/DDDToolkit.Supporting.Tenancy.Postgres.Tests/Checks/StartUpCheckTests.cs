@@ -155,27 +155,27 @@ public sealed class StartUpCheckTests(TenancyPostgres postgres)
         }
 
         // A function that is not there, one that runs as whoever asks, and one whose search path a session decides.
-        await FailsAsync("DROP FUNCTION tenancy.tenants_to_sweep()", "- tenants_to_sweep is missing:*apply them.*role_keys_in_use, tenants_to_sweep, seats_of_identity, invitation_of_digest of tenancy*");
-        await FailsAsync("ALTER FUNCTION tenancy.role_keys_in_use() SECURITY INVOKER", "- tenancy.role_keys_in_use() does not run as its owner*");
-        await FailsAsync("ALTER FUNCTION tenancy.seats_of_identity(uuid) RESET search_path", "- tenancy.seats_of_identity(uuid) runs as its owner without an empty search path*SET search_path = '';*");
-        await FailsAsync("ALTER FUNCTION tenancy.tenants_to_sweep() SET search_path = public", "- tenancy.tenants_to_sweep() runs as its owner without an empty search path*");
+        await FailsAsync("DROP FUNCTION \"tenancy\".tenants_to_sweep()", "- tenants_to_sweep is missing:*apply them.*role_keys_in_use, tenants_to_sweep, seats_of_identity, invitation_of_digest of \"tenancy\"*");
+        await FailsAsync("ALTER FUNCTION \"tenancy\".role_keys_in_use() SECURITY INVOKER", "- \"tenancy\".role_keys_in_use() does not run as its owner*");
+        await FailsAsync("ALTER FUNCTION \"tenancy\".seats_of_identity(uuid) RESET search_path", "- \"tenancy\".seats_of_identity(uuid) runs as its owner without an empty search path*SET search_path = '';*");
+        await FailsAsync("ALTER FUNCTION \"tenancy\".tenants_to_sweep() SET search_path = public", "- \"tenancy\".tenants_to_sweep() runs as its owner without an empty search path*");
 
         // An owner the policies hold: the tables' owner, held to them after all, or a role that never read past them.
         await FailsAsync(
-            "ALTER TABLE tenancy.\"Roles\" FORCE ROW LEVEL SECURITY",
-            $"- tenancy.role_keys_in_use() is owned by {TenancyPostgres.LoginRole}, which row level security holds back on tenancy.\"Roles\", so it would answer for no tenant:*",
-            mended: "ALTER TABLE tenancy.\"Roles\" NO FORCE ROW LEVEL SECURITY");
+            "ALTER TABLE \"tenancy\".\"Roles\" FORCE ROW LEVEL SECURITY",
+            $"- \"tenancy\".role_keys_in_use() is owned by {TenancyPostgres.LoginRole}, which row level security holds back on \"tenancy\".\"Roles\", so it would answer for no tenant:*",
+            mended: "ALTER TABLE \"tenancy\".\"Roles\" NO FORCE ROW LEVEL SECURITY");
         await FailsAsync(
-            "ALTER FUNCTION tenancy.tenants_to_sweep() OWNER TO tenancy_reader",
-            "- tenancy.tenants_to_sweep() is owned by tenancy_reader, which row level security holds back on tenancy.\"Tenants\"*OWNER TO*",
-            mended: $"ALTER FUNCTION tenancy.tenants_to_sweep() OWNER TO {TenancyPostgres.LoginRole}",
+            "ALTER FUNCTION \"tenancy\".tenants_to_sweep() OWNER TO tenancy_reader",
+            "- \"tenancy\".tenants_to_sweep() is owned by tenancy_reader, which row level security holds back on \"tenancy\".\"Tenants\"*OWNER TO*",
+            mended: $"ALTER FUNCTION \"tenancy\".tenants_to_sweep() OWNER TO {TenancyPostgres.LoginRole}",
             asSuperuser: true);
 
         // The scoped system role without the right to ask, and anyone else with it.
         await FailsAsync(
-            "REVOKE EXECUTE ON FUNCTION tenancy.role_keys_in_use() FROM ddd_system_in",
-            "- ddd_system_in may not execute tenancy.role_keys_in_use(), which Tenancy's reads across tenants ask as it: GRANT EXECUTE ON FUNCTION tenancy.role_keys_in_use() TO ddd_system_in;*");
-        foreach (var function in new[] { "tenancy.role_keys_in_use()", "tenancy.tenants_to_sweep()", "tenancy.seats_of_identity(uuid)" })
+            "REVOKE EXECUTE ON FUNCTION \"tenancy\".role_keys_in_use() FROM ddd_system_in",
+            "- ddd_system_in may not execute \"tenancy\".role_keys_in_use(), which Tenancy's reads across tenants ask as it: GRANT EXECUTE ON FUNCTION \"tenancy\".role_keys_in_use() TO ddd_system_in;*");
+        foreach (var function in new[] { "\"tenancy\".role_keys_in_use()", "\"tenancy\".tenants_to_sweep()", "\"tenancy\".seats_of_identity(uuid)" })
         {
             await FailsAsync(
                 $"GRANT EXECUTE ON FUNCTION {function} TO authenticated",
@@ -240,7 +240,7 @@ public sealed class StartUpCheckTests(TenancyPostgres postgres)
         await using (var unreachable = new TenancyServices(database, roles: roles => roles.SystemInRole = "scoped_out_of_reach"))
         {
             await FluentActions.Awaiting(() => TenancyPostgresChecks.EnsureSystemReadsAcrossTenantsAsync(unreachable.Provider, Cancellation))
-                .Should().ThrowAsync<InvalidOperationException>().WithMessage("System work in the scope 'tenancy' could not ask tenancy.role_keys_in_use() as the scoped system role: permission denied to set role \"scoped_out_of_reach\".*switch to the scoped system role*");
+                .Should().ThrowAsync<InvalidOperationException>().WithMessage("System work in the scope 'tenancy' could not ask \"tenancy\".role_keys_in_use() as the scoped system role: permission denied to set role \"scoped_out_of_reach\".*switch to the scoped system role*");
         }
 
         // A store that writes the rights itself reads across tenants as the application itself, not through the functions.
@@ -288,18 +288,18 @@ public sealed class StartUpCheckTests(TenancyPostgres postgres)
         await TenancyPostgres.ExecuteAsync(database.ConnectionString, "GRANT EXECUTE ON FUNCTION tenancy.caller_seat() TO anon", Cancellation);
         await using var granted = new TenancyServices(database);
         await FluentActions.Awaiting(() => TenancyPostgresChecks.EnsureSystemInRoleIsConfinedAsync(granted.Provider, Cancellation))
-            .Should().ThrowAsync<InvalidOperationException>().WithMessage("*anon may execute tenancy.caller_seat()*REVOKE EXECUTE*");
+            .Should().ThrowAsync<InvalidOperationException>().WithMessage("*anon may execute \"tenancy\".caller_seat()*REVOKE EXECUTE*");
 
         // And for each function that answers about other seats' rights, writes the rights, reads across tenants, or
         // takes the tenant as an argument, given to the anonymous role or to every role at once.
         await TenancyPostgres.ExecuteAsync(database.ConnectionString, "REVOKE EXECUTE ON FUNCTION tenancy.caller_seat() FROM anon", Cancellation);
         foreach (var function in new[]
                  {
-                     "tenancy.tenant_administrators()", "tenancy.rights_a_move_changes(uuid,uuid)", "tenancy.seats_holding_at(text,uuid)",
-                     "tenancy.rewrite_tenant_rights()", "tenancy.rights_follow_grants()",
-                     "tenancy.role_keys_in_use()", "tenancy.tenants_to_sweep()", "tenancy.seats_of_identity(uuid)",
-                     "tenancy.seat_in_tenant(bigint)", "tenancy.seated_in_tenant(bigint)", "tenancy.holds_key_in_tenant(bigint,text)",
-                     "tenancy.units_where_i_hold_in_tenant(bigint,text)", "tenancy.roles_with_key_in_tenant(bigint,text)",
+                     "\"tenancy\".tenant_administrators()", "\"tenancy\".rights_a_move_changes(uuid,uuid)", "\"tenancy\".seats_holding_at(text,uuid)",
+                     "\"tenancy\".rewrite_tenant_rights()", "\"tenancy\".rights_follow_grants()",
+                     "\"tenancy\".role_keys_in_use()", "\"tenancy\".tenants_to_sweep()", "\"tenancy\".seats_of_identity(uuid)",
+                     "\"tenancy\".seat_in_tenant(bigint)", "\"tenancy\".seated_in_tenant(bigint)", "\"tenancy\".holds_key_in_tenant(bigint,text)",
+                     "\"tenancy\".units_where_i_hold_in_tenant(bigint,text)", "\"tenancy\".roles_with_key_in_tenant(bigint,text)",
                  })
         {
             foreach (var (to, says) in new[] { ("anon", "*anon may execute " + function + "*REVOKE EXECUTE*"), ("PUBLIC", "*every role may execute " + function + "*FROM PUBLIC*") })
@@ -328,7 +328,7 @@ public sealed class StartUpCheckTests(TenancyPostgres postgres)
         await using (var services = new TenancyServices(plain))
         {
             await FluentActions.Awaiting(() => TenancyPostgresChecks.EnsurePoliciesAreInPlaceAsync(services.Provider, Cancellation))
-                .Should().ThrowAsync<InvalidOperationException>().WithMessage("*Row level security is off on Tenancy's tables*tenancy.\"Seats\",*references DDDToolkit.Supporting.Tenancy.Postgres*");
+                .Should().ThrowAsync<InvalidOperationException>().WithMessage("*Row level security is off on Tenancy's tables*\"tenancy\".\"Seats\",*references DDDToolkit.Supporting.Tenancy.Postgres*");
         }
 
         // The application marks a key, and the access file written with the mark is not applied yet.
@@ -379,7 +379,7 @@ public sealed class StartUpCheckTests(TenancyPostgres postgres)
         {
             await FluentActions.Awaiting(() => TenancyPostgresChecks.EnsurePoliciesAreInPlaceAsync(services.Provider, Cancellation))
                 .Should().ThrowAsync<InvalidOperationException>()
-                .WithMessage("The access files in the database were written with ApplicationCatalogue.ContainAccessManagingKeys on, and the application runs with it off*tenancy.key_is_contained*would refuse what the use cases allow*Export the access files*");
+                .WithMessage("The access files in the database were written with ApplicationCatalogue.ContainAccessManagingKeys on, and the application runs with it off*\"tenancy\".key_is_contained*would refuse what the use cases allow*Export the access files*");
         }
 
         // Written again with it off: the application that turned it off starts, and one that runs with it on is refused.
@@ -417,10 +417,10 @@ public sealed class StartUpCheckTests(TenancyPostgres postgres)
         // The trigger that writes the rights, gone from one of the tables it follows, or switched off there.
         await TenancyPostgres.ExecuteAsync(database.ConnectionString, "DROP TRIGGER tenancy_rights_follow_grants ON tenancy.\"Roles\"", Cancellation);
         await FluentActions.Awaiting(() => TenancyPostgresChecks.EnsurePoliciesAreInPlaceAsync(services.Provider, Cancellation))
-            .Should().ThrowAsync<InvalidOperationException>().WithMessage("*tenancy_rights_follow_grants, which writes the rights, is missing or disabled on tenancy.\"Roles\",*");
+            .Should().ThrowAsync<InvalidOperationException>().WithMessage("*tenancy_rights_follow_grants, which writes the rights, is missing or disabled on \"tenancy\".\"Roles\",*");
         await TenancyPostgres.ExecuteAsync(database.ConnectionString, "ALTER TABLE tenancy.\"Seats\" DISABLE TRIGGER tenancy_rights_follow_grants", Cancellation);
         await FluentActions.Awaiting(() => TenancyPostgresChecks.EnsurePoliciesAreInPlaceAsync(services.Provider, Cancellation))
-            .Should().ThrowAsync<InvalidOperationException>().WithMessage("*is missing or disabled on tenancy.\"Roles\", tenancy.\"Seats\",*");
+            .Should().ThrowAsync<InvalidOperationException>().WithMessage("*is missing or disabled on \"tenancy\".\"Roles\", \"tenancy\".\"Seats\",*");
 
         // The access files applied again put both back.
         foreach (var script in TenancyPostgres.AccessScripts())
@@ -437,7 +437,7 @@ public sealed class StartUpCheckTests(TenancyPostgres postgres)
         await TenancyPostgres.ExecuteAsync(database.ConnectionString, "DROP FUNCTION tenancy.seats_holding_at(text, uuid)", Cancellation);
         await FluentActions.Awaiting(() => TenancyPostgresChecks.EnsurePoliciesAreInPlaceAsync(services.Provider, Cancellation))
             .Should().ThrowAsync<InvalidOperationException>().WithMessage(
-                "The functions of tenancy that answer about other seats' rights or write a tenant's rights again are not as Tenancy's contribution writes them: " +
+                "The functions of \"tenancy\" that answer about other seats' rights or write a tenant's rights again are not as Tenancy's contribution writes them: " +
                 "seats_holding_at (missing), tenant_administrators (it does not run as its owner). The store and the questions ask the first three*");
 
         // A function system work reads across tenants through, likewise: in no tenant, it reads no row itself.
@@ -445,7 +445,7 @@ public sealed class StartUpCheckTests(TenancyPostgres postgres)
         await TenancyPostgres.ExecuteAsync(database.ConnectionString, "ALTER FUNCTION tenancy.tenants_to_sweep() SECURITY INVOKER; DROP FUNCTION tenancy.seats_of_identity(uuid);", Cancellation);
         await FluentActions.Awaiting(() => TenancyPostgresChecks.EnsurePoliciesAreInPlaceAsync(services.Provider, Cancellation))
             .Should().ThrowAsync<InvalidOperationException>().WithMessage(
-                "The functions of tenancy that read across tenants are not as Tenancy's contribution writes them: " +
+                "The functions of \"tenancy\" that read across tenants are not as Tenancy's contribution writes them: " +
                 "seats_of_identity (missing), tenants_to_sweep (it does not run as its owner). System work asks them in no tenant*");
 
         // And a question that takes the tenant as an argument: as its caller, it would be held to the tenant the
@@ -454,7 +454,7 @@ public sealed class StartUpCheckTests(TenancyPostgres postgres)
         await TenancyPostgres.ExecuteAsync(database.ConnectionString, "ALTER FUNCTION tenancy.roles_with_key_in_tenant(bigint, text) SECURITY INVOKER; DROP FUNCTION tenancy.seated_in_tenant(bigint);", Cancellation);
         await FluentActions.Awaiting(() => TenancyPostgresChecks.EnsurePoliciesAreInPlaceAsync(services.Provider, Cancellation))
             .Should().ThrowAsync<InvalidOperationException>().WithMessage(
-                "The functions of tenancy that take the tenant as an argument are not as Tenancy's contribution writes them: " +
+                "The functions of \"tenancy\" that take the tenant as an argument are not as Tenancy's contribution writes them: " +
                 "roles_with_key_in_tenant (it does not run as its owner), seated_in_tenant (missing). Policies ask them where the connection names no tenant*");
         await MendedAsync();
 
@@ -494,7 +494,7 @@ public sealed class StartUpCheckTests(TenancyPostgres postgres)
         const string Changed = " (it runs as its owner, has settings of its own, or is strict or volatile)";
         await FluentActions.Awaiting(() => TenancyPostgresChecks.EnsurePoliciesAreInPlaceAsync(services.Provider, Cancellation))
             .Should().ThrowAsync<InvalidOperationException>().WithMessage(
-                "The functions of tenancy that modules read Tenancy through are not as Tenancy's contribution writes them: " +
+                "The functions of \"tenancy\" that modules read Tenancy through are not as Tenancy's contribution writes them: " +
                 $"caller_rights{Changed}, tenant_roles{Changed}, tenant_seats (missing), tenant_unit_paths{Changed}, tenant_units{Changed}.*AddTenancyReadFunctions*");
 
         // The access files applied again write each as it was: replacing a function takes its settings off as well.
@@ -530,7 +530,7 @@ public sealed class StartUpCheckTests(TenancyPostgres postgres)
 
         await FluentActions.Awaiting(() => TenancyPostgresChecks.EnsurePoliciesAreInPlaceAsync(services.Provider, Cancellation))
             .Should().ThrowAsync<InvalidOperationException>().WithMessage(
-                "The functions of tenancy that modules read Tenancy through do not answer the columns of the read model: " +
+                "The functions of \"tenancy\" that modules read Tenancy through do not answer the columns of the read model: " +
                 "tenant_seats answers Id, TenantId, DisplayName, Status where the read model has Id, TenantId, Status; " +
                 "tenant_units answers Id, ParentId, TenantId, Status where the read model has Id, TenantId, ParentId, Status. " +
                 "*access facts only, never a name*drop the ones named here first. Export the access files with Tenancy's contribution, and apply them.");

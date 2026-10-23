@@ -211,7 +211,7 @@ public static class TenancyPostgresChecks
                 "Something turned it off after AddTenancyPostgres(), or AddTenancyPostgres() was not called; call it, and leave the option to it.");
         }
 
-        await AsSystemAsync(services, async (connection, tenancy, _) =>
+        await AsSystemAsync(services, async (connection, tenancy) =>
         {
             // Each function with the table it answers from, whose policies its owner has to read past.
             (string Function, IEntityType Table)[] reads =
@@ -233,7 +233,7 @@ public static class TenancyPostgresChecks
                     FROM ROWS FROM (pg_catalog.unnest($2::pg_catalog.text[]), pg_catalog.unnest($3::pg_catalog.text[]), pg_catalog.unnest($4::pg_catalog.text[])) AS each(name, table_schema, table_name)),
                 found AS (
                     SELECT listed.name, listed.table_schema, listed.table_name, p.oid, p.prosecdef, p.proconfig, p.proowner,
-                           p.oid::pg_catalog.regprocedure::pg_catalog.text AS signature
+                           '"' || pg_catalog.replace(n.nspname, '"', '""') || '".' || pg_catalog.quote_ident(p.proname) || '(' || pg_catalog.replace(pg_catalog.oidvectortypes(p.proargtypes), ', ', ',') || ')' AS signature
                     FROM listed
                     JOIN pg_catalog.pg_namespace n ON n.nspname = $1
                     JOIN pg_catalog.pg_proc p ON p.pronamespace = n.oid AND p.proname = listed.name)
@@ -248,7 +248,7 @@ public static class TenancyPostgresChecks
                     FROM found WHERE found.prosecdef AND NOT coalesce('search_path=""' = ANY (found.proconfig), false)
                     UNION ALL
                     SELECT 4, found.signature || ' is owned by ' || pg_catalog.quote_ident(owner.rolname) || ', which row level security holds back on '
-                              || pg_catalog.quote_ident(found.table_schema) || '.' || pg_catalog.quote_ident(found.table_name)
+                              || '"' || pg_catalog.replace(found.table_schema, '"', '""') || '".' || pg_catalog.quote_ident(found.table_name)
                               || ', so it would answer for no tenant: give the function to the table''s owner, on a table without FORCE ROW LEVEL SECURITY, or to a role with BYPASSRLS, with ALTER FUNCTION '
                               || found.signature || ' OWNER TO ...;'
                     FROM found
@@ -286,7 +286,7 @@ public static class TenancyPostgresChecks
                 throw new InvalidOperationException(
                     "Tenancy's reads across tenants would not answer as they should: " + string.Join(" ", problems.Select(problem => "- " + problem)) +
                     " They run as the scoped system role " + role + " in no tenant, where the policies show it no row, and ask the functions " +
-                    string.Join(", ", reads.Select(read => read.Function)) + " of " + tenancy.Schema + ", which run as their owner.");
+                    string.Join(", ", reads.Select(read => read.Function)) + " of " + RowAccessModel.Schema(tenancy.Schema) + ", which run as their owner.");
             }
         }, cancellationToken).ConfigureAwait(false);
 
@@ -353,11 +353,16 @@ public static class TenancyPostgresChecks
             return Task.CompletedTask;
         }
 
-        return AsSystemAsync(services, async (connection, tenancy, _) =>
+        return AsSystemAsync(services, async (connection, tenancy) =>
         {
             var problems = await ListAsync(
                 connection,
                 """
+                WITH definer AS (
+                    SELECT p.oid, '"' || pg_catalog.replace(n.nspname, '"', '""') || '".' || pg_catalog.quote_ident(p.proname)
+                                  || '(' || pg_catalog.replace(pg_catalog.oidvectortypes(p.proargtypes), ', ', ',') || ')' AS signature
+                    FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+                    WHERE n.nspname = $5 AND p.prosecdef)
                 SELECT problem FROM (
                     SELECT 1 AS sort, 'it does not exist: run the access files, or PostgresRowAccess.SetupScript(), first' AS problem
                     WHERE pg_catalog.to_regrole($1) IS NULL
@@ -389,7 +394,7 @@ public static class TenancyPostgresChecks
                     UNION ALL
                     SELECT 6, pg_catalog.quote_ident(held.mapped) || ', the role of a mapped token role, may execute '
                               || CASE WHEN held.own OR held.total = 1 THEN held.signatures
-                                      ELSE held.total::pg_catalog.text || ' functions of ' || pg_catalog.quote_ident($5) || ', ' || held.example || ' among them'
+                                      ELSE held.total::pg_catalog.text || ' functions of "' || pg_catalog.replace($5, '"', '""') || '", ' || held.example || ' among them'
                                  END
                               || CASE WHEN held.own THEN ' by a grant of its own'
                                       ELSE ' with the privileges of ' || pg_catalog.quote_ident(held.through) || ', which it has'
@@ -401,7 +406,7 @@ public static class TenancyPostgresChecks
                     FROM (SELECT mapped.rolname::pg_catalog.text AS mapped, through.rolname::pg_catalog.text AS through, through.oid = mapped.oid AS own,
                                  pg_catalog.count(*) AS total, pg_catalog.min(executable.signature) AS example,
                                  pg_catalog.string_agg(executable.signature, ', ' ORDER BY executable.signature) AS signatures
-                          FROM (SELECT DISTINCT p.oid::pg_catalog.regprocedure::pg_catalog.text AS signature, granted.grantee
+                          FROM (SELECT DISTINCT '"' || pg_catalog.replace(n.nspname, '"', '""') || '".' || pg_catalog.quote_ident(p.proname) || '(' || pg_catalog.replace(pg_catalog.oidvectortypes(p.proargtypes), ', ', ',') || ')' AS signature, granted.grantee
                                 FROM pg_catalog.pg_proc p
                                 JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
                                 CROSS JOIN LATERAL pg_catalog.aclexplode(coalesce(p.proacl, pg_catalog.acldefault('f', p.proowner))) granted
@@ -417,19 +422,16 @@ public static class TenancyPostgresChecks
                     FROM pg_catalog.pg_roles api
                     WHERE api.rolname = $4 AND pg_catalog.to_regrole($1) IS NOT NULL AND pg_catalog.pg_has_role(api.oid, pg_catalog.to_regrole($1), 'MEMBER')
                     UNION ALL
-                    SELECT 8, pg_catalog.quote_ident($3) || ' may execute ' || p.oid::pg_catalog.regprocedure::pg_catalog.text || ', which runs as its owner: REVOKE EXECUTE ON FUNCTION '
-                              || p.oid::pg_catalog.regprocedure::pg_catalog.text || ' FROM PUBLIC, ' || pg_catalog.quote_ident($3) || ';'
-                    FROM pg_catalog.pg_proc p
-                    JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
-                    WHERE n.nspname = $5 AND p.prosecdef AND pg_catalog.to_regrole($3) IS NOT NULL
-                      AND pg_catalog.has_function_privilege(pg_catalog.to_regrole($3), p.oid, 'EXECUTE')
-                      AND NOT pg_catalog.has_function_privilege('public', p.oid, 'EXECUTE')
+                    SELECT 8, pg_catalog.quote_ident($3) || ' may execute ' || definer.signature || ', which runs as its owner: REVOKE EXECUTE ON FUNCTION '
+                              || definer.signature || ' FROM PUBLIC, ' || pg_catalog.quote_ident($3) || ';'
+                    FROM definer
+                    WHERE pg_catalog.to_regrole($3) IS NOT NULL
+                      AND pg_catalog.has_function_privilege(pg_catalog.to_regrole($3), definer.oid, 'EXECUTE')
+                      AND NOT pg_catalog.has_function_privilege('public', definer.oid, 'EXECUTE')
                     UNION ALL
-                    SELECT 9, 'every role may execute ' || p.oid::pg_catalog.regprocedure::pg_catalog.text || ', which runs as its owner: REVOKE EXECUTE ON FUNCTION '
-                              || p.oid::pg_catalog.regprocedure::pg_catalog.text || ' FROM PUBLIC;'
-                    FROM pg_catalog.pg_proc p
-                    JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
-                    WHERE n.nspname = $5 AND p.prosecdef AND pg_catalog.has_function_privilege('public', p.oid, 'EXECUTE')
+                    SELECT 9, 'every role may execute ' || definer.signature || ', which runs as its owner: REVOKE EXECUTE ON FUNCTION ' || definer.signature || ' FROM PUBLIC;'
+                    FROM definer
+                    WHERE pg_catalog.has_function_privilege('public', definer.oid, 'EXECUTE')
                 ) found
                 ORDER BY sort, problem
                 """,
@@ -505,7 +507,7 @@ public static class TenancyPostgresChecks
 
         var operatorRoles = OperatorDatabaseRoles(services);
 
-        return AsSystemAsync(services, async (connection, tenancy, sql) =>
+        return AsSystemAsync(services, async (connection, tenancy) =>
         {
             // The operators' database roles, each with the policy that lets it read the tenants: the first table
             // an operator reads, and written with every other of Tenancy's by the same contribution.
@@ -546,7 +548,7 @@ public static class TenancyPostgresChecks
             var open = await ListAsync(
                 connection,
                 """
-                SELECT pg_catalog.quote_ident(listed.schema) || '.' || pg_catalog.quote_ident(listed.name)
+                SELECT '"' || pg_catalog.replace(listed.schema, '"', '""') || '".' || pg_catalog.quote_ident(listed.name)
                 FROM ROWS FROM (pg_catalog.unnest($1::pg_catalog.text[]), pg_catalog.unnest($2::pg_catalog.text[])) AS listed(schema, name)
                 WHERE NOT coalesce((SELECT c.relrowsecurity FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
                                     WHERE n.nspname = listed.schema AND c.relname = listed.name), false)
@@ -573,7 +575,7 @@ public static class TenancyPostgresChecks
                 connection,
                 """
                 WITH shaped AS (
-                    SELECT pg_catalog.quote_ident(n.nspname) || '.' || pg_catalog.quote_ident(made.relname) AS name,
+                    SELECT '"' || pg_catalog.replace(n.nspname, '"', '""') || '".' || pg_catalog.quote_ident(made.relname) AS name,
                            i.indisvalid AND i.indisready AND i.indislive AS used
                     FROM pg_catalog.pg_index i
                     JOIN pg_catalog.pg_class made ON made.oid = i.indexrelid
@@ -584,7 +586,7 @@ public static class TenancyPostgresChecks
                       AND i.indisunique AND i.indnkeyatts = 1 AND i.indkey[0] = tenant.attnum
                       AND pg_catalog.pg_get_expr(i.indpred, i.indrelid) = '(' || pg_catalog.quote_ident($4) || ' IS NULL)')
                 SELECT said FROM (
-                    SELECT 0 AS sort, pg_catalog.quote_ident($1) || '.' || pg_catalog.quote_ident($2) || ' over ' || pg_catalog.quote_ident($3)
+                    SELECT 0 AS sort, '"' || pg_catalog.replace($1, '"', '""') || '".' || pg_catalog.quote_ident($2) || ' over ' || pg_catalog.quote_ident($3)
                                       || ' alone, for the units where ' || pg_catalog.quote_ident($4) || ' IS NULL' AS said
                     UNION ALL
                     SELECT 1, shaped.name FROM shaped
@@ -643,13 +645,13 @@ public static class TenancyPostgresChecks
                 if (name == TenancySql.KeyIsContained && written.Count == 1
                     && written[0].Trim() == TenancySql.KeyIsContainedBody(catalogue, !catalogue.ContainAccessManagingKeys))
                 {
-                    throw ContainmentDisagrees(sql.DelimitIdentifier(TenancySql.KeyIsContained, tenancy.Schema), catalogue.ContainAccessManagingKeys);
+                    throw ContainmentDisagrees(RowAccessModel.Schema(tenancy.Schema) + "." + TenancySql.KeyIsContained, catalogue.ContainAccessManagingKeys);
                 }
 
                 if (written.Count != 1 || written[0].Trim() != body)
                 {
                     throw new InvalidOperationException(
-                        "The function " + sql.DelimitIdentifier(name, tenancy.Schema) + " in the database " + (written.Count == 1 ? "was written from another catalogue" : "is missing") +
+                        "The function " + RowAccessModel.Schema(tenancy.Schema) + "." + name + " in the database " + (written.Count == 1 ? "was written from another catalogue" : "is missing") +
                         ": " + says + ". Export the access files with the catalogue the application runs with, and apply them: the export writes them from the ApplicationCatalogue " +
                         "marked [TenancyCatalogue], the one handed to TenancyOptions.Catalogue, which is public and static where the project that runs the export sees it, " +
                         "and from the modules' keys marked [TenancyPermissions].");
@@ -662,7 +664,7 @@ public static class TenancyPostgresChecks
             var unfollowed = await ListAsync(
                 connection,
                 """
-                SELECT pg_catalog.quote_ident(listed.schema) || '.' || pg_catalog.quote_ident(listed.name)
+                SELECT '"' || pg_catalog.replace(listed.schema, '"', '""') || '".' || pg_catalog.quote_ident(listed.name)
                 FROM ROWS FROM (pg_catalog.unnest($1::pg_catalog.text[]), pg_catalog.unnest($2::pg_catalog.text[])) AS listed(schema, name)
                 WHERE NOT EXISTS (SELECT 1 FROM pg_catalog.pg_trigger t
                                   JOIN pg_catalog.pg_class c ON c.oid = t.tgrelid
@@ -724,7 +726,7 @@ public static class TenancyPostgresChecks
                 if (absent.Count > 0)
                 {
                     throw new InvalidOperationException(
-                        "The functions of " + tenancy.Schema + " that " + what + " are not as Tenancy's contribution writes them: " + string.Join(", ", absent) +
+                        "The functions of " + RowAccessModel.Schema(tenancy.Schema) + " that " + what + " are not as Tenancy's contribution writes them: " + string.Join(", ", absent) +
                         ". " + why + " Export the access files with Tenancy's contribution, and apply them.");
                 }
             }
@@ -754,7 +756,7 @@ public static class TenancyPostgresChecks
             if (unreadable.Count > 0)
             {
                 throw new InvalidOperationException(
-                    "The functions of " + tenancy.Schema + " that modules read Tenancy through are not as Tenancy's contribution writes them: " + string.Join(", ", unreadable) +
+                    "The functions of " + RowAccessModel.Schema(tenancy.Schema) + " that modules read Tenancy through are not as Tenancy's contribution writes them: " + string.Join(", ", unreadable) +
                     ". A module's context maps its read model to them with AddTenancyReadFunctions; written otherwise, they would answer past the tables' policies, or as a step of " +
                     "their own that no index serves. Export the access files with Tenancy's contribution, and apply them.");
             }
@@ -782,7 +784,7 @@ public static class TenancyPostgresChecks
             if (answering.Count > 0)
             {
                 throw new InvalidOperationException(
-                    "The functions of " + tenancy.Schema + " that modules read Tenancy through do not answer the columns of the read model: " + string.Join("; ", answering) +
+                    "The functions of " + RowAccessModel.Schema(tenancy.Schema) + " that modules read Tenancy through do not answer the columns of the read model: " + string.Join("; ", answering) +
                     ". A module's context reads each row from the function of its name, column by column, and the read model carries access facts only, never a name. " +
                     "Postgres replaces no function by one that answers other columns, so drop the ones named here first. " +
                     "Export the access files with Tenancy's contribution, and apply them.");
@@ -854,7 +856,7 @@ public static class TenancyPostgresChecks
     /// which way each one is, what the difference lets through or refuses, and how to put it right.
     /// </summary>
     /// <param name="function">
-    /// <c>key_is_contained</c> in Tenancy's schema, as SQL names it: <c>tenancy.key_is_contained</c>, <c>"Tenancy".key_is_contained</c>.
+    /// <c>key_is_contained</c> in Tenancy's schema, as SQL names it: <c>"tenancy".key_is_contained</c>.
     /// </param>
     /// <param name="applicationContains">Whether the application runs with containment on.</param>
     private static InvalidOperationException ContainmentDisagrees(string function, bool applicationContains)
@@ -879,10 +881,9 @@ public static class TenancyPostgresChecks
     /// Runs <paramref name="check"/> on the connection of a context that maps Tenancy's tables, made in a scope of its
     /// own, as <see cref="Caller.System"/>, begun around it alone and outside any ambient transaction. The caller
     /// is begun before the context is taken, so a host that makes a context for whoever is calling makes this
-    /// one for the application itself. The check is handed the context's SQL generation helper as well, so a message
-    /// names a function as SQL does, <c>"Tenancy".key_is_live</c>, which a developer can look up as it is written.
+    /// one for the application itself.
     /// </summary>
-    private static async Task AsSystemAsync(IServiceProvider services, Func<DbConnection, TenancyTables, ISqlGenerationHelper, Task> check, CancellationToken cancellationToken)
+    private static async Task AsSystemAsync(IServiceProvider services, Func<DbConnection, TenancyTables, Task> check, CancellationToken cancellationToken)
     {
         using (new TransactionScope(TransactionScopeOption.Suppress, TransactionScopeAsyncFlowOption.Enabled))
         using (Callers.Begin(Caller.System))
@@ -893,7 +894,7 @@ public static class TenancyPostgresChecks
             await context.Database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-                await check(context.Database.GetDbConnection(), tenancy, context.GetService<ISqlGenerationHelper>()).ConfigureAwait(false);
+                await check(context.Database.GetDbConnection(), tenancy).ConfigureAwait(false);
             }
             finally
             {
@@ -918,7 +919,7 @@ public static class TenancyPostgresChecks
         {
             await using var lifetime = services.GetRequiredService<IServiceScopeFactory>().CreateAsyncScope();
             var (context, tenancy) = TenancyContextOf(lifetime.ServiceProvider);
-            var function = context.GetService<ISqlGenerationHelper>().DelimitIdentifier(TenancyFunctionNames.RoleKeysInUse, tenancy.Schema);
+            var function = RowAccessModel.Schema(tenancy.Schema) + "." + TenancyFunctionNames.RoleKeysInUse;
 
             try
             {

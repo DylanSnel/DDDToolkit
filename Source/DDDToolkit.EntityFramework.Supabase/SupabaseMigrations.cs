@@ -664,9 +664,9 @@ public static partial class SupabaseMigrations
     private static void EnsureSignaturesKept(string newest, string sql)
     {
         var before = FunctionHeaders(newest);
-        foreach (var (name, (parameters, returns)) in FunctionHeaders(sql))
+        foreach (var (key, (name, parameters, returns)) in FunctionHeaders(sql))
         {
-            if (before.TryGetValue(name, out var old) && (!SameText(old.Parameters, parameters) || !SameText(old.Returns, returns)))
+            if (before.TryGetValue(key, out var old) && (!SameText(old.Parameters, parameters) || !SameText(old.Returns, returns)))
             {
                 throw new InvalidOperationException(
                     $"The function {name} changed from ({old.Parameters}) RETURNS {old.Returns} to ({parameters}) RETURNS {returns}. Postgres cannot change it in place while other policies use it; give it a new name.");
@@ -678,15 +678,17 @@ public static partial class SupabaseMigrations
     }
 
     /// <summary>
-    /// The functions an access file makes, by name, with their parameters and what they return, read from the
+    /// The functions an access file makes, with their names, their parameters and what they return, read from the
     /// first line of each <c>CREATE OR REPLACE FUNCTION</c>: the parameters between the parentheses after the
     /// name, and the type after <c>RETURNS</c>, up to the first of the function's options. A contributed
-    /// statement may write a whole function on that line, whose options and body are not its signature.
+    /// statement may write a whole function on that line, whose options and body are not its signature. Each is
+    /// found by its name without double quotes, so a file written before the schemas were quoted, which names
+    /// <c>tenancy.caller_seat</c>, finds the function the next one names <c>"tenancy".caller_seat</c>.
     /// </summary>
-    private static Dictionary<string, (string Parameters, string Returns)> FunctionHeaders(string sql)
+    private static Dictionary<string, (string Name, string Parameters, string Returns)> FunctionHeaders(string sql)
     {
         const string Create = "CREATE OR REPLACE FUNCTION ";
-        var headers = new Dictionary<string, (string, string)>(StringComparer.OrdinalIgnoreCase);
+        var headers = new Dictionary<string, (string, string, string)>(StringComparer.OrdinalIgnoreCase);
         foreach (var line in sql.Split('\n').Where(line => line.StartsWith(Create, StringComparison.Ordinal)))
         {
             var header = line[Create.Length..].TrimEnd('\r');
@@ -706,7 +708,8 @@ public static partial class SupabaseMigrations
 
             if (close > open && ReturnsClause.Match(header[(close + 1)..]) is { Success: true } returns)
             {
-                headers[header[..open].Trim()] = (header[(open + 1)..close], returns.Groups["type"].Value);
+                var name = header[..open].Trim();
+                headers[name.Replace("\"", "", StringComparison.Ordinal)] = (name, header[(open + 1)..close], returns.Groups["type"].Value);
             }
         }
 
@@ -788,6 +791,13 @@ public static partial class SupabaseMigrations
     /// <summary>
     /// <c>ENABLE ROW LEVEL SECURITY</c> for each table this migration creates in a schema that asks for it.
     /// </summary>
+    /// <remarks>
+    /// The one line of the toolkit's in a migration's file, which is otherwise Entity Framework's SQL, names the
+    /// table as Entity Framework names it in the <c>CREATE TABLE</c> above it, its schema in double quotes only
+    /// where Postgres needs them. A migration's file is written once and compared with what the migration makes
+    /// from then on, so its SQL stays what it was when the migration was exported; the access files, which say
+    /// what the rules are now, quote every schema.
+    /// </remarks>
     private static IEnumerable<string> RowLevelSecurity(Migration migration, SupabaseMigrationOptions options, ISqlGenerationHelper sql)
     {
         if (options.RowLevelSecuritySchemas.Count == 0)

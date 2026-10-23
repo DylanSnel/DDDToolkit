@@ -21,7 +21,7 @@ public sealed class ColumnRulePostgresTests(PostgresRowAccessDatabase database) 
 {
     private const string AlicesTicket = "Alice's, open for the north";
 
-    private const string StatusHeldByTheOwners = "The column rule 'Owners close their tickets' does not let this caller change \"Status\" of desk.\"Tickets\".";
+    private const string StatusHeldByTheOwners = "The column rule 'Owners close their tickets' does not let this caller change \"Status\" of \"desk\".\"Tickets\".";
 
     private static readonly Caller Alice = Callers.FromClaims(PostgresRowAccessDatabase.ClaimsOf(PostgresRowAccessDatabase.Alice, team: "north"));
 
@@ -87,7 +87,7 @@ public sealed class ColumnRulePostgresTests(PostgresRowAccessDatabase database) 
         {
             var asTeammate = () => database.RunAsAsync(Bob, """UPDATE desk."Tickets" SET "Status" = 1 WHERE "Title" = {0}""", Cancellation, AlicesTicket);
             (await asTeammate.Should().ThrowAsync<PostgresException>()).Which.MessageText.Should().Be(
-                "None of the column rules 'Leads close the teams tickets' and 'Owners close their tickets' lets this caller change \"Status\" of desk.\"Tickets\".");
+                "None of the column rules 'Leads close the teams tickets' and 'Owners close their tickets' lets this caller change \"Status\" of \"desk\".\"Tickets\".");
 
             (await database.RunAsAsync(BobLeading, """UPDATE desk."Tickets" SET "Status" = 1 WHERE "Title" = {0}""", Cancellation, AlicesTicket))
                 .Should().Be(1, "one of the column rules allows the team's lead");
@@ -143,13 +143,13 @@ public sealed class ColumnRulePostgresTests(PostgresRowAccessDatabase database) 
         try
         {
             // The clerks' own rule lets the role change any ticket, and it retitles one.
-            (await RunAsRoleAsync("desk_clerk", $"""UPDATE desk."Tickets" SET "Title" = 'Retitled by a clerk' WHERE "Title" = '{AlicesTicket.Replace("'", "''", StringComparison.Ordinal)}'"""))
+            (await RunAsRoleAsync("desk_clerk", $"""UPDATE "desk"."Tickets" SET "Title" = 'Retitled by a clerk' WHERE "Title" = '{AlicesTicket.Replace("'", "''", StringComparison.Ordinal)}'"""))
                 .Should().Be(1, "the rules for the row let the clerk change it");
 
             // Its status is held, and no column rule is for the role.
             var closing = () => RunAsRoleAsync("desk_clerk", """UPDATE desk."Tickets" SET "Status" = 1 WHERE "Title" = 'Retitled by a clerk'""");
             var refused = (await closing.Should().ThrowAsync<PostgresException>()).Which;
-            (refused.SqlState, refused.MessageText).Should().Be((PostgresErrorCodes.InsufficientPrivilege, "No column rule is for this caller's role, so it may not change \"Status\" of desk.\"Tickets\"."));
+            (refused.SqlState, refused.MessageText).Should().Be((PostgresErrorCodes.InsufficientPrivilege, "No column rule is for this caller's role, so it may not change \"Status\" of \"desk\".\"Tickets\"."));
         }
         finally
         {

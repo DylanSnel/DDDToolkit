@@ -22,8 +22,8 @@ public abstract class SeatReadRuleTests(CampusPostgresServer postgres)
 
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
-    /// <summary>Tenancy's schema as SQL names it: <c>tenancy</c>, <c>"Tenancy"</c>.</summary>
-    private string Tenancy => postgres.Delimited(postgres.Schemas.Tenancy);
+    /// <summary>Tenancy's schema as the access files name it: <c>"tenancy"</c>, <c>"Tenancy"</c>.</summary>
+    private string Tenancy => postgres.Quoted(postgres.Schemas.Tenancy);
 
     [Fact]
     public async Task Under_a_narrower_read_of_the_seats_a_member_list_takes_the_seats_its_caller_reads_and_one_that_manages_seats_takes_any()

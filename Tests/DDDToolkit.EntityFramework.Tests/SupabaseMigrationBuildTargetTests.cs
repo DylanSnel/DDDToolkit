@@ -39,17 +39,17 @@ public sealed class SupabaseMigrationBuildTargetTests : IDisposable
         exitCode.Should().Be(0, output);
         var sql = File.ReadAllText(Directory.GetFiles(Migrations, "*_access.desk.ddd.sql").Should().ContainSingle().Subject);
 
-        sql.Should().Contain("CREATE POLICY \"Owners have their tickets (insert) for desk_user\" ON desk.\"Tickets\" FOR INSERT TO desk_user\n", "user=desk_user reached the export");
-        sql.Should().Contain("CREATE POLICY \"Owners have their tickets (insert) for desk_guest\" ON desk.\"Tickets\" FOR INSERT TO desk_guest\n", "anonymous=desk_guest reached the export");
-        sql.Should().Contain("CREATE POLICY \"Scoped work reads by role (select) for desk_scoped\" ON desk.\"Tickets\" FOR SELECT TO desk_scoped\n", "system-in=desk_scoped reached the export");
+        sql.Should().Contain("CREATE POLICY \"Owners have their tickets (insert) for desk_user\" ON \"desk\".\"Tickets\" FOR INSERT TO desk_user\n", "user=desk_user reached the export");
+        sql.Should().Contain("CREATE POLICY \"Owners have their tickets (insert) for desk_guest\" ON \"desk\".\"Tickets\" FOR INSERT TO desk_guest\n", "anonymous=desk_guest reached the export");
+        sql.Should().Contain("CREATE POLICY \"Scoped work reads by role (select) for desk_scoped\" ON \"desk\".\"Tickets\" FOR SELECT TO desk_scoped\n", "system-in=desk_scoped reached the export");
         sql.Should().Contain("        CREATE ROLE desk_scoped NOLOGIN NOINHERIT;\n", "the prelude makes the scoped role a policy names");
-        sql.Should().Contain("CREATE POLICY \"Analysts read every ticket (select) for desk_analyst\" ON desk.\"Tickets\" FOR SELECT TO desk_analyst\n", "token:analyst=desk_analyst reached the export");
+        sql.Should().Contain("CREATE POLICY \"Analysts read every ticket (select) for desk_analyst\" ON \"desk\".\"Tickets\" FOR SELECT TO desk_analyst\n", "token:analyst=desk_analyst reached the export");
         sql.Should().Contain("        CREATE ROLE desk_analyst NOLOGIN NOINHERIT;\n", "and the prelude makes the role it is mapped to");
         sql.Should().Contain("(SELECT who.id())", "uid=who.id() reached the export");
         sql.Should().Contain("(SELECT who.role())", "role=who.role() reached the export");
         sql.Should().Contain("(SELECT who.claims() #>> '{app_metadata,team}')", "claims=who.claims() reached the export");
         sql.Should().Contain("SELECT coalesce(((SELECT who.claims()) ->> 'on_duty')::boolean, false)", "the caller functions reached the contribution the build handed over");
-        sql.Should().Contain("GRANT EXECUTE ON FUNCTION desk.on_duty() TO desk_user;\n", "and so did the roles its grants name");
+        sql.Should().Contain("GRANT EXECUTE ON FUNCTION \"desk\".on_duty() TO desk_user;\n", "and so did the roles its grants name");
         sql.Should().NotContain("authenticated").And.NotContain("auth.", "nothing of the defaults is left");
     }
 
@@ -63,10 +63,10 @@ public sealed class SupabaseMigrationBuildTargetTests : IDisposable
         var sql = File.ReadAllText(Directory.GetFiles(Migrations, "*_access.desk.ddd.sql").Should().ContainSingle().Subject);
 
         sql.Should().Contain("-- Privileges, from the policies above", "the access file writes the privileges unless the project says None");
-        sql.Should().Contain("REVOKE ALL ON TABLE desk.\"Tickets\" FROM PUBLIC, anon, authenticated, ddd_system_in, desk_analyst, desk_books;\n", "and system=desk_books reached the export, as one more role a table gave nothing to");
-        sql.Should().Contain("GRANT SELECT ON TABLE desk.\"Tickets\" TO desk_analyst;\n", "an analyst reads, and no more");
+        sql.Should().Contain("REVOKE ALL ON TABLE \"desk\".\"Tickets\" FROM PUBLIC, anon, authenticated, ddd_system_in, desk_analyst, desk_books;\n", "and system=desk_books reached the export, as one more role a table gave nothing to");
+        sql.Should().Contain("GRANT SELECT ON TABLE \"desk\".\"Tickets\" TO desk_analyst;\n", "an analyst reads, and no more");
         sql.Should().Contain("        CREATE ROLE desk_books NOLOGIN NOINHERIT;\n", "the access file makes the bookkeeping role");
-        sql.Should().Contain("ALTER TABLE desk.\"Tickets\" ENABLE ROW LEVEL SECURITY;\nALTER TABLE desk.\"Tickets\" FORCE ROW LEVEL SECURITY;\n", "and forces the policies unless the project says false");
+        sql.Should().Contain("ALTER TABLE \"desk\".\"Tickets\" ENABLE ROW LEVEL SECURITY;\nALTER TABLE \"desk\".\"Tickets\" FORCE ROW LEVEL SECURITY;\n", "and forces the policies unless the project says false");
 
         // Turned off, both reach the export, and the file says nothing of either.
         Directory.Delete(Migrations, recursive: true);

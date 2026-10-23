@@ -57,13 +57,13 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
     private const string OwnerLock = "projects_owner_stays";
 
     /// <summary>What the database says to a statement that renames or plans a project without the key to edit it: the column rule's trigger.</summary>
-    private const string NameAndPlanHeld = "The column rule 'Name and plan change with the edit key' does not let this caller change \"Name\", \"PlannedFrom\" or \"PlannedUntil\" of projects.\"Projects\".";
+    private const string NameAndPlanHeld = "The column rule 'Name and plan change with the edit key' does not let this caller change \"Name\", \"PlannedFrom\" or \"PlannedUntil\" of \"projects\".\"Projects\".";
 
     /// <summary>The trigger of the column rule on the name and the planned days, which its refusal names.</summary>
     private const string NameAndPlanTrigger = "projects_name_plannedfrom_planneduntil_column_rule";
 
     /// <summary>What the database says to a statement that closes or reopens a project without the key to close it.</summary>
-    private const string StateHeld = "The column rule 'State changes with the close key' does not let this caller change \"State\" of projects.\"Projects\".";
+    private const string StateHeld = "The column rule 'State changes with the close key' does not let this caller change \"State\" of \"projects\".\"Projects\".";
 
     /// <summary>A role of the test's own that the policies hold: it bypasses nothing, and the login role cannot switch to it.</summary>
     private const string HeldToThePolicies = "tenancy_tests_held_to_the_policies";
@@ -100,13 +100,13 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
         // System work in a tenant cannot leave it, and nobody without a seat asks what Tenancy answers about one.
         ["a function of Tenancy's the anonymous role may ask"] = (
             $"GRANT EXECUTE ON FUNCTION {TenantsContext.Schema}.caller_seat() TO anon",
-            $"anon may execute {TenantsContext.Schema}.caller_seat()",
+            $"anon may execute {RowAccessModel.Schema(TenantsContext.Schema)}.caller_seat()",
             TenancyPostgresChecks.SystemInRoleConfinedCheck),
 
         // The few reads across tenants are the application's own, and no signed-in user's.
         ["a read across tenants a signed-in user may ask"] = (
             $"GRANT EXECUTE ON FUNCTION {TenantsContext.Schema}.role_keys_in_use() TO authenticated",
-            $"authenticated may execute {TenantsContext.Schema}.role_keys_in_use()",
+            $"authenticated may execute {RowAccessModel.Schema(TenantsContext.Schema)}.role_keys_in_use()",
             TenancyPostgresChecks.SystemReadsAcrossTenantsCheck),
 
         // The second lock on a tenant's single root: the policies hold a seat, and the index holds everyone.
@@ -119,7 +119,7 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
         // of the tenant's, whoever writes the row.
         ["a crew's roles not held to the roles the caller sees"] = (
             $"""DROP POLICY "Members hold roles the caller sees (insert) for authenticated" ON {ProjectsContext.Schema}."{ProjectsContext.CrewRolesTable}" """,
-            $"{ProjectsContext.Schema}.\"{ProjectsContext.CrewRolesTable}\" (authenticated is not held to the roles it sees)",
+            $"{RowAccessModel.Schema(ProjectsContext.Schema)}.\"{ProjectsContext.CrewRolesTable}\" (authenticated is not held to the roles it sees)",
             MembershipPostgresChecks.FunctionsInPlaceCheck),
 
         // The crew lead's project role stays in use, whatever statement archives it.

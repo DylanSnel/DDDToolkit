@@ -102,7 +102,7 @@ public sealed class PostgresRowLevelSecurityOptions
     /// Set <see cref="RowLevelSecurityScope.Transaction"/> where a pooler hands each transaction whichever server
     /// connection is free, PgBouncer in transaction mode or Supabase's transaction pooler: a setting made for a
     /// session there reaches whoever is given that server connection next. Nothing guesses it from the
-    /// connection string. It needs the procedure <c>ddd.use_caller</c>, which
+    /// connection string. It needs the procedure <c>"ddd".use_caller</c>, which
     /// <see cref="PostgresRowAccess.SetupScript"/> and every script and access file make, and the role the
     /// application logs in as must be allowed to call it.
     /// </para>

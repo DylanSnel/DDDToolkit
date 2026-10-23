@@ -456,7 +456,7 @@ public abstract class InvitationPolicyTests(TenancyPostgres postgres, TenancyNam
         }
 
         (await FluentActions.Awaiting(() => TenancyPostgresChecks.EnsurePoliciesAreInPlaceAsync(services.Provider, Cancellation)).Should().ThrowAsync<InvalidOperationException>())
-            .WithMessage($"Row level security is off on Tenancy's tables tenancy.{names.Shown("InvitationDigests")}*");
+            .WithMessage($"Row level security is off on Tenancy's tables \"tenancy\".{names.Shown("InvitationDigests")}*");
 
         await using (var owner = await AsCaller.OwnerAsync(database, Cancellation))
         {
@@ -466,7 +466,7 @@ public abstract class InvitationPolicyTests(TenancyPostgres postgres, TenancyNam
 
         await TenancyPostgres.ExecuteAsync(database.ConnectionString, "DROP FUNCTION tenancy.invitation_of_digest(bytea)", Cancellation);
         (await FluentActions.Awaiting(() => TenancyPostgresChecks.EnsurePoliciesAreInPlaceAsync(services.Provider, Cancellation)).Should().ThrowAsync<InvalidOperationException>())
-            .WithMessage("The functions of tenancy that read across tenants are not as Tenancy's contribution writes them: invitation_of_digest (missing)*");
+            .WithMessage("The functions of \"tenancy\" that read across tenants are not as Tenancy's contribution writes them: invitation_of_digest (missing)*");
         (await FluentActions.Awaiting(() => TenancyPostgresChecks.EnsureSystemReadsAcrossTenantsAsync(services.Provider, Cancellation)).Should().ThrowAsync<InvalidOperationException>())
             .WithMessage("Tenancy's reads across tenants would not answer as they should: - invitation_of_digest is missing:*");
 

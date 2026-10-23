@@ -152,10 +152,10 @@ public sealed class ExportOptionTests(TenancyPostgres postgres)
         // a year: that role finds and removes rows, across tenants, and the guard lets only the old ones go.
         var script = Script(kept, Export(grants: true, Keeper));
         script.Should().Contain(
-            $"CREATE POLICY \"Bookkeeping removes old rows (delete) for {Keeper}\" ON ddd.\"EventLog\" FOR DELETE TO {Keeper}\n" +
+            $"CREATE POLICY \"Bookkeeping removes old rows (delete) for {Keeper}\" ON \"ddd\".\"EventLog\" FOR DELETE TO {Keeper}\n" +
             "    USING (true);\n");
-        script.Should().Contain($"CREATE POLICY \"Bookkeeping removes old rows (select) for {Keeper}\" ON ddd.\"EventLog\" FOR SELECT TO {Keeper}\n");
-        script.Should().Contain($"GRANT SELECT, DELETE ON TABLE ddd.\"EventLog\" TO {Keeper};\n");
+        script.Should().Contain($"CREATE POLICY \"Bookkeeping removes old rows (select) for {Keeper}\" ON \"ddd\".\"EventLog\" FOR SELECT TO {Keeper}\n");
+        script.Should().Contain($"GRANT SELECT, DELETE ON TABLE \"ddd\".\"EventLog\" TO {Keeper};\n");
         script.Should().NotContain($"(insert) for {Keeper}").And.NotContain($"(update) for {Keeper}");
 
         // Without any one of the three, the role is given nothing on the history.

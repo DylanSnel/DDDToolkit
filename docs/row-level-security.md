@@ -152,7 +152,7 @@ builder.Services.AddPostgresRowLevelSecurity();   // Scope is RowLevelSecuritySc
 hands it to the next client as it is, so a setting made for a session reaches whoever comes next. In
 `Transaction` scope nothing is ever set for a session:
 
-- **A command outside a transaction** gets `RESET ROLE; CALL ddd.use_caller(@role, @claims, @names, @values);`
+- **A command outside a transaction** gets `RESET ROLE; CALL "ddd".use_caller(@role, @claims, @names, @values);`
   written in front of its text. Npgsql sends both together and Postgres runs them as one transaction, so
   the settings apply to that command and end with it, at no round trip. The reset takes off a role some
   other client left on the server connection, so that the call is always made by the role the application
@@ -515,9 +515,9 @@ sequenceDiagram
 <summary>Show the code: the policy that asks both</summary>
 
 ```sql
-CREATE POLICY "A team sees its notebooks" ON teams."Notebooks" FOR SELECT TO authenticated
+CREATE POLICY "A team sees its notebooks" ON "teams"."Notebooks" FOR SELECT TO authenticated
     USING ("Team" = current_setting('teams.current', true)
-           AND "Members" @> ARRAY[(SELECT ddd.caller_id())]);
+           AND "Members" @> ARRAY[(SELECT "ddd".caller_id())]);
 ```
 
 </details>
@@ -740,13 +740,13 @@ var allowed = ACustomerSeesTheirOrders.Allows(order, caller);
 ```
 
 ```sql
-CREATE POLICY "A customer sees their orders (select) for authenticated" ON ordering."Orders" FOR SELECT TO authenticated
-    USING (("PlacedBy" IS NULL) OR ("PlacedBy" IS NOT DISTINCT FROM (SELECT ddd.caller_id())));
+CREATE POLICY "A customer sees their orders (select) for authenticated" ON "ordering"."Orders" FOR SELECT TO authenticated
+    USING (("PlacedBy" IS NULL) OR ("PlacedBy" IS NOT DISTINCT FROM (SELECT "ddd".caller_id())));
 -- and one for anon, and one per role for UPDATE
 
 -- OrderLine belongs to the aggregate: it is read with its Orders, and written as the rules let a caller write its Orders.
-CREATE POLICY "OrderLine (select) for authenticated" ON ordering."OrderLine" FOR SELECT TO authenticated
-    USING (EXISTS (SELECT 1 FROM ordering."Orders" parent WHERE parent."Id" = ordering."OrderLine"."OrderId"));
+CREATE POLICY "OrderLine (select) for authenticated" ON "ordering"."OrderLine" FOR SELECT TO authenticated
+    USING (EXISTS (SELECT 1 FROM "ordering"."Orders" parent WHERE parent."Id" = "ordering"."OrderLine"."OrderId"));
 -- and one for anon, and one per role for INSERT, UPDATE and DELETE
 ```
 
@@ -756,12 +756,12 @@ What the generator translates, and into what:
 
 | In `Allows` | In the policy |
 |---|---|
-| `order.PlacedBy == null \|\| order.PlacedBy?.Value == caller.UserId` | `("PlacedBy" IS NULL) OR ("PlacedBy" IS NOT DISTINCT FROM ddd.caller_id())` |
+| `order.PlacedBy == null \|\| order.PlacedBy?.Value == caller.UserId` | `("PlacedBy" IS NULL) OR ("PlacedBy" IS NOT DISTINCT FROM "ddd".caller_id())` |
 | `order.Status != OrderStatus.Cancelled` | `"Status" <> 2`, or `'Cancelled'` when the column stores it as text |
 | `order.Total.Amount <= 500` | `coalesce("Total_Amount" <= 500, FALSE)` |
-| `caller.IsSignedIn && !order.IsPublic` | `(ddd.caller_id() IS NOT NULL) AND (NOT "IsPublic")` |
-| `caller.Claim("app_metadata.team") == order.Team` | `ddd.caller_claims() #>> '{app_metadata,team}' IS NOT DISTINCT FROM "Team"` |
-| `caller.Role == "authenticated"` | `ddd.caller_role() IS NOT DISTINCT FROM 'authenticated'` |
+| `caller.IsSignedIn && !order.IsPublic` | `("ddd".caller_id() IS NOT NULL) AND (NOT "IsPublic")` |
+| `caller.Claim("app_metadata.team") == order.Team` | `"ddd".caller_claims() #>> '{app_metadata,team}' IS NOT DISTINCT FROM "Team"` |
+| `caller.Role == "authenticated"` | `"ddd".caller_role() IS NOT DISTINCT FROM 'authenticated'` |
 | `order.Due < DateTimeOffset.UtcNow` | `coalesce("Due" < now(), FALSE)` |
 
 `==` keeps C#'s meaning. Between two values C# says cannot be null, an enum, a number, a flag, a `Guid`
@@ -868,9 +868,9 @@ public static partial class AuditorsSeeEveryOrder
 
 ```sql
 -- Orders (select) for authenticated asks the rules 'A customer has their orders' and 'Auditors see every order': a row one of them allows is allowed.
-CREATE POLICY "Orders (select) for authenticated" ON ordering."Orders" FOR SELECT TO authenticated
-    USING ((("PlacedBy" IS NULL) OR ("PlacedBy" IS NOT DISTINCT FROM (SELECT ddd.caller_id())))
-        OR ((SELECT ddd.caller_claims() #>> '{app_metadata,auditor}') IS NOT DISTINCT FROM 'true'));
+CREATE POLICY "Orders (select) for authenticated" ON "ordering"."Orders" FOR SELECT TO authenticated
+    USING ((("PlacedBy" IS NULL) OR ("PlacedBy" IS NOT DISTINCT FROM (SELECT "ddd".caller_id())))
+        OR ((SELECT "ddd".caller_claims() #>> '{app_metadata,auditor}') IS NOT DISTINCT FROM 'true'));
 ```
 
 </details>
@@ -1012,13 +1012,13 @@ public static partial class NobodyOrdersForSomebodyElse
 Reading a line asks whether the caller reads its order; adding one asks the order's rules about the order:
 
 ```sql
-CREATE POLICY "OrderLine (select) for authenticated" ON ordering."OrderLine" FOR SELECT TO authenticated
-    USING (EXISTS (SELECT 1 FROM ordering."Orders" parent WHERE parent."Id" = ordering."OrderLine"."OrderId"));
+CREATE POLICY "OrderLine (select) for authenticated" ON "ordering"."OrderLine" FOR SELECT TO authenticated
+    USING (EXISTS (SELECT 1 FROM "ordering"."Orders" parent WHERE parent."Id" = "ordering"."OrderLine"."OrderId"));
 
-CREATE POLICY "OrderLine (insert) for authenticated" ON ordering."OrderLine" FOR INSERT TO authenticated
-    WITH CHECK (EXISTS (SELECT 1 FROM ordering."Orders" r WHERE r."Id" = ordering."OrderLine"."OrderId"
-        AND (((r."PlacedBy" IS NULL) OR (r."PlacedBy" IS NOT DISTINCT FROM (SELECT ddd.caller_id())))
-          OR ((r."PlacedBy" IS NOT DISTINCT FROM (SELECT ddd.caller_id())) AND ddd.written_in_this_transaction(r.xmin)))));
+CREATE POLICY "OrderLine (insert) for authenticated" ON "ordering"."OrderLine" FOR INSERT TO authenticated
+    WITH CHECK (EXISTS (SELECT 1 FROM "ordering"."Orders" r WHERE r."Id" = "ordering"."OrderLine"."OrderId"
+        AND (((r."PlacedBy" IS NULL) OR (r."PlacedBy" IS NOT DISTINCT FROM (SELECT "ddd".caller_id())))
+          OR ((r."PlacedBy" IS NOT DISTINCT FROM (SELECT "ddd".caller_id())) AND "ddd".written_in_this_transaction(r.xmin)))));
 ```
 
 </details>
@@ -1077,12 +1077,12 @@ reads. The rule asks it about the row:
 ```sql
 CREATE OR REPLACE FUNCTION projects.is_member(uuid) RETURNS boolean
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
-    SELECT EXISTS (SELECT 1 FROM projects."Projects" root
-                   WHERE root."Id" = $1 AND (EXISTS (SELECT 1 FROM projects."ProjectMember" e1
-                                                     WHERE e1."ProjectId" = root."Id" AND ((e1."UserId" IS NOT DISTINCT FROM (SELECT ddd.caller_id()))))))
+    SELECT EXISTS (SELECT 1 FROM "projects"."Projects" root
+                   WHERE root."Id" = $1 AND (EXISTS (SELECT 1 FROM "projects"."ProjectMember" e1
+                                                     WHERE e1."ProjectId" = root."Id" AND ((e1."UserId" IS NOT DISTINCT FROM (SELECT "ddd".caller_id()))))))
 $function$;
 
-CREATE POLICY "Members work on their projects (select) for authenticated" ON projects."Projects" FOR SELECT TO authenticated
+CREATE POLICY "Members work on their projects (select) for authenticated" ON "projects"."Projects" FOR SELECT TO authenticated
     USING (projects.is_member("Id"));
 -- and the same for anon, and for UPDATE
 ```
@@ -1148,7 +1148,8 @@ yours. It writes the name as you give it, without quotes, which Postgres reads i
 `Sql.Call<bool>("Tenancy.my_check", ...)` asks `tenancy.my_check`. A function of your own in a schema with
 capitals is asked with `Sql.Raw<bool>`, whose SQL names the schema in double quotes,
 `Sql.Raw<bool>("\"Tenancy\".my_check(\"Id\")")`, or is written as an access function named
-[relative to its module](#names-relative-to-the-module), which the export quotes for you.
+[relative to its module](#names-relative-to-the-module), whose schema the export writes in double quotes, as it
+writes [every schema it names](#schema-names).
 
 `Any` is over the aggregate's own collections, with or without a condition. Inside an `Any`, the entity may be
 asked about its own entities in the same way, as deep as the model goes:
@@ -1224,14 +1225,14 @@ flowchart TD
 <summary>Show the code: the function the export writes, and the policy that asks it</summary>
 
 ```sql
-CREATE OR REPLACE FUNCTION desk.tickets_i_watch() RETURNS SETOF uuid
+CREATE OR REPLACE FUNCTION "desk".tickets_i_watch() RETURNS SETOF uuid
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
-    SELECT DISTINCT e1."TicketId" FROM desk."TicketWatcher" e1
-    WHERE (e1."User" IS NOT DISTINCT FROM (SELECT ddd.caller_id()))
+    SELECT DISTINCT e1."TicketId" FROM "desk"."TicketWatcher" e1
+    WHERE (e1."User" IS NOT DISTINCT FROM (SELECT "ddd".caller_id()))
 $function$;
 
-CREATE POLICY "Watchers read the tickets they watch (select) for authenticated" ON desk."Tickets" FOR SELECT TO authenticated
-    USING ("Id" = ANY (ARRAY(SELECT desk.tickets_i_watch())));
+CREATE POLICY "Watchers read the tickets they watch (select) for authenticated" ON "desk"."Tickets" FOR SELECT TO authenticated
+    USING ("Id" = ANY (ARRAY(SELECT "desk".tickets_i_watch())));
 -- and the same for anon, since the rule names no roles
 ```
 
@@ -1259,8 +1260,8 @@ public static partial class TicketsIReactedIn
 ```sql
 CREATE OR REPLACE FUNCTION desk.tickets_i_reacted_in() RETURNS SETOF uuid
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
-    SELECT DISTINCT e1."TicketId" FROM desk."TicketComment" e1
-    WHERE (EXISTS (SELECT 1 FROM desk."CommentReaction" e2 WHERE e2."TicketCommentTicketId" = e1."TicketId" AND e2."TicketCommentId" = e1."Id" AND ((e2."User" IS NOT DISTINCT FROM (SELECT ddd.caller_id())))))
+    SELECT DISTINCT e1."TicketId" FROM "desk"."TicketComment" e1
+    WHERE (EXISTS (SELECT 1 FROM "desk"."CommentReaction" e2 WHERE e2."TicketCommentTicketId" = e1."TicketId" AND e2."TicketCommentId" = e1."Id" AND ((e2."User" IS NOT DISTINCT FROM (SELECT "ddd".caller_id())))))
 $function$;
 ```
 
@@ -1282,9 +1283,9 @@ public static partial class Questions
 }
 
 // Questions.IdsIFollow<ProjectId>("projects").Contains(project.Id)
-//   "Id" = ANY (ARRAY(SELECT projects.ids_i_follow('projects')))
+//   "Id" = ANY (ARRAY(SELECT "projects".ids_i_follow('projects')))
 // project.Team == Questions.CallerTeam()
-//   "Team" = (SELECT projects.caller_team())
+//   "Team" = (SELECT "projects".caller_team())
 ```
 
 An `[AccessSet]` question answers with a set, an `[AccessScalar]` one with a value, and called in C# either
@@ -1338,26 +1339,73 @@ ask a function another module defines. For a script of one context whose rules a
 names with `RowAccessExport.FunctionNames`, from `PostgresRowAccess.FunctionNamesOf(contexts, functions)`.
 A rule that asks a logical name nothing defines is refused when its script is written, naming the rule.
 
-The schema a relative name lands in, the context's default schema or its aggregate table's, is any name
-Entity Framework takes, and a script writes it as Entity Framework writes the schema it creates: as it is
-where Postgres keeps it so, and in double quotes where Postgres would otherwise fold it to lower case or
-read a word of its own. The function's own name is the module's, and is written as it is.
+The schema a relative name lands in is the context's default schema, or else its aggregate table's, and the
+script writes it in double quotes, as it writes [every schema](#schema-names): `"desk".tickets_i_watch()`. The
+function's own name is the module's, and is written as it is. A name with its schema is SQL as you write it,
+which Postgres reads in lower case: `Desk.tickets_i_watch` is `desk.tickets_i_watch`, a function of another
+schema than `"Desk"`. So a function in a schema with capitals is named relative to its module instead.
 
-| The context says | The function is made as |
+### Schema names
+
+The toolkit writes every schema it names in double quotes: a module's, Tenancy's and Membership's, the one the
+migration history is in, and its own, `ddd`. That holds for the access files, the setup script and the
+statement the interceptor sends; for a function, a table, a grant, a trigger and a comment alike; and for what
+the start-up checks say, so a fix they name runs as it is written. Postgres keeps a name in double quotes as it
+is written, so the SQL names the schema Entity Framework made, whatever the model calls it, and nothing has to
+decide whether a name needs the quotes: any name Entity Framework takes works.
+
+```mermaid
+flowchart LR
+    Model["The model's schema<br/>desk, Desk, Help_Desk, order"] -->|"every statement<br/>names it in double quotes"| Sql["the functions, policies,<br/>triggers and grants"]
+    Sql -->|"Postgres keeps<br/>the name as written"| Schema["the schema<br/>Entity Framework made"]
+    Sql -.->|"a lookup compares<br/>the name, unquoted"| Kept["what the catalog keeps:<br/>Help_Desk, tickets_i_watch"]
+```
+
+| The context says | The script writes |
 |---|---|
-| `HasDefaultSchema("desk")` | `desk.tickets_i_watch()` |
-| `HasDefaultSchema("Desk")` | `"Desk".tickets_i_watch()` |
-| `HasDefaultSchema("Help_Desk")` | `"Help_Desk".tickets_i_watch()` |
-| `HasDefaultSchema("order")` | `"order".tickets_i_watch()` |
+| `HasDefaultSchema("desk")` | `"desk".tickets_i_watch()`, `"desk"."Tickets"` |
+| `HasDefaultSchema("Desk")` | `"Desk".tickets_i_watch()`, `"Desk"."Tickets"` |
+| `HasDefaultSchema("Help_Desk")` | `"Help_Desk".tickets_i_watch()`, `"Help_Desk"."Tickets"` |
+| `HasDefaultSchema("order")` | `"order".tickets_i_watch()`, `"order"."Tickets"` |
 
-So the functions, policies, triggers and grants a script writes are where the tables are, whatever the
-schema is called, and a rule that asks `{fn:desk/tickets_i_watch}` asks the function by that name. Where a
-script finds what an earlier one made, to drop it, keep it or take its grants back, it compares the schema
-and the name the catalog keeps, `('Desk', 'tickets_i_watch')`, capitals and all. Only a schema longer than
-the 63 bytes Postgres keeps of a name is refused: Postgres would cut it, and the script would no longer find
-what it made there. A name with its schema is SQL as you write it, which Postgres reads in lower case:
-`Desk.tickets_i_watch` is `desk.tickets_i_watch`, a function of another schema than `"Desk"`. So a function in a
-schema with capitals is named relative to its module instead.
+The names inside the schema are written as before: a table as Entity Framework names it, `"Tickets"`, and a
+function by its own name, `tickets_i_watch`. Where a script finds what an earlier one made, to drop it, keep it
+or take its grants back, it compares the schema and the name the catalog keeps, as strings,
+`('Help_Desk', 'tickets_i_watch')`. Only a schema longer than the 63 bytes Postgres keeps of a name is
+refused: Postgres would cut it, and the script would no longer find what it made there. A statement of a
+contribution names a function of its own the same way, with `RowAccessModel.Schema(context.Model)`.
+
+What the toolkit does not name is written as it was given. A function you name with its schema, an access
+function declared `schema.name`, a `Sql.Call`, a caller function or a `RowAccessExport.FunctionNames` given
+by hand, is SQL of your own. Postgres's own `pg_catalog` and the functions of Supabase and pgmq,
+`auth.uid()` and `pgmq.send(...)`, are written as their makers document them. The SQL Entity Framework
+writes, the migrations and a context's queries, names a schema as Entity Framework does, in double quotes
+only where Postgres needs them; so does the one line of the Supabase export's in a migration's file, the
+`ENABLE ROW LEVEL SECURITY` of a table it creates, since a migration's file stays as it was exported. The
+prose of these pages names a function without the quotes, `ddd.caller_id()`: it is the same function.
+
+<details>
+<summary>Show the code: a module in "Help_Desk"</summary>
+
+```csharp
+modelBuilder.HasDefaultSchema("Help_Desk");
+```
+
+```sql
+CREATE OR REPLACE FUNCTION "Help_Desk".tickets_i_watch() RETURNS SETOF uuid
+    LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
+    SELECT DISTINCT e1."TicketId" FROM "Help_Desk"."TicketWatcher" e1
+    WHERE (e1."User" IS NOT DISTINCT FROM (SELECT "ddd".caller_id()))
+$function$;
+
+CREATE POLICY "Watchers read the tickets they watch (select) for authenticated" ON "Help_Desk"."Tickets" FOR SELECT TO authenticated
+    USING ("Id" = ANY (ARRAY(SELECT "Help_Desk".tickets_i_watch())));
+
+-- The next file finds the functions this one made by the names the catalog keeps:
+--   AND (n.nspname, p.proname) NOT IN (('Help_Desk', 'tickets_i_watch'))
+```
+
+</details>
 
 ### A resource's access, asked by its id
 
@@ -1450,8 +1498,8 @@ rules give the function:
   AND ({col:RecordedBy} = (SELECT {fn:tenancy/caller_seat}())))
 
 -- Inspections' access file
-CREATE POLICY "Seats record where they may (insert) for authenticated" ON inspections."Inspections" FOR INSERT TO authenticated
-    WITH CHECK (("ProjectId" = ANY (ARRAY(SELECT projects.project_ids_where_i_hold('inspections.record')))) AND ("RecordedBy" = (SELECT tenancy.caller_seat())));
+CREATE POLICY "Seats record where they may (insert) for authenticated" ON "inspections"."Inspections" FOR INSERT TO authenticated
+    WITH CHECK (("ProjectId" = ANY (ARRAY(SELECT "projects".project_ids_where_i_hold('inspections.record')))) AND ("RecordedBy" = (SELECT "tenancy".caller_seat())));
 ```
 
 </details>
@@ -1529,27 +1577,27 @@ What the script writes for the state, shortened. The rule reads the row's key al
 to be is asked only where the key changes:
 
 ```sql
-CREATE OR REPLACE FUNCTION projects.projects_state_column_rule() RETURNS trigger
+CREATE OR REPLACE FUNCTION "projects".projects_state_column_rule() RETURNS trigger
     LANGUAGE plpgsql SET search_path = '' AS $body$
 BEGIN
     IF CURRENT_USER = 'authenticated' THEN
-        IF (OLD."Id" = ANY (ARRAY(SELECT projects.project_ids_where_i_hold('projects.close')))) IS NOT TRUE
-           OR (OLD."Id" IS DISTINCT FROM NEW."Id" AND (NEW."Id" = ANY (ARRAY(SELECT projects.project_ids_where_i_hold('projects.close')))) IS NOT TRUE) THEN
+        IF (OLD."Id" = ANY (ARRAY(SELECT "projects".project_ids_where_i_hold('projects.close')))) IS NOT TRUE
+           OR (OLD."Id" IS DISTINCT FROM NEW."Id" AND (NEW."Id" = ANY (ARRAY(SELECT "projects".project_ids_where_i_hold('projects.close')))) IS NOT TRUE) THEN
             RAISE EXCEPTION USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'projects_state_column_rule', HINT = 'ddd:access.refused',
-                MESSAGE = 'The column rule ''State changes with the close key'' does not let this caller change "State" of projects."Projects".';
+                MESSAGE = 'The column rule ''State changes with the close key'' does not let this caller change "State" of "projects"."Projects".';
         END IF;
     ELSIF CURRENT_USER IN ('anon', 'tenancy_operator') THEN
         RAISE EXCEPTION USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'projects_state_column_rule', HINT = 'ddd:access.refused',
-            MESSAGE = 'No column rule is for this caller''s role, so it may not change "State" of projects."Projects".';
+            MESSAGE = 'No column rule is for this caller''s role, so it may not change "State" of "projects"."Projects".';
     END IF;
     RETURN NEW;
 END
 $body$;
 
-CREATE TRIGGER projects_state_column_rule BEFORE UPDATE OF "State" ON projects."Projects"
+CREATE TRIGGER projects_state_column_rule BEFORE UPDATE OF "State" ON "projects"."Projects"
     FOR EACH ROW WHEN (OLD."State" IS DISTINCT FROM NEW."State")
-    EXECUTE FUNCTION projects.projects_state_column_rule();
-COMMENT ON TRIGGER projects_state_column_rule ON projects."Projects" IS 'DDDToolkit column rule';
+    EXECUTE FUNCTION "projects".projects_state_column_rule();
+COMMENT ON TRIGGER projects_state_column_rule ON "projects"."Projects" IS 'DDDToolkit column rule';
 ```
 
 A script of your own writes the same from `RowAccessRule.ForColumns<Project>("State changes with the close key",
@@ -1823,24 +1871,24 @@ flowchart TD
 
 ```sql
 -- Written by the row access contribution Audit.AuditRowAccess in Audit 1.2.0.
-CREATE OR REPLACE FUNCTION audit.entries_i_wrote() RETURNS SETOF uuid
+CREATE OR REPLACE FUNCTION "audit".entries_i_wrote() RETURNS SETOF uuid
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
 SELECT e."Id" FROM "audit"."AuditEntries" e WHERE e."WrittenBy" = (SELECT auth.uid())
 $function$;
-COMMENT ON FUNCTION audit.entries_i_wrote() IS 'DDDToolkit access function of AuditContext';
-REVOKE ALL ON FUNCTION audit.entries_i_wrote() FROM PUBLIC;
+COMMENT ON FUNCTION "audit".entries_i_wrote() IS 'DDDToolkit access function of AuditContext';
+REVOKE ALL ON FUNCTION "audit".entries_i_wrote() FROM PUBLIC;
 
 -- Who may execute the functions above: the roles granted it below, and nobody else. Every other grant
 -- on them is taken back first, what an earlier file gave and what a schema's default privileges gave alike.
 DO $ddd$ ... $ddd$;
-GRANT EXECUTE ON FUNCTION audit.entries_i_wrote() TO authenticated;
+GRANT EXECUTE ON FUNCTION "audit".entries_i_wrote() TO authenticated;
 
-ALTER TABLE audit."AuditEntries" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "audit"."AuditEntries" ENABLE ROW LEVEL SECURITY;
 
 -- Entries are read by who wrote them (select) for authenticated asks the policy 'Entries are read by who wrote them' of the row access contribution Audit.AuditRowAccess in Audit 1.2.0.
-CREATE POLICY "Entries are read by who wrote them (select) for authenticated" ON audit."AuditEntries" FOR SELECT TO authenticated
-    USING ("Id" = ANY (ARRAY(SELECT audit.entries_i_wrote())));
-COMMENT ON POLICY "Entries are read by who wrote them (select) for authenticated" ON audit."AuditEntries" IS 'DDDToolkit row access rule';
+CREATE POLICY "Entries are read by who wrote them (select) for authenticated" ON "audit"."AuditEntries" FOR SELECT TO authenticated
+    USING ("Id" = ANY (ARRAY(SELECT "audit".entries_i_wrote())));
+COMMENT ON POLICY "Entries are read by who wrote them (select) for authenticated" ON "audit"."AuditEntries" IS 'DDDToolkit row access rule';
 ```
 
 </details>
@@ -1848,8 +1896,8 @@ COMMENT ON POLICY "Entries are read by who wrote them (select) for authenticated
 - **Functions** are created in the default schema of the context the contribution answered for, or in
   `public` when it has none, as `LANGUAGE sql` with `SET search_path = ''`, so their bodies name everything
   with its schema. Unlike an access function's, the schema is not a table's: a contribution may write for
-  several tables. It is any schema Entity Framework takes, written as
-  [a relative name's](#names-relative-to-the-module) is: `"Tenancy".caller_seat()` in `"Tenancy"`.
+  several tables. It is any schema Entity Framework takes, written in double quotes as
+  [every schema](#schema-names) is: `"tenancy".caller_seat()`, `"Tenancy".caller_seat()`.
   `SecurityDefiner` is false unless the contribution says otherwise. Rules and other contributions ask one
   by its logical name, `{fn:audit/entries_i_wrote}`, with the contribution's `Owner`, and a script writes
   it after the functions it asks. It carries the context's function comment, so the next script keeps it
@@ -1912,7 +1960,9 @@ COMMENT ON POLICY "Entries are read by who wrote them (select) for authenticated
   each in double quotes, so it means them as the model spells them: `Table`, `Column`, `ColumnType`, `Stored`
   for a value as its column stores it, `EntityTablesOf` for the tables of an aggregate's entities and the way
   up to its own, `Schema` for the schema a statement makes a trigger's function in,
-  `$"{RowAccessModel.Schema(context.Model)}.entry_is_kept()"`, and `Literal`. `Refusal` writes the statement a
+  `$"{RowAccessModel.Schema(context.Model)}.entry_is_kept()"`, or for any other schema by its name,
+  `RowAccessModel.Schema("audit")`, both in double quotes as the script writes [every schema](#schema-names),
+  and `Literal`. `Refusal` writes the statement a
   trigger refuses with, so a save it refuses is answered as one a policy refuses is: see
   [When the database refuses](#when-the-database-refuses).
 
@@ -2109,11 +2159,11 @@ After the policies, the script takes back every privilege on each table it wrote
 gives a role each command a permissive policy for that role allows, and `USAGE` on the tables' schemas:
 
 ```sql
-GRANT USAGE ON SCHEMA ordering TO authenticated;
+GRANT USAGE ON SCHEMA "ordering" TO authenticated;
 
-REVOKE ALL ON TABLE ordering."Orders" FROM PUBLIC, anon, authenticated, ddd_system_in;
-GRANT SELECT, INSERT, DELETE ON TABLE ordering."Orders" TO authenticated;
-GRANT UPDATE ("Status", "Total_Amount", "Version") ON TABLE ordering."Orders" TO authenticated;
+REVOKE ALL ON TABLE "ordering"."Orders" FROM PUBLIC, anon, authenticated, ddd_system_in;
+GRANT SELECT, INSERT, DELETE ON TABLE "ordering"."Orders" TO authenticated;
+GRANT UPDATE ("Status", "Total_Amount", "Version") ON TABLE "ordering"."Orders" TO authenticated;
 ```
 
 - **What is taken back** is what any of the script's roles could hold: the user's, the anonymous caller's
@@ -2322,8 +2372,8 @@ writes every row. `RowAccessExport.ForceRowLevelSecurity` writes `FORCE ROW LEVE
 `ENABLE` of a script, on the tables of the rules, of the aggregates' entities and of the contributions:
 
 ```sql
-ALTER TABLE ordering."Orders" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE ordering."Orders" FORCE ROW LEVEL SECURITY;
+ALTER TABLE "ordering"."Orders" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "ordering"."Orders" FORCE ROW LEVEL SECURITY;
 ```
 
 The owner is then held to the policies like any other role, and no policy is for it, so it reads no row

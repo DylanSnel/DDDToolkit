@@ -5,8 +5,8 @@ namespace DDDToolkit.EntityFramework.Postgres;
 /// <summary>
 /// The names of the functions row access rules ask: <c>schema.name</c>, which is a function's name in the
 /// database as SQL writes it, and the logical <c>owner/name</c>, which a script resolves to the schema of the
-/// context that defines the function, delimited as Entity Framework delimits that schema:
-/// <c>desk.tickets_i_watch</c>, <c>"Desk".tickets_i_watch</c>.
+/// context that defines the function, written in double quotes as every schema the toolkit writes is:
+/// <c>"desk".tickets_i_watch</c>, <c>"Desk".tickets_i_watch</c>.
 /// </summary>
 internal static class RowAccessNames
 {
@@ -68,6 +68,13 @@ internal static class RowAccessNames
     /// that is no <c>schema.name</c>, such as a logical name nothing defines, is compared as Postgres would fold it.
     /// </summary>
     public static IEqualityComparer<string> Functions { get; } = new KeptComparer();
+
+    /// <summary>
+    /// What a script orders functions by: <paramref name="name"/> as Postgres keeps it, <c>schema.name</c> without
+    /// double quotes, so <c>"desk".f</c> sorts where <c>desk.f</c> does, beside the functions named with their schema
+    /// without them, and a script writes its functions in the order it always wrote them.
+    /// </summary>
+    public static string OrderOf(string name) => Kept(name) is { } kept ? kept.Schema + "." + kept.Name : name;
 
     /// <summary>
     /// The schema and the name Postgres keeps for <paramref name="qualified"/>, a function's name as SQL writes it,

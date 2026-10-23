@@ -43,9 +43,9 @@ public sealed class ReadRulesTests(TenancyPostgres postgres)
         var tenancy = TenancyPostgres.AccessScripts()[0];
 
         tenancy.Should().Contain(
-            "CREATE POLICY \"Members and the person read seats (select) for authenticated\" ON tenancy.\"Seats\" FOR SELECT TO authenticated\n" +
-            "    USING (\"TenantId\" = (SELECT tenancy.caller_tenant()) OR \"Identity\" = (SELECT ddd.caller_id()));");
-        tenancy.Should().Contain("CREATE POLICY \"Seat managers read invitations (select) for authenticated\" ON tenancy.\"Invitations\" FOR SELECT TO authenticated\n");
+            "CREATE POLICY \"Members and the person read seats (select) for authenticated\" ON \"tenancy\".\"Seats\" FOR SELECT TO authenticated\n" +
+            "    USING (\"TenantId\" = (SELECT \"tenancy\".caller_tenant()) OR \"Identity\" = (SELECT \"ddd\".caller_id()));");
+        tenancy.Should().Contain("CREATE POLICY \"Seat managers read invitations (select) for authenticated\" ON \"tenancy\".\"Invitations\" FOR SELECT TO authenticated\n");
         tenancy.Should().NotContain("in place of", "nothing changes for an application that writes no read rule");
     }
 
@@ -60,14 +60,14 @@ public sealed class ReadRulesTests(TenancyPostgres postgres)
             "DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres ");
         tenancy.Should().Contain(
             ", held to what that default holds a rule to, beside what it keeps whatever a rule says: a row one of them allows is allowed.\n" +
-            "CREATE POLICY \"Seats (select) for authenticated\" ON tenancy.\"Seats\" FOR SELECT TO authenticated\n" +
-            "    USING ((\"Identity\" = (SELECT ddd.caller_id()) OR ((\"TenantId\" = (SELECT tenancy.caller_tenant())) AND ((SELECT tenancy.holds_key('tenancy.seats.manage')) " +
-            "OR (SELECT tenancy.holds_key('tenancy.grants.manage')) OR (SELECT tenancy.holds_key('tenancy.units.manage')) OR (SELECT tenancy.holds_tenant_wide('tenancy.roles.manage')))))" +
-            " OR ((\"TenantId\" = (SELECT tenancy.caller_tenant())) AND (\"Id\" = (SELECT tenancy.caller_seat()))));",
+            "CREATE POLICY \"Seats (select) for authenticated\" ON \"tenancy\".\"Seats\" FOR SELECT TO authenticated\n" +
+            "    USING ((\"Identity\" = (SELECT \"ddd\".caller_id()) OR ((\"TenantId\" = (SELECT \"tenancy\".caller_tenant())) AND ((SELECT \"tenancy\".holds_key('tenancy.seats.manage')) " +
+            "OR (SELECT \"tenancy\".holds_key('tenancy.grants.manage')) OR (SELECT \"tenancy\".holds_key('tenancy.units.manage')) OR (SELECT \"tenancy\".holds_tenant_wide('tenancy.roles.manage')))))" +
+            " OR ((\"TenantId\" = (SELECT \"tenancy\".caller_tenant())) AND (\"Id\" = (SELECT \"tenancy\".caller_seat()))));",
             "a person's own seats and the managers' read stay, and the rule decides the rest, in the calling seat's tenant");
         tenancy.Should().NotContain("\"Members and the person read seats (select) for authenticated\"", "the default itself is gone");
-        tenancy.Should().NotContain("ON tenancy.\"Seats\" FOR SELECT TO anon", "a rule without To is for the signed-in users the default is for, and anonymous callers still read no seat");
-        tenancy.Should().Contain("CREATE POLICY \"Managers and the seat change it (update) for authenticated\" ON tenancy.\"Seats\"", "who changes a seat stays Tenancy's");
+        tenancy.Should().NotContain("ON \"tenancy\".\"Seats\" FOR SELECT TO anon", "a rule without To is for the signed-in users the default is for, and anonymous callers still read no seat");
+        tenancy.Should().Contain("CREATE POLICY \"Managers and the seat change it (update) for authenticated\" ON \"tenancy\".\"Seats\"", "who changes a seat stays Tenancy's");
         tenancy.Should().NotContain("SeatPlacements belongs to the aggregate", "a seat's placements and grants keep Tenancy's own policies");
     }
 

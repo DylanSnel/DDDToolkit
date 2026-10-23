@@ -28,7 +28,7 @@ public sealed class RowAccessContributionTests
         var scripts = PostgresRowAccess.Scripts([desk, yard], [YardRules.Owners], [], With(recording));
 
         recording.Asked.Should().Equal([typeof(DeskContext), typeof(YardContext)], "a script asks every contribution about every context it writes, once");
-        scripts.Single(each => each.Context == desk).Script.Should().Contain("CREATE OR REPLACE FUNCTION desk.on_duty() RETURNS boolean");
+        scripts.Single(each => each.Context == desk).Script.Should().Contain("CREATE OR REPLACE FUNCTION \"desk\".on_duty() RETURNS boolean");
         scripts.Single(each => each.Context == yard).Script.Should().Be(
             PostgresRowAccess.Script(yard, [YardRules.Owners]),
             "the yard maps no tickets, so the contribution answers null there, and its script is what the rules alone make");
@@ -46,15 +46,15 @@ public sealed class RowAccessContributionTests
 
         var script = PostgresRowAccess.Script(desk, [], [], With(new DutyRowAccess(), watchers));
 
-        script.Should().Contain("ALTER TABLE desk.\"Tickets\" ENABLE ROW LEVEL SECURITY;", "the duty's policy is on the tickets");
-        script.Should().Contain("ALTER TABLE desk.\"TicketWatcher\" ENABLE ROW LEVEL SECURITY;", "a table of an aggregate's entities, which no rule of the script is about");
-        script.Should().Contain("ALTER TABLE desk.\"CommentReaction\" ENABLE ROW LEVEL SECURITY;", "a table a contribution keeps to itself has it too, with or without a policy");
+        script.Should().Contain("ALTER TABLE \"desk\".\"Tickets\" ENABLE ROW LEVEL SECURITY;", "the duty's policy is on the tickets");
+        script.Should().Contain("ALTER TABLE \"desk\".\"TicketWatcher\" ENABLE ROW LEVEL SECURITY;", "a table of an aggregate's entities, which no rule of the script is about");
+        script.Should().Contain("ALTER TABLE \"desk\".\"CommentReaction\" ENABLE ROW LEVEL SECURITY;", "a table a contribution keeps to itself has it too, with or without a policy");
         script.Should().Contain(
             "-- Watchers see themselves (select) for authenticated asks the policy 'Watchers see themselves' of the row access contribution DDDToolkit.EntityFramework.Tests.Infrastructure.SpotContribution in ");
         script.Should().Contain(
-            "CREATE POLICY \"Watchers see themselves (select) for authenticated\" ON desk.\"TicketWatcher\" FOR SELECT TO authenticated\n" +
-            "    USING (\"User\" = (SELECT ddd.caller_id()));\n" +
-            "COMMENT ON POLICY \"Watchers see themselves (select) for authenticated\" ON desk.\"TicketWatcher\" IS 'DDDToolkit row access rule';",
+            "CREATE POLICY \"Watchers see themselves (select) for authenticated\" ON \"desk\".\"TicketWatcher\" FOR SELECT TO authenticated\n" +
+            "    USING (\"User\" = (SELECT \"ddd\".caller_id()));\n" +
+            "COMMENT ON POLICY \"Watchers see themselves (select) for authenticated\" ON \"desk\".\"TicketWatcher\" IS 'DDDToolkit row access rule';",
             "a contributed policy is named like a rule's, and carries the comment the next script drops it by");
     }
 
@@ -67,17 +67,17 @@ public sealed class RowAccessContributionTests
 
         script.Should().Contain(
             "-- Tickets (select) for authenticated asks the rule 'Public tickets are everyones' and the policy 'On duty reads the open tickets' of the row access contribution " + DutyRowAccess.Source + ": a row one of them allows is allowed.\n" +
-            "CREATE POLICY \"Tickets (select) for authenticated\" ON desk.\"Tickets\" FOR SELECT TO authenticated\n" +
-            "    USING ((\"IsPublic\") OR (\"Id\" = ANY (ARRAY(SELECT desk.duty_tickets()))));",
+            "CREATE POLICY \"Tickets (select) for authenticated\" ON \"desk\".\"Tickets\" FOR SELECT TO authenticated\n" +
+            "    USING ((\"IsPublic\") OR (\"Id\" = ANY (ARRAY(SELECT \"desk\".duty_tickets()))));",
             "the rule and the contribution allow authenticated to read in one permissive policy");
         script.Should().Contain(
-            "CREATE POLICY \"Public tickets are everyones (select) for anon\" ON desk.\"Tickets\" FOR SELECT TO anon\n    USING (\"IsPublic\");",
+            "CREATE POLICY \"Public tickets are everyones (select) for anon\" ON \"desk\".\"Tickets\" FOR SELECT TO anon\n    USING (\"IsPublic\");",
             "anon has the rule alone, whose policy keeps the rule's name");
         script.Should().Contain(
-            "CREATE POLICY \"Open tickets only (select) for authenticated\" ON desk.\"Tickets\" AS RESTRICTIVE FOR SELECT TO authenticated\n" +
+            "CREATE POLICY \"Open tickets only (select) for authenticated\" ON \"desk\".\"Tickets\" AS RESTRICTIVE FOR SELECT TO authenticated\n" +
             "    USING (\"Status\" = 0);",
             "a restrictive policy is a policy of its own, and narrows what the merged one allows");
-        Regex.Matches(script, "^CREATE POLICY .* ON desk\\.\"Tickets\" .*FOR SELECT TO authenticated$", RegexOptions.Multiline).Should().HaveCount(2);
+        Regex.Matches(script, "^CREATE POLICY .* ON \"desk\"\\.\"Tickets\" .*FOR SELECT TO authenticated$", RegexOptions.Multiline).Should().HaveCount(2);
     }
 
     [Fact]
@@ -108,7 +108,7 @@ public sealed class RowAccessContributionTests
 
         script.Should().Contain(
             "-- Members read the open tickets (select) for authenticated asks the policy 'Members read the open tickets' of the row access contribution " + SpotSource + ".\n" +
-            "CREATE POLICY \"Members read the open tickets (select) for authenticated\" ON desk.\"Tickets\" FOR SELECT TO authenticated\n" +
+            "CREATE POLICY \"Members read the open tickets (select) for authenticated\" ON \"desk\".\"Tickets\" FOR SELECT TO authenticated\n" +
             "    USING (\"Status\" = 0);",
             "a default is the contribution's policy, word for word, until the application says otherwise");
         script.Should().NotContain("in place of");
@@ -124,22 +124,22 @@ public sealed class RowAccessContributionTests
         script.Should().Contain(
             "-- Tickets (select) for authenticated asks the rule 'Members read the public tickets' in place of the default 'Members read the open tickets' of the row access contribution " + SpotSource +
             ", held to what that default holds a rule to, beside what it keeps whatever a rule says: a row one of them allows is allowed.\n" +
-            "CREATE POLICY \"Tickets (select) for authenticated\" ON desk.\"Tickets\" FOR SELECT TO authenticated\n" +
-            "    USING ((\"Owner\" = (SELECT ddd.caller_id())) OR ((\"Team\" IS NOT NULL) AND (\"IsPublic\")));",
+            "CREATE POLICY \"Tickets (select) for authenticated\" ON \"desk\".\"Tickets\" FOR SELECT TO authenticated\n" +
+            "    USING ((\"Owner\" = (SELECT \"ddd\".caller_id())) OR ((\"Team\" IS NOT NULL) AND (\"IsPublic\")));",
             "the rule decides within what the default holds it to, and the owner keeps reading his own tickets whatever it says");
         script.Should().NotContain("\"Status\" = 0", "the default itself is gone");
-        Regex.Matches(script, "^CREATE POLICY .* ON desk\\.\"Tickets\" FOR SELECT TO authenticated$", RegexOptions.Multiline).Should().HaveCount(1);
+        Regex.Matches(script, "^CREATE POLICY .* ON \"desk\"\\.\"Tickets\" FOR SELECT TO authenticated$", RegexOptions.Multiline).Should().HaveCount(1);
         script.Should().Contain(
-            "CREATE POLICY \"Keeper changes the tickets (update) for authenticated\" ON desk.\"Tickets\" FOR UPDATE TO authenticated",
+            "CREATE POLICY \"Keeper changes the tickets (update) for authenticated\" ON \"desk\".\"Tickets\" FOR UPDATE TO authenticated",
             "what a role writes stays the contribution's");
 
         // The comments, their reactions and the watchers are the aggregate's entities, which the contribution keeps as
         // well: the rule adds nothing to their tables, which keep the contribution's own policies, and no policy that
         // reads with the ticket.
-        script.Should().Contain("CREATE POLICY \"Comments are read by everyone (select) for authenticated\" ON desk.\"TicketComment\" FOR SELECT TO authenticated\n    USING (TRUE);");
+        script.Should().Contain("CREATE POLICY \"Comments are read by everyone (select) for authenticated\" ON \"desk\".\"TicketComment\" FOR SELECT TO authenticated\n    USING (TRUE);");
         script.Should().NotContain("TicketComment belongs to the aggregate");
-        Regex.Matches(script, "^CREATE POLICY .* ON desk\\.\"(CommentReaction|TicketWatcher)\" ", RegexOptions.Multiline).Should().BeEmpty();
-        Regex.Matches(script, "^CREATE POLICY .* ON desk\\.\"TicketComment\" ", RegexOptions.Multiline).Should().HaveCount(1);
+        Regex.Matches(script, "^CREATE POLICY .* ON \"desk\"\\.\"(CommentReaction|TicketWatcher)\" ", RegexOptions.Multiline).Should().BeEmpty();
+        Regex.Matches(script, "^CREATE POLICY .* ON \"desk\"\\.\"TicketComment\" ", RegexOptions.Multiline).Should().HaveCount(1);
     }
 
     [Fact]
@@ -151,7 +151,7 @@ public sealed class RowAccessContributionTests
 
         script.Should().Contain(
             "-- Tickets (select) for authenticated asks the rule 'Members read the public tickets' in place of the default 'Members read the open tickets' of the row access contribution " + SpotSource + ".\n" +
-            "CREATE POLICY \"Tickets (select) for authenticated\" ON desk.\"Tickets\" FOR SELECT TO authenticated\n" +
+            "CREATE POLICY \"Tickets (select) for authenticated\" ON \"desk\".\"Tickets\" FOR SELECT TO authenticated\n" +
             "    USING (\"IsPublic\");");
     }
 
@@ -166,9 +166,9 @@ public sealed class RowAccessContributionTests
         script.Should().Contain(
             "-- Tickets (select) for authenticated asks the rule 'Public tickets are everyones' (which names no role, so it is for the roles of the default) in place of the default 'Members read the open tickets' of the row access contribution " + SpotSource +
             ", held to what that default holds a rule to, beside what it keeps whatever a rule says: a row one of them allows is allowed.\n" +
-            "CREATE POLICY \"Tickets (select) for authenticated\" ON desk.\"Tickets\" FOR SELECT TO authenticated\n" +
-            "    USING ((\"Owner\" = (SELECT ddd.caller_id())) OR ((\"Team\" IS NOT NULL) AND (\"IsPublic\")));");
-        Regex.Matches(script, "^CREATE POLICY .* ON desk\\.\"Tickets\" .* TO anon$", RegexOptions.Multiline)
+            "CREATE POLICY \"Tickets (select) for authenticated\" ON \"desk\".\"Tickets\" FOR SELECT TO authenticated\n" +
+            "    USING ((\"Owner\" = (SELECT \"ddd\".caller_id())) OR ((\"Team\" IS NOT NULL) AND (\"IsPublic\")));");
+        Regex.Matches(script, "^CREATE POLICY .* ON \"desk\"\\.\"Tickets\" .* TO anon$", RegexOptions.Multiline)
             .Should().BeEmpty("the contribution has no default for anonymous callers, so the table stays closed to them");
     }
 
@@ -279,11 +279,11 @@ public sealed class RowAccessContributionTests
         var scripts = PostgresRowAccess.Scripts([yard, desk], [cratesOnDuty], [], export);
 
         PostgresRowAccess.FunctionNamesOf([yard, desk], [], export).Should().Equal(
-            new Dictionary<string, string> { [DutyRowAccess.OnDuty] = "desk.on_duty", [DutyRowAccess.DutyTickets] = "desk.duty_tickets" },
+            new Dictionary<string, string> { [DutyRowAccess.OnDuty] = "\"desk\".on_duty", [DutyRowAccess.DutyTickets] = "\"desk\".duty_tickets" },
             "a contributed function lives in the default schema of the context the contribution answered for");
         scripts.Select(each => each.Context).Should().Equal([desk, yard], "the yard asks a function the desk's contribution writes");
-        scripts[1].Script.Should().Contain("FOR SELECT TO authenticated\n    USING (desk.on_duty());", "the rule asks it by its logical name, and gets the name it has in the database");
-        scripts[0].Script.Should().Contain("AND desk.on_duty()\n$function$;", "the contribution's own body asks it the same way");
+        scripts[1].Script.Should().Contain("FOR SELECT TO authenticated\n    USING (\"desk\".on_duty());", "the rule asks it by its logical name, and gets the name it has in the database");
+        scripts[0].Script.Should().Contain("AND \"desk\".on_duty()\n$function$;", "the contribution's own body asks it the same way");
     }
 
     private static readonly string TicketsSeen = ResourceAccessAnswer.NameOf(typeof(TicketId), ResourceAccessSet.Seen);
@@ -332,16 +332,16 @@ public sealed class RowAccessContributionTests
         PostgresRowAccess.FunctionNamesOf([yard, desk], [], export).Should().Equal(
             new Dictionary<string, string>
             {
-                ["following/tickets_followed"] = "desk.tickets_followed",
-                ["following/tickets_followed_with"] = "desk.tickets_followed_with",
-                [TicketsSeen] = "desk.tickets_followed",
-                [TicketsHeldOn] = "desk.tickets_followed_with",
+                ["following/tickets_followed"] = "\"desk\".tickets_followed",
+                ["following/tickets_followed_with"] = "\"desk\".tickets_followed_with",
+                [TicketsSeen] = "\"desk\".tickets_followed",
+                [TicketsHeldOn] = "\"desk\".tickets_followed_with",
             },
             "a set is another name for the function that answers it, wherever that function lives");
         scripts.Select(each => each.Context).Should().Equal([desk, yard], "the yard asks a set the desk's contribution answers, so the desk's script runs first");
-        scripts[1].Script.Should().Contain("FOR SELECT TO authenticated\n    USING (\"Id\" = ANY (ARRAY(SELECT desk.tickets_followed())));", "the rule names no function, and gets the one that answers the set");
-        scripts[0].Script.Should().Contain("(\"Id\" = ANY (ARRAY(SELECT desk.tickets_followed_with('tickets.close'))))", "the same in the module of the resource itself");
-        scripts[0].Script.Should().Contain("GRANT EXECUTE ON FUNCTION desk.tickets_followed_with(key text) TO authenticated;")
+        scripts[1].Script.Should().Contain("FOR SELECT TO authenticated\n    USING (\"Id\" = ANY (ARRAY(SELECT \"desk\".tickets_followed())));", "the rule names no function, and gets the one that answers the set");
+        scripts[0].Script.Should().Contain("(\"Id\" = ANY (ARRAY(SELECT \"desk\".tickets_followed_with('tickets.close'))))", "the same in the module of the resource itself");
+        scripts[0].Script.Should().Contain("GRANT EXECUTE ON FUNCTION \"desk\".tickets_followed_with(key text) TO authenticated;")
             .And.NotContain("@DDDToolkit", "the name a rule asks by never reaches the database");
     }
 
@@ -353,7 +353,7 @@ public sealed class RowAccessContributionTests
 
         var script = PostgresRowAccess.Script(desk, [], [], With(Following(), asking));
 
-        script.Should().Contain("SELECT desk.tickets_followed_with('tickets.close');");
+        script.Should().Contain("SELECT \"desk\".tickets_followed_with('tickets.close');");
     }
 
     [Fact]
@@ -386,7 +386,7 @@ public sealed class RowAccessContributionTests
             + "write the contexts together with PostgresRowAccess.Scripts, or hand this script that context's names in RowAccessExport.FunctionNames, from PostgresRowAccess.FunctionNamesOf(contexts, functions, export).",
             "the host listed the contribution already, so what is missing is the context that keeps the resource");
         PostgresRowAccess.Script(yard, [seen], [], told).Should().Contain(
-            "USING (\"Id\" = ANY (ARRAY(SELECT desk.tickets_followed())));", "handed the desk's names, the yard's script asks the desk's function");
+            "USING (\"Id\" = ANY (ARRAY(SELECT \"desk\".tickets_followed())));", "handed the desk's names, the yard's script asks the desk's function");
     }
 
     [Fact]
@@ -419,7 +419,7 @@ public sealed class RowAccessContributionTests
             "The row access contribution DDDToolkit.EntityFramework.Tests.Infrastructure.SpotContribution answers the resources the caller sees, by the id *TicketId with two functions for DeskContext.*");
         twoContributions.Should().Throw<InvalidOperationException>().WithMessage("The row access contributions * and * both answer the resources the caller sees*");
         twoContexts.Should().Throw<InvalidOperationException>().WithMessage(
-            "Two contexts answer the resources the caller sees, by the id *TicketId: DeskContext with desk.tickets_followed and DeskScaleContext with desk_scale.tickets_followed.*",
+            "Two contexts answer the resources the caller sees, by the id *TicketId: DeskContext with \"desk\".tickets_followed and DeskScaleContext with \"desk_scale\".tickets_followed.*",
             "a rule that asks the set would otherwise be written with whichever came last");
     }
 
@@ -492,14 +492,14 @@ public sealed class RowAccessContributionTests
 
         script.Should().Contain(
             "-- Written by the row access contribution " + DutyRowAccess.Source + ".\n" +
-            "CREATE OR REPLACE FUNCTION desk.on_duty() RETURNS boolean\n" +
+            "CREATE OR REPLACE FUNCTION \"desk\".on_duty() RETURNS boolean\n" +
             "    LANGUAGE sql STABLE SET search_path = '' AS $function$\n" +
-            "SELECT coalesce(((SELECT ddd.caller_claims()) ->> 'on_duty')::boolean, false)\n" +
+            "SELECT coalesce(((SELECT \"ddd\".caller_claims()) ->> 'on_duty')::boolean, false)\n" +
             "$function$;\n" +
-            "COMMENT ON FUNCTION desk.on_duty() IS 'DDDToolkit access function of DeskContext';\n",
+            "COMMENT ON FUNCTION \"desk\".on_duty() IS 'DDDToolkit access function of DeskContext';\n",
             "a contributed function runs as its caller unless it says otherwise, and carries the context's function comment, so the next script keeps it");
         script.Should().Contain(
-            "CREATE OR REPLACE FUNCTION desk.duty_tickets() RETURNS SETOF uuid\n" +
+            "CREATE OR REPLACE FUNCTION \"desk\".duty_tickets() RETURNS SETOF uuid\n" +
             "    LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$\n");
         script.Should().Contain("WHERE d.description = 'DDDToolkit access function of DeskContext'\n          AND (n.nspname, p.proname) NOT IN (('desk', 'duty_tickets'), ('desk', 'on_duty'))",
             "the functions the contribution still writes are kept, by the names they have in the database");
@@ -530,20 +530,20 @@ public sealed class RowAccessContributionTests
         var script = PostgresRowAccess.Script(desk, [], [], With(reading));
 
         script.Should().Contain(
-            "CREATE OR REPLACE FUNCTION desk.open_tickets() RETURNS " + Rows + "\n" +
+            "CREATE OR REPLACE FUNCTION \"desk\".open_tickets() RETURNS " + Rows + "\n" +
             "    LANGUAGE sql STABLE AS $function$\n" +
-            OpenTickets.Replace("{fn:reading/staffed}", "desk.staffed") + "\n" +
+            OpenTickets.Replace("{fn:reading/staffed}", "\"desk\".staffed") + "\n" +
             "$function$;\n" +
-            "COMMENT ON FUNCTION desk.open_tickets() IS 'DDDToolkit access function of DeskContext';\n" +
-            "REVOKE ALL ON FUNCTION desk.open_tickets() FROM PUBLIC;\n",
+            "COMMENT ON FUNCTION \"desk\".open_tickets() IS 'DDDToolkit access function of DeskContext';\n" +
+            "REVOKE ALL ON FUNCTION \"desk\".open_tickets() FROM PUBLIC;\n",
             "a function to fold into the queries that call it has no SET clause, which Postgres would not fold, and is otherwise written, commented and kept from every role as any other");
-        script.Should().Contain("CREATE OR REPLACE FUNCTION desk.staffed(team text) RETURNS boolean\n    LANGUAGE sql IMMUTABLE AS $function$\n", "an IMMUTABLE one, whose body starts with WITH, is folded too");
+        script.Should().Contain("CREATE OR REPLACE FUNCTION \"desk\".staffed(team text) RETURNS boolean\n    LANGUAGE sql IMMUTABLE AS $function$\n", "an IMMUTABLE one, whose body starts with WITH, is folded too");
         script.Should().Contain(
-            "CREATE OR REPLACE FUNCTION desk.open_tickets_apart() RETURNS " + Rows + "\n    LANGUAGE sql STABLE SET search_path = '' AS $function$\n",
+            "CREATE OR REPLACE FUNCTION \"desk\".open_tickets_apart() RETURNS " + Rows + "\n    LANGUAGE sql STABLE SET search_path = '' AS $function$\n",
             "the same function without Inlinable keeps its empty search path");
-        script.Should().Contain("GRANT EXECUTE ON FUNCTION desk.open_tickets() TO authenticated;\n", "its grants are its GrantTo, as any contributed function's");
-        script.IndexOf("CREATE OR REPLACE FUNCTION desk.staffed(team text)", StringComparison.Ordinal)
-            .Should().BeLessThan(script.IndexOf("CREATE OR REPLACE FUNCTION desk.open_tickets()", StringComparison.Ordinal), "and it is created after the functions it asks");
+        script.Should().Contain("GRANT EXECUTE ON FUNCTION \"desk\".open_tickets() TO authenticated;\n", "its grants are its GrantTo, as any contributed function's");
+        script.IndexOf("CREATE OR REPLACE FUNCTION \"desk\".staffed(team text)", StringComparison.Ordinal)
+            .Should().BeLessThan(script.IndexOf("CREATE OR REPLACE FUNCTION \"desk\".open_tickets()", StringComparison.Ordinal), "and it is created after the functions it asks");
 
         // It runs as its caller, so what it asks, its callers must be allowed to ask.
         var askingForAnon = () => PostgresRowAccess.Script(desk, [], [], With(new SpotContribution("reading", _ => new(
@@ -584,7 +584,7 @@ public sealed class RowAccessContributionTests
         foreach (var body in new[] { "(" + Select + ")", "/* every ticket; all of them */\n  select t.\"Id\" from desk.\"Tickets\" t where t.\"Team\" <> ';' ;\n", "WITH t AS (" + Select + ") SELECT * FROM t" })
         {
             PostgresRowAccess.Script(desk, [], [], With(new SpotContribution("x", _ => new([new ContributedFunction("ids", "", "SETOF uuid", body, Inlinable: true)], [], []))))
-                .Should().Contain("CREATE OR REPLACE FUNCTION desk.ids() RETURNS SETOF uuid\n    LANGUAGE sql STABLE AS $function$\n", body);
+                .Should().Contain("CREATE OR REPLACE FUNCTION \"desk\".ids() RETURNS SETOF uuid\n    LANGUAGE sql STABLE AS $function$\n", body);
         }
 
         // Without Inlinable none of this is asked: a function apart may run as its owner, change rows, or be more than a SELECT.
@@ -605,10 +605,10 @@ public sealed class RowAccessContributionTests
 
         var script = PostgresRowAccess.Script(desk, [], [DeskRules.IsWatcher], With(new DutyRowAccess()));
 
-        script.IndexOf("CREATE OR REPLACE FUNCTION desk.on_duty()", StringComparison.Ordinal)
-            .Should().BeLessThan(script.IndexOf("CREATE OR REPLACE FUNCTION desk.duty_tickets()", StringComparison.Ordinal), "duty_tickets asks on_duty, so on_duty comes first");
+        script.IndexOf("CREATE OR REPLACE FUNCTION \"desk\".on_duty()", StringComparison.Ordinal)
+            .Should().BeLessThan(script.IndexOf("CREATE OR REPLACE FUNCTION \"desk\".duty_tickets()", StringComparison.Ordinal), "duty_tickets asks on_duty, so on_duty comes first");
         script.IndexOf("CREATE OR REPLACE FUNCTION desk.is_watcher(uuid)", StringComparison.Ordinal)
-            .Should().BeLessThan(script.IndexOf("CREATE OR REPLACE FUNCTION desk.on_duty()", StringComparison.Ordinal), "the rest keep the order of their names");
+            .Should().BeLessThan(script.IndexOf("CREATE OR REPLACE FUNCTION \"desk\".on_duty()", StringComparison.Ordinal), "the rest keep the order of their names");
     }
 
     [Fact]
@@ -626,7 +626,7 @@ public sealed class RowAccessContributionTests
         var script = () => PostgresRowAccess.Script(desk, [], [], With(circle));
 
         script.Should().Throw<InvalidOperationException>().WithMessage(
-            "The functions of DeskContext ask each other in a circle, desk.first asks desk.second asks desk.first: Postgres checks a function's body when it creates it*");
+            "The functions of DeskContext ask each other in a circle, \"desk\".first asks \"desk\".second asks \"desk\".first: Postgres checks a function's body when it creates it*");
     }
 
     [Fact]
@@ -653,7 +653,7 @@ public sealed class RowAccessContributionTests
             "every role whose policy asks it may execute it, and nobody else");
         script.Should().Contain("REVOKE ALL ON FUNCTION desk.tickets_for_team(text, boolean) FROM PUBLIC;\n")
             .And.NotContain("GRANT EXECUTE ON FUNCTION desk.tickets_for_team", "no policy asks it, so no caller may execute it");
-        script.Should().Contain("GRANT EXECUTE ON FUNCTION desk.on_duty() TO authenticated;\n", "a contributed function is granted to its GrantTo, exactly");
+        script.Should().Contain("GRANT EXECUTE ON FUNCTION \"desk\".on_duty() TO authenticated;\n", "a contributed function is granted to its GrantTo, exactly");
         script.IndexOf("REVOKE ALL ON FUNCTION %s FROM %s", StringComparison.Ordinal).Should().BeLessThan(
             script.IndexOf("GRANT EXECUTE ON FUNCTION desk.is_watcher(uuid)", StringComparison.Ordinal), "the grants come after everything else is taken back");
 
@@ -662,7 +662,7 @@ public sealed class RowAccessContributionTests
         var scopedCrates = RowAccessRule.For<Crate>("Scoped work reads crates of watched tickets", RowOperations.Read, "({col:Id} = ANY (ARRAY(SELECT {fn:desk/tickets_i_watch}())))", RowAccessRoles.SystemIn);
         var scripts = PostgresRowAccess.Scripts([yard, scale], [scopedCrates, DeskRules.WatchersBySet], [DeskRules.WatchedSet], new RowAccessExport());
         scripts.Single(each => each.Context == scale).Script.Should().Contain(
-            "GRANT EXECUTE ON FUNCTION desk_scale.tickets_i_watch() TO anon, authenticated, ddd_system_in;",
+            "GRANT EXECUTE ON FUNCTION \"desk_scale\".tickets_i_watch() TO anon, authenticated, ddd_system_in;",
             "written with the other contexts, a function is granted to the roles of their policies that ask it too");
     }
 
@@ -685,7 +685,7 @@ public sealed class RowAccessContributionTests
         policy.Should().Throw<InvalidOperationException>().WithMessage(
             "The policy 'Anyone on duty' of the row access contribution DDDToolkit.EntityFramework.Tests.Infrastructure.SpotContribution asks duty/on_duty for anon, which that function is not granted to.*");
         PostgresRowAccess.Script(desk, [RowAccessRule.For<Ticket>("Signed in on duty", RowOperations.Read, "{fn:duty/on_duty}()", RowAccessRoles.User)], [], With(new DutyRowAccess()))
-            .Should().Contain("FOR SELECT TO authenticated\n    USING ((desk.on_duty()) OR (", "for a role it is granted to, a rule asks it");
+            .Should().Contain("FOR SELECT TO authenticated\n    USING ((\"desk\".on_duty()) OR (", "for a role it is granted to, a rule asks it");
     }
 
     [Fact]
@@ -701,7 +701,7 @@ public sealed class RowAccessContributionTests
         var scripts = () => PostgresRowAccess.Scripts([desk, yard], [ticketsOfCrates], [], With(new DutyRowAccess(), crates));
 
         scripts.Should().Throw<InvalidOperationException>().WithMessage(
-            "The contexts ask each other's functions in a circle: DeskContext asks yard.crate_ids, which YardContext defines; YardContext asks desk.on_duty, which DeskContext defines. *Move one of the functions into the module that asks it.");
+            "The contexts ask each other's functions in a circle: DeskContext asks \"yard\".crate_ids, which YardContext defines; YardContext asks \"desk\".on_duty, which DeskContext defines. *Move one of the functions into the module that asks it.");
     }
 
     [Fact]
@@ -739,19 +739,19 @@ public sealed class RowAccessContributionTests
         var names = () => PostgresRowAccess.FunctionNamesOf([memos, bookmarks], [memoMembers, bookmarkMembers]);
 
         scripts.Should().Throw<InvalidOperationException>().WithMessage(
-            "The functions bookmarks/is_member (about DDDToolkit.EntityFramework.Tests.Infrastructure.Bookmark, written by BookmarksContext) and memos/is_member (about DDDToolkit.EntityFramework.Tests.Infrastructure.Memo, written by MemosContext) would both be public.is_member. A function has one definition: give one of them another name, or give its context a schema of its own.",
-            "neither context names a schema, so both functions would be public.is_member, and the file written later would replace the other's");
-        names.Should().Throw<InvalidOperationException>().WithMessage("*would both be public.is_member*");
+            "The functions bookmarks/is_member (about DDDToolkit.EntityFramework.Tests.Infrastructure.Bookmark, written by BookmarksContext) and memos/is_member (about DDDToolkit.EntityFramework.Tests.Infrastructure.Memo, written by MemosContext) would both be \"public\".is_member. A function has one definition: give one of them another name, or give its context a schema of its own.",
+            "neither context names a schema, so both functions would be \"public\".is_member, and the file written later would replace the other's");
+        names.Should().Throw<InvalidOperationException>().WithMessage("*would both be \"public\".is_member*");
 
         var contributed = new SpotContribution("bookmarks", context => context is BookmarksContext ? new([new ContributedFunction("is_member", "", "boolean", "SELECT true")], [], []) : null);
         var withContribution = () => PostgresRowAccess.Scripts([memos, bookmarks], [], [memoMembers], With(contributed));
         withContribution.Should().Throw<InvalidOperationException>().WithMessage(
-            "The functions bookmarks/is_member (from the row access contribution DDDToolkit.EntityFramework.Tests.Infrastructure.SpotContribution, written by BookmarksContext) and memos/is_member (*) would both be public.is_member.*",
+            "The functions bookmarks/is_member (from the row access contribution DDDToolkit.EntityFramework.Tests.Infrastructure.SpotContribution, written by BookmarksContext) and memos/is_member (*) would both be \"public\".is_member.*",
             "a contributed function and an access function are no different");
 
         var single = () => PostgresRowAccess.Script(memos, [], [memoMembers], new RowAccessExport { FunctionNames = new Dictionary<string, string> { ["bookmarks/is_member"] = "public.is_member" } });
         single.Should().Throw<InvalidOperationException>().WithMessage(
-            "The functions bookmarks/is_member (named in RowAccessExport.FunctionNames) and memos/is_member (*) would both be public.is_member.*",
+            "The functions bookmarks/is_member (named in RowAccessExport.FunctionNames) and memos/is_member (*) would both be \"public\".is_member.*",
             "a script of one context knows where the other's functions are from the export");
     }
 
@@ -791,7 +791,7 @@ public sealed class RowAccessContributionTests
 
         var sql = PostgresRowAccess.CreateStatements(parcels, [], [watched], new RowAccessExport());
 
-        sql.Should().Contain("    SELECT root.\"Id\" FROM parcels.\"Parcels\" root\n", "the policy compares the answer with the parcels' ids")
+        sql.Should().Contain("    SELECT root.\"Id\" FROM \"parcels\".\"Parcels\" root\n", "the policy compares the answer with the parcels' ids")
             .And.Contain("e1.\"ParcelNumber\" = root.\"Number\"")
             .And.NotContain("SELECT DISTINCT e1.", "the watchers hold the parcels' numbers, which only the parcels' table turns into their ids");
     }
@@ -807,7 +807,7 @@ public sealed class RowAccessContributionTests
             Contributions = [new DutyRowAccess()],
         });
 
-        script.Should().Contain("SELECT coalesce(((SELECT who.claims()) ->> 'on_duty')::boolean, false)").And.NotContain("ddd.caller_claims()");
+        script.Should().Contain("SELECT coalesce(((SELECT who.claims()) ->> 'on_duty')::boolean, false)").And.NotContain("\"ddd\".caller_claims()");
     }
 
     [Fact]
@@ -823,7 +823,7 @@ public sealed class RowAccessContributionTests
             "what it returns is written into the function as it is, so an option there would change how the function runs");
         PostgresRowAccess.Script(desk, [], [], With(new SpotContribution("x", _ => new(
                 [new ContributedFunction("due", "", "timestamp with time zone", "SELECT now()"), new ContributedFunction("share", "", "SETOF double precision", "SELECT 0.5")], [], []))))
-            .Should().Contain("CREATE OR REPLACE FUNCTION desk.due() RETURNS timestamp with time zone\n").And.Contain("CREATE OR REPLACE FUNCTION desk.share() RETURNS SETOF double precision\n",
+            .Should().Contain("CREATE OR REPLACE FUNCTION \"desk\".due() RETURNS timestamp with time zone\n").And.Contain("CREATE OR REPLACE FUNCTION \"desk\".share() RETURNS SETOF double precision\n",
                 "a type Postgres spells in more than one word is still a type");
 
         var insertWithUsing = () => PostgresRowAccess.Script(desk, [], [], With(new SpotContribution("x", context => new([], [new ContributedPolicy(SpotContribution.Of<Ticket>(context), "Insert", "INSERT", RowAccessRoles.User, "TRUE", null)], []))));
@@ -848,10 +848,10 @@ public sealed class RowAccessContributionTests
             []))));
 
         script.Should().Contain(
-            "CREATE OR REPLACE FUNCTION desk.due_tickets(team text) RETURNS " + Rows + "\n" +
+            "CREATE OR REPLACE FUNCTION \"desk\".due_tickets(team text) RETURNS " + Rows + "\n" +
             "    LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$\n",
             "the columns are written as they are given: a name, in quotes or plain, and a type each");
-        script.Should().Contain("GRANT EXECUTE ON FUNCTION desk.due_tickets(team text) TO authenticated;");
+        script.Should().Contain("GRANT EXECUTE ON FUNCTION \"desk\".due_tickets(team text) TO authenticated;");
 
         // What stands for the columns is written into the function as it is, so it is columns and nothing else.
         foreach (var refused in new[]

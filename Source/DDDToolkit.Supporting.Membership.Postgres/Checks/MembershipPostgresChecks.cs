@@ -275,7 +275,7 @@ public static class MembershipPostgresChecks
         return ListAsync(
             connection,
             """
-            SELECT pg_catalog.quote_ident($1) || '.' || listed.name || CASE
+            SELECT '"' || pg_catalog.replace($1, '"', '""') || '".' || listed.name || CASE
                        WHEN found.oid IS NULL THEN ' (missing)'
                        WHEN NOT found.prosecdef THEN ' (it does not run as its owner)'
                        WHEN NOT found.pinned THEN ' (it has no empty search path)'
@@ -346,7 +346,7 @@ public static class MembershipPostgresChecks
             findings.AddRange(await ListAsync(
                 connection,
                 """
-                SELECT pg_catalog.quote_ident($1) || '.' || pg_catalog.quote_ident($2) || ' (its owner column is not held to the key that changes the owner)'
+                SELECT '"' || pg_catalog.replace($1, '"', '""') || '".' || pg_catalog.quote_ident($2) || ' (its owner column is not held to the key that changes the owner)'
                 WHERE NOT EXISTS (SELECT 1 FROM pg_catalog.pg_trigger t
                                   JOIN pg_catalog.pg_class c ON c.oid = t.tgrelid
                                   JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
@@ -383,7 +383,7 @@ public static class MembershipPostgresChecks
         return ListAsync(
             connection,
             """
-            SELECT pg_catalog.quote_ident(listed.schema) || '.' || pg_catalog.quote_ident(listed.name)
+            SELECT '"' || pg_catalog.replace(listed.schema, '"', '""') || '".' || pg_catalog.quote_ident(listed.name)
                    || ' (' || pg_catalog.string_agg(DISTINCT pg_catalog.quote_ident(named.role), ', ' ORDER BY pg_catalog.quote_ident(named.role))
                    || ' ' || $6 || ')'
             FROM ROWS FROM (pg_catalog.unnest($1::pg_catalog.text[]), pg_catalog.unnest($2::pg_catalog.text[])) AS listed(schema, name)
@@ -422,7 +422,7 @@ public static class MembershipPostgresChecks
         var missing = await ListAsync(
             connection,
             """
-            SELECT pg_catalog.quote_ident($1) || '.' || pg_catalog.quote_ident($2)
+            SELECT '"' || pg_catalog.replace($1, '"', '""') || '".' || pg_catalog.quote_ident($2)
             WHERE NOT EXISTS (SELECT 1 FROM pg_catalog.pg_trigger t
                               JOIN pg_catalog.pg_class c ON c.oid = t.tgrelid
                               JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
@@ -467,7 +467,7 @@ public static class MembershipPostgresChecks
             [tableSchema, table, roles],
             cancellationToken).ConfigureAwait(false);
 
-        return able.Count == 0 ? null : new UnguardedRoleTable(tableSchema + "." + table, able[0], roleClass.ClrType.Name);
+        return able.Count == 0 ? null : new UnguardedRoleTable(RowAccessModel.Table(roleClass), able[0], roleClass.ClrType.Name);
     }
 
     /// <summary>The first column of every row <paramref name="sql"/> answers, a text, with <paramref name="values"/> bound in order.</summary>

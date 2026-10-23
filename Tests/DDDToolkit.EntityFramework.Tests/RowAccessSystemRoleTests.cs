@@ -100,9 +100,9 @@ public sealed class RowAccessSystemRoleTests(ExplicitCallersPostgres postgres)
 
         var script = Script(new RowAccessExport { Roles = Mapped with { System = "ddd_system" } }, rules);
 
-        script.Should().Contain("CREATE POLICY \"Bookkeeping counts the hives (select) for ddd_system\" ON apiary.\"Hives\" FOR SELECT TO ddd_system\n");
+        script.Should().Contain("CREATE POLICY \"Bookkeeping counts the hives (select) for ddd_system\" ON \"apiary\".\"Hives\" FOR SELECT TO ddd_system\n");
         script.Should().Contain("        CREATE ROLE ddd_system NOLOGIN NOINHERIT;\n", "the script makes the role a policy names, as it makes the scoped system role");
-        script.Should().Contain("        GRANT USAGE ON SCHEMA ddd TO ddd_system;\n", "and lets it ask what the policies ask");
+        script.Should().Contain("        GRANT USAGE ON SCHEMA \"ddd\" TO ddd_system;\n", "and lets it ask what the policies ask");
     }
 
     [Fact]
@@ -289,7 +289,7 @@ public sealed class RowAccessSystemRoleTests(ExplicitCallersPostgres postgres)
 
             (await check.Should().ThrowAsync<InvalidOperationException>()).Which.Message.Should().Be(
                 "The role 'postgres' that 'ApiaryContext' logs in as is meant to hold nothing, and it does:\n" +
-                "- it owns the schemas apiary, ddd and what the migrations made there, as the role that runs them does. " +
+                "- it owns the schemas \"apiary\", \"ddd\" and what the migrations made there, as the role that runs them does. " +
                 "Fix: log in as a role of its own, one that owns and holds nothing and may switch to the roles callers run as, and keep postgres for running the migrations.\n" +
                 LoginCheckCloses);
         }
@@ -319,9 +319,9 @@ public sealed class RowAccessSystemRoleTests(ExplicitCallersPostgres postgres)
             (await check.Should().ThrowAsync<InvalidOperationException>()).Which.Message.Should().Be(
                 $"The role '{login}' that 'ApiaryContext' logs in as is meant to hold nothing, and it does:\n" +
                 $"- it has the privileges of authenticated without switching to it. Fix: ALTER ROLE {login} NOINHERIT; GRANT authenticated TO {login} WITH INHERIT FALSE;\n" +
-                $"- it owns the table apiary.\"HiveBox\". Fix: ALTER TABLE apiary.\"HiveBox\" OWNER TO <the role that runs the migrations>;\n" +
-                $"- it has SELECT on the table ddd.\"InboxMessages\" through PUBLIC. Fix: REVOKE ALL ON TABLE ddd.\"InboxMessages\" FROM PUBLIC;\n" +
-                $"- it holds DELETE, SELECT, UPDATE of a column on the table apiary.\"Hives\". Fix: REVOKE ALL ON TABLE apiary.\"Hives\" FROM {login};\n" +
+                $"- it owns the table \"apiary\".\"HiveBox\". Fix: ALTER TABLE \"apiary\".\"HiveBox\" OWNER TO <the role that runs the migrations>;\n" +
+                $"- it has SELECT on the table \"ddd\".\"InboxMessages\" through PUBLIC. Fix: REVOKE ALL ON TABLE \"ddd\".\"InboxMessages\" FROM PUBLIC;\n" +
+                $"- it holds DELETE, SELECT, UPDATE of a column on the table \"apiary\".\"Hives\". Fix: REVOKE ALL ON TABLE \"apiary\".\"Hives\" FROM {login};\n" +
                 LoginCheckCloses);
         }
 
@@ -467,8 +467,8 @@ public sealed class RowAccessSystemRoleTests(ExplicitCallersPostgres postgres)
             // Whoever may create in a schema makes a table or a function there and owns it, outside every policy.
             (await check.Should().ThrowAsync<InvalidOperationException>()).Which.Message.Should().Be(
                 $"The role '{login}' that 'ApiaryContext' logs in as is meant to hold nothing, and it does:\n" +
-                "- it has CREATE on the schema ddd through PUBLIC. Fix: REVOKE CREATE ON SCHEMA ddd FROM PUBLIC;\n" +
-                $"- it holds CREATE on the schema apiary. Fix: REVOKE CREATE ON SCHEMA apiary FROM {login};\n" +
+                "- it has CREATE on the schema \"ddd\" through PUBLIC. Fix: REVOKE CREATE ON SCHEMA \"ddd\" FROM PUBLIC;\n" +
+                $"- it holds CREATE on the schema \"apiary\". Fix: REVOKE CREATE ON SCHEMA \"apiary\" FROM {login};\n" +
                 LoginCheckCloses);
 
             await database.RunAsOwnerAsync($"REVOKE CREATE ON SCHEMA apiary FROM {login}; REVOKE CREATE ON SCHEMA ddd FROM PUBLIC;", Cancellation);
@@ -645,7 +645,7 @@ public sealed class RowAccessSystemRoleTests(ExplicitCallersPostgres postgres)
             (await check.Should().ThrowAsync<InvalidOperationException>()).Which.Message.Should().Be(
                 $"The role '{login}' that 'ApiaryContext' logs in as is meant to switch to every role its callers run as, and it cannot:\n" +
                 $"- {auditors}, the role of the token role 'auditor', does not exist. Fix: run the migrations that make it, or CREATE ROLE {auditors} NOLOGIN NOINHERIT; GRANT {auditors} TO {login}; {MappedOnSupabase($"token:auditor={auditors}")}\n" +
-                $"- it may not call ddd.use_caller(text, text, text[], text[]), which sets the caller of each transaction. Fix: GRANT USAGE ON SCHEMA ddd TO {login}; GRANT EXECUTE ON PROCEDURE ddd.use_caller(text, text, text[], text[]) TO {login};\n" +
+                $"- it may not call \"ddd\".use_caller(text, text, text[], text[]), which sets the caller of each transaction. Fix: GRANT USAGE ON SCHEMA \"ddd\" TO {login}; GRANT EXECUTE ON PROCEDURE \"ddd\".use_caller(text, text, text[], text[]) TO {login};\n" +
                 SwitchCheckCloses);
 
             await database.RunAsOwnerAsync(

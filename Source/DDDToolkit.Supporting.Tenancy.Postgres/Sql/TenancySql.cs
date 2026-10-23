@@ -1413,7 +1413,7 @@ internal static class TenancySql
         // invitation that was there already, which would give a token of their own making to somebody's offer.
         string WrittenNow(string and) =>
             $"EXISTS (SELECT 1 FROM {Q(invitations)} i WHERE i.{C(invitations, "Id")} = {TenancyTables.Own(digests, "InvitationId")} " +
-            $"AND i.{C(invitations, "TenantId")} = {TenancyTables.Own(digests, "TenantId")} AND ddd.written_in_this_transaction(i.xmin){and})";
+            $"AND i.{C(invitations, "TenantId")} = {TenancyTables.Own(digests, "TenantId")} AND \"ddd\".written_in_this_transaction(i.xmin){and})";
 
         var digestTenant = C(digests, "TenantId");
         policies.Add(new ContributedPolicy(
@@ -1527,7 +1527,7 @@ internal static class TenancySql
         var bySeat = $"{C(log, nameof(EventLogEntry.ActedByKind))} = {RowAccessModel.Literal(TenancyActorKinds.Seat)}";
         var stoppedInThisSave =
             $"EXISTS (SELECT 1 FROM {Q(seats)} s WHERE s.{C(seats, "Identity")} = {Uid} AND s.{C(seats, "TenantId")} = {TenancyTables.Own(log, TenancyEventLogTable.TenantId)} " +
-            $"AND s.{C(seats, "Id")}::pg_catalog.text = {actor} AND ddd.written_in_this_transaction(s.xmin))";
+            $"AND s.{C(seats, "Id")}::pg_catalog.text = {actor} AND \"ddd\".written_in_this_transaction(s.xmin))";
         var byTheCaller = $"(CASE WHEN {actor} = (SELECT {Fn(CallerSeat)}())::pg_catalog.text THEN true ELSE {stoppedInThisSave} END)";
 
         // The kinds system work is recorded as, named one by one: a kind nobody thought of yet is refused, not let in.

@@ -193,7 +193,7 @@ public sealed class BesideAnOrganizationOnPostgresTests(FilingPostgres postgres)
         var bodies = await depot.ListAsync<string>(
             $"SELECT p.proname || ': ' || p.prosrc FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = '{DepotContext.Schema}' AND p.proname LIKE 'crates_%' ORDER BY 1");
         bodies.Single(body => body.StartsWith("crates_as_member_with:", StringComparison.Ordinal)).Should().Contain("WHERE $1 IS NOT NULL AND m.\"MemberId\" = ");
-        bodies.Single(body => body.StartsWith("crates_where_i_hold:", StringComparison.Ordinal)).Should().Contain("WHERE $1 IS NOT NULL AND r.\"BayId\" IN (SELECT reached.place FROM depot.bays_where_i_hold($1) AS reached(place))");
+        bodies.Single(body => body.StartsWith("crates_where_i_hold:", StringComparison.Ordinal)).Should().Contain("WHERE $1 IS NOT NULL AND r.\"BayId\" IN (SELECT reached.place FROM \"depot\".bays_where_i_hold($1) AS reached(place))");
     }
 
     [Fact]
@@ -296,22 +296,22 @@ public sealed class BesideAnOrganizationOnPostgresTests(FilingPostgres postgres)
         string Body(string name) => bodies.Single(body => body.StartsWith(name + ":", StringComparison.Ordinal));
 
         // Who the caller is as a member: the depot's answer, for a pallet and for a crate.
-        Body("pallets_as_member").Should().Contain("m.\"MemberId\" = (SELECT depot.caller_porter())");
-        Body("crates_as_member").Should().Contain("m.\"MemberId\" = (SELECT depot.caller_porter())");
+        Body("pallets_as_member").Should().Contain("m.\"MemberId\" = (SELECT \"depot\".caller_porter())");
+        Body("crates_as_member").Should().Contain("m.\"MemberId\" = (SELECT \"depot\".caller_porter())");
 
         // Which roles give a key: the rules' own list for a pallet, and the depot's answer for a crate, behind
         // what the rules let a member's role give.
         Body("pallets_as_member_with").Should().Contain("('loader', 'pallets.load')").And.NotContain("roles_with_key");
         Body("crates_as_member_with").Should()
             .Contain("AND $1 NOT IN ('crates.move', 'depot.manage')")
-            .And.Contain("h.\"RoleId\" IN (SELECT giving.role FROM depot.roles_with_key($1) AS giving(role))")
+            .And.Contain("h.\"RoleId\" IN (SELECT giving.role FROM \"depot\".roles_with_key($1) AS giving(role))")
             .And.NotContain("VALUES");
 
         // Reach from above: where the crate sits, against where the caller holds the key. A pallet sits nowhere.
-        Body("crates_i_see").Should().Contain("r.\"BayId\" IN (SELECT reached.place FROM depot.bays_where_i_hold('crates.see') AS reached(place))");
+        Body("crates_i_see").Should().Contain("r.\"BayId\" IN (SELECT reached.place FROM \"depot\".bays_where_i_hold('crates.see') AS reached(place))");
         Body("crates_where_i_hold").Should()
-            .Contain("r.\"BayId\" IN (SELECT reached.place FROM depot.bays_where_i_hold($1) AS reached(place))")
-            .And.Contain("$1 IN ('crates.scrap') AND r.\"OwnerId\" = (SELECT depot.caller_porter())");
+            .Contain("r.\"BayId\" IN (SELECT reached.place FROM \"depot\".bays_where_i_hold($1) AS reached(place))")
+            .And.Contain("$1 IN ('crates.scrap') AND r.\"OwnerId\" = (SELECT \"depot\".caller_porter())");
         Body("pallets_i_see").Should().NotContain("bays_where_i_hold");
         Body("pallets_where_i_hold").Should().NotContain("bays_where_i_hold");
 
@@ -358,10 +358,10 @@ public sealed class BesideAnOrganizationOnPostgresTests(FilingPostgres postgres)
 
         // With the depot's own listed, the file is written, each function after the ones it asks.
         var script = PostgresDepot.AccessScript();
-        script.IndexOf("FUNCTION depot.caller_porter()", StringComparison.Ordinal)
-            .Should().BePositive().And.BeLessThan(script.IndexOf("FUNCTION depot.bays_where_i_hold(text)", StringComparison.Ordinal));
-        script.IndexOf("FUNCTION depot.bays_where_i_hold(text)", StringComparison.Ordinal)
-            .Should().BeLessThan(script.IndexOf("FUNCTION depot.crates_i_see()", StringComparison.Ordinal));
+        script.IndexOf("FUNCTION \"depot\".caller_porter()", StringComparison.Ordinal)
+            .Should().BePositive().And.BeLessThan(script.IndexOf("FUNCTION \"depot\".bays_where_i_hold(text)", StringComparison.Ordinal));
+        script.IndexOf("FUNCTION \"depot\".bays_where_i_hold(text)", StringComparison.Ordinal)
+            .Should().BeLessThan(script.IndexOf("FUNCTION \"depot\".crates_i_see()", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -397,7 +397,7 @@ public sealed class BesideAnOrganizationOnPostgresTests(FilingPostgres postgres)
                 .Should().ThrowAsync<InvalidOperationException>(what);
             refused.Which.Message.Should()
                 .StartWith("The functions that answer the membership of Crate in the database are not as its rules, 'crates', say them: ")
-                .And.Contain("depot.crates_as_member (it was written from other rules), depot.crates_as_member_with (it was written from other rules)")
+                .And.Contain("\"depot\".crates_as_member (it was written from other rules), \"depot\".crates_as_member_with (it was written from other rules)")
                 .And.NotContain("pallets_");
         }
 

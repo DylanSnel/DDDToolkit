@@ -659,7 +659,7 @@ public static partial class PostgresRowAccess
         var statements = new StringBuilder();
         foreach (var table in tables)
         {
-            var qualified = sql.DelimitIdentifier(table.Name, table.Schema ?? DefaultSchema);
+            var qualified = QualifiedTable(table, sql);
             if (secured.Add(table))
             {
                 statements.Append('\n').Append(EnableStatement(qualified, writing.Force));
@@ -995,7 +995,7 @@ public static partial class PostgresRowAccess
     private static List<Definition> InDependencyOrder(DbContext context, IReadOnlyList<Definition> definitions)
     {
         var inScript = definitions.ToDictionary(definition => definition.Resolved, RowAccessNames.Functions);
-        var remaining = definitions.OrderBy(definition => definition.Resolved, StringComparer.Ordinal).ToList();
+        var remaining = definitions.OrderBy(definition => RowAccessNames.OrderOf(definition.Resolved), StringComparer.Ordinal).ToList();
         var written = new HashSet<string>(RowAccessNames.Functions);
         var ordered = new List<Definition>(definitions.Count);
 

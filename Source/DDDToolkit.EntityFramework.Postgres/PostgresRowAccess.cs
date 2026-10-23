@@ -60,7 +60,7 @@ public static partial class PostgresRowAccess
     private const string RootAlias = "r";
 
     /// <summary>
-    /// <c>ddd.written_in_this_transaction(xmin)</c>: whether the visible version of a row was written,
+    /// <c>"ddd".written_in_this_transaction(xmin)</c>: whether the visible version of a row was written,
     /// inserted or updated, by the transaction that is running, its savepoints included.
     /// </summary>
     /// <remarks>
@@ -98,13 +98,13 @@ public static partial class PostgresRowAccess
 
     /// <summary>What <see cref="WrittenInThisTransactionBody"/> is the body of, up to the body.</summary>
     private const string WrittenInThisTransactionHeader =
-        "CREATE OR REPLACE FUNCTION ddd.written_in_this_transaction(row_xmin xid) RETURNS boolean LANGUAGE sql STABLE SET search_path = '' AS ";
+        "CREATE OR REPLACE FUNCTION \"ddd\".written_in_this_transaction(row_xmin xid) RETURNS boolean LANGUAGE sql STABLE SET search_path = '' AS ";
 
     /// <summary>The signature <see cref="WrittenInThisTransactionBody"/> is found and granted by.</summary>
-    private const string WrittenInThisTransactionSignature = "ddd.written_in_this_transaction(xid)";
+    private const string WrittenInThisTransactionSignature = "\"ddd\".written_in_this_transaction(xid)";
 
     /// <summary>
-    /// <c>ddd.use_caller(role, claims, names, values)</c>: sets a caller's role, claims and settings for the
+    /// <c>"ddd".use_caller(role, claims, names, values)</c>: sets a caller's role, claims and settings for the
     /// running transaction alone, which is how they travel where nothing may live on a session
     /// (<see cref="RowLevelSecurityScope.Transaction"/>). The interceptor calls it in front of a command that runs
     /// outside a transaction.
@@ -136,10 +136,10 @@ public static partial class PostgresRowAccess
 
     /// <summary>What <see cref="UseCallerBody"/> is the body of, up to the body.</summary>
     private const string UseCallerHeader =
-        "CREATE OR REPLACE PROCEDURE ddd.use_caller(role_name text, claims text, setting_names text[], setting_values text[]) LANGUAGE plpgsql AS ";
+        "CREATE OR REPLACE PROCEDURE \"ddd\".use_caller(role_name text, claims text, setting_names text[], setting_values text[]) LANGUAGE plpgsql AS ";
 
     /// <summary>The signature <see cref="UseCallerBody"/> is found, revoked and granted by.</summary>
-    internal const string UseCallerSignature = "ddd.use_caller(text, text, text[], text[])";
+    internal const string UseCallerSignature = "\"ddd\".use_caller(text, text, text[], text[])";
 
     /// <summary>The commands an entity's table gets a policy for, in the order a script writes them.</summary>
     private static readonly string[] EntityCommands = ["SELECT", "INSERT", "UPDATE", "DELETE"];
@@ -254,10 +254,10 @@ public static partial class PostgresRowAccess
     /// <summary>
     /// What row level security needs on a Postgres that is not Supabase's, where every project has it
     /// already: the roles a caller's queries run as, the roles of the mapped token roles among them, which the
-    /// application's login role may switch to, the <c>ddd.caller_id()</c>, <c>ddd.caller_role()</c> and
-    /// <c>ddd.caller_claims()</c> functions policies ask about the caller,
-    /// <c>ddd.written_in_this_transaction(xmin)</c>, which the policies of an aggregate's entities ask about its
-    /// root, and the procedure <c>ddd.use_caller</c>, which sets a caller for one transaction and which the
+    /// application's login role may switch to, the <c>"ddd".caller_id()</c>, <c>"ddd".caller_role()</c> and
+    /// <c>"ddd".caller_claims()</c> functions policies ask about the caller,
+    /// <c>"ddd".written_in_this_transaction(xmin)</c>, which the policies of an aggregate's entities ask about its
+    /// root, and the procedure <c>"ddd".use_caller</c>, which sets a caller for one transaction and which the
     /// login role alone may call. It can run again, so it can go in the first migration and stay there.
     /// </summary>
     /// <param name="options">The roles; PostgREST's, <c>anon</c> and <c>authenticated</c>, and <c>ddd_system_in</c>, when left out.</param>
@@ -295,15 +295,15 @@ public static partial class PostgresRowAccess
     /// The role that runs this owns the <c>ddd</c> schema, its functions and its procedure. A
     /// <see cref="Script(DbContext, IEnumerable{RowAccessRule}, IEnumerable{RowAccessFunction}?, RowAccessExport)">script</see>
     /// run later by another role, the application's, leaves them alone while they are as it needs them. When a
-    /// new version of the toolkit changes <c>ddd.written_in_this_transaction</c> or <c>ddd.use_caller</c>, such a
+    /// new version of the toolkit changes <c>"ddd".written_in_this_transaction</c> or <c>"ddd".use_caller</c>, such a
     /// script cannot replace what it does not own: run this again first, as the role that ran it before.
     /// </para>
     /// <para>
-    /// <c>ddd.use_caller</c> is taken from <c>PUBLIC</c> and given to <paramref name="loginRole"/>, or to the role
+    /// <c>"ddd".use_caller</c> is taken from <c>PUBLIC</c> and given to <paramref name="loginRole"/>, or to the role
     /// running the script, together with the right to use the <c>ddd</c> schema. A login role that is neither, one
     /// made afterwards, needs both before it can run a context whose settings last one transaction
-    /// (<see cref="RowLevelSecurityScope.Transaction"/>): <c>GRANT USAGE ON SCHEMA ddd TO</c> that role, and
-    /// <c>GRANT EXECUTE ON PROCEDURE ddd.use_caller(text, text, text[], text[]) TO</c> it.
+    /// (<see cref="RowLevelSecurityScope.Transaction"/>): <c>GRANT USAGE ON SCHEMA "ddd" TO</c> that role, and
+    /// <c>GRANT EXECUTE ON PROCEDURE "ddd".use_caller(text, text, text[], text[]) TO</c> it.
     /// </para>
     /// </remarks>
     /// <exception cref="ArgumentException"><paramref name="loginRole"/> is empty, or a role in <paramref name="options"/> is empty or cannot be a policy's.</exception>
@@ -357,22 +357,22 @@ public static partial class PostgresRowAccess
             .Append("$ddd$;").Append('\n')
             .Append("GRANT ").Append(quoted).Append(" TO ").Append(login).Append(';').Append('\n')
             .Append('\n')
-            .Append("CREATE SCHEMA IF NOT EXISTS ddd;").Append('\n')
-            .Append("GRANT USAGE ON SCHEMA ddd TO ").Append(quoted).Append(';').Append('\n')
+            .Append("CREATE SCHEMA IF NOT EXISTS \"ddd\";").Append('\n')
+            .Append("GRANT USAGE ON SCHEMA \"ddd\" TO ").Append(quoted).Append(';').Append('\n')
             .Append('\n')
             .Append("-- The claims of the caller's token, as the interceptor put them on the connection.").Append('\n')
-            .Append("CREATE OR REPLACE FUNCTION ddd.caller_claims() RETURNS jsonb LANGUAGE sql STABLE AS $function$").Append('\n')
+            .Append("CREATE OR REPLACE FUNCTION \"ddd\".caller_claims() RETURNS jsonb LANGUAGE sql STABLE AS $function$").Append('\n')
             .Append("    SELECT nullif(current_setting('request.jwt.claims', true), '')::jsonb").Append('\n')
             .Append("$function$;").Append('\n')
             .Append('\n')
             .Append("-- The user's id, or null when there is none or it is not a uuid: a rule about a user then matches nobody.").Append('\n')
-            .Append("CREATE OR REPLACE FUNCTION ddd.caller_id() RETURNS uuid LANGUAGE sql STABLE AS $function$").Append('\n')
+            .Append("CREATE OR REPLACE FUNCTION \"ddd\".caller_id() RETURNS uuid LANGUAGE sql STABLE AS $function$").Append('\n')
             .Append("    SELECT CASE WHEN sub ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN sub::uuid END").Append('\n')
-            .Append("    FROM (SELECT ddd.caller_claims() ->> 'sub' AS sub) caller").Append('\n')
+            .Append("    FROM (SELECT \"ddd\".caller_claims() ->> 'sub' AS sub) caller").Append('\n')
             .Append("$function$;").Append('\n')
             .Append('\n')
-            .Append("CREATE OR REPLACE FUNCTION ddd.caller_role() RETURNS text LANGUAGE sql STABLE AS $function$").Append('\n')
-            .Append("    SELECT ddd.caller_claims() ->> 'role'").Append('\n')
+            .Append("CREATE OR REPLACE FUNCTION \"ddd\".caller_role() RETURNS text LANGUAGE sql STABLE AS $function$").Append('\n')
+            .Append("    SELECT \"ddd\".caller_claims() ->> 'role'").Append('\n')
             .Append("$function$;").Append('\n')
             .Append('\n')
             .Append("-- Whether a row was written, inserted or updated, by the running transaction, savepoints included.").Append('\n')
@@ -384,7 +384,7 @@ public static partial class PostgresRowAccess
             .Append("-- call it: whoever could call it could say who they are.").Append('\n')
             .Append(UseCallerHeader).Append("$procedure$").Append(UseCallerBody).Append("$procedure$;").Append('\n')
             .Append("REVOKE ALL ON PROCEDURE ").Append(UseCallerSignature).Append(" FROM PUBLIC;").Append('\n')
-            .Append("GRANT USAGE ON SCHEMA ddd TO ").Append(login).Append(';').Append('\n')
+            .Append("GRANT USAGE ON SCHEMA \"ddd\" TO ").Append(login).Append(';').Append('\n')
             .Append("GRANT EXECUTE ON PROCEDURE ").Append(UseCallerSignature).Append(" TO ").Append(login).Append(';').Append('\n')
             .ToString());
     }
@@ -563,7 +563,8 @@ public static partial class PostgresRowAccess
     /// <param name="export">The contributions to ask as well; none when left out.</param>
     /// <returns>
     /// Each logical name, and the name its function has in the database, <c>schema.name</c> as SQL writes it: the
-    /// schema delimited as Entity Framework delimits it, <c>desk.tickets_i_watch</c> or <c>"Desk".tickets_i_watch</c>.
+    /// schema in double quotes, as every schema the toolkit writes is, <c>"desk".tickets_i_watch</c> or
+    /// <c>"Desk".tickets_i_watch</c>; a name given with its schema as it was given.
     /// </returns>
     /// <exception cref="ArgumentNullException"><paramref name="contexts"/> or <paramref name="functions"/> is null.</exception>
     /// <exception cref="InvalidOperationException">
@@ -678,13 +679,12 @@ public static partial class PostgresRowAccess
 
     /// <summary>
     /// <paramref name="schema"/>, the schema of <paramref name="context"/> that a function a script names by its
-    /// logical name is created in, as the script writes it: delimited by the provider, as Entity Framework
-    /// delimits the schema it creates, so the two name one schema whatever it is called. <c>desk</c> is written
-    /// as it is; <c>Desk</c>, <c>Field_Work</c> and <c>order</c> as <c>"Desk"</c>, <c>"Field_Work"</c> and
-    /// <c>"order"</c>, since Postgres would fold the first two to lower case and read the last as a word of its own.
-    /// The function's name itself is the module's or the package's, and stays as it is written.
+    /// logical name is created in, as the script writes it: in double quotes, as every schema the toolkit writes is
+    /// (<see cref="RowAccessModel.Schema(string)"/>), so it names the schema Entity Framework made whatever it is
+    /// called: <c>"desk"</c>, <c>"Desk"</c>, <c>"Field_Work"</c>, <c>"order"</c>. The function's name itself is the
+    /// module's or the package's, and stays as it is written.
     /// </summary>
-    /// <param name="context">The context whose schema it is.</param>
+    /// <param name="context">The context whose schema it is, for the message.</param>
     /// <param name="schema">The schema, as the model names it.</param>
     /// <param name="logical">The logical name of the function, for the message.</param>
     /// <exception cref="InvalidOperationException">
@@ -693,7 +693,7 @@ public static partial class PostgresRowAccess
     /// </exception>
     private static string FunctionSchema(DbContext context, string schema, string logical)
         => Encoding.UTF8.GetByteCount(schema) <= MaxIdentifierBytes
-            ? context.GetService<ISqlGenerationHelper>().DelimitIdentifier(schema)
+            ? RowAccessModel.Schema(schema)
             : throw new InvalidOperationException(
                 $"The function {logical} would be created in the schema '{schema}' of {context.GetType().Name}, which is longer than the {MaxIdentifierBytes} bytes Postgres keeps of a name. Postgres would cut it, and a script that names the schema in full would no longer find what it made there. Give the schema a shorter name.");
 
@@ -890,7 +890,7 @@ public static partial class PostgresRowAccess
         foreach (var onTable in aggregates.GroupBy(aggregate => TableOf(aggregate.Root)))
         {
             var table = onTable.Key;
-            var qualified = sql.DelimitIdentifier(table.Name, table.Schema ?? DefaultSchema);
+            var qualified = QualifiedTable(table, sql);
             List<AggregateRules> sharing = [.. onTable];
 
             statements.Append('\n').Append(EnableStatement(qualified, writing.Force));
@@ -1108,10 +1108,10 @@ public static partial class PostgresRowAccess
     /// What makes the policies of
     /// <see cref="CreateStatements(DbContext, IReadOnlyList{RowAccessRule}, IReadOnlyList{RowAccessFunction}?, RowAccessExport)"/>
     /// work, whatever the database already has: the
-    /// toolkit's schema and <c>ddd.written_in_this_transaction</c>, which the policies of an aggregate's
+    /// toolkit's schema and <c>"ddd".written_in_this_transaction</c>, which the policies of an aggregate's
     /// entities ask, the scoped system role when a policy is for it, and the right to ask them for every
     /// role a policy names. It comes right after the drop in every script and every access file, so none
-    /// depends on another having run. It makes <c>ddd.use_caller</c> as well, which the policies do not ask but
+    /// depends on another having run. It makes <c>"ddd".use_caller</c> as well, which the policies do not ask but
     /// the interceptor calls where the caller's settings last one transaction, so a database that has the
     /// policies can be reached through a transaction pooler.
     /// </summary>
@@ -1123,10 +1123,10 @@ public static partial class PostgresRowAccess
     /// the application's own role after somebody else ran <see cref="SetupScript"/>.
     /// </para>
     /// <para>
-    /// <c>ddd.use_caller</c> is taken from <c>PUBLIC</c>, which Postgres gives every new routine to, and stays
+    /// <c>"ddd".use_caller</c> is taken from <c>PUBLIC</c>, which Postgres gives every new routine to, and stays
     /// with its owner, the role that ran the script that made it. A login role of its own gets it from two
-    /// statements of the host's: <c>GRANT USAGE ON SCHEMA ddd TO</c> that role, and
-    /// <c>GRANT EXECUTE ON PROCEDURE ddd.use_caller(text, text, text[], text[]) TO</c> it.
+    /// statements of the host's: <c>GRANT USAGE ON SCHEMA "ddd" TO</c> that role, and
+    /// <c>GRANT EXECUTE ON PROCEDURE "ddd".use_caller(text, text, text[], text[]) TO</c> it.
     /// </para>
     /// <para>
     /// The scoped system role is made without a login and without <c>BYPASSRLS</c>, and the script fails
@@ -1175,8 +1175,8 @@ public static partial class PostgresRowAccess
             .Append("    body constant text := $function$").Append(WrittenInThisTransactionBody).Append("$function$;").Append('\n')
             .Append("    use_caller constant text := $procedure$").Append(UseCallerBody).Append("$procedure$;").Append('\n')
             .Append("BEGIN").Append('\n')
-            .Append("    IF pg_catalog.to_regnamespace('ddd') IS NULL THEN").Append('\n')
-            .Append("        CREATE SCHEMA ddd;").Append('\n')
+            .Append("    IF pg_catalog.to_regnamespace('\"ddd\"') IS NULL THEN").Append('\n')
+            .Append("        CREATE SCHEMA \"ddd\";").Append('\n')
             .Append("    END IF;").Append('\n')
             .Append("    IF NOT EXISTS (SELECT FROM pg_catalog.pg_proc").Append('\n')
             .Append("                   WHERE oid = pg_catalog.to_regprocedure(").Append(Literal(WrittenInThisTransactionSignature)).Append(") AND prosrc = body) THEN").Append('\n')
@@ -1240,7 +1240,7 @@ public static partial class PostgresRowAccess
             var oid = $"pg_catalog.to_regrole({Literal(identifier)})";
             prelude
                 .Append("    IF NOT coalesce(pg_catalog.has_schema_privilege(").Append(oid).Append(", 'ddd', 'USAGE'), false) THEN").Append('\n')
-                .Append("        GRANT USAGE ON SCHEMA ddd TO ").Append(identifier).Append(';').Append('\n')
+                .Append("        GRANT USAGE ON SCHEMA \"ddd\" TO ").Append(identifier).Append(';').Append('\n')
                 .Append("    END IF;").Append('\n')
                 .Append("    IF NOT coalesce(pg_catalog.has_function_privilege(").Append(oid).Append(", ").Append(Literal(WrittenInThisTransactionSignature)).Append(", 'EXECUTE'), false) THEN").Append('\n')
                 .Append("        GRANT EXECUTE ON FUNCTION ").Append(WrittenInThisTransactionSignature).Append(" TO ").Append(identifier).Append(';').Append('\n')
@@ -1321,9 +1321,9 @@ public static partial class PostgresRowAccess
             var named = reaching.SelectMany(each => roles[each.Rule])
                 .Concat(contributed.Keys.Where(key => key.Table == entity).Select(key => key.Role))
                 .Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList();
-            var entityTable = sql.DelimitIdentifier(entity.Name, entity.Schema ?? DefaultSchema);
+            var entityTable = QualifiedTable(entity, sql);
             var parent = chain[0].Parent;
-            var follows = $"(EXISTS (SELECT 1 FROM {sql.DelimitIdentifier(parent.Name, parent.Schema ?? DefaultSchema)} parent WHERE "
+            var follows = $"(EXISTS (SELECT 1 FROM {QualifiedTable(parent, sql)} parent WHERE "
                 + string.Join(" AND ", chain[0].Key.Select(column => $"parent.{sql.DelimitIdentifier(column.Parent)} = {entityTable}.{sql.DelimitIdentifier(column.Child)}"))
                 + "))";
 
@@ -1349,7 +1349,7 @@ public static partial class PostgresRowAccess
                         "SELECT" => granting.Any(each => each.Rule.Operations.HasFlag(RowOperations.Read)) ? follows : null,
                         "INSERT" => Written(entity, chain, AnyOf([
                             Allowed(RowOperations.Change),
-                            Allowed(RowOperations.Create) is { } create ? $"({create} AND ddd.written_in_this_transaction({RootAlias}.xmin))" : null]), sql),
+                            Allowed(RowOperations.Create) is { } create ? $"({create} AND \"ddd\".written_in_this_transaction({RootAlias}.xmin))" : null]), sql),
                         "UPDATE" => Written(entity, chain, Allowed(RowOperations.Change), sql),
                         _ => Written(entity, chain, AnyOf([Allowed(RowOperations.Change), Allowed(RowOperations.Remove)]), sql),
                     };
@@ -1408,7 +1408,7 @@ public static partial class PostgresRowAccess
 
         // Each level above the entity an alias, the root r; below the first is the entity's own row.
         var aliases = chain.Select((_, level) => level == chain.Count - 1 ? RootAlias : "p" + (level + 1)).ToList();
-        var own = sql.DelimitIdentifier(entity.Name, entity.Schema ?? DefaultSchema);
+        var own = QualifiedTable(entity, sql);
 
         var exists = condition;
         for (var level = chain.Count - 1; level >= 0; level--)
@@ -1417,7 +1417,7 @@ public static partial class PostgresRowAccess
             var below = level == 0 ? own : aliases[level - 1];
             var belongs = string.Join(" AND ", chain[level].Key.Select(column => $"{aliases[level]}.{sql.DelimitIdentifier(column.Parent)} = {below}.{sql.DelimitIdentifier(column.Child)}"));
 
-            exists = $"EXISTS (SELECT 1 FROM {sql.DelimitIdentifier(parent.Name, parent.Schema ?? DefaultSchema)} {aliases[level]} WHERE {belongs} AND {exists})";
+            exists = $"EXISTS (SELECT 1 FROM {QualifiedTable(parent, sql)} {aliases[level]} WHERE {belongs} AND {exists})";
         }
 
         return "(" + exists + ")";
@@ -1556,7 +1556,7 @@ public static partial class PostgresRowAccess
         var name = writing.Names[function.LogicalName];
         var what = $"the access function '{function.LogicalName}'";
         List<string> parameters = function.Parameters.Length == 0 ? [] : [.. function.Parameters.Split(", ")];
-        var qualified = sql.DelimitIdentifier(table.Name, table.Schema ?? DefaultSchema);
+        var qualified = QualifiedTable(table, sql);
 
         string signature;
         string returns;
@@ -1731,12 +1731,12 @@ public static partial class PostgresRowAccess
 
     /// <summary>
     /// The functions a script writes, <c>schema.name</c> as SQL writes them, as the schema and the name Postgres
-    /// keeps (<see cref="RowAccessNames.Kept"/>), to compare with the catalog's: <c>("desk", "f")</c> for
-    /// <c>desk.f</c>, <c>("Desk", "f")</c> for <c>"Desk".f</c>.
+    /// keeps (<see cref="RowAccessNames.Kept"/>), to compare with the catalog's: <c>('desk', 'f')</c> for
+    /// <c>"desk".f</c> and for a name a rule gave as <c>desk.f</c>, <c>('Desk', 'f')</c> for <c>"Desk".f</c>.
     /// </summary>
     private static List<string> NamePairs(IEnumerable<string> names)
         => [.. names
-            .Order(StringComparer.Ordinal)
+            .OrderBy(RowAccessNames.OrderOf, StringComparer.Ordinal)
             .Select(name => RowAccessNames.Kept(name) ?? throw new InvalidOperationException($"'{name}' is no function's name with its schema, schema.name, which a script can drop or grant."))
             .Select(kept => $"({Literal(kept.Schema)}, {Literal(kept.Name)})")];
 
@@ -1791,6 +1791,14 @@ public static partial class PostgresRowAccess
     /// them, the parent's first.
     /// </summary>
     private sealed record Link(StoreObjectIdentifier Parent, IReadOnlyList<(string Parent, string Child)> Key);
+
+    /// <summary>
+    /// <paramref name="table"/> as a statement names it: its schema in double quotes, as every schema the toolkit
+    /// writes is (<see cref="RowAccessModel.Schema(string)"/>), and its name as Entity Framework writes it,
+    /// <c>"desk"."Tickets"</c>. A table the model gives no schema is in <see cref="DefaultSchema"/>.
+    /// </summary>
+    private static string QualifiedTable(StoreObjectIdentifier table, ISqlGenerationHelper sql)
+        => RowAccessModel.Schema(table.Schema ?? DefaultSchema) + "." + sql.DelimitIdentifier(table.Name);
 
     private static List<StoreObjectIdentifier> TablesOf(DbContext context)
         => [.. context.Model.GetEntityTypes()
@@ -2069,7 +2077,7 @@ public static partial class PostgresRowAccess
         {
             var (navigation, entityTable) = EntitiesAt(navigationName);
             _aliases[alias] = (navigation.TargetEntityType, entityTable);
-            return (writing.Sql.DelimitIdentifier(entityTable.Name, entityTable.Schema ?? DefaultSchema), [.. navigation.ForeignKey.Properties.Select(property => property.GetColumnName(entityTable)!)]);
+            return (QualifiedTable(entityTable, writing.Sql), [.. navigation.ForeignKey.Properties.Select(property => property.GetColumnName(entityTable)!)]);
         }
 
         /// <summary>The navigation to a collection of the root's entities in a table of their own, and that table.</summary>
@@ -2104,7 +2112,7 @@ public static partial class PostgresRowAccess
                 navigation.ForeignKey.Properties,
                 (principal, dependent) => $"{Qualified(alias, dependent.GetColumnName(entityTable)!)} = {Qualified(rootAlias, principal.GetColumnName(table)!)}");
 
-            return $"EXISTS (SELECT 1 FROM {writing.Sql.DelimitIdentifier(entityTable.Name, entityTable.Schema ?? DefaultSchema)} {alias} WHERE {string.Join(" AND ", belongs)} AND (";
+            return $"EXISTS (SELECT 1 FROM {QualifiedTable(entityTable, writing.Sql)} {alias} WHERE {string.Join(" AND ", belongs)} AND (";
         }
 
         /// <summary>
@@ -2128,7 +2136,7 @@ public static partial class PostgresRowAccess
                 navigation.ForeignKey.Properties,
                 (principal, dependent) => $"{Qualified(alias, dependent.GetColumnName(entityTable)!)} = {Qualified(ownerAlias, principal.GetColumnName(ownerTable)!)}");
 
-            return $"EXISTS (SELECT 1 FROM {writing.Sql.DelimitIdentifier(entityTable.Name, entityTable.Schema ?? DefaultSchema)} {alias} WHERE {string.Join(" AND ", belongs)} AND (";
+            return $"EXISTS (SELECT 1 FROM {QualifiedTable(entityTable, writing.Sql)} {alias} WHERE {string.Join(" AND ", belongs)} AND (";
         }
 
         private (IEntityType Entity, StoreObjectIdentifier Table) Alias(string alias, string token)
@@ -2192,7 +2200,7 @@ public static partial class PostgresRowAccess
             _ => null,
         };
 
-    /// <summary><c>ddd.caller_claims() -&gt;&gt; 'email'</c> for a claim, <c>ddd.caller_claims() #&gt;&gt; '{app_metadata,role}'</c> for a path into one.</summary>
+    /// <summary><c>"ddd".caller_claims() -&gt;&gt; 'email'</c> for a claim, <c>"ddd".caller_claims() #&gt;&gt; '{app_metadata,role}'</c> for a path into one.</summary>
     private static string Claim(string path, Writing writing)
         => path.Contains('.', StringComparison.Ordinal)
             ? $"(SELECT {writing.Callers.Claims} #>> {Literal("{" + path.Replace('.', ',') + "}")})"

@@ -309,7 +309,7 @@ public abstract class AccessHistoryPolicyTests(TenancyPostgres postgres, Tenancy
 
         await FluentActions.Awaiting(() => TenancyPostgresChecks.EnsurePoliciesAreInPlaceAsync(services.Provider, Cancellation))
             .Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage($"Row level security is off on Tenancy's tables ddd.{names.Shown("EventLog")}, so nothing holds a seat to its tenant there.*");
+            .WithMessage($"Row level security is off on Tenancy's tables \"ddd\".{names.Shown("EventLog")}, so nothing holds a seat to its tenant there.*");
     }
 
     /// <summary>Harbor's history, as Ada reads it: its administrator holds the key that reads it.</summary>

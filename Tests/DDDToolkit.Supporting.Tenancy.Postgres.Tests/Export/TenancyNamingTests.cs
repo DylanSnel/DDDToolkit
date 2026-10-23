@@ -180,14 +180,14 @@ public sealed partial class TenancyNamingTests(TenancyPostgres postgres)
             // And where something is missing, they name the table as the database has it.
             await TenancyPostgres.ExecuteAsync(secured.ConnectionString, secured.Names.Sql("DROP TRIGGER tenancy_rights_follow_grants ON tenancy.\"Roles\""), Cancellation);
             await FluentActions.Awaiting(() => TenancyPostgresChecks.EnsurePoliciesAreInPlaceAsync(services.Provider, Cancellation))
-                .Should().ThrowAsync<InvalidOperationException>().WithMessage("*tenancy_rights_follow_grants, which writes the rights, is missing or disabled on tenancy.roles,*");
+                .Should().ThrowAsync<InvalidOperationException>().WithMessage("*tenancy_rights_follow_grants, which writes the rights, is missing or disabled on \"tenancy\".roles,*");
         }
 
         // The access files were never applied: no row level security on Tenancy's tables, whatever they are called.
         var plain = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Plain, Cancellation, TenancyNaming.SnakeCase);
         await using var withoutPolicies = new TenancyServices(plain);
         await FluentActions.Awaiting(() => TenancyPostgresChecks.EnsurePoliciesAreInPlaceAsync(withoutPolicies.Provider, Cancellation))
-            .Should().ThrowAsync<InvalidOperationException>().WithMessage("*Row level security is off on Tenancy's tables*tenancy.seat_rights,*tenancy.seats,*references DDDToolkit.Supporting.Tenancy.Postgres*");
+            .Should().ThrowAsync<InvalidOperationException>().WithMessage("*Row level security is off on Tenancy's tables*\"tenancy\".seat_rights,*\"tenancy\".seats,*references DDDToolkit.Supporting.Tenancy.Postgres*");
     }
 
     [Fact]

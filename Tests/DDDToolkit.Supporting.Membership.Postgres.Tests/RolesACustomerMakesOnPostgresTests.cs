@@ -284,8 +284,8 @@ public sealed partial class RolesACustomerMakesOnPostgresTests(FilingPostgres po
             script = PostgresRowAccess.Script(model, rules, null, new RowAccessExport { Contributions = PostgresGarden.Contributions, WriteGrants = true });
         }
 
-        script.Should().MatchRegex("GRANT UPDATE \\([^)]*\"Status\"[^)]*\\) ON TABLE gardens\\.\"PlotRoles\" TO authenticated;")
-            .And.NotMatchRegex("GRANT UPDATE \\([^)]*\"MadeFrom\"[^)]*\\) ON TABLE gardens\\.\"PlotRoles\"");
+        script.Should().MatchRegex("GRANT UPDATE \\([^)]*\"Status\"[^)]*\\) ON TABLE \"gardens\"\\.\"PlotRoles\" TO authenticated;")
+            .And.NotMatchRegex("GRANT UPDATE \\([^)]*\"MadeFrom\"[^)]*\\) ON TABLE \"gardens\"\\.\"PlotRoles\"");
         await garden.ExecuteAsync(script);
 
         // Ben may change the meadow's roles now. Where a role came from he changes on none of them.
@@ -593,13 +593,13 @@ public sealed partial class RolesACustomerMakesOnPostgresTests(FilingPostgres po
         (await FluentActions.Awaiting(() => MembershipPostgresChecks.EnsureFunctionsAreInPlaceAsync(plain.Services.Provider, Cancellation)).Should().ThrowAsync<InvalidOperationException>())
             .Which.Message.Should()
             .StartWith("The functions that answer the membership of Plot in the database are not as its rules, 'plots', say them: ")
-            .And.Contain("gardens.plots_as_member (missing), gardens.plots_as_member_with (missing), gardens.plots_i_see (missing), gardens.plots_where_i_hold (missing)")
+            .And.Contain("\"gardens\".plots_as_member (missing), \"gardens\".plots_as_member_with (missing), \"gardens\".plots_i_see (missing), \"gardens\".plots_where_i_hold (missing)")
             .And.Contain("[MembershipRules<PlotGardener>]");
 
         // Written from rules that let a member's role give another key: the database would answer otherwise than the application.
         await plain.ExecuteAsync(PostgresGarden.AccessScript([new MembershipRowAccessContribution<PlotGardener>(Plots(memberKeys: MemberKeys.AllBut())), new MembershipRowAccessContribution<ShedHand>(ShedMembership.Rules), new GardenOwnFunctions()]));
         (await FluentActions.Awaiting(() => MembershipPostgresChecks.EnsureFunctionsAreInPlaceAsync(plain.Services.Provider, Cancellation)).Should().ThrowAsync<InvalidOperationException>())
-            .Which.Message.Should().Contain("gardens.plots_as_member_with (it was written from other rules)");
+            .Which.Message.Should().Contain("\"gardens\".plots_as_member_with (it was written from other rules)");
 
         // Written from rules that differ in their starter roles alone: the functions are the same, and it starts.
         await plain.ExecuteAsync(PostgresGarden.AccessScript([new MembershipRowAccessContribution<PlotGardener>(Plots(starters: [new("weeder", [PlotKeys.See])])), new MembershipRowAccessContribution<ShedHand>(ShedMembership.Rules), new GardenOwnFunctions()]));

@@ -25,7 +25,7 @@ namespace DDDToolkit.EntityFramework.Postgres;
 /// <code>
 /// SELECT set_config('role', 'authenticated', false), set_config('request.jwt.claims', '{"sub":"…"}', false), …
 /// </code>
-/// after which the caller functions answer for that user, <c>ddd.caller_id()</c> on a Postgres of your
+/// after which the caller functions answer for that user, <c>"ddd".caller_id()</c> on a Postgres of your
 /// own and <c>auth.uid()</c> on Supabase, and every policy on every table the context touches applies.
 /// </summary>
 /// <remarks>
@@ -48,7 +48,7 @@ namespace DDDToolkit.EntityFramework.Postgres;
 /// <para>
 /// <b>In <see cref="RowLevelSecurityScope.Transaction"/> scope nothing is ever set on a session</b>, so a
 /// pooler that hands each transaction any free server connection carries nothing from one client to the
-/// next. A command outside a transaction gets <c>RESET ROLE; CALL ddd.use_caller(…);</c> in front of its
+/// next. A command outside a transaction gets <c>RESET ROLE; CALL "ddd".use_caller(…);</c> in front of its
 /// text, which sets the same role, claims and settings for the transaction that one command is; the provider
 /// sends them together, so it costs no round trip. The reset takes off a role some other client left on the
 /// server connection, so the call is always made by the role the application logged in as, the only one that
@@ -170,7 +170,7 @@ public sealed class PostgresRowLevelSecurityInterceptor : DbConnectionIntercepto
     /// as that role, and refused. Nothing of a caller lives on a session in this scope, so taking a role off it
     /// loses nothing.
     /// </remarks>
-    private const string Call = "RESET ROLE;\nCALL ddd.use_caller(@" + RoleParameter + ", @" + ClaimsParameter + ", @" + NamesParameter + ", @" + ValuesParameter + ");\n";
+    private const string Call = "RESET ROLE;\nCALL \"ddd\".use_caller(@" + RoleParameter + ", @" + ClaimsParameter + ", @" + NamesParameter + ", @" + ValuesParameter + ");\n";
 
     private const string TimeoutSetting = "statement_timeout";
 

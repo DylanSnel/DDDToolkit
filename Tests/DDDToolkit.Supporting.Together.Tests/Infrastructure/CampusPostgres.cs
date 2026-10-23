@@ -182,14 +182,20 @@ public abstract class CampusPostgresServer(CampusSchemas schemas) : CampusDataba
     public CampusSchemas Schemas { get; } = schemas;
 
     /// <summary>
-    /// <paramref name="schema"/> as SQL names it, quoted where Postgres needs it, as Entity Framework writes it:
-    /// <c>tenancy</c>, <c>"Tenancy"</c>.
+    /// <paramref name="schema"/> as Entity Framework's own SQL names it, a query of a context's say, quoted where
+    /// Postgres needs it: <c>tenancy</c>, <c>"Tenancy"</c>.
     /// </summary>
     public string Delimited(string schema)
     {
         using var model = CampusPostgres.TenancyModel(Schemas);
         return model.GetService<ISqlGenerationHelper>().DelimitIdentifier(schema);
     }
+
+    /// <summary>
+    /// <paramref name="schema"/> as the access files and the start-up checks name it, always in double quotes:
+    /// <c>"tenancy"</c>, <c>"Tenancy"</c>.
+    /// </summary>
+    public string Quoted(string schema) => RowAccessModel.Schema(schema);
 
     /// <inheritdoc />
     public ValueTask InitializeAsync() => ValueTask.CompletedTask;

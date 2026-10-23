@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.EntityFramework.Postgres;
 using DDDToolkit.EntityFramework.Supabase;
@@ -8,10 +9,11 @@ namespace DDDToolkit.EntityFramework.Tests;
 
 /// <summary>
 /// A module in a schema Postgres keeps only in double quotes, one with capitals, an underscore or a word of its own:
-/// every name a script writes in that schema is delimited as Entity Framework delimits the schema it creates, so the
-/// functions, policies, triggers and grants are where the tables are, and a lookup by name compares the names the
-/// catalog keeps, capitals and all. A schema Postgres keeps as SQL writes it is written as it always was. None of this
-/// opens a database; <see cref="QuotedSchemaPostgresTests"/> runs the scripts.
+/// a script writes every schema in double quotes, so the functions, policies, triggers and grants are where Entity
+/// Framework made the tables, whatever the schema is called, and a lookup by name compares the names the catalog
+/// keeps, capitals and all. A lower-case schema is written in double quotes too, so a script of one differs from a
+/// script of the other in the schema's name alone. None of this opens a database; <see cref="QuotedSchemaPostgresTests"/>
+/// runs the scripts.
 /// </summary>
 public sealed class QuotedSchemaTests : IDisposable
 {
@@ -76,7 +78,7 @@ public sealed class QuotedSchemaTests : IDisposable
     }
 
     [Fact]
-    public void A_schema_with_an_underscore_or_that_is_a_word_of_postgres_is_quoted_as_well_and_a_plain_one_is_written_as_it_was()
+    public void A_schema_with_an_underscore_a_word_of_postgres_and_a_plain_one_are_all_written_in_double_quotes()
     {
         using var helpDesk = HelpDeskContext.Create();
         using var orderDesk = OrderDeskContext.Create();
@@ -94,17 +96,58 @@ public sealed class QuotedSchemaTests : IDisposable
             .And.Contain("NOT IN (('Help_Desk', 'tickets_i_watch'), ('Help_Desk', 'tickets_status_column_rule'))");
         word.Should().Contain("CREATE OR REPLACE FUNCTION \"order\".tickets_i_watch() RETURNS SETOF uuid", "order without quotes is no schema but a word of SQL")
             .And.Contain("NOT IN (('order', 'tickets_i_watch'), ('order', 'tickets_status_column_rule'))");
-        plain.Should().Contain("CREATE OR REPLACE FUNCTION desk.tickets_i_watch() RETURNS SETOF uuid", "desk is a name Postgres keeps as SQL writes it, so it is written as Entity Framework writes it, without quotes")
-            .And.Contain("NOT IN (('desk', 'tickets_i_watch'), ('desk', 'tickets_status_column_rule'))");
+        plain.Should().Contain("CREATE OR REPLACE FUNCTION \"desk\".tickets_i_watch() RETURNS SETOF uuid", "every schema is written in double quotes, one that needs none as well")
+            .And.Contain("ALTER TABLE \"desk\".\"Tickets\" ENABLE ROW LEVEL SECURITY;")
+            .And.Contain("IF pg_catalog.to_regnamespace('\"ddd\"') IS NULL THEN\n        CREATE SCHEMA \"ddd\";", "the toolkit's own schema too")
+            .And.Contain("NOT IN (('desk', 'tickets_i_watch'), ('desk', 'tickets_status_column_rule'))", "a lookup compares the name the catalog keeps, without the quotes");
 
-        Normalized(quoted, "\"Help_Desk\"", "Help_Desk").Should().Be(plain, "the schema is all that differs");
-        Normalized(word, "\"order\"", "order").Should().Be(plain);
+        Normalized(quoted, "Help_Desk").Should().Be(plain, "the schema's name is all that differs");
+        Normalized(word, "order").Should().Be(plain);
 
-        static string Normalized(string script, string written, string kept)
-            => script.Replace(written + ".", "desk.", StringComparison.Ordinal)
-                .Replace("'" + kept + "'", "'desk'", StringComparison.Ordinal)
+        static string Normalized(string script, string schema)
+            => script.Replace("\"" + schema + "\".", "\"desk\".", StringComparison.Ordinal)
+                .Replace("'" + schema + "'", "'desk'", StringComparison.Ordinal)
                 .Replace(nameof(HelpDeskContext), nameof(DeskContext), StringComparison.Ordinal)
                 .Replace(nameof(OrderDeskContext), nameof(DeskContext), StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("desk", "\"desk\"")]
+    [InlineData("Desk", "\"Desk\"")]
+    [InlineData("Help_Desk", "\"Help_Desk\"")]
+    [InlineData("order", "\"order\"")]
+    [InlineData("odd\"name", "\"odd\"\"name\"")]
+    public void A_schema_is_written_in_double_quotes_whatever_its_name_and_a_quote_in_it_is_doubled(string schema, string written)
+        => RowAccessModel.Schema(schema).Should().Be(written, "one rule names every schema, and nothing decides whether a name needs the quotes");
+
+    [Fact]
+    public void No_script_names_a_schema_without_its_quotes_a_plain_one_and_the_toolkits_own_included()
+    {
+        using var desk = DeskContext.Create();
+        using var capitalized = CapitalizedMemosContext.Create();
+        RowAccessRule[] rules = [DeskRules.WatchersBySet, DeskRules.OwnersClose];
+
+        // A script of a lower-case schema, one of a schema with capitals, and the setup script, which makes ddd.
+        var scripts = new Dictionary<string, (string Script, string[] Schemas)>
+        {
+            ["desk"] = (PostgresRowAccess.Script(desk, rules, [DeskRules.WatchedSet], new RowAccessExport { WriteGrants = true, Roles = RowAccessRoleNames.Default with { System = "ddd_system" } }), ["desk", "ddd"]),
+            ["Memos"] = (PostgresRowAccess.Script(capitalized, [MembersReadMemos], [MemoMembers]), ["Memos", "ddd"]),
+            ["setup"] = (PostgresRowAccess.SetupScript(), ["ddd"]),
+        };
+
+        foreach (var (written, (script, schemas)) in scripts)
+        {
+            foreach (var schema in schemas)
+            {
+                // The schema before a function or a table, in a string Postgres reads as a name as well, to_regprocedure's,
+                // or named by a statement on its own, without its quotes.
+                var unquoted = new Regex(
+                    @"(?<![\w"".])" + Regex.Escape(schema) + @"\.(\w+\(|"")|SCHEMA (IF NOT EXISTS )?" + Regex.Escape(schema) + @"\b",
+                    RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+                unquoted.Matches(script).Select(match => match.Value).Should().BeEmpty("the script of {0} writes {1} in double quotes wherever it names it", written, schema);
+                script.Should().Contain("\"" + schema + "\".", "the script of {0} names {1}", written, schema);
+            }
+        }
     }
 
     [Fact]
@@ -134,7 +177,7 @@ public sealed class QuotedSchemaTests : IDisposable
             .WithMessage("The functions bookmarks/is_member (named in RowAccessExport.FunctionNames) and memos/is_member (*) would both be \"Memos\".is_member.*", "both are the function is_member of the schema Memos");
         FluentActions.Invoking(() => Written("\"Memos\".IS_MEMBER")).Should().Throw<InvalidOperationException>("a name without quotes is folded, so IS_MEMBER is is_member");
         FluentActions.Invoking(() => Written("\"Memos\".\"IS_MEMBER\"")).Should().NotThrow("a name in double quotes is kept as it is written, and IS_MEMBER is another function");
-        FluentActions.Invoking(() => Written("Memos.is_member")).Should().NotThrow("Postgres folds a name without quotes, so this is is_member of the schema memos, another schema");
+        FluentActions.Invoking(() => Written("Memos.is_member")).Should().NotThrow("Postgres folds a name without quotes, so this is is_member of the schema \"memos\", another schema");
         FluentActions.Invoking(() => Written("memos.is_member")).Should().NotThrow();
     }
 

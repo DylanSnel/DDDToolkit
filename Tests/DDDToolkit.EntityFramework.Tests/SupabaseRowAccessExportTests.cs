@@ -68,13 +68,13 @@ public sealed class SupabaseRowAccessExportTests : IDisposable
         var sql = File.ReadAllText(Path.Combine(_directory, AccessFiles()[0]));
         sql.Should().StartWith("-- Written by DDDToolkit from the row access rules of SupabaseShelfContext.");
         sql.Should().Contain("AND (n.nspname, c.relname) IN (('ddd', 'OutboxMessages'), ('public', 'Shelves'))", "the previous file's policies come off every table of the module first");
-        sql.Should().Contain("ALTER TABLE public.\"Shelves\" ENABLE ROW LEVEL SECURITY;");
+        sql.Should().Contain("ALTER TABLE \"public\".\"Shelves\" ENABLE ROW LEVEL SECURITY;");
         sql.Should().Contain(
-            "CREATE POLICY \"Shelves by name (select) for anon\" ON public.\"Shelves\" FOR SELECT TO anon\n" +
+            "CREATE POLICY \"Shelves by name (select) for anon\" ON \"public\".\"Shelves\" FOR SELECT TO anon\n" +
             "    USING (\"Name\" IS NOT DISTINCT FROM (SELECT auth.jwt() ->> 'shelf'));\n" +
-            "COMMENT ON POLICY \"Shelves by name (select) for anon\" ON public.\"Shelves\" IS 'DDDToolkit row access rule';\n" +
+            "COMMENT ON POLICY \"Shelves by name (select) for anon\" ON \"public\".\"Shelves\" IS 'DDDToolkit row access rule';\n" +
             "\n" +
-            "CREATE POLICY \"Shelves by name (select) for authenticated\" ON public.\"Shelves\" FOR SELECT TO authenticated\n" +
+            "CREATE POLICY \"Shelves by name (select) for authenticated\" ON \"public\".\"Shelves\" FOR SELECT TO authenticated\n" +
             "    USING (\"Name\" IS NOT DISTINCT FROM (SELECT auth.jwt() ->> 'shelf'));\n",
             "a rule without To is a policy for each of Supabase's two roles");
     }
@@ -184,17 +184,17 @@ public sealed class SupabaseRowAccessExportTests : IDisposable
         SupabaseMigrations.Export(context, _directory, options);
 
         var sql = File.ReadAllText(Directory.GetFiles(_directory, "*_access.*").Single());
-        sql.Should().Contain("ALTER TABLE desk.\"TicketComment\" ENABLE ROW LEVEL SECURITY;");
+        sql.Should().Contain("ALTER TABLE \"desk\".\"TicketComment\" ENABLE ROW LEVEL SECURITY;");
         sql.Should().Contain(
-            "CREATE POLICY \"TicketComment (select) for anon\" ON desk.\"TicketComment\" FOR SELECT TO anon\n" +
-            "    USING (EXISTS (SELECT 1 FROM desk.\"Tickets\" parent WHERE parent.\"Id\" = desk.\"TicketComment\".\"TicketId\"));",
+            "CREATE POLICY \"TicketComment (select) for anon\" ON \"desk\".\"TicketComment\" FOR SELECT TO anon\n" +
+            "    USING (EXISTS (SELECT 1 FROM \"desk\".\"Tickets\" parent WHERE parent.\"Id\" = \"desk\".\"TicketComment\".\"TicketId\"));",
             "reading an entity follows the root row, which answers under its own policies");
         sql.Should().Contain(
-            "CREATE POLICY \"TicketComment (insert) for authenticated\" ON desk.\"TicketComment\" FOR INSERT TO authenticated\n" +
-            "    WITH CHECK (EXISTS (SELECT 1 FROM desk.\"Tickets\" r WHERE r.\"Id\" = desk.\"TicketComment\".\"TicketId\" AND (((SELECT auth.uid()) IS NOT NULL) AND (r.\"Owner\" IS NOT DISTINCT FROM (SELECT auth.uid())))));",
+            "CREATE POLICY \"TicketComment (insert) for authenticated\" ON \"desk\".\"TicketComment\" FOR INSERT TO authenticated\n" +
+            "    WITH CHECK (EXISTS (SELECT 1 FROM \"desk\".\"Tickets\" r WHERE r.\"Id\" = \"desk\".\"TicketComment\".\"TicketId\" AND (((SELECT auth.uid()) IS NOT NULL) AND (r.\"Owner\" IS NOT DISTINCT FROM (SELECT auth.uid())))));",
             "writing one asks the root's write rules, with Supabase's caller functions, about the root row");
         sql.Should().NotContain("FOR ALL TO anon, authenticated\n    USING (EXISTS", "no entity policy lets whoever reads the root write its entities");
-        sql.Should().Contain("CREATE OR REPLACE FUNCTION ddd.written_in_this_transaction(row_xmin xid)", "the access file brings what its policies ask");
+        sql.Should().Contain("CREATE OR REPLACE FUNCTION \"ddd\".written_in_this_transaction(row_xmin xid)", "the access file brings what its policies ask");
         sql.Should().Contain("FOR UPDATE TO authenticated\n    USING (((SELECT auth.uid()) IS NOT NULL) AND (\"Owner\" IS NOT DISTINCT FROM (SELECT auth.uid())))\n    WITH CHECK");
     }
 
@@ -211,8 +211,8 @@ public sealed class SupabaseRowAccessExportTests : IDisposable
         sql.Should().Contain(
             "CREATE OR REPLACE FUNCTION desk.is_watcher(uuid) RETURNS boolean\n" +
             "    LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$\n" +
-            "    SELECT EXISTS (SELECT 1 FROM desk.\"Tickets\" root\n" +
-            "                   WHERE root.\"Id\" = $1 AND (EXISTS (SELECT 1 FROM desk.\"TicketWatcher\" e1 WHERE e1.\"TicketId\" = root.\"Id\" AND ((e1.\"User\" IS NOT DISTINCT FROM (SELECT auth.uid()))))))\n" +
+            "    SELECT EXISTS (SELECT 1 FROM \"desk\".\"Tickets\" root\n" +
+            "                   WHERE root.\"Id\" = $1 AND (EXISTS (SELECT 1 FROM \"desk\".\"TicketWatcher\" e1 WHERE e1.\"TicketId\" = root.\"Id\" AND ((e1.\"User\" IS NOT DISTINCT FROM (SELECT auth.uid()))))))\n" +
             "$function$;\n" +
             "COMMENT ON FUNCTION desk.is_watcher(uuid) IS 'DDDToolkit access function of DeskContext';");
         sql.Should().Contain("FOR SELECT TO anon\n    USING (desk.is_watcher(\"Id\"));", "the rule asks the function about the row");
@@ -232,13 +232,13 @@ public sealed class SupabaseRowAccessExportTests : IDisposable
 
         var sql = File.ReadAllText(Directory.GetFiles(_directory, "*_access.*").Single());
         sql.Should().NotContain("auth.", "none of Supabase's own caller functions is left");
-        sql.Should().Contain("WHERE root.\"Id\" = $1 AND (EXISTS (SELECT 1 FROM desk.\"TicketWatcher\" e1 WHERE e1.\"TicketId\" = root.\"Id\" AND ((e1.\"User\" IS NOT DISTINCT FROM (SELECT who.id()))))))", "the access function asks it too");
+        sql.Should().Contain("WHERE root.\"Id\" = $1 AND (EXISTS (SELECT 1 FROM \"desk\".\"TicketWatcher\" e1 WHERE e1.\"TicketId\" = root.\"Id\" AND ((e1.\"User\" IS NOT DISTINCT FROM (SELECT who.id()))))))", "the access function asks it too");
         sql.Should().Contain("FOR SELECT TO ddd_system_in\n    USING ((SELECT who.role()) IS NOT NULL);");
 
         var policies = Regex.Matches(sql, "^CREATE POLICY .*?;$", RegexOptions.Multiline | RegexOptions.Singleline)
             .Select(match => match.Value)
             .ToList();
-        policies.Where(policy => policy.Contains("desk.\"TicketComment\" FOR UPDATE", StringComparison.Ordinal)).Should().NotBeEmpty("the entities' write policies ask the root's rules")
+        policies.Where(policy => policy.Contains("\"desk\".\"TicketComment\" FOR UPDATE", StringComparison.Ordinal)).Should().NotBeEmpty("the entities' write policies ask the root's rules")
             .And.OnlyContain(policy => policy.Contains("(SELECT who.id())", StringComparison.Ordinal));
         policies.Where(policy => policy.Contains("\"Owner\"", StringComparison.Ordinal)).Should().NotBeEmpty()
             .And.OnlyContain(policy => policy.Contains("(SELECT who.id())", StringComparison.Ordinal));
@@ -310,8 +310,8 @@ public sealed class SupabaseRowAccessExportTests : IDisposable
         AccessFiles().Should().HaveCount(2);
         var tickets = File.ReadAllText(Directory.GetFiles(_directory, "*_access.desk.ddd.sql").Single());
         var crates = File.ReadAllText(Directory.GetFiles(_directory, "*_access.yard.ddd.sql").Single());
-        tickets.Should().Contain("CREATE OR REPLACE FUNCTION desk_scale.tickets_i_watch() RETURNS SETOF uuid", "the module that maps the tickets writes the function, in its own schema");
-        crates.Should().Contain("USING (\"Id\" = ANY (ARRAY(SELECT desk_scale.tickets_i_watch())));", "the other module asks it by its logical name");
+        tickets.Should().Contain("CREATE OR REPLACE FUNCTION \"desk_scale\".tickets_i_watch() RETURNS SETOF uuid", "the module that maps the tickets writes the function, in its own schema");
+        crates.Should().Contain("USING (\"Id\" = ANY (ARRAY(SELECT \"desk_scale\".tickets_i_watch())));", "the other module asks it by its logical name");
         string.CompareOrdinal(AccessFiles()[0], AccessFiles()[1]).Should().BeLessThan(0);
         AccessFiles()[0].Should().EndWith("_access.desk.ddd.sql", "the module that defines the function comes first");
 
@@ -343,7 +343,7 @@ public sealed class SupabaseRowAccessExportTests : IDisposable
             options);
 
         var crates = File.ReadAllText(Directory.GetFiles(_directory, "*_access.yard.ddd.sql").Single());
-        crates.Should().Contain("USING (\"Id\" = ANY (ARRAY(SELECT desk_scale.tickets_i_follow())));", "the rule names no function, and the file writes the one that answers the set");
+        crates.Should().Contain("USING (\"Id\" = ANY (ARRAY(SELECT \"desk_scale\".tickets_i_follow())));", "the rule names no function, and the file writes the one that answers the set");
         AccessFiles()[0].Should().EndWith("_access.desk.ddd.sql", "the module whose contribution answers the set comes first");
 
         using var yard = YardContext.Create();
@@ -383,10 +383,10 @@ public sealed class SupabaseRowAccessExportTests : IDisposable
             At("EXECUTE format('DROP POLICY %I ON %I.%I'"),
             At("-- What the policies below ask"),
             At("EXECUTE format('DROP FUNCTION %s', generated.signature)"),
-            At("CREATE OR REPLACE FUNCTION desk.on_duty() RETURNS boolean"),
-            At("CREATE OR REPLACE FUNCTION desk.duty_tickets() RETURNS SETOF uuid"),
+            At("CREATE OR REPLACE FUNCTION \"desk\".on_duty() RETURNS boolean"),
+            At("CREATE OR REPLACE FUNCTION \"desk\".duty_tickets() RETURNS SETOF uuid"),
             At("CREATE POLICY \"Tickets (select) for authenticated\""),
-            At("CREATE OR REPLACE FUNCTION desk.duty_stamp() RETURNS trigger"),
+            At("CREATE OR REPLACE FUNCTION \"desk\".duty_stamp() RETURNS trigger"),
             At("CREATE OR REPLACE TRIGGER duty_stamp BEFORE UPDATE ON \"desk\".\"Tickets\""),
         }.Should().BeInAscendingOrder("the policies come off, the prelude makes what they ask, then the functions, each after what it asks, then the policies, and the contribution's own statements last");
     }
@@ -419,8 +419,8 @@ public sealed class SupabaseRowAccessExportTests : IDisposable
         report.IsInSync.Should().BeTrue();
         AccessFiles().Should().Equal("20260925160000_access.supabaseshelf.ddd.sql");
         var sql = File.ReadAllText(Path.Combine(_directory, AccessFiles()[0]));
-        sql.Should().Contain("ALTER TABLE public.\"Shelves\" ENABLE ROW LEVEL SECURITY;")
-            .And.Contain("CREATE POLICY \"Shelves are read by the signed in (select) for authenticated\" ON public.\"Shelves\" FOR SELECT TO authenticated\n    USING ((SELECT auth.uid()) IS NOT NULL);");
+        sql.Should().Contain("ALTER TABLE \"public\".\"Shelves\" ENABLE ROW LEVEL SECURITY;")
+            .And.Contain("CREATE POLICY \"Shelves are read by the signed in (select) for authenticated\" ON \"public\".\"Shelves\" FOR SELECT TO authenticated\n    USING ((SELECT auth.uid()) IS NOT NULL);");
 
         options.RowAccessContributions.Clear();
         Compare(options).IsInSync.Should().BeFalse("without the contribution the module's policies are what a new file would take off");
@@ -530,7 +530,70 @@ public sealed class SupabaseRowAccessExportTests : IDisposable
         third.RowAccessContributions.Add(listing);
         var export = () => SupabaseMigrations.Export(context, _directory, third);
         export.Should().Throw<InvalidOperationException>().WithMessage(
-            "The function desk.tickets_listed changed from () RETURNS TABLE (\"TicketId\" uuid, \"Team\" text) to () RETURNS TABLE (\"TicketId\" uuid, \"Team\" text, \"Title\" text). Postgres cannot change it in place*");
+            "The function \"desk\".tickets_listed changed from () RETURNS TABLE (\"TicketId\" uuid, \"Team\" text) to () RETURNS TABLE (\"TicketId\" uuid, \"Team\" text, \"Title\" text). Postgres cannot change it in place*");
+    }
+
+    [Fact]
+    public void A_changed_signature_is_refused_against_an_access_file_written_before_the_schemas_were_quoted()
+    {
+        // Up to 3.2.0-preview.3 an access file named a lower-case schema without its double quotes, and the first file
+        // after it is the first to quote them. It finds the functions the file before it made all the same, so a
+        // signature that changed across that step is refused here, not by Postgres when it applies the file.
+        using var context = DeskContext.Create();
+        var returns = "SETOF uuid";
+        var listing = TicketsListed(() => returns);
+        var first = Options(null, []);
+        first.RowAccessContributions.Add(listing);
+        SupabaseMigrations.Export(context, _directory, first);
+        WriteAsBeforeTheQuotes(AccessFiles().Should().ContainSingle().Subject)
+            .Should().Contain("CREATE OR REPLACE FUNCTION desk.tickets_listed() RETURNS SETOF uuid");
+
+        returns = "boolean";
+        var second = Options(new DateTimeOffset(2026, 9, 26, 9, 0, 0, TimeSpan.Zero), []);
+        second.RowAccessContributions.Add(listing);
+        var export = () => SupabaseMigrations.Export(context, _directory, second);
+
+        export.Should().Throw<InvalidOperationException>().WithMessage(
+            "The function \"desk\".tickets_listed changed from () RETURNS SETOF uuid to () RETURNS boolean. Postgres cannot change it in place*");
+        AccessFiles().Should().HaveCount(1, "nothing is written");
+    }
+
+    [Fact]
+    public void After_an_access_file_written_before_the_schemas_were_quoted_comes_one_that_quotes_them()
+    {
+        // The step every application takes once: the rules are what they were, the file that says them is not, so the
+        // next export writes a new one with the schemas quoted and leaves the one a database may have applied.
+        using var context = DeskContext.Create();
+        var first = Options(null, []);
+        first.RowAccessContributions.Add(TicketsListed(() => "SETOF uuid"));
+        SupabaseMigrations.Export(context, _directory, first);
+        WriteAsBeforeTheQuotes(AccessFiles().Should().ContainSingle().Subject);
+
+        var second = Options(new DateTimeOffset(2026, 9, 26, 9, 0, 0, TimeSpan.Zero), []);
+        second.RowAccessContributions.Add(TicketsListed(() => "SETOF uuid"));
+        var report = SupabaseMigrations.Export(context, _directory, second);
+
+        report.IsInSync.Should().BeTrue("the function keeps its signature, which the file before it says without the quotes");
+        report.Created.Should().ContainSingle();
+        AccessFiles().Should().HaveCount(2);
+        File.ReadAllText(Path.Combine(_directory, AccessFiles()[1])).Should().Contain("CREATE OR REPLACE FUNCTION \"desk\".tickets_listed() RETURNS SETOF uuid");
+        SupabaseMigrations.Compare(context, _directory, second).IsInSync.Should().BeTrue();
+    }
+
+    /// <summary>A contribution that writes <c>tickets_listed</c> in the desk's schema, returning what <paramref name="returns"/> says.</summary>
+    private static SpotContribution TicketsListed(Func<string> returns) => new("listing", _ => new(
+        [new ContributedFunction("tickets_listed", "", returns(), "SELECT t.\"Id\" FROM \"desk\".\"Tickets\" t", SecurityDefiner: true, GrantTo: [RowAccessRoles.User])], [], []));
+
+    /// <summary>
+    /// Rewrites the access file <paramref name="name"/> as <c>3.2.0-preview.3</c> wrote it, its lower-case schemas
+    /// without their double quotes, and returns what it then says.
+    /// </summary>
+    private string WriteAsBeforeTheQuotes(string name)
+    {
+        var path = Path.Combine(_directory, name);
+        var sql = Regex.Replace(File.ReadAllText(path), "\"(desk|ddd)\"", "$1", RegexOptions.CultureInvariant);
+        File.WriteAllText(path, sql);
+        return sql;
     }
 
     [Fact]
@@ -561,7 +624,7 @@ public sealed class SupabaseRowAccessExportTests : IDisposable
                 "20260925160002_access.yard.ddd.sql",
             ],
             "the desk asks the shelves' contributed function, and the yard the desk's: each file comes after the files of the functions it asks, whatever order the modules came in");
-        File.ReadAllText(Path.Combine(_directory, AccessFiles()[1])).Should().Contain("AND public.any_shelf()", "the desk asks the function by the name it has in the shelves' schema");
+        File.ReadAllText(Path.Combine(_directory, AccessFiles()[1])).Should().Contain("AND \"public\".any_shelf()", "the desk asks the function by the name it has in the shelves' schema");
     }
 
     /// <summary>

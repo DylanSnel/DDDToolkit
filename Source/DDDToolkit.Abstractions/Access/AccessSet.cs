@@ -6,7 +6,7 @@ namespace DDDToolkit.Abstractions.Access;
 /// <code>
 /// public static bool Allows(Ticket ticket, Caller caller) =&gt; TicketsIWatch.Ids().Contains(ticket.Id);
 /// </code>
-/// The generator writes that as <c>"Id" = ANY (ARRAY(SELECT desk.tickets_i_watch()))</c>, which Postgres
+/// The generator writes that as <c>"Id" = ANY (ARRAY(SELECT "desk".tickets_i_watch()))</c>, which Postgres
 /// answers once per statement, before it reads the table, and with the column's index.
 /// </summary>
 /// <remarks>

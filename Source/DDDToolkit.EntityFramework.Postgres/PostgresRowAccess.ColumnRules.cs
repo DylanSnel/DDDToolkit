@@ -83,7 +83,7 @@ public static partial class PostgresRowAccess
         return [.. sets.Select((set, index) =>
         {
             var name = twice.Contains(names[index]) ? ColumnTriggerName(set.Table, set.Columns, hashed: true) : names[index];
-            // In the schema of the context, delimited as Entity Framework delimits the schema it creates.
+            // In the schema of the context, in double quotes as every schema the toolkit writes is.
             var schema = FunctionSchema(context, context.Model.GetDefaultSchema() ?? set.Table.Schema ?? DefaultSchema, name);
             return ColumnTriggerOf(prepared, contributed, writing, set.Table, set.Columns, set.Rules, name, schema + "." + name);
         })];
@@ -152,7 +152,7 @@ public static partial class PostgresRowAccess
         var context = prepared.Context;
         var sql = writing.Sql;
         var names = writing.Roles;
-        var qualified = sql.DelimitIdentifier(table.Name, table.Schema ?? DefaultSchema);
+        var qualified = QualifiedTable(table, sql);
 
         // Who may change a row of the table at all: the roles of the rules for Change about it, and those of the
         // contributions' permissive policies for UPDATE on it.

@@ -18,7 +18,7 @@ public static partial class PostgresRowAccess
     private static readonly string[] TableCommands = ["SELECT", "INSERT", "DELETE"];
 
     /// <summary>The trigger function that keeps the rows of a table that only grows, as a statement names it.</summary>
-    private const string KeptRowsFunction = "ddd.refuse_changes_to_kept_rows";
+    private const string KeptRowsFunction = "\"ddd\".refuse_changes_to_kept_rows";
 
     /// <summary>The signature <see cref="KeptRowsFunction"/> is found by.</summary>
     private const string KeptRowsSignature = KeptRowsFunction + "()";
@@ -39,7 +39,7 @@ public static partial class PostgresRowAccess
     public const string KeptRowsSqlState = "55000";
 
     /// <summary>
-    /// The body of <c>ddd.refuse_changes_to_kept_rows()</c>. An update and a truncate are always refused. A
+    /// The body of <c>"ddd".refuse_changes_to_kept_rows()</c>. An update and a truncate are always refused. A
     /// delete is let through only on a table that says how long it keeps a row, the trigger's first argument in
     /// seconds, and only once the row is older than that by the database's own clock; the second argument names
     /// the column a row's age is counted from.
@@ -252,7 +252,7 @@ public static partial class PostgresRowAccess
         var tables = new StringBuilder();
         foreach (var table in covered)
         {
-            var qualified = sql.DelimitIdentifier(table.Name, table.Schema ?? DefaultSchema);
+            var qualified = QualifiedTable(table, sql);
             tables.Append('\n').Append("REVOKE ALL ON TABLE ").Append(qualified).Append(" FROM ").Append(revoked).Append(";\n");
 
             var adding = new List<string>();
@@ -289,12 +289,12 @@ public static partial class PostgresRowAccess
             .Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)];
 
         List<ToolkitTable> own = [.. ToolkitTablesOf(context).Where(toolkit => !secured.Contains(toolkit.Table))];
-        tables.Append(FormerHoldersStatement([.. own.Select(toolkit => sql.DelimitIdentifier(toolkit.Table.Name, toolkit.Table.Schema ?? DefaultSchema))]));
+        tables.Append(FormerHoldersStatement([.. own.Select(toolkit => QualifiedTable(toolkit.Table, sql))]));
 
         foreach (var toolkit in own)
         {
             var table = toolkit.Table;
-            var qualified = sql.DelimitIdentifier(table.Name, table.Schema ?? DefaultSchema);
+            var qualified = QualifiedTable(table, sql);
             void Grant(string what, IReadOnlyList<string> roles)
             {
                 foreach (var role in roles)
@@ -360,7 +360,7 @@ public static partial class PostgresRowAccess
             .Append("-- that may change.").Append('\n');
         foreach (var (schema, roles) in usage)
         {
-            statements.Append("GRANT USAGE ON SCHEMA ").Append(sql.DelimitIdentifier(schema)).Append(" TO ").Append(string.Join(", ", roles.Select(role => sql.DelimitIdentifier(role)))).Append(";\n");
+            statements.Append("GRANT USAGE ON SCHEMA ").Append(RowAccessModel.Schema(schema)).Append(" TO ").Append(string.Join(", ", roles.Select(role => sql.DelimitIdentifier(role)))).Append(";\n");
         }
 
         statements.Append(tables);
@@ -539,7 +539,7 @@ public static partial class PostgresRowAccess
     private static string MigrationHistoryStatement(DbContext context, string system, ISqlGenerationHelper sql)
     {
         var (schema, name) = MigrationHistoryOf(context);
-        var history = sql.DelimitIdentifier(name, schema);
+        var history = QualifiedTable(StoreObjectIdentifier.Table(name, schema), sql);
         var role = sql.DelimitIdentifier(system);
 
         return Blocks(1, new StringBuilder()
@@ -548,7 +548,7 @@ public static partial class PostgresRowAccess
             .Append("DO $ddd$").Append('\n')
             .Append("BEGIN").Append('\n')
             .Append("    IF pg_catalog.to_regclass(").Append(Literal(history)).Append(") IS NOT NULL THEN").Append('\n')
-            .Append("        GRANT USAGE ON SCHEMA ").Append(sql.DelimitIdentifier(schema)).Append(" TO ").Append(role).Append(';').Append('\n')
+            .Append("        GRANT USAGE ON SCHEMA ").Append(RowAccessModel.Schema(schema)).Append(" TO ").Append(role).Append(';').Append('\n')
             .Append("        GRANT SELECT ON TABLE ").Append(history).Append(" TO ").Append(role).Append(';').Append('\n')
             .Append("    END IF;").Append('\n')
             .Append("END").Append('\n')
@@ -592,7 +592,7 @@ public static partial class PostgresRowAccess
 
     /// <summary>
     /// The guard of the context's tables that only grow, an event log: the trigger function
-    /// <c>ddd.refuse_changes_to_kept_rows()</c>, and on each such table a trigger before every <c>UPDATE</c> and
+    /// <c>"ddd".refuse_changes_to_kept_rows()</c>, and on each such table a trigger before every <c>UPDATE</c> and
     /// <c>DELETE</c> of a row and one before <c>TRUNCATE</c>. Empty for a context without such a table.
     /// </summary>
     /// <remarks>
@@ -629,8 +629,8 @@ public static partial class PostgresRowAccess
             .Append("DECLARE").Append('\n')
             .Append("    body constant text := $function$").Append(KeptRowsBody).Append("$function$;").Append('\n')
             .Append("BEGIN").Append('\n')
-            .Append("    IF pg_catalog.to_regnamespace('ddd') IS NULL THEN").Append('\n')
-            .Append("        CREATE SCHEMA ddd;").Append('\n')
+            .Append("    IF pg_catalog.to_regnamespace('\"ddd\"') IS NULL THEN").Append('\n')
+            .Append("        CREATE SCHEMA \"ddd\";").Append('\n')
             .Append("    END IF;").Append('\n')
             .Append("    IF NOT EXISTS (SELECT FROM pg_catalog.pg_proc").Append('\n')
             .Append("                   WHERE oid = pg_catalog.to_regprocedure(").Append(Literal(KeptRowsSignature)).Append(") AND prosrc = body) THEN").Append('\n')
@@ -642,7 +642,7 @@ public static partial class PostgresRowAccess
 
         foreach (var table in kept)
         {
-            var qualified = sql.DelimitIdentifier(table.Table.Name, table.Table.Schema ?? DefaultSchema);
+            var qualified = QualifiedTable(table.Table, sql);
             var keepFor = table.KeepForSeconds?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
 
             statements

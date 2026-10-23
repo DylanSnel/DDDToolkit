@@ -1327,8 +1327,8 @@ modelBuilder.Entity<Project>().ScopeToTenant(project => project.TenantId);
 
 ```sql
 -- Postgres: the same shape as a policy, two set-shaped questions that each run once per statement
-"Id" = ANY (ARRAY(SELECT projects.crew_project_ids('projects.edit')))
-OR "UnitId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold('projects.edit')))
+"Id" = ANY (ARRAY(SELECT "projects".crew_project_ids('projects.edit')))
+OR "UnitId" = ANY (ARRAY(SELECT "tenancy".units_where_i_hold('projects.edit')))
 ```
 
 </details>
@@ -4733,7 +4733,7 @@ tables say where, group by group. Where one of the three is not there, the row s
 | The policy for changing a project is coarser than the application on purpose. The unit a project is at, the seat that owns it and its crew decide who reaches it, so in the database those change only with the keys their commands ask: the unit with a trigger of the module's own, the owner and the crew with the lock the Membership package writes from the projects' rules. Its name, its planned days and its state change only with the keys renaming, planning and closing ask, by column rules. A save one of them refuses, from a handler whose caller lost a key after its check, is refused with `access.refused`, a 403, as a policy's refusal is | **Code:** [`UnitChangesWithItsKeys.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Access/UnitChangesWithItsKeys.cs), [`NameAndPlanChangeWithTheEditKey.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Access/NameAndPlanChangeWithTheEditKey.cs), [`StateChangesWithTheCloseKey.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Access/StateChangesWithTheCloseKey.cs), [`SampleCatalogue.cs`](../Examples/Tenancy/Examples.Tenancy.Catalogue/SampleCatalogue.cs), which marks the projects' rules `[MembershipRules<CrewMember>]`, [`SeatsChangeTheProjectsTheyWorkOn.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Access/SeatsChangeTheProjectsTheyWorkOn.cs), [`Program.cs`](../Examples/Tenancy/Examples.Tenancy.Exporter/Program.cs)<br/>**Try it:** Nothing to try through the application: the rule is about statements that go around it. [What stays in C#](#what-stays-in-c) says what the policy still lets through<br/>**Test:** `SampleOnPostgresTests`, `MovingScenarios`, `OwnerScenarios` |
 | What a member reads of the other seats, and who besides the seats managers reads an invitation, are defaults: a read rule on the application's own class takes the place of one, held to the tenant, beside what Tenancy's own work reads, which stays. The sample keeps both defaults | **Code:** [`TenancySql.cs`](../Source/DDDToolkit.Supporting.Tenancy.Postgres/Sql/TenancySql.cs), [`ContributedDefault.cs`](../Source/DDDToolkit.EntityFramework.Postgres/ContributedDefault.cs), [`TenancyRowAccess.cs`](../Source/DDDToolkit.Supporting.Tenancy/Access/RowAccess/TenancyRowAccess.cs)<br/>**Try it:** Nothing in the sample: it keeps the defaults ([Who reads the seats](#who-reads-the-seats-a-default-you-may-replace) says why)<br/>**Test:** `ReadRulesTests`, `RowAccessContributionTests`, `TenancyReadRuleGeneratorTests`, and `TenancyChoicesExportTests`, which runs the exporter's build step with a read rule on the sample's seat class and finds the default's policy the one that goes |
 | Tenancy guards only its own columns of a seat: no seat changes its id, identity or tenant, whatever it manages, and its status changes only as the use cases change it. The columns the application adds are its own to guard: the sample holds a seat's name to the rule of its command with a column rule, and leaves the job title as writable as the row | **Code:** [`TenancySql.cs`](../Source/DDDToolkit.Supporting.Tenancy.Postgres/Sql/TenancySql.cs), [`NameChangesByTheSeatOrWithTheSeatsKey.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Infrastructure/Access/NameChangesByTheSeatOrWithTheSeatsKey.cs), [`RenameSeat.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Application/Seats/Commands/RenameSeat.cs)<br/>**Try it:** Nothing to try through the application: the rules are about statements that go around it ([What the database guards on a seat](#what-the-database-guards-on-a-seat))<br/>**Test:** `SeatColumnsTests`, `TenancyTriggerTests`, `SampleOnPostgresTests` |
-| A module's rule asks another module's projects by the project's id, through a contract of one line that Projects publishes, and names no SQL function: the export writes the policy with the function the Membership package says answers that set. Projects' own rules ask the same contracts. The functions keep the names the sample's database had, said in one place | **Code:** [`ProjectsISee.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Contracts/RowAccess/ProjectsISee.cs), [`ProjectsWhereIHold.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Contracts/RowAccess/ProjectsWhereIHold.cs), [`SeatsRecordWhereTheyMay.cs`](../Examples/Tenancy/Modules/Inspections/Examples.Tenancy.Inspections.Infrastructure/Access/SeatsRecordWhereTheyMay.cs), [`ProjectMembership.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Access/ProjectMembership.cs), whose `Functions` keeps the names<br/>**Try it:** Read the newest `Examples/Tenancy/supabase/migrations/*_access.inspections.ddd.sql`: its policies ask `projects.project_ids_where_i_hold`, a name no rule of Inspections writes. [A resource's access, asked by its id](row-level-security.md#a-resources-access-asked-by-its-id) has the mechanism<br/>**Test:** `ProjectRowRulesTests`, `InspectionRowRulesTests`, `SampleOnPostgresTests` |
+| A module's rule asks another module's projects by the project's id, through a contract of one line that Projects publishes, and names no SQL function: the export writes the policy with the function the Membership package says answers that set. Projects' own rules ask the same contracts. The functions keep the names the sample's database had, said in one place | **Code:** [`ProjectsISee.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Contracts/RowAccess/ProjectsISee.cs), [`ProjectsWhereIHold.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Contracts/RowAccess/ProjectsWhereIHold.cs), [`SeatsRecordWhereTheyMay.cs`](../Examples/Tenancy/Modules/Inspections/Examples.Tenancy.Inspections.Infrastructure/Access/SeatsRecordWhereTheyMay.cs), [`ProjectMembership.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Access/ProjectMembership.cs), whose `Functions` keeps the names<br/>**Try it:** Read the newest `Examples/Tenancy/supabase/migrations/*_access.inspections.ddd.sql`: its policies ask `"projects".project_ids_where_i_hold`, a name no rule of Inspections writes. [A resource's access, asked by its id](row-level-security.md#a-resources-access-asked-by-its-id) has the mechanism<br/>**Test:** `ProjectRowRulesTests`, `InspectionRowRulesTests`, `SampleOnPostgresTests` |
 | Every context is wired by one call. `UseDDDToolkit` adds the toolkit's interceptors, then what the host's registrations brought: the caller on every connection, which row level security brings, and Tenancy's save check, last. A module added later is wired by the same call, and a context that keeps rows to a tenant without the save check is refused at its first save | **Code:** [`ProjectsInfrastructure.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/ProjectsInfrastructure.cs), [`SampleStorage.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Storage/SampleStorage.cs), [`DependencyInjection.cs`](../Source/DDDToolkit.EntityFramework/DependencyInjection.cs)<br/>**Try it:** Start the sample: the host's log names each context once, with what it was given<br/>**Test:** `StartupTests`, `UseDDDToolkitTests`, `OneCallTests`, `RequiredSaveCheckTests` |
 | Connections are budgeted per purpose: one pool for requests and one for background work | **Code:** [`PostgresPools.cs`](../Examples/Shared/Examples.Hosting/PostgresPools.cs), [`ContextsByPurpose.cs`](../Examples/Shared/Examples.Hosting/ContextsByPurpose.cs)<br/>**Try it:** `Sample:Pools:Requests` and `Sample:Pools:Background`, in the host's settings<br/>**Test:** `SampleOnPostgresTests` |
 | The application's clock and the database's are expected to be in step. The policies have no tolerance for a difference | **Code:** [The functions](#the-functions) says so; nothing in the packages<br/>**Try it:** Nothing to try: it is a property of the machines' clocks<br/>**Test:** `DatabaseClock`, the clock the Postgres tests of the package run with |
@@ -4860,8 +4860,8 @@ public static class ShopCatalogue
   `[TenancyOperators]` too. On a Postgres of your own, pass `new TenancyRowAccessContribution(catalogue)` to
   `PostgresRowAccess.Scripts` in `RowAccessExport.Contributions`. The functions go into the default schema of
   the context that maps Tenancy's tables, `tenancy` or `Tenancy` or any name Entity Framework takes, which the
-  SQL names as Entity Framework does: `tenancy.caller_seat()`, `"Tenancy".caller_seat()`
-  ([Names relative to the module](row-level-security.md#names-relative-to-the-module)).
+  SQL names in double quotes, as it names every schema: `"tenancy".caller_seat()`, `"Tenancy".caller_seat()`
+  ([Schema names](row-level-security.md#schema-names)).
 - **The checks** are [start-up checks](startup-checks.md): `AddTenancyPostgres()` brings them, and the host runs
   them with every other check it has, before the server binds its port, in an order that says the cause before
   its effects. A host that runs them by hand calls `TenancyPostgresChecks.EnsureExplicitCallers`,
@@ -4994,12 +4994,12 @@ app.Use(async (context, next) =>
 ```sql
 -- What the contribution writes, shortened: the seat is found from the verified identity, never taken from
 -- the application
-CREATE OR REPLACE FUNCTION tenancy.caller_seat() RETURNS uuid
+CREATE OR REPLACE FUNCTION "tenancy".caller_seat() RETURNS uuid
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
 SELECT s."Id" FROM "tenancy"."Seats" s
 JOIN "tenancy"."Tenants" t ON t."Id" = s."TenantId"
 WHERE s."Identity" = (SELECT auth.uid())
-  AND s."TenantId" = (SELECT tenancy.system_tenant())
+  AND s."TenantId" = (SELECT "tenancy".system_tenant())
   AND ... -- the seat and its tenant both active
 $function$;
 ```
@@ -5145,7 +5145,7 @@ public async Task<List<string>> VisibleProjectsAsync(CancellationToken cancellat
 ```sql
 -- A read function, as the contribution writes it: no condition and no setting of its own, so Postgres folds
 -- it into the module's query, and the policies on the table decide the rows
-CREATE OR REPLACE FUNCTION tenancy.caller_rights() RETURNS TABLE ("TenantId" bigint, "SeatId" uuid, "UnitId" uuid, "RoleId" uuid, "Key" text, "StartsAt" timestamp with time zone, "EndsAt" timestamp with time zone)
+CREATE OR REPLACE FUNCTION "tenancy".caller_rights() RETURNS TABLE ("TenantId" bigint, "SeatId" uuid, "UnitId" uuid, "RoleId" uuid, "Key" text, "StartsAt" timestamp with time zone, "EndsAt" timestamp with time zone)
     LANGUAGE sql STABLE AS $function$
 SELECT t."TenantId", t."SeatId", t."UnitId", t."RoleId", t."Key"::pg_catalog.text, t."StartsAt", t."EndsAt"
 FROM "tenancy"."SeatRights" t
@@ -5153,14 +5153,14 @@ $function$;
 
 -- A question about other seats, shortened: it runs as its owner, past the policies, answers ids, and
 -- answers a right only where the caller may read the grant that gives it, as the policy on the grants does
-CREATE OR REPLACE FUNCTION tenancy.tenant_administrators() RETURNS TABLE ("SeatId" uuid, "RoleId" uuid)
+CREATE OR REPLACE FUNCTION "tenancy".tenant_administrators() RETURNS TABLE ("SeatId" uuid, "RoleId" uuid)
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
 SELECT r."SeatId", r."RoleId" FROM "tenancy"."SeatRights" r
 JOIN "tenancy"."OrganizationUnits" u ON u."Id" = r."UnitId" AND u."TenantId" = r."TenantId"
-WHERE r."TenantId" = (SELECT tenancy.caller_tenant()) AND r."Key" = 'tenancy.roles.manage'
+WHERE r."TenantId" = (SELECT "tenancy".caller_tenant()) AND r."Key" = 'tenancy.roles.manage'
   AND ... -- held at the root, with no end
-  AND (r."SeatId" = (SELECT tenancy.caller_seat())
-       OR r."UnitId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold('tenancy.grants.manage')))
+  AND (r."SeatId" = (SELECT "tenancy".caller_seat())
+       OR r."UnitId" = ANY (ARRAY(SELECT "tenancy".units_where_i_hold('tenancy.grants.manage')))
        OR ...) -- or seats or units managed at the right's unit, or roles for the whole tenant
 $function$;
 ```
@@ -5267,13 +5267,13 @@ question is asked once per statement, never once per row:
 
 | You mean | Your rule says | The policy asks |
 |---|---|---|
-| in the caller's tenant | `seat.TenantId == TenancyRowAccess.CallerTenant<TenantId>()` | `"TenantId" = (SELECT tenancy.caller_tenant())` |
-| the caller itself | `seat.Id == TenancyRowAccess.CallerSeat<SeatId>()` | `"Id" = (SELECT tenancy.caller_seat())` |
+| in the caller's tenant | `seat.TenantId == TenancyRowAccess.CallerTenant<TenantId>()` | `"TenantId" = (SELECT "tenancy".caller_tenant())` |
+| the caller itself | `seat.Id == TenancyRowAccess.CallerSeat<SeatId>()` | `"Id" = (SELECT "tenancy".caller_seat())` |
 | the person's own seats, in every tenant | `seat.Identity == caller.UserId` | `"Identity" IS NOT DISTINCT FROM (SELECT auth.uid())` |
-| the seats placed at or below a unit the caller is placed at; to a seat placed at the root, as every seat of a flat tenant is, every placed seat | `TenancyRowAccess.SeatsInMyUnits<SeatId>().Contains(seat.Id)` | `"Id" = ANY (ARRAY(SELECT tenancy.seats_in_my_units()))` |
-| where the caller holds a key | `TenancyRowAccess.UnitsWhereIHold<OrganizationUnitId>(key).Contains(invitation.UnitId)` | `"UnitId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold('...')))` |
-| a key held anywhere | `TenancyRowAccess.HoldsKey(key)` | `(SELECT tenancy.holds_key('...'))` |
-| a key held for the whole tenant | `TenancyRowAccess.HoldsTenantWide(key)` | `(SELECT tenancy.holds_tenant_wide('...'))` |
+| the seats placed at or below a unit the caller is placed at; to a seat placed at the root, as every seat of a flat tenant is, every placed seat | `TenancyRowAccess.SeatsInMyUnits<SeatId>().Contains(seat.Id)` | `"Id" = ANY (ARRAY(SELECT "tenancy".seats_in_my_units()))` |
+| where the caller holds a key | `TenancyRowAccess.UnitsWhereIHold<OrganizationUnitId>(key).Contains(invitation.UnitId)` | `"UnitId" = ANY (ARRAY(SELECT "tenancy".units_where_i_hold('...')))` |
+| a key held anywhere | `TenancyRowAccess.HoldsKey(key)` | `(SELECT "tenancy".holds_key('...'))` |
+| a key held for the whole tenant | `TenancyRowAccess.HoldsTenantWide(key)` | `(SELECT "tenancy".holds_tenant_wide('...'))` |
 
 Tenancy's own default is written with the same blocks, and so is what it keeps:
 
@@ -5295,12 +5295,12 @@ What the export writes for the first rule, under the sample's names, with the co
 -- it is for the roles of the default) in place of the default 'Members and the person read seats' of the row access
 -- contribution ..., held to what that default holds a rule to, beside what it keeps whatever a rule says: a row one
 -- of them allows is allowed.
-CREATE POLICY "Seats (select) for authenticated" ON tenancy."Seats" FOR SELECT TO authenticated
+CREATE POLICY "Seats (select) for authenticated" ON "tenancy"."Seats" FOR SELECT TO authenticated
     USING (("Identity" = (SELECT auth.uid())
-            OR (("TenantId" = (SELECT tenancy.caller_tenant()))
-                AND ((SELECT tenancy.holds_key('tenancy.seats.manage')) OR (SELECT tenancy.holds_key('tenancy.grants.manage'))
-                     OR (SELECT tenancy.holds_key('tenancy.units.manage')) OR (SELECT tenancy.holds_tenant_wide('tenancy.roles.manage')))))
-           OR (("TenantId" = (SELECT tenancy.caller_tenant())) AND ("Id" = ANY (ARRAY(SELECT tenancy.seats_in_my_units())))));
+            OR (("TenantId" = (SELECT "tenancy".caller_tenant()))
+                AND ((SELECT "tenancy".holds_key('tenancy.seats.manage')) OR (SELECT "tenancy".holds_key('tenancy.grants.manage'))
+                     OR (SELECT "tenancy".holds_key('tenancy.units.manage')) OR (SELECT "tenancy".holds_tenant_wide('tenancy.roles.manage')))))
+           OR (("TenantId" = (SELECT "tenancy".caller_tenant())) AND ("Id" = ANY (ARRAY(SELECT "tenancy".seats_in_my_units())))));
 ```
 
 </details>
@@ -5352,7 +5352,7 @@ public static partial class ProjectsAreReadWhereTheKeyIsHeld
 }
 ```
 
-The rule becomes `"UnitId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold('projects.read')))`. `EXPLAIN`
+The rule becomes `"UnitId" = ANY (ARRAY(SELECT "tenancy".units_where_i_hold('projects.read')))`. `EXPLAIN`
 shows the question as an init plan, asked once per statement, whose answer the scan compares with, by an index
 where the table is large enough for one; a row never calls the function itself. The
 [set-shaped questions](row-level-security.md#set-shaped-questions) say why.

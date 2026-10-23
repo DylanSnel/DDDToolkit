@@ -46,10 +46,10 @@ public sealed class ForcedRowLevelSecurityTests(ExplicitCallersPostgres postgres
 
         enabled.Select(each => each.line).Should().Equal(
             [
-                "ALTER TABLE apiary.\"Hives\" ENABLE ROW LEVEL SECURITY;",
-                "ALTER TABLE apiary.\"HiveBox\" ENABLE ROW LEVEL SECURITY;",
-                "ALTER TABLE ddd.\"InboxMessages\" ENABLE ROW LEVEL SECURITY;",
-                "ALTER TABLE ddd.\"OutboxMessages\" ENABLE ROW LEVEL SECURITY;",
+                "ALTER TABLE \"apiary\".\"Hives\" ENABLE ROW LEVEL SECURITY;",
+                "ALTER TABLE \"apiary\".\"HiveBox\" ENABLE ROW LEVEL SECURITY;",
+                "ALTER TABLE \"ddd\".\"InboxMessages\" ENABLE ROW LEVEL SECURITY;",
+                "ALTER TABLE \"ddd\".\"OutboxMessages\" ENABLE ROW LEVEL SECURITY;",
             ]);
         foreach (var (line, index) in enabled)
         {
@@ -157,7 +157,7 @@ public sealed class ForcedRowLevelSecurityTests(ExplicitCallersPostgres postgres
 
             (await check.Should().ThrowAsync<InvalidOperationException>()).Which.Message.Should().Be(
                 "Functions in the schemas of 'ApiaryContext' run as their owner, and their owner is held to row level security, so on a table that forces it they would read no row:\n" +
-                $"- apiary.has_honey(uuid) is owned by {owner}. Fix: ALTER FUNCTION apiary.has_honey(uuid) OWNER TO <a role with BYPASSRLS>; or ALTER ROLE {owner} BYPASSRLS;");
+                $"- \"apiary\".has_honey(uuid) is owned by {owner}. Fix: ALTER FUNCTION \"apiary\".has_honey(uuid) OWNER TO <a role with BYPASSRLS>; or ALTER ROLE {owner} BYPASSRLS;");
         }
 
         // Once the owner may bypass, the function answers again, and the check passes.
@@ -215,7 +215,7 @@ public sealed class ForcedRowLevelSecurityTests(ExplicitCallersPostgres postgres
 
             (await check.Should().ThrowAsync<InvalidOperationException>()).Which.Message.Should().Be(
                 "Functions in the schemas of 'ApiaryContext' run as their owner, and their owner is held to row level security, so on a table that forces it they would read no row:\n" +
-                $"- apiary.has_honey(uuid) is owned by {owner}. Fix: ALTER FUNCTION apiary.has_honey(uuid) OWNER TO <a role with BYPASSRLS>; or ALTER ROLE {owner} BYPASSRLS;");
+                $"- \"apiary\".has_honey(uuid) is owned by {owner}. Fix: ALTER FUNCTION \"apiary\".has_honey(uuid) OWNER TO <a role with BYPASSRLS>; or ALTER ROLE {owner} BYPASSRLS;");
         }
         finally
         {

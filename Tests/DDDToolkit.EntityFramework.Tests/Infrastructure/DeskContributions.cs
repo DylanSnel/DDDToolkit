@@ -33,7 +33,7 @@ public sealed class DutyRowAccess : IRowAccessContribution
             return null;
         }
 
-        var schema = context.Model.GetDefaultSchema() ?? PostgresRowAccess.DefaultSchema;
+        var schema = RowAccessModel.Schema(context.Model);
         var id = RowAccessModel.Column(tickets, nameof(Ticket.Id));
         var open = $"{RowAccessModel.Column(tickets, nameof(Ticket.Status))} = {RowAccessModel.Stored(tickets, nameof(Ticket.Status), TicketStatus.Open)}";
 

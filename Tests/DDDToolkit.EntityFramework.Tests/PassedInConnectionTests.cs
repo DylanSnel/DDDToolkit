@@ -22,7 +22,7 @@ namespace DDDToolkit.EntityFramework.Tests;
 public sealed class PassedInConnectionTests(PoolerFixture database) : IAsyncLifetime
 {
     private const string SetsTheRole = "set_config('role'";
-    private const string Calls = "CALL ddd.use_caller";
+    private const string Calls = "CALL \"ddd\".use_caller";
     private const string AsksForTheMark = "current_setting('ddd.caller_mark'";
 
     private readonly CallerOfTheTest _caller = new();

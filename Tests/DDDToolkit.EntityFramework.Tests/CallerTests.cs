@@ -223,7 +223,7 @@ public sealed class CallerTests
         var auth0 = Callers.FromClaims("""{"sub":"auth0|64f1c2","role":"authenticated"}""");
 
         auth0.Kind.Should().Be(CallerKind.User);
-        auth0.UserId.Should().BeNull("ddd.caller_id() answers null for it as well");
+        auth0.UserId.Should().BeNull("\"ddd\".caller_id() answers null for it as well");
         auth0.IsSignedIn.Should().BeFalse();
     }
 

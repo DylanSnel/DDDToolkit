@@ -29,8 +29,11 @@ public sealed partial class MigrationHistoryTests : IDisposable
 {
     private const string Nowhere = "Host=nowhere.invalid;Database=unused";
 
-    /// <summary>The history of a stockroom, where the toolkit keeps it.</summary>
+    /// <summary>The history of a stockroom, where the toolkit keeps it, as Entity Framework names it.</summary>
     private const string InTheStockroom = "stockroom.\"__EFMigrationsHistory\"";
+
+    /// <summary>That table as an access file names it, its schema in double quotes as every schema the toolkit writes is.</summary>
+    private const string InTheStockroomQuoted = "\"stockroom\".\"__EFMigrationsHistory\"";
 
     /// <summary>The history in Postgres's default schema, where Entity Framework keeps it when nothing says otherwise.</summary>
     private const string InPublic = "\"__EFMigrationsHistory\"";
@@ -171,9 +174,9 @@ public sealed partial class MigrationHistoryTests : IDisposable
 
         var script = PostgresRowAccess.Script(designTime, [], [], export);
 
-        script.Should().Contain($"pg_catalog.to_regclass('{InTheStockroom}') IS NOT NULL")
-            .And.Contain("GRANT USAGE ON SCHEMA stockroom TO ddd_system;")
-            .And.Contain($"GRANT SELECT ON TABLE {InTheStockroom} TO ddd_system;");
+        script.Should().Contain($"pg_catalog.to_regclass('{InTheStockroomQuoted}') IS NOT NULL")
+            .And.Contain("GRANT USAGE ON SCHEMA \"stockroom\" TO ddd_system;")
+            .And.Contain($"GRANT SELECT ON TABLE {InTheStockroomQuoted} TO ddd_system;");
     }
 
     [Theory]
@@ -230,7 +233,7 @@ public sealed partial class MigrationHistoryTests : IDisposable
         script.Should().Contain("pg_catalog.to_regclass('\"Audit\".\"__EFMigrationsHistory\"') IS NOT NULL")
             .And.Contain("GRANT USAGE ON SCHEMA \"Audit\" TO ddd_system;")
             .And.Contain("GRANT SELECT ON TABLE \"Audit\".\"__EFMigrationsHistory\" TO ddd_system;")
-            .And.NotContain(InTheStockroom);
+            .And.NotContain(InTheStockroomQuoted);
     }
 
     [Fact]

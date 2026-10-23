@@ -296,8 +296,8 @@ public sealed class EventLogTests : IDisposable
         year.Database.GenerateCreateScript().Should().Be(month.Database.GenerateCreateScript());
 
         // The script is where the period goes: thirty days, or a year, in seconds.
-        PostgresRowAccess.Script(month, []).Should().Contain("EXECUTE FUNCTION ddd.refuse_changes_to_kept_rows('2592000', 'RecordedAt');");
-        PostgresRowAccess.Script(year, []).Should().Contain("EXECUTE FUNCTION ddd.refuse_changes_to_kept_rows('31536000', 'RecordedAt');");
+        PostgresRowAccess.Script(month, []).Should().Contain("EXECUTE FUNCTION \"ddd\".refuse_changes_to_kept_rows('2592000', 'RecordedAt');");
+        PostgresRowAccess.Script(year, []).Should().Contain("EXECUTE FUNCTION \"ddd\".refuse_changes_to_kept_rows('31536000', 'RecordedAt');");
     }
 
     [Fact]

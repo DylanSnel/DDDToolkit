@@ -139,11 +139,11 @@ public sealed class SupabaseRoleDefaultsTests : IDisposable
             "DECLARE\n" +
             "    recorded constant text := 'DDDToolkit row access roles: {\"user\":\"authenticated\",\"anonymous\":\"anon\",\"system-in\":\"ddd_system_in\",\"system\":\"ddd_system\",\"token\":{\"Analyst\":\"desk_examiner\",\"analyst\":\"desk_analyst\"}}';\n" +
             "BEGIN\n" +
-            "    IF pg_catalog.to_regnamespace('ddd') IS NULL THEN\n" +
-            "        CREATE SCHEMA ddd;\n" +
+            "    IF pg_catalog.to_regnamespace('\"ddd\"') IS NULL THEN\n" +
+            "        CREATE SCHEMA \"ddd\";\n" +
             "    END IF;\n" +
-            "    IF pg_catalog.obj_description(pg_catalog.to_regnamespace('ddd')::pg_catalog.oid, 'pg_namespace') IS DISTINCT FROM recorded THEN\n" +
-            "        EXECUTE 'COMMENT ON SCHEMA ddd IS ' || pg_catalog.quote_literal(recorded);\n" +
+            "    IF pg_catalog.obj_description(pg_catalog.to_regnamespace('\"ddd\"')::pg_catalog.oid, 'pg_namespace') IS DISTINCT FROM recorded THEN\n" +
+            "        EXECUTE 'COMMENT ON SCHEMA \"ddd\" IS ' || pg_catalog.quote_literal(recorded);\n" +
             "    END IF;\n" +
             "END\n" +
             "$ddd$;\n");

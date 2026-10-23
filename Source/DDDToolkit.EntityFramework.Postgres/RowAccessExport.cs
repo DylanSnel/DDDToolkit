@@ -43,11 +43,12 @@ public sealed class RowAccessExport
 
     /// <summary>
     /// Where the functions rules ask by a logical name, <c>owner/name</c>, live when another context defines
-    /// them: <c>"projects/is_member"</c> to <c>"projects.is_member"</c>, the name as SQL writes it, with a schema
-    /// Postgres keeps only in double quotes in them, <c>"\"Projects\".is_member"</c>. A script finds those of its
-    /// own context itself, in the context's schema; <see cref="PostgresRowAccess.Scripts"/> and the Supabase export fill
-    /// this in from every context they write, with <see cref="PostgresRowAccess.FunctionNamesOf"/>. Empty by
-    /// default. A rule that asks a logical name neither defines is refused, naming the rule.
+    /// them: <c>"projects/is_member"</c> to <c>"\"projects\".is_member"</c>, the name as SQL writes it, its schema in
+    /// double quotes as every schema the toolkit writes is; a lower-case name given without them,
+    /// <c>"projects.is_member"</c>, is the same function to Postgres. A script finds those of its own context itself,
+    /// in the context's schema; <see cref="PostgresRowAccess.Scripts"/> and the Supabase export fill this in from
+    /// every context they write, with <see cref="PostgresRowAccess.FunctionNamesOf"/>. Empty by default. A rule that
+    /// asks a logical name neither defines is refused, naming the rule.
     /// </summary>
     /// <exception cref="ArgumentNullException">Set to null.</exception>
     public IReadOnlyDictionary<string, string> FunctionNames

@@ -220,6 +220,40 @@ public sealed partial class PostgresCompositionTests
         }
     }
 
+    [Fact]
+    public void Every_modules_newest_access_file_names_every_schema_in_double_quotes()
+    {
+        // The toolkit writes every schema it names in double quotes, the sample's lower-case ones as well: so the
+        // files name the schemas the migrations made whatever a module calls its own, and a host that copies the
+        // sample may give its schemas any name Entity Framework takes.
+        var own = new Dictionary<string, string>
+        {
+            ["tenants"] = TenantsContext.Schema,
+            ["projects"] = ProjectsContext.Schema,
+            ["inspections"] = InspectionsContext.Schema,
+        };
+        string[] schemas = [.. own.Values, "ddd"];
+        foreach (var (module, sql) in NewestAccessFiles())
+        {
+            foreach (var schema in schemas)
+            {
+                Unquoted(schema).Matches(sql).Select(match => match.Value).Should().BeEmpty("{0}'s access file writes {1} in double quotes wherever it names it", module, schema);
+            }
+
+            sql.Should().Contain("\"" + own[module] + "\".", "{0}'s access file names its own schema", module)
+                .And.Contain("\"ddd\".", "{0}'s access file names the toolkit's", module);
+        }
+    }
+
+    /// <summary>
+    /// <paramref name="schema"/> without its double quotes where a statement names it: before a function or a table,
+    /// in a string Postgres reads as a name too, <c>to_regprocedure('"ddd".f(xid)')</c>, or on its own after
+    /// <c>SCHEMA</c>. A setting's or a key's name in a string, <c>'tenancy.caller_tenant'</c>, is no schema: no
+    /// function's parenthesis or table's quote follows it.
+    /// </summary>
+    private static Regex Unquoted(string schema)
+        => new(@"(?<![\w"".])" + Regex.Escape(schema) + @"\.(\w+\(|"")|SCHEMA (IF NOT EXISTS )?" + Regex.Escape(schema) + @"\b", RegexOptions.CultureInvariant);
+
     /// <summary>
     /// The tables <paramref name="sql"/> alters with <c>ENABLE</c> or <c>FORCE ROW LEVEL SECURITY</c>, as
     /// <paramref name="what"/> says, in its order.

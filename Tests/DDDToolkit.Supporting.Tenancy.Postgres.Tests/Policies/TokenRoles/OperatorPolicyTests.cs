@@ -231,22 +231,22 @@ public sealed class OperatorPolicyTests(TenancyPostgres postgres)
         plain.Should().NotContain("Operators").And.NotContain(TallyRules.OperatorRole);
         string.Concat(TenancyPostgres.AccessScripts(operators: [])).Should().Be(plain, "no operators' token role, no change");
         string.Concat(TenancyPostgres.AccessScripts(roles: Mapped())).Should().NotContain("Operators", "a mapped token role nobody called an operator's is closed out like any other")
-            .And.Contain($"CREATE POLICY \"Closed to token roles (all) for {TallyRules.OperatorRole}\" ON tenancy.\"Tenants\"");
+            .And.Contain($"CREATE POLICY \"Closed to token roles (all) for {TallyRules.OperatorRole}\" ON \"tenancy\".\"Tenants\"");
 
         var script = string.Concat(TenancyPostgres.AccessScripts(roles: Mapped(), operators: [TallyRules.OperatorTokenRole]));
 
         script.Should().Contain(
-            $"CREATE POLICY \"Operators read every tenant (select) for {TallyRules.OperatorRole}\" ON tenancy.\"Tenants\" FOR SELECT TO {TallyRules.OperatorRole}\n" +
+            $"CREATE POLICY \"Operators read every tenant (select) for {TallyRules.OperatorRole}\" ON \"tenancy\".\"Tenants\" FOR SELECT TO {TallyRules.OperatorRole}\n" +
             "    USING (true);\n");
         script.Should().Contain(
-            $"CREATE POLICY \"Operators only read (update) for {TallyRules.OperatorRole}\" ON tenancy.\"Seats\" AS RESTRICTIVE FOR UPDATE TO {TallyRules.OperatorRole}\n" +
+            $"CREATE POLICY \"Operators only read (update) for {TallyRules.OperatorRole}\" ON \"tenancy\".\"Seats\" AS RESTRICTIVE FOR UPDATE TO {TallyRules.OperatorRole}\n" +
             "    USING (false)\n" +
             "    WITH CHECK (false);\n");
         script.Should().Contain(
-            $"CREATE POLICY \"Operators only read (insert) for {TallyRules.OperatorRole}\" ON widgets.\"Widgets\" AS RESTRICTIVE FOR INSERT TO {TallyRules.OperatorRole}\n" +
+            $"CREATE POLICY \"Operators only read (insert) for {TallyRules.OperatorRole}\" ON \"widgets\".\"Widgets\" AS RESTRICTIVE FOR INSERT TO {TallyRules.OperatorRole}\n" +
             "    WITH CHECK (false);\n");
         script.Should().Contain(
-            $"CREATE POLICY \"Operators only read (select) for {TallyRules.OperatorRole}\" ON widgets.\"Widgets\" AS RESTRICTIVE FOR SELECT TO {TallyRules.OperatorRole}\n" +
+            $"CREATE POLICY \"Operators only read (select) for {TallyRules.OperatorRole}\" ON \"widgets\".\"Widgets\" AS RESTRICTIVE FOR SELECT TO {TallyRules.OperatorRole}\n" +
             "    USING (true);\n");
         script.Should().NotContain($"Closed to token roles (all) for {TallyRules.OperatorRole}", "an operator's role is held otherwise");
         script.Should().NotContain($"Operators read every tenant (select) for {TallyRules.OperatorRole}\" ON widgets.", "what an operator reads of a module is the module's to say");
@@ -255,9 +255,9 @@ public sealed class OperatorPolicyTests(TenancyPostgres postgres)
         // On each of Tenancy's own tables, the invitations, the table of the application's entity and the history:
         // thirteen tables. Not on the digests of the invitations' tokens, which no caller's role reads.
         Count(script, "CREATE POLICY \"Operators read every tenant (select) for ").Should().Be(13);
-        script.Should().Contain($"CREATE POLICY \"Operators read every tenant (select) for {TallyRules.OperatorRole}\" ON tenancy.\"Invitations\"");
-        script.Should().NotContain($"CREATE POLICY \"Operators read every tenant (select) for {TallyRules.OperatorRole}\" ON tenancy.\"InvitationDigests\"");
-        script.Should().Contain($"CREATE POLICY \"Operators only read (select) for {TallyRules.OperatorRole}\" ON tenancy.\"InvitationDigests\"");
+        script.Should().Contain($"CREATE POLICY \"Operators read every tenant (select) for {TallyRules.OperatorRole}\" ON \"tenancy\".\"Invitations\"");
+        script.Should().NotContain($"CREATE POLICY \"Operators read every tenant (select) for {TallyRules.OperatorRole}\" ON \"tenancy\".\"InvitationDigests\"");
+        script.Should().Contain($"CREATE POLICY \"Operators only read (select) for {TallyRules.OperatorRole}\" ON \"tenancy\".\"InvitationDigests\"");
         foreach (var command in new[] { "select", "insert", "update", "delete" })
         {
             Count(script, $"CREATE POLICY \"Operators only read ({command}) for {TallyRules.OperatorRole}\"").Should().Be(

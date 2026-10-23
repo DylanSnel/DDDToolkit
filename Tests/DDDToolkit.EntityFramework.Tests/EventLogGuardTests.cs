@@ -17,7 +17,7 @@ namespace DDDToolkit.EntityFramework.Tests;
 /// </summary>
 public sealed class EventLogGuardTests(ExplicitCallersPostgres postgres)
 {
-    private const string Log = "ddd.\"EventLog\"";
+    private const string Log = "\"ddd\".\"EventLog\"";
 
     private static readonly TimeSpan KeepFor = LoggedApiaryContext.KeepFor;
 
@@ -256,14 +256,14 @@ public sealed class EventLogGuardTests(ExplicitCallersPostgres postgres)
 
         var script = PostgresRowAccess.Script(logged, ApiaryRules.All, [], export);
 
-        script.Should().Contain("        EXECUTE 'CREATE OR REPLACE FUNCTION ddd.refuse_changes_to_kept_rows() RETURNS trigger LANGUAGE plpgsql SET search_path = '''' AS ' || pg_catalog.quote_literal(body);\n")
+        script.Should().Contain("        EXECUTE 'CREATE OR REPLACE FUNCTION \"ddd\".refuse_changes_to_kept_rows() RETURNS trigger LANGUAGE plpgsql SET search_path = '''' AS ' || pg_catalog.quote_literal(body);\n")
             .And.EndWith(
-                "CREATE OR REPLACE TRIGGER ddd_kept_rows BEFORE UPDATE OR DELETE ON ddd.\"EventLog\"\n" +
-                "    FOR EACH ROW EXECUTE FUNCTION ddd.refuse_changes_to_kept_rows('2592000', 'RecordedAt');\n" +
-                "ALTER TABLE ddd.\"EventLog\" ENABLE ALWAYS TRIGGER ddd_kept_rows;\n" +
-                "CREATE OR REPLACE TRIGGER ddd_kept_rows_truncate BEFORE TRUNCATE ON ddd.\"EventLog\"\n" +
-                "    FOR EACH STATEMENT EXECUTE FUNCTION ddd.refuse_changes_to_kept_rows();\n" +
-                "ALTER TABLE ddd.\"EventLog\" ENABLE ALWAYS TRIGGER ddd_kept_rows_truncate;\n");
+                "CREATE OR REPLACE TRIGGER ddd_kept_rows BEFORE UPDATE OR DELETE ON \"ddd\".\"EventLog\"\n" +
+                "    FOR EACH ROW EXECUTE FUNCTION \"ddd\".refuse_changes_to_kept_rows('2592000', 'RecordedAt');\n" +
+                "ALTER TABLE \"ddd\".\"EventLog\" ENABLE ALWAYS TRIGGER ddd_kept_rows;\n" +
+                "CREATE OR REPLACE TRIGGER ddd_kept_rows_truncate BEFORE TRUNCATE ON \"ddd\".\"EventLog\"\n" +
+                "    FOR EACH STATEMENT EXECUTE FUNCTION \"ddd\".refuse_changes_to_kept_rows();\n" +
+                "ALTER TABLE \"ddd\".\"EventLog\" ENABLE ALWAYS TRIGGER ddd_kept_rows_truncate;\n");
         script.Should().NotContain($"ALTER TABLE {Log} ENABLE ROW LEVEL SECURITY", "a log nobody claims has no policies, like the outbox");
 
         PostgresRowAccess.Script(plain, ApiaryRules.All, [], export).Should().NotContain("kept_rows");

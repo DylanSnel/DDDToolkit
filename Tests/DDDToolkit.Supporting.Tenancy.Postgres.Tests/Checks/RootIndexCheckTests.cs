@@ -28,7 +28,7 @@ public abstract class RootIndexCheckTests(TenancyPostgres postgres, TenancyNamin
     /// <summary>What the check says of a database without the index, up to what it says of the model.</summary>
     private string Missing =>
         "The database has no unique index that keeps a tenant's organization to a single root: none in use on " +
-        $"tenancy.{names.Shown("OrganizationUnits")} over {names.Shown("TenantId")} alone, for the units where {names.Shown("ParentId")} IS NULL. " +
+        $"\"tenancy\".{names.Shown("OrganizationUnits")} over {names.Shown("TenantId")} alone, for the units where {names.Shown("ParentId")} IS NULL. " +
         "On Postgres that index is required: the policies keep a seat from making a second root, and hold neither Tenancy's own system work nor the tables' owner, " +
         "while a key held at any unit without a parent is held for the whole tenant. ";
 
@@ -69,8 +69,8 @@ public abstract class RootIndexCheckTests(TenancyPostgres postgres, TenancyNamin
             Cancellation);
         await RefusedAsync(
             services.Provider,
-            Missing + "The index tenancy.units_keep_a_single_root is there, and Postgres does not use it: it is not valid, as CREATE INDEX CONCURRENTLY leaves an index it could not finish. " +
-            "See that no tenant has two roots, and build it again: REINDEX INDEX tenancy.units_keep_a_single_root;");
+            Missing + "The index \"tenancy\".units_keep_a_single_root is there, and Postgres does not use it: it is not valid, as CREATE INDEX CONCURRENTLY leaves an index it could not finish. " +
+            "See that no tenant has two roots, and build it again: REINDEX INDEX \"tenancy\".units_keep_a_single_root;");
         await ExecuteAsync(database, "REINDEX INDEX tenancy.units_keep_a_single_root;");
         await TenancyPostgresChecks.EnsurePoliciesAreInPlaceAsync(services.Provider, Cancellation);
     }

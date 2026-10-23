@@ -636,7 +636,7 @@ public abstract class CrossSeatQuestionTests(TenancyPostgres postgres, TenancyNa
 
         // And each answers about the calling seat's tenant alone, found as every question of Tenancy's finds it.
         (await owner.ListAsync<string>(
-                "SELECT p.proname FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'tenancy' AND p.proname = ANY ($1) AND p.prosrc LIKE '%tenancy.caller_tenant()%' ORDER BY 1",
+                "SELECT p.proname FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'tenancy' AND p.proname = ANY ($1) AND p.prosrc LIKE '%\"tenancy\".caller_tenant()%' ORDER BY 1",
                 Cancellation,
                 (object)functions))
             .Should().HaveCount(3);

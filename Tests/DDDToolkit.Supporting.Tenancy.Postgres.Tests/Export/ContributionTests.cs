@@ -294,8 +294,8 @@ public sealed class ContributionTests(TenancyPostgres postgres)
         var scripts = TenancyPostgres.AccessScripts();
 
         scripts.Should().HaveCount(2);
-        scripts[0].Should().Contain("CREATE OR REPLACE FUNCTION tenancy.units_where_i_hold(key text)", "Tenancy's context comes first: the widgets' policies ask its functions");
-        scripts[1].Should().Contain("\"UnitId\" = ANY (ARRAY(SELECT tenancy.units_where_i_hold('widget.read')))");
+        scripts[0].Should().Contain("CREATE OR REPLACE FUNCTION \"tenancy\".units_where_i_hold(key text)", "Tenancy's context comes first: the widgets' policies ask its functions");
+        scripts[1].Should().Contain("\"UnitId\" = ANY (ARRAY(SELECT \"tenancy\".units_where_i_hold('widget.read')))");
         scripts[1].Should().NotContain("CREATE OR REPLACE FUNCTION tenancy.", "only the context that maps Tenancy's tables makes its functions");
     }
 

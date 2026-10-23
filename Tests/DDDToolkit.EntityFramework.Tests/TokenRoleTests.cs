@@ -326,11 +326,11 @@ public sealed class TokenRoleTests
 
         script.Should().Contain(
             "\n" +
-            "CREATE POLICY \"Analysts read every ticket (select) for desk_analyst\" ON desk.\"Tickets\" FOR SELECT TO desk_analyst\n" +
+            "CREATE POLICY \"Analysts read every ticket (select) for desk_analyst\" ON \"desk\".\"Tickets\" FOR SELECT TO desk_analyst\n" +
             "    USING (TRUE);\n" +
-            "COMMENT ON POLICY \"Analysts read every ticket (select) for desk_analyst\" ON desk.\"Tickets\" IS 'DDDToolkit row access rule';\n",
+            "COMMENT ON POLICY \"Analysts read every ticket (select) for desk_analyst\" ON \"desk\".\"Tickets\" IS 'DDDToolkit row access rule';\n",
             "the rule's policy is for the role the token role is mapped to");
-        script.Should().Contain("CREATE POLICY \"TicketComment (select) for desk_analyst\" ON desk.\"TicketComment\" FOR SELECT TO desk_analyst\n", "and the tickets' entities follow, as for any role");
+        script.Should().Contain("CREATE POLICY \"TicketComment (select) for desk_analyst\" ON \"desk\".\"TicketComment\" FOR SELECT TO desk_analyst\n", "and the tickets' entities follow, as for any role");
         script.Should().NotContain("@token").And.NotContain("TO analyst\n", "the token role's own name is nowhere in the script");
         script.Should().Contain(
             "    IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'desk_analyst') THEN\n" +
@@ -368,9 +368,9 @@ public sealed class TokenRoleTests
             "        END;\n" +
             "    END IF;\n",
             "the role a policy names is made where it is missing, refused where it could void or spread its policies or has another caller's, and granted to whoever runs the script");
-        script.Should().Contain("        GRANT USAGE ON SCHEMA ddd TO desk_analyst;\n");
+        script.Should().Contain("        GRANT USAGE ON SCHEMA \"ddd\" TO desk_analyst;\n");
         script.IndexOf("CREATE ROLE desk_analyst", StringComparison.Ordinal).Should().BeLessThan(
-            script.IndexOf("GRANT USAGE ON SCHEMA ddd TO desk_analyst", StringComparison.Ordinal), "the role exists before anything is granted to it");
+            script.IndexOf("GRANT USAGE ON SCHEMA \"ddd\" TO desk_analyst", StringComparison.Ordinal), "the role exists before anything is granted to it");
     }
 
     [Fact]
@@ -422,7 +422,7 @@ public sealed class TokenRoleTests
         {
             Roles = RowAccessRoleNames.Default with { TokenRoles = new Dictionary<string, string> { [Analyst] = AnalystRole } },
             Contributions = [new AnalystDesk()],
-        }).Should().Contain("ON desk.\"Tickets\" FOR SELECT TO desk_analyst\n", "mapped, a contribution's policy is for the mapped role as a rule's is");
+        }).Should().Contain("ON \"desk\".\"Tickets\" FOR SELECT TO desk_analyst\n", "mapped, a contribution's policy is for the mapped role as a rule's is");
     }
 
     [Fact]
@@ -448,7 +448,7 @@ public sealed class TokenRoleTests
         setup.Should().Contain("'The role ddd_system_in is granted to authenticated, anon or desk_analyst", "the scoped system role's privileges must not reach the holders of a token either");
         setup.Split("pg_catalog.pg_has_role(scoped.oid, callers.oid, 'USAGE')").Should().HaveCount(2, "that is asked of the mapped role alone, not of the scoped system role");
         setup.Should().Contain("GRANT \"anon\", \"authenticated\", \"ddd_system_in\", \"desk_analyst\" TO CURRENT_USER;", "the login role may switch to it");
-        setup.Should().Contain("GRANT USAGE ON SCHEMA ddd TO \"anon\", \"authenticated\", \"ddd_system_in\", \"desk_analyst\";", "and it may ask the caller functions");
+        setup.Should().Contain("GRANT USAGE ON SCHEMA \"ddd\" TO \"anon\", \"authenticated\", \"ddd_system_in\", \"desk_analyst\";", "and it may ask the caller functions");
         PostgresRowAccess.SetupScript(new PostgresRowLevelSecurityOptions { TokenRoles = { [Analyst] = AnalystRole } }, "desk_app")
             .Should().Contain("GRANT \"anon\", \"authenticated\", \"ddd_system_in\", \"desk_analyst\" TO \"desk_app\";");
 

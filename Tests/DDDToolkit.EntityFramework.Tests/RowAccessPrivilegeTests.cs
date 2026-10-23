@@ -16,13 +16,13 @@ namespace DDDToolkit.EntityFramework.Tests;
 /// </summary>
 public sealed class RowAccessPrivilegeTests
 {
-    private const string Hives = "apiary.\"Hives\"";
+    private const string Hives = "\"apiary\".\"Hives\"";
 
-    private const string Boxes = "apiary.\"HiveBox\"";
+    private const string Boxes = "\"apiary\".\"HiveBox\"";
 
-    private const string Outbox = "ddd.\"OutboxMessages\"";
+    private const string Outbox = "\"ddd\".\"OutboxMessages\"";
 
-    private const string Inbox = "ddd.\"InboxMessages\"";
+    private const string Inbox = "\"ddd\".\"InboxMessages\"";
 
     /// <summary>The apiary's roles: the defaults, and the role its rangers' tokens are mapped to.</summary>
     private static readonly RowAccessRoleNames Roles = RowAccessRoleNames.Default with
@@ -37,7 +37,7 @@ public sealed class RowAccessPrivilegeTests
     {
         var plain = Script(new RowAccessExport { Roles = Roles });
 
-        plain.Should().NotContain("-- Privileges").And.NotContain(" ON TABLE ").And.NotContain("REVOKE ALL ON TABLE").And.NotContain("ON SCHEMA apiary");
+        plain.Should().NotContain("-- Privileges").And.NotContain(" ON TABLE ").And.NotContain("REVOKE ALL ON TABLE").And.NotContain("ON SCHEMA \"apiary\"");
         plain.Should().NotContain("CREATE ROLE ddd_system_in", "no policy of the apiary names the scoped system role, and nothing else asks for it");
 
         // The bookkeeping role changes nothing in a script that never names it: a host whose system caller runs
@@ -58,7 +58,7 @@ public sealed class RowAccessPrivilegeTests
                 $"GRANT UPDATE (\"IsOpen\", \"Keeper\", \"Label\", \"Version\") ON TABLE {Hives} TO authenticated;",
             ],
             "a keeper does anything with a hive, a visitor and a ranger read, and each gets exactly that");
-        script.Should().Contain("GRANT USAGE ON SCHEMA apiary TO anon, apiary_ranger, authenticated;\n", "a role with a privilege on a table needs its schema");
+        script.Should().Contain("GRANT USAGE ON SCHEMA \"apiary\" TO anon, apiary_ranger, authenticated;\n", "a role with a privilege on a table needs its schema");
 
         // What a contribution's permissive policy allows counts as a rule's does; a restrictive one only narrows.
         var contributed = Script(new RowAccessExport
@@ -106,9 +106,9 @@ public sealed class RowAccessPrivilegeTests
             new RowAccessExport { WriteGrants = true });
 
         entries.Should().Contain(
-            "GRANT UPDATE (\"Folio\", \"Memo\", \"Net\", \"Period_From\", \"Period_Until\", \"Reason\", \"Serial\", \"Tax\", \"Trail\") ON TABLE ledger.\"Entries\" TO authenticated;\n",
+            "GRANT UPDATE (\"Folio\", \"Memo\", \"Net\", \"Period_From\", \"Period_Until\", \"Reason\", \"Serial\", \"Tax\", \"Trail\") ON TABLE \"ledger\".\"Entries\" TO authenticated;\n",
             "not the key, the alternate key, the column fixed after insert, the computed column or the discriminator; a value object stored inline by its columns, one stored as JSON as its one column");
-        entries.Should().Contain("GRANT SELECT, INSERT, DELETE ON TABLE ledger.\"Entries\" TO authenticated;\n", "the other commands are the table's");
+        entries.Should().Contain("GRANT SELECT, INSERT, DELETE ON TABLE \"ledger\".\"Entries\" TO authenticated;\n", "the other commands are the table's");
     }
 
     [Fact]
@@ -156,7 +156,7 @@ public sealed class RowAccessPrivilegeTests
         script.Should().Contain($"REVOKE ALL ON TABLE {Outbox} FROM {Everybody};\n").And.Contain($"REVOKE ALL ON TABLE {Inbox} FROM {Everybody};\n");
         GrantsOn(script, Outbox).Should().Equal([$"GRANT INSERT ON TABLE {Outbox} TO authenticated, ddd_system_in;"], "whoever saves adds the event's row, and nobody reads one");
         GrantsOn(script, Inbox).Should().Equal([$"GRANT SELECT, INSERT ON TABLE {Inbox} TO ddd_system_in;"], "the handlers of integration events run as the scoped system role");
-        script.Should().Contain("GRANT USAGE ON SCHEMA ddd TO authenticated, ddd_system_in;\n");
+        script.Should().Contain("GRANT USAGE ON SCHEMA \"ddd\" TO authenticated, ddd_system_in;\n");
         script.Should().NotContain($"ALTER TABLE {Outbox} ENABLE ROW LEVEL SECURITY").And.NotContain($"ALTER TABLE {Inbox} ENABLE ROW LEVEL SECURITY");
 
         // A role the policies let write a table of the context saves too, and its save writes the event's row.
@@ -274,7 +274,7 @@ public sealed class RowAccessPrivilegeTests
         using var ledger = LedgerContext.Create();
         var script = PostgresRowAccess.Script(ledger, LedgerRules, [], new RowAccessExport { WriteGrants = true });
 
-        script.Should().Contain("          AND d.refobjid = 'ledger.\"Entries\"'::pg_catalog.regclass AND d.deptype IN ('a', 'i')\n", "the sequences are the ones the table's columns own");
+        script.Should().Contain("          AND d.refobjid = '\"ledger\".\"Entries\"'::pg_catalog.regclass AND d.deptype IN ('a', 'i')\n", "the sequences are the ones the table's columns own");
         script.Should().Contain("        EXECUTE pg_catalog.format('REVOKE ALL ON SEQUENCE %s FROM %s', owned, 'PUBLIC, anon, authenticated, ddd_system_in');\n");
         script.Should().Contain("        EXECUTE pg_catalog.format('GRANT USAGE ON SEQUENCE %s TO %s', owned, 'authenticated');\n", "a bookkeeper adds entries, and a visitor does not");
 

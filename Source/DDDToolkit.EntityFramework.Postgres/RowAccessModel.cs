@@ -34,9 +34,9 @@ public static class RowAccessModel
 
     /// <summary>
     /// The schema a script makes a context's functions in, the default schema of <paramref name="model"/> or else
-    /// <see cref="PostgresRowAccess.DefaultSchema"/>, quoted: <c>"desk"</c>, <c>"Desk"</c>. What a contribution's
-    /// statements name a function of their own with, a trigger's say, which the script does not name for them as
-    /// it names the functions asked by <c>{fn:owner/name}</c>:
+    /// <see cref="PostgresRowAccess.DefaultSchema"/>, as <see cref="Schema(string)"/> writes it: <c>"desk"</c>,
+    /// <c>"Desk"</c>. What a contribution's statements name a function of their own with, a trigger's say, which the
+    /// script does not name for them as it names the functions asked by <c>{fn:owner/name}</c>:
     /// <code>
     /// $"CREATE OR REPLACE FUNCTION {RowAccessModel.Schema(context.Model)}.entry_is_kept() RETURNS trigger ..."
     /// </code>
@@ -46,7 +46,21 @@ public static class RowAccessModel
     {
         ArgumentNullException.ThrowIfNull(model);
 
-        return Quote(model.GetDefaultSchema() ?? PostgresRowAccess.DefaultSchema);
+        return Schema(model.GetDefaultSchema() ?? PostgresRowAccess.DefaultSchema);
+    }
+
+    /// <summary>
+    /// <paramref name="schema"/> as every piece of SQL the toolkit writes names a schema: always in double quotes,
+    /// a quote in it doubled, <c>"desk"</c>, <c>"Desk"</c>, <c>"ddd"</c>. Postgres keeps a name in double quotes as
+    /// it is written, so the SQL names the schema Entity Framework made, whatever the model calls it, and nothing has
+    /// to decide whether a name needs the quotes.
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="schema"/> is null.</exception>
+    public static string Schema(string schema)
+    {
+        ArgumentNullException.ThrowIfNull(schema);
+
+        return Quote(schema);
     }
 
     /// <summary>

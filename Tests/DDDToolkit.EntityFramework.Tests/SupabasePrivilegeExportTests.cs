@@ -76,8 +76,8 @@ public sealed class SupabasePrivilegeExportTests : IDisposable
         var written = NewestAccessFile();
 
         written.Should().Contain("-- Privileges, from the policies above")
-            .And.Contain("GRANT SELECT, INSERT, DELETE ON TABLE public.\"Shelves\" TO authenticated;\n")
-            .And.Contain("ALTER TABLE public.\"Shelves\" ENABLE ROW LEVEL SECURITY;\nALTER TABLE public.\"Shelves\" FORCE ROW LEVEL SECURITY;\n");
+            .And.Contain("GRANT SELECT, INSERT, DELETE ON TABLE \"public\".\"Shelves\" TO authenticated;\n")
+            .And.Contain("ALTER TABLE \"public\".\"Shelves\" ENABLE ROW LEVEL SECURITY;\nALTER TABLE \"public\".\"Shelves\" FORCE ROW LEVEL SECURITY;\n");
 
         // A build that leaves both properties out, or empty, or asks for both out loud, writes what the options do.
         Build([ShelvesByName]).Output.Should().Contain("Unchanged").And.NotContain("Created");
@@ -113,12 +113,12 @@ public sealed class SupabasePrivilegeExportTests : IDisposable
         exitCode.Should().Be(0, output);
         var sql = NewestAccessFile();
         sql.Should().Contain("-- Privileges, from the policies above")
-            .And.Contain("REVOKE ALL ON TABLE public.\"Shelves\" FROM PUBLIC, anon, authenticated, ddd_system, ddd_system_in;\n")
-            .And.Contain("GRANT SELECT, INSERT, DELETE ON TABLE public.\"Shelves\" TO authenticated;\n")
-            .And.Contain("GRANT UPDATE (\"Capacity\", \"Name\") ON TABLE public.\"Shelves\" TO authenticated;\n")
-            .And.Contain("GRANT INSERT ON TABLE ddd.\"OutboxMessages\" TO authenticated, ddd_system_in;\n")
-            .And.Contain("GRANT SELECT, DELETE ON TABLE ddd.\"OutboxMessages\" TO ddd_system;\n")
-            .And.Contain("GRANT UPDATE (\"Attempts\", \"LastError\", \"NextAttemptAt\", \"ProcessedAt\") ON TABLE ddd.\"OutboxMessages\" TO ddd_system;\n")
+            .And.Contain("REVOKE ALL ON TABLE \"public\".\"Shelves\" FROM PUBLIC, anon, authenticated, ddd_system, ddd_system_in;\n")
+            .And.Contain("GRANT SELECT, INSERT, DELETE ON TABLE \"public\".\"Shelves\" TO authenticated;\n")
+            .And.Contain("GRANT UPDATE (\"Capacity\", \"Name\") ON TABLE \"public\".\"Shelves\" TO authenticated;\n")
+            .And.Contain("GRANT INSERT ON TABLE \"ddd\".\"OutboxMessages\" TO authenticated, ddd_system_in;\n")
+            .And.Contain("GRANT SELECT, DELETE ON TABLE \"ddd\".\"OutboxMessages\" TO ddd_system;\n")
+            .And.Contain("GRANT UPDATE (\"Attempts\", \"LastError\", \"NextAttemptAt\", \"ProcessedAt\") ON TABLE \"ddd\".\"OutboxMessages\" TO ddd_system;\n")
             .And.Contain("        CREATE ROLE ddd_system NOLOGIN NOINHERIT;\n", "system=ddd_system reached the export, which makes the role");
         sql.Should().NotContain("TO anon;", "no rule is for a visitor, so a visitor gets nothing");
 
@@ -140,10 +140,10 @@ public sealed class SupabasePrivilegeExportTests : IDisposable
         AccessFiles().Should().ContainSingle();
         var sql = NewestAccessFile();
         sql.Should().StartWith("-- Written by DDDToolkit from the row access rules of SupabaseShelfContext.");
-        sql.Should().Contain("REVOKE ALL ON TABLE ddd.\"OutboxMessages\" FROM PUBLIC, anon, authenticated, ddd_system, ddd_system_in;\n")
-            .And.Contain("GRANT INSERT ON TABLE ddd.\"OutboxMessages\" TO authenticated, ddd_system_in;\n")
-            .And.Contain("GRANT SELECT, DELETE ON TABLE ddd.\"OutboxMessages\" TO ddd_system;\n", "the bookkeeping role is ddd_system unless the project says otherwise");
-        sql.Should().NotContain("public.\"Shelves\"\n", "a table without a rule is not the script's to give or take");
+        sql.Should().Contain("REVOKE ALL ON TABLE \"ddd\".\"OutboxMessages\" FROM PUBLIC, anon, authenticated, ddd_system, ddd_system_in;\n")
+            .And.Contain("GRANT INSERT ON TABLE \"ddd\".\"OutboxMessages\" TO authenticated, ddd_system_in;\n")
+            .And.Contain("GRANT SELECT, DELETE ON TABLE \"ddd\".\"OutboxMessages\" TO ddd_system;\n", "the bookkeeping role is ddd_system unless the project says otherwise");
+        sql.Should().NotContain("\"public\".\"Shelves\"\n", "a table without a rule is not the script's to give or take");
         sql.Should().NotContain("ENABLE ROW LEVEL SECURITY");
 
         // The exported migrations do not start with a drop of policies for it: there are none to take off.
@@ -163,9 +163,9 @@ public sealed class SupabasePrivilegeExportTests : IDisposable
         AccessFiles().Should().ContainSingle();
         NewestAccessFile().Should().StartWith("-- Written by DDDToolkit from the row access rules of CounterContext.")
             .And.Contain("        CREATE ROLE ddd_system NOLOGIN NOINHERIT;\n")
-            .And.Contain("    IF pg_catalog.to_regclass('counter.\"__EFMigrationsHistory\"') IS NOT NULL THEN\n")
-            .And.Contain("        GRANT USAGE ON SCHEMA counter TO ddd_system;\n")
-            .And.Contain("        GRANT SELECT ON TABLE counter.\"__EFMigrationsHistory\" TO ddd_system;\n")
+            .And.Contain("    IF pg_catalog.to_regclass('\"counter\".\"__EFMigrationsHistory\"') IS NOT NULL THEN\n")
+            .And.Contain("        GRANT USAGE ON SCHEMA \"counter\" TO ddd_system;\n")
+            .And.Contain("        GRANT SELECT ON TABLE \"counter\".\"__EFMigrationsHistory\" TO ddd_system;\n")
             .And.NotContain("ENABLE ROW LEVEL SECURITY", "there is no table of the module's to hold to a policy");
         SupabaseMigrations.Compare(counter, _directory, new SupabaseMigrationOptions()).IsInSync.Should().BeTrue();
 
@@ -184,8 +184,8 @@ public sealed class SupabasePrivilegeExportTests : IDisposable
         var report = SupabaseMigrations.Export(annals, _directory, new SupabaseMigrationOptions { WriteGrants = false });
 
         report.IsInSync.Should().BeTrue();
-        NewestAccessFile().Should().Contain("CREATE OR REPLACE TRIGGER ddd_kept_rows BEFORE UPDATE OR DELETE ON archive.\"Annals\"\n")
-            .And.Contain("    FOR EACH ROW EXECUTE FUNCTION ddd.refuse_changes_to_kept_rows('', 'RecordedAt');\n", "a log kept for good lets no row go")
+        NewestAccessFile().Should().Contain("CREATE OR REPLACE TRIGGER ddd_kept_rows BEFORE UPDATE OR DELETE ON \"archive\".\"Annals\"\n")
+            .And.Contain("    FOR EACH ROW EXECUTE FUNCTION \"ddd\".refuse_changes_to_kept_rows('', 'RecordedAt');\n", "a log kept for good lets no row go")
             .And.NotContain(" ON TABLE ", "the guard needs no privileges to be written");
         SupabaseMigrations.Compare(annals, _directory, new SupabaseMigrationOptions { WriteGrants = false }).IsInSync.Should().BeTrue();
     }
@@ -203,7 +203,7 @@ public sealed class SupabasePrivilegeExportTests : IDisposable
 
         exitCode.Should().Be(0, output);
         AccessFiles().Should().HaveCount(2, "the file the build wants says more than the one there");
-        NewestAccessFile().Should().Contain("ALTER TABLE public.\"Shelves\" ENABLE ROW LEVEL SECURITY;\nALTER TABLE public.\"Shelves\" FORCE ROW LEVEL SECURITY;\n");
+        NewestAccessFile().Should().Contain("ALTER TABLE \"public\".\"Shelves\" ENABLE ROW LEVEL SECURITY;\nALTER TABLE \"public\".\"Shelves\" FORCE ROW LEVEL SECURITY;\n");
         foreach (var (path, before) in migrations)
         {
             File.ReadAllText(path).Should().Be(before, "an exported migration is never rewritten");
