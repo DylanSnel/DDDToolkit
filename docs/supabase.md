@@ -424,8 +424,10 @@ a word of SQL's own such as `order`. Entity Framework creates it as it names it,
 an access file writes every schema in double quotes, the sample's lower-case ones included: its functions,
 policies, triggers and grants name `"tenancy"`, `"Tenancy"`, `"Help_Desk"` and `"order"` alike
 ([Schema names](row-level-security.md#schema-names)). A migration's own file is Entity Framework's SQL, and
-names the schema as Entity Framework does. Where a project serves a module's schema through the Data API, it
-lists the schema as the model spells it, without quotes, in `config.toml` and in
+names the schema as Entity Framework does, all but the one line the export adds to it: the
+`ENABLE ROW LEVEL SECURITY` of a new table in a schema the Data API serves quotes it as an access file does,
+`ALTER TABLE "tenancy"."Tenants" ENABLE ROW LEVEL SECURITY;`. Where a project serves a module's schema through
+the Data API, it lists the schema as the model spells it, without quotes, in `config.toml` and in
 `SupabaseMigrationOptions.RowLevelSecuritySchemas` alike:
 
 ```toml title="supabase/config.toml"

@@ -1380,9 +1380,10 @@ function declared `schema.name`, a `Sql.Call`, a caller function or a `RowAccess
 by hand, is SQL of your own. Postgres's own `pg_catalog` and the functions of Supabase and pgmq,
 `auth.uid()` and `pgmq.send(...)`, are written as their makers document them. The SQL Entity Framework
 writes, the migrations and a context's queries, names a schema as Entity Framework does, in double quotes
-only where Postgres needs them; so does the one line of the Supabase export's in a migration's file, the
-`ENABLE ROW LEVEL SECURITY` of a table it creates, since a migration's file stays as it was exported. The
-prose of these pages names a function without the quotes, `ddd.caller_id()`: it is the same function.
+only where Postgres needs them. The one line of the Supabase export's in a migration's file, the
+`ENABLE ROW LEVEL SECURITY` of a table it creates, is the toolkit's, and quotes the schema as every other
+statement of the toolkit's does: `ALTER TABLE "desk"."Tickets" ENABLE ROW LEVEL SECURITY;`. The prose of these
+pages names a function without the quotes, `ddd.caller_id()`: it is the same function.
 
 <details>
 <summary>Show the code: a module in "Help_Desk"</summary>

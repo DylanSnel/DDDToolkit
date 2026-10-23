@@ -792,11 +792,10 @@ public static partial class SupabaseMigrations
     /// <c>ENABLE ROW LEVEL SECURITY</c> for each table this migration creates in a schema that asks for it.
     /// </summary>
     /// <remarks>
-    /// The one line of the toolkit's in a migration's file, which is otherwise Entity Framework's SQL, names the
-    /// table as Entity Framework names it in the <c>CREATE TABLE</c> above it, its schema in double quotes only
-    /// where Postgres needs them. A migration's file is written once and compared with what the migration makes
-    /// from then on, so its SQL stays what it was when the migration was exported; the access files, which say
-    /// what the rules are now, quote every schema.
+    /// The one line of the toolkit's in a migration's file, which is otherwise Entity Framework's SQL, writes the
+    /// table's schema as the toolkit writes every schema, in double quotes (<see cref="RowAccessModel.Schema(string)"/>),
+    /// and its name as Entity Framework writes it: <c>"desk"."Tickets"</c>. A table the migration gives no schema is
+    /// named without one, as the <c>CREATE TABLE</c> above it names it, so the line names the table that statement made.
     /// </remarks>
     private static IEnumerable<string> RowLevelSecurity(Migration migration, SupabaseMigrationOptions options, ISqlGenerationHelper sql)
     {
@@ -808,7 +807,8 @@ public static partial class SupabaseMigrations
         return migration.UpOperations
             .OfType<CreateTableOperation>()
             .Where(table => options.RowLevelSecuritySchemas.Contains(table.Schema ?? SupabaseMigrationOptions.PublicSchema))
-            .Select(table => $"ALTER TABLE {sql.DelimitIdentifier(table.Name, table.Schema)} ENABLE ROW LEVEL SECURITY;");
+            .Select(table => "ALTER TABLE " + (table.Schema is null ? "" : RowAccessModel.Schema(table.Schema) + ".")
+                + sql.DelimitIdentifier(table.Name) + " ENABLE ROW LEVEL SECURITY;");
     }
 
     private static string Compose(string id, string context, string script, IEnumerable<string> additions)

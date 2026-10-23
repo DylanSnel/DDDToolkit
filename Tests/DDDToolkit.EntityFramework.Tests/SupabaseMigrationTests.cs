@@ -126,7 +126,44 @@ public sealed class SupabaseMigrationTests : IDisposable
         none[0].Sql.Should().NotContain("ROW LEVEL SECURITY");
 
         var both = Generate(new SupabaseMigrationOptions { RowLevelSecuritySchemas = new HashSet<string> { "public", "ddd" } });
-        both[0].Sql.Should().Contain("ALTER TABLE ddd.\"OutboxMessages\" ENABLE ROW LEVEL SECURITY;");
+        both[0].Sql.Should().Contain("ALTER TABLE \"ddd\".\"OutboxMessages\" ENABLE ROW LEVEL SECURITY;");
+    }
+
+    [Fact]
+    public void The_row_level_security_line_names_a_tables_schema_in_double_quotes_as_everything_the_toolkit_writes()
+    {
+        var sql = Generate(new SupabaseMigrationOptions { RowLevelSecuritySchemas = new HashSet<string> { "public", "ddd" } })[0].Sql;
+
+        sql.Should().Contain("CREATE TABLE ddd.\"OutboxMessages\" (", "the rest of the file is Entity Framework's SQL, which names the schema as Entity Framework does")
+            .And.Contain("ALTER TABLE \"ddd\".\"OutboxMessages\" ENABLE ROW LEVEL SECURITY;", "the line is the toolkit's, and the toolkit writes every schema in double quotes, a lower-case one too")
+            .And.Contain("ALTER TABLE \"Shelves\" ENABLE ROW LEVEL SECURITY;", "a table the migration gives no schema is named as its CREATE TABLE names it")
+            .And.NotContain("ALTER TABLE ddd.");
+    }
+
+    [Fact]
+    public void A_file_exported_with_its_row_level_security_line_unquoted_is_changed_and_left_as_it_is()
+    {
+        var options = new SupabaseMigrationOptions { RowLevelSecuritySchemas = new HashSet<string> { "public", "ddd" } };
+        using (var context = SupabaseShelfContext.Create())
+        {
+            SupabaseMigrations.Export(context, _directory, options);
+        }
+
+        // The line as an export wrote it before it quoted the schema. Nothing compares such a file differently: it
+        // is deleted and exported again.
+        var path = Path.Combine(_directory, FileOf(CreateShelves.Id));
+        var exported = File.ReadAllText(path);
+        var unquoted = exported.Replace("ALTER TABLE \"ddd\".\"OutboxMessages\"", "ALTER TABLE ddd.\"OutboxMessages\"", StringComparison.Ordinal);
+        unquoted.Should().NotBe(exported);
+        File.WriteAllText(path, unquoted);
+
+        using (var context = SupabaseShelfContext.Create())
+        {
+            var report = SupabaseMigrations.Export(context, _directory, options);
+            report.Entries.Single(e => e.MigrationId == CreateShelves.Id).Status.Should().Be(SupabaseMigrationStatus.Changed);
+        }
+
+        File.ReadAllText(path).Should().Be(unquoted, "the export never rewrites a migration's file");
     }
 
     [Fact]

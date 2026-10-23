@@ -2941,22 +2941,25 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   any other schema. The quotes hold for the access functions named relative to their module, the functions a
   contribution writes, Tenancy's and Membership's among them, the functions and triggers of column rules, the name a
   rule's `{fn:owner/name}` becomes and what `PostgresRowAccess.FunctionNamesOf` answers, the policies, grants and
-  comments, and `PostgresCallerFunctions.Toolkit`, which asks `"ddd".caller_id()` and its two siblings. Where a script
-  finds what an earlier one made, to drop it, keep it or take back its grants, it compares the schema and the name the
-  catalog keeps, as strings, capitals and all, and two names are one function where Postgres keeps them as one; a
-  script writes its functions in the order it always did. The start-up checks name a schema the same way,
+  comments, the `ENABLE ROW LEVEL SECURITY` line the Supabase export adds to a migration's file for a new table of a
+  schema the Data API serves, `ALTER TABLE "desk"."Tickets" ENABLE ROW LEVEL SECURITY;`, and
+  `PostgresCallerFunctions.Toolkit`, which asks `"ddd".caller_id()` and its two siblings. Where a script finds what an
+  earlier one made, to drop it, keep it or take back its grants, it compares the schema and the name the catalog
+  keeps, as strings, capitals and all, and two names are one function where Postgres keeps them as one; a script
+  writes its functions in the order it always did. The start-up checks name a schema the same way,
   `"tenancy".key_is_live`, `REVOKE CREATE ON SCHEMA "ddd" FROM PUBLIC;`, so a fix they name runs as it is written. A
   table, a column and a function keep their own names, and what the toolkit does not name is written as it was given:
   an access function named `schema.name`, `Sql.Call`, caller functions of your own, a hand-given
-  `RowAccessExport.FunctionNames`, Supabase's `auth.uid()` and pgmq's functions. A migration's file is Entity
-  Framework's SQL and names a schema as Entity Framework does, its `ENABLE ROW LEVEL SECURITY` line included, so no
-  exported migration file changes. Up to `3.2.0-preview.3` a script refused a function it would make in a schema that
-  was not lower case letters, digits and underscores; that refusal is gone, and a schema longer than the 63 bytes
-  Postgres keeps of a name is the only one refused. Since the quotes change every access file's SQL, the next build
-  writes one new access file per module, which differs from the one before it in the quotes alone: the Tenancy
-  sample's are `20261023170856` to `20261023170858`, the webshop's Ordering file is `20261023170858`, and the files
-  before them stay, as a database may have applied them. The login role's file names no schema, and has no new one. On
-  Supabase, a schema the Data API serves goes into `[api] schemas` as the model spells it, without quotes. See
+  `RowAccessExport.FunctionNames`, Supabase's `auth.uid()` and pgmq's functions; the rest of a migration's file is
+  Entity Framework's SQL and names a schema as Entity Framework does. A migration file exported before this change
+  whose new table names a schema now compares as `Changed`, so delete it and export it again (no sample has one). Up
+  to `3.2.0-preview.3` a script refused a function it would make in a schema that was not lower case letters, digits
+  and underscores; that refusal is gone, and a schema longer than the 63 bytes Postgres keeps of a name is the only
+  one refused. Since the quotes change every access file's SQL, the next build writes one new access file per module,
+  which differs from the one before it in the quotes alone: the Tenancy sample's are `20261023170856` to
+  `20261023170858`, the webshop's Ordering file is `20261023170858`, and the files before them stay, as a database may
+  have applied them. The login role's file names no schema, and has no new one. On Supabase, a schema the Data API
+  serves goes into `[api] schemas` as the model spells it, without quotes. See
   [Schema names](docs/row-level-security.md#schema-names) and
   [A schema of any name](docs/supabase.md#a-schema-of-any-name).
 - **The pgmq check is one of the start-up checks, and runs once the host asks for them.** `AddPgmqSink` and
