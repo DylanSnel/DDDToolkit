@@ -114,11 +114,11 @@ public sealed class OneCallerOrAnotherTests(TenancyPostgres postgres)
         var script = string.Concat(TallyDatabase.Scripts(operators: true, tallyRules: [ReadByOperators, ReadBySeatManagers]));
 
         script.Should().Contain(
-            $"CREATE POLICY \"Operators read every tally (select) for {TallyRules.OperatorRole}\" ON tallies.\"Tallies\" FOR SELECT TO {TallyRules.OperatorRole}\n"
+            $"CREATE POLICY \"Operators read every tally (select) for {TallyRules.OperatorRole}\" ON \"tallies\".\"Tallies\" FOR SELECT TO {TallyRules.OperatorRole}\n"
             + "    USING (TRUE);\n");
         script.Should().Contain(
-            "CREATE POLICY \"Seat managers read the tallies (select) for authenticated\" ON tallies.\"Tallies\" FOR SELECT TO authenticated\n"
-            + "    USING ((SELECT tenancy.holds_tenant_wide('tenancy.seats.manage')));\n");
+            "CREATE POLICY \"Seat managers read the tallies (select) for authenticated\" ON \"tallies\".\"Tallies\" FOR SELECT TO authenticated\n"
+            + "    USING ((SELECT \"tenancy\".holds_tenant_wide('tenancy.seats.manage')));\n");
     }
 
     /// <summary>Two tallies in Harbor and one in Orchard, as the tallies' own system work in each.</summary>

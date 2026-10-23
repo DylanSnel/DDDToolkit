@@ -703,17 +703,17 @@ public static partial class SeatManagersReadTheAuditLog
 ```
 
 ```sql
-CREATE POLICY "Operators read the audit log (select) for tenancy_operator" ON audit."AuditEntries" FOR SELECT TO tenancy_operator
+CREATE POLICY "Operators read the audit log (select) for tenancy_operator" ON "audit"."AuditEntries" FOR SELECT TO tenancy_operator
     USING (TRUE);
 
-CREATE POLICY "Seat managers read the audit log (select) for authenticated" ON audit."AuditEntries" FOR SELECT TO authenticated
-    USING ((SELECT tenancy.holds_tenant_wide('tenancy.seats.manage')));
+CREATE POLICY "Seat managers read the audit log (select) for authenticated" ON "audit"."AuditEntries" FOR SELECT TO authenticated
+    USING ((SELECT "tenancy".holds_tenant_wide('tenancy.seats.manage')));
 
 -- Tenancy's own, on every table kept to a tenant: a seat reads its tenant's rows alone, and an operator only reads
-CREATE POLICY "Kept to its tenant (all) for authenticated" ON audit."AuditEntries" AS RESTRICTIVE FOR ALL TO authenticated
-    USING ("TenantId" = (SELECT tenancy.caller_tenant()))
-    WITH CHECK ("TenantId" = (SELECT tenancy.caller_tenant()));
-CREATE POLICY "Operators only read (select) for tenancy_operator" ON audit."AuditEntries" AS RESTRICTIVE FOR SELECT TO tenancy_operator
+CREATE POLICY "Kept to its tenant (all) for authenticated" ON "audit"."AuditEntries" AS RESTRICTIVE FOR ALL TO authenticated
+    USING ("TenantId" = (SELECT "tenancy".caller_tenant()))
+    WITH CHECK ("TenantId" = (SELECT "tenancy".caller_tenant()));
+CREATE POLICY "Operators only read (select) for tenancy_operator" ON "audit"."AuditEntries" AS RESTRICTIVE FOR SELECT TO tenancy_operator
     USING (true);
 ```
 
