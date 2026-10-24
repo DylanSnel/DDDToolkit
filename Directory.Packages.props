@@ -250,5 +250,10 @@
       13.5.4 for 10.0.11.
     -->
     <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
+    <!--
+      GHSA-qhrr-8q5h-9q3h names every 2.x before 2.5.303. The AppHosts and their tests get it through Aspire 13.5.4,
+      whose StreamJsonRpc 2.25.29 asks for 2.5.302. 2.5.307 is what StreamJsonRpc asks for in its newest release.
+    -->
+    <PackageVersion Include="MessagePack" Version="2.5.307" />
   </ItemGroup>
 </Project>
