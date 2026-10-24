@@ -136,8 +136,8 @@ of another fails restore with NU1605, a package downgrade, or fails at run time 
 | `DDDToolkit.Mediator` | One call that dispatches domain events through [Mediator](https://github.com/martinothamar/Mediator) instead of a hand-written delegate. |
 | `DDDToolkit.FluentValidation` | A generated validator per value object. |
 | `DDDToolkit.Localization` | Validation errors and invariant violations phrased in the reader's language, through `IStringLocalizer`. |
-| `DDDToolkit.HotChocolate` | GraphQL scalar bindings and converters for typed identifiers, failures as coded errors and as typed errors in mutation payloads, plus a subscription sink. Needs HotChocolate 16.6.6 or later. |
-| `DDDToolkit.HotChocolate.Fusion.InMemory` | One GraphQL schema over a modular monolith: each module a source schema, composed by a Fusion gateway in the process. Needs HotChocolate Fusion 16.6.6 or later. |
+| `DDDToolkit.HotChocolate` | GraphQL scalar bindings and converters for typed identifiers, failures as coded errors and as typed errors in mutation payloads, plus a subscription sink. Needs HotChocolate 16.6.9 or later. |
+| `DDDToolkit.HotChocolate.Fusion.InMemory` | One GraphQL schema over a modular monolith: each module a source schema, composed by a Fusion gateway in the process. Needs HotChocolate Fusion 16.6.9 or later. |
 | `DDDToolkit.NewtonSoft.Json` | Newtonsoft converters and a contract resolver that honours `[Internal]`. |
 | `DDDToolkit.Supporting.Tenancy` | [Tenancy](docs/tenancy.md), a supporting domain: tenants, their organization tree, seats and roles over a permission catalogue, and the access questions. No database in it. |
 | `DDDToolkit.Supporting.Tenancy.EntityFramework` | Tenancy in a context of your own, with the access questions as Entity Framework queries, on every provider. |

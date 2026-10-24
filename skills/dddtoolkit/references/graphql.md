@@ -1,7 +1,7 @@
 # GraphQL with HotChocolate
 
 Package `DDDToolkit.HotChocolate`, and `DDDToolkit.HotChocolate.Fusion.InMemory` for one schema over the
-modules of a monolith. Both ask for HotChocolate 16.6.6 or later, and every HotChocolate package of an
+modules of a monolith. Both ask for HotChocolate 16.6.9 or later, and every HotChocolate package of an
 application has the same version. Full page:
 `https://dylansnel.github.io/DDDToolkit/docs/graphql.md`. The rule: do not build what HotChocolate
 already offers. The toolkit adds bindings and conventions; types, loaders, paging and authorization are

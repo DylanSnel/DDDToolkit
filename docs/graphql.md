@@ -23,7 +23,7 @@ dotnet add package Temp.DDDToolkit.HotChocolate --prerelease
 The package brings its own source generator, so referencing it is the whole of the build-time setup.
 It depends on `HotChocolate.AspNetCore`, so you do not add HotChocolate separately.
 
-It asks for HotChocolate 16.6.6 or later. HotChocolate's packages are released together and an
+It asks for HotChocolate 16.6.9 or later. HotChocolate's packages are released together and an
 application has one version of them all, so a HotChocolate package you reference yourself takes the
 version of the others.
 
@@ -1251,7 +1251,7 @@ them directly, in memory, with no HTTP.
 dotnet add package Temp.DDDToolkit.HotChocolate.Fusion.InMemory --prerelease
 ```
 
-**It needs HotChocolate Fusion 16.6.6 or later**, the version `DDDToolkit.HotChocolate` asks for too. The
+**It needs HotChocolate Fusion 16.6.9 or later**, the version `DDDToolkit.HotChocolate` asks for too. The
 package declares it, so NuGet refuses an older HotChocolate rather than a gateway that fails at run time.
 
 How the example shop's `Product` comes together. No module references another's classes; they agree
