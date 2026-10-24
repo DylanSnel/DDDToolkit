@@ -27,7 +27,7 @@ const sidebars = {
       type: 'category',
       label: 'Modules and messaging',
       collapsed: false,
-      items: ['modules', 'module-contracts', 'access-requirements', 'integration-events', 'transports'],
+      items: ['modules', 'module-contracts', 'access-requirements', 'how-a-request-is-checked', 'integration-events', 'transports'],
     },
     {
       type: 'category',

@@ -65,6 +65,9 @@ handler runs. They are part of the core package, free of any dispatcher and of a
 | `RequestInHand` | The request a flow of work is handling, once its checks let it through, with the requirement it passed: what the handler and its save serve, and the check to ask again. |
 
 Who is calling is a separate question, answered by the host: [running queries as the caller](row-level-security.md#running-queries-as-the-caller).
+[How a request is checked](how-a-request-is-checked.md) follows six requests, four of them the Tenancy sample's own,
+through all three questions in order, from the attribute to the row, with a walk-through to click through on the
+docs site.
 
 ## What a request declares
 
@@ -371,14 +374,15 @@ with `[StatesRequirement]` as a package declares one ([Writing your own supporti
 stacks the same way:
 
 ```csharp
-[RequiresPlan(Plan.Pro)]                                                     // billing's own: the tenant's plan
+[RequiresPlan(Plan.Pro)]                                                     // the module's own: the tenant's plan
 [RequiresKey(BoardKeys.Export)]                                              // Tenancy's: a key for the whole tenant
 public sealed record ExportBoard(BoardId Board) : IBoardsRequest;
 ```
 
-is, in the module's interface, `ExportBoard => AccessRequirement.All(BillingAccess.RequiresPlan(Plan.Pro),
+is, in the module's interface, `ExportBoard => AccessRequirement.All(PlanAtLeast.RequiresPlan(Plan.Pro),
 TenancyAccess.ForTheWholeTenant("boards.export"))`. Put the case that reads nothing first: a refusal there costs no
-statement.
+statement. [A requirement of your own](how-a-request-is-checked.md#a-requirement-of-your-own) builds this one whole:
+the requirement, the attribute, `PlanCheck` and its registration.
 
 - **One opens no door the other closes.** `[AllowAnonymous]` beside any other requirement attribute is a
   contradiction, [DDD00079](diagnostics.md#ddd00079), an error.
@@ -400,29 +404,24 @@ statement.
 <summary>Show the code: a module's own requirement attribute, declared and stacked</summary>
 
 ```csharp
-public enum Plan { Free, Pro }
+public enum Plan { Free, Team, Pro }
 
-public abstract record BillingAccess : AccessRequirement
+// The requirement: a record, so two that say the same are equal
+public sealed record PlanAtLeast(Plan Plan) : AccessRequirement
 {
-    private BillingAccess()
-    {
-    }
-
-    public static OnPlan RequiresPlan(Plan plan) => new(plan);
-
-    public sealed record OnPlan(Plan Plan) : BillingAccess;
+    public static PlanAtLeast RequiresPlan(Plan plan) => new(plan);
 }
 
 // The attribute names the call it stands for: its constructor's arguments are the call's
-[StatesRequirement(typeof(BillingAccess), nameof(BillingAccess.RequiresPlan))]
+[StatesRequirement(typeof(PlanAtLeast), nameof(PlanAtLeast.RequiresPlan))]
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, Inherited = false)]
 public sealed class RequiresPlanAttribute(Plan plan) : Attribute
 {
     public Plan Plan { get; } = plan;
 }
 
-// The module's check decides BillingAccess, beside Tenancy's, for the same interface
-services.AddAccessCheck<IBoardsRequest, BillingAccessCheck>();
+// The module's check decides PlanAtLeast, beside Tenancy's, for the same interface
+services.AddAccessCheck<IBoardsRequest, PlanCheck>();
 services.AddTenancyAccess<TenantId, SeatId, OrganizationUnitId, RoleId, IBoardsRequest, BoardsContext>();
 ```
 
@@ -432,7 +431,7 @@ partial interface IBoardsRequest
     AccessRequirement IRequireAccess.RequiredAccess => this switch
     {
         ExportBoard => AccessRequirement.All(
-            BillingAccess.RequiresPlan((Plan)(1)),
+            PlanAtLeast.RequiresPlan((Plan)(2)),
             TenancyAccess.ForTheWholeTenant("boards.export")),
         // ...
     };
@@ -656,7 +655,8 @@ policies decide per row, as the caller, for every statement the work sends, what
 at the door is a decision about who may send the request, and the rows the work then reads are the policies' to let
 through. Postgres lets a row through that one permissive policy for the caller's role allows, and Tenancy's
 restrictive policies keep a seat to its tenant on top of that. Each way an `Any` lets a caller through to a table of
-the application's own therefore needs a row rule of its own: without it, the caller passes the door and reads no row.
+the application's own therefore needs a row rule of its own: without it, the caller passes the door and then may not
+read the table at all, or reads no row of it.
 
 ```mermaid
 flowchart LR
@@ -666,14 +666,19 @@ flowchart LR
     Door -- "seats.manage" --> ManagerRule["Seat managers read<br/>the audit log"]
     OperatorRule --> Rows[("audit rows,<br/>every tenant")]
     ManagerRule --> Own[("audit rows,<br/>their tenant")]
-    Door -- "a branch with<br/>no row rule" --> None["reads no row"]
+    Door -- "a branch with<br/>no row rule" --> None["no privilege,<br/>or no row"]
 ```
 
 The audit log's two ways through the door are two row rules on the application's own table: one for the operators'
 token role, which reads every tenant's rows, and one for a signed-in seat that manages seats for the whole tenant,
 which Tenancy keeps to its own tenant. The export writes each as a policy for its own role, and leaves the two to
 Postgres, which allows a row either allows. Take the seat managers' rule away and the door still lets a seat manager
-through, to read nothing. Tenancy's `OneCallerOrAnotherTests` run this on Postgres.
+through, and what the read meets then depends on who grants the table's privileges. The Supabase export writes them
+from the permissive policies ([Privileges from the policies](row-level-security.md#privileges-from-the-policies)),
+so with the rule gone no policy gives `authenticated` a privilege on the table: the read fails with 42501,
+`permission denied`, an error the toolkit does not make a refusal of. Where the host grants the privileges itself, as
+with the Postgres export, which writes none unless `WriteGrants` says so, the read passes and returns no row, and
+nothing says why. Tenancy's `OneCallerOrAnotherTests` run the second on Postgres.
 
 <details>
 <summary>Show the code: the request, its two row rules, and the policies the export writes</summary>
@@ -709,12 +714,13 @@ CREATE POLICY "Operators read the audit log (select) for tenancy_operator" ON "a
 CREATE POLICY "Seat managers read the audit log (select) for authenticated" ON "audit"."AuditEntries" FOR SELECT TO authenticated
     USING ((SELECT "tenancy".holds_tenant_wide('tenancy.seats.manage')));
 
--- Tenancy's own, on every table kept to a tenant: a seat reads its tenant's rows alone, and an operator only reads
+-- Tenancy's own, on every table kept to a tenant: a seat reads its tenant's rows alone, and an operator writes none
 CREATE POLICY "Kept to its tenant (all) for authenticated" ON "audit"."AuditEntries" AS RESTRICTIVE FOR ALL TO authenticated
     USING ("TenantId" = (SELECT "tenancy".caller_tenant()))
     WITH CHECK ("TenantId" = (SELECT "tenancy".caller_tenant()));
-CREATE POLICY "Operators only read (select) for tenancy_operator" ON "audit"."AuditEntries" AS RESTRICTIVE FOR SELECT TO tenancy_operator
-    USING (true);
+CREATE POLICY "Operators only read (insert) for tenancy_operator" ON "audit"."AuditEntries" AS RESTRICTIVE FOR INSERT TO tenancy_operator
+    WITH CHECK (false);
+-- ... and the same for update and delete
 ```
 
 `tenancy_operator` is the database role the host maps the operators' token role to

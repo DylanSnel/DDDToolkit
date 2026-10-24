@@ -406,6 +406,7 @@ this skill:
 | In-process dispatch versus the outbox | `event-delivery` |
 | Modules, contracts, integration events, versioning | `modules`, `module-contracts`, `integration-events` |
 | What a request requires of its caller, access checks, the generated behavior | `access-requirements` |
+| One request from its attribute to the rows: the generated line, the check that decides, the statement at the door, the policies | `how-a-request-is-checked` |
 | pgmq, Wolverine, MassTransit, a custom sink | `transports` |
 | Tenants, the organization tree, seats and roles | `tenancy` |
 | Access to a resource through its members, their roles and its owner | `membership` |

@@ -1,0 +1,565 @@
+/* The walk-through, in the site's colours (src/css/custom.css): its card, border, muted text and primary colour, with
+   three colours of its own for what a layer answers, each defined for light and dark mode. A state is never told by
+   colour alone: every one has a word and a mark beside it. */
+
+.walkthrough {
+  --wt-pass: #17784c;
+  --wt-refuse: #b8321d;
+  --wt-warn: #9a5a06;
+  --wt-skip: var(--ddd-muted);
+  --wt-info: var(--ifm-color-primary);
+  margin: 1.5rem 0 2.5rem;
+  padding: 1.25rem;
+  border: 1px solid var(--ddd-border);
+  border-radius: 0.9rem;
+  background: color-mix(in srgb, var(--ifm-color-primary) 3%, var(--ddd-card));
+  display: grid;
+  /* One column that never grows past the box: a code block's long lines scroll inside it instead. */
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+  min-width: 0;
+}
+
+:global(html[data-theme='dark']) .walkthrough {
+  --wt-pass: #4fcf90;
+  --wt-refuse: #ff8b7b;
+  --wt-warn: #f0b660;
+}
+
+.header {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.eyebrow {
+  margin: 0;
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ifm-color-primary);
+}
+
+.title {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--ifm-heading-color);
+}
+
+.lede {
+  margin: 0;
+  color: var(--ddd-muted);
+  font-size: 0.95rem;
+}
+
+/* ---------------------------------------------------------------- the choices */
+
+.controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.9rem;
+}
+
+.group {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.legend {
+  padding: 0;
+  margin-bottom: 0.4rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ddd-muted);
+}
+
+.requests {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+/* The chosen request's summary: on its card where there is room, below the names on a phone. */
+.summary {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .requests {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+
+  .requests .face {
+    border-radius: 999px;
+    padding: 0.3rem 0.8rem;
+  }
+
+  .requests .faceTitle {
+    font-size: 0.78rem;
+  }
+
+  .requests .faceDetail {
+    display: none;
+  }
+
+  .requests .choice input:checked + .face {
+    box-shadow: none;
+  }
+
+  .summary {
+    display: block;
+  }
+}
+
+.chips,
+.segments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.situations {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem 1.5rem;
+}
+
+.choice {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  cursor: pointer;
+}
+
+/* The radio button itself stays in the page for the keyboard and for screen readers; its face is what is drawn. */
+.choice input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  margin: 0;
+  cursor: inherit;
+}
+
+.face {
+  display: grid;
+  gap: 0.15rem;
+  width: 100%;
+  padding: 0.45rem 0.75rem;
+  border: 1px solid var(--ddd-border);
+  border-radius: 0.55rem;
+  background: var(--ddd-card);
+  color: var(--ifm-font-color-base);
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.requests .face {
+  padding: 0.55rem 0.8rem;
+}
+
+.chips .face,
+.segments .face {
+  border-radius: 999px;
+  padding: 0.3rem 0.85rem;
+}
+
+.faceTitle {
+  font-size: 0.9rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.requests .faceTitle {
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.85rem;
+}
+
+.faceDetail {
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: var(--ddd-muted);
+}
+
+.choice:hover .face {
+  border-color: color-mix(in srgb, var(--ifm-color-primary) 55%, var(--ddd-border));
+}
+
+.choice input:checked + .face {
+  border-color: var(--ifm-color-primary);
+  background: color-mix(in srgb, var(--ifm-color-primary) 12%, var(--ddd-card));
+  box-shadow: inset 3px 0 0 var(--ifm-color-primary);
+}
+
+.chips .choice input:checked + .face,
+.segments .choice input:checked + .face {
+  box-shadow: none;
+}
+
+.choice input:focus-visible + .face {
+  outline: 2px solid var(--ifm-color-primary);
+  outline-offset: 2px;
+}
+
+.choice input:disabled + .face {
+  opacity: 0.5;
+}
+
+.choice:has(input:disabled) {
+  cursor: not-allowed;
+}
+
+.who {
+  margin: -0.4rem 0 0;
+  font-size: 0.85rem;
+  color: var(--ddd-muted);
+}
+
+/* ---------------------------------------------------------------- the answer */
+
+.verdict {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.15rem 0.8rem;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--ddd-border);
+  border-left: 4px solid var(--wt-state);
+  border-radius: 0.65rem;
+  background: color-mix(in srgb, var(--wt-state) 9%, var(--ddd-card));
+}
+
+.light {
+  grid-row: span 2;
+  width: 0.8rem;
+  height: 0.8rem;
+  border-radius: 50%;
+  background: var(--wt-state);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--wt-state) 22%, transparent);
+}
+
+.verdictBig {
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--wt-state);
+  overflow-wrap: anywhere;
+}
+
+.verdictSmall {
+  font-size: 0.85rem;
+  color: var(--ddd-muted);
+}
+
+.pass {
+  --wt-state: var(--wt-pass);
+}
+
+.refuse {
+  --wt-state: var(--wt-refuse);
+}
+
+.warn {
+  --wt-state: var(--wt-warn);
+}
+
+.skip {
+  --wt-state: var(--wt-skip);
+}
+
+.info {
+  --wt-state: var(--wt-info);
+}
+
+/* ---------------------------------------------------------------- the seven layers */
+
+.track {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.35rem;
+}
+
+@media (max-width: 760px) {
+  .track {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 420px) {
+  .track {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.stop {
+  display: grid;
+  justify-items: start;
+  gap: 0.15rem;
+  width: 100%;
+  height: 100%;
+  padding: 0.45rem 0.5rem;
+  border: 1px solid var(--ddd-border);
+  border-top: 3px solid var(--wt-state);
+  border-radius: 0.5rem;
+  background: var(--ddd-card);
+  color: var(--ifm-font-color-base);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.stop:hover {
+  border-color: color-mix(in srgb, var(--ifm-color-primary) 55%, var(--ddd-border));
+  border-top-color: var(--wt-state);
+}
+
+.stop:focus-visible,
+.navButton:focus-visible,
+.every input:focus-visible {
+  outline: 2px solid var(--ifm-color-primary);
+  outline-offset: 2px;
+}
+
+.stop.current {
+  background: color-mix(in srgb, var(--ifm-color-primary) 12%, var(--ddd-card));
+  border-color: var(--ifm-color-primary);
+  border-top-color: var(--wt-state);
+}
+
+.dot {
+  display: inline-grid;
+  place-items: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 50%;
+  border: 2px solid var(--wt-state);
+  color: var(--wt-state);
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.stopTitle {
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.stopState {
+  font-size: 0.7rem;
+  line-height: 1.3;
+  color: var(--wt-state);
+  overflow-wrap: anywhere;
+}
+
+.stepnav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+
+.navButton {
+  padding: 0.35rem 0.8rem;
+  border: 1px solid var(--ddd-border);
+  border-radius: 0.5rem;
+  background: var(--ddd-card);
+  color: var(--ifm-font-color-base);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.navButton:hover:not(:disabled) {
+  border-color: var(--ifm-color-primary);
+}
+
+.navButton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.position {
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.78rem;
+  color: var(--ddd-muted);
+}
+
+.every {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: var(--ddd-muted);
+  cursor: pointer;
+}
+
+@media (max-width: 640px) {
+  .every {
+    margin-left: 0;
+  }
+}
+
+/* ---------------------------------------------------------------- a layer */
+
+.card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.6rem;
+  min-width: 0;
+  padding: 0.9rem 1rem 0.4rem;
+  border: 1px solid var(--ddd-border);
+  border-left: 4px solid var(--wt-state);
+  border-radius: 0.65rem;
+  background: var(--ddd-card);
+}
+
+.card.current {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ifm-color-primary) 45%, transparent);
+}
+
+.cardHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.75rem;
+}
+
+.walkthrough .cardTitle {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  font-size: 1.05rem;
+  letter-spacing: -0.01em;
+}
+
+.where {
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.75rem;
+  color: var(--ddd-muted);
+}
+
+.pill {
+  margin-left: auto;
+  padding: 0.1rem 0.6rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--wt-state) 13%, var(--ddd-card));
+  color: var(--wt-state);
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.75rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.say,
+.note {
+  margin: 0;
+}
+
+.note {
+  font-size: 0.88rem;
+  color: var(--ddd-muted);
+}
+
+.card :global(.theme-code-block) {
+  margin-bottom: 0.6rem;
+  box-shadow: none;
+}
+
+/* The module's checks, in the order the set asks them. */
+.checks {
+  list-style: none;
+  margin: 0 0 0.6rem;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.checkRow {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.6rem;
+  align-items: center;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid var(--ddd-border);
+  border-radius: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.checkRow.decides {
+  border-color: var(--ifm-color-primary);
+  background: color-mix(in srgb, var(--ifm-color-primary) 10%, var(--ddd-card));
+}
+
+.checkIndex {
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.75rem;
+  color: var(--ddd-muted);
+}
+
+.checkName {
+  display: grid;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.checkName small {
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.72rem;
+  color: var(--ddd-muted);
+}
+
+.checkVerdict {
+  font-size: 0.75rem;
+  color: var(--ddd-muted);
+  text-align: right;
+}
+
+.decides .checkVerdict {
+  color: var(--ifm-color-primary);
+  font-weight: 700;
+}
+
+@media (max-width: 640px) {
+  .walkthrough {
+    padding: 0.9rem;
+  }
+
+  .checkRow {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .checkVerdict {
+    grid-column: 2;
+    text-align: left;
+  }
+}
+
+/* Read by a screen reader, not drawn: the layer's number, which the dot shows. */
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .face {
+    transition: none;
+  }
+}

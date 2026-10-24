@@ -7,6 +7,10 @@ as the owner, so the policies guard whatever else reaches the database and not t
 so the policies decide what the application sees too. And the policies themselves can be written in C#,
 next to the aggregate they guard, as rules the generator turns into SQL when the code compiles.
 
+The policies are the last of three questions between a caller and a row: [How a request is
+checked](how-a-request-is-checked.md) puts this page beside the requirement a request states and the checks that hold
+the caller to it, in the order a request meets them.
+
 This page is about Postgres, any Postgres. [Supabase](supabase.md#row-level-security-for-your-own-queries)
 has the same thing with Supabase's roles and `auth` functions, and its build writes the policies into
 `supabase/migrations` for you.
@@ -2518,6 +2522,8 @@ if (RequestInHand.Current is { } inHand && !await inHand.StillPassesAsync(cancel
 
 ## Where to look next
 
+- [How a request is checked](how-a-request-is-checked.md), which follows one request from its attribute through the
+  checks to the policies of the rows it touches, with the caller on the connection in between.
 - [Supabase](supabase.md#row-level-security-for-your-own-queries) for Supabase Auth's tokens, and the build
   that writes the policies.
 - [Designing aggregates](aggregate-design.md), because a policy is about an aggregate, not a row.

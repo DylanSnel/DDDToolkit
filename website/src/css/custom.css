@@ -222,6 +222,15 @@ html[data-theme='dark'] .theme-code-block {
   background: transparent;
 }
 
+/* On a phone a table wider than the column scrolls inside its own border, rather than widening the page:
+   drawn as a table, a wide one made the whole page scroll sideways. */
+@media (max-width: 996px) {
+  .markdown table {
+    display: block;
+    overflow-x: auto;
+  }
+}
+
 /* blockquotes as quiet asides */
 .markdown blockquote {
   border-left: 3px solid var(--ifm-color-primary);

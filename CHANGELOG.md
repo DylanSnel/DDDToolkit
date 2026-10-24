@@ -2596,6 +2596,28 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   Membership, Start-up checks and the agent skill show the one call where they showed the chain; Row level
   security and Supabase install and register `DDDToolkit.EntityFramework` where they use it, and say what a
   context given the base alone may do where the login role owns and holds nothing.
+- **Docs: How a request is checked, from the attribute to the row.** [How a request is
+  checked](docs/how-a-request-is-checked.md), beside Access requirements in the sidebar and linked from it and from
+  Row level security, follows six requests, four of them the Tenancy sample's own, and six callers of the sample's
+  seed through seven layers: what you write, the line the generator writes into the module's interface, the
+  module's set of checks and the type test that picks one, what the core's, Tenancy's and Membership's checks do,
+  the one statement at the door, the caller on the connection, what the door says, and the privileges and policies
+  of the rows, with what a caller meets who goes round the door, system work as a scope and back, and a requirement
+  of a module's own (`PlanAtLeast`, `[RequiresPlan(Plan.Pro)]`, `PlanCheck`, stacked with `[RequiresKey]`), whose
+  check asks who is calling before it reads a tenant's plan, so a caller who is nobody in the tenant is refused with
+  its own reason and learns nothing. Its tables give, for every request and caller, what the door says, what it
+  reads, the rows, and what Postgres answers a refused caller who goes round the door. On the docs site a
+  walk-through to click through draws the same: pick a request, a caller and a situation, and step through the
+  layers, in the site's colours, light and dark, by keyboard and at phone width; it is loaded with that page alone.
+  A page in `docs/` marks such a part with `<div data-interactive="...">` around what GitHub and the Markdown for
+  language models show instead (`website/src/remark/interactive.js`). Docs tests compile the page's requests and
+  hold them to the sample's source, what it shows the generator writes to what the generator writes, the policies to
+  the sample's newest export, every line of code the walk-through shows to a line of the page, and every answer it
+  gives to its row of the page's tables. Access requirements now says what a way through the door with no row rule
+  of its own meets: on the Supabase export, which writes the privileges from the permissive policies, 42501,
+  `permission denied`, an error rather than a refusal; where the host grants the privileges itself, no row. Its own
+  requirement attribute example uses the same `PlanAtLeast` as the new page. On a phone a wide table in the docs
+  scrolls inside its border instead of widening the page.
 
 ### Changed
 

@@ -551,7 +551,8 @@ in two tenants, on the [Tenancy](../docs/tenancy.md) supporting domain, and on t
 you try it: a dev login with seeded people, a UI that calls the API with each person's token and tenant, and
 calls that deliberately break a rule and show the refusal. How the access works is explained on the Tenancy
 page, in [Who may do what, in the sample](../docs/tenancy.md#who-may-do-what-in-the-sample) and
-[Try it](../docs/tenancy.md#try-it).
+[Try it](../docs/tenancy.md#try-it), and [How a request is checked](../docs/how-a-request-is-checked.md) follows
+four of its requests and its seeded people from the attribute on a request to the policies of the rows it touches.
 
 A crew is the Membership package's: its members are seats, and the roles they hold are project roles, which
 each tenant keeps for its crews, starting from three starter roles made when the tenant is set up, and makes,

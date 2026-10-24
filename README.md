@@ -65,6 +65,7 @@ public partial class Order { }
 | [Modules](docs/modules.md) | `DDD_Module`, `[assembly: Module]` and the boundary the analyzer checks |
 | [Module contracts](docs/module-contracts.md) | What a module publishes, why, and where to keep it |
 | [Access requirements](docs/access-requirements.md) | What a command or a query requires of its caller, the checks that hold it to that before the handler, and the behavior written for Mediator |
+| [How a request is checked](docs/how-a-request-is-checked.md) | One request followed from the attribute on it to the rows it touches: the generated requirement, the module's checks, the statement at the door, the caller on the connection and the policies, with a walk-through to click through |
 | [Integration events](docs/integration-events.md) | Contracts between modules, the outbox and the inbox, versioning |
 | [Transports](docs/transports.md) | Carrying integration events out of the process: pgmq, Wolverine, MassTransit, or a sink of your own |
 | [Tenancy](docs/tenancy.md) | The first supporting domain: tenants, the organization tree, seats and roles, and who may do what where |
