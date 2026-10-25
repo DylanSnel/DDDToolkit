@@ -290,7 +290,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   cases' types, and HotChocolate's error filter writes the reasons as a list of objects. Requirement attributes stacked
   on one request are `All` of their calls, in the order they are written above it, as several `[Authorize]` are in
   ASP.NET Core: `[RequiresPlan(Plan.Pro)] [RequiresKey(BoardKeys.Export)]` is
-  `All(BillingAccess.RequiresPlan(Plan.Pro), TenancyAccess.ForTheWholeTenant("boards.export"))`, a module's own attribute
+  `All(PlanAtLeast.RequiresPlan(Plan.Pro), TenancyAccess.ForTheWholeTenant("boards.export"))`, a module's own attribute
   stacking as a package's does, and a marker keeps saying where the key of `[RequiresKey]` is held. A request with
   attributes of its own that derives from one carrying them holds to both, its base's first, as `[Authorize]` on a
   controller and on the one it derives from do, with the base's markers, a bare one on the base record's parameter
@@ -335,7 +335,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   one that may be null, or a `string`, a class or an enum, which never has one. See
   [Yours, or the key](docs/access-requirements.md#yours-or-the-key).
 - **An access behavior, written where the Mediator library is used.** Mark a module's request interface,
-  `[AccessRequests] public interface IBillingRequest : IRequireAccess;`, and in a project that references
+  `[AccessRequests] public partial interface IBillingRequest : IRequireAccess;`, and in a project that references
   [Mediator](https://github.com/martinothamar/Mediator) (`Mediator.Abstractions`) the generator writes
   `BillingAccessBehavior<TMessage, TResponse>` beside it, for every message that implements the interface and
   for no other, and `services.AddBillingAccessBehavior()`, which puts it in the pipeline, per scope, with the
@@ -1382,8 +1382,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   about the caller's own seat, it answers what `WhoAmIAsync` answers. It asks nothing beyond what every question of
   the directory asks, a seat of the tenant or system work in it: who may see another person's access is the
   application's choice, which the request that sends it states,
-  `TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage)` for an administration say, or
-  `TenancyAccess.InTenant()` where the database's read rules are the rule. What comes back is what the caller reads
+  `[RequiresKey(TenancyKeys.SeatsManage)]` for an administration say, or
+  `[InTenant]` where the database's read rules are the rule. What comes back is what the caller reads
   through the store, as the lists read seats: on Postgres the policies give another seat's grants only where the
   caller may read them, a read rule on the seat class decides which seats it reads, and the roles and keys are those
   of the grants that were read; on another database, or in a context without row level security, every seat comes
@@ -2108,10 +2108,10 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `Sample:`. See
   [Who may do what, in the sample](docs/tenancy.md#who-may-do-what-in-the-sample).
 - **Tenancy sample: no module writes its access behavior.** A module's request interface is one line,
-  `[AccessRequests] public interface IProjectsRequest : IRequireAccess;`. A request declares an
-  `AccessRequirement`: one of the Tenancy package's cases, which the package's check decides in every module,
-  or a case of the module's own, which a check of the module decides (`ProjectsAccessCheck`,
-  `InspectionsAccessCheck`; Tenants has none). A handler takes nothing from its check: it acts on what its
+  `[AccessRequests] public partial interface IProjectsRequest : IRequireAccess;`. A request states what it
+  requires, with an attribute or as the property: one of the Tenancy package's cases, which the package's check
+  decides in every module, or a case of the module's own, which a check of the module decides
+  (`ProjectsAccessCheck`, `InspectionsAccessCheck`; Tenants has none). A handler takes nothing from its check: it acts on what its
   request names, loads a project with the version its caller named, and asks Projects' gate itself for what it
   needs of a project. A request that declares a case no check of its module decides is stopped where it is
   sent, and a test holds every declared case to having a check. The sample ships without the expert hold;
