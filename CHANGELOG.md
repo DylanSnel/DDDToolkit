@@ -675,7 +675,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `RowLevelSecurityScope.Transaction`, sets the caller's role, claims and settings for one transaction at a
   time, so nothing lives on a session and a pooler that hands each transaction another server connection,
   PgBouncer in transaction mode or Supabase's transaction pooler, carries nothing from one client to the
-  next. A command outside a transaction gets `RESET ROLE; CALL ddd.use_caller(…);` in front of its text, in
+  next. A command outside a transaction gets `RESET ROLE; CALL "ddd".use_caller(…);` in front of its text, in
   the same round trip; a transaction a context begins, or is handed with `UseTransaction`, gets the settings
   as its first statement, and so does a `TransactionScope`; a save always runs in a transaction, the
   context's `AutoTransactionBehavior` being set to `Always`; and a
@@ -700,7 +700,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   [SQL of your own](docs/row-level-security.md#sql-of-your-own).
 - **Set-shaped questions in row access rules.** A question only the database answers may answer with a
   set, an `AccessSet<T>`, which a rule asks with `Contains`: `TicketsIWatch.Ids().Contains(ticket.Id)`
-  becomes `"Id" = ANY (ARRAY(SELECT desk.tickets_i_watch()))`, which Postgres asks once per statement, as
+  becomes `"Id" = ANY (ARRAY(SELECT "desk".tickets_i_watch()))`, which Postgres asks once per statement, as
   an InitPlan, and answers through the key's index. An access function with
   `Shape = AccessFunctionShape.Set` answers with the keys of every aggregate it allows, as
   `RETURNS SETOF`, and gets `Ids(...)` in place of `Allows(key)`; one whose whole question is about the
