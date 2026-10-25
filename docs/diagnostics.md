@@ -1884,7 +1884,7 @@ behavior can be written for:
 
 ```csharp
 [AccessRequests]
-public interface IBillingRequest : IRequireAccess;
+public partial interface IBillingRequest : IRequireAccess;
 ```
 
 It is an error because no behavior is written for the interface until it has that shape, so nothing asks the
@@ -1958,7 +1958,7 @@ public sealed class BillingAccessStreamBehavior<TMessage, TResponse>(AccessCheck
 
 ```csharp
 [AccessRequests]
-public interface IBillingRequest : IRequireAccess;
+public partial interface IBillingRequest : IRequireAccess;
 
 public sealed record InvoiceClosed(InvoiceId Invoice) : INotification, IBillingRequest   // DDD00058
 {
@@ -2099,7 +2099,7 @@ resource.
 
 ```csharp
 [AccessRequests]
-public interface IBillingRequest : IRequireAccess;
+public partial interface IBillingRequest : IRequireAccess;
 
 public sealed class InvoiceReminders(CloseInvoiceHandler handler)
 {
