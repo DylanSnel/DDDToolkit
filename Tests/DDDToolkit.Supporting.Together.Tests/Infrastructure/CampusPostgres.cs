@@ -326,7 +326,7 @@ public abstract class CampusPostgresServer(CampusSchemas schemas) : CampusDataba
         }
 
         _container = container;
-        await CampusPostgres.ExecuteAsync(Superuser(), $"CREATE ROLE {CampusPostgres.LoginRole} LOGIN NOINHERIT PASSWORD '{LoginPassword}'", CancellationToken.None);
+        await CampusPostgres.ExecuteAsync(Superuser(), ServerRole.Create(CampusPostgres.LoginRole, $"LOGIN NOINHERIT PASSWORD '{LoginPassword}'"), CancellationToken.None);
         _clock = await DatabaseClock.MeasureAsync(Superuser(), CancellationToken.None);
         await PrepareTemplateAsync(CancellationToken.None);
         return true;

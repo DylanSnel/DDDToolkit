@@ -59,7 +59,7 @@ public sealed class HelpDeskDatabase : IAsyncLifetime
             return;
         }
 
-        await RunAsOwnerAsync($"CREATE ROLE {LoginRole} LOGIN NOINHERIT PASSWORD '{LoginRole}';", cancellation);
+        await RunAsOwnerAsync(ServerRole.Create(LoginRole, $"LOGIN NOINHERIT PASSWORD '{LoginRole}'"), cancellation);
         await RunAsOwnerAsync(PostgresRowAccess.SetupScript(loginRole: LoginRole), cancellation);
 
         await using (var model = HelpDeskContext.Create(Database.ConnectionString))

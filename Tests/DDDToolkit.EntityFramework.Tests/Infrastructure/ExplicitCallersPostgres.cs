@@ -109,9 +109,9 @@ public sealed class ExplicitCallersPostgres : IAsyncLifetime
     private static async Task PrepareAsync(string connectionString, CancellationToken cancellationToken)
     {
         await ExecuteAsync(Unpooled(connectionString), $"""
-            CREATE ROLE anon NOLOGIN NOINHERIT;
-            CREATE ROLE authenticated NOLOGIN NOINHERIT;
-            CREATE ROLE {SystemInRole} NOLOGIN NOINHERIT;
+            {ServerRole.Create("anon", "NOLOGIN NOINHERIT")}
+            {ServerRole.Create("authenticated", "NOLOGIN NOINHERIT")}
+            {ServerRole.Create(SystemInRole, "NOLOGIN NOINHERIT")}
             """, cancellationToken);
         await ExecuteAsync(Unpooled(connectionString), $"CREATE DATABASE {Template}", cancellationToken);
 

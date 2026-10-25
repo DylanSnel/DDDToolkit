@@ -23,12 +23,12 @@ public sealed class SupabaseRowLevelSecurityDatabase : IAsyncLifetime
     public static readonly Guid Bob = Guid.Parse("b0b00000-0000-4000-8000-000000000002");
 
     /// <summary>The roles, which are the server's rather than a database's.</summary>
-    private const string Roles = """
-        CREATE ROLE anon NOLOGIN NOINHERIT;
-        CREATE ROLE authenticated NOLOGIN NOINHERIT;
-        CREATE ROLE service_role NOLOGIN NOINHERIT BYPASSRLS;
-        CREATE ROLE ddd_system_in NOLOGIN NOINHERIT;
-        CREATE ROLE shop_app LOGIN NOINHERIT PASSWORD 'shop_app';
+    private static readonly string Roles = $"""
+        {ServerRole.Create("anon", "NOLOGIN NOINHERIT")}
+        {ServerRole.Create("authenticated", "NOLOGIN NOINHERIT")}
+        {ServerRole.Create("service_role", "NOLOGIN NOINHERIT BYPASSRLS")}
+        {ServerRole.Create("ddd_system_in", "NOLOGIN NOINHERIT")}
+        {ServerRole.Create(LoginRole, $"LOGIN NOINHERIT PASSWORD '{LoginRole}'")}
         GRANT anon, authenticated, service_role, ddd_system_in TO shop_app;
         """;
 

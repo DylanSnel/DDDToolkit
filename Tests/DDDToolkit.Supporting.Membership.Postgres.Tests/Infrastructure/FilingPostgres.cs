@@ -302,7 +302,7 @@ public sealed class FilingPostgres : IAsyncLifetime
         }
 
         _container = container;
-        await ExecuteAsync(Superuser(), $"CREATE ROLE {LoginRole} LOGIN NOINHERIT PASSWORD '{LoginPassword}'", CancellationToken.None);
+        await ExecuteAsync(Superuser(), ServerRole.Create(LoginRole, $"LOGIN NOINHERIT PASSWORD '{LoginPassword}'"), CancellationToken.None);
         return true;
     }
 

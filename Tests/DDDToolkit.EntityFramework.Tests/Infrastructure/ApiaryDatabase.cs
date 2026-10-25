@@ -83,8 +83,11 @@ public sealed class ApiaryDatabase
     /// <summary>A ranger: a signed-in user whose token carries the role the apiary maps to a role of its own.</summary>
     public static readonly Caller Ranger = Callers.FromClaims($$"""{"sub":"0a4de400-0000-4000-8000-000000000023","role":"{{ApiaryRules.Ranger}}"}""");
 
-    /// <summary>The server's roles are made once per server, by whichever test comes first.</summary>
-    private static readonly ConcurrentDictionary<string, Task> ServerRoles = new(StringComparer.Ordinal);
+    /// <summary>
+    /// The server's roles are made once per server, by whichever test comes first: through a lazy, because a
+    /// dictionary may run a factory twice when two tests ask at once, and keeps only one of the two.
+    /// </summary>
+    private static readonly ConcurrentDictionary<string, Lazy<Task>> ServerRoles = new(StringComparer.Ordinal);
 
     private ApiaryDatabase(string ownerConnectionString, bool logged, RowAccessExport export)
     {
@@ -132,7 +135,7 @@ public sealed class ApiaryDatabase
     {
         var cancellation = TestContext.Current.CancellationToken;
         var owner = await postgres.CreateDatabaseAsync(cancellation);
-        await ServerRoles.GetOrAdd(new NpgsqlConnectionStringBuilder(owner) { Database = null }.ConnectionString, _ => MakeServerRolesAsync(owner));
+        await ServerRoles.GetOrAdd(new NpgsqlConnectionStringBuilder(owner) { Database = null }.ConnectionString, _ => new Lazy<Task>(() => MakeServerRolesAsync(owner))).Value;
 
         var export = new RowAccessExport { Roles = RowAccessRoleNames.From(Roles()), WriteGrants = true };
         var database = new ApiaryDatabase(owner, logged, configure?.Invoke(export) ?? export);
@@ -150,15 +153,21 @@ public sealed class ApiaryDatabase
     /// bookkeeping role, and the login role's right to switch to each role a caller runs as. Made by one
     /// connection, so two tests never grant a role at the same moment.
     /// </summary>
+    /// <remarks>
+    /// Each role is made only where the server has none of that name yet. The server is shared by every test of
+    /// this suite that asks <see cref="ExplicitCallersPostgres"/> for a database, and some of those run the
+    /// toolkit's own scripts on it, which make the bookkeeping role as well: whichever runs first, the other finds
+    /// the role there.
+    /// </remarks>
     private static async Task MakeServerRolesAsync(string owner)
     {
         await using var connection = new NpgsqlConnection(new NpgsqlConnectionStringBuilder(owner) { Pooling = false }.ConnectionString);
         await connection.OpenAsync(CancellationToken.None);
         await using var command = new NpgsqlCommand(
             $"""
-            CREATE ROLE {LoginRole} LOGIN NOINHERIT PASSWORD '{LoginRole}';
-            CREATE ROLE {ApiaryRules.RangerRole} NOLOGIN NOINHERIT;
-            CREATE ROLE {SystemRole} NOLOGIN NOINHERIT;
+            {ServerRole.Create(LoginRole, $"LOGIN NOINHERIT PASSWORD '{LoginRole}'")}
+            {ServerRole.Create(ApiaryRules.RangerRole, "NOLOGIN NOINHERIT")}
+            {ServerRole.Create(SystemRole, "NOLOGIN NOINHERIT")}
             GRANT anon, authenticated, {ExplicitCallersPostgres.SystemInRole}, {ApiaryRules.RangerRole}, {SystemRole} TO {LoginRole};
             """,
             connection);

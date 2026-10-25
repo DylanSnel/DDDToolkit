@@ -63,7 +63,7 @@ public sealed class PalletDepotDatabase : IAsyncLifetime
             return;
         }
 
-        await RunAsOwnerAsync($"CREATE ROLE {LoginRole} LOGIN NOINHERIT PASSWORD '{LoginRole}';", cancellation);
+        await RunAsOwnerAsync(ServerRole.Create(LoginRole, $"LOGIN NOINHERIT PASSWORD '{LoginRole}'"), cancellation);
         await RunAsOwnerAsync(PostgresRowAccess.SetupScript(loginRole: LoginRole), cancellation);
 
         await using (var model = new PalletContext(new DbContextOptionsBuilder<PalletContext>().UseNpgsql("Host=nowhere.invalid;Database=unused").Options))
