@@ -3282,16 +3282,18 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `SupabaseMigrationBuild.RunIfRequested(All, Rules, Functions, Contributions)`, with the contributions the
   host lists; `RunIfRequested` and `Run` have overloads that take them.
 - **`DDDToolkit.HotChocolate` and `DDDToolkit.HotChocolate.Fusion.InMemory` ask for HotChocolate 16.6.9 or
-  later**, where they asked for 16.0.0 and 16.6.6: they declare `HotChocolate.AspNetCore`,
-  `HotChocolate.Types.Analyzers` and the two Fusion packages at 16.6.9. HotChocolate asks that all of its
-  packages in one application are the same version, and a module compiled against 16.0.0 did not run under
+  later**, where 3.1.0 asked for 16.0.0 and 16.6.6, and `3.2.0-preview.3` for 16.6.6 in both: they declare
+  `HotChocolate.AspNetCore`, `HotChocolate.Types.Analyzers` and the two Fusion packages at 16.6.9. HotChocolate
+  asks that all of its packages in one application are the same version, and a module compiled against 16.0.0 did
+  not run under
   the in-memory gateway, which brought 16.6.6: a field paged with a total count threw a
   `MissingMethodException`. 16.6.9 is the first release whose Fusion packages bring a
   `System.Security.Cryptography.Pkcs` without the advisories
   [GHSA-846f-f764-76mx](https://github.com/advisories/GHSA-846f-f764-76mx) and
   [GHSA-2fmv-rv2c-59x7](https://github.com/advisories/GHSA-2fmv-rv2c-59x7): 10.0.13, where 16.6.8 and
   before bring 10.0.0. An application on an older HotChocolate 16 moves its HotChocolate packages to 16.6.9
-  or later, all of them to one version.
+  or later, all of them to one version; from `3.2.0-preview.3` that is every HotChocolate, GreenDonut and Fusion
+  package it references, from 16.6.6 to 16.6.9.
 - **`DDDToolkit.HotChocolate.Fusion.InMemory`: source schemas that do not compose fail the start at once,
   and say why.** The start used to wait out `CompositionTimeout` and then, more often than not, report only
   that there was no schema: HotChocolate's in-memory connector composes in its constructor and tells only
