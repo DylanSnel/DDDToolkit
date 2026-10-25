@@ -2984,6 +2984,12 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   serves goes into `[api] schemas` as the model spells it, without quotes. See
   [Schema names](docs/row-level-security.md#schema-names) and
   [A schema of any name](docs/supabase.md#a-schema-of-any-name).
+  - From `3.2.0-preview.3`: what the toolkit writes says `"tenancy".caller_seat()` where it said
+    `tenancy.caller_seat()`, `GRANT USAGE ON SCHEMA "ddd"` where it said `GRANT USAGE ON SCHEMA ddd`, and
+    `CALL "ddd".use_caller(...)` where it said `CALL ddd.use_caller(...)`. Postgres reads a lower-case schema the
+    same either way, so no caller gains or loses a row: commit the new access files (`Check` fails in CI until they
+    are there) and apply them with `supabase db push`. A test of your own that compares the toolkit's text, a
+    script, a start-up check's message or the interceptor's statement, compares the quoted form.
 - **The pgmq check is one of the start-up checks, and runs once the host asks for them.** `AddPgmqSink` and
   `AddPgmqConsumer` register it with the others, where they registered a hosted service of its own that ran in
   every host with a sink or a consumer. It now runs, in `StartingAsync` as before, in a host that calls
