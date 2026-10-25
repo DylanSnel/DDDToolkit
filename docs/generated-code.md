@@ -369,9 +369,11 @@ public sealed record ExportSales : IShopRequest;
 ```
 
 ```csharp title="ShopAccessBehavior.g.cs, shortened"
+using DDDToolkit_Generated_IRequireAccess = global::DDDToolkit.Access.IRequireAccess;
+
 partial interface IShopRequest
 {
-    AccessRequirement IRequireAccess.RequiredAccess => this switch
+    AccessRequirement DDDToolkit_Generated_IRequireAccess.RequiredAccess => this switch
     {
         CancelOrder request => MemberAccess.On("shop.orders.cancel", request.Order, request.ExpectedVersion),
         StopWatching request => AccessRequirement.Any(
@@ -380,12 +382,14 @@ partial interface IShopRequest
         ExportSales => AccessRequirement.All(
             AccessRequirement.SignedIn(),
             TenancyAccess.ForTheWholeTenant("shop.reports.export")),
-        _ => throw new InvalidOperationException(GetType().FullName + " declares no access requirement: ..."),
+        _ => throw new InvalidOperationException(this.GetType().FullName + " declares no access requirement: ..."),
     };
 }
 ```
 
-A request that answers `RequiredAccess` itself gets no line: C# takes its own over the interface's. Several
+The line names `IRequireAccess` through an alias the file declares, so a namespace of the module's own called
+`DDDToolkit`, `Contoso.DDDToolkit.Shop` say, takes nothing from it. A request that answers `RequiredAccess` itself
+gets no line: C# takes its own over the interface's. Several
 attributes stacked on a request are `AccessRequirement.All` of their calls, and `[OrOwn]` beside a key is
 `AccessRequirement.Any` of the caller's own and the key, the caller's own first; beside `[OnResource]` the caller's own
 way through still sees the resource, `MemberAccess.Sees`, so the order is read, its version compared and its hold kept
