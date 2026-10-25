@@ -1959,7 +1959,7 @@ to subscribe and what they then see. Put the `[Authorize]` on the field.
 
 ### Transports
 
-`AddInMemorySubscriptions()` is enough for a single process. At 16.6.6 HotChocolate also ships transports
+`AddInMemorySubscriptions()` is enough for a single process. HotChocolate also ships transports
 for Postgres, Redis, RabbitMQ and NATS, for when more than one server is holding sockets and the server
 that published is not the server the client is connected to. The toolkit's sink goes through
 `ITopicEventSender` and does not care which of them is registered.
