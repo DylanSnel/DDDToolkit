@@ -23,6 +23,11 @@ It needs nothing else: no dispatcher, and no [Tenancy](tenancy.md). Members are 
 [who else they are](#beside-an-organization). In an application that has Tenancy as well, a member can be a
 seat, and [what joins the two](#with-tenancy) is written for you.
 
+A resource with one owner and nobody else on it needs none of this: the aggregate marks the property that names its
+owner `[Owner]`, and a request marks its id `[Own]` or `[OrOwn]`, as for a value of the caller's own
+([The owner of an aggregate](access-requirements.md#the-owner-of-an-aggregate)). Membership is for several people on
+one resource, each for a period, with the roles they hold there.
+
 The [Tenancy sample](../Examples/README.md#the-tenancy-sample) is the worked example of all three beside
 Tenancy. Its Projects module keeps a project's crew as members, who are seats, and the project roles each
 tenant keeps for its crews, made from three starter roles when a tenant is set up and the tenant's own to

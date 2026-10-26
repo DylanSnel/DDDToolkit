@@ -334,6 +334,27 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   other way round, and a member marked twice; DDD00086 `[OrOwn]` or `[Own]` on a type nothing says the caller's own of,
   one that may be null, or a `string`, a class or an enum, which never has one. See
   [Yours, or the key](docs/access-requirements.md#yours-or-the-key).
+- **The owner of an aggregate: the fact in the domain, the policy at the door.** An aggregate root marks the property
+  that names its owner `[Owner]`, `[Owner] public UserId Owner { get; private set; }`, a fact about what it is and no
+  rule; it may be nullable, and a row whose owner is null is nobody's. A request about the owner's own says the policy
+  in the words it says the caller's own with: `[OwnOnly]` with `[Own] BoardId Board` for the owner alone, `[OrOwn]
+  BoardId Board` beside `[RequiresKey(key)]` for the owner or the key. The generator sees the aggregate, in the
+  project or one it references, and writes `AccessRequirement.OwnerOf(request.Board)`, the new case
+  `AccessRequirement.OwnedAggregate<TId>`; beside `[OnResource]` it stands in the place of `Own(member)`. A handle of
+  the id's own wins over the owner, so where an `ICallersOwn` of the id, or Tenancy for its seat id, says the caller's
+  own, the line compares the id as before; DDD00086 stays for a type that is neither, and says where an aggregate's
+  owner would be marked. The core's `CallerAccessCheck` decides the case: it asks the caller's own of the owner's type
+  first, refusing a caller with none, one who did not sign in or the application's own work, with `access.not-own`
+  before anything is read; then the owner is read, the one column of the one row the id names, as the caller. No row
+  for the caller is `access.not-found`, a new code of the toolkit's (`ToolkitRefusals.NotFound`, `RefusalKind.NotFound`,
+  in English and Dutch), as Membership's `not-found` for a resource the caller does not see; a row that is somebody
+  else's, or nobody's, is `access.not-own`. What reads the owner is the storage's, `IAggregateOwners<TId>`, which
+  answers the owner's type and an `AggregateOwner` read of one row; without one, the case is decided by nothing, and
+  the request is stopped naming the registration. DDD00087 reports `[Owner]` on anything but one instance property of
+  an aggregate root itself, and an id two aggregate roots with an owner share; DDD00088 an owner of a type nothing could
+  say the caller's own of, at the property for a `string`, a class or an enum, and at the request where the requests'
+  project can tell that nothing says it of the owner's type. Several owners are still members, Membership's. See
+  [The owner of an aggregate](docs/access-requirements.md#the-owner-of-an-aggregate).
 - **An access behavior, written where the Mediator library is used.** Mark a module's request interface,
   `[AccessRequests] public partial interface IBillingRequest : IRequireAccess;`, and in a project that references
   [Mediator](https://github.com/martinothamar/Mediator) (`Mediator.Abstractions`) the generator writes
@@ -483,6 +504,16 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 #### Entity Framework and row level security
 
+- **The owner of an aggregate is read with nothing written.** `AddDDDToolkitEntityFramework` registers
+  `IAggregateOwners<TId>` for every id, so a host on Entity Framework writes nothing for a request about an
+  aggregate's owner: the context that maps the aggregate is found among the registered ones the first time such a
+  request is checked, once for the host, from the models and the property the aggregate marks `[Owner]`, and the
+  owner's one column of the one row is read in one statement, `AsNoTracking`, as the caller, so row level security
+  and the aggregate's query filters decide whether the row is there. It runs on a context of its own where the host
+  registered a factory for the context, and on the request's otherwise, or where a query filter reads the context.
+  What cannot be told fails the request rather than letting it through, saying which: no context maps such an
+  aggregate, two do, it marks no owner or two, or its context does not map the property. A reader the host registers
+  for an id is asked instead. See [The owner of an aggregate](docs/access-requirements.md#the-owner-of-an-aggregate).
 - **`UseDDDToolkitDesignTime()`: what a design-time factory gives its context of the toolkit.** `dotnet ef` and the
   Supabase export make a context through its `IDesignTimeDbContextFactory`, before any host exists, so they have
   no services to hand `UseDDDToolkit`. This call adds what `UseDDDToolkit` adds that needs none, which is the
@@ -2011,6 +2042,13 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 #### Samples
 
+- **The webshop's order is its customer's, at the door too.** `Order.PlacedBy` is marked `[Owner]`, and
+  `POST /orders/{id}/ship-to` sends an order elsewhere with `ShipElsewhere`, `[OwnOnly]` with `[Own]` on the order's
+  id: Ordering's first request with a door, which its endpoint asks the checks of itself, with Ordering's
+  `AccessChecks<IOrderingRequest>` and its handle `CallersCustomer` registered by `AddOrderingModule`. Only the
+  customer who placed an order sends it elsewhere, and only while it is placed: `Order.DeliverTo` refuses a confirmed
+  or cancelled one with `ordering.no-longer-placed`. A guest's order is nobody's, so it is 403 for everybody; on
+  Supabase another customer's is 404, since the policy keeps it from the caller the owner is read as.
 - **The samples write no design-time factory for Supabase, and register its check once.** The Tenancy sample's
   three contexts and the webshop's five are marked `[SupabaseMigrations]`, and their hand-written Postgres factories,
   `TenantsContextFactory.cs`, `ProjectsContextFactory.cs`, `InspectionsContextFactory.cs` and the webshop's five

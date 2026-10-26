@@ -280,12 +280,12 @@ everywhere; the checks a module adds follow, in the order they were added.
 
 | The Tenants module's set, for `ITenantsRequest` | Added by | Decides |
 |---|---|---|
-| `CallerAccessCheck` | every set, first | `SignedIn()`, `Own(value)` |
+| `CallerAccessCheck` | every set, first | `SignedIn()`, `Own(value)`, `OwnerOf(id)` |
 | `TenancyAccessCheck` over `TenantsContext` | `services.AddTenancyAccess<ITenantsRequest, TenantsContext>()` | every `TenancyRequirement` |
 
 | The Projects module's set, for `IProjectsRequest` | Added by | Decides |
 |---|---|---|
-| `CallerAccessCheck` | every set, first | `SignedIn()`, `Own(value)` |
+| `CallerAccessCheck` | every set, first | `SignedIn()`, `Own(value)`, `OwnerOf(id)` |
 | `TenancyAccessCheck` over `ProjectsContext` | `services.AddTenancyAccess<TenantId, SeatId, OrganizationUnitId, RoleId, IProjectsRequest, ProjectsContext>()` | every `TenancyRequirement` |
 | `MemberAccessCheck<Project, ProjectId>` | `services.AddProjectMemberAccess<IProjectsRequest>()`, generated for the project's members | `MemberAccess<ProjectId>`: `On`, `Sees`, `SeenWith` |
 | `ProjectsAccessCheck` | `services.AddAccessCheck<IProjectsRequest, ProjectsAccessCheck>()` | `ProjectsRequirement`, the module's own case |
@@ -357,12 +357,13 @@ return RequestInHand.Take(request, requirement, check, cancellationToken);   // 
 ## 4. The check that decides
 
 Each case belongs to whoever can decide it, and each check asks the caller before it reads anything: a caller that
-is nobody in the tenant is refused with its own reason, without a statement made for it. Only three cases read.
+is nobody in the tenant is refused with its own reason, without a statement made for it. Only four cases read.
 
 | The case | Its check | What it reads | Refused with |
 |---|---|---|---|
 | `SignedIn()` | the core's `CallerAccessCheck` | nothing: the caller's token | `access.not-signed-in`, 403 |
 | `Own(seat)` | the core's `CallerAccessCheck` | nothing: the caller's seat in the tenant, found when the request came in | `access.not-own`, 403 |
+| `OwnerOf(board)` | the core's `CallerAccessCheck` | one statement, the storage's: the owner's column of the one row, as the caller; nothing for a caller with no own of the owner's type | `access.not-own`, 403; `access.not-found`, 404, for a row the caller does not see ([The owner of an aggregate](access-requirements.md#the-owner-of-an-aggregate)) |
 | `InTenant()` | Tenancy's | nothing: the seat, found when the request came in | the caller's own reason, such as `tenancy.not-seated`, 403 |
 | `ForTheWholeTenant(key)` | Tenancy's | one statement: the key at the tenant's root, for a seat; nothing for system work in the tenant, which holds every key there | `tenancy.not-permitted` with the key, 403 |
 | `AtUnit(key, unit)` | Tenancy's | one statement: the key at the unit or above it, for a seat; for system work in the tenant, whether the unit is the tenant's | `tenancy.not-permitted` with the key and the unit, 403 |

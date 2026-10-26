@@ -56,8 +56,9 @@ handler runs. They are part of the core package, free of any dispatcher and of a
 |---|---|
 | `IRequireAccess` | What a request implements: one member, `RequiredAccess`. |
 | `[AllowAnonymous]`, `[SignedIn]`, `[RequiresKey(key)]`, `[OrOwn]`, `[OwnOnly]` with `[Own]` | The core's attributes a request states its requirement with; a package ships the rest of the vocabulary the same way. Stacked, they all hold. |
-| `AccessRequirement` | What `RequiredAccess` answers: a record that says what is required. The core spells the cases about who is calling, the caller's own, and what combines cases, `All` and `Any`; the others come from whoever can decide them. |
+| `AccessRequirement` | What `RequiredAccess` answers: a record that says what is required. The core spells the cases about who is calling, the caller's own, the owner of an aggregate, and what combines cases, `All` and `Any`; the others come from whoever can decide them. |
 | `ICallersOwn<TValue>` | Says what the caller's own value of a type is: the core's for a `Guid`, Tenancy's for its seat id, an application's for a kind of its own. |
+| `[Owner]`, `IAggregateOwners<TId>` | The property of an aggregate root that names its owner, a fact the domain states, and what reads it for a request about the owner's own: the Entity Framework package's, for every id. |
 | `IAccessCheck` | What decides the cases of one owner: a package ships one, a module writes one for its own. |
 | `CallerAccessCheck` | The core's check of who is calling, first in every module's set. |
 | `AccessChecks<TRequests>` | The checks of one module. `RequireAsync(request)` holds a request to what it declared, and fails closed. |
@@ -171,6 +172,8 @@ stands for, and what a request that computes its requirement writes:
 | one of the application's operators, on a query | `[RequiresOperator]` | `TenancyAccess.RequiresOperator()` | a signed-in user with an [operator's token role](tenancy.md#operators) | `tenancy.operators-only` |
 | the caller's own, or a key | `[RequiresKey(key)]`, `[OrOwn]` on the member that names it | `AccessRequirement.Any(AccessRequirement.Own(seat), ...)` | the caller the member names, and whoever holds the key | one `access.refused`, with `access.not-own` and the key's reason |
 | the caller's own alone | `[OwnOnly]`, `[Own]` on the member that names it | `AccessRequirement.Own(seat)` | the caller the member names | `access.not-own` |
+| the owner of an aggregate, or a key | `[RequiresKey(key)]`, `[OrOwn]` on the aggregate's id, whose owner the aggregate marks `[Owner]` | `AccessRequirement.Any(AccessRequirement.OwnerOf(board), ...)` | the aggregate's owner, and whoever holds the key | one `access.refused`, with `access.not-own` or `access.not-found` and the key's reason |
+| the owner of an aggregate alone | `[OwnOnly]`, `[Own]` on the aggregate's id | `AccessRequirement.OwnerOf(board)` | the aggregate's owner | `access.not-own`; `access.not-found` for a row the caller does not see |
 | several of these, all of them | the attributes, stacked | `AccessRequirement.All(...)` | whoever meets every one | the first failing one's own reason |
 | one of several | | `AccessRequirement.Any(...)` | whoever meets one | one `access.refused`, with each one's reason |
 | something only your module knows | `[YourOwn]`, declared with `[StatesRequirement]` | a record of your own | what your check lets through | your module's code |
@@ -242,7 +245,9 @@ its neighbour is a warning:
 | and `[OrOwn]` on a member | `Any(Own(member), ForTheWholeTenant(key))` | not: [DDD00085](diagnostics.md#ddd00085) | `Any(All(Own(member), Sees(key, resource)), On(key, resource))` | `Any(All(Own(member), Sees(key, resource, version)), On(key, resource, version))` |
 
 Beside `[OnResource]` the caller's own way through is held to the resource too: the caller sees it, its version is
-compared, and what a save is held to is kept, as on the key's way ([Yours, or the key](#yours-or-the-key)).
+compared, and what a save is held to is kept, as on the key's way ([Yours, or the key](#yours-or-the-key)). On the id
+of an aggregate whose owner it marks `[Owner]`, `[OrOwn]` is the same with `OwnerOf(member)` in the place of
+`Own(member)` ([The owner of an aggregate](#the-owner-of-an-aggregate)).
 
 | On one request | Goes with | Reported otherwise |
 |---|---|---|
@@ -253,8 +258,9 @@ compared, and what a save is held to is kept, as on the key's way ([Yours, or th
 | `[AtUnit]` or `[OnResource]` | `[RequiresKey]`, one of the two, on a member of the id it marks that is never null | [DDD00080](diagnostics.md#ddd00080), [DDD00081](diagnostics.md#ddd00081) |
 | `[ExpectedVersion]` | `[OnResource]`, on a `long?` | [DDD00080](diagnostics.md#ddd00080), [DDD00081](diagnostics.md#ddd00081) |
 | `[RequiresKey]` without a marker | a package that says where such a key is held, Tenancy | [DDD00080](diagnostics.md#ddd00080) |
-| `[OrOwn]` | `[RequiresKey]`, without `[AtUnit]`, once, on a member of a type with an own that is never null | [DDD00085](diagnostics.md#ddd00085), [DDD00086](diagnostics.md#ddd00086) |
-| `[Own]` | `[OwnOnly]`, once, on a member of a type with an own that is never null | [DDD00085](diagnostics.md#ddd00085), [DDD00086](diagnostics.md#ddd00086) |
+| `[OrOwn]` | `[RequiresKey]`, without `[AtUnit]`, once, on a member that is never null, of a type with an own or the id of an aggregate whose owner is of one | [DDD00085](diagnostics.md#ddd00085), [DDD00086](diagnostics.md#ddd00086), [DDD00088](diagnostics.md#ddd00088) |
+| `[Own]` | `[OwnOnly]`, once, on a member that is never null, of a type with an own or the id of an aggregate whose owner is of one | [DDD00085](diagnostics.md#ddd00085), [DDD00086](diagnostics.md#ddd00086), [DDD00088](diagnostics.md#ddd00088) |
+| `[Owner]`, on an aggregate's property | the root itself, once, on a property of a type with an own, nullable or not | [DDD00087](diagnostics.md#ddd00087), [DDD00088](diagnostics.md#ddd00088) |
 | `[SeenWith<TResourceId>(key)]`, `[RequiresOperator]` | a query | [DDD00082](diagnostics.md#ddd00082) on a command or a plain request of Mediator's |
 | any of them | one module interface of the same project, `[AccessRequests]` and `partial` | [DDD00083](diagnostics.md#ddd00083) |
 
@@ -299,6 +305,7 @@ before the handler runs:
 | `AccessRequirement.Any(a, b)` | the first case that holds; what follows it is not asked | one `access.refused`, whose argument `Reasons` is each case's own refusal, its code and its arguments, in order |
 | `AccessRequirement.Own(value)`, `[OwnOnly]` with `[Own]` on the member | the value is the caller's own | `access.not-own` |
 | `[RequiresKey(key)]` with `[OrOwn]` on the member | the value is the caller's own, or the caller holds the key: `Any(Own(value), the key's case)` | one `access.refused`, with both reasons |
+| `AccessRequirement.OwnerOf(id)`, `[OwnOnly]` with `[Own]` on an aggregate's id | the aggregate's owner, read from its row as the caller, is the caller's own | `access.not-own`, or `access.not-found` for a row the caller does not see |
 
 Each case of a combination is decided by the check that decides it alone, so cases of different owners combine: a
 key on a project of Membership's with a key at a unit of Tenancy's, a module's own case with either. A combination
@@ -524,6 +531,7 @@ What the caller's own value of a type is, whoever knows says, with an `ICallersO
 | `Guid` | the caller's verified identity, the id its token names | the core, with nothing registered |
 | the application's seat id | the caller's seat in the tenant of the request, active, in an active tenant | Tenancy, which `AddTenancy` registers |
 | a kind of the application's own, its `UserId` say | what the application's handle answers | a small handle beside the requests, registered by the host: `services.AddCallersOwn<UserId, CallersUser>()` |
+| the id of an aggregate with an `[Owner]` property | the aggregate, where its owner, read from its row as the caller, is the caller's own of the owner's type | the aggregate, which marks the property; the Entity Framework package reads it, with nothing registered ([The owner of an aggregate](#the-owner-of-an-aggregate)) |
 
 Nobody else has an own: a caller who did not sign in, the application's own work, which holds every key in its tenant
 but has no seat, an operator. `[OwnOnly]` on the request, with `[Own]` on the member, says the caller's own alone,
@@ -539,7 +547,8 @@ with no key standing in: leaving a tenant, closing one's own account.
 - **Said in one place.** `[OrOwn]` without `[RequiresKey]`, `[Own]` without `[OwnOnly]` and the other way round, a
   member marked both ways, and two members marked one way are [DDD00085](diagnostics.md#ddd00085). On a member of a
   type nothing says the caller's own of, or one that may be null, it is [DDD00086](diagnostics.md#ddd00086): the
-  request would be stopped every time it is sent.
+  request would be stopped every time it is sent. The id of an aggregate that marks its owner is no such type: it
+  is about that owner.
 - **As the property.** `AccessRequirement.Own(value)` is the case, and `TenancyAccess.Own(seat)` the same case
   spelled beside Tenancy's others: `Any(TenancyAccess.Own(Seat), TenancyAccess.ForTheWholeTenant(key))`.
 
@@ -583,6 +592,84 @@ public there; a package names the types its own handles are for with `[assembly:
 template an application declares its class with, as Tenancy does for the seat id, and says with `Implies` there what
 the caller's own already requires, a sign-in for a `Guid` and a seat in the tenant for the seat id. A handle answers
 from what is known of the caller already, as the check that asks it reads nothing.
+
+#### The owner of an aggregate
+
+A row the caller owns is the same question, asked of the row: a board is its owner's, an order the customer's who
+placed it. The fact sits in the domain, and the policy at the door. The aggregate root marks the property that names
+its owner `[Owner]`, which says what the aggregate is and nothing of who may do what with it; a request marks the
+aggregate's id `[Own]`, with `[OwnOnly]`, for the owner alone, or `[OrOwn]` beside a key, for the owner or the key, as
+it marks a value of the caller's own. The generator sees both, the domain through the project the requests
+reference, and writes `AccessRequirement.OwnerOf(request.Board)` where nothing says the caller's own of the id itself.
+
+```csharp
+[AggregateRoot<BoardId>]
+public sealed partial class Board
+{
+    public Board(BoardId id, UserId owner) : base(id) => Owner = owner;
+
+    [Owner] public UserId Owner { get; private set; }                       // the fact: whose board it is
+}
+
+[OwnOnly]                                                                    // the board's owner alone
+public sealed record ArchiveBoard([Own] BoardId Board) : IBoardsRequest;
+
+[RequiresKey(BoardKeys.Manage)]                                              // the owner, or the key for every board
+public sealed record RenameBoard([OrOwn] BoardId Board, string Name) : IBoardsRequest;
+```
+
+```csharp title="the lines the generator writes into IBoardsRequest, shortened"
+ArchiveBoard request => AccessRequirement.OwnerOf(request.Board),
+RenameBoard request => AccessRequirement.Any(
+    AccessRequirement.OwnerOf(request.Board),
+    TenancyAccess.ForTheWholeTenant("boards.manage")),
+```
+
+The check asks the caller's own of the owner's type first, as for a value: a caller who has none, one who did not
+sign in or the application's own work, is refused with `access.not-own` before anything is read. Then it reads the
+owner, the one column of the one row the id names, in one statement, as the caller. A row the caller does not see,
+because row level security or a query filter keeps it from them, is as missing as one never made: `access.not-found`,
+as a resource of Membership's the caller does not see is its own `not-found`. A row that is somebody else's is
+`access.not-own`, and so is one whose owner is null, which is nobody's. Beside a key each of these lets the key be
+asked, and where the key is not held either the caller gets one `access.refused` with both reasons.
+
+```mermaid
+flowchart LR
+    Sent["ArchiveBoard<br/>board"] --> Own{"caller has<br/>a UserId?"}
+    Own -- "no" --> NotOwn["access.not-own,<br/>nothing read"]
+    Own -- "yes" --> Read[("the board's Owner,<br/>read as the caller")]
+    Read -- "no row" --> NotFound["access.not-found"]
+    Read -- "another's,<br/>or nobody's" --> NotOwn2["access.not-own"]
+    Read -- "the caller's" --> Through["let through"]
+```
+
+- **Read by the storage, with nothing written.** What reads the owner is the storage's, an `IAggregateOwners<TId>`. The
+  Entity Framework package registers one for every id with `AddDDDToolkitEntityFramework`, which a host on Entity
+  Framework calls already: it finds the context that maps the aggregate among the registered ones, once for the host,
+  and reads the column of the `[Owner]` property, on a context of its own where the host registered a factory for the
+  context, and otherwise on the request's. A storage of another kind registers its own for the id, and one the host
+  registers takes the place of the package's. Where nothing reads it the request is stopped, as any requirement
+  nothing decides is, and the exception names the registration; where the context cannot be told, because none maps
+  the aggregate or two do, the request fails with an exception that says which, and lets nobody through.
+- **The id's own comes first.** Where something says the caller's own of the id itself, an `ICallersOwn` of the id's
+  own, or Tenancy for its seat id, the line compares the id, `Own(request.Seat)`, and the owner is not read: that
+  handle reads nothing, and says what the id is first.
+- **Beside a resource as well.** `[OrOwn]` on the id of an aggregate that marks its owner, beside `[OnResource]`, is the
+  caller's own on a resource with the owner in the place of the value: `Any(All(OwnerOf(member), Sees(key, resource)),
+  On(key, resource))`, and the handler still finds the aggregate on that resource.
+- **One owner, of a type with an own.** Several owners of one aggregate are members: a resource with members, which
+  [Membership](membership.md) keeps, with the keys each member's roles give. `[Owner]` twice on one aggregate, on an
+  entity inside it or on a type that is no aggregate root is [DDD00087](diagnostics.md#ddd00087). On a type nothing
+  could say the caller's own of it is [DDD00088](diagnostics.md#ddd00088): where it is declared, for a `string`, a class
+  or an enum, and at the request, where the requests' project sees no handle of the owner's type. An owner that may be
+  null is fine: a row whose owner is null is nobody's.
+- **The rows stay the policies'.** The owner is read as the caller, so the door never tells a caller about a row the
+  policies hide; whether the work may then change that row is still theirs to say. A row rule of your own says it,
+  `[RowAccess<Order>]` with `order.PlacedBy?.Value == caller.UserId`, as the Webshop sample's does.
+
+The Webshop sample's `ShipElsewhere` sends an order elsewhere for the customer who placed it alone: `Order.PlacedBy`
+is marked `[Owner]`, and may be null, so a guest's order is nobody's, and whoever has a link to it sends it nowhere.
+Its endpoint asks the checks itself, as one without Mediator does ([Asking the checks without Mediator](#asking-the-checks-without-mediator)).
 
 #### The caller's own on a resource
 
@@ -650,7 +737,8 @@ public sealed class LeaveDocumentHandler(DocumentsContext context, ICallerAccess
 
 ### The door and the rows
 
-The door decides per request, and reads no row the request is about: it asks the caller's rights, once. The
+The door decides per request, and reads no row the request is about: it asks the caller's rights, once, and at most
+the owner of the one aggregate a request about the owner's own names, as the caller. The
 policies decide per row, as the caller, for every statement the work sends, whatever the door said. So a combination
 at the door is a decision about who may send the request, and the rows the work then reads are the policies' to let
 through. Postgres lets a row through that one permissive policy for the caller's role allows, and Tenancy's
@@ -831,6 +919,7 @@ with the `IAccessCheck` that does:
 |---|---|---|
 | who is calling: anyone, a signed-in user | `[AllowAnonymous]` and `[SignedIn]`, `AccessRequirement.AllowAnonymous()` and `SignedIn()`, of the core | nothing: every module's set asks the core's `CallerAccessCheck` first, and nobody has to decide that anyone may send a request |
 | the caller's own | `[OrOwn]`, `[OwnOnly]` with `[Own]`, `AccessRequirement.Own(value)`, of the core | nothing for a `Guid` or Tenancy's seat id; `services.AddCallersOwn<TValue, TCallersOwn>()` for a kind of your own |
+| the owner of an aggregate | `[OrOwn]`, `[OwnOnly]` with `[Own]` on the id of an aggregate that marks its owner `[Owner]`, `AccessRequirement.OwnerOf(id)`, of the core | nothing more on Entity Framework, whose `AddDDDToolkitEntityFramework` registers what reads the owner; the caller's own of the owner's type as in the row above |
 | several cases at once, or one of several | stacked attributes, `AccessRequirement.All(...)` and `Any(...)`, of the core | nothing: the set asks each case of the check that decides it |
 | a tenant: a seat in it, a key for the whole of it or at a unit, operators | `[InTenant]`, `[RequiresKey(key)]` with `[AtUnit]` or without a marker, `[RequiresOperator]`: `TenancyAccess.InTenant()` and the rest of `TenancyRequirement`'s cases, of [Tenancy](tenancy.md#what-a-request-requires-of-its-caller) | `services.AddTenancyAccess<...>()`, for each module |
 | a resource with members: a key held on it | `[RequiresKey(key)]` with `[OnResource]`, `[SeenWith<TResourceId>(key)]`: `MemberAccess.On(key, resource)` and `SeenWith`, of [Membership](membership.md#a-document-and-the-people-it-is-shared-with) | `services.AddDocumentMemberAccess<IFilingRequest>()`, generated for each resource |

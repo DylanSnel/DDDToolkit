@@ -21,7 +21,9 @@ public static class AccessCheckServiceCollectionExtensions
     /// calling and nothing else work in every module, with no check added:
     /// <see cref="AccessRequirement.AllowAnonymous"/>, <see cref="AccessRequirement.SignedIn"/>, and
     /// <see cref="AccessRequirement.Own{TValue}"/> for a type something says the caller's own of
-    /// (<see cref="AddCallersOwn{TValue, TCallersOwn}"/>). The set itself decides what combines their cases, and every
+    /// (<see cref="AddCallersOwn{TValue, TCallersOwn}"/>), and <see cref="AccessRequirement.OwnerOf{TId}"/> for an aggregate
+    /// whose owner something reads (<see cref="IAggregateOwners{TId}"/>, which the Entity Framework package registers for
+    /// every id). The set itself decides what combines their cases, and every
     /// other, <see cref="AccessRequirement.All"/> and <see cref="AccessRequirement.Any"/>. Who is calling
     /// is what the host's <see cref="ICallerAccessor"/> answers, and without one what <see cref="Callers.Begin"/>
     /// made current (<see cref="AmbientCallerAccessor"/>). Anything else a request declares is stopped unless a
