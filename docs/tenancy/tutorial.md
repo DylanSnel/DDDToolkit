@@ -46,6 +46,14 @@ could never change those classes again without breaking Boards. So the ids go in
 **contracts** project: the one part of a module that other modules may reference. The toolkit's analyzer warns when a
 module uses anything of another module outside its contracts ([Module contracts](../module-contracts.md)).
 
+**Why Postgres, on Supabase.** Tenancy runs on any database Entity Framework supports, and every check it makes
+runs in C#, in front of your handlers. On Postgres it adds a **second lock**: row level security. The database then
+refuses a row the caller may not see or change by itself, also for a query that never goes through your handlers,
+such as Supabase's Data API, a reporting tool, or a query with a bug in it. This tutorial uses Postgres on Supabase
+to show that second lock: how the toolkit writes the policies, and how a request runs as its caller in the
+database. Supabase also gives the sign-in (Supabase Auth) and a local stack for development. On another database you
+leave out the Postgres package and the Supabase steps, and the C# checks stay the same.
+
 Harbor's Tenancy module therefore has five projects, one per layer:
 
 | Project | What it holds | Tenancy's package in it |
@@ -219,9 +227,11 @@ that is what keeps the database out of the domain. The comment at the top of eac
 - `Temp.DDDToolkit.Supporting.Tenancy` in the domain project brings Tenancy's classes and rules, and the generator
   that writes your classes from them (step 2). There is no database in it.
 - `Temp.DDDToolkit.Supporting.Tenancy.Postgres` in the infrastructure project brings the Entity Framework mapping,
-  through `Supporting.Tenancy.EntityFramework`, which it depends on, and the row level security for Postgres.
-- `Temp.DDDToolkit.EntityFramework.Supabase` writes the migrations for Supabase, and checks them when the host starts
-  (step 3).
+  through `Supporting.Tenancy.EntityFramework`, which it depends on, and the second lock: the SQL functions and row
+  level security policies for Postgres. On another database you reference `Supporting.Tenancy.EntityFramework`
+  instead.
+- `Temp.DDDToolkit.EntityFramework.Supabase` writes the migrations and the policies as SQL files for Supabase, and
+  checks at start-up that the database has them (step 3).
 
 Build the solution. It builds with nothing in it yet: the next step adds the classes.
 

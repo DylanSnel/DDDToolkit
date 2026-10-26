@@ -106,7 +106,7 @@ classDiagram
 | **Seat** | One person's place in one tenant. A person with two tenants has two seats. | Tove's seat in Harbor Works, and her seat in Meadow Gardens |
 | **Placement** | Where a seat sits: a seat is placed at one or more units. | Rhea's seat, placed at North |
 | **Permission** | One thing you may do, as a string. A request asks for one; a role gives some. | `projects.edit` |
-| **Role** | A named set of permissions. Each tenant has its own roles, and may rename and change them. | Area manager |
+| **Role** | A named set of permissions, kept per tenant. A tenant starts with copies of the starter roles you declare; whether it may also make and change roles itself is your application's choice ([below](#what-your-application-decides)). | Area manager |
 | **Grant** (`RoleGrant`) | A role given to a seat at one of its placements, from a moment, and until a moment or for good. | Area manager, for Rhea, at North |
 
 ## Reach: a permission counts below where it is given
@@ -137,6 +137,22 @@ held **at the tenant**.
   Administrator ([The administrators' pack](../tenancy.md#the-administrators-pack)).
 - **System work.** Work that no person in the tenant does, such as creating the tenant itself. Your code says so
   explicitly, with `using (TenancyUseCases.BeginSystem())`, and only for that one piece of work.
+
+## What your application decides
+
+Tenancy has a default for each of these, so the smallest application decides none of them. Where you want
+something else, this is where you say so.
+
+| Choice | The default | What you can do instead |
+|---|---|---|
+| The roles a new tenant starts with | One, Administrator, holding every permission, given to the tenant's first person at the root. | Declare starter roles of your own, and an administrators' starter role of your own ([The administrators' pack](../tenancy.md#the-administrators-pack)). |
+| Whether a tenant makes and changes its own roles | Tenancy has the use cases (make a role, rename it, change its permissions, archive it), and offers none of them on its own. | Offer a request for those you want, as the tutorial does, and give `tenancy.roles.manage` to whoever may use them. Offer none, and nobody makes roles through your application: tenants keep their starter roles. |
+| A starter role you change later | The copies tenants already have keep what they had. | `services.SyncRolePacks()`: the copies follow your change, and what a tenant changed itself stays ([Packs after provisioning](../tenancy.md#packs-after-provisioning)). |
+| Giving a permission that manages access | Only where you hold it yourself: a seat that manages grants at North cannot give itself the right to manage roles for the whole tenant. | Turn that rule off, `ContainAccessManagingPermissions: false` on your catalogue ([Containment, on or off](../tenancy.md#containment-on-or-off)). |
+| The shape of a tenant | Chosen per tenant when it is created: flat, the root alone, or hierarchical, a tree. | A flat tenant can become hierarchical later; the way back is closed, because its units would have to go. |
+| Who reads whose seat | Tenancy's own read rule. | A read rule of your own on your `Seat` class ([Who reads the seats](../tenancy.md#who-reads-the-seats-a-default-you-may-replace)). |
+| Invitations | Off. | Declare an invitation class ([Invitations](../tenancy.md#invitations)). |
+| The database | Any database Entity Framework supports: every check runs in C#. | On Postgres, the database checks the same rules as well, with row level security ([On Postgres: the second lock](../tenancy.md#on-postgres-the-second-lock)). |
 
 ## Where to go next
 
