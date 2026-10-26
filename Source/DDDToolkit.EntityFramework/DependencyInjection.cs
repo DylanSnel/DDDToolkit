@@ -303,7 +303,9 @@ public static class DependencyInjection
     {
         ArgumentNullException.ThrowIfNull(optionsBuilder);
 
-        ((IDbContextOptionsBuilderInfrastructure)optionsBuilder).AddOrUpdateExtension(MigrationHistoryExtension.Instance);
+        // A context that left the database's migration lock out keeps it out (DatabaseMigrationLock).
+        ((IDbContextOptionsBuilderInfrastructure)optionsBuilder).AddOrUpdateExtension(
+            optionsBuilder.Options.FindExtension<MigrationHistoryExtension>() ?? MigrationHistoryExtension.Instance);
         return optionsBuilder;
     }
 

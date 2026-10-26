@@ -978,6 +978,17 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   owner are owned by a role that may bypass it, without which they would answer that nobody may do
   anything; it passes while no table is forced. See
   [Forcing row level security](docs/row-level-security.md#forcing-row-level-security).
+- **Migrations of several services on one Postgres database wait for each other.** Entity Framework's migration lock
+  on Npgsql is the context's history table, and the toolkit keeps a history per module, so two modules migrated side
+  by side; where both made the same thing, a schema such as `ddd`, the second failed now and then with
+  `23505: duplicate key value violates unique constraint "pg_namespace_nspname_index"`. Every context the toolkit wires
+  on Postgres, with `UseDDDToolkit`, `UseDDDToolkitCore` or a design-time factory's `UseDDDToolkitDesignTime()`, now
+  also takes one advisory lock for the whole database, in the migration's transaction before Npgsql's own:
+  `DatabaseMigrationLock.PostgresStatement`, key `DatabaseMigrationLock.PostgresKey`. It holds for `Migrate()`,
+  `MigrateAsync()`, `dotnet ef database update` and a migration bundle, lasts until the transaction ends, and is the
+  database's alone, so services on another database never wait for it. On by default; a context leaves it out with
+  `WithoutDatabaseMigrationLock()` after the toolkit's call. SQL Server and SQLite are unchanged: their lock is the
+  database's already. See [Several services on one database](docs/entity-framework.md#several-services-on-one-database).
 
 #### Supabase and Auth
 
