@@ -358,6 +358,32 @@ internal sealed class EfTenancyStore<TTenant, TTenantId, TOrganization, TUnit, T
             .ConfigureAwait(false);
     }
 
+    /// <inheritdoc />
+    public async Task<string?> TenantNameAsync(TTenantId tenant, CancellationToken cancellationToken)
+    {
+        if (!AsksTheDatabase)
+        {
+            return null;
+        }
+
+        // The function answers the tenants of the caller's identity, by their names, whatever the policies on the
+        // organizations let the seat read of them.
+        return await context.Set<TenantNameRow<TTenantId>>()
+            .FromSqlRaw(
+                TenancyFunctionSql.Select(
+                    context,
+                    schema: null,
+                    TenancyFunctionNames.TenantNamesOfIdentity,
+                    parameters: 0,
+                    nameof(TenantNameRow<TTenantId>.Id),
+                    nameof(TenantNameRow<TTenantId>.Slug),
+                    nameof(TenantNameRow<TTenantId>.Name)))
+            .Where(row => row.Id.Equals(tenant))
+            .Select(row => row.Name)
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     /// <summary>
     /// Whether the database finds a calling seat on this context's connection: what the function that answers
     /// the caller's seat says, which every one of Tenancy's database functions and policies asks first. It tells

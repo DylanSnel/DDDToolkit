@@ -133,18 +133,25 @@ public sealed class RestrictiveRulesTests(TenancyPostgres postgres)
         await MarkExternalAsync(database, Oli.Seat);
 
         // Oli is placed at North Pier, an Operator there: his overview names the unit through Tenancy's function, as
-        // the directory names a unit by its id, and the tenant by its slug, since the organization and its name are
-        // what the rule keeps from him.
+        // the directory names a unit by its id, and the tenant by its name through the function the picker reads,
+        // while the organization itself is what the rule keeps from him.
         var overview = await services.BySeat(Oli.Identity, Harbor, Oli.Seat, scoped => scoped.Directory().WhoAmIAsync(Cancellation));
 
-        overview.Tenant.Name.Should().Be(overview.Tenant.Slug);
+        overview.Tenant.Name.Should().Be("Harbor Works", "as the tenant picker names it");
+        await using (var oli = await AsCaller.PersonAsync(database, Oli.Identity, Harbor, Cancellation))
+        {
+            (await oli.ScalarAsync<long>("SELECT count(*) FROM tenancy.\"Organizations\"", Cancellation)).Should().Be(0, "the organizations stay closed to him");
+        }
+
+        (await services.BySeat(Oli.Identity, Harbor, Oli.Seat, scoped => scoped.Directory().SeatOverviewAsync(Oli.Seat, Cancellation))).Tenant.Name
+            .Should().Be("Harbor Works", "his overview asked by id is the same");
         overview.Units.Select(unit => unit.Path).Should().Equal("Harbor / North / North Pier");
         overview.Permissions.Should().NotBeEmpty().And.OnlyContain(reach => !reach.AtTenant && reach.Reaches.Select(unit => unit.Id).SequenceEqual(new[] { NorthPier }));
         (await services.BySeat(Oli.Identity, Harbor, Oli.Seat, scoped => scoped.Directory().ListUnitsAsync(Cancellation))).Should().BeEmpty();
 
         // Ada is an employee, and her overview reads the organization as before.
         var ada = await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.Directory().WhoAmIAsync(Cancellation));
-        ada.Tenant.Name.Should().NotBe(ada.Tenant.Slug);
+        ada.Tenant.Name.Should().Be("Harbor Works");
         ada.Permissions.Should().Contain(reach => reach.AtTenant && reach.Reaches.Count == 4);
     }
 

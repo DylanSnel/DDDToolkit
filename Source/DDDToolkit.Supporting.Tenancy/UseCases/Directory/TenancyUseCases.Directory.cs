@@ -181,8 +181,14 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
                 })
                 .ToArray();
 
+            // The organization names the tenant; for a seat a restrictive rule keeps out of it, Tenancy's function names
+            // it as it names the tenants in the picker.
+            var name = organization?.Name
+                       ?? await store.TenantNameAsync(tenantId, cancellationToken).ConfigureAwait(false)
+                       ?? tenant.Slug.Value;
+
             return new SeatOverview(
-                new TenantSummary(tenant.Id, tenant.Slug.Value, organization?.Name ?? tenant.Slug.Value, tenant.Shape, tenant.Status),
+                new TenantSummary(tenant.Id, tenant.Slug.Value, name, tenant.Shape, tenant.Status),
                 seat,
                 placedAt,
                 named,

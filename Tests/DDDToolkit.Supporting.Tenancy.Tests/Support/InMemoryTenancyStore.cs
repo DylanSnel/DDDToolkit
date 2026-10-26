@@ -309,6 +309,13 @@ public sealed class InMemoryTenancyStore
         return Task.FromResult<IReadOnlyList<NamedUnit<OrganizationUnitId>>?>(null);
     }
 
+    /// <summary>No policies of its own: the overview reads the organization.</summary>
+    public Task<string?> TenantNameAsync(TenantId tenant, CancellationToken cancellationToken)
+    {
+        Record(nameof(TenantNameAsync));
+        return Task.FromResult<string?>(null);
+    }
+
     public Task<IReadOnlyList<MoveReach<OrganizationUnitId>>> RightsAMoveChangesAsync(
         TenantId tenant,
         SeatId seat,

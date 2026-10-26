@@ -2758,9 +2758,10 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     work keeps working under such a rule, every use case of it, and a seat it keeps out of the organization still
     reads what a unit is called: `TenancyDirectory.UnitsByIdAsync` answers through the new `units_named()`, which runs
     as its owner, for the ids asked alone, a name, a path and a depth; `ListUnitsAsync` answers such a seat no units,
-    and its overview names the units it is placed at, and the tenant by its slug. The tenant picker, and the seat a
-    request acts as, read what each of the person's tenants is called through the new `identity_tenant_names()`,
-    which runs as its owner and answers a tenant's id, slug and organization's name, and nothing more: the picker
+    and its overview names the units it is placed at. The tenant picker, the seat a request acts as, and the overview
+    of a seat kept out of the organization read what each of the person's tenants is called through the new
+    `identity_tenant_names()`, which runs as its owner and answers a tenant's id, slug and organization's name, and
+    nothing more: the picker
     names every tenant, to an employee and to a seat the rule keeps out alike, before a tenant is chosen, where a rule
     that asks the caller's seat has no seat to ask about, while the organizations themselves stay closed to that seat.
     On a provider without policies the names are read from the organizations, as before. See

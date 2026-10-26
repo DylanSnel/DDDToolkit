@@ -140,6 +140,17 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         /// <param name="cancellationToken">Cancels the read.</param>
         Task<IReadOnlyList<NamedUnit<TUnitId>>?> UnitsNamedAsync(TTenantId tenant, IReadOnlyCollection<TUnitId> ids, CancellationToken cancellationToken);
 
+        /// <summary>
+        /// What <paramref name="tenant"/>, the calling seat's, is called, whatever the seat reads of its organization: on
+        /// a database that keeps its own policies, where an application's restrictive rule may keep the seat out of the
+        /// organization, through Tenancy's function that runs as its owner and answers the tenants of the caller's
+        /// identity, as the tenant picker reads them. <see langword="null"/> from a storage that keeps no policies of
+        /// its own, where the caller reads the organization, and for a tenant without a name.
+        /// </summary>
+        /// <param name="tenant">The tenant, which is the calling seat's.</param>
+        /// <param name="cancellationToken">Cancels the read.</param>
+        Task<string?> TenantNameAsync(TTenantId tenant, CancellationToken cancellationToken);
+
         /// <summary>Adds a new tenant to the unit of work.</summary>
         void Add(TTenant tenant);
 
