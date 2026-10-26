@@ -90,11 +90,11 @@ public sealed class CustomRoleTests
     [Fact]
     public void A_role_is_made_in_use_with_its_name_trimmed_and_its_keys_each_once_in_ordinal_order()
     {
-        var role = Role("  Lender\t", "  Lends the tools out. ", ShedKeys.Stock, " " + ShedKeys.Open, ShedKeys.LendTools, ShedKeys.Stock);
+        var role = Role("  Lender\t", "  Lends the tools out. ", ShedPermissions.Stock, " " + ShedPermissions.Open, ShedKeys.LendTools, ShedPermissions.Stock);
 
         role.Name.Should().Be("Lender");
         role.Description.Should().Be("Lends the tools out.");
-        role.Keys.Should().Equal(ShedKeys.Open, ShedKeys.Stock, ShedKeys.LendTools);
+        role.Keys.Should().Equal(ShedPermissions.Open, ShedPermissions.Stock, ShedKeys.LendTools);
         role.Status.Should().Be(CustomRoleStatus.Active);
         role.MadeFrom.Should().BeNull("a role a customer makes came from no starter role");
         role.GetInvariantViolations().Should().BeEmpty();
@@ -146,44 +146,44 @@ public sealed class CustomRoleTests
     public void A_key_must_be_one_the_resources_rules_let_a_members_role_give()
     {
         // The sheds' rules let a role give every key but selling: another module's among them, without naming it.
-        Role(keys: [ShedKeys.Open, ShedKeys.LendTools, "anything.else"]).Keys.Should().Equal("anything.else", ShedKeys.Open, ShedKeys.LendTools);
-        var kept = Refused.With(ShedMembership.Codes, MembershipRefusals.KeyNotForMembers, () => Role(keys: [ShedKeys.Open, ShedKeys.Sell]));
+        Role(keys: [ShedPermissions.Open, ShedKeys.LendTools, "anything.else"]).Keys.Should().Equal("anything.else", ShedPermissions.Open, ShedKeys.LendTools);
+        var kept = Refused.With(ShedMembership.Codes, MembershipRefusals.KeyNotForMembers, () => Role(keys: [ShedPermissions.Open, ShedPermissions.Sell]));
         kept.Code.Should().Be("sheds.key-not-for-members");
         kept.Message.Should().Be("A role cannot give these keys here: sheds.sell.");
-        kept.Arguments.Should().Contain("Keys", ShedKeys.Sell).And.Contain(RefusalException.FieldArgument, "keys");
+        kept.Arguments.Should().Contain("Keys", ShedPermissions.Sell).And.Contain(RefusalException.FieldArgument, "keys");
 
         // The plots' rules list what a role may give: any other key is refused, and every one refused is named.
         var listed = Refused.With(PlotMembership.Codes, MembershipRefusals.KeyNotForMembers, () => new PlotRole(
-            PlotRoleId.CreateSequential(), Meadow, new CustomRoleDraft("Seller", null, [PlotKeys.Water, PlotKeys.Sell, "compost.turn", PlotKeys.Fence])));
+            PlotRoleId.CreateSequential(), Meadow, new CustomRoleDraft("Seller", null, [PlotPermissions.Water, PlotPermissions.Sell, "compost.turn", PlotPermissions.Fence])));
         listed.Arguments["Keys"].Should().Be("compost.turn, plots.sell");
 
         // A blank key is no key: refused like one the rules keep from a role.
-        Refused.With(ShedMembership.Codes, MembershipRefusals.KeyNotForMembers, () => Role(keys: [ShedKeys.Open, "  "]));
+        Refused.With(ShedMembership.Codes, MembershipRefusals.KeyNotForMembers, () => Role(keys: [ShedPermissions.Open, "  "]));
         Refused.With(ShedMembership.Codes, MembershipRefusals.KeyNotForMembers, () => Role(keys: [null!]));
     }
 
     [Fact]
     public void Setting_the_keys_answers_what_came_in_and_what_went_out_and_refuses_before_anything_changes()
     {
-        var role = Role(keys: [ShedKeys.Open, ShedKeys.Stock]);
+        var role = Role(keys: [ShedPermissions.Open, ShedPermissions.Stock]);
 
-        var set = role.SetKeys([ShedKeys.LendTools, ShedKeys.Open, " " + ShedKeys.LendTools], Sheds);
+        var set = role.SetKeys([ShedKeys.LendTools, ShedPermissions.Open, " " + ShedKeys.LendTools], Sheds);
 
         (set.Changed, role.Keys.Count).Should().Be((true, 2));
         set.Added.Should().Equal(ShedKeys.LendTools);
-        set.Removed.Should().Equal(ShedKeys.Stock);
-        role.Keys.Should().Equal(ShedKeys.Open, ShedKeys.LendTools);
+        set.Removed.Should().Equal(ShedPermissions.Stock);
+        role.Keys.Should().Equal(ShedPermissions.Open, ShedKeys.LendTools);
 
         // The keys it has already, in any order and said twice: nothing came in, nothing went out.
-        var same = role.SetKeys([ShedKeys.LendTools, ShedKeys.Open, ShedKeys.Open], Sheds);
+        var same = role.SetKeys([ShedKeys.LendTools, ShedPermissions.Open, ShedPermissions.Open], Sheds);
         (same.Changed, same.Added.Count, same.Removed.Count).Should().Be((false, 0, 0));
 
         // Refused as a whole: a key the rules keep from a role takes the others with it, and the role is as it was.
-        Refused.With(ShedMembership.Codes, MembershipRefusals.KeyNotForMembers, () => role.SetKeys([ShedKeys.Stock, ShedKeys.Sell], Sheds));
-        role.Keys.Should().Equal(ShedKeys.Open, ShedKeys.LendTools);
+        Refused.With(ShedMembership.Codes, MembershipRefusals.KeyNotForMembers, () => role.SetKeys([ShedPermissions.Stock, ShedPermissions.Sell], Sheds));
+        role.Keys.Should().Equal(ShedPermissions.Open, ShedKeys.LendTools);
 
         // No key at all is a role that gives nothing: allowed, and said as what went out.
-        role.SetKeys([], Sheds).Removed.Should().Equal(ShedKeys.Open, ShedKeys.LendTools);
+        role.SetKeys([], Sheds).Removed.Should().Equal(ShedPermissions.Open, ShedKeys.LendTools);
         role.Keys.Should().BeEmpty();
         FluentActions.Invoking(() => role.SetKeys(null!, Sheds)).Should().Throw<ArgumentNullException>();
     }
@@ -191,22 +191,22 @@ public sealed class CustomRoleTests
     [Fact]
     public void A_role_gives_a_key_while_it_is_in_use_holds_it_and_the_rules_let_a_role_give_it()
     {
-        var role = Role(keys: [ShedKeys.Open, ShedKeys.LendTools]);
+        var role = Role(keys: [ShedPermissions.Open, ShedKeys.LendTools]);
 
-        role.Gives(ShedKeys.Open, Sheds).Should().BeTrue();
+        role.Gives(ShedPermissions.Open, Sheds).Should().BeTrue();
         role.Gives(ShedKeys.LendTools, Sheds).Should().BeTrue();
-        role.Gives(ShedKeys.Stock, Sheds).Should().BeFalse("it does not hold it");
+        role.Gives(ShedPermissions.Stock, Sheds).Should().BeFalse("it does not hold it");
         role.Gives("sheds.Open", Sheds).Should().BeFalse("a key is compared as it is written");
 
         // What a row holds from before the rules changed is cut by what a role may give now.
-        Break.Set(role, nameof(ShedRole.Keys), new[] { ShedKeys.Open, ShedKeys.Sell });
-        role.Gives(ShedKeys.Sell, Sheds).Should().BeFalse();
-        role.Gives(ShedKeys.Open, Sheds).Should().BeTrue();
+        Break.Set(role, nameof(ShedRole.Keys), new[] { ShedPermissions.Open, ShedPermissions.Sell });
+        role.Gives(ShedPermissions.Sell, Sheds).Should().BeFalse();
+        role.Gives(ShedPermissions.Open, Sheds).Should().BeTrue();
 
         // And an archived role gives nothing at all.
         role.Archive(Sheds);
-        role.Gives(ShedKeys.Open, Sheds).Should().BeFalse();
-        role.Keys.Should().Contain(ShedKeys.Open, "what it held is still there to read");
+        role.Gives(ShedPermissions.Open, Sheds).Should().BeFalse();
+        role.Keys.Should().Contain(ShedPermissions.Open, "what it held is still there to read");
     }
 
     // ---------------------------------------------------------------- renamed and archived
@@ -229,41 +229,41 @@ public sealed class CustomRoleTests
     [Fact]
     public void An_archived_role_stays_as_it_was_and_changes_no_more()
     {
-        var role = Role("Lender", "Lends the tools out.", ShedKeys.Open, ShedKeys.LendTools);
+        var role = Role("Lender", "Lends the tools out.", ShedPermissions.Open, ShedKeys.LendTools);
 
         role.Archive(Sheds);
 
         role.Status.Should().Be(CustomRoleStatus.Archived);
         (role.Name, role.Description).Should().Be(("Lender", "Lends the tools out."));
-        role.Keys.Should().Equal(ShedKeys.Open, ShedKeys.LendTools);
+        role.Keys.Should().Equal(ShedPermissions.Open, ShedKeys.LendTools);
         role.GetInvariantViolations().Should().BeEmpty();
 
         // Not renamed, given keys or archived again: each refused under the resource's code, with nothing changed.
         Refused.With(ShedMembership.Codes, MembershipRefusals.RoleIsArchived, () => role.Rename("Librarian", null, Sheds)).Code.Should().Be("sheds.role-archived");
-        Refused.With(ShedMembership.Codes, MembershipRefusals.RoleIsArchived, () => role.SetKeys([ShedKeys.Open], Sheds));
+        Refused.With(ShedMembership.Codes, MembershipRefusals.RoleIsArchived, () => role.SetKeys([ShedPermissions.Open], Sheds));
         Refused.With(ShedMembership.Codes, MembershipRefusals.RoleIsArchived, () => role.Archive(Sheds));
         (role.Name, role.Keys.Count).Should().Be(("Lender", 2));
 
         // That it is archived is said before anything else about the change is looked at.
         Refused.With(ShedMembership.Codes, MembershipRefusals.RoleIsArchived, () => role.Rename("  ", null, Sheds));
-        Refused.With(ShedMembership.Codes, MembershipRefusals.RoleIsArchived, () => role.SetKeys([ShedKeys.Sell], Sheds));
+        Refused.With(ShedMembership.Codes, MembershipRefusals.RoleIsArchived, () => role.SetKeys([ShedPermissions.Sell], Sheds));
     }
 
     [Fact]
-    public void A_role_remembers_the_starter_role_it_was_made_from_and_the_owners_is_not_archived_whatever_it_is_called()
+    public void A_role_remembers_the_starter_role_it_was_made_from_whatever_it_is_called_and_any_is_archived_alike()
     {
-        // The sheds' rules declare the keeper, the role every owner of a shed holds.
+        // The sheds' rules declare the keeper's starter role.
         var keeper = new ShedRole(ShedRoleId.CreateSequential(), StarterRoles.Missing<ShedRoleId>(Sheds, []).Single());
         (keeper.Name, keeper.MadeFrom).Should().Be((ShedMembership.Keeper, ShedMembership.Keeper));
 
         // Renamed and given other keys like any role, and still the one made from that starter role.
         keeper.Rename("Shed boss", "Runs the shed.", Sheds).Should().BeTrue();
-        keeper.SetKeys([ShedKeys.Open], Sheds).Removed.Should().Equal(ShedKeys.Stock);
+        keeper.SetKeys([ShedPermissions.Open], Sheds).Removed.Should().Equal(ShedPermissions.Stock);
         keeper.MadeFrom.Should().Be(ShedMembership.Keeper);
 
-        // Not archived: nobody could be made an owner after, and there is no way back from archived.
-        Refused.With(ShedMembership.Codes, MembershipRefusals.OwnerRoleStays, () => keeper.Archive(Sheds)).Code.Should().Be("sheds.owner-role-stays");
-        keeper.Status.Should().Be(CustomRoleStatus.Active);
+        // Archived like any role: an owner holds none, so no role is one every owner holds.
+        keeper.Archive(Sheds);
+        keeper.Status.Should().Be(CustomRoleStatus.Archived);
 
         // A role made from another starter role is archived like any other: the plots' tender.
         var tender = new PlotRole(PlotRoleId.CreateSequential(), Meadow, StarterRoles.Missing<PlotRoleId>(PlotMembership.Rules, []).Single(draft => draft.MadeFrom == PlotMembership.Tender));
@@ -287,15 +287,15 @@ public sealed class CustomRoleTests
 
         // A document's roles are the ones its rules declare: a row made under them would be held by nobody and give nothing.
         FluentActions.Invoking(() => role.Rename("Librarian", null, declared))
-            .Should().Throw<ArgumentException>().WithParameterName("rules").WithMessage("The rules 'documents' do not say the resource's roles are kept*rolesKept: true*");
-        FluentActions.Invoking(() => role.SetKeys([DocumentKeys.View], declared)).Should().Throw<ArgumentException>().WithParameterName("rules");
+            .Should().Throw<ArgumentException>().WithParameterName("rules").WithMessage("The rules 'documents' do not say a customer makes the resource's roles*Roles.Custom()*");
+        FluentActions.Invoking(() => role.SetKeys([DocumentPermissions.View], declared)).Should().Throw<ArgumentException>().WithParameterName("rules");
         FluentActions.Invoking(() => role.Archive(declared)).Should().Throw<ArgumentException>().WithParameterName("rules");
         FluentActions.Invoking(() => StarterRoles.Missing<ShedRoleId>(declared, [])).Should().Throw<ArgumentException>().WithParameterName("rules");
 
         FluentActions.Invoking(() => role.Rename("Librarian", null, null!)).Should().Throw<ArgumentNullException>();
         FluentActions.Invoking(() => role.SetKeys([], null!)).Should().Throw<ArgumentNullException>();
         FluentActions.Invoking(() => role.Archive(null!)).Should().Throw<ArgumentNullException>();
-        FluentActions.Invoking(() => role.Gives(ShedKeys.Open, null!)).Should().Throw<ArgumentNullException>();
+        FluentActions.Invoking(() => role.Gives(ShedPermissions.Open, null!)).Should().Throw<ArgumentNullException>();
         FluentActions.Invoking(() => new ShedRole(ShedRoleId.CreateSequential(), null!)).Should().Throw<ArgumentNullException>();
         (role.Name, role.Status).Should().Be(("Lender", CustomRoleStatus.Active));
     }
@@ -312,7 +312,7 @@ public sealed class CustomRoleTests
     [Fact]
     public void The_two_rules_a_role_checks_itself_hold_what_went_round_its_operations()
     {
-        var role = Role("Lender", null, ShedKeys.Open, ShedKeys.LendTools);
+        var role = Role("Lender", null, ShedPermissions.Open, ShedKeys.LendTools);
         role.GetInvariantViolations().Should().BeEmpty();
 
         // A name with space around it, as a row written by other hands might have.
@@ -328,7 +328,7 @@ public sealed class CustomRoleTests
         Break.Set(role, nameof(ShedRole.Description), string.Empty);
 
         // Keys out of order, said twice, or blank.
-        foreach (var keys in new[] { new[] { ShedKeys.Stock, ShedKeys.Open }, [ShedKeys.Open, ShedKeys.Open], [ShedKeys.Open, " "] })
+        foreach (var keys in new[] { new[] { ShedPermissions.Stock, ShedPermissions.Open }, [ShedPermissions.Open, ShedPermissions.Open], [ShedPermissions.Open, " "] })
         {
             Break.Set(role, nameof(ShedRole.Keys), keys);
             role.GetInvariantViolations().Should().ContainSingle().Which.Code.Should().Be(MembershipRefusals.RoleKeysNotNormalized);
@@ -336,7 +336,7 @@ public sealed class CustomRoleTests
 
         // Whether a key is one a role may give is not checked after the fact: the rules may have changed since,
         // and the row is cut where it is read.
-        Break.Set(role, nameof(ShedRole.Keys), new[] { ShedKeys.Open, ShedKeys.Sell });
+        Break.Set(role, nameof(ShedRole.Keys), new[] { ShedPermissions.Open, ShedPermissions.Sell });
         role.GetInvariantViolations().Should().BeEmpty();
         FluentActions.Invoking(role.EnsureInvariants).Should().NotThrow();
     }
@@ -345,24 +345,24 @@ public sealed class CustomRoleTests
     public void What_happened_to_a_role_is_the_hosts_to_tell_and_the_package_raises_nothing()
     {
         // The sheds' role class adds nothing: every operation of the package's, and no event.
-        var shed = Role(keys: [ShedKeys.Open]);
+        var shed = Role(keys: [ShedPermissions.Open]);
         shed.Rename("Librarian", null, Sheds);
-        shed.SetKeys([ShedKeys.Stock], Sheds);
+        shed.SetKeys([ShedPermissions.Stock], Sheds);
         shed.Archive(Sheds);
         shed.DomainEvents.Should().BeEmpty();
 
         // The plots' role class raises its own from what each operation answered.
-        var plot = new PlotRole(PlotRoleId.CreateSequential(), Meadow, new CustomRoleDraft("Fencer", null, [PlotKeys.See]));
+        var plot = new PlotRole(PlotRoleId.CreateSequential(), Meadow, new CustomRoleDraft("Fencer", null, [PlotPermissions.See]));
         plot.CallIt("Fencer", null);
-        plot.HaveItGive(PlotKeys.See);
+        plot.HaveItGive(PlotPermissions.See);
         plot.CallIt("Hedger", null);
-        plot.HaveItGive(PlotKeys.See, PlotKeys.Fence);
+        plot.HaveItGive(PlotPermissions.See, PlotPermissions.Fence);
         plot.PutAway();
 
         plot.DomainEvents.Select(raised => raised.GetType()).Should().Equal(
             [typeof(PlotRoleMade), typeof(PlotRoleRenamed), typeof(PlotRoleKeysChanged), typeof(PlotRolePutAway)],
             "what changed nothing answered so, and raised nothing");
-        plot.DomainEvents.OfType<PlotRoleKeysChanged>().Single().Added.Should().Equal(PlotKeys.Fence);
+        plot.DomainEvents.OfType<PlotRoleKeysChanged>().Single().Added.Should().Equal(PlotPermissions.Fence);
         plot.GardenId.Should().Be(Meadow, "whose a role is, is the host's own column, set in the host's own constructor");
     }
 
@@ -374,11 +374,9 @@ public sealed class CustomRoleTests
         var drafts = StarterRoles.Missing<PlotRoleId>(PlotMembership.Rules, []);
 
         drafts.Select(draft => (draft.Name, draft.MadeFrom, draft.Description)).Should().Equal(
-            (PlotMembership.Tender, PlotMembership.Tender, null),
-            (PlotMembership.Waterer, PlotMembership.Waterer, null),
-            (MembershipRules.DefaultOwnerRole, MembershipRules.DefaultOwnerRole, null));
-        drafts[0].Keys.Should().Equal(PlotKeys.See, PlotKeys.Plant, PlotKeys.Water);
-        drafts[2].Keys.Should().Equal([PlotKeys.See, PlotKeys.Plant, PlotKeys.Water, PlotKeys.Fence], "the owner's role the rules add gives every key of a plot a member's role can give: not selling");
+            [(PlotMembership.Tender, PlotMembership.Tender, null), (PlotMembership.Waterer, PlotMembership.Waterer, null)],
+            "the starter roles the rules declare, and none for the owner, which holds no role");
+        drafts[0].Keys.Should().Equal(PlotPermissions.See, PlotPermissions.Plant, PlotPermissions.Water);
 
         // A host makes each with its own constructor, and may call it otherwise from the start: what it was made from stays.
         var named = new PlotRole(PlotRoleId.CreateSequential(), Meadow, drafts[1] with { Name = "Watering can", Description = "Waters." });
@@ -396,16 +394,16 @@ public sealed class CustomRoleTests
 
         // Renamed, given other keys, archived: told by what it was made from, so still there.
         meadow[0].CallIt("Grower", null);
-        meadow[0].HaveItGive(PlotKeys.See);
+        meadow[0].HaveItGive(PlotPermissions.See);
         meadow[1].PutAway();
         StarterRoles.Missing(rules, meadow).Should().BeEmpty();
 
         // A role a customer made with a starter role's name is no starter role: that one is still to be made.
-        var orchard = new List<PlotRole> { new(PlotRoleId.CreateSequential(), GardenId.CreateSequential(), new CustomRoleDraft(PlotMembership.Tender, null, [PlotKeys.See])) };
-        StarterRoles.Missing(rules, orchard).Select(draft => draft.MadeFrom).Should().Equal(PlotMembership.Tender, PlotMembership.Waterer, MembershipRules.DefaultOwnerRole);
+        var orchard = new List<PlotRole> { new(PlotRoleId.CreateSequential(), GardenId.CreateSequential(), new CustomRoleDraft(PlotMembership.Tender, null, [PlotPermissions.See])) };
+        StarterRoles.Missing(rules, orchard).Select(draft => draft.MadeFrom).Should().Equal(PlotMembership.Tender, PlotMembership.Waterer);
 
-        // Only what is missing: a scope that has the owner's role alone is given the other two.
-        StarterRoles.Missing(rules, meadow.Where(role => role.MadeFrom == rules.OwnerRole)).Select(draft => draft.MadeFrom).Should().Equal(PlotMembership.Tender, PlotMembership.Waterer);
+        // Only what is missing: a scope that has the waterer's role alone is given the tender's.
+        StarterRoles.Missing(rules, meadow.Where(role => role.MadeFrom == PlotMembership.Waterer)).Select(draft => draft.MadeFrom).Should().Equal(PlotMembership.Tender);
 
         // Which scope is meant is said by the roles handed over, and by nothing else.
         FluentActions.Invoking(() => StarterRoles.Missing<PlotRoleId>(rules, null!)).Should().Throw<ArgumentNullException>();

@@ -99,7 +99,7 @@ public sealed class ProjectRoleScenarios(SampleHosts sample) : IClassFixture<Sam
     {
         var surveyor = Harbor.ProjectRoles[SampleCatalogue.Surveyor].Value;
 
-        // Rhea runs North and Hana gives people their roles; neither manages the roles themselves. Leo leads a crew.
+        // Rhea runs North and Hana gives people their roles; neither manages the roles themselves. Leo owns a project.
         foreach (var person in new[] { "rhea", "hana", "leo" })
         {
             using var client = await sample.ClientAsync(person, Harbor.Slug);
@@ -198,29 +198,24 @@ public sealed class ProjectRoleScenarios(SampleHosts sample) : IClassFixture<Sam
     }
 
     [Fact]
-    public async Task The_crew_leads_role_is_not_archived_and_goes_to_every_owner_whatever_it_is_called()
+    public async Task The_crew_leads_role_is_archived_as_any_other_since_an_owner_holds_no_role()
     {
         await using var host = await sample.StartAsync();
         using var ada = await host.ClientAsync("ada", Harbor.Slug);
         var lead = Harbor.ProjectRoles[SampleCatalogue.CrewLead].Value;
 
+        // No project role is the owner's: an owner holds what an owner does by owning the project, so the crew lead's
+        // role goes as any other does.
         using (var archived = await ada.PostAsync($"/project-roles/{lead}/archive", content: null, Cancellation))
         {
-            await archived.ShouldBeRefusedAsync(HttpStatusCode.Conflict, ProjectRefusals.OwnerRoleStays);
-        }
-
-        // Renamed, it is still the owner's: the role a project is opened with is the one made from the crew lead's
-        // starter role, whatever the tenant calls it.
-        using (var renamed = await ada.PutAsJsonAsync($"/project-roles/{lead}", new { name = "Foreman", description = "Runs the site" }, Cancellation))
-        {
-            renamed.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            archived.StatusCode.Should().Be(HttpStatusCode.NoContent);
         }
 
         using var opened = await ada.PostAsJsonAsync("/projects", new { number = "P-100", name = "Harbor wall", unitId = Harbor.UnitNamed("North").Value }, Cancellation);
         opened.StatusCode.Should().Be(HttpStatusCode.Created);
         var project = (await ada.VisibleProjectsAsync()).Named("Harbor wall");
         (await ada.WithNamesAsync(project)).Crew.Should().ContainSingle()
-            .Which.Should().Match<NamedCrewMember>(owner => owner.Name == "Ada" && owner.IsOwner && owner.Role == "Foreman");
+            .Which.Should().Match<NamedCrewMember>(owner => owner.Name == "Ada" && owner.IsOwner && owner.Role == null);
     }
 
     [Fact]
@@ -242,10 +237,10 @@ public sealed class ProjectRoleScenarios(SampleHosts sample) : IClassFixture<Sam
         await SampleTenants.SendAsSystemAsync(host, quarry.Tenant, new SetUpProjectRoles());
         (await SampleTenants.AskAsSystemAsync(host, quarry.Tenant, new TenantProjectRoles())).Select(role => role.Id).Should().BeEquivalentTo(made.Select(role => role.Id));
 
-        // And it opens projects: the owner holds the crew lead's role it was given.
+        // And it opens projects: the owner is on the crew, holding no role, as in a tenant with no project roles.
         var opened = await SampleTenants.SendAsSystemAsync(host, quarry.Tenant, new OpenProject("P-100", "Harbor wall", quarry.RootUnit, quarry.AdminSeat));
         var crew = await SampleTenants.AskAsSystemAsync(host, quarry.Tenant, new AllCrewMembers(opened));
-        crew.Should().ContainSingle().Which.Roles!.Select(held => held.RoleId).Should().Equal(made.Single(role => role.MadeFrom == SampleCatalogue.CrewLead).Id);
+        crew.Should().ContainSingle().Which.Roles.Should().BeNullOrEmpty();
 
         // Harbor's roles are as they were.
         using var ada = await host.ClientAsync("ada", Harbor.Slug);

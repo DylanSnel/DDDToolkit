@@ -10,7 +10,7 @@ namespace DDDToolkit.Supporting.Membership.Access;
 /// public static class DocumentMembership
 /// {
 ///     [MembershipRules&lt;DocumentShare&gt;]
-///     public static MembershipRules Rules { get; } = new("documents", keys: [...], roles: [...]);
+///     public static MembershipRules Rules { get; } = MembershipRules.For&lt;Document&gt;(Roles.Fixed([...]));
 /// }
 ///
 /// // Where the resource is registered

@@ -126,7 +126,7 @@ public sealed class DemoSeederTests(SampleHosts sample) : IClassFixture<SampleHo
     }
 
     [Fact]
-    public async Task Every_project_is_opened_with_its_owner_as_lead_and_its_crew()
+    public async Task Every_project_is_opened_with_its_owner_and_its_crew()
     {
         foreach (var tenant in DemoData.Tenants)
         {
@@ -142,19 +142,24 @@ public sealed class DemoSeederTests(SampleHosts sample) : IClassFixture<SampleHo
                 project.GetProperty("id").GetGuid().Should().Be(expected.Id.Value);
                 project.GetProperty("unitId").GetGuid().Should().Be(expected.Unit.Value);
                 project.GetProperty("ownerSeat").GetGuid().Should().Be(tenant.SeatOf(expected.Owner).Value);
-                project.GetProperty("crew").EnumerateArray()
+                var crew = project.GetProperty("crew").EnumerateArray().ToList();
+
+                // The owner is on the crew for good, holding no role: an owner holds what an owner does by owning.
+                var owner = crew.Should().ContainSingle(member => member.GetProperty("seatId").GetGuid() == tenant.SeatOf(expected.Owner).Value).Which;
+                owner.GetProperty("roles").GetArrayLength().Should().Be(0);
+                owner.GetProperty("endsAt").ValueKind.Should().Be(JsonValueKind.Null);
+
+                crew.Where(member => member.GetProperty("seatId").GetGuid() != tenant.SeatOf(expected.Owner).Value)
                     .Select(member =>
                     {
-                        // Each holds one role, for good, like the membership it is held in.
+                        // Each of the others holds one role, for good, like the membership it is held in.
                         var held = member.GetProperty("roles").EnumerateArray().Should().ContainSingle().Which;
                         held.GetProperty("endsAt").ValueKind.Should().Be(JsonValueKind.Null);
                         held.GetProperty("appliesNow").GetBoolean().Should().BeTrue();
                         member.GetProperty("endsAt").ValueKind.Should().Be(JsonValueKind.Null);
                         return (Seat: member.GetProperty("seatId").GetGuid(), Role: held.GetProperty("roleId").GetGuid(), Applies: member.GetProperty("appliesNow").GetBoolean());
                     })
-                    .Should().BeEquivalentTo(
-                        expected.Crew.Select(member => (tenant.SeatOf(member.Person).Value, tenant.ProjectRoles[member.Role].Value, true))
-                            .Prepend((tenant.SeatOf(expected.Owner).Value, tenant.ProjectRoles[SampleCatalogue.CrewLead].Value, true)));
+                    .Should().BeEquivalentTo(expected.Crew.Select(member => (tenant.SeatOf(member.Person).Value, tenant.ProjectRoles[member.Role].Value, true)));
             }
         }
     }

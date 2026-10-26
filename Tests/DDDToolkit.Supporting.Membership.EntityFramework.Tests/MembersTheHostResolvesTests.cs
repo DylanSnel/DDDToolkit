@@ -18,29 +18,29 @@ public sealed class MembersTheHostResolvesTests
         var pears = await depot.Services.AsAsync(Caller.System, provider => provider.GetRequiredService<DepotContext>().Pallets.AsNoTracking().SingleAsync(pallet => pallet.Id == data.Pears, Cancellation));
 
         // As a member: a loader loads, and holds no key its role does not give.
-        (await depot.Services.PalletsAsync(data.Bo, access => access.HoldAsync(data.Pears, PalletKeys.Load, Cancellation)))
+        (await depot.Services.PalletsAsync(data.Bo, access => access.HoldAsync(data.Pears, PalletPermissions.Load, Cancellation)))
             .Should().Be(new MemberHold<PalletId>(data.Pears, MemberVia.Members, pears.Version, Until: null));
-        (await depot.Services.PalletsAsync(data.Bo, access => access.HoldAsync(data.Pears, PalletKeys.Strap, Cancellation)))
+        (await depot.Services.PalletsAsync(data.Bo, access => access.HoldAsync(data.Pears, PalletPermissions.Strap, Cancellation)))
             .Should().Be(new MemberHold<PalletId>(data.Pears, null, pears.Version, Until: null));
 
         // Being on a pallet gives the key that sees it, until the membership ends; a checker checks and no more.
-        (await depot.Services.PalletsAsync(data.Cas, access => access.HoldAsync(data.Pears, PalletKeys.See, Cancellation)))
+        (await depot.Services.PalletsAsync(data.Cas, access => access.HoldAsync(data.Pears, PalletPermissions.See, Cancellation)))
             .Should().Be(new MemberHold<PalletId>(data.Pears, MemberVia.Members, pears.Version, data.NextWeek));
-        (await depot.Services.PalletsAsync(data.Dot, access => access.ViaAsync(data.Pears, PalletKeys.See, Cancellation))).Should().Be(MemberVia.Members);
-        (await depot.Services.PalletsAsync(data.Dot, access => access.ViaAsync(data.Pears, PalletKeys.Load, Cancellation))).Should().BeNull();
+        (await depot.Services.PalletsAsync(data.Dot, access => access.ViaAsync(data.Pears, PalletPermissions.See, Cancellation))).Should().Be(MemberVia.Members);
+        (await depot.Services.PalletsAsync(data.Dot, access => access.ViaAsync(data.Pears, PalletPermissions.Load, Cancellation))).Should().BeNull();
 
         // As the owner: every key of the pallet, with no end, on the pallet it owns and on no other. Strapping is
-        // a key the loader's role lists and the rules keep from every member's role, so the owner's alone.
-        PalletMembership.Rules.Roles.Single(role => role.Name == "loader").Keys.Should().Contain(PalletKeys.Strap);
-        PalletMembership.Rules.KeysOf(PalletMembership.Loader).Should().Equal(PalletKeys.See, PalletKeys.Load);
-        var strap = await depot.Services.PalletsAsync(data.Ana, access => access.RequireAsync(data.Pears, PalletKeys.Strap, Cancellation));
+        // a key no role gives, InRoles = false, so the owner's alone.
+        PalletMembership.Rules.Roles.Declared.Single(role => role.Name == "loader").Keys.Should().NotContain(PalletPermissions.Strap);
+        PalletMembership.Rules.KeysOf(PalletMembership.Loader).Should().Equal(PalletPermissions.See, PalletPermissions.Load);
+        var strap = await depot.Services.PalletsAsync(data.Ana, access => access.RequireAsync(data.Pears, PalletPermissions.Strap, Cancellation));
         (strap.Via, strap.Until).Should().Be((MemberVia.Members, null));
-        await Refused.WithCodeAsync(PalletMembership.Codes, MembershipRefusals.NotPermitted, () => depot.Services.PalletsAsync(data.Bo, access => access.RequireAsync(data.Pears, PalletKeys.Strap, Cancellation)));
-        await Refused.WithCodeAsync(PalletMembership.Codes, MembershipRefusals.NotPermitted, () => depot.Services.PalletsAsync(data.Ana, access => access.RequireAsync(data.Plums, PalletKeys.Strap, Cancellation)));
+        await Refused.WithCodeAsync(PalletMembership.Codes, MembershipRefusals.NotPermitted, () => depot.Services.PalletsAsync(data.Bo, access => access.RequireAsync(data.Pears, PalletPermissions.Strap, Cancellation)));
+        await Refused.WithCodeAsync(PalletMembership.Codes, MembershipRefusals.NotPermitted, () => depot.Services.PalletsAsync(data.Ana, access => access.RequireAsync(data.Plums, PalletPermissions.Strap, Cancellation)));
 
         // And none: a porter that is on no pallet, and a pallet a porter is not on.
-        await Refused.WithCodeAsync(PalletMembership.Codes, MembershipRefusals.NotFound, () => depot.Services.PalletsAsync(data.Eli, access => access.RequireAsync(data.Pears, PalletKeys.See, Cancellation)));
-        await Refused.WithCodeAsync(PalletMembership.Codes, MembershipRefusals.NotFound, () => depot.Services.PalletsAsync(data.Ana, access => access.RequireAsync(data.Limes, PalletKeys.See, Cancellation)));
+        await Refused.WithCodeAsync(PalletMembership.Codes, MembershipRefusals.NotFound, () => depot.Services.PalletsAsync(data.Eli, access => access.RequireAsync(data.Pears, PalletPermissions.See, Cancellation)));
+        await Refused.WithCodeAsync(PalletMembership.Codes, MembershipRefusals.NotFound, () => depot.Services.PalletsAsync(data.Ana, access => access.RequireAsync(data.Limes, PalletPermissions.See, Cancellation)));
     }
 
     [Fact]
@@ -91,9 +91,9 @@ public sealed class MembersTheHostResolvesTests
 
         // Ned is on the pears as a loader, by a membership and a role that both apply. The depot let him go, so
         // the host answers nobody for him: nothing is there, and nothing is read to find that out.
-        (await depot.Services.PalletsAsync(data.Ned, access => access.HoldAsync(data.Pears, PalletKeys.Load, Cancellation))).Should().BeNull();
+        (await depot.Services.PalletsAsync(data.Ned, access => access.HoldAsync(data.Pears, PalletPermissions.Load, Cancellation))).Should().BeNull();
         (await depot.Services.PalletsAsync(data.Ned, access => access.KeysOnAsync([data.Pears], DepotScenario.PalletKeysAsked, Cancellation))).Should().BeEmpty();
-        await Refused.WithCodeAsync(PalletMembership.Codes, MembershipRefusals.NotFound, () => depot.Services.PalletsAsync(data.Ned, access => access.RequireAsync(data.Pears, PalletKeys.See, Cancellation)));
+        await Refused.WithCodeAsync(PalletMembership.Codes, MembershipRefusals.NotFound, () => depot.Services.PalletsAsync(data.Ned, access => access.RequireAsync(data.Pears, PalletPermissions.See, Cancellation)));
         depot.Commands.Count.Should().Be(0);
 
         // Taken on again, his rows count again.
@@ -103,7 +103,7 @@ public sealed class MembersTheHostResolvesTests
             porter.Active = true;
             desk.TakeOn(porter);
         });
-        (await depot.Services.PalletsAsync(data.Ned, access => access.HoldAsync(data.Pears, PalletKeys.Load, Cancellation)))!.Via.Should().Be(MemberVia.Members);
+        (await depot.Services.PalletsAsync(data.Ned, access => access.HoldAsync(data.Pears, PalletPermissions.Load, Cancellation)))!.Via.Should().Be(MemberVia.Members);
 
         // And nobody the depot counts is put on a pallet in the first place: the admission asks the depot.
         await depot.Services.AsAsync(Caller.System, async provider =>
@@ -115,7 +115,6 @@ public sealed class MembersTheHostResolvesTests
             // The roles are the ones the rules declare, asked of the rules: no row of the depot's says them.
             await admission.RequireRoleAsync(PalletMembership.Loader, Cancellation);
             await Refused.WithCodeAsync(PalletMembership.Codes, MembershipRefusals.RoleNotForMembers, () => admission.RequireRoleAsync(new NamedRole("packer"), Cancellation).AsTask());
-            (await admission.OwnerRoleAsync(Cancellation)).Should().Be(PalletMembership.Owner);
             provider.GetRequiredService<IMemberRoles<PalletId, NamedRole>>().Should().BeOfType<NamedRoles<PalletId>>();
         });
     }
@@ -132,9 +131,9 @@ public sealed class MembersTheHostResolvesTests
         await depot.Services.ChangeAsync(async (context, _) =>
             (await context.Pallets.SingleAsync(pallet => pallet.Id == data.Limes, Cancellation)).PutOn(lookalike, PalletMembership.Loader, MemberPeriod.Open(data.Now.AddDays(-1)), data.Now, by: null));
 
-        (await depot.Services.PalletsAsync(data.Ivo, access => access.HoldAsync(data.Limes, PalletKeys.Load, Cancellation))).Should().BeNull();
+        (await depot.Services.PalletsAsync(data.Ivo, access => access.HoldAsync(data.Limes, PalletPermissions.Load, Cancellation))).Should().BeNull();
         depot.Commands.Reset();
-        (await depot.Services.PalletsAsync(data.Ivo, access => access.KeysOnAsync([data.Limes], [PalletKeys.See, PalletKeys.Load], Cancellation))).Should().BeEmpty();
+        (await depot.Services.PalletsAsync(data.Ivo, access => access.KeysOnAsync([data.Limes], [PalletPermissions.See, PalletPermissions.Load], Cancellation))).Should().BeEmpty();
         depot.Commands.Count.Should().Be(0);
 
         // Once the depot knows the user as that porter, it is one.
@@ -145,10 +144,10 @@ public sealed class MembersTheHostResolvesTests
             desk.TakeOn(porter);
             return Task.CompletedTask;
         });
-        (await depot.Services.PalletsAsync(data.Ivo, access => access.HoldAsync(data.Limes, PalletKeys.Load, Cancellation)))!.Via.Should().Be(MemberVia.Members);
+        (await depot.Services.PalletsAsync(data.Ivo, access => access.HoldAsync(data.Limes, PalletPermissions.Load, Cancellation)))!.Via.Should().Be(MemberVia.Members);
 
         // Only a signed-in user is asked about at all: the host is not asked who an anonymous caller is.
-        (await depot.Services.AsAsync(Caller.Anonymous, provider => provider.GetRequiredService<IMemberQuestions<PalletId>>().HoldAsync(data.Limes, PalletKeys.See, Cancellation))).Should().BeNull();
+        (await depot.Services.AsAsync(Caller.Anonymous, provider => provider.GetRequiredService<IMemberQuestions<PalletId>>().HoldAsync(data.Limes, PalletPermissions.See, Cancellation))).Should().BeNull();
     }
 
     [Fact]
@@ -157,7 +156,7 @@ public sealed class MembersTheHostResolvesTests
         using var depot = await SqliteDepot.SeededAsync();
         var data = depot.Scenario;
 
-        (DepotPerson Person, string Key)[] asked = [(data.Bo, PalletKeys.Load), (data.Ana, PalletKeys.Strap), (data.Dot, PalletKeys.Load), (data.Cas, PalletKeys.See), (data.Bo, "pallets.unheard-of")];
+        (DepotPerson Person, string Key)[] asked = [(data.Bo, PalletPermissions.Load), (data.Ana, PalletPermissions.Strap), (data.Dot, PalletPermissions.Load), (data.Cas, PalletPermissions.See), (data.Bo, "pallets.unheard-of")];
         foreach (var (person, key) in asked)
         {
             depot.Commands.Reset();
@@ -168,8 +167,8 @@ public sealed class MembersTheHostResolvesTests
         depot.Commands.Reset();
         var keys = await depot.Services.PalletsAsync(data.Bo, access => access.KeysOnAsync([data.Pears, data.Plums, data.Limes], DepotScenario.PalletKeysAsked, Cancellation));
         depot.Commands.Count.Should().Be(1);
-        keys[data.Pears].Should().BeEquivalentTo([PalletKeys.See, PalletKeys.Load]);
-        keys[data.Plums].Should().BeEquivalentTo([PalletKeys.See, PalletKeys.Load, PalletKeys.Strap], "an owner holds every key of a pallet");
+        keys[data.Pears].Should().BeEquivalentTo([PalletPermissions.See, PalletPermissions.Load]);
+        keys[data.Plums].Should().BeEquivalentTo([PalletPermissions.See, PalletPermissions.Load, PalletPermissions.Strap], "an owner holds every key of a pallet");
         keys.Should().NotContainKey(data.Limes);
 
         // Who the caller is was answered before the statement, and the roles are values of the rules: nothing

@@ -13,7 +13,7 @@ namespace Examples.Tenancy.Tests.Inspections.Recording;
 
 /// <summary>
 /// Crew roles, seen from a second module. Inspections owns no rule about who may record: it asks Projects' gate,
-/// which answers from the crew and from the organization alike. Juno is Pier 7's surveyor, Leo its lead and Vic
+/// which answers from the crew and from the organization alike. Juno is Pier 7's surveyor, Leo its owner and Vic
 /// its observer; Rhea manages North, where Pier 7 is.
 /// </summary>
 /// <remarks>
@@ -35,8 +35,9 @@ public sealed class InspectionScenarios(SampleHosts sample) : IClassFixture<Samp
 
     public static TheoryData<string, bool> MayRecordOnPierSeven => new()
     {
-        // Through the crew: the lead's and the surveyor's roles grant inspections.record, the observer's does not.
-        { "leo", true },
+        // Through the crew: the surveyor's role grants inspections.record, the observer's does not. Leo owns the
+        // project, and an owner holds the permissions Projects declares on it: recording is Inspections'.
+        { "leo", false },
         { "juno", true },
         { "vic", false },
 
@@ -222,8 +223,9 @@ public sealed class InspectionScenarios(SampleHosts sample) : IClassFixture<Samp
             (await record.Should().ThrowAsync<InvalidOperationException>()).WithMessage("*the seat it acts for*");
         }
 
+        // System work the projects let through, in their own scope, acting for Leo.
         InspectionId recorded;
-        using (TenancyUseCases.BeginSystemIn(Harbor.Id, leo))
+        using (TenancyUseCases.BeginSystemIn(Harbor.Id, leo, ProjectMembership.Scope))
         {
             await using var scope = host.Services.CreateAsyncScope();
             recorded = await scope.ServiceProvider.GetRequiredService<ISender>().Send(new RecordInspection(PierSeven.Id, "Recorded for the lead"), Cancellation);

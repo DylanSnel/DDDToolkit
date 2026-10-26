@@ -31,16 +31,16 @@ public static class CampusCatalogue
 
     /// <summary>
     /// The keys of the courses and the labs that the organization's roles can hold: what the module adds to
-    /// the catalogue. <see cref="CourseKeys.Dissolve"/> is not among them.
+    /// the catalogue. <see cref="CoursePermissions.Dissolve"/> is not among them.
     /// </summary>
     public static IReadOnlyList<Permission> Permissions { get; } =
     [
-        new(CourseKeys.See, "Courses", "See courses", Order: 10),
-        new(CourseKeys.Grade, "Courses", "Grade the work handed in for a course", Order: 20),
-        new(CourseKeys.Outline, "Courses", "Write a course's outline", Order: 30),
-        new(LabKeys.See, "Labs", "See labs", Order: 10),
-        new(LabKeys.Equip, "Labs", "Equip a lab", Order: 20),
-        new(LabKeys.Calibrate, "Labs", "Calibrate a lab's instruments", Order: 30),
+        new(CoursePermissions.See, "Courses", "See courses", Order: 10),
+        new(CoursePermissions.Grade, "Courses", "Grade the work handed in for a course", Order: 20),
+        new(CoursePermissions.Outline, "Courses", "Write a course's outline", Order: 30),
+        new(LabPermissions.See, "Labs", "See labs", Order: 10),
+        new(LabPermissions.Equip, "Labs", "Equip a lab", Order: 20),
+        new(LabPermissions.Calibrate, "Labs", "Calibrate a lab's instruments", Order: 30),
     ];
 
     /// <summary>What the application passes as <c>TenancyOptions.Catalogue</c>.</summary>
@@ -48,28 +48,11 @@ public static class CampusCatalogue
         Packs:
         [
             new(AdministratorPack, "Administrator", "Runs the college", [], Administers: true, Order: 10),
-            new(DeanPack, "Dean", "Runs a faculty", [CourseKeys.See, CourseKeys.Grade, LabKeys.See, LabKeys.Equip], Order: 20),
-            new(LabChiefPack, "Lab chief", "Is responsible for a lab", [LabKeys.See, LabKeys.Equip, LabKeys.Calibrate], Order: 30),
-            new(LabDemonstratorPack, "Lab demonstrator", "Shows a lab's equipment", [LabKeys.See, LabKeys.Equip, TenancyKeys.HistoryView], Order: 40),
+            new(DeanPack, "Dean", "Runs a faculty", [CoursePermissions.See, CoursePermissions.Grade, LabPermissions.See, LabPermissions.Equip], Order: 20),
+            new(LabChiefPack, "Lab chief", "Is responsible for a lab", [LabPermissions.See, LabPermissions.Equip, LabPermissions.Calibrate], Order: 30),
+            new(LabDemonstratorPack, "Lab demonstrator", "Shows a lab's equipment", [LabPermissions.See, LabPermissions.Equip, TenancyKeys.HistoryView], Order: 40),
         ]);
 
     /// <summary>The catalogue as the application runs with it, for whatever is written before its services exist.</summary>
     public static TenancyCatalogue Built { get; } = TenancyCatalogue.Build(Application, Permissions);
-}
-
-/// <summary>
-/// The logical names of Tenancy's functions in a database that answers the questions itself: what the rules of
-/// a course and of a lab name, so their own functions ask Tenancy's. Texts, relative to the owner Tenancy
-/// gives its functions, whatever schema they live in.
-/// </summary>
-public static class TenancyFunctions
-{
-    /// <summary>Answers the calling seat, or <c>NULL</c> for a caller without an active seat in the tenant.</summary>
-    public const string CallerSeat = TenancyRowAccess.Owner + "/caller_seat";
-
-    /// <summary>Answers, for a key, the units the calling seat's hold of it reaches: where it is held, and every unit below.</summary>
-    public const string UnitsWhereIHold = TenancyRowAccess.Owner + "/units_where_i_hold";
-
-    /// <summary>Answers, for a key, the tenant's roles in use that give it.</summary>
-    public const string RolesWithKey = TenancyRowAccess.Owner + "/roles_with_key";
 }

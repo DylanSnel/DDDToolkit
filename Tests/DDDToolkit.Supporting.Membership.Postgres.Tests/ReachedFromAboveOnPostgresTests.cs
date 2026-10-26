@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.EntityFramework.Postgres;
 using Microsoft.EntityFrameworkCore.Metadata;
 
@@ -18,7 +19,7 @@ public sealed class ReachedFromAboveOnPostgresTests(FilingPostgres postgres)
     public async Task Users_with_the_roles_their_rules_declare_are_reached_from_above_in_the_database_as_in_the_application()
     {
         await using var desk = await Desk.CreateAsync(postgres);
-        string[] keys = [DocumentKeys.View, DocumentKeys.Edit, DocumentKeys.Share, "documents.unheard-of"];
+        string[] keys = [DocumentPermissions.View, DocumentPermissions.Edit, DocumentPermissions.Share, "documents.unheard-of"];
 
         foreach (var (name, user) in desk.People)
         {
@@ -48,11 +49,11 @@ public sealed class ReachedFromAboveOnPostgresTests(FilingPostgres postgres)
 
         // And what the SQLite suite pins of it: Cy is Ada's deputy for seeing and changing, and a member of
         // nothing; Dee changes what Ada owns and sees only what is shared with her.
-        (await desk.HoldAsync(desk.Cy, desk.Minutes, DocumentKeys.Edit))!.Via.Should().Be(MemberVia.Above);
-        (await desk.HoldAsync(desk.Cy, desk.Minutes, DocumentKeys.Share))!.Via.Should().BeNull();
-        (await desk.HoldAsync(desk.Cy, desk.Notes, DocumentKeys.View)).Should().BeNull();
-        (await desk.HoldAsync(desk.Dee, desk.Agenda, DocumentKeys.Edit)).Should().BeNull("within the reach of the key, and not there for her");
-        (await desk.HoldAsync(desk.Ben, desk.Minutes, DocumentKeys.View))!.Via.Should().Be(MemberVia.Members);
+        (await desk.HoldAsync(desk.Cy, desk.Minutes, DocumentPermissions.Edit))!.Via.Should().Be(MemberVia.Above);
+        (await desk.HoldAsync(desk.Cy, desk.Minutes, DocumentPermissions.Share))!.Via.Should().BeNull();
+        (await desk.HoldAsync(desk.Cy, desk.Notes, DocumentPermissions.View)).Should().BeNull();
+        (await desk.HoldAsync(desk.Dee, desk.Agenda, DocumentPermissions.Edit)).Should().BeNull("within the reach of the key, and not there for her");
+        (await desk.HoldAsync(desk.Ben, desk.Minutes, DocumentPermissions.View))!.Via.Should().Be(MemberVia.Members);
     }
 
     [Fact]
@@ -92,17 +93,24 @@ public sealed class ReachedFromAboveOnPostgresTests(FilingPostgres postgres)
         Task<MemberHold<PlotId>?> HoldAsync(GardenPerson person, PlotId plot, string key)
             => gardens.AsAsync(person.Caller, provider => provider.GetRequiredService<IMemberQuestions<PlotId>>().HoldAsync(plot, key, Cancellation));
 
-        (await HoldAsync(data.Cy, data.Beans, PlotKeys.Water))!.Via.Should().Be(MemberVia.Members);
-        (await HoldAsync(gardens.Ranger, data.Leeks, PlotKeys.Water))!.Via.Should().Be(MemberVia.Above);
-        (await HoldAsync(gardens.Ranger, data.Beans, PlotKeys.Plant))!.Via.Should().BeNull();
-        (await HoldAsync(gardens.Ranger, data.Kale, PlotKeys.See)).Should().BeNull("the kale is in the orchard");
-        (await HoldAsync(data.Ben, data.Beans, PlotKeys.Plant))!.Via.Should().Be(MemberVia.Members);
-        (await HoldAsync(data.Ben, data.Beans, PlotKeys.Fence))!.Via.Should().Be(MemberVia.Above);
-        (await HoldAsync(data.Fay, data.Beans, PlotKeys.Plant))!.Via.Should().BeNull();
-        (await HoldAsync(data.Eve, data.Beans, PlotKeys.Fence)).Should().BeNull();
+        (await HoldAsync(data.Cy, data.Beans, PlotPermissions.Water))!.Via.Should().Be(MemberVia.Members);
+        (await HoldAsync(gardens.Ranger, data.Leeks, PlotPermissions.Water))!.Via.Should().Be(MemberVia.Above);
+        (await HoldAsync(gardens.Ranger, data.Beans, PlotPermissions.Plant))!.Via.Should().BeNull();
+        (await HoldAsync(gardens.Ranger, data.Kale, PlotPermissions.See)).Should().BeNull("the kale is in the orchard");
+        (await HoldAsync(data.Ben, data.Beans, PlotPermissions.Plant))!.Via.Should().Be(MemberVia.Members);
+        (await HoldAsync(data.Ben, data.Beans, PlotPermissions.Fence))!.Via.Should().Be(MemberVia.Above);
+        (await HoldAsync(data.Fay, data.Beans, PlotPermissions.Plant))!.Via.Should().BeNull();
+        (await HoldAsync(data.Eve, data.Beans, PlotPermissions.Fence)).Should().BeNull();
     }
 
     private static string Column(IEntityType entity, string property) => RowAccessModel.Column(entity, property);
+
+    /// <summary>A rule of each resource's for signed-in users: what the functions are granted to them for, written as no policy here.</summary>
+    private static readonly IReadOnlyList<RowAccessRule> ForUsers =
+    [
+        RowAccessRule.For<Document>("Users read documents", RowOperations.Read, "true", RowAccessRoles.User),
+        RowAccessRule.For<Plot>("Users read plots", RowOperations.Read, "true", RowAccessRoles.User),
+    ];
 
     /// <summary>
     /// A new database of the calling test's own, copied from a template made once for the run: the schema's
@@ -129,7 +137,11 @@ public sealed class ReachedFromAboveOnPostgresTests(FilingPostgres postgres)
                     GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA {schema} TO authenticated, anon, ddd_system_in;
                     """,
                     cancellationToken);
-                await FilingPostgres.ExecuteAsync(prepared.ConnectionString, PostgresRowAccess.Script(context, [], null, new RowAccessExport { Contributions = contributions }), cancellationToken);
+                // No policy is written, and the functions are granted to signed-in users, as a rule of the resource's for them grants them.
+                await FilingPostgres.ExecuteAsync(
+                    prepared.ConnectionString,
+                    PostgresRowAccess.Script(context, [], null, new RowAccessExport { Contributions = contributions, Rules = ForUsers }),
+                    cancellationToken);
             },
             TestContext.Current.CancellationToken);
 
@@ -193,7 +205,7 @@ public sealed class ReachedFromAboveOnPostgresTests(FilingPostgres postgres)
             modelBuilder.Entity<Document>(document =>
             {
                 document.Property(row => row.Id).ValueGeneratedNever();
-                document.HasMembers(row => row.Shares, row => row.OwnerId, at: row => row.OwnerId);
+                document.HasMembers(row => row.Shares);
             });
             modelBuilder.Entity<Deputy>().HasKey(row => new { row.Of, row.User, row.Key });
         }
@@ -213,12 +225,10 @@ public sealed class ReachedFromAboveOnPostgresTests(FilingPostgres postgres)
     /// </summary>
     private sealed class Desk : IAsyncDisposable
     {
-        private static readonly MembershipRules Rules = new(
-            "documents",
-            keys: [DocumentKeys.View, DocumentKeys.Edit, DocumentKeys.Share],
-            roles: [new("contributor", [DocumentKeys.View, DocumentKeys.Edit]), new("onlooker", [DocumentKeys.View])],
-            seeKey: DocumentKeys.View,
-            above: new("desk/owners_where_i_hold"));
+        private static readonly MembershipRules Rules = MembershipRules.For<Document>(
+            Roles.Fixed([new("contributor", [DocumentPermissions.View, DocumentPermissions.Edit]), new("onlooker", [DocumentPermissions.View])]),
+            reachFromAbove: new DatabaseFunction("desk", "owners_where_i_hold"),
+            systemScopes: []);
 
         private readonly ServiceProvider _provider;
         private readonly List<Document> _documents = [];
@@ -269,17 +279,17 @@ public sealed class ReachedFromAboveOnPostgresTests(FilingPostgres postgres)
             // Started a while back, so the database's clock, which its functions ask, need not agree with this machine's to the second.
             var before = desk._now.AddDays(-10);
             var period = MemberPeriod.Between(before, desk._now.AddDays(7));
-            var minutes = new Document(desk.Minutes, "Minutes", desk.Ada, DocumentMembership.Owner, before);
+            var minutes = new Document(desk.Minutes, "Minutes", desk.Ada, before);
             minutes.ShareWith(desk.Ben, DocumentMembership.Onlooker, period, desk._now, by: desk.Ada);
             minutes.ShareWith(desk.Dee, period, desk._now, by: desk.Ada);
             desk._documents.AddRange(
                 minutes,
-                new Document(desk.Agenda, "Agenda", desk.Ada, DocumentMembership.Owner, before),
-                new Document(desk.Notes, "Notes", desk.Ben, DocumentMembership.Owner, before));
+                new Document(desk.Agenda, "Agenda", desk.Ada, before),
+                new Document(desk.Notes, "Notes", desk.Ben, before));
             desk._deputies.AddRange(
-                new Deputy { Of = desk.Ada, User = desk.Cy.Value, Key = DocumentKeys.View },
-                new Deputy { Of = desk.Ada, User = desk.Cy.Value, Key = DocumentKeys.Edit },
-                new Deputy { Of = desk.Ada, User = desk.Dee.Value, Key = DocumentKeys.Edit });
+                new Deputy { Of = desk.Ada, User = desk.Cy.Value, Key = DocumentPermissions.View },
+                new Deputy { Of = desk.Ada, User = desk.Cy.Value, Key = DocumentPermissions.Edit },
+                new Deputy { Of = desk.Ada, User = desk.Dee.Value, Key = DocumentPermissions.Edit });
 
             await desk.AsAsync(Caller.System, async provider =>
             {
@@ -295,7 +305,7 @@ public sealed class ReachedFromAboveOnPostgresTests(FilingPostgres postgres)
 
         /// <summary>The documents a user sees, read over the rows in memory: those it is on now, and those of an owner it holds the key that sees over.</summary>
         public IReadOnlyList<DocumentId> SeenBy(UserId user)
-            => [.. _documents.Where(document => OnNow(document, user) || IsDeputy(user, document, DocumentKeys.View)).Select(document => document.Id)];
+            => [.. _documents.Where(document => OnNow(document, user) || IsDeputy(user, document, DocumentPermissions.View)).Select(document => document.Id)];
 
         /// <summary>
         /// The documents a key is held on, read over the rows in memory: by owning one, for a key of the
@@ -410,7 +420,7 @@ public sealed class ReachedFromAboveOnPostgresTests(FilingPostgres postgres)
             modelBuilder.Entity<Plot>(plot =>
             {
                 plot.Property(row => row.Id).ValueGeneratedNever();
-                plot.HasMembers(row => row.Gardeners, row => row.OwnerId, at: row => row.GardenId);
+                plot.HasMembers(row => row.Gardeners);
             });
             modelBuilder.Entity<PlotRole>().IsCustomRole();
             modelBuilder.Entity<GardenKey>().HasKey(held => new { held.UserId, held.GardenId, held.Key });
@@ -432,16 +442,14 @@ public sealed class ReachedFromAboveOnPostgresTests(FilingPostgres postgres)
     /// </summary>
     private sealed class WardenedGardens : IAsyncDisposable
     {
-        private static readonly MembershipRules Rules = new(
+        private static readonly MembershipRules Rules = MembershipRules.Declare(
+            typeof(Plot),
             "plots",
-            keys: [.. PlotMembership.Rules.Keys],
-            roles: [new(PlotMembership.Tender, [PlotKeys.See, PlotKeys.Plant, PlotKeys.Water]), new(PlotMembership.Waterer, [PlotKeys.See, PlotKeys.Water])],
-            members: MemberSource.Resolved("wardens/caller_gardener"),
-            seeKey: PlotKeys.See,
-            memberKeys: PlotMembership.Rules.MemberKeys,
-            codes: PlotMembership.Codes,
-            above: new("wardens/gardens_where_i_hold"),
-            rolesKept: true);
+            PlotMembership.Rules.Permissions,
+            Roles.Custom(starters: [new(PlotMembership.Tender, [PlotPermissions.See, PlotPermissions.Plant, PlotPermissions.Water]), new(PlotMembership.Waterer, [PlotPermissions.See, PlotPermissions.Water])]),
+            members: MemberSource.Resolved(new DatabaseFunction("wardens", "caller_gardener")),
+            reachFromAbove: new DatabaseFunction("wardens", "gardens_where_i_hold"),
+            codes: PlotMembership.Codes);
 
         private readonly ServiceProvider _provider;
         private readonly List<GardenKey> _keys;
@@ -453,12 +461,12 @@ public sealed class ReachedFromAboveOnPostgresTests(FilingPostgres postgres)
             Ranger = new GardenPerson("Ranger", Guid.NewGuid(), Data.Meadow);
             _keys =
             [
-                new GardenKey { UserId = Ranger.User, GardenId = Data.Meadow, Key = PlotKeys.See },
-                new GardenKey { UserId = Ranger.User, GardenId = Data.Meadow, Key = PlotKeys.Water },
-                new GardenKey { UserId = Data.Ben.User, GardenId = Data.Meadow, Key = PlotKeys.Fence },
+                new GardenKey { UserId = Ranger.User, GardenId = Data.Meadow, Key = PlotPermissions.See },
+                new GardenKey { UserId = Ranger.User, GardenId = Data.Meadow, Key = PlotPermissions.Water },
+                new GardenKey { UserId = Data.Ben.User, GardenId = Data.Meadow, Key = PlotPermissions.Fence },
 
                 // Held at the meadow by somebody the host let go: nothing reaches a plot through it.
-                new GardenKey { UserId = Data.Eve.User, GardenId = Data.Meadow, Key = PlotKeys.Water },
+                new GardenKey { UserId = Data.Eve.User, GardenId = Data.Meadow, Key = PlotPermissions.Water },
             ];
 
             var services = new ServiceCollection();
@@ -503,7 +511,7 @@ public sealed class ReachedFromAboveOnPostgresTests(FilingPostgres postgres)
 
         /// <summary>The plots somebody sees, read in memory: those it is on, and those of a garden it holds the key that sees at. Nothing for somebody let go.</summary>
         public IReadOnlyList<PlotId> SeenBy(GardenPerson person)
-            => Counts(person) ? [.. Data.PlotsSeenBy(person).Union(Above(person, PlotKeys.See))] : [];
+            => Counts(person) ? [.. Data.PlotsSeenBy(person).Union(Above(person, PlotPermissions.See))] : [];
 
         /// <summary>The plots a key is held on, read in memory: as the gardens' own rules say it, and from above. Nothing for somebody let go.</summary>
         public IReadOnlyList<PlotId> HeldBy(GardenPerson person, string key)

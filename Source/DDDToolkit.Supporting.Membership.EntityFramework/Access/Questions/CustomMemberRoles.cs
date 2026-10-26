@@ -6,7 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace DDDToolkit.Supporting.Membership.EntityFramework;
 
 /// <summary>
-/// The roles there are for the members of a resource whose roles are kept, as the admission asks about them:
+/// The roles there are for the members of a resource whose roles a customer makes, as the admission asks about them:
 /// answered from the rows of the application's role class, on the request's own context, so the application's
 /// rule about whose roles a request reads applies to what is answered. An application that registered a
 /// factory for the context and no context for a request is read on a context of the factory's, as its access
@@ -25,11 +25,6 @@ internal sealed class CustomMemberRoles<TContext, TResource, TResourceId, TRoleI
     /// <remarks>A role in use, among the rows the request reads: an archived role is not given again, and neither is a role of another scope.</remarks>
     public async ValueTask<bool> ExistsAsync(TRoleId role, CancellationToken cancellationToken)
         => await ReadAsync((rows, context) => rows.InUseAsync(context, role, cancellationToken), cancellationToken).ConfigureAwait(false);
-
-    /// <inheritdoc />
-    /// <remarks>The role in use that was made from the starter role the rules name as the owner's, whatever it is called now.</remarks>
-    public async ValueTask<TRoleId?> FindOwnerRoleAsync(CancellationToken cancellationToken)
-        => await ReadAsync((rows, context) => rows.MadeFromAsync(context, registration.Rules.OwnerRole, cancellationToken), cancellationToken).ConfigureAwait(false);
 
     /// <summary>
     /// Runs one reading of the roles' rows: on the request's own context where the scope has one, and

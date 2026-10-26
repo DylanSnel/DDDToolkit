@@ -16,7 +16,7 @@ namespace DDDToolkit.Supporting.Membership;
 /// A role is an aggregate of its own, beside the resource: it is made, renamed, given keys and archived by
 /// itself, and a member of the resource holds it by its id
 /// (<c>[Member&lt;PlotGardenerId, UserId, PlotRoleId, Plot&gt;]</c>). The resource's rules say that its
-/// roles are kept this way (<see cref="Access.MembershipRules.RolesKept"/>).
+/// roles are made this way (<see cref="Access.Roles.Custom"/>).
 /// <para>
 /// The second type is the resource the roles are of. The role itself has no use for it: it is how the roles
 /// of a resource are found where its members are asked about, so an application with plots and with sheds

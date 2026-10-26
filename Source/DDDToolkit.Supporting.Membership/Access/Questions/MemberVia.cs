@@ -8,15 +8,15 @@ public enum MemberVia
 {
     /// <summary>
     /// Through the resource's members: the caller is a member now and holds a role there, now, that gives the
-    /// key; or the key is one that being a member gives by itself; or the caller is the owner, who holds every
-    /// key of the resource.
+    /// key; or the key is one that being a member gives by itself; or the caller is the owner, who holds the
+    /// permissions on the resource that its owner holds.
     /// </summary>
     Members,
 
     /// <summary>
     /// From above the resource: the caller holds the key where the resource sits, or above it, and does not
     /// hold it as one of the resource's members, which comes first. Only a resource whose rules say it is
-    /// reached from above (<see cref="MembershipRules.Above"/>) is reached this way.
+    /// reached from above (<see cref="MembershipRules.ReachFromAbove"/>) is reached this way.
     /// </summary>
     Above,
 

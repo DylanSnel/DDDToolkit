@@ -24,6 +24,7 @@ using EfValueObjectGenerator = DDDToolkit.EntityFramework.Analyzers.ValueObjectG
 using FvValueObjectGenerator = DDDToolkit.FluentValidation.Analyzers.ValueObjectGenerator;
 using HcSingleValueObjectConverterGenerator = DDDToolkit.HotChocolate.Analyzers.SingleValueObjectConverterGenerator;
 using MemberListGenerator = DDDToolkit.Supporting.Membership.Analyzers.MemberListGenerator;
+using MembershipPermissionsGenerator = DDDToolkit.Supporting.Membership.Analyzers.MembershipPermissionsGenerator;
 using MembershipWithTenancyGenerator = DDDToolkit.Supporting.Membership.EntityFramework.Analyzers.MembershipWithTenancyGenerator;
 using SupabaseDesignTimeFactoryGenerator = DDDToolkit.EntityFramework.Supabase.Analyzers.SupabaseDesignTimeFactoryGenerator;
 using SupabaseMigrationsGenerator = DDDToolkit.EntityFramework.Supabase.Analyzers.SupabaseMigrationsGenerator;
@@ -144,8 +145,11 @@ public sealed class GeneratorTestHost
     /// <summary>The generators in DDDToolkit.EntityFramework.Supabase.Analyzers: the list and the export, and the design-time factories.</summary>
     public static IIncrementalGenerator[] SupabaseGenerators() => [new SupabaseMigrationsGenerator(), new SupabaseDesignTimeFactoryGenerator()];
 
-    /// <summary>The generator in DDDToolkit.Supporting.Membership.Analyzers, which a project that declares a member class runs.</summary>
-    public static IIncrementalGenerator[] MemberListGenerators() => [new MemberListGenerator()];
+    /// <summary>
+    /// The generators in DDDToolkit.Supporting.Membership.Analyzers, which a project that declares a member class runs: the
+    /// member list and what the resource says of itself, and the declaration of the permissions on a resource.
+    /// </summary>
+    public static IIncrementalGenerator[] MemberListGenerators() => [new MemberListGenerator(), new MembershipPermissionsGenerator()];
 
     /// <summary>The generator in DDDToolkit.Supporting.Membership.EntityFramework.Analyzers.</summary>
     public static IIncrementalGenerator[] MembershipGenerators() => [new MembershipWithTenancyGenerator()];

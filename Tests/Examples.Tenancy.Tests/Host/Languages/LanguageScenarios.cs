@@ -93,6 +93,27 @@ public sealed class LanguageScenarios(SampleHosts sample) : IClassFixture<Sample
             .Should().Be(TenancyRefusals.Refuse(TenancyRefusals.NotSeated).Message);
     }
 
+    [Fact]
+    public async Task What_a_permission_lets_somebody_do_is_answered_in_the_language_asked_for()
+    {
+        // The catalogue the screens that make roles read: each permission's text is its summary, or the module's
+        // translation under the permission's key.
+        using var ada = await sample.ClientAsync("ada", Harbor.Slug);
+
+        async Task<string?> DescriptionAsync(string key, string language)
+        {
+            using var response = await SendAsync(ada, HttpMethod.Get, "/tenancy/catalogue", language);
+            response.StatusCode.Should().Be(HttpStatusCode.OK);
+            var catalogue = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>(Cancellation);
+            return catalogue.GetProperty("permissions").EnumerateArray().Single(permission => permission.GetProperty("key").GetString() == key)
+                .GetProperty("description").GetString();
+        }
+
+        (await DescriptionAsync(ProjectKeys.View, "en")).Should().Be("See a project and its crew.");
+        (await DescriptionAsync(ProjectKeys.View, "nl")).Should().Be("Een project en zijn crew zien.");
+        (await DescriptionAsync(InspectionKeys.Record, "nl")).Should().Be("Een inspectie vastleggen op een project.");
+    }
+
     private static async Task<Problem> RenameAsync(HttpClient client, string? acceptLanguage)
     {
         var pierSeven = Harbor.ProjectNamed("Pier 7").Id.Value;

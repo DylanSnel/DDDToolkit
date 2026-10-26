@@ -92,7 +92,7 @@ public sealed class RoleKeysScenarios(SampleHosts sample) : IClassFixture<Sample
     [Fact]
     public async Task A_seat_that_does_not_manage_roles_gets_the_roles_without_their_keys_and_the_refusal_per_field()
     {
-        // Leo leads a crew, and holds nothing in the organization.
+        // Leo owns a project, and holds nothing in the organization.
         using var leo = await sample.ClientAsync("leo", Harbor.Slug);
         var answer = await leo.GraphQLAsync(RolesWithKeys);
 

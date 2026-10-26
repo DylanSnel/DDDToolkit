@@ -53,7 +53,7 @@ public sealed class DepotContext(DbContextOptions<DepotContext> options) : DbCon
         {
             pallet.Property(row => row.Id).ValueGeneratedNever();
             pallet.Property(row => row.Label).HasMaxLength(100);
-            pallet.HasMembers(row => row.Porters, row => row.OwnerId);
+            pallet.HasMembers(row => row.Porters);
         });
 
         modelBuilder.Entity<Crate>(crate =>
@@ -62,7 +62,7 @@ public sealed class DepotContext(DbContextOptions<DepotContext> options) : DbCon
             crate.Property(row => row.Label).HasMaxLength(100);
 
             // Where a crate sits is said with its members: what a key held at a bay, or above it, is compared with.
-            crate.HasMembers(row => row.Porters, row => row.OwnerId, at: row => row.BayId);
+            crate.HasMembers(row => row.Porters);
         });
 
         modelBuilder.Entity<Porter>(porter =>

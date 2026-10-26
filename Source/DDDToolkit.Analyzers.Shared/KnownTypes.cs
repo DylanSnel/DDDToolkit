@@ -33,6 +33,9 @@ internal static class KnownTypes
     /// <summary>The property of an aggregate root that names its owner: <c>[Owner]</c>.</summary>
     public const string OwnerAttribute = AttributesNamespace + ".OwnerAttribute";
 
+    /// <summary>The property of an aggregate root that says where it hangs: <c>[At]</c>.</summary>
+    public const string AtAttribute = AttributesNamespace + ".AtAttribute";
+
     /// <summary>An abstract generic parent a package ships for aggregate roots declared elsewhere: <c>[AggregateRootBase]</c>.</summary>
     public const string AggregateRootBaseAttribute = AttributesNamespace + ".AggregateRootBaseAttribute";
 

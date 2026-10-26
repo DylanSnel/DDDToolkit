@@ -61,7 +61,6 @@ DDD00059 | DDDToolkit.Membership | Warning | The member list of a resource is wr
 DDD00060 | DDDToolkit.Membership | Warning | A member class names an aggregate root whose members it is
 DDD00061 | DDDToolkit.Access | Warning | A request that declares its access is sent, not handed to its handler
 DDD00062 | DDDToolkit.GraphQL | Error | A class of one GraphQL schema is one the toolkit alone registers
-DDD00063 | DDDToolkit.Tenancy | Error | A module's keys marked [TenancyPermissions] are a list the project that composes the modules can read
 DDD00064 | DDDToolkit.Modules | Warning | DDD_Module declares the module where the package's build step runs
 DDD00065 | DDDToolkit.Entities | Info | The class a package's use cases are named through is written where each of its templates has one class
 DDD00066 | DDDToolkit.Entities | Error | A package's switch writes a class or an id where its name is free and its id is known
@@ -88,3 +87,12 @@ DDD00086 | DDDToolkit.Access | Error | [OrOwn] and [Own] mark a member of a type
 DDD00087 | DDDToolkit.Access | Error | [Owner] marks the one owner of an aggregate root
 DDD00088 | DDDToolkit.Access | Error | [Owner] marks a property of a type the caller has an own of
 DDD00089 | DDDToolkit.Access | Error | A module's default requirement is one any of its requests may take
+DDD00090 | DDDToolkit.Supabase | Warning | The names of resources with members are those of the newest access file
+DDD00091 | DDDToolkit.Membership | Error | [Members] names a resource with what can be converted to a code and a function's name
+DDD00092 | DDDToolkit.Access | Error | A permission is a public constant of a [Permissions] class, with a level
+DDD00093 | DDDToolkit.Membership | Error | A permission's level fits what it is asked on
+DDD00094 | DDDToolkit.Membership | Error | The rules of a resource are made from the permissions declared on it
+DDD00095 | DDDToolkit.Tenancy | Error | A module's permissions are declared in a [Permissions] class, not on a list of its own
+DDD00096 | DDDToolkit.Access | Warning | [OrOwn] beside a key the owner of the resource holds already says nothing more
+DDD00097 | DDDToolkit.Access | Error | [At] marks the one place an aggregate root hangs at
+DDD00098 | DDDToolkit.Membership | Error | Rules that reach a resource from above read where it hangs from its [At] property

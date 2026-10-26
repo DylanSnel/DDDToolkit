@@ -68,7 +68,7 @@ public partial class RefusalTableTests
 
         MembershipRefusals.Codes.Should().BeEquivalentTo(declared, "every constant is in the table and the table has nothing else");
         declared.Should().OnlyHaveUniqueItems().And.OnlyContain(code => code.StartsWith("membership.", StringComparison.Ordinal));
-        declared.Should().HaveCount(17, "the eleven rules of access and of a member list, the one about a period, and the five about a role kept for a resource");
+        declared.Should().HaveCount(15, "the ten rules of access and of a member list, the one about a period, and the four about a role a customer makes");
 
         var english = Resx(CultureInfo.InvariantCulture);
         english.Keys.Should().BeEquivalentTo(declared, "MembershipFailures.resx holds exactly the table's names");
@@ -95,7 +95,6 @@ public partial class RefusalTableTests
             [MembershipRefusals.NotPermitted] = RefusalKind.NotPermitted,
             [MembershipRefusals.MemberNotActive] = RefusalKind.Conflict,
             [MembershipRefusals.RoleNotForMembers] = RefusalKind.Invalid,
-            [MembershipRefusals.NoOwnerRole] = RefusalKind.Conflict,
             [MembershipRefusals.AlreadyMember] = RefusalKind.Conflict,
             [MembershipRefusals.MemberNotFound] = RefusalKind.NotFound,
             [MembershipRefusals.RoleHeld] = RefusalKind.Conflict,
@@ -106,7 +105,6 @@ public partial class RefusalTableTests
             [MembershipRefusals.RoleIsArchived] = RefusalKind.Conflict,
             [MembershipRefusals.RoleNameInvalid] = RefusalKind.Invalid,
             [MembershipRefusals.KeyNotForMembers] = RefusalKind.Invalid,
-            [MembershipRefusals.OwnerRoleStays] = RefusalKind.Conflict,
             [MembershipRefusals.RoleKeysNotNormalized] = RefusalKind.Conflict,
         });
     }
@@ -162,7 +160,7 @@ public partial class RefusalTableTests
         own[MembershipRefusals.AlreadyMember].Should().Be("projects.already-on-crew");
         own[MembershipRefusals.MemberNotActive].Should().Be("projects.seat-not-active");
         own[MembershipRefusals.OwnerProtected].Should().Be("projects.owner-protected", "a rule nobody renamed keeps the package's name");
-        own.All.Should().HaveCount(17).And.OnlyHaveUniqueItems();
+        own.All.Should().HaveCount(15).And.OnlyHaveUniqueItems();
         own.Refuse(MembershipRefusals.AlreadyMember).Code.Should().Be("projects.already-on-crew");
 
         // A map never changes: renaming answers another one.
@@ -317,7 +315,7 @@ public partial class RefusalTableTests
     [Fact]
     public void Every_invalid_refusal_names_the_input_it_is_about()
     {
-        var document = new Document(DocumentId.CreateSequential(), "Minutes", UserId.CreateSequential(), DocumentMembership.Owner, Now);
+        var document = new Document(DocumentId.CreateSequential(), "Minutes", UserId.CreateSequential(), Now);
         var codes = DocumentRefusals.Membership;
 
         // Each one refused the way a caller meets it.
@@ -333,7 +331,7 @@ public partial class RefusalTableTests
             (MembershipRefusals.RoleNameInvalid, "name",
                 Refused.With(PlotMembership.Codes, MembershipRefusals.RoleNameInvalid, () => _ = new PlotRole(PlotRoleId.CreateSequential(), GardenId.CreateSequential(), new CustomRoleDraft("  ", null, []))).Arguments),
             (MembershipRefusals.KeyNotForMembers, "keys",
-                Refused.With(PlotMembership.Codes, MembershipRefusals.KeyNotForMembers, () => _ = new PlotRole(PlotRoleId.CreateSequential(), GardenId.CreateSequential(), new CustomRoleDraft("Seller", null, [PlotKeys.Sell]))).Arguments),
+                Refused.With(PlotMembership.Codes, MembershipRefusals.KeyNotForMembers, () => _ = new PlotRole(PlotRoleId.CreateSequential(), GardenId.CreateSequential(), new CustomRoleDraft("Seller", null, [PlotPermissions.Sell]))).Arguments),
         };
 
         var invalid = MembershipRefusals.Codes.Where(code => MembershipRefusals.KindOf(code) == RefusalKind.Invalid).ToArray();
@@ -360,10 +358,10 @@ public partial class RefusalTableTests
     [Fact]
     public void A_refusal_carries_its_arguments_and_an_english_text_filled_from_them()
     {
-        var refusal = DocumentRefusals.Membership.Refuse(MembershipRefusals.NotPermitted, ("Key", DocumentKeys.Share));
+        var refusal = DocumentRefusals.Membership.Refuse(MembershipRefusals.NotPermitted, ("Key", DocumentPermissions.Share));
 
         refusal.Message.Should().Be("Doing this needs the key documents.share.");
-        refusal.Arguments.Should().Contain("Key", DocumentKeys.Share);
+        refusal.Arguments.Should().Contain("Key", DocumentPermissions.Share);
         refusal.Arguments.Should().ContainKey("key", "names are matched without regard to case, like the arguments of every failure");
 
         // An argument nobody gave is left as written, rather than shown as nothing.
@@ -376,7 +374,7 @@ public partial class RefusalTableTests
     public void A_refusal_reads_in_the_readers_language_under_the_resources_own_code()
     {
         var localizer = Localizer(DocumentRefusals.Membership, FolderRefusals.Membership);
-        var shared = DocumentRefusals.Membership.Refuse(MembershipRefusals.NotPermitted, ("Key", DocumentKeys.Share));
+        var shared = DocumentRefusals.Membership.Refuse(MembershipRefusals.NotPermitted, ("Key", DocumentPermissions.Share));
         var staffed = FolderRefusals.Membership.Refuse(MembershipRefusals.AlreadyMember, ("Member", new StaffCode("C-014")));
 
         localizer.Localize(shared, CultureInfo.GetCultureInfo("nl-NL")).Should().Be("Hiervoor is het recht documents.share nodig.");
@@ -402,7 +400,7 @@ public partial class RefusalTableTests
 
         localizer.Localize(staffed, CultureInfo.GetCultureInfo("nl")).Should().Be(staffed.Message);
         localizer.Localize(DocumentRefusals.Membership.Refuse(MembershipRefusals.OwnerProtected), CultureInfo.GetCultureInfo("nl"))
-            .Should().Be("De eigenaar blijft lid, in de rol van eigenaar, tot iemand anders eigenaar is.");
+            .Should().Be("De eigenaar blijft lid, zonder rol, tot iemand anders eigenaar is.");
     }
 
     [Fact]
@@ -410,7 +408,7 @@ public partial class RefusalTableTests
     {
         var keys = FolderRefusals.Membership.TextKeys;
 
-        keys.Should().HaveCount(20, "seventeen codes of its own, and the three rules a member and a role report under the package's names");
+        keys.Should().HaveCount(18, "fifteen codes of its own, and the three rules a member and a role report under the package's names");
         keys["folders.already-on-folder"].Should().Be(MembershipRefusals.AlreadyMember);
         keys["folders.owner-protected"].Should().Be(MembershipRefusals.OwnerProtected);
         keys[MembershipRefusals.RoleHeld].Should().Be(MembershipRefusals.RoleHeld, "a member does not know whose it is, and reports the rule by the package's name");
@@ -420,17 +418,17 @@ public partial class RefusalTableTests
         keys.Values.Distinct().Should().BeEquivalentTo(MembershipRefusals.Codes, "every text is read by a code");
 
         // A resource named as the package names its rules needs no entry twice.
-        MembershipCodes.Under("membership").TextKeys.Should().HaveCount(17);
+        MembershipCodes.Under("membership").TextKeys.Should().HaveCount(15);
     }
 
     [Fact]
     public void The_rule_a_member_checks_itself_reads_in_the_readers_language_too()
     {
         var localizer = Localizer(DocumentRefusals.Membership);
-        var document = new Document(DocumentId.CreateSequential(), "Minutes", UserId.CreateSequential(), DocumentMembership.Owner, Now);
+        var document = new Document(DocumentId.CreateSequential(), "Minutes", UserId.CreateSequential(), Now);
         var member = document.ShareWith(UserId.CreateSequential(), DocumentMembership.Contributor, MemberPeriod.Open(Now), Now, by: null);
         var roles = Break.ListOf<MemberRole<UserId, NamedRole>>(member, "_roles");
-        roles.Add(new Document(DocumentId.CreateSequential(), "Other", UserId.CreateSequential(), DocumentMembership.Contributor, Now).Shares.Single().Roles.Single());
+        roles.Add(new Document(DocumentId.CreateSequential(), "Other", UserId.CreateSequential(), Now).ShareWith(member.MemberId, DocumentMembership.Contributor, MemberPeriod.Open(Now), Now, by: null).Roles.Single());
 
         var violation = document.GetInvariantViolations().Should().ContainSingle().Which;
 
@@ -469,17 +467,16 @@ public partial class RefusalTableTests
         var meadow = GardenId.CreateSequential();
 
         // Refused where a role is given keys, under the plots' own code.
-        var refused = Refused.With(PlotMembership.Codes, MembershipRefusals.KeyNotForMembers, () => _ = new PlotRole(PlotRoleId.CreateSequential(), meadow, new CustomRoleDraft("Seller", null, [PlotKeys.Sell])));
+        var refused = Refused.With(PlotMembership.Codes, MembershipRefusals.KeyNotForMembers, () => _ = new PlotRole(PlotRoleId.CreateSequential(), meadow, new CustomRoleDraft("Seller", null, [PlotPermissions.Sell])));
         refused.Code.Should().Be("plots.key-not-for-members");
         localizer.Localize(refused, CultureInfo.GetCultureInfo("nl-NL")).Should().Be("Deze rechten kan een rol hier niet geven: plots.sell.");
         localizer.Localize(refused, CultureInfo.GetCultureInfo("en-GB")).Should().Be(refused.Message).And.Be("A role cannot give these keys here: plots.sell.");
 
         var archived = PlotMembership.Codes.Refuse(MembershipRefusals.RoleIsArchived);
         localizer.Localize(archived, CultureInfo.GetCultureInfo("nl")).Should().Be("Die rol is gearchiveerd.");
-        localizer.Localize(PlotMembership.Codes.Refuse(MembershipRefusals.OwnerRoleStays), CultureInfo.GetCultureInfo("nl")).Should().Be("De rol die elke eigenaar heeft, kan niet worden gearchiveerd.");
 
         // What a role checks by itself it reports under the package's name for the rule, and that reads in the reader's language too.
-        var role = new PlotRole(PlotRoleId.CreateSequential(), meadow, new CustomRoleDraft("Fencer", null, [PlotKeys.See]));
+        var role = new PlotRole(PlotRoleId.CreateSequential(), meadow, new CustomRoleDraft("Fencer", null, [PlotPermissions.See]));
         Break.Set(role, nameof(PlotRole.Name), string.Empty);
         var violation = role.GetInvariantViolations().Should().ContainSingle().Which;
         violation.Code.Should().Be(MembershipRefusals.RoleNameInvalid);

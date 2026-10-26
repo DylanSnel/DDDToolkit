@@ -2,23 +2,36 @@ using System.Security.Cryptography;
 using System.Text;
 using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.EntityFramework.Postgres;
-using Npgsql;
+using DDDToolkit.Supporting.Membership.TestHost.Access;
 
 namespace DDDToolkit.Supporting.Membership.Postgres.Tests;
 
 /// <summary>
-/// What the contribution of one resource writes: four functions under the host's names, from the resource's
-/// rules and the names its model gives its tables, with the grants the rules name; and the lock, for rules
-/// that name the keys that change the members and the owner. No policy that allows anything, no table kept to
-/// itself, and nothing for a context that is another resource's.
+/// What the contribution of one resource writes: four functions named after the resource, from its rules and the
+/// names its model gives its tables, granted to the roles its row access rules are for; and the lock, for rules with
+/// permissions that lock the members and the owner. No policy that allows anything, no table kept to itself, and
+/// nothing for a context that is another resource's.
 /// </summary>
 public sealed class ContributionTests(FilingPostgres postgres)
 {
-    /// <summary>What the functions are written with: the roles as the host maps them, the folder's token role among them.</summary>
-    private static readonly RowAccessExport Export = new() { Roles = FilingPostgres.RoleNames };
+    /// <summary>
+    /// What the functions are written with: the roles as the hosts map them, the folders' token role among them, and the
+    /// hosts' row access rules, whose roles the functions are granted to.
+    /// </summary>
+    private static readonly RowAccessExport Export = new()
+    {
+        Roles = FilingPostgres.RoleNames,
+        Rules = [.. FilingPostgres.Rules, .. PostgresDepot.Rules, .. PostgresGarden.Rules],
+    };
+
+    private static DatabaseFunction Depot(string name) => new(DepotFunctions.Owner, name);
+
+    /// <summary><see cref="Export"/> with other roles, or other rules.</summary>
+    private static RowAccessExport ExportWith(RowAccessRoleNames? roles = null, IReadOnlyList<RowAccessRule>? rules = null)
+        => new() { Roles = roles ?? Export.Roles, Rules = rules ?? Export.Rules };
 
     [Fact]
-    public void The_contribution_writes_four_functions_under_the_hosts_names_and_allows_nothing()
+    public void The_contribution_writes_four_functions_named_after_the_resource_and_allows_nothing()
     {
         using var context = FilingPostgres.Model();
 
@@ -27,25 +40,53 @@ public sealed class ContributionTests(FilingPostgres postgres)
         written.Policies.Should().OnlyContain(policy => policy.Restrictive, "what a caller may read and change of a folder is the application's own rules to say: the package only narrows");
         written.ExclusiveTables.Should().BeNull("the member tables follow the rules of the resource that owns them");
         written.Functions.Select(function => (function.Name, function.Parameters, function.Returns)).Should().Equal(
-            ("folder_ids_staffed", "", "SETOF bigint"),
-            ("folder_ids_staffed_with", "text", "SETOF bigint"),
-            ("folder_ids_seen", "", "SETOF bigint"),
-            ("folder_ids_held", "text", "SETOF bigint"));
+            ("folders_as_member", "", "SETOF bigint"),
+            ("folders_as_member_with", "text", "SETOF bigint"),
+            ("folders_i_see", "", "SETOF bigint"),
+            ("folders_where_i_hold", "text", "SETOF bigint"));
         written.Functions.Should().OnlyContain(function => function.SecurityDefiner && !function.Inlinable && function.Volatility == "STABLE");
-        written.Functions.Should().OnlyContain(function => function.GrantTo!.SequenceEqual(new[] { RowAccessRoles.User, RowAccessRoles.Token(FilingPostgres.ArchivistTokenRole) }), "who may ask is what the rules say");
 
-        // A document's are its own: other names, another id, and signed-in users alone.
+        // A document's are its own: other names, another id.
         var documents = new MembershipRowAccessContribution<DocumentShare>(DocumentMembership.Rules).Contribute(context, Export)!;
         documents.Functions.Select(function => (function.Name, function.Parameters, function.Returns)).Should().Equal(
             ("documents_as_member", "", "SETOF uuid"),
             ("documents_as_member_with", "text", "SETOF uuid"),
             ("documents_i_see", "", "SETOF uuid"),
             ("documents_where_i_hold", "text", "SETOF uuid"));
-        documents.Functions.Should().OnlyContain(function => function.GrantTo!.SequenceEqual(new[] { RowAccessRoles.User }));
     }
 
     [Fact]
-    public void Rules_that_name_the_key_that_changes_the_members_lock_both_member_tables_for_the_roles_they_name()
+    public void The_functions_are_granted_to_the_roles_the_resources_row_access_rules_are_for()
+    {
+        using var context = FilingPostgres.Model();
+
+        // The folders' rules are for signed-in users, and one for the archivists' token role; and the folders' module
+        // lets its own scoped work through, so the role that work runs as asks them as well.
+        new MembershipRowAccessContribution<FolderMember>(FolderMembership.Rules).Contribute(context, Export)!.Functions
+            .Should().OnlyContain(function => function.GrantTo!.SequenceEqual(new[] { RowAccessRoles.User, Archivists.Role, RowAccessRoles.SystemIn }));
+
+        // A token role named in a row access rule alone is granted them by that rule; without the rule, it is not.
+        var withoutArchivists = ExportWith(rules: [.. Export.Rules.Where(rule => !rule.Roles.Contains(Archivists.Role))]);
+        new MembershipRowAccessContribution<FolderMember>(FolderMembership.Rules).Contribute(context, withoutArchivists)!.Functions
+            .Should().OnlyContain(function => function.GrantTo!.SequenceEqual(new[] { RowAccessRoles.User, RowAccessRoles.SystemIn }));
+
+        // The documents' rules are for signed-in users, and turn scoped work off: the user's role alone.
+        new MembershipRowAccessContribution<DocumentShare>(DocumentMembership.Rules).Contribute(context, Export)!.Functions
+            .Should().OnlyContain(function => function.GrantTo!.SequenceEqual(new[] { RowAccessRoles.User }));
+
+        // A rule for callers who did not sign in grants them nothing: an anonymous caller is nobody's member.
+        var anonymous = ExportWith(rules: [.. Export.Rules, RowAccessRule.For<Document>("Anybody reads the title", RowOperations.Read, "true", RowAccessRoles.Anonymous)]);
+        new MembershipRowAccessContribution<DocumentShare>(DocumentMembership.Rules).Contribute(context, anonymous)!.Functions
+            .Should().OnlyContain(function => function.GrantTo!.SequenceEqual(new[] { RowAccessRoles.User }));
+
+        // And a resource no rule is for, whose module lets its scoped work through: that role alone.
+        var papers = MembershipRules.Declare(typeof(Document), "papers", [new("papers.read")], Roles.Fixed([new("reader", ["papers.read"])]), systemScopes: ["filing"]);
+        new MembershipRowAccessContribution<DocumentShare>(papers).Contribute(context, ExportWith(rules: []))!.Functions
+            .Should().OnlyContain(function => function.GrantTo!.SequenceEqual(new[] { RowAccessRoles.SystemIn }));
+    }
+
+    [Fact]
+    public void Rules_with_a_permission_that_locks_the_members_lock_both_member_tables_for_the_roles_the_functions_are_granted_to()
     {
         using var context = FilingPostgres.Model();
         var staff = context.Model.FindEntityType(typeof(FolderMember))!;
@@ -53,51 +94,51 @@ public sealed class ContributionTests(FilingPostgres postgres)
 
         var written = new MembershipRowAccessContribution<FolderMember>(FolderMembership.Rules).Contribute(context, Export)!.Policies;
 
-        // Adding, changing and removing a row, on the staff's table and on the table of the roles they hold,
-        // for each role the folder's rules let ask its functions: never reading, which stays what the folder's
-        // own rules say.
+        // Adding, changing and removing a row, on the staff's table and on the table of the roles they hold, for each
+        // role that may ask the folders' functions, scoped system work among them, which passes where the rules let its
+        // scope through: never reading, which stays what the folder's own rules say.
         written.Select(policy => (policy.Table, policy.Command, policy.Role)).Should().BeEquivalentTo(
             from table in new[] { staff, held }
-            from role in new[] { RowAccessRoles.User, RowAccessRoles.Token(FilingPostgres.ArchivistTokenRole) }
+            from role in new[] { RowAccessRoles.User, Archivists.Role, RowAccessRoles.SystemIn }
             from command in new[] { "INSERT", "UPDATE", "DELETE" }
             select (table, command, role));
         written.Should().OnlyContain(policy => policy.Restrictive && policy.Name == "Members change with the key");
 
-        // A row is written only on a folder the caller holds the key on, as the folder's own function answers
-        // it: the key that changes the staff, or the key that hands the folder on, since naming a keeper
-        // writes the new keeper's rows.
+        // A row is written only on a folder the caller holds the key on, as the folder's own function answers it: the
+        // permission that locks the staff, or the one that locks the keeper, since naming a keeper writes the new
+        // keeper's rows.
         const string Holds =
-            "(\"FolderId\" IN (SELECT held.id FROM {fn:folders/folder_ids_held}('folders.staff') AS held(id))"
-            + " OR \"FolderId\" IN (SELECT held.id FROM {fn:folders/folder_ids_held}('folders.hand-over') AS held(id)))";
+            "(\"FolderId\" IN (SELECT held.id FROM {fn:folders/folders_where_i_hold}('folders.staff') AS held(id))"
+            + " OR \"FolderId\" IN (SELECT held.id FROM {fn:folders/folders_where_i_hold}('folders.hand-over') AS held(id)))";
         written.Where(policy => policy.Command == "INSERT").Should().OnlyContain(policy => policy.Using == null && policy.WithCheck == Holds);
         written.Where(policy => policy.Command == "UPDATE").Should().OnlyContain(policy => policy.Using == Holds && policy.WithCheck == Holds);
         written.Where(policy => policy.Command == "DELETE").Should().OnlyContain(policy => policy.Using == Holds && policy.WithCheck == null);
 
-        // A document's, for signed-in users alone, under its own names, asked once where one key does both;
-        // and nothing for rules that name no such key.
+        // A document's, for signed-in users alone, asked once where one permission locks both; and nothing for rules
+        // with no such permission.
         var documents = new MembershipRowAccessContribution<DocumentShare>(DocumentMembership.Rules).Contribute(context, Export)!.Policies;
         documents.Should().HaveCount(6).And.OnlyContain(policy => policy.Role == RowAccessRoles.User && policy.Restrictive);
         documents.Should().Contain(policy => policy.Table.ClrType == typeof(DocumentShare) && policy.Command == "INSERT"
             && policy.WithCheck == "\"DocumentId\" IN (SELECT held.id FROM {fn:documents/documents_where_i_hold}('documents.share') AS held(id))");
 
         using var gardens = PostgresGarden.Model();
-        new MembershipRowAccessContribution<ShedHand>(ShedMembership.Rules).Contribute(gardens, Export)!.Policies.Should().BeEmpty("a shed's rules name no key that changes its hands");
+        new MembershipRowAccessContribution<ShedHand>(ShedMembership.Rules).Contribute(gardens, Export)!.Policies.Should().BeEmpty("no permission of a shed locks its hands");
     }
 
     [Fact]
-    public void Rules_that_name_the_key_that_changes_the_owner_pin_the_owner_column_for_the_roles_they_name()
+    public void Rules_with_a_permission_that_locks_the_owner_pin_the_owner_column_for_the_roles_the_functions_are_granted_to()
     {
         using var context = FilingPostgres.Model();
 
         var written = new MembershipRowAccessContribution<FolderMember>(FolderMembership.Rules).Contribute(context, Export)!.Statements;
 
-        // A trigger, since only a trigger sees the row a statement found and the row it leaves: it fires where
-        // the keeper would change, and refuses as a policy refuses unless the caller held the key before.
+        // A trigger, since only a trigger sees the row a statement found and the row it leaves: it fires where the
+        // keeper would change, and refuses as a policy refuses unless the caller held the key before.
         written.Should().HaveCount(4);
         written[0].Should()
-            .StartWith("CREATE OR REPLACE FUNCTION \"filing\".folders_owner_stays() RETURNS trigger\n    LANGUAGE plpgsql SET search_path = '' AS $body$\nBEGIN\n    -- Membership of folders, in form ")
-            .And.Contain($"IF CURRENT_USER IN ('authenticated', '{FilingPostgres.ArchivistRole}')")
-            .And.Contain("AND NOT EXISTS (SELECT 1 FROM {fn:folders/folder_ids_held}('folders.hand-over') AS held(id) WHERE held.id = OLD.\"Id\") THEN")
+            .StartWith("CREATE OR REPLACE FUNCTION \"filing\".folders_owner_stays() RETURNS trigger\n    LANGUAGE plpgsql SET search_path = '' AS $body$\nBEGIN\n    -- Membership of folders (Folder), in form ")
+            .And.Contain($"IF CURRENT_USER IN ('authenticated', '{FilingPostgres.ArchivistRole}', 'ddd_system_in')")
+            .And.Contain("AND NOT EXISTS (SELECT 1 FROM {fn:folders/folders_where_i_hold}('folders.hand-over') AS held(id) WHERE held.id = OLD.\"Id\") THEN")
             .And.Contain("RAISE EXCEPTION USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'folders_owner_stays', HINT = 'ddd:access.refused', MESSAGE = ")
             .And.NotContain("SECURITY DEFINER", "it asks as the caller, who may ask the folder's functions")
             .And.NotContain("\r");
@@ -108,57 +149,45 @@ public sealed class ContributionTests(FilingPostgres postgres)
             + "    FOR EACH ROW WHEN (OLD.\"Keeper\" IS DISTINCT FROM NEW.\"Keeper\")\n"
             + "    EXECUTE FUNCTION \"filing\".folders_owner_stays()");
 
-        // Rules that name no such key take a lock away that earlier rules may have left behind, and write none.
-        // What follows, for the sheds, is the trigger that keeps the owner's role in use: their roles are kept.
+        // Rules with no such permission take a lock away that earlier rules may have left behind, and write none; where
+        // a customer makes the roles, they take away the trigger an earlier form wrote to keep an owner's role in use.
         using var gardens = PostgresGarden.Model();
-        var sheds = new MembershipRowAccessContribution<ShedHand>(ShedMembership.Rules).Contribute(gardens, Export)!.Statements;
-        sheds.Take(2).Should().Equal(
+        new MembershipRowAccessContribution<ShedHand>(ShedMembership.Rules).Contribute(gardens, Export)!.Statements.Should().Equal(
             "DROP TRIGGER IF EXISTS sheds_owner_stays ON \"gardens\".\"Sheds\"",
-            "DROP FUNCTION IF EXISTS \"gardens\".sheds_owner_stays()");
-        sheds.Skip(2).Should().HaveCount(4).And.OnlyContain(
-            statement => statement.Contains("sheds_owner_role_stays", StringComparison.Ordinal),
-            "and the rest is the trigger that keeps the owner's role in use, with its function: no lock on the owner column is written");
+            "DROP FUNCTION IF EXISTS \"gardens\".sheds_owner_stays()",
+            "DROP TRIGGER IF EXISTS sheds_owner_role_stays ON \"gardens\".\"ShedRoles\"",
+            "DROP FUNCTION IF EXISTS \"gardens\".sheds_owner_role_stays()");
 
-        // A role the host maps to no database role is nobody a lock can be written for: said, naming the rules.
-        FluentActions.Invoking(() => new MembershipRowAccessContribution<FolderMember>(FolderMembership.Rules).Contribute(context, new RowAccessExport()))
+        // A role the host maps to no database role is nobody a lock can be written for: said, naming the resource.
+        FluentActions.Invoking(() => new MembershipRowAccessContribution<FolderMember>(FolderMembership.Rules).Contribute(context, new RowAccessExport { Rules = Export.Rules }))
             .Should().Throw<InvalidOperationException>()
-            .WithMessage("The rules 'folders' let the role '@token:archivist' ask the resource's functions, and the lock on the owner column cannot be written for it*");
+            .WithMessage("A row access rule of Folder is for the role '@token:archivist', which may ask its functions, and they cannot be granted to it: '@token:archivist' is the token role 'archivist', which is mapped to no database role*");
 
-        // And a name Postgres would cut is refused where the lock is written: it is named after the rules,
-        // whatever short names the rules give their functions.
-        var longName = new MembershipRules(
-            new string('d', 60), keys: ["d.read"], roles: [new("reader", ["d.read"])], functions: new("d_on", "d_with", "d_seen", "d_held"), changeOwnerKey: "d.read");
+        // And a name Postgres would cut is refused where the lock is written: it is named after the resource.
+        var longName = MembershipRules.Declare(typeof(Document), new string('d', 60), [new("d.read", LocksOwner: true)], Roles.Fixed([new("reader", ["d.read"])]));
         FluentActions.Invoking(() => new MembershipRowAccessContribution<DocumentShare>(longName).Contribute(context, Export))
             .Should().Throw<InvalidOperationException>().WithMessage("*longer than the 63 characters Postgres keeps of a name*");
 
-        // The same rules without that key ask for no lock, so their name is nobody's trouble: the functions
-        // are written, and there is no lock of that name to take away.
-        var longAndOpen = new MembershipRules(new string('d', 60), keys: ["d.read"], roles: [new("reader", ["d.read"])], functions: new("d_on", "d_with", "d_seen", "d_held"));
-        var open = new MembershipRowAccessContribution<DocumentShare>(longAndOpen).Contribute(context, Export)!;
-        open.Functions.Should().HaveCount(4);
-        open.Statements.Should().BeEmpty();
-
-        // The function the trigger runs is written between two quotes of its own. A key that has that quote in
-        // it would end the body early, and what came after it would be read as the statement's own: refused
-        // where the lock is written, as the export refuses a function's body with its quote in it.
-        var quoted = new MembershipRules(
-            "documents", keys: ["d.read", "d.give $body$; DROP TABLE x; --"], roles: [new("reader", ["d.read"])], changeOwnerKey: "d.give $body$; DROP TABLE x; --");
+        // The function the trigger runs is written between two quotes of its own. A key that has that quote in it
+        // would end the body early, and what came after it would be read as the statement's own: refused where the
+        // lock is written, as the export refuses a function's body with its quote in it.
+        var quoted = MembershipRules.Declare(
+            typeof(Document), "documents", [new("d.read"), new("d.give $body$; DROP TABLE x; --", LocksOwner: true)], Roles.Fixed([new("reader", ["d.read"])]));
         FluentActions.Invoking(() => new MembershipRowAccessContribution<DocumentShare>(quoted).Contribute(context, Export))
             .Should().Throw<InvalidOperationException>()
             .WithMessage("The lock on the owner column of Document cannot be written from the rules 'documents'*has '$body$' in it, which would end the function's body early.");
     }
 
     [Fact]
-    public void Where_the_roles_are_kept_the_lock_holds_a_role_given_to_one_the_caller_sees_and_a_trigger_keeps_the_owners_role_in_use()
+    public void Where_a_customer_makes_the_roles_the_lock_holds_a_role_given_to_one_the_caller_sees()
     {
         using var gardens = PostgresGarden.Model();
         var held = MembershipModel.For(gardens.Model, typeof(PlotGardener))!.Roles.GetTableName();
         var plots = new MembershipRowAccessContribution<PlotGardener>(PlotMembership.Rules).Contribute(gardens, Export)!;
 
-        // The plots' rules name the key that changes the gardeners. On the table of the roles a gardener holds a
-        // second restrictive policy, for adding and changing a row, for each role the rules let ask the
-        // functions: the role is one the caller sees in the role table, asked as the caller. Removing a row asks
-        // nothing of its role.
+        // A plot's permission that fences locks the gardeners. On the table of the roles a gardener holds a second
+        // restrictive policy, for adding and changing a row, for each role the lock holds: the role is one the caller
+        // sees in the role table, asked as the caller. Removing a row asks nothing of its role.
         const string Seen = "EXISTS (SELECT 1 FROM \"gardens\".\"PlotRoles\" k WHERE k.\"Id\" = \"gardens\".\"PlotGardenerRoles\".\"RoleId\")";
         plots.Policies.Where(policy => policy.Name == "Members hold roles the caller sees")
             .Select(policy => (policy.Table.GetTableName(), policy.Command, policy.Role, policy.Using, policy.WithCheck, policy.Restrictive))
@@ -166,55 +195,27 @@ public sealed class ContributionTests(FilingPostgres postgres)
             {
                 (held, "INSERT", RowAccessRoles.User, null, Seen, true),
                 (held, "UPDATE", RowAccessRoles.User, "true", Seen, true),
+                (held, "INSERT", RowAccessRoles.SystemIn, null, Seen, true),
+                (held, "UPDATE", RowAccessRoles.SystemIn, "true", Seen, true),
             });
 
-        // It is part of the lock: the sheds keep their roles and name no key that changes their hands, so they
-        // get neither. And the documents declare their roles, which are names and no rows.
+        // It is part of the lock: the sheds lock nothing, so they get neither. And the documents' roles are in code,
+        // which are names and no rows.
         new MembershipRowAccessContribution<ShedHand>(ShedMembership.Rules).Contribute(gardens, Export)!.Policies.Should().BeEmpty();
         using var filing = FilingPostgres.Model();
         new MembershipRowAccessContribution<DocumentShare>(DocumentMembership.Rules).Contribute(filing, Export)!.Policies.Should().NotContain(policy => policy.Name == "Members hold roles the caller sees");
 
-        // The owner's role: a trigger on the role table, after the lock on the owner column, written from the
-        // starter role the rules name as the owner's, which refuses a row of it that would be archived.
-        var trigger = plots.Statements.Skip(4).ToList();
-        trigger.Should().HaveCount(4);
-        trigger[0].Should()
-            .StartWith("CREATE OR REPLACE FUNCTION \"gardens\".plots_owner_role_stays() RETURNS trigger\n    LANGUAGE plpgsql SET search_path = '' AS $body$\nBEGIN\n    -- Membership of plots, in form ")
-            .And.Contain("\n    IF NEW.\"MadeFrom\" = 'owner' AND NEW.\"Status\" IS DISTINCT FROM 'Active' THEN\n")
-            .And.Contain("RAISE EXCEPTION USING ERRCODE = 'check_violation'")
-            .And.NotContain("CURRENT_USER", "whoever writes the row is held, as the role refuses in C# whoever asks")
-            .And.NotContain("SECURITY DEFINER")
-            .And.NotContain("\r");
-        trigger[1].Should().Be("REVOKE ALL ON FUNCTION \"gardens\".plots_owner_role_stays() FROM PUBLIC");
-        trigger[2].Should().Be("DROP TRIGGER IF EXISTS plots_owner_role_stays ON \"gardens\".\"PlotRoles\"");
-        trigger[3].Should().Be(
-            "CREATE TRIGGER plots_owner_role_stays BEFORE INSERT OR UPDATE OF \"MadeFrom\", \"Status\" ON \"gardens\".\"PlotRoles\"\n"
-            + "    FOR EACH ROW EXECUTE FUNCTION \"gardens\".plots_owner_role_stays()");
-
-        // The sheds name their keeper as the owner's role, on a role table of their own.
-        new MembershipRowAccessContribution<ShedHand>(ShedMembership.Rules).Contribute(gardens, Export)!.Statements.Should()
-            .Contain(statement => statement.StartsWith("CREATE OR REPLACE FUNCTION \"gardens\".sheds_owner_role_stays()", StringComparison.Ordinal)
-                && statement.Contains("IF NEW.\"MadeFrom\" = 'keeper' AND", StringComparison.Ordinal))
-            .And.Contain("DROP TRIGGER IF EXISTS sheds_owner_role_stays ON \"gardens\".\"ShedRoles\"");
-
-        // Rules that declare their roles keep no role table, and get no such trigger.
+        // No trigger keeps any role in use: the owner holds none, and a role is archived like any other.
+        plots.Statements.Should().NotContain(statement => statement.StartsWith("CREATE", StringComparison.Ordinal) && statement.Contains("owner_role_stays", StringComparison.Ordinal));
         new MembershipRowAccessContribution<DocumentShare>(DocumentMembership.Rules).Contribute(filing, Export)!.Statements.Should().NotContain(statement => statement.Contains("owner_role_stays"));
-
-        // A name Postgres would cut is refused, as the lock's is: rules that keep their roles have this trigger whatever else they say.
-        var longName = new MembershipRules(
-            new string('p', 50), keys: [PlotKeys.See], roles: [new("tender", [PlotKeys.See])], memberKeys: MemberKeys.Only(PlotKeys.See), rolesKept: true,
-            functions: new("p_on", "p_with", "p_seen", "p_held"));
-        FluentActions.Invoking(() => new MembershipRowAccessContribution<PlotGardener>(longName).Contribute(gardens, Export))
-            .Should().Throw<InvalidOperationException>()
-            .WithMessage("The rules '" + new string('p', 50) + "' keep the roles of the resource, and the trigger that keeps the owner's role in use would be called*longer than the 63 characters Postgres keeps of a name*");
     }
 
     [Fact]
-    public void The_applications_own_work_in_a_scope_the_rules_name_is_answered_every_resource()
+    public void The_applications_own_work_in_a_scope_the_rules_let_through_is_answered_every_resource()
     {
         using var context = FilingPostgres.Model();
 
-        // A folder's rules name the module's scope: seen and held on answer every folder for the role scoped
+        // A folder's rules let the module's own scope through: seen and held on answer every folder for the role scoped
         // work runs as, when its claims say that scope. As member and as member with do not: such work is nobody's member.
         var folders = new MembershipRowAccessContribution<FolderMember>(FolderMembership.Rules).Contribute(context, Export)!.Functions;
         const string OwnWork = "UNION\nSELECT r.\"Id\" FROM \"filing\".\"Folders\" r WHERE {caller:role} = 'ddd_system_in' AND {caller:claim:scope} IN ('filing')";
@@ -224,12 +225,12 @@ public sealed class ContributionTests(FilingPostgres postgres)
         folders[1].Body.Should().NotContain("scope");
 
         // The role is the one the host runs scoped work as, and several scopes are one list.
-        var renamed = new RowAccessExport { Roles = FilingPostgres.RoleNames with { SystemIn = "filing_worker" } };
-        var several = new MembershipRules("documents", keys: [DocumentKeys.View], roles: [new("reader", [DocumentKeys.View])], systemScopes: ["filing", "night-shift"]);
+        var renamed = ExportWith(roles: FilingPostgres.RoleNames with { SystemIn = "filing_worker" });
+        var several = MembershipRules.Declare(typeof(Document), "documents", [new(DocumentPermissions.View)], Roles.Fixed([new("reader", [DocumentPermissions.View])]), systemScopes: ["filing", "night-shift"]);
         new MembershipRowAccessContribution<DocumentShare>(several).Contribute(context, renamed)!.Functions[2].Body
             .Should().EndWith("WHERE {caller:role} = 'filing_worker' AND {caller:claim:scope} IN ('filing', 'night-shift')");
 
-        // A document's rules name no scope: nothing of the kind is written, and scoped work is answered nothing.
+        // A document's rules say no system work in a scope, []: nothing of the kind is written, and scoped work is answered nothing.
         new MembershipRowAccessContribution<DocumentShare>(DocumentMembership.Rules).Contribute(context, Export)!.Functions.Should().OnlyContain(function => !function.Body.Contains("scope"));
     }
 
@@ -240,8 +241,8 @@ public sealed class ContributionTests(FilingPostgres postgres)
 
         var crates = new MembershipRowAccessContribution<CratePorter>(CrateMembership.Rules).Contribute(depot, Export)!.Functions;
 
-        // A condition without a column gates the whole part it is in: with no key, the member rows are not
-        // read and the depot's functions are not asked.
+        // A condition without a column gates the whole part it is in: with no key, the member rows are not read and the
+        // depot's functions are not asked.
         crates[1].Body.Should().Contain("\nWHERE $1 IS NOT NULL AND m.\"MemberId\" = ");
         crates[3].Body.Should().Contain("r WHERE $1 IS NOT NULL AND r.\"BayId\" IN (SELECT reached.place FROM {fn:depot/bays_where_i_hold}($1) AS reached(place))");
 
@@ -250,19 +251,18 @@ public sealed class ContributionTests(FilingPostgres postgres)
     }
 
     [Fact]
-    public void The_functions_are_owned_by_the_rules_name_which_is_what_a_rule_asks_them_by()
+    public void The_functions_are_owned_by_the_resources_name_which_is_what_a_rule_asks_them_by()
     {
         new MembershipRowAccessContribution<DocumentShare>(DocumentMembership.Rules).Owner.Should().Be("documents");
         new MembershipRowAccessContribution<FolderMember>(FolderMembership.Rules).Owner.Should().Be("folders");
-        new MembershipRowAccessContribution<DocumentShare>(Rules("sales.orders")).Owner.Should().Be("sales-orders", "an owner is letters, digits and dashes");
+        new MembershipRowAccessContribution<DocumentShare>(Rules<Document>("sales.orders")).Owner.Should().Be("sales-orders", "an owner is letters, digits and dashes");
 
-        // The application's rules get the rules' own names: the documents' rules ask by the document's id, and the
-        // folders' through questions that name that owner and those names.
+        // The application's rules ask by the resource's id, or through questions that name that owner and those names.
         var script = FilingPostgres.AccessScript();
         script.Should().Contain("USING (\"Id\" = ANY (ARRAY(SELECT \"filing\".documents_i_see())))")
-            .And.Contain("USING (\"Id\" = ANY (ARRAY(SELECT \"filing\".folder_ids_seen())))");
+            .And.Contain("USING (\"Id\" = ANY (ARRAY(SELECT \"filing\".folders_i_see())))");
         (DocumentMembership.Rules.Functions.Seen, DocumentMembership.Rules.Functions.HeldOn).Should().Be(("documents_i_see", "documents_where_i_hold"));
-        (FolderMembership.Rules.Functions.Seen, FolderMembership.Rules.Functions.HeldOn).Should().Be(("folder_ids_seen", "folder_ids_held"));
+        (FolderMembership.Rules.Functions.Seen, FolderMembership.Rules.Functions.HeldOn).Should().Be(("folders_i_see", "folders_where_i_hold"));
     }
 
     [Fact]
@@ -279,13 +279,10 @@ public sealed class ContributionTests(FilingPostgres postgres)
             ("documents_i_see", new ResourceAccessAnswer(typeof(DocumentId), ResourceAccessSet.Seen)),
             ("documents_where_i_hold", new ResourceAccessAnswer(typeof(DocumentId), ResourceAccessSet.HeldOn)));
         folders.Select(function => (function.Name, function.Answers)).Should().Equal(
-            [
-                ("folder_ids_staffed", null),
-                ("folder_ids_staffed_with", null),
-                ("folder_ids_seen", new ResourceAccessAnswer(typeof(FolderId), ResourceAccessSet.Seen)),
-                ("folder_ids_held", new ResourceAccessAnswer(typeof(FolderId), ResourceAccessSet.HeldOn)),
-            ],
-            "the names are the rules' own, and a rule that asks by the folder's id gets them all the same");
+            ("folders_as_member", null),
+            ("folders_as_member_with", null),
+            ("folders_i_see", new ResourceAccessAnswer(typeof(FolderId), ResourceAccessSet.Seen)),
+            ("folders_where_i_hold", new ResourceAccessAnswer(typeof(FolderId), ResourceAccessSet.HeldOn)));
     }
 
     [Fact]
@@ -295,7 +292,7 @@ public sealed class ContributionTests(FilingPostgres postgres)
         DDDToolkit.Supporting.Membership.TestHost.Access.UsersReadTheDocumentsTheySee.RowAccessSql.Should().Be($"({{col:Id}} = ANY (ARRAY(SELECT {{fn:{seen}}}())))");
         DDDToolkit.Supporting.Membership.TestHost.Access.UsersChangeTheDocumentsTheyWorkOn.RowAccessSql.Should().Contain("{fn:@DDDToolkit.Supporting.Membership.TestHost.DocumentId/held_on}('documents.edit')");
 
-        // The same rules, naming the functions as the documents' rules call them: the file is the same, byte for byte.
+        // The same rules, naming the functions as the documents' name has them: the file is the same, byte for byte.
         RowAccessRule Named(RowAccessRule rule) => RowAccessRule.For<Document>(
             rule.Name,
             rule.Operations,
@@ -321,28 +318,29 @@ public sealed class ContributionTests(FilingPostgres postgres)
     }
 
     [Fact]
-    public void Who_the_caller_is_as_a_member_is_what_the_rules_say()
+    public void Who_the_caller_is_as_a_member_is_what_the_rules_say_or_what_follows_from_the_member_id()
     {
         using var context = FilingPostgres.Model();
 
         var documents = new MembershipRowAccessContribution<DocumentShare>(DocumentMembership.Rules).Contribute(context, Export)!.Functions;
         var folders = new MembershipRowAccessContribution<FolderMember>(FolderMembership.Rules).Contribute(context, Export)!.Functions;
 
-        // The caller's user id for a document, and the claim the folder's rules name for a folder: places the script fills in.
+        // A document's members are known by an id over a Guid, and no contribution keeps such an id: the caller's own.
+        // The folder's rules name a claim: places the script fills in.
         documents[0].Body.Should().Contain("m.\"MemberId\" = {caller:uid}").And.NotContain("claim");
         folders[0].Body.Should().Contain("m.\"StaffCode\" = {caller:claim:app_metadata.staff}").And.NotContain("{caller:uid}");
 
-        // An owner holds every key of the resource, and none but those, by matching the owner's column, never a role.
+        // An owner holds the permissions marked Owner, and none but those, by matching the owner's column, never a role.
         documents[3].Body.Should().Contain("$1 IN ('documents.view', 'documents.edit', 'documents.share') AND r.\"OwnerId\" = {caller:uid}");
         folders[3].Body.Should().Contain(
             "$1 IN ('folders.read', 'folders.file', 'folders.staff', 'folders.shred', 'folders.hand-over') AND r.\"Keeper\" = {caller:claim:app_metadata.staff}");
 
-        // Being a member gives a document's key that sees; a folder's rules name no such key.
+        // Being a member gives a document's permission that every member holds; no permission of a folder is held so.
         documents[3].Body.Should().Contain("WHERE $1 = 'documents.view'");
-        folders[3].Body.Should().NotContain("folder_ids_staffed}()");
+        folders[3].Body.Should().NotContain("folders_as_member}()");
 
-        // Which role gives which key: only the keys a member's role can give. Shredding is listed by two roles of a folder and given by none.
-        folders[1].Body.Should().Contain("('keeper', 'folders.staff')").And.Contain("('clerk', 'folders.file')").And.NotContain(FolderKeys.Shred);
+        // Which role gives which key: only the permissions a role can give. Shredding is no role's to give.
+        folders[1].Body.Should().Contain("('keeper', 'folders.staff')").And.Contain("('clerk', 'folders.file')").And.NotContain(FolderPermissions.Shred);
     }
 
     [Fact]
@@ -354,14 +352,16 @@ public sealed class ContributionTests(FilingPostgres postgres)
         {
             var functions = contribution.Contribute(context, Export)!.Functions;
 
-            // Line feeds alone, whatever line endings the package's own source was checked out with: an access
-            // file written on one machine is the file written on another.
+            // Line feeds alone, whatever line endings the package's own source was checked out with: an access file
+            // written on one machine is the file written on another.
             functions.Should().OnlyContain(function => !function.Body.Contains('\r'));
 
-            // And every body says, in its first line, which rules it was written from: what the start-up check reads.
+            // And every body says, in its first lines, which rules it was written from, for which resource, and who may
+            // execute it: what the start-up check and the export read.
             functions.Select(function => function.Body.Split('\n')[0]).Distinct().Should().ContainSingle()
-                .Which.Should().MatchRegex("^-- Membership of (documents|folders), in form [0-9]+, written from the rules [0-9a-f]{64}$");
-            functions.Should().OnlyContain(function => function.Body.Split('\n').Length > 1);
+                .Which.Should().MatchRegex("^-- Membership of (documents \\(Document\\)|folders \\(Folder\\)), in form [0-9]+, written from the rules [0-9a-f]{64}$");
+            functions.Select(function => function.Body.Split('\n')[1]).Distinct().Should().ContainSingle()
+                .Which.Should().StartWith("-- Executed by: ");
         }
     }
 
@@ -381,8 +381,8 @@ public sealed class ContributionTests(FilingPostgres postgres)
 
         var functions = new MembershipRowAccessContribution<DocumentShare>(DocumentMembership.Rules).Contribute(context, Export)!.Functions;
 
-        // The functions answer the resource's id, as the questions that ask them do, and a role's row is its
-        // member's by every column of the key the two share.
+        // The functions answer the resource's id, as the questions that ask them do, and a role's row is its member's
+        // by every column of the key the two share.
         functions.Should().OnlyContain(function => function.Returns == "SETOF uuid");
         functions[0].Body.Should().Contain("SELECT DISTINCT m.\"DocumentId\" FROM \"public\".\"DocumentShares\" m");
         functions[1].Body.Should().Contain("WHERE h.\"DocumentTitle\" = m.\"DocumentTitle\" AND h.\"DocumentId\" = m.\"DocumentId\" AND h.\"DocumentShareId\" = m.\"Id\" AND ");
@@ -393,49 +393,56 @@ public sealed class ContributionTests(FilingPostgres postgres)
     public void Rules_this_contribution_cannot_answer_are_refused_when_the_functions_are_written()
     {
         using var context = FilingPostgres.Model();
-
         using var depot = PostgresDepot.Model();
 
-        // What the rules have the host answer, the database is asked through a function the rules name: rules
-        // that name none are for a host whose database answers nothing, and no functions can be written from them.
-        FluentActions.Invoking(() => new MembershipRowAccessContribution<PalletPorter>(Rules("yards", MemberSource.Resolved())).Contribute(depot, Export))
+        // What the rules have the host answer, the database is asked through a function the rules name: rules that name
+        // none are for a host whose database answers nothing, and no functions can be written from them.
+        FluentActions.Invoking(() => new MembershipRowAccessContribution<PalletPorter>(Rules<Pallet>("yards", MemberSource.Resolved())).Contribute(depot, Export))
             .Should().Throw<InvalidOperationException>()
-            .WithMessage("The rules 'yards' have the application resolve who the caller is as a member of Pallet, and name no function that answers it in the database.*MemberSource.Resolved(\"owner/name\")*");
-        FluentActions.Invoking(() => new MembershipRowAccessContribution<CratePorter>(Kept("yards", elsewhere: new())).Contribute(depot, Export))
+            .WithMessage("The rules 'yards' have the application resolve who the caller is as a member of Pallet, and name no function that answers it in the database.*DatabaseFunction*");
+        FluentActions.Invoking(() => new MembershipRowAccessContribution<CratePorter>(Kept("yards", roles: null, rolesFunction: false)).Contribute(depot, Export))
             .Should().Throw<InvalidOperationException>()
-            .WithMessage("The rules 'yards' say the roles are kept elsewhere, and name no function that answers which of them give a key in the database.*rolesKeptElsewhere: new(\"owner/name\")*");
-        FluentActions.Invoking(() => new MembershipRowAccessContribution<CratePorter>(Kept("yards", above: new())).Contribute(depot, Export))
-            .Should().Throw<InvalidOperationException>()
-            .WithMessage("The rules 'yards' let Crate be reached from above, and name no function that answers where the caller holds a key in the database.*above: new(\"owner/name\")*");
+            .WithMessage("The rules 'yards' say the roles are kept elsewhere, and name no function that answers which of them give a key in the database.*DatabaseFunction*");
 
-        // Reached from above, and the model does not say where the resource sits: a pallet sits nowhere.
+        // Reached from above, and nothing answers where the caller holds a key at a bay: the depot's places are its own,
+        // and the rules name no function of the depot's.
+        FluentActions.Invoking(() => new MembershipRowAccessContribution<CratePorter>(Kept("yards", above: true)).Contribute(depot, Export))
+            .Should().Throw<InvalidOperationException>()
+            .WithMessage("The rules 'yards' let Crate be reached from above, where it hangs at a BayId, and nothing answers in the database where the caller holds a key at one*");
+
+        // Reached from above, and the resource marks no place it hangs at: a pallet hangs nowhere.
         FluentActions.Invoking(() => new MembershipRowAccessContribution<PalletPorter>(
-                new MembershipRules("yards", keys: ["yards.read"], roles: [new("reader", ["yards.read"])], seeKey: "yards.read", above: new("depot/bays_where_i_hold"))).Contribute(depot, Export))
+                MembershipRules.Declare(typeof(Pallet), "yards", [new("yards.read", EveryMember: true)], Roles.Fixed([new("reader", ["yards.read"])]), members: MemberSource.Resolved(Depot("caller_porter")), reachFromAbove: Depot("bays_where_i_hold"))).Contribute(depot, Export))
             .Should().Throw<InvalidOperationException>()
-            .WithMessage("The rules 'yards' let Pallet be reached from above, and the model does not say where it sits.*at: resource => resource.PlaceId*");
+            .WithMessage("The rules 'yards' let Pallet be reached from above, and it marks no place it hangs at.*[At]*");
 
-        // Roles the rules declare are held by name, and a crate's members hold roles of the depot's.
-        FluentActions.Invoking(() => new MembershipRowAccessContribution<CratePorter>(Rules("yards")).Contribute(depot, Export))
+        // Roles in code are held by name, and a crate's members hold roles of the depot's.
+        FluentActions.Invoking(() => new MembershipRowAccessContribution<CratePorter>(Rules<Crate>("yards", MemberSource.Resolved(Depot("caller_porter")))).Contribute(depot, Export))
             .Should().Throw<InvalidOperationException>()
-            .WithMessage("The members of Crate hold roles known by DepotRoleId, and the rules 'yards' declare the roles, which a member holds by name.*");
+            .WithMessage("The members of Crate hold roles known by DepotRoleId, and the rules 'yards'*");
 
         // A claim is a text, and a document's members are stored as uuid; the caller's user id is a uuid, and a folder's staff are text.
-        FluentActions.Invoking(() => new MembershipRowAccessContribution<DocumentShare>(Rules("papers", MemberSource.Claim("app_metadata.badge"))).Contribute(context, Export))
+        FluentActions.Invoking(() => new MembershipRowAccessContribution<DocumentShare>(Rules<Document>("papers", MemberSource.Claim("app_metadata.badge"))).Contribute(context, Export))
             .Should().Throw<InvalidOperationException>().WithMessage("*from the claim 'app_metadata.badge', a text, and the members of Document are stored as uuid*");
-        FluentActions.Invoking(() => new MembershipRowAccessContribution<FolderMember>(Rules("shelves")).Contribute(context, Export))
+        FluentActions.Invoking(() => new MembershipRowAccessContribution<FolderMember>(Rules<Folder>("shelves", MemberSource.CallerId)).Contribute(context, Export))
             .Should().Throw<InvalidOperationException>().WithMessage("*from MemberSource.CallerId, a uuid, and the members of Folder are stored as text*");
+
+        // Said by nothing, who a member is follows from what it is known by: a text is nobody's to answer.
+        FluentActions.Invoking(() => new MembershipRowAccessContribution<FolderMember>(Rules<Folder>("shelves")).Contribute(context, Export))
+            .Should().Throw<InvalidOperationException>().WithMessage("Who the caller is as a member of Folder follows from what a member is known by, StaffCode, and nothing answers it in the database*");
     }
 
     [Fact]
     public async Task A_key_or_a_role_with_a_quote_or_a_brace_in_it_stays_what_it_is()
     {
         using var filing = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Plain, seed: false);
-        var odd = new MembershipRules(
+        var odd = MembershipRules.Declare(
+            typeof(Document),
             "documents",
-            keys: ["documents.it's {here}", "documents.view", "documents.{seen}'s", "documents.owner's {own}"],
-            roles: [new("o'brien {night}", ["documents.it's {here}", "documents.view"]), new("owner", ["documents.view"])],
-            seeKey: "documents.{seen}'s");
-        await filing.ExecuteAsync(FilingPostgres.AccessScript([new MembershipRowAccessContribution<DocumentShare>(odd)], rules: []));
+            [new("documents.it's {here}"), new("documents.view"), new("documents.{seen}'s", EveryMember: true), new("documents.owner's {own}", InRoles: false)],
+            Roles.Fixed([new("o'brien {night}", ["documents.it's {here}", "documents.view"]), new("owner", ["documents.view"])]),
+            systemScopes: []);
+        await filing.ExecuteAsync(FilingPostgres.AccessScript([new MembershipRowAccessContribution<DocumentShare>(odd)], rules: [FilingPostgres.Rules[0]]));
 
         // A document shared in that role, saved by the application's own work.
         var owner = UserId.CreateSequential();
@@ -443,7 +450,7 @@ public sealed class ContributionTests(FilingPostgres postgres)
         var id = DocumentId.CreateSequential();
         await filing.Services.AsAsync(Caller.System, async provider =>
         {
-            var document = new Document(id, "Night shift", owner, DocumentMembership.Owner, DateTimeOffset.UtcNow.AddDays(-2));
+            var document = new Document(id, "Night shift", owner, DateTimeOffset.UtcNow.AddDays(-2));
             document.ShareWith(reader, new NamedRole("o'brien {night}"), MemberPeriod.Open(DateTimeOffset.UtcNow.AddDays(-1)), DateTimeOffset.UtcNow, by: owner);
             provider.GetRequiredService<FilingContext>().Documents.Add(document);
             await provider.GetRequiredService<FilingContext>().SaveChangesAsync(TestContext.Current.CancellationToken);
@@ -454,24 +461,14 @@ public sealed class ContributionTests(FilingPostgres postgres)
         (await session.ListAsync<Guid>("SELECT id FROM filing.documents_where_i_hold($1) AS id", "documents.{seen}'s")).Should().Equal(id.Value);
         (await session.ListAsync<Guid>("SELECT id FROM filing.documents_where_i_hold($1) AS id", "documents.it''s {here}")).Should().BeEmpty();
         (await session.ListAsync<Guid>("SELECT id FROM filing.documents_as_member_with($1) AS id", "documents.view")).Should().Equal(id.Value);
-        (await session.ListAsync<Guid>("SELECT id FROM filing.documents_where_i_hold($1) AS id", "documents.owner's {own}")).Should().BeEmpty("no role lists it, and the reader does not own the document");
+        (await session.ListAsync<Guid>("SELECT id FROM filing.documents_where_i_hold($1) AS id", "documents.owner's {own}")).Should().BeEmpty("no role gives it, and the reader does not own the document");
 
-        // And the keys of the resource, which its owner holds by owning it: one no role lists, and one the owner's role does not.
+        // And the permissions of the resource, which its owner holds by owning it: one no role gives, and one a role
+        // called owner does not list, since a role of that name is a role like any other.
         await using var asOwner = await filing.SessionAsync(TestCallers.User(owner));
         (await asOwner.ListAsync<Guid>("SELECT id FROM filing.documents_where_i_hold($1) AS id", "documents.owner's {own}")).Should().Equal(id.Value);
         (await asOwner.ListAsync<Guid>("SELECT id FROM filing.documents_where_i_hold($1) AS id", "documents.it's {here}")).Should().Equal(id.Value);
         (await asOwner.ListAsync<Guid>("SELECT id FROM filing.documents_where_i_hold($1) AS id", "documents.owner''s {own}")).Should().BeEmpty();
-    }
-
-    [Fact]
-    public void A_rule_for_a_role_the_functions_are_not_granted_to_is_refused_when_the_file_is_written()
-    {
-        // A rule for callers who did not sign in that asks a function of signed-in users: said where the file is
-        // written, naming the rule, and not where it is applied.
-        var open = RowAccessRule.For<Document>("Anybody reads what they see", RowOperations.Read, DDDToolkit.Supporting.Membership.TestHost.Access.UsersReadTheDocumentsTheySee.RowAccessSql, RowAccessRoles.Anonymous);
-
-        FluentActions.Invoking(() => FilingPostgres.AccessScript(rules: [open]))
-            .Should().Throw<InvalidOperationException>().WithMessage("*Anybody reads what they see*documents_i_see*");
     }
 
     [Fact]
@@ -486,7 +483,7 @@ public sealed class ContributionTests(FilingPostgres postgres)
             ("crates_as_member_with", "text", "SETOF uuid"),
             ("crates_i_see", "", "SETOF uuid"),
             ("crates_where_i_hold", "text", "SETOF uuid"));
-        crates.Should().OnlyContain(function => function.SecurityDefiner && function.GrantTo!.SequenceEqual(new[] { RowAccessRoles.User }));
+        crates.Should().OnlyContain(function => function.SecurityDefiner && function.GrantTo!.SequenceEqual(new[] { RowAccessRoles.User, RowAccessRoles.SystemIn }));
 
         // Asked by logical name, a text the script fills in: nothing here refers to what defines them.
         crates[0].Body.Should().Contain("m.\"MemberId\" = (SELECT {fn:depot/caller_porter}()) AND ");
@@ -495,40 +492,51 @@ public sealed class ContributionTests(FilingPostgres postgres)
         crates[3].Body.Should().Contain("r.\"BayId\" IN (SELECT reached.place FROM {fn:depot/bays_where_i_hold}($1) AS reached(place))");
 
         // Members that are users, by their own id, with the depot's roles and no reach from above: only the roles are asked.
-        var users = new MembershipRowAccessContribution<CratePorter>(Kept("crates", MemberSource.CallerId, elsewhere: new("depot/roles_with_key"))).Contribute(depot, Export)!.Functions;
+        var users = new MembershipRowAccessContribution<CratePorter>(Kept("crates", MemberSource.CallerId, reached: false)).Contribute(depot, Export)!.Functions;
         users[0].Body.Should().Contain("m.\"MemberId\" = {caller:uid} AND ").And.NotContain("{fn:");
         users[1].Body.Should().Contain("{fn:depot/roles_with_key}($1)");
         users[2].Body.Should().NotContain("reached.place", "a crate that nothing above reaches is seen by its members and its owner alone")
             .And.Contain("UNION\nSELECT r.\"Id\" FROM \"depot\".\"Crates\" r WHERE r.\"OwnerId\" = {caller:uid}", "its owner sees it by the owner column, whether or not its member row is there");
         users[3].Body.Should().NotContain("reached.place");
 
-        // What a member's role can give stands in front of what the host answers, as the rules say it.
-        string Cut(MemberKeys keys)
-            => new MembershipRowAccessContribution<CratePorter>(Kept("crates", MemberSource.CallerId, elsewhere: new("depot/roles_with_key"), memberKeys: keys)).Contribute(depot, Export)!.Functions[1].Body;
-        Cut(MemberKeys.Only("crates.pack", "crates.it's")).Should().Contain("\n  AND $1 IN ('crates.pack', 'crates.it''s')\n  AND EXISTS (");
-        Cut(MemberKeys.AllBut("crates.move")).Should().Contain("\n  AND $1 NOT IN ('crates.move')\n  AND EXISTS (");
-        Cut(MemberKeys.AllBut()).Should().NotContain("$1 NOT IN").And.Contain("{fn:depot/roles_with_key}($1)");
-        Cut(MemberKeys.Only()).Should().Contain("\n  AND false\n", "a role gives a member nothing where the rules list nothing");
+        // What a role can give stands in front of what the host answers, as the rules say it.
+        string Cut(OtherKeys? otherKeys, IReadOnlyList<ResourcePermission>? permissions = null)
+            => new MembershipRowAccessContribution<CratePorter>(Kept("crates", MemberSource.CallerId, reached: false, otherKeys: otherKeys, noOtherKeys: otherKeys is null, permissions: permissions)).Contribute(depot, Export)!.Functions[1].Body;
+        Cut(null).Should().Contain("\n  AND $1 IN ('crates.see', 'crates.pack', 'crates.weigh', 'crates.scrap')\n  AND EXISTS (", "the permissions a role can give, and nothing else");
+        Cut(OtherKeys.AllBut("depot.manage", "crates.it's")).Should().Contain("\n  AND $1 NOT IN ('crates.move', 'depot.manage', 'crates.it''s')\n  AND EXISTS (");
+        Cut(OtherKeys.All).Should().Contain("\n  AND $1 NOT IN ('crates.move')\n  AND EXISTS (");
+        Cut(OtherKeys.All, [new("crates.see", EveryMember: true)]).Should().NotContain("$1 NOT IN").And.Contain("{fn:depot/roles_with_key}($1)");
+        Cut(null, [new("crates.see", EveryMember: true, InRoles: false)]).Should().Contain("\n  AND false\n", "a role gives a member nothing where the rules let it give nothing");
 
-        // A pallet: the depot answers who the caller is, and the roles are the rules' own list.
+        // A pallet: the depot answers who the caller is, and the roles are in code.
         var pallets = new MembershipRowAccessContribution<PalletPorter>(PalletMembership.Rules).Contribute(depot, Export)!.Functions;
         pallets[0].Body.Should().Contain("m.\"MemberId\" = (SELECT {fn:depot/caller_porter}()) AND ");
-        pallets[1].Body.Should().Contain("(VALUES ('loader', 'pallets.see'), ('loader', 'pallets.load'), ('checker', 'pallets.see'), ").And.NotContain("roles_with_key");
+        pallets[1].Body.Should().Contain("(VALUES ('loader', 'pallets.see'), ('loader', 'pallets.load'), ('checker', 'pallets.see')) AS gives(role, key)").And.NotContain("roles_with_key");
         pallets[3].Body.Should().Contain("$1 IN ('pallets.see', 'pallets.load', 'pallets.strap') AND r.\"OwnerId\" = (SELECT {fn:depot/caller_porter}())");
 
-        // Roles the rules declare, and reach from above, for members that are users: a document that is reached
-        // by whoever holds the key over its owner. Where a resource sits is whatever its row keeps.
+        // Roles in code, and reach from above, for members that are users: a document that is reached by whoever holds
+        // the key over its owner, where the document marks it hangs, [At].
         using var managed = new ManagedContext(new DbContextOptionsBuilder<ManagedContext>().UseNpgsql("Host=model-only").Options);
-        var above = new MembershipRules(
+        var above = MembershipRules.Declare(
+            typeof(Document),
             "documents",
-            keys: [DocumentKeys.View, DocumentKeys.Edit],
-            roles: [new("contributor", [DocumentKeys.View, DocumentKeys.Edit])],
-            seeKey: DocumentKeys.View,
-            above: new("staff/reports_where_i_hold"));
+            [new(DocumentPermissions.View, EveryMember: true), new(DocumentPermissions.Edit)],
+            Roles.Fixed([new("contributor", [DocumentPermissions.View, DocumentPermissions.Edit])]),
+            reachFromAbove: new DatabaseFunction("staff", "reports_where_i_hold"));
         var documents = new MembershipRowAccessContribution<DocumentShare>(above).Contribute(managed, Export)!.Functions;
-        documents[1].Body.Should().Contain("(VALUES ('contributor', 'documents.view'), ('contributor', 'documents.edit'), ");
+        documents[1].Body.Should().Contain("(VALUES ('contributor', 'documents.view'), ('contributor', 'documents.edit')) AS gives(role, key)");
         documents[2].Body.Should().EndWith("UNION\nSELECT r.\"Id\" FROM \"public\".\"Document\" r WHERE r.\"OwnerId\" IN (SELECT reached.place FROM {fn:staff/reports_where_i_hold}('documents.view') AS reached(place))");
         documents[3].Body.Should().EndWith("UNION\nSELECT r.\"Id\" FROM \"public\".\"Document\" r WHERE $1 IS NOT NULL AND r.\"OwnerId\" IN (SELECT reached.place FROM {fn:staff/reports_where_i_hold}($1) AS reached(place))");
+
+        // A permission marked FromAbove = false is held from above by nobody.
+        var notFromAbove = MembershipRules.Declare(
+            typeof(Document),
+            "documents",
+            [new(DocumentPermissions.View, EveryMember: true), new(DocumentPermissions.Edit, FromAbove: false)],
+            Roles.Fixed([new("contributor", [DocumentPermissions.View, DocumentPermissions.Edit])]),
+            reachFromAbove: new DatabaseFunction("staff", "reports_where_i_hold"));
+        new MembershipRowAccessContribution<DocumentShare>(notFromAbove).Contribute(managed, Export)!.Functions[3].Body
+            .Should().EndWith("WHERE $1 IS NOT NULL AND $1 NOT IN ('documents.edit') AND r.\"OwnerId\" IN (SELECT reached.place FROM {fn:staff/reports_where_i_hold}($1) AS reached(place))");
     }
 
     [Fact]
@@ -539,46 +547,50 @@ public sealed class ContributionTests(FilingPostgres postgres)
         static string MarkerOf(IRowAccessContribution contribution, DbContext context, RowAccessExport? export = null)
             => contribution.Contribute(context, export ?? Export)!.Functions[0].Body.Split('\n')[0];
 
-        // What the host answers is part of it: another name for one of its functions, or another list of what a
-        // member's role gives, is another fingerprint.
+        // What the host answers is part of it: another function of its own, or another list of what a role gives, is
+        // another fingerprint.
         var crates = MarkerOf(new MembershipRowAccessContribution<CratePorter>(CrateMembership.Rules), depot);
-        crates.Should().MatchRegex("^-- Membership of crates, in form [0-9]+, written from the rules [0-9a-f]{64}$");
+        crates.Should().MatchRegex("^-- Membership of crates \\(Crate\\), in form [0-9]+, written from the rules [0-9a-f]{64}$");
         MembershipRules[] others =
         [
-            Kept("crates", MemberSource.Resolved("depot/acting_porter"), new("depot/roles_with_key"), new("depot/bays_where_i_hold")),
-            Kept("crates", MemberSource.Resolved("depot/caller_porter"), new("depot/roles_given"), new("depot/bays_where_i_hold")),
-            Kept("crates", MemberSource.Resolved("depot/caller_porter"), new("depot/roles_with_key"), new("depot/bays_held")),
-            Kept("crates", MemberSource.Resolved("depot/caller_porter"), new("depot/roles_with_key")),
-            Kept("crates", MemberSource.Resolved("depot/caller_porter"), new("depot/roles_with_key"), new("depot/bays_where_i_hold"), MemberKeys.AllBut(CrateKeys.Move)),
-            Kept("crates", MemberSource.Resolved("depot/caller_porter"), new("depot/roles_with_key"), new("depot/bays_where_i_hold"), MemberKeys.Only(CrateKeys.Move, CrateKeys.ManageDepot)),
+            Kept("crates", MemberSource.Resolved(Depot("acting_porter"))),
+            Kept("crates", roles: Depot("roles_given")),
+            Kept("crates", above: Depot("bays_held")),
+            Kept("crates", reached: false),
+            Kept("crates", otherKeys: OtherKeys.All),
+            Kept("crates", otherKeys: OtherKeys.AllBut(CrateKeys.ManageDepot, CrateKeys.PrintLabels)),
         ];
         var markers = others.Select(rules => MarkerOf(new MembershipRowAccessContribution<CratePorter>(rules), depot)).Append(crates).ToList();
         markers.Should().OnlyHaveUniqueItems();
-        MarkerOf(new MembershipRowAccessContribution<CratePorter>(
-                Kept("crates", MemberSource.Resolved("depot/caller_porter"), new("depot/roles_with_key"), new("depot/bays_where_i_hold"), MemberKeys.AllBut(CrateKeys.Move, CrateKeys.ManageDepot))), depot)
-            .Should().Be(crates, "rules that say the same are written the same");
+        MarkerOf(new MembershipRowAccessContribution<CratePorter>(Kept("crates")), depot).Should().Be(crates, "rules that say the same are written the same");
 
-        // The keys the lock is written from, and the scopes whose work is the application's own, are part of it
+        // The permissions the lock is written from, and the scopes whose work is the application's own, are part of it
         // as well: a database locked by another key, or answering another scope, is not the one the rules say.
-        static MembershipRules Documents(string? membersKey = null, string? ownerKey = null, string[]? scopes = null)
-            => new("documents", keys: [DocumentKeys.View, DocumentKeys.Edit, DocumentKeys.Share], roles: [new("contributor", [DocumentKeys.View, DocumentKeys.Edit])],
-                changeMembersKey: membersKey, changeOwnerKey: ownerKey, systemScopes: scopes);
+        static MembershipRules Documents(bool membersLocked = false, bool ownerLocked = false, string[]? scopes = null)
+            => MembershipRules.Declare(
+                typeof(Document),
+                "documents",
+                [new(DocumentPermissions.View), new(DocumentPermissions.Edit), new(DocumentPermissions.Share, LocksMembers: membersLocked, LocksOwner: ownerLocked)],
+                Roles.Fixed([new("contributor", [DocumentPermissions.View, DocumentPermissions.Edit])]),
+                systemScopes: scopes ?? []);
         string[] documents =
         [
             MarkerOf(new MembershipRowAccessContribution<DocumentShare>(Documents()), filing),
-            MarkerOf(new MembershipRowAccessContribution<DocumentShare>(Documents(membersKey: DocumentKeys.Share)), filing),
-            MarkerOf(new MembershipRowAccessContribution<DocumentShare>(Documents(membersKey: DocumentKeys.Edit)), filing),
-            MarkerOf(new MembershipRowAccessContribution<DocumentShare>(Documents(ownerKey: DocumentKeys.Share)), filing),
-            MarkerOf(new MembershipRowAccessContribution<DocumentShare>(Documents(membersKey: DocumentKeys.Share, ownerKey: DocumentKeys.Share)), filing),
+            MarkerOf(new MembershipRowAccessContribution<DocumentShare>(Documents(membersLocked: true)), filing),
+            MarkerOf(new MembershipRowAccessContribution<DocumentShare>(Documents(ownerLocked: true)), filing),
+            MarkerOf(new MembershipRowAccessContribution<DocumentShare>(Documents(membersLocked: true, ownerLocked: true)), filing),
             MarkerOf(new MembershipRowAccessContribution<DocumentShare>(Documents(scopes: ["filing"])), filing),
             MarkerOf(new MembershipRowAccessContribution<DocumentShare>(Documents(scopes: ["filing", "archive"])), filing),
 
             // The scopes are compared with the role scoped work runs as, so that role's name is part of it where a scope is named.
-            MarkerOf(new MembershipRowAccessContribution<DocumentShare>(Documents(scopes: ["filing"])), filing, new RowAccessExport { Roles = FilingPostgres.RoleNames with { SystemIn = "filing_worker" } }),
+            MarkerOf(new MembershipRowAccessContribution<DocumentShare>(Documents(scopes: ["filing"])), filing, ExportWith(roles: FilingPostgres.RoleNames with { SystemIn = "filing_worker" })),
         ];
         documents.Should().OnlyHaveUniqueItems();
-        MarkerOf(new MembershipRowAccessContribution<DocumentShare>(Documents()), filing, new RowAccessExport { Roles = FilingPostgres.RoleNames with { SystemIn = "filing_worker" } })
-            .Should().Be(documents[0], "rules that name no scope are written without that role");
+        MarkerOf(new MembershipRowAccessContribution<DocumentShare>(Documents()), filing, ExportWith(roles: FilingPostgres.RoleNames with { SystemIn = "filing_worker" }))
+            .Should().Be(documents[0], "rules that let no scope through are written without that role");
+
+        // Who may execute the functions is no part of it: a database whose grants changed holds the same functions.
+        MarkerOf(new MembershipRowAccessContribution<DocumentShare>(Documents()), filing, ExportWith(rules: [])).Should().Be(documents[0]);
 
         // The trigger of the lock says the same first line as the functions: one thing to hold a database to.
         var folders = new MembershipRowAccessContribution<FolderMember>(FolderMembership.Rules).Contribute(filing, Export)!;
@@ -586,12 +598,12 @@ public sealed class ContributionTests(FilingPostgres postgres)
     }
 
     /// <summary>
-    /// The form the SQL is written in, as its first line says it, and a hash of everything that is written for
-    /// four sets of rules said in the test itself, one for each way rules can be said, with that first line
-    /// taken out. Kept together: the form is what tells the start-up check that a database holds what an
-    /// earlier version of the package wrote, so it goes up whenever what is written changes.
+    /// The form the SQL is written in, as its first line says it, and a hash of everything that is written for four
+    /// sets of rules said in the test itself, one for each way rules can be said, with the lines that name the rules
+    /// taken out. Kept together: the form is what tells the start-up check that a database holds what an earlier
+    /// version of the package wrote, so it goes up whenever what is written changes.
     /// </summary>
-    private static readonly (string SqlForm, string Written) KeptTogether = ("5", "a42a6ca93a7f0f06f71e83069597c877655dc91690bd8163d148f3da8ca917eb");
+    private static readonly (string SqlForm, string Written) KeptTogether = ("6", "93578164e7f90bcd577144074316d94f79159d355c081c361512cf81420f7cbe");
 
     [Fact]
     public void What_is_written_for_the_same_rules_changes_only_together_with_the_form_it_is_written_in()
@@ -603,43 +615,33 @@ public sealed class ContributionTests(FilingPostgres postgres)
         // Rules said here, and not the hosts' own, so that only a change of what the package writes moves the hash.
         (IRowAccessContribution Contribution, DbContext Context)[] hosts =
         [
-            // Users by their id, declared roles, a key that being a member gives, one key for both locks.
-            (new MembershipRowAccessContribution<DocumentShare>(new MembershipRules(
+            // Users by their id, roles in code, a permission every member holds, one permission for both locks.
+            (new MembershipRowAccessContribution<DocumentShare>(MembershipRules.Declare(
+                typeof(Document),
                 "documents",
-                keys: ["documents.view", "documents.edit", "documents.share"],
-                roles: [new("contributor", ["documents.view", "documents.edit"]), new("onlooker", ["documents.view"])],
-                seeKey: "documents.view",
-                changeMembersKey: "documents.share",
-                changeOwnerKey: "documents.share")), filing),
+                [new("documents.view", EveryMember: true), new("documents.edit"), new("documents.share", LocksMembers: true, LocksOwner: true)],
+                Roles.Fixed([new("contributor", ["documents.view", "documents.edit"]), new("onlooker", ["documents.view"])]),
+                systemScopes: [])), filing),
 
-            // Members by a claim, a declared owner's role, a key no role gives, names of its own, two roles
-            // that may ask, a key for each lock, and a scope of the application's own.
-            (new MembershipRowAccessContribution<FolderMember>(new MembershipRules(
+            // Members by a claim, a permission no role gives, a permission for each lock, and a scope of the application's own.
+            (new MembershipRowAccessContribution<FolderMember>(MembershipRules.Declare(
+                typeof(Folder),
                 "folders",
-                keys: ["folders.read", "folders.file", "folders.staff", "folders.shred", "folders.hand-over"],
-                roles: [new("keeper", ["folders.read", "folders.file", "folders.staff", "folders.shred"]), new("visitor", ["folders.read"])],
+                [new("folders.read"), new("folders.file"), new("folders.staff", LocksMembers: true), new("folders.shred", InRoles: false), new("folders.hand-over", InRoles: false, LocksOwner: true)],
+                Roles.Fixed([new("keeper", ["folders.read", "folders.file", "folders.staff"]), new("visitor", ["folders.read"])]),
                 members: MemberSource.Claim("app_metadata.staff"),
-                ownerRole: "keeper",
-                memberKeys: MemberKeys.AllBut("folders.shred"),
-                functions: new("folder_ids_staffed", "folder_ids_staffed_with", "folder_ids_seen", "folder_ids_held"),
-                grantTo: [RowAccessRoles.User, RowAccessRoles.Token(FilingPostgres.ArchivistTokenRole)],
-                changeMembersKey: "folders.staff",
-                changeOwnerKey: "folders.hand-over",
                 systemScopes: ["filing"])), filing),
 
             // Members the host resolves, roles kept elsewhere, reached from above, no lock.
-            (new MembershipRowAccessContribution<CratePorter>(Kept("crates", MemberSource.Resolved("depot/caller_porter"), new("depot/roles_with_key"), new("depot/bays_where_i_hold"))), depot),
+            (new MembershipRowAccessContribution<CratePorter>(Kept("crates")), depot),
 
-            // Roles kept for the resource, a key for the members' lock alone, which then holds a role given to
-            // one the caller sees; and the trigger that keeps the owner's role in use.
-            (new MembershipRowAccessContribution<PlotGardener>(new MembershipRules(
+            // Roles a customer makes, a permission that locks the members alone, which then holds a role given to one the caller sees.
+            (new MembershipRowAccessContribution<PlotGardener>(MembershipRules.Declare(
+                typeof(Plot),
                 "plots",
-                keys: ["plots.see", "plots.plant", "plots.fence"],
-                roles: [new("tender", ["plots.see", "plots.plant"])],
-                seeKey: "plots.see",
-                memberKeys: MemberKeys.Only("plots.see", "plots.plant"),
-                rolesKept: true,
-                changeMembersKey: "plots.fence")), gardens),
+                [new("plots.see", EveryMember: true), new("plots.plant"), new("plots.fence", LocksMembers: true)],
+                Roles.Custom(starters: [new("tender", ["plots.see", "plots.plant"])]),
+                systemScopes: [])), gardens),
         ];
 
         var forms = new HashSet<string>(StringComparer.Ordinal);
@@ -652,9 +654,9 @@ public sealed class ContributionTests(FilingPostgres postgres)
                 var lines = function.Body.Split('\n');
                 forms.Add(System.Text.RegularExpressions.Regex.Match(lines[0], "in form (?<form>[0-9]+),").Groups["form"].Value);
 
-                // Without the first line, which names the rules and the form: everything else is what a database holds.
+                // Without the lines that name the rules and the form: everything else is what a database holds.
                 written.Append(function.Name).Append('(').Append(function.Parameters).Append(") ").Append(function.Returns).Append(' ').Append(function.SecurityDefiner).Append('\n')
-                    .Append(string.Join('\n', lines.Skip(1))).Append('\n');
+                    .Append(string.Join('\n', lines.Where(line => !line.StartsWith("-- Membership of ", StringComparison.Ordinal)))).Append('\n');
             }
 
             foreach (var policy in result.Policies)
@@ -685,26 +687,39 @@ public sealed class ContributionTests(FilingPostgres postgres)
         }
     }
 
-    private static MembershipRules Rules(string name, MemberSource? members = null)
-        => new(name, keys: [name + ".read"], roles: [new("reader", [name + ".read"])], members: members);
+    /// <summary>Rules of <typeparamref name="TResource"/> under another name: one permission a role in code gives.</summary>
+    private static MembershipRules Rules<TResource>(string name, MemberSource? members = null)
+        => MembershipRules.Declare(typeof(TResource), name, [new(name + ".read")], Roles.Fixed([new("reader", [name + ".read"])]), members: members);
 
-    /// <summary>Rules for a crate: the roles are the depot's, kept elsewhere; who a member is and what is above are the caller's to say.</summary>
-    private static MembershipRules Kept(string name, MemberSource? members = null, RolesKeptElsewhere? elsewhere = null, ReachFromAbove? above = null, MemberKeys? memberKeys = null)
-        => new(
+    /// <summary>
+    /// Rules for a crate: the crate's permissions, the depot's roles, the depot's porters and its bays, as the crates'
+    /// own rules say them, each of which a test may say otherwise.
+    /// </summary>
+    private static MembershipRules Kept(
+        string name,
+        MemberSource? members = null,
+        DatabaseFunction? roles = null,
+        bool rolesFunction = true,
+        ReachFromAbove? above = null,
+        bool reached = true,
+        OtherKeys? otherKeys = null,
+        bool noOtherKeys = false,
+        IReadOnlyList<ResourcePermission>? permissions = null)
+        => MembershipRules.Declare(
+            typeof(Crate),
             name,
-            keys: [CrateKeys.Scrap],
-            members: members,
-            seeKey: CrateKeys.See,
-            ownerRole: CrateMembership.OwnerRole,
-            memberKeys: memberKeys ?? MemberKeys.AllBut(CrateKeys.Move, CrateKeys.ManageDepot),
-            rolesKeptElsewhere: elsewhere ?? new("depot/roles_with_key"),
-            above: above);
+            permissions ?? CrateMembership.Rules.Permissions,
+            Roles.External(rolesFunction ? roles ?? Depot("roles_with_key") : null, noOtherKeys ? null : otherKeys ?? OtherKeys.AllBut(CrateKeys.ManageDepot)),
+            members: members ?? MemberSource.Resolved(Depot("caller_porter")),
+            reachFromAbove: reached ? above ?? Depot("bays_where_i_hold") : null,
+            systemScopes: CrateMembership.Rules.SystemScopes,
+            codes: CrateMembership.Codes);
 
     /// <summary>A context that keeps the documents where their owner is: who holds a key over a document's owner reaches the document.</summary>
     private sealed class ManagedContext(DbContextOptions<ManagedContext> options) : DbContext(options)
     {
         protected override void OnModelCreating(ModelBuilder modelBuilder)
-            => modelBuilder.Entity<Document>().HasMembers(row => row.Shares, row => row.OwnerId, at: row => row.OwnerId);
+            => modelBuilder.Entity<Document>().HasMembers(row => row.Shares);
 
         protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
         {
@@ -723,7 +738,7 @@ public sealed class ContributionTests(FilingPostgres postgres)
             => modelBuilder.Entity<Document>(document =>
             {
                 document.HasKey(nameof(Document.Title), nameof(Document.Id));
-                document.HasMembers(row => row.Shares, row => row.OwnerId);
+                document.HasMembers(row => row.Shares);
             });
 
         protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)

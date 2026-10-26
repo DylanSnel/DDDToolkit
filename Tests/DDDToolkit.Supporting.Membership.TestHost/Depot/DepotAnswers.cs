@@ -23,13 +23,13 @@ public static class DepotFunctions
     public const string Owner = "depot";
 
     /// <summary>Answers the calling porter, or <c>NULL</c> for a caller the depot does not count.</summary>
-    public const string CallerPorter = Owner + "/caller_porter";
+    public static DatabaseFunction CallerPorter { get; } = new(Owner, "caller_porter");
 
     /// <summary>Answers, for a key, the depot's roles in use that give it.</summary>
-    public const string RolesWithKey = Owner + "/roles_with_key";
+    public static DatabaseFunction RolesWithKey { get; } = new(Owner, "roles_with_key");
 
     /// <summary>Answers, for a key, the bays the calling porter's hold of it reaches: where it is held, and every bay below.</summary>
-    public const string BaysWhereIHold = Owner + "/bays_where_i_hold";
+    public static DatabaseFunction BaysWhereIHold { get; } = new(Owner, "bays_where_i_hold");
 }
 
 /// <summary>
@@ -104,13 +104,6 @@ public sealed class CratesInTheDepot(DepotDesk desk, DepotContext context)
     /// <inheritdoc />
     public async ValueTask<bool> ExistsAsync(DepotRoleId role, CancellationToken cancellationToken)
         => await context.Roles.AnyAsync(kept => kept.Id == role && kept.InUse, cancellationToken);
-
-    /// <inheritdoc />
-    public async ValueTask<DepotRoleId?> FindOwnerRoleAsync(CancellationToken cancellationToken)
-        => await context.Roles
-            .Where(kept => kept.Name == CrateMembership.Rules.OwnerRole && kept.InUse)
-            .Select(kept => (DepotRoleId?)kept.Id)
-            .FirstOrDefaultAsync(cancellationToken);
 
     /// <inheritdoc />
     /// <remarks>Over the context the statement runs on, which is not always this request's own.</remarks>

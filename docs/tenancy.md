@@ -325,8 +325,8 @@ Tenancy becomes a module of your application, like any other. In the order you w
    a migration of your own, and `services.AddTenancy<TContext>()`, with your catalogue when you have one
    ([Your tenancy module](#your-tenancy-module)); each id makes its own new ones
    ([How a new id is made](#how-a-new-id-is-made)).
-4. **Write your catalogue, when you need one.** Each module states its own keys once, on a list it marks with
-   `[TenancyPermissions]`, and the host adds every module's with one generated call
+4. **Write your catalogue, when you need one.** Each module declares its own permissions once, in a class it
+   marks `[Permissions]`, and the host adds every module's with one generated call
    ([A module states its keys once](#a-module-states-its-keys-once)). Your part adds the role
    packs a tenant starts with, keys no module owns, and a mark on every key that manages access
    ([What the catalogue is for](#what-the-catalogue-is-for)). Declare no administrators' pack, and every tenant
@@ -676,44 +676,78 @@ it is [yours to keep](#the-kind-of-a-unit), on your own unit class.
 
 ### A module states its keys once
 
+A module declares its permissions once, next to the code that asks for them: the constants of a static class it
+marks `[Permissions]`, each with its **level**, the attribute that says where it is asked, and a summary that says
+what it lets somebody do.
+
+```csharp
+// Ordering.Application, a project of the module Ordering
+[Permissions]
+public static class OrderingPermissions
+{
+    /// <summary>See the orders.</summary>
+    [AtTenant]
+    public const string View = "orders.view";
+
+    /// <summary>Refund an order.</summary>
+    [AtUnit(Implies = [View])]
+    public const string Refund = "orders.refund";
+}
+```
+
+| The level | Asked | Held by |
+|---|---|---|
+| `[AtTenant]` | for the whole tenant, as `TenancyAccess.AtTenant` asks it, and as `[RequiresKey]` with no marker requires it | a role of the organization granted at its root |
+| `[AtUnit]` | at a unit, as `TenancyAccess.AtUnit` and a request's `[AtUnit]` member ask it | a role granted at that unit or above it |
+| `[On<TResource>]`, [Membership's](membership.md#the-settings-of-a-permission) | on one resource with members | its owner, its members through their roles, and, where its rules say so, a role granted where it hangs |
+
+A key asked both for the whole tenant and at a unit carries both levels. Whatever the level, the permission is in
+Tenancy's catalogue under the module, so a role of the organization can hold it. Its description is its summary as
+text, or the level's `Description` where one is said; a translation of the application's, under the permission's key
+in a resx its [failure localizer](localization.md) reads, says it in another language, as a refusal's text is said.
+`Implies` names what holding it brings with it, as a pack's keys do, and `Retired = true` keeps a key that grants
+nothing any more, so no stored right breaks. A class marked `[Permissions]` that is not static, a constant without a
+level and a key declared twice are [DDD00092](diagnostics.md#ddd00092).
+
 A module's keys are needed by two programs that cannot ask each other: the host, which builds its catalogue
 from its services, and the program that exports the database's policies, which builds the same catalogue
-without any. Both compose the modules, so both see every module's assembly, and read the keys there: the host
-through Tenancy's generator, which comes with the package, and the export through the Supabase package's, which
-finds the same marked lists for Tenancy's contribution ([Setting it up](#setting-it-up)).
+without any. Both compose the modules, so both see every module's assembly, and read the keys there: Tenancy's
+generator writes the module's list into the module's project, and collects every module's into the host, and
+the Supabase package's generator finds the same lists for Tenancy's contribution ([Setting it up](#setting-it-up)).
 
 ```mermaid
 flowchart TB
-    Ordering["Ordering.Application<br/>OrderingKeys.Permissions<br/>[TenancyPermissions]"]
-    Billing["Billing.Application<br/>BillingKeys.Permissions<br/>[TenancyPermissions]"]
+    Ordering["Ordering.Application<br/>[Permissions] OrderingPermissions"]
+    Billing["Billing.Application<br/>[Permissions] BillingPermissions"]
+    Declared{{"Tenancy's generator,<br/>in each module's project:<br/>DeclaredPermissions.All"}}
     Generator{{"Tenancy's generator,<br/>in each project that<br/>declares no module"}}
     Supabase{{"the Supabase export's<br/>generator, where the<br/>export runs"}}
     Host["the host<br/>AddTenancyPermissionsOfModules()"]
-    Export["Tenancy's contribution<br/>modules: every marked list"]
+    Export["Tenancy's contribution<br/>modules: every module's list"]
     Running(["the catalogue<br/>the host runs with"])
     Written(["the catalogue the<br/>policies are written from"])
     Check{"start-up check<br/>on Postgres:<br/>the same?"}
-    Ordering --> Generator
-    Billing --> Generator
-    Ordering --> Supabase
-    Billing --> Supabase
+    Ordering --> Declared
+    Billing --> Declared
+    Declared --> Generator
+    Declared --> Supabase
     Generator --> Host --> Running --> Check
     Supabase --> Export --> Written --> Check
 ```
 
 <details>
-<summary>Show the code: a module's keys, the host's one call, and what the generators write</summary>
+<summary>Show the code: the host's one call, and what the generators write</summary>
 
 ```csharp
-// Ordering.Application: the keys, stated once
-public static class OrderingKeys
+// What Tenancy's generator writes into Ordering.Application, in the namespace of its assembly
+public static class DeclaredPermissions
 {
     [TenancyPermissions]
-    public static IReadOnlyList<Permission> Permissions { get; } =
-    [
-        new("orders.view", "Ordering", "See the orders"),
-        new("orders.refund", "Ordering", "Refund an order", ManagesAccess: true),
-    ];
+    public static IReadOnlyList<Permission> All { get; } = new Permission[]
+    {
+        new("orders.view", "Ordering", "See the orders.", Implies: null, Retired: false, Order: 10),
+        new("orders.refund", "Ordering", "Refund an order.", Implies: new string[] { "orders.view" }, Retired: false, Order: 20),
+    };
 }
 
 // The host's Program.cs: the host references every module, and the class is in the namespace of its assembly
@@ -721,12 +755,12 @@ using Shop.Host;
 
 builder.Services.AddTenancyPermissionsOfModules();
 
-// What Tenancy's generator writes into each of those projects, in the namespace of its assembly
+// What Tenancy's generator writes into the host, in the namespace of its assembly
 internal static class TenancyPermissionsOfModules
 {
     public static IReadOnlyList<Permission> All { get; } = Join(
-        global::Shop.Billing.BillingKeys.Permissions,
-        global::Shop.Ordering.OrderingKeys.Permissions);
+        global::Shop.Billing.Application.DeclaredPermissions.All,
+        global::Shop.Ordering.Application.DeclaredPermissions.All);
 
     public static IServiceCollection AddTenancyPermissionsOfModules(this IServiceCollection services)
         => TenancyServiceCollectionExtensions.AddTenancyPermissions(services, All);
@@ -737,19 +771,23 @@ internal static class TenancyPermissionsOfModules
 private readonly IRowAccessContribution _contribution = new global::DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution(
     modules: new IEnumerable<Permission>[]
     {
-        global::Shop.Billing.BillingKeys.Permissions,
-        global::Shop.Ordering.OrderingKeys.Permissions,
+        global::Shop.Billing.Application.DeclaredPermissions.All,
+        global::Shop.Ordering.Application.DeclaredPermissions.All,
     },
     application: global::Shop.ShopCatalogue.Application);
 ```
 
 </details>
 
-A module states its keys on the static list where it declares them, and marks that list with
-`[TenancyPermissions]`. That is the only place: its registration adds nothing, and no other project lists them.
+The module writes no list: Tenancy's generator writes `DeclaredPermissions.All` into each project that declares a
+`[Permissions]` class, under the module the project declares, and marks it `[TenancyPermissions]`, the mark the
+projects that compose the modules collect. That is the only place: the module's registration adds nothing, and no
+other project lists its keys. A list a module marks `[TenancyPermissions]` by hand would say the keys a second time,
+and is [DDD00095](diagnostics.md#ddd00095).
+
 In every application that references Tenancy, the program the modules are composed in, and in every library
 that references it and declares no module, the generator writes `TenancyPermissionsOfModules`, an internal class
-with the project's own marked lists and those of every project it references. Its namespace is named after the
+with every module's list it finds in the project and in those it references. Its namespace is named after the
 project's assembly, `Shop.Host` for `Shop.Host.dll`, whatever the project's `RootNamespace` says:
 
 - **`TenancyPermissionsOfModules.All`**: every module's keys, one list after the other, in the order of the
@@ -760,36 +798,27 @@ project's assembly, `Shop.Host` for `Shop.Host.dll`, whatever the project's `Roo
 - **`services.AddTenancyPermissionsOfModules()`**: adds `All` to the catalogue, as one contribution. The host
   calls it once. A top-level `Program.cs` is in no namespace, so it needs `using Shop.Host;` for the call.
 
-Neither call names a module, so a module that is added, or a key a module adds, reaches both programs with the
-next build, and nothing in the host changes. While no module marks a list, before the first one does or after
-the last one is taken out, `All` is empty, and both calls compile all the same.
+Neither call names a module, so a module that is added, or a permission a module adds, reaches both programs with
+the next build, and nothing in the host changes. While no module declares a permission, before the first one does
+or after the last one is taken out, `All` is empty, and both calls compile all the same.
 
 Declaring a module means `DDD_Module`, set in the project file or for a folder of projects
-([A module named by its folder](modules.md#a-module-named-by-its-folder)), or `[assembly: Module]`. A module's
-own libraries get no class: a module states its own keys and composes no other module's. A module project that
-is not declared one yet gets one as well, and leaves it alone: the host's call is the one that counts. An
-application gets the class whether it declares a module or not, because nothing composes the modules from it:
-an application in one project that sets `DDD_Module` to name its code, as
-[Getting started](getting-started.md) does, is a module and the host at once, and registers its own keys with the
-same call. A library that the host and an export share, to compose the modules in one place, sets no `DDD_Module`,
-or it is a module and gets no class.
+([A module named by its folder](modules.md#a-module-named-by-its-folder)), or `[assembly: Module]`; a project
+that declares none lists its permissions under its assembly's name. A module's own libraries get no
+`TenancyPermissionsOfModules`: a module states its own keys and composes no other module's. An application gets
+the class whether it declares a module or not, because nothing composes the modules from it: an application in
+one project that sets `DDD_Module` to name its code, as [Getting started](getting-started.md) does, is a module
+and the host at once, and registers its own keys with the same call. A library that the host and an export share,
+to compose the modules in one place, sets no `DDD_Module`, or it is a module and gets no class.
 
-The list is a static property or field, readable, declared in a class that is not generic (nor nested in one),
-whose type is a sequence of `Permission`: `IReadOnlyList<Permission>`, `IEnumerable<Permission>` or an array.
-In a library it is public as well, in public types, because the project that composes the modules reads it from
-outside, whether the library declares a module or not. A list that cannot be read that way is the error
-[DDD00063](diagnostics.md#ddd00063) where it is declared, because the module's keys would otherwise be missing
-from the catalogue with nothing to say so. Only an application, the program itself, may keep a list of its own
-internal: it collects that list itself, and no other project composes the modules from it.
-
-`AddTenancyPermissions` stays, for keys you add by hand. A module that marks its list does not call it as well:
+`AddTenancyPermissions` stays, for keys you add by hand. A module's permissions are not added with it as well:
 the same list added twice stops the catalogue at start-up, with one problem that names its keys and says which
 call to take out.
 
 A host that leaves `AddTenancyPermissionsOfModules()` out runs without any module's keys. A pack that names one
 of them stops the catalogue at start-up; with no such pack, as with Tenancy's default administrators' pack, the
-first question about one of them throws. Both messages say how a module's keys reach the catalogue: the list
-marked `[TenancyPermissions]`, and the host's call.
+first question about one of them throws. Both messages say how a module's keys reach the catalogue: its
+`[Permissions]` classes, and the host's call.
 
 The two programs build the same catalogue as long as they reference the same modules, and add no keys by hand
 that the other does not. The export can be the host itself, and then there is one list. Where it is a program
@@ -1327,7 +1356,7 @@ modelBuilder.Entity<Project>().ScopeToTenant(project => project.TenantId);
 
 ```sql
 -- Postgres: the same shape as a policy, two set-shaped questions that each run once per statement
-"Id" = ANY (ARRAY(SELECT "projects".crew_project_ids('projects.edit')))
+"Id" = ANY (ARRAY(SELECT "projects".projects_as_member_with('projects.edit')))
 OR "UnitId" = ANY (ARRAY(SELECT "tenancy".units_where_i_hold('projects.edit')))
 ```
 
@@ -2746,7 +2775,9 @@ otherwise, as `ddd_system`, which reaches the toolkit's bookkeeping and no modul
 caller runs as a role that cannot bypass the policies, and they decide what it reaches. The scope says
 whose work it is. Work that calls
 Tenancy's use cases keeps Tenancy's own; a module's own work in a tenant that only reads Tenancy's rows
-next to its own passes its module's name.
+next to its own passes its module's name. So does a module's work on its resources with members: their rules let
+the module's own scope through, and Tenancy's holds nothing on them ([Who holds a key](membership.md#who-holds-a-key)).
+The sample seeds a tenant's organization as Tenancy's work, and its projects as the Projects module's.
 
 Everything about system work is named after the toolkit's caller of the application itself, `Caller.System`,
 so one word says it wherever it comes up:
@@ -3145,7 +3176,7 @@ services.AddProjectMembershipWithTenancy<ProjectsContext, TenantId, Organization
 services.AddProjectMemberAccess<IProjectsRequest>();                         // its check, for a key on a project
 
 // Projects.Application: the rules, the check for a key at a unit, and the generated behavior. No keys: the module
-// marks their list, ProjectCatalogue.Permissions, with [TenancyPermissions], and the host adds every module's
+// declares them in ProjectPermissions, a [Permissions] class, and the host adds every module's
 services.AddSingleton(membership);
 services.AddScoped<ProjectAccess>();
 services.AddAccessCheck<IProjectsRequest, ProjectsAccessCheck>();
@@ -3443,8 +3474,8 @@ it answers rhea, shortened to the first of her two projects:
 
 The name and the number are the project's own. The crew comes the owner first, then by when each membership
 starts, and a member's roles by when each starts: the module has no names to order by. `myRoleIds` are the
-roles the caller holds on the crew now: none for rhea, who reaches Pier 7 through the organization, and the
-Crew lead role for leo. `changedBy` is [who changed the project last](#an-operator-who-changed-a-row-and-the-history-as-a-list):
+roles the caller holds on the crew now: none for rhea, who reaches Pier 7 through the organization, and none
+for leo, who owns it and holds what an owner does by owning it. `changedBy` is [who changed the project last](#an-operator-who-changed-a-row-and-the-history-as-a-list):
 the seeding here, which is system work. A client that shows the ids asks [Tenancy for the names](#names) of
 the unit and the seats, and Projects for those of the roles, `GET /project-roles`.
 
@@ -3610,7 +3641,7 @@ Anybody who works in the tenant reads what they are called; their keys are answe
 
 | Starter role | Keys |
 |---|---|
-| Crew lead | `projects.view`, `projects.edit`, `projects.close`, `projects.crew.manage`, `inspections.record`: every key a crew can give. Every project's owner holds it, so it is not archived (`projects.owner-role-stays`) |
+| Crew lead | `projects.view`, `projects.edit`, `projects.close`, `projects.crew.manage`, `inspections.record`: every key a crew can give. The role a former owner usually stays on the crew in |
 | Surveyor | `projects.view`, `inspections.record` |
 | Observer | `projects.view` |
 
@@ -3620,24 +3651,25 @@ goes on no crew, and neither does an archived project role or another tenant's: 
 `projects.role-not-for-members`. An archived role stays on whoever holds it, gives nothing, and can still be
 taken away. The database holds a statement that goes round the application to part of it: a seat that writes a
 crew's roles itself gives none of another tenant's, since the Membership package's lock asks the project
-roles' table as that seat, and the crew lead's role is archived by no statement, whoever sends it. One of its
-own tenant's archived roles such a seat can still write onto a crew, and that role gives nothing.
+roles' table as that seat. One of its own tenant's archived roles such a seat can still write onto a crew, and
+that role gives nothing.
 
-A project has one owner, who is on its crew with no end and holds the crew lead's project role there, with no
-end either. That role holds every key a crew can give, so the owner may do everything that acts on the
-project: rename it, close it and reopen it, manage its crew and record inspections. Moving it needs
-`projects.open` at the unit it goes to, and naming another owner needs `projects.owner.change` at the
-project's unit or above it, so the owner does neither through the crew. Until the organization names another
-owner, the owner is not taken off the crew and does not lose the Crew lead role (`projects.owner-protected`),
-whoever asks. Naming another owner puts the new owner on the crew, when not on it yet, and gives them the
-role. The old owner loses that role and nothing else: the seat stays on the crew with whatever other roles it
-holds there, or with none, still seeing the project. A second crew lead holds as much as the owner, but is not
-the owner, and cannot take the owner off the crew.
+A project has one owner, who is on its crew with no end and holds no project role there. The owner holds what
+the permissions Projects declares on a project give an owner, by owning it: it sees the project, renames it,
+closes and reopens it, and manages its crew ([`ProjectPermissions`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Access/ProjectPermissions.cs)).
+Recording an inspection is the Inspections module's, which a role on the crew gives, so an owner who records
+holds a role at the unit, or leaves it to the crew. Moving a project needs `projects.open` at the unit it goes
+to, and naming another owner needs `projects.owner.change` at the project's unit or above it, a permission
+declared with `Owner = false`, so the owner does neither by owning it. Until the organization names another
+owner, the owner is not taken off the crew and is given no role there (`projects.owner-protected`), whoever
+asks. Naming another owner puts the new owner on the crew, when not on it yet, and its roles there go: it holds
+by owning now. The command says what the owner before becomes: a member in the project role it names,
+`formerOwnerRoleId`, or, left out, nobody on the crew. A crew lead holds more on the crew than the owner, the
+key that records among it, but is not the owner, and cannot take the owner off the crew.
 
-The owner's role is the tenant's project role in use made from the crew lead's starter role, whatever the
-tenant has called it since. What it gives is the tenant's to decide: take `projects.edit` out of it, and no
-owner renames through the crew. Changing a project role's keys takes `tenancy.roles.manage` for the whole
-tenant. A tenant with no such role in use opens no project and names no owner (`projects.no-lead-role`).
+What the project roles give is the tenant's to decide, and none of them is the owner's: a tenant archives the
+crew lead's role as any other, and opens projects without any project role. Changing a project role's keys
+takes `tenancy.roles.manage` for the whole tenant.
 
 Giving a crew role is positional: whoever manages the crew gives any of the tenant's project roles in use, to
 anyone on the crew, themselves included, without holding the role's keys, and puts any active seat of the
@@ -3736,7 +3768,7 @@ Meadow Gardens (`meadow`) is flat: its root is its only unit, and it refuses a u
 |---|---|---|
 | ada | harbor, at the root, Access admin and Area manager | harbor's first administrator, who also runs its work: everything in harbor is hers to do. maud administers too, so either of them may step down, and not both |
 | rhea | harbor, North, Area manager | sees Pier 7 and Inland depot, and not Bay bridge (`projects.not-found`); grants Observer and Crew lead at North Coast, and is refused Access admin there (`tenancy.grant-exceeds-own`, with the keys that manage access she lacks) and anything at South Bay (`tenancy.not-permitted`) |
-| leo | harbor, North Coast, no organization role | the owner of Pier 7 and its crew lead: renames it, closes and reopens it, puts seats on its crew and gives and takes their project roles, his own included; names no other owner (`projects.not-permitted`), gives the crew no role of the organization (`projects.role-not-for-members`), and keeps the Crew lead role on the crew until someone else owns it (`projects.owner-protected`) |
+| leo | harbor, North Coast, no organization role | the owner of Pier 7, holding no role on its crew: renames it, closes and reopens it, puts seats on its crew and gives and takes their project roles; records no inspection on it, since recording is the Inspections module's and comes with a role on the crew (`projects.not-permitted`), names no other owner (`projects.not-permitted`), gives the crew no role of the organization (`projects.role-not-for-members`), and is given no role and stays on the crew until someone else owns it (`projects.owner-protected`) |
 | juno | harbor, North Coast | a surveyor on Pier 7's crew: records an inspection, is refused a rename |
 | vic | harbor, North Inland, Observer until yesterday | sees Pier 7 through its crew, and not Inland depot, which only his expired grant reached |
 | seth | harbor, South Bay, suspended | every call in harbor is `tenancy.seat-suspended`, though `/me/seats` still lists the seat |
@@ -4630,7 +4662,7 @@ again.
 | tove, in meadow, suspends her own seat | 409 | `tenancy.last-admin` |
 | tove, in meadow, withdraws her root placement | 409 | `tenancy.last-admin` |
 | leo removes himself, the owner, from Pier 7's crew | 409 | `projects.owner-protected` |
-| leo, the owner, takes his own Crew lead role on Pier 7 | 409 | `projects.owner-protected` |
+| leo, the owner, gives himself the Surveyor role on Pier 7 | 409 | `projects.owner-protected` |
 | maud, an access admin, reads the access history | 200 | |
 | rhea reads the access history, without `tenancy.history.view` | 403 | `tenancy.not-permitted`, key `tenancy.history.view` |
 | hana, who gives roles and adds no seat, invites a person | 403 | `tenancy.not-permitted` |
@@ -4680,7 +4712,7 @@ tables say where, group by group. Where one of the three is not there, the row s
 | The choice | Where to see it |
 |---|---|
 | Every request says who may send it, in one attribute on the request, and none leaves it to a package; the generator writes the call the attribute stands for into the module's interface, and a request answers the property itself only where it computes the requirement. A request handed to a use case of Tenancy's says what that use case asks first; the use case asks again, and keeps the rules only it can read | **Code:** [`AccessRequirement.cs`](../Source/DDDToolkit/Access/AccessRequirement.cs), [`RequiresKeyAttribute.cs`](../Source/DDDToolkit/Access/RequiresKeyAttribute.cs), [`AtUnitAttribute.cs`](../Source/DDDToolkit.Supporting.Tenancy/Access/RequiredAccess/AtUnitAttribute.cs), [`MakeGrant.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Application/Grants/Commands/MakeGrant.cs), [`SeatGrants.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Application/Seats/Queries/SeatGrants.cs)<br/>**Try it:** Preset `grant-outside-your-region`, which the request's requirement refuses, and `give-a-role-that-manages-access`, which it lets through and the use case refuses<br/>**Test:** `AccessDeclarationTests`, `RequestPipelineTests`, `CallerRequirementTests` |
-| A project's owner may do everything that acts on the project, and a crew role reaches no further than the crew lead's | **Code:** [`Project.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Domain/Aggregates/Projects/Project.cs), [`ProjectCatalogue.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Access/ProjectCatalogue.cs)<br/>**Try it:** Sign in as leo and open Pier 7. Presets `owner-change-from-the-crew`, `remove-the-owner` and `take-the-owners-lead-role`<br/>**Test:** `OwnerScenarios`, `CrewRoleScenarios` |
+| A project's owner holds the permissions Projects declares for an owner, by owning it and with no role, and a crew role reaches no further than what a crew can give | **Code:** [`Project.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Domain/Aggregates/Projects/Project.cs), [`ProjectPermissions.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Access/ProjectPermissions.cs), [`ProjectMembership.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Access/ProjectMembership.cs)<br/>**Try it:** Sign in as leo and open Pier 7. Presets `owner-change-from-the-crew`, `remove-the-owner` and `give-the-owner-a-role`<br/>**Test:** `OwnerScenarios`, `CrewRoleScenarios`, `ProjectMembershipTests` |
 | Whoever may close a project may reopen it | **Code:** [`ReopenProject.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Lifecycle/Commands/ReopenProject.cs)<br/>**Try it:** The Reopen button on a closed project's page; leo's close and reopen in the `.http` file<br/>**Test:** `ClosingAndReopeningScenarios` |
 | Whoever manages a crew gives any of the tenant's project roles in use, to anyone on it, themselves included, without holding the role's keys | **Code:** [`GiveCrewRole.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Crew/Commands/GiveCrewRole.cs)<br/>**Try it:** leo gives vic the surveyor's role, in the `.http` file. Preset `crew-role-without-crew-management`<br/>**Test:** `CrewRoleScenarios` |
 | A role of the organization is given by whoever manages grants where the seat is placed. A role that manages access is given only by a seat that holds its keys that do, there and for at least as long, and never to itself | **Code:** [`TenancyUseCases.Gate.cs`](../Source/DDDToolkit.Supporting.Tenancy/UseCases/TenancyUseCases.Gate.cs), [`SampleCatalogue.cs`](../Examples/Tenancy/Examples.Tenancy.Catalogue/SampleCatalogue.cs)<br/>**Try it:** Sign in as hana. Presets `give-a-role-that-manages-access`, `appoint-yourself` and `appoint-yourself-holding-its-key`<br/>**Test:** `PeopleOfficeScenarios`, `SeatCommandsTests` |
@@ -4699,7 +4731,7 @@ tables say where, group by group. Where one of the three is not there, the row s
 | The choice | Where to see it |
 |---|---|
 | A module is a project per layer, with ports between the application and its storage. Its entry is in its API project, and the host references that project alone | **Code:** [`Modules`](../Examples/Tenancy/Modules), [`ProjectsModule.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Api/ProjectsModule.cs), [`IProjectStore.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/StoredProjects/IProjectStore.cs)<br/>**Try it:** `dotnet run --project Examples/Tenancy/Examples.Tenancy.AppHost`<br/>**Test:** `LayerReferenceTests` |
-| A module states its permission keys once, on the list it marks with `[TenancyPermissions]`. The host gets every module's list from Tenancy's generator and registers the keys with one call; the program that exports finds the same marked lists itself and builds Tenancy's policies from them and the part of the catalogue marked `[TenancyCatalogue]` | **Code:** [`ProjectCatalogue.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Access/ProjectCatalogue.cs), [`Program.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Program.cs), [`SampleCatalogue.cs`](../Examples/Tenancy/Examples.Tenancy.Catalogue/SampleCatalogue.cs), [`TenancyPermissionsGenerator.cs`](../Source/DDDToolkit.Supporting.Tenancy.Analyzers/TenancyPermissionsGenerator.cs)<br/>**Try it:** Nothing to run: build the host and the exporter with `-p:EmitCompilerGeneratedFiles=true`: `TenancyPermissionsOfModules.g.cs` is under the host's `obj` folder, `DDDToolkit.RowAccessContributionsOfPackages.g.cs` under the exporter's<br/>**Test:** `ModuleKeysTests`, `TenancyPermissionsGeneratorTests`, `PackageContributionsGeneratorTests`, `StartupTests` |
+| A module declares its permissions once, as the constants of a `[Permissions]` class with their levels. Tenancy's generator writes each module's list from it, the host gets every module's list from the same generator and registers the keys with one call; the program that exports finds the same lists itself and builds Tenancy's policies from them and the part of the catalogue marked `[TenancyCatalogue]` | **Code:** [`ProjectPermissions.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Access/ProjectPermissions.cs), [`InspectionPermissions.cs`](../Examples/Tenancy/Modules/Inspections/Examples.Tenancy.Inspections.Application/Access/InspectionPermissions.cs), [`Program.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Program.cs), [`SampleCatalogue.cs`](../Examples/Tenancy/Examples.Tenancy.Catalogue/SampleCatalogue.cs), [`TenancyPermissionsGenerator.cs`](../Source/DDDToolkit.Supporting.Tenancy.Analyzers/TenancyPermissionsGenerator.cs)<br/>**Try it:** Nothing to run: build the host and the exporter with `-p:EmitCompilerGeneratedFiles=true`: `DeclaredPermissions.g.cs` is under each module's application project's `obj` folder, `TenancyPermissionsOfModules.g.cs` under the host's, `DDDToolkit.RowAccessContributionsOfPackages.g.cs` under the exporter's<br/>**Test:** `ModuleKeysTests`, `TenancyPermissionsGeneratorTests`, `PackageContributionsGeneratorTests`, `StartupTests` |
 | No project writes Tenancy's nine types: the use cases are named through a class the toolkit's generator writes where the module's classes are declared, `TenancyUseCases` after the package's own class, which every project above sees, the generators there included; a second module with the classes names its own in one line | **Code:** [`TemplateFacades.cs`](../Source/DDDToolkit.Analyzers.Shared/TemplateFacades.cs), [`AssemblyInfo.cs`](../Source/DDDToolkit.Supporting.Tenancy/AssemblyInfo.cs), [`KeyOfMineType.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Api/Seats/GraphQL/KeyOfMineType.cs)<br/>**Try it:** Nothing to run: build with `-p:EmitCompilerGeneratedFiles=true`, and `TenancyUseCases.TemplateFacade.g.cs` is under the obj folder of the Tenants domain project<br/>**Test:** `TemplateFacadeTests`, `SourceTreeTests` |
 | No project that sees the Tenants module's classes names Tenancy's ids to begin system work, ask the current caller, register Tenancy or select the tenant: the first two are static members of the class the use cases are named through, the registrations are generated like `AddTenancy` into the module's own projects, and tenant selection is asked without its id types. Types generic over the ids keep them. Projects and Inspections see the ids alone, and write them where they register | **Code:** [`TenancyUseCases.Callers.cs`](../Source/DDDToolkit.Supporting.Tenancy/UseCases/TenancyUseCases.Callers.cs), [`ITenantSelection.cs`](../Source/DDDToolkit.Supporting.Tenancy/Access/Selection/ITenantSelection.cs), [`DemoSeeder.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Seeding/DemoSeeder.cs), [`TenantHeader.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Access/TenantHeader.cs), [`TenantsInfrastructure.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Infrastructure/TenantsInfrastructure.cs), [`ProjectsInfrastructure.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/ProjectsInfrastructure.cs)<br/>**Try it:** Nothing to run: the seeding begins its system work this way each time the sample starts with its demonstration<br/>**Test:** `SourceTreeTests`, `TenancyClosedOverTheIdsTests`, `ClosedOverTheIdsTests` |
 | No class the application adds nothing to is written by hand: Tenancy's switch in the Tenants domain project has the generator write the organization and the role as the package ships them, and the tenant, the unit, the seat and the invitation are declared, because each adds something, and win. The ids are the contracts project's own, printed with their prefixes, and the switch takes them | **Code:** [`Module.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Domain/Module.cs), [`GenerateTenancyClassesAttribute.cs`](../Source/DDDToolkit.Supporting.Tenancy/Aggregates/GenerateTenancyClassesAttribute.cs), [`TemplateDefaults.cs`](../Source/DDDToolkit.Analyzers.Shared/TemplateDefaults.cs)<br/>**Try it:** Nothing to run: build with `-p:EmitCompilerGeneratedFiles=true`, and `Organization.TemplateDefault.*.g.cs` and `Role.TemplateDefault.*.g.cs` are under the obj folder of the Tenants domain project<br/>**Test:** `SourceTreeTests`, `MigrationTests`, `TemplateDefaultsTests`, `ProvisioningTests` |
@@ -4740,7 +4772,7 @@ tables say where, group by group. Where one of the three is not there, the row s
 | The policy for changing a project is coarser than the application on purpose. The unit a project is at, the seat that owns it and its crew decide who reaches it, so in the database those change only with the keys their commands ask: the unit with a trigger of the module's own, the owner and the crew with the lock the Membership package writes from the projects' rules. Its name, its planned days and its state change only with the keys renaming, planning and closing ask, by column rules. A save one of them refuses, from a handler whose caller lost a key after its check, is refused with `access.refused`, a 403, as a policy's refusal is | **Code:** [`UnitChangesWithItsKeys.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Access/UnitChangesWithItsKeys.cs), [`NameAndPlanChangeWithTheEditKey.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Access/NameAndPlanChangeWithTheEditKey.cs), [`StateChangesWithTheCloseKey.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Access/StateChangesWithTheCloseKey.cs), [`SampleCatalogue.cs`](../Examples/Tenancy/Examples.Tenancy.Catalogue/SampleCatalogue.cs), which marks the projects' rules `[MembershipRules<CrewMember>]`, [`SeatsChangeTheProjectsTheyWorkOn.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Access/SeatsChangeTheProjectsTheyWorkOn.cs), [`Program.cs`](../Examples/Tenancy/Examples.Tenancy.Exporter/Program.cs)<br/>**Try it:** Nothing to try through the application: the rule is about statements that go around it. [What stays in C#](#what-stays-in-c) says what the policy still lets through<br/>**Test:** `SampleOnPostgresTests`, `MovingScenarios`, `OwnerScenarios` |
 | What a member reads of the other seats, and who besides the seats managers reads an invitation, are defaults: a read rule on the application's own class takes the place of one, held to the tenant, beside what Tenancy's own work reads, which stays. The sample keeps both defaults | **Code:** [`TenancySql.cs`](../Source/DDDToolkit.Supporting.Tenancy.Postgres/Sql/TenancySql.cs), [`ContributedDefault.cs`](../Source/DDDToolkit.EntityFramework.Postgres/ContributedDefault.cs), [`TenancyRowAccess.cs`](../Source/DDDToolkit.Supporting.Tenancy/Access/RowAccess/TenancyRowAccess.cs)<br/>**Try it:** Nothing in the sample: it keeps the defaults ([Who reads the seats](#who-reads-the-seats-a-default-you-may-replace) says why)<br/>**Test:** `ReadRulesTests`, `RowAccessContributionTests`, `TenancyReadRuleGeneratorTests`, and `TenancyChoicesExportTests`, which runs the exporter's build step with a read rule on the sample's seat class and finds the default's policy the one that goes |
 | Tenancy guards only its own columns of a seat: no seat changes its id, identity or tenant, whatever it manages, and its status changes only as the use cases change it. The columns the application adds are its own to guard: the sample holds a seat's name to the rule of its command with a column rule, and leaves the job title as writable as the row | **Code:** [`TenancySql.cs`](../Source/DDDToolkit.Supporting.Tenancy.Postgres/Sql/TenancySql.cs), [`NameChangesByTheSeatOrWithTheSeatsKey.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Infrastructure/Access/NameChangesByTheSeatOrWithTheSeatsKey.cs), [`RenameSeat.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Application/Seats/Commands/RenameSeat.cs)<br/>**Try it:** Nothing to try through the application: the rules are about statements that go around it ([What the database guards on a seat](#what-the-database-guards-on-a-seat))<br/>**Test:** `SeatColumnsTests`, `TenancyTriggerTests`, `SampleOnPostgresTests` |
-| A module's rule asks another module's projects by the project's id, through a contract of one line that Projects publishes, and names no SQL function: the export writes the policy with the function the Membership package says answers that set. Projects' own rules ask the same contracts. The functions keep the names the sample's database had, said in one place | **Code:** [`ProjectsISee.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Contracts/RowAccess/ProjectsISee.cs), [`ProjectsWhereIHold.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Contracts/RowAccess/ProjectsWhereIHold.cs), [`SeatsRecordWhereTheyMay.cs`](../Examples/Tenancy/Modules/Inspections/Examples.Tenancy.Inspections.Infrastructure/Access/SeatsRecordWhereTheyMay.cs), [`ProjectMembership.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Access/ProjectMembership.cs), whose `Functions` keeps the names<br/>**Try it:** Read the newest `Examples/Tenancy/supabase/migrations/*_access.inspections.ddd.sql`: its policies ask `"projects".project_ids_where_i_hold`, a name no rule of Inspections writes. [A resource's access, asked by its id](row-level-security.md#a-resources-access-asked-by-its-id) has the mechanism<br/>**Test:** `ProjectRowRulesTests`, `InspectionRowRulesTests`, `SampleOnPostgresTests` |
+| A module's rule asks another module's projects by the project's id, through a contract of one line that Projects publishes, and names no SQL function: the export writes the policy with the function the Membership package says answers that set. Projects' own rules ask the same contracts. The functions are named after the projects, from the class's name | **Code:** [`ProjectsISee.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Contracts/RowAccess/ProjectsISee.cs), [`ProjectsWhereIHold.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Contracts/RowAccess/ProjectsWhereIHold.cs), [`SeatsRecordWhereTheyMay.cs`](../Examples/Tenancy/Modules/Inspections/Examples.Tenancy.Inspections.Infrastructure/Access/SeatsRecordWhereTheyMay.cs), [`ProjectMembership.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Access/ProjectMembership.cs)<br/>**Try it:** Read the newest `Examples/Tenancy/supabase/migrations/*_access.inspections.ddd.sql`: its policies ask `"projects".projects_where_i_hold`, a name no rule of Inspections writes. [A resource's access, asked by its id](row-level-security.md#a-resources-access-asked-by-its-id) has the mechanism<br/>**Test:** `ProjectRowRulesTests`, `InspectionRowRulesTests`, `SampleOnPostgresTests` |
 | Every context is wired by one call. `UseDDDToolkit` adds the toolkit's interceptors, then what the host's registrations brought: the caller on every connection, which row level security brings, and Tenancy's save check, last. A module added later is wired by the same call, and a context that keeps rows to a tenant without the save check is refused at its first save | **Code:** [`ProjectsInfrastructure.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/ProjectsInfrastructure.cs), [`SampleStorage.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Storage/SampleStorage.cs), [`DependencyInjection.cs`](../Source/DDDToolkit.EntityFramework/DependencyInjection.cs)<br/>**Try it:** Start the sample: the host's log names each context once, with what it was given<br/>**Test:** `StartupTests`, `UseDDDToolkitTests`, `OneCallTests`, `RequiredSaveCheckTests` |
 | Connections are budgeted per purpose: one pool for requests and one for background work | **Code:** [`PostgresPools.cs`](../Examples/Shared/Examples.Hosting/PostgresPools.cs), [`ContextsByPurpose.cs`](../Examples/Shared/Examples.Hosting/ContextsByPurpose.cs)<br/>**Try it:** `Sample:Pools:Requests` and `Sample:Pools:Background`, in the host's settings<br/>**Test:** `SampleOnPostgresTests` |
 | The application's clock and the database's are expected to be in step. The policies have no tolerance for a difference | **Code:** [The functions](#the-functions) says so; nothing in the packages<br/>**Try it:** Nothing to try: it is a property of the machines' clocks<br/>**Test:** `DatabaseClock`, the clock the Postgres tests of the package run with |
@@ -4836,7 +4868,7 @@ services.AddTenancyPostgres();
 services.RunStartupChecks();
 
 // Your part of the catalogue, the one you hand TenancyOptions.Catalogue: the export writes the policies from it,
-// and from the keys your modules mark with [TenancyPermissions]. Mark nothing, and they are written from
+// and from the permissions your modules declare in [Permissions] classes. Mark nothing, and they are written from
 // new ApplicationCatalogue(), as a host that leaves TenancyOptions.Catalogue unset runs with.
 public static class ShopCatalogue
 {
@@ -4856,8 +4888,9 @@ public static class ShopCatalogue
 - **The contribution** is a [row access contribution](row-level-security.md#policies-a-package-ships) the
   package declares, so referencing the package writes it. Which keys manage access is yours to say, so its SQL
   is written from your catalogue, built as your registration builds it: the part you mark with
-  `[TenancyCatalogue]`, a static property or field of type `ApplicationCatalogue`, and every list your modules
-  mark with `[TenancyPermissions]` ([A module states its keys once](#a-module-states-its-keys-once)), found in
+  `[TenancyCatalogue]`, a static property or field of type `ApplicationCatalogue`, and every module's list of
+  permissions, which Tenancy's generator writes from its `[Permissions]` classes and marks `[TenancyPermissions]`
+  ([A module states its keys once](#a-module-states-its-keys-once)), found in
   the projects the exporting project references. The build makes it in that project, in a class it writes into
   `DDDToolkit.RowAccessContributionsOfPackages.g.cs`, whose comment names what it was made from. Two members
   marked `[TenancyCatalogue]`, or one of another type, the catalogue built already say, stop the build
@@ -5847,7 +5880,7 @@ holds any one of those keys on a project:
 - with `projects.crew.manage` or `projects.owner.change`, write every row of the project's crew, as the
   commands would, but without their rules: put a seat on it twice, or give one of the tenant's archived
   project roles, which gives nothing;
-- leave the project without what only the aggregate keeps: an owner who is on the crew with the lead role, and,
+- leave the project without what only the aggregate keeps: an owner who is on the crew holding no role, and,
   with `projects.edit`, a name and planned days that are valid.
 
 It never crosses a tenant, reaches none of Tenancy's tables or keys, gives nobody a role on a crew without the

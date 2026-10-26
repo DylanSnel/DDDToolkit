@@ -2,7 +2,7 @@ namespace DDDToolkit.Supporting.Membership.EntityFramework;
 
 /// <summary>
 /// The ways a caller can hold one key on a resource, as the rules say it for that key. Several can apply to
-/// one key: an owner holds every key of the resource, a role may give it too, and it may be held from above.
+/// one key: an owner holds a permission the rules give an owner, a role may give it too, and it may be held from above.
 /// </summary>
 [Flags]
 internal enum MemberHeldBy

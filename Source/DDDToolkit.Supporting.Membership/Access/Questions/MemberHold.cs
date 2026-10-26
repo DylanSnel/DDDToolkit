@@ -27,9 +27,8 @@ namespace DDDToolkit.Supporting.Membership.Access;
 /// <param name="Until">
 /// The first moment the caller no longer holds the key on the resource, as its membership and its roles stand
 /// now, or <see langword="null"/> when the hold has no end: so for the application's own work, and for a key
-/// the resource's owner holds by owning it, which is every key the rules state
-/// (<see cref="MembershipRules.Keys"/>). A key the rules do not state the owner holds as any member does,
-/// through a role, and until that role ends. A member holds a key that being a member gives until its
+/// the resource's owner holds by owning it, the permissions marked <c>Owner</c>
+/// (<see cref="MembershipRules.OwnerKeys"/>). The owner holds no other key by owning, and holds no role. A member holds a key that being a member gives until its
 /// membership ends, and a key a role gives until the last of its roles that give the key now ends, or its
 /// membership if that ends sooner; a role that only starts later does not lengthen it.
 /// <see langword="null"/> as well when the key is not held (<paramref name="Via"/> is <see langword="null"/>).

@@ -19,7 +19,7 @@ namespace Examples.Tenancy.Projects.Domain.Aggregates.ProjectRoles;
 /// <para>
 /// Declared with the Membership package's role template, which keeps what a role is: its name and description,
 /// its keys, chosen from what the rules let a crew role give, whether it is archived, and which starter role it
-/// was made from, so the crew lead's role is found whatever the tenant has called it since. The tenant is this
+/// was made from, so a starter role is made once whatever the tenant has called it since. The tenant is this
 /// application's column, set here and kept to by Tenancy's own rule, like every row of a tenant. The rules are
 /// handed in, never kept: a role is a row, and the rules are the module's one declaration of what a crew role may
 /// give and of the codes it refuses under.
@@ -82,10 +82,10 @@ public sealed partial class ProjectRole
 
     /// <summary>
     /// Archives the role: it gives nothing from then on and is given to nobody, and stays on the crews that hold
-    /// it, so what they held still has a name. The crew lead's role, which every owner holds, is not archived.
+    /// it, so what they held still has a name. Any role is archived alike: a project's owner holds none.
     /// </summary>
-    /// <param name="rules">The rules of the projects' crews, which name the owner's role.</param>
-    /// <exception cref="Exceptions.RefusalException"><c>projects.role-archived</c>, <c>projects.owner-role-stays</c>.</exception>
+    /// <param name="rules">The rules of the projects' crews.</param>
+    /// <exception cref="Exceptions.RefusalException"><c>projects.role-archived</c>.</exception>
     public void TakeOutOfUse(MembershipRules rules)
     {
         Archive(rules);

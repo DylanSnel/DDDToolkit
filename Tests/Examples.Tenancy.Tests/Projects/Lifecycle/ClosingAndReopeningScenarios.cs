@@ -8,7 +8,7 @@ namespace Examples.Tenancy.Tests.Projects.Lifecycle;
 
 /// <summary>
 /// Closing a project and reopening it, both with one key, <c>projects.close</c>, held through the crew or the
-/// organization. Leo owns Pier 7 and leads its crew, Vic observes it, and Rhea manages North, where it is.
+/// organization. Leo owns Pier 7, Vic observes it, and Rhea manages North, where it is.
 /// </summary>
 /// <remarks>
 /// Every scenario closes a project, so each makes a host of its own.
@@ -121,7 +121,6 @@ public sealed class ClosingAndReopeningScenarios(SampleHosts sample) : IClassFix
             "Harbor wall",
             Harbor.Root,
             Harbor.Administrator.Id,
-            Harbor.ProjectRoles[SampleCatalogue.CrewLead],
             DateTimeOffset.UtcNow);
 
         var reopenOpen = () => project.Reopen();

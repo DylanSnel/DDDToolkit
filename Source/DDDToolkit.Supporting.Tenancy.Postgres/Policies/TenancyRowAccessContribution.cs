@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using DDDToolkit.Abstractions.Attributes;
@@ -154,8 +155,11 @@ namespace DDDToolkit.Supporting.Tenancy.Postgres;
 /// against SQL an attacker runs on its connection, which can switch roles and set anything.
 /// </para>
 /// </remarks>
-public class TenancyRowAccessContribution : IRowAccessContribution
+public class TenancyRowAccessContribution : IRowAccessContribution, ICallerFunctions
 {
+    /// <summary>The ids of the seat and the unit each model keeps, read once per model.</summary>
+    private static readonly ConditionalWeakTable<IModel, Ids> IdsOfModels = new();
+
     /// <summary>What was written for each model, per set of token roles the export maps.</summary>
     private readonly ConditionalWeakTable<IModel, ConcurrentDictionary<string, Answer>> _answers = new();
 
@@ -313,6 +317,56 @@ public class TenancyRowAccessContribution : IRowAccessContribution
             roles.Resolve(RowAccessRoles.SystemIn),
             RemovesOldHistory: export.WriteGrants && roles.System is not null);
     }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <see cref="TenancyFunctions.CallerSeat"/> for the application's seat id, where the context maps Tenancy's
+    /// tables or its read model, which knows it: so a resource whose members are seats has its functions ask the
+    /// caller's seat without its rules naming one.
+    /// </remarks>
+    public DatabaseFunction? CallerAs(DbContext context, Type id)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(id);
+
+        return IdsOf(context.Model).Seat == id ? TenancyFunctions.CallerSeat : null;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <see cref="TenancyFunctions.UnitsWhereIHold"/> for the application's unit id, where the context maps Tenancy's
+    /// tables or its read model: so a resource that hangs at a unit is reached from above through Tenancy's grants
+    /// without its rules naming a function.
+    /// </remarks>
+    public DatabaseFunction? PlacesWhereCallerHolds(DbContext context, Type place)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(place);
+
+        return IdsOf(context.Model).Unit == place ? TenancyFunctions.UnitsWhereIHold : null;
+    }
+
+    /// <summary>The seat id and the unit id a model keeps, read off the rights it maps, Tenancy's own or its read model's.</summary>
+    private static Ids IdsOf(IModel model)
+        => IdsOfModels.GetValue(model, static built =>
+        {
+            foreach (var entityType in built.GetEntityTypes())
+            {
+                for (var type = entityType.ClrType; type is not null && type != typeof(object); type = type.BaseType)
+                {
+                    if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(SeatRight<,,,>))
+                    {
+                        var arguments = type.GetGenericArguments();
+                        return new Ids(arguments[1], arguments[2]);
+                    }
+                }
+            }
+
+            return new Ids(null, null);
+        });
+
+    /// <summary>The seat id and the unit id of a model, where it keeps them.</summary>
+    private sealed record Ids(Type? Seat, Type? Unit);
 
     /// <summary>What was written for one model, <see langword="null"/> included.</summary>
     private sealed record Answer(RowAccessContributionResult? Result);

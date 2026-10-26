@@ -290,7 +290,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   cases' types, and HotChocolate's error filter writes the reasons as a list of objects. Requirement attributes stacked
   on one request are `All` of their calls, in the order they are written above it, as several `[Authorize]` are in
   ASP.NET Core: `[RequiresPlan(Plan.Pro)] [RequiresKey(BoardKeys.Export)]` is
-  `All(PlanAtLeast.RequiresPlan(Plan.Pro), TenancyAccess.ForTheWholeTenant("boards.export"))`, a module's own attribute
+  `All(PlanAtLeast.RequiresPlan(Plan.Pro), TenancyAccess.AtTenant("boards.export"))`, a module's own attribute
   stacking as a package's does, and a marker keeps saying where the key of `[RequiresKey]` is held. A request with
   attributes of its own that derives from one carrying them holds to both, its base's first, as `[Authorize]` on a
   controller and on the one it derives from do, with the base's markers, a bare one on the base record's parameter
@@ -315,8 +315,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   never with `[AtUnit]`; beside `[OnResource]` the caller's own way through still sees the resource,
   `Any(All(Own(member), MemberAccess.Sees(key, resource, version)), MemberAccess.On(key, resource, version))`, so the
   resource is read, refused as `not-found` where the caller does not see it, its version compared and its hold kept
-  for the expert hold on either way. `MemberAccess.Sees` is Membership's new case for it, and a resource whose rules
-  name `changeMembersKey` has its member rows locked to that key in the database, so the handler saves the caller's own
+  for the expert hold on either way. `MemberAccess.Sees` is Membership's new case for it, and a resource with a
+  permission marked `LocksMembers` has its member rows locked to it in the database, so the handler saves the caller's own
   place as the application's own work once the request is the one in hand (the docs show it). `[OwnOnly]` on the
   request with `[Own]` on the member is `Own(member)` alone. What the caller's own is, an `ICallersOwn<TValue>` says (`TValue? Find(Caller caller)`): the core
   for a `Guid`, the caller's verified identity, with nothing registered; Tenancy for the application's seat id, the
@@ -1535,21 +1535,24 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `TenancyChoicesExportTests` run the exporter's build step with a read rule on its seat, and with containment
   off, and find the default's policy, and `key_is_contained`, the one change to the access file. See
   [Who reads the seats](docs/tenancy.md#who-reads-the-seats-a-default-you-may-replace).
-- **Tenancy: a module states its keys once.** A module marks the static list it declares its permission keys on
-  with `[TenancyPermissions]`, and states them nowhere else. Tenancy's generator, which now ships inside
-  `DDDToolkit.Supporting.Tenancy` in `analyzers/dotnet/cs` and is no package of its own, writes
+- **Tenancy: a module states its keys once.** A module declares its permissions as the public constants of a
+  static class marked `[Permissions]`, each with its level, the attribute that says where it is asked: `[AtTenant]`
+  for the whole tenant, `[AtUnit]` at a unit, or Membership's `[On<TResource>]` on a resource with members. It states
+  them nowhere else. Tenancy's generator, which now ships inside `DDDToolkit.Supporting.Tenancy` in
+  `analyzers/dotnet/cs` and is no package of its own, writes the module's list from them, `DeclaredPermissions.All`,
+  under the module the project declares, each permission with its summary, or its level's `Description`, as its
+  text (translated as a refusal's text is, under the permission's key, `IFailureLocalizer.Text`), and with the
+  `Implies` and `Retired` its level says. It writes
   `TenancyPermissionsOfModules` into every application that references Tenancy, the program the modules are
   composed in, whether it declares a module or not, and into every library that references it and declares no
   module, with `DDD_Module` or `[assembly: Module]`: an internal class in the namespace named after the project's
   assembly, with `All`, every module's keys, one list after the other, and
   `services.AddTenancyPermissionsOfModules()`, which adds them as one contribution. The host makes that one call,
-  and the Supabase export hands Tenancy's row access contribution the same marked lists (see Changed), so neither
-  names a module, and a module that is added reaches both with the next build. While no module marks a list,
-  `All` is empty and both still compile. A marked list the composing project could not read is the new error
-  DDD00063 where it is declared: one that is not static, has no getter, is a static virtual or abstract member of
-  an interface, is declared in a generic type, an extension block or a file-local type, is no sequence of
-  `Permission`, or, in a library, whether it declares a module or not, is not public. Only an application may
-  keep a list of its own internal. The same list added twice, by the host's call and by the module's own
+  and the Supabase export hands Tenancy's row access contribution the same lists (see Changed), so neither
+  names a module, and a module that is added reaches both with the next build. While no module declares a
+  permission, `All` is empty and both still compile. A `[Permissions]` class that is not static, a constant without
+  a level and a key declared twice are the new error DDD00092, and a list a module marks `[TenancyPermissions]` by
+  hand, which would say its keys a second time, DDD00095. The same list added twice, by the host's call and by the module's own
   `AddTenancyPermissions`, is refused at start-up with one problem that names its keys and the call to take out.
   A pack that names a key the catalogue does not know, and a question about one, now say how a module's keys
   reach the catalogue, which is what a host that leaves the call out meets. `AddTenancyPermissions` stays, for
@@ -1558,10 +1561,10 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   while they reference the same modules. See
   [A module states its keys once](docs/tenancy.md#a-module-states-its-keys-once). From 3.2.0-preview.1 or
   3.2.0-preview.2:
-  - Mark each module's list of keys with `[TenancyPermissions]`, make it public, and take
-    `services.AddTenancyPermissions(thatList)` out of the module's registration.
+  - Declare each module's keys as the constants of a `[Permissions]` class, each with its level (see Changed), and
+    take `services.AddTenancyPermissions(thatList)` out of the module's registration.
   - Call `services.AddTenancyPermissionsOfModules()` once in the host, with `using <the host's assembly name>;`
-    in a top-level `Program.cs`. The export lists no keys either: it finds the marked lists itself, and the
+    in a top-level `Program.cs`. The export lists no keys either: it finds the modules' lists itself, and the
     application marks its own part of the catalogue `[TenancyCatalogue]` (see Changed).
 - **Tenancy: no project writes the nine types.** The project that declares a module's Tenancy classes gets
   `TenancyUseCases` from the toolkit's generator, whatever the module is called: a class of the package's class's
@@ -1647,7 +1650,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   [Operators](docs/tenancy.md#operators).
 - **Tenancy: what a request requires, and the check that decides it.** `TenancyRequirement` is the set of
   cases a command or query declares where Tenancy is the one that knows, spelled with `TenancyAccess`:
-  `InTenant()`, a caller who works in the tenant; `ForTheWholeTenant(key)`; `AtUnit(key, unit)`, a key held at
+  `InTenant()`, a caller who works in the tenant; `AtTenant(key)`; `AtUnit(key, unit)`, a key held at
   a unit or above it, closed over the application's unit id from the argument; and `RequiresOperator()`, one of
   the application's operators. Each is refused with Tenancy's own codes. A request handed to a use case of the
   package says the first thing that use case asks, which the request itself can name, and the use case asks
@@ -1889,22 +1892,31 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   declares a member class with `[Member<TId, TMemberId, TRoleId, TResource>]`, naming the resource it is a
   member of, keeps its aggregate as it was, and changes the members through a `MemberList`, which the
   package's generator writes on that aggregate as a private `Members` property, from the one collection of
-  the member class, the one property of the member's id, which is the owner, and the one static
-  `MembershipCodes` the aggregate declares. An aggregate that declares a list itself is left alone, and one
+  the member class and the one property the aggregate marks `[Owner]`, of the member's id. It writes the
+  resource's codes with it, `Codes`, under the resource's name, the plural of its class's (`Document` is
+  `documents`, `[Members("People")]` says another), unless the aggregate declares a static `MembershipCodes` of its
+  own. An aggregate that declares a list itself is left alone, and one
   that has none and cannot be given one is told what stands in the way, DDD00059. A member class that names no
   aggregate root, or a resource that keeps its members as another member class, is DDD00060, on the member
   class; the list of the class the resource keeps is still written, so the resource's own methods compile.
   The list keeps the
   rules: a member is on the list once and holds a role once, each for a period of its own, a role counts only
-  inside its membership, and the owner stays, with no end, in the owner's role. Adding a member and giving
+  inside its membership, and the owner stays, with no end, holding no role: it holds what the permissions give an
+  owner, by owning, and `Members.Open(now)` puts it on the list. Adding a member and giving
   a role take the moment they are done at, next to the period: what has ended by then is replaced, and a
   membership or a role that still runs, or is still to start, is not, whenever the new one would start.
-  Naming an owner answers everything it changed (`OwnerNamed`): whether the membership began anew, the roles
-  that went, the end it lifted and the start it moved. An owner's place has no end and keeps none after the
-  resource is handed on, and the roles held in that membership are kept to the period it had: they stop
-  where it would have, and count no sooner than it was to start. `MembershipRules` declares
-  once, as data, who holds which key: the keys of the resource, every one of which its owner holds, and the
-  roles with the keys each gives. `IMemberQuestions<TResourceId>`, `MemberAccess.On` and `SeenWith` with their
+  Naming an owner, `NameOwner(member, formerOwner, now)`, takes the roles the new owner held and makes the owner
+  before what the command says, `FormerOwner.StaysAs(role)` or `FormerOwner.Leaves`, and answers everything it
+  changed (`OwnerNamed`): whether the new owner was added or its membership began anew, the roles that went, the
+  end it lifted, the start it moved and what the owner before became. An owner's place has no end and keeps none
+  after the resource is handed on. A resource's permissions are declared once, as the constants of a
+  `[Permissions]` class marked `[On<TResource>]`, each saying whether the owner holds it by owning (`Owner`, unless
+  said), whether every member does (`EveryMember`), whether a role can give it (`InRoles`), whether it reaches from
+  above (`FromAbove`), and whether it is the one the database locks the members or the owner to (`LocksMembers`,
+  `LocksOwner`); the generator hands them to the rules. `MembershipRules.For<TResource>(roles, ...)` declares
+  once, as data, who holds which key: the resource's permissions, and where the roles come from, `Roles.Fixed`
+  in code, `Roles.Custom` made by a customer or `Roles.External` kept elsewhere, with `OtherKeys` for keys of other
+  modules a role may give. `IMemberQuestions<TResourceId>`, `MemberAccess.On` and `SeenWith` with their
   check, and `MemberAdmission` are each asked for by the resource, so an application has as many kinds of
   resource with members as it needs, in one project too. A resource is seen by its members now and by its owner,
   from the moment its row names the owner. `SeenWith` refuses nobody for want of the key, and refuses a caller
@@ -1914,19 +1926,20 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   command requires the key the application chooses, and the questions say until when its caller holds that
   key (`HoldAsync`, `MemberHold.Until`, no end for the owner and for the application's own work), for a rule
   the application writes itself, such as that nobody gives a role for longer than they hold the key. The application itself
-  (`Caller.System`) holds every key; its work in a scope (`Caller.SystemIn`) holds nothing on a resource
-  unless the resource's rules name that scope, `systemScopes`. Refusals carry the
+  (`Caller.System`) holds every key; its work in a scope (`Caller.SystemIn`) holds every key on a resource whose
+  rules let that scope through, the scope of the resource's own module unless `systemScopes` names others, and
+  nothing on any other. Refusals carry the
   resource's own codes, in English and Dutch, and registering a resource offers the texts under them, so
   an application that localizes its failures adds no line for them. The package needs no dispatcher and no
-  Tenancy: members are users, known by their id or by a claim only the server can change (one in
-  `user_metadata` is refused), unless the application says who else they are. For a screen that lists the
+  Tenancy: who a member is follows from the member id, the caller's user id for one over a `Guid`, or a claim only
+  the server can change (one in `user_metadata` is refused), unless the application says who else they are. For a screen that lists the
   members of a resource, `MemberOverviews.From(members, owner, now)` puts them in one order, the owner first,
   each with its roles and whether they count now, and reads nothing. It comes in three
   packages. See [Membership](docs/membership.md).
 - **Membership stored with Entity Framework.** `DDDToolkit.Supporting.Membership.EntityFramework` maps a
   resource's members into the application's own context,
-  `modelBuilder.Entity<Document>().HasMembers(document => document.Shares, document => document.OwnerId)`,
-  as two tables owned by the resource, under the application's names (`MemberTableNames`) and the resource's
+  `modelBuilder.Entity<Document>().HasMembers(document => document.Shares)`, with the owner the property the
+  resource marks `[Owner]`, as two tables owned by the resource, under the application's names (`MemberTableNames`) and the resource's
   whole key, the parts it declares with `[KeyPart]` included, with who a member's row is of fixed once the row
   is there (`IsFixedAfterInsert`: a save that changed it is refused, and exported privileges leave it out of
   UPDATE), and registers a
@@ -1973,52 +1986,56 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 - **Membership on Postgres.** `DDDToolkit.Supporting.Membership.Postgres` declares
   `MembershipRowAccessContribution<TMember>`: for each kind of resource whose rules the application marks
   `[MembershipRules<TMember>]`, the export of every application that references the package writes four set functions
-  under the names the rules give them, the resources the caller is a member of, those where a role gives it
+  named after the resource, the resources the caller is a member of, those where a role gives it
   a key, those it sees, as a member or as the owner, so a read rule that asks it lets an owner write the member
   rows of a resource it has just opened, and those it holds a key on, as a member, as the owner or from above.
   What the rules
-  have the application answer, the functions ask of functions the application defines, each by the logical
-  name the rules give it, `owner/name`: a text, so nothing refers to what defines them, and the export
-  refuses a name nothing it is written with defines. The four run as their owner with an empty search path
-  and are executable by the database roles the rules name; the application's own need be executable by no
+  have the application answer, the functions ask of functions the application defines, each by the
+  `DatabaseFunction` the rules name, its logical name `owner/name`, which the application declares once, so
+  nothing refers to what defines them, and the export refuses a name nothing it is written with defines. The
+  four run as their owner with an empty search path and are executable by the database roles the application's
+  row access rules on the resource are written for, never `anon`, and by `ddd_system_in` while the rules let a
+  scope through; the application's own need be executable by no
   caller, and the two that take a key are never asked without one. The application's own row access rules
   ask the functions, and the member tables follow the resource's rules. Since those rules let whoever may
-  change a resource write its member rows and its owner column, past the application, the rules name the
-  keys the application's commands require for that, and a lock is written from them for the database roles
-  the rules name: `changeMembersKey` gives a restrictive policy on both member tables, and `changeOwnerKey`
-  a trigger that keeps the owner column as it was unless the caller held the key, refusing as the toolkit's
-  access guards do, so a save it refuses is `access.refused` rather than a failure of the server. Where the roles are kept
-  for the resource, `changeMembersKey` gives a second restrictive policy, on the table of the roles a member
+  change a resource write its member rows and its owner column, past the application, the permissions mark the
+  ones the application's commands require for that, and a lock is written from them for every role that may ask
+  the functions: `LocksMembers` gives a restrictive policy on both member tables, and `LocksOwner`
+  a trigger that keeps the owner column as it was unless the caller held the permission, refusing as the toolkit's
+  access guards do, so a save it refuses is `access.refused` rather than a failure of the server. Where a customer
+  makes the roles, `LocksMembers` gives a second restrictive policy, on the table of the roles a member
   holds: a role added or changed there is one the caller sees in the application's role table, asked as the
   caller, so the application's own rule on that table, which shows a caller its own customer's roles, keeps
   another customer's off a member list written past the application. All of it only narrows what the
   application's rules allow, and no code of the package gates a command by it. Work in a scope the rules
-  name (`systemScopes`) is answered every resource by the functions, as in C#.
+  let through is answered every resource by the functions, as in C#, and work in another scope writes no member
+  row.
   `MembershipPostgresChecks.EnsureFunctionsAreInPlaceAsync` refuses, at start-up, a database that lacks a
   function of a registered resource, has one written from other rules than the resource runs with or by
   another version of the package, the names of the application's functions and what a member's role gives
-  among them, or lets other roles execute one than the rules name; one whose lock is not in place; one whose
-  kept roles have lost the trigger that keeps the owner's role in use; and one whose table of kept roles has
-  no row security and may be written by a role the rules name. It returns,
-  and logs as a warning, a line for each resource whose rules name no key for the lock, and refuses nothing
-  for that.
+  among them, or lets other roles execute one than its `-- Executed by:` line names; one whose lock is not in
+  place; and one whose table of a customer's roles has no row security and may be written by a role that may ask
+  the functions. It returns, and logs as a warning, a line for each resource whose permissions mark none for the
+  lock, and refuses nothing for that.
 - **A membered resource's functions are asked by its id, and named by its rules.** The two functions that answer
   access, the resources the caller sees and those it holds a key on, say so for the resource's id, so a rule asks
   them through a one-line `[ResourceAccessContract<DocumentId>(ResourceAccessSet.Seen)]` and never by name; the
   `[AccessFunctions(Owner = "documents")]` class with the functions' names in it is no longer needed, and still
-  works. The names are the rules' alone: `MembershipFunctions.For` the rules' name, `documents_i_see` and so on,
-  unless the rules keep names a database already has with `functions:`. A rule that asks a resource whose
+  works. The names follow from the resource's name alone, `documents_i_see` and so on: nothing of the
+  application's names them. A rule that asks a resource whose
   contribution the export is not written with is refused, naming the rule and the resource. See
   [On Postgres: the second lock](docs/membership.md#on-postgres-the-second-lock).
 - **Membership beside an organization.** A resource's rules say three things apart from each other, each with
   the default a resource of plain users has, and any of the one goes with any of the others. Who a member is:
-  the caller's id, a claim, or an id the application resolves for the caller, `MemberSource.Resolved(...)`,
-  answered through `ICallerMember<TResourceId, TMemberId>`. Where the roles come from: declared in the rules,
-  or kept elsewhere, `rolesKeptElsewhere: new(...)`, where the application answers which of them give a key
-  (`IRolesWithKey<TResourceId, TRoleId>`) and which there are (`IMemberRoles`); what such a role gives a
-  member is still cut by the rules' `MemberKeys`. And whether a key held where the resource sits, or above
-  it, reaches the resource: `above: new(...)` with `HasMembers(..., at: ...)`, answered through
-  `IPlacesReached<TResourceId, TPlaceId>`. A caller that holds a key both ways holds it as a member
+  what follows from the member id, a claim, or an id the application resolves for the caller,
+  `MemberSource.Resolved(...)`, answered through `ICallerMember<TResourceId, TMemberId>`. Where the roles come
+  from: declared in the rules, `Roles.Fixed`, or kept elsewhere, `Roles.External(...)`, where the application
+  answers which of them give a key (`IRolesWithKey<TResourceId, TRoleId>`) and which there are (`IMemberRoles`);
+  what such a role gives a member is still cut to what a role may give, `InRoles` and `OtherKeys`. And whether a
+  key held where the resource hangs, or above it, reaches the resource: `reachFromAbove`, with the resource's class
+  marking where it hangs `[At]`, answered through `IPlacesReached<TResourceId, TPlaceId>`. A function of the
+  application's database is named once, as a `DatabaseFunction`, which the rules and the contribution that
+  defines it both read. A caller that holds a key both ways holds it as a member
   (`MemberVia.Members` before `MemberVia.Above`). A key held from above is held for as long as the caller
   sees the resource: with no end the package knows where it sees it from above as well, and until its
   membership ends where it sees it as a member alone (`MemberHold.Until`). So the people of an organization
@@ -2026,30 +2043,28 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   above or without, and the package references no package that keeps an organization. See
   [Beside an organization](docs/membership.md#beside-an-organization).
 - **Roles a customer makes.** A third place a resource's roles can come from, next to the rules and to roles
-  kept elsewhere: rows kept for the resource, `rolesKept: true`. An application declares a role class with
-  `[KeptRole<TRoleId, TResource>]`, an aggregate of its own named for the resource it is a role of, so
+  kept elsewhere: rows kept for the resource, `Roles.Custom(starters: [...])`. An application declares a role
+  class with `[CustomRole<TRoleId, TResource>]`, an aggregate of its own named for the resource it is a role of, so
   several kinds of resource in one project each have theirs, and a member holds a role by that class's id.
   A role has a name, a description, the keys it gives, and is in use or archived; it is made with the
-  application's constructor and changed with `Rename`, `SetKeys` and `Archive`, each under the resource's
+  application's constructor, from a `CustomRoleDraft`, and changed with `Rename`, `SetKeys` and `Archive`, each under the resource's
   rules and each answering what happened (`RoleKeysSet`), so the application raises its own events. A key
-  must be one the rules let a member's role give (`MemberKeys`), which is asked again where the keys are
-  read; a name is trimmed and not empty; an archived role gives nothing from then on, is not given again
-  and stays on the members that hold it; and the role every owner holds is not archived, which on Postgres a
-  trigger on the role table, written from the rules, refuses as well, whoever writes the row. Five refusals come
-  with it, under the resource's codes, in English and Dutch. The roles the rules declare are then the
-  starter roles: `StarterRoles.Missing(rules, rolesOfTheScope)` answers the ones a scope does not have yet,
-  each made once and told by what it was made from (`MadeFrom`), which is also how the owner's role is
-  found after a customer renamed it. Whose a role is, is the application's: it adds its own column, keeps
+  must be one the rules let a member's role give (`InRoles`, `OtherKeys`), which is asked again where the keys
+  are read; a name is trimmed and not empty; an archived role gives nothing from then on, is not given again
+  and stays on the members that hold it. No role is the owner's, so every role is archived alike. Its
+  refusals come with it, under the resource's codes, in English and Dutch. The starter roles:
+  `StarterRoles.Missing(rules, rolesOfTheScope)` answers the ones a scope does not have yet,
+  each made once and told by what it was made from (`MadeFrom`). Whose a role is, is the application's: it adds its own column, keeps
   the rows apart by its own rule, and declares its own unique indexes over that column with `Name` and
-  with `MadeFrom`; the package assumes no customer. `IsKeptRole()` maps the package's part of the role
+  with `MadeFrom`; the package assumes no customer. `IsCustomRole()` maps the package's part of the role
   class, with `MadeFrom` fixed once the row is there (`IsFixedAfterInsert`: a save that changed it is
   refused, and the privileges an export writes leave it out of what a caller may update), and marks whose
   roles they are, so `services.AddPlotMembership<TContext>(rules)` registers the
   resource as before and nothing is registered for the roles. A role's keys are read from its row inside
   the one statement that reads the members, and on Postgres the four functions join the role table of the
-  same context: no port, and no function of the application's. The functions' fingerprint covers that the
-  roles are kept and what a member's role can give, and the start-up check refuses rules that keep the
-  roles over a context that maps no role class. Who may make, change or archive a role is the application's
+  same context: no port, and no function of the application's. The functions' fingerprint covers that a
+  customer makes the roles and what a member's role can give, and the start-up check refuses rules whose roles a
+  customer makes over a context that maps no role class. Who may make, change or archive a role is the application's
   to decide. See [Roles a customer makes](docs/membership.md#roles-a-customer-makes).
 - **Membership with Tenancy.** In an application that has both supporting domains, a member of a resource can
   be a seat of a tenant, and what joins the two is written into the application. Membership's Entity
@@ -2058,14 +2073,37 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `services.AddCourseMembershipWithTenancy<TContext>(rules)` and the class it registers: a member is the
   caller's seat, somebody is made a member while their seat is active, a key held at an organization unit
   reaches the resources at that unit and below it, and, where a member holds roles by Tenancy's role id, the
-  roles are the tenant's own. The application writes the three rule entries,
-  `members: MemberSource.Resolved("tenancy/caller_seat")`, `above: new("tenancy/units_where_i_hold")` and
-  where its roles come from, and that one registration, which refuses rules that take a member from the
-  caller itself. A module that knows the organization only by its ids names the tenant's, the unit's and the
+  roles are the tenant's own. Who a member is follows from the seat id; the rules say where the roles come
+  from and, with `reachFromAbove: true`, that a key held at a unit reaches, and Tenancy's functions answer both
+  in the database without being named, but for the tenant's roles, `Roles.External(TenancyFunctions.RolesWithKey)`.
+  The one registration refuses rules that take a member from the caller's token. A module that knows the organization only by its ids names the tenant's, the unit's and the
   role's id in the call. Nothing is written without Tenancy, or, where a project sees the application's
   seat class, for a member class whose members are not seats. Neither package references the other, and
   the toolkit's own generator names neither. See
   [With Tenancy](docs/membership.md#with-tenancy).
+- **A resource with members is named after its class.** `Board` is `boards`, `CraneBoard` `crane-boards`: the
+  plural of the class's name, which its codes start with, `boards.already-member`, and its four functions in the
+  database are named after, `boards_i_see`. `[Members("People")]` on the class says another, and keeps the name a
+  renamed class had; one that cannot be converted to a code is DDD00091, an error. The build that runs the Supabase
+  export compares the names it writes with those the newest access file recorded, and says once which are gone and
+  which are new, DDD00090, a warning, since a client reads other codes and the database gets new functions. See
+  [Names](docs/membership.md#names).
+- **Permissions on a resource, declared once.** `[On<TResource>]` is the level of a permission asked on a resource
+  with members, a constant of a `[Permissions]` class: `Owner` (the owner holds it by owning, unless `Owner =
+  false`), `EveryMember`, `InRoles`, `LocksMembers`, `LocksOwner` and `FromAbove` say how it is held there, and every
+  level's `Description`, `Implies` and `Retired` what it is. The package's generator hands each project's
+  permissions to `MembershipRules.For<TResource>` when the project is first used. A level on a class that is no
+  resource with members, and a second permission that says `EveryMember`, `LocksMembers` or `LocksOwner` on one
+  resource, are DDD00093; rules made for a resource no permission is declared on, DDD00094. See
+  [The settings of a permission](docs/membership.md#the-settings-of-a-permission).
+- **Where an aggregate hangs: `[At]`.** The core's `[At]` marks the one property of an aggregate root that says where
+  it hangs, a unit of an organization or a bay of a depot, never nullable (DDD00097 otherwise). Rules that reach a
+  resource from above, `reachFromAbove: true` beside a package that keeps the places or
+  `reachFromAbove: DepotFunctions.BaysWhereIHold` beside a place of the application's own, read it, and rules that
+  reach a class that marks none are DDD00098. See [Beside an organization](docs/membership.md#beside-an-organization).
+- **`[OrOwn]` on a resource whose owner holds the key says nothing: DDD00096.** A warning at `[OrOwn]` on the id of a
+  resource with members beside `[OnResource]`, where the required permission is one its owner holds by owning: the
+  owner passes the key already.
 
 #### Samples
 
@@ -2213,11 +2251,12 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     `roles` on each crew member. A role held already is 409 `projects.crew-role-held`.
   - A membership that ended can begin again. `POST /projects/{id}/crew` for a seat whose membership has ended
     puts it on the crew anew, without the roles of the ended membership; giving such a seat a role is 404
-    `projects.member-not-found`; and an owner named from an ended membership holds the lead role and no other.
+    `projects.member-not-found`; and an owner named from an ended membership holds no role.
     In the UI a day picked as "until" counts through that day, and the owner picker marks a seat that is not
     active.
-  - A project's owner holds the crew lead's project role on the crew and keeps it until another owner is named.
-    Naming another owner takes that role from the old owner and nothing else: the seat stays on the crew.
+  - A project's owner is on the crew holding no project role, and holds what the permissions Projects declares
+    give an owner. Naming another owner, `formerOwnerRoleId` says the project role the old owner stays on the crew
+    in; left out, the old owner leaves the crew.
   - A hierarchical tenant's administrators' pack is Access admin, which lists its keys: Tenancy's own,
     `projects.owner.change`, `projects.crew.manage` and `projects.view`. Tenant admin is the flat tenants'.
     One of the demonstration's people, maud, holds Access admin in harbor, next to ada, and her rename of a
@@ -2228,23 +2267,22 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 - **Tenancy sample: crews on the Membership package, with the project roles each tenant keeps.** A crew member
   is declared with the [Membership](docs/membership.md) package's member template,
   `[Member<CrewMemberId, SeatId, ProjectRoleId, Project>]`, and a project keeps its crew through the member list
-  the package writes on it. The projects' rules, `ProjectMembership`, say what an owner holds, what a crew role
-  may give, and which keys change a crew and name an owner. The roles a crew holds are project roles,
-  `[KeptRole<ProjectRoleId, Project>]`: each tenant's own, made from three starter roles when it is set up
+  the package writes on it. The projects' permissions, `ProjectPermissions`, say what an owner holds, what a crew
+  role may give, and which keys change a crew and name an owner, and the rules, `ProjectMembership`, are made from
+  them. The roles a crew holds are project roles, `[CustomRole<ProjectRoleId, Project>]`: each tenant's own, made from three starter roles when it is set up
   (`SetUpProjectRoles`, system work in the tenant, which the seeding sends), and made, renamed, re-keyed and
   archived by whoever holds `tenancy.roles.manage` for the whole tenant: `GET` and `POST /project-roles`,
   `PUT /project-roles/{id}`, `PUT /project-roles/{id}/keys`, `POST /project-roles/{id}/archive`, the field
   `projectRoles` and the mutations `projectRoleCreate`, `projectRoleRename`, `projectRoleKeysSet` and
   `projectRoleArchive`, and the UI's Crew roles page. A role of the organization is refused on a crew, 400
   `projects.role-not-for-members`, a project role with a key no crew gives is not made, 400
-  `projects.key-not-for-members`, and the crew lead's is not archived, 409 `projects.owner-role-stays`. The
+  `projects.key-not-for-members`. The
   access check for a key on a project, the reaches and the four functions the database asks are the package's,
-  under the names the functions had: `AddProjectMembershipWithTenancy` and
+  named after the projects: `AddProjectMembershipWithTenancy` and
   `AddProjectMemberAccess<IProjectsRequest>()` register them, and the exported access file writes the
   functions and the lock that holds a crew's rows to `projects.crew.manage` (or `projects.owner.change`, which
   writes them too) and to the project roles the seat sees, its own tenant's, and a project's owner to
-  `projects.owner.change`; the crew lead's project role is archived by no statement, and no caller changes
-  where a project role came from. Two rules of the module's own hold the rest of what a crew and an owner
+  `projects.owner.change`; and no caller changes where a project role came from. Two rules of the module's own hold the rest of what a crew and an owner
   are: a seat opens a project for itself unless it may name owners at the unit, as `OpenProject` asks, and a
   crew takes only seats of the project's tenant (`CrewSeatsOfTheProjectsTenant`). The rule that lets a seat
   change the project roles asks whether it manages the tenant's roles, and Tenancy's own policy keeps the rows
@@ -2582,13 +2620,12 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   (`Access`), holds the name to that command's rule: the seat itself, or a seat that manages seats for the whole
   tenant. The job title has no command and no rule, and is as writable as the row. The exporter writes the access
   file `*_access.tenants.ddd.sql` that adds the rule's trigger, with Tenancy's own changed one.
-- **The Tenancy sample states each module's keys once.** `ProjectCatalogue.Permissions` and
-  `InspectionCatalogue.Permissions` are marked `[TenancyPermissions]`, and neither module's registration adds
-  them any more. The host adds both with the generated `AddTenancyPermissionsOfModules()`, and the program
-  that exports finds the same marked lists and writes Tenancy's policies from them and the part of the
-  catalogue `SampleCatalogue` marks `[TenancyCatalogue]`; the catalogue's project no longer lists the modules' keys.
-  `ModuleKeysTests` holds the host to one contribution of every module's keys, and every list a module declares
-  to its mark; the exported access files are unchanged.
+- **The Tenancy sample states each module's keys once.** `ProjectPermissions` and `InspectionPermissions`, two
+  `[Permissions]` classes, declare them, and neither module's registration adds them any more. The host adds both
+  with the generated `AddTenancyPermissionsOfModules()`, and the program that exports finds the same lists and
+  writes Tenancy's policies from them and the part of the catalogue `SampleCatalogue` marks `[TenancyCatalogue]`;
+  the catalogue's project no longer lists the modules' keys. `ModuleKeysTests` holds the host to one contribution
+  of every module's keys, and every module's list to the one Tenancy's generator writes.
 - **The Tenancy sample declares its modules by folder.** `Examples/Tenancy/Modules/Directory.Build.props` names
   every project's module after the folder it is in with `DDD_Module`, which declares it, and holds
   DDD00022 and DDD00023 as errors for all of them; the projects' `Module.cs` files are gone, and an API project's
@@ -2878,7 +2915,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     for a caller in no tenant where it was `access.system-only`.
   - `AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.AllowAnonymous();` is `[AllowAnonymous]`
     on the request, `=> AccessRequirement.SignedIn();` is `[SignedIn]`, `=> TenancyAccess.InTenant();` is `[InTenant]`,
-    `=> TenancyAccess.RequiresOperator();` is `[RequiresOperator]`, `=> TenancyAccess.ForTheWholeTenant(key);` is
+    `=> TenancyAccess.RequiresOperator();` is `[RequiresOperator]`, `=> TenancyAccess.AtTenant(key);` is
     `[RequiresKey(key)]`, `=> TenancyAccess.AtUnit(key, Unit);` is `[RequiresKey(key)]` with `[AtUnit]` on `Unit`,
     `=> MemberAccess.On(key, Document, ExpectedVersion);` is `[RequiresKey(key)]` with `[OnResource]` on `Document`
     and `[ExpectedVersion]` on `ExpectedVersion`, and `=> MemberAccess.SeenWith<DocumentId>(key);` is
@@ -2941,7 +2978,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   - `new AccessRequirement.Open(reason)`: `AccessRequirement.AllowAnonymous()` where anyone may send the
     request, or `AccessRequirement.SignedIn()` where the caller only had to be signed in.
   - `new TenancyRequirement.DecidedByThePackage()`: what the package's use case asks first and the request can
-    name, `TenancyAccess.InTenant()`, `TenancyAccess.ForTheWholeTenant(key)` or `TenancyAccess.AtUnit(key,
+    name, `TenancyAccess.InTenant()`, `TenancyAccess.AtTenant(key)` or `TenancyAccess.AtUnit(key,
     unit)`, and `AccessRequirement.SignedIn()` for accepting an invitation or listing one's own seats. The use
     case still asks the rest. The sample's requests show each
     ([What a request requires of its caller](docs/tenancy.md#what-a-request-requires-of-its-caller)).
@@ -2951,9 +2988,9 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     sample's `MarkTenantAsDemo` does.
   - `new TenancyRequirement.OperatorsOnly()`: `TenancyAccess.RequiresOperator()`, whose record is now
     `TenancyRequirement.Operator`.
-  - `new TenancyRequirement.InTenant()`, `new TenancyRequirement.ForTheWholeTenant(key)` and
+  - `new TenancyRequirement.InTenant()`, `new TenancyRequirement.AtTenant(key)` and
     `new TenancyRequirement.AtUnit<TUnitId>(key, unit)` still compile; `TenancyAccess.InTenant()`,
-    `.ForTheWholeTenant(key)` and `.AtUnit(key, unit)` are how a request spells them now.
+    `.AtTenant(key)` and `.AtUnit(key, unit)` are how a request spells them now.
   - What a client is answered changes in three places. `access.system-only` where `tenancy.system-only` was,
     from the door and from Tenancy's provisioning, suspending, reactivating and closing a tenant
     (`TenancyRefusals.SystemOnly` is gone). `access.not-signed-in` for a caller who did not sign in, on a
@@ -2968,7 +3005,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   - `public sealed class ShopTenancyRowAccess() : TenancyRowAccessContribution(TenancyCatalogue.Build(ShopCatalogue.Application, ShopModules.Permissions), ["operator"])`
     and its `[assembly: UseRowAccessContribution(...)]`: mark the application's part `[TenancyCatalogue]`, a static
     `ApplicationCatalogue`, and the operators' token roles `[TenancyOperators]`, a static list of strings; the
-    modules' keys are found where they are marked `[TenancyPermissions]`. With nothing marked the policies are
+    modules' keys are found in the lists Tenancy's generator writes from their `[Permissions]` classes. With nothing marked the policies are
     written from `new ApplicationCatalogue()`, as a host that leaves `TenancyOptions.Catalogue` unset runs with.
   - `public sealed class DocumentMembershipFunctions() : MembershipRowAccessContribution<DocumentShare>(DocumentMembership.Rules)`
     and its line: mark the rules `[MembershipRules<DocumentShare>]`, once for each kind of resource.
@@ -3403,6 +3440,71 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   differently. Every schema with the conventions now describes them alike, whether it reads XML documentation or
   not. Your own types are described from your own XML documentation, as before. See
   [Typed errors in mutation payloads](docs/graphql.md#typed-errors-in-mutation-payloads).
+
+- **Membership: an owner holds no role, and a resource's rules are made from its permissions.** Decided for
+  3.2.0-preview.5. The owner of a resource holds the permissions said for the owner, by owning it, and nothing
+  through a role: there is no owner's role anywhere, so a project, a board or a document opens with its owner on
+  the list holding none, a customer archives any role, and naming another owner says what the owner before
+  becomes. A resource's permissions are constants of a `[Permissions]` class marked `[On<TResource>]`, and its rules
+  are made through its type, which says its name and codes. Who may ask the database's functions follows from the
+  application's row access rules on the resource, and the scope whose system work holds every key is the module's
+  own unless the rules say otherwise. Nobody uses the packages yet, so the old names are gone with no alias.
+  - From 3.2.0-preview.4, was, now:
+    - `new MembershipRules("documents", keys: [...], roles: [...], ...)`: `MembershipRules.For<Document>(Roles.Fixed([...]))`,
+      with the keys declared as constants of a `[Permissions]` class marked `[On<Document>]`. Rules declared by hand
+      with a name are `MembershipRules.Declare`, hidden, for tests.
+    - the rules' name, `"documents"`: the class's name made plural; `[Members("Documents")]` on the class where it differs.
+    - `codes: Document.Codes`: the `Codes` the generator writes on the resource, or a static `MembershipCodes` the
+      resource declares itself.
+    - `keys:`, every one of which the owner held: `[On<Document>]` on each permission, `Owner = false` for one the
+      owner does not hold by owning; `rules.Keys`: `rules.Permissions`, and `rules.OwnerKeys` for those the owner holds.
+    - `seeKey: "documents.view"`: `[On<Document>(EveryMember = true)]`; `rules.SeeKey`: `rules.EveryMemberKey`.
+    - `memberKeys: MemberKeys.Only(...)` and `MemberKeys.AllBut(...)`: `InRoles = false` on a permission no role gives,
+      and `otherKeys: OtherKeys.AllBut(...)` or `OtherKeys.All` on `Roles.Custom` or `Roles.External` for keys of other
+      modules; `MemberKeys` is gone, and `rules.MemberKeys` is `rules.RoleKeys`.
+    - `roles: [...]`: `Roles.Fixed([...])`; `rolesKept: true` with the roles as starters:
+      `Roles.Custom(starters: [...])`; `rolesKeptElsewhere: new("tenancy/roles_with_key")`:
+      `Roles.External(TenancyFunctions.RolesWithKey)`; `RolesKeptElsewhere` is gone; `rules.RolesKept` is
+      `rules.Roles.Kind == RolesKind.Custom`.
+    - `above: new("tenancy/units_where_i_hold")`: `reachFromAbove: true`, beside Tenancy, or
+      `reachFromAbove: DepotFunctions.BaysWhereIHold` beside a place of the application's own; `rules.Above` is
+      `rules.ReachFromAbove`; and `HasMembers(..., at: row => row.UnitId)`: `[At]` on `UnitId`.
+    - `members: MemberSource.Resolved("tenancy/caller_seat")`: left out, since who a member is follows from the
+      seat id (`MemberSource.Inferred`); `MemberSource.Resolved("depot/caller_porter")`:
+      `MemberSource.Resolved(DepotFunctions.CallerPorter)`, a `DatabaseFunction`.
+    - `changeMembersKey:` and `changeOwnerKey:`: `[On<Document>(LocksMembers = true)]` and `LocksOwner = true`;
+      `rules.ChangeMembersKey` and `rules.ChangeOwnerKey`: `rules.MembersLockKey` and `rules.OwnerLockKey`.
+    - `grantTo: [...]`: gone; the roles the application's row access rules on the resource are written for, never
+      `anon`, and `ddd_system_in` while the rules let a scope through.
+    - `functions: new MembershipFunctions(...)`: gone; the functions are named after the resource, and
+      `MembershipFunctions.For(name)` answers their names.
+    - `systemScopes:` left out, no scope: the scope of the resource's own module; `systemScopes: []` for none.
+    - `ownerRole: "..."`, `rules.OwnerRole`, `IMemberRoles.FindOwnerRoleAsync`, `MemberAdmission.OwnerRoleAsync`, the
+      refusals `no-owner-role` and `owner-role-stays` and the trigger that kept the owner's role in use: gone.
+    - `HasMembers(resource => resource.Members, resource => resource.OwnerId, names)`:
+      `HasMembers(resource => resource.Members, names)`, with `[Owner]` on `OwnerId`.
+    - `Members.Open(ownerRole, now)` in the resource's constructor: `Members.Open(now)`;
+      `Members.NameOwner(member, ownerRole, now)`: `Members.NameOwner(member, FormerOwner.StaysAs(role), now)` or
+      `FormerOwner.Leaves`; `Members.TakeRole(member, role, ownerRole)`: `Members.TakeRole(member, role)`.
+    - `[KeptRole<TRoleId, TResource>]`: `[CustomRole<TRoleId, TResource>]`, with `KeptRoleAggregate`,
+      `KeptRoleDraft` and `KeptRoleStatus` as `CustomRoleAggregate`, `CustomRoleDraft` and `CustomRoleStatus`, and
+      `IsKeptRole()`: `IsCustomRole()`.
+    - A list of keys marked `[TenancyPermissions]` by hand: a `[Permissions]` class (DDD00095 for the list); DDD00063
+      is gone with it.
+    - `TenancyAccess.ForTheWholeTenant(key)`: `TenancyAccess.AtTenant(key)`, whose case is
+      `TenancyRequirement.AtTenant`; `KeyReach.WholeTenant`: `KeyReach.AtTenant`;
+      `ITenancyQuestions.HoldsTenantWideAsync` and `RequireTenantWideAsync`: `HoldsAtTenantAsync` and
+      `RequireAtTenantAsync`; `TenancyRowAccess.HoldsTenantWide`: `HoldsAtTenant`.
+  - The Tenancy sample follows: `ProjectCatalogue` and `InspectionCatalogue` are `ProjectPermissions` and
+    `InspectionPermissions`, `[Permissions]` classes; a project's owner holds no project role, and records an
+    inspection only through a role; `ChangeProjectOwner` takes `FormerOwnerRoleId`, which the REST body and the
+    GraphQL input carry as `formerOwnerRoleId`; `TakeCrewRole` takes no lead role; the projects' functions are
+    `projects_as_member`, `projects_as_member_with`, `projects_i_see` and `projects_where_i_hold`; and the projects'
+    system work runs in the scope `projects`, Tenancy's holding nothing on a project.
+  - An application on Postgres rebuilds, and lets the export write the new access file: it writes the functions
+    under the resource's name and drops the old ones, writes the grants from the row access rules, and drops the
+    trigger that kept an owner's role in use. Rows of an owner's role that were held stay as they were: the role
+    gives what it gives, and the owner holds what it holds by owning.
 
 ### Fixed
 

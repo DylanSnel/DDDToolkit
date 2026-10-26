@@ -1036,6 +1036,7 @@ input ProjectOpenAtUnitInput {
 
 input ProjectOwnerChangeInput {
   expectedVersion: Long
+  formerOwnerRoleId: UUID
   id: ID!
   seatId: UUID!
 }

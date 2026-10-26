@@ -101,7 +101,7 @@ public sealed class BesideAnOrganizationOnPostgresTests(FilingPostgres postgres)
         // The barley names Dot as its owner today, and her place on it begins tomorrow. She is on the tea now.
         await depot.Services.ChangeAsync((context, _) =>
         {
-            context.Crates.Add(new Crate(barley, "Barley", data.RightBay, data.Dot.Porter!.Value, data.Lead, data.Now.AddDays(1)));
+            context.Crates.Add(new Crate(barley, "Barley", data.RightBay, data.Dot.Porter!.Value, data.Now.AddDays(1)));
             return Task.CompletedTask;
         });
 
@@ -110,13 +110,13 @@ public sealed class BesideAnOrganizationOnPostgresTests(FilingPostgres postgres)
         await using (var session = await depot.SessionAsync(data.Dot))
         {
             (await session.ListAsync<Guid>($"SELECT id FROM {Depot}crates_i_see() AS id")).Should().BeEquivalentTo([data.Tea.Value, barley.Value]);
-            (await session.ListAsync<Guid>($"SELECT id FROM {Depot}crates_where_i_hold($1) AS id", CrateKeys.Scrap)).Should().Equal(barley.Value);
-            (await session.ListAsync<Guid>($"SELECT id FROM {Depot}crates_where_i_hold($1) AS id", CrateKeys.See)).Should().Equal(data.Tea.Value);
+            (await session.ListAsync<Guid>($"SELECT id FROM {Depot}crates_where_i_hold($1) AS id", CratePermissions.Scrap)).Should().Equal(barley.Value);
+            (await session.ListAsync<Guid>($"SELECT id FROM {Depot}crates_where_i_hold($1) AS id", CratePermissions.See)).Should().Equal(data.Tea.Value);
         }
 
-        var keys = await depot.Services.CratesAsync(data.Dot, access => access.KeysOnAsync([barley, data.Tea], [CrateKeys.See, CrateKeys.Scrap], Cancellation));
-        keys[barley].Should().BeEquivalentTo([CrateKeys.Scrap], "what the functions answer for each key");
-        keys[data.Tea].Should().BeEquivalentTo([CrateKeys.See]);
+        var keys = await depot.Services.CratesAsync(data.Dot, access => access.KeysOnAsync([barley, data.Tea], [CratePermissions.See, CratePermissions.Scrap], Cancellation));
+        keys[barley].Should().BeEquivalentTo([CratePermissions.Scrap], "what the functions answer for each key");
+        keys[data.Tea].Should().BeEquivalentTo([CratePermissions.See]);
     }
 
     [Fact]
@@ -151,8 +151,8 @@ public sealed class BesideAnOrganizationOnPostgresTests(FilingPostgres postgres)
         });
         await using var again = await depot.SessionAsync(data.Ned);
         (await again.ListAsync<Guid>($"SELECT id FROM {Depot}crates_i_see() AS id")).Should().BeEquivalentTo([data.Tea.Value, data.Salt.Value, data.Rice.Value]);
-        (await again.ListAsync<Guid>($"SELECT id FROM {Depot}crates_where_i_hold($1) AS id", CrateKeys.Pack)).Should().Equal(data.Tea.Value);
-        (await again.ListAsync<Guid>($"SELECT id FROM {Depot}pallets_where_i_hold($1) AS id", PalletKeys.Load)).Should().Equal(data.Pears.Value);
+        (await again.ListAsync<Guid>($"SELECT id FROM {Depot}crates_where_i_hold($1) AS id", CratePermissions.Pack)).Should().Equal(data.Tea.Value);
+        (await again.ListAsync<Guid>($"SELECT id FROM {Depot}pallets_where_i_hold($1) AS id", PalletPermissions.Load)).Should().Equal(data.Pears.Value);
     }
 
     [Fact]
@@ -218,27 +218,27 @@ public sealed class BesideAnOrganizationOnPostgresTests(FilingPostgres postgres)
         print.Until.Should().BeCloseTo(data.InThreeDays, precision);
         commands.Commands[0].Should().Contain("depot.\"CratePorters\"").And.Contain("depot.\"RoleKeys\"").And.Contain("depot.\"BayPaths\"");
 
-        var scrap = await AskAsync(data.Ana, data.Tea, CrateKeys.Scrap);
+        var scrap = await AskAsync(data.Ana, data.Tea, CratePermissions.Scrap);
         (scrap!.Via, scrap.Until).Should().Be((MemberVia.Members, (DateTimeOffset?)null));
-        var move = await AskAsync(data.Eli, data.Rice, CrateKeys.Move);
+        var move = await AskAsync(data.Eli, data.Rice, CratePermissions.Move);
         (move!.Via, move.Until).Should().Be((MemberVia.Above, (DateTimeOffset?)null));
-        var pack = await AskAsync(data.Bo, data.Tea, CrateKeys.Pack);
+        var pack = await AskAsync(data.Bo, data.Tea, CratePermissions.Pack);
         (pack!.Via, pack.Until).Should().Be((MemberVia.Members, (DateTimeOffset?)null));
         (await AskAsync(data.Bo, data.Tea, CrateKeys.ManageDepot))!.Via.Should().BeNull("whatever the packer holds in the depot, no member's role gives the depot's own key");
-        (await AskAsync(data.Cas, data.Tea, CrateKeys.See))!.Until.Should().BeCloseTo(data.NextWeek, precision);
-        (await AskAsync(data.Eli, data.Salt, CrateKeys.See)).Should().BeNull();
-        (await AskAsync(data.Ned, data.Tea, CrateKeys.See)).Should().BeNull();
+        (await AskAsync(data.Cas, data.Tea, CratePermissions.See))!.Until.Should().BeCloseTo(data.NextWeek, precision);
+        (await AskAsync(data.Eli, data.Salt, CratePermissions.See)).Should().BeNull();
+        (await AskAsync(data.Ned, data.Tea, CratePermissions.See)).Should().BeNull();
 
         // The keys held on many, and a page of the host's own with a reach in it: one statement each.
         commands.Reset();
         var keys = await depot.Services.CratesAsync(data.Flo, access => access.KeysOnAsync([data.Tea, data.Salt, data.Rice], DepotScenario.CrateKeysAsked, Cancellation));
         commands.Count.Should().Be(1);
-        keys.Values.Should().HaveCount(3).And.OnlyContain(held => held.SetEquals(new[] { CrateKeys.See, CrateKeys.Pack }));
+        keys.Values.Should().HaveCount(3).And.OnlyContain(held => held.SetEquals(new[] { CratePermissions.See, CratePermissions.Pack }));
 
         commands.Reset();
         var labels = await depot.Services.AsAsync(data.Eli.Caller, async provider =>
         {
-            var seen = provider.GetRequiredService<IMemberQuestions<CrateId>>().Reach(CrateKeys.See);
+            var seen = provider.GetRequiredService<IMemberQuestions<CrateId>>().Reach(CratePermissions.See);
             return await provider.GetRequiredService<DepotContext>().Crates.Within(seen).OrderBy(crate => crate.Label).Select(crate => crate.Label).ToListAsync(Cancellation);
         });
         labels.Should().Equal("Rice", "Tea");
@@ -264,11 +264,11 @@ public sealed class BesideAnOrganizationOnPostgresTests(FilingPostgres postgres)
         // holds on the tea from above he holds until he is off it.
         await depot.Services.ChangeAsync((context, _) =>
         {
-            context.BayHolds.Add(new BayHold { PorterId = cas, BayId = data.LeftBay, Key = CrateKeys.Weigh });
+            context.BayHolds.Add(new BayHold { PorterId = cas, BayId = data.LeftBay, Key = CratePermissions.Weigh });
             return Task.CompletedTask;
         });
         depot.Services.Commands.Reset();
-        var weigh = await depot.Services.CratesAsync(data.Cas, access => access.HoldAsync(data.Tea, CrateKeys.Weigh, Cancellation));
+        var weigh = await depot.Services.CratesAsync(data.Cas, access => access.HoldAsync(data.Tea, CratePermissions.Weigh, Cancellation));
         weigh!.Via.Should().Be(MemberVia.Above);
         weigh.Until.Should().BeCloseTo(data.NextWeek, precision);
         depot.Services.Commands.Count.Should().Be(1);
@@ -276,10 +276,10 @@ public sealed class BesideAnOrganizationOnPostgresTests(FilingPostgres postgres)
         // Seeing the tea from above as well, he holds it with no end known here.
         await depot.Services.ChangeAsync((context, _) =>
         {
-            context.BayHolds.Add(new BayHold { PorterId = cas, BayId = data.Hall, Key = CrateKeys.See });
+            context.BayHolds.Add(new BayHold { PorterId = cas, BayId = data.Hall, Key = CratePermissions.See });
             return Task.CompletedTask;
         });
-        var seen = await depot.Services.CratesAsync(data.Cas, access => access.HoldAsync(data.Tea, CrateKeys.Weigh, Cancellation));
+        var seen = await depot.Services.CratesAsync(data.Cas, access => access.HoldAsync(data.Tea, CratePermissions.Weigh, Cancellation));
         (seen!.Via, seen.Until).Should().Be((MemberVia.Above, (DateTimeOffset?)null));
     }
 
@@ -311,7 +311,7 @@ public sealed class BesideAnOrganizationOnPostgresTests(FilingPostgres postgres)
         Body("crates_i_see").Should().Contain("r.\"BayId\" IN (SELECT reached.place FROM \"depot\".bays_where_i_hold('crates.see') AS reached(place))");
         Body("crates_where_i_hold").Should()
             .Contain("r.\"BayId\" IN (SELECT reached.place FROM \"depot\".bays_where_i_hold($1) AS reached(place))")
-            .And.Contain("$1 IN ('crates.scrap') AND r.\"OwnerId\" = (SELECT \"depot\".caller_porter())");
+            .And.Contain("$1 IN ('crates.pack', 'crates.weigh', 'crates.scrap') AND r.\"OwnerId\" = (SELECT \"depot\".caller_porter())");
         Body("pallets_i_see").Should().NotContain("bays_where_i_hold");
         Body("pallets_where_i_hold").Should().NotContain("bays_where_i_hold");
 
@@ -344,15 +344,14 @@ public sealed class BesideAnOrganizationOnPostgresTests(FilingPostgres postgres)
             .Should().Throw<InvalidOperationException>().WithMessage("*asks the function depot/*");
 
         // A name the depot does not define, for one of the three: said for that one.
-        var misnamed = new MembershipRules(
+        var misnamed = MembershipRules.Declare(
+            typeof(Crate),
             "crates",
-            keys: [CrateKeys.Scrap],
+            CrateMembership.Rules.Permissions,
+            Roles.External(DepotFunctions.RolesWithKey, OtherKeys.AllBut(CrateKeys.ManageDepot)),
             members: MemberSource.Resolved(DepotFunctions.CallerPorter),
-            seeKey: CrateKeys.See,
-            ownerRole: CrateMembership.OwnerRole,
-            memberKeys: MemberKeys.AllBut(CrateKeys.Move),
-            rolesKeptElsewhere: new(DepotFunctions.RolesWithKey),
-            above: new("depot/aisles_where_i_hold"));
+            reachFromAbove: new DatabaseFunction(DepotFunctions.Owner, "aisles_where_i_hold"),
+            codes: CrateMembership.Codes);
         FluentActions.Invoking(() => PostgresDepot.AccessScript([new MembershipRowAccessContribution<CratePorter>(misnamed), new DepotOwnFunctions()], rules: []))
             .Should().Throw<InvalidOperationException>().WithMessage("*asks the function depot/aisles_where_i_hold, and none of the functions this is written with is called that*");
 
@@ -377,12 +376,12 @@ public sealed class BesideAnOrganizationOnPostgresTests(FilingPostgres postgres)
         var registered = CrateMembership.Rules;
         (string What, MembershipRules Rules)[] others =
         [
-            ("another function says who the caller is", Crates(members: MemberSource.Resolved("spare/acting_porter"))),
+            ("another function says who the caller is", Crates(members: MemberSource.Resolved(new DatabaseFunction("spare", "acting_porter")))),
             ("the caller's own id is who it is", Crates(members: MemberSource.CallerId)),
-            ("another function says which roles give a key", Crates(elsewhere: new("depot/bays_where_i_hold"))),
-            ("a member's role gives other keys", Crates(memberKeys: MemberKeys.AllBut(CrateKeys.Move))),
-            ("a member's role gives only what is listed", Crates(memberKeys: MemberKeys.Only(CrateKeys.Move, CrateKeys.ManageDepot))),
-            ("another function says where a key is held", Crates(above: new("depot/roles_with_key"))),
+            ("another function says which roles give a key", Crates(roles: DepotFunctions.BaysWhereIHold)),
+            ("a role gives other keys", Crates(otherKeys: OtherKeys.All)),
+            ("a role gives the crate's permissions alone", Crates(noOtherKeys: true)),
+            ("another function says where a key is held", Crates(above: DepotFunctions.RolesWithKey)),
             ("nothing above reaches a crate", Crates(reached: false)),
         ];
 
@@ -401,16 +400,17 @@ public sealed class BesideAnOrganizationOnPostgresTests(FilingPostgres postgres)
                 .And.NotContain("pallets_");
         }
 
-        MembershipRules Crates(MemberSource? members = null, RolesKeptElsewhere? elsewhere = null, MemberKeys? memberKeys = null, ReachFromAbove? above = null, bool reached = true)
-            => new(
+        MembershipRules Crates(
+            MemberSource? members = null, DatabaseFunction? roles = null, OtherKeys? otherKeys = null, bool noOtherKeys = false, ReachFromAbove? above = null, bool reached = true)
+            => MembershipRules.Declare(
+                typeof(Crate),
                 registered.Name,
-                keys: registered.Keys,
+                registered.Permissions,
+                Roles.External(roles ?? registered.Roles.Function, noOtherKeys ? null : otherKeys ?? registered.Roles.OtherKeys),
                 members: members ?? registered.Members,
-                seeKey: registered.SeeKey,
-                ownerRole: registered.OwnerRole,
-                memberKeys: memberKeys ?? registered.MemberKeys,
-                rolesKeptElsewhere: elsewhere ?? registered.RolesKeptElsewhere,
-                above: reached ? above ?? registered.Above : null);
+                reachFromAbove: reached ? above ?? registered.ReachFromAbove : null,
+                systemScopes: registered.SystemScopes,
+                codes: registered.Codes);
     }
 
     [Fact]
@@ -418,13 +418,13 @@ public sealed class BesideAnOrganizationOnPostgresTests(FilingPostgres postgres)
     {
         // A pallet is mapped without a place. Rules that would have it reached from above cannot be the rules
         // its functions were written from, and the check says so before it asks the database anything.
-        var rules = new MembershipRules(
+        var rules = MembershipRules.Declare(
+            typeof(Pallet),
             "pens",
-            keys: ["pens.view"],
-            roles: [new("hand", ["pens.view"])],
+            [new("pens.view", EveryMember: true)],
+            Roles.Fixed([new("hand", ["pens.view"])]),
             members: MemberSource.Resolved(DepotFunctions.CallerPorter),
-            seeKey: "pens.view",
-            above: new(DepotFunctions.BaysWhereIHold));
+            reachFromAbove: DepotFunctions.BaysWhereIHold);
         var services = new ServiceCollection();
         services.AddDbContext<DepotContext>(options => options.UseNpgsql("Host=model-only"));
         services.AddSingleton<DepotDesk>();
@@ -433,7 +433,7 @@ public sealed class BesideAnOrganizationOnPostgresTests(FilingPostgres postgres)
         await using var provider = services.BuildServiceProvider();
 
         (await FluentActions.Awaiting(() => MembershipPostgresChecks.EnsureFunctionsAreInPlaceAsync(provider, Cancellation)).Should().ThrowAsync<InvalidOperationException>())
-            .WithMessage("The rules 'pens' let Pallet be reached from above, and DepotContext does not say where it sits*HasMembers(..., at: resource => resource.PlaceId).");
+            .WithMessage("The rules 'pens' let Pallet be reached from above, and it marks no place it hangs at*[At]*");
     }
 
     /// <summary>Where a caller holds a key, for pallets that would sit at bays.</summary>

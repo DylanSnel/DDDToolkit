@@ -17,8 +17,8 @@ namespace DDDToolkit.Supporting.Membership.EntityFramework;
 /// Every question is asked for the caller that is current when it is asked, and at one moment: the reach that
 /// sees and the reach that acts of one question share it. Who the caller is as a member comes from the rules,
 /// its user id, a claim of its token, or what the application resolves for it, and only a signed-in user is
-/// one. The owner of a resource is found by the resource's own owner column, holds every key of the
-/// resource whatever its roles give, and sees it. Which roles give a key is what the rules declare; where the roles are
+/// one. The owner of a resource is found by the resource's own owner column, holds the permissions the rules give
+/// an owner, holding no role, and sees it. Which roles give a key is what the rules declare; where the roles are
 /// kept for the resource, what their rows say, read inside the statement; or, where they are kept elsewhere,
 /// what the application answers inside the statement. Either way only for a key a member's role can give
 /// at all. Where the rules let a resource be reached from above, a signed-in caller holds a key on it as well
@@ -79,7 +79,7 @@ internal sealed class EfMemberQuestions<TContext, TResource, TResourceId, TMembe
         // What the application answers is asked of the scope the questions are asked in: it knows the request.
         _resolved = asMember is null ? services.GetRequiredService<ICallerMember<TResourceId, TMemberId>>() : null;
         _asMember = asMember ?? _resolved!.Find;
-        _kept = rules.RolesKeptElsewhere is null ? null : services.GetRequiredService<IRolesWithKey<TResourceId, TRoleId>>();
+        _kept = rules.Roles.Kind == RolesKind.External ? services.GetRequiredService<IRolesWithKey<TResourceId, TRoleId>>() : null;
     }
 
     /// <inheritdoc />
@@ -214,8 +214,8 @@ internal sealed class EfMemberQuestions<TContext, TResource, TResourceId, TMembe
 
     /// <summary>
     /// The reach of what the caller sees: the resources it is a member of now, whatever roles it holds there;
-    /// those it owns, by the owner column, since the owner holds every key of a resource by owning it, and
-    /// does so from the moment the resource names it, before its own membership has begun; and, where the
+    /// those it owns, by the owner column, since the owner sees what it owns, from the moment the resource names
+    /// it, before its own membership has begun; and, where the
     /// rules let a resource be reached from above and name a key for seeing, those that sit where the caller
     /// holds that key. The functions in the database see a resource the same way.
     /// </summary>
@@ -224,7 +224,7 @@ internal sealed class EfMemberQuestions<TContext, TResource, TResourceId, TMembe
         var names = Names();
         var heldBy = asked.Member is null ? MemberHeldBy.None : MemberHeldBy.Membership | MemberHeldBy.Owner;
         var member = asked.Member ?? default;
-        if (Rules.SeeKey is not { } key)
+        if (Rules.EveryMemberKey is not { } key)
         {
             // No key to ask about above: such a resource is seen by its members and its owner, and by nobody else.
             return new(asked.Now, asked.Everything, heldBy, member, names);
@@ -252,7 +252,7 @@ internal sealed class EfMemberQuestions<TContext, TResource, TResourceId, TMembe
         Func<DbContext, IQueryable<TRoleId>>? kept = null;
         if (asked.Member is not null)
         {
-            // The owner holds every key of the resource by owning it, whatever its roles give.
+            // The owner holds the permissions the rules give an owner by owning the resource, and nothing through a role.
             if (Rules.OwnerHolds(key))
             {
                 heldBy |= MemberHeldBy.Owner;
@@ -262,12 +262,12 @@ internal sealed class EfMemberQuestions<TContext, TResource, TResourceId, TMembe
             {
                 heldBy |= MemberHeldBy.Membership;
             }
-            else if (Rules.RolesKept)
+            else if (Rules.Roles.Kind == RolesKind.Custom)
             {
                 // The roles are rows kept for the resource, and which of them give the key is read from
                 // those rows, inside the statement. Only for a key a member's role can give: whatever a
                 // row still holds from before the rules changed, it gives no key the rules keep from members.
-                if (Rules.MemberKeys.Allows(key))
+                if (Rules.RoleKeys.Allows(key))
                 {
                     kept = names.Roles!.ThatGive(key);
                     heldBy |= MemberHeldBy.Roles;
@@ -282,7 +282,7 @@ internal sealed class EfMemberQuestions<TContext, TResource, TResourceId, TMembe
                     heldBy |= MemberHeldBy.Roles;
                 }
             }
-            else if (Rules.MemberKeys.Allows(key))
+            else if (Rules.RoleKeys.Allows(key))
             {
                 // The roles are kept elsewhere, and which of them give the key is asked there, inside the
                 // statement. Only for a key a member's role can give: whatever else such a role holds, it
@@ -295,8 +295,9 @@ internal sealed class EfMemberQuestions<TContext, TResource, TResourceId, TMembe
             }
         }
 
-        // Held where the resource sits, or above it: asked of the application, for members and others alike.
-        var above = names.Above?.Reaching(_services, asked.Caller, key);
+        // Held where the resource sits, or above it: asked of the application, for members and others alike, for
+        // every key but a permission the rules keep from above.
+        var above = Rules.ReachesFromAbove(key) ? names.Above?.Reaching(_services, asked.Caller, key) : null;
         if (above is not null)
         {
             heldBy |= MemberHeldBy.Above;

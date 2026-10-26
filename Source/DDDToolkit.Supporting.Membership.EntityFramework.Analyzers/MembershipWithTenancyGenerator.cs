@@ -314,7 +314,7 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
                 writer.Line("/// <typeparam name=\"" + parameter + "\">" + WhatItIs(parameter) + ", which this project sees no class of and so cannot be given.</typeparam>");
             }
 
-            writer.Line("/// <exception cref=\"global::System.ArgumentException\">The rules take a member from the caller itself, where a member is a seat.</exception>");
+            writer.Line("/// <exception cref=\"global::System.ArgumentException\">The rules take a member from the caller's token, where a member is a seat.</exception>");
             using (Declared(
                        writer,
                        [
@@ -329,13 +329,14 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
                 writer.Line();
 
                 // The one thing the resource's own registration cannot tell: a seat's id is over the same value as a
-                // user's, so rules that take the member from the caller would be accepted, and read a user for a seat.
-                using (writer.Block("if (rules.Members.Kind != " + Membership + ".Access.MemberSourceKind.Resolved)"))
+                // user's, so rules that take the member from the token would be accepted, and read a user for a seat.
+                // Who a member is follows from the member id where the rules say nothing: here, the caller's seat.
+                using (writer.Block("if (rules.Members.Kind is " + Membership + ".Access.MemberSourceKind.CallerId or " + Membership + ".Access.MemberSourceKind.Claim)"))
                 {
                     writer.Line("throw new global::System.ArgumentException(");
-                    writer.Line("    \"The rules '\" + rules.Name + \"' take a member from the caller itself (MemberSource.\" + rules.Members.Kind + \"), and "
+                    writer.Line("    \"The rules '\" + rules.Name + \"' take a member from the caller's token (MemberSource.\" + rules.Members.Kind + \"), and "
                                 + join.Registration + " registers " + join.ResourceName + " for members that are seats of a tenant, which no token carries. \"");
-                    writer.Line("    + \"Say members: MemberSource.Resolved(\\\"tenancy/caller_seat\\\") in the rules, or register " + join.ResourceName
+                    writer.Line("    + \"Leave members out of the rules, and a member is the caller's seat, or register " + join.ResourceName
                                 + " with " + join.Plain + " where its members are not seats.\",");
                     writer.Line("    nameof(rules));");
                 }
@@ -381,11 +382,6 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
             writer.Line("private readonly global::System.IServiceProvider _services;");
             writer.Line("private readonly " + answers + " _tenancy;");
             writer.Line("private readonly " + catalogue + " _catalogue;");
-            if (join.TenantsRoles)
-            {
-                writer.Line("private readonly string _ownerRole;");
-            }
-
             writer.Line();
             writer.Line("/// <param name=\"services\">The services of the scope the questions are asked in.</param>");
             writer.Line("/// <param name=\"rules\">The rules the resource is registered with.</param>");
@@ -394,10 +390,6 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
                 writer.Line("_services = services;");
                 writer.Line("_tenancy = " + Services + ".ServiceProviderServiceExtensions.GetRequiredService<" + answers + ">(services);");
                 writer.Line("_catalogue = " + Services + ".ServiceProviderServiceExtensions.GetRequiredService<" + catalogue + ">(services);");
-                if (join.TenantsRoles)
-                {
-                    writer.Line("_ownerRole = rules.OwnerRole;");
-                }
             }
 
             writer.Line();
@@ -461,24 +453,6 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
                 writer.Line("            row => row.Id.Equals(role) && row.Status == global::" + Tenancy + ".RoleStatus.Active,");
                 writer.Line("            cancellationToken),");
                 writer.Line("        cancellationToken).ConfigureAwait(false);");
-
-                writer.Line();
-                writer.Line("/// <summary>");
-                writer.Line("/// The tenant's role in use that was made from the pack the rules name as the owner's role, or null when it has none.");
-                writer.Line("/// Where a tenant made several from that pack, the first of them by id.");
-                writer.Line("/// </summary>");
-                using (writer.Block("public async global::System.Threading.Tasks.ValueTask<" + join.Role + "?> FindOwnerRoleAsync(" + CancellationTokenType + " cancellationToken)"))
-                {
-                    writer.Line("var pack = _ownerRole;");
-                    writer.Line("return await AskAsync(");
-                    writer.Line("    tenancy =>");
-                    writer.Line("    {");
-                    writer.Line("        var fromThePack = " + Queryable + ".Where(tenancy.Roles(), row => row.FromPack == pack && row.Status == global::" + Tenancy + ".RoleStatus.Active);");
-                    writer.Line("        var ids = " + Queryable + ".Select(" + Queryable + ".OrderBy(fromThePack, row => row.Id), row => (" + join.Role + "?)row.Id);");
-                    writer.Line("        return " + Asynchronous + ".FirstOrDefaultAsync(ids, cancellationToken);");
-                    writer.Line("    },");
-                    writer.Line("    cancellationToken).ConfigureAwait(false);");
-                }
             }
 
             writer.Line();

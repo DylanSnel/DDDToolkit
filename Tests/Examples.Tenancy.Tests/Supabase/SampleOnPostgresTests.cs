@@ -122,16 +122,10 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
             $"{RowAccessModel.Schema(ProjectsContext.Schema)}.\"{ProjectsContext.CrewRolesTable}\" (authenticated is not held to the roles it sees)",
             MembershipPostgresChecks.FunctionsInPlaceCheck),
 
-        // The crew lead's project role stays in use, whatever statement archives it.
-        ["the trigger that keeps the crew lead's role in use disabled"] = (
-            $"""ALTER TABLE {ProjectsContext.Schema}."{ProjectsContext.ProjectRolesTable}" DISABLE TRIGGER projects_owner_role_stays""",
-            "projects_owner_role_stays, is missing, disabled, or written from other rules",
-            MembershipPostgresChecks.FunctionsInPlaceCheck),
-
         // A project's owner changes only for a seat that holds the key that names one.
         ["no lock on a project's owner"] = (
             $"""DROP TRIGGER projects_owner_stays ON {ProjectsContext.Schema}."{ProjectsContext.ProjectsTable}" """,
-            "(its owner column is not held to the key that changes the owner)",
+            "(its owner column is not held to the permission that locks the owner)",
             MembershipPostgresChecks.FunctionsInPlaceCheck),
     };
 
@@ -352,8 +346,8 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
             """);
 
         async Task<(bool OnTheCrew, bool SeesThroughTheCrew)> AskAsync()
-            => (await ScalarAsync<bool>(tove, $"SELECT '{bridge}' = ANY (ARRAY(SELECT projects.crew_member_project_ids()))"),
-                await ScalarAsync<bool>(tove, $"SELECT '{bridge}' = ANY (ARRAY(SELECT projects.crew_project_ids('{ProjectKeys.View}')))"));
+            => (await ScalarAsync<bool>(tove, $"SELECT '{bridge}' = ANY (ARRAY(SELECT projects.projects_as_member()))"),
+                await ScalarAsync<bool>(tove, $"SELECT '{bridge}' = ANY (ARRAY(SELECT projects.projects_as_member_with('{ProjectKeys.View}')))"));
 
         // A surveyor on the crew of Bay bridge: on it, and holding the key to see it through her role there.
         (await AskAsync()).Should().Be((true, true));
@@ -436,7 +430,7 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
             (await command.ExecuteNonQueryAsync(Cancellation)).Should().Be(1, "{0} may: {1}", by.Name, set);
         }
 
-        // Leo leads Pier 7's crew, which lets him edit and close the project and manage its crew, and he holds
+        // Leo owns Pier 7, which lets him edit and close the project and manage its crew, and he holds
         // nothing at a unit. The policy lets him write the row, and he renames the project with a statement.
         await using (var leo = await AsSeatAsync(DemoPeople.Leo))
         {
@@ -528,7 +522,7 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
         (await ChangeAsync(DemoPeople.Juno, "\"Name\" = 'Pier 7, by Juno'")).Should().Be(1, "renaming asks the key to edit, which Juno holds");
         await ShouldBeRefusedAsync(DemoPeople.Juno, "\"State\" = 'Closed'", StateHeld);
 
-        // Leo leads the crew, which holds both keys: he plans it, closes it and opens it again.
+        // Leo owns it, which holds both keys: he plans it, closes it and opens it again.
         (await ChangeAsync(DemoPeople.Leo, "\"PlannedFrom\" = DATE '2026-01-01', \"PlannedUntil\" = DATE '2026-02-01'")).Should().Be(1);
         (await ChangeAsync(DemoPeople.Leo, "\"State\" = 'Closed'")).Should().Be(1);
         (await ChangeAsync(DemoPeople.Leo, "\"State\" = 'Open'")).Should().Be(1);
@@ -709,7 +703,7 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
             (refused!.SqlState, refused.MessageText, refused.ConstraintName).Should().Be((PostgresErrorCodes.InsufficientPrivilege, NameAndPlanHeld, NameAndPlanTrigger));
         }
 
-        // Leo holds the key to edit it through the crew he leads, and the same handler renames it.
+        // Leo holds the key to edit it as its owner, and the same handler renames it.
         await RenameAsync(DemoPeople.Leo, "Pier 7, by Leo");
 
         await using var owner = new NpgsqlConnection(sample.Database.AsMigrationRole);
@@ -904,7 +898,7 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
         (await RowAsync(owner, $"SELECT \"Name\", \"OwnerSeatId\" FROM projects.\"Projects\" WHERE \"Id\" = '{pier}'"))
             .Should().Equal("Pier 7, by Vic", Harbor.SeatOf(DemoPeople.Leo).Value);
         (await ScalarAsync<long>(owner, $"""SELECT count(*) FROM projects."{ProjectsContext.CrewRolesTable}" WHERE "ProjectId" = '{pier}' AND "EndsAt" IS NULL"""))
-            .Should().Be(4, "the lead's, the surveyor's, the observer's and his scribe's role, each as it was");
+            .Should().Be(3, "the surveyor's, the observer's and his scribe's role, each as it was: the owner holds none");
     }
 
     /// <summary>
@@ -944,9 +938,9 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
 
         // Meadow's keys are held on none of harbor's projects: Vic holds what harbor's roles give him on Pier 7, and no more.
         await using var asVic = await AsSeatAsync(sample, DemoPeople.Vic, Harbor);
-        (await ListAsync(asVic, $"SELECT id::text FROM projects.crew_project_ids('{ProjectKeys.Close}') AS id")).Should().BeEmpty();
-        (await ListAsync(asVic, $"SELECT id::text FROM projects.project_ids_where_i_hold('{ProjectKeys.ManageCrew}') AS id")).Should().BeEmpty();
-        (await ListAsync(asVic, $"SELECT id::text FROM projects.crew_project_ids('{InspectionKeys.Record}') AS id")).Should().Equal(pier.ToString());
+        (await ListAsync(asVic, $"SELECT id::text FROM projects.projects_as_member_with('{ProjectKeys.Close}') AS id")).Should().BeEmpty();
+        (await ListAsync(asVic, $"SELECT id::text FROM projects.projects_where_i_hold('{ProjectKeys.ManageCrew}') AS id")).Should().BeEmpty();
+        (await ListAsync(asVic, $"SELECT id::text FROM projects.projects_as_member_with('{InspectionKeys.Record}') AS id")).Should().Equal(pier.ToString());
 
         await using var owner = new NpgsqlConnection(sample.Database.AsMigrationRole);
         await owner.OpenAsync(Cancellation);
@@ -1001,7 +995,7 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
         (await ScalarAsync<long>(owner, $"""SELECT count(*) FROM projects."{ProjectsContext.CrewTable}" WHERE "ProjectId" = '{pier}' AND "SeatId" = '{Meadow.SeatOf(DemoPeople.Tove).Value}'"""))
             .Should().Be(0);
         await using var toveInMeadow = await AsSeatAsync(sample, DemoPeople.Tove, Meadow);
-        (await ListAsync(toveInMeadow, "SELECT id::text FROM projects.project_ids_i_see() AS id")).Should().NotContain(pier.ToString());
+        (await ListAsync(toveInMeadow, "SELECT id::text FROM projects.projects_i_see() AS id")).Should().NotContain(pier.ToString());
     }
 
     /// <summary>
@@ -1048,11 +1042,11 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
 
     /// <summary>
     /// A project role's row says what everybody who holds it may do, and the database holds whoever may change it
-    /// to what the commands hold them to: where a role came from is written once, and the crew lead's role, which
-    /// every owner holds, is not archived, whatever statement reaches the database.
+    /// to what the commands hold them to: where a role came from is written once, whatever statement reaches the
+    /// database.
     /// </summary>
     [Fact]
-    public async Task A_role_manager_moves_no_project_roles_origin_and_archives_no_crew_leads_role_by_writing_to_the_database()
+    public async Task A_role_manager_moves_no_project_roles_origin_by_writing_to_the_database()
     {
         await using var sample = await StartedAsync();
         var lead = Harbor.ProjectRoles[SampleCatalogue.CrewLead].Value;
@@ -1064,15 +1058,6 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
         // Where the crew lead's role came from: the privileges the export wrote leave the column out.
         (await RefusedAsync(ada, $"""UPDATE projects."{ProjectsContext.ProjectRolesTable}" SET "MadeFrom" = NULL WHERE "Id" = '{lead}'"""))
             .Should().Be(PostgresErrorCodes.InsufficientPrivilege);
-
-        // Archiving it: the trigger the Membership package writes from the projects' rules.
-        await using (var archive = new NpgsqlCommand($"""UPDATE projects."{ProjectsContext.ProjectRolesTable}" SET "Status" = 'Archived' WHERE "Id" = '{lead}'""", ada))
-        {
-            var refused = (await FluentActions.Awaiting(() => archive.ExecuteNonQueryAsync(Cancellation)).Should().ThrowAsync<PostgresException>()).Which;
-            (refused.SqlState, refused.MessageText).Should().Be((
-                PostgresErrorCodes.CheckViolation,
-                $"A row of \"projects\".\"{ProjectsContext.ProjectRolesTable}\" made from the starter role '{SampleCatalogue.CrewLead}' is the role every owner of a Project holds, and is not archived."));
-        }
 
         // What she may do she does: she renames the crew lead's role and archives the observer's, under the rule
         // that asks the one question of whether she manages the tenant's roles.
@@ -1148,10 +1133,10 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
         await using var asJuno = await AsSeatAsync(sample, DemoPeople.Juno, Harbor);
         foreach (var key in SampleOnPostgres.KeysNoCrewGives)
         {
-            (await ListAsync(asJuno, $"SELECT id::text FROM projects.project_ids_where_i_hold('{key}') AS id")).Should().BeEmpty(key);
+            (await ListAsync(asJuno, $"SELECT id::text FROM projects.projects_where_i_hold('{key}') AS id")).Should().BeEmpty(key);
         }
 
-        (await ListAsync(asJuno, $"SELECT id::text FROM projects.project_ids_where_i_hold('{InspectionKeys.Record}') AS id")).Should().Equal(pier.ToString());
+        (await ListAsync(asJuno, $"SELECT id::text FROM projects.projects_where_i_hold('{InspectionKeys.Record}') AS id")).Should().Equal(pier.ToString());
     }
 
     [Fact]
@@ -1384,7 +1369,7 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
 
     /// <summary>
     /// A project role of <paramref name="keys"/> that Ada makes, given on <paramref name="project"/>'s crew to
-    /// <paramref name="person"/>, already on it, by Leo, who leads it.
+    /// <paramref name="person"/>, already on it, by Leo, who owns it.
     /// </summary>
     private static async Task<Guid> GiveNewRoleAsync(HttpClient ada, HttpClient leo, DemoProject project, DemoPerson person, string name, params string[] keys)
     {

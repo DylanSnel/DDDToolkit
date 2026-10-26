@@ -34,7 +34,7 @@ public sealed class FilingPostgres : IAsyncLifetime
     /// <summary>The role the application logs in as: it owns the tables, and switches to the callers' roles.</summary>
     public const string LoginRole = "filing_app";
 
-    /// <summary>The token role the folder's rules let ask its functions, next to signed-in users.</summary>
+    /// <summary>The token role a rule of the folders' is for, next to signed-in users: what grants it the folders' functions.</summary>
     public const string ArchivistTokenRole = "archivist";
 
     /// <summary>The database role the host maps that token role to.</summary>
@@ -70,6 +70,7 @@ public sealed class FilingPostgres : IAsyncLifetime
         RowAccessRule.For<Document>("Users read the documents they see", RowOperations.Read, UsersReadTheDocumentsTheySee.RowAccessSql, RowAccessRoles.User),
         RowAccessRule.For<Document>("Users change the documents they work on", RowOperations.Change, UsersChangeTheDocumentsTheyWorkOn.RowAccessSql, RowAccessRoles.User),
         RowAccessRule.For<Folder>("Staff read the folders they are on", RowOperations.Read, StaffReadTheFoldersTheyAreOn.RowAccessSql, RowAccessRoles.User),
+        RowAccessRule.For<Folder>("Archivists read the folders they hold", RowOperations.Read, ArchivistsReadTheFoldersTheyHold.RowAccessSql, Archivists.Role),
     ];
 
     /// <summary>

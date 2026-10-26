@@ -14,7 +14,7 @@ namespace Examples.Tenancy.Host.DevLogin;
 /// project outside the caller's region, one reached only through an expired grant), keys the caller does not hold
 /// on a project, an access admin who runs access and not the work, naming an owner from a crew, giving or taking
 /// away a role that manages access without its keys that do, granting outside one's region, giving oneself a role
-/// that manages access, the last administrator, the project owner who may neither go nor lose the lead role, a
+/// that manages access, the last administrator, the project owner who may neither go nor hold a project role, a
 /// role of the organization given on a crew, a project role held twice, an inspection for days outside its
 /// project's planned range, the access history read with and without the key that reads it, inviting a person
 /// without the key that adds a seat, accepting with a token nobody was given, a suspended seat, and calls without
@@ -99,7 +99,7 @@ public static class DevAttempts
                 new { title = "Foundation trench checked", from = "2000-01-03", until = "2000-01-07" }, 409, InspectionRefusals.OutsidePlannedRange),
             WithTokenAndTenant(
                 "owner-change-from-the-crew",
-                "Name another owner from the crew (leo, owner and crew lead of Pier 7, names juno; only the organization names an owner)",
+                "Name another owner from the crew (leo, the owner of Pier 7, names juno; only the organization names an owner)",
                 DemoPeople.Leo, harbor, "PUT", $"/projects/{pierSeven}/owner",
                 new { seatId = harbor.SeatOf(DemoPeople.Juno).Value }, 403, ProjectRefusals.NotPermitted),
             WithTokenAndTenant(
@@ -170,11 +170,10 @@ public static class DevAttempts
                 "Remove the project owner from the crew (leo removes himself from Pier 7)",
                 DemoPeople.Leo, harbor, "DELETE", $"/projects/{pierSeven}/crew/{harbor.SeatOf(DemoPeople.Leo).Value}", null, 409, ProjectRefusals.OwnerProtected),
             WithTokenAndTenant(
-                "take-the-owners-lead-role",
-                "Take the lead role from the project owner (leo takes his own Crew lead role on Pier 7)",
-                DemoPeople.Leo, harbor, "DELETE",
-                $"/projects/{pierSeven}/crew/{harbor.SeatOf(DemoPeople.Leo).Value}/roles/{harbor.ProjectRoles[SampleCatalogue.CrewLead].Value}",
-                null, 409, ProjectRefusals.OwnerProtected),
+                "give-the-owner-a-role",
+                "Give the project owner a project role (leo gives himself Surveyor on Pier 7; the owner holds what it holds by owning)",
+                DemoPeople.Leo, harbor, "POST", $"/projects/{pierSeven}/crew/{harbor.SeatOf(DemoPeople.Leo).Value}/roles",
+                new { roleId = harbor.ProjectRoles[SampleCatalogue.Surveyor].Value }, 409, ProjectRefusals.OwnerProtected),
             WithTokenAndTenant(
                 "history-with-the-key",
                 "Read the access history with the key that reads it (maud, an access admin, holds tenancy.history.view for all of harbor)",

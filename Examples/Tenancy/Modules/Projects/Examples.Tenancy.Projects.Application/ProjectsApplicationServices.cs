@@ -11,10 +11,9 @@ namespace Examples.Tenancy.Projects.Application;
 /// package, so the host still makes one call per module.
 /// </summary>
 /// <remarks>
-/// Projects' keys are not registered here: the module states them once, on the list it marks with
-/// <c>[TenancyPermissions]</c> (<see cref="ProjectCatalogue.Permissions"/>), and the host adds every module's list
-/// with the one call Tenancy's generator writes into it. A second registration here would add the keys twice,
-/// which the catalogue refuses.
+/// Projects' keys are not registered here: the module states them once, in its <c>[Permissions]</c> class
+/// (<see cref="ProjectPermissions"/>), and the host adds every module's permissions with the one call Tenancy's
+/// generator writes into it. A second registration here would add the keys twice, which the catalogue refuses.
 /// </remarks>
 public static class ProjectsApplicationServices
 {
@@ -75,8 +74,9 @@ public static class ProjectsApplicationServices
         services.AddProjectsAccessBehavior();
 
         // What Projects refuses with, in English and Dutch, for the edge to phrase in its reader's language. The
-        // codes a crew's rules refuse under are among them, in the module's own words.
-        services.AddDDDToolkitLocalization(texts => texts.AddResource<ProjectFailures>());
+        // codes a crew's rules refuse under are among them, in the module's own words. Beside them, what each of
+        // its permissions lets somebody do, which the catalogue answers in the reader's language.
+        services.AddDDDToolkitLocalization(texts => texts.AddResource<ProjectFailures>().AddResource<ProjectPermissionTexts>());
 
         return services;
     }

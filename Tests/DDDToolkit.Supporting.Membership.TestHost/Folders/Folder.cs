@@ -39,14 +39,15 @@ public sealed partial class FolderMember
 [AggregateRoot<FolderId>]
 public sealed partial class Folder
 {
-    /// <summary>Opens a folder, with <paramref name="keeper"/> on it from <paramref name="now"/> on, for good, in the keeper's role.</summary>
-    public Folder(FolderId id, StaffCode keeper, NamedRole keeperRole, DateTimeOffset now) : base(id)
+    /// <summary>Opens a folder, with <paramref name="keeper"/> on it from <paramref name="now"/> on, for good, holding no role.</summary>
+    public Folder(FolderId id, StaffCode keeper, DateTimeOffset now) : base(id)
     {
         Keeper = keeper;
-        Members.Open(keeperRole, now);
+        Members.Open(now);
     }
 
     /// <summary>The member of staff that keeps the folder: its owner.</summary>
+    [Owner]
     public StaffCode Keeper { get; private set; }
 
     /// <summary>Whether the folder is locked: a locked folder changes no more.</summary>
@@ -76,10 +77,10 @@ public sealed partial class Folder
     }
 
     /// <summary>Takes a role from a member of staff on the folder.</summary>
-    public void TakeRole(StaffCode from, NamedRole role, NamedRole? keeperRole)
+    public void TakeRole(StaffCode from, NamedRole role)
     {
         RequireUnlocked();
-        Members.TakeRole(from, role, keeperRole);
+        Members.TakeRole(from, role);
     }
 
     /// <summary>Takes a member of staff off the folder.</summary>
@@ -90,10 +91,10 @@ public sealed partial class Folder
     }
 
     /// <summary>Hands the folder to another keeper.</summary>
-    public void HandOver(StaffCode to, NamedRole keeperRole, DateTimeOffset now)
+    public void HandOver(StaffCode to, FormerOwner<NamedRole> formerKeeper, DateTimeOffset now)
     {
         RequireUnlocked();
-        Keeper = Members.NameOwner(to, keeperRole, now).Owner;
+        Keeper = Members.NameOwner(to, formerKeeper, now).Owner;
     }
 
     /// <summary>Locks the folder.</summary>

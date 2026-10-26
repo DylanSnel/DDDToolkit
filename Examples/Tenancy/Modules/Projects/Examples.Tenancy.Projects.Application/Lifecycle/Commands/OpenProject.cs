@@ -4,8 +4,8 @@ using Mediator;
 namespace Examples.Tenancy.Projects.Application.Lifecycle.Commands;
 
 /// <summary>
-/// Opens a project at an active unit, with its owner on the crew, holding the tenant's crew lead role there: the
-/// project role made from the crew lead's starter role.
+/// Opens a project at an active unit, with its owner on the crew, holding no project role there: the owner holds
+/// what an owner does by owning the project (<see cref="Access.ProjectPermissions"/>).
 /// </summary>
 /// <remarks>
 /// Asked at the unit, since there is no project yet: the caller holds <see cref="RequiredKey"/> there or above
@@ -60,7 +60,7 @@ public sealed record OpenProject(string Number, string Name, OrganizationUnitId 
 /// <param name="store">Where projects are added and saved.</param>
 /// <param name="reads">Where Tenancy's rows are read, for the unit.</param>
 /// <param name="tenancy">What the tenant allows: an active unit.</param>
-/// <param name="admission">Whether the owner may go on a crew, and which project role is the crew lead's.</param>
+/// <param name="admission">Whether the owner may go on a crew.</param>
 /// <param name="answers">Tenancy's answers about the current caller.</param>
 /// <param name="clock">What "now" is.</param>
 public sealed class OpenProjectHandler(
@@ -75,8 +75,7 @@ public sealed class OpenProjectHandler(
     /// <inheritdoc />
     /// <returns>The new project's id.</returns>
     /// <exception cref="Exceptions.RefusalException">
-    /// <c>projects.unit-not-active</c>, <c>projects.seat-not-active</c> for the owner, <c>projects.no-lead-role</c>,
-    /// <c>projects.number-taken</c>, <c>projects.number-invalid</c>, <c>projects.name-invalid</c>,
+    /// <c>projects.unit-not-active</c>, <c>projects.seat-not-active</c> for the owner, <c>projects.number-taken</c>, <c>projects.number-invalid</c>, <c>projects.name-invalid</c>,
     /// <c>projects.planned-range-invalid</c>.
     /// </exception>
     /// <exception cref="InvalidOperationException">A seat chose the project's id; or system work named no owner.</exception>
@@ -102,10 +101,8 @@ public sealed class OpenProjectHandler(
         await using var reading = reads.Open();
         await tenancy.RequireActiveUnitAsync(reading, unit, cancellationToken);
 
-        // Whether the owner may be on a crew, and the role every owner holds: the projects' rules answer both, on
-        // the request's context, where the role is a row of this module's.
+        // Whether the owner may be on a crew: the projects' rules answer it, on the request's context.
         await admission.RequireMemberAsync(owner, cancellationToken);
-        var leadRole = await admission.OwnerRoleAsync(cancellationToken);
 
         var number = command.Number?.Trim() ?? string.Empty;
         if (await store.NumberTakenAsync(number, cancellationToken))
@@ -113,7 +110,7 @@ public sealed class OpenProjectHandler(
             throw ProjectRefusals.Refuse(ProjectRefusals.NumberTaken, ("Number", number));
         }
 
-        var opened = new Project(command.Id ?? ProjectId.Create(), scope.Tenant, number, command.Name, unit, owner, leadRole, clock.GetUtcNow(), command.Planned);
+        var opened = new Project(command.Id ?? ProjectId.Create(), scope.Tenant, number, command.Name, unit, owner, clock.GetUtcNow(), command.Planned);
         store.Add(opened);
         await store.SaveAsync(cancellationToken);
         return opened.Id;

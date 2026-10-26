@@ -1,23 +1,32 @@
-using DDDToolkit.Abstractions.Attributes;
+using DDDToolkit.Access;
 
 namespace DDDToolkit.Supporting.Membership.TestHost.Folders;
 
-/// <summary>The keys a folder is asked about.</summary>
-public static class FolderKeys
+/// <summary>
+/// The permissions a folder is asked about, every setting said somewhere: the keeper, the folder's owner, holds all
+/// of them by keeping it; two no role can give; one the database holds the staff to and one the keeper column.
+/// </summary>
+[Permissions]
+public static class FolderPermissions
 {
     /// <summary>See a folder.</summary>
+    [On<Folder>]
     public const string Read = "folders.read";
 
     /// <summary>Put something in a folder.</summary>
+    [On<Folder>]
     public const string File = "folders.file";
 
     /// <summary>Decide who is on a folder's staff: the key this host's commands that change the staff require.</summary>
+    [On<Folder>(LocksMembers = true)]
     public const string Staff = "folders.staff";
 
-    /// <summary>Destroy what is in a folder: a key the roles list and no member's role gives, so the keeper's alone.</summary>
+    /// <summary>Destroy what is in a folder: no role gives it, so the keeper's alone.</summary>
+    [On<Folder>(InRoles = false)]
     public const string Shred = "folders.shred";
 
-    /// <summary>Hand a folder to another keeper: a key no role lists, so the keeper's alone.</summary>
+    /// <summary>Hand a folder to another keeper: no role gives it, so the keeper's alone.</summary>
+    [On<Folder>(InRoles = false, LocksOwner = true)]
     public const string HandOver = "folders.hand-over";
 }
 
@@ -44,37 +53,26 @@ public static class FolderRefusals
 }
 
 /// <summary>
-/// The rules of access through a folder's staff, with every entry said: members known by a claim, a declared
-/// owner's role, two keys only the keeper holds, one that no role lists and one that no role gives, names
-/// of its own in the database, the two keys the database holds a caller to, and the scope whose work is the
-/// host's own on a folder.
+/// The rules of access through a folder's staff: members known by a claim, and roles in code. The host's own work
+/// on a folder runs in the scope of the host's module, <see cref="Scope"/>, which the rules let through without
+/// saying it.
 /// </summary>
 public static class FolderMembership
 {
-    /// <summary>The scope the host's own work on its folders runs in: the module's name.</summary>
+    /// <summary>The scope the host's own work on its folders runs in: the module's name, <c>Filing</c>, as a scope is written.</summary>
     public const string Scope = "filing";
 
     /// <summary>The rules.</summary>
-    public static MembershipRules Rules { get; } = new(
-        "folders",
-        keys: [FolderKeys.Read, FolderKeys.File, FolderKeys.Staff, FolderKeys.Shred, FolderKeys.HandOver],
-        roles:
+    public static MembershipRules Rules { get; } = MembershipRules.For<Folder>(
+        Roles.Fixed(
         [
-            new("keeper", [FolderKeys.Read, FolderKeys.File, FolderKeys.Staff, FolderKeys.Shred]),
-            new("clerk", [FolderKeys.Read, FolderKeys.File, FolderKeys.Shred]),
-            new("visitor", [FolderKeys.Read]),
-        ],
-        members: MemberSource.Claim("app_metadata.staff"),
-        ownerRole: "keeper",
-        memberKeys: MemberKeys.AllBut(FolderKeys.Shred),
-        codes: FolderRefusals.Membership,
-        functions: new("folder_ids_staffed", "folder_ids_staffed_with", "folder_ids_seen", "folder_ids_held"),
-        grantTo: [RowAccessRoles.User, RowAccessRoles.Token("archivist")],
-        changeMembersKey: FolderKeys.Staff,
-        changeOwnerKey: FolderKeys.HandOver,
-        systemScopes: [Scope]);
+            new("keeper", [FolderPermissions.Read, FolderPermissions.File, FolderPermissions.Staff]),
+            new("clerk", [FolderPermissions.Read, FolderPermissions.File]),
+            new("visitor", [FolderPermissions.Read]),
+        ]),
+        members: MemberSource.Claim("app_metadata.staff"));
 
-    /// <summary>The keeper's role: the owner's.</summary>
+    /// <summary>The keeper's role: what a member of staff holds who keeps the folder beside its keeper.</summary>
     public static NamedRole Keeper { get; } = new("keeper");
 
     /// <summary>The role that files.</summary>

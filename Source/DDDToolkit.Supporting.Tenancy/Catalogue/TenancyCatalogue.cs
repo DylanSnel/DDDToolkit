@@ -230,8 +230,8 @@ public sealed partial class TenancyCatalogue
         if (!Knows(key))
         {
             throw new ArgumentException(
-                "'" + key + "' is not a key of the permission catalogue. A module's keys reach it from the static list the module marks with "
-                + "[TenancyPermissions], when the host calls services.AddTenancyPermissionsOfModules().",
+                "'" + key + "' is not a key of the permission catalogue. A module's keys reach it from the [Permissions] class the module declares them in, "
+                + "when the host calls services.AddTenancyPermissionsOfModules().",
                 nameof(key));
         }
     }
@@ -258,8 +258,8 @@ public sealed partial class TenancyCatalogue
     /// the module.
     /// </summary>
     private const string UnknownKeyAdvice =
-        "A key unknown to the catalogue is most often a module's that never reached it. A module states its keys on the static list it marks with "
-        + "[TenancyPermissions]; the host adds every module's list with services.AddTenancyPermissionsOfModules(), and an export builds with "
+        "A key unknown to the catalogue is most often a module's that never reached it. A module declares its keys as the constants of a static class it marks "
+        + "[Permissions], each with its level; the host adds every module's with services.AddTenancyPermissionsOfModules(), and an export builds with "
         + "TenancyPermissionsOfModules.All, in a project that references the module.";
 
     [GeneratedRegex("^[a-z][a-z0-9-]*(\\.[a-z0-9-]+)+$", RegexOptions.CultureInvariant)]
@@ -271,9 +271,9 @@ public sealed partial class TenancyCatalogue
     /// it in a column of that length, and a database that enforces it would refuse the first grant instead.
     /// <para>
     /// A key declared twice is refused. When it is one and the same declaration both times, the same list was
-    /// added twice, and the problem says so once for all of its keys: a module that marks its list with
-    /// <see cref="TenancyPermissionsAttribute"/> and still adds it with <c>AddTenancyPermissions</c>, beside the
-    /// host's <c>AddTenancyPermissionsOfModules</c>, is how that happens.
+    /// added twice, and the problem says so once for all of its keys: a module whose <c>[Permissions]</c> classes
+    /// the host adds with <c>AddTenancyPermissionsOfModules</c>, and whose list it adds with
+    /// <c>AddTenancyPermissions</c> as well, is how that happens.
     /// </para>
     /// </summary>
     private static List<Permission> CheckPermissions(IReadOnlyList<Permission> application, IReadOnlyList<Permission> contributed, List<string> problems)
@@ -335,8 +335,8 @@ public sealed partial class TenancyCatalogue
         if (addedTwice.Count > 0)
         {
             problems.Add("The same declaration of " + string.Join(", ", addedTwice.Distinct(StringComparer.Ordinal).Select(key => "'" + key + "'"))
-                         + " is added more than once. A module whose list is marked [TenancyPermissions] has it added by the host's AddTenancyPermissionsOfModules(),"
-                         + " and adds it with AddTenancyPermissions no more; and either is called once.");
+                         + " is added more than once. A module's [Permissions] classes are added by the host's AddTenancyPermissionsOfModules(),"
+                         + " and with AddTenancyPermissions no more; and either is called once.");
         }
 
         return declared;

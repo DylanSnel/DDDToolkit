@@ -108,7 +108,7 @@ public sealed class AccessStatementTests(SampleHosts hosts) : IClassFixture<Samp
         var counter = new CommandCounter();
         await using var sample = await CountedAsync(counter);
 
-        // A seat. Ada administers the tenant from its root, and owns Bay bridge and HQ refit, so she leads their
+        // A seat. Ada administers the tenant from its root, and owns Bay bridge and HQ refit, so she is on their
         // crews: how she reaches each project comes back with it, the crew first.
         using (AsSeatOf(DemoPeople.Ada))
         {
@@ -134,9 +134,9 @@ public sealed class AccessStatementTests(SampleHosts hosts) : IClassFixture<Samp
             projects.Should().ContainSingle().Which.Should().Match<ProjectOverview>(project => project.Name == "Pier 7" && project.Via == ProjectVia.Crew);
         }
 
-        // System work in the tenant reaches all of it, by neither way: the filter is left out of the statement,
-        // and the tenant filter keeps it to that tenant.
-        using (TenancyUseCases.BeginSystemIn(Harbor.Id))
+        // The projects' own system work in the tenant reaches all of it, by neither way: the filter is left out of
+        // the statement, and the tenant filter keeps it to that tenant.
+        using (TenancyUseCases.BeginSystemIn(Harbor.Id, scope: ProjectMembership.Scope))
         {
             var (reach, projects) = await ListedAsync(sample, counter);
 
@@ -156,7 +156,7 @@ public sealed class AccessStatementTests(SampleHosts hosts) : IClassFixture<Samp
         var depot = Harbor.ProjectNamed("Inland depot").Id;
         var bridge = Harbor.ProjectNamed("Bay bridge").Id;
 
-        // A key a crew gives. Rhea leads Inland depot's crew, and holds nothing at its unit that lets her edit.
+        // A key a crew gives. Rhea owns Inland depot, and holds nothing at its unit that lets her edit.
         using (AsSeatOf(DemoPeople.Rhea))
         {
             await using var scope = sample.Services.CreateAsyncScope();
@@ -205,8 +205,8 @@ public sealed class AccessStatementTests(SampleHosts hosts) : IClassFixture<Samp
             counter.Commands.Should().ContainSingle();
         }
 
-        // System work in the tenant: one statement too, and it holds every key by neither way.
-        using (TenancyUseCases.BeginSystemIn(Harbor.Id))
+        // The projects' own system work in the tenant: one statement too, and it holds every key by neither way.
+        using (TenancyUseCases.BeginSystemIn(Harbor.Id, scope: ProjectMembership.Scope))
         {
             await using var scope = sample.Services.CreateAsyncScope();
             counter.WatchThisFlow();
@@ -225,8 +225,7 @@ public sealed class AccessStatementTests(SampleHosts hosts) : IClassFixture<Samp
         await using var sample = await CountedAsync(counter);
 
         // Ada opens a project at the root and names Leo as its owner, which is the most a command of Projects asks
-        // before it changes anything: the owner's key at the unit, the unit, the seat and the lead role, which is a
-        // project role, a row of the module's own.
+        // before it changes anything: the owner's key at the unit, the unit and the seat.
         using (AsSeatOf(DemoPeople.Ada))
         {
             await using var scope = sample.Services.CreateAsyncScope();
@@ -247,10 +246,9 @@ public sealed class AccessStatementTests(SampleHosts hosts) : IClassFixture<Samp
             counter.Commands.Take(4).Should().AllSatisfy(
                 statement => statement.Should().StartWith("SELECT").And.Contain($"FROM {TenantsContext.Schema}.").And.NotContain(AnyTableOfTenancy).And.NotContain($"FROM {ProjectsTable}"),
                 "the four questions of Tenancy's come first, each asked of a function of Tenancy's: the key to open, the owner's key, the unit and the seat");
-            counter.Commands[4].Should().Contain($"FROM {ProjectRolesTable}").And.NotContain($"{TenantsContext.Schema}.", "then the lead role, of the module's own table");
-            counter.Commands.Skip(5).Should().AllSatisfy(
-                statement => statement.Should().Contain(ProjectsTable).And.NotContain($"{TenantsContext.Schema}."),
-                "and then the module's own: whether the number is free, and the save");
+            counter.Commands.Skip(4).Should().AllSatisfy(
+                statement => statement.Should().Contain(ProjectsTable).And.NotContain($"{TenantsContext.Schema}.").And.NotContain(ProjectRolesTable),
+                "and then the module's own: whether the number is free, and the save; the owner is given no project role, so none is read");
         }
     }
 
@@ -324,7 +322,7 @@ public sealed class AccessStatementTests(SampleHosts hosts) : IClassFixture<Samp
         ProjectId[] all = [.. Harbor.Projects.Select(project => project.Id)];
         var pier = Harbor.ProjectNamed("Pier 7").Id;
 
-        // Leo leads Pier 7's crew and sees nothing else of harbor; Ada administers the tenant. Asked about every
+        // Leo owns Pier 7 and sees nothing else of harbor; Ada administers the tenant. Asked about every
         // project of harbor, each is answered about the ones it sees, in one statement, whatever their number.
         foreach (var (person, sees) in new[] { (DemoPeople.Leo, 1), (DemoPeople.Ada, all.Length) })
         {
@@ -343,7 +341,7 @@ public sealed class AccessStatementTests(SampleHosts hosts) : IClassFixture<Samp
                     [Harbor.SeatOf(DemoPeople.Leo), Harbor.SeatOf(DemoPeople.Juno), Harbor.SeatOf(DemoPeople.Vic)],
                     "the owner first, then by when each was put on the crew");
                 crews[pier].Members.Should().OnlyContain(member => member.ProjectId == pier, "a member says whose crew it is on");
-                crews[pier].MyRoleIds.Should().Equal(person == DemoPeople.Leo ? [Harbor.ProjectRoles[SampleCatalogue.CrewLead]] : [], "the caller's own roles on the crew come with it");
+                crews[pier].MyRoleIds.Should().BeEmpty("the caller's own roles on the crew come with it, and neither holds one there: Leo owns it");
 
                 // Every key an ability stands for, each project's state and whether there is anywhere to move one
                 // to: one statement. Leo may not open a project anywhere, so he may not move one.

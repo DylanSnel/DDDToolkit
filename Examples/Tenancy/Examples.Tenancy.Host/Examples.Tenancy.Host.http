@@ -239,8 +239,8 @@ GET {{api}}/access/units?key=projects.fly
 Authorization: Bearer {{rhea.response.body.access_token}}
 Tenant: harbor
 
-### A project may be planned for a range of days, two ISO dates. She owns Inland depot, and the crew lead's
-### role holds projects.edit, so she plans it: 204. With both dates left out the plan is taken away; with one,
+### A project may be planned for a range of days, two ISO dates. She owns Inland depot, and an owner holds
+### projects.edit by owning a project, so she plans it: 204. With both dates left out the plan is taken away; with one,
 ### or the last before the first, it is 400 projects.planned-range-invalid. Like every change to a project it
 ### takes the version she read as If-Match, which leo shows below.
 PUT {{api}}/projects/{{inlandDepot}}/planned-range
@@ -463,15 +463,15 @@ Content-Type: application/json
 
 { "keys": ["projects.view", "inspections.record"] }
 
-### Archived, it is given to nobody and changes no more: 204. The crew lead's role is not archived: every
-### project's owner holds it, so for {{projectCrewLead}} this is 409 projects.owner-role-stays.
+### Archived, it is given to nobody and changes no more: 204. Any role is archived alike, the crew lead's too:
+### a project's owner holds no role.
 POST {{api}}/project-roles/{{rigger.response.body.id}}/archive
 Authorization: Bearer {{maud.response.body.access_token}}
 Tenant: harbor
 
 ### ------------------------------------------------------------------------------------------------
-### leo owns Pier 7 and leads its crew. The crew lead's role holds every key that acts on a project, so the
-### owner may do everything on it; opening projects and naming an owner are the organization's.
+### leo owns Pier 7 and leads its crew. An owner holds every key that acts on a project by owning it, so he
+### may do everything on it; opening projects and naming an owner are the organization's.
 # @name leo
 POST {{api}}/dev/auth/token
 Content-Type: application/json
@@ -517,23 +517,27 @@ Content-Type: application/json
 { "name": "Pier 7" }
 
 ### Naming another owner is not the crew's to do, whatever role is on it: 403 projects.not-permitted, key
-### projects.owner.change. Rhea, who holds it at North, may, and so may ada and maud.
+### projects.owner.change. Rhea, who holds it at North, may, and so may ada and maud. The body says what the old
+### owner becomes, a crew member in a project role, formerOwnerRoleId, or, left out, nobody on the crew.
 PUT {{api}}/projects/{{pier7}}/owner
 Authorization: Bearer {{leo.response.body.access_token}}
 Tenant: harbor
 Content-Type: application/json
 
-{ "seatId": "{{junoSeat}}" }
+{ "seatId": "{{junoSeat}}", "formerOwnerRoleId": "{{projectCrewLead}}" }
 
 ### The owner stays on the crew until someone else is named owner: 409 projects.owner-protected.
 DELETE {{api}}/projects/{{pier7}}/crew/{{leosSeat}}
 Authorization: Bearer {{leo.response.body.access_token}}
 Tenant: harbor
 
-### And keeps the lead role until then: taking it, from himself too, is 409 projects.owner-protected.
-DELETE {{api}}/projects/{{pier7}}/crew/{{leosSeat}}/roles/{{projectCrewLead}}
+### And holds no project role until then: giving him one, by himself too, is 409 projects.owner-protected.
+POST {{api}}/projects/{{pier7}}/crew/{{leosSeat}}/roles
 Authorization: Bearer {{leo.response.body.access_token}}
 Tenant: harbor
+Content-Type: application/json
+
+{ "roleId": "{{projectCrewLead}}" }
 
 ### A crew member holds any number of roles, each for a period of its own. vic is the crew's observer; leo
 ### gives him the surveyor's role as well, until a day (pick one that is still to come): 204. Whoever manages

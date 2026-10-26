@@ -43,11 +43,11 @@ public sealed class DirectoryLookupScenarios(SampleHosts sample) : IClassFixture
                 $$"""query($pier: ID!, $bridge: ID!) { pier: project(id: $pier) { {{named}} } bridge: project(id: $bridge) { {{named}} } }""",
                 new { pier, bridge });
 
-        // Two projects at two units, with five people and three roles between them: Leo, Juno and Vic on Pier 7,
-        // Ada and Tove on the bridge.
+        // Two projects at two units, with five people and two roles between them: Leo, Juno and Vic on Pier 7,
+        // Ada and Tove on the bridge. The owners, Leo and Ada, hold no role.
         batches.WholeAt<OrganizationUnitId>(2);
         batches.WholeAt<SeatId>(5);
-        batches.WholeAt<ProjectRoleId>(3);
+        batches.WholeAt<ProjectRoleId>(2);
         sent.Clear();
         var data = await BothAsync("unit { path } crew { seat { displayName status } roles { role { name } } }");
 
@@ -59,7 +59,7 @@ public sealed class DirectoryLookupScenarios(SampleHosts sample) : IClassFixture
         data.GetProperty("bridge").GetProperty("crew").EnumerateArray()
             .SelectMany(member => member.GetProperty("roles").EnumerateArray())
             .Select(held => held.GetProperty("role").GetProperty("name").GetString())
-            .Should().BeEquivalentTo(["Crew lead", "Surveyor"]);
+            .Should().BeEquivalentTo(["Surveyor"]);
 
         // And each field that names something was one question, with every id of both projects in it once.
         sent.OfType<SeatsById>().Should().ContainSingle("the seats of both crews are asked together")
@@ -67,13 +67,13 @@ public sealed class DirectoryLookupScenarios(SampleHosts sample) : IClassFixture
         sent.OfType<OrganizationUnitsById>().Should().ContainSingle("the units of both projects are asked together")
             .Which.Ids.Should().BeEquivalentTo([Harbor.UnitNamed("North Coast"), Harbor.UnitNamed("South Bay")]);
         sent.OfType<ProjectRolesById>().Should().ContainSingle("the roles of both crews are asked together")
-            .Which.Ids.Should().BeEquivalentTo([Harbor.ProjectRoles[SampleCatalogue.CrewLead], Harbor.ProjectRoles[SampleCatalogue.Surveyor], Harbor.ProjectRoles[SampleCatalogue.Observer]]);
+            .Which.Ids.Should().BeEquivalentTo([Harbor.ProjectRoles[SampleCatalogue.Surveyor], Harbor.ProjectRoles[SampleCatalogue.Observer]]);
 
         // Each of them left as one batch, whole: the host's requests take their dispatcher from the test, so
         // nothing above was counted by the clock.
         batches.SentOf<SeatId>().Should().Equal([5], "the seats of both crews waited on one batch");
         batches.SentOf<OrganizationUnitId>().Should().Equal([2], "the units of both projects waited on one batch");
-        batches.SentOf<ProjectRoleId>().Should().Equal([3], "the roles of both crews waited on one batch");
+        batches.SentOf<ProjectRoleId>().Should().Equal([2], "the roles of both crews waited on one batch");
 
         // The gateway asks Tenancy once for each field of an answer that is a reference, so the owners are a
         // question of their own although each of them is on a crew as well: one question for the two, never one

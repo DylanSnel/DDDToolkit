@@ -43,19 +43,13 @@ public static class ProjectRefusals
     public const string NumberTaken = "projects.number-taken";
 
     /// <summary>
-    /// The tenant has no project role in use made from the crew lead's starter role, so a project cannot be given
-    /// an owner: the tenant was not set up. The package's rule <see cref="MembershipRefusals.NoOwnerRole"/>.
-    /// </summary>
-    public const string NoLeadRole = "projects.no-lead-role";
-
-    /// <summary>
     /// The role cannot go on a crew: it is not one of the tenant's project roles in use, so a role of the
     /// organization, an archived project role and one of another tenant alike. Argument: <c>Role</c>. The
     /// package's rule <see cref="MembershipRefusals.RoleNotForMembers"/>.
     /// </summary>
     public const string RoleNotForMembers = "projects.role-not-for-members";
 
-    /// <summary>The change would take the owner off the crew, or take the owner's lead role.</summary>
+    /// <summary>The change would take the owner off the crew, or give the owner a project role: the owner holds what an owner does by owning the project.</summary>
     public const string OwnerProtected = "projects.owner-protected";
 
     /// <summary>
@@ -132,12 +126,6 @@ public static class ProjectRefusals
     public const string KeyNotForMembers = "projects.key-not-for-members";
 
     /// <summary>
-    /// The crew lead's role, which every owner holds, is not archived. The package's rule
-    /// <see cref="MembershipRefusals.OwnerRoleStays"/>.
-    /// </summary>
-    public const string OwnerRoleStays = "projects.owner-role-stays";
-
-    /// <summary>
     /// A project role's keys, as stored, are not each there once, not blank and in order: only code that went
     /// round the role writes such a row. The package's rule <see cref="MembershipRefusals.RoleKeysNotNormalized"/>.
     /// </summary>
@@ -150,9 +138,8 @@ public static class ProjectRefusals
         [Closed] = (RefusalKind.Conflict, "The project is closed; nothing about it changes until it is reopened."),
         [NotClosed] = (RefusalKind.Conflict, "The project is open; only a closed project can be reopened."),
         [NumberTaken] = (RefusalKind.Conflict, "Another project in this tenant already has the number {Number}."),
-        [NoLeadRole] = (RefusalKind.Conflict, "The tenant has no active crew lead role to give a project's owner."),
         [RoleNotForMembers] = (RefusalKind.Invalid, "That role is not one of this tenant's project roles in use, so it cannot go on a crew."),
-        [OwnerProtected] = (RefusalKind.Conflict, "The owner keeps the lead role on the crew until somebody else is named owner."),
+        [OwnerProtected] = (RefusalKind.Conflict, "The owner stays on the crew, holding no project role, until somebody else is named owner."),
         [AlreadyOnCrew] = (RefusalKind.Conflict, "That seat is on the crew already, or is due to join it. Give it a crew role instead."),
         [CrewRoleHeld] = (RefusalKind.Conflict, "That seat already has this role on the crew."),
         [CrewRoleNotFound] = (RefusalKind.NotFound, "That seat does not have this role on the crew."),
@@ -173,7 +160,6 @@ public static class ProjectRefusals
         [RoleNameInvalid] = (RefusalKind.Invalid, "Enter {Min} to {Max} characters."),
         [RoleNameTaken] = (RefusalKind.Conflict, "Another project role of this tenant is called {Name} already."),
         [KeyNotForMembers] = (RefusalKind.Invalid, "A project role cannot give these keys: {Keys}."),
-        [OwnerRoleStays] = (RefusalKind.Conflict, "The role every project's owner holds is not archived."),
         [RoleKeysNotNormalized] = (RefusalKind.Conflict, "A project role's keys are each there once, none of them blank, in order."),
     };
 
@@ -188,7 +174,6 @@ public static class ProjectRefusals
         .With(MembershipRefusals.RoleHeld, Suffix(CrewRoleHeld))
         .With(MembershipRefusals.RoleNotHeld, Suffix(CrewRoleNotFound))
         .With(MembershipRefusals.MemberNotActive, Suffix(SeatNotActive))
-        .With(MembershipRefusals.NoOwnerRole, Suffix(NoLeadRole))
         .WithMemberArgument("Seat");
 
     /// <summary>Every code above: what a test holds the resource files of <see cref="ProjectFailures"/> to.</summary>

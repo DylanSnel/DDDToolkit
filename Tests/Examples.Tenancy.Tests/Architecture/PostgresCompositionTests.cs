@@ -341,7 +341,7 @@ public sealed partial class PostgresCompositionTests
 
         var rules = ExportedMarks.Marked(typeof(MembershipRulesAttribute<>)).Should().ContainSingle("the projects are the one resource with members").Subject;
         rules.GetCustomAttributes().Select(attribute => attribute.GetType()).Should().Contain(typeof(MembershipRulesAttribute<CrewMember>), "Membership's contribution is closed over a crew's member class");
-        ((MembershipRules)rules.GetValue(null)!).Name.Should().Be(ProjectMembership.Name);
+        ((MembershipRules)rules.GetValue(null)!).Name.Should().Be("projects");
     }
 
     /// <summary>The names of the projects <paramref name="projectFile"/> references.</summary>

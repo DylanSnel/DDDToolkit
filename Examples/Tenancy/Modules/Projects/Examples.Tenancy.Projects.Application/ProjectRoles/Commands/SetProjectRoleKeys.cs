@@ -11,7 +11,7 @@ namespace Examples.Tenancy.Projects.Application.ProjectRoles.Commands;
 /// </summary>
 /// <remarks>
 /// The crew lead's role is re-keyed like any other. What a project's owner may do does not hang on it: the owner
-/// holds every key of a lead by owning the project.
+/// holds no role, and what it holds by owning the project the projects' permissions say.
 /// </remarks>
 /// <param name="Id">The role.</param>
 /// <param name="Keys">Every key it is to give.</param>

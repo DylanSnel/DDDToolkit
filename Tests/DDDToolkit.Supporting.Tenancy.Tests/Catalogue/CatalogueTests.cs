@@ -82,8 +82,8 @@ public class CatalogueTests
         Permission[] gauges = [new("gauges.read", "Gauges", "Read gauges"), new("gauges.lock", "Gauges", "Lock gauges")];
 
         Problems(Application(), [.. gauges, .. gauges]).Should().ContainSingle().Which.Should().Be(
-            "The same declaration of 'gauges.read', 'gauges.lock' is added more than once. A module whose list is marked [TenancyPermissions] has it "
-            + "added by the host's AddTenancyPermissionsOfModules(), and adds it with AddTenancyPermissions no more; and either is called once.");
+            "The same declaration of 'gauges.read', 'gauges.lock' is added more than once. A module's [Permissions] classes are added by the host's "
+            + "AddTenancyPermissionsOfModules(), and with AddTenancyPermissions no more; and either is called once.");
 
         // Two declarations of one key that are not one and the same are refused as a duplicate, as before.
         Problems(Application(), [.. gauges, new Permission("gauges.read", "Gauges", "Read gauges")])
@@ -107,7 +107,7 @@ public class CatalogueTests
     {
         // What a host that leaves out services.AddTenancyPermissionsOfModules() meets: a pack names a module's key
         // that never reached the catalogue, or, with no pack naming one, the first question about it.
-        const string Cure = "*[TenancyPermissions]*services.AddTenancyPermissionsOfModules()*";
+        const string Cure = "*[Permissions]*services.AddTenancyPermissionsOfModules()*";
         var refused = FluentActions.Invoking(() => TenancyCatalogue.Build(Application(packs: [Administrators, new RolePack("viewer", "Viewer", "Looks", ["orders.view"])]), []))
             .Should().Throw<TenancyCatalogueException>().Which;
 
@@ -121,7 +121,7 @@ public class CatalogueTests
 
         // A catalogue that names no unknown key hears nothing about modules.
         FluentActions.Invoking(() => TenancyCatalogue.Build(Application(packs: [Administrators, Administrators]), []))
-            .Should().Throw<TenancyCatalogueException>().Which.Message.Should().NotContain("[TenancyPermissions]");
+            .Should().Throw<TenancyCatalogueException>().Which.Message.Should().NotContain("[Permissions]");
     }
 
     [Fact]

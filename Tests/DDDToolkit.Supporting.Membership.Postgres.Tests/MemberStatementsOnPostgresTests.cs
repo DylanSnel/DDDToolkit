@@ -16,7 +16,7 @@ public sealed class MemberStatementsOnPostgresTests(FilingPostgres postgres)
         var data = filing.Scenario;
         var commands = filing.Services.Commands;
 
-        var held = await filing.Services.AsAsync(TestCallers.User(data.Ben), provider => provider.GetRequiredService<IMemberQuestions<DocumentId>>().RequireAsync(data.Minutes, DocumentKeys.Edit, Cancellation));
+        var held = await filing.Services.AsAsync(TestCallers.User(data.Ben), provider => provider.GetRequiredService<IMemberQuestions<DocumentId>>().RequireAsync(data.Minutes, DocumentPermissions.Edit, Cancellation));
         commands.Count.Should().Be(1);
         held.Via.Should().Be(MemberVia.Members);
         commands.Commands[0].Should().Contain("EXISTS").And.Contain("filing.\"DocumentShares\"").And.Contain("filing.\"DocumentShareRoles\"");
@@ -25,8 +25,8 @@ public sealed class MemberStatementsOnPostgresTests(FilingPostgres postgres)
         var keys = await filing.Services.AsAsync(TestCallers.User(data.Ada), provider => provider.GetRequiredService<IMemberQuestions<DocumentId>>()
             .KeysOnAsync([data.Minutes, data.Budget, data.Outline], FilingScenario.DocumentKeysAsked, Cancellation));
         commands.Count.Should().Be(1);
-        keys[data.Minutes].Should().BeEquivalentTo([DocumentKeys.View, DocumentKeys.Edit, DocumentKeys.Share]);
-        keys[data.Budget].Should().BeEquivalentTo([DocumentKeys.View]);
+        keys[data.Minutes].Should().BeEquivalentTo([DocumentPermissions.View, DocumentPermissions.Edit, DocumentPermissions.Share]);
+        keys[data.Budget].Should().BeEquivalentTo([DocumentPermissions.View]);
         keys.Should().NotContainKey(data.Outline);
 
         // A folder's, known by the claim: the same shape over the host's own table names.
@@ -35,9 +35,9 @@ public sealed class MemberStatementsOnPostgresTests(FilingPostgres postgres)
             .KeysOnAsync([data.Cabinet, data.Annex], FilingScenario.FolderKeysAsked, Cancellation));
         commands.Count.Should().Be(1);
         commands.Commands[0].Should().Contain($"filing.\"{FilingContext.FolderStaffTable}\"").And.Contain($"\"{FilingContext.StaffColumn}\"").And.NotContain("Document");
-        staff[data.Cabinet].Should().BeEquivalentTo([FolderKeys.Read, FolderKeys.File]);
+        staff[data.Cabinet].Should().BeEquivalentTo([FolderPermissions.Read, FolderPermissions.File]);
         staff[data.Annex].Should().BeEquivalentTo(
-            [FolderKeys.Read, FolderKeys.File, FolderKeys.Staff, FolderKeys.Shred, FolderKeys.HandOver],
+            [FolderPermissions.Read, FolderPermissions.File, FolderPermissions.Staff, FolderPermissions.Shred, FolderPermissions.HandOver],
             "the clerk keeps the annex, and a keeper holds every key of a folder");
     }
 
@@ -63,9 +63,9 @@ public sealed class MemberStatementsOnPostgresTests(FilingPostgres postgres)
             // their statement, each keeps the context it took while the others take theirs.
             var together = commands.HoldUntilTogether(readings: 3);
             var asked = await Task.WhenAll(
-                access.HoldAsync(data.Minutes, DocumentKeys.Edit, Cancellation),
-                access.HoldAsync(data.Budget, DocumentKeys.Share, Cancellation),
-                access.HoldAsync(data.Outline, DocumentKeys.View, Cancellation));
+                access.HoldAsync(data.Minutes, DocumentPermissions.Edit, Cancellation),
+                access.HoldAsync(data.Budget, DocumentPermissions.Share, Cancellation),
+                access.HoldAsync(data.Outline, DocumentPermissions.View, Cancellation));
 
             together.Met.Should().BeTrue("the three readings ran at the same time, or what follows proves nothing");
             asked[0]!.Via.Should().Be(MemberVia.Members, "Ben contributes to the minutes");
@@ -83,15 +83,15 @@ public sealed class MemberStatementsOnPostgresTests(FilingPostgres postgres)
             var access = scope.ServiceProvider.GetRequiredService<IMemberQuestions<DocumentId>>();
 
             var asked = await Task.WhenAll(
-                access.HoldAsync(data.Minutes, DocumentKeys.Edit, Cancellation),
-                access.HoldAsync(data.Budget, DocumentKeys.Share, Cancellation),
-                access.HoldAsync(data.Outline, DocumentKeys.View, Cancellation));
+                access.HoldAsync(data.Minutes, DocumentPermissions.Edit, Cancellation),
+                access.HoldAsync(data.Budget, DocumentPermissions.Share, Cancellation),
+                access.HoldAsync(data.Outline, DocumentPermissions.View, Cancellation));
 
             asked.Should().OnlyContain(hold => hold == null);
         }
 
         // And as the owner of the outline, the third is answered: it was the caller that hid it, not the question.
-        (await filing.Services.AsAsync(TestCallers.User(data.Cy), provider => provider.GetRequiredService<IMemberQuestions<DocumentId>>().HoldAsync(data.Outline, DocumentKeys.View, Cancellation)))!
+        (await filing.Services.AsAsync(TestCallers.User(data.Cy), provider => provider.GetRequiredService<IMemberQuestions<DocumentId>>().HoldAsync(data.Outline, DocumentPermissions.View, Cancellation)))!
             .Via.Should().Be(MemberVia.Members);
     }
 
@@ -117,29 +117,29 @@ public sealed class MemberStatementsOnPostgresTests(FilingPostgres postgres)
         {
             document.GiveRole(data.Dee, DocumentMembership.Contributor, MemberPeriod.Between(started, data.Now.AddHours(2)), started, by: data.Ada);
             document.ShareWith(data.Hal, DocumentMembership.Contributor, MemberPeriod.Between(started, data.Now.AddDays(3)), started, by: data.Ada);
-            document.GiveRole(data.Hal, DocumentMembership.Owner, MemberPeriod.Between(started, data.Now.AddDays(10)), started, by: data.Ada);
+            document.GiveRole(data.Hal, DocumentMembership.Manager, MemberPeriod.Between(started, data.Now.AddDays(10)), started, by: data.Ada);
         });
 
         // By owning the document: no end. By a role with no end, in a membership with none: no end.
-        var ada = await AskAsync(data.Ada, DocumentKeys.Share);
+        var ada = await AskAsync(data.Ada, DocumentPermissions.Share);
         (ada!.Via, ada.Until).Should().Be((MemberVia.Members, (DateTimeOffset?)null));
-        (await AskAsync(data.Ben, DocumentKeys.Edit))!.Until.Should().BeNull();
+        (await AskAsync(data.Ben, DocumentPermissions.Edit))!.Until.Should().BeNull();
 
         // By being a member: the membership's end. By a role: the role's end, or its membership's if that is sooner.
-        (await AskAsync(data.Cy, DocumentKeys.View))!.Until.Should().BeCloseTo(data.Now.AddDays(7), precision);
-        (await AskAsync(data.Dee, DocumentKeys.Edit))!.Until.Should().BeCloseTo(data.Now.AddHours(2), precision);
-        (await AskAsync(data.Hal, DocumentKeys.Edit))!.Until.Should().BeCloseTo(data.Now.AddDays(3), precision, "the role that ends last gives the key for ten days, and counts only inside a membership of three");
-        (await AskAsync(data.Hal, DocumentKeys.Share))!.Until.Should().BeCloseTo(data.Now.AddDays(3), precision);
+        (await AskAsync(data.Cy, DocumentPermissions.View))!.Until.Should().BeCloseTo(data.Now.AddDays(7), precision);
+        (await AskAsync(data.Dee, DocumentPermissions.Edit))!.Until.Should().BeCloseTo(data.Now.AddHours(2), precision);
+        (await AskAsync(data.Hal, DocumentPermissions.Edit))!.Until.Should().BeCloseTo(data.Now.AddDays(3), precision, "the role that ends last gives the key for ten days, and counts only inside a membership of three");
+        (await AskAsync(data.Hal, DocumentPermissions.Share))!.Until.Should().BeCloseTo(data.Now.AddDays(3), precision);
 
         // Not held: nothing to end.
-        var cy = await AskAsync(data.Cy, DocumentKeys.Edit);
+        var cy = await AskAsync(data.Cy, DocumentPermissions.Edit);
         (cy!.Via, cy.Until).Should().Be(((MemberVia?)null, (DateTimeOffset?)null));
 
         // A folder's, known by the claim, with a keeper's deputy for three days.
         await filing.Services.ChangeAsync(data.Cabinet, folder => folder.GiveRole(data.Visitor, FolderMembership.Keeper, MemberPeriod.Between(started, data.Now.AddDays(3)), started, by: data.Keeper));
-        var deputy = await filing.Services.AsAsync(TestCallers.Staff(data.Visitor), provider => provider.GetRequiredService<IMemberQuestions<FolderId>>().HoldAsync(data.Cabinet, FolderKeys.Staff, Cancellation));
+        var deputy = await filing.Services.AsAsync(TestCallers.Staff(data.Visitor), provider => provider.GetRequiredService<IMemberQuestions<FolderId>>().HoldAsync(data.Cabinet, FolderPermissions.Staff, Cancellation));
         deputy!.Until.Should().BeCloseTo(data.Now.AddDays(3), precision);
-        var keeper = await filing.Services.AsAsync(TestCallers.Staff(data.Keeper), provider => provider.GetRequiredService<IMemberQuestions<FolderId>>().HoldAsync(data.Cabinet, FolderKeys.HandOver, Cancellation));
+        var keeper = await filing.Services.AsAsync(TestCallers.Staff(data.Keeper), provider => provider.GetRequiredService<IMemberQuestions<FolderId>>().HoldAsync(data.Cabinet, FolderPermissions.HandOver, Cancellation));
         (keeper!.Via, keeper.Until).Should().Be((MemberVia.Members, (DateTimeOffset?)null));
     }
 
@@ -152,7 +152,7 @@ public sealed class MemberStatementsOnPostgresTests(FilingPostgres postgres)
 
         var titles = await filing.Services.AsAsync(TestCallers.User(data.Ada), async provider =>
         {
-            var seen = provider.GetRequiredService<IMemberQuestions<DocumentId>>().Reach(DocumentKeys.View);
+            var seen = provider.GetRequiredService<IMemberQuestions<DocumentId>>().Reach(DocumentPermissions.View);
             return await provider.GetRequiredService<FilingContext>().Documents.Within(seen).OrderBy(document => document.Title).Select(document => document.Title).ToListAsync(Cancellation);
         });
         titles.Should().Equal("Budget", "Minutes");
@@ -162,7 +162,7 @@ public sealed class MemberStatementsOnPostgresTests(FilingPostgres postgres)
         var answer = await filing.Services.AsAsync(TestCallers.User(data.Cy), async provider =>
         {
             var access = provider.GetRequiredService<IMemberQuestions<DocumentId>>();
-            var act = access.Reach(DocumentKeys.Edit);
+            var act = access.Reach(DocumentPermissions.Edit);
             var found = await provider.GetRequiredService<FilingContext>().Documents
                 .Where(document => document.Id == data.Minutes)
                 .Within(access.KeyReach([]).See)

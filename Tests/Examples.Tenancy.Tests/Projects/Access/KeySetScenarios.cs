@@ -70,12 +70,12 @@ public sealed class KeySetScenarios(SampleHosts sample) : IClassFixture<SampleHo
         hers[PierSeven].Should().BeEquivalentTo(keys);
         hers[InlandDepot].Should().BeEquivalentTo(keys);
 
-        // Leo leads Pier 7's crew and holds nothing in the organization: what a lead's role gives, and never the
-        // key that names an owner, which no crew gives.
+        // Leo owns Pier 7 and holds nothing in the organization: what its owner holds, and never the key that names
+        // an owner, which no crew gives, nor the one that records, which is the Inspections module's.
         using var leo = await sample.ClientAsync("leo", Harbor.Slug);
         var his = await KeysOnAsync(leo, keys, projects);
         his.Should().ContainSingle().Which.Key.Should().Be(PierSeven);
-        his[PierSeven].Should().BeEquivalentTo([ProjectKeys.View, ProjectKeys.Edit, ProjectKeys.ManageCrew, InspectionKeys.Record]);
+        his[PierSeven].Should().BeEquivalentTo([ProjectKeys.View, ProjectKeys.Edit, ProjectKeys.ManageCrew]);
 
         // Juno surveys there and Vic looks: each holds what the role held on the crew gives.
         using var juno = await sample.ClientAsync("juno", Harbor.Slug);
@@ -136,8 +136,8 @@ public sealed class KeySetScenarios(SampleHosts sample) : IClassFixture<SampleHo
             held.Keys.Should().BeEquivalentTo([Harbor.ProjectNamed("Pier 7").Id, Harbor.ProjectNamed("Inland depot").Id]);
         }
 
-        // System work in the tenant holds every key on every project of it, and asks Tenancy nothing.
-        using (TenancyUseCases.BeginSystemIn(Harbor.Id))
+        // The projects' own system work in the tenant holds every key on every project of it, and asks Tenancy nothing.
+        using (TenancyUseCases.BeginSystemIn(Harbor.Id, scope: ProjectMembership.Scope))
         {
             await using var scope = host.Services.CreateAsyncScope();
             var access = scope.ServiceProvider.GetRequiredService<ProjectAccess>();

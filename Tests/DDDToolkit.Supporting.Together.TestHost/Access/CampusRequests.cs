@@ -33,8 +33,8 @@ public static class CampusRequests
     {
         /// <inheritdoc />
         AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.All(
-            MemberAccess.On(CourseKeys.Grade, Course),
-            TenancyAccess.AtUnit(CourseKeys.Grade, To));
+            MemberAccess.On(CoursePermissions.Grade, Course),
+            TenancyAccess.AtUnit(CoursePermissions.Grade, To));
     }
 
     /// <summary>
@@ -43,7 +43,7 @@ public static class CampusRequests
     /// </summary>
     /// <param name="Course">The course.</param>
     /// <param name="Seat">The seat that leaves it.</param>
-    [RequiresKey(CourseKeys.Outline)]
+    [RequiresKey(CoursePermissions.Outline)]
     public sealed record LeaveCourse([OnResource] CourseId Course, [OrOwn] SeatId Seat) : ICampusRequest;
 
     /// <summary>The college's access history: one of the application's operators, or a seat that manages seats for the whole college.</summary>

@@ -61,7 +61,6 @@ type looks annotated and behaves like a plain class. Every misuse below reports 
 | [DDD00060](#ddd00060) | Warning | A member class names an aggregate root whose members it is |
 | [DDD00061](#ddd00061) | Warning | A request that declares its access is sent, not handed to its handler |
 | [DDD00062](#ddd00062) | Error | A class of one GraphQL schema is one the toolkit alone registers |
-| [DDD00063](#ddd00063) | Error | A module's keys marked [TenancyPermissions] are a list the project that composes the modules can read |
 | [DDD00064](#ddd00064) | Warning | DDD_Module declares the module where the package's build step runs |
 | [DDD00065](#ddd00065) | Info | The class a package's use cases are named through is written where each of its templates has one class |
 | [DDD00066](#ddd00066) | Error | A package's switch writes a class or an id where its name is free and its id is known |
@@ -88,6 +87,15 @@ type looks annotated and behaves like a plain class. Every misuse below reports 
 | [DDD00087](#ddd00087) | Error | [Owner] marks the one owner of an aggregate root |
 | [DDD00088](#ddd00088) | Error | [Owner] marks a property of a type the caller has an own of |
 | [DDD00089](#ddd00089) | Error | A module's default requirement is one any of its requests may take |
+| [DDD00090](#ddd00090) | Warning | The names of resources with members are those of the newest access file |
+| [DDD00091](#ddd00091) | Error | [Members] names a resource with what can be converted to a code and a function's name |
+| [DDD00092](#ddd00092) | Error | A permission is a public constant of a [Permissions] class, with a level |
+| [DDD00093](#ddd00093) | Error | A permission's level fits what it is asked on |
+| [DDD00094](#ddd00094) | Error | The rules of a resource are made from the permissions declared on it |
+| [DDD00095](#ddd00095) | Error | A module's permissions are declared in a [Permissions] class, not on a list of its own |
+| [DDD00096](#ddd00096) | Warning | [OrOwn] beside a key the owner of the resource holds already says nothing more |
+| [DDD00097](#ddd00097) | Error | [At] marks the one place an aggregate root hangs at |
+| [DDD00098](#ddd00098) | Error | Rules that reach a resource from above read where it hangs from its [At] property |
 
 Most of these say the generator could not do what you asked. The rest are a different kind: they are
 rules about the model rather than about the declaration, and each of them names code that compiles,
@@ -125,8 +133,12 @@ where it is a request about the owner's own that no row could ever let through.
 [DDD00059](#ddd00059) and [DDD00060](#ddd00060) are about the
 [member list of a resource](membership.md#the-member-list-is-written-for-you), and say what the generator of
 the Membership package could not tell, and which member class names the wrong resource.
-[DDD00063](#ddd00063) is about [a module's permission keys](tenancy.md#a-module-states-its-keys-once), where it
-is a module whose keys never reach the catalogue the host runs with.
+[DDD00092](#ddd00092) to [DDD00095](#ddd00095) are about [permissions declared once](membership.md#the-settings-of-a-permission),
+where it is a permission read as something it is not, said twice, or that never reaches the rules or the catalogue;
+[DDD00090](#ddd00090) and [DDD00091](#ddd00091) about [the names of resources with members](membership.md#names), where
+it is a code clients read or a function that changes with a class's name; and [DDD00096](#ddd00096) to
+[DDD00098](#ddd00098) about the owner and the place of a resource with members, where it is an attribute that adds
+nothing, or rules that read a place nobody said.
 [DDD00074](#ddd00074) is about [the migration history](entity-framework.md#the-migration-history), where it is a
 `dotnet ef database update` or an exported file that records the migrations in a table the application never reads.
 [DDD00075](#ddd00075) is about [two modules with Tenancy's classes](tenancy.md#two-modules-with-the-classes), where it is a name that
@@ -2007,7 +2019,7 @@ that declares the requirement.
 public sealed partial class DocumentShare;
 
 [AggregateRoot<DocumentId>]
-public sealed partial class Document                    // DDD00059: two properties of UserId, and no codes
+public sealed partial class Document                    // DDD00059: no property marked [Owner]
 {
     public UserId OwnerId { get; private set; }
 
@@ -2025,9 +2037,9 @@ class's own id, and only when each can be told without a guess:
 | The list needs | It is | Not told when |
 |---|---|---|
 | the members | the one get-only `partial` property of `IReadOnlyList<TMember>`, `IReadOnlyCollection<TMember>` or `IEnumerable<TMember>`, which the toolkit keeps in a list | there is none, or there are two; a set is kept in a `HashSet` |
-| the owner | the one property of what a member is known by, the template's second type | there is none, or there are two |
+| the owner | the one property marked `[Owner]`, of what a member is known by, the template's second type | none is marked, two are, or the one marked is of another type |
 | a new row's id | the `Create()` of the member class's own id, which the generator writes for an `[EntityId<Guid>]` | the id is over something else, a `long` say, and declares no `Create()` |
-| the codes | the one static property or field of `MembershipCodes` on the resource | there is none, or there are two |
+| the codes | the one static property or field of `MembershipCodes` on the resource, or, where it declares none, the ones the generator writes under the resource's [name](membership.md#names) | there are two, or a member called `Codes` that is not one |
 
 It is also not written when the resource has a member called `Members` already, and when two member classes
 name the same resource and it keeps a collection of both, or of neither, since both lists would be called the
@@ -2043,9 +2055,9 @@ Say what is missing, and the list is written:
 [AggregateRoot<DocumentId>]
 public sealed partial class Document
 {
-    public static MembershipCodes Codes { get; } = MembershipCodes.Under("documents");
+    [Owner] public UserId OwnerId { get; private set; }
 
-    public UserId OwnerId { get; private set; }
+    public UserId WrittenBy { get; private set; }
 
     public partial IReadOnlyList<DocumentShare> Shares { get; }
 }
@@ -2207,47 +2219,6 @@ And when the attribute names no schema, and when the class is one the generated 
 generic class, a `file` class, or a class that is private or protected inside another. It is an error because each
 of these puts a field where it was meant not to be, or leaves it out where it was meant to be, without another
 word. See [A field for one schema only](graphql.md#a-field-for-one-schema-only).
-
-## DDD00063
-
-**A module's keys marked [TenancyPermissions] are a list the project that composes the modules can read.**
-
-```csharp
-[assembly: Module("Ordering")]
-
-public static class OrderingKeys
-{
-    [TenancyPermissions]
-    internal static IReadOnlyList<Permission> Permissions { get; } = [...];   // DDD00063: not public
-
-    [TenancyPermissions]
-    public static IReadOnlyList<string> Codes { get; } = [...];               // DDD00063: no sequence of Permission
-}
-```
-
-A module states its permission keys once, on the static list it marks with `[TenancyPermissions]`
-([A module states its keys once](tenancy.md#a-module-states-its-keys-once)). Tenancy's generator collects every
-marked list into the project that composes the modules, an application such as your host, whether it declares a
-module or not, or a library that declares none: `TenancyPermissionsOfModules.All`, and `services.AddTenancyPermissionsOfModules()`. It reads a list as
-`Type.Member`, from another project, so the list is:
-
-| The list is | Reported as |
-|---|---|
-| static | is not static |
-| readable: a field, or a property with a getter | has no getter |
-| no static virtual or abstract member of an interface | is a static virtual or abstract member of an interface |
-| declared in a class that is not generic, nor nested in one | is declared in the generic type |
-| declared in a type code can name: not in an extension block, nor in a file-local type | is declared in '...', which code cannot name; is declared in the file-local type |
-| of a type that is a sequence of `Permission`: `IReadOnlyList<Permission>`, `IEnumerable<Permission>`, an array | is of type ..., which is no sequence of Permission |
-| public, in public types, when its project is a library, whether it declares a module or not | is not public, and its project is a library |
-| readable outside its own type, in an application: not private or protected | cannot be read outside the type it is declared in |
-
-A list the composing project cannot read is left out of what it collects, and nothing else would say so: the
-module's keys would be missing from the catalogue the host runs with, and the first question about one of them
-would throw. That is why it is an error, reported where the list is declared. A library is public about it even
-when it declares no module, as a project of shared code does: the host references it all the same. Only an
-application, the program itself, may keep a list of its own internal: it collects that list itself, and no
-other project composes from it.
 
 ## DDD00064
 
@@ -2525,8 +2496,7 @@ would be written from the default catalogue rather than yours, or a resource's f
 project could not say why. Make the member public, in public types, with a public getter.
 
 An application, the program that runs the export or the host, may keep its own marks internal: nothing
-references it for them. A list of keys marked `[TenancyPermissions]` is held to the same by
-[DDD00063](#ddd00063).
+references it for them.
 
 ## DDD00071
 
@@ -3153,6 +3123,212 @@ default is a requirement any of them may take. Reported, at the attribute:
 A refused default is no default: the interface's last arm stops a request that states nothing, as without one. The
 attributes a package ships that may be a default allow an interface already: `[SignedIn]`, `[InTenant]`, and
 `[RequiresKey(key)]`, whose key is then held for the whole tenant, since a default reads no member and has no marker.
+
+## DDD00090
+
+**The names of resources with members are those of the newest access file.**
+
+```text
+warning DDD00090: Membership names changed since the last access file. Gone: boards (was Board). New: whiteboards
+(Whiteboard). Codes clients read change with them, and the database gets new functions. A class you renamed keeps
+its old name with [Members("...")].
+```
+
+A resource with members is [named after its class](membership.md#names), and the name is what its codes start with,
+`boards.already-member`, and what its four functions in the database are named after, `boards_i_see`. Renaming the
+class renames both: a client that branches on a code reads another one, and the next access file writes new
+functions and drops the old. The Supabase export the build runs compares the names of the resources it writes with
+those the newest access file of each module recorded, with the class each came from, and says once, in that build,
+which are gone and which are new. It does not guess which became which.
+
+A class renamed on purpose that should keep its name says so, `[Members("Boards")]`; one that should take the new
+name needs nothing more, and the warning is not given again once the new access file is there. Without the export,
+`SupabaseMigrationsExport` unset, nothing compares the names, and no warning is given.
+
+## DDD00091
+
+**[Members] names a resource with what can be converted to a code and a function's name.**
+
+```csharp
+[Members("Crane boards")]                              // DDD00091: a space
+[AggregateRoot<BoardId>]
+public sealed partial class Board;
+```
+
+What `[Members]` says is written in two forms, as a class's name is: in lower case with a dash between words for
+the resource's codes, `crane-boards.already-member`, and with an underscore for its functions, `crane_boards_i_see`.
+It is converted the way a class's name is, PascalCase split into words, and taken as it is, not made plural. Write
+it as a class's name, `CraneBoards`, or as it comes out, `crane-boards`: letters and digits, with `-` or `_`
+between words, starting with a letter. A space, another symbol, a digit or a separator first, or a separator last
+cannot be converted, and nothing of the resource is written: its rules, `MembershipRules.For<Board>`, do not
+compile until the name is put right ([Names](membership.md#names)).
+
+## DDD00092
+
+**A permission is a public constant of a [Permissions] class, with a level.**
+
+```csharp
+[Permissions]
+public class BoardPermissions                                          // DDD00092: not static
+{
+    public const string View = "boards.view";                          // DDD00092: no level
+
+    [On<Board>] internal const string Edit = "boards.edit";            // DDD00092: no public const string
+
+    [On<Board>] public const string Comment = "boards.view";           // DDD00092: 'View' declares it already
+}
+
+public static class BoardKeys
+{
+    [AtTenant] public const string Manage = "boards.manage";           // DDD00092: the class is not marked [Permissions]
+}
+```
+
+A module declares its permissions in a static class marked `[Permissions]`: every public `const string` of it is a
+permission, which a request names in `[RequiresKey]` and a role gives, and each carries its **level**, the
+attribute that says where it is asked: Tenancy's `[AtTenant]` or `[AtUnit]`, or Membership's `[On<TResource>]`
+([The settings of a permission](membership.md#the-settings-of-a-permission),
+[A module states its keys once](tenancy.md#a-module-states-its-keys-once)). The packages' generators read the class
+and nothing else, so each of these would be read as something it is not, or not at all:
+
+| Reported | Because |
+|---|---|
+| a class marked `[Permissions]` that is not static | it holds constants and nothing else |
+| a public `const string` of such a class without a level | nobody could tell where it is asked, so no catalogue and no rules would hold it |
+| a level on a field that is no public `const string` | a request names a permission by its constant, from another module too |
+| a level on a constant of a class not marked `[Permissions]` | nothing reads that class |
+| one key declared twice in one class | a permission is declared once; the second constant is the slip |
+
+## DDD00093
+
+**A permission's level fits what it is asked on.**
+
+```csharp
+[Permissions]
+public static class BoardPermissions
+{
+    [On<Column>] public const string Move = "columns.move";                   // DDD00093: no member class names Column
+
+    [On<Board>(EveryMember = true)] public const string View = "boards.view";
+    [On<Board>(EveryMember = true)] public const string Read = "boards.read";  // DDD00093: one permission every member holds
+}
+```
+
+`[On<TResource>]` says a permission is asked on one resource with members, and how it is held there. `TResource` is
+the aggregate root a member class names, `[Member<TId, TMemberId, TRoleId, TResource>]`: on another class the
+permission would be asked on something that has no members, and its rules could not be made. Of the permissions on
+one resource, one at most is held by every member (`EveryMember`), since that is also the one that sees the resource
+from above; one at most locks the members (`LocksMembers`) and one at most locks the owner (`LocksOwner`), since
+each is the one key the database's lock asks for. A key declared on one resource by two constants is reported as
+well. Each is said where it is declared, among the permissions the project sees.
+
+## DDD00094
+
+**The rules of a resource are made from the permissions declared on it.**
+
+```csharp
+public static MembershipRules Rules { get; } = MembershipRules.For<Board>(   // DDD00094: no permission on Board
+    Roles.Custom());
+```
+
+`MembershipRules.For<TResource>` makes the rules of a resource from the permissions declared on it: the constants of
+a `[Permissions]` class marked `[On<TResource>]`, in the project that makes the rules or in a project it references,
+which the package's generator hands over when the project is first used. Rules without a permission give the owner
+nothing and every role nothing, and the call would throw when the rules are made, so it is said where they are
+made. Declare the permissions asked on the resource:
+[The settings of a permission](membership.md#the-settings-of-a-permission).
+
+## DDD00095
+
+**A module's permissions are declared in a [Permissions] class, not on a list of its own.**
+
+```csharp
+public static class OrderingKeys
+{
+    [TenancyPermissions]                                                       // DDD00095
+    public static IReadOnlyList<Permission> Permissions { get; } = [new("orders.view", "Ordering", "See the orders")];
+}
+```
+
+A module declares its permissions once, as the constants of a static class marked `[Permissions]`, each with its
+level and, in its summary or its `Description`, what it lets somebody do. Tenancy's generator writes the module's
+list for the catalogue from that class, under the module `DDD_Module` or `[assembly: Module]` names, marks it
+`[TenancyPermissions]`, and the project that composes the modules collects every such list
+([A module states its keys once](tenancy.md#a-module-states-its-keys-once)). A list a module marks with it by hand
+says the same keys a second time, apart from the constants a request requires, and is refused. Declare each key as
+a constant instead:
+
+```csharp
+[Permissions]
+public static class OrderingPermissions
+{
+    /// <summary>See the orders.</summary>
+    [AtTenant]
+    public const string View = "orders.view";
+}
+```
+
+## DDD00096
+
+**[OrOwn] beside a key the owner of the resource holds already says nothing more.**
+
+```csharp
+[RequiresKey(BoardPermissions.Edit)]
+public sealed record RenameBoard([OnResource, OrOwn] BoardId Board, string Name) : IBoardsRequest;   // DDD00096
+```
+
+`[OrOwn]` on a request's member says the request is about the caller's own, or the caller holds the key of its
+`[RequiresKey]`. On the id of a resource with members, beside `[OnResource]` on it, the key is asked on that
+resource, and its owner holds every permission declared `[On<TResource>]` with `Owner = true` by owning it: the owner
+is let through by the key already, so `[OrOwn]` adds nothing and only makes the request read as if it did. Take it
+off. `[Own]` and `[OrOwn]` stay meant for an aggregate with an `[Owner]` and no members
+([The owner of an aggregate](access-requirements.md#the-owner-of-an-aggregate)), and for a key the owner does not
+hold, one declared with `Owner = false`. It is a warning because the request does what it would do without it.
+
+## DDD00097
+
+**[At] marks the one place an aggregate root hangs at.**
+
+```csharp
+[AggregateRoot<BoardId>]
+public sealed partial class Board
+{
+    [At] public OrganizationUnitId UnitId { get; private set; }
+
+    [At] public OrganizationUnitId? FormerUnitId { get; private set; }     // DDD00097: a second, and may be empty
+}
+
+[Entity<ColumnId>]
+public sealed partial class Column
+{
+    [At] public OrganizationUnitId UnitId { get; private set; }            // DDD00097: an entity inside an aggregate
+}
+```
+
+`[At]` marks the property of an aggregate root that says where it hangs: the unit of an organization a board belongs
+to, the bay a crate stands in. A fact of the domain, which the rules of a resource with members read where they let
+it be reached from above: a key held at that place, or above it, reaches the aggregate
+([Beside an organization](membership.md#beside-an-organization)). So it goes on one instance property of an
+aggregate root, the root itself and never an entity inside it, and that property is never empty: an aggregate that
+hangs nowhere could not be reached from above, which is what `[At]` says. A static property, one on a type that is
+no aggregate root, a second one and a nullable one are each refused, where the property is declared.
+
+## DDD00098
+
+**Rules that reach a resource from above read where it hangs from its [At] property.**
+
+```csharp
+public static MembershipRules Rules { get; } = MembershipRules.For<Board>(    // DDD00098: Board marks no property [At]
+    Roles.Custom(),
+    reachFromAbove: true);
+```
+
+`reachFromAbove` in the rules of a resource with members says that a key held where the resource hangs, or above it,
+reaches the resource. Where it hangs is a fact of the domain, said on the resource's class with `[At]` on the
+property that holds it, and read from there by the mapping and by the functions in the database. Rules that reach
+from above a resource that marks no such property would be refused when the resource is first asked about, and when
+its functions are written; this says it where the rules are made. Mark the property `[At]`, or leave
+`reachFromAbove` out.
 
 ## Building the model fails: the owned type must carry the key part
 

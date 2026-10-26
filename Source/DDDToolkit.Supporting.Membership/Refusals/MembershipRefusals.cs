@@ -64,9 +64,6 @@ public static class MembershipRefusals
     /// </summary>
     public const string RoleNotForMembers = "membership.role-not-for-members";
 
-    /// <summary>There is no role in use to give an owner, so nobody can be named one.</summary>
-    public const string NoOwnerRole = "membership.no-owner-role";
-
     // ---------------------------------------------------------------- the member list
 
     /// <summary>
@@ -87,7 +84,10 @@ public static class MembershipRefusals
     /// <summary>The member does not hold the role. Arguments: <c>Member</c>, <c>Role</c>.</summary>
     public const string RoleNotHeld = "membership.role-not-held";
 
-    /// <summary>The change would take the owner off the member list, or take the owner's role.</summary>
+    /// <summary>
+    /// The change would take the owner off the member list, or give the owner a role: the owner stays a member, with
+    /// no end, and holds what it holds by owning the resource, not through a role.
+    /// </summary>
     public const string OwnerProtected = "membership.owner-protected";
 
     /// <summary>The member named owner is the owner already.</summary>
@@ -113,9 +113,6 @@ public static class MembershipRefusals
     /// </summary>
     public const string KeyNotForMembers = "membership.key-not-for-members";
 
-    /// <summary>The role is the one every owner holds, and that role is not archived: without it nobody could be an owner.</summary>
-    public const string OwnerRoleStays = "membership.owner-role-stays";
-
     /// <summary>A role's keys are not distinct, not blank and in ordinal order: what a role checks of itself after the fact.</summary>
     public const string RoleKeysNotNormalized = "membership.role-keys-not-normalized";
 
@@ -131,20 +128,18 @@ public static class MembershipRefusals
 
             [MemberNotActive] = (RefusalKind.Conflict, "That one cannot be a member: not active, or not known here."),
             [RoleNotForMembers] = (RefusalKind.Invalid, "That role cannot be given to a member here."),
-            [NoOwnerRole] = (RefusalKind.Conflict, "There is no role in use to give an owner."),
 
             [AlreadyMember] = (RefusalKind.Conflict, "That one is a member already, or is due to become one. Give the member a role instead."),
             [MemberNotFound] = (RefusalKind.NotFound, "That one is not a member, or the membership has ended."),
             [RoleHeld] = (RefusalKind.Conflict, "That member already has this role."),
             [RoleNotHeld] = (RefusalKind.NotFound, "That member does not have this role."),
-            [OwnerProtected] = (RefusalKind.Conflict, "The owner stays a member, in the owner's role, until somebody else is named owner."),
+            [OwnerProtected] = (RefusalKind.Conflict, "The owner stays a member, holding no role, until somebody else is named owner."),
             [AlreadyOwner] = (RefusalKind.Conflict, "That member is the owner already."),
             [InvalidPeriod] = (RefusalKind.Invalid, "A period's end must come after its start."),
 
             [RoleIsArchived] = (RefusalKind.Conflict, "That role is archived."),
             [RoleNameInvalid] = (RefusalKind.Invalid, "Enter {Min} to {Max} characters."),
             [KeyNotForMembers] = (RefusalKind.Invalid, "A role cannot give these keys here: {Keys}."),
-            [OwnerRoleStays] = (RefusalKind.Conflict, "The role every owner holds cannot be archived."),
             [RoleKeysNotNormalized] = (RefusalKind.Conflict, "A role's keys must be distinct, not blank and in ordinal order."),
         });
 

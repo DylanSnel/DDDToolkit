@@ -25,7 +25,9 @@ public sealed partial class TranslationTests(SampleWithoutDatabase sample) : ICl
     private static readonly Type[] Markers =
     [
         typeof(ProjectFailures),
+        typeof(ProjectPermissionTexts),
         typeof(InspectionFailures),
+        typeof(InspectionPermissionTexts),
         typeof(SeatFailures),
         typeof(OrganizationFailures),
         typeof(HistoryFailures),
@@ -68,6 +70,19 @@ public sealed partial class TranslationTests(SampleWithoutDatabase sample) : ICl
         var inspections = Texts(typeof(InspectionFailures), CultureInfo.InvariantCulture);
         inspections.Keys.Should().BeEquivalentTo(InspectionRefusals.Codes.Except(PassedOn), "InspectionFailures.resx holds exactly Inspections' own codes");
         inspections.Should().OnlyContain(text => text.Value == InspectionRefusals.TemplateOf(text.Key));
+
+        // A permission's English is its summary, which the module's generated list holds: the file repeats it, for
+        // the translator, and holds no other key.
+        foreach (var (marker, declared) in new[]
+                 {
+                     (typeof(ProjectPermissionTexts), Examples.Tenancy.Projects.Application.DeclaredPermissions.All),
+                     (typeof(InspectionPermissionTexts), Examples.Tenancy.Inspections.Application.DeclaredPermissions.All),
+                 })
+        {
+            Texts(marker, CultureInfo.InvariantCulture).Should().Equal(
+                declared.ToDictionary(permission => permission.Key, permission => permission.Description),
+                "{0}.resx holds every permission the module declares, in the words of its summary", marker.Name);
+        }
 
         // A code has one text: what Inspections passes on from Projects reads as Projects says it.
         PassedOn.Should().OnlyContain(code => InspectionRefusals.TemplateOf(code) == ProjectRefusals.TemplateOf(code));

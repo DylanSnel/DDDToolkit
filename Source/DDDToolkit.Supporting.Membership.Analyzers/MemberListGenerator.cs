@@ -13,37 +13,51 @@ using Microsoft.CodeAnalysis.Text;
 namespace DDDToolkit.Supporting.Membership.Analyzers;
 
 /// <summary>
-/// Writes the member list of a resource: for a class declared with the package's member template,
-/// <c>[Member&lt;DocumentShareId, UserId, NamedRole, Document&gt;]</c>, the property on the resource it names
-/// that the resource's own methods change its members through:
+/// Writes what makes a class a resource with members: for a class declared with the package's member template,
+/// <c>[Member&lt;DocumentShareId, UserId, NamedRole, Document&gt;]</c>, the resource's name, its codes and its
+/// module's scope, which its rules read through its type, and the member list on it that the resource's own
+/// methods change its members through:
 /// <code>
-/// partial class Document
+/// partial class Document : IMembershipResource
 /// {
+///     public static MembershipCodes Codes { get; } = MembershipCodes.Under("documents");
+///
+///     static string IMembershipResource.MembershipName =&gt; "documents";
+///     static MembershipCodes IMembershipResource.MembershipCodes =&gt; Codes;
+///     static string? IMembershipResource.MembershipScope =&gt; "filing";
+///
 ///     private MemberList&lt;DocumentShare, DocumentShareId, UserId, NamedRole&gt; Members
 ///         =&gt; new(_shares, OwnerId, Codes);
 /// }
 /// </code>
-/// Everything in that line is said elsewhere already: the four types by the member class, and the rest by
-/// the resource. So an application writes its own methods and guards, and not this.
+/// Everything in it is said elsewhere already: the four types by the member class, and the rest by the resource
+/// and its project. So an application writes its own methods and guards, and not this.
 /// <para>
-/// <b>What it is written from.</b> Four things the resource declares, each of which has to be the only one
-/// of its kind there, so that nothing is guessed:
+/// <b>The name.</b> The plural of the class's name, in lower case with a dash between words: <c>Document</c> is
+/// <c>documents</c>, <c>CraneBoard</c> <c>crane-boards</c>. A class that says another with <c>[Members("...")]</c> has
+/// that, converted the same way and not made plural; one that cannot be converted is DDD00091, and nothing of the
+/// resource is written. The codes are written as <c>Codes</c>, under the name, unless the class declares a static
+/// <c>MembershipCodes</c> of its own, which is then the one; the scope is the name of the project's module, in the
+/// same form, or none for a project that declares no module.
+/// </para>
+/// <para>
+/// <b>What the list is written from.</b> Three things the resource declares, each of which has to be the only
+/// one of its kind there, so that nothing is guessed, and the codes:
 /// </para>
 /// <list type="bullet">
 /// <item>The members: the one get-only partial collection property of the member class that the entity
 /// generator keeps in a list, <c>IReadOnlyList&lt;T&gt;</c>, <c>IReadOnlyCollection&lt;T&gt;</c> or
 /// <c>IEnumerable&lt;T&gt;</c>. The list is the field that generator declares for it.</item>
-/// <item>The owner: the one property of the type a member is known by. A resource with members keeps its
-/// owner as one, so where there is one such property it is the owner.</item>
+/// <item>The owner: the property marked <c>[Owner]</c>, of the type a member is known by.</item>
 /// <item>New rows: the member class's own id has a <c>Create()</c>, which the list makes a new row's id with:
 /// the generator writes one for an <c>[EntityId&lt;Guid&gt;]</c>, and an id over anything else declares it.</item>
-/// <item>The codes: the one static property or field of <c>MembershipCodes</c>, which the rules about the
-/// members refuse under.</item>
+/// <item>The codes: the ones written here, or the one static property or field of <c>MembershipCodes</c> the
+/// resource declares itself.</item>
 /// </list>
 /// <para>
 /// <b>When nothing is written.</b> A resource that declares a member list itself, under whatever name, is left
-/// alone and hears nothing: that is the form for every shape this cannot tell, a resource with two properties
-/// of the member's id, codes kept elsewhere. A resource that declares none and cannot be given one is told what
+/// alone and hears nothing about it: that is the form for every shape this cannot tell. Its name, codes and scope
+/// are written all the same. A resource that declares none and cannot be given one is told what
 /// stands in the way (DDD00059), since its
 /// members could not be changed at all. That includes a member class over a type this generator cannot see,
 /// the id of an <c>[AggregateRoot&lt;Guid&gt;]</c> that another generator writes: the application would
@@ -71,6 +85,12 @@ public sealed class MemberListGenerator : IIncrementalGenerator
     private const string MemberTemplate = Package + ".MemberAttribute`4";
     private const string MemberList = Package + ".MemberList`4";
     private const string Codes = Package + ".MembershipCodes";
+    private const string MembersName = Package + ".MembersAttribute";
+    private const string Resource = "global::" + Package + ".IMembershipResource";
+    private const string CodesType = "global::" + Codes;
+
+    /// <summary>What the codes the generator writes are called on the resource.</summary>
+    private const string CodesName = "Codes";
 
     /// <summary>What the list is called on the resource.</summary>
     private const string PropertyName = "Members";
@@ -206,22 +226,24 @@ public sealed class MemberListGenerator : IIncrementalGenerator
             reasons.Add("it declares more than one collection of '" + member.Name + "' (" + Listed(collections) + "), so which of them holds its members cannot be told");
         }
 
-        var owners = members.OfType<IPropertySymbol>()
-            .Where(property => !property.IsStatic
-                               && !property.IsIndexer
-                               && property.GetMethod is not null
-                               && property.ExplicitInterfaceImplementations.IsEmpty
-                               && (knownBy.TypeKind == TypeKind.Error
-                                   ? property.Type is { TypeKind: TypeKind.Error } unbound && unbound.Name == knownBy.Name
-                                   : SymbolEqualityComparer.Default.Equals(property.Type, knownBy)))
-            .ToList();
+        // The owner is what the resource marks [Owner]: a fact of the domain, said on the aggregate, which a
+        // request about the owner reads as well. One of the member's id, since the owner is a member.
+        var owners = OwnerDeclarations.OwnersOf(resource).Where(static property => !property.IsStatic).ToList();
         if (owners.Count == 0)
         {
-            reasons.Add("it declares no property of '" + knownBy.Name + "', which its owner is kept in");
+            reasons.Add("it marks no property [Owner]: mark the property of '" + knownBy.Name + "' that holds its owner [Owner]");
         }
         else if (owners.Count > 1)
         {
-            reasons.Add("it declares more than one property of '" + knownBy.Name + "' (" + Listed(owners) + "), so which of them is its owner cannot be told");
+            reasons.Add("it marks more than one property [Owner] (" + Listed(owners) + "), and a resource has one owner");
+        }
+        else if (!(knownBy.TypeKind == TypeKind.Error
+                     ? owners[0].Type is { TypeKind: TypeKind.Error } unbound && unbound.Name == knownBy.Name
+                     : SymbolEqualityComparer.Default.Equals(owners[0].Type, knownBy)))
+        {
+            reasons.Add("its owner, '" + owners[0].Name + "', is a '" + owners[0].Type.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat) + "', and its members are known by '"
+                        + knownBy.Name + "': the owner is a member, so it is known by the same, and never left empty");
+            owners.Clear();
         }
 
         // An id this generator cannot see is either one a switch writes, over a Guid, or what is said of it instead.
@@ -234,19 +256,50 @@ public sealed class MemberListGenerator : IIncrementalGenerator
                         + char.ToLowerInvariant(shortfall.Advice[0]) + shortfall.Advice.Substring(1));
         }
 
+        // Codes of its own, when the resource declares them; otherwise they are written, under its name.
         var codes = members
             .Where(candidate => candidate is { IsStatic: true, IsImplicitlyDeclared: false }
                                 && candidate is IFieldSymbol or IPropertySymbol { GetMethod: not null }
                                 && SymbolEqualityComparer.Default.Equals(TypeOf(candidate), codesType))
             .ToList();
-        if (codes.Count == 0)
+        var resourceReasons = new List<string>();
+        if (codes.Count > 1)
         {
-            reasons.Add("it declares no static property or field of MembershipCodes, the codes the rules about its members refuse under");
+            resourceReasons.Add("it declares more than one static member of MembershipCodes (" + Listed(codes) + "), so which codes its members refuse under cannot be told");
         }
-        else if (codes.Count > 1)
+        else if (codes.Count == 0 && resource.GetMembers(CodesName).Length > 0)
         {
-            reasons.Add("it declares more than one static member of MembershipCodes (" + Listed(codes) + "), so which codes its members refuse under cannot be told");
+            resourceReasons.Add("it has a member called " + CodesName + " already, which the codes written for it would be called too: declare its codes as a static MembershipCodes yourself");
         }
+
+        // Its name: what [Members] says, or the plural of its class's name.
+        string? name = null;
+        DiagnosticInfo? badName = null;
+        if (resource.GetAttributes().FirstOrDefault(static each => each.AttributeClass?.ToDisplayString() == MembersName) is { } membersAttribute)
+        {
+            var said = membersAttribute.ConstructorArguments.Length == 1 ? membersAttribute.ConstructorArguments[0].Value as string : null;
+            name = MembershipNames.Converted(said);
+            if (name is null)
+            {
+                badName = DiagnosticInfo.Create(
+                    DiagnosticDescriptors.MembershipNameUnreadable,
+                    (membersAttribute.ApplicationSyntaxReference?.GetSyntax(cancellationToken) is { } at ? LocationInfo.From(at) : null) ?? type.Location,
+                    resource.Name,
+                    said ?? "null");
+            }
+        }
+        else
+        {
+            name = MembershipNames.OfClass(resource.Name);
+        }
+
+        if (resource.GetMembers().Any(static each => each.Name.EndsWith("IMembershipResource.MembershipName", StringComparison.Ordinal)))
+        {
+            // Written by hand already: the resource says its name, codes and scope itself.
+            name = null;
+        }
+
+        var scope = MembershipNames.Converted(ModuleBoundary.ModuleOf(compilation.Assembly));
 
         if (!declared && resource.GetMembers(PropertyName).Length > 0)
         {
@@ -262,10 +315,16 @@ public sealed class MemberListGenerator : IIncrementalGenerator
             Collection: collection,
             Field: field,
             Owner: owners.Count == 1 ? owners[0].Name : null,
-            Codes: codes.Count == 1 ? codes[0].Name : null,
+            Codes: codes.Count == 1 ? codes[0].Name : resourceReasons.Count == 0 ? CodesName : null,
             Declared: declared,
-            Reasons: reasons.ToEquatableArray(),
-            Unseen: unseen);
+            Reasons: reasons.Concat(resourceReasons).ToEquatableArray(),
+            Unseen: unseen)
+        {
+            Name = resourceReasons.Count == 0 ? name : null,
+            WritesCodes = codes.Count == 0 && resourceReasons.Count == 0,
+            Scope = scope,
+            BadName = badName,
+        };
     }
 
     /// <summary>
@@ -381,7 +440,20 @@ public sealed class MemberListGenerator : IIncrementalGenerator
         string? KeptMember = null,
         string? KeptIn = null,
         bool Several = false,
-        EquatableArray<string> Unseen = default);
+        EquatableArray<string> Unseen = default)
+    {
+        /// <summary>The resource's name, as its codes are written, or null when it is not written here.</summary>
+        public string? Name { get; init; }
+
+        /// <summary>Whether the codes are written, as <see cref="CodesName"/>, rather than declared by the resource.</summary>
+        public bool WritesCodes { get; init; }
+
+        /// <summary>The scope of the project's module's system work, or null for a project that declares no module.</summary>
+        public string? Scope { get; init; }
+
+        /// <summary>DDD00091 for a name <c>[Members]</c> says that cannot be converted, or null.</summary>
+        public DiagnosticInfo? BadName { get; init; }
+    }
 
     // ------------------------------------------------------------------ writing it
 
@@ -439,19 +511,13 @@ public sealed class MemberListGenerator : IIncrementalGenerator
             return;
         }
 
-        if (list.Declared)
-        {
-            // The application wrote its list itself: its to write, under its own name, and nothing to say about it.
-            return;
-        }
+        list.BadName?.Report(context);
 
-        if (list.Several && registered)
-        {
-            // Two classes whose registrations would be called the same: the registrations say so, once.
-            return;
-        }
-
-        if (list.Reasons.Count > 0 || list.Field is null || list.Owner is null || list.Codes is null)
+        // What the rules read through the resource's type, written whatever becomes of the list: its name, its codes
+        // and its module's scope.
+        var writesResource = list.Name is not null && list.Codes is not null && !(list.Several && registered);
+        var writesList = !list.Declared && !(list.Several && registered);
+        if (writesList && (list.Reasons.Count > 0 || list.Field is null || list.Owner is null || list.Codes is null))
         {
             DiagnosticInfo.Create(
                     DiagnosticDescriptors.MemberListNotWritten,
@@ -461,6 +527,26 @@ public sealed class MemberListGenerator : IIncrementalGenerator
                     string.Join("; ", list.Reasons),
                     list.ShortTypeArguments)
                 .Report(context);
+            writesList = false;
+        }
+
+        // Two files, so the member list is in one of its own exactly when it is written.
+        if (writesResource)
+        {
+            var resource = new CodeWriter().Header();
+            using (resource.TypeScope(list.Resource))
+            {
+                using (resource.Block("partial class " + Identifier(list.Resource.Name) + " : " + Resource))
+                {
+                    WriteResource(resource, list);
+                }
+            }
+
+            context.AddSource(list.Resource.HintName(".Membership"), SourceText.From(resource.ToString(), Encoding.UTF8));
+        }
+
+        if (!writesList)
+        {
             return;
         }
 
@@ -475,12 +561,42 @@ public sealed class MemberListGenerator : IIncrementalGenerator
                             + "\"/>, and the codes it refuses under in <see cref=\"" + list.Codes + "\"/>.");
                 writer.Line("/// </summary>");
                 writer.Line("private global::" + Package + ".MemberList<" + string.Join(", ", list.TypeArguments.Select(InFull)) + "> " + PropertyName);
-                writer.Line("    => new(" + Identifier(list.Field) + ", " + Identifier(list.Owner) + ", " + Identifier(list.Codes) + ");");
+                writer.Line("    => new(" + Identifier(list.Field!) + ", " + Identifier(list.Owner!) + ", " + Identifier(list.Codes!) + ");");
             }
         }
 
         context.AddSource(list.Resource.HintName("." + PropertyName), SourceText.From(writer.ToString(), Encoding.UTF8));
     }
+
+    /// <summary>
+    /// The resource's part of <see cref="Resource"/>: its codes, where they are written, and the three members its
+    /// rules read through its type, explicitly, so they add nothing to what the class shows.
+    /// </summary>
+    private static void WriteResource(CodeWriter writer, ListOfAResource list)
+    {
+        var name = Literal(list.Name!);
+        if (list.WritesCodes)
+        {
+            writer.Line("/// <summary>");
+            writer.Line("/// The codes " + list.Resource.Name + " refuses under, the rules about its members' own names under its name: <c>" + list.Name
+                        + ".already-member</c> and the rest.");
+            writer.Line("/// </summary>");
+            writer.Line("public static " + CodesType + " " + CodesName + " { get; } = " + CodesType + ".Under(" + name + ");");
+            writer.Line();
+        }
+
+        writer.Line("/// <summary>The name of " + list.Resource.Name + " as its codes and its functions in the database are named.</summary>");
+        writer.Line("static string " + Resource + ".MembershipName => " + name + ";");
+        writer.Line();
+        writer.Line("/// <summary>The codes " + list.Resource.Name + " refuses under.</summary>");
+        writer.Line("static " + CodesType + " " + Resource + ".MembershipCodes => " + Identifier(list.Codes!) + ";");
+        writer.Line();
+        writer.Line("/// <summary>The scope of its module's system work" + (list.Scope is null ? ": none, since the project declares no module." : ".") + "</summary>");
+        writer.Line("static string? " + Resource + ".MembershipScope => " + (list.Scope is null ? "null" : Literal(list.Scope)) + ";");
+        writer.Line();
+    }
+
+    private static string Literal(string text) => SymbolDisplay.FormatLiteral(text, quote: true);
 
     /// <summary>A name as an identifier: a keyword gets an <c>@</c>.</summary>
     private static string Identifier(string name)

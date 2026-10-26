@@ -72,8 +72,8 @@ public sealed class AccessAdminScenarios(SampleHosts sample) : IClassFixture<Sam
 
         var pier = await maud.WithNamesAsync(await maud.ProjectDetailAsync(PierSeven));
         pier.Member("Juno").IsOwner.Should().BeTrue();
-        pier.Member("Juno").Role.Should().Be("Crew lead, Surveyor");
-        pier.Member("Leo").Should().Match<NamedCrewMember>(leo => !leo.IsOwner && leo.AppliesNow && leo.Role == null, "the old owner stays on the crew, without the lead role");
+        pier.Member("Juno").Role.Should().BeNull("an owner holds what an owner does by owning, and her surveyor's role went");
+        pier.Crew.Should().NotContain(member => member.Name == "Leo", "named with no role for him, the owner before leaves the crew");
     }
 
     [Fact]

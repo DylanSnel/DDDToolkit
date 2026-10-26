@@ -121,7 +121,7 @@ public abstract class FunctionsInTheDatabaseTests(CampusPostgresServer postgres)
         // The members and the roles they hold follow the course; the roles of courses are the college's to read.
         await using var tom = await CallerSession.BeginAsync(campus.ConnectionString!, data.Tom, data.Alder);
         (await tom.ListAsync<long>($"SELECT count(*) FROM {Campus}\"CourseTutors\"")).Should().ContainSingle().Which.Should().Be(5, "the owner and the four on Optics");
-        (await tom.ListAsync<long>($"SELECT count(*) FROM {Campus}\"CourseRoles\"")).Should().ContainSingle().Which.Should().Be(3, "Alder's three, and none of Birch's");
+        (await tom.ListAsync<long>($"SELECT count(*) FROM {Campus}\"CourseRoles\"")).Should().ContainSingle().Which.Should().Be(2, "Alder's two, and none of Birch's");
         (await tom.ListAsync<string>($"SELECT \"Name\" FROM {Campus}\"Labs\"")).Should().Equal("Laser lab");
     }
 
@@ -168,7 +168,7 @@ public abstract class FunctionsInTheDatabaseTests(CampusPostgresServer postgres)
         Body("courses_where_i_hold").Should()
             .Contain($"r.\"UnitId\" IN (SELECT reached.place FROM {Tenancy}.units_where_i_hold($1) AS reached(place))")
             .And.Contain($"r.\"OwnerSeatId\" = (SELECT {Tenancy}.caller_seat())");
-        Body("labs_where_i_hold").Should().Contain($"{Tenancy}.units_where_i_hold($1)").And.NotContain("\"OwnerSeatId\"", "a lab states no key of its own, so nothing is held by owning one");
+        Body("labs_where_i_hold").Should().Contain($"{Tenancy}.units_where_i_hold($1)").And.Contain($"r.\"OwnerSeatId\" = (SELECT {Tenancy}.caller_seat())", "a lab's owner holds its permissions by owning it");
     }
 
     [Fact]
@@ -186,16 +186,16 @@ public abstract class FunctionsInTheDatabaseTests(CampusPostgresServer postgres)
         // written with.
         FluentActions.Invoking(() => CampusPostgres.AccessScripts([new MembershipRowAccessContribution<CourseTutor>(CourseMembership.Rules), new MembershipRowAccessContribution<LabTechnician>(LabMembership.Rules)], schemas: postgres.Schemas))
             .Should().Throw<InvalidOperationException>()
-            .WithMessage("*asks the function tenancy/*, and none of the functions this is written with is called that*");
+            .WithMessage("The rules 'courses' let Course be reached from above, where it hangs at a OrganizationUnitId, and nothing answers in the database where the caller holds a key at one*");
 
         // And one whose rules name a function Tenancy does not have is told which.
-        var misnamed = new MembershipRules(
+        var misnamed = MembershipRules.Declare(
+            typeof(Course),
             "courses",
-            keys: [CourseKeys.See],
-            members: MemberSource.Resolved("tenancy/calling_seat"),
-            seeKey: CourseKeys.See,
-            memberKeys: MemberKeys.Only(CourseKeys.See),
-            rolesKept: true);
+            [new(CoursePermissions.See, EveryMember: true)],
+            Roles.Custom(),
+            members: MemberSource.Resolved(new DatabaseFunction(TenancyRowAccess.Owner, "calling_seat")),
+            systemScopes: CourseMembership.Rules.SystemScopes);
         FluentActions.Invoking(() => CampusPostgres.AccessScripts([new TenancyRowAccessContribution(CampusCatalogue.Built), new MembershipRowAccessContribution<CourseTutor>(misnamed), new MembershipRowAccessContribution<LabTechnician>(LabMembership.Rules)], schemas: postgres.Schemas))
             .Should().Throw<InvalidOperationException>()
             .WithMessage("*asks the function tenancy/calling_seat, and none of the functions this is written with is called that*");

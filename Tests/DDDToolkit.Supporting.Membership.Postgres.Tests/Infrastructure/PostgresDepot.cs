@@ -33,14 +33,14 @@ public sealed class DepotOwnFunctions : IRowAccessContribution
         return new RowAccessContributionResult(
         [
             new ContributedFunction(
-                Name(DepotFunctions.CallerPorter),
+                DepotFunctions.CallerPorter.Name,
                 "",
                 "uuid",
                 $"SELECT p.{Column(porters, nameof(Porter.Id))} FROM {RowAccessModel.Table(porters)} p "
                 + $"WHERE p.{Column(porters, nameof(Porter.UserId))} = {{caller:uid}} AND p.{Column(porters, nameof(Porter.Active))}",
                 SecurityDefiner: true),
             new ContributedFunction(
-                Name(DepotFunctions.RolesWithKey),
+                DepotFunctions.RolesWithKey.Name,
                 "text",
                 "SETOF uuid",
                 $"SELECT given.{Column(roleKeys, nameof(DepotRoleKey.RoleId))} FROM {RowAccessModel.Table(roleKeys)} given "
@@ -48,7 +48,7 @@ public sealed class DepotOwnFunctions : IRowAccessContribution
                 + $"WHERE given.{Column(roleKeys, nameof(DepotRoleKey.Key))} = $1 AND kept.{Column(roles, nameof(DepotRole.InUse))}",
                 SecurityDefiner: true),
             new ContributedFunction(
-                Name(DepotFunctions.BaysWhereIHold),
+                DepotFunctions.BaysWhereIHold.Name,
                 "text",
                 "SETOF uuid",
                 $"SELECT path.{Column(paths, nameof(BayPath.BayId))} FROM {RowAccessModel.Table(holds)} held "

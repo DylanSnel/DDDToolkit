@@ -19,7 +19,8 @@ namespace Examples.Tenancy.Tests.Architecture;
 public sealed class ModuleKeysTests
 {
     /// <summary>The keys every module of the sample states, each module's list in the order of its name.</summary>
-    private static readonly IReadOnlyList<Permission> EveryModulesKeys = [.. InspectionCatalogue.Permissions, .. ProjectCatalogue.Permissions];
+    private static readonly IReadOnlyList<Permission> EveryModulesKeys =
+        [.. Examples.Tenancy.Inspections.Application.DeclaredPermissions.All, .. Examples.Tenancy.Projects.Application.DeclaredPermissions.All];
 
     [Fact]
     public void The_host_adds_every_modules_keys_in_one_contribution_and_no_module_adds_its_own()
@@ -57,7 +58,7 @@ public sealed class ModuleKeysTests
             .ToList();
 
         lists.Select(list => list.DeclaringType!.Name + "." + list.Name)
-            .Should().BeEquivalentTo(["InspectionCatalogue.Permissions", "ProjectCatalogue.Permissions"], "the sample's modules each keep one list");
-        lists.Should().OnlyContain(list => list.IsDefined(typeof(TenancyPermissionsAttribute)), "a module states its keys on the list it marks");
+            .Should().BeEquivalentTo(["DeclaredPermissions.All", "DeclaredPermissions.All"], "the generator writes each module's one list from its [Permissions] classes");
+        lists.Should().OnlyContain(list => list.IsDefined(typeof(TenancyPermissionsAttribute)), "a module's permissions reach the catalogue on the list the generator marks");
     }
 }

@@ -20,8 +20,8 @@ public sealed class CombinedRequirementsUnderTheHoldTests
     private sealed record ShareOnBoth(DocumentId First, DocumentId Second, UserId With) : IFilingRequest
     {
         AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.All(
-            MemberAccess.On(DocumentKeys.Share, First),
-            MemberAccess.On(DocumentKeys.Share, Second));
+            MemberAccess.On(DocumentPermissions.Share, First),
+            MemberAccess.On(DocumentPermissions.Share, Second));
     }
 
     [Fact]
@@ -92,8 +92,8 @@ public sealed class CombinedRequirementsUnderTheHoldTests
         using var filing = await FilingAsync();
         var data = filing.Scenario;
 
-        // Ada owns the minutes, and is given the owner's role on the budget, which Ben owns.
-        await filing.Services.ChangeAsync(data.Budget, budget => budget.GiveRole(data.Ada, DocumentMembership.Owner, MemberPeriod.Open(data.Now.AddDays(-1)), data.Now, by: data.Ben));
+        // Ada owns the minutes, and is given the manager's role on the budget, which Ben owns.
+        await filing.Services.ChangeAsync(data.Budget, budget => budget.GiveRole(data.Ada, DocumentMembership.Manager, MemberPeriod.Open(data.Now.AddDays(-1)), data.Now, by: data.Ben));
 
         var command = new ShareOnBoth(data.Minutes, data.Budget, data.Hal);
         await filing.Services.AsAsync(TestCallers.User(data.Ada), async provider =>

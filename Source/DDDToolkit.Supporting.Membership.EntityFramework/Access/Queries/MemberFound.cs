@@ -19,7 +19,7 @@ public sealed class MemberFound<TResource>
     /// <summary>
     /// Whether the caller holds the key on the resource as one of its members: it is a member now, with what
     /// the reach asks of a membership, a role that gives the key, held now, or nothing more for a key that
-    /// being a member gives; or it owns the resource, whose owner holds every key of it.
+    /// being a member gives; or it owns the resource, and the key is one its owner holds by owning it.
     /// </summary>
     public required bool AsMember { get; init; }
 

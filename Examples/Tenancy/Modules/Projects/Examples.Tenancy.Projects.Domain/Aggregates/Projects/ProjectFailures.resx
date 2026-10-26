@@ -27,11 +27,8 @@
   <data name="projects.number-taken" xml:space="preserve">
     <value>Another project in this tenant already has the number {Number}.</value>
   </data>
-  <data name="projects.no-lead-role" xml:space="preserve">
-    <value>The tenant has no active crew lead role to give a project's owner.</value>
-  </data>
   <data name="projects.owner-protected" xml:space="preserve">
-    <value>The owner keeps the lead role on the crew until somebody else is named owner.</value>
+    <value>The owner stays on the crew, holding no project role, until somebody else is named owner.</value>
   </data>
   <data name="projects.already-on-crew" xml:space="preserve">
     <value>That seat is on the crew already, or is due to join it. Give it a crew role instead.</value>
@@ -95,9 +92,6 @@
   </data>
   <data name="projects.key-not-for-members" xml:space="preserve">
     <value>A project role cannot give these keys: {Keys}.</value>
-  </data>
-  <data name="projects.owner-role-stays" xml:space="preserve">
-    <value>The role every project's owner holds is not archived.</value>
   </data>
   <data name="projects.role-keys-not-normalized" xml:space="preserve">
     <value>A project role's keys are each there once, none of them blank, in order.</value>

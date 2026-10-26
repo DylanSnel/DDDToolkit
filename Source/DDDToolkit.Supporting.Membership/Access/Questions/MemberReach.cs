@@ -32,7 +32,7 @@ public abstract class MemberReach<TResourceId>
 
     /// <summary>
     /// For the access questions of a storage: the reach of what the caller sees, under rules that name no key
-    /// for seeing (<see cref="MembershipRules.SeeKey"/>). A resource is seen by its members and its owner all
+    /// for seeing (<see cref="MembershipRules.EveryMemberKey"/>). A resource is seen by its members and its owner all
     /// the same, so there is such a reach, and no key it is for.
     /// </summary>
     /// <param name="now">The moment a membership must apply at.</param>

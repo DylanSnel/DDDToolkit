@@ -7,7 +7,7 @@ namespace DDDToolkit.Supporting.Membership.EntityFramework;
 
 /// <summary>
 /// Where a caller holds a key, for one kind of resource that is reached from above
-/// (<see cref="MembershipRules.Above"/>): the places a hold of the key reaches, which a resource that sits at
+/// (<see cref="MembershipRules.ReachFromAbove"/>): the places a hold of the key reaches, which a resource that sits at
 /// one of them is then held on. An application implements it over whatever keeps who holds what where, the
 /// units of an organization say, and registers it with the resource.
 /// <para>
@@ -40,7 +40,7 @@ namespace DDDToolkit.Supporting.Membership.EntityFramework;
 /// </para>
 /// <para>
 /// What is above what is the application's to know: the package compares where a resource sits
-/// (<c>HasMembers(..., at: ...)</c>) with what this answers, and keeps no places and no tree of them. A key
+/// (the property its class marks <c>[At]</c>) with what this answers, and keeps no places and no tree of them. A key
 /// answered here is held whatever the rules say a member's role gives: that list is about members.
 /// </para>
 /// </summary>

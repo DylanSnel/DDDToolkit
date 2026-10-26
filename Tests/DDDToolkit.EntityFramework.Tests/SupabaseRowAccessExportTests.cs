@@ -446,6 +446,40 @@ public sealed class SupabaseRowAccessExportTests : IDisposable
     }
 
     [Fact]
+    public void A_resource_with_members_named_otherwise_than_in_the_newest_access_file_is_said_with_what_is_gone_and_what_is_new()
+    {
+        // What the Membership package writes at the head of a resource's functions, as a contribution of its own
+        // would: the resource's name, and its class (DDD00090 is said from it, once, by the build).
+        static SpotContribution Named(string name, string resource) => new("members", context => context is SupabaseShelfContext
+            ? new(
+                [
+                    new ContributedFunction(
+                        name.Replace('-', '_') + "_i_see",
+                        "",
+                        "SETOF uuid",
+                        $"-- Membership of {name} ({resource}), in form 6, written from the rules 0{Environment.NewLine}SELECT NULL::uuid WHERE false",
+                        SecurityDefiner: true,
+                        GrantTo: [RowAccessRoles.User]),
+                ],
+                [],
+                [])
+            : null);
+
+        var first = Options(null, []);
+        first.RowAccessContributions.Add(Named("boards", "Board"));
+        Export(first).Renamed.Should().BeEmpty("there was no access file to compare with");
+
+        // The class renamed: the next file names another resource, and which became which is not guessed.
+        var renamed = Options(new DateTimeOffset(2026, 9, 26, 9, 0, 0, TimeSpan.Zero), []);
+        renamed.RowAccessContributions.Add(Named("whiteboards", "Whiteboard"));
+        Export(renamed).Renamed.Should().BeEquivalentTo(
+            [new RenamedResource("boards", "Board", Gone: true), new RenamedResource("whiteboards", "Whiteboard", Gone: false)]);
+
+        // Once the new file is there, nothing is said again.
+        Export(renamed).Renamed.Should().BeEmpty();
+    }
+
+    [Fact]
     public void A_context_with_only_a_contribution_starts_its_migrations_with_the_drop()
     {
         var options = Options(null, []);

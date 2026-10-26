@@ -69,5 +69,16 @@ public static partial class GardenersReadThePlotsTheyAreOn
 public static partial class FencersChangeTheirPlots
 {
     /// <summary>Whether the caller changes <paramref name="plot"/>.</summary>
-    public static bool Allows(Plot plot, Caller caller) => PlotQuestions.HeldOn(PlotKeys.Fence).Contains(plot.Id);
+    public static bool Allows(Plot plot, Caller caller) => PlotQuestions.HeldOn(PlotPermissions.Fence).Contains(plot.Id);
+}
+
+/// <summary>
+/// A signed-in user reads every shed, and changes none past the application. The one rule of a shed's, and what grants a
+/// signed-in user the sheds' functions: a resource's functions are granted to the roles its rules are for.
+/// </summary>
+[RowAccess<Shed>(RowOperations.Read, To = [RowAccessRoles.User])]
+public static partial class UsersReadTheSheds
+{
+    /// <summary>Whether the caller reads <paramref name="shed"/>.</summary>
+    public static bool Allows(Shed shed, Caller caller) => caller.IsSignedIn;
 }

@@ -251,12 +251,12 @@ public sealed class GraphQLProjectScenarios(SampleHosts sample) : IClassFixture<
     [Fact]
     public async Task Who_manages_a_crew_reads_its_roles_and_another_member_is_refused_them_and_keeps_the_member()
     {
-        // Leo leads Pier 7's crew, so he manages it: the roles each member holds are his to read.
+        // Leo owns Pier 7, so he manages its crew: the roles each member holds are his to read. He holds none.
         using var leo = await sample.ClientAsync("leo", Harbor.Slug);
         var managed = (await leo.GraphQLDataAsync(WithRoles)).GetProperty("projects").GetProperty("nodes").EnumerateArray().Should().ContainSingle().Subject;
 
-        managed.GetProperty("crew").EnumerateArray().Select(member => member.GetProperty("roles").EnumerateArray().Single().GetProperty("role").GetProperty("id").GetGuid())
-            .Should().Equal(Harbor.ProjectRoles[SampleCatalogue.CrewLead].Value, Harbor.ProjectRoles[SampleCatalogue.Surveyor].Value, Harbor.ProjectRoles[SampleCatalogue.Observer].Value);
+        managed.GetProperty("crew").EnumerateArray().Select(member => member.GetProperty("roles").EnumerateArray().Select(held => held.GetProperty("role").GetProperty("id").GetGuid()).SingleOrDefault())
+            .Should().Equal(Guid.Empty, Harbor.ProjectRoles[SampleCatalogue.Surveyor].Value, Harbor.ProjectRoles[SampleCatalogue.Observer].Value);
 
         // Juno surveys on that crew. She sees the project and who is on its crew; the roles are a field under the
         // key that manages a crew, which she does not hold on it.
@@ -307,7 +307,8 @@ public sealed class GraphQLProjectScenarios(SampleHosts sample) : IClassFixture<
             var nodes = (await ada.GraphQLDataAsync(WithRoles, new { first = size })).GetProperty("projects").GetProperty("nodes").EnumerateArray().ToList();
 
             nodes.Should().HaveCount(size);
-            nodes.SelectMany(project => project.GetProperty("crew").EnumerateArray()).Should().OnlyContain(member => member.GetProperty("roles").GetArrayLength() > 0, "she administers the tenant");
+            nodes.SelectMany(project => project.GetProperty("crew").EnumerateArray()).Should().OnlyContain(
+                member => member.GetProperty("roles").ValueKind == JsonValueKind.Array, "she administers the tenant, so every crew's roles are hers to read, an owner's empty list among them");
             costs.Add(counter.Commands.Count);
         }
 

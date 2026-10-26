@@ -8,9 +8,9 @@ namespace DDDToolkit.Supporting.Membership;
 /// <summary>
 /// A role of one kind of resource, kept as a row: a name, what it is for, and the permission keys it gives
 /// a member that holds it. The application declares its own class with
-/// <see cref="CustomRoleAttribute{TRoleId, TResource}"/>, for a resource whose rules say its roles are kept
-/// (<see cref="MembershipRules.RolesKept"/>): roles a customer makes for itself, where the roles a
-/// resource's rules declare are the same for everybody.
+/// <see cref="CustomRoleAttribute{TRoleId, TResource}"/>, for a resource whose rules say a customer makes its
+/// roles (<see cref="Access.Roles.Custom"/>): roles a customer makes for itself, where fixed roles are the same for
+/// everybody.
 /// <para>
 /// A role is made, renamed, given keys and archived, and each of those says what happened, so the
 /// application raises its own events: the role raises none. Who may do any of it is the application's to
@@ -18,15 +18,17 @@ namespace DDDToolkit.Supporting.Membership;
 /// </para>
 /// <para>
 /// Its keys are held to the resource's rules: a role gives only keys the rules let a member's role give
-/// (<see cref="MembershipRules.MemberKeys"/>), and one that would give another is refused. The rules are
+/// (<see cref="MembershipRules.RoleKeys"/>), the permissions marked <c>InRoles</c>, and one that would give another
+/// is refused. The rules are
 /// handed to everything that changes the role, as the one declaration the application has of them, and a
 /// refusal carries the code those rules give it.
 /// </para>
 /// <para>
 /// An archived role gives nothing from then on and is not given again. It stays, and stays on the members
 /// that hold it, so what they held still has a name. A role made from a starter role remembers which
-/// (<see cref="MadeFrom"/>), and only when it is made: that is how the owner's role is found, whatever a
-/// customer has called it since.
+/// (<see cref="MadeFrom"/>), and only when it is made: that is how the starter roles a customer has not made yet
+/// are found, whatever it has called the ones it has. A role called "owner" is a role like any other: the owner of a
+/// resource holds no role.
 /// </para>
 /// <para>
 /// The class is the application's. Whose a role is, a customer's say, is a property the application adds
@@ -111,7 +113,7 @@ public abstract partial class CustomRoleAggregate<TRoleId>
         ArgumentNullException.ThrowIfNull(key);
         ArgumentNullException.ThrowIfNull(rules);
 
-        return Status == CustomRoleStatus.Active && Keys.Contains(key, StringComparer.Ordinal) && rules.MemberKeys.Allows(key);
+        return Status == CustomRoleStatus.Active && Keys.Contains(key, StringComparer.Ordinal) && rules.RoleKeys.Allows(key);
     }
 
     /// <summary>Renames the role and says again what it is for.</summary>
@@ -170,37 +172,29 @@ public abstract partial class CustomRoleAggregate<TRoleId>
 
     /// <summary>
     /// Archives the role: it stays, on every member that holds it, gives nothing from now on, and is not
-    /// given again. The role every owner holds is not archived: nobody could be made an owner after.
+    /// given again.
     /// </summary>
     /// <param name="rules">The rules of the resource the role is of.</param>
     /// <exception cref="ArgumentNullException"><paramref name="rules"/> is null.</exception>
-    /// <exception cref="RefusalException">
-    /// <c>role-archived</c>: it already is; <c>owner-role-stays</c> for the role made from the owner's starter
-    /// role. Under the resource's codes.
-    /// </exception>
+    /// <exception cref="RefusalException"><c>role-archived</c>: it already is. Under the resource's codes.</exception>
     public void Archive(MembershipRules rules)
     {
         var codes = CodesOf(rules);
         RequireInUse(codes);
 
-        if (MadeFrom is not null && string.Equals(MadeFrom, rules.OwnerRole, StringComparison.Ordinal))
-        {
-            throw codes.Refuse(MembershipRefusals.OwnerRoleStays);
-        }
-
         Status = CustomRoleStatus.Archived;
     }
 
-    /// <summary>The codes of rules whose roles are kept for the resource: the only rules a role is made and changed under.</summary>
+    /// <summary>The codes of rules whose roles a customer makes: the only rules a role is made and changed under.</summary>
     private static MembershipCodes CodesOf(MembershipRules rules)
     {
         ArgumentNullException.ThrowIfNull(rules);
 
-        return rules.RolesKept
+        return rules.Roles.Kind == RolesKind.Custom
             ? rules.Codes
             : throw new ArgumentException(
-                "The rules '" + rules.Name + "' do not say the resource's roles are kept, so no role is made or changed under them: a member would hold it and "
-                + "it would give nothing. Say it in the rules, rolesKept: true, or hand over the rules of the resource this role is of.",
+                "The rules '" + rules.Name + "' do not say a customer makes the resource's roles, so no role is made or changed under them: a member would hold it and "
+                + "it would give nothing. Say it in the rules, Roles.Custom(), or hand over the rules of the resource this role is of.",
                 nameof(rules));
     }
 
@@ -237,7 +231,7 @@ public abstract partial class CustomRoleAggregate<TRoleId>
     private static string[] ValidKeys(IReadOnlyCollection<string>? keys, MembershipRules rules)
     {
         string[] asked = [.. (keys ?? []).Select(key => key?.Trim() ?? string.Empty).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)];
-        string[] refused = [.. asked.Where(key => key.Length == 0 || !rules.MemberKeys.Allows(key))];
+        string[] refused = [.. asked.Where(key => key.Length == 0 || !rules.RoleKeys.Allows(key))];
 
         return refused.Length > 0
             ? throw rules.Codes.Refuse(MembershipRefusals.KeyNotForMembers, ("Keys", string.Join(", ", refused)))

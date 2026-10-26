@@ -26,6 +26,35 @@ public class FailureLocalizerTests
     // ---------------------------------------------------------------- lookup
 
     [Fact]
+    public void A_text_is_looked_up_by_its_key_and_is_the_fallback_where_nobody_translated_it()
+    {
+        // A permission's description: its English is the summary of its [Permissions] class, handed in as the fallback.
+        var localizer = Localizer(("boards.view", "Een bord zien."));
+
+        localizer.Text("boards.view", "See a board.").Should().Be("Een bord zien.");
+        localizer.Text("boards.edit", "Change a board.").Should().Be("Change a board.");
+        FailureLocalizer.Default.Text("boards.view", "See a board.").Should().Be("See a board.");
+    }
+
+    [Fact]
+    public void A_localizer_written_before_text_existed_answers_the_fallback()
+    {
+        IFailureLocalizer older = new OlderLocalizer();
+
+        older.Text("boards.view", "See a board.").Should().Be("See a board.");
+    }
+
+    /// <summary>A localizer of an application's own that implements only what the interface had before <c>Text</c>.</summary>
+    private sealed class OlderLocalizer : IFailureLocalizer
+    {
+        public string Localize(ValidationError error) => error.Message;
+
+        public string Localize(InvariantViolation violation) => violation.Message;
+
+        public string Localize(RefusalException refusal) => refusal.Message;
+    }
+
+    [Fact]
     public void A_failure_is_looked_up_by_its_code_and_filled_from_its_arguments()
     {
         var localizer = Localizer(("TooLong", "{PropertyName} mag hooguit {MaxLength} tekens zijn."));

@@ -74,7 +74,7 @@ public sealed class CampusContext(DbContextOptions<CampusContext> options) : DbC
             course.HasIndex(row => row.UnitId);
 
             // The tutors and the roles they hold, and the unit a key held in the organization is compared with.
-            course.HasMembers(row => row.Tutors, row => row.OwnerSeatId, at: row => row.UnitId);
+            course.HasMembers(row => row.Tutors);
         });
 
         modelBuilder.Entity<CourseRole>(role =>
@@ -94,7 +94,7 @@ public sealed class CampusContext(DbContextOptions<CampusContext> options) : DbC
             lab.Property(row => row.Name).HasMaxLength(100);
             lab.ScopeToTenant(row => row.TenantId);
             lab.HasIndex(row => row.UnitId);
-            lab.HasMembers(row => row.Technicians, row => row.OwnerSeatId, at: row => row.UnitId);
+            lab.HasMembers(row => row.Technicians);
         });
     }
 

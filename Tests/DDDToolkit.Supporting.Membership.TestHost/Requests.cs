@@ -27,7 +27,7 @@ public partial interface IFilingRequest : IRequireAccess;
 /// Shares a document with a user, in a role or in none, until a moment or with no end. Whoever holds the key
 /// that shares, on that document, may: the attribute below is the whole of this host's rule about it.
 /// </summary>
-[RequiresKey(DocumentKeys.Share)]
+[RequiresKey(DocumentPermissions.Share)]
 public sealed record ShareDocument([OnResource] DocumentId Document, UserId With, NamedRole? Role = null, DateTimeOffset? Until = null, [ExpectedVersion] long? ExpectedVersion = null) : IFilingRequest;
 
 /// <summary>
@@ -35,7 +35,7 @@ public sealed record ShareDocument([OnResource] DocumentId Document, UserId With
 /// folder's staff is required on it, and the handler adds the host's own rule: for no longer than the caller
 /// holds that key.
 /// </summary>
-[RequiresKey(FolderKeys.Staff)]
+[RequiresKey(FolderPermissions.Staff)]
 public sealed record AdmitStaff([OnResource] FolderId Folder, StaffCode Staff, NamedRole Role, DateTimeOffset? Until = null, [ExpectedVersion] long? ExpectedVersion = null) : IFilingRequest;
 
 /// <summary>
@@ -44,17 +44,17 @@ public sealed record AdmitStaff([OnResource] FolderId Folder, StaffCode Staff, N
 /// <see cref="CallersUser"/> says, and either way the document is read at the door, its version compared, and what the
 /// expert hold holds the save to kept.
 /// </summary>
-[RequiresKey(DocumentKeys.Share)]
+[RequiresKey(DocumentPermissions.Share)]
 public sealed record LeaveDocument([OnResource] DocumentId Document, [OrOwn] UserId Member, [ExpectedVersion] long? ExpectedVersion = null) : IFilingRequest;
 
 /// <summary>Lists the documents the caller sees: nothing is refused, the statement filters.</summary>
-[SeenWith<DocumentId>(DocumentKeys.View)]
+[SeenWith<DocumentId>(DocumentPermissions.View)]
 public sealed record ListDocuments : IFilingRequest;
 
 /// <summary>Puts something in a folder: requires the key that files, on that folder.</summary>
-[RequiresKey(FolderKeys.File)]
+[RequiresKey(FolderPermissions.File)]
 public sealed record FileInFolder([OnResource] FolderId Folder, [ExpectedVersion] long? ExpectedVersion = null) : IFilingRequest;
 
 /// <summary>Lists the folders the caller sees.</summary>
-[SeenWith<FolderId>(FolderKeys.Read)]
+[SeenWith<FolderId>(FolderPermissions.Read)]
 public sealed record ListFolders : IFilingRequest;

@@ -658,7 +658,7 @@
           "rows": {
             "round": true,
             "result": "refused, 42501",
-            "say": "Round the door Membership's lock refuses her row: Pier 7 is not among `project_ids_where_i_hold('projects.crew.manage')` for her.",
+            "say": "Round the door Membership's lock refuses her row: Pier 7 is not among `projects_where_i_hold('projects.crew.manage')` for her.",
             "snippet": "rows.crew-insert"
           }
         },
@@ -792,7 +792,7 @@
           },
           "door": {
             "pass": true,
-            "say": "The application's own work holds every key on every project."
+            "say": "The projects' own work, in their scope, holds every key on every project."
           },
           "statement": {
             "snippet": "statement.member-hold-system",
@@ -800,7 +800,7 @@
           },
           "rows": {
             "result": "200 · the seat is on the crew",
-            "say": "Written as `ddd_system_in`: the policy of system work in its tenant lets it add a member to a project of harbor. Membership's lock is for signed-in callers, not for the application's own work.",
+            "say": "Written as `ddd_system_in`, in the projects' scope: the policy of system work in its tenant lets it add a member to a project of harbor, and Membership's lock lets through the scope the projects' rules name. Work in Tenancy's scope would hold nothing on a project.",
             "snippet": "rows.crew-insert-system"
           }
         }
@@ -1781,19 +1781,19 @@
       "language": "sql",
       "lines": [
         "CREATE POLICY \"Members change with the key (insert) for authenticated\" ON \"projects\".\"ProjectCrewMembers\" AS RESTRICTIVE FOR INSERT TO authenticated",
-        "    WITH CHECK (\"ProjectId\" IN (SELECT held.id FROM \"projects\".project_ids_where_i_hold('projects.crew.manage') AS held(id)) OR \"ProjectId\" IN (SELECT held.id FROM \"projects\".project_ids_where_i_hold('projects.owner.change') AS held(id)));",
+        "    WITH CHECK (\"ProjectId\" IN (SELECT held.id FROM \"projects\".projects_where_i_hold('projects.crew.manage') AS held(id)) OR \"ProjectId\" IN (SELECT held.id FROM \"projects\".projects_where_i_hold('projects.owner.change') AS held(id)));",
         "",
-        "CREATE OR REPLACE FUNCTION \"projects\".project_ids_where_i_hold(text) RETURNS SETOF uuid",
+        "CREATE OR REPLACE FUNCTION \"projects\".projects_where_i_hold(text) RETURNS SETOF uuid",
         "    LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$",
-        "SELECT holding.id FROM \"projects\".crew_project_ids($1) AS holding(id)",
+        "SELECT holding.id FROM \"projects\".projects_as_member_with($1) AS holding(id)",
         "UNION",
-        "SELECT joined.id FROM \"projects\".crew_member_project_ids() AS joined(id) WHERE $1 = 'projects.view'",
+        "SELECT joined.id FROM \"projects\".projects_as_member() AS joined(id) WHERE $1 = 'projects.view'",
         "UNION",
         "SELECT r.\"Id\" FROM \"projects\".\"Projects\" r WHERE $1 IN ('projects.view', 'projects.edit', 'projects.close', 'projects.crew.manage') AND r.\"OwnerSeatId\" = (SELECT \"tenancy\".caller_seat())",
         "UNION",
         "SELECT r.\"Id\" FROM \"projects\".\"Projects\" r WHERE $1 IS NOT NULL AND r.\"UnitId\" IN (SELECT reached.place FROM \"tenancy\".units_where_i_hold($1) AS reached(place))",
         "UNION",
-        "SELECT r.\"Id\" FROM \"projects\".\"Projects\" r WHERE (SELECT auth.role()) = 'ddd_system_in' AND (SELECT auth.jwt() ->> 'scope') IN ('tenancy', 'projects') AND $1 IS NOT NULL",
+        "SELECT r.\"Id\" FROM \"projects\".\"Projects\" r WHERE (SELECT auth.role()) = 'ddd_system_in' AND (SELECT auth.jwt() ->> 'scope') IN ('projects') AND $1 IS NOT NULL",
         "$function$;"
       ]
     },

@@ -1424,8 +1424,8 @@ defines itself and names; this contract is for a set a package answers:
 ```mermaid
 flowchart LR
     Contract["ProjectsISee<br/>a contract of ProjectId:<br/>the projects seen"] -->|"the generator"| Rule["the rule's SQL<br/>asks the set by<br/>ProjectId and seen"]
-    Rule -->|"the export"| Policy["the policy asks<br/>projects.project_ids_i_see()"]
-    Answer["the Membership contribution<br/>project_ids_i_see answers<br/>seen for ProjectId"] -->|"says so"| Policy
+    Rule -->|"the export"| Policy["the policy asks<br/>projects.projects_i_see()"]
+    Answer["the Membership contribution<br/>projects_i_see answers<br/>seen for ProjectId"] -->|"says so"| Policy
 ```
 
 The contract is one line, in the contracts of the module that owns the resource. It names the resource's id and
@@ -1504,7 +1504,7 @@ rules give the function:
 
 -- Inspections' access file
 CREATE POLICY "Seats record where they may (insert) for authenticated" ON "inspections"."Inspections" FOR INSERT TO authenticated
-    WITH CHECK (("ProjectId" = ANY (ARRAY(SELECT "projects".project_ids_where_i_hold('inspections.record')))) AND ("RecordedBy" = (SELECT "tenancy".caller_seat())));
+    WITH CHECK (("ProjectId" = ANY (ARRAY(SELECT "projects".projects_where_i_hold('inspections.record')))) AND ("RecordedBy" = (SELECT "tenancy".caller_seat())));
 ```
 
 </details>
@@ -1586,8 +1586,8 @@ CREATE OR REPLACE FUNCTION "projects".projects_state_column_rule() RETURNS trigg
     LANGUAGE plpgsql SET search_path = '' AS $body$
 BEGIN
     IF CURRENT_USER = 'authenticated' THEN
-        IF (OLD."Id" = ANY (ARRAY(SELECT "projects".project_ids_where_i_hold('projects.close')))) IS NOT TRUE
-           OR (OLD."Id" IS DISTINCT FROM NEW."Id" AND (NEW."Id" = ANY (ARRAY(SELECT "projects".project_ids_where_i_hold('projects.close')))) IS NOT TRUE) THEN
+        IF (OLD."Id" = ANY (ARRAY(SELECT "projects".projects_where_i_hold('projects.close')))) IS NOT TRUE
+           OR (OLD."Id" IS DISTINCT FROM NEW."Id" AND (NEW."Id" = ANY (ARRAY(SELECT "projects".projects_where_i_hold('projects.close')))) IS NOT TRUE) THEN
             RAISE EXCEPTION USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'projects_state_column_rule', HINT = 'ddd:access.refused',
                 MESSAGE = 'The column rule ''State changes with the close key'' does not let this caller change "State" of "projects"."Projects".';
         END IF;
@@ -2011,8 +2011,7 @@ somebody else changed it first. That case is told apart by reading the row again
   will see it. The message of the second names row level security in so many words, which is why words decide
   nothing. The toolkit's triggers that hold what may never be, whoever writes, are no access guards and raise
   codes of their own. Tenancy's checks of a tenant's last administrator, of the rights and the paths, and of the
-  rows that stay fixed, and the Membership package's trigger that keeps an owner's role in use, raise
-  `check_violation`; an [event log](entity-framework.md#an-event-log)'s guard raises `55000`. Tenancy's store answers the last administrator
+  rows that stay fixed raise `check_violation`; an [event log](entity-framework.md#an-event-log)'s guard raises `55000`. Tenancy's store answers the last administrator
   with a refusal of its own.
 - **Only a save is answered.** `DatabaseRefusalInterceptor` sees what a `SaveChanges` threw. A statement of your
   own, an `ExecuteUpdate`, an `ExecuteDelete` or SQL, is no save: an access guard's refusal of it reaches you as

@@ -106,19 +106,19 @@ public sealed class CampusScenario
         ];
         _courseRoleKeys = CourseRoles.ToDictionary(role => role.Id, role => role.Keys);
 
-        var optics = new Course(Optics, Alder, Physics, "Optics", OwenSeat, AlderCourseRoles[MembershipRules.DefaultOwnerRole], monthAgo);
+        var optics = new Course(Optics, Alder, Physics, "Optics", OwenSeat, monthAgo);
         optics.TakeOn(TomSeat, AlderCourseRoles[CourseMembership.Tutor], MemberPeriod.Open(before), now, by: OwenSeat);
         optics.TakeOn(PiaSeat, AlderCourseRoles[CourseMembership.Convenor], MemberPeriod.Between(before, NextWeek), now, by: OwenSeat);
         optics.TakeOn(DeeSeat, MemberPeriod.Open(before), now, by: OwenSeat);
         optics.TakeOn(SueSeat, AlderCourseRoles[CourseMembership.Tutor], MemberPeriod.Open(before), now, by: OwenSeat);
 
-        var poetry = new Course(Poetry, Alder, Arts, "Poetry", PiaSeat, AlderCourseRoles[MembershipRules.DefaultOwnerRole], monthAgo);
-        var latin = new Course(Latin, Birch, BirchRoot, "Latin", BeaSeat, BirchCourseRoles[MembershipRules.DefaultOwnerRole], monthAgo);
+        var poetry = new Course(Poetry, Alder, Arts, "Poetry", PiaSeat, monthAgo);
+        var latin = new Course(Latin, Birch, BirchRoot, "Latin", BeaSeat, monthAgo);
         Courses = [optics, poetry, latin];
 
-        var laser = new Lab(Laser, Alder, Physics, "Laser lab", OwenSeat, AlderLabChief, monthAgo);
+        var laser = new Lab(Laser, Alder, Physics, "Laser lab", OwenSeat, monthAgo);
         laser.LetIn(TomSeat, AlderDemonstrator, MemberPeriod.Open(before), now, by: OwenSeat);
-        var darkroom = new Lab(Darkroom, Alder, Arts, "Darkroom", PiaSeat, AlderLabChief, monthAgo);
+        var darkroom = new Lab(Darkroom, Alder, Arts, "Darkroom", PiaSeat, monthAgo);
         Labs = [laser, darkroom];
     }
 
@@ -234,11 +234,11 @@ public sealed class CampusScenario
     /// holds, a lab's, one of Tenancy's, and one nobody declared.
     /// </summary>
     public static IReadOnlyList<string> CourseKeysAsked
-        => [CourseKeys.See, CourseKeys.Grade, CourseKeys.Outline, CourseKeys.Dissolve, LabKeys.Equip, TenancyKeys.HistoryView, "courses.unheard-of"];
+        => [CoursePermissions.See, CoursePermissions.Grade, CoursePermissions.Outline, CoursePermissions.Dissolve, LabPermissions.Equip, TenancyKeys.HistoryView, "courses.unheard-of"];
 
     /// <summary>Every key a question about labs is asked with: the labs' own, a course's, one of Tenancy's that a role given in a lab holds, and one nobody declared.</summary>
     public static IReadOnlyList<string> LabKeysAsked
-        => [LabKeys.See, LabKeys.Equip, LabKeys.Calibrate, CourseKeys.Grade, TenancyKeys.HistoryView, "labs.unheard-of"];
+        => [LabPermissions.See, LabPermissions.Equip, LabPermissions.Calibrate, CoursePermissions.Grade, TenancyKeys.HistoryView, "labs.unheard-of"];
 
     /// <summary>
     /// Saves the scenario the way an application comes by it: the colleges, their units, seats and grants through
@@ -318,7 +318,7 @@ public sealed class CampusScenario
 
     /// <summary>The courses somebody sees: those it owns, those it is on now, and those given where it holds the key that sees, or below.</summary>
     public IReadOnlyList<CourseId> CoursesSeenBy(Asking asking)
-        => [.. CoursesOf(asking, (course, seat) => course.OwnerSeatId == seat || course.Tutors.Any(row => row.MemberId == seat && row.AppliesAt(Now)) || HeldAbove(seat, course.UnitId, CourseKeys.See))];
+        => [.. CoursesOf(asking, (course, seat) => course.OwnerSeatId == seat || course.Tutors.Any(row => row.MemberId == seat && row.AppliesAt(Now)) || HeldAbove(seat, course.UnitId, CoursePermissions.See))];
 
     /// <summary>
     /// The courses somebody holds <paramref name="key"/> on, worked out in memory with the rules and what the
@@ -344,7 +344,7 @@ public sealed class CampusScenario
 
     /// <summary>The labs somebody sees: those it owns, those it works in now, and those that are where it holds the key that sees, or below.</summary>
     public IReadOnlyList<LabId> LabsSeenBy(Asking asking)
-        => [.. LabsOf(asking, (lab, seat) => lab.OwnerSeatId == seat || lab.Technicians.Any(row => row.MemberId == seat && row.AppliesAt(Now)) || HeldAbove(seat, lab.UnitId, LabKeys.See))];
+        => [.. LabsOf(asking, (lab, seat) => lab.OwnerSeatId == seat || lab.Technicians.Any(row => row.MemberId == seat && row.AppliesAt(Now)) || HeldAbove(seat, lab.UnitId, LabPermissions.See))];
 
     /// <summary>The labs somebody holds <paramref name="key"/> on: by working in it, through a role of the college's it holds there, or from the organization above.</summary>
     public IReadOnlyList<LabId> LabsHeldBy(Asking asking, string key)
@@ -378,17 +378,18 @@ public sealed class CampusScenario
     }
 
     private bool ThroughARoleOf(Course course, SeatId seat, string key)
-        => CourseMembership.Rules.MemberKeys.Allows(key)
+        => CourseMembership.Rules.RoleKeys.Allows(key)
            && course.Tutors.Any(row => row.MemberId == seat
                && _courseRoleKeys.Any(role => role.Value.Contains(key, StringComparer.Ordinal) && row.HoldsAt(role.Key, Now)));
 
-    /// <summary>Whether a seat holds a key in a lab as one of its technicians: by working in it, or through a role of the college's.</summary>
+    /// <summary>Whether a seat holds a key in a lab as one of its technicians: by owning it, by working in it, or through a role of the college's.</summary>
     private bool AsMemberOf(Lab lab, SeatId seat, string key)
-        => (LabMembership.Rules.MembershipGives(key) && lab.Technicians.Any(row => row.MemberId == seat && row.AppliesAt(Now)))
+        => (LabMembership.Rules.OwnerHolds(key) && lab.OwnerSeatId == seat)
+           || (LabMembership.Rules.MembershipGives(key) && lab.Technicians.Any(row => row.MemberId == seat && row.AppliesAt(Now)))
            || ThroughARoleOf(lab, seat, key);
 
     private bool ThroughARoleOf(Lab lab, SeatId seat, string key)
-        => LabMembership.Rules.MemberKeys.Allows(key)
+        => LabMembership.Rules.RoleKeys.Allows(key)
            && lab.Technicians.Any(row => row.MemberId == seat
                && _tenantRoleKeys.Any(role => role.Value.Contains(key, StringComparer.Ordinal) && row.HoldsAt(role.Key, Now)));
 
@@ -420,5 +421,5 @@ public sealed class CampusScenario
     private static CampusPerson Person(string name) => new(name, Guid.CreateVersion7());
 
     private static Dictionary<string, CourseRoleId> RolesOfCourses()
-        => CourseMembership.Rules.Roles.ToDictionary(role => role.Name, _ => CourseRoleId.CreateSequential(), StringComparer.Ordinal);
+        => CourseMembership.Rules.Roles.Declared.ToDictionary(role => role.Name, _ => CourseRoleId.CreateSequential(), StringComparer.Ordinal);
 }

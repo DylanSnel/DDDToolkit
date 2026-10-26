@@ -338,9 +338,11 @@ of an aggregate whose owner it marks `[Owner]`, `[OrOwn]` is the same with `Owne
 | `[AtUnit]` or `[OnResource]` | `[RequiresKey]`, one of the two, on a member of the id it marks that is never null | [DDD00080](diagnostics.md#ddd00080), [DDD00081](diagnostics.md#ddd00081) |
 | `[ExpectedVersion]` | `[OnResource]`, on a `long?` | [DDD00080](diagnostics.md#ddd00080), [DDD00081](diagnostics.md#ddd00081) |
 | `[RequiresKey]` without a marker | a package that says where such a key is held, Tenancy | [DDD00080](diagnostics.md#ddd00080) |
-| `[OrOwn]` | `[RequiresKey]`, without `[AtUnit]`, once, on a member that is never null, of a type with an own or the id of an aggregate whose owner is of one | [DDD00085](diagnostics.md#ddd00085), [DDD00086](diagnostics.md#ddd00086), [DDD00088](diagnostics.md#ddd00088) |
+| `[OrOwn]` | `[RequiresKey]`, without `[AtUnit]`, once, on a member that is never null, of a type with an own or the id of an aggregate whose owner is of one; not on the id of a resource with members beside a permission its owner holds | [DDD00085](diagnostics.md#ddd00085), [DDD00086](diagnostics.md#ddd00086), [DDD00088](diagnostics.md#ddd00088), [DDD00096](diagnostics.md#ddd00096), a warning |
 | `[Own]` | `[OwnOnly]`, once, on a member that is never null, of a type with an own or the id of an aggregate whose owner is of one | [DDD00085](diagnostics.md#ddd00085), [DDD00086](diagnostics.md#ddd00086), [DDD00088](diagnostics.md#ddd00088) |
 | `[Owner]`, on an aggregate's property | the root itself, once, on a property of a type with an own, nullable or not | [DDD00087](diagnostics.md#ddd00087), [DDD00088](diagnostics.md#ddd00088) |
+| `[At]`, on an aggregate's property | the root itself, once, on an instance property that is never null: where it hangs, which the rules of a resource with members read where it is reached from above | [DDD00097](diagnostics.md#ddd00097), and [DDD00098](diagnostics.md#ddd00098) for rules that reach a class that marks none |
+| `[Permissions]`, on a class | a static class whose public constants each carry a level, `[AtTenant]`, `[AtUnit]` or `[On<TResource>]` | [DDD00092](diagnostics.md#ddd00092), [DDD00093](diagnostics.md#ddd00093) |
 | `[SeenWith<TResourceId>(key)]`, `[RequiresOperator]` | a query | [DDD00082](diagnostics.md#ddd00082) on a command or a plain request of Mediator's |
 | any of them | one module interface of the same project, `[AccessRequests]` and `partial` | [DDD00083](diagnostics.md#ddd00083) |
 
@@ -753,6 +755,11 @@ flowchart LR
 - **Beside a resource as well.** `[OrOwn]` on the id of an aggregate that marks its owner, beside `[OnResource]`, is the
   caller's own on a resource with the owner in the place of the value: `Any(All(OwnerOf(member), Sees(key, resource)),
   On(key, resource))`, and the handler still finds the aggregate on that resource.
+- **The owner of a resource with members holds its permissions already.** On a resource of
+  [Membership](membership.md)'s the property marked `[Owner]` names the member that owns it, who holds every
+  permission said for the owner by owning it. So `[OrOwn]` on the resource's own id, beside `[OnResource]` and a
+  permission the owner holds, lets through nobody the key does not: the warning
+  [DDD00096](diagnostics.md#ddd00096) says to take it off. It stays for a permission declared `Owner = false`.
 - **One owner, of a type with an own.** Several owners of one aggregate are members: a resource with members, which
   [Membership](membership.md) keeps, with the keys each member's roles give. `[Owner]` twice on one aggregate, on an
   entity inside it or on a type that is no aggregate root is [DDD00087](diagnostics.md#ddd00087). On a type nothing
@@ -788,9 +795,9 @@ flowchart LR
     Key -- "no" --> Refused["one access.refused,<br/>both reasons"]
 ```
 
-The database may still hold the save to the key. Where the resource's rules name the key that changes the members,
-`changeMembersKey`, Membership's lock is a restrictive policy on the member tables: a member row changes only for a
-caller that holds that key, and no row rule of the application's widens it. A caller who takes itself off passes the
+The database may still hold the save to the key. Where a permission of the resource is marked `LocksMembers`, the
+one the commands that change the members require, Membership's lock is a restrictive policy on the member tables: a
+member row changes only for a caller that holds that permission, and no row rule of the application's widens it. A caller who takes itself off passes the
 door, and the database refuses its own row. So the handler saves the caller's own place as the application's own
 work, begun for that one save once the request is the one in hand, the one whose check let it through in this very
 handling; anybody else's place it saves as the caller, which the database judges as every other save. The Tenancy

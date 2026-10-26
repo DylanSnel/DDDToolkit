@@ -306,6 +306,18 @@ internal static class Providers
             .Where(static diagnostic => diagnostic is not null)
             .Select(static (diagnostic, _) => diagnostic!);
 
+    /// <summary>
+    /// DDD00097 for every property marked <c>[At]</c> that is not the one place an aggregate root hangs at: on another
+    /// type, static, a second one, or one that may be empty.
+    /// </summary>
+    public static IncrementalValuesProvider<DiagnosticInfo> MisplacedPlaces(this IncrementalGeneratorInitializationContext context)
+        => context.SyntaxProvider.ForAttributeWithMetadataName(
+                KnownTypes.AtAttribute,
+                predicate: static (node, _) => node is PropertyDeclarationSyntax,
+                transform: static (syntaxContext, _) => OwnerDeclarations.CheckPlace(syntaxContext))
+            .Where(static diagnostic => diagnostic is not null)
+            .Select(static (diagnostic, _) => diagnostic!);
+
     /// <summary>The compilation's assembly name, as a cacheable value.</summary>
     public static IncrementalValueProvider<string?> AssemblyName(this IncrementalGeneratorInitializationContext context)
         => context.CompilationProvider.Select(static (compilation, _) => compilation.AssemblyName);

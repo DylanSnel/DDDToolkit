@@ -24,9 +24,6 @@
   <data name="membership.role-not-for-members" xml:space="preserve">
     <value>Die rol kan hier niet aan een lid worden gegeven.</value>
   </data>
-  <data name="membership.no-owner-role" xml:space="preserve">
-    <value>Er is geen rol in gebruik om aan een eigenaar te geven.</value>
-  </data>
   <data name="membership.already-member" xml:space="preserve">
     <value>Dit is al een lid, of wordt het nog. Geef het lid een rol.</value>
   </data>
@@ -40,7 +37,7 @@
     <value>Dat lid heeft deze rol niet.</value>
   </data>
   <data name="membership.owner-protected" xml:space="preserve">
-    <value>De eigenaar blijft lid, in de rol van eigenaar, tot iemand anders eigenaar is.</value>
+    <value>De eigenaar blijft lid, zonder rol, tot iemand anders eigenaar is.</value>
   </data>
   <data name="membership.already-owner" xml:space="preserve">
     <value>Dat lid is al de eigenaar.</value>
@@ -56,9 +53,6 @@
   </data>
   <data name="membership.key-not-for-members" xml:space="preserve">
     <value>Deze rechten kan een rol hier niet geven: {Keys}.</value>
-  </data>
-  <data name="membership.owner-role-stays" xml:space="preserve">
-    <value>De rol die elke eigenaar heeft, kan niet worden gearchiveerd.</value>
   </data>
   <data name="membership.role-keys-not-normalized" xml:space="preserve">
     <value>De rechten van een rol moeten uniek zijn, niet leeg, en in ordinale volgorde staan.</value>

@@ -28,19 +28,20 @@ public static partial class DocumentsWhereIHold
 }
 
 /// <summary>
-/// The questions about folders the database answers, under the names the folder's rules give its functions: a
-/// host may still ask the package's functions by name, as an <c>[AccessFunctions]</c> class asks any function.
+/// The questions about folders the database answers, under the names the package gives a folder's functions, from
+/// the resource's name: a host may still ask the package's functions by name, as an <c>[AccessFunctions]</c> class
+/// asks any function.
 /// </summary>
 [AccessFunctions(Owner = "folders")]
 public static partial class FolderQuestions
 {
     /// <summary>The folders the caller sees.</summary>
-    [AccessSet("folder_ids_seen")]
+    [AccessSet("folders_i_see")]
     public static partial AccessSet<FolderId> Seen();
 
     /// <summary>The folders the caller holds <paramref name="key"/> on.</summary>
     /// <param name="key">A permission key.</param>
-    [AccessSet("folder_ids_held")]
+    [AccessSet("folders_where_i_hold")]
     public static partial AccessSet<FolderId> HeldOn(string key);
 }
 
@@ -53,7 +54,7 @@ public static partial class UsersReadTheDocumentsTheySee
 }
 
 /// <summary>
-/// A user opens a document of its own: one that names it as its owner. Its share and the owner's role come
+/// A user opens a document of its own: one that names it as its owner. Its share, which holds no role, comes
 /// with it, and are written as the document's own rule lets a caller write them: the document is read through
 /// what the caller sees, which its owner does from the moment its row is there. Not among the rules the suites
 /// apply by default: a test that opens a document as its owner lists it.
@@ -78,8 +79,8 @@ public static partial class UsersChangeTheDocumentsTheyWorkOn
 {
     /// <summary>Whether the caller may change <paramref name="document"/>.</summary>
     public static bool Allows(Document document, Caller caller)
-        => DocumentsWhereIHold.Ids(DocumentKeys.Edit).Contains(document.Id)
-           || DocumentsWhereIHold.Ids(DocumentKeys.Share).Contains(document.Id);
+        => DocumentsWhereIHold.Ids(DocumentPermissions.Edit).Contains(document.Id)
+           || DocumentsWhereIHold.Ids(DocumentPermissions.Share).Contains(document.Id);
 }
 
 /// <summary>A member of staff reads the folders it is on.</summary>
@@ -88,4 +89,24 @@ public static partial class StaffReadTheFoldersTheyAreOn
 {
     /// <summary>Whether the caller sees <paramref name="folder"/>.</summary>
     public static bool Allows(Folder folder, Caller caller) => FolderQuestions.Seen().Contains(folder.Id);
+}
+
+/// <summary>
+/// An archivist, a caller of the token role <c>archivist</c>, reads the folders it holds the key that reads one on:
+/// the one rule for that role. The folders' functions are granted to it because this rule is written for it, and to
+/// no role that no rule of a folder is for. Not among the rules the suites apply by default: a test of the grants
+/// lists it.
+/// </summary>
+[RowAccess<Folder>(RowOperations.Read, To = [Archivists.Role])]
+public static partial class ArchivistsReadTheFoldersTheyHold
+{
+    /// <summary>Whether the caller holds the key that reads <paramref name="folder"/>.</summary>
+    public static bool Allows(Folder folder, Caller caller) => FolderQuestions.HeldOn(FolderPermissions.Read).Contains(folder.Id);
+}
+
+/// <summary>The token role of the host's archivists.</summary>
+public static class Archivists
+{
+    /// <summary>The role, as a rule names it.</summary>
+    public const string Role = RowAccessRoles.TokenPrefix + "archivist";
 }

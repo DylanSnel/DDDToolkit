@@ -13,23 +13,40 @@ using Microsoft.CodeAnalysis.Text;
 namespace DDDToolkit.Supporting.Tenancy.Analyzers;
 
 /// <summary>
-/// Collects the permission keys of every module a project references, so a module states its keys once: on the
-/// static list it marks with <c>[TenancyPermissions]</c>.
+/// Puts the permissions of every module into Tenancy's catalogue, so a module declares each permission once: as a
+/// constant of a static class it marks <c>[Permissions]</c>, with its level and what it is for.
 /// <code>
-/// // A module's application project
-/// public static class OrderingKeys
+/// // A module's application project, with DDD_Module Ordering
+/// [Permissions]
+/// public static class OrderingPermissions
+/// {
+///     /// &lt;summary&gt;See the orders.&lt;/summary&gt;
+///     [AtTenant]
+///     public const string View = "orders.view";
+/// }
+///
+/// // Written into that project: the module's list
+/// public static class DeclaredPermissions
 /// {
 ///     [TenancyPermissions]
-///     public static IReadOnlyList&lt;Permission&gt; Permissions { get; } = [new("orders.view", "Ordering", "See the orders")];
+///     public static IReadOnlyList&lt;Permission&gt; All { get; } = [new("orders.view", "Ordering", "See the orders.", Order: 10)];
 /// }
 ///
 /// // Written into the host, which references the module
 /// internal static class TenancyPermissionsOfModules
 /// {
-///     public static IReadOnlyList&lt;Permission&gt; All { get; } = Join(global::Shop.Ordering.OrderingKeys.Permissions, ...);
+///     public static IReadOnlyList&lt;Permission&gt; All { get; } = Join(global::Shop.Ordering.DeclaredPermissions.All, ...);
 ///     public static IServiceCollection AddTenancyPermissionsOfModules(this IServiceCollection services) =&gt; ...AddTenancyPermissions(services, All);
 /// }
 /// </code>
+/// <para>
+/// <b>The module's list.</b> Every <c>public const string</c> of a <c>[Permissions]</c> class, whatever its level,
+/// under the module the project declares with <c>DDD_Module</c> or <c>[assembly: Module]</c>, or its assembly's name
+/// where it declares none, in the order the classes' names and their constants are written. A permission's
+/// description is its level's <c>Description</c>, or else its <c>&lt;summary&gt;</c>, as text; its <c>Implies</c> and
+/// <c>Retired</c> are said on the level. The list is marked <c>[TenancyPermissions]</c>, the mark the project that
+/// composes the modules collects; a list a module marks by hand is DDD00095.
+/// </para>
 /// The keys are needed twice, by two programs that cannot ask each other: the host registers them, where its
 /// catalogue is built from the services, and the program that exports the database's policies builds the same
 /// catalogue without any. Both compose the modules, so both see every module's assembly, and in it the marked
@@ -50,16 +67,10 @@ namespace DDDToolkit.Supporting.Tenancy.Analyzers;
 /// the other's internals still names its own.
 /// </para>
 /// <para>
-/// <b>What it reports.</b> A marked list that could not be read where it is collected: not static, without a
-/// getter, in a generic type, in a type that cannot be named such as an extension block, a static virtual or
-/// abstract member of an interface, of a type that is no sequence of <c>Permission</c>, or, in a library, not public.
-/// That is DDD00063 where the list is declared, because a project that references the library, the one that composes
-/// the modules among them, does not even see a list that is not public, and would leave its keys out in silence.
-/// Whether the library declares a module does not matter: one that leaves its <c>[assembly: Module]</c> out is
-/// still referenced. Only an application, the program the modules are composed in, may keep a list of its own
-/// internal, since it collects that one itself; one that it cannot read outside the list's own type is reported
-/// all the same. A list that cannot be read is left out of what is written here as well, so the report is the one
-/// error, not a second one in written code.
+/// <b>What it reports.</b> A list a project marks <c>[TenancyPermissions]</c> by hand: DDD00095 where it is declared,
+/// since the mark is the generator's, and a module declares its permissions in a <c>[Permissions]</c> class. A marked
+/// list of a referenced project that cannot be read as <c>Type.Member</c> is left out of what is written, which only
+/// a list written by hand, and refused where it was, can be.
 /// </para>
 /// <para>
 /// The package's types are named here by their metadata names, as text: this assembly references nothing of the
@@ -71,6 +82,11 @@ public sealed class TenancyPermissionsGenerator : IIncrementalGenerator
 {
     private const string Package = "DDDToolkit.Supporting.Tenancy";
     private const string AttributeName = Package + ".Catalogue.TenancyPermissionsAttribute";
+    private const string PermissionsAttribute = "DDDToolkit.Access.PermissionsAttribute";
+    private const string LevelBase = "DDDToolkit.Access.PermissionLevelAttribute";
+
+    /// <summary>The class written into a project that declares permissions.</summary>
+    public const string DeclaredClassName = "DeclaredPermissions";
     private const string PermissionName = Package + ".Catalogue.Permission";
     private const string RegistrationName = Package + ".TenancyServiceCollectionExtensions";
     private const string ServiceCollectionName = "Microsoft.Extensions.DependencyInjection.IServiceCollection";
@@ -85,7 +101,16 @@ public sealed class TenancyPermissionsGenerator : IIncrementalGenerator
     /// <inheritdoc />
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
-        // This project's own marked lists, each read where it is declared: what is reported about it is said there.
+        // This project's [Permissions] classes: the module's list is written from them.
+        var declared = context.SyntaxProvider.ForAttributeWithMetadataName(
+                PermissionsAttribute,
+                predicate: static (node, _) => node is ClassDeclarationSyntax,
+                transform: static (syntaxContext, cancellationToken) => ReadDeclared(syntaxContext, cancellationToken))
+            .Where(static each => each is not null)
+            .Select(static (each, _) => each!)
+            .Collect();
+
+        // This project's own marked lists: a module's list is written, never marked by hand.
         var own = context.SyntaxProvider.ForAttributeWithMetadataName(
                 AttributeName,
                 predicate: static (node, _) => node is PropertyDeclarationSyntax or VariableDeclaratorSyntax,
@@ -98,57 +123,28 @@ public sealed class TenancyPermissionsGenerator : IIncrementalGenerator
         // compilation into plain values, so the output step stays cached while an edit changes none of them.
         var composition = context.CompilationProvider.Select(static (compilation, cancellationToken) => Compose(compilation, cancellationToken));
 
-        context.RegisterSourceOutput(own.Combine(composition), static (production, pair) => Execute(production, pair.Left, pair.Right));
+        context.RegisterSourceOutput(own.Combine(declared).Combine(composition), static (production, all) => Execute(production, all.Left.Left, all.Left.Right, all.Right));
     }
 
     // ------------------------------------------------------------------ a list of this project
 
-    /// <summary>
-    /// One marked list of this project: how it is read, or why it cannot be, whether a project that references
-    /// this one sees it, and whether this project itself can.
-    /// </summary>
+    /// <summary>One list this project marks by hand: what the report names, and where.</summary>
     /// <param name="Name">The list as a message names it: <c>OrderingKeys.Permissions</c>.</param>
     /// <param name="Location">Its name in its declaration.</param>
-    /// <param name="Expression">What reads it, <c>global::Shop.Ordering.OrderingKeys.Permissions</c>; null when it cannot be read.</param>
-    /// <param name="Problem">Why it cannot be read, as the message says it; null when it can, or when the compiler says so already.</param>
-    /// <param name="IsPublic">Whether it is public, in public types, with a public getter: what a project that references this one sees.</param>
-    /// <param name="IsReadableHere">
-    /// Whether code anywhere in this project reads it, as the written class does: neither the member, nor its getter,
-    /// nor a type it is in, is private or protected.
-    /// </param>
-    private sealed record OwnList(string Name, LocationInfo? Location, string? Expression, string? Problem, bool IsPublic, bool IsReadableHere);
+    private sealed record OwnList(string Name, LocationInfo? Location);
 
     private static OwnList? Inspect(GeneratorAttributeSyntaxContext context)
     {
-        var compilation = context.SemanticModel.Compilation;
-        var member = context.TargetSymbol;
-        ITypeSymbol type;
-        SyntaxToken name;
-        switch (member)
+        var name = context.TargetNode switch
         {
-            case IPropertySymbol property when context.TargetNode is PropertyDeclarationSyntax declaration:
-                (type, name) = (property.Type, declaration.Identifier);
-                break;
-            case IFieldSymbol field when context.TargetNode is VariableDeclaratorSyntax declarator:
-                (type, name) = (field.Type, declarator.Identifier);
-                break;
-            default:
-                return null;
-        }
+            PropertyDeclarationSyntax declaration => declaration.Identifier,
+            VariableDeclaratorSyntax declarator => declarator.Identifier,
+            _ => default,
+        };
 
-        if (compilation.GetTypeByMetadataName(PermissionName) is not { } permission)
-        {
-            return null;
-        }
-
-        var problem = ProblemOf(member, type, permission, compilation);
-        return new OwnList(
-            member.ToDisplayString(SymbolDisplayFormat.CSharpShortErrorMessageFormat),
-            LocationInfo.From(name),
-            problem is null && type.TypeKind != TypeKind.Error ? ExpressionOf(member) : null,
-            problem,
-            IsPublic(member),
-            IsReadableWithin(member, compilation));
+        return name == default
+            ? null
+            : new OwnList(context.TargetSymbol.ToDisplayString(SymbolDisplayFormat.CSharpShortErrorMessageFormat), LocationInfo.From(name));
     }
 
     // ------------------------------------------------------------------ the projects it references
@@ -164,7 +160,8 @@ public sealed class TenancyPermissionsGenerator : IIncrementalGenerator
     /// <param name="Namespace">The project's own namespace, from its assembly's name: where the class is written.</param>
     /// <param name="CanRegister">Whether the service collection and the package's registration are both in reach.</param>
     /// <param name="Referenced">What reads each list of a referenced project, in ordinal order.</param>
-    private sealed record Composition(bool SeesTenancy, bool DeclaresModule, bool IsLibrary, string Namespace, bool CanRegister, EquatableArray<string> Referenced);
+    /// <param name="Module">The module the project declares, or its assembly's name: what its own permissions are listed under.</param>
+    private sealed record Composition(bool SeesTenancy, bool DeclaresModule, bool IsLibrary, string Namespace, bool CanRegister, EquatableArray<string> Referenced, string Module = "");
 
     private static Composition Compose(Compilation compilation, CancellationToken cancellationToken)
     {
@@ -179,11 +176,13 @@ public sealed class TenancyPermissionsGenerator : IIncrementalGenerator
             return new Composition(false, false, isLibrary, @namespace, false, EquatableArray<string>.Empty);
         }
 
+        var module = ModuleBoundary.ModuleOf(compilation.Assembly) ?? compilation.AssemblyName ?? @namespace;
+
         // A module's own libraries collect nothing, so they are not walked: most projects that see the package are one.
         // An application is walked whatever it declares: it is the program, and nothing composes the modules from it.
         if (isLibrary && ModuleBoundary.ModuleOf(compilation.Assembly) is not null)
         {
-            return new Composition(true, true, isLibrary, @namespace, false, EquatableArray<string>.Empty);
+            return new Composition(true, true, isLibrary, @namespace, false, EquatableArray<string>.Empty, module);
         }
 
         var found = new List<string>();
@@ -202,7 +201,7 @@ public sealed class TenancyPermissionsGenerator : IIncrementalGenerator
         }
 
         var canRegister = compilation.GetTypeByMetadataName(ServiceCollectionName) is not null && compilation.GetTypeByMetadataName(RegistrationName) is not null;
-        return new Composition(true, false, isLibrary, @namespace, canRegister, found.Distinct(StringComparer.Ordinal).OrderBy(static each => each, StringComparer.Ordinal).ToEquatableArray());
+        return new Composition(true, false, isLibrary, @namespace, canRegister, found.Distinct(StringComparer.Ordinal).OrderBy(static each => each, StringComparer.Ordinal).ToEquatableArray(), module);
     }
 
     /// <summary>The marked lists under <paramref name="space"/> that this project can read, as what reads each.</summary>
@@ -226,7 +225,7 @@ public sealed class TenancyPermissionsGenerator : IIncrementalGenerator
         cancellationToken.ThrowIfCancellationRequested();
 
         // A generic type's members are named only with type arguments, which a list of keys has none to take; nor
-        // are those of a type nested in one. What its own project says about it is DDD00063.
+        // are those of a type nested in one. A list the generator writes is never in one.
         if (type.IsGenericType || !compilation.IsSymbolAccessibleWithin(type, compilation.Assembly))
         {
             return;
@@ -259,7 +258,7 @@ public sealed class TenancyPermissionsGenerator : IIncrementalGenerator
     // ------------------------------------------------------------------ what a list has to be
 
     /// <summary>
-    /// Why the list cannot be read as <c>Type.Member</c> at all, as the message of DDD00063 says it, or null when it
+    /// Why the list cannot be read as <c>Type.Member</c> at all, or null when it
     /// can. Who may read it, every project or its own alone, is asked apart: an application reads its own lists.
     /// </summary>
     private static string? ProblemOf(ISymbol member, ITypeSymbol type, INamedTypeSymbol permission, Compilation compilation)
@@ -313,20 +312,6 @@ public sealed class TenancyPermissionsGenerator : IIncrementalGenerator
             : "is of type '" + type.ToDisplayString(SymbolDisplayFormat.CSharpShortErrorMessageFormat) + "', which is no sequence of Permission";
     }
 
-    /// <summary>Whether the member and every type it is declared in are public: what another project sees of it.</summary>
-    private static bool IsPublic(ISymbol member)
-    {
-        for (ISymbol? symbol = member; symbol is not null and not INamespaceSymbol; symbol = symbol.ContainingSymbol)
-        {
-            if (symbol.DeclaredAccessibility != Accessibility.Public)
-            {
-                return false;
-            }
-        }
-
-        return member is not IPropertySymbol { GetMethod: { DeclaredAccessibility: not Accessibility.Public } };
-    }
-
     /// <summary>
     /// Whether code anywhere in <paramref name="compilation"/> reads the member, a property through its getter: what
     /// the class written in that project does.
@@ -344,27 +329,27 @@ public sealed class TenancyPermissionsGenerator : IIncrementalGenerator
 
     // ------------------------------------------------------------------ what is written
 
-    private static void Execute(SourceProductionContext production, ImmutableArray<OwnList> own, Composition composition)
+    private static void Execute(SourceProductionContext production, ImmutableArray<OwnList> own, ImmutableArray<DeclaredClass> declared, Composition composition)
     {
         var lists = new List<string>(composition.Referenced);
         foreach (var list in own)
         {
-            // In a library a list is public, since the projects that reference it read it; in an application it is
-            // at least readable outside its own type, since the class written there reads it.
-            var problem = list.Problem
-                ?? (composition.IsLibrary && !list.IsPublic ? "is not public, and its project is a library: the project that composes the modules reads it from outside" : null)
-                ?? (!list.IsReadableHere ? "cannot be read outside the type it is declared in" : null);
-            if (problem is not null)
-            {
-                production.ReportDiagnostic(Diagnostic.Create(DiagnosticDescriptors.TenancyPermissionsUnreadable, list.Location?.ToLocation() ?? Location.None, list.Name, problem));
-            }
-            else if (list.Expression is not null)
-            {
-                lists.Add(list.Expression);
-            }
+            // The mark is the generator's: a module declares its permissions in a [Permissions] class.
+            production.ReportDiagnostic(Diagnostic.Create(DiagnosticDescriptors.HandWrittenTenancyPermissions, list.Location?.ToLocation() ?? Location.None, list.Name));
         }
 
-        if (!composition.SeesTenancy || composition.DeclaresModule)
+        if (!composition.SeesTenancy)
+        {
+            return;
+        }
+
+        if (declared.Length > 0)
+        {
+            production.AddSource(DeclaredClassName + ".g.cs", SourceText.From(WriteDeclared(composition, declared), Encoding.UTF8));
+            lists.Add("global::" + composition.Namespace + "." + DeclaredClassName + ".All");
+        }
+
+        if (composition.DeclaresModule)
         {
             return;
         }
@@ -375,14 +360,175 @@ public sealed class TenancyPermissionsGenerator : IIncrementalGenerator
         production.AddSource(ClassName + ".g.cs", SourceText.From(Write(composition, ordered), Encoding.UTF8));
     }
 
+    // ------------------------------------------------------------------ a project's own permissions
+
+    /// <summary>One permission of a <c>[Permissions]</c> class, as the catalogue lists it.</summary>
+    private sealed record DeclaredPermission(string Key, string Description, EquatableArray<string> Implies, bool Retired);
+
+    /// <summary>A <c>[Permissions]</c> class of this project and its permissions, in the order they are written.</summary>
+    private sealed record DeclaredClass(string Name, EquatableArray<DeclaredPermission> Permissions);
+
+    private static DeclaredClass? ReadDeclared(GeneratorAttributeSyntaxContext context, CancellationToken cancellationToken)
+    {
+        if (context.TargetSymbol is not INamedTypeSymbol type)
+        {
+            return null;
+        }
+
+        var permissions = new List<DeclaredPermission>();
+        foreach (var field in type.GetMembers().OfType<IFieldSymbol>().OrderBy(static field => field.Locations.FirstOrDefault()?.SourceSpan.Start ?? 0))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!field.IsConst || field.ConstantValue is not string key || field.DeclaredAccessibility != Accessibility.Public)
+            {
+                continue;
+            }
+
+            var levels = field.GetAttributes().Where(static each => DerivesFrom(each.AttributeClass, LevelBase)).ToList();
+            if (levels.Count == 0)
+            {
+                // A permission without a level is the core's to report (DDD00092); it goes into no catalogue.
+                continue;
+            }
+
+            string? description = null;
+            string[]? implies = null;
+            var retired = false;
+            foreach (var level in levels)
+            {
+                foreach (var named in level.NamedArguments)
+                {
+                    switch (named.Key)
+                    {
+                        case "Description" when description is null && named.Value.Value is string said:
+                            description = said;
+                            break;
+                        case "Implies" when implies is null && !named.Value.IsNull:
+                            implies = [.. named.Value.Values.Select(static value => value.Value as string).Where(static value => value is not null).Select(static value => value!)];
+                            break;
+                        case "Retired" when named.Value.Value is true:
+                            retired = true;
+                            break;
+                    }
+                }
+            }
+
+            permissions.Add(new DeclaredPermission(
+                key,
+                description ?? Summary(field, cancellationToken) ?? string.Empty,
+                (implies ?? []).ToEquatableArray(),
+                retired));
+        }
+
+        return new DeclaredClass(type.ToDisplayString(), permissions.ToEquatableArray());
+    }
+
+    /// <summary>
+    /// The text of a constant's <c>&lt;summary&gt;</c>, read off the comment lines written above it, whether the project
+    /// parses documentation comments or not: tags dropped, a <c>cref</c> as the name it points at, white space
+    /// collapsed. Null where there is none.
+    /// </summary>
+    private static string? Summary(IFieldSymbol field, CancellationToken cancellationToken)
+    {
+        if (field.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax(cancellationToken) is not { } declarator
+            || declarator.FirstAncestorOrSelf<FieldDeclarationSyntax>() is not { } declaration)
+        {
+            return null;
+        }
+
+        var comment = new StringBuilder();
+        foreach (var line in declaration.GetLeadingTrivia().ToFullString().Split('\n'))
+        {
+            var trimmed = line.Trim();
+            if (trimmed.StartsWith("///", StringComparison.Ordinal))
+            {
+                comment.Append(trimmed.Substring(3)).Append(' ');
+            }
+        }
+
+        var text = comment.ToString();
+        var start = text.IndexOf("<summary>", StringComparison.Ordinal);
+        var end = text.IndexOf("</summary>", StringComparison.Ordinal);
+        if (start < 0 || end < start)
+        {
+            return null;
+        }
+
+        var summary = text.Substring(start + "<summary>".Length, end - start - "<summary>".Length);
+        summary = System.Text.RegularExpressions.Regex.Replace(summary, "<(see|seealso)\\s+(cref|langword|href)=\"(?:[A-Z]:)?([^\"]+)\"\\s*/>", static match => LastName(match.Groups[3].Value));
+        summary = System.Text.RegularExpressions.Regex.Replace(summary, "<(paramref|typeparamref)\\s+name=\"([^\"]+)\"\\s*/>", "$2");
+        summary = System.Text.RegularExpressions.Regex.Replace(summary, "<[^>]+>", string.Empty);
+        summary = summary.Replace("&lt;", "<").Replace("&gt;", ">").Replace("&quot;", "\"").Replace("&apos;", "'").Replace("&amp;", "&");
+        summary = System.Text.RegularExpressions.Regex.Replace(summary, "\\s+", " ").Trim();
+        return summary.Length == 0 ? null : summary;
+    }
+
+    private static string LastName(string reference)
+    {
+        var withoutArguments = reference.Split('(')[0];
+        var dot = withoutArguments.LastIndexOf('.');
+        return dot < 0 ? withoutArguments : withoutArguments.Substring(dot + 1);
+    }
+
+    private static bool DerivesFrom(INamedTypeSymbol? type, string metadataName)
+    {
+        for (var current = type?.BaseType; current is not null; current = current.BaseType)
+        {
+            if (current.ToDisplayString() == metadataName)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static string WriteDeclared(Composition composition, ImmutableArray<DeclaredClass> declared)
+    {
+        var writer = new CodeWriter().Header();
+        writer.Line("namespace " + composition.Namespace + ";");
+        writer.Line();
+        writer.Line("/// <summary>");
+        writer.Line("/// The permissions this project declares in its <c>[Permissions]</c> classes, as Tenancy's catalogue lists them, under");
+        writer.Line("/// the module <c>" + Escaped(composition.Module) + "</c>: what the project that composes the modules collects, with every module's.");
+        writer.Line("/// </summary>");
+        writer.Line("/// <remarks>Written by Tenancy's generator; a permission is declared, and described, where its constant is.</remarks>");
+        using (writer.Block("public static class " + DeclaredClassName))
+        {
+            writer.Line("/// <summary>Every permission of the project's <c>[Permissions]</c> classes, in the order they are written.</summary>");
+            writer.Line("[global::" + AttributeName + "]");
+            writer.Line("public static global::System.Collections.Generic.IReadOnlyList<" + Permission + "> All { get; } = new " + Permission + "[]");
+            writer.Line("{");
+            var order = 0;
+            foreach (var each in declared.OrderBy(static each => each.Name, StringComparer.Ordinal))
+            {
+                foreach (var permission in each.Permissions)
+                {
+                    order += 10;
+                    var implies = permission.Implies.Count == 0 ? "null" : "new string[] { " + string.Join(", ", permission.Implies.Select(Literal)) + " }";
+                    writer.Line("    new(" + Literal(permission.Key) + ", " + Literal(composition.Module) + ", " + Literal(permission.Description) + ", Implies: " + implies
+                                + ", Retired: " + (permission.Retired ? "true" : "false") + ", Order: " + order + "),");
+                }
+            }
+
+            writer.Line("};");
+        }
+
+        return writer.ToString();
+    }
+
+    private static string Literal(string text) => SymbolDisplay.FormatLiteral(text, quote: true);
+
+    private static string Escaped(string text) => text.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
+
     private static string Write(Composition composition, IReadOnlyList<string> lists)
     {
         var writer = new CodeWriter().Header();
         writer.Line("namespace " + composition.Namespace + ";");
         writer.Line();
         writer.Line("/// <summary>");
-        writer.Line("/// The permission keys of every module this project references, each as its module states them once, on the list");
-        writer.Line("/// it marks with <c>[TenancyPermissions]</c>: what the host adds to Tenancy's catalogue"
+        writer.Line("/// The permissions of every module this project references, each module's as Tenancy's generator lists them from its");
+        writer.Line("/// <c>[Permissions]</c> classes: what the host adds to Tenancy's catalogue"
                     + (composition.CanRegister ? ", with <see cref=\"AddTenancyPermissionsOfModules\"/>," : ",") + " and what a program");
         writer.Line("/// that exports the database's policies builds the same catalogue from, with");
         writer.Line("/// <c>TenancyCatalogue.Build(application, TenancyPermissionsOfModules.All)</c>.");
@@ -402,7 +548,7 @@ public sealed class TenancyPermissionsGenerator : IIncrementalGenerator
             }
         }
 
-        writer.Line("/// A module that marks its list is in it as soon as this project references the module.");
+        writer.Line("/// A module that declares a <c>[Permissions]</c> class is in it as soon as this project references the module.");
         writer.Line("/// </remarks>");
         using (writer.Block("internal static class " + ClassName))
         {

@@ -115,84 +115,32 @@ public abstract partial class MemberEntity<TId, TMemberId, TRoleId>
     }
 
     /// <summary>
-    /// Keeps the member on the resource from <paramref name="now"/> at the latest and with no end, in
-    /// <paramref name="ownerRole"/> with no end either: an owner's place does not run out. A membership that had
-    /// ended starts anew at <paramref name="now"/>, without the roles it held: they ran out with it, and naming
-    /// an owner gives the owner's role and no other.
-    /// <para>
-    /// A membership that was still to start, or still to end, loses that start or that end, and the roles
-    /// held in it do not gain by that: a role counted only inside its membership, so each is kept to the
-    /// period the membership had. One that was to count from the membership's start counts from that moment
-    /// still, and no sooner; one with no end of its own, or one that ran past the membership's end, ends
-    /// where the membership would have; and one whose own period was outside that one altogether, so it never
-    /// counted, goes. Otherwise somebody on a resource for a week would hold its roles for good by owning it
-    /// for a day, and somebody who was to come next month would hold them from today.
-    /// </para>
+    /// Keeps the member on the resource from <paramref name="now"/> at the latest and with no end, holding no role:
+    /// an owner's place does not run out, and the owner holds what it holds by owning the resource, never through a
+    /// role. A membership that had ended starts anew at <paramref name="now"/>; one that was still to start, or
+    /// still to end, loses that start or that end. Either way the roles the member held go: they gave what the owner
+    /// now holds by owning, or more than an owner holds.
     /// </summary>
-    /// <returns>What happened to the membership, and whether the role was given now.</returns>
-    internal OwnersPlace StayAsOwner(TRoleId ownerRole, DateTimeOffset now)
+    /// <param name="now">When the member becomes the owner.</param>
+    /// <returns>What happened to the membership, and the roles that went.</returns>
+    internal OwnersPlace StayAsOwner(DateTimeOffset now)
     {
-        var beganAnew = false;
-        List<MemberRole<TMemberId, TRoleId>> dropped = [];
-        DateTimeOffset? lifted = null;
-        DateTimeOffset? moved = null;
-
-        if (EndedBy(now))
+        var beganAnew = EndedBy(now);
+        DateTimeOffset? lifted = beganAnew ? null : EndsAt;
+        DateTimeOffset? moved = !beganAnew && StartsAt > now ? StartsAt : null;
+        if (beganAnew || moved is not null)
         {
-            beganAnew = true;
-            dropped.AddRange(_roles);
-            _roles.Clear();
             StartsAt = now;
-        }
-        else
-        {
-            if (StartsAt > now)
-            {
-                moved = StartsAt;
-                StartsAt = now;
-            }
-
-            lifted = EndsAt;
-            if (moved is not null || lifted is not null)
-            {
-                foreach (var held in _roles.Where(held => !held.RoleId.Equals(ownerRole)).ToList())
-                {
-                    // What the role counted for: its own period, inside the one the membership had.
-                    var from = moved is { } start && held.StartsAt < start ? start : held.StartsAt;
-                    var until = lifted is { } end && (held.EndsAt is null || held.EndsAt > end) ? end : held.EndsAt;
-                    if (until is { } last && last <= from)
-                    {
-                        // It was outside the membership's period, before it or after it, so it never counted.
-                        _roles.Remove(held);
-                        dropped.Add(held);
-                    }
-                    else
-                    {
-                        held.KeepTo(from, until);
-                    }
-                }
-            }
         }
 
         EndsAt = null;
+        List<MemberRole<TMemberId, TRoleId>> dropped = [.. _roles];
+        _roles.Clear();
 
-        var given = Find(ownerRole) is not { EndsAt: null } owners || owners.StartsAt > now;
-        if (given)
-        {
-            Give(ownerRole, MemberPeriod.Open(now), givenBy: null);
-        }
-
-        return new OwnersPlace(given, beganAnew, dropped, lifted, moved);
+        return new OwnersPlace(beganAnew, dropped, lifted, moved);
     }
 
-    /// <summary>What keeping a member on a resource as its owner did to the membership it had.</summary>
-    /// <param name="RoleGiven">Whether the owner's role was given now; <see langword="false"/> when the member held it already, with no end.</param>
-    /// <param name="BeganAnew">Whether the membership had ended, and began again now.</param>
-    /// <param name="RolesDropped">The roles the member held and no longer holds.</param>
-    /// <param name="EndLifted">The end the membership had and no longer has, or <see langword="null"/>.</param>
-    /// <param name="StartMoved">The later start the membership had, moved to now, or <see langword="null"/>.</param>
     internal readonly record struct OwnersPlace(
-        bool RoleGiven,
         bool BeganAnew,
         IReadOnlyList<MemberRole<TMemberId, TRoleId>> RolesDropped,
         DateTimeOffset? EndLifted,

@@ -1,14 +1,14 @@
 namespace DDDToolkit.Supporting.Membership.Access;
 
 /// <summary>
-/// A role a resource's rules declare: a name, and the keys a member that holds it has on that resource. A
-/// member holds it as a <see cref="NamedRole"/> of the same name.
+/// A role declared in code: a name, and the permissions a member that holds it has on the resource. Of fixed roles
+/// (<see cref="Roles.Fixed"/>) a member holds it as a <see cref="NamedRole"/> of the same name.
 /// <code>
-/// new DeclaredRole("contributor", [DocumentKeys.View, DocumentKeys.Edit])
+/// new DeclaredRole("contributor", [DocumentPermissions.View, DocumentPermissions.Edit])
 /// </code>
 /// <para>
-/// Under rules whose roles are kept for the resource (<see cref="MembershipRules.RolesKept"/>) it is a starter
-/// role instead: what a first role is made from, with this name and these keys, and nothing a member holds.
+/// Of a customer's roles (<see cref="Roles.Custom"/>) it is a starter role instead: what a first role is made from,
+/// with this name and these keys, and nothing a member holds.
 /// </para>
 /// </summary>
 /// <param name="Name">

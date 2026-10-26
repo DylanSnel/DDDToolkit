@@ -95,9 +95,10 @@ public static partial class PostgresRowAccess
         ArgumentNullException.ThrowIfNull(context);
 
         var contributions = new List<Contributed>();
+        var asked = export.WithRules(rules);
         foreach (var contribution in export.Contributions)
         {
-            if (contribution.Contribute(context, export) is { } result)
+            if (contribution.Contribute(context, asked) is { } result)
             {
                 contributions.Add(Checked(context, contribution, result, export.Roles));
             }

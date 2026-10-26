@@ -1,9 +1,12 @@
+using Examples.Tenancy.Projects.Application.Access;
 using Examples.Tenancy.Projects.Application.Crew.Commands;
 using Examples.Tenancy.Projects.Application.Lifecycle.Commands;
 using Examples.Tenancy.Projects.Application.Overview.Queries;
 using Examples.Tenancy.Projects.Application.ProjectRoles.Commands;
 using Examples.Tenancy.Projects.Application.ProjectRoles.Queries;
+using Examples.Tenancy.Tenants.Application.Roles;
 using Examples.Tenancy.Tenants.Application.Roles.Queries;
+using Examples.Tenancy.Tenants.Application.Seats;
 using Examples.Tenancy.Tenants.Application.Seats.Queries;
 using Examples.Tenancy.Tenants.Application.Tenant.Commands;
 using DDDToolkit.Exceptions;
@@ -78,9 +81,17 @@ public sealed class DemoSeeder(IServiceScopeFactory scopes, IConfiguration confi
 
         foreach (var tenant in DemoData.Tenants)
         {
+            // The organization is Tenancy's, so it is seeded as Tenancy's system work in the tenant; the projects are
+            // Projects', so they are seeded as that module's, in its own scope, the one the projects' rules let
+            // through. Tenancy's scope holds nothing on a project.
             using (TenancyUseCases.BeginSystemIn(tenant.Id, tenant.Administrator.Id))
             {
-                await SeedAsync(tenant, cancellationToken);
+                await SeedOrganizationAsync(tenant, cancellationToken);
+            }
+
+            using (TenancyUseCases.BeginSystemIn(tenant.Id, tenant.Administrator.Id, ProjectMembership.Scope))
+            {
+                await SeedProjectsAsync(tenant, cancellationToken);
             }
         }
 
@@ -133,14 +144,23 @@ public sealed class DemoSeeder(IServiceScopeFactory scopes, IConfiguration confi
         var missing = new List<string>();
         foreach (var tenant in DemoData.Tenants)
         {
-            // System work in a tenant reads all of it: every seat, role and project role, and every project.
+            // System work in a tenant reads all of it: Tenancy's every seat and role, Projects' every project role
+            // and every project, each module's in its own scope.
             IReadOnlyList<string> lacking;
+            IReadOnlyList<SeatListing> seats;
+            IReadOnlyList<RoleListing> roles;
             using (TenancyUseCases.BeginSystemIn(tenant.Id, tenant.Administrator.Id))
             {
                 await using var scope = scopes.CreateAsyncScope();
                 var sender = scope.ServiceProvider.GetRequiredService<ISender>();
-                var seats = await sender.Send(new TenantSeats(), cancellationToken);
-                var roles = await sender.Send(new TenantRoles(), cancellationToken);
+                seats = await sender.Send(new TenantSeats(), cancellationToken);
+                roles = await sender.Send(new TenantRoles(), cancellationToken);
+            }
+
+            using (TenancyUseCases.BeginSystemIn(tenant.Id, tenant.Administrator.Id, ProjectMembership.Scope))
+            {
+                await using var scope = scopes.CreateAsyncScope();
+                var sender = scope.ServiceProvider.GetRequiredService<ISender>();
                 var projectRoles = await sender.Send(new TenantProjectRoles(), cancellationToken);
                 // The demonstration has a handful of projects in each tenant: its largest page holds them all.
                 var projects = await sender.Send(new VisibleProjects(new PagingArguments(first: VisibleProjects.LargestPage)), cancellationToken);
@@ -165,14 +185,9 @@ public sealed class DemoSeeder(IServiceScopeFactory scopes, IConfiguration confi
         }
     }
 
-    /// <summary>Everything inside one tenant, as system work there.</summary>
-    private async Task SeedAsync(DemoTenant tenant, CancellationToken cancellationToken)
+    /// <summary>The organization of one tenant, its units, seats and grants, as Tenancy's system work there.</summary>
+    private async Task SeedOrganizationAsync(DemoTenant tenant, CancellationToken cancellationToken)
     {
-        // Setting the tenant up for projects: the starter project roles every tenant's crews begin with, the crew
-        // lead's among them, which every project's owner holds. System work in the tenant, as for any tenant made,
-        // with the demonstration's fixed ids.
-        await SendAsync(new SetUpProjectRoles(tenant.ProjectRoles), cancellationToken);
-
         // An application's own state on a package's aggregate: the package stores it and knows nothing of it, so
         // the module has a command of its own for it, which only system work in the tenant may send.
         await SendAsync(new MarkTenantAsDemo(), cancellationToken);
@@ -216,10 +231,20 @@ public sealed class DemoSeeder(IServiceScopeFactory scopes, IConfiguration confi
             await RunAsync<TenancyUseCases.SeatCommands>(seats => seats.SuspendAsync(tenant.SeatOf(person), cancellationToken));
         }
 
-        // Last, the projects. Each owner goes on the crew holding the tenant's crew lead's project role, the rest of
-        // the crew each holding the project role made from their starter role, all for good. System work names the
-        // owner, and is recorded as the administrator it acts for. The commands are the ones a request sends; the
-        // project's id is the one thing only system work may say.
+    }
+
+    /// <summary>The project roles and the projects of one tenant, as Projects' system work there.</summary>
+    private async Task SeedProjectsAsync(DemoTenant tenant, CancellationToken cancellationToken)
+    {
+        // Setting the tenant up for projects: the starter project roles every tenant's crews begin with. System work
+        // in the tenant, as for any tenant made, with the demonstration's fixed ids.
+        await SendAsync(new SetUpProjectRoles(tenant.ProjectRoles), cancellationToken);
+
+        // Then the projects. Each owner goes on the crew holding no project role, since it holds what an owner does
+        // by owning the project; the rest of the crew each hold the project role made from their starter role, all
+        // for good. System work names the owner, and is recorded as the administrator it acts for. The commands are
+        // the ones a request sends; the project's id is the one thing only system work may say.
+        var now = clock.GetUtcNow();
         foreach (var project in tenant.Projects)
         {
             await SendAsync(

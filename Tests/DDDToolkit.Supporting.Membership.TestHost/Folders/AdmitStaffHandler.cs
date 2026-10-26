@@ -44,7 +44,7 @@ public sealed class AdmitStaffHandler(
 
         // Until when the caller holds the key its request required: asked of the questions, since the check let
         // the request through and the handler takes nothing of what it read. It refuses as the check refuses.
-        var hold = await questions.RequireAsync(command.Folder, FolderKeys.Staff, cancellationToken);
+        var hold = await questions.RequireAsync(command.Folder, FolderPermissions.Staff, cancellationToken);
 
         // The host's own rule. A hold with no end gives for as long as it likes; one that ends gives until it
         // ends at the latest, so an admission with no end is beyond it too.

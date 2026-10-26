@@ -45,12 +45,14 @@
 
   <!--
     The generators. A NuGet consumer gets them through the packages above; inside this repository they are wired by
-    hand. Tenancy's holds the list of keys this module marks with [TenancyPermissions] to what the project that
-    composes the modules can read, and writes nothing here: a module composes no other module's keys.
+    hand. Tenancy's writes the module's part of the catalogue from its [Permissions] class, for the project that
+    composes the modules to read; a module composes no other module's keys. The Membership package's hands the
+    permissions on a project to the projects' rules, MembershipRules.For<Project>.
   -->
   <ItemGroup>
     <ProjectReference Include="..\..\..\..\..\Source\DDDToolkit.Analyzers\DDDToolkit.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\..\..\..\Source\DDDToolkit.Supporting.Tenancy.Analyzers\DDDToolkit.Supporting.Tenancy.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\..\..\..\Source\DDDToolkit.Supporting.Membership.Analyzers\DDDToolkit.Supporting.Membership.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
 </Project>

@@ -16,8 +16,8 @@ namespace Examples.Tenancy.Projects.Application.ProjectRoles.Commands;
 /// make no role twice: the unique index over the tenant and what a role was made from refuses the second save,
 /// which then fails as a whole, and sending it again makes nothing. The roles are made in one save, so a starter
 /// role whose name the tenant already gave a role of its own refuses the set-up, <c>projects.role-name-taken</c>,
-/// and makes none of them until that role is renamed. A tenant without the crew lead's role cannot open a
-/// project: there is no role to give its owner (<c>projects.no-lead-role</c>).
+/// and makes none of them until that role is renamed. A tenant opens projects without any: a project's owner holds
+/// no role.
 /// <para>
 /// Who may send it is a caller in the tenant, <c>[InTenant]</c>, the module's default, which it takes by saying nothing
 /// of its own: the one requirement that lets the system work that sends it through. Nothing requires system work at

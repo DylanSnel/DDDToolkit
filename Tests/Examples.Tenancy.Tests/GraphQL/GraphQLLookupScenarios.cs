@@ -71,7 +71,7 @@ public sealed class GraphQLLookupScenarios(SampleHosts sample) : IClassFixture<S
             .ToList();
         crew.Should().BeEquivalentTo(
         [
-            (DemoPeople.Leo.Name, true, "Crew lead"),
+            (DemoPeople.Leo.Name, true, ""),
             (DemoPeople.Juno.Name, false, "Surveyor"),
             (DemoPeople.Vic.Name, false, "Observer"),
         ]);
@@ -81,15 +81,15 @@ public sealed class GraphQLLookupScenarios(SampleHosts sample) : IClassFixture<S
     public async Task A_seat_of_another_tenant_is_its_id_with_nothing_else_and_no_error()
     {
         // A project of harbor whose owner is a seat of meadow: no use case makes one, so it is stored directly, as
-        // system work in harbor. Tenancy's directory answers nothing for that seat to anybody of harbor.
+        // the projects' system work in harbor. Tenancy's directory answers nothing for that seat to anybody of harbor.
         await using var host = await sample.StartAsync();
         var stray = Meadow.Administrator.Id;
 
-        using (TenancyUseCases.BeginSystemIn(Harbor.Id))
+        using (TenancyUseCases.BeginSystemIn(Harbor.Id, scope: ProjectMembership.Scope))
         {
             await using var scope = host.Services.CreateAsyncScope();
             var projects = scope.ServiceProvider.GetRequiredService<ProjectsContext>();
-            projects.Projects.Add(new Project(ProjectId.CreateSequential(), Harbor.Id, "P-950", "Outer breakwater", Harbor.Root, stray, Harbor.ProjectRoles[SampleCatalogue.CrewLead], DateTimeOffset.UtcNow));
+            projects.Projects.Add(new Project(ProjectId.CreateSequential(), Harbor.Id, "P-950", "Outer breakwater", Harbor.Root, stray, DateTimeOffset.UtcNow));
             await projects.SaveChangesAsync(Cancellation);
         }
 
@@ -117,7 +117,7 @@ public sealed class GraphQLLookupScenarios(SampleHosts sample) : IClassFixture<S
         var depot = await ada.ProjectNodeIdAsync(Harbor.ProjectNamed("Inland depot"));
         var shed = await tove.ProjectNodeIdAsync(Meadow.ProjectNamed("Garden shed"));
 
-        // Leo sees Pier 7, whose crew he leads, and nothing else: not a project of his own tenant he has no part
+        // Leo sees Pier 7, which he owns, and nothing else: not a project of his own tenant he has no part
         // in, and not one of another tenant. Both are nothing, by the lookup and by the node field alike.
         using var leo = await sample.ClientAsync("leo", Harbor.Slug);
         var data = await leo.GraphQLDataAsync(

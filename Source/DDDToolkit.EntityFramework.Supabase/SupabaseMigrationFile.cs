@@ -63,14 +63,30 @@ public enum SupabaseMigrationStatus
 /// <param name="Path">The file concerned: the one that exists, or the one that was or would be written.</param>
 public sealed record SupabaseMigrationEntry(string MigrationId, SupabaseMigrationStatus Status, string Path);
 
+/// <summary>A resource with members that is gone from, or new to, what the newest access file of its module recorded.</summary>
+/// <param name="Name">Its name, as its codes and its functions are named: <c>boards</c>.</param>
+/// <param name="Class">The class it was the name of, or is; <see langword="null"/> where an older access file did not record it.</param>
+/// <param name="Gone">Whether it is gone, as against new.</param>
+public sealed record RenamedResource(string Name, string? Class, bool Gone);
+
 /// <summary>Every migration's standing against one Supabase migrations directory.</summary>
 public sealed class SupabaseMigrationReport
 {
-    internal SupabaseMigrationReport(string directory, IReadOnlyList<SupabaseMigrationEntry> entries)
+    internal SupabaseMigrationReport(string directory, IReadOnlyList<SupabaseMigrationEntry> entries, IReadOnlyList<RenamedResource>? renamed = null)
     {
         Directory = directory;
         Entries = entries;
+        Renamed = renamed ?? [];
     }
+
+    /// <summary>
+    /// The resources with members whose names in the code are not those the newest access file of the module
+    /// recorded: those gone, with the class each came from, and those new. Empty where nothing changed, where the
+    /// module has no access file yet, and for a module that keeps no resource with members. Not a problem by itself:
+    /// the build says it as a warning (DDD00090), since codes clients read change with a name, and the database gets
+    /// new functions.
+    /// </summary>
+    public IReadOnlyList<RenamedResource> Renamed { get; }
 
     /// <summary>The directory that was compared or written to.</summary>
     public string Directory { get; }

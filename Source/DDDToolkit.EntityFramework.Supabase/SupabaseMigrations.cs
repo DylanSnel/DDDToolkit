@@ -443,6 +443,7 @@ public static partial class SupabaseMigrations
             CallerFunctions = options.CallerFunctions,
             Roles = options.Roles,
             Contributions = [.. options.RowAccessContributions],
+            Rules = [.. options.RowAccessRules],
             FunctionNames = names ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
             WriteGrants = options.WriteGrants,
             ForceRowLevelSecurity = options.ForceRowLevelSecurity,
@@ -510,12 +511,13 @@ public static partial class SupabaseMigrations
 
         options ??= new SupabaseMigrationOptions();
         names ??= PostgresRowAccess.FunctionNamesOf([context], options.RowAccessFunctions, ExportOf(options, names: null));
-        if (Access(context, module ?? ModuleNameOf(context.GetType()), directory, existing, files, options, names, script, write) is { } access)
+        var renamed = new List<RenamedResource>();
+        if (Access(context, module ?? ModuleNameOf(context.GetType()), directory, existing, files, options, names, script, write, renamed) is { } access)
         {
             entries.Add(access);
         }
 
-        return new SupabaseMigrationReport(directory, entries);
+        return new SupabaseMigrationReport(directory, entries, renamed);
     }
 
     /// <summary>
@@ -536,6 +538,7 @@ public static partial class SupabaseMigrations
     /// <param name="names">Where the access functions of every module live, by logical name.</param>
     /// <param name="script">The module's script, written with every other module's; null to write it knowing this module alone.</param>
     /// <param name="write">Whether to write a new file; when not, the file a write would add is reported missing.</param>
+    /// <param name="renamed">Where the resources with members whose names changed since the newest file are added.</param>
     private static SupabaseMigrationEntry? Access(
         DbContext context,
         string module,
@@ -545,7 +548,8 @@ public static partial class SupabaseMigrations
         SupabaseMigrationOptions options,
         IReadOnlyDictionary<string, string> names,
         string? script,
-        bool write)
+        bool write,
+        List<RenamedResource> renamed)
     {
         var owner = context.GetType().Name;
         var rules = PostgresRowAccess.RulesOf(context, options.RowAccessRules);
@@ -580,7 +584,9 @@ public static partial class SupabaseMigrations
 
         if (files.LastOrDefault() is { } newest)
         {
-            EnsureSignaturesKept(Normalize(File.ReadAllText(newest)), sql);
+            var before = Normalize(File.ReadAllText(newest));
+            EnsureSignaturesKept(before, sql);
+            renamed.AddRange(RenamedSince(before, sql));
         }
 
         var newestMigration = migrations.Count == 0 ? "" : migrations.Max(file => file.Version)!;
@@ -653,6 +659,44 @@ public static partial class SupabaseMigrations
             }
         }
     }
+
+    /// <summary>
+    /// The resources with members named otherwise in <paramref name="sql"/> than in <paramref name="newest"/>, the
+    /// newest access file of the module: those gone, with the class the file recorded, and those new, by the line
+    /// the Membership package writes at the head of each function of a resource,
+    /// <c>-- Membership of boards (Board), in form 6, ...</c>. A file written before the class was recorded names the
+    /// resource alone. Which became which is not guessed: a class renamed on purpose keeps its name with
+    /// <c>[Members("...")]</c>.
+    /// </summary>
+    private static IEnumerable<RenamedResource> RenamedSince(string newest, string sql)
+    {
+        var before = MembershipNamed(newest);
+        var after = MembershipNamed(sql);
+        return before.Where(old => !after.ContainsKey(old.Key)).Select(old => new RenamedResource(old.Key, old.Value, Gone: true))
+            .Concat(after.Where(now => !before.ContainsKey(now.Key)).Select(now => new RenamedResource(now.Key, now.Value, Gone: false)))
+            .ToList();
+    }
+
+    /// <summary>The resources with members an access file names, each with its class where the file records one.</summary>
+    private static Dictionary<string, string?> MembershipNamed(string sql)
+    {
+        var named = new Dictionary<string, string?>(StringComparer.Ordinal);
+        foreach (Match match in MembershipLine.Matches(sql))
+        {
+            var name = match.Groups["name"].Value;
+            if (!named.TryGetValue(name, out var known) || known is null)
+            {
+                named[name] = match.Groups["class"].Success ? match.Groups["class"].Value : null;
+            }
+        }
+
+        return named;
+    }
+
+    /// <summary>What the Membership package's functions say of themselves at the head of their bodies: the resource's name, and its class.</summary>
+    private static readonly Regex MembershipLine = new(
+        @"-- Membership of (?<name>[a-z0-9.\-]+)(?: \((?<class>[A-Za-z_][A-Za-z0-9_]*)\))?, in form ",
+        RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
     /// <summary>
     /// Refuses <paramref name="sql"/> when a function it still writes takes other parameters or returns

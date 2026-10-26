@@ -74,7 +74,7 @@ seat there before anything else ([TenantHeader](../Examples/Tenancy/Examples.Ten
 | **A new sign-in** | a person who signed in and has no seat in harbor | `authenticated` |
 | **Orla** | one of the application's operators: her token carries the operators' role, and she has no seat anywhere | `tenancy_operator` |
 | **Anonymous** | a request with no token | `anon` |
-| **System work** | the application's own work in harbor, begun by trusted code with `TenancyUseCases.BeginSystemIn(harbor)` | `ddd_system_in`, scope `tenancy` |
+| **System work** | the application's own work in harbor, begun by trusted code with `TenancyUseCases.BeginSystemIn(harbor)`, in the scope of the module whose request it sends: `tenancy`, and `projects` for a request of Projects', the one the projects' rules let through | `ddd_system_in`, scope `tenancy` or `projects` |
 
 | Request | What it does | What it requires | Where it is from |
 |---|---|---|---|
@@ -749,23 +749,23 @@ CREATE TRIGGER seats_displayname_column_rule BEFORE UPDATE OF "DisplayName" ON "
     EXECUTE FUNCTION "tenancy".seats_displayname_column_rule();
 ```
 
-```sql title="20261023170857_access.projects.ddd.sql, the crew and the function it asks, shortened"
-CREATE OR REPLACE FUNCTION "projects".project_ids_where_i_hold(text) RETURNS SETOF uuid
+```sql title="20261026172631_access.projects.ddd.sql, the crew and the function it asks, shortened"
+CREATE OR REPLACE FUNCTION "projects".projects_where_i_hold(text) RETURNS SETOF uuid
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
-SELECT holding.id FROM "projects".crew_project_ids($1) AS holding(id)
+SELECT holding.id FROM "projects".projects_as_member_with($1) AS holding(id)
 UNION
-SELECT joined.id FROM "projects".crew_member_project_ids() AS joined(id) WHERE $1 = 'projects.view'
+SELECT joined.id FROM "projects".projects_as_member() AS joined(id) WHERE $1 = 'projects.view'
 UNION
 SELECT r."Id" FROM "projects"."Projects" r WHERE $1 IN ('projects.view', 'projects.edit', 'projects.close', 'projects.crew.manage') AND r."OwnerSeatId" = (SELECT "tenancy".caller_seat())
 UNION
 SELECT r."Id" FROM "projects"."Projects" r WHERE $1 IS NOT NULL AND r."UnitId" IN (SELECT reached.place FROM "tenancy".units_where_i_hold($1) AS reached(place))
 UNION
-SELECT r."Id" FROM "projects"."Projects" r WHERE (SELECT auth.role()) = 'ddd_system_in' AND (SELECT auth.jwt() ->> 'scope') IN ('tenancy', 'projects') AND $1 IS NOT NULL
+SELECT r."Id" FROM "projects"."Projects" r WHERE (SELECT auth.role()) = 'ddd_system_in' AND (SELECT auth.jwt() ->> 'scope') IN ('projects') AND $1 IS NOT NULL
 $function$;
 CREATE POLICY "System work in its tenant (insert) for ddd_system_in" ON "projects"."ProjectCrewMembers" FOR INSERT TO ddd_system_in
     WITH CHECK (EXISTS (SELECT 1 FROM "projects"."Projects" r WHERE r."Id" = "projects"."ProjectCrewMembers"."ProjectId" AND r."TenantId" = (SELECT "tenancy".system_tenant())));
 CREATE POLICY "Members change with the key (insert) for authenticated" ON "projects"."ProjectCrewMembers" AS RESTRICTIVE FOR INSERT TO authenticated
-    WITH CHECK ("ProjectId" IN (SELECT held.id FROM "projects".project_ids_where_i_hold('projects.crew.manage') AS held(id)) OR "ProjectId" IN (SELECT held.id FROM "projects".project_ids_where_i_hold('projects.owner.change') AS held(id)));
+    WITH CHECK ("ProjectId" IN (SELECT held.id FROM "projects".projects_where_i_hold('projects.crew.manage') AS held(id)) OR "ProjectId" IN (SELECT held.id FROM "projects".projects_where_i_hold('projects.owner.change') AS held(id)));
 CREATE POLICY "Kept to its tenant (all) for authenticated" ON "projects"."ProjectCrewMembers" AS RESTRICTIVE FOR ALL TO authenticated
     USING (EXISTS (SELECT 1 FROM "projects"."Projects" r WHERE r."Id" = "projects"."ProjectCrewMembers"."ProjectId" AND r."TenantId" = (SELECT "tenancy".caller_tenant())))
     WITH CHECK (EXISTS (SELECT 1 FROM "projects"."Projects" r WHERE r."Id" = "projects"."ProjectCrewMembers"."ProjectId" AND r."TenantId" = (SELECT "tenancy".caller_tenant())));
@@ -1023,10 +1023,10 @@ with "–" where the door let the caller through, or refused for something other
 |---|---|---|---|---|
 | Ada, either project, the version she read | let through: `projects.crew.manage` from above, held at the root | `HoldAsync`, one statement | the seat is on the crew; the permissive policy and Membership's lock both let her | – |
 | Ada, an old version | a lost race, 409 `concurrency-conflict`, asked only once she may act | `HoldAsync` | none: read the project again, and decide again | – |
-| Juno, Pier 7 | `projects.not-permitted`, 403, with the key: she sees it, a surveyor holds no key to manage the crew | `HoldAsync` | none | refused, 42501: Pier 7 is not among `project_ids_where_i_hold('projects.crew.manage')` for her, so Membership's lock refuses the row |
+| Juno, Pier 7 | `projects.not-permitted`, 403, with the key: she sees it, a surveyor holds no key to manage the crew | `HoldAsync` | none | refused, 42501: Pier 7 is not among `projects_where_i_hold('projects.crew.manage')` for her, so Membership's lock refuses the row |
 | Juno, Bay bridge | `projects.not-found`, 404: she does not see it, as if it did not exist | `HoldAsync`: no row | none | refused, 42501: Membership's lock refuses her row as well |
 | the new sign-in, Orla, Anonymous | `tenancy.not-seated`, 403 | nothing | none | refused, 42501: the crew's policies find no seat of the new sign-in's, Orla's role holds only `SELECT` on the crew, and `anon` may not use the schema |
-| System work, the version it read | let through: the application's own work holds every key | the project and its version | the seat is on the crew, under the policy of system work in its tenant | – |
+| System work, the version it read | let through: the projects' own work, in their scope, holds every key | the project and its version | the seat is on the crew, under the policy of system work in its tenant and Membership's lock, which lets the projects' scope through | – |
 | System work, an old version | a lost race, 409 `concurrency-conflict` | the project and its version | none | – |
 
 ### RenameSeat

@@ -9,11 +9,12 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Examples.Tenancy.Tests.Projects.Ownership;
 
 /// <summary>
-/// Walks the owner's scenarios, one request each: what Leo, who owns Pier 7 and leads its crew and holds no role at
-/// any unit, may do to Pier 7 and may not, and what Vic may once Leo has given him a heavy role on its crew: Site
-/// manager, a project role the tenant made with every key a crew role can give. The owner may do everything that
-/// acts on his project; opening projects, moving one to another unit, naming an owner and managing the
-/// organization are the organization's, and no crew role reaches them.
+/// Walks the owner's scenarios, one request each: what Leo, who owns Pier 7 and holds no role on its crew or at any
+/// unit, may do to Pier 7 and may not, and what Vic may once Leo has given him a heavy role on its crew: Site
+/// manager, a project role the tenant made with every key a crew role can give. The owner holds the permissions
+/// Projects declares on a project for its owner; recording an inspection is the Inspections module's, which a role
+/// on the crew gives. Opening projects, moving one to another unit, naming an owner and managing the organization
+/// are the organization's, and no crew role reaches them.
 /// </summary>
 /// <remarks>
 /// A test that is refused and changes nothing shares the class's host; a test that changes something makes its own.
@@ -67,7 +68,7 @@ public sealed class OwnerScenarios(SampleHosts sample) : IClassFixture<SampleHos
 
         (await leo.WithNamesAsync(await leo.ProjectDetailAsync(PierSeven))).Crew
             .Select(member => (member.Name, member.Role))
-            .Should().Equal(("Leo", "Crew lead"), ("Juno", "Surveyor"), ("Tove", "Surveyor"), ("Vic", "Observer"));
+            .Should().Equal(("Leo", (string?)null), ("Juno", "Surveyor"), ("Tove", "Surveyor"), ("Vic", "Observer"));
 
         var toves = await tove.VisibleProjectsAsync();
         toves.Names().Should().Equal("Pier 7", "Bay bridge");
@@ -97,7 +98,7 @@ public sealed class OwnerScenarios(SampleHosts sample) : IClassFixture<SampleHos
     }
 
     [Fact]
-    public async Task Leo_makes_Vic_a_co_lead_of_Pier_7()
+    public async Task Leo_makes_Vic_the_lead_of_Pier_7s_crew()
     {
         await using var host = await sample.StartAsync();
         using var leo = await host.ClientAsync("leo", Harbor.Slug);
@@ -108,24 +109,24 @@ public sealed class OwnerScenarios(SampleHosts sample) : IClassFixture<SampleHos
             made.StatusCode.Should().Be(HttpStatusCode.NoContent);
         }
 
-        // Two leads, one owner: Vic leads the crew as Leo does, next to the observer's role he had, and Leo stays
-        // its owner.
+        // A lead and an owner: Vic leads the crew, next to the observer's role he had, and Leo stays its owner,
+        // holding what an owner does by owning it.
         var pier = await vic.ProjectDetailAsync(PierSeven);
         var crew = (await vic.WithNamesAsync(pier)).Crew.Select(member => (member.Name, member.Role, member.IsOwner));
-        crew.Should().Equal(("Leo", "Crew lead", true), ("Juno", "Surveyor", false), ("Vic", "Crew lead, Observer", false));
+        crew.Should().Equal(("Leo", (string?)null, true), ("Juno", "Surveyor", false), ("Vic", "Crew lead, Observer", false));
         Abilities(pier).Should().Be((true, false, true, false, true, false));
     }
 
     [Fact]
-    public async Task Leo_gives_Vic_a_heavy_role_on_the_crew_and_Vic_holds_what_Leo_holds()
+    public async Task Leo_gives_Vic_a_heavy_role_on_the_crew_and_Vic_holds_every_key_a_crew_gives()
     {
         await using var onPostgres = await sample.StartOnPostgresAsync();
         var host = onPostgres.Host;
         using var leo = await host.ClientAsync("leo", Harbor.Slug);
         using var vic = await VicWithAHeavyCrewRoleAsync(onPostgres);
 
-        // Positional: Leo gives a role the tenant made, not he, and on the crew it gives exactly the lead's, though
-        // its row holds more.
+        // Positional: Leo gives a role the tenant made, not he, and on the crew it gives exactly what a crew gives,
+        // though its row holds more. On the project itself Vic may do what its owner may.
         var his = await vic.ProjectDetailAsync(PierSeven);
         var leos = await leo.ProjectDetailAsync(PierSeven);
         (await vic.WithNamesAsync(his)).MyRole.Should().Be("Observer, Site manager");
@@ -133,32 +134,44 @@ public sealed class OwnerScenarios(SampleHosts sample) : IClassFixture<SampleHos
         Abilities(his).Should().Be(Abilities(leos)).And.Be((true, false, true, false, true, false));
 
         var hisInspections = await vic.GetFromJsonAsync<JsonElement>($"/projects/{PierSeven.Id.Value}/inspections", Cancellation);
-        hisInspections.GetProperty("canRecord").GetBoolean().Should().BeTrue("the lead may record, so the area manager on the crew may");
+        hisInspections.GetProperty("canRecord").GetBoolean().Should().BeTrue("a crew role may give recording, which is the Inspections module's");
 
         // Key by key, over every key of the application's catalogue, of which the Site manager's role holds every
-        // one a crew gives: Pier 7 answers Vic as it answers Leo, and both hold exactly the keys a crew gives.
+        // one a crew gives: Vic holds exactly the keys a crew gives, and Leo exactly those an owner holds.
         var catalogue = host.Services.GetRequiredService<TenancyCatalogue>();
-        var held = new List<string>();
+        var (hers, leosKeys) = (new List<string>(), new List<string>());
         foreach (var key in catalogue.LiveKeys)
         {
-            var answer = await HoldsOnPierSevenAsync(vic, key);
-            answer.Should().Be(await HoldsOnPierSevenAsync(leo, key), key);
-            if (answer.Allowed)
+            if ((await HoldsOnPierSevenAsync(vic, key)).Allowed)
             {
-                held.Add(key);
+                hers.Add(key);
+            }
+
+            if ((await HoldsOnPierSevenAsync(leo, key)).Allowed)
+            {
+                leosKeys.Add(key);
             }
         }
 
-        held.Should().Equal(catalogue.LiveKeys.Where(ProjectCatalogue.CrewGives));
+        hers.Should().Equal(catalogue.LiveKeys.Where(SampleCatalogue.Projects.Rules.RoleKeys.Allows));
+        leosKeys.Should().BeEquivalentTo(SampleCatalogue.Projects.Rules.OwnerKeys);
     }
 
     [Fact]
-    public async Task Leo_records_an_inspection_on_Pier_7()
+    public async Task Juno_records_an_inspection_on_Pier_7_and_its_owner_does_not()
     {
         await using var host = await sample.StartAsync();
         using var leo = await host.ClientAsync("leo", Harbor.Slug);
+        using var juno = await host.ClientAsync("juno", Harbor.Slug);
 
-        using (var recorded = await leo.PostAsJsonAsync($"/projects/{PierSeven.Id.Value}/inspections", new { title = "Loose railing on the east side" }, Cancellation))
+        // Leo owns Pier 7, and holds the permissions Projects declares on it. Recording is the Inspections module's,
+        // which a role on the crew gives: the surveyor's, Juno's.
+        using (var refused = await leo.PostAsJsonAsync($"/projects/{PierSeven.Id.Value}/inspections", new { title = "Loose railing on the west side" }, Cancellation))
+        {
+            (await refused.ShouldBeRefusedAsync(HttpStatusCode.Forbidden, ProjectRefusals.NotPermitted)).Argument("Key").Should().Be(InspectionKeys.Record);
+        }
+
+        using (var recorded = await juno.PostAsJsonAsync($"/projects/{PierSeven.Id.Value}/inspections", new { title = "Loose railing on the east side" }, Cancellation))
         {
             recorded.StatusCode.Should().Be(HttpStatusCode.Created, await recorded.Content.ReadAsStringAsync(Cancellation));
         }
@@ -166,7 +179,7 @@ public sealed class OwnerScenarios(SampleHosts sample) : IClassFixture<SampleHos
         var list = await leo.GetFromJsonAsync<JsonElement>($"/projects/{PierSeven.Id.Value}/inspections", Cancellation);
         var inspection = list.GetProperty("items").EnumerateArray().Should().ContainSingle().Which;
         inspection.GetProperty("title").GetString().Should().Be("Loose railing on the east side");
-        inspection.GetProperty("recordedBy").GetGuid().Should().Be(Harbor.SeatOf(DemoPeople.Leo).Value);
+        inspection.GetProperty("recordedBy").GetGuid().Should().Be(Harbor.SeatOf(DemoPeople.Juno).Value);
     }
 
     [Fact]
@@ -267,19 +280,19 @@ public sealed class OwnerScenarios(SampleHosts sample) : IClassFixture<SampleHos
         project.Text("state").Should().Be("closed");
         (await vic.WithNamesAsync(project)).Crew
             .Select(member => (member.Name, member.Role))
-            .Should().Equal(("Leo", "Crew lead"), ("Juno", "Observer"), ("Tove", "Surveyor"), ("Vic", "Observer, Site manager"));
+            .Should().Equal(("Leo", (string?)null), ("Juno", "Observer"), ("Tove", "Surveyor"), ("Vic", "Observer, Site manager"));
     }
 
     [Fact]
-    public async Task Vic_with_a_heavy_crew_role_neither_removes_the_owner_nor_takes_his_lead_role()
+    public async Task Vic_with_a_heavy_crew_role_neither_removes_the_owner_nor_gives_him_a_role()
     {
         await using var onPostgres = await sample.StartOnPostgresAsync();
         using var vic = await VicWithAHeavyCrewRoleAsync(onPostgres);
         var leoSeat = Harbor.SeatOf(DemoPeople.Leo);
 
-        using (var taken = await vic.TakeCrewRoleAsync(PierSeven, leoSeat, Harbor.ProjectRoles[SampleCatalogue.CrewLead]))
+        using (var given = await vic.GiveCrewRoleAsync(PierSeven, leoSeat, Harbor.ProjectRoles[SampleCatalogue.Observer]))
         {
-            await taken.ShouldBeRefusedAsync(HttpStatusCode.Conflict, ProjectRefusals.OwnerProtected);
+            await given.ShouldBeRefusedAsync(HttpStatusCode.Conflict, ProjectRefusals.OwnerProtected);
         }
 
         using (var removed = await vic.DeleteAsync($"/projects/{PierSeven.Id.Value}/crew/{leoSeat.Value}", Cancellation))
@@ -288,7 +301,7 @@ public sealed class OwnerScenarios(SampleHosts sample) : IClassFixture<SampleHos
         }
 
         var leo = (await vic.WithNamesAsync(await vic.ProjectDetailAsync(PierSeven))).Member("Leo");
-        leo.Role.Should().Be("Crew lead");
+        leo.Role.Should().BeNull();
         leo.IsOwner.Should().BeTrue();
     }
 
@@ -347,7 +360,7 @@ public sealed class OwnerScenarios(SampleHosts sample) : IClassFixture<SampleHos
     private static async Task<HttpClient> VicWithAHeavyCrewRoleAsync(SampleOnPostgres onPostgres)
     {
         var host = onPostgres.Host;
-        var everyCrewKey = host.Services.GetRequiredService<TenancyCatalogue>().LiveKeys.Where(ProjectCatalogue.CrewGives).ToArray();
+        var everyCrewKey = host.Services.GetRequiredService<TenancyCatalogue>().LiveKeys.Where(SampleCatalogue.Projects.Rules.RoleKeys.Allows).ToArray();
 
         using var ada = await host.ClientAsync("ada", Harbor.Slug);
         using var made = await ada.PostAsJsonAsync("/project-roles", new { name = "Site manager", keys = everyCrewKey }, Cancellation);

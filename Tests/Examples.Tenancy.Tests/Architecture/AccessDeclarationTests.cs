@@ -70,7 +70,7 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
         (new TakeCrewRole(TheProject, SeatId.CreateSequential(), ProjectRoleId.CreateSequential()), MemberAccess.On(ProjectKeys.ManageCrew, TheProject)),
         (new RemoveCrewMember(TheProject, SeatId.CreateSequential()), MemberAccess.On(ProjectKeys.ManageCrew, TheProject)),
         (new AllCrewMembers(TheProject), MemberAccess.SeenWith<ProjectId>(ProjectKeys.View)),
-        (new ChangeProjectOwner(TheProject, SeatId.CreateSequential()), MemberAccess.On(ProjectKeys.ChangeOwner, TheProject)),
+        (new ChangeProjectOwner(TheProject, SeatId.CreateSequential(), FormerOwnerRole: null), MemberAccess.On(ProjectKeys.ChangeOwner, TheProject)),
         (new TenantProjects(TheTenant), TenancyAccess.RequiresOperator()),
         (new TenantProjectRoles(), TenancyAccess.InTenant()),
         (new ProjectRolesById([ProjectRoleId.CreateSequential()]), TenancyAccess.InTenant()),

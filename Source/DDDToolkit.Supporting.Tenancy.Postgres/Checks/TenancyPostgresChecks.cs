@@ -654,7 +654,7 @@ public static class TenancyPostgresChecks
                         "The function " + RowAccessModel.Schema(tenancy.Schema) + "." + name + " in the database " + (written.Count == 1 ? "was written from another catalogue" : "is missing") +
                         ": " + says + ". Export the access files with the catalogue the application runs with, and apply them: the export writes them from the ApplicationCatalogue " +
                         "marked [TenancyCatalogue], the one handed to TenancyOptions.Catalogue, which is public and static where the project that runs the export sees it, " +
-                        "and from the modules' keys marked [TenancyPermissions].");
+                        "and from the permissions the modules declare in their [Permissions] classes.");
                 }
             }
 

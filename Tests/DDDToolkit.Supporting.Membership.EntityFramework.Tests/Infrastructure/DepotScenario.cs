@@ -58,15 +58,15 @@ public sealed class DepotScenario
 
         Roles =
         [
-            new DepotRole { Id = Lead, Name = CrateMembership.OwnerRole, InUse = true },
+            new DepotRole { Id = Lead, Name = "crate-lead", InUse = true },
             new DepotRole { Id = Packer, Name = "packer", InUse = true },
             new DepotRole { Id = OldHand, Name = "old-hand", InUse = false },
         ];
         RoleKeys =
         [
-            Gives(Lead, CrateKeys.Pack), Gives(Lead, CrateKeys.Weigh),
-            Gives(Packer, CrateKeys.Pack), Gives(Packer, CrateKeys.Move), Gives(Packer, CrateKeys.PrintLabels), Gives(Packer, CrateKeys.ManageDepot),
-            Gives(OldHand, CrateKeys.Pack), Gives(OldHand, CrateKeys.Weigh),
+            Gives(Lead, CratePermissions.Pack), Gives(Lead, CratePermissions.Weigh),
+            Gives(Packer, CratePermissions.Pack), Gives(Packer, CratePermissions.Move), Gives(Packer, CrateKeys.PrintLabels), Gives(Packer, CrateKeys.ManageDepot),
+            Gives(OldHand, CratePermissions.Pack), Gives(OldHand, CratePermissions.Weigh),
         ];
 
         Bays =
@@ -80,25 +80,25 @@ public sealed class DepotScenario
         BayPaths = [.. Bays.SelectMany(bay => Above(bay.Id).Select(above => new BayPath { AboveId = above, BayId = bay.Id }))];
         BayHolds =
         [
-            Holds(Eli, LeftAisle, CrateKeys.See), Holds(Eli, LeftAisle, CrateKeys.Move),
-            Holds(Flo, Hall, CrateKeys.See), Holds(Flo, Hall, CrateKeys.Pack),
-            Holds(Bo, LeftAisle, CrateKeys.Pack), Holds(Bo, LeftBay, CrateKeys.Move),
-            Holds(Ned, Hall, CrateKeys.See),
+            Holds(Eli, LeftAisle, CratePermissions.See), Holds(Eli, LeftAisle, CratePermissions.Move),
+            Holds(Flo, Hall, CratePermissions.See), Holds(Flo, Hall, CratePermissions.Pack),
+            Holds(Bo, LeftAisle, CratePermissions.Pack), Holds(Bo, LeftBay, CratePermissions.Move),
+            Holds(Ned, Hall, CratePermissions.See),
         ];
 
-        var pears = new Pallet(Pears, "Pears", Ana.Porter!.Value, PalletMembership.Owner, monthAgo);
+        var pears = new Pallet(Pears, "Pears", Ana.Porter!.Value, monthAgo);
         pears.PutOn(Bo.Porter!.Value, PalletMembership.Loader, MemberPeriod.Open(before), now, by: Ana.Porter);
         pears.PutOn(Cas.Porter!.Value, PalletMembership.Checker, MemberPeriod.Between(before, NextWeek), now, by: Ana.Porter);
         pears.PutOn(Dot.Porter!.Value, MemberPeriod.Open(before), now, by: Ana.Porter);
         pears.PutOn(Ned.Porter!.Value, PalletMembership.Loader, MemberPeriod.Open(before), now, by: Ana.Porter);
 
-        var plums = new Pallet(Plums, "Plums", Bo.Porter.Value, PalletMembership.Owner, monthAgo);
+        var plums = new Pallet(Plums, "Plums", Bo.Porter.Value, monthAgo);
         plums.PutOn(Ana.Porter.Value, PalletMembership.Checker, MemberPeriod.Open(before), now, by: Bo.Porter);
 
-        var limes = new Pallet(Limes, "Limes", Cas.Porter.Value, PalletMembership.Owner, monthAgo);
+        var limes = new Pallet(Limes, "Limes", Cas.Porter.Value, monthAgo);
         Pallets = [pears, plums, limes];
 
-        var tea = new Crate(Tea, "Tea", LeftBay, Ana.Porter.Value, Lead, monthAgo);
+        var tea = new Crate(Tea, "Tea", LeftBay, Ana.Porter.Value, monthAgo);
         tea.PutOn(Bo.Porter.Value, MemberPeriod.Open(before), now, by: Ana.Porter);
         tea.GiveRole(Bo.Porter.Value, Packer, MemberPeriod.Between(before, InThreeDays), now, by: Ana.Porter);
         tea.PutOn(Cas.Porter.Value, OldHand, MemberPeriod.Between(before, NextWeek), now, by: Ana.Porter);
@@ -106,8 +106,8 @@ public sealed class DepotScenario
         tea.GiveRole(Dot.Porter.Value, Packer, MemberPeriod.Between(before, yesterday), now, by: Ana.Porter);
         tea.PutOn(Ned.Porter.Value, Packer, MemberPeriod.Open(before), now, by: Ana.Porter);
 
-        var salt = new Crate(Salt, "Salt", RightBay, Bo.Porter.Value, Lead, monthAgo);
-        var rice = new Crate(Rice, "Rice", LeftAisle, Cas.Porter.Value, Lead, monthAgo);
+        var salt = new Crate(Salt, "Salt", RightBay, Bo.Porter.Value, monthAgo);
+        var rice = new Crate(Rice, "Rice", LeftAisle, Cas.Porter.Value, monthAgo);
         Crates = [tea, salt, rice];
     }
 
@@ -194,11 +194,11 @@ public sealed class DepotScenario
     public IReadOnlyList<Crate> Crates { get; }
 
     /// <summary>Every key a question about pallets is asked with, and one nobody declared.</summary>
-    public static IReadOnlyList<string> PalletKeysAsked => [PalletKeys.See, PalletKeys.Load, PalletKeys.Strap, "pallets.unheard-of"];
+    public static IReadOnlyList<string> PalletKeysAsked => [PalletPermissions.See, PalletPermissions.Load, PalletPermissions.Strap, "pallets.unheard-of"];
 
     /// <summary>Every key a question about crates is asked with, another module's and the depot's own among them, and one nobody declared.</summary>
     public static IReadOnlyList<string> CrateKeysAsked
-        => [CrateKeys.See, CrateKeys.Pack, CrateKeys.Weigh, CrateKeys.Move, CrateKeys.Scrap, CrateKeys.PrintLabels, CrateKeys.ManageDepot, "crates.unheard-of"];
+        => [CratePermissions.See, CratePermissions.Pack, CratePermissions.Weigh, CratePermissions.Move, CratePermissions.Scrap, CrateKeys.PrintLabels, CrateKeys.ManageDepot, "crates.unheard-of"];
 
     /// <summary>Saves the scenario as the application's own work, and has the depot's desk know its porters.</summary>
     public async Task SaveAsync(DepotServices services)
@@ -261,7 +261,7 @@ public sealed class DepotScenario
     public IReadOnlyList<CrateId> CratesWithARoleFor(DepotPerson person, string key)
         => [.. Crates
             .Where(crate => person.Member is { } member
-                && CrateMembership.Rules.MemberKeys.Allows(key)
+                && CrateMembership.Rules.RoleKeys.Allows(key)
                 && crate.Porters.Any(row => row.MemberId == member && RolesGiving(key).Any(role => row.HoldsAt(role, Now))))
             .Select(crate => crate.Id)
             .Order()];
@@ -277,7 +277,7 @@ public sealed class DepotScenario
     /// <summary>The crates somebody sees: those it owns, those it is on now, and those that stand where it holds the key that sees.</summary>
     public IReadOnlyList<CrateId> CratesSeenBy(DepotPerson person)
         => [.. Crates.Where(crate => person.Member is { } member && crate.OwnerId == member).Select(crate => crate.Id)
-            .Union(CratesAsMember(person)).Union(CratesReachedFromAbove(person, CrateKeys.See)).Order()];
+            .Union(CratesAsMember(person)).Union(CratesReachedFromAbove(person, CratePermissions.See)).Order()];
 
     /// <summary>
     /// The crates somebody holds <paramref name="key"/> on, worked out in memory with the rules and the depot's

@@ -41,8 +41,8 @@ and one command that shares it. The code below is all there is to write, and it 
 `using` lines are left out.
 
 **The domain.** The aggregate stays yours, declared as it always was. You declare a **member class** with
-the package's template, naming the resource it is a member of, and keep the owner, the members and the codes
-on your aggregate:
+the package's template, naming the resource it is a member of, and keep the owner and the members on your
+aggregate, marking the property that names the owner `[Owner]`:
 
 ```csharp
 [EntityId<Guid>] public readonly partial record struct UserId;
@@ -56,15 +56,14 @@ public sealed partial class DocumentShare;
 [AggregateRoot<DocumentId>]
 public sealed partial class Document
 {
-    public static MembershipCodes Codes { get; } = MembershipCodes.Under("documents");
-
-    public Document(DocumentId id, UserId owner, NamedRole ownerRole, DateTimeOffset now) : base(id)
+    public Document(DocumentId id, UserId owner, DateTimeOffset now) : base(id)
     {
         OwnerId = owner;
-        Members.Open(ownerRole, now);                // the owner is a member, for good, in the owner's role
+        Members.Open(now);                           // the owner is a member, for good, holding no role
     }
 
-    public UserId OwnerId { get; private set; }
+    [Owner]
+    public UserId OwnerId { get; private set; }      // holds what the permissions give an owner, by owning
 
     public bool Archived { get; private set; }
 
@@ -83,29 +82,58 @@ public sealed partial class Document
 ```
 
 `Members` is the document's **member list**, a `MemberList` over `Shares`. You do not declare it: the
-package's generator [writes it](#the-member-list-is-written-for-you) from the collection, the owner and the
-codes above.
+package's generator [writes it](#the-member-list-is-written-for-you) from the collection and the owner. It
+writes three more things onto `Document` with it: its name, `documents`, the class's name made plural, which
+its codes and its functions in the database are named after; the codes it refuses under, `Codes`,
+`documents.already-member` and the rest; and the scope of its module's own system work, `filing` here. A class
+whose name should not be what its codes say keeps another with `[Members("Papers")]`
+([Names](#names)).
 
-**The rules.** Who holds which key is one declaration, which the code that checks a request and the database
-both read: the keys of the resource, every one of which its owner holds, and the roles a member can be given.
+**The permissions.** What is asked on a document is declared once, in a class of permissions: every public
+constant of it a permission, with where it is asked and how it is held there.
+
+```csharp
+[Permissions]
+public static class DocumentPermissions
+{
+    /// <summary>See a document.</summary>
+    [On<Document>(EveryMember = true)]
+    public const string View = "documents.view";
+
+    /// <summary>Change a document.</summary>
+    [On<Document>]
+    public const string Edit = "documents.edit";
+
+    /// <summary>Say who a document is shared with, and hand it on.</summary>
+    [On<Document>(LocksMembers = true, LocksOwner = true)]
+    public const string Share = "documents.share";
+}
+```
+
+`[On<Document>]` says the permission is asked on one document. The owner holds every one of them by owning the
+document, unless one says `Owner = false`; a role can give each, unless one says `InRoles = false`; and the one
+marked `EveryMember` is held by everybody on the document, whatever role they hold. `LocksMembers` and
+`LocksOwner` name the permission your commands require to change the members and to hand the document on, so a
+database that checks every row holds a statement that reaches it past your application to it as well
+([who writes the member rows](#who-writes-the-member-rows)). [The settings of a permission](#the-settings-of-a-permission)
+has every one of them.
+
+**The rules.** Who holds which permission through the members is one declaration, which the code that checks a
+request and the database both read. Made through the document's type, it reads the name, the codes and the
+permissions off it, and says what is left: the roles a member can be given.
 
 ```csharp
 public static class DocumentMembership
 {
-    public static MembershipRules Rules { get; } = new(
-        "documents",
-        keys: ["documents.view", "documents.edit", "documents.share"],
-        roles: [new("contributor", ["documents.view", "documents.edit"]), new("onlooker", ["documents.view"])],
-        codes: Document.Codes,
-        changeMembersKey: "documents.share",
-        changeOwnerKey: "documents.share");
+    public static MembershipRules Rules { get; } = MembershipRules.For<Document>(
+        Roles.Fixed([new("contributor", [DocumentPermissions.View, DocumentPermissions.Edit]), new("onlooker", [DocumentPermissions.View])]));
 }
 ```
 
-The last two name the key your commands require to change the members and to hand the document on, so a
-database that checks every row holds a statement that reaches it past your application to that key as well,
-rather than to whatever your own rule lets a caller change of a document
-([who writes the member rows](#who-writes-the-member-rows)).
+`Roles.Fixed` declares roles in code, the same for every document. A customer that makes roles of its own has
+`Roles.Custom` ([Roles a customer makes](#roles-a-customer-makes)), and roles kept elsewhere, an organization's,
+`Roles.External` ([Beside an organization](#beside-an-organization)). Who a member is follows from what it is known
+by: a `UserId` over a `Guid` is the caller's own id. Nothing else needs saying here.
 
 **The wiring.** Your context maps the members, and your services register the resource:
 
@@ -120,9 +148,9 @@ public sealed class FilingContext(DbContextOptions<FilingContext> options) : DbC
         configuration.AddFilingConverters();         // your ids, stored by the converters generated for your module
     }
 
-    // Both member tables, owned by the document
+    // Both member tables, owned by the document; the owner is the property it marks [Owner]
     protected override void OnModelCreating(ModelBuilder modelBuilder)
-        => modelBuilder.Entity<Document>().HasMembers(document => document.Shares, document => document.OwnerId);
+        => modelBuilder.Entity<Document>().HasMembers(document => document.Shares);
 }
 
 public static class FilingModule
@@ -143,16 +171,16 @@ the resource it names. `HasMembers` adds two tables to your model, `DocumentShar
 `DocumentShareRoles`: add a migration for them, as for any change to it.
 
 **A request and its handler.** A request says what it requires, and its handler changes the document the
-request names, which is the one that was checked. The key is held on the document, so the request requires it with
-`[RequiresKey]` and marks the document `[OnResource]`, and the version the caller read `[ExpectedVersion]`; the
-toolkit's generator writes `MemberAccess.On("documents.share", request.Document, request.ExpectedVersion)` for it,
-into the module's interface, which is partial for that:
+request names, which is the one that was checked. The permission is held on the document, so the request requires
+it with `[RequiresKey]` and marks the document `[OnResource]`, and the version the caller read `[ExpectedVersion]`;
+the toolkit's generator writes `MemberAccess.On("documents.share", request.Document, request.ExpectedVersion)` for
+it, into the module's interface, which is partial for that:
 
 ```csharp
 [AccessRequests]
 public partial interface IFilingRequest : IRequireAccess;           // what every request of your module implements
 
-[RequiresKey("documents.share")]
+[RequiresKey(DocumentPermissions.Share)]
 public sealed record ShareDocument([OnResource] DocumentId Document, UserId With, string Role, DateTimeOffset? Until, [ExpectedVersion] long? ExpectedVersion = null) : IFilingRequest;
 
 public sealed class DocumentHandlers(
@@ -165,8 +193,7 @@ public sealed class DocumentHandlers(
     public async Task<DocumentId> WriteAsync(CancellationToken cancellationToken)
     {
         var owner = new UserId(callers.Current.UserId!.Value);
-        var ownerRole = await admission.OwnerRoleAsync(cancellationToken);           // "owner", which the rules added
-        var document = new Document(DocumentId.Create(), owner, ownerRole, clock.GetUtcNow());
+        var document = new Document(DocumentId.Create(), owner, clock.GetUtcNow());
         db.Documents.Add(document);
         await db.SaveChangesAsync(cancellationToken);
         return document.Id;
@@ -210,8 +237,8 @@ MemberAccess.Sees(key, request.Document)), MemberAccess.On(key, request.Document
 `UserId` registered beside it ([Yours, or the key](access-requirements.md#yours-or-the-key)). `MemberAccess.Sees` is the
 caller's own way through on the resource: the caller sees the document, holding the key there or not, and the check
 reads it, refuses one it does not see with `documents.not-found`, compares the version `[ExpectedVersion]` names and
-keeps the hold, as `On` does. The handler still finds the member on that document. Where the rules name
-`changeMembersKey`, the database's lock lets a member row change only for a caller that holds it, so the handler saves
+keeps the hold, as `On` does. The handler still finds the member on that document. Where a permission is marked
+`LocksMembers`, the database's lock lets a member row change only for a caller that holds it, so the handler saves
 the caller's own place as the application's own work once its request is the one in hand
 ([The caller's own on a resource](access-requirements.md#the-callers-own-on-a-resource)).
 
@@ -271,18 +298,18 @@ questions only as the caller your host began.
 |---|---|
 | `DocumentShareId` | A member row is a child entity of your aggregate, and a child entity has an id: what its table is keyed by, beside the document. |
 | The member class, in one line | It is your class and your table, and the place for what only you know of a member: a property, or a rule about it. |
-| `NamedRole` in it | What a member holds a role by: a name, where the rules declare the roles, and an id, where [roles are rows](#roles-a-customer-makes). |
-| `OwnerId` | The owner is a column of your resource. The statement that answers who holds a key reads it there, and so do the database's functions, so the member list is handed it and keeps no copy. |
+| `NamedRole` in it | What a member holds a role by: a name, where the roles are in code, and an id, where [roles are rows](#roles-a-customer-makes). |
+| `[Owner]` on `OwnerId` | The owner is a column of your resource, and a fact of it. The statement that answers who holds a permission reads it there, and so do the database's functions and the mapping, so it is said once, on the class. |
 | `Shares` | Members live inside your aggregate: loaded and saved with it, under its one version. |
-| `Codes` | What a client reads when a rule about the members refuses: `documents.already-member`. The aggregate needs only the codes, so the rules, with their keys and roles, stay out of your domain. The rules take the same codes, so a request is refused under them as well. |
-| `ownerRole` and `now` in the constructor | The aggregate reads nothing and knows no rules. Which role is the owner's is the rules' to say, so the use case asks, `OwnerRoleAsync`, and hands it in, with the time. |
+| `now` in the constructor | The aggregate reads no clock. The owner holds no role, so there is nothing else to hand in. |
 | Your guard in `ShareWith` | It is the whole hook: a document that changes no more simply does not call the member list. |
-| The rules' name, keys and roles | The name is what the resource's functions in the database are named after. The keys are what is asked about on a document, and its owner holds every one: a key that is in no list is held by nobody, and a role that lists a key the rules do not state is refused where they are declared. |
-| `HasMembers(shares, owner)` | The model is your context's to build. The owner is said once more because the mapping reads no code of your aggregate: it marks the column the access statement reads. |
+| `DocumentPermissions` | What is asked on a document is yours to name, once: the request requires the constant, the rules read it, the database's functions are written from it, and a permission that is in no class is held by nobody. Its summary is the text an administrator reads. |
+| The roles in the rules | Which roles there are, and what each gives, is your product's to say. A role that lists what is no permission of a document, or one no role gives, is refused where the rules are made. |
+| `HasMembers(shares)` | The model is your context's to build: which collection is the member list, and what its tables are called. |
 | `AddDocumentMembership<FilingContext>(rules)` | Closed over your classes already. Which context maps the document, and which rules apply, only you know. |
 | `AddDocumentMemberAccess<IFilingRequest>()` | A check is added for one request interface, and a module may have several resources, or ask about another module's: this says whose requests the document's check decides. |
 | `IFilingRequest` | What tells your module's requests from another's: the [checks are registered for it](access-requirements.md#what-a-request-declares). |
-| `[RequiresKey]`, `[OnResource]` and `[ExpectedVersion]` | Which key a command takes is yours to say, and on which of the request's ids it is held; the generator writes the call, so it is no field of the request. The version is the one the caller read, for a command that sends it: it is compared after the key, so a caller without access learns nothing from it. |
+| `[RequiresKey]`, `[OnResource]` and `[ExpectedVersion]` | Which permission a command takes is yours to say, and on which of the request's ids it is held; the generator writes the call, so it is no field of the request. The version is the one the caller read, for a command that sends it: it is compared after the permission, so a caller without access learns nothing from it. |
 | `partial` on `IFilingRequest` | The generator writes `RequiredAccess` into it from its requests' attributes, one line per request. |
 | `MemberAdmission<DocumentId, UserId, NamedRole>` in the constructor | Membership's use cases are small classes generic over your ids alone, three at most, so they read where they are taken, and a module with several kinds of resource names each one's by its own ids. None is nested in one class over your classes, as Tenancy's use cases are, so there is no class such as Tenancy's `TenancyUseCases` to name them through, and no alias to write ([Calling a use case](tenancy.md#calling-a-use-case)). |
 | `RequireRoleAsync` in the handler | The member list takes any role: it cannot know which roles there are. `MemberAdmission` asks the rules, and, where you registered them, whether the one to be made a member is known (`RequireMemberAsync` and an `IMemberDirectory`) and whether a role goes to a member at all (`IMemberRolePolicy`). |
@@ -305,6 +332,17 @@ partial class Document
 }
 ```
 
+```csharp title="Document.Membership.g.cs, shortened"
+partial class Document : global::DDDToolkit.Supporting.Membership.IMembershipResource
+{
+    public static global::DDDToolkit.Supporting.Membership.MembershipCodes Codes { get; } = global::DDDToolkit.Supporting.Membership.MembershipCodes.Under("documents");
+
+    static string IMembershipResource.MembershipName => "documents";
+    static MembershipCodes IMembershipResource.MembershipCodes => Codes;
+    static string? IMembershipResource.MembershipScope => "filing";
+}
+```
+
 ```csharp title="MembershipEntityFrameworkServiceCollectionExtensions.*.Registration.g.cs, shortened"
 internal static partial class GeneratedMembershipEntityFrameworkServiceCollectionExtensions
 {
@@ -321,15 +359,15 @@ internal static partial class GeneratedMembershipEntityFrameworkServiceCollectio
 </details>
 
 It is written from three things the resource declares, and only when each is the only one of its kind there,
-so that nothing is guessed: the get-only `partial` collection of the member class, the property of what a
-member is known by (`UserId` here) that is the owner, and the static `MembershipCodes`. A new member row's id
+so that nothing is guessed: the get-only `partial` collection of the member class, the property marked
+`[Owner]`, of what a member is known by (`UserId` here), and the static `MembershipCodes`, which the generator
+writes as well unless the resource declares its own. A new member row's id
 is made in code by the id itself, `DocumentShareId.Create()`, which the generator writes for an
 `[EntityId<Guid>]`; a row keyed by a `long` declares its own `Create()`. [DDD00059](diagnostics.md#ddd00059)
 lists each with what stands in its way, and says which it is when the list is not written.
 
 For every other shape you write the list yourself, on the resource, and the generator leaves a resource that
-declares one alone: a resource with two properties of the member's id, codes kept in a class of their own, a
-collection that is itself called `Members`.
+declares one alone: codes kept in a class of their own, a collection that is itself called `Members`.
 
 ```csharp
 private MemberList<DocumentShare, DocumentShareId, UserId, NamedRole> Members
@@ -338,6 +376,65 @@ private MemberList<DocumentShare, DocumentShareId, UserId, NamedRole> Members
 
 `_shares` is the field the toolkit keeps `Shares` in. A resource that has no list, and cannot be given one,
 is told what stands in the way when it is built: [DDD00059](diagnostics.md#ddd00059).
+
+### Names
+
+A resource with members is named after its class, made plural: `Document` is `documents`, `CraneBoard` is
+`crane-boards`, `Category` is `categories`. The name is written twice, in lower case: with a dash between its
+words for the codes the resource refuses under, `crane-boards.already-member`, and with an underscore for its
+functions in the database, `crane_boards_i_see`. Only the last word is made plural, by the plain English rules,
+so a class whose plural is another word says its own with `[Members]`:
+
+```csharp
+[Members("People")]                     // people.already-member, people_i_see
+[AggregateRoot<PersonId>]
+public sealed partial class Person;
+```
+
+What `[Members]` says is taken as it is and written the same two ways: `People`, `CraneBoards` or
+`crane-boards`. One that cannot be, with a space in it or a digit first, is [DDD00091](diagnostics.md#ddd00091),
+and the resource's rules do not compile until it is put right.
+
+The name is what a client reads in a code and what the database's functions are called, so renaming the class
+renames both: clients that branch on `documents.already-member` read another code, and the next access file
+makes new functions. The export compares the names it writes with those the newest access file recorded, with
+the class each came from, and says once, in the build that writes the new file, which are gone and which are new
+([DDD00090](diagnostics.md#ddd00090)). A class renamed on purpose keeps its old name with `[Members("Documents")]`;
+one that should take the new name needs nothing more.
+
+The scope of the module's own system work is named the same way, after the module: `filing` for the module
+`Filing`. It is the scope the rules let through unless they say otherwise ([System work](#system-work)).
+
+### The settings of a permission
+
+A permission is a public constant of a static class marked `[Permissions]`, and its **level** is the attribute
+on it, which says where it is asked: `[On<Document>]` on one document, and with [Tenancy](#with-tenancy)
+`[AtTenant]` for the whole tenant or `[AtUnit]` at a unit. One class can hold permissions of every level; the
+module's catalogue lists them all. A permission asked on a document says how it is held there:
+
+| Setting | Unless said | Said |
+|---|---|---|
+| `Owner` | the owner holds it by owning the document | `Owner = false`: the owner holds it only as anybody would, from above say; for a permission no owner holds by owning, such as one that names another owner |
+| `EveryMember` | being a member gives nothing by itself | `EveryMember = true`: every member holds it, whatever roles it holds; usually the one that sees the document. One permission at most |
+| `InRoles` | a role can give it | `InRoles = false`: no role gives it, so the owner and reach from above alone hold it; for one a customer must never hand out |
+| `LocksMembers` | it locks nothing | `LocksMembers = true`: what your commands that change the members require, which a database that checks every row holds the member rows to ([who writes the member rows](#who-writes-the-member-rows)). One at most |
+| `LocksOwner` | it locks nothing | `LocksOwner = true`: what your command that hands a document on requires, which the database holds the owner column to. One at most |
+| `FromAbove` | it reaches the document from above, where the rules let one be reached so | `FromAbove = false`: held where the document sits, it gives nothing on it ([beside an organization](#beside-an-organization)) |
+
+Every level takes three more. Its summary, as text, is what the permission lets somebody do, the text an
+administrator reads where roles are made; `Description = "..."` says it instead. Either is the English text: a
+translation of yours, under the permission's key in a resx your failure localizer reads, says it in another
+language, as refusal texts are said ([Localization](localization.md)). `Implies` names what holding it brings with
+it, so a role with only this one does what those let it do too. And `Retired = true` keeps a permission nobody
+holds any more, so a role that lists it keeps it and no stored right breaks: a permission is retired, and never
+deleted.
+
+The generator reads the class and nothing else. A class marked `[Permissions]` that is not static, a constant
+without a level and a key declared twice in it are [DDD00092](diagnostics.md#ddd00092); `[On<T>]` on a class that
+is no resource with members, and two permissions that each say `EveryMember`, `LocksMembers` or `LocksOwner`, are
+[DDD00093](diagnostics.md#ddd00093); and rules made for a resource no permission is declared on are
+[DDD00094](diagnostics.md#ddd00094), where they are made.
+
 
 ## From the check to the save
 
@@ -436,8 +533,8 @@ them, and no rule about who gives what to whom. Each of your commands requires w
 
 **A key on the resource.** The usual rule, and one line on the request: the one `ShareDocument` has above.
 Whoever holds `documents.share` on the document shares it, with anyone, in any role, for as long as they
-say. The owner holds every key of the resource, so the owner may. A member may when one of its roles gives
-the key, which is your rules' to say.
+say. The owner holds it by owning the document, as it holds every permission said for the owner, so the owner
+may. A member may when one of its roles gives the permission, which is your rules' to say.
 
 **A rule of your own.** Anything further you write in the handler. The questions say until when the caller
 holds the key, in one statement, so "nobody gives a role for longer than they hold the key themselves" is a
@@ -478,17 +575,20 @@ folder.Admit(command.Staff, command.Role, MemberPeriod.Between(now, command.Unti
   take the moment they are called at for that, next to the period: what has ended by then is replaced, and
   nothing else.
 - **A member holds each role once, for a period of its own.** A role counts only while its membership does.
-- **There is one owner,** always a member, with no end, in the owner's role. The owner cannot be removed,
-  or lose that role, until somebody else is named owner.
-- **An owner's place has no end, and keeps none.** Naming an owner takes away the end the new owner's membership
-  had, and handing the resource on again does not put it back: somebody who was on a resource for a week
-  and owned it for a day is on it for good. What its roles gave, they give no longer than before: a role
-  with no end of its own, or one that ran past the membership's end, stops where the membership would have.
-  The same holds for a start: somebody who was to come next month is a member from the day they are named,
-  and their roles count no sooner than they were to. `NameOwner` answers what it changed (`OwnerNamed`):
-  whether the membership began anew, the roles that went, the end it lifted, `EndLifted`, and the start it
-  moved, `StartMoved`. Keep the end, and take the member off the list then, if a former owner is to leave
-  when they would have.
+- **There is one owner,** always a member, with no end, holding no role: it holds what the permissions give
+  an owner, by owning. `Members.Open(now)` in the resource's constructor puts it on the list. The owner is
+  not removed, and is given no role, until somebody else is named owner (`documents.owner-protected`).
+- **An owner's place has no end, and keeps none.** `Members.NameOwner(member, formerOwner, now)` names another:
+  a member from then on, put on the list when it was not on it, and the roles it held go, since it holds by
+  owning now. Naming an owner takes away the end the new owner's membership had, and handing the resource on
+  again does not put it back: somebody who was on a resource for a week and owned it for a day is on it for
+  good. The same holds for a start: somebody who was to come next month is a member from the day they are
+  named. The owner before becomes what your command says, `FormerOwner.StaysAs(role)`, a member with no end in
+  that role, or `FormerOwner.Leaves`, nobody on the list: there is no default, since the owner held no role to
+  fall back to. `NameOwner` answers what it changed (`OwnerNamed`): whether the new owner was added or its
+  membership began anew, the roles that went, the end it lifted, `EndLifted`, the start it moved, `StartMoved`,
+  and what the owner before became. Keep the end, and take the member off the list then, if a new owner is to
+  leave when they would have.
 - **Members live inside your aggregate.** They are loaded and saved with it, under its one version, so
   `If-Match` on the resource covers its members. Your own guard runs in front of every change, and you
   raise your own events from what the member list answers: the package raises none.
@@ -529,41 +629,57 @@ starts, each with its roles and whether they count now. It reads nothing.
 
 ## Who holds a key
 
-| The key is | Held by |
+| The permission is | Held by |
 |---|---|
-| a key of the resource (`keys`) | the owner, by owning the resource, with no end |
-| given by a role (`roles`, or the role's row where [a customer makes the roles](#roles-a-customer-makes), cut by `memberKeys`) | a member now, holding that role now |
-| the one being a member gives (`seeKey`) | every member now, whatever roles it holds |
-| held where the resource sits, or above it (`above`) | whoever you answer holds it there |
-| any key | the application itself, and its work in a scope the rules name (`systemScopes`) |
+| on the resource, said for the owner (`Owner`, unless `Owner = false`) | the owner, by owning the resource, with no end and no role |
+| given by a role (in `Roles.Fixed`, or on the role's row where [a customer makes the roles](#roles-a-customer-makes)), and one a role may give (`InRoles`, or a key of another module `otherKeys` lets through) | a member now, holding that role now |
+| marked `EveryMember` | every member now, whatever roles it holds |
+| held where the resource sits, or above it (`reachFromAbove`, unless `FromAbove = false`) | whoever you answer holds it there |
+| any permission | the application itself, and its work in a scope the rules let through (`systemScopes`) |
 
-The owner's role is the owner's place on the member list, and a role like any other: whoever else is given
-it holds what it gives. Rules that name no owner's role, as the document's do, get one added: `owner`, which
-gives every key of the resource, so no key is the owner's alone then. To keep a key to the owner, declare
-the owner's role yourself, `ownerRole: "keeper"` with a role of that name among `roles` that leaves the key
-out, or leave the key out of what a member's role gives:
-`memberKeys: MemberKeys.AllBut("documents.hand-over")`. A key of the resource that no role gives is the
-owner's alone.
+What an owner may do is the permissions said for the owner, and nothing through a role: the owner holds no role,
+and none is given to it. So a permission no owner should hold by owning says `Owner = false`, and a request that
+requires one the owner does hold lets the owner through already: `[OrOwn]` beside its `[OnResource]` says nothing
+more, [DDD00096](diagnostics.md#ddd00096).
 
-`seeKey` is the one key that being a member gives by itself. The document's rules name none: a member sees
-the document all the same, and holds on it what its roles give.
+`EveryMember` marks the one permission that being a member gives by itself, usually the one that sees the
+resource. The document's `View` is it: a member sees the document whatever roles it holds.
 
-A caller who is neither a member now nor the owner does not see the resource, unless it holds the key that
+A caller who is neither a member now nor the owner does not see the resource, unless it holds the permission that
 sees it [from above](#beside-an-organization): `not-found`, exactly as for one that does not exist. A caller
-that sees it and does not hold the key is `not-permitted`, naming the key. A version that is not the one the
+that sees it and does not hold the permission is `not-permitted`, naming it. A version that is not the one the
 caller read is compared last.
 
-Who the caller is as a member comes from the rules: `MemberSource.CallerId`, the user id of its token, for a
-member id over a `Guid`, `MemberSource.Claim("app_metadata.staff")` for one over a text, or
-`MemberSource.Resolved()` for [an id you resolve yourself](#beside-an-organization). Only a signed-in
+Who the caller is as a member follows from what a member is known by: the user id of its token for a member id
+over a `Guid`, as for the document, and the caller's seat for a seat of [Tenancy](#with-tenancy). Rules that say
+otherwise name it: `members: MemberSource.Claim("app_metadata.staff")` for one over a text, or
+`MemberSource.Resolved(...)` for [an id you resolve yourself](#beside-an-organization). Only a signed-in
 user is anybody's member, or holds anything from above: a caller who did not sign in reaches nothing, and
 nothing is read for it. The same goes for one whose token lacks that id or claim, where nothing above
 reaches the resource.
 
-Work in a scope, `Caller.SystemIn("billing")`, is not the application itself. It is nobody's member and
-holds nothing on a resource, unless the resource's rules name that scope: `systemScopes: ["documents"]`,
-which a module says for the work it does on its own resources. Another module's work is not above your
-rules.
+### System work
+
+The application itself, `Caller.System`, holds every permission on every resource. Work in a scope,
+`Caller.SystemIn("filing")`, is not the application itself: it is nobody's member, and holds every permission on
+a resource whose rules let its scope through, and nothing on any other. Left out, the rules let one scope
+through, the module's own, which the resource carries: `filing` for a document of the module `Filing`
+([Names](#names)). So the module's own work on its documents, a seeding or a handler that saves as the
+application, needs nothing said. `systemScopes` replaces it: name the scopes to let through, the module's own
+among them to keep it, or `[]` for none.
+
+```csharp
+// The boards' own work, and the nightly import that fills them, which runs in a scope of its own
+public static MembershipRules Rules { get; } = MembershipRules.For<Board>(
+    Roles.Custom(starters: [new("editor", [BoardPermissions.View, BoardPermissions.Edit])]),
+    systemScopes: ["boards", "boards-import"]);
+```
+
+Name a scope for the work it is. Another module's work is not above your rules, and neither is Tenancy's: the
+scope `tenancy` is what work that calls Tenancy's use cases runs in, provisioning a tenant, placing a seat or
+giving a grant among it, so rules that let it through would let every such piece of work do everything on every
+board. On Postgres the scope reaches the database too: the role scoped system work runs as may ask the
+resource's functions, and [the lock](#who-writes-the-member-rows) lets work in another scope write no member row.
 
 ## Inside your own statements
 
@@ -646,10 +762,11 @@ root of yours, a child entity included ([DDD00050](diagnostics.md#ddd00050)). Ei
 member class to fix, and a domain project without the registrations hears it as
 [DDD00060](diagnostics.md#ddd00060); the list of the class the resource keeps is written all the same.
 
-`HasMembers` takes your names for the two tables and for the member's column:
+`HasMembers` takes your names for the two tables and for the member's column; the owner is the property the
+folder marks `[Owner]`:
 
 ```csharp
-modelBuilder.Entity<Folder>().HasMembers(folder => folder.Staff, folder => folder.Keeper,
+modelBuilder.Entity<Folder>().HasMembers(folder => folder.Staff,
     new MemberTableNames("FolderStaff", "FolderStaffRoles", MemberColumn: "StaffCode"));
 ```
 
@@ -662,7 +779,8 @@ where the mapping is read.
 
 `DDDToolkit.Supporting.Membership.Postgres` writes four functions per resource: the resources the caller is a
 member of, those where it holds a role that gives a key, those it sees, and those it holds a key on, as a
-member, as the owner or from above. They answer what the access questions answer, from the same rules. What a
+member, as the owner or from above. They answer what the access questions answer, from the same rules and the
+same permissions. What a
 caller reads and changes of a resource is yours to say, in
 [row access rules](row-level-security.md#row-access-rules-written-in-c) that ask the last two by the resource's
 id, and the member tables follow the resource's rules, as every table of an aggregate's entities does.
@@ -679,7 +797,7 @@ policies hold it with nothing more to write, and with [Tenancy](#with-tenancy) i
 public static class DocumentMembership
 {
     [MembershipRules<DocumentShare>]
-    public static MembershipRules Rules { get; } = new("documents", ...);
+    public static MembershipRules Rules { get; } = MembershipRules.For<Document>(Roles.Fixed([...]));
 }
 
 // What your rules ask, a line each: the documents a caller sees, and those it holds a key on, by the document's id
@@ -731,15 +849,23 @@ services.RunStartupChecks();
   several modules the declarations are the owning module's contracts, which other modules' rules ask as its
   own rules do, and no other module declares one of its own:
   [a resource's access, asked by its id](row-level-security.md#a-resources-access-asked-by-its-id).
-- **The functions' names** follow from the rules' name: `documents_as_member`, `documents_as_member_with`,
-  `documents_i_see` and `documents_where_i_hold` for `documents`. Nothing of yours asks them by name, so say
-  them only to keep the names a database already has, `functions: new MembershipFunctions(...)` in the rules;
-  the start-up check holds the database to whichever the rules say. The sample keeps the ones its database had
-  (`ProjectMembership.Functions`).
-- **The functions** run as their owner with an empty search path, and only the database roles the rules
-  name may ask them (`grantTo`, signed-in users unless you say otherwise). Whether a period applies is asked
-  of the database's clock. The application's own work in a scope the rules name is answered every resource,
-  as in C#, where that work's role is one of `grantTo` (`RowAccessRoles.SystemIn`).
+- **The functions' names** follow from the resource's name ([Names](#names)): `documents_as_member`,
+  `documents_as_member_with`, `documents_i_see` and `documents_where_i_hold` for `documents`. Nothing of yours
+  asks them by name, and the start-up check holds the database to them. A class renamed gives the next access
+  file new functions, and drops the old: keep the name with `[Members]` where the database should keep them.
+- **Who may ask them** follows from your row access rules on the resource. The functions run as their owner with
+  an empty search path, and only the database roles your rules on the document are written for may ask them,
+  with the role scoped system work runs as while the rules let a scope through:
+
+  | Your rules on the resource are written for | The functions may be asked by |
+  |---|---|
+  | signed-in users, `RowAccessRoles.User` | `authenticated` |
+  | a role of your own as well, `To = [RowAccessRoles.User, "staff"]` | `authenticated` and `staff` |
+  | callers who did not sign in, `anon`, among the others | the others alone: a caller who did not sign in is nobody's member and holds nothing |
+  | any of these, while the rules let a scope through (`systemScopes`, the module's own unless said) | `ddd_system_in` as well, the role [scoped system work](row-level-security.md#the-scoped-system-role) runs as, which is then answered every resource, as in C# |
+
+  A rule you add for another role grants it the functions with the next access file, which names them in the
+  `-- Executed by:` line of each function's body. Whether a period applies is asked of the database's clock.
 - **The check** is the [start-up check](startup-checks.md) `membership.functions-in-place`, which
   `AddMembershipPostgres()` brings and the host runs with its other checks, after the migrations';
   `MembershipPostgresChecks.EnsureFunctionsAreInPlaceAsync` is the same by hand. The call is the only thing that
@@ -749,7 +875,7 @@ services.RunStartupChecks();
   lacks a function of any registered resource, or has one that does
   not run as its owner, has no empty search path, answers no set, was written from other rules than the
   resource is registered with or by another version of the package, may be executed by every role or by one
-  the rules do not name, or may not be executed by a role the rules name. It reads the line of a function's
+  its `-- Executed by:` line does not name, or may not be executed by a role it names. It reads the line of a function's
   body that names its rules: a body rewritten by hand under that line is not found. Rules you forget to mark
   get no functions. With none marked the build warns ([DDD00054](diagnostics.md#ddd00054)); with several
   resources, one marked is enough for the build, and this check is what finds the resource whose rules are
@@ -760,27 +886,33 @@ services.RunStartupChecks();
 That the member tables follow the resource's rules has a consequence. A row knows no command: whoever your
 rule lets change a resource writes its member rows and its owner column, by any statement that reaches the
 database, past the check in front of your handler. Somebody who only edits a document could give itself a
-role on it, or make itself its owner, and an owner holds every key. So the rules name the keys your
-commands require for that, and the package writes a lock from them:
+role on it, or make itself its owner, and an owner holds what an owner holds. So the permissions mark the ones
+your commands require for that, and the package writes a lock from them:
 
 ```csharp
-public static MembershipRules Rules { get; } = new(
-    "documents",
-    keys: ["documents.view", "documents.edit", "documents.share"],
-    roles: [new("contributor", ["documents.view", "documents.edit"]), new("onlooker", ["documents.view"])],
-    codes: Document.Codes,
-    changeMembersKey: "documents.share",        // what your commands that change the shares require
-    changeOwnerKey: "documents.share");         // what your command that hands a document on requires
+[Permissions]
+public static class DocumentPermissions
+{
+    [On<Document>(EveryMember = true)]
+    public const string View = "documents.view";
+
+    [On<Document>]
+    public const string Edit = "documents.edit";
+
+    // What your commands that change the shares require, and your command that hands a document on
+    [On<Document>(LocksMembers = true, LocksOwner = true)]
+    public const string Share = "documents.share";
+}
 ```
 
-| The rules name | The database then holds |
+| The permissions mark | The database then holds |
 |---|---|
-| `changeMembersKey` | a restrictive policy on both member tables: a row is added, changed or removed only on a resource the caller holds that key on, or the key that changes the owner, since naming an owner writes member rows too |
-| `changeMembersKey`, where the [roles are kept](#roles-a-customer-makes) | a second restrictive policy on the table of the roles a member holds: a role added or changed there is one the caller sees in your role table, asked as the caller, so your rules on that table decide which |
-| `changeOwnerKey` | a trigger on the resource's table: a statement that would leave a row with another owner is refused, as a policy refuses, unless the caller held that key on the resource before. A new row had no owner before, so whom it names is your rule about adding a resource to hold |
-| `above:`, with either key | nothing about where a resource sits: the lock asks what the caller holds where the resource sits when the statement runs, so the column that says where is yours to hold |
+| `LocksMembers` | a restrictive policy on both member tables: a row is added, changed or removed only on a resource the caller holds that permission on, or the one that locks the owner, since naming an owner writes member rows too |
+| `LocksMembers`, where a [customer makes the roles](#roles-a-customer-makes) | a second restrictive policy on the table of the roles a member holds: a role added or changed there is one the caller sees in your role table, asked as the caller, so your rules on that table decide which |
+| `LocksOwner` | a trigger on the resource's table: a statement that would leave a row with another owner is refused, as a policy refuses, unless the caller held that permission on the resource before. A new row had no owner before, so whom it names is your rule about adding a resource to hold |
+| either, with `reachFromAbove` | nothing about where a resource sits: the lock asks what the caller holds where the resource sits when the statement runs, so the column that says where is yours to hold |
 
-- **You still decide who may.** The two entries are what the database is told, and nothing else: no code
+- **You still decide who may.** The two marks are what the database is told, and nothing else: no code
   of the package gates a command by them, and your commands declare what they require as before.
 - **What decides who holds a key, the lock takes as the rows say it.** Three columns are yours to hold,
   since who may change them is your decision and not the package's:
@@ -804,33 +936,30 @@ public static MembershipRules Rules { get; } = new(
   `projects.edit`, and `StateChangesWithTheCloseKey` its state to `projects.close`. The owner column stays the
   lock's, written from the key the rules name with nothing of yours, and held by the start-up check below; a
   column rule of your own on it would hold it a second time.
-- **It narrows, and allows nothing.** The lock is for the database roles of `grantTo`, on top of your own
-  rules. Reading stays what your rules say. The application itself and the role that owns the tables are
-  not held by it.
-- **It holds the roles that can hold a key, and no other.** A database role outside `grantTo` cannot ask
-  the functions, so it holds no key, and the lock is not written for it. Where a rule of yours lets such a
-  role change the resource, a token role of its own say, that role writes the member rows and the owner
-  column as your rule lets it: name it in `grantTo`, or let it change the resource only through the
-  application.
-- **Rules that name neither** leave the member rows and the owner column to your own rule about changing
+- **It narrows, and allows nothing.** The lock is for every database role that may ask the functions, on top
+  of your own rules: the roles your rules on the resource are written for, and the role of scoped system work.
+  So system work in a scope the rules do not let through writes no member row and names no owner, and work in
+  one they do holds every permission, and passes. Reading stays what your rules say. The application itself and
+  the role that owns the tables are not held by it.
+- **Permissions that mark neither** leave the member rows and the owner column to your own rule about changing
   the resource. The start-up check then says so, a line for each such resource, returned and logged as a
   warning, and refuses nothing. That is sound where your rule admits exactly who may change the members
-  and name the owner, or where no caller reaches the database past your application. Naming the key for
-  the members without the one for the owner leaves a way round: whoever makes itself owner holds every key.
+  and name the owner, or where no caller reaches the database past your application. Marking the permission
+  that locks the members without the one that locks the owner leaves a way round: whoever makes itself owner
+  holds what an owner holds.
 - **A refusal of the lock reaches your caller as `access.refused`.** A policy's refusal is read as every
   policy's is, and the trigger refuses as the toolkit's access guards do: `42501`, its own name as the constraint
   (`documents_owner_stays`), and the toolkit's hint. A save it refuses, from a handler whose caller lost the key
   between the check and the save say, is a `RefusalException` with that code, a 403, and a warning that names
   the trigger; see [When the database refuses](row-level-security.md#when-the-database-refuses).
 - **The check holds the lock too:** a database where a policy of the lock is gone for a role, or the
-  trigger is disabled, is refused at start-up. So is one where kept roles have lost the trigger that keeps
-  the owner's role in use.
+  trigger is disabled, is refused at start-up.
 - **Each statement is asked as it runs,** as every policy is. A resource is opened with its owner on the
   list, and those rows pass like any other. The owner sees the resource from the moment its row names it, so
   a read rule that asks the resources seen, `DocumentsISee.Ids()`, lets the owner write the member rows of a resource it has just opened, in the
-  same save; and an owner holds every key the rules state, so state the key
-  that changes the members among them where a caller opens a resource as itself. And an owner that hands
-  its own resource on, holding the keys by owning it alone, holds them no longer once the owner column has
+  same save; and an owner holds the permissions said for the owner, so let it hold the one that locks the
+  members where a caller opens a resource as itself. And an owner that hands
+  its own resource on, holding the permissions by owning it alone, holds them no longer once the owner column has
   changed: the rows a hand-over writes after that are not its to write, under the lock or under a rule of
   yours that asks what the caller holds. Somebody who holds the key through a role, or
   [from above](#beside-an-organization), hands a resource on as itself. An owner's own hand-over is saved
@@ -849,13 +978,31 @@ document has, and any of the one goes with any of the others:
 
 | The rules say | Left out | Said, and what you answer then |
 |---|---|---|
-| **Who a member is** | the caller's own id, or a claim (`members`) | `members: MemberSource.Resolved(...)`: an id you resolve for the caller, such as its place in the organization. You answer it with an `ICallerMember<TResourceId, TMemberId>`. |
-| **Where the roles come from** | declared in the rules, held by name (`roles`) | `rolesKeptElsewhere: new(...)`: rows you keep, held by their id. You answer which of them give a key with an `IRolesWithKey<TResourceId, TRoleId>`, and which there are with an `IMemberRoles<TResourceId, TRoleId>`. Or `rolesKept: true`: [rows a customer makes](#roles-a-customer-makes), kept for the resource, with nothing for you to answer. |
-| **Whether something above reaches it** | nothing: its members and its owner alone | `above: new(...)`, with a `seeKey`, and `HasMembers(..., at: ...)` for where the resource sits. You answer where the caller holds a key with an `IPlacesReached<TResourceId, TPlaceId>`. |
+| **Who a member is** | what follows from the member id: the caller's own id for one over a `Guid`, its seat for a seat of [Tenancy](#with-tenancy) | `members: MemberSource.Resolved(...)`: an id you resolve for the caller, such as its place in the organization. You answer it with an `ICallerMember<TResourceId, TMemberId>`. |
+| **Where the roles come from** | always said: `Roles.Fixed([...])`, declared in the rules, held by name | `Roles.External(...)`: rows you keep, held by their id. You answer which of them give a key with an `IRolesWithKey<TResourceId, TRoleId>`, and which there are with an `IMemberRoles<TResourceId, TRoleId>`. Or `Roles.Custom(...)`: [rows a customer makes](#roles-a-customer-makes), kept for the resource, with nothing for you to answer. |
+| **Whether something above reaches it** | nothing: its members and its owner alone | `reachFromAbove: ...`, with a permission marked `EveryMember`, and `[At]` on the property of the resource's class that says where it hangs. You answer where the caller holds a key with an `IPlacesReached<TResourceId, TPlaceId>`. |
 
 So the people of an organization can be the members of a resource whose roles are its own, declared in its
 rules or made by a customer; or its roles can be the organization's as well; with or without a key held
 higher up reaching it.
+
+**Reach from above** is what lets whoever runs a part of the organization act on what hangs there without being
+put on each resource. Ada holds the administrators' role at the root, and reaches every crate of the depot; Ben
+holds `crates.scrap` at bay A, and scraps the crates that stand there, and no other; Piet is on crate 17 as one
+of its porters, and holds there what his role gives, wherever the crate stands. And a crate whose owner has left
+is still reached by somebody, who can hand it to a new owner: through its members alone, it would be nobody's to
+hand on.
+
+```mermaid
+flowchart TB
+    Root["the depot's root<br/>Ada: the administrators' role"] --> BayA["bay A<br/>Ben: crates.scrap"]
+    Root --> BayB["bay B"]
+    BayA --> Crate17["crate 17<br/>[At] BayId = bay A<br/>Piet: on its porters, a role"]
+    BayB --> Crate21["crate 21<br/>[At] BayId = bay B"]
+    Crate17 -. "Ada and Ben, from above" .- BayA
+    Crate21 -. "Ada, from above" .- BayB
+```
+
 A crate in a depot, with every one of the three said:
 
 ```csharp
@@ -863,18 +1010,38 @@ A crate in a depot, with every one of the three said:
 [Member<CratePorterId, PorterId, DepotRoleId, Crate>]
 public sealed partial class CratePorter;
 
-public static MembershipRules Rules { get; } = new(
-    "crates",
-    keys: ["crates.scrap"],                                         // what the owner holds by owning
-    members: MemberSource.Resolved("depot/caller_porter"),
-    seeKey: "crates.see",
-    ownerRole: "crate-lead",                                        // what your IMemberRoles finds the owner's role by
-    memberKeys: MemberKeys.AllBut("crates.move", "depot.manage"),   // what no role gives on a crate
-    rolesKeptElsewhere: new("depot/roles_with_key"),
-    above: new("depot/bays_where_i_hold"));
+[AggregateRoot<CrateId>]
+public sealed partial class Crate
+{
+    [At] public BayId BayId { get; private set; }               // where the crate stands: what reaches it from above
+    [Owner] public PorterId OwnerId { get; private set; }
+    public partial IReadOnlyList<CratePorter> Porters { get; }
+}
 
-// OnModelCreating: the members, and where a crate sits
-modelBuilder.Entity<Crate>().HasMembers(crate => crate.Porters, crate => crate.OwnerId, at: crate => crate.BayId);
+[Permissions]
+public static class CratePermissions
+{
+    [On<Crate>(EveryMember = true)] public const string See = "crates.see";
+    [On<Crate>] public const string Pack = "crates.pack";
+    [On<Crate>(Owner = false, InRoles = false)] public const string Move = "crates.move";   // held from above alone
+    [On<Crate>] public const string Scrap = "crates.scrap";
+}
+
+// The depot's functions in the database, each named once, by its logical name
+public static class DepotFunctions
+{
+    public static DatabaseFunction CallerPorter { get; } = new("depot", "caller_porter");
+    public static DatabaseFunction RolesWithKey { get; } = new("depot", "roles_with_key");
+    public static DatabaseFunction BaysWhereIHold { get; } = new("depot", "bays_where_i_hold");
+}
+
+public static MembershipRules Rules { get; } = MembershipRules.For<Crate>(
+    Roles.External(DepotFunctions.RolesWithKey, otherKeys: OtherKeys.AllBut("depot.manage")),   // the depot's roles; not its own key
+    members: MemberSource.Resolved(DepotFunctions.CallerPorter),
+    reachFromAbove: DepotFunctions.BaysWhereIHold);
+
+// OnModelCreating: the members; where a crate stands is its [At] property
+modelBuilder.Entity<Crate>().HasMembers(crate => crate.Porters);
 
 // Services: the resource, with the class that answers for the depot
 services.AddCrateMembership<DepotContext, CratesInTheDepot>(CrateMembership.Rules);
@@ -909,14 +1076,9 @@ public sealed class CratesInTheDepot(DepotDesk desk, DepotContext db)
                select path.BayId;
     }
 
-    // Which roles there are, and which is the owner's: what the admission asks before a role is given
+    // Which roles there are: what the admission asks before a role is given
     public async ValueTask<bool> ExistsAsync(DepotRoleId role, CancellationToken cancellationToken)
         => await db.Roles.AnyAsync(kept => kept.Id == role && kept.InUse, cancellationToken);
-
-    public async ValueTask<DepotRoleId?> FindOwnerRoleAsync(CancellationToken cancellationToken)
-        => await db.Roles.Where(kept => kept.Name == CrateMembership.Rules.OwnerRole && kept.InUse)
-            .Select(kept => (DepotRoleId?)kept.Id)
-            .FirstOrDefaultAsync(cancellationToken);
 }
 ```
 
@@ -928,12 +1090,19 @@ public sealed class CratesInTheDepot(DepotDesk desk, DepotContext db)
   `PlacesReached` is asked about a caller `Find` answered nobody for as well. Say there too whether the
   caller still counts: answered from the caller's id alone, it lets somebody you let go keep what they held.
 - **A role gives what the rules let it.** Whatever a role holds where it is kept, it gives a member only a
-  key within `memberKeys`, and no key from above is cut by that list: it is about members.
-- **Seen from above by the key that sees.** A caller who holds `seeKey` where the resource sits, or above
-  it, sees the resource as its members do, and holds on it whatever else it holds there. Without that key
-  the resource is not there for it, so rules that reach from above name one. The questions answer only
+  permission of the crate a role may give (`InRoles`), or a key of another module `otherKeys` lets through:
+  `OtherKeys.AllBut("depot.manage")` lets every key through but the depot's own, and left out none is. No key
+  from above is cut by that: it is about members.
+- **Seen from above by the permission every member holds.** A caller who holds `crates.see` where the crate
+  stands, or above it, sees the crate as its porters do, and holds on it whatever else it holds there, but for
+  a permission marked `FromAbove = false`. Without it the crate is not there for it, so rules that reach from
+  above have a permission marked `EveryMember`, or are refused where they are made. The questions answer only
   for what the caller sees. A reach says where one key is held, seen or not, as the function for it does:
   in a statement of your own, put the reach that sees in front, `db.Crates.Within(seen).Within(act)`.
+- **Where a crate stands is a fact of the crate.** `[At]` marks the one property of the aggregate root that says
+  so, never nullable: a crate that stands nowhere could not be reached from above
+  ([DDD00097](diagnostics.md#ddd00097)). The mapping and the functions read it there, so rules that reach from
+  above a class that marks none are [DDD00098](diagnostics.md#ddd00098).
 - **Members come first.** A caller that holds a key as a member and from above holds it as a member:
   `Via` is `Members`, then `Above`.
 - **Held from above for as long as it is seen.** Only you know until when a key is held above, so the
@@ -944,14 +1113,14 @@ public sealed class CratesInTheDepot(DepotDesk desk, DepotContext db)
   that asks, [on the context it runs on](#inside-your-own-statements).
 
 **On Postgres** the [four functions](#on-postgres-the-second-lock) ask functions of yours, each by the
-logical name the rules give, `owner/name`: one without parameters that answers the caller's member id or
-`NULL`, and two that take a key and answer the role ids, and the places. You define them as
-[a contribution of your own](row-level-security.md#policies-a-package-ships), which the project that runs
-the export lists, `[assembly: UseRowAccessContribution(typeof(DepotFunctions))]`, beside the resource's the
+`DatabaseFunction` the rules name, its logical name `owner/name`: one without parameters that answers the
+caller's member id or `NULL`, and two that take a key and answer the role ids, and the places. You define them
+as [a contribution of your own](row-level-security.md#policies-a-package-ships), which the project that runs
+the export lists, `[assembly: UseRowAccessContribution(typeof(DepotRowAccess))]`, beside the resource's the
 package writes:
 
 ```csharp
-public sealed class DepotFunctions : IRowAccessContribution
+public sealed class DepotRowAccess : IRowAccessContribution
 {
     public string Owner => "depot";
 
@@ -969,7 +1138,7 @@ public sealed class DepotFunctions : IRowAccessContribution
             Functions:
             [
                 // depot/caller_porter: runs as its owner, and is granted to nobody
-                new ContributedFunction("caller_porter", "", "uuid",
+                new ContributedFunction(DepotFunctions.CallerPorter.Name, "", "uuid",
                     $"SELECT p.{id} FROM {RowAccessModel.Table(porters)} p WHERE p.{user} = {{caller:uid}} AND p.{active}",
                     SecurityDefiner: true),
                 // depot/roles_with_key and depot/bays_where_i_hold: each takes the key as text, and answers a set
@@ -980,20 +1149,23 @@ public sealed class DepotFunctions : IRowAccessContribution
 }
 ```
 
-- **A logical name is a text,** so the package refers to nothing of yours. The export refuses a name that
-  nothing it is written with defines, and the start-up check refuses functions written from rules that name
-  other ones.
+- **A function is named once,** as a `DatabaseFunction` value the rules and your contribution both read, so
+  nothing is typed twice. The export refuses a name that nothing it is written with defines, and the start-up
+  check refuses functions written from rules that name other ones.
 - **Grant them to nobody.** The four functions run as their owner, so yours need not be executable by a
   caller, and a caller cannot ask who it is or which roles give what.
 - **Answer for the caller by a condition of your own,** its id or a claim, and never by a policy. The four
   functions ask yours as their owner, past whatever policies your tables have, so a function that reads
   "the caller's rows" answers for everybody's. The two that take a key are never asked without one.
-- **A host whose database answers nothing itself leaves the names out:** `MemberSource.Resolved()`, `new()`.
+- **A host whose database answers nothing itself names no function:** `MemberSource.Resolved()` and
+  `Roles.External()`. Rules that reach from above say `reachFromAbove: true` then, and the place's function
+  follows from its type, which only a package that keeps the places answers.
 
 Where the organization is [Tenancy](tenancy.md), a member is a seat, the roles can be the tenant's, and
-the place is an organization unit. The class is then [written for you](#with-tenancy), and the three
-functions are Tenancy's own, `tenancy/caller_seat`, `tenancy/roles_with_key` and
-`tenancy/units_where_i_hold`. Neither package references the other.
+the place is an organization unit. The class is then [written for you](#with-tenancy), and the functions are
+Tenancy's own, `TenancyFunctions.CallerSeat`, `TenancyFunctions.RolesWithKey` and
+`TenancyFunctions.UnitsWhereIHold`, of which the rules name the roles' alone. Neither package references the
+other.
 
 ## Roles a customer makes
 
@@ -1004,9 +1176,9 @@ given on one resource and counts only there. That makes three places a role can 
 
 | Where a role comes from | A member holds it by | Who makes it | What it gives is read from |
 |---|---|---|---|
-| Declared in the rules (`roles`) | its name, `NamedRole` | you, in code | the rules |
-| Kept for the resource (`rolesKept: true`) | the id of your role class | a customer, at run time | the role's row, in your own context |
-| Kept elsewhere (`rolesKeptElsewhere: new(...)`) | the id of whatever keeps it | whoever keeps it | what you answer, [beside an organization](#beside-an-organization) |
+| Declared in the rules, `Roles.Fixed([...])` | its name, `NamedRole` | you, in code | the rules |
+| Kept for the resource, `Roles.Custom(...)` | the id of your role class | a customer, at run time | the role's row, in your own context |
+| Kept elsewhere, `Roles.External(...)` | the id of whatever keeps it | whoever keeps it | what you answer, [beside an organization](#beside-an-organization) |
 
 A plot in a garden, whose roles each garden makes for itself:
 
@@ -1027,13 +1199,20 @@ public sealed partial class PlotRole
 [Member<PlotGardenerId, UserId, PlotRoleId, Plot>]
 public sealed partial class PlotGardener;
 
-public static MembershipRules Rules { get; } = new(
-    "plots",
-    keys: ["plots.see", "plots.plant", "plots.water", "plots.fence", "plots.sell"],
-    roles: [new("tender", ["plots.see", "plots.plant", "plots.water"]), new("waterer", ["plots.see", "plots.water"])],
-    seeKey: "plots.see",
-    memberKeys: MemberKeys.Only("plots.see", "plots.plant", "plots.water", "plots.fence"),
-    rolesKept: true);                                             // roles are rows; the roles above are the starter roles
+[Permissions]
+public static class PlotPermissions
+{
+    [On<Plot>(EveryMember = true)] public const string See = "plots.see";
+    [On<Plot>] public const string Plant = "plots.plant";
+    [On<Plot>] public const string Water = "plots.water";
+    [On<Plot>(LocksMembers = true)] public const string Fence = "plots.fence";
+    [On<Plot>(InRoles = false, LocksOwner = true)] public const string Sell = "plots.sell";   // the owner's alone
+}
+
+// Roles are rows; the roles named here are the starter roles every garden begins with
+public static MembershipRules Rules { get; } = MembershipRules.For<Plot>(
+    Roles.Custom(starters: [new("tender", [PlotPermissions.See, PlotPermissions.Plant, PlotPermissions.Water]),
+                            new("waterer", [PlotPermissions.See, PlotPermissions.Water])]));
 
 // OnModelCreating: the package's part of a role, then yours
 modelBuilder.Entity<PlotRole>(role =>
@@ -1051,10 +1230,10 @@ services.AddPlotMembership<GardenContext>(PlotMembership.Rules);
 
 ```mermaid
 flowchart LR
-    Rules["MembershipRules<br/>rolesKept, memberKeys,<br/>the starter roles"] -- "made once<br/>for each scope" --> Role["PlotRole<br/>a row a customer renames,<br/>gives keys, archives"]
+    Rules["MembershipRules<br/>Roles.Custom,<br/>the starter roles"] -- "made once<br/>for each scope" --> Role["PlotRole<br/>a row a customer renames,<br/>gives keys, archives"]
     Role -- "given on one plot" --> Member["PlotGardener<br/>holds the role by its id"]
     Member --> Question["who holds a key<br/>one statement"]
-    Role -- "its keys, cut by memberKeys" --> Question
+    Role -- "its keys, cut to what<br/>a role may give" --> Question
 ```
 
 <details>
@@ -1076,9 +1255,9 @@ foreach (var draft in StarterRoles.Missing(PlotMembership.Rules, existing))
 
 A starter role is made once. It is told by what it was made from, `MadeFrom`, and not by its name or its
 status, so one a customer renamed or archived is not made again, and the unique index over your scope and
-`MadeFrom` keeps two requests that ask at the same moment apart. The owner's role is found the same way: the
-role in use made from the starter role the rules name as the owner's (`ownerRole`, or `owner`, which the
-rules add). A customer may call it what it likes.
+`MadeFrom` keeps two requests that ask at the same moment apart. No starter role is the owner's: the owner holds
+no role, so a customer renames, re-keys and archives every one of them, and a scope with no roles at all still
+has resources and owners.
 
 A role is made with your constructor, and changed with three operations of the package's. Each answers what
 happened, so you raise your own events: the package raises none.
@@ -1094,13 +1273,13 @@ role.Archive(PlotMembership.Rules);
 - **Each takes the resource's rules.** A role is a row and carries none: the rules are your one declaration
   of what a member's role can give and of the codes it refuses under, and handing them in keeps both out of
   the row. The constructor of your class is where you say them for a new role.
-- **A key is one a member's role can give.** Every key of a role is within the rules' `memberKeys`, or the
-  change is refused, `plots.key-not-for-members`, naming the keys. The list is asked again where a role's
-  keys are read, so a key you take out of `memberKeys` later is given by no role, whatever its row still
-  holds. Left out, `memberKeys` is every key the starter roles list, the owner's among them. Say it with
-  `MemberKeys.Only(...)` where a customer makes the roles: under `MemberKeys.AllBut(...)` a customer
-  chooses from every key there is but the exceptions, one a module adds later among them. Rules under
-  which a role could give nothing at all are refused where they are declared.
+- **A key is one a member's role can give.** Every key of a role is a permission of the plot a role may give,
+  `InRoles`, or the change is refused, `plots.key-not-for-members`, naming the keys: `plots.sell` is in no
+  role. That is asked again where a role's keys are read, so a permission you mark `InRoles = false` later is
+  given by no role, whatever its row still holds. Roles that hold keys of other modules as well, an
+  inspection's on a project say, say so with `otherKeys`: `Roles.Custom(starters: [...], otherKeys:
+  OtherKeys.AllBut(...))` lets every other key through but the ones named, those the module declares at
+  another level and those no role gives among them.
 - **A name is trimmed and not empty,** at most 120 characters, and a description is at most 1000: either is
   refused under `plots.role-name-invalid`, which names the field. `Rename` takes both as they are to be:
   no description, `null`, clears the one there was. That a name is used once is an index you declare, over
@@ -1108,27 +1287,23 @@ role.Archive(PlotMembership.Rules);
   no such column.
 - **An archived role gives nothing from then on,** is not given again, and stays on the members that hold
   it, so what they held still has a name. It changes no more (`plots.role-archived`).
-- **The role every owner holds is not archived** (`plots.owner-role-stays`): nobody could be made an owner
-  after. It is renamed and given other keys like any role. What the owner may do does not hang on it: the
-  owner holds every key of the resource by owning it. On Postgres a trigger the package writes on your role
-  table refuses it as well, whoever writes the row: your application's own work and the table's owner
-  included, since no command archives that role either. A role is archived and never removed, so the trigger
-  holds archiving; who may delete a row of the table is your rules', and callers need no DELETE on it.
+- **Every role is archived alike.** None is the owner's: what the owner may do is the permissions said for the
+  owner, and does not hang on a role. A role is archived and never removed; who may delete a row of the table is
+  your rules', and callers need no DELETE on it.
 - **Where a role came from is written once.** `IsCustomRole` maps `MadeFrom` as fixed once the row is there
   (`IsFixedAfterInsert`): a save that changed it is refused, and where the export writes the privileges from
-  the policies, a caller may update every column of a role but that one. The owner's role is found by it.
+  the policies, a caller may update every column of a role but that one. A starter role is found by it.
 - **Who may make, change or archive a role** is a requirement on your command, like
   [who may give one](#who-may-give-a-role-is-yours-to-decide).
 
 **Whose a role is, is yours.** The package assumes no customer, no tenant and no column for one. You add
 the column to your class, set it in your constructor, and keep one customer's rows from another's by your
 own rule, as for any aggregate: a query filter, or a [row access rule](row-level-security.md#row-access-rules-written-in-c).
-What the package asks about roles before a role is given, whether a role is one in use and which is the
-owner's (`MemberAdmission`), it reads through the request's own context, so your rule applies to it: a role
-of another customer is no role there is. A query filter applies where a role's keys are read as well,
-[inside the access questions' statement](#inside-your-own-statements). Where a request reads more than one
-scope's roles and two of them are the owner's, the package says so and picks neither. An application without
-customers keeps one set of roles, and declares the two indexes over `Name` and over `MadeFrom` alone. An
+What the package asks about roles before a role is given, whether a role is one in use (`MemberAdmission`), it
+reads through the request's own context, so your rule applies to it: a role of another customer is no role there
+is. A query filter applies where a role's keys are read as well,
+[inside the access questions' statement](#inside-your-own-statements). An application without customers keeps one
+set of roles, and declares the two indexes over `Name` and over `MadeFrom` alone. An
 application that finds a scope's roles some other way registers its own `IMemberRoles<TResourceId, TRoleId>`
 before the resource, and the admission asks that.
 
@@ -1136,7 +1311,7 @@ before the resource, and the admission asks that.
 statement that reads the members, so every question stays one statement. On Postgres the
 [four functions](#on-postgres-the-second-lock) join the role table of the same context, for a role in use
 that holds the key: no function of yours is asked, and nothing is registered for the roles. Their
-fingerprint covers that the roles are kept and what a member's role can give, so the start-up check refuses
+fingerprint covers that a customer makes the roles and what a member's role can give, so the start-up check refuses
 functions written before either changed; a starter role more changes no function. A second resource with
 kept roles declares a role class, rules and a mapping of its own, and neither's roles are the other's.
 
@@ -1147,8 +1322,8 @@ asked. Who could write such a row, and what holds each:
 
 - **Your application** asks the admission before a role is given, `RequireRoleAsync`, in a request your rule
   applies to: a role of another customer is no role there is.
-- **A caller that writes the rows itself,** past your application, is held by the lock where the rules name
-  `changeMembersKey`: a role it adds to a member, or changes a member's role into, is one it sees in your
+- **A caller that writes the rows itself,** past your application, is held by the lock where a permission
+  is marked `LocksMembers`: a role it adds to a member, or changes a member's role into, is one it sees in your
   role table. That is asked as the caller, under your [row access rules](row-level-security.md#row-access-rules-written-in-c)
   on the role table, so the rule that shows a caller its own customer's roles is the one that keeps another
   customer's off its resources. Say whose a role is in that rule, from the caller's token or a function of
@@ -1163,11 +1338,11 @@ asked. Who could write such a row, and what holds each:
   again; if a store of yours may have one, a query over your scope columns finds it.
 
 A role's row decides what everybody who holds the role may do, so who may change it is worth a rule in the
-database as well as a requirement on your command. The role table is your aggregate's and gets no policy
-from the package, only the trigger that keeps the owner's role in use: give it row access rules of its own,
-as for any aggregate callers can reach past your application. A rule that lets signed-in users read their
-own customer's roles and nobody write them is enough to turn row security on. The start-up check holds you to
-it: a role table without row security that a database role of `grantTo` may write is refused.
+database as well as a requirement on your command. The role table is your aggregate's and gets no policy and no
+trigger from the package: give it row access rules of its own, as for any aggregate callers can reach past your
+application. A rule that lets signed-in users read their own customer's roles and nobody write them is enough to
+turn row security on. The start-up check holds you to it: a role table without row security that a database role
+which may ask the resource's functions may write is refused.
 
 ## With Tenancy
 
@@ -1177,8 +1352,9 @@ Membership's generator notices Tenancy and writes, for each member class whose m
 that joins the two and a registration named after the resource.
 
 **What you write.** The member class says that a member is a seat, by taking Tenancy's seat id as its member
-id. The rules say the three things, each with the function of Tenancy's that answers it in the database.
-And one registration takes the place of `AddCourseMembership`:
+id, and who a member is follows from that. The rules say where the roles come from and whether a key held in
+the organization reaches a course; Tenancy's functions answer both in the database without being named. And
+one registration takes the place of `AddCourseMembership`:
 
 ```csharp
 namespace Campus.Courses;
@@ -1187,25 +1363,38 @@ namespace Campus.Courses;
 [Member<CourseTutorId, SeatId, CourseRoleId, Course>]
 public sealed partial class CourseTutor;
 
-public static class CourseMembership
+[AggregateRoot<CourseId>]
+public sealed partial class Course
 {
-    public static MembershipRules Rules { get; } = new(
-        "courses",
-        keys: ["courses.see", "courses.grade", "courses.outline", "courses.dissolve"],
-        roles: [new("tutor", ["courses.see", "courses.grade"]), new("convenor", ["courses.see", "courses.outline"])],
-        members: MemberSource.Resolved("tenancy/caller_seat"),      // who a member is: the caller's seat
-        seeKey: "courses.see",
-        memberKeys: MemberKeys.Only("courses.see", "courses.grade", "courses.outline"),
-        above: new("tenancy/units_where_i_hold"),                   // what reaches a course: a key held at its unit, or above
-        rolesKept: true);                                           // where the roles come from: rows of your role class
+    [Owner] public SeatId OwnerSeatId { get; private set; }
+    [At] public OrganizationUnitId UnitId { get; private set; }    // where a course hangs in the organization
+    public partial IReadOnlyList<CourseTutor> Tutors { get; }
 }
 
-// OnModelCreating, in the context of the courses: Tenancy's read model beside them, and where a course sits
+[Permissions]
+public static class CoursePermissions
+{
+    [On<Course>(EveryMember = true)] public const string See = "courses.see";
+    [On<Course>] public const string Grade = "courses.grade";
+    [On<Course>] public const string Outline = "courses.outline";
+    [On<Course>(InRoles = false)] public const string Dissolve = "courses.dissolve";
+    [AtUnit] public const string Open = "courses.open";             // asked at a unit, as Tenancy asks it
+}
+
+public static class CourseMembership
+{
+    public static MembershipRules Rules { get; } = MembershipRules.For<Course>(
+        Roles.Custom(starters: [new("tutor", [CoursePermissions.See, CoursePermissions.Grade]),
+                                new("convenor", [CoursePermissions.See, CoursePermissions.Outline])]),
+        reachFromAbove: true);                                      // a key held at a course's unit, or above it
+}
+
+// OnModelCreating, in the context of the courses: Tenancy's read model beside them
 modelBuilder.AddTenancyReadModel<TenantId, SeatId, OrganizationUnitId, RoleId>("tenancy");
 modelBuilder.Entity<Course>(course =>
 {
     course.ScopeToTenant(row => row.TenantId);
-    course.HasMembers(row => row.Tutors, row => row.OwnerSeatId, at: row => row.UnitId);
+    course.HasMembers(row => row.Tutors);
 });
 
 // Services: the one registration, and the course's check for your requests
@@ -1215,7 +1404,7 @@ services.AddCourseMemberAccess<ICampusRequest>();
 
 ```mermaid
 flowchart TB
-    Rules["MembershipRules<br/>members, above,<br/>where the roles come from"] --> Questions["IMemberQuestions<br/>one statement"]
+    Rules["MembershipRules<br/>where the roles come from,<br/>reach from above"] --> Questions["IMemberQuestions<br/>one statement"]
     Questions -- "who is the caller,<br/>where is the key held" --> Written["GeneratedCourseMembershipWithTenancy<br/>written into your project"]
     Written -- "the seat of the caller,<br/>the units where it holds the key" --> Tenancy["Tenancy<br/>its questions and answers"]
 ```
@@ -1234,7 +1423,7 @@ internal static partial class GeneratedMembershipWithTenancyExtensions
     public static IServiceCollection AddCourseMembershipWithTenancy<TContext>(this IServiceCollection services, MembershipRules rules)
         where TContext : DbContext
     {
-        if (rules.Members.Kind != MemberSourceKind.Resolved)
+        if (rules.Members.Kind is MemberSourceKind.CallerId or MemberSourceKind.Claim)
         {
             throw new ArgumentException("...");                  // a member is a seat, which no token carries
         }
@@ -1286,14 +1475,15 @@ Tenancy's role id:
 | | A resource's own roles | The tenant's roles on the member list |
 |---|---|---|
 | The member class | `[Member<CourseTutorId, SeatId, CourseRoleId, Course>]` | `[Member<LabTechnicianId, SeatId, RoleId, Lab>]` |
-| The rules say | `rolesKept: true` | `rolesKeptElsewhere: new("tenancy/roles_with_key")`, and `ownerRole:` the role pack an owner's role is made from |
-| A role of the organization | reaches the resource from above | reaches it from above, and gives its keys where it is given on the member list, cut by `memberKeys` |
+| The rules say | `Roles.Custom(...)` | `Roles.External(TenancyFunctions.RolesWithKey)` |
+| A role of the organization | reaches the resource from above | reaches it from above, and gives its keys where it is given on the member list, cut to what a role may give |
 
 What the written class answers:
 
 - **A member is the caller's seat,** as Tenancy found it for the request. The application's own work in a
-  tenant is nobody's member. It holds every key on a resource whose rules name the scope it runs in
-  (`systemScopes`), and nothing on any other. Somebody without an active seat in
+  tenant is nobody's member. It holds every key on a resource whose rules let the scope it runs in through,
+  the module's own unless they say otherwise, and nothing on any other: Tenancy's own work holds nothing on a
+  course ([System work](#system-work)). Somebody without an active seat in
   the tenant is refused where a question refuses, before anything is read, with Tenancy's own code:
   `tenancy.not-seated`, `tenancy.seat-suspended`, `tenancy.tenant-required`. A suspended seat is nobody:
   the rows that name it still apply, and reach nothing.
@@ -1302,23 +1492,21 @@ What the written class answers:
   caller reads, every seat of the tenant unless a [read rule on your seat class](tenancy.md#who-reads-the-seats-a-default-you-may-replace)
   narrows that on Postgres; a seat the caller does not read is then refused as one that does not exist is.
 - **A key held in the organization reaches the resource from above:** held at the unit the resource sits at,
-  or at one above it. `Via` says `Above`. Only a key of Tenancy's catalogue can be held there, so add the
-  resource's keys to it: mark the module's list of them with `[TenancyPermissions]`, and the host adds it
-  ([A module states its keys once](tenancy.md#a-module-states-its-keys-once)). A key you leave out, one that is the owner's
-  alone say, is held by nobody from above, and asking about it is no mistake. A role given in the
+  or at one above it. `Via` says `Above`. Only a key of Tenancy's catalogue can be held there, and the
+  permissions of the module's `[Permissions]` classes are in it already: Tenancy's generator lists them, and
+  the host adds every module's list ([A module states its keys once](tenancy.md#a-module-states-its-keys-once)).
+  A permission marked `FromAbove = false` is held by nobody from above, and asking about it is no mistake. A role given in the
   organization for a while reaches the resource until the moment it ends. The hold does not name that
   moment, as [beside any organization](#beside-an-organization), so a rule of yours that reads the hold's
   end asks Tenancy for the end of what is held there.
 - **The tenant's roles, where the member class holds them.** The class then also answers which of the
-  tenant's roles in use give a key, whether a role is one of them, and which is the owner's: the tenant's
-  role in use made from the pack `ownerRole` names. A tenant that archives that role has none: naming an
-  owner is refused with `no-owner-role` until it has one again, and the archived role gives nothing where
-  it is still held.
+  tenant's roles in use give a key, and whether a role is one of them. An archived role gives nothing where it
+  is still held.
 - **Still one statement.** Tenancy's answers are queries over its read model in your context, put into the
   statement that asks.
-- **Rules that take a member from the caller itself are refused** when the application starts. A seat's id
+- **Rules that take a member from the caller's token are refused** when the application starts. A seat's id
   is over the same value as a user's, so `MemberSource.CallerId` would otherwise be accepted and read a user
-  for a seat.
+  for a seat. Left out, who a member is follows from the seat id, as it should.
 - **A port you registered before stays,** as with a class of your own.
 
 It is written into the project that gets `AddCourseMembership`, the one that declares the member class or
@@ -1345,13 +1533,14 @@ package. And only for seats:
 
 **What stays yours.**
 
-- **The rules.** The three entries are yours to say, and to leave out: a resource of a tenant can take its
+- **The rules.** What they say is yours, and so is what they leave out: a resource of a tenant can take its
   members from somewhere else, keep its roles any of the three ways, or be reached by nothing from above.
-  The three names are those of Tenancy's own functions; an application whose database answers nothing itself
-  leaves them out, `MemberSource.Resolved()`, `new()`.
-- **Your context.** It maps Tenancy's read model beside the resource, `AddTenancyReadModel`, or
-  `AddTenancyReadFunctions` on a database that [keeps the rights itself](tenancy.md#modules-read-through-functions),
-  and says where a resource sits, `at:`.
+  Tenancy's functions answer who the caller is and where it holds a key without being named; the tenant's roles
+  are named, `Roles.External(TenancyFunctions.RolesWithKey)`, since roles can be kept in other ways.
+- **Your context and your class.** The context maps Tenancy's read model beside the resource,
+  `AddTenancyReadModel`, or `AddTenancyReadFunctions` on a database that
+  [keeps the rights itself](tenancy.md#modules-read-through-functions). Where a resource sits is a fact of its
+  class, `[At]` on its unit.
 - **The tenant on your rows.** Membership knows no tenant. The resource and your role class are kept to
   their tenant by Tenancy's own rule, `ScopeToTenant`, like every row of a tenant, and a tenant's starter
   roles are made when you set the tenant up.

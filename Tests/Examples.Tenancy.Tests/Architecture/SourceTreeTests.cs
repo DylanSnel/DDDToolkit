@@ -156,7 +156,7 @@ public sealed partial class SourceTreeTests
         {
             entities.Should().Contain(typeof(CrewMember));
             events.Should().Contain(typeof(CrewRoleGiven));
-            invariants.Should().Contain(typeof(Project.OwnerStaysOnTheCrewWithARole));
+            invariants.Should().Contain(typeof(Project.OwnerStaysOnTheCrew));
             values.Should().Contain(typeof(ProjectState));
         }
     }

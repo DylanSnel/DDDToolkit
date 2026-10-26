@@ -444,13 +444,14 @@ Warning, on the aggregate a `[Member<TId, TMemberId, TRoleId, TResource>]` class
 (`DDDToolkit.Supporting.Membership`). The package's generator writes a private `Members` property on that
 aggregate, a `MemberList<TMember, TId, TMemberId, TRoleId>`, and could not: the message lists what it could
 not tell. It needs exactly one of each on the aggregate: a get-only `partial` collection of the member class
-(`IReadOnlyList<T>`, `IReadOnlyCollection<T>` or `IEnumerable<T>`); a property of `TMemberId`, the owner; a
-static property or field of `MembershipCodes`; and `TId` must have a `Create()`, which the generator writes for an
+(`IReadOnlyList<T>`, `IReadOnlyCollection<T>` or `IEnumerable<T>`); the one property of `TMemberId` marked
+`[Owner]`; at most one static property or field of `MembershipCodes` (none: the generator writes `Codes` under the
+resource's name); and `TId` must have a `Create()`, which the generator writes for an
 `[EntityId<Guid>]` and an id over a `long` declares itself. A member id that
 another generator writes, the id of an `[AggregateRoot<Guid>]`, cannot be seen by it: declare that id with
 `[EntityId<Guid>]` yourself. Add what is missing,
-for example `public static MembershipCodes Codes { get; } = MembershipCodes.Under("documents");`. If the
-shape cannot be told (two properties of the member's id, codes kept elsewhere), write
+for example `[Owner] public UserId OwnerId { get; private set; }`. If the
+shape cannot be told (codes kept elsewhere), write
 the property by hand on the aggregate, which also silences the warning:
 `private MemberList<DocumentShare, DocumentShareId, UserId, NamedRole> Members => new(_shares, OwnerId, codes);`.
 Do not rename a hand-written list to dodge the warning: any member of that `MemberList` type counts.
@@ -489,19 +490,6 @@ protected inside another (make it a non-generic internal class), for an instance
 with no field, for two methods that are one field (two overloads, or `GetX` beside `GetXAsync`: rename one or give it
 a `[GraphQLName]`), and for a method whose name another has and that takes a parameter of a type another generator
 writes, such as a data loader's interface (give the method a name of its own).
-
-## DDD00063
-
-Error, on a property or field marked `[TenancyPermissions]` (`DDDToolkit.Supporting.Tenancy.Catalogue`) that the
-project composing the modules cannot read as `Type.Member`, so the module's keys would be missing from the
-catalogue. Make it `public static`, readable (a field or a property with a getter), declared in a class that is
-not generic (nor nested in one), not in an extension block or a file-local type, not a static virtual or abstract
-interface member, and of a type that is a sequence of `Permission`:
-`[TenancyPermissions] public static IReadOnlyList<Permission> Permissions { get; } = [...];`. Every library's list
-is public, whether the library declares a module or not; only an application (an `Exe`) may keep its own list
-internal, though not private or protected.
-Do not also pass the list to `services.AddTenancyPermissions(...)`: the host's generated
-`services.AddTenancyPermissionsOfModules()` adds it, and the catalogue refuses a list added twice.
 
 ## DDD00064
 
@@ -800,6 +788,68 @@ default, which every request that states nothing takes, a command that forgot it
 application's own and may be a default, or put it on each request. Defaults that work: `[SignedIn]`, `[InTenant]`,
 `[RequiresKey(key)]` (for the whole tenant), and an application's own `[StatesRequirement]` attribute that allows an
 interface; several are `All`, in the order written.
+
+## DDD00090
+
+Warning, from the build that runs the Supabase export: the names of resources with members differ from the ones the
+newest access file recorded. A resource is named after its class, made plural (`Board` is `boards`), and the name
+is what its codes start with (`boards.already-member`) and what its database functions are called
+(`boards_i_see`). A class renamed on purpose that should keep its name says `[Members("Boards")]` on the class; one
+that should take the new name needs nothing, and the warning is gone once the new access file is written. Do not
+rename the class back to dodge it.
+
+## DDD00091
+
+Error, at `[Members("...")]` on a resource class: the name cannot be converted to a code and a function name. Write
+it as a class's name (`People`, `CraneBoards`) or as it comes out (`crane-boards`): letters and digits, `-` or `_`
+between words, starting with a letter, ending with neither separator. It is not made plural.
+
+## DDD00092
+
+Error, on a `[Permissions]` class or its constants (`DDDToolkit.Access`): the class is not `static`; a public
+`const string` has no level; a level (`[AtTenant]`, `[AtUnit]`, `[On<TResource>]`) is on a field that is no public
+`const string`, or on a constant of a class not marked `[Permissions]`; or one key is declared twice. Make the class
+`public static`, give each permission exactly the level where it is asked, and name a permission by its one
+constant.
+
+## DDD00093
+
+Error, on a constant marked `[On<TResource>]`: `TResource` is no resource with members (no
+`[Member<TId, TMemberId, TRoleId, TResource>]` class names it), or a second permission of that resource says
+`EveryMember`, `LocksMembers` or `LocksOwner`, or a key is declared twice on it. Name the aggregate root whose members
+hold it, and keep one permission per setting.
+
+## DDD00094
+
+Error, at `MembershipRules.For<TResource>(...)`: no permission is declared `[On<TResource>]` in this project or the
+projects it references. Declare the permissions asked on the resource in a `[Permissions]` class:
+`[On<Board>(EveryMember = true)] public const string View = "boards.view";`.
+
+## DDD00095
+
+Error, on a property or field a project marks `[TenancyPermissions]` by hand. Declare each permission as a
+`public const string` of a `public static` class marked `[Permissions]`, with its level (`[AtTenant]`, `[AtUnit]`
+or `[On<TResource>]`) and a `<summary>` for its description; Tenancy's generator writes the module's
+`DeclaredPermissions.All` from it and marks that. Remove the hand-written list, and any
+`services.AddTenancyPermissions(...)` call for it.
+
+## DDD00096
+
+Warning, at `[OrOwn]` on the id of a resource with members beside `[OnResource]`: the key the request requires is
+one the resource's owner holds by owning it (declared `[On<TResource>]` with `Owner = true`, the default), so the
+owner passes the key already. Remove `[OrOwn]`. Keep it only for a permission declared `Owner = false`.
+
+## DDD00097
+
+Error, at `[At]` (`DDDToolkit.Abstractions.Attributes`): it goes on one instance property of an aggregate root, the
+place the root hangs at, never nullable. Not on an entity inside an aggregate, not on a static property, not twice
+on one aggregate, not on a property that may be empty.
+
+## DDD00098
+
+Error, at `MembershipRules.For<TResource>(..., reachFromAbove: ...)`: `TResource` marks no property `[At]`. Mark the
+property that holds where it hangs `[At]` (an `OrganizationUnitId` beside Tenancy, a place of your own otherwise),
+or leave `reachFromAbove` out.
 
 ## Not a diagnostic: the owned type must carry the key part
 

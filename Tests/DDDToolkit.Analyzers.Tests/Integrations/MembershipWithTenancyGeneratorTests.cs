@@ -301,11 +301,10 @@ public class MembershipWithTenancyGeneratorTests
         PortsOf(result, "GeneratedLabMembershipWithTenancy`1").Should().BeEquivalentTo(
             "ICallerMember`2", "IMemberDirectory`2", "IPlacesReached`2", "IRolesWithKey`2", "IMemberRoles`2");
 
-        // Which roles give a key, which roles there are, and which is the owner's: found by the pack the rules name.
+        // Which roles give a key, and which roles there are: the tenant's, asked of Tenancy. None is the owner's.
         result.ShouldContain(File, "? tenancy.RolesWithKey(key)");
         result.ShouldContain(File, "row => row.Id.Equals(role) && row.Status == global::DDDToolkit.Supporting.Tenancy.RoleStatus.Active,");
-        result.ShouldContain(File, "_ownerRole = rules.OwnerRole;");
-        result.ShouldContain(File, "row => row.FromPack == pack && row.Status == global::DDDToolkit.Supporting.Tenancy.RoleStatus.Active");
+        result.ShouldNotContain(File, "_ownerRole", "the owner holds no role");
     }
 
     [Fact]
@@ -720,22 +719,21 @@ public class MembershipWithTenancyGeneratorTests
 
     // ------------------------------------------------------------------ what the registration does when it is called
 
-    private static MembershipRules CourseRules(MemberSource? members)
-        => new(
+    private static MembershipRules CourseRules(EmittedAssembly emitted, MemberSource? members)
+        => MembershipRules.Declare(
+            emitted.Type("Campus.Courses.Course"),
             "courses",
-            keys: ["courses.see", "courses.grade"],
-            roles: [new("tutor", ["courses.see", "courses.grade"])],
+            [new("courses.see", EveryMember: true), new("courses.grade")],
+            Roles.Custom(starters: [new("tutor", ["courses.see", "courses.grade"])]),
             members: members,
-            seeKey: "courses.see",
-            above: new("tenancy/units_where_i_hold"),
-            rolesKept: true);
+            reachFromAbove: true);
 
     [Fact]
     public void The_registration_registers_the_resource_with_the_class_that_answers_for_every_port_it_implements()
     {
         var emitted = Run(CampusWith(Startup("services.AddCourseMembershipWithTenancy<CampusContext>(rules);"), (Courses, "Courses.cs"))).Emit();
         var services = new ServiceCollection();
-        var rules = CourseRules(MemberSource.Resolved("tenancy/caller_seat"));
+        var rules = CourseRules(emitted, members: null);
 
         emitted.CallStatic("Campus.Startup", "Register", services, rules);
 
@@ -764,7 +762,7 @@ public class MembershipWithTenancyGeneratorTests
             .WithTenancyOnEntityFramework()).Emit();
         var services = new ServiceCollection();
 
-        emitted.CallStatic("Campus.Startup", "Register", services, CourseRules(MemberSource.Resolved("tenancy/caller_seat")));
+        emitted.CallStatic("Campus.Startup", "Register", services, CourseRules(emitted, members: null));
 
         var written = emitted.Type(Package + "GeneratedCourseMembershipWithTenancy`4").MakeGenericType(
             emitted.Type("Campus.CampusContext"), emitted.Type("Campus.Tenants.TenantId"), emitted.Type("Campus.Tenants.OrganizationUnitId"), emitted.Type("Campus.Tenants.RoleId"));
@@ -785,17 +783,20 @@ public class MembershipWithTenancyGeneratorTests
         // accepted by the resource's own registration, and read a user for a seat. Here that is a mistake, and said.
         var emitted = Run(CampusWith(Startup("services.AddCourseMembershipWithTenancy<CampusContext>(rules);"), (Courses, "Courses.cs"))).Emit();
 
-        foreach (var (members, said) in new[] { ((MemberSource?)null, "MemberSource.CallerId"), (MemberSource.Claim("app_metadata.seat"), "MemberSource.Claim") })
+        foreach (var (members, said) in new[] { (MemberSource.CallerId, "MemberSource.CallerId"), (MemberSource.Claim("app_metadata.seat"), "MemberSource.Claim") })
         {
             var services = new ServiceCollection();
 
-            FluentActions.Invoking(() => emitted.CallStatic("Campus.Startup", "Register", services, CourseRules(members)))
+            FluentActions.Invoking(() => emitted.CallStatic("Campus.Startup", "Register", services, CourseRules(emitted, members)))
                 .Should().Throw<TargetInvocationException>()
                 .WithInnerException<ArgumentException>()
-                .WithMessage("The rules 'courses' take a member from the caller itself (" + said + "), and AddCourseMembershipWithTenancy registers Course for members that are "
-                             + "seats of a tenant, which no token carries. Say members: MemberSource.Resolved(\"tenancy/caller_seat\") in the rules, or register Course with "
+                .WithMessage("The rules 'courses' take a member from the caller's token (" + said + "), and AddCourseMembershipWithTenancy registers Course for members that are "
+                             + "seats of a tenant, which no token carries. Leave members out of the rules, and a member is the caller's seat, or register Course with "
                              + "AddCourseMembership where its members are not seats.*");
             services.Should().BeEmpty("nothing is registered for rules that are refused");
         }
+
+        // Said by nothing, a member is the caller's seat, and the rules are taken.
+        emitted.CallStatic("Campus.Startup", "Register", new ServiceCollection(), CourseRules(emitted, members: null));
     }
 }

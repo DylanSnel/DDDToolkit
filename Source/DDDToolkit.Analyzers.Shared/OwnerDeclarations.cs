@@ -179,6 +179,67 @@ internal static class OwnerDeclarations
     }
 
     /// <summary>
+    /// DDD00097 for a property marked <c>[At]</c> where it is declared: an instance property of an aggregate root, the
+    /// one it marks, that is never empty. <see langword="null"/> where it is all of these.
+    /// </summary>
+    public static DiagnosticInfo? CheckPlace(GeneratorAttributeSyntaxContext context)
+    {
+        if (context.TargetSymbol is not IPropertySymbol { ContainingType: { } type } property)
+        {
+            return null;
+        }
+
+        var location = LocationInfo.From(((PropertyDeclarationSyntax)context.TargetNode).Identifier);
+        var at = type.Name + "." + property.Name;
+        if (property.IsStatic)
+        {
+            return DiagnosticInfo.Create(DiagnosticDescriptors.PlaceMisdeclared, location, at,
+                "is static, and marked [At]: where an aggregate hangs is a column of each row of it, so mark the instance property that says it");
+        }
+
+        if (!EntityDeclarations.IsAggregateRoot(type) && AggregateIdOf(type) is null)
+        {
+            return DiagnosticInfo.Create(DiagnosticDescriptors.PlaceMisdeclared, location, at,
+                "is marked [At], and '" + type.Name + "' is no aggregate root: what is reached from above is an aggregate, by the place its root hangs at, so mark the property on an [AggregateRoot<TId>]");
+        }
+
+        var marked = MarkedIn(type, KnownTypes.AtAttribute);
+        if (marked.Count > 1 && !SymbolEqualityComparer.Default.Equals(First(marked), property))
+        {
+            return DiagnosticInfo.Create(DiagnosticDescriptors.PlaceMisdeclared, location, at,
+                "is marked [At] beside " + DefinitionFactory.Listed(marked.Where(each => !SymbolEqualityComparer.Default.Equals(each, property)).Select(static each => "'" + each.Name + "'"))
+                + ": an aggregate hangs at one place, so keep the one that says it");
+        }
+
+        if (property.Type.NullableAnnotation == NullableAnnotation.Annotated || property.Type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T })
+        {
+            return DiagnosticInfo.Create(DiagnosticDescriptors.PlaceMisdeclared, location, at,
+                "is marked [At], and may be empty: an aggregate that hangs nowhere is reached from above by nobody, which is what [At] is for. Mark the property of where it always hangs, of a type that is never empty");
+        }
+
+        return null;
+    }
+
+    /// <summary>The properties of <paramref name="type"/> and the classes it derives from marked with <paramref name="attribute"/>, each once.</summary>
+    private static List<IPropertySymbol> MarkedIn(INamedTypeSymbol type, string attribute)
+    {
+        var found = new List<IPropertySymbol>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        for (var current = type; current is not null && current.SpecialType != SpecialType.System_Object; current = current.BaseType)
+        {
+            foreach (var property in current.GetMembers().OfType<IPropertySymbol>())
+            {
+                if (!property.IsIndexer && seen.Add(property.Name) && DefinitionFactory.HasAttribute(property, attribute))
+                {
+                    found.Add(property);
+                }
+            }
+        }
+
+        return found;
+    }
+
+    /// <summary>
     /// The id of <paramref name="type"/> where it is an aggregate root: declared one with an attribute, in any of the ways
     /// <see cref="EntityDeclarations"/> knows, or deriving from the toolkit's <c>AggregateRoot&lt;TId&gt;</c> by hand.
     /// <see langword="null"/> for any other type, a child entity among them.

@@ -409,6 +409,11 @@ public static partial class SupabaseMigrationBuild
                 output.WriteLine($"Supabase migrations: {entry.Status,-12} {Path.GetFileName(entry.Path)}");
             }
 
+            if (NamesChanged(reports) is { } namesChanged)
+            {
+                output.WriteLine("warning " + namesChanged);
+            }
+
             if (reports.All(report => report.IsInSync))
             {
                 return 0;
@@ -497,6 +502,30 @@ public static partial class SupabaseMigrationBuild
             caller.GetValueOrDefault("claims") ?? options.CallerFunctions.Claims);
 
         return true;
+    }
+
+    /// <summary>
+    /// DDD00090, once for the build, where the names of resources with members are not those the newest access files
+    /// recorded: what is gone, with the class it came from, and what is new. <see langword="null"/> where nothing
+    /// changed.
+    /// </summary>
+    internal static string? NamesChanged(IEnumerable<SupabaseMigrationReport> reports)
+    {
+        var renamed = reports.SelectMany(report => report.Renamed).ToList();
+        if (renamed.Count == 0)
+        {
+            return null;
+        }
+
+        static string Listed(IEnumerable<RenamedResource> resources, string when)
+        {
+            var listed = resources.Select(resource => resource.Name + (resource.Class is null ? string.Empty : " (" + when + resource.Class + ")")).ToList();
+            return listed.Count == 0 ? "none" : string.Join(", ", listed);
+        }
+
+        return "DDD00090: Membership names changed since the last access file. Gone: " + Listed(renamed.Where(each => each.Gone), "was ")
+               + ". New: " + Listed(renamed.Where(each => !each.Gone), string.Empty)
+               + ". Codes clients read change with them, and the database gets new functions. A class you renamed keeps its old name with [Members(\"...\")].";
     }
 
     /// <summary>

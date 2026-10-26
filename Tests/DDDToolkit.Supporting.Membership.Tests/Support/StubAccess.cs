@@ -55,7 +55,7 @@ public sealed class StubAccess<TResourceId>(MembershipRules rules) : IMemberQues
 
     /// <inheritdoc />
     public MemberKeyReach<TResourceId> KeyReach(IReadOnlyCollection<string> keys)
-        => new StubKeyReach(Rules.SeeKey is { } see ? Reach(see) : new StubReach(Now, System), [.. keys.Distinct(StringComparer.Ordinal)]);
+        => new StubKeyReach(Rules.EveryMemberKey is { } see ? Reach(see) : new StubReach(Now, System), [.. keys.Distinct(StringComparer.Ordinal)]);
 
     /// <inheritdoc />
     public Task<MemberHold<TResourceId>?> HoldAsync(TResourceId resource, string key, CancellationToken cancellationToken)

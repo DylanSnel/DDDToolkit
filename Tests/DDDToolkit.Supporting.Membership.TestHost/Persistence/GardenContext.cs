@@ -54,7 +54,7 @@ public sealed class GardenContext(DbContextOptions<GardenContext> options) : DbC
         {
             plot.Property(row => row.Id).ValueGeneratedNever();
             plot.Property(row => row.Name).HasMaxLength(100);
-            plot.HasMembers(row => row.Gardeners, row => row.OwnerId);
+            plot.HasMembers(row => row.Gardeners);
         });
 
         modelBuilder.Entity<PlotRole>(role =>
@@ -75,7 +75,7 @@ public sealed class GardenContext(DbContextOptions<GardenContext> options) : DbC
         {
             shed.Property(row => row.Id).ValueGeneratedNever();
             shed.Property(row => row.Name).HasMaxLength(100);
-            shed.HasMembers(row => row.Hands, row => row.OwnerId);
+            shed.HasMembers(row => row.Hands);
         });
 
         modelBuilder.Entity<ShedRole>(role =>

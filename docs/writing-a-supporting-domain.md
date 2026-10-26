@@ -1083,13 +1083,13 @@ the package's docs has to have explained. These can be the package's to write:
   - **What it cannot write it says.** A class that has no line and cannot be given one is told what stands
     in the way, as a warning, since the class compiles and is only of no use yet:
     [DDD00059](diagnostics.md#ddd00059).
-- **What every module states, collected where the modules are composed.** Tenancy's generator reads the lists of
-  keys the modules mark with `[TenancyPermissions]`, in the assemblies a project references, and writes them into
-  each project that declares no module, with `DDD_Module` or `[assembly: Module]`, the host among them, with the
-  call that registers them ([A module states its keys once](tenancy.md#a-module-states-its-keys-once)). So a
-  module says a thing once that two programs need, and no project lists the modules. It writes nothing in a
-  module's own projects, and a list it could not read from outside is an error where the list is declared:
-  [DDD00063](diagnostics.md#ddd00063).
+- **What every module states, collected where the modules are composed.** Tenancy's generator writes a module's
+  list of permissions from the `[Permissions]` classes the module declares, and reads every module's list in the
+  assemblies a project references, and writes them into each project that declares no module, with `DDD_Module`
+  or `[assembly: Module]`, the host among them, with the call that registers them
+  ([A module states its keys once](tenancy.md#a-module-states-its-keys-once)). So a module says a thing once that
+  two programs need, and no project lists the modules. A list a module writes by hand would say its keys twice,
+  and is an error where it is declared: [DDD00095](diagnostics.md#ddd00095).
 
 A generator of the package's own ships inside the package it belongs to, in `analyzers/dotnet/cs`, and is no
 package of its own, so it never arrives at another version than the types it names as text. The package

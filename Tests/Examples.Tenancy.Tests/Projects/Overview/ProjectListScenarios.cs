@@ -256,7 +256,7 @@ public sealed class ProjectListScenarios(SampleHosts sample) : IClassFixture<Sam
 
         var listed = await client.VisibleProjectsAsync();
 
-        // A row of the list and the project's own answer are decided in one place, so they say the same: Leo leads
+        // A row of the list and the project's own answer are decided in one place, so they say the same: Leo owns
         // Pier 7, Vic only looks at it, Maud runs access and none of the work.
         listed.Should().NotBeEmpty();
         foreach (var item in listed)

@@ -12,12 +12,9 @@ namespace DDDToolkit.Supporting.Membership.EntityFramework.Tests;
 /// </summary>
 public sealed class UsersReachedFromAboveTests
 {
-    private static readonly MembershipRules Rules = new(
-        "documents",
-        keys: [DocumentKeys.View, DocumentKeys.Edit, DocumentKeys.Share],
-        roles: [new("contributor", [DocumentKeys.View, DocumentKeys.Edit]), new("onlooker", [DocumentKeys.View])],
-        seeKey: DocumentKeys.View,
-        above: new());
+    private static readonly MembershipRules Rules = MembershipRules.For<Document>(
+        Roles.Fixed([new("contributor", [DocumentPermissions.View, DocumentPermissions.Edit]), new("onlooker", [DocumentPermissions.View])]),
+        reachFromAbove: true);
 
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
@@ -28,23 +25,23 @@ public sealed class UsersReachedFromAboveTests
 
         // Cy is no member of anything. Ada made him her deputy for seeing and changing what she owns: he holds
         // both on her minutes, from above, with no end known here, and not the key nobody gave him.
-        var view = await desk.HoldAsync(desk.Cy, desk.Minutes, DocumentKeys.View);
+        var view = await desk.HoldAsync(desk.Cy, desk.Minutes, DocumentPermissions.View);
         (view!.Via, view.Until).Should().Be((MemberVia.Above, null));
-        (await desk.HoldAsync(desk.Cy, desk.Minutes, DocumentKeys.Edit))!.Via.Should().Be(MemberVia.Above);
-        (await desk.HoldAsync(desk.Cy, desk.Minutes, DocumentKeys.Share))!.Via.Should().BeNull("he sees the minutes, and nobody gave him that key");
+        (await desk.HoldAsync(desk.Cy, desk.Minutes, DocumentPermissions.Edit))!.Via.Should().Be(MemberVia.Above);
+        (await desk.HoldAsync(desk.Cy, desk.Minutes, DocumentPermissions.Share))!.Via.Should().BeNull("he sees the minutes, and nobody gave him that key");
 
         // What Ben owns is not Ada's: it sits at another owner, and is not there for her deputy.
-        (await desk.HoldAsync(desk.Cy, desk.Notes, DocumentKeys.View)).Should().BeNull();
+        (await desk.HoldAsync(desk.Cy, desk.Notes, DocumentPermissions.View)).Should().BeNull();
 
         // The members hold what they always held: the owner every key by owning, a member what its role gives.
-        var share = await desk.HoldAsync(desk.Ada, desk.Minutes, DocumentKeys.Share);
+        var share = await desk.HoldAsync(desk.Ada, desk.Minutes, DocumentPermissions.Share);
         (share!.Via, share.Until).Should().Be((MemberVia.Members, null));
-        var read = await desk.HoldAsync(desk.Ben, desk.Minutes, DocumentKeys.View);
+        var read = await desk.HoldAsync(desk.Ben, desk.Minutes, DocumentPermissions.View);
         (read!.Via, read.Until).Should().Be((MemberVia.Members, desk.NextWeek));
-        (await desk.HoldAsync(desk.Ben, desk.Minutes, DocumentKeys.Edit))!.Via.Should().BeNull("an onlooker reads");
+        (await desk.HoldAsync(desk.Ben, desk.Minutes, DocumentPermissions.Edit))!.Via.Should().BeNull("an onlooker reads");
 
         // Somebody who is nobody's member and nobody's deputy reaches nothing.
-        (await desk.HoldAsync(desk.Eve, desk.Minutes, DocumentKeys.View)).Should().BeNull();
+        (await desk.HoldAsync(desk.Eve, desk.Minutes, DocumentPermissions.View)).Should().BeNull();
     }
 
     [Fact]
@@ -54,20 +51,20 @@ public sealed class UsersReachedFromAboveTests
 
         // Dee changes what Ada owns, and holds the key that sees over nobody. The minutes are shared with her
         // until next week, so they are there for her until then, and so is what she holds on them from above.
-        var edit = await desk.HoldAsync(desk.Dee, desk.Minutes, DocumentKeys.Edit);
+        var edit = await desk.HoldAsync(desk.Dee, desk.Minutes, DocumentPermissions.Edit);
         (edit!.Via, edit.Until).Should().Be((MemberVia.Above, desk.NextWeek));
 
         // The agenda is Ada's as well, and shared with nobody: within the reach of the key, and not there for her.
-        (await desk.HoldAsync(desk.Dee, desk.Agenda, DocumentKeys.Edit)).Should().BeNull();
-        (await desk.WithinAsync(desk.Dee, DocumentKeys.Edit)).Should().BeEquivalentTo([desk.Minutes, desk.Agenda]);
-        (await desk.WithinAsync(desk.Dee, DocumentKeys.View)).Should().BeEquivalentTo([desk.Minutes]);
+        (await desk.HoldAsync(desk.Dee, desk.Agenda, DocumentPermissions.Edit)).Should().BeNull();
+        (await desk.WithinAsync(desk.Dee, DocumentPermissions.Edit)).Should().BeEquivalentTo([desk.Minutes, desk.Agenda]);
+        (await desk.WithinAsync(desk.Dee, DocumentPermissions.View)).Should().BeEquivalentTo([desk.Minutes]);
         (await desk.KeysOnAsync(desk.Dee)).Should().ContainSingle().Which.Should().Be((desk.Minutes, "documents.edit documents.view"));
 
         // At the moment her membership ends, the minutes are gone for her with everything she held on them.
         desk.Clock.Advance(desk.NextWeek - desk.Clock.Now - TimeSpan.FromTicks(1));
-        (await desk.HoldAsync(desk.Dee, desk.Minutes, DocumentKeys.Edit))!.Via.Should().Be(MemberVia.Above, "one tick before the end the hold named");
+        (await desk.HoldAsync(desk.Dee, desk.Minutes, DocumentPermissions.Edit))!.Via.Should().Be(MemberVia.Above, "one tick before the end the hold named");
         desk.Clock.Advance(TimeSpan.FromTicks(1));
-        (await desk.HoldAsync(desk.Dee, desk.Minutes, DocumentKeys.Edit)).Should().BeNull("at the end the hold named");
+        (await desk.HoldAsync(desk.Dee, desk.Minutes, DocumentPermissions.Edit)).Should().BeNull("at the end the hold named");
         (await desk.KeysOnAsync(desk.Dee)).Should().BeEmpty();
     }
 
@@ -83,19 +80,19 @@ public sealed class UsersReachedFromAboveTests
         desk.Commands.Count.Should().Be(1);
 
         desk.Commands.Reset();
-        (await desk.WithinAsync(desk.Cy, DocumentKeys.View)).Should().BeEquivalentTo([desk.Minutes, desk.Agenda]);
+        (await desk.WithinAsync(desk.Cy, DocumentPermissions.View)).Should().BeEquivalentTo([desk.Minutes, desk.Agenda]);
         desk.Commands.Commands.Should().ContainSingle().Which.Should().Contain("\"Deputies\"", "where a key is held above is a subquery of the statement, and no list fetched first");
 
         // The roles are values of the rules, as ever: a member's role is asked of no table but the document's own.
         desk.Commands.Reset();
-        (await desk.HoldAsync(desk.Ben, desk.Minutes, DocumentKeys.Edit))!.Via.Should().BeNull();
+        (await desk.HoldAsync(desk.Ben, desk.Minutes, DocumentPermissions.Edit))!.Via.Should().BeNull();
         desk.Commands.Commands.Should().ContainSingle().Which.Should().Contain("\"DocumentShareRoles\"").And.Contain("\"Deputies\"");
 
         // A document handed to another owner sits at that owner from then on: reached from where it sits now.
         await desk.ChangeAsync(async context =>
-            (await context.Documents.SingleAsync(document => document.Id == desk.Agenda, Cancellation)).HandOver(desk.Ben, DocumentMembership.Owner, desk.Clock.Now));
-        (await desk.HoldAsync(desk.Cy, desk.Agenda, DocumentKeys.View)).Should().BeNull();
-        (await desk.HoldAsync(desk.Cy, desk.Minutes, DocumentKeys.View))!.Via.Should().Be(MemberVia.Above);
+            (await context.Documents.SingleAsync(document => document.Id == desk.Agenda, Cancellation)).HandOver(desk.Ben, FormerOwner.StaysAs(DocumentMembership.Onlooker), desk.Clock.Now));
+        (await desk.HoldAsync(desk.Cy, desk.Agenda, DocumentPermissions.View)).Should().BeNull();
+        (await desk.HoldAsync(desk.Cy, desk.Minutes, DocumentPermissions.View))!.Via.Should().Be(MemberVia.Above);
     }
 
     /// <summary>A key somebody holds over everything a user owns: what a user gives a deputy.</summary>
@@ -133,7 +130,7 @@ public sealed class UsersReachedFromAboveTests
             modelBuilder.Entity<Document>(document =>
             {
                 document.Property(row => row.Id).ValueGeneratedNever();
-                document.HasMembers(row => row.Shares, row => row.OwnerId, at: row => row.OwnerId);
+                document.HasMembers(row => row.Shares);
             });
             modelBuilder.Entity<Deputy>().HasKey(row => new { row.Of, row.User, row.Key });
         }
@@ -200,20 +197,20 @@ public sealed class UsersReachedFromAboveTests
             var before = desk.Clock.Now.AddDays(-10);
             var period = MemberPeriod.Between(before, desk.NextWeek);
 
-            var minutes = new Document(desk.Minutes, "Minutes", desk.Ada, DocumentMembership.Owner, before);
+            var minutes = new Document(desk.Minutes, "Minutes", desk.Ada, before);
             minutes.ShareWith(desk.Ben, DocumentMembership.Onlooker, period, desk.Clock.Now, by: desk.Ada);
             minutes.ShareWith(desk.Dee, period, desk.Clock.Now, by: desk.Ada);
-            var agenda = new Document(desk.Agenda, "Agenda", desk.Ada, DocumentMembership.Owner, before);
-            var notes = new Document(desk.Notes, "Notes", desk.Ben, DocumentMembership.Owner, before);
+            var agenda = new Document(desk.Agenda, "Agenda", desk.Ada, before);
+            var notes = new Document(desk.Notes, "Notes", desk.Ben, before);
 
             await desk.ChangeAsync(async context =>
             {
                 await context.Database.EnsureCreatedAsync(Cancellation);
                 context.Documents.AddRange(minutes, agenda, notes);
                 context.Deputies.AddRange(
-                    new Deputy { Of = desk.Ada, User = desk.Cy.Value, Key = DocumentKeys.View },
-                    new Deputy { Of = desk.Ada, User = desk.Cy.Value, Key = DocumentKeys.Edit },
-                    new Deputy { Of = desk.Ada, User = desk.Dee.Value, Key = DocumentKeys.Edit });
+                    new Deputy { Of = desk.Ada, User = desk.Cy.Value, Key = DocumentPermissions.View },
+                    new Deputy { Of = desk.Ada, User = desk.Cy.Value, Key = DocumentPermissions.Edit },
+                    new Deputy { Of = desk.Ada, User = desk.Dee.Value, Key = DocumentPermissions.Edit });
             });
             desk.Commands.Reset();
             return desk;
@@ -235,7 +232,7 @@ public sealed class UsersReachedFromAboveTests
         public async Task<List<(DocumentId Document, string Keys)>> KeysOnAsync(UserId user)
         {
             var held = await AsAsync(TestCallers.User(user), provider => provider.GetRequiredService<IMemberQuestions<DocumentId>>()
-                .KeysOnAsync([Minutes, Agenda, Notes], [DocumentKeys.View, DocumentKeys.Edit, DocumentKeys.Share], Cancellation));
+                .KeysOnAsync([Minutes, Agenda, Notes], [DocumentPermissions.View, DocumentPermissions.Edit, DocumentPermissions.Share], Cancellation));
 
             return [.. held.Select(pair => (pair.Key, string.Join(' ', pair.Value.Order(StringComparer.Ordinal))))];
         }

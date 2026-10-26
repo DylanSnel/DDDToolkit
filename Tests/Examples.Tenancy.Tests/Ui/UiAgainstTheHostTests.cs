@@ -65,11 +65,11 @@ public sealed class UiAgainstTheHostTests(SampleHosts sample) : IClassFixture<Sa
             cancellationToken: Cancellation);
         session.LastAnswer!.Path.Should().StartWith("/projects", "the directory's answers are not the page's last answer");
         names.CrewByName(listed.Crew).Select(member => (names.OfSeat(member.SeatId), names.OfProjectRoles(member.RolesHeld.Select(held => held.RoleId)), member.IsOwner))
-            .Should().Equal(("Leo", "Crew lead", true), ("Juno", "Surveyor", false), ("Vic", "Observer", false));
+            .Should().Equal(("Leo", (string?)null, true), ("Juno", "Surveyor", false), ("Vic", "Observer", false));
         listed.Crew.SelectMany(member => member.RolesHeld).Should().OnlyContain(held => held.AppliesNow && held.EndsAt == null, "every seeded crew role is held for good");
         names.OfUnit(listed.UnitId).Should().Be("Harbor Works / North / North Coast");
         names.OfProjectRoles(listed.MyRoles).Should().BeNull("she is not on its crew");
-        names.OfProjectRoles(projects.Single(project => project.Name == "Inland depot").MyRoles).Should().Be("Crew lead");
+        names.OfProjectRoles(projects.Single(project => project.Name == "Inland depot").MyRoles).Should().BeNull("she owns it, and an owner holds no project role");
 
         var detail = (await api.ProjectDetailAsync(pierSeven, Cancellation)).Value!;
         detail.UnitId.Should().Be(Harbor.UnitNamed("North Coast").Value);
@@ -102,9 +102,10 @@ public sealed class UiAgainstTheHostTests(SampleHosts sample) : IClassFixture<Sa
     [Fact]
     public async Task The_project_page_plans_a_project_and_records_an_inspection_for_its_days()
     {
-        // It changes what it plans and records, so it has a host of its own.
+        // It changes what it plans and records, so it has a host of its own. Rhea manages North, where Pier 7 is,
+        // and so both plans it and records on it.
         await using var host = await sample.StartAsync();
-        var (api, _) = await SignInAsync(host, "leo");
+        var (api, _) = await SignInAsync(host, "rhea");
         var pierSeven = Harbor.ProjectNamed("Pier 7").Id.Value.ToString();
         var (first, last) = (new DateOnly(2026, 10, 5), new DateOnly(2026, 10, 30));
 

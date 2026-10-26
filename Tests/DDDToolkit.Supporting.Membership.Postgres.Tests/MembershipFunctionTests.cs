@@ -157,11 +157,11 @@ public sealed class MembershipFunctionTests(FilingPostgres postgres)
             "documents_i_see |  | SETOF uuid | true | search_path=\"\" | authenticated",
             "documents_owner_stays |  | trigger | false | search_path=\"\" | nobody",
             "documents_where_i_hold | text | SETOF uuid | true | search_path=\"\" | authenticated",
-            "folder_ids_held | text | SETOF bigint | true | search_path=\"\" | authenticated," + FilingPostgres.ArchivistRole,
-            "folder_ids_seen |  | SETOF bigint | true | search_path=\"\" | authenticated," + FilingPostgres.ArchivistRole,
-            "folder_ids_staffed |  | SETOF bigint | true | search_path=\"\" | authenticated," + FilingPostgres.ArchivistRole,
-            "folder_ids_staffed_with | text | SETOF bigint | true | search_path=\"\" | authenticated," + FilingPostgres.ArchivistRole,
-            "folders_owner_stays |  | trigger | false | search_path=\"\" | nobody");
+            "folders_as_member |  | SETOF bigint | true | search_path=\"\" | authenticated,ddd_system_in," + FilingPostgres.ArchivistRole,
+            "folders_as_member_with | text | SETOF bigint | true | search_path=\"\" | authenticated,ddd_system_in," + FilingPostgres.ArchivistRole,
+            "folders_i_see |  | SETOF bigint | true | search_path=\"\" | authenticated,ddd_system_in," + FilingPostgres.ArchivistRole,
+            "folders_owner_stays |  | trigger | false | search_path=\"\" | nobody",
+            "folders_where_i_hold | text | SETOF bigint | true | search_path=\"\" | authenticated,ddd_system_in," + FilingPostgres.ArchivistRole);
 
         // Nobody else: not every role there is, and not a caller that did not sign in.
         (await filing.ListAsync<long>(
@@ -181,11 +181,11 @@ public sealed class MembershipFunctionTests(FilingPostgres postgres)
         using var filing = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Secured);
         var data = filing.Scenario;
 
-        // The folder's rules let the archivists' role ask its functions, next to signed-in users; the document's name no such role.
+        // A row access rule of the folders' is for the archivists' role, next to signed-in users, so it asks their functions; no rule of the documents' is for it.
         await using var archivist = await filing.SessionAsync(TestCallers.Staff(data.Clerk), role: FilingPostgres.ArchivistRole);
 
-        (await archivist.ListAsync<long>($"SELECT id FROM {Filing}folder_ids_seen() AS id")).Should().BeEquivalentTo([data.Cabinet.Value, data.Annex.Value]);
-        (await archivist.ListAsync<long>($"SELECT id FROM {Filing}folder_ids_held($1) AS id", FolderKeys.Staff)).Should().Equal(data.Annex.Value);
+        (await archivist.ListAsync<long>($"SELECT id FROM {Filing}folders_i_see() AS id")).Should().BeEquivalentTo([data.Cabinet.Value, data.Annex.Value]);
+        (await archivist.ListAsync<long>($"SELECT id FROM {Filing}folders_where_i_hold($1) AS id", FolderPermissions.Staff)).Should().Equal(data.Annex.Value);
 
         await using var again = await filing.SessionAsync(TestCallers.Staff(data.Clerk), role: FilingPostgres.ArchivistRole);
         (await FluentActions.Awaiting(() => again.ListAsync<Guid>($"SELECT id FROM {Filing}documents_i_see() AS id")).Should().ThrowAsync<PostgresException>())
@@ -214,8 +214,8 @@ public sealed class MembershipFunctionTests(FilingPostgres postgres)
             return (
                 (await session.ListAsync<Guid>($"SELECT id FROM filing.{functions.AsMember}() AS id")).Contains(minutes),
                 (await session.ListAsync<Guid>($"SELECT id FROM filing.{functions.Seen}() AS id")).Contains(minutes),
-                (await session.ListAsync<Guid>($"SELECT id FROM filing.{functions.AsMemberWith}($1) AS id", DocumentKeys.Edit)).Contains(minutes),
-                (await session.ListAsync<Guid>($"SELECT id FROM filing.{functions.HeldOn}($1) AS id", DocumentKeys.Edit)).Contains(minutes));
+                (await session.ListAsync<Guid>($"SELECT id FROM filing.{functions.AsMemberWith}($1) AS id", DocumentPermissions.Edit)).Contains(minutes),
+                (await session.ListAsync<Guid>($"SELECT id FROM filing.{functions.HeldOn}($1) AS id", DocumentPermissions.Edit)).Contains(minutes));
         }
 
         // As the rows are: a member, seen, with a role that gives the key, which is held.
@@ -239,23 +239,9 @@ public sealed class MembershipFunctionTests(FilingPostgres postgres)
         using var filing = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Plain);
         var data = filing.Scenario;
 
-        // The folder's rules as they are, and the role scoped work runs as among those that may ask: the
-        // functions are the same four, and the scoped system role may execute them.
-        var registered = FolderMembership.Rules;
-        var asked = new MembershipRules(
-            registered.Name,
-            keys: registered.Keys,
-            roles: [.. registered.Roles],
-            members: registered.Members,
-            ownerRole: registered.OwnerRole,
-            memberKeys: registered.MemberKeys,
-            codes: registered.Codes,
-            functions: registered.Functions,
-            grantTo: [.. registered.GrantTo, DDDToolkit.Abstractions.Attributes.RowAccessRoles.SystemIn],
-            changeMembersKey: registered.ChangeMembersKey,
-            changeOwnerKey: registered.ChangeOwnerKey,
-            systemScopes: registered.SystemScopes);
-        await filing.ExecuteAsync(FilingPostgres.AccessScript([new MembershipRowAccessContribution<DocumentShare>(DocumentMembership.Rules), new MembershipRowAccessContribution<FolderMember>(asked)], rules: []));
+        // The folder's rules as they are: they let the module's own scope through, so the role scoped work runs as
+        // is among those the functions are granted to, without being named anywhere.
+        await filing.ExecuteAsync(FilingPostgres.AccessScript());
 
         static string Scoped(string scope) => $$"""{"role":"ddd_system_in","scope":"{{scope}}"}""";
         long[] every = [data.Cabinet.Value, data.Annex.Value];
@@ -263,30 +249,30 @@ public sealed class MembershipFunctionTests(FilingPostgres postgres)
         // The module's own scope: every folder is seen, and every key is held on every folder. Nobody's member.
         await using (var own = await filing.SessionAsync(Callers.FromClaims(Scoped(FolderMembership.Scope)), role: "ddd_system_in"))
         {
-            (await own.ListAsync<long>("SELECT id FROM filing.folder_ids_seen() AS id")).Should().BeEquivalentTo(every);
-            (await own.ListAsync<long>("SELECT id FROM filing.folder_ids_held($1) AS id", FolderKeys.Shred)).Should().BeEquivalentTo(every);
-            (await own.ListAsync<long>("SELECT id FROM filing.folder_ids_held($1) AS id", "folders.unheard-of")).Should().BeEquivalentTo(every, "the application's own work holds every key there is");
-            (await own.ListAsync<long>("SELECT id FROM filing.folder_ids_staffed() AS id")).Should().BeEmpty();
-            (await own.ListAsync<long>("SELECT id FROM filing.folder_ids_staffed_with($1) AS id", FolderKeys.Read)).Should().BeEmpty();
+            (await own.ListAsync<long>("SELECT id FROM filing.folders_i_see() AS id")).Should().BeEquivalentTo(every);
+            (await own.ListAsync<long>("SELECT id FROM filing.folders_where_i_hold($1) AS id", FolderPermissions.Shred)).Should().BeEquivalentTo(every);
+            (await own.ListAsync<long>("SELECT id FROM filing.folders_where_i_hold($1) AS id", "folders.unheard-of")).Should().BeEquivalentTo(every, "the application's own work holds every key there is");
+            (await own.ListAsync<long>("SELECT id FROM filing.folders_as_member() AS id")).Should().BeEmpty();
+            (await own.ListAsync<long>("SELECT id FROM filing.folders_as_member_with($1) AS id", FolderPermissions.Read)).Should().BeEmpty();
         }
 
         // Another module's scope, and no scope at all: nothing, as in C#.
         foreach (var claims in new[] { Scoped("other"), """{"role":"ddd_system_in"}""" })
         {
             await using var elsewhere = await filing.SessionAsync(Callers.FromClaims(claims), role: "ddd_system_in");
-            (await elsewhere.ListAsync<long>("SELECT id FROM filing.folder_ids_seen() AS id")).Should().BeEmpty();
-            (await elsewhere.ListAsync<long>("SELECT id FROM filing.folder_ids_held($1) AS id", FolderKeys.Read)).Should().BeEmpty();
+            (await elsewhere.ListAsync<long>("SELECT id FROM filing.folders_i_see() AS id")).Should().BeEmpty();
+            (await elsewhere.ListAsync<long>("SELECT id FROM filing.folders_where_i_hold($1) AS id", FolderPermissions.Read)).Should().BeEmpty();
         }
 
         // A signed-in user whose token happens to carry that scope is a user: its role is not the one scoped work runs as.
         await using var user = await filing.SessionAsync(Callers.FromClaims($$"""{"sub":"{{data.Hal.Value}}","role":"authenticated","scope":"{{FolderMembership.Scope}}"}"""));
-        (await user.ListAsync<long>("SELECT id FROM filing.folder_ids_seen() AS id")).Should().BeEmpty();
-        (await user.ListAsync<long>("SELECT id FROM filing.folder_ids_held($1) AS id", FolderKeys.Read)).Should().BeEmpty();
+        (await user.ListAsync<long>("SELECT id FROM filing.folders_i_see() AS id")).Should().BeEmpty();
+        (await user.ListAsync<long>("SELECT id FROM filing.folders_where_i_hold($1) AS id", FolderPermissions.Read)).Should().BeEmpty();
 
         // And what C# answers for the same callers.
-        var hold = await filing.Services.AsAsync(Caller.SystemIn(FolderMembership.Scope), provider => provider.GetRequiredService<IMemberQuestions<FolderId>>().HoldAsync(data.Annex, FolderKeys.Shred, Cancellation));
+        var hold = await filing.Services.AsAsync(Caller.SystemIn(FolderMembership.Scope), provider => provider.GetRequiredService<IMemberQuestions<FolderId>>().HoldAsync(data.Annex, FolderPermissions.Shred, Cancellation));
         hold!.Via.Should().Be(MemberVia.System);
-        (await filing.Services.AsAsync(Caller.SystemIn("other"), provider => provider.GetRequiredService<IMemberQuestions<FolderId>>().HoldAsync(data.Annex, FolderKeys.Read, Cancellation))).Should().BeNull();
+        (await filing.Services.AsAsync(Caller.SystemIn("other"), provider => provider.GetRequiredService<IMemberQuestions<FolderId>>().HoldAsync(data.Annex, FolderPermissions.Read, Cancellation))).Should().BeNull();
     }
 
     [Fact]
@@ -307,8 +293,8 @@ public sealed class MembershipFunctionTests(FilingPostgres postgres)
             .And.NotContain(body => body.Contains("Document", StringComparison.Ordinal) || body.Contains("document", StringComparison.Ordinal));
 
         // And each says the host's own names: the folder's tables and its own column for who a member is.
-        bodies.Single(body => body.StartsWith("folder_ids_staffed:", StringComparison.Ordinal)).Should()
+        bodies.Single(body => body.StartsWith("folders_as_member:", StringComparison.Ordinal)).Should()
             .Contain($"\"{FilingContext.Schema}\".\"{FilingContext.FolderStaffTable}\"").And.Contain($"\"{FilingContext.StaffColumn}\"");
-        bodies.Single(body => body.StartsWith("folder_ids_staffed_with:", StringComparison.Ordinal)).Should().Contain($"\"{FilingContext.Schema}\".\"{FilingContext.FolderStaffRolesTable}\"");
+        bodies.Single(body => body.StartsWith("folders_as_member_with:", StringComparison.Ordinal)).Should().Contain($"\"{FilingContext.Schema}\".\"{FilingContext.FolderStaffRolesTable}\"");
     }
 }

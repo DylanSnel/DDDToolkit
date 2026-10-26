@@ -19,20 +19,19 @@ namespace Examples.Tenancy.Projects.Domain.Aggregates.Projects;
 /// <list type="bullet">
 /// <item>A seat is on the crew once, for a period, and holds each project role at most once, each for a period
 /// of its own.</item>
-/// <item>There is one owner, always on the crew, with no end, holding the crew lead's role, with no end either.
-/// The owner cannot be taken off the crew, nor lose that role, until somebody else has been named owner; the old
-/// owner then loses the lead role, and that role alone: the seat stays on the crew, with whatever else it holds
-/// there.</item>
+/// <item>There is one owner, always on the crew, with no end, and holding no project role: the owner holds what
+/// the projects' permissions give an owner by owning the project. The owner cannot be taken off the crew until
+/// somebody else has been named owner; the command that names one says what the old owner becomes, a crew member
+/// in a project role, or nobody on the crew.</item>
 /// <item>A closed project changes no more, until it is reopened.</item>
 /// <item>It may have a planned range, the days the work is planned for: a first and a last day, the last not
 /// before the first. A project without one is simply not planned yet.</item>
 /// </list>
 /// The rules about the crew are the Membership package's, kept through <c>Members</c>, the member list its
-/// generator writes on the project from <see cref="Crew"/>, <see cref="OwnerSeatId"/> and <see cref="Codes"/>.
+/// generator writes on the project from <see cref="Crew"/>, the owner it marks <c>[Owner]</c> and <see cref="Codes"/>.
 /// Each crew method here is the project's guard, a closed project changes nothing, in front of one call to it,
-/// and the event the project raises for what the call answered. Which role is the crew lead's, and whether a
-/// role or a seat may go on a crew at all, the command asks and passes in; the member list refuses what the
-/// answer rules out.
+/// and the event the project raises for what the call answered. Whether a role or a seat may go on a crew at
+/// all, the command asks first; the member list refuses what the rules about a crew rule out.
 /// <para>
 /// Each method refuses a precondition with a coded <see cref="Exceptions.RefusalException"/> before it changes
 /// anything. The nested invariants, one file each in <c>Invariants/</c>, state five of the same rules after the
@@ -49,9 +48,9 @@ public sealed partial class Project
     public const int LongestName = 200;
 
     /// <summary>
-    /// Opens a project at <paramref name="unitId"/>, with <paramref name="owner"/> on its crew, holding
-    /// <paramref name="ownerRole"/> there, both from <paramref name="now"/> on and with no end. A project that
-    /// was never opened is not a project, so opening it is what constructing it means.
+    /// Opens a project at <paramref name="unitId"/>, with <paramref name="owner"/> on its crew from
+    /// <paramref name="now"/> on and with no end, holding no project role: the owner holds what an owner does by
+    /// owning it. A project that was never opened is not a project, so opening it is what constructing it means.
     /// </summary>
     /// <param name="id">Its id.</param>
     /// <param name="tenantId">The tenant it belongs to, for good.</param>
@@ -59,7 +58,6 @@ public sealed partial class Project
     /// <param name="name">Its name: trimmed, 1 to <see cref="LongestName"/> characters.</param>
     /// <param name="unitId">The unit it hangs at.</param>
     /// <param name="owner">The seat that owns it.</param>
-    /// <param name="ownerRole">The owner's role on the crew: the tenant's crew lead's project role, which the command finds.</param>
     /// <param name="now">When it is opened.</param>
     /// <param name="planned">The days the work is planned for, or <see langword="null"/> when it is not planned yet.</param>
     /// <exception cref="Exceptions.RefusalException">
@@ -72,7 +70,6 @@ public sealed partial class Project
         string name,
         OrganizationUnitId unitId,
         SeatId owner,
-        ProjectRoleId ownerRole,
         DateTimeOffset now,
         DateRange? planned = null) : base(id)
     {
@@ -84,7 +81,7 @@ public sealed partial class Project
         State = ProjectState.Open;
         OwnerSeatId = owner;
 
-        Members.Open(ownerRole, now);
+        Members.Open(now);
 
         RaiseDomainEvent(new ProjectOpened(id, tenantId, unitId, owner));
     }
@@ -99,12 +96,14 @@ public sealed partial class Project
     public string Name { get; private set; } = string.Empty;
 
     /// <summary>The unit the project hangs at: a role held there or above it reaches the project.</summary>
+    [At]
     public OrganizationUnitId UnitId { get; private set; }
 
     /// <summary>Whether the project is open or closed.</summary>
     public ProjectState State { get; private set; }
 
-    /// <summary>The seat that owns the project, always on its crew, holding the crew lead role there.</summary>
+    /// <summary>The seat that owns the project, always on its crew, holding no project role there.</summary>
+    [Owner]
     public SeatId OwnerSeatId { get; private set; }
 
     /// <summary>
@@ -117,8 +116,9 @@ public sealed partial class Project
     public partial IReadOnlyList<CrewMember> Crew { get; }
 
     /// <summary>
-    /// The codes the rules about the crew refuse under: the Membership package's rules under this module's codes.
-    /// With the crew and the owner, what the package's generator writes the member list from.
+    /// The codes the rules about the crew refuse under: the Membership package's rules under this module's own
+    /// words for them, <c>projects.already-on-crew</c> and the like. Declared here, so the package's generator writes
+    /// none of its own, and the member list and the projects' rules refuse under these.
     /// </summary>
     private static MembershipCodes Codes => ProjectRefusals.Membership;
 
@@ -260,24 +260,16 @@ public sealed partial class Project
         RaiseDomainEvent(new CrewRoleGiven(Id, seat, role));
     }
 
-    /// <summary>
-    /// Takes a role from a crew member, who stays on the crew with whatever else it holds there. The owner keeps
-    /// the crew lead's role, and never ends up without any role that has no end, until somebody else is named owner.
-    /// </summary>
+    /// <summary>Takes a role from a crew member, who stays on the crew with whatever else it holds there.</summary>
     /// <param name="seat">The seat on the crew.</param>
     /// <param name="role">The role to take.</param>
-    /// <param name="leadRole">
-    /// The tenant's crew lead role, as the command found it, or <see langword="null"/> when the tenant has none
-    /// in use. Read for the owner only.
-    /// </param>
     /// <exception cref="Exceptions.RefusalException">
-    /// <c>projects.closed</c>, <c>projects.member-not-found</c>, <c>projects.crew-role-not-found</c>,
-    /// <c>projects.owner-protected</c>.
+    /// <c>projects.closed</c>, <c>projects.member-not-found</c>, <c>projects.crew-role-not-found</c>.
     /// </exception>
-    public void TakeCrewRole(SeatId seat, ProjectRoleId role, ProjectRoleId? leadRole)
+    public void TakeCrewRole(SeatId seat, ProjectRoleId role)
     {
         RequireOpen();
-        Members.TakeRole(seat, role, leadRole);
+        Members.TakeRole(seat, role);
         RaiseDomainEvent(new CrewRoleTaken(Id, seat, role));
     }
 
@@ -293,23 +285,25 @@ public sealed partial class Project
     }
 
     /// <summary>
-    /// Names another owner: on the crew from now on and with no end, added when they are not on it yet, holding
-    /// <paramref name="leadRole"/> there with no end. A seat whose time on the crew had ended begins anew, as the
-    /// lead and nothing else: the roles of the ended membership do not come back. One whose time was to end keeps
-    /// its place for good, and the roles it held there end where the membership would have. The old owner loses
-    /// the lead role and nothing else: the seat stays on the crew, with every other role it holds there.
+    /// Names another owner: on the crew from now on and with no end, added when they are not on it yet, holding no
+    /// project role there, since the owner holds what an owner does by owning the project: the roles it held go. A
+    /// seat whose time on the crew had ended begins anew; one whose time was to end keeps its place for good. The old
+    /// owner becomes what <paramref name="formerOwner"/> says: a crew member in a project role, or nobody on the crew.
     /// </summary>
     /// <param name="seat">The seat that is to own the project; the command has checked it is an active seat of the tenant.</param>
-    /// <param name="leadRole">The tenant's crew lead role, as the command found it.</param>
+    /// <param name="formerOwner">
+    /// What the old owner becomes: <c>FormerOwner.StaysAs(role)</c> with a project role the command has checked may go
+    /// on a crew, or <c>FormerOwner.Leaves</c>.
+    /// </param>
     /// <param name="now">When the owner is named.</param>
     /// <exception cref="Exceptions.RefusalException"><c>projects.closed</c>, <c>projects.already-owner</c>.</exception>
-    public void ChangeOwner(SeatId seat, ProjectRoleId leadRole, DateTimeOffset now)
+    public void ChangeOwner(SeatId seat, FormerOwner<ProjectRoleId> formerOwner, DateTimeOffset now)
     {
         RequireOpen();
-        var named = Members.NameOwner(seat, leadRole, now);
+        var named = Members.NameOwner(seat, formerOwner, now);
         OwnerSeatId = named.Owner;
 
-        // The roles of a membership that had ended, or that never counted inside the one it had: taken.
+        // The roles the new owner held on the crew: it holds by owning now, so they go.
         foreach (var dropped in named.RolesDropped)
         {
             RaiseDomainEvent(new CrewRoleTaken(Id, seat, dropped.RoleId));
@@ -322,14 +316,14 @@ public sealed partial class Project
             RaiseDomainEvent(new CrewMemberAdded(Id, seat));
         }
 
-        if (named.RoleGiven)
+        // The old owner stays on the crew in a project role, or leaves it.
+        if (named.PreviousRole is { } role)
         {
-            RaiseDomainEvent(new CrewRoleGiven(Id, seat, leadRole));
+            RaiseDomainEvent(new CrewRoleGiven(Id, named.Previous, role));
         }
-
-        if (named.RoleTaken)
+        else if (named.PreviousLeft)
         {
-            RaiseDomainEvent(new CrewRoleTaken(Id, named.Previous, leadRole));
+            RaiseDomainEvent(new CrewMemberRemoved(Id, named.Previous));
         }
 
         RaiseDomainEvent(new OwnerChanged(Id, named.Previous, seat));

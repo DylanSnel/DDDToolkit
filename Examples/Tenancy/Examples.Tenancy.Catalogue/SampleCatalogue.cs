@@ -60,8 +60,8 @@ namespace Examples.Tenancy.Catalogue;
 /// role, themselves included. So a role at a unit that holds either is given only by someone who holds it there
 /// for at least as long, and never to oneself; whoever manages grants and holds neither gives Surveyor and
 /// Observer. The marks rule the organization's grants only. On a project's crew a role reaches that project
-/// alone (<see cref="ProjectCatalogue.CrewGives"/>), and whoever manages the crew gives any project role, the crew
-/// lead's included, as the owner rule allows.
+/// alone (<see cref="ProjectMembership"/>), and whoever manages the crew gives any project role, the crew lead's
+/// included; the owner holds none, since it holds what an owner does by owning the project.
 /// </para>
 /// <para>
 /// That a role which manages access is given only by someone who holds its keys is containment, which a catalogue
@@ -94,11 +94,10 @@ public static class SampleCatalogue
     public const string AreaManager = "area-manager";
 
     /// <summary>
-    /// The key of the pack for leading a project's crew, and of the starter project role of the same name, the
-    /// role a project's owner holds on it. It is the key Projects finds the owner's role by, so it is Projects'
-    /// constant.
+    /// The key of the pack for leading a project's crew, and of the starter project role of the same name: a crew
+    /// member in it holds what a project's owner holds by owning it, and records inspections besides.
     /// </summary>
-    public const string CrewLead = ProjectMembership.CrewLead;
+    public const string CrewLead = "crew-lead";
 
     /// <summary>The key of the pack for working on a project's site and recording what is found there, and of the starter project role of the same name.</summary>
     public const string Surveyor = "surveyor";
@@ -114,7 +113,7 @@ public static class SampleCatalogue
 
     /// <summary>
     /// The project roles every tenant's crews start with, made once when a tenant is set up: the crew lead's, which
-    /// every project's owner holds, a surveyor's, who records inspections, and an observer's. The tenant's own to
+    /// a former owner usually stays on the crew in, a surveyor's, who records inspections, and an observer's. The tenant's own to
     /// rename, re-key and archive afterwards, and to add to. Each gives the keys that act on a project, of whichever
     /// module asks them, which is why the application says them and not the Projects module.
     /// </summary>

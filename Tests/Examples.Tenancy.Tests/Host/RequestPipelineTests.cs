@@ -346,7 +346,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
         var archive = new ArchiveProjectRole(observer);
 
         // Nothing of a package's stands between this command and the role, so its handler asks again what the
-        // command declared. Leo leads a crew and manages no roles: handed the command directly, past the check, the
+        // command declared. Leo owns a project and manages no roles: handed the command directly, past the check, the
         // handler refuses him as the check does, naming the key.
         using (AsSeatOf(DemoPeople.Leo))
         {
@@ -913,7 +913,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
                 await using var scope = scopes.CreateAsyncScope();
                 var projects = scope.ServiceProvider.GetRequiredService<ProjectsContext>();
                 var project = await projects.Projects.AsTracking().SingleAsync(candidate => candidate.Id == message.Id, cancellationToken);
-                project.TakeCrewRole(From, Role, leadRole: null);
+                project.TakeCrewRole(From, Role);
                 await projects.SaveChangesAsync(cancellationToken);
             }
 
@@ -1190,7 +1190,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
             (DemoPeople.Ada, new MoveProjectToUnit(pier.Id, Harbor.UnitNamed("North Inland"))),
             (DemoPeople.Ada, new CloseProject(pier.Id)),
             (DemoPeople.Ada, new AddCrewMember(pier.Id, Harbor.SeatOf(DemoPeople.Tove), Role: null, Until: null)),
-            (DemoPeople.Ada, new ChangeProjectOwner(pier.Id, Harbor.SeatOf(DemoPeople.Juno))),
+            (DemoPeople.Ada, new ChangeProjectOwner(pier.Id, Harbor.SeatOf(DemoPeople.Juno), FormerOwnerRole: null)),
             (DemoPeople.Vic, new TakeCrewRole(pier.Id, vic, observer)),
             (DemoPeople.Vic, new RemoveCrewMember(pier.Id, vic)),
         ];
@@ -1319,7 +1319,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
             (await send.Should().ThrowAsync<InvalidOperationException>()).WithMessage("*Only system work chooses a project's id*");
         }
 
-        using (TenancyUseCases.BeginSystemIn(Harbor.Id, Harbor.Administrator.Id))
+        using (TenancyUseCases.BeginSystemIn(Harbor.Id, Harbor.Administrator.Id, ProjectMembership.Scope))
         {
             await using (var before = host.Services.CreateAsyncScope())
             {
@@ -1327,7 +1327,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
                     .Should().NotContain(project => project.Id == chosen, "the seat's command opened nothing");
             }
 
-            // System work, as the seeder and an import are, says which id the project gets.
+            // The projects' system work, as the seeder and an import are, says which id the project gets.
             await using (var scope = host.Services.CreateAsyncScope())
             {
                 (await scope.ServiceProvider.GetRequiredService<ISender>().Send(withAnId, Cancellation)).Should().Be(chosen);

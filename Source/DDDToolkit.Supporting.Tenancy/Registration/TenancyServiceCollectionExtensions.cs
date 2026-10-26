@@ -148,10 +148,10 @@ public static class TenancyServiceCollectionExtensions
     /// Adds permission keys to the catalogue by hand. Contributions add up. A key may be declared only once in
     /// the whole catalogue, and never under <c>tenancy.</c>.
     /// <para>
-    /// A module states its keys once, on a static list it marks with <see cref="TenancyPermissionsAttribute"/>,
-    /// and the host adds every module's list with the call Tenancy's generator writes into it,
+    /// A module declares its permissions once, as the constants of a static class marked <c>[Permissions]</c>, and
+    /// the host adds every module's with the call Tenancy's generator writes into it,
     /// <c>services.AddTenancyPermissionsOfModules()</c>, which calls this; an export builds the same catalogue from
-    /// <c>TenancyPermissionsOfModules.All</c>. So a module that marks its list does not call this as well: the same
+    /// <c>TenancyPermissionsOfModules.All</c>. So a module's permissions are not added with this as well: the same
     /// list added twice stops the catalogue when it is built. This is for keys no generator collects, such as
     /// those of a module the host composes by hand.
     /// </para>

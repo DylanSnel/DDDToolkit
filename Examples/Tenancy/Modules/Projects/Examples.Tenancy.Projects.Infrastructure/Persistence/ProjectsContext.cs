@@ -133,9 +133,10 @@ public sealed class ProjectsContext(DbContextOptions<ProjectsContext> options) :
             });
 
             // The crew, as the Membership package keeps it: who is on it for which period, the roles each holds there,
-            // and the owner among them. The unit is where a key held in the organization reaches the project from.
-            // The tables and the seat's column keep the names they have always had.
-            project.HasMembers(row => row.Crew, row => row.OwnerSeatId, at: row => row.UnitId, new MemberTableNames(CrewTable, CrewRolesTable, MemberColumn: CrewSeatColumn));
+            // and the owner among them, the property the project marks [Owner]. The unit, the one it marks [At], is
+            // where a key held in the organization reaches the project from. The tables and the seat's column keep
+            // the names they have always had.
+            project.HasMembers(row => row.Crew, new MemberTableNames(CrewTable, CrewRolesTable, MemberColumn: CrewSeatColumn));
         });
 
         modelBuilder.Entity<ProjectRole>(role =>

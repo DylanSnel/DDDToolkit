@@ -1,3 +1,5 @@
+using DDDToolkit.Abstractions.Access;
+
 namespace DDDToolkit.Supporting.Membership.Access;
 
 /// <summary>
@@ -6,10 +8,13 @@ namespace DDDToolkit.Supporting.Membership.Access;
 /// declaration.
 /// <para>
 /// It is one of three things a resource's rules say apart from each other: who a member is, which is this;
-/// where the roles a member holds come from (<see cref="MembershipRules.Roles"/>,
-/// <see cref="MembershipRules.RolesKept"/> or <see cref="MembershipRules.RolesKeptElsewhere"/>); and whether
-/// something above the resource reaches it (<see cref="MembershipRules.Above"/>). Each stands by itself, so
-/// any member source goes with any kind of roles, with reach from above or without.
+/// where the roles a member holds come from (<see cref="MembershipRules.Roles"/>); and whether something above
+/// the resource reaches it (<see cref="MembershipRules.ReachFromAbove"/>). Each stands by itself, so any member source
+/// goes with any kind of roles, with reach from above or without.
+/// </para>
+/// <para>
+/// Rules say none, usually: who a member is follows from what a member is known by, the second type of
+/// <c>[Member&lt;...&gt;]</c> (<see cref="Inferred"/>). The others are for what that cannot tell.
 /// </para>
 /// </summary>
 public sealed record MemberSource
@@ -17,7 +22,7 @@ public sealed record MemberSource
     /// <summary>The claims of a token its user writes itself: nothing in them says who the user is.</summary>
     private const string UserMetadata = "user_metadata";
 
-    private MemberSource(MemberSourceKind kind, string? claimPath, string? function)
+    private MemberSource(MemberSourceKind kind, string? claimPath, DatabaseFunction? function)
     {
         Kind = kind;
         ClaimPath = claimPath;
@@ -25,8 +30,24 @@ public sealed record MemberSource
     }
 
     /// <summary>
+    /// Who a member is follows from what it is known by, the member id of <c>[Member&lt;TId, TMemberId, TRoleId,
+    /// TResource&gt;]</c>: the default, which rules that say no other source have.
+    /// <list type="bullet">
+    /// <item>The seat id of a package that keeps an organization's seats: the caller's seat. Such a package answers it,
+    /// in C# through the <c>ICallerMember</c> its join with this package registers for the resource, and in the
+    /// database through the function its contribution names for its seat id, where the context that maps the resource
+    /// maps that package's read model.</item>
+    /// <item>An id over a <see cref="Guid"/> otherwise: the caller's user id, the <c>sub</c> of its token, as
+    /// <see cref="CallerId"/>.</item>
+    /// </list>
+    /// A member known by anything else is a member the application says: <see cref="Claim"/> for a claim of the
+    /// token, <see cref="Resolved"/> for what it resolves itself.
+    /// </summary>
+    public static MemberSource Inferred { get; } = new(MemberSourceKind.Inferred, null, null);
+
+    /// <summary>
     /// The caller's user id, the <c>sub</c> of its token: for members that are users, known by an id over a
-    /// <see cref="Guid"/>. The default.
+    /// <see cref="Guid"/>. What <see cref="Inferred"/> takes for such an id, said outright.
     /// </summary>
     public static MemberSource CallerId { get; } = new(MemberSourceKind.CallerId, null, null);
 
@@ -73,17 +94,16 @@ public sealed record MemberSource
     /// </para>
     /// </summary>
     /// <param name="function">
-    /// The function that answers the caller's member id in the database, by its logical name,
-    /// <c>owner/name</c>: one without parameters that answers the id as the member's column stores it, or
+    /// The function that answers the caller's member id in the database, one a package ships or the
+    /// application declares: one without parameters that answers the id as the member's column stores it, or
     /// <c>NULL</c> for a caller that is nobody's member. Left out by an application whose database does not
     /// answer the questions itself; whatever writes the resource's functions refuses rules that name none.
     /// It is asked by the resource's functions, which run as their owner, so it reads every row whatever
     /// policies its tables have: it answers for the caller by a condition of its own, the caller's id or a
     /// claim, never by a policy.
     /// </param>
-    /// <exception cref="ArgumentException"><paramref name="function"/> is not a logical name, <c>owner/name</c>.</exception>
-    public static MemberSource Resolved(string? function = null)
-        => new(MemberSourceKind.Resolved, null, LogicalName(function, nameof(function)));
+    public static MemberSource Resolved(DatabaseFunction? function = null)
+        => new(MemberSourceKind.Resolved, null, function);
 
     /// <summary>Which fact about the caller it is.</summary>
     public MemberSourceKind Kind { get; }
@@ -92,41 +112,10 @@ public sealed record MemberSource
     public string? ClaimPath { get; }
 
     /// <summary>
-    /// For <see cref="MemberSourceKind.Resolved"/>, the logical name of the function that answers the caller's
-    /// member id in the database, or <see langword="null"/> when the rules name none; <see langword="null"/>
-    /// for every other kind.
+    /// For <see cref="MemberSourceKind.Resolved"/>, the function that answers the caller's member id in the
+    /// database, or <see langword="null"/> when the rules name none; <see langword="null"/> for every other kind.
     /// </summary>
-    public string? Function { get; }
-
-    /// <summary>
-    /// <paramref name="function"/> when it is a logical name, <c>owner/name</c>, or <see langword="null"/>:
-    /// the name whatever writes a database's functions asks a function of the application's by, whichever
-    /// schema it lives in. An owner is lower case letters, digits and dashes; a name is letters, digits and
-    /// underscores, not starting with a digit.
-    /// </summary>
-    /// <exception cref="ArgumentException"><paramref name="function"/> is something else.</exception>
-    internal static string? LogicalName(string? function, string parameter)
-    {
-        if (function is null)
-        {
-            return null;
-        }
-
-        var parts = function.Split('/');
-        return parts.Length == 2 && IsOwner(parts[0]) && IsName(parts[1])
-            ? function
-            : throw new ArgumentException(
-                "'" + function + "' is not the logical name of a function. A function of the application's is named by its owner and its name, "
-                + "'owner/name', such as 'organization/caller_place': the owner in lower case letters, digits and dashes, the name in letters, "
-                + "digits and underscores. Its schema is not said: it is found where the function is defined.",
-                parameter);
-    }
-
-    private static bool IsOwner(string owner)
-        => owner.Length > 0
-           && owner[0] != '-'
-           && owner[^1] != '-'
-           && owner.All(character => character is (>= 'a' and <= 'z') or (>= '0' and <= '9') or '-');
+    public DatabaseFunction? Function { get; }
 
     private static bool IsName(string name)
         => name.Length > 0

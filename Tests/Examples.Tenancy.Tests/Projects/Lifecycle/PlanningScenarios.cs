@@ -93,7 +93,6 @@ public sealed class PlanningScenarios(SampleHosts sample) : IClassFixture<Sample
             "Harbor wall",
             Harbor.Root,
             Harbor.Administrator.Id,
-            Harbor.ProjectRoles[SampleCatalogue.CrewLead],
             DateTimeOffset.UtcNow);
         project.Planned.Should().BeNull("a project is not planned until somebody plans it");
 

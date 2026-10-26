@@ -149,7 +149,7 @@ public sealed class InspectionsOfProjectsScenarios(SampleHosts sample) : IClassF
             ["shed"] = await tove.ProjectNodeIdAsync(Meadow.ProjectNamed("Garden shed")),
         };
 
-        // Leo leads Pier 7's crew and sees no other project. Through the gateway he is given no project but his
+        // Leo owns Pier 7 and sees no other project. Through the gateway he is given no project but his
         // own, so he is asked for here the way the gateway asks once Projects answered a project: of Inspections'
         // own schema, by the project's id, as the request's caller. Whatever id reaches that schema, what it
         // answers is decided by its own access check.
@@ -181,7 +181,8 @@ public sealed class InspectionsOfProjectsScenarios(SampleHosts sample) : IClassF
         }
 
         Titles(data.GetProperty("mine").GetProperty("inspections")).Should().Equal("Loose railing");
-        data.GetProperty("mine").GetProperty("inspections").GetProperty("canRecord").GetBoolean().Should().BeTrue("the crew's lead may record");
+        data.GetProperty("mine").GetProperty("inspections").GetProperty("canRecord").GetBoolean().Should().BeFalse(
+            "its owner holds the permissions Projects declares on it, and recording is the Inspections module's");
 
         // The lookup answers the key it was given and nothing else; the field says nothing at all, though an
         // inspection was recorded on Bay bridge. A project of his own tenant he has no part in and one of another

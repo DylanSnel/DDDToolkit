@@ -530,16 +530,7 @@ internal static class DiagnosticDescriptors
         category: Membership,
         DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
-        description: "For a class declared with the Membership package's member template, [Member<TId, TMemberId, TRoleId, TResource>], the toolkit writes the member list on the resource the template names: a private property Members, of MemberList<TMember, TId, TMemberId, TRoleId>, which the resource's own methods change its members through. It is written from four things the resource declares, and only when each can be told without a guess. The members: exactly one get-only partial property of IReadOnlyList<TMember>, IReadOnlyCollection<TMember> or IEnumerable<TMember>, which the toolkit backs with a list. The owner: exactly one property of TMemberId on the resource. New rows: TId has a public static Create(), which makes a new row's id: the generator writes one for an [EntityId<Guid>], and an id over anything else declares it. The codes: exactly one static property or field of MembershipCodes on the resource, the codes its member rules refuse under. And the resource has no member called Members of its own, and the member class's types are ones the generator can see: the id of an [AggregateRoot<Guid>] is written by another generator, which no generator sees, so an id a member is known by is declared with [EntityId<Guid>]. A resource that declares a MemberList itself, under whatever name, is left alone and hears nothing: that is the form for every other shape, a resource with two properties of the member's id, or codes kept elsewhere. This warning is for a resource that has no member list at all: its members could not be changed, so say what is missing, or write the property by hand. A member class that names no aggregate root, or names one whose members are another class, is DDD00060 on the member class instead.");
-
-    public static readonly DiagnosticDescriptor TenancyPermissionsUnreadable = Create(
-        id: "DDD00063",
-        title: "A module's keys marked [TenancyPermissions] are a list the project that composes the modules can read",
-        messageFormat: "'{0}' is marked [TenancyPermissions] and {1}, so its keys reach no catalogue. Make it a public static property or field with a getter, declared in a class that is not generic, whose type is a sequence of Permission.",
-        category: Tenancy,
-        DiagnosticSeverity.Error,
-        isEnabledByDefault: true,
-        description: "A module states its permission keys once, on a static list marked [TenancyPermissions], and Tenancy's generator collects every marked list into each application, the program the modules are composed in, such as the host, and into each library that declares no module, with DDD_Module or [assembly: Module]: TenancyPermissionsOfModules.All, which an export builds the catalogue from, and services.AddTenancyPermissionsOfModules(), which the host registers them with. It reads a list as the expression Type.Member, so the list is a static property or field, readable, declared in a class that is not generic (nor nested in one) and that code can name, and its type is a sequence of Permission: IReadOnlyList<Permission>, IEnumerable<Permission> or an array. A static virtual or abstract member of an interface, and a member of an extension block or of a file-local type, cannot be read that way. In a library the list is also public, in public types: the projects that reference the library, the one that composes the modules among them, see nothing less of it, whether the library declares a module or not. Only an application, the program the modules are composed in, may keep a list of its own internal, since it collects that one itself; not private or protected, though, since the class it is collected into reads it from outside its type. A list that is none of these is left out of every collection, and nothing else would say so: the module's keys would be missing from the catalogue the host runs with, and asking about one would throw when it is asked. It is an error for that reason.");
+        description: "For a class declared with the Membership package's member template, [Member<TId, TMemberId, TRoleId, TResource>], the toolkit writes onto the resource the template names what makes it a resource with members: its name, the codes it refuses under, as a static property Codes, and the scope of its module's system work, which its rules read through its type, MembershipRules.For<TResource>; and the member list, a private property Members, of MemberList<TMember, TId, TMemberId, TRoleId>, which the resource's own methods change its members through. The list is written from what the resource declares, and only when each can be told without a guess. The members: exactly one get-only partial property of IReadOnlyList<TMember>, IReadOnlyCollection<TMember> or IEnumerable<TMember>, which the toolkit backs with a list. The owner: the one property marked [Owner], of TMemberId, since the owner is a member. New rows: TId has a public static Create(), which makes a new row's id: the generator writes one for an [EntityId<Guid>], and an id over anything else declares it. The codes: the ones the toolkit writes, unless the resource declares one static property or field of MembershipCodes of its own, the form for codes a resource words itself; two of them, or a member called Codes that is not one, cannot be told. And the resource has no member called Members of its own, and the member class's types are ones the generator can see: the id of an [AggregateRoot<Guid>] is written by another generator, which no generator sees, so an id a member is known by is declared with [EntityId<Guid>]. A resource that declares a MemberList itself, under whatever name, is left alone and hears nothing: that is the form for every other shape. This warning is for a resource that has no member list at all: its members could not be changed, so say what is missing, or write the property by hand. A member class that names no aggregate root, or names one whose members are another class, is DDD00060 on the member class instead.");
 
     public static readonly DiagnosticDescriptor ModuleNotDeclaredByTheBuild = Create(
         id: "DDD00064",
@@ -611,7 +602,7 @@ internal static class DiagnosticDescriptors
         category: Supabase,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "A package's row access contribution is made in the project that runs the Supabase export, from the static members the application marks with the attributes the package names, [TenancyCatalogue], [TenancyOperators] or [MembershipRules<TMember>] among them; each such attribute says so with [ApplicationMark]. That project finds the marks in the projects it references, and of a library it sees what is public and nothing else: a member that is internal, or declared in a type that is, is not there for it at all. The export would then write Tenancy's policies from the default catalogue rather than the application's, or leave a resource's functions out, and nothing in that project could say why, since it never saw the mark. So the library that declares the member reports it, where it is declared: make it public, in public types, with a public getter. An application, the program that runs the export itself or the host, may keep its own marks internal, since no project references it for them. A list of keys marked [TenancyPermissions] is held to the same by DDD00063.");
+        description: "A package's row access contribution is made in the project that runs the Supabase export, from the static members the application marks with the attributes the package names, [TenancyCatalogue], [TenancyOperators] or [MembershipRules<TMember>] among them; each such attribute says so with [ApplicationMark]. That project finds the marks in the projects it references, and of a library it sees what is public and nothing else: a member that is internal, or declared in a type that is, is not there for it at all. The export would then write Tenancy's policies from the default catalogue rather than the application's, or leave a resource's functions out, and nothing in that project could say why, since it never saw the mark. So the library that declares the member reports it, where it is declared: make it public, in public types, with a public getter. An application, the program that runs the export itself or the host, may keep its own marks internal, since no project references it for them.");
 
     public static readonly DiagnosticDescriptor RowAccessContributionCannotBeMade = Create(
         id: "DDD00071",
@@ -783,4 +774,85 @@ internal static class DiagnosticDescriptors
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
         description: "A requirement attribute on a module's interface, [AccessRequests, InTenant] say, is the default of its requests: one that states nothing of its own, by attribute or by answering RequiredAccess, requires what the default says, on a line of its own in the generated switch. So every request that forgets its own requirement takes it, a command that forgets its key included, and a default is a requirement any of them may take. [AllowAnonymous] is none: a request that forgot would let anyone in, and a forgotten requirement never opens a door. A requirement for queries only, Tenancy's [RequiresOperator] or Membership's [SeenWith<TResourceId>(key)], is none either, since a command that says nothing would take it (DDD00082); [OwnOnly] reads a member of a request marked [Own], and a default reads none. And an attribute whose class's AttributeUsage leaves out interfaces is no default, which the compiler says as well (CS0592): a module's own requirement attribute is one where its class allows AttributeTargets.Interface. Each is reported at the attribute, and the interface's last arm stops a request that states nothing, as it does without a default.");
+
+    public static readonly DiagnosticDescriptor MembershipNamesChanged = Create(
+        id: "DDD00090",
+        title: "The names of resources with members are those of the newest access file",
+        messageFormat: "Membership names changed since the last access file. Gone: {0}. New: {1}. Codes clients read change with them, and the database gets new functions. A class you renamed keeps its old name with [Members(\"...\")].",
+        category: Supabase,
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "A resource with members is named after its class, the plural of it, or what [Members(\"...\")] says, and the name is what its codes start with and what its four functions in the database are named after. Renaming the class renames both: clients that branch on boards.already-member read another code, and the next access file makes new functions beside the old ones. The Supabase export the build runs compares the names of the resources it writes with those the newest access file of each module recorded, with the class each came from, and says once, in that build, which are gone and which are new. It does not guess which became which. A class that was renamed on purpose and should keep its name says so with [Members(\"OldName\")]; one that should take the new name needs nothing more, and the warning is not said again once the new access file is there. Without the export, SupabaseMigrationsExport unset, nothing compares the names, and no warning is given.");
+
+    public static readonly DiagnosticDescriptor MembershipNameUnreadable = Create(
+        id: "DDD00091",
+        title: "[Members] names a resource with what can be converted to a code and a function's name",
+        messageFormat: "'{0}' is named '{1}' with [Members], which cannot be converted to a code and a function's name. Write it as a class's name, such as People or CraneBoards, or as it comes out, crane-boards: letters and digits, with - or _ between words, starting with a letter.",
+        category: Membership,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "A resource with members is named after its class unless [Members(\"...\")] says otherwise, and the name is written in two forms: in lower case with a dash between words for its codes, boards.already-member, and with an underscore for its functions in the database, boards_i_see. What [Members] says is converted the same way a class's name is, PascalCase split into words, and taken as it is, not made plural. A space, a symbol other than - and _, a digit or a separator first, or a separator last cannot be converted, and nothing of the resource is written: its rules, MembershipRules.For<TResource>, do not compile until the name is put right.");
+
+    public static readonly DiagnosticDescriptor PermissionMisdeclared = Create(
+        id: "DDD00092",
+        title: "A permission is a public constant of a [Permissions] class, with a level",
+        messageFormat: "'{0}' {1}",
+        category: Access,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "A module declares its permissions in a static class marked [Permissions]: every public const string of it is a permission, which a request names in [RequiresKey] and a role gives, and each carries its level, the attribute that says where it is asked: Tenancy's [AtTenant] or [AtUnit], or Membership's [On<TResource>]. The packages' generators read the class and nothing else: Tenancy's puts every permission into its catalogue, Membership's every permission on a resource into the rules of that resource. So a class marked [Permissions] that is not static, a public const string without a level, a level on a field that is no public const string, or on one of a class that is not marked [Permissions], and a key declared twice in one class, would each be read as something it is not, or not at all, and are refused.");
+
+    public static readonly DiagnosticDescriptor PermissionLevelMisfits = Create(
+        id: "DDD00093",
+        title: "A permission's level fits what it is asked on",
+        messageFormat: "'{0}' {1}",
+        category: Membership,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "[On<TResource>] says a permission is asked on one resource with members, and how it is held there. TResource is the aggregate root a member class names, [Member<TId, TMemberId, TRoleId, TResource>]: on another class the permission would be asked on something that has no members, and its rules could not be made. Of the permissions on one resource, one at most is held by every member (EveryMember), since that is also the one that sees the resource from above; one at most locks the members (LocksMembers) and one at most locks the owner (LocksOwner), since each is the one key the database's lock asks for. A second is refused where it is declared, among the permissions the project sees.");
+
+    public static readonly DiagnosticDescriptor RulesWithoutPermissions = Create(
+        id: "DDD00094",
+        title: "The rules of a resource are made from the permissions declared on it",
+        messageFormat: "MembershipRules.For<{0}> finds no permission declared on '{0}' in this project or in the projects it references. Mark the keys asked on it [On<{0}>] in a [Permissions] class.",
+        category: Membership,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "MembershipRules.For<TResource> makes the rules of a resource from the permissions declared on it: the constants of a [Permissions] class marked [On<TResource>], in the project that makes the rules or in a project it references, which the package's generator hands over when the project is first used. Rules without a permission give the owner nothing and every role nothing, and the call would throw when the rules are made, so it is said where they are made.");
+
+    public static readonly DiagnosticDescriptor HandWrittenTenancyPermissions = Create(
+        id: "DDD00095",
+        title: "A module's permissions are declared in a [Permissions] class, not on a list of its own",
+        messageFormat: "'{0}' is a list of permissions marked [TenancyPermissions] by hand. Declare each permission as a constant of a static class marked [Permissions], with its level, [AtTenant], [AtUnit] or [On<TResource>]: the generator writes the module's list from it.",
+        category: Tenancy,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "A module declares its permissions once, as the constants of a static class marked [Permissions], each with its level and, in its summary or its Description, what it lets somebody do. Tenancy's generator writes the module's list for its catalogue from that class, under the module DDD_Module or [assembly: Module] names, and the project that composes the modules collects every such list. [TenancyPermissions] is the mark the generator puts on what it writes; a list a module marks with it by hand says the same keys a second time, apart from the constants a request requires, and is refused.");
+
+    public static readonly DiagnosticDescriptor PlaceMisdeclared = Create(
+        id: "DDD00097",
+        title: "[At] marks the one place an aggregate root hangs at",
+        messageFormat: "'{0}' {1}",
+        category: Access,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "[At] marks the property of an aggregate root that says where it hangs: the unit of an organization a board belongs to, the bay a crate stands in. A fact of the domain, which the rules of a resource with members read where they let it be reached from above: a key held at that place, or above it, reaches the aggregate. So it goes on one instance property of an aggregate root, the root itself and never an entity inside it, and that property is never empty: an aggregate that hangs nowhere could not be reached from above, which is what [At] says. A static property, one of another type, a second one and a nullable one are each refused.");
+
+    public static readonly DiagnosticDescriptor ReachFromAboveWithoutPlace = Create(
+        id: "DDD00098",
+        title: "Rules that reach a resource from above read where it hangs from its [At] property",
+        messageFormat: "MembershipRules.For<{0}> says reachFromAbove, and '{0}' marks no property [At]: reachFromAbove needs the place the resource hangs at: mark one property [At]",
+        category: Membership,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "reachFromAbove in the rules of a resource with members says that a key held where the resource hangs, or above it, reaches the resource. Where it hangs is a fact of the domain, said on the resource's class with [At] on the property that holds it, and read from there by the mapping and the functions in the database. Rules that reach from above a resource that marks no such property would be refused when the resource is first asked about, and when its functions are written; this says it where the rules are made.");
+
+    public static readonly DiagnosticDescriptor OwnAlternativeRedundant = Create(
+        id: "DDD00096",
+        title: "[OrOwn] beside a key the owner of the resource holds already says nothing more",
+        messageFormat: "[OrOwn] on '{0}' says nothing more: the owner of the {1} holds '{2}' already, which is declared [On<{1}>] with Owner = true and is asked on it. Remove [OrOwn].",
+        category: Access,
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "[OrOwn] on a request's member says the request is about the caller's own, or the caller holds the key of its [RequiresKey]. On the id of a resource with members, beside [OnResource] on it, the key is asked on that resource, and its owner holds every permission declared [On<TResource>] with Owner = true by owning it: the owner is let through by the key already, so [OrOwn] adds nothing and only makes the request read as if it did. [Own] and [OrOwn] stay meant for an aggregate with an [Owner] and no members, and for a key the owner does not hold, one declared with Owner = false.");
 }

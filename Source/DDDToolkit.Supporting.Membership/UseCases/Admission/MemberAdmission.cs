@@ -6,7 +6,7 @@ namespace DDDToolkit.Supporting.Membership.UseCases;
 /// <summary>
 /// What a use case asks before it changes the members of one kind of resource, where the answer is not the
 /// member list's to give: whether the one to be made a member is known, whether a role is one there is for
-/// this resource, and which role an owner holds. A handler asks, and passes the answer to the aggregate:
+/// this resource. A handler asks, and passes the answer to the aggregate:
 /// <code>
 /// await admission.RequireMemberAsync(command.With, cancellationToken);
 /// await admission.RequireRoleAsync(command.Role, cancellationToken);
@@ -88,22 +88,4 @@ public sealed class MemberAdmission<TResourceId, TMemberId, TRoleId>
             throw _codes.Refuse(MembershipRefusals.RoleNotForMembers, ("Role", role));
         }
     }
-
-    /// <summary>
-    /// The role every owner holds: what a resource is opened with, and what a new owner is given. The
-    /// application's own rule about which roles go to a member is not asked: an owner holds the owner's role
-    /// whatever else that role is for.
-    /// </summary>
-    /// <param name="cancellationToken">Cancels the lookup.</param>
-    /// <exception cref="Exceptions.RefusalException"><c>no-owner-role</c> when there is none in use, under the resource's codes.</exception>
-    public async ValueTask<TRoleId> OwnerRoleAsync(CancellationToken cancellationToken)
-        => await _roles.FindOwnerRoleAsync(cancellationToken).ConfigureAwait(false) ?? throw _codes.Refuse(MembershipRefusals.NoOwnerRole);
-
-    /// <summary>
-    /// The role every owner holds, or <see langword="null"/> when there is none in use: for a use case that
-    /// only needs to know which role is the owner's, and goes on without one, as taking a role from the owner
-    /// does.
-    /// </summary>
-    /// <param name="cancellationToken">Cancels the lookup.</param>
-    public ValueTask<TRoleId?> FindOwnerRoleAsync(CancellationToken cancellationToken) => _roles.FindOwnerRoleAsync(cancellationToken);
 }

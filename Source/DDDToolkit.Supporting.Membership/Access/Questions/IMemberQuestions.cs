@@ -9,11 +9,11 @@ namespace DDDToolkit.Supporting.Membership.Access;
 /// <para>
 /// A caller holds a key on a resource through its members: it is a member now, and holds a role there, now,
 /// that gives the key. A role counts only inside its membership, and only for the keys a member's role can
-/// give (<see cref="MembershipRules.MemberKeys"/>). Being a member gives one key by itself, when the rules
-/// name one (<see cref="MembershipRules.SeeKey"/>). The owner of a resource holds every key of it
-/// (<see cref="MembershipRules.Keys"/>), by owning it, and the application's own work holds every key: the
+/// give (<see cref="MembershipRules.RoleKeys"/>). Being a member gives one key by itself, when the rules
+/// name one (<see cref="MembershipRules.EveryMemberKey"/>). The owner of a resource holds the permissions marked
+/// <c>Owner</c> (<see cref="MembershipRules.OwnerKeys"/>), by owning it, and nothing through a role, and the application's own work holds every key: the
 /// application itself, and its work in a scope the rules name (<see cref="MembershipRules.IsOwnWork"/>). Where
-/// the rules say so (<see cref="MembershipRules.Above"/>), a key held where the resource sits, or above it,
+/// the rules say so (<see cref="MembershipRules.ReachFromAbove"/>), a key held where the resource sits, or above it,
 /// is held on the resource as well, by a caller that is no member of it. A resource the caller reaches in
 /// no way does not exist for it.
 /// </para>
@@ -55,7 +55,7 @@ public interface IMemberQuestions<TResourceId>
     /// application's own work; none for a caller that is nobody.
     /// <para>
     /// A reach says where one key is held, and nothing of the others. Through its members a resource is held
-    /// only where it is seen. From above it is seen by the key that sees (<see cref="MembershipRules.SeeKey"/>),
+    /// only where it is seen. From above it is seen by the key every member holds (<see cref="MembershipRules.EveryMemberKey"/>),
     /// so a caller that holds another key there and not that one is within this reach without seeing the
     /// resource. <see cref="HoldAsync"/> and <see cref="KeysOnAsync"/> answer only for what the caller sees; a
     /// statement of the module's own that should do the same puts the reach for the key that sees in front

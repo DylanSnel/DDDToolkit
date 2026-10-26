@@ -18,8 +18,6 @@ public sealed class MemberListTests
 
     private static readonly UserId Member = UserId.CreateSequential();
 
-    private static readonly NamedRole OwnersRole = DocumentMembership.Owner;
-
     private static readonly NamedRole Contributor = DocumentMembership.Contributor;
 
     private static readonly NamedRole Onlooker = DocumentMembership.Onlooker;
@@ -29,17 +27,16 @@ public sealed class MemberListTests
     // ---------------------------------------------------------------- opening
 
     [Fact]
-    public void A_resource_opens_with_its_owner_a_member_for_good_holding_the_owners_role_for_good()
+    public void A_resource_opens_with_its_owner_a_member_for_good_holding_no_role()
     {
         var document = Written();
 
         var owner = document.Shares.Should().ContainSingle().Which;
         owner.MemberId.Should().Be(Owner);
         (owner.StartsAt, owner.EndsAt, owner.AddedBy).Should().Be((Now, null, null));
-        var held = owner.Roles.Should().ContainSingle().Which;
-        (held.RoleId, held.StartsAt, held.EndsAt, held.GivenBy).Should().Be((OwnersRole, Now, null, null));
-        owner.HoldsAt(OwnersRole, Now).Should().BeTrue();
-        owner.HoldsAt(OwnersRole, Now.AddSeconds(-1)).Should().BeFalse("nothing counts before it starts");
+        owner.Roles.Should().BeEmpty("the owner holds what it holds by owning the resource");
+        owner.AppliesAt(Now).Should().BeTrue();
+        owner.AppliesAt(Now.AddSeconds(-1)).Should().BeFalse("nothing counts before it starts");
         document.DomainEvents.Should().ContainSingle().Which.Should().BeOfType<DocumentWritten>("opening raises nothing of the package's: the host's one event says it all");
         document.GetInvariantViolations().Should().BeEmpty();
     }
@@ -48,9 +45,9 @@ public sealed class MemberListTests
     public void A_member_list_is_opened_once()
     {
         var list = new MemberList<DocumentShare, DocumentShareId, UserId, NamedRole>([], Owner, Codes);
-        list.Open(OwnersRole, Now);
+        list.Open(Now);
 
-        FluentActions.Invoking(() => list.Open(OwnersRole, Now)).Should().Throw<InvalidOperationException>().WithMessage("*has members already*");
+        FluentActions.Invoking(() => list.Open(Now)).Should().Throw<InvalidOperationException>().WithMessage("*has members already*");
     }
 
     [Fact]
@@ -218,15 +215,15 @@ public sealed class MemberListTests
         var document = Written();
         document.ShareWith(Member, Contributor, MemberPeriod.Open(Now), Now, by: Owner);
 
-        document.TakeRole(Member, Contributor, OwnersRole);
+        document.TakeRole(Member, Contributor);
 
         document.Shares.Single(share => share.MemberId == Member).Roles.Should().BeEmpty("the member stays, without the role");
 
-        var again = Refused.With(Codes, MembershipRefusals.RoleNotHeld, () => document.TakeRole(Member, Contributor, OwnersRole));
+        var again = Refused.With(Codes, MembershipRefusals.RoleNotHeld, () => document.TakeRole(Member, Contributor));
         again.Arguments.Should().Contain("Member", Member).And.Contain("Role", Contributor);
 
         var stranger = UserId.CreateSequential();
-        Refused.With(Codes, MembershipRefusals.MemberNotFound, () => document.TakeRole(stranger, Contributor, OwnersRole)).Arguments.Should().Contain("Member", stranger);
+        Refused.With(Codes, MembershipRefusals.MemberNotFound, () => document.TakeRole(stranger, Contributor)).Arguments.Should().Contain("Member", stranger);
         Refused.With(Codes, MembershipRefusals.MemberNotFound, () => document.GiveRole(stranger, Contributor, MemberPeriod.Open(Now), Now, by: Owner));
         Refused.With(Codes, MembershipRefusals.MemberNotFound, () => document.Unshare(stranger));
     }
@@ -238,7 +235,7 @@ public sealed class MemberListTests
         document.ShareWith(Member, Contributor, MemberPeriod.Between(Now, Now.AddDays(1)), Now, by: Owner);
 
         // What was given once can always be taken back, and so can the member itself.
-        document.TakeRole(Member, Contributor, OwnersRole);
+        document.TakeRole(Member, Contributor);
         document.Unshare(Member);
 
         document.Shares.Should().ContainSingle().Which.MemberId.Should().Be(Owner);
@@ -346,125 +343,93 @@ public sealed class MemberListTests
     // ---------------------------------------------------------------- the owner
 
     [Fact]
-    public void The_owner_stays_with_no_end_in_the_owners_role()
+    public void The_owner_stays_for_good_holding_no_role()
     {
         var document = Written();
-        document.GiveRole(Owner, Contributor, MemberPeriod.Open(Now), Now, by: Owner);
-        document.GiveRole(Owner, Onlooker, MemberPeriod.Between(Now, Now.AddDays(7)), Now, by: Owner);
 
-        // The owner's role, as the use case named it, is the owner's until another owner is named.
-        Refused.With(Codes, MembershipRefusals.OwnerProtected, () => document.TakeRole(Owner, OwnersRole, OwnersRole)).Arguments.Should().BeEmpty();
-
-        // With no owner's role in use any more, the use case has none to name. The owner then still keeps a
-        // role that does not run out: the last one cannot be taken, and a dated one does not count as it.
-        document.TakeRole(Owner, Contributor, ownerRole: null);
-        Refused.With(Codes, MembershipRefusals.OwnerProtected, () => document.TakeRole(Owner, OwnersRole, ownerRole: null));
-
-        // What is not the owner's role and not the last is the owner's to lose, like anyone's.
-        document.TakeRole(Owner, Onlooker, OwnersRole);
-        document.Shares.Single().Roles.Select(held => held.RoleId).Should().Equal(OwnersRole);
-
+        // The owner holds what it holds by owning the resource: a role would give it more, or nothing.
+        Refused.With(Codes, MembershipRefusals.OwnerProtected, () => document.GiveRole(Owner, Contributor, MemberPeriod.Open(Now), Now, by: Owner)).Arguments.Should().BeEmpty();
         Refused.With(Codes, MembershipRefusals.OwnerProtected, () => document.Unshare(Owner));
 
         // And the owner is a member already, for good: adding them again is refused, whatever the period.
         Refused.With(Codes, MembershipRefusals.AlreadyMember, () => document.ShareWith(Owner, MemberPeriod.Open(Now.AddYears(10)), Now, by: Member));
         var owner = document.Shares.Single();
-        (owner.EndsAt, owner.Roles.Single().EndsAt).Should().Be((null, null));
+        (owner.EndsAt, owner.Roles.Count).Should().Be((null, 0));
         document.GetInvariantViolations().Should().BeEmpty();
     }
 
     [Fact]
-    public void Somebody_who_holds_the_owners_role_without_being_the_owner_loses_it_like_any_other_role()
+    public void A_role_called_owner_is_a_role_like_any_other()
     {
         var document = Written();
-        document.ShareWith(Member, OwnersRole, MemberPeriod.Open(Now), Now, by: Owner);
+        var called = new NamedRole("owner");
+        document.ShareWith(Member, called, MemberPeriod.Open(Now), Now, by: Owner);
 
-        // Holding everything the owner holds does not make a member the owner: only the owner is protected.
-        document.TakeRole(Member, OwnersRole, OwnersRole);
+        // Nothing about a role's name makes a member the owner: only the owner is protected.
+        document.TakeRole(Member, called);
         document.Unshare(Member);
 
         document.Shares.Should().ContainSingle().Which.MemberId.Should().Be(Owner);
     }
 
     [Fact]
-    public void Naming_an_owner_who_is_a_member_keeps_their_place_for_good_and_takes_the_old_owners_role_alone()
+    public void Naming_an_owner_who_is_a_member_keeps_their_place_for_good_with_no_role_and_the_old_owner_stays_in_the_role_said()
     {
         var document = Written();
-        document.GiveRole(Owner, Contributor, MemberPeriod.Open(Now), Now, by: Owner);
         document.ShareWith(Member, MemberPeriod.Between(Now, Now.AddDays(7)), Now, by: Owner);
-        document.GiveRole(Member, OwnersRole, MemberPeriod.Between(Now, Now.AddDays(7)), Now, by: Owner);
         document.GiveRole(Member, Onlooker, MemberPeriod.Open(Now), Now, by: Owner);
+        document.GiveRole(Member, Contributor, MemberPeriod.Between(Now, Now.AddDays(3)), Now, by: Owner);
         Forget(document);
         var later = Now.AddDays(1);
 
-        document.HandOver(Member, OwnersRole, later);
+        document.HandOver(Member, FormerOwner.StaysAs(Contributor), later);
 
-        // The new owner was a member, and held the owner's role, for a week: both are for good now. The
-        // onlooker's role had no end of its own and counted for that week: it still ends there. The old owner
-        // lost the owner's role and kept the contributor's, and their place.
+        // The new owner was a member for a week: it is one for good now, and holds what it holds by owning the
+        // document, so the roles it held went. The old owner stays on, in the role the command said.
         document.OwnerId.Should().Be(Member);
         var newOwner = document.Shares.Single(share => share.MemberId == Member);
-        (newOwner.StartsAt, newOwner.EndsAt).Should().Be((Now, null));
-        newOwner.Roles.Select(held => (held.RoleId, held.StartsAt, held.EndsAt, held.GivenBy))
-            .Should().BeEquivalentTo([(Onlooker, Now, (DateTimeOffset?)Now.AddDays(7), (UserId?)Owner), (OwnersRole, later, null, null)]);
+        (newOwner.StartsAt, newOwner.EndsAt, newOwner.Roles.Count).Should().Be((Now, null, 0));
         var oldOwner = document.Shares.Single(share => share.MemberId == Owner);
         oldOwner.EndsAt.Should().BeNull();
-        oldOwner.Roles.Select(held => held.RoleId).Should().Equal(Contributor);
+        oldOwner.Roles.Select(held => (held.RoleId, held.StartsAt, held.EndsAt, held.GivenBy)).Should().Equal((Contributor, later, null, null));
         Raised(document).Should().Equal(
-            Bare(new DocumentRoleGiven(document.Id, Member, OwnersRole)),
-            Bare(new DocumentRoleTaken(document.Id, Owner, OwnersRole)),
+            Bare(new DocumentRoleTaken(document.Id, Member, Onlooker)),
+            Bare(new DocumentRoleTaken(document.Id, Member, Contributor)),
+            Bare(new DocumentRoleGiven(document.Id, Owner, Contributor)),
             Bare(new DocumentHandedOver(document.Id, Owner, Member)));
         document.GetInvariantViolations().Should().BeEmpty();
 
-        // Named again, the member is the owner already; named back, the first owner is given the role anew.
-        Refused.With(Codes, MembershipRefusals.AlreadyOwner, () => document.HandOver(Member, OwnersRole, later)).Arguments.Should().BeEmpty();
-        document.HandOver(Owner, OwnersRole, later);
-        document.Shares.Single(share => share.MemberId == Owner).Roles.Select(held => held.RoleId).Should().BeEquivalentTo([Contributor, OwnersRole]);
+        // Named again, the member is the owner already; named back, the first owner's role goes as the second's did.
+        Refused.With(Codes, MembershipRefusals.AlreadyOwner, () => document.HandOver(Member, FormerOwner.Leaves, later)).Arguments.Should().BeEmpty();
+        document.HandOver(Owner, FormerOwner.StaysAs(Onlooker), later);
+        document.Shares.Single(share => share.MemberId == Owner).Roles.Should().BeEmpty();
         document.Shares.Single(share => share.MemberId == Member).Roles.Select(held => held.RoleId).Should().Equal(Onlooker);
     }
 
     [Fact]
-    public void A_member_for_a_week_who_owned_the_resource_for_a_day_stays_for_good_and_holds_its_other_roles_no_longer_than_the_week()
+    public void Naming_an_owner_with_the_old_owner_leaving_takes_the_old_owner_off_the_list()
     {
-        List<DocumentShare> shares = [];
-        var week = Now.AddDays(7);
-        var list = new MemberList<DocumentShare, DocumentShareId, UserId, NamedRole>(shares, Owner, Codes);
-        list.Open(OwnersRole, Now);
+        var document = Written();
+        document.ShareWith(Member, Onlooker, MemberPeriod.Open(Now), Now, by: Owner);
+        Forget(document);
 
-        // Dee is on the document for a week: an onlooker with no end of its own, a contributor for a fortnight,
-        // which counts for the week alone, and for three days something that runs out before the week does.
-        var dee = list.Add(Member, MemberPeriod.Between(Now, week), Now, by: Owner);
-        list.GiveRole(Member, Onlooker, MemberPeriod.Open(Now), Now, by: Owner);
-        list.GiveRole(Member, Contributor, MemberPeriod.Between(Now, Now.AddDays(14)), Now, by: Owner);
-        var brief = new NamedRole("brief");
-        list.GiveRole(Member, brief, MemberPeriod.Between(Now, Now.AddDays(3)), Now, by: Owner);
-        var late = new NamedRole("late");
-        list.GiveRole(Member, late, MemberPeriod.Open(week.AddDays(1)), Now, by: Owner);
+        document.HandOver(Member, FormerOwner.Leaves, Now.AddDays(1));
 
-        // Named owner on the first day.
-        var named = list.NameOwner(Member, OwnersRole, Now.AddDays(1));
+        document.Shares.Should().ContainSingle().Which.MemberId.Should().Be(Member);
+        Raised(document).Should().Equal(
+            Bare(new DocumentRoleTaken(document.Id, Member, Onlooker)),
+            Bare(new DocumentUnshared(document.Id, Owner)),
+            Bare(new DocumentHandedOver(document.Id, Owner, Member)));
+        document.GetInvariantViolations().Should().BeEmpty();
+    }
 
-        // The answer says the end that went, so a host that wants her off again at that moment can keep it.
-        named.EndLifted.Should().Be(week);
-        (named.Added, named.BeganAnew, named.StartMoved, named.RoleGiven, named.RoleTaken).Should().Be((false, false, null, true, true));
-        named.RolesDropped.Select(held => held.RoleId).Should().Equal([late], "a role that was to start when the membership would have been over never counted");
-
-        // Handed back on the second day, by the aggregate, which keeps who the owner is.
-        var handedBack = new MemberList<DocumentShare, DocumentShareId, UserId, NamedRole>(shares, Member, Codes)
-            .NameOwner(Owner, OwnersRole, Now.AddDays(2));
-        handedBack.EndLifted.Should().BeNull("the first owner's place had no end");
-
-        // An owner's place has no end, and stays so: she is on the document for good.
-        (dee.StartsAt, dee.EndsAt).Should().Be((Now, null));
-        dee.AppliesAt(Now.AddYears(5)).Should().BeTrue();
-
-        // What her roles gave, they give no longer than they ever did: until the week was to end.
-        dee.Roles.Select(held => (held.RoleId, held.EndsAt)).Should().BeEquivalentTo(
-            [(Onlooker, (DateTimeOffset?)week), (Contributor, (DateTimeOffset?)week), (brief, (DateTimeOffset?)Now.AddDays(3))]);
-        dee.HoldsAt(Onlooker, week.AddTicks(-1)).Should().BeTrue();
-        dee.HoldsAt(Onlooker, week).Should().BeFalse("a role with no end of its own got the end the membership had");
-        dee.HoldsAt(Contributor, week).Should().BeFalse("a role that ran past the membership's end stops where it always did");
-        dee.HoldsAt(OwnersRole, Now.AddDays(3)).Should().BeFalse("the owner's role went with the ownership");
+    [Fact]
+    public void Nothing_is_assumed_for_the_old_owner()
+    {
+        // There is no role the old owner falls back to, since it held none: the command says what it becomes.
+        typeof(MemberList<,,,>).GetMethod("NameOwner")!.GetParameters().Select(parameter => parameter.ParameterType.Name)
+            .Should().Contain("FormerOwner`1");
+        FluentActions.Invoking(() => Written().HandOver(Member, null!, Now)).Should().Throw<ArgumentNullException>();
     }
 
     [Fact]
@@ -472,143 +437,39 @@ public sealed class MemberListTests
     {
         List<DocumentShare> shares = [];
         var list = new MemberList<DocumentShare, DocumentShareId, UserId, NamedRole>(shares, Owner, Codes);
-        list.Open(OwnersRole, Now);
+        list.Open(Now);
         list.Add(Member, Contributor, MemberPeriod.Between(Now, Now.AddDays(30)), Now, by: Owner);
         list.GiveRole(Member, Onlooker, MemberPeriod.Open(Now), Now, by: Owner);
         var later = Now.AddDays(90);
 
-        var named = list.NameOwner(Member, OwnersRole, later);
+        var named = list.NameOwner(Member, FormerOwner.Leaves, later);
 
-        // Not added: the member was on the list. But nothing of the membership that ended is left, and the
-        // answer says so, so an aggregate that raises an event for every role a member loses can raise them.
-        (named.Added, named.BeganAnew, named.RoleGiven, named.RoleTaken).Should().Be((false, true, true, true));
+        // Not added: the member was on the list. But nothing of the membership that ended is left, and the answer says
+        // so, so an aggregate that raises an event for every role a member loses can raise them.
+        (named.Added, named.BeganAnew, named.PreviousRole, named.PreviousLeft).Should().Be((false, true, (NamedRole?)null, true));
         named.RolesDropped.Select(held => (held.RoleId, held.StartsAt, held.EndsAt))
             .Should().Equal((Contributor, Now, Now.AddDays(30)), (Onlooker, Now, null));
         (named.EndLifted, named.StartMoved).Should().Be((null, null), "the membership that ended is over: nothing of it was changed");
 
-        // And the host's aggregate raises its own events from that answer.
-        var document = Written();
-        document.ShareWith(Member, Contributor, MemberPeriod.Between(Now, Now.AddDays(30)), Now, by: Owner);
-        Forget(document);
-
-        document.HandOver(Member, OwnersRole, later);
-
-        Raised(document).Should().Equal(
-            Bare(new DocumentRoleTaken(document.Id, Member, Contributor)),
-            Bare(new DocumentShared(document.Id, Member)),
-            Bare(new DocumentRoleGiven(document.Id, Member, OwnersRole)),
-            Bare(new DocumentRoleTaken(document.Id, Owner, OwnersRole)),
-            Bare(new DocumentHandedOver(document.Id, Owner, Member)));
+        var member = shares.Single(share => share.MemberId == Member);
+        (member.StartsAt, member.EndsAt, member.Roles.Count).Should().Be((later, null, 0), "the membership does not read as unbroken since it first began");
     }
 
     [Fact]
-    public void Naming_an_owner_who_already_holds_the_owners_role_for_good_gives_nothing_again()
+    public void Naming_an_owner_whose_membership_is_yet_to_start_or_to_end_starts_it_now_for_good_and_says_so()
     {
-        var document = Written();
-        document.ShareWith(Member, OwnersRole, MemberPeriod.Open(Now), Now, by: Owner);
-        Forget(document);
+        List<DocumentShare> shares = [];
+        var list = new MemberList<DocumentShare, DocumentShareId, UserId, NamedRole>(shares, Owner, Codes);
+        list.Open(Now);
+        var dee = list.Add(Member, Onlooker, MemberPeriod.Between(Now.AddDays(10), Now.AddDays(20)), Now, by: Owner);
 
-        document.HandOver(Member, OwnersRole, Now.AddDays(1));
-
-        var held = document.Shares.Single(share => share.MemberId == Member).Roles.Should().ContainSingle().Which;
-        (held.StartsAt, held.GivenBy).Should().Be((Now, Owner), "the role the member held is the one it keeps");
-        Raised(document).Should().Equal(
-            Bare(new DocumentRoleTaken(document.Id, Owner, OwnersRole)),
-            Bare(new DocumentHandedOver(document.Id, Owner, Member)));
-    }
-
-    [Fact]
-    public void Naming_an_owner_whose_membership_had_ended_starts_it_anew_with_the_owners_role_alone()
-    {
-        var document = Written();
-        document.ShareWith(Member, Contributor, MemberPeriod.Between(Now, Now.AddDays(30)), Now, by: Owner);
-        document.GiveRole(Member, Onlooker, MemberPeriod.Open(Now), Now, by: Owner);
-        var later = Now.AddDays(90);
-
-        // The membership ran out two months ago, and the onlooker's role, which had no end of its own, with it.
-        // Named owner, the member is one from now on: nobody gave it the onlooker's role again.
-        document.HandOver(Member, OwnersRole, later);
-
-        var member = document.Shares.Single(share => share.MemberId == Member);
-        (member.StartsAt, member.EndsAt).Should().Be((later, null), "the membership does not read as unbroken since it first began");
-        member.Roles.Select(held => (held.RoleId, held.StartsAt, held.EndsAt)).Should().Equal((OwnersRole, later, null));
-        member.HoldsAt(Onlooker, later).Should().BeFalse();
-        document.GetInvariantViolations().Should().BeEmpty();
-    }
-
-    [Fact]
-    public void Naming_an_owner_whose_membership_is_yet_to_start_starts_it_now()
-    {
-        var document = Written();
-        document.ShareWith(Member, Onlooker, MemberPeriod.Between(Now.AddDays(10), Now.AddDays(20)), Now, by: Owner);
-
-        document.HandOver(Member, OwnersRole, Now.AddDays(1));
-
-        var member = document.Shares.Single(share => share.MemberId == Member);
-        (member.StartsAt, member.EndsAt).Should().Be((Now.AddDays(1), null), "an owner is a member from the moment it is named");
-        member.Roles.Select(held => held.RoleId).Should().BeEquivalentTo([Onlooker, OwnersRole], "a membership that had not ended keeps what it holds");
-        member.HoldsAt(OwnersRole, Now.AddDays(1)).Should().BeTrue();
-        member.Roles.Single(held => held.RoleId == Onlooker).Should().Match<MemberRole<UserId, NamedRole>>(
-            held => held.StartsAt == Now.AddDays(10) && held.EndsAt == Now.AddDays(20),
-            "a role with dates of its own inside the membership's keeps them");
+        var named = list.NameOwner(Member, FormerOwner.StaysAs(Contributor), Now.AddDays(1));
 
         // The answer says both changes of the period: the start that was moved, and the end that went.
-        List<DocumentShare> shares = [];
-        var list = new MemberList<DocumentShare, DocumentShareId, UserId, NamedRole>(shares, Owner, Codes);
-        list.Open(OwnersRole, Now);
-        list.Add(Member, MemberPeriod.Between(Now.AddDays(10), Now.AddDays(20)), Now, by: Owner);
-
-        var named = list.NameOwner(Member, OwnersRole, Now.AddDays(1));
-
         (named.StartMoved, named.EndLifted, named.BeganAnew, named.Added).Should().Be((Now.AddDays(10), Now.AddDays(20), false, false));
-        named.RolesDropped.Should().BeEmpty();
-    }
-
-    [Fact]
-    public void A_member_who_was_to_come_later_and_owned_the_resource_before_then_holds_its_other_roles_no_sooner_than_it_was_to()
-    {
-        List<DocumentShare> shares = [];
-        var (comes, leaves) = (Now.AddDays(10), Now.AddDays(20));
-        var list = new MemberList<DocumentShare, DocumentShareId, UserId, NamedRole>(shares, Owner, Codes);
-        list.Open(OwnersRole, Now);
-
-        // Dee is to be on the document from the tenth day to the twentieth. Her roles have dates of their own:
-        // one given from today on, which counts only once she is there; one inside her time; and one that is
-        // over before she comes, which never counts.
-        var dee = list.Add(Member, MemberPeriod.Between(comes, leaves), Now, by: Owner);
-        list.GiveRole(Member, Onlooker, MemberPeriod.Open(Now), Now, by: Owner);
-        list.GiveRole(Member, Contributor, MemberPeriod.Between(Now.AddDays(12), Now.AddDays(15)), Now, by: Owner);
-        var early = new NamedRole("early");
-        list.GiveRole(Member, early, MemberPeriod.Between(Now, Now.AddDays(5)), Now, by: Owner);
-        dee.HoldsAt(Onlooker, Now.AddDays(2)).Should().BeFalse("a role counts only inside its membership, which has not started");
-
-        // Named owner on the first day, and the document handed back on the second.
-        var named = list.NameOwner(Member, OwnersRole, Now.AddDays(1));
-        new MemberList<DocumentShare, DocumentShareId, UserId, NamedRole>(shares, Member, Codes)
-            .NameOwner(Owner, OwnersRole, Now.AddDays(2));
-
-        (named.StartMoved, named.EndLifted).Should().Be((comes, leaves));
-        named.RolesDropped.Select(held => held.RoleId).Should().Equal([early], "a role that was over before the membership was to start never counted");
-
-        // She is on the document from the day she was named, for good: an owner's place.
-        (dee.StartsAt, dee.EndsAt).Should().Be((Now.AddDays(1), null));
-
-        // Her roles give nothing sooner, and nothing for longer, than they were to: each kept to the period her membership had.
-        dee.Roles.Select(held => (held.RoleId, held.StartsAt, held.EndsAt)).Should().BeEquivalentTo(
-            [(Onlooker, comes, (DateTimeOffset?)leaves), (Contributor, Now.AddDays(12), (DateTimeOffset?)Now.AddDays(15))]);
-        dee.HoldsAt(Onlooker, Now.AddDays(3)).Should().BeFalse("she was not to look on before the tenth day, and passing through ownership gave her no head start");
-        dee.HoldsAt(Onlooker, comes).Should().BeTrue();
-        dee.HoldsAt(Onlooker, leaves).Should().BeFalse();
-
-        // A membership with no end that was to start later: the same for the start alone.
-        var cy = UserId.CreateSequential();
-        var later = list.Add(cy, MemberPeriod.Open(comes), Now, by: Owner);
-        list.GiveRole(cy, Onlooker, MemberPeriod.Open(Now), Now, by: Owner);
-        var again = list.NameOwner(cy, OwnersRole, Now.AddDays(3));
-
-        (again.StartMoved, again.EndLifted).Should().Be((comes, null));
-        later.Roles.Single(held => held.RoleId == Onlooker).Should().Match<MemberRole<UserId, NamedRole>>(held => held.StartsAt == comes && held.EndsAt == null);
-        later.HoldsAt(OwnersRole, Now.AddDays(3)).Should().BeTrue("the owner's role is the owner's from the moment it is named");
+        named.RolesDropped.Select(held => held.RoleId).Should().Equal(Onlooker);
+        (named.PreviousRole, named.PreviousLeft).Should().Be((Contributor, false));
+        (dee.StartsAt, dee.EndsAt).Should().Be((Now.AddDays(1), null), "an owner is a member from the moment it is named, for good");
     }
 
     [Fact]
@@ -617,17 +478,16 @@ public sealed class MemberListTests
         var document = Written();
         Forget(document);
 
-        document.HandOver(Member, OwnersRole, Now.AddDays(1));
+        document.HandOver(Member, FormerOwner.StaysAs(Onlooker), Now.AddDays(1));
 
-        document.Shares.Select(share => (share.MemberId, Roles: share.Roles.Count)).Should().Equal((Owner, 0), (Member, 1));
+        document.Shares.Select(share => (share.MemberId, Roles: share.Roles.Count)).Should().Equal((Owner, 1), (Member, 0));
         document.Shares.Single(share => share.MemberId == Member).AddedBy.Should().BeNull("nobody added the owner: they were named");
         Raised(document).Should().Equal(
             Bare(new DocumentShared(document.Id, Member)),
-            Bare(new DocumentRoleGiven(document.Id, Member, OwnersRole)),
-            Bare(new DocumentRoleTaken(document.Id, Owner, OwnersRole)),
+            Bare(new DocumentRoleGiven(document.Id, Owner, Onlooker)),
             Bare(new DocumentHandedOver(document.Id, Owner, Member)));
 
-        // The old owner is a member like any other now, with no role, and can be removed.
+        // The old owner is a member like any other now, and can be removed.
         document.Unshare(Owner);
         document.Shares.Should().ContainSingle().Which.MemberId.Should().Be(Member);
     }
@@ -637,11 +497,11 @@ public sealed class MemberListTests
     {
         List<DocumentShare> shares = [];
         var list = new MemberList<DocumentShare, DocumentShareId, UserId, NamedRole>(shares, Owner, Codes);
-        list.Open(OwnersRole, Now);
+        list.Open(Now);
 
-        var named = list.NameOwner(Member, OwnersRole, Now.AddDays(1));
+        var named = list.NameOwner(Member, FormerOwner.StaysAs(Onlooker), Now.AddDays(1));
 
-        (named.Previous, named.Owner, named.Added, named.RoleGiven, named.RoleTaken).Should().Be((Owner, Member, true, true, true));
+        (named.Previous, named.Owner, named.Added, named.PreviousRole, named.PreviousLeft).Should().Be((Owner, Member, true, Onlooker, false));
         (named.BeganAnew, named.EndLifted, named.StartMoved).Should().Be((false, null, null), "somebody who was no member had no membership to change");
         named.RolesDropped.Should().BeEmpty();
 
@@ -709,9 +569,9 @@ public sealed class MemberListTests
             () => document.ShareWith(UserId.CreateSequential(), MemberPeriod.Open(Now), Now, by: Owner),
             () => document.ShareWith(UserId.CreateSequential(), Onlooker, MemberPeriod.Open(Now), Now, by: Owner),
             () => document.GiveRole(Member, Onlooker, MemberPeriod.Open(Now), Now, by: Owner),
-            () => document.TakeRole(Member, Contributor, OwnersRole),
+            () => document.TakeRole(Member, Contributor),
             () => document.Unshare(Member),
-            () => document.HandOver(Member, OwnersRole, Now),
+            () => document.HandOver(Member, FormerOwner.Leaves, Now),
         ];
 
         foreach (var change in changes)
@@ -732,7 +592,7 @@ public sealed class MemberListTests
 
         document.ShareWith(Member, Contributor, MemberPeriod.Open(Now), Now, by: Owner);
         document.GiveRole(Member, Onlooker, MemberPeriod.Open(Now), Now, by: Owner);
-        document.TakeRole(Member, Contributor, OwnersRole);
+        document.TakeRole(Member, Contributor);
         document.Unshare(Member);
 
         // The package raises none of its own, so names and payloads are the host's to choose and to keep.
@@ -754,12 +614,12 @@ public sealed class MemberListTests
 
         Refused.With(Codes, MembershipRefusals.AlreadyMember, () => document.ShareWith(Member, MemberPeriod.Open(Now), Now, by: Owner));
         Refused.With(Codes, MembershipRefusals.RoleHeld, () => document.GiveRole(Member, Contributor, MemberPeriod.Open(Now), Now, by: Owner));
-        Refused.With(Codes, MembershipRefusals.RoleNotHeld, () => document.TakeRole(Member, Onlooker, OwnersRole));
+        Refused.With(Codes, MembershipRefusals.RoleNotHeld, () => document.TakeRole(Member, Onlooker));
         Refused.With(Codes, MembershipRefusals.OwnerProtected, () => document.Unshare(Owner));
-        Refused.With(Codes, MembershipRefusals.AlreadyOwner, () => document.HandOver(Owner, OwnersRole, Now));
+        Refused.With(Codes, MembershipRefusals.AlreadyOwner, () => document.HandOver(Owner, FormerOwner.Leaves, Now));
 
         document.DomainEvents.Should().BeEmpty();
-        document.Shares.Select(share => (share.MemberId, Roles: share.Roles.Count)).Should().Equal((Owner, 1), (Member, 1));
+        document.Shares.Select(share => (share.MemberId, Roles: share.Roles.Count)).Should().Equal((Owner, 0), (Member, 1));
     }
 
     // ---------------------------------------------------------------- the net under the methods
@@ -771,7 +631,7 @@ public sealed class MemberListTests
         document.ShareWith(Member, MemberPeriod.Open(Now), Now, by: Owner);
 
         // Went round the member list: the row of another document's member, for the same user.
-        var elsewhere = new Document(DocumentId.CreateSequential(), "Elsewhere", Member, OwnersRole, Now);
+        var elsewhere = new Document(DocumentId.CreateSequential(), "Elsewhere", Member, Now);
         Break.ListOf<DocumentShare>(document, "_shares").Add(elsewhere.Shares.Single());
 
         var violation = document.GetInvariantViolations().Should().ContainSingle().Which;
@@ -783,10 +643,9 @@ public sealed class MemberListTests
 
     [Theory]
     [InlineData("the membership ends")]
-    [InlineData("every role ends")]
-    [InlineData("no role is held")]
+    [InlineData("a role is held")]
     [InlineData("the owner is no member")]
-    public void An_owner_whose_place_or_whose_roles_run_out_is_caught_under_the_resources_own_code(string broken)
+    public void An_owner_whose_place_runs_out_or_who_holds_a_role_is_caught_under_the_resources_own_code(string broken)
     {
         var document = Written();
         var owner = document.Shares.Single();
@@ -795,11 +654,11 @@ public sealed class MemberListTests
             case "the membership ends":
                 Break.Set(owner, nameof(DocumentShare.EndsAt), (DateTimeOffset?)Now.AddDays(30));
                 break;
-            case "every role ends":
-                Break.Set(owner.Roles.Single(), nameof(MemberRole<UserId, NamedRole>.EndsAt), (DateTimeOffset?)Now.AddDays(30));
-                break;
-            case "no role is held":
-                Break.ListOf<MemberRole<UserId, NamedRole>>(owner, "_roles").Clear();
+            case "a role is held":
+                // Went round the member list: a role held on another document, put on the owner's place.
+                var elsewhere = new Document(DocumentId.CreateSequential(), "Elsewhere", Member, Now);
+                var held = elsewhere.ShareWith(Owner, Contributor, MemberPeriod.Open(Now), Now, by: Member).Roles.Single();
+                Break.ListOf<MemberRole<UserId, NamedRole>>(owner, "_roles").Add(held);
                 break;
             default:
                 Break.ListOf<DocumentShare>(document, "_shares").Clear();
@@ -818,7 +677,7 @@ public sealed class MemberListTests
         var member = document.ShareWith(Member, Contributor, MemberPeriod.Open(Now), Now, by: Owner);
 
         // Went round the member list: a second hold of the role the member has, taken from another document.
-        var elsewhere = new Document(DocumentId.CreateSequential(), "Elsewhere", Member, OwnersRole, Now);
+        var elsewhere = new Document(DocumentId.CreateSequential(), "Elsewhere", Member, Now);
         var second = elsewhere.ShareWith(UserId.CreateSequential(), Contributor, MemberPeriod.Open(Now), Now, by: Member).Roles.Single();
         Break.ListOf<MemberRole<UserId, NamedRole>>(member, "_roles").Add(second);
 
@@ -835,8 +694,8 @@ public sealed class MemberListTests
 
     // ---------------------------------------------------------------- helpers
 
-    /// <summary>A document written now, owned by <see cref="Owner"/>, who holds the owner's role on it.</summary>
-    private static Document Written() => new(DocumentId.CreateSequential(), "Minutes", Owner, OwnersRole, Now);
+    /// <summary>A document written now, owned by <see cref="Owner"/>, who is on it for good, holding no role.</summary>
+    private static Document Written() => new(DocumentId.CreateSequential(), "Minutes", Owner, Now);
 
     /// <summary>Forgets the events raised so far, so a test reads only what its own change raised.</summary>
     private static void Forget(Document document) => ((IHasDomainEvents)document).DequeueDomainEvents();

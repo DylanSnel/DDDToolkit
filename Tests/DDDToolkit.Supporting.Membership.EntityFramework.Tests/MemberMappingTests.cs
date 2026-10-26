@@ -78,7 +78,7 @@ public sealed class MemberMappingTests
         var model = ModelOf(document =>
         {
             document.ToTable("Papers", "office");
-            document.HasMembers(row => row.Shares, row => row.OwnerId, new MemberTableNames(Roles: "PaperRoles"));
+            document.HasMembers(row => row.Shares, new MemberTableNames(Roles: "PaperRoles"));
         });
         var mapping = MembershipModel.MembersOf(model.FindEntityType(typeof(Document))!)!;
 
@@ -93,7 +93,7 @@ public sealed class MemberMappingTests
         var model = ModelOf(document =>
         {
             document.HasKey(nameof(Document.Title), nameof(Document.Id));
-            document.HasMembers(row => row.Shares, row => row.OwnerId);
+            document.HasMembers(row => row.Shares);
         });
         var mapping = MembershipModel.MembersOf(model.FindEntityType(typeof(Document))!)!;
 
@@ -108,7 +108,7 @@ public sealed class MemberMappingTests
     {
         // A binder is known by its shelf and its id: the part joins its key when the model is finished, after
         // its members were mapped. The member tables are keyed under the whole of it all the same.
-        var model = ShelvesOf(binder => binder.HasMembers(row => row.Borrowers, row => row.OwnerId));
+        var model = ShelvesOf(binder => binder.HasMembers(row => row.Borrowers));
         var binder = model.FindEntityType(typeof(Binder))!;
         var mapping = MembershipModel.MembersOf(binder)!;
 
@@ -137,14 +137,14 @@ public sealed class MemberMappingTests
         await using var connection = new Microsoft.Data.Sqlite.SqliteConnection("DataSource=:memory:");
         await connection.OpenAsync(cancellation);
         var options = new DbContextOptionsBuilder<ShelvesContext>().UseSqlite(connection).Options;
-        void Map(Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder<Binder> binder) => binder.HasMembers(row => row.Borrowers, row => row.OwnerId);
+        void Map(Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder<Binder> binder) => binder.HasMembers(row => row.Borrowers);
 
         var now = new DateTimeOffset(2026, 10, 1, 9, 0, 0, TimeSpan.Zero);
         var (upper, lower) = (ShelfId.CreateSequential(), ShelfId.CreateSequential());
         var (ada, ben) = (UserId.CreateSequential(), UserId.CreateSequential());
-        var folio = new Binder(upper, BinderId.CreateSequential(), ada, BinderMembership.Owner, now);
+        var folio = new Binder(upper, BinderId.CreateSequential(), ada, now);
         folio.LendTo(ben, BinderMembership.Borrower, MemberPeriod.Between(now, now.AddDays(7)), now, by: ada);
-        var atlas = new Binder(lower, BinderId.CreateSequential(), ben, BinderMembership.Owner, now);
+        var atlas = new Binder(lower, BinderId.CreateSequential(), ben, now);
 
         await using (var writing = new ShelvesContext(options, Map))
         {
@@ -159,11 +159,11 @@ public sealed class MemberMappingTests
             var read = await reading.Set<Binder>().SingleAsync(binder => binder.Id == folio.Id, cancellation);
             read.ShelfId.Should().Be(upper);
             read.Borrowers.Select(row => (row.MemberId, Roles: string.Join(",", row.Roles.Select(held => held.RoleId.Value))))
-                .Should().BeEquivalentTo([(ada, "owner"), (ben, "reader")]);
+                .Should().BeEquivalentTo([(ada, ""), (ben, "reader")], "the owner holds no role");
             (await reading.Database.SqlQuery<int>($"SELECT count(*) AS \"Value\" FROM \"BinderBorrowers\" WHERE \"ShelfId\" = {upper.Value} AND \"BinderId\" = {folio.Id.Value}").SingleAsync(cancellation))
                 .Should().Be(2);
             (await reading.Database.SqlQuery<int>($"SELECT count(*) AS \"Value\" FROM \"BinderBorrowerRoles\" WHERE \"ShelfId\" = {upper.Value}").SingleAsync(cancellation))
-                .Should().Be(2);
+                .Should().Be(1);
 
             // And a change of the members is saved under the same key: the loan and its role are gone, the owner's stay.
             read.TakeBackFrom(ben);
@@ -172,7 +172,7 @@ public sealed class MemberMappingTests
 
         await using var after = new ShelvesContext(options, Map);
         (await after.Set<Binder>().SingleAsync(binder => binder.Id == folio.Id, cancellation)).Borrowers.Should().ContainSingle().Which.MemberId.Should().Be(ada);
-        (await after.Set<Binder>().SingleAsync(binder => binder.Id == atlas.Id, cancellation)).Borrowers.Should().ContainSingle().Which.Roles.Should().ContainSingle();
+        (await after.Set<Binder>().SingleAsync(binder => binder.Id == atlas.Id, cancellation)).Borrowers.Should().ContainSingle().Which.Roles.Should().BeEmpty();
     }
 
     [Fact]
@@ -182,7 +182,7 @@ public sealed class MemberMappingTests
         // afterwards does not reach their tables. Refused where the mapping is read, with what to write.
         var model = ModelOf(document =>
         {
-            document.HasMembers(row => row.Shares, row => row.OwnerId);
+            document.HasMembers(row => row.Shares);
             document.HasKey(nameof(Document.Title), nameof(Document.Id));
         });
 
@@ -191,7 +191,7 @@ public sealed class MemberMappingTests
             .WithMessage("Document was keyed after its members were mapped*Say the key first: call HasKey before HasMembers*");
 
         // A key part is no such key: it is the resource's own declaration, known when the members are mapped.
-        FluentActions.Invoking(() => MembershipModel.MembersOf(ShelvesOf(binder => binder.HasMembers(row => row.Borrowers, row => row.OwnerId)).FindEntityType(typeof(Binder))!))
+        FluentActions.Invoking(() => MembershipModel.MembersOf(ShelvesOf(binder => binder.HasMembers(row => row.Borrowers)).FindEntityType(typeof(Binder))!))
             .Should().NotThrow();
     }
 
@@ -282,19 +282,20 @@ public sealed class MemberMappingTests
     {
         var builder = new ModelBuilder();
 
-        FluentActions.Invoking(() => builder.Entity<Shelf>().HasMembers(shelf => shelf.Books, shelf => shelf.Owner))
+        FluentActions.Invoking(() => builder.Entity<Shelf>().HasMembers(shelf => shelf.Books))
             .Should().Throw<ArgumentException>()
             .WithMessage("Book is not a member class*[Member<BookId, UserId, NamedRole, Shelf>]*");
     }
 
     [Fact]
-    public void An_owner_is_known_by_what_the_members_are_known_by()
+    public void The_owner_is_the_property_the_resource_marks_owner()
     {
-        var builder = new ModelBuilder();
+        // Said once, on the class: the mapping reads it, and nothing names it again.
+        var mapping = MembershipModel.MembersOf(ModelOf(document => document.HasMembers(row => row.Shares)).FindEntityType(typeof(Document))!)!;
 
-        FluentActions.Invoking(() => builder.Entity<Document>().HasMembers(document => document.Shares, document => document.Id))
-            .Should().Throw<ArgumentException>()
-            .WithMessage("The owner of Document is a DocumentId, and its members are known by a UserId*");
+        (mapping.Owner.Name, mapping.Owner.ClrType).Should().Be((nameof(Document.OwnerId), typeof(UserId)));
+        typeof(MembershipEntityTypeBuilderExtensions).GetMethods().Where(method => method.Name == "HasMembers").SelectMany(method => method.GetParameters())
+            .Select(parameter => parameter.Name).Should().Equal(["resource", "members", "names"], "neither the owner nor the place is said in the mapping");
     }
 
     [Fact]
@@ -302,13 +303,13 @@ public sealed class MemberMappingTests
     {
         FluentActions.Invoking(() => ModelOf(document =>
             {
-                document.HasMembers(row => row.Shares, row => row.OwnerId);
-                document.HasMembers(row => row.Shares, row => row.OwnerId);
+                document.HasMembers(row => row.Shares);
+                document.HasMembers(row => row.Shares);
             }))
             .Should().Throw<InvalidOperationException>()
             .WithMessage("Document has members already, in Shares*");
 
-        FluentActions.Invoking(() => ModelOf(document => document.HasMembers(row => row.Shares.Where(share => share.EndsAt == null), row => row.OwnerId)))
+        FluentActions.Invoking(() => ModelOf(document => document.HasMembers(row => row.Shares.Where(share => share.EndsAt == null))))
             .Should().Throw<ArgumentException>()
             .WithMessage("*is not a property of the resource*");
     }
@@ -341,21 +342,16 @@ public sealed class MemberMappingTests
     [Fact]
     public void Where_a_resource_sits_is_named_as_a_property_of_the_resource()
     {
-        // What a place is known by is the resource's own to say: here a document sits at its owner.
-        var model = ModelOf(document => document.HasMembers(row => row.Shares, row => row.OwnerId, at: row => row.OwnerId, new MemberTableNames(Roles: "PaperRoles")));
+        // What a place is known by is the resource's own to say, on its class with [At]: here a document sits at its owner.
+        var model = ModelOf(document => document.HasMembers(row => row.Shares, new MemberTableNames(Roles: "PaperRoles")));
         var mapping = MembershipModel.MembersOf(model.FindEntityType(typeof(Document))!)!;
         (mapping.At!.Name, mapping.At.ClrType).Should().Be((nameof(Document.OwnerId), typeof(UserId)));
-        mapping.Roles.GetTableName().Should().Be("PaperRoles", "the host's names are taken as they are without a place");
-
-        FluentActions.Invoking(() => ModelOf(document => document.HasMembers(row => row.Shares, row => row.OwnerId, at: row => new UserId(row.Id.Value))))
-            .Should().Throw<ArgumentException>().WithParameterName("at").WithMessage("*is not a property of the resource*");
-        FluentActions.Invoking(() => ModelOf(document => document.HasMembers(row => row.Shares, row => row.OwnerId, at: (System.Linq.Expressions.Expression<Func<Document, UserId>>)null!)))
-            .Should().Throw<ArgumentNullException>().WithParameterName("at");
+        mapping.Roles.GetTableName().Should().Be("PaperRoles", "the host's names are taken as they are beside a place");
 
         // Said with the members, and only there: a mark that names a property the model does not have is refused where it is read.
         var marked = ModelOf(document =>
         {
-            document.HasMembers(row => row.Shares, row => row.OwnerId);
+            document.HasMembers(row => row.Shares);
             document.HasAnnotation(MembershipModel.AtAnnotation, "Shelf");
         });
         FluentActions.Invoking(() => MembershipModel.MembersOf(marked.FindEntityType(typeof(Document))!))

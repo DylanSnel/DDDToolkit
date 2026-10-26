@@ -36,9 +36,11 @@ public sealed class AreaManagerScenarios(SampleHosts sample) : IClassFixture<Sam
         pier.UnitPath.Should().Be("Harbor Works / North / North Coast");
         pier.MyRole.Should().BeNull("she is not on its crew");
 
-        // She owns Inland depot, so she is on its crew as its lead, which is how she is shown to see it.
+        // She owns Inland depot, so she is on its crew, holding no project role, which is how she is shown to see it.
         projects.Named("Inland depot").Text("via").Should().Be("crew");
-        (await rhea.WithNamesAsync(projects.Named("Inland depot"))).MyRole.Should().Be("Crew lead");
+        var depot = await rhea.WithNamesAsync(projects.Named("Inland depot"));
+        depot.MyRole.Should().BeNull("an owner holds what an owner does by owning the project");
+        depot.Member("Rhea").IsOwner.Should().BeTrue();
     }
 
     [Fact]

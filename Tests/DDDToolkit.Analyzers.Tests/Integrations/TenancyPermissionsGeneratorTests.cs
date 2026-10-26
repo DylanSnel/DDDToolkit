@@ -8,10 +8,11 @@ using Microsoft.Extensions.DependencyInjection;
 namespace DDDToolkit.Analyzers.Tests.Integrations;
 
 /// <summary>
-/// What Tenancy's own generator writes: a module states its keys once, on the list it marks with
-/// <c>[TenancyPermissions]</c>, and a project that composes the modules gets every module's list in
-/// <c>TenancyPermissionsOfModules</c>, with the registration of them. The host registers the keys with that, and an
-/// export builds the same catalogue from <c>All</c>, so no project lists the modules' keys by hand.
+/// What Tenancy's own generator writes: a module declares its permissions once, as the constants of a class marked
+/// <c>[Permissions]</c>, and gets <c>DeclaredPermissions</c>, its part of the catalogue under the module's name, with the
+/// description each constant's summary gives; a project that composes the modules gets every module's part in
+/// <c>TenancyPermissionsOfModules</c>, with the registration of them. The host registers the permissions with that, and
+/// an export builds the same catalogue from <c>All</c>, so no project lists the modules' permissions by hand.
 /// <para>
 /// The modules are projects of their own here, seen through metadata the way the host sees them, and the package is
 /// the real one.
@@ -21,46 +22,52 @@ public class TenancyPermissionsGeneratorTests
 {
     private const string Written = "TenancyPermissionsOfModules";
 
-    /// <summary>A module that keeps its keys in a property, one of them marked as managing access.</summary>
+    private const string Declared = "DeclaredPermissions";
+
+    /// <summary>A module with two permissions, one asked at a unit and one across the tenant.</summary>
     private const string Ordering =
         """
-        using System.Collections.Generic;
         using DDDToolkit.Abstractions.Attributes;
-        using DDDToolkit.Supporting.Tenancy.Catalogue;
+        using DDDToolkit.Access;
+        using DDDToolkit.Supporting.Tenancy.Access;
 
         [assembly: Module("Ordering")]
 
         namespace Shop.Ordering;
 
-        public static class OrderingKeys
+        [Permissions]
+        public static class OrderingPermissions
         {
-            [TenancyPermissions]
-            public static IReadOnlyList<Permission> Permissions { get; } =
-            [
-                new("orders.view", "Ordering", "See the orders"),
-                new("orders.refund", "Ordering", "Refund an order", ManagesAccess: true),
-            ];
+            /// <summary>See the orders.</summary>
+            [AtUnit]
+            public const string View = "orders.view";
+
+            /// <summary>Refund an order.</summary>
+            [AtTenant(Implies = [View])]
+            public const string Refund = "orders.refund";
         }
         """;
 
-    /// <summary>A module that keeps its keys in a field, as an array.</summary>
+    /// <summary>A module with one permission, described by its level rather than a summary.</summary>
     private const string Billing =
         """
         using DDDToolkit.Abstractions.Attributes;
-        using DDDToolkit.Supporting.Tenancy.Catalogue;
+        using DDDToolkit.Access;
+        using DDDToolkit.Supporting.Tenancy.Access;
 
         [assembly: Module("Billing")]
 
         namespace Shop.Billing;
 
-        public static class BillingKeys
+        [Permissions]
+        public static class BillingPermissions
         {
-            [TenancyPermissions]
-            public static readonly Permission[] Keys = [new("invoices.view", "Billing", "See the invoices")];
+            [AtTenant(Description = "See the invoices")]
+            public const string View = "invoices.view";
         }
         """;
 
-    /// <summary>The host: it registers the keys, and builds the catalogue an export would, naming no module.</summary>
+    /// <summary>The host: it registers the permissions, and builds the catalogue an export would, naming no module.</summary>
     private const string Host =
         """
         using DDDToolkit.Supporting.Tenancy.Catalogue;
@@ -76,32 +83,32 @@ public class TenancyPermissionsGeneratorTests
         }
         """;
 
-    /// <summary>
-    /// An application in one project: its own lists, one of them internal. Compiled as the program it is
-    /// (<see cref="GeneratorTestHost.AsApplication"/>), it may keep that one internal, whether it declares a module or
-    /// not; compiled as a library it may not, since a project that references it would not see the list.
-    /// </summary>
+    /// <summary>An application in one project: its own permissions, in two classes, one of them internal.</summary>
     private const string Kiosk =
         """
-        using System.Collections.Generic;
-        using DDDToolkit.Supporting.Tenancy.Catalogue;
+        using DDDToolkit.Access;
+        using DDDToolkit.Supporting.Tenancy.Access;
 
         namespace Kiosk;
 
-        internal static class SalesKeys
+        [Permissions]
+        internal static class SalesPermissions
         {
-            [TenancyPermissions]
-            internal static IEnumerable<Permission> Permissions => [new("sales.view", "Sales", "See the sales")];
+            /// <summary>See the sales.</summary>
+            [AtUnit]
+            public const string View = "sales.view";
         }
 
-        public static class StockKeys
+        [Permissions]
+        public static class StockPermissions
         {
-            [TenancyPermissions]
-            public static IReadOnlyList<Permission> Permissions { get; } =
-            [
-                new("stock.count", "Stock", "Count the stock"),
-                new("stock.order", "Stock", "Order stock"),
-            ];
+            /// <summary>Count the stock.</summary>
+            [AtUnit]
+            public const string Count = "stock.count";
+
+            /// <summary>Order stock.</summary>
+            [AtTenant]
+            public const string Order = "stock.order";
         }
         """;
 
@@ -119,13 +126,101 @@ public class TenancyPermissionsGeneratorTests
 
     private static GeneratorRunOutcome Run(GeneratorTestHost host) => host.RunCoreAnd(GeneratorTestHost.TenancyGenerators());
 
-    private static IEnumerable<string> WrittenFiles(GeneratorRunOutcome result)
-        => result.GeneratedSources.Select(source => source.HintName).Where(name => name.StartsWith(Written, StringComparison.Ordinal));
+    private static IEnumerable<string> WrittenFiles(GeneratorRunOutcome result, string name = Written)
+        => result.GeneratedSources.Select(source => source.HintName).Where(hint => hint.StartsWith(name, StringComparison.Ordinal));
+
+    // ------------------------------------------------------------------ what a module gets
+
+    [Fact]
+    public void A_module_gets_its_part_of_the_catalogue_from_its_permissions_class_under_its_name()
+    {
+        var result = Run(GeneratorTestHost.Create(Ordering, "Ordering.cs").WithAssemblyName("Shop.Ordering").WithTenancy().WithDependencyInjection());
+
+        result.ShouldCompile();
+        result.ReportedDiagnostics.Should().BeEmpty();
+        WrittenFiles(result, Declared).Should().Equal([Declared + ".g.cs"]);
+        result.ShouldContain(Declared, "namespace Shop.Ordering;");
+        result.ShouldContain(Declared, "[global::DDDToolkit.Supporting.Tenancy.Catalogue.TenancyPermissionsAttribute]");
+        result.ShouldContain(Declared, "new(\"orders.view\", \"Ordering\", \"See the orders.\", Implies: null, Retired: false, Order: 10),");
+        result.ShouldContain(Declared, "new(\"orders.refund\", \"Ordering\", \"Refund an order.\", Implies: new string[] { \"orders.view\" }, Retired: false, Order: 20),");
+        WrittenFiles(result).Should().BeEmpty("a module states its own permissions, and composes no other module's");
+
+        var module = result.Emit();
+        var all = (IReadOnlyList<Permission>)module.StaticProperty("Shop.Ordering." + Declared, "All")!;
+        all.Select(permission => (permission.Key, permission.Module, permission.Description)).Should().Equal(
+            ("orders.view", "Ordering", "See the orders."),
+            ("orders.refund", "Ordering", "Refund an order."));
+        TenancyCatalogue.Build(all).LiveKeys.Should().Contain(["orders.view", "orders.refund"]);
+    }
+
+    [Fact]
+    public void A_description_said_on_the_level_wins_over_the_summary_and_a_retired_permission_says_so()
+    {
+        const string Said =
+            """
+            using DDDToolkit.Abstractions.Attributes;
+            using DDDToolkit.Access;
+            using DDDToolkit.Supporting.Tenancy.Access;
+
+            [assembly: Module("Billing")]
+
+            namespace Shop.Billing;
+
+            [Permissions]
+            public static class BillingPermissions
+            {
+                /// <summary>See the <see cref="View"/> of an <c>invoice</c> &amp; its lines.</summary>
+                [AtTenant]
+                public const string View = "invoices.view";
+
+                /// <summary>What the summary says.</summary>
+                [AtUnit(Description = "What the level says", Retired = true)]
+                public const string Void = "invoices.void";
+            }
+            """;
+
+        var result = Run(GeneratorTestHost.Create(Said, "Billing.cs").WithAssemblyName("Shop.Billing").WithTenancy());
+
+        result.ShouldCompile();
+        var all = (IReadOnlyList<Permission>)result.Emit().StaticProperty("Shop.Billing." + Declared, "All")!;
+        all.Select(permission => (permission.Key, permission.Description, permission.Retired)).Should().Equal(
+            ("invoices.view", "See the View of an invoice & its lines.", false),
+            ("invoices.void", "What the level says", true));
+    }
+
+    [Fact]
+    public void A_list_marked_by_hand_is_refused_where_it_is_declared()
+    {
+        const string ByHand =
+            """
+            using System.Collections.Generic;
+            using DDDToolkit.Abstractions.Attributes;
+            using DDDToolkit.Supporting.Tenancy.Catalogue;
+
+            [assembly: Module("Ordering")]
+
+            namespace Shop.Ordering;
+
+            public static class OrderingKeys
+            {
+                [TenancyPermissions]
+                public static IReadOnlyList<Permission> Permissions { get; } = [new("orders.view", "Ordering", "See the orders")];
+            }
+            """;
+
+        var result = Run(GeneratorTestHost.Create(ByHand).WithAssemblyName("Shop.Ordering").WithTenancy());
+
+        result.ShouldNotCrash();
+        var reported = result.ShouldHaveDiagnostic("DDD00095", at: "Permissions");
+        reported.Severity.Should().Be(DiagnosticSeverity.Error);
+        reported.GetMessage().Should().StartWith("'OrderingKeys.Permissions' is a list of permissions marked [TenancyPermissions] by hand. Declare each permission as a constant of a static class marked [Permissions]");
+        result.Count("DDD00095").Should().Be(1);
+    }
 
     // ------------------------------------------------------------------ what a project that composes gets
 
     [Fact]
-    public void A_host_gets_every_referenced_modules_list_and_the_registration_of_them()
+    public void A_host_gets_every_referenced_modules_part_and_the_registration_of_them()
     {
         var result = Run(Shop(Host, ("Shop.Ordering", Ordering), ("Shop.Billing", Billing)));
 
@@ -139,10 +234,10 @@ public class TenancyPermissionsGeneratorTests
             Written,
             """
                 public static global::System.Collections.Generic.IReadOnlyList<global::DDDToolkit.Supporting.Tenancy.Catalogue.Permission> All { get; } = Join(
-                    global::Shop.Billing.BillingKeys.Keys,
-                    global::Shop.Ordering.OrderingKeys.Permissions);
+                    global::Shop.Billing.DeclaredPermissions.All,
+                    global::Shop.Ordering.DeclaredPermissions.All);
             """,
-            "each list once, in the order of its name, a field as well as a property");
+            "each module's part once, in the order of its name");
         result.ShouldContain(
             Written,
             """
@@ -150,33 +245,35 @@ public class TenancyPermissionsGeneratorTests
                     => global::DDDToolkit.Supporting.Tenancy.TenancyServiceCollectionExtensions.AddTenancyPermissions(services, All);
             """,
             "the registration adds them as a module's own call would");
+
     }
 
     [Fact]
-    public void An_application_in_one_project_collects_its_own_lists_and_registers_every_key_of_them()
+    public void An_application_in_one_project_collects_its_own_permissions_and_registers_every_one_of_them()
     {
         var result = Run(GeneratorTestHost.Create(Kiosk, "Kiosk.cs").WithAssemblyName("Kiosk").WithTenancy().WithDependencyInjection().AsApplication());
 
         result.ShouldCompile();
-        result.ReportedDiagnostics.Should().BeEmpty("an application reads its own internal list itself, and no project composes from it");
+        result.ReportedDiagnostics.Should().BeEmpty("an application's own permissions, an internal class's too, are its own to collect");
 
         var kiosk = result.Emit();
         var all = (IReadOnlyList<Permission>)kiosk.StaticProperty("Kiosk." + Written, "All")!;
-        all.Select(permission => permission.Key).Should().Equal(["sales.view", "stock.count", "stock.order"], "the lists one after the other, in the order of their names");
+        all.Select(permission => (permission.Key, permission.Module)).Should().Equal(
+            [("sales.view", "Kiosk"), ("stock.count", "Kiosk"), ("stock.order", "Kiosk")],
+            "the classes one after the other, in the order of their names, under the project's name where it declares no module");
 
         var services = (IServiceCollection)kiosk.CallStatic("Kiosk." + Written, "AddTenancyPermissionsOfModules", new ServiceCollection())!;
         var contribution = services.Should().ContainSingle().Which.ImplementationInstance.Should().BeOfType<PermissionContribution>().Which;
         contribution.Permissions.Should().Equal(all, "the registration adds exactly what the export builds from");
-        TenancyCatalogue.Build(contribution.Permissions).LiveKeys.Should().Contain(["sales.view", "stock.count", "stock.order"]);
     }
 
     [Theory]
     [InlineData("DDD_Module")]
     [InlineData("[assembly: Module]")]
-    public void An_application_in_one_project_that_declares_its_module_still_collects_its_own_lists(string declaredWith)
+    public void An_application_in_one_project_that_declares_its_module_still_collects_its_own_permissions(string declaredWith)
     {
         // Getting started has the one project set DDD_Module, which makes it module Kiosk: it is still the program the
-        // modules are composed in, and no other project would register its keys.
+        // modules are composed in, and no other project would register its permissions.
         var host = GeneratorTestHost.Create(Kiosk, "Kiosk.cs").WithAssemblyName("Kiosk").WithTenancy().WithDependencyInjection().AsApplication();
         host = declaredWith == "DDD_Module"
             ? host.WithModuleFromTheBuild("Kiosk")
@@ -185,7 +282,7 @@ public class TenancyPermissionsGeneratorTests
         var result = Run(host);
 
         result.ShouldCompile();
-        result.ReportedDiagnostics.Should().BeEmpty("its internal list is collected here, so nothing is lost");
+        result.ReportedDiagnostics.Should().BeEmpty();
 
         var kiosk = result.Emit();
         var services = (IServiceCollection)kiosk.CallStatic("Kiosk." + Written, "AddTenancyPermissionsOfModules", new ServiceCollection())!;
@@ -200,8 +297,8 @@ public class TenancyPermissionsGeneratorTests
         var result = Run(Shop(Host, ("Shop.Ordering", Ordering), ("Shop.Billing", Billing)).WithModuleFromTheBuild("Host").AsApplication());
 
         result.ShouldCompile();
-        result.ShouldContain(Written, "global::Shop.Billing.BillingKeys.Keys,");
-        result.ShouldContain(Written, "global::Shop.Ordering.OrderingKeys.Permissions);");
+        result.ShouldContain(Written, "global::Shop.Billing.DeclaredPermissions.All,");
+        result.ShouldContain(Written, "global::Shop.Ordering.DeclaredPermissions.All);");
     }
 
     [Fact]
@@ -214,22 +311,12 @@ public class TenancyPermissionsGeneratorTests
         result.ShouldNotContain(Written, "AddTenancyPermissionsOfModules", "an export needs the list, and has no services to add it to");
     }
 
-    // ------------------------------------------------------------------ where nothing is written
+    // ------------------------------------------------------------------ where nothing is composed
 
     [Fact]
-    public void A_modules_own_project_gets_nothing_and_hears_nothing()
+    public void A_project_of_a_module_above_it_gets_nothing()
     {
-        var result = Run(GeneratorTestHost.Create(Ordering, "Ordering.cs").WithAssemblyName("Shop.Ordering").WithTenancy().WithDependencyInjection());
-
-        result.ShouldCompile();
-        result.ReportedDiagnostics.Should().BeEmpty();
-        WrittenFiles(result).Should().BeEmpty("a module states its own keys, and composes no other module's");
-    }
-
-    [Fact]
-    public void A_project_of_a_module_above_it_gets_nothing_either()
-    {
-        // The module's infrastructure or API project: it sees the module's list through its reference, and declares the module too.
+        // The module's infrastructure or API project: it sees the module's part through its reference, and declares the module too.
         const string Infrastructure =
             """
             using DDDToolkit.Abstractions.Attributes;
@@ -246,6 +333,7 @@ public class TenancyPermissionsGeneratorTests
 
         result.ShouldCompile();
         WrittenFiles(result).Should().BeEmpty("only a project that declares no module composes the modules");
+        WrittenFiles(result, Declared).Should().BeEmpty("it declares no permission of its own");
     }
 
     [Fact]
@@ -262,10 +350,10 @@ public class TenancyPermissionsGeneratorTests
     }
 
     [Fact]
-    public void A_project_that_sees_no_marked_list_gets_an_empty_list_so_its_calls_compile_the_same()
+    public void A_project_that_sees_no_permissions_gets_an_empty_list_so_its_calls_compile_the_same()
     {
-        // The host's call and the export's build name no module, so they must compile before the first module marks
-        // its list, and after the last one is taken out: an application of Tenancy alone makes them as well.
+        // The host's call and the export's build name no module, so they must compile before the first module declares
+        // its permissions, and after the last one is taken out: an application of Tenancy alone makes them as well.
         var result = Run(Shop(Host));
 
         result.ShouldCompile();
@@ -278,7 +366,7 @@ public class TenancyPermissionsGeneratorTests
         ((IReadOnlyList<Permission>)host.StaticProperty("Shop.Host." + Written, "All")!).Should().BeEmpty();
         var services = (IServiceCollection)host.CallStatic("Shop.Host.Startup", "Register", new ServiceCollection())!;
         services.Should().ContainSingle().Which.ImplementationInstance.Should().BeOfType<PermissionContribution>()
-            .Which.Permissions.Should().BeEmpty("a contribution of no keys adds nothing to the catalogue");
+            .Which.Permissions.Should().BeEmpty("a contribution of no permissions adds nothing to the catalogue");
     }
 
     [Fact]
@@ -291,108 +379,12 @@ public class TenancyPermissionsGeneratorTests
         WrittenFiles(result).Should().BeEmpty();
     }
 
-    // ------------------------------------------------------------------ a list that cannot be read
-
-    [Theory]
-    [InlineData("public class Keys { [TenancyPermissions] public IReadOnlyList<Permission> Permissions { get; } = []; }", "is not static")]
-    [InlineData("public static class Keys { [TenancyPermissions] public static IReadOnlyList<Permission> Permissions { set { } } }", "has no getter")]
-    [InlineData("public static class Keys<T> { [TenancyPermissions] public static IReadOnlyList<Permission> Permissions { get; } = []; }", "is declared in the generic type 'Keys<T>'")]
-    [InlineData("public static class Keys { [TenancyPermissions] public static IReadOnlyList<string> Permissions { get; } = []; }", "is of type 'IReadOnlyList<string>', which is no sequence of Permission")]
-    [InlineData("internal static class Keys { [TenancyPermissions] public static IReadOnlyList<Permission> Permissions { get; } = []; }", "is not public, and its project is a library")]
-    [InlineData("public static class Keys { [TenancyPermissions] internal static readonly Permission[] Permissions = []; }", "is not public, and its project is a library")]
-    [InlineData("public static class Keys { [TenancyPermissions] public static IReadOnlyList<Permission> Permissions { internal get; set; } = []; }", "is not public, and its project is a library")]
-    [InlineData("public interface IKeys { [TenancyPermissions] static virtual IReadOnlyList<Permission> Permissions => []; }", "is a static virtual or abstract member of an interface, which is read only through a type parameter")]
-    [InlineData("public static class Keys { extension(string) { [TenancyPermissions] public static IReadOnlyList<Permission> Permissions => []; } }", "is declared in 'Keys.extension(string)', which code cannot name")]
-    [InlineData("file static class Keys { [TenancyPermissions] public static IReadOnlyList<Permission> Permissions { get; } = []; }", "is declared in the file-local type 'Keys', which no other file can name")]
-    public void A_modules_list_no_other_project_can_read_is_reported_where_it_is_declared(string declaration, string because)
-    {
-        Assert.SkipUnless(
-            GeneratorTestHost.ParsesExtensionBlocks || !declaration.Contains("extension(", StringComparison.Ordinal),
-            "An extension block is C# 14, which the oldest Roslyn the generators support does not parse.");
-
-        var source =
-            $$"""
-              using System.Collections.Generic;
-              using DDDToolkit.Abstractions.Attributes;
-              using DDDToolkit.Supporting.Tenancy.Catalogue;
-
-              [assembly: Module("Ordering")]
-
-              namespace Shop.Ordering;
-
-              {{declaration}}
-              """;
-
-        var result = Run(GeneratorTestHost.Create(source).WithAssemblyName("Shop.Ordering").WithTenancy());
-
-        result.ShouldNotCrash();
-        var reported = result.ShouldHaveDiagnostic("DDD00063", at: "Permissions");
-        reported.Severity.Should().Be(DiagnosticSeverity.Error, "the module's keys would be missing from the catalogue, with nothing else to say so");
-        reported.GetMessage().Should().Contain("is marked [TenancyPermissions] and " + because).And.Contain("so its keys reach no catalogue");
-        result.Count("DDD00063").Should().Be(1);
-    }
-
-    [Fact]
-    public void An_application_may_keep_its_own_list_internal()
-    {
-        var result = Run(GeneratorTestHost.Create(Kiosk).WithAssemblyName("Kiosk").WithTenancy().AsApplication());
-
-        result.ShouldNotHaveDiagnostic("DDD00063");
-        result.ShouldContain(Written, "global::Kiosk.SalesKeys.Permissions");
-    }
-
-    [Fact]
-    public void A_library_that_declares_no_module_makes_its_list_public_all_the_same()
-    {
-        // A project the host references without [assembly: Module]: a module that leaves its Module.cs out, or an
-        // application's projects before they declare modules. The host could not read an internal list there, and
-        // would leave its keys out without a word, so the library hears it where the list is declared.
-        var result = Run(GeneratorTestHost.Create(Kiosk).WithAssemblyName("Kiosk").WithTenancy());
-
-        result.ShouldNotCrash();
-        result.ShouldHaveDiagnostic("DDD00063", at: "Permissions").GetMessage()
-            .Should().Be("'SalesKeys.Permissions' is marked [TenancyPermissions] and is not public, and its project is a library: the project that composes "
-                         + "the modules reads it from outside, so its keys reach no catalogue. Make it a public static property or field with a getter, "
-                         + "declared in a class that is not generic, whose type is a sequence of Permission.");
-        result.Count("DDD00063").Should().Be(1, "StockKeys is public");
-        result.CompilationErrors.Should().BeEmpty();
-        result.ShouldNotContain(Written, "SalesKeys", "a list that is reported is left out, so the report is the one error");
-        result.ShouldContain(Written, "global::Kiosk.StockKeys.Permissions);");
-    }
-
-    [Theory]
-    [InlineData("public static class Keys { [TenancyPermissions] private static IReadOnlyList<Permission> Permissions => []; }", "cannot be read outside the type it is declared in")]
-    [InlineData("public class Keys { [TenancyPermissions] protected static readonly Permission[] Permissions = []; }", "cannot be read outside the type it is declared in")]
-    [InlineData("public static class Keys { [TenancyPermissions] public static IReadOnlyList<Permission> Permissions { private get; set; } = []; }", "cannot be read outside the type it is declared in")]
-    [InlineData("public static class Outer { private static class Keys { [TenancyPermissions] internal static IReadOnlyList<Permission> Permissions => []; } }", "cannot be read outside the type it is declared in")]
-    [InlineData("file static class Keys { [TenancyPermissions] internal static IReadOnlyList<Permission> Permissions => []; }", "is declared in the file-local type 'Keys', which no other file can name")]
-    public void An_applications_own_list_it_cannot_read_from_outside_its_type_is_reported_and_left_out(string declaration, string because)
-    {
-        var source =
-            $$"""
-              using System.Collections.Generic;
-              using DDDToolkit.Supporting.Tenancy.Catalogue;
-
-              namespace Kiosk;
-
-              {{declaration}}
-              """;
-
-        var result = Run(GeneratorTestHost.Create(source).WithAssemblyName("Kiosk").WithTenancy().WithDependencyInjection().AsApplication());
-
-        result.ShouldNotCrash();
-        result.ShouldHaveDiagnostic("DDD00063", at: "Permissions").GetMessage().Should().Contain("is marked [TenancyPermissions] and " + because);
-        result.Count("DDD00063").Should().Be(1);
-        result.CompilationErrors.Should().BeEmpty("the class written beside the list leaves it out, where it would not compile");
-        result.ShouldContain(Written, "All { get; } = global::System.Array.Empty<");
-    }
-
     [Fact]
     public void A_list_the_host_cannot_read_is_left_out_so_the_modules_error_is_the_only_one()
     {
-        // The module as its own build left it: without Tenancy's generator, which would have stopped it, so the host
-        // meets the lists a module gets wrong. One is no static member, one is internal, one is read only through a
-        // type parameter, one is in an extension block (where the Roslyn the tests run on parses C# 14), and one is right.
+        // A module as a build without Tenancy's generator left it, which would have refused its lists marked by hand: the
+        // host meets the lists such a build gets wrong. One is no static member, one is internal, one is read only through
+        // a type parameter, one is in an extension block (where the Roslyn the tests run on parses C# 14), and one is right.
         const string Careless =
             """
             using System.Collections.Generic;
@@ -457,7 +449,7 @@ public class TenancyPermissionsGeneratorTests
     // ------------------------------------------------------------------ incremental
 
     [Fact]
-    public void An_edit_of_the_host_that_changes_no_list_writes_nothing_anew()
+    public void An_edit_of_the_host_that_changes_no_permission_writes_nothing_anew()
     {
         var first = Run(Shop(Host, ("Shop.Ordering", Ordering), ("Shop.Billing", Billing)));
         first.ShouldCompile();
@@ -476,7 +468,7 @@ public class TenancyPermissionsGeneratorTests
     }
 
     [Fact]
-    public void A_list_the_host_marks_itself_is_written_anew()
+    public void Permissions_the_host_declares_itself_are_written_anew()
     {
         // The control for the test above: a change that matters shows, or that one would pass on a pipeline that writes nothing.
         var first = Run(Shop(Host, ("Shop.Ordering", Ordering)));
@@ -485,23 +477,26 @@ public class TenancyPermissionsGeneratorTests
         var second = first.RunAgain(static (compilation, parseOptions) => compilation.AddSyntaxTrees(CSharpSyntaxTree.ParseText(
             SourceText.From(
                 """
-                using System.Collections.Generic;
-                using DDDToolkit.Supporting.Tenancy.Catalogue;
+                using DDDToolkit.Access;
+                using DDDToolkit.Supporting.Tenancy.Access;
 
                 namespace Shop.Host;
 
-                public static class HostKeys
+                [Permissions]
+                public static class HostPermissions
                 {
-                    [TenancyPermissions]
-                    public static IReadOnlyList<Permission> Permissions { get; } = [new("shop.close", "Shop", "Close the shop")];
+                    /// <summary>Close the shop.</summary>
+                    [AtTenant]
+                    public const string Close = "shop.close";
                 }
                 """,
                 Encoding.UTF8),
             parseOptions,
-            "HostKeys.cs")));
+            "HostPermissions.cs")));
 
         second.ShouldCompile();
         second.OutputStepReasons().Should().Contain(step => step.Reason == IncrementalStepRunReason.Modified || step.Reason == IncrementalStepRunReason.New);
-        second.ShouldContain(Written, "global::Shop.Host.HostKeys.Permissions,");
+        second.ShouldContain(Written, "global::Shop.Host.DeclaredPermissions.All,");
+        second.ShouldContain(Declared, "new(\"shop.close\", \"Shop.Host\", \"Close the shop.\"");
     }
 }

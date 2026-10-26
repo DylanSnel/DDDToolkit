@@ -3,7 +3,7 @@ namespace Examples.Tenancy.Projects.Contracts.Keys;
 /// <summary>
 /// The permission keys Projects asks for. A role grants them at a unit of the organization or through a
 /// project's crew, except <see cref="Open"/> and <see cref="ChangeOwner"/>, which only a unit grants; see
-/// <c>ProjectCatalogue</c> for what each one lets a seat do.
+/// <c>ProjectPermissions</c> for what each one lets a seat do.
 /// </summary>
 /// <remarks>
 /// Published as constants, not as the catalogue's records: another module names a key when it asks Projects a

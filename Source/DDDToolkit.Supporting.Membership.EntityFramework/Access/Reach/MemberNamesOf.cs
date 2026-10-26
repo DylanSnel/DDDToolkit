@@ -61,13 +61,13 @@ internal sealed class MemberNamesOf<TContext, TResource, TRoleId>
         }
 
         PlacesAbove<TResource>? above = null;
-        if (rules.Above is not null)
+        if (rules.ReachFromAbove is not null)
         {
             var at = mapping.At
                 ?? throw new InvalidOperationException(
-                    "The rules '" + rules.Name + "' let " + typeof(TResource).Name + " be reached from above, and " + typeof(TContext).Name + " does not say where it sits. "
-                    + "Say it where the context maps its members: modelBuilder.Entity<" + typeof(TResource).Name
-                    + ">().HasMembers(resource => resource.Members, resource => resource.OwnerId, at: resource => resource.PlaceId).");
+                    "The rules '" + rules.Name + "' let " + typeof(TResource).Name + " be reached from above, and " + typeof(TContext).Name + " does not say where it sits: "
+                    + typeof(TResource).Name + " marks no property [At]. Mark the property that says where it hangs, [At] public PlaceId PlaceId { get; private set; }, "
+                    + "and map its members with HasMembers(resource => resource.Members).");
 
             // What a place is known by is the model's to say: the type of the property the resource keeps it in.
             above = (PlacesAbove<TResource>)Activator.CreateInstance(
@@ -76,11 +76,11 @@ internal sealed class MemberNamesOf<TContext, TResource, TRoleId>
         }
 
         CustomRoles<TRoleId>? roles = null;
-        if (rules.RolesKept)
+        if (rules.Roles.Kind == Access.RolesKind.Custom)
         {
             var roleClass = mapping.RoleClass
                 ?? throw new InvalidOperationException(
-                    "The rules '" + rules.Name + "' say the roles of " + typeof(TResource).Name + " are kept, and " + typeof(TContext).Name + " maps no role class for it. "
+                    "The rules '" + rules.Name + "' say a customer makes the roles of " + typeof(TResource).Name + ", and " + typeof(TContext).Name + " maps no role class for it. "
                     + "Declare one with the role template, [CustomRole<" + typeof(TRoleId).Name + ", " + typeof(TResource).Name + ">] public sealed partial class "
                     + typeof(TResource).Name + "Role, and map it where the context builds its model: modelBuilder.Entity<" + typeof(TResource).Name + "Role>().IsCustomRole().");
 
@@ -99,7 +99,7 @@ internal sealed class MemberNamesOf<TContext, TResource, TRoleId>
         // A query filter that reads a member of the context it runs on is the application's rule as that one
         // context knows it: whose rows a request reads, kept on the request's own context, say. A context a
         // factory makes for one reading knows nothing of it, so what such a filter guards is read on the request's own.
-        var followsTheRequest = ReadsItsContext(resource) || (rules.RolesKept && mapping.RoleClass is { } kept && ReadsItsContext(kept));
+        var followsTheRequest = ReadsItsContext(resource) || (rules.Roles.Kind == Access.RolesKind.Custom && mapping.RoleClass is { } kept && ReadsItsContext(kept));
 
         return new MemberNames<TResource, TRoleId>(mapping.Navigation.Name, mapping.Owner.Name, above, roles, followsTheRequest);
     }

@@ -7,7 +7,7 @@ namespace DDDToolkit.Supporting.Membership.EntityFramework;
 
 /// <summary>
 /// Which of the roles an application keeps give a key, for one kind of resource whose rules say its roles are
-/// kept elsewhere (<see cref="MembershipRules.RolesKeptElsewhere"/>). An application implements it over the
+/// kept elsewhere (<see cref="Roles.External"/>). An application implements it over the
 /// rows it keeps its roles in, and registers it with the resource.
 /// <para>
 /// It answers a query, not a list: the access questions put it into their own statement, where it becomes a
@@ -25,7 +25,7 @@ namespace DDDToolkit.Supporting.Membership.EntityFramework;
 /// </para>
 /// <para>
 /// What a role holds here is not all it gives a member: the package asks only for a key within the rules'
-/// <see cref="MembershipRules.MemberKeys"/>, so a role that holds a key outside it gives nothing with that
+/// <see cref="MembershipRules.RoleKeys"/>, so a role that holds a key outside it gives nothing with that
 /// key on the resource, whatever this answers.
 /// </para>
 /// </summary>

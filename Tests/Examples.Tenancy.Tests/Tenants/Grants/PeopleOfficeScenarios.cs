@@ -279,7 +279,7 @@ public sealed class PeopleOfficeScenarios(SampleHosts sample) : IClassFixture<Sa
         // on a crew only that crew, which whoever gives it there manages already.
         var catalogue = (await sample.SharedAsync()).Services.GetRequiredService<TenancyCatalogue>();
 
-        catalogue.AccessManagingKeys.Where(ProjectCatalogue.CrewGives).Should().Equal(ProjectKeys.ManageCrew);
+        catalogue.AccessManagingKeys.Where(SampleCatalogue.Projects.Rules.RoleKeys.Allows).Should().Equal(ProjectKeys.ManageCrew);
     }
 
     private static OrganizationUnitId NorthCoast => Harbor.UnitNamed("North Coast");
