@@ -62,7 +62,7 @@ public sealed class PressContext(DbContextOptions<PressContext> options) : DbCon
         modelBuilder.Entity<Manuscript>(manuscript =>
         {
             manuscript.ScopeToTenant(row => row.TenantId);
-            manuscript.HasMembers(row => row.Editors, row => row.OwnerSeatId, at: row => row.UnitId);
+            manuscript.HasMembers(row => row.Editors);
         });
 
         modelBuilder.Entity<ManuscriptRole>(role =>

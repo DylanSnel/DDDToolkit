@@ -12,8 +12,8 @@ namespace Acme.Press;
 /// <summary>
 /// The module's registration, which the host calls. Each call below but <c>AddTenancyPostgres</c>, which the
 /// package declares, is written into this project by a generator, so this does not compile when one of them did
-/// not arrive. The module's keys are not registered here: the host registers them, with the call Tenancy's
-/// generator writes into it from the list they are marked on.
+/// not arrive. The module's permissions are not registered here: the host registers them, with the call
+/// Tenancy's generator writes into it from the list it writes for the module's [Permissions] class.
 /// </summary>
 public static class PressHost
 {
