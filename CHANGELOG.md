@@ -3763,6 +3763,16 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     this version's `SetupScript()` again first, as that role, which owns `ddd` and so may add the function
     to it.
 
+- **The pgmq sample's services no longer fail to start when two of them migrate at once.** The three services of
+  `Microservices.Pgmq` share one database and migrate it as they start. The first migrations of Ordering, in the
+  storefront, and of Shipping, in the fulfilment service, both make the schema `ddd`, each in a transaction, and
+  Entity Framework's lock, the module's own history table, keeps neither from running beside the other. Now and
+  then the second asked for `ddd` while the first had made it and not committed, made it too and failed on
+  `pg_namespace`'s unique index (23505): that service stopped, the gateway did not start, and all seven scenarios
+  of `MicroservicesOverPgmq` failed. `ModuleDatabase.Postgres` now migrates under a Postgres advisory lock, on a
+  connection of its own, so the hosts on one database migrate one at a time; a host on another database does not
+  wait for it.
+
 ## [3.1.0] - 2026-10-01
 
 The module names its generated code. This renames generated methods in a project that declares

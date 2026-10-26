@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Npgsql;
 
 namespace Examples.Hosting;
 
@@ -21,7 +22,8 @@ namespace Examples.Hosting;
 /// every context marked <c>[SupabaseMigrations]</c>, <c>AddSupabaseMigrations()</c>. Once the host registers
 /// <c>services.AddSupabaseRowLevelSecurity()</c>, Supabase's policies apply to the modules' queries as well:
 /// <c>UseDDDToolkit</c> brings it to every module's context.</item>
-/// <item><see cref="Postgres"/>: Postgres, where the application applies its own migrations on start-up.</item>
+/// <item><see cref="Postgres"/>: Postgres, where the application applies its own migrations on start-up, one host
+/// at a time when several share the database.</item>
 /// <item><see cref="SqlServer"/>: SQL Server, likewise, from the module's
 /// <c>Examples.Webshop.{Module}.Migrations.SqlServer</c> assembly.</item>
 /// </list>
@@ -145,7 +147,11 @@ public abstract record ModuleDatabase
             // Supabase: the CLI applies the migrations, and the host checks them all with AddSupabaseMigrations().
             case PostgresDatabase { AppliesMigrations: false }:
                 break;
-            // Postgres and SQL Server: the application applies the module's migrations.
+            // Postgres: the application applies the module's migrations, while no other host migrates the database.
+            case PostgresDatabase postgres:
+                services.AddHostedService<PrepareDatabase<TContext>>(provider => new(provider.GetRequiredService<IServiceScopeFactory>(), migrate: true, postgres.LockMigrationsAsync));
+                break;
+            // SQL Server: the application applies the module's migrations.
             default:
                 services.AddHostedService<PrepareDatabase<TContext>>(provider => new(provider.GetRequiredService<IServiceScopeFactory>(), migrate: true));
                 break;
@@ -170,6 +176,41 @@ public abstract record ModuleDatabase
         // is told nothing else; their history is in the module's schema, where UseDDDToolkit keeps it.
         private protected override void Configure(DbContextOptionsBuilder options, string schema)
             => options.UseNpgsql(ConnectionString);
+
+        /// <summary>
+        /// Waits until no other host migrates this database, and keeps it so until the connection it returns is
+        /// disposed: a session-level advisory lock, held on a connection of its own outside the pool, so that closing
+        /// the connection lets go of the lock whatever happened in between.
+        /// </summary>
+        /// <remarks>
+        /// Entity Framework's own lock is not enough when several hosts share one database. It locks the migration
+        /// history table, and every module keeps its history in its own schema, so it keeps two hosts from migrating
+        /// the same module at once and lets two modules migrate side by side. Within one host that is harmless, since
+        /// a host prepares its modules one after the other. The services of <c>Microservices.Pgmq</c> share one
+        /// database and start together, though, and the first migrations of Ordering and Shipping both make the schema
+        /// <c>ddd</c>. A migration runs in a transaction, so when those two overlap, the second asks whether <c>ddd</c>
+        /// exists while the first has made it and not yet committed, makes it as well, and fails on
+        /// <c>pg_namespace</c>'s unique index as soon as the first commits; that service then does not start.
+        /// Advisory locks belong to a database, so a host on another database never waits for this one.
+        /// </remarks>
+        public async Task<IAsyncDisposable> LockMigrationsAsync(CancellationToken cancellationToken)
+        {
+            var connection = new NpgsqlConnection(new NpgsqlConnectionStringBuilder(ConnectionString) { Pooling = false }.ConnectionString);
+            try
+            {
+                await connection.OpenAsync(cancellationToken);
+                await using var command = new NpgsqlCommand(
+                    "SELECT pg_catalog.pg_advisory_lock(pg_catalog.hashtextextended('Examples.Hosting.ModuleDatabase.Migrate', 0))",
+                    connection);
+                await command.ExecuteNonQueryAsync(cancellationToken);
+                return connection;
+            }
+            catch
+            {
+                await connection.DisposeAsync();
+                throw;
+            }
+        }
     }
 
     private sealed record SqlServerDatabase(string ConnectionString) : ModuleDatabase
@@ -182,9 +223,13 @@ public abstract record ModuleDatabase
     /// Creates or migrates the module's database before anything else starts, the outbox poller and the
     /// seeding included: <c>StartingAsync</c> runs for every lifecycle service before any hosted
     /// service's <c>StartAsync</c>. It is the application's own work, so it says so, which a host that
-    /// requires explicit callers needs.
+    /// requires explicit callers needs. With <paramref name="lockMigrations"/>, the migrations wait for every
+    /// other host that migrates the same database (<see cref="PostgresDatabase.LockMigrationsAsync"/>).
     /// </summary>
-    private sealed class PrepareDatabase<TContext>(IServiceScopeFactory scopes, bool migrate) : IHostedLifecycleService
+    private sealed class PrepareDatabase<TContext>(
+        IServiceScopeFactory scopes,
+        bool migrate,
+        Func<CancellationToken, Task<IAsyncDisposable>>? lockMigrations = null) : IHostedLifecycleService
         where TContext : DbContext
     {
         public async Task StartingAsync(CancellationToken cancellationToken)
@@ -195,6 +240,7 @@ public abstract record ModuleDatabase
 
             if (migrate)
             {
+                await using var alone = lockMigrations is null ? null : await lockMigrations(cancellationToken);
                 await database.MigrateAsync(cancellationToken);
             }
             else
