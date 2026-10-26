@@ -49,6 +49,23 @@ public class OwnerDiagnosticTests
             .ShouldHaveExactlyDiagnostics();
     }
 
+    [Fact]
+    public void An_owner_of_an_aggregate_root_written_by_hand_is_no_diagnostic()
+    {
+        Declared(
+                """
+                public sealed class Shelf : DDDToolkit.BaseTypes.AggregateRoot<BoardId>
+                {
+                    public Shelf(BoardId id) : base(id)
+                    {
+                    }
+
+                    [Owner] public UserId Owner { get; private set; }
+                }
+                """)
+            .ShouldHaveExactlyDiagnostics();
+    }
+
     [Theory]
     [InlineData(
         """

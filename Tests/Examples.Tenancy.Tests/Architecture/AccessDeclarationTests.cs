@@ -330,8 +330,9 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
     {
         // System work is a scope the seeding begins around what it sends, never a requirement. The two commands only it
         // sends say who may send them, a caller in the tenant, and their handlers refuse everyone but system work. The
-        // core's cases are about who is calling, or combine cases: none of them is about the work.
-        typeof(AccessRequirement).GetNestedTypes().Select(each => each.Name).Should().BeEquivalentTo(["Anyone", "SignedInUser", "Owned`1", "Combined", "AllOf", "AnyOf"]);
+        // core's cases are about who is calling, the owner of what a request names among them, or combine cases: none of
+        // them is about the work.
+        typeof(AccessRequirement).GetNestedTypes().Select(each => each.Name).Should().BeEquivalentTo(["Anyone", "SignedInUser", "Owned`1", "OwnedAggregate`1", "Combined", "AllOf", "AnyOf"]);
         DeclaredBy(new MarkTenantAsDemo()).Should().Be(TenancyAccess.InTenant());
         DeclaredBy(new SetUpProjectRoles()).Should().Be(TenancyAccess.InTenant());
     }

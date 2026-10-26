@@ -150,7 +150,7 @@ internal static class OwnerDeclarations
                 "is static, and marked [Owner]: the owner is a column of each row of the aggregate, so mark the instance property that names it");
         }
 
-        if (!EntityDeclarations.IsAggregateRoot(type))
+        if (!EntityDeclarations.IsAggregateRoot(type) && AggregateIdOf(type) is null)
         {
             return DiagnosticInfo.Create(DiagnosticDescriptors.OwnerOutOfPlace, location, at, EntityDeclarations.IsEntity(type)
                 ? "is marked [Owner], and '" + type.Name + "' is an entity inside an aggregate: a request names its root by the root's id, and the check reads the root's row, so mark the property of the root that names the owner"
@@ -178,6 +178,34 @@ internal static class OwnerDeclarations
         return null;
     }
 
+    /// <summary>
+    /// The id of <paramref name="type"/> where it is an aggregate root: declared one with an attribute, in any of the ways
+    /// <see cref="EntityDeclarations"/> knows, or deriving from the toolkit's <c>AggregateRoot&lt;TId&gt;</c> by hand.
+    /// <see langword="null"/> for any other type, a child entity among them.
+    /// </summary>
+    public static ITypeSymbol? AggregateIdOf(INamedTypeSymbol type)
+    {
+        if (EntityDeclarations.IsAggregateRoot(type))
+        {
+            return EntityDeclarations.IdArgumentOf(type);
+        }
+
+        if (EntityDeclarations.IsEntityOrAggregateRoot(type))
+        {
+            return null;
+        }
+
+        for (var current = type.BaseType; current is not null && current.SpecialType != SpecialType.System_Object; current = current.BaseType)
+        {
+            if (current is { Name: "AggregateRoot", TypeArguments.Length: 1 } && current.ContainingNamespace?.ToDisplayString() == "DDDToolkit.BaseTypes")
+            {
+                return current.TypeArguments[0] is { TypeKind: not TypeKind.Error } id ? id : null;
+            }
+        }
+
+        return null;
+    }
+
     /// <summary>The first of <paramref name="owners"/> as they are written: by the file, then by the place in it.</summary>
     private static IPropertySymbol First(List<IPropertySymbol> owners)
         => owners
@@ -191,8 +219,7 @@ internal static class OwnerDeclarations
         var found = new List<OwnedAggregate>();
         foreach (var type in DefinitionFactory.TypesIn(assembly.GlobalNamespace, CancellationToken.None))
         {
-            if (type.TypeKind != TypeKind.Class || !EntityDeclarations.IsAggregateRoot(type) || EntityDeclarations.IsBase(type)
-                || EntityDeclarations.IdArgumentOf(type) is not { } id)
+            if (type.TypeKind != TypeKind.Class || EntityDeclarations.IsBase(type) || AggregateIdOf(type) is not { } id)
             {
                 continue;
             }
