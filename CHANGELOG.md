@@ -511,9 +511,16 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   owner's one column of the one row is read in one statement, `AsNoTracking`, as the caller, so row level security
   and the aggregate's query filters decide whether the row is there. It runs on a context of its own where the host
   registered a factory for the context, and on the request's otherwise, or where a query filter reads the context.
-  What cannot be told fails the request rather than letting it through, saying which: no context maps such an
-  aggregate, two do, it marks no owner or two, or its context does not map the property. A reader the host registers
-  for an id is asked instead. See [The owner of an aggregate](docs/access-requirements.md#the-owner-of-an-aggregate).
+  What cannot be told fails rather than letting anybody through, saying which: no context maps such an aggregate,
+  two do, it marks no owner or two, its owner is of a type nothing could compare, or its context does not map the
+  property. The new start-up check `entity-framework.owners-mapped` (`EntityFrameworkChecks.OwnersMappedCheck`), which
+  `AddDDDToolkitEntityFramework` brings, finds it when the host starts, with the message the first request would get:
+  the generator says of a project which aggregates its requests ask the owner of, `[assembly: AsksOwnerOf(typeof(BoardId))]`
+  for its lines and for every call of `AccessRequirement.OwnerOf` the project writes, and the check reads that from the
+  assembly of every request interface the host registered checks for, and keeps what it found for the requests. A call
+  in a project that declares no request interface is found by its first request, as before. A reader the host
+  registers for an id is asked instead, and the check passes over that id. See
+  [The owner of an aggregate](docs/access-requirements.md#the-owner-of-an-aggregate).
 - **`UseDDDToolkitDesignTime()`: what a design-time factory gives its context of the toolkit.** `dotnet ef` and the
   Supabase export make a context through its `IDesignTimeDbContextFactory`, before any host exists, so they have
   no services to hand `UseDDDToolkit`. This call adds what `UseDDDToolkit` adds that needs none, which is the

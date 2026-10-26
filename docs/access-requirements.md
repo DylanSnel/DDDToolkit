@@ -649,8 +649,16 @@ flowchart LR
   and reads the column of the `[Owner]` property, on a context of its own where the host registered a factory for the
   context, and otherwise on the request's. A storage of another kind registers its own for the id, and one the host
   registers takes the place of the package's. Where nothing reads it the request is stopped, as any requirement
-  nothing decides is, and the exception names the registration; where the context cannot be told, because none maps
-  the aggregate or two do, the request fails with an exception that says which, and lets nobody through.
+  nothing decides is, and the exception names the registration.
+- **Found when the host starts.** The generator says of the requests' assembly which aggregates they ask the owner
+  of, `[assembly: AsksOwnerOf(typeof(BoardId))]`, for its lines and for every call of `OwnerOf` the project writes
+  itself. The [start-up check](startup-checks.md) `entity-framework.owners-mapped`, which
+  `AddDDDToolkitEntityFramework` brings, reads it from the assembly of every request interface the host registered
+  checks for, finds each aggregate's context and column, and keeps them for the requests. Where one cannot be read,
+  because no context maps the aggregate, two do, it marks no owner or two, or its owner is of a type nothing could
+  compare, the host does not start, with the message its first request would have failed with, and lets nobody
+  through. A call of `OwnerOf` in a project no request interface is declared in is found by its first request, the
+  same way.
 - **The id's own comes first.** Where something says the caller's own of the id itself, an `ICallersOwn` of the id's
   own, or Tenancy for its seat id, the line compares the id, `Own(request.Seat)`, and the owner is not read: that
   handle reads nothing, and says what the id is first.

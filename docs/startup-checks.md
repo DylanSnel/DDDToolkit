@@ -32,7 +32,7 @@ flowchart LR
 
 ```csharp
 builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMediator());
-//   Services:   entity-framework.toolkit-wired
+//   Services:   entity-framework.toolkit-wired, entity-framework.owners-mapped
 
 builder.Services.AddSupabaseRowLevelSecurity();
 //   Services:   postgres.row-level-security-wired
@@ -85,6 +85,7 @@ made otherwise. They read the catalogs of the database and change nothing.
 |---|---|---|---|---|
 | `access.behaviors-registered` | `AccessBehaviorChecks.BehaviorsRegisteredCheck` | `AddAccessChecks`, and so `AddAccessCheck`, a package's registration of its check and the generated `Add{Module}AccessBehavior`, for an interface the toolkit wrote a behavior for | Services | Every command and query the host handles, of an interface the toolkit wrote a behavior for, has that behavior in its pipeline, the one for streams for a stream query, in every module ([When nothing asks the checks](access-requirements.md#when-nothing-asks-the-checks)) |
 | `entity-framework.toolkit-wired` | `EntityFrameworkChecks.ToolkitWiredCheck` | `AddDDDToolkitEntityFramework` | Services | Every context that maps the toolkit's classes is built with `UseDDDToolkit`, or `UseDDDToolkitCore` ([Checking the wiring](entity-framework.md#checking-the-wiring)), and every context has the parts its model requires, Tenancy's save check for rows kept to a tenant ([A part a model cannot do without](entity-framework.md#a-part-a-model-cannot-do-without)) |
+| `entity-framework.owners-mapped` | `EntityFrameworkChecks.OwnersMappedCheck` | `AddDDDToolkitEntityFramework` | Services | The owner of every aggregate the host's requests ask about can be read: one registered context maps the aggregate, which marks one property `[Owner]` of a type with an own, and maps the property. The ids are the ones the generator says the request interfaces' assemblies ask about; what it finds is kept for the requests ([The owner of an aggregate](access-requirements.md#the-owner-of-an-aggregate)) |
 | `postgres.row-level-security-wired` | `PostgresRowAccessChecks.RowLevelSecurityWiredCheck` | `AddPostgresRowLevelSecurity`, `AddSupabaseRowLevelSecurity` | Services | Every context on Postgres runs its commands as the caller, but one given the toolkit's base alone with `UseDDDToolkitCore`, which runs as the login role on purpose ([Running queries as the caller](row-level-security.md#running-queries-as-the-caller)) |
 | `supabase.roles-match-access-files` | `SupabaseRowAccessChecks.RolesMatchAccessFilesCheck` | `AddSupabaseRowLevelSecurity` | Login | The roles every such context switches to are the ones the newest access file the database applied records it was written for; it runs before the next ([Roles and caller functions of your own](supabase.md#roles-and-caller-functions-of-your-own)) |
 | `postgres.login-role-may-switch-to-callers` | `PostgresRowAccessChecks.LoginRoleMaySwitchToCallersCheck` | `AddPostgresRowLevelSecurity`, `AddSupabaseRowLevelSecurity` | Login | The login role may become every caller of every such context, the scoped system role where it exists ([A login that owns nothing](row-level-security.md#a-login-that-owns-nothing)) |

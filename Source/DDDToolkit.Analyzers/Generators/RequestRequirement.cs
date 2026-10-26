@@ -37,12 +37,17 @@ namespace DDDToolkit.Analyzers;
 /// <param name="WrittenInto">The module interfaces of this project, partial, that the line goes into.</param>
 /// <param name="Arm">The line, without its comma, or <see langword="null"/> where the request states nothing with attributes or cannot.</param>
 /// <param name="Diagnostics">What is wrong with what the request says.</param>
+/// <param name="OwnersAsked">
+/// The ids, from <c>global::</c> on, of the aggregates whose owner the line asks about: <c>AccessRequirement.OwnerOf</c>
+/// of a member marked <c>[Own]</c> or <c>[OrOwn]</c>. Empty where no line is written.
+/// </param>
 internal sealed record RequestRequirement(
     string FullyQualifiedName,
     int Depth,
     EquatableArray<string> WrittenInto,
     string? Arm,
-    EquatableArray<DiagnosticInfo> Diagnostics)
+    EquatableArray<DiagnosticInfo> Diagnostics,
+    EquatableArray<string> OwnersAsked)
 {
     /// <summary>The name a pattern binds the request to in its line.</summary>
     public const string Designation = "request";
@@ -793,7 +798,8 @@ internal sealed record RequestRequirement(
                 DepthOf(type),
                 (arm is null ? [] : writable.Select(static module => module.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat))).ToEquatableArray(),
                 arm,
-                _diagnostics.ToEquatableArray());
+                _diagnostics.ToEquatableArray(),
+                (arm is null || writable.Count == 0 ? Enumerable.Empty<string>() : _ownerOf.Values.Select(static each => each.Id.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)).Distinct().OrderBy(static id => id, StringComparer.Ordinal)).ToEquatableArray());
         }
 
         /// <summary>A module interface of this project the generator writes the property into: partial, and of the shape a behavior is written for.</summary>

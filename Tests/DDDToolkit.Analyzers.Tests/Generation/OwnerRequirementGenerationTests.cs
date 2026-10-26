@@ -237,6 +237,43 @@ public class OwnerRequirementGenerationTests
     }
 
     [Fact]
+    public void The_project_says_the_aggregates_whose_owner_it_asks_about_for_the_start_up_check()
+    {
+        // The lines of [Own] and [OrOwn] on an aggregate's id, and a call the project writes itself, once each; a seat
+        // is the caller's own seat, no owner of anything, and a project that asks about none says nothing.
+        var result = Module(
+            CallersUser
+            + """
+              [OwnOnly]
+              public sealed record ArchiveBoard([Own] BoardId Board) : IBillingRequest;
+
+              [RequiresKey("boards.manage")]
+              public sealed record RenameBoard([OrOwn] BoardId Board) : IBillingRequest;
+
+              public sealed record EditNote(NoteId Note) : IBillingRequest
+              {
+                  AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.Any(AccessRequirement.OwnerOf(Note), AccessRequirement.SignedIn());
+              }
+
+              [OwnOnly]
+              public sealed record LeaveTenant([Own] SeatId Seat) : IBillingRequest;
+              """).RunCore();
+
+        result.ShouldCompile();
+        result.ShouldHaveExactlyDiagnostics();
+        var said = result.Source("DDDToolkit.AsksOwnerOf.");
+        said.Should().Contain("[assembly: global::DDDToolkit.Access.AsksOwnerOfAttribute(typeof(global::Shop.Billing.BoardId))]")
+            .And.Contain("[assembly: global::DDDToolkit.Access.AsksOwnerOfAttribute(typeof(global::Shop.Billing.NoteId))]")
+            .And.NotContain("SeatId");
+
+        result.Emit().Assembly.GetCustomAttributes(typeof(AsksOwnerOfAttribute), inherit: false).Cast<AsksOwnerOfAttribute>()
+            .Select(static asked => asked.AggregateId.Name).Should().Equal(["BoardId", "NoteId"], "once each, in the order of their names");
+
+        Module("[OwnOnly] public sealed record LeaveTenant([Own] SeatId Seat) : IBillingRequest;").RunCore()
+            .AllSources.Should().NotContain("AsksOwnerOf", "a project that asks about no owner says nothing");
+    }
+
+    [Fact]
     public void An_aggregate_of_a_project_the_requests_reference_is_read_as_one_of_their_own()
     {
         var result = OverTheDomain(CallersUser + "[OwnOnly] public sealed record ArchiveBoard([Own] BoardId Board) : IBillingRequest;").RunCore();

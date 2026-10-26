@@ -995,7 +995,9 @@ builder.Services.RunStartupChecks();
 It looks at every context the host registers that maps one of the toolkit's classes: an entity or an aggregate,
 or the table of the outbox, the inbox or the event log. A context a library brings for its own tables needs none
 of the interceptors, and is passed over. Every context, either kind, is also held to the parts its model requires
-([A part a model cannot do without](#a-part-a-model-cannot-do-without)). By hand, it is:
+([A part a model cannot do without](#a-part-a-model-cannot-do-without)). Beside it the registration brings
+`entity-framework.owners-mapped`, which finds the context of every aggregate the host's requests ask the owner of
+([The owner of an aggregate](access-requirements.md#the-owner-of-an-aggregate)). By hand, the first is:
 
 ```csharp
 var app = builder.Build();

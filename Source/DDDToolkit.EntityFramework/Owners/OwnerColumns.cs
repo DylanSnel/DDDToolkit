@@ -24,7 +24,57 @@ namespace DDDToolkit.EntityFramework.Owners;
 /// </remarks>
 internal sealed class OwnerColumns
 {
+    private static readonly MethodInfo ForMethod = typeof(OwnerColumns).GetMethod(nameof(For))!;
+
     private readonly ConcurrentDictionary<Type, object> _found = new();
+
+    /// <summary>
+    /// The ids of the aggregates the host's requests ask the owner of, as the generator says it of the assembly of each
+    /// request interface <paramref name="services"/> register checks for, ordered by name; without an id the host reads
+    /// the owner of with a reader of its own.
+    /// </summary>
+    /// <param name="services">The host's services, as registered.</param>
+    public static List<Type> AskedOf(IServiceCollection services)
+        => [.. services
+            .Where(static descriptor => !descriptor.IsKeyedService && IsClosed(descriptor.ServiceType, typeof(AccessChecks<>)))
+            .Select(static descriptor => descriptor.ServiceType.GenericTypeArguments[0].Assembly)
+            .Distinct()
+            .SelectMany(static assembly => assembly.GetCustomAttributes<AsksOwnerOfAttribute>())
+            .Select(static asked => asked.AggregateId)
+            .Distinct()
+            .Where(id => !services.Any(descriptor => !descriptor.IsKeyedService && IsClosed(descriptor.ServiceType, typeof(IAggregateOwners<>))
+                && descriptor.ServiceType.GenericTypeArguments[0] == id))
+            .OrderBy(static id => id.FullName, StringComparer.Ordinal)];
+
+    /// <summary>
+    /// Finds the column of the owner of an aggregate whose id is <paramref name="id"/>, as <see cref="For{TId}"/> does,
+    /// and keeps it; <see langword="null"/> where it is found, and otherwise why it cannot be, as the first request would
+    /// be told.
+    /// </summary>
+    /// <param name="id">The aggregate's id.</param>
+    /// <param name="services">The services of a scope, where the contexts are.</param>
+    public string? ProblemWith(Type id, IServiceProvider services)
+    {
+        MethodInfo find;
+        try
+        {
+            find = ForMethod.MakeGenericMethod(id);
+        }
+        catch (ArgumentException)
+        {
+            return $"'{id.Name}' is said to be the id of an aggregate whose owner is asked about, and is no struct id of the toolkit's, which an aggregate's is.";
+        }
+
+        try
+        {
+            find.Invoke(this, [services]);
+            return null;
+        }
+        catch (TargetInvocationException failed) when (failed.InnerException is InvalidOperationException unreadable)
+        {
+            return unreadable.Message;
+        }
+    }
 
     /// <summary>The column the owner of an aggregate whose id is <typeparamref name="TId"/> is read from.</summary>
     /// <typeparam name="TId">The aggregate's id.</typeparam>
@@ -148,6 +198,9 @@ internal sealed class OwnerColumns
     /// </summary>
     private static bool ReadsItsContext(IEntityType aggregate)
         => aggregate.GetDeclaredQueryFilters().Any(static filter => filter.Expression is { } expression && ContextReader.Reads(expression));
+
+    /// <summary>Whether <paramref name="type"/> is <paramref name="definition"/> closed over a type argument.</summary>
+    private static bool IsClosed(Type type, Type definition) => type.IsConstructedGenericType && type.GetGenericTypeDefinition() == definition;
 
     private static string Listed(IEnumerable<string> items)
     {

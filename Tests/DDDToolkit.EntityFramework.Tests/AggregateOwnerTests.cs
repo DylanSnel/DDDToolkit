@@ -6,6 +6,7 @@ using DDDToolkit.EntityFramework.Conventions;
 using DDDToolkit.EntityFramework.Tests.Converters;
 using DDDToolkit.EntityFramework.Tests.Infrastructure;
 using DDDToolkit.Exceptions;
+using DDDToolkit.Startup;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -231,7 +232,55 @@ public sealed class AggregateOwnerTests : IDisposable
         _statements.Read.Should().BeEmpty("the host's own reader read it");
     }
 
+    [Fact]
+    public void The_assembly_says_the_aggregates_its_requests_ask_the_owner_of()
+    {
+        // The line of [Own] on a letter's id, and the call CloseHub writes itself; the hive's is SmokeHive's.
+        typeof(ILettersRequest).Assembly.GetCustomAttributes(typeof(AsksOwnerOfAttribute), inherit: false).Cast<AsksOwnerOfAttribute>()
+            .Select(static asked => asked.AggregateId).Should().BeEquivalentTo([typeof(HiveId), typeof(HubId), typeof(LetterId)]);
+    }
+
+    [Fact]
+    public async Task The_start_up_check_finds_what_cannot_be_read_before_the_first_request_and_names_each()
+    {
+        // This assembly's requests ask about a letter's owner, a hub's, which marks none, and a hive's, which no context of
+        // this host maps: two of the three stop the start, each with what its first request would have been told.
+        var services = Services();
+        services.AddDbContext<LettersContext>(Configure);
+        await using var host = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
+
+        (await FluentActions.Awaiting(() => OwnersMapped(services).RunAsync(host, Cancellation)).Should().ThrowAsync<InvalidOperationException>())
+            .WithMessage("The owners of 2 aggregates the host's requests ask about cannot be read:*"
+                + "- 'Hub', whose id is HubId, marks no property [Owner]*"
+                + "- No context the host registered maps an aggregate whose id is HiveId*");
+        _statements.Read.Should().BeEmpty("the models are read, and no row");
+    }
+
+    [Fact]
+    public async Task An_id_the_host_reads_the_owner_of_itself_is_its_reader_s_and_the_rest_are_found_at_start_up()
+    {
+        var services = Services();
+        services.AddDbContext<LettersContext>(Configure);
+        services.AddScoped<IAggregateOwners<HiveId>, NobodysHives>();
+        await using var host = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
+
+        (await FluentActions.Awaiting(() => OwnersMapped(services).RunAsync(host, Cancellation)).Should().ThrowAsync<InvalidOperationException>())
+            .WithMessage("'Hub', whose id is HubId, marks no property [Owner], so a request about its owner cannot be checked. Mark the property that names its owner [Owner].");
+
+        services.AddScoped<IAggregateOwners<HubId>, NobodysHubs>();
+        await using var passing = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
+        await OwnersMapped(services).RunAsync(passing, Cancellation);
+
+        // What the check found is what the requests use: the letter's owner is read, and nothing more is looked for.
+        await AskAsync(passing, Caller.User(Ann), new DeliverLetter(AnnsLetter));
+        _statements.Read.Should().ContainSingle();
+    }
+
     public void Dispose() => _database.Dispose();
+
+    /// <summary>The check <c>AddDDDToolkitEntityFramework</c> brought to <paramref name="services"/> for the owners.</summary>
+    private static StartupCheck OwnersMapped(IServiceCollection services)
+        => services.GetStartupChecks().Registered.Single(static each => each.Name == EntityFrameworkChecks.OwnersMappedCheck);
 
     private ServiceProvider Host()
     {
@@ -265,6 +314,22 @@ public sealed class AggregateOwnerTests : IDisposable
 
     private static async Task<FluentAssertions.Specialized.ExceptionAssertions<InvalidOperationException>> FailedAsync(IServiceProvider host, Caller caller, ILettersRequest request)
         => await FluentActions.Awaiting(() => AskAsync(host, caller, request)).Should().ThrowAsync<InvalidOperationException>("a request whose owner cannot be read lets nobody through");
+
+    /// <summary>A reader of the host's own: every hive is nobody's.</summary>
+    private sealed class NobodysHives : IAggregateOwners<HiveId>
+    {
+        public Type OwnerType => typeof(Guid);
+
+        public ValueTask<AggregateOwner?> ReadAsync(HiveId aggregate, CancellationToken cancellationToken) => ValueTask.FromResult<AggregateOwner?>(AggregateOwner.Nobody);
+    }
+
+    /// <summary>A reader of the host's own: every hub is nobody's.</summary>
+    private sealed class NobodysHubs : IAggregateOwners<HubId>
+    {
+        public Type OwnerType => typeof(PostmanId);
+
+        public ValueTask<AggregateOwner?> ReadAsync(HubId aggregate, CancellationToken cancellationToken) => ValueTask.FromResult<AggregateOwner?>(AggregateOwner.Nobody);
+    }
 
     /// <summary>A reader of the host's own: every letter is Bob's.</summary>
     private sealed class EverythingIsBobs : IAggregateOwners<LetterId>

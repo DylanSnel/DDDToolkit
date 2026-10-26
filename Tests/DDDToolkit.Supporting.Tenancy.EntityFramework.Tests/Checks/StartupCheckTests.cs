@@ -40,6 +40,7 @@ public sealed class StartupCheckTests
 
         ran.Should().Equal(
             EntityFrameworkChecks.ToolkitWiredCheck,
+            EntityFrameworkChecks.OwnersMappedCheck,
             TenancyChecks.CatalogueBuildsCheck,
             TenancyChecks.ContextsWiredCheck,
             TenancyChecks.UnknownStoredKeysCheck);

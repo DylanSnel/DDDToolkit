@@ -111,6 +111,74 @@ public sealed class AccessBehaviorGenerator : IIncrementalGenerator
         // Collected, because two interfaces of one namespace may give their behaviors one name, and only all of
         // them together show it; and the lines of an interface come from every request that implements it.
         context.RegisterSourceOutput(interfaces.Collect().Combine(requests), static (productionContext, all) => Execute(productionContext, all.Left, all.Right));
+
+        // The aggregates whose owner the project asks about: in the lines written above, and wherever its own code calls
+        // AccessRequirement.OwnerOf, a request's RequiredAccess say. Said once for the assembly, for the start-up check
+        // that finds where each owner is kept before the first request asks for it.
+        var calledByHand = context.SyntaxProvider.CreateSyntaxProvider(
+                predicate: static (node, _) => node is InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax { Name.Identifier.ValueText: "OwnerOf" } or SimpleNameSyntax { Identifier.ValueText: "OwnerOf" } },
+                transform: static (syntaxContext, cancellationToken) => OwnerAsked(syntaxContext, cancellationToken))
+            .Where(static id => id is not null)
+            .Select(static (id, _) => id!)
+            .Collect();
+        var canSay = context.CompilationProvider.Select(static (compilation, _) => compilation.GetTypeByMetadataName(KnownTypes.AsksOwnerOfAttribute) is not null);
+        context.RegisterSourceOutput(requests.Combine(calledByHand).Combine(canSay), static (productionContext, all) => EmitOwnersAsked(productionContext, all.Left.Left, all.Left.Right, all.Right));
+    }
+
+    /// <summary>
+    /// The id, from <c>global::</c> on, of the aggregate a call of <c>AccessRequirement.OwnerOf</c> asks the owner of;
+    /// <see langword="null"/> for a call of any other method of that name.
+    /// </summary>
+    /// <remarks>
+    /// An id of the project's own gets the interfaces the method's constraints ask for from a generator this one does not
+    /// see, so the call may bind to no method here, only to a candidate: then the id is the type argument it is written
+    /// with, or the type of what it is handed.
+    /// </remarks>
+    private static string? OwnerAsked(GeneratorSyntaxContext context, CancellationToken cancellationToken)
+    {
+        var invocation = (InvocationExpressionSyntax)context.Node;
+        var bound = context.SemanticModel.GetSymbolInfo(invocation, cancellationToken);
+        if ((bound.Symbol ?? bound.CandidateSymbols.FirstOrDefault()) is not IMethodSymbol { Name: "OwnerOf", Arity: 1 } method
+            || EntityDeclarations.MetadataNameOf(method.ContainingType) != KnownTypes.AccessRequirement)
+        {
+            return null;
+        }
+
+        var written = invocation.Expression switch
+        {
+            MemberAccessExpressionSyntax { Name: GenericNameSyntax generic } => generic.TypeArgumentList.Arguments.FirstOrDefault(),
+            GenericNameSyntax generic => generic.TypeArgumentList.Arguments.FirstOrDefault(),
+            _ => null,
+        };
+        var id = method.TypeArguments[0] is { TypeKind: not TypeKind.TypeParameter and not TypeKind.Error } inferred ? inferred
+            : written is not null ? context.SemanticModel.GetTypeInfo(written, cancellationToken).Type
+            : invocation.ArgumentList.Arguments.FirstOrDefault() is { } argument ? context.SemanticModel.GetTypeInfo(argument.Expression, cancellationToken).Type
+            : null;
+
+        return id is { TypeKind: not TypeKind.Error and not TypeKind.TypeParameter } ? id.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) : null;
+    }
+
+    /// <summary>
+    /// <c>[assembly: AsksOwnerOf(typeof(...))]</c> for every aggregate whose owner the project asks about, once each, in
+    /// the order of their names; nothing where it asks about none, or cannot see the attribute.
+    /// </summary>
+    private static void EmitOwnersAsked(SourceProductionContext context, ImmutableArray<RequestRequirement> declared, ImmutableArray<string> calledByHand, bool canSay)
+    {
+        var asked = declared.SelectMany(static request => request.OwnersAsked).Concat(calledByHand).Distinct(StringComparer.Ordinal).OrderBy(static id => id, StringComparer.Ordinal).ToList();
+        if (!canSay || asked.Count == 0)
+        {
+            return;
+        }
+
+        var writer = new CodeWriter().Header();
+        writer.Line("// The aggregates whose owner this project's requests ask about, read by the start-up check that finds where each");
+        writer.Line("// owner is kept before the first request asks for it.");
+        foreach (var id in asked)
+        {
+            writer.Line("[assembly: global::" + KnownTypes.AsksOwnerOfAttribute + "(typeof(" + id + "))]");
+        }
+
+        context.AddSource("DDDToolkit.AsksOwnerOf.g.cs", SourceText.From(writer.ToString(), Encoding.UTF8));
     }
 
     /// <summary>The name the generated file gives <c>IRequireAccess</c>, one no module's own type or namespace has.</summary>

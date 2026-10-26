@@ -10,7 +10,8 @@ namespace DDDToolkit.Access;
 /// </summary>
 /// <remarks>
 /// The Entity Framework package registers one for every id, with <c>AddDDDToolkitEntityFramework</c>, which a host on Entity
-/// Framework calls already: it finds the context that maps the aggregate among those the host registered, and reads the
+/// Framework calls already: it finds the context that maps the aggregate among those the host registered, when the host
+/// starts (the start-up check <c>entity-framework.owners-mapped</c>) or at the first request about it, and reads the
 /// column the <c>[Owner]</c> property maps, in one statement, so a host writes nothing for it. Where the host runs its
 /// queries as the caller, that statement runs as the caller too, and row level security decides whether the row is there.
 /// A storage of another kind registers one of its own for the id, per scope, which takes the place of the package's for

@@ -39,6 +39,7 @@ public sealed class StartupCheckRegistrationTests : IDisposable
 
         services.GetStartupChecks().InOrder().Select(check => (check.Name, check.Stage)).Should().Equal(
             (EntityFrameworkChecks.ToolkitWiredCheck, StartupCheckStage.Services),
+            (EntityFrameworkChecks.OwnersMappedCheck, StartupCheckStage.Services),
             (PostgresRowAccessChecks.RowLevelSecurityWiredCheck, StartupCheckStage.Services),
             (SupabaseRowAccessChecks.RolesMatchAccessFilesCheck, StartupCheckStage.Login),
             (PostgresRowAccessChecks.LoginRoleMaySwitchToCallersCheck, StartupCheckStage.Login),

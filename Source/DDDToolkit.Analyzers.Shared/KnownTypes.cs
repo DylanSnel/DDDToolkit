@@ -196,6 +196,12 @@ internal static class KnownTypes
     /// </summary>
     public const string AccessBehaviorAttribute = "DDDToolkit.Access.AccessBehaviorAttribute";
 
+    /// <summary>The assembly attribute that says the id of an aggregate whose owner a project's requests ask about.</summary>
+    public const string AsksOwnerOfAttribute = "DDDToolkit.Access.AsksOwnerOfAttribute";
+
+    /// <summary>The core's requirement record, whose <c>OwnerOf</c> a request's line or a project's own code calls.</summary>
+    public const string AccessRequirement = "DDDToolkit.Access.AccessRequirement";
+
     /// <summary>
     /// The pipeline behavior of the Mediator library (assembly Mediator.Abstractions). A project that can see it
     /// uses the library, and gets a behavior written for each of its <c>[AccessRequests]</c> interfaces.

@@ -82,6 +82,7 @@ public sealed class SampleWithoutDatabaseTests
             "tenancy.contexts-wired",
             "access.behaviors-registered",
             "entity-framework.toolkit-wired",
+            "entity-framework.owners-mapped",
             "supabase.roles-match-access-files",
             "postgres.login-role-may-switch-to-callers",
             "supabase.migrations-applied",

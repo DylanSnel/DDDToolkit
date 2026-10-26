@@ -1,6 +1,8 @@
 using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Access;
+using DDDToolkit.EntityFramework;
 using DDDToolkit.Exceptions;
+using DDDToolkit.Startup;
 using Examples.Hosting;
 using Examples.Webshop.Ordering;
 using Examples.Webshop.Ordering.Application.Orders;
@@ -71,6 +73,22 @@ public sealed class OrderOwnerTests : IAsyncLifetime
         (await RefusedAsync(Caller.User(Alice), _guests.Id)).Code.Should().Be(ToolkitRefusals.NotOwn, "a guest's order is nobody's");
         (await RefusedAsync(Caller.Anonymous, _guests.Id)).Code.Should().Be(ToolkitRefusals.NotOwn, "not even for a guest, who is no customer");
         (await RefusedAsync(Caller.User(Alice), OrderId.CreateSequential())).Code.Should().Be(ToolkitRefusals.NotFound);
+    }
+
+    [Fact]
+    public async Task The_host_finds_who_placed_an_order_when_it_starts_rather_than_at_the_first_request()
+    {
+        // Ordering's assembly says its requests ask about an order's owner, and the check AddDDDToolkitEntityFramework
+        // brought finds the context that maps it, and the column of PlacedBy, with nothing written by the module for it.
+        typeof(IOrderingRequest).Assembly.GetCustomAttributes(typeof(AsksOwnerOfAttribute), inherit: false).Cast<AsksOwnerOfAttribute>()
+            .Select(static asked => asked.AggregateId).Should().Equal(typeof(OrderId));
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddOrderingModule(ModuleHost.InProcess(ModuleDatabase.Sqlite(_directory)));
+        await using var host = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
+
+        await services.GetStartupChecks().Registered.Single(static each => each.Name == EntityFrameworkChecks.OwnersMappedCheck).RunAsync(host, Cancellation);
     }
 
     [Fact]
