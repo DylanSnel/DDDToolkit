@@ -77,6 +77,14 @@ Content-Type: application/json
 
 { "reason": "Changed my mind." }
 
+### Sending it elsewhere: 403, access.not-own. This order was placed as a guest's, and a guest's order is
+### nobody's: the door read who placed it and let nobody through, whoever has its id. A customer who placed
+### an order, with the access token Supabase Auth gave them, sends it elsewhere while it is placed.
+POST {{host}}/orders/{{placed.response.body.id}}/ship-to
+Content-Type: application/json
+
+{ "street": "Neude 11", "city": "Utrecht", "postalCode": "3512 AE" }
+
 ### More than the payment provider accepts. Inventory reserves the grinder, Payments is refused, Ordering
 ### cancels, and Inventory puts the grinder back: the compensating half of the process.
 # @name declined

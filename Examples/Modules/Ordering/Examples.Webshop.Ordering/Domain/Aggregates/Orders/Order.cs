@@ -1,4 +1,5 @@
 using DDDToolkit.Abstractions.Attributes;
+using DDDToolkit.Exceptions;
 using Examples.Webshop.Ordering.Contracts;
 using Examples.Webshop.SharedKernel;
 
@@ -71,6 +72,13 @@ public partial class Order
     /// The customer who placed the order, or <see langword="null"/> for a guest's. It never changes: an
     /// order does not move to another customer.
     /// </summary>
+    /// <remarks>
+    /// <c>[Owner]</c> says what this is: the order's owner. A fact about the order, and no rule about who may
+    /// do what with it. A request about the customer's own order says that, at the door, by marking the
+    /// order's id <c>[Own]</c>, as <c>ShipElsewhere</c> does, and the toolkit's check reads this one column
+    /// of the one row as the caller. A guest's order is nobody's, so nobody sends it on as its owner.
+    /// </remarks>
+    [Owner]
     public CustomerId? PlacedBy { get; private set; }
 
     /// <summary>The lines of this order. Read-only outside the aggregate; the generated <c>_lines</c> field is what Entity Framework maps.</summary>
@@ -92,6 +100,32 @@ public partial class Order
 
     /// <summary>Why the order was cancelled, or <see langword="null"/> while it is not.</summary>
     public string? CancellationReason { get; private set; }
+
+    /// <summary>What <see cref="DeliverTo"/> refuses an order with that is no longer placed, for a caller to branch on.</summary>
+    public const string NoLongerPlaced = "ordering.no-longer-placed";
+
+    /// <summary>
+    /// Sends the order to another address. Only while it is placed: Shipping books the van with the address the
+    /// order is confirmed with, so a confirmed order keeps the one its van is booked for, and a cancelled one
+    /// goes nowhere. Nothing is raised: whoever needs the address hears it when the order is confirmed.
+    /// </summary>
+    /// <remarks>
+    /// A refusal, not an invariant, unlike <see cref="Cancel"/>'s rule: whether the address may change is a
+    /// question about the order before the change, and a moved order that was confirmed is a state the order
+    /// keeps nothing of to tell afterwards. So it is decided first, and the order is as it was.
+    /// </remarks>
+    /// <exception cref="RefusalException"><see cref="NoLongerPlaced"/>, for an order that is confirmed or cancelled.</exception>
+    public void DeliverTo(ValidAddress shipTo)
+    {
+        ArgumentNullException.ThrowIfNull(shipTo);
+
+        if (Status is not OrderStatus.Placed)
+        {
+            throw new RefusalException(NoLongerPlaced, RefusalKind.Conflict, "An order is sent elsewhere only while it is placed: a confirmed order has its van booked, and a cancelled one goes nowhere.");
+        }
+
+        ShipTo = shipTo;
+    }
 
     /// <summary>
     /// Inventory set the stock aside. A cancelled order ignores it: Inventory hears about the

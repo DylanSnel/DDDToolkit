@@ -36,6 +36,13 @@ public static class OrderingModule
         // nobody signs in, the caller is the system, and every order is a guest's.
         services.TryAddSingleton<ICallerAccessor, AmbientCallerAccessor>();
 
+        // Who may send what, for the one request that asks: ShipElsewhere, about the customer's own order. The
+        // endpoints ask the checks themselves, so nothing goes in a pipeline. The order marks who placed it as its
+        // owner, so the caller's own customer id is what that is compared with; the package's reader of the owner
+        // comes with AddDDDToolkitEntityFramework below, and reads the one column as the caller.
+        services.AddCallersOwn<CustomerId, CallersCustomer>();
+        services.AddAccessChecks<IOrderingRequest>();
+
         // Ordering produces integration events, so it owns an outbox: what it publishes, as what, and
         // that it goes wherever the host sends it. It does not know which modules listen.
         services.AddDDDToolkitEntityFramework(options => options.UseOutbox<OrderingContext>(outbox =>

@@ -251,6 +251,16 @@ The outbox pollers run outside any request, as the role the host logged in as, s
 regardless. On SQLite and SQL Server nobody signs in, every order is a guest's, and nothing enforces the
 rules.
 
+Who placed an order is also what the one request of Ordering's with a door asks about. `Order.PlacedBy` is marked
+`[Owner]`, a fact about the order and no rule, and `POST /orders/{id}/ship-to` sends the order elsewhere with a request,
+[`ShipElsewhere`](Modules/Ordering/Examples.Webshop.Ordering/Application/Orders/Commands/ShipElsewhere.cs), that is
+`[OwnOnly]` with `[Own]` on the order's id. The endpoint asks Ordering's checks before anything else, and the toolkit's
+check reads who placed the order, that one column, as the caller: only that customer sends it elsewhere, while it is
+placed. A guest's order is nobody's, so the endpoint answers 403 to everybody, whoever has the link; Bob gets a 404 for
+Alice's order, which the policy keeps from him. On SQLite and SQL Server every caller is the shop's own work, which
+owns no order, so nobody sends one elsewhere there. See
+[Access requirements → The owner of an aggregate](../docs/access-requirements.md#the-owner-of-an-aggregate).
+
 The AppHost's container gets the roles and `auth` functions every Supabase project has from
 `Examples.Webshop.Supabase.AppHost/database/`, and the host is given the CLI's local JWT secret, as the
 `supabase` launch profile gives it against `supabase start`. With it the host takes two kinds of token: one
