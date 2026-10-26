@@ -341,19 +341,19 @@ public sealed class SampleApiTests
         });
         var api = new SampleApi(stub.Client(), SignedIn());
 
-        async Task<bool> WholeTenantAsync(string path)
-            => (await api.SendAsync<JsonElement?>(HttpMethod.Get, path, null, CallAs.Session, TenantChoice.Session, Cancellation)).Problem!.KeyNeededForTheWholeTenant;
+        async Task<bool> AtTenantAsync(string path)
+            => (await api.SendAsync<JsonElement?>(HttpMethod.Get, path, null, CallAs.Session, TenantChoice.Session, Cancellation)).Problem!.KeyNeededAtTenant;
 
         // The refusal's text names the key and not where it was needed, so a seat that holds the key at a unit
         // would read only that it lacks it. The arguments say where: no unit is the whole tenant.
-        (await WholeTenantAsync("/whole-tenant")).Should().BeTrue();
-        (await WholeTenantAsync("/names-no-unit")).Should().BeTrue();
-        (await WholeTenantAsync("/at-a-unit")).Should().BeFalse("the key was needed at that unit, which the arguments show by name");
-        (await WholeTenantAsync("/another-rule")).Should().BeFalse("only the refusal for a key that is not held says where the key was needed");
-        (await WholeTenantAsync("/a-project")).Should().BeFalse("a project's refusal is about the project, and names no unit either");
-        (await WholeTenantAsync("/yours-or-the-key")).Should().BeTrue("one of the ways the request may be sent was the key for the whole tenant");
-        (await WholeTenantAsync("/one-or-another-at-a-unit")).Should().BeFalse("the key of that way was needed at a unit");
-        ApiProblem.WithoutArguments(null, "Unauthorized").KeyNeededForTheWholeTenant.Should().BeFalse();
+        (await AtTenantAsync("/whole-tenant")).Should().BeTrue();
+        (await AtTenantAsync("/names-no-unit")).Should().BeTrue();
+        (await AtTenantAsync("/at-a-unit")).Should().BeFalse("the key was needed at that unit, which the arguments show by name");
+        (await AtTenantAsync("/another-rule")).Should().BeFalse("only the refusal for a key that is not held says where the key was needed");
+        (await AtTenantAsync("/a-project")).Should().BeFalse("a project's refusal is about the project, and names no unit either");
+        (await AtTenantAsync("/yours-or-the-key")).Should().BeTrue("one of the ways the request may be sent was the key for the whole tenant");
+        (await AtTenantAsync("/one-or-another-at-a-unit")).Should().BeFalse("the key of that way was needed at a unit");
+        ApiProblem.WithoutArguments(null, "Unauthorized").KeyNeededAtTenant.Should().BeFalse();
     }
 
     [Fact]

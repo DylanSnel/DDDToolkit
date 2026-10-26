@@ -264,8 +264,8 @@ public sealed class ContainmentAndLastAdminScenarios(SampleHosts sample) : IClas
 
         var adas = await ada.GetFromJsonAsync<JsonElement>($"/access/units?key={TenancyKeys.RolesManage}", Cancellation);
         var mauds = await maud.GetFromJsonAsync<JsonElement>($"/access/units?key={TenancyKeys.RolesManage}", Cancellation);
-        adas.GetProperty("wholeTenant").GetBoolean().Should().BeFalse();
-        mauds.GetProperty("wholeTenant").GetBoolean().Should().BeTrue();
+        adas.GetProperty("atTenant").GetBoolean().Should().BeFalse();
+        mauds.GetProperty("atTenant").GetBoolean().Should().BeTrue();
 
         // Now Maud is the last, and stays: neither giving up the role nor suspending her own seat gets through.
         using (var revoked = await maud.DeleteAsync($"/tenancy/seats/{maudSeat}/grants/{Harbor.Root.Value}/{accessAdmin}", Cancellation))

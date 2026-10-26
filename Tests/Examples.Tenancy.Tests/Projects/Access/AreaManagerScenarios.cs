@@ -66,7 +66,7 @@ public sealed class AreaManagerScenarios(SampleHosts sample) : IClassFixture<Sam
         // The answer is ids: North, where she holds the key, and the two units below it.
         units.GetProperty("unitsWhereIHold").EnumerateArray().Select(unit => unit.GetGuid())
             .Should().BeEquivalentTo([Harbor.UnitNamed("North").Value, Harbor.UnitNamed("North Coast").Value, Harbor.UnitNamed("North Inland").Value]);
-        units.GetProperty("wholeTenant").GetBoolean().Should().BeFalse();
+        units.GetProperty("atTenant").GetBoolean().Should().BeFalse();
 
         onPier.GetProperty("allowed").GetBoolean().Should().BeTrue("an area manager may close a project in her area");
         onPier.Text("via").Should().Be("organization");

@@ -8,7 +8,7 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// (<c>AccessRequirement.SignedIn()</c> and the like) and Membership's (<c>MemberAccess.On(key, resource)</c>):
 /// <code>
 /// AccessRequirement IRequireAccess.RequiredAccess =&gt; TenancyAccess.InTenant();
-/// AccessRequirement IRequireAccess.RequiredAccess =&gt; TenancyAccess.ForTheWholeTenant(TenancyKeys.RolesManage);
+/// AccessRequirement IRequireAccess.RequiredAccess =&gt; TenancyAccess.AtTenant(TenancyKeys.RolesManage);
 /// AccessRequirement IRequireAccess.RequiredAccess =&gt; TenancyAccess.AtUnit(TenancyKeys.GrantsManage, Unit);
 /// AccessRequirement IRequireAccess.RequiredAccess =&gt; TenancyAccess.RequiresOperator();
 /// </code>
@@ -18,7 +18,7 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// toolkit's generator writes the same call: <see cref="InTenantAttribute"/>, <c>[RequiresKey(key)]</c> for the
 /// whole tenant, with <see cref="AtUnitAttribute"/> on the unit for a key there, and
 /// <see cref="RequiresOperatorAttribute"/>. These methods stay for a requirement computed from the request's
-/// values: <c>Unit is { } unit ? TenancyAccess.AtUnit(key, unit) : TenancyAccess.ForTheWholeTenant(key)</c>.
+/// values: <c>Unit is { } unit ? TenancyAccess.AtUnit(key, unit) : TenancyAccess.AtTenant(key)</c>.
 /// </summary>
 /// <remarks>
 /// They are the one spelling: the cases' constructors are internal, as the core's are, and these methods make
@@ -35,11 +35,11 @@ public static class TenancyAccess
 
     /// <summary>
     /// The caller holds <paramref name="key"/> for the whole tenant, at its root, now
-    /// (<see cref="TenancyRequirement.ForTheWholeTenant"/>).
+    /// (<see cref="TenancyRequirement.AtTenant"/>).
     /// </summary>
     /// <param name="key">The key the request needs for the whole tenant: one of the catalogue's.</param>
     /// <exception cref="ArgumentException"><paramref name="key"/> is blank.</exception>
-    public static TenancyRequirement.ForTheWholeTenant ForTheWholeTenant(string key) => new(key);
+    public static TenancyRequirement.AtTenant AtTenant(string key) => new(key);
 
     /// <summary>
     /// The caller holds <paramref name="key"/> at <paramref name="unit"/>, there or at a unit above it, now
@@ -79,7 +79,7 @@ public static class TenancyAccess
     /// <code>
     /// AccessRequirement IRequireAccess.RequiredAccess =&gt; AccessRequirement.Any(
     ///     TenancyAccess.Own(Seat),
-    ///     TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage));
+    ///     TenancyAccess.AtTenant(TenancyKeys.SeatsManage));
     /// </code>
     /// which a request says with attributes as well: <c>[RequiresKey(TenancyKeys.SeatsManage)]</c> and
     /// <c>[OrOwn] SeatId Seat</c>.

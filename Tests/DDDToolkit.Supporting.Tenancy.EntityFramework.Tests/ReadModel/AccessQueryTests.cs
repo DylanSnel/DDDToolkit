@@ -193,12 +193,12 @@ public abstract class AccessQueryTests(TestDatabases databases) : IAsyncLifetime
     }
 
     [Fact]
-    public async Task HoldsTenantWideAsync_and_HoldsAtAsync_run_through_the_executor()
+    public async Task HoldsAtTenantAsync_and_HoldsAtAsync_run_through_the_executor()
     {
         await BuildHarborAsync();
 
-        (await AskAsync(_harbor.AdminSeat, questions => questions.HoldsTenantWideAsync(TenancyKeys.RolesManage, TestContext.Current.CancellationToken))).Should().BeTrue();
-        (await AskAsync(_grace, questions => questions.HoldsTenantWideAsync(TenancyKeys.UnitsManage, TestContext.Current.CancellationToken))).Should().BeFalse("North is not the root");
+        (await AskAsync(_harbor.AdminSeat, questions => questions.HoldsAtTenantAsync(TenancyKeys.RolesManage, TestContext.Current.CancellationToken))).Should().BeTrue();
+        (await AskAsync(_grace, questions => questions.HoldsAtTenantAsync(TenancyKeys.UnitsManage, TestContext.Current.CancellationToken))).Should().BeFalse("North is not the root");
         (await AskAsync(_grace, questions => questions.HoldsAtAsync(TenancyKeys.UnitsManage, _coast, TestContext.Current.CancellationToken))).Should().BeTrue();
         (await AskAsync(_grace, questions => questions.HoldsAtAsync(TenancyKeys.UnitsManage, _south, TestContext.Current.CancellationToken))).Should().BeFalse();
         (await AskAsync(_lin, questions => questions.HoldsAtAsync(HostCatalogue.WidgetCreate, _coast, TestContext.Current.CancellationToken))).Should().BeTrue();

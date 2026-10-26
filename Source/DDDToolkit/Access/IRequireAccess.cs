@@ -18,7 +18,7 @@ namespace DDDToolkit.Access;
 /// {
 ///     AccessRequirement IRequireAccess.RequiredAccess =&gt; Unit is { } unit
 ///         ? TenancyAccess.AtUnit(BillingKeys.Read, unit)
-///         : TenancyAccess.ForTheWholeTenant(BillingKeys.Read);
+///         : TenancyAccess.AtTenant(BillingKeys.Read);
 /// }
 /// </code>
 /// The toolkit's generator turns the attributes into plain C# at compile time: the module's interface, marked

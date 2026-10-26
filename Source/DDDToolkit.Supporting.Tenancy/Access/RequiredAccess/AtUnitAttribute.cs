@@ -16,7 +16,7 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// well. The member is the application's unit id, the id its class declared with <c>[OrganizationUnit&lt;TUnitId&gt;]</c>
 /// is declared over: on another id, a seat's say, it is DDD00081, where the project sees that class. A unit that may
 /// be left out, <c>OrganizationUnitId?</c>, is a requirement computed from whether it is given, so the request answers
-/// <c>RequiredAccess</c> itself: <c>Unit is { } unit ? TenancyAccess.AtUnit(key, unit) : TenancyAccess.ForTheWholeTenant(key)</c>.
+/// <c>RequiredAccess</c> itself: <c>Unit is { } unit ? TenancyAccess.AtUnit(key, unit) : TenancyAccess.AtTenant(key)</c>.
 /// A key without any marker is held for the whole tenant.
 /// <para>
 /// Not beside <c>[OrOwn]</c>: the caller would send the unit the key is checked at for another subject, so a key held at

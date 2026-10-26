@@ -2885,7 +2885,7 @@ the aggregate root a class declared with `[Member<TId, TMemberId, TRoleId, TReso
 with `[KeyMarker(..., IdOf = ...)]`. It is reported where the project sees such classes, as a module's application
 project sees its domain's; where it sees none, nothing can be told, and the check says so when the request is sent. A
 member that may be null is a requirement computed from whether it is given, written as `RequiredAccess`:
-`Unit is { } unit ? TenancyAccess.AtUnit(key, unit) : TenancyAccess.ForTheWholeTenant(key)`. `[ExpectedVersion]` marks
+`Unit is { } unit ? TenancyAccess.AtUnit(key, unit) : TenancyAccess.AtTenant(key)`. `[ExpectedVersion]` marks
 a member of the type the call takes there, a `long?` or a `long`.
 
 ## DDD00082

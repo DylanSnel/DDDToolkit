@@ -5,16 +5,16 @@ namespace DDDToolkit.Access;
 /// the call that makes the requirement from the key alone. Tenancy says that a key without a marker is held for the
 /// whole tenant:
 /// <code>
-/// [assembly: KeyWithoutMarker(typeof(TenancyAccess), nameof(TenancyAccess.ForTheWholeTenant))]
+/// [assembly: KeyWithoutMarker(typeof(TenancyAccess), nameof(TenancyAccess.AtTenant))]
 /// </code>
-/// so <c>[RequiresKey(BillingKeys.CloseTheBooks)]</c> on its own is <c>TenancyAccess.ForTheWholeTenant("billing.close-the-books")</c>.
+/// so <c>[RequiresKey(BillingKeys.CloseTheBooks)]</c> on its own is <c>TenancyAccess.AtTenant("billing.close-the-books")</c>.
 /// </summary>
 /// <remarks>
 /// One package says it. A project that references none that does, or two that do, cannot tell where a key without a
 /// marker is held, and there such a request is DDD00080, which asks for a marker.
 /// </remarks>
 /// <param name="factory">The class whose static method makes the requirement: <c>typeof(TenancyAccess)</c>.</param>
-/// <param name="method">The method's name: <c>nameof(TenancyAccess.ForTheWholeTenant)</c>.</param>
+/// <param name="method">The method's name: <c>nameof(TenancyAccess.AtTenant)</c>.</param>
 [AttributeUsage(AttributeTargets.Assembly, AllowMultiple = false, Inherited = false)]
 public sealed class KeyWithoutMarkerAttribute(Type factory, string method) : Attribute
 {

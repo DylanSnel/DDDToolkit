@@ -28,7 +28,7 @@ internal static class AccessEndpoints
         group.MapGet("/access/units", async (string key, ISender sender, CancellationToken cancellationToken) =>
         {
             var held = await sender.Send(new UnitsWhereIHold(key), cancellationToken);
-            return Results.Ok(new { unitsWhereIHold = held.Units, wholeTenant = held.WholeTenant });
+            return Results.Ok(new { unitsWhereIHold = held.Units, atTenant = held.AtTenant });
         });
 
         return group;

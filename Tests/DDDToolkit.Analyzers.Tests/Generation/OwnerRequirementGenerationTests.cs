@@ -144,13 +144,13 @@ public class OwnerRequirementGenerationTests
         result.ShouldContain(
             Hint,
             "global::Shop.Billing.RenameBoard request => global::DDDToolkit.Access.AccessRequirement.Any(global::DDDToolkit.Access.AccessRequirement.OwnerOf(request.Board), "
-            + "global::DDDToolkit.Supporting.Tenancy.Access.TenancyAccess.ForTheWholeTenant(\"boards.manage\")),",
+            + "global::DDDToolkit.Supporting.Tenancy.Access.TenancyAccess.AtTenant(\"boards.manage\")),",
             "the owner reads one column of one row; the key only where the board is not the caller's");
 
         var emitted = result.Emit();
         var any = Asked(emitted, "RenameBoard", IdOf(emitted, "BoardId", Guid.NewGuid()), "Q3").Should().BeOfType<AccessRequirement.AnyOf>().Subject;
         any.Cases[0].GetType().Name.Should().Be("OwnedAggregate`1");
-        any.Cases[1].Should().Be(TenancyAccess.ForTheWholeTenant("boards.manage"));
+        any.Cases[1].Should().Be(TenancyAccess.AtTenant("boards.manage"));
     }
 
     [Fact]

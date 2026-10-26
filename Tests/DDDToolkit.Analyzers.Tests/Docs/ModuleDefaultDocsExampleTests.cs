@@ -58,7 +58,7 @@ public class ModuleDefaultDocsExampleTests
         var emitted = result.Emit();
         ((IRequireAccess)emitted.New("Boards.ListBoards")).RequiredAccess.Should().Be(TenancyAccess.InTenant(), "it states nothing, and takes the default");
         ((IRequireAccess)emitted.New("Boards.ArchiveBoard", emitted.New("Boards.BoardId", Guid.NewGuid()))).RequiredAccess
-            .Should().Be(TenancyAccess.ForTheWholeTenant("boards.archive"), "the key, and only the key");
+            .Should().Be(TenancyAccess.AtTenant("boards.archive"), "the key, and only the key");
         ((IRequireAccess)emitted.New("Boards.MyInvitations")).RequiredAccess.Should().Be(AccessRequirement.SignedIn(), "a signed-in user, a seat or not");
     }
 

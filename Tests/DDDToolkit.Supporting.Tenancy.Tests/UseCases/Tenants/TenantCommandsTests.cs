@@ -65,7 +65,7 @@ public class TenantCommandsTests
         var tenantWide = await harness.Run(caller, async h =>
         {
             var questions = new TenancyAnswers<TenantId, SeatId, OrganizationUnitId, RoleId>(h.Catalogue, h.Clock).Over(h.Store, h.Store);
-            return await Task.WhenAll(h.Catalogue.LiveKeys.Select(key => questions.HoldsTenantWideAsync(key, default)));
+            return await Task.WhenAll(h.Catalogue.LiveKeys.Select(key => questions.HoldsAtTenantAsync(key, default)));
         });
 
         tenantWide.Should().OnlyContain(held => held, "the administrators' role holds every live key, granted at the root");
@@ -132,7 +132,7 @@ public class TenantCommandsTests
             var held = await harness.Run(caller, async h =>
             {
                 var questions = new TenancyAnswers<TenantId, SeatId, OrganizationUnitId, RoleId>(h.Catalogue, h.Clock).Over(h.Store, h.Store);
-                return await Task.WhenAll(h.Catalogue.LiveKeys.Select(key => questions.HoldsTenantWideAsync(key, default)));
+                return await Task.WhenAll(h.Catalogue.LiveKeys.Select(key => questions.HoldsAtTenantAsync(key, default)));
             });
             held.Should().OnlyContain(holds => holds, "the default administrators' role holds every live key, granted at the root");
 
@@ -179,7 +179,7 @@ public class TenantCommandsTests
         var held = await harness.Run(caller, async h =>
         {
             var questions = new TenancyAnswers<TenantId, SeatId, OrganizationUnitId, RoleId>(h.Catalogue, h.Clock).Over(h.Store, h.Store);
-            var answers = await Task.WhenAll(h.Catalogue.LiveKeys.Select(key => questions.HoldsTenantWideAsync(key, default)));
+            var answers = await Task.WhenAll(h.Catalogue.LiveKeys.Select(key => questions.HoldsAtTenantAsync(key, default)));
             return h.Catalogue.LiveKeys.Where((_, index) => answers[index]).ToArray();
         });
         held.Should().Equal(listed).And.NotContain(widgets);

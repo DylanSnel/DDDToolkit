@@ -95,7 +95,7 @@ public sealed class DemoSeederTests(SampleHosts sample) : IClassFixture<SampleHo
             }
 
             // Either way every live key of the catalogue is hers, for the whole tenant.
-            me.GetProperty("keys").EnumerateArray().Where(key => key.GetProperty("wholeTenant").GetBoolean()).Select(key => key.GetProperty("key").GetString())
+            me.GetProperty("keys").EnumerateArray().Where(key => key.GetProperty("atTenant").GetBoolean()).Select(key => key.GetProperty("key").GetString())
                 .Should().BeEquivalentTo((await sample.SharedAsync()).Services.GetRequiredService<TenancyCatalogue>().LiveKeys);
         }
     }

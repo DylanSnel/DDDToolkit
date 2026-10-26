@@ -16,7 +16,7 @@ public abstract partial record AccessRequirement
     /// <code>
     /// AccessRequirement IRequireAccess.RequiredAccess =&gt; AccessRequirement.Any(
     ///     AccessRequirement.OwnerOf(Board),                              // the board's owner,
-    ///     TenancyAccess.ForTheWholeTenant(BoardKeys.Manage));           // or the key for every board
+    ///     TenancyAccess.AtTenant(BoardKeys.Manage));           // or the key for every board
     /// </code>
     /// A request says it with the attributes it says the caller's own with as well: <see cref="OwnAttribute"/> on the
     /// aggregate's id with <see cref="OwnOnlyAttribute"/> for the owner alone, <see cref="OrOwnAttribute"/> beside

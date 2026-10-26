@@ -134,7 +134,7 @@ public sealed class RequestInHand
     /// <summary>
     /// The request's type and that of its requirement, as their authors write them, <c>CloseInvoice
     /// (BillingAccess.OnInvoice)</c>, and of each case of a combination, <c>RenameSeat (AccessRequirement.Any(AccessRequirement.Owned&lt;SeatId&gt;,
-    /// TenancyRequirement.ForTheWholeTenant))</c>: what a log line names the request by, so that whoever reads it sees
+    /// TenancyRequirement.AtTenant))</c>: what a log line names the request by, so that whoever reads it sees
     /// what was asked again. Nothing of their values, which may say more than a log should.
     /// </summary>
     public override string ToString() => $"{WrittenTypeNames.Of(Request.GetType())} ({WrittenTypeNames.OfRequirement(Requirement)})";

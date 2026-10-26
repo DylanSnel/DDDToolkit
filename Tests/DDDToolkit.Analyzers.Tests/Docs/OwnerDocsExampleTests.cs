@@ -57,10 +57,10 @@ public class OwnerDocsExampleTests
         result.ShouldContain(
             "BoardsAccessBehavior.",
             "global::Boards.RenameBoard request => global::DDDToolkit.Access.AccessRequirement.Any(global::DDDToolkit.Access.AccessRequirement.OwnerOf(request.Board), "
-            + "global::DDDToolkit.Supporting.Tenancy.Access.TenancyAccess.ForTheWholeTenant(\"boards.manage\")),");
+            + "global::DDDToolkit.Supporting.Tenancy.Access.TenancyAccess.AtTenant(\"boards.manage\")),");
 
         var shown = DocsExamples.Titled(Page, "the lines the generator writes into IBoardsRequest, shortened");
         shown.Should().Contain("ArchiveBoard request => AccessRequirement.OwnerOf(request.Board),")
-            .And.Contain("RenameBoard request => AccessRequirement.Any(\n    AccessRequirement.OwnerOf(request.Board),\n    TenancyAccess.ForTheWholeTenant(\"boards.manage\")),");
+            .And.Contain("RenameBoard request => AccessRequirement.Any(\n    AccessRequirement.OwnerOf(request.Board),\n    TenancyAccess.AtTenant(\"boards.manage\")),");
     }
 }

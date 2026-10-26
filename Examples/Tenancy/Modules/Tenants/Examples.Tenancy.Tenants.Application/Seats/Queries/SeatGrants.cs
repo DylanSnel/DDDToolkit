@@ -31,7 +31,7 @@ public sealed record SeatGrants(SeatId Seat, OrganizationUnitId? At = null) : IQ
     /// <summary>The key at the unit asked about, there or above it; for the whole tenant where every unit is.</summary>
     AccessRequirement IRequireAccess.RequiredAccess => At is { } unit
         ? TenancyAccess.AtUnit(RequiredKey, unit)
-        : TenancyAccess.ForTheWholeTenant(RequiredKey);
+        : TenancyAccess.AtTenant(RequiredKey);
 }
 
 /// <summary>A role a seat holds at a unit, for a period: what <see cref="SeatGrants"/> answers, one per grant.</summary>

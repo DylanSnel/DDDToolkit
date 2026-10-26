@@ -824,7 +824,7 @@
         0,
         1
       ],
-      "setSay": "An `Any` is decided by the set, case by case: `Own(seat)` by the core's check, `ForTheWholeTenant(key)` by Tenancy's. Both must have a check before either is asked.",
+      "setSay": "An `Any` is decided by the set, case by case: `Own(seat)` by the core's check, `AtTenant(key)` by Tenancy's. Both must have a check before either is asked.",
       "check": {
         "snippet": "check.combined",
         "highlight": "{2,6-7,9}"
@@ -1027,7 +1027,7 @@
       "decides": [
         1
       ],
-      "setSay": "An `Any` of two of Tenancy's cases: the set gives `RequiresOperator()` and `ForTheWholeTenant(key)` each to Tenancy's check, in that order.",
+      "setSay": "An `Any` of two of Tenancy's cases: the set gives `RequiresOperator()` and `AtTenant(key)` each to Tenancy's check, in that order.",
       "check": {
         "snippet": "check.combined",
         "highlight": "{2,6-7,9}"
@@ -1416,7 +1416,7 @@
         "{",
         "    AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.Any(",
         "        TenancyAccess.RequiresOperator(),",
-        "        TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage));",
+        "        TenancyAccess.AtTenant(TenancyKeys.SeatsManage));",
         "}"
       ]
     },
@@ -1452,7 +1452,7 @@
         "{",
         "    AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.Any(",
         "        AccessRequirement.Own(Seat),",
-        "        TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage));",
+        "        TenancyAccess.AtTenant(TenancyKeys.SeatsManage));",
         "}"
       ]
     },
@@ -1507,7 +1507,7 @@
         "{",
         "    AccessRequirement DDDToolkit_Generated_IRequireAccess.RequiredAccess => this switch",
         "    {",
-        "        RenameSeat request => AccessRequirement.Any(AccessRequirement.Own(request.Seat), TenancyAccess.ForTheWholeTenant(\"tenancy.seats.manage\")),",
+        "        RenameSeat request => AccessRequirement.Any(AccessRequirement.Own(request.Seat), TenancyAccess.AtTenant(\"tenancy.seats.manage\")),",
         "        // ... a line for each of the module's other requests that state their requirement with attributes",
         "    };",
         "}"
@@ -1580,9 +1580,9 @@
         "    case TenancyRequirement.InTenant:",
         "        answers.RequireTenant();                                 // a seat here, or system work here",
         "        break;",
-        "    case TenancyRequirement.ForTheWholeTenant required:",
+        "    case TenancyRequirement.AtTenant required:",
         "        answers.RequireTenant();                                 // nobody is refused without a statement",
-        "        if (!await HoldsForTheWholeTenantAsync(required.Key, cancellationToken))",
+        "        if (!await HoldsAtTenantAsync(required.Key, cancellationToken))",
         "            throw TenancyRefusals.Refuse(TenancyRefusals.NotPermitted, (\"Key\", required.Key));",
         "        break;",
         "    case TenancyRequirement.AtUnit<TUnitId> required:",
@@ -1637,7 +1637,7 @@
     "statement.tenant-wide": {
       "language": "sql",
       "lines": [
-        "-- HoldsTenantWideAsync: the key at the tenant's root, approximately what Entity Framework sends",
+        "-- HoldsAtTenantAsync: the key at the tenant's root, approximately what Entity Framework sends",
         "SELECT EXISTS (",
         "    SELECT 1 FROM \"tenancy\".\"SeatRights\" AS r",
         "    INNER JOIN \"tenancy\".\"OrganizationUnits\" AS root ON r.\"UnitId\" = root.\"Id\"",

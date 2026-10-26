@@ -121,7 +121,7 @@ public abstract class ReadFunctionTests(TenancyPostgres postgres, TenancyNaming 
                 (nameof(tenancy.Units), () => tenancy.Units().ToListAsync(Cancellation)),
                 (nameof(tenancy.Roles), () => tenancy.Roles().ToListAsync(Cancellation)),
                 (nameof(tenancy.Seats), () => tenancy.Seats().ToListAsync(Cancellation)),
-                (nameof(tenancy.HoldsTenantWideAsync), () => tenancy.HoldsTenantWideAsync(HostCatalogue.WidgetRead, Cancellation)),
+                (nameof(tenancy.HoldsAtTenantAsync), () => tenancy.HoldsAtTenantAsync(HostCatalogue.WidgetRead, Cancellation)),
                 (nameof(tenancy.HoldsAtAsync), () => tenancy.HoldsAtAsync(HostCatalogue.WidgetRead, NorthPier, Cancellation)),
             ];
 
@@ -561,7 +561,7 @@ public abstract class ReadFunctionTests(TenancyPostgres postgres, TenancyNaming 
         {
             await IdsAsync($"UnitsWhereIHold {key}", tenancy.UnitsWhereIHold(key));
             await IdsAsync($"RolesWithKey {key}", tenancy.RolesWithKey(key));
-            Line($"HoldsTenantWide {key}", [(await tenancy.HoldsTenantWideAsync(key, Cancellation)).ToString()]);
+            Line($"HoldsAtTenant {key}", [(await tenancy.HoldsAtTenantAsync(key, Cancellation)).ToString()]);
 
             var heldAt = new List<string>();
             foreach (var unit in EveryUnit)

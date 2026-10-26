@@ -268,7 +268,7 @@ public sealed class UiAgainstTheHostTests(SampleHosts sample) : IClassFixture<Sa
 
         // Who am I lists the key for her: held at North, and not for the whole tenant.
         var held = (await api.WhoAmIAsync(Cancellation)).Value!.Keys.Single(key => key.Key == TenancyKeys.SeatsManage);
-        held.WholeTenant.Should().BeFalse();
+        held.AtTenant.Should().BeFalse();
         held.GrantedAt.Select(unit => unit.Path).Should().Equal("Harbor Works / North");
 
         var refused = await api.InvitePersonAsync(
@@ -282,11 +282,11 @@ public sealed class UiAgainstTheHostTests(SampleHosts sample) : IClassFixture<Sa
         // and from that the page says the key is needed for the whole tenant.
         (refused.Status, refused.Problem!.Code).Should().Be((403, TenancyRefusals.NotPermitted));
         refused.Problem.Title.Should().Be("You lack the permission tenancy.seats.manage.");
-        refused.Problem.KeyNeededForTheWholeTenant.Should().BeTrue("the API answered {0}", refused.RawBody);
+        refused.Problem.KeyNeededAtTenant.Should().BeTrue("the API answered {0}", refused.RawBody);
 
         // So does the history page, whose key the sample's own check asks for.
         var history = await api.AccessHistoryAsync(size: 5, cancellationToken: Cancellation);
-        (history.Problem!.Code, history.Problem.KeyNeededForTheWholeTenant).Should().Be((TenancyRefusals.NotPermitted, true), "the API answered {0}", history.RawBody);
+        (history.Problem!.Code, history.Problem.KeyNeededAtTenant).Should().Be((TenancyRefusals.NotPermitted, true), "the API answered {0}", history.RawBody);
 
         // A key needed at a unit is refused with that unit, and the page says nothing of the whole tenant.
         var outside = await api.SendAsync<JsonElement?>(
@@ -296,7 +296,7 @@ public sealed class UiAgainstTheHostTests(SampleHosts sample) : IClassFixture<Sa
             CallAs.Session,
             TenantChoice.Session,
             Cancellation);
-        (outside.Problem!.Code, outside.Problem.KeyNeededForTheWholeTenant).Should().Be((TenancyRefusals.NotPermitted, false), "the API answered {0}", outside.RawBody);
+        (outside.Problem!.Code, outside.Problem.KeyNeededAtTenant).Should().Be((TenancyRefusals.NotPermitted, false), "the API answered {0}", outside.RawBody);
     }
 
     [Fact]

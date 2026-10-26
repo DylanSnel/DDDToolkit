@@ -190,7 +190,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         {
             var gate = new Gate(store, catalogue, clock);
             var tenantId = gate.RequireTenant();
-            await gate.RequireTenantWideAsync(TenancyKeys.SettingsManage, cancellationToken).ConfigureAwait(false);
+            await gate.RequireAtTenantAsync(TenancyKeys.SettingsManage, cancellationToken).ConfigureAwait(false);
 
             // Everything is decided before the tenant changes, so a refusal leaves nothing for a later save.
             var tenant = await gate.LoadTenantAsync(tenantId, cancellationToken).ConfigureAwait(false);
@@ -237,7 +237,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         {
             var gate = new Gate(store, catalogue, clock);
             var tenantId = gate.RequireTenant();
-            await gate.RequireTenantWideAsync(TenancyKeys.SettingsManage, cancellationToken).ConfigureAwait(false);
+            await gate.RequireAtTenantAsync(TenancyKeys.SettingsManage, cancellationToken).ConfigureAwait(false);
 
             var organization = await gate.LoadOrganizationAsync(tenantId, cancellationToken).ConfigureAwait(false);
             organization.Rename(name, gate.By);

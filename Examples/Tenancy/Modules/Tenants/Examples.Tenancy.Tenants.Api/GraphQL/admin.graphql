@@ -161,7 +161,7 @@ type GrantOfMine {
 
 type HeldUnits {
   units: [UUID!]!
-  wholeTenant: Boolean!
+  atTenant: Boolean!
 }
 
 "A value that broke its own rules: one error for the command, with every reason in its failures. The value that was rejected is not sent back."
@@ -205,7 +205,7 @@ type IssuedInvitation {
 
 type KeyOfMine {
   key: String!
-  wholeTenant: Boolean!
+  atTenant: Boolean!
   grantedAt: [UnitPath!]!
   reaches: [UnitPath!]!
 }

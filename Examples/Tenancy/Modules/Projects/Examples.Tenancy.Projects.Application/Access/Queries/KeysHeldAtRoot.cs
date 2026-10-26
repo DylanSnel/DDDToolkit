@@ -46,6 +46,6 @@ public sealed class KeysHeldAtRootHandler(IProjectReads reads, ProjectAccess acc
         var keys = KeysHeldAtRoot.Known(query.Keys, catalogue);
 
         await using var reading = reads.Open();
-        return await access.HeldTenantWideAsync(reading, keys, cancellationToken);
+        return await access.HeldAtTenantAsync(reading, keys, cancellationToken);
     }
 }

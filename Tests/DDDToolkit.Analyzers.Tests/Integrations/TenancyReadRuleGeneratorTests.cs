@@ -33,7 +33,7 @@ public class TenancyReadRuleGeneratorTests
     [InlineData("seat.Id == TenancyRowAccess.CallerSeat<SeatId>()", "({col:Id} = (SELECT {fn:tenancy/caller_seat}()))")]
     [InlineData("TenancyRowAccess.SeatsInMyUnits<SeatId>().Contains(seat.Id)", "({col:Id} = ANY (ARRAY(SELECT {fn:tenancy/seats_in_my_units}())))")]
     [InlineData("TenancyRowAccess.HoldsKey(TenancyKeys.SeatsManage)", "(SELECT {fn:tenancy/holds_key}('tenancy.seats.manage'))")]
-    [InlineData("TenancyRowAccess.HoldsTenantWide(TenancyKeys.RolesManage)", "(SELECT {fn:tenancy/holds_tenant_wide}('tenancy.roles.manage'))")]
+    [InlineData("TenancyRowAccess.HoldsAtTenant(TenancyKeys.RolesManage)", "(SELECT {fn:tenancy/holds_tenant_wide}('tenancy.roles.manage'))")]
     [InlineData("seat.Identity == caller.UserId", "({col:Identity} IS NOT DISTINCT FROM {caller:uid})")]
     public void A_building_block_in_a_read_rule_on_the_seat_class_is_asked_once_per_statement(string expression, string sql)
         => RuleSqlOf("Seat", "seat", expression).Should().Be(sql);

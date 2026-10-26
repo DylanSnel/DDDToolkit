@@ -35,7 +35,7 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// default with a read rule on its class: <c>seat.TenantId == CallerTenant&lt;TenantId&gt;()</c> for the caller's
 /// tenant, <c>seat.Id == CallerSeat&lt;SeatId&gt;()</c> for the caller itself,
 /// <c>UnitsWhereIHold&lt;OrganizationUnitId&gt;(key).Contains(invitation.UnitId)</c> for where it holds a key,
-/// <see cref="HoldsKey"/> and <see cref="HoldsTenantWide"/>, and <see cref="SeatsInMyUnits{TSeatId}"/> for the
+/// <see cref="HoldsKey"/> and <see cref="HoldsAtTenant"/>, and <see cref="SeatsInMyUnits{TSeatId}"/> for the
 /// seats placed where it is placed, or below.
 /// </para>
 /// <para>
@@ -120,11 +120,11 @@ public static partial class TenancyRowAccess
 
     /// <summary>
     /// Whether the calling seat holds <paramref name="key"/> now for the whole tenant: at its root. As
-    /// <see cref="ITenancyQuestions{TTenantId, TSeatId, TUnitId, TRoleId}.HoldsTenantWideAsync"/>.
+    /// <see cref="ITenancyQuestions{TTenantId, TSeatId, TUnitId, TRoleId}.HoldsAtTenantAsync"/>.
     /// </summary>
     /// <param name="key">A key of the catalogue.</param>
     [AccessScalar("holds_tenant_wide")]
-    public static partial bool HoldsTenantWide(string key);
+    public static partial bool HoldsAtTenant(string key);
 
     /// <summary>
     /// The seat the caller's verified identity has in <paramref name="tenant"/>, while that seat and the tenant

@@ -12,7 +12,7 @@ namespace Examples.Tenancy.Tenants.Application.Seats.Commands;
 /// <c>Seat</c> class, and what guards it is the module's to say. Its rule: <b>a seat renames itself, and another
 /// seat takes <see cref="RequiredKey"/> for the whole tenant</b>. Yours, or the key: the request says so with
 /// <c>[RequiresKey(RequiredKey)]</c> and <c>[OrOwn]</c> on the seat, which is
-/// <c>AccessRequirement.Any(AccessRequirement.Own(Seat), TenancyAccess.ForTheWholeTenant(RequiredKey))</c>, and the check
+/// <c>AccessRequirement.Any(AccessRequirement.Own(Seat), TenancyAccess.AtTenant(RequiredKey))</c>, and the check
 /// holds the caller to it at the door: the seat it names is the caller's own seat in the tenant, or the caller holds the
 /// key. A caller for whom neither holds is refused with one <c>access.refused</c> that carries both reasons,
 /// <c>access.not-own</c> and <c>tenancy.not-permitted</c> with the key. System work in the tenant holds every key there,

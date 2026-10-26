@@ -50,7 +50,7 @@ public class DirectoryTests
             HostCatalogue.WidgetChange, HostCatalogue.WidgetCreate, HostCatalogue.WidgetRead);
 
         var units = me.Keys.Single(key => key.Key == TenancyKeys.UnitsManage);
-        units.WholeTenant.Should().BeFalse();
+        units.AtTenant.Should().BeFalse();
         units.GrantedAt.Select(unit => unit.Path).Should().Equal("Harbor Works / North");
         units.Reaches.Select(unit => unit.Path).Should().Equal("Harbor Works / North", "Harbor Works / North / North Coast");
 
@@ -59,7 +59,7 @@ public class DirectoryTests
         read.Reaches.Select(unit => unit.Path).Should().Equal("Harbor Works / North", "Harbor Works / North / North Coast", "Harbor Works / South");
 
         var administrator = await harness.As(harness.Administrator, h => h.Directory.WhoAmIAsync(default));
-        administrator.Keys.Should().HaveCount(harness.Catalogue.LiveKeys.Count).And.OnlyContain(key => key.WholeTenant && key.Reaches.Count == 4);
+        administrator.Keys.Should().HaveCount(harness.Catalogue.LiveKeys.Count).And.OnlyContain(key => key.AtTenant && key.Reaches.Count == 4);
 
         harness.Clock.Advance(TimeSpan.FromDays(7));
         var later = await harness.As(bert, h => h.Directory.WhoAmIAsync(default));

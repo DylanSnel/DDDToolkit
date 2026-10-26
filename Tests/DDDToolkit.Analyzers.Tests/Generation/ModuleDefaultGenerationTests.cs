@@ -87,7 +87,7 @@ public class ModuleDefaultGenerationTests
             {
                 AccessRequirement IRequireAccess.RequiredAccess => Unit is { } unit
                     ? TenancyAccess.AtUnit("billing.read", unit)
-                    : TenancyAccess.ForTheWholeTenant("billing.read");
+                    : TenancyAccess.AtTenant("billing.read");
             }
             """).RunCore();
 
@@ -101,9 +101,9 @@ public class ModuleDefaultGenerationTests
         var emitted = result.Emit();
         Asked(emitted, "MyInvoices").Should().Be(AccessRequirement.SignedIn(), "a signed-in user with no seat in the tenant is let through, as the request says");
         Asked(emitted, "ListPlans").Should().Be(AccessRequirement.AllowAnonymous(), "the default replaces nothing, an open door said on purpose neither");
-        Asked(emitted, "CloseTheBooks", 2026).Should().Be(TenancyAccess.ForTheWholeTenant("billing.close"));
+        Asked(emitted, "CloseTheBooks", 2026).Should().Be(TenancyAccess.AtTenant("billing.close"));
         Asked(emitted, "OpenLedger", "Ledger", emitted.New("Shop.Billing.OrganizationUnitId", Guid.NewGuid())).GetType().Name.Should().Be("AtUnit`1");
-        Asked(emitted, "ListLedgers", new object?[] { null }).Should().Be(TenancyAccess.ForTheWholeTenant("billing.read"));
+        Asked(emitted, "ListLedgers", new object?[] { null }).Should().Be(TenancyAccess.AtTenant("billing.read"));
     }
 
     [Fact]
@@ -144,7 +144,7 @@ public class ModuleDefaultGenerationTests
                 /// <inheritdoc cref="global::DDDToolkit.Access.IRequireAccess.RequiredAccess"/>
                 global::DDDToolkit.Access.AccessRequirement DDDToolkit_Generated_IRequireAccess.RequiredAccess => this switch
                 {
-                    global::Shop.Billing.CloseTheBooks => global::DDDToolkit.Supporting.Tenancy.Access.TenancyAccess.ForTheWholeTenant("billing.close"),
+                    global::Shop.Billing.CloseTheBooks => global::DDDToolkit.Supporting.Tenancy.Access.TenancyAccess.AtTenant("billing.close"),
                     global::Shop.Billing.ListUnits => global::DDDToolkit.Supporting.Tenancy.Access.TenancyAccess.InTenant(),
                     // A request this project cannot name, one of another project say, takes the module's default as well.
                     _ => global::DDDToolkit.Supporting.Tenancy.Access.TenancyAccess.InTenant(),
@@ -176,8 +176,8 @@ public class ModuleDefaultGenerationTests
 
         result.ShouldCompile();
         result.ShouldHaveExactlyDiagnostics();
-        result.ShouldContain(Hint, "global::Shop.Billing.ListLedgers => global::DDDToolkit.Supporting.Tenancy.Access.TenancyAccess.ForTheWholeTenant(\"billing.read\"),");
-        Asked(result.Emit(), "ListLedgers").Should().Be(TenancyAccess.ForTheWholeTenant("billing.read"));
+        result.ShouldContain(Hint, "global::Shop.Billing.ListLedgers => global::DDDToolkit.Supporting.Tenancy.Access.TenancyAccess.AtTenant(\"billing.read\"),");
+        Asked(result.Emit(), "ListLedgers").Should().Be(TenancyAccess.AtTenant("billing.read"));
     }
 
     [Fact]
@@ -217,7 +217,7 @@ public class ModuleDefaultGenerationTests
         Asked(emitted, "Ledger").Should().Be(TenancyAccess.InTenant());
         Asked(emitted, "SpecialLedger").Should().Be(TenancyAccess.InTenant(), "a base that takes the default states nothing to inherit, so the derived request takes the default itself");
         result.ShouldContain(Hint, "global::Shop.Billing.SpecialLedger => global::DDDToolkit.Supporting.Tenancy.Access.TenancyAccess.InTenant(),");
-        Asked(emitted, "ClosedLedger").Should().Be(TenancyAccess.ForTheWholeTenant("billing.close"), "the default of its base is no attribute of its base, and stacks onto nothing");
+        Asked(emitted, "ClosedLedger").Should().Be(TenancyAccess.AtTenant("billing.close"), "the default of its base is no attribute of its base, and stacks onto nothing");
     }
 
     // ------------------------------------------------------------------ held to it, with the library

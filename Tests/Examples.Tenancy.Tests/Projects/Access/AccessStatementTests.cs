@@ -583,14 +583,14 @@ public sealed class AccessStatementTests(SampleHosts hosts) : IClassFixture<Samp
             statement.Should().Contain($"{AnyTableOfTenancy}SeatRights\"", "UnitsWhereIHold reads Tenancy's rights in the same statement");
             statement.Should().Contain($"{AnyTableOfTenancy}OrganizationUnits\"", "the units are read in the same statement");
 
-            held.WholeTenant.Should().BeFalse();
+            held.AtTenant.Should().BeFalse();
             statement.Should().NotContain("\"Name\"", "no name is read: the answer is ids");
             held.Units.Should().BeEquivalentTo([Harbor.UnitNamed("North"), Harbor.UnitNamed("North Coast"), Harbor.UnitNamed("North Inland")]);
             held.Units.Select(unit => unit.Value).Should().BeInAscendingOrder("the ids come ordered by their value, so the answer is the same every time");
             held.Units.Select(unit => unit.Value).Should().Equal(
                 answered.GetProperty("unitsWhereIHold").EnumerateArray().Select(unit => unit.GetGuid()),
                 "the route answers with this query's answer");
-            answered.GetProperty("wholeTenant").GetBoolean().Should().BeFalse();
+            answered.GetProperty("atTenant").GetBoolean().Should().BeFalse();
         }
 
         // Ada administers the tenant from its root: every unit, and the whole tenant, in the one statement too.
@@ -602,7 +602,7 @@ public sealed class AccessStatementTests(SampleHosts hosts) : IClassFixture<Samp
             var held = await scope.ServiceProvider.GetRequiredService<ISender>().Send(new UnitsWhereIHold(TenancyKeys.UnitsManage), Cancellation);
 
             counter.Commands.Should().ContainSingle();
-            held.WholeTenant.Should().BeTrue("she holds the key at the root");
+            held.AtTenant.Should().BeTrue("she holds the key at the root");
             held.Units.Should().HaveCount(Harbor.Units.Count + 1, "the root and every unit below it");
         }
     }

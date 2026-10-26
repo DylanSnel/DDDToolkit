@@ -97,7 +97,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         {
             var gate = new Gate(store, catalogue, clock);
             var tenantId = gate.RequireTenant();
-            await gate.RequireTenantWideAsync(TenancyKeys.SeatsManage, cancellationToken).ConfigureAwait(false);
+            await gate.RequireAtTenantAsync(TenancyKeys.SeatsManage, cancellationToken).ConfigureAwait(false);
             await gate.RequireAtAsync(TenancyKeys.GrantsManage, unit, cancellationToken).ConfigureAwait(false);
 
             var settings = invitationOptions.Checked();
@@ -385,7 +385,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
                 var asIssuer = new Gate(store, catalogue, clock);
                 try
                 {
-                    await asIssuer.RequireTenantWideAsync(TenancyKeys.SeatsManage, cancellationToken).ConfigureAwait(false);
+                    await asIssuer.RequireAtTenantAsync(TenancyKeys.SeatsManage, cancellationToken).ConfigureAwait(false);
                     await asIssuer.RequireAtAsync(TenancyKeys.GrantsManage, invitation.UnitId, cancellationToken).ConfigureAwait(false);
                     await asIssuer.RequireGrantableAsync(to: null, invitation.UnitId, role, invitation.GrantUntil, cancellationToken).ConfigureAwait(false);
                 }

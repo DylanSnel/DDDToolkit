@@ -53,8 +53,8 @@ public class AccessQuestionTests
     private bool HoldsAt(HostCaller caller, string key, OrganizationUnitId unit, ITenancyReadSource<TenantId, SeatId, OrganizationUnitId, RoleId>? source = null)
         => Ask(caller, questions => questions.HoldsAtAsync(key, unit, default).GetAwaiter().GetResult(), source);
 
-    private bool HoldsTenantWide(HostCaller caller, string key)
-        => Ask(caller, questions => questions.HoldsTenantWideAsync(key, default).GetAwaiter().GetResult());
+    private bool HoldsAtTenant(HostCaller caller, string key)
+        => Ask(caller, questions => questions.HoldsAtTenantAsync(key, default).GetAwaiter().GetResult());
 
     private HostCaller As(HostSeat seat) => HostCaller.InSeat(seat.TenantId, seat.Id);
 
@@ -81,16 +81,16 @@ public class AccessQuestionTests
     }
 
     [Fact]
-    public void HoldsTenantWideAsync_only_for_a_key_held_at_the_root()
+    public void HoldsAtTenantAsync_only_for_a_key_held_at_the_root()
     {
         var supervisor = As(SeatAt(_harbor.North, HostCatalogue.SupervisorPack));
         var administrator = As(_harbor.Administrator);
 
-        HoldsTenantWide(supervisor, TenancyKeys.UnitsManage).Should().BeFalse("a key held below the root is not tenant-wide, however far it reaches");
-        HoldsTenantWide(administrator, TenancyKeys.UnitsManage).Should().BeTrue();
-        HoldsTenantWide(administrator, TenancyKeys.RolesManage).Should().BeTrue();
-        HoldsTenantWide(As(SeatAt(_harbor.Root, HostCatalogue.WatcherPack)), HostCatalogue.WidgetRead).Should().BeTrue();
-        HoldsTenantWide(As(SeatAt(_harbor.Root, HostCatalogue.WatcherPack)), HostCatalogue.WidgetChange).Should().BeFalse();
+        HoldsAtTenant(supervisor, TenancyKeys.UnitsManage).Should().BeFalse("a key held below the root is not tenant-wide, however far it reaches");
+        HoldsAtTenant(administrator, TenancyKeys.UnitsManage).Should().BeTrue();
+        HoldsAtTenant(administrator, TenancyKeys.RolesManage).Should().BeTrue();
+        HoldsAtTenant(As(SeatAt(_harbor.Root, HostCatalogue.WatcherPack)), HostCatalogue.WidgetRead).Should().BeTrue();
+        HoldsAtTenant(As(SeatAt(_harbor.Root, HostCatalogue.WatcherPack)), HostCatalogue.WidgetChange).Should().BeFalse();
     }
 
     [Fact]
@@ -205,7 +205,7 @@ public class AccessQuestionTests
 
         UnitsWhere(nobody, HostCatalogue.WidgetRead).Should().BeEmpty();
         HoldsAt(nobody, HostCatalogue.WidgetRead, _harbor.Root).Should().BeFalse();
-        HoldsTenantWide(nobody, TenancyKeys.RolesManage).Should().BeFalse();
+        HoldsAtTenant(nobody, TenancyKeys.RolesManage).Should().BeFalse();
         Ask(nobody, questions => questions.ReadableUnits().ToArray()).Should().BeEmpty();
         Ask(nobody, questions => questions.RolesWithKey(HostCatalogue.WidgetRead).ToArray()).Should().BeEmpty();
         Ask(nobody, questions => questions.KeysIHoldAt(_harbor.Root).ToArray()).Should().BeEmpty();
@@ -238,7 +238,7 @@ public class AccessQuestionTests
             Ask(system, questions => questions.Seats().ToArray(), source).Should().OnlyContain(seat => seat.TenantId == _harbor.Tenant.Id);
         }
 
-        HoldsTenantWide(system, TenancyKeys.RolesManage).Should().BeTrue();
+        HoldsAtTenant(system, TenancyKeys.RolesManage).Should().BeTrue();
         Ask(system, questions => questions.KeysIHoldAt(_harbor.North).ToArray()).Should().BeEquivalentTo(_harbor.Catalogue.LiveKeys);
 
         // A seat's own questions keep to its tenant too, even over rows that are not filtered.
@@ -260,7 +260,7 @@ public class AccessQuestionTests
         {
             () => UnitsWhere(system, HostCatalogue.WidgetRead),
             () => HoldsAt(system, HostCatalogue.WidgetRead, _harbor.Root),
-            () => HoldsTenantWide(system, HostCatalogue.WidgetRead),
+            () => HoldsAtTenant(system, HostCatalogue.WidgetRead),
             () => Ask(system, ask => ask.ReadableUnits()),
             () => Ask(system, ask => ask.RolesWithKey(HostCatalogue.WidgetRead)),
             () => Ask(system, ask => ask.KeysIHoldAt(_harbor.Root)),
@@ -289,7 +289,7 @@ public class AccessQuestionTests
         var administrator = As(_harbor.Administrator);
 
         FluentActions.Invoking(() => UnitsWhere(administrator, "widget.fly")).Should().Throw<ArgumentException>().WithMessage("*widget.fly*");
-        FluentActions.Invoking(() => HoldsTenantWide(administrator, "widget.fly")).Should().Throw<ArgumentException>();
+        FluentActions.Invoking(() => HoldsAtTenant(administrator, "widget.fly")).Should().Throw<ArgumentException>();
         FluentActions.Invoking(() => HoldsAt(administrator, "widget.fly", _harbor.Root)).Should().Throw<ArgumentException>();
         FluentActions.Invoking(() => Ask(administrator, questions => questions.RolesWithKey("widget.fly"))).Should().Throw<ArgumentException>();
         FluentActions.Invoking(() => UnitsWhere(HostCaller.Nobody(TenancyRefusals.NotSeated), "widget.fly"))

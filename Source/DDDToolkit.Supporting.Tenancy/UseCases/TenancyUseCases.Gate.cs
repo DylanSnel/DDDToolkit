@@ -151,7 +151,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
 
         /// <summary>A seat must hold <paramref name="key"/> for the whole tenant; system work in a tenant holds it.</summary>
         /// <exception cref="Exceptions.RefusalException"><c>tenancy.not-permitted</c>.</exception>
-        public async Task RequireTenantWideAsync(string key, CancellationToken cancellationToken)
+        public async Task RequireAtTenantAsync(string key, CancellationToken cancellationToken)
         {
             RequireTenant();
             if (BySystem)
@@ -159,7 +159,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
                 return;
             }
 
-            if (!await Questions.HoldsTenantWideAsync(key, cancellationToken).ConfigureAwait(false))
+            if (!await Questions.HoldsAtTenantAsync(key, cancellationToken).ConfigureAwait(false))
             {
                 throw NotPermitted(key, unit: null);
             }

@@ -10,7 +10,7 @@ namespace DDDToolkit.Access;
 /// [RequiresKey(ProjectKeys.ManageCrew)]                                    // take yourself off, or manage the crew
 /// public sealed record LeaveCrew([OnResource] ProjectId Project, [OrOwn] SeatId Seat) : IProjectsRequest;
 /// </code>
-/// is <c>AccessRequirement.Any(AccessRequirement.Own(request.Seat), TenancyAccess.ForTheWholeTenant("tenancy.seats.manage"))</c>.
+/// is <c>AccessRequirement.Any(AccessRequirement.Own(request.Seat), TenancyAccess.AtTenant("tenancy.seats.manage"))</c>.
 /// With <c>[OnResource]</c> the key's case is the one on the resource, and the caller's own way through is held to the
 /// resource as well, which the caller must see: <c>Any(All(Own(request.Seat), MemberAccess.Sees(key, request.Project)),
 /// MemberAccess.On(key, request.Project))</c>, as the marker says with <see cref="KeyMarkerAttribute.OwnAlternative"/>.

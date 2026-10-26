@@ -61,7 +61,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         {
             var gate = new Gate(store, catalogue, clock);
             var tenantId = gate.RequireTenant();
-            await gate.RequireTenantWideAsync(TenancyKeys.SeatsManage, cancellationToken).ConfigureAwait(false);
+            await gate.RequireAtTenantAsync(TenancyKeys.SeatsManage, cancellationToken).ConfigureAwait(false);
 
             if (await store.IdentityHasSeatAsync(tenantId, identity, cancellationToken).ConfigureAwait(false))
             {
@@ -298,7 +298,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
             var gate = new Gate(store, catalogue, clock);
             var tenantId = gate.RequireTenant();
             await gate.SerializeAsync(tenantId, cancellationToken).ConfigureAwait(false);
-            await gate.RequireTenantWideAsync(TenancyKeys.SeatsManage, cancellationToken).ConfigureAwait(false);
+            await gate.RequireAtTenantAsync(TenancyKeys.SeatsManage, cancellationToken).ConfigureAwait(false);
 
             var changed = await gate.LoadSeatAsync(seat, cancellationToken).ConfigureAwait(false);
             await gate.RequireStatusChangeableAsync(changed, cancellationToken).ConfigureAwait(false);

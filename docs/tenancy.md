@@ -1230,7 +1230,7 @@ Tenancy answers questions about the organization, and nothing else:
 |---|---|
 | `UnitsWhereIHold(key)` | The units where the current seat holds the key: the units it was granted it at, and every unit below them |
 | `ReadableUnits()` | The units the current seat is placed in, and every unit below them: where it belongs, not what it may open |
-| `HoldsTenantWideAsync(key)` | Whether it holds the key at the root, so for the whole tenant |
+| `HoldsAtTenantAsync(key)` | Whether it holds the key at the root, so for the whole tenant |
 | `HoldsAtAsync(key, unit)` | Whether it holds the key at that unit, granted there or above it |
 | `KeysIHoldAt(unit)` | Every key it holds that reaches that unit |
 | `RolesWithKey(key)` | The active roles that grant the key |
@@ -1280,7 +1280,7 @@ Both shortened, by hand, for the projects the caller may edit:
 await using var reading = reads.Open();                          // a context for this one query
 var tenancy = answers.Over(reading.Tenancy, reading.Queries);
 var reach = new ProjectReach(
-    wholeTenant: false,
+    atTenant: false,
     units: tenancy.UnitsWhereIHold("projects.edit"),             // a query, not a list
     seat,
     membershipIsEnough: false,                                   // true for "projects.view" alone
@@ -1383,14 +1383,14 @@ toolkit's generator turns the attribute into the call beside it, in the module's
 [AccessRequests]
 public partial interface IBillingRequest : IRequireAccess;      // one interface per module
 
-[RequiresKey(BillingKeys.CloseTheBooks)]                        // TenancyAccess.ForTheWholeTenant(BillingKeys.CloseTheBooks)
+[RequiresKey(BillingKeys.CloseTheBooks)]                        // TenancyAccess.AtTenant(BillingKeys.CloseTheBooks)
 public sealed record CloseTheBooks(int Year) : IBillingRequest;
 ```
 
 | A request requires | Its attribute | Or, computed, `RequiredAccess =>` | Lets through | Refuses with |
 |---|---|---|---|---|
 | a caller who works in the tenant | `[InTenant]` | `TenancyAccess.InTenant()` | a seat in the tenant the request was sent for, and system work there | what the caller is nobody for, such as `tenancy.not-seated` |
-| a key for the whole tenant | `[RequiresKey(key)]`, with no marker | `TenancyAccess.ForTheWholeTenant(key)` | whoever holds the key at the tenant's root now, and system work in the tenant | `tenancy.not-permitted`, naming the key |
+| a key for the whole tenant | `[RequiresKey(key)]`, with no marker | `TenancyAccess.AtTenant(key)` | whoever holds the key at the tenant's root now, and system work in the tenant | `tenancy.not-permitted`, naming the key |
 | a key at a unit | `[RequiresKey(key)]`, with `[AtUnit]` on the unit | `TenancyAccess.AtUnit(key, unit)` | whoever holds the key at that unit now, there or above it, and system work in the tenant at a unit of its own | `tenancy.not-permitted`, with the key and the unit |
 | one of the application's operators, on a query | `[RequiresOperator]` | `TenancyAccess.RequiresOperator()` | an [operator](#operators) | `tenancy.operators-only`, for a seat and for system work too |
 | the caller's own seat, or a key | `[RequiresKey(key)]`, with `[OrOwn]` on the seat | `AccessRequirement.Any(TenancyAccess.Own(seat), ...)` | the seat the request names, where it is the caller's own seat in the tenant; else whoever holds the key | one `access.refused`, with `access.not-own` and the key's reason |
@@ -1426,7 +1426,7 @@ the seat.
 `AccessRequirement.All` and `Any` ([Requirements that combine](access-requirements.md#requirements-that-combine)):
 moving a seat between two units takes the key at both, `All(TenancyAccess.AtUnit(key, From), TenancyAccess.AtUnit(key, To))`,
 and its handler moves it from `From` and no other unit; a tenant's audit log for operators or for a seat that
-manages seats is `Any(TenancyAccess.RequiresOperator(), TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage))`,
+manages seats is `Any(TenancyAccess.RequiresOperator(), TenancyAccess.AtTenant(TenancyKeys.SeatsManage))`,
 with a row rule for each way in ([The door and the rows](access-requirements.md#the-door-and-the-rows)).
 
 `[AtUnit]` is for a command that acts at a unit the request names: one the package's use case decides, such as
@@ -1452,7 +1452,7 @@ public sealed record ListLedgers(OrganizationUnitId? Unit) : IBillingRequest
 {
     AccessRequirement IRequireAccess.RequiredAccess => Unit is { } unit
         ? TenancyAccess.AtUnit(BillingKeys.Read, unit)
-        : TenancyAccess.ForTheWholeTenant(BillingKeys.Read);
+        : TenancyAccess.AtTenant(BillingKeys.Read);
 }
 ```
 
@@ -1612,7 +1612,7 @@ services.AddTenancyAccess<ITenantsRequest, ShopTenancyContext>();
 services.AddTenancyAccess<TenantId, SeatId, OrganizationUnitId, RoleId, IBillingRequest, BillingContext>();
 ```
 
-Only `ForTheWholeTenant` and `AtUnit` read: one statement each, over that context, which is Tenancy's own or
+Only `AtTenant` and `AtUnit` read: one statement each, over that context, which is Tenancy's own or
 one that maps the [read model](#what-a-module-reads-of-tenancy), so no module is checked over another module's
 context. A request of a module that never added the check is stopped, and the message names
 `AddTenancyAccess` as the call that adds it. It runs
@@ -1930,7 +1930,7 @@ Two rules decide what happens, and neither is the directory's own:
   a seat of the tenant, or system work in it. Who may see another person's access is your application's choice,
   so the request that sends the question states it, as a request states it for everything else. The sample's
   administration lets only a seat that manages seats for the whole tenant read another person's roles in every unit,
-  `TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage)`, and a seat that manages them at a unit the roles held
+  `TenancyAccess.AtTenant(TenancyKeys.SeatsManage)`, and a seat that manages them at a unit the roles held
   there, `TenancyAccess.AtUnit(TenancyKeys.SeatsManage, unit)`. An application that lets the managers of a unit see
   the people of their units asks `[InTenant]` and leaves the rest to the read rules.
 - **The read rules decide what comes back.** The seat is read through Tenancy's store, as the caller, the way the
@@ -1983,7 +1983,7 @@ public sealed record SeatGrants(SeatId Seat, OrganizationUnitId? At = null) : IQ
 {
     AccessRequirement IRequireAccess.RequiredAccess => At is { } unit
         ? TenancyAccess.AtUnit(TenancyKeys.SeatsManage, unit)
-        : TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage);
+        : TenancyAccess.AtTenant(TenancyKeys.SeatsManage);
 }
 
 public sealed class SeatGrantsHandler(ITenancyReads reads) : IQueryHandler<SeatGrants, IReadOnlyList<SeatGrant>>
@@ -3702,7 +3702,7 @@ Tenant: harbor
     "b0000000-0000-4000-8000-000000000103",
     "b0000000-0000-4000-8000-000000000104"
   ],
-  "wholeTenant": false
+  "atTenant": false
 }
 ```
 
@@ -3723,7 +3723,7 @@ var units = await reading.Queries.ListAsync(
     questions.Units().Select(unit => new UnitRead(unit.Id, unit.ParentId, held.Contains(unit.Id))),
     cancellationToken);
 
-var wholeTenant = units.Any(unit => unit.ParentId is null && unit.Held);   // held at the root
+var atTenant = units.Any(unit => unit.ParentId is null && unit.Held);   // held at the root
 var ids = units.Where(unit => unit.Held).Select(unit => unit.Id).OrderBy(unit => unit.Value);
 ```
 
@@ -5280,7 +5280,7 @@ question is asked once per statement, never once per row:
 | the seats placed at or below a unit the caller is placed at; to a seat placed at the root, as every seat of a flat tenant is, every placed seat | `TenancyRowAccess.SeatsInMyUnits<SeatId>().Contains(seat.Id)` | `"Id" = ANY (ARRAY(SELECT "tenancy".seats_in_my_units()))` |
 | where the caller holds a key | `TenancyRowAccess.UnitsWhereIHold<OrganizationUnitId>(key).Contains(invitation.UnitId)` | `"UnitId" = ANY (ARRAY(SELECT "tenancy".units_where_i_hold('...')))` |
 | a key held anywhere | `TenancyRowAccess.HoldsKey(key)` | `(SELECT "tenancy".holds_key('...'))` |
-| a key held for the whole tenant | `TenancyRowAccess.HoldsTenantWide(key)` | `(SELECT "tenancy".holds_tenant_wide('...'))` |
+| a key held for the whole tenant | `TenancyRowAccess.HoldsAtTenant(key)` | `(SELECT "tenancy".holds_tenant_wide('...'))` |
 
 Tenancy's own default is written with the same blocks, and so is what it keeps:
 
@@ -5292,7 +5292,7 @@ seat.TenantId == TenancyRowAccess.CallerTenant<TenantId>() || seat.Identity == c
 seat.Identity == caller.UserId
     || (seat.TenantId == TenancyRowAccess.CallerTenant<TenantId>()
         && (TenancyRowAccess.HoldsKey(TenancyKeys.SeatsManage) || TenancyRowAccess.HoldsKey(TenancyKeys.GrantsManage)
-            || TenancyRowAccess.HoldsKey(TenancyKeys.UnitsManage) || TenancyRowAccess.HoldsTenantWide(TenancyKeys.RolesManage)))
+            || TenancyRowAccess.HoldsKey(TenancyKeys.UnitsManage) || TenancyRowAccess.HoldsAtTenant(TenancyKeys.RolesManage)))
 ```
 
 What the export writes for the first rule, under the sample's names, with the comment that says what it did:
@@ -5339,7 +5339,7 @@ nothing, and the policies keep system work to its tenant with `system_tenant` in
 | `seats_in_my_units()` | the seats placed at one of those units, whatever their status: the people of the seat's own part of the tree, every placed seat to a seat placed at the root; for a [read rule on your seat class](#who-reads-the-seats-a-default-you-may-replace) | |
 | `roles_with_key(key)` | the active roles of the seat's tenant that hold the key | `RolesWithKey` |
 | `holds_key(key)` | whether the seat holds the key live at any unit | |
-| `holds_tenant_wide(key)` | whether the seat holds the key live at the root | `HoldsTenantWideAsync` |
+| `holds_tenant_wide(key)` | whether the seat holds the key live at the root | `HoldsAtTenantAsync` |
 | `identity_tenants()` | every tenant where the caller's identity has a seat, whatever its status | the seat directory |
 | `unit_parent(unit)` | the parent a unit of the seat's tenant has, as it was before the statement that asks | |
 | `manages_access(key)` | whether your catalogue marks the key as managing access | `TenancyCatalogue.ManagesAccess` |
@@ -5615,7 +5615,7 @@ That last one changes no row, exactly as a lost race does, so the row is read ag
 changed or removed stays a concurrency conflict. See [When the database refuses](row-level-security.md#when-the-database-refuses).
 It is logged after asking the request's access check again
 ([When the policies refuse what C# allowed](row-level-security.md#when-the-policies-refuse-what-c-allowed)). A
-request that requires a key, `ForTheWholeTenant` or `AtUnit`, is refused by that check as well once the seat lost
+request that requires a key, `AtTenant` or `AtUnit`, is refused by that check as well once the seat lost
 the key, and an information line says that the seat's rights changed between the check and the save. What a use
 case of Tenancy's checks past what its request declares, behind `InTenant()` say, is not asked again: a save of
 such a request that the database denies stays a warning, which names the requirement it asked.
@@ -5704,7 +5704,7 @@ for each row. The job title has no command, and no rule: it is as writable as th
 public static partial class NameChangesByTheSeatOrWithTheSeatsKey
 {
     public static bool Allows(Seat seat, Caller caller)
-        => seat.Id == TenancyRowAccess.CallerSeat<SeatId>() || TenancyRowAccess.HoldsTenantWide(RenameSeat.RequiredKey);
+        => seat.Id == TenancyRowAccess.CallerSeat<SeatId>() || TenancyRowAccess.HoldsAtTenant(RenameSeat.RequiredKey);
 }
 ```
 

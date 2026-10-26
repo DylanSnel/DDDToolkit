@@ -20,7 +20,7 @@ internal sealed class RoleFieldKeys : IFieldKeys<RoleListing>
 {
     /// <inheritdoc />
     public async ValueTask<RefusalException?> RefusedAsync(RoleListing parent, string key, IResolverContext context, CancellationToken cancellationToken)
-        => await context.DataLoader<IHeldUnitsByKeyDataLoader>().LoadAsync(key, cancellationToken) is { WholeTenant: true }
+        => await context.DataLoader<IHeldUnitsByKeyDataLoader>().LoadAsync(key, cancellationToken) is { AtTenant: true }
             ? null
             : TenancyRefusals.Refuse(TenancyRefusals.NotPermitted, ("Key", key));
 }

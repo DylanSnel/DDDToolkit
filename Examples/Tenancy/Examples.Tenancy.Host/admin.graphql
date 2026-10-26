@@ -238,8 +238,8 @@ type GrantOfMine {
 }
 
 type HeldUnits {
+  atTenant: Boolean!
   units: [UUID!]!
-  wholeTenant: Boolean!
 }
 
 type Inspection {
@@ -316,10 +316,10 @@ type IssuedInvitation {
 }
 
 type KeyOfMine {
+  atTenant: Boolean!
   grantedAt: [UnitPath!]!
   key: String!
   reaches: [UnitPath!]!
-  wholeTenant: Boolean!
 }
 
 type OrganizationUnit {

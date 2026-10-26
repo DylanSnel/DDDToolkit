@@ -27,14 +27,14 @@ public sealed class SeatColumnsTests(TenancyPostgres postgres)
     /// <summary>The trigger on a seat's status.</summary>
     private const string StatusIsManaged = "tenancy_seat_status_is_managed";
 
-    /// <summary>The trigger the export writes for <see cref="JobTitlesChangeWithTheSeatsKeyForTheWholeTenant"/>.</summary>
+    /// <summary>The trigger the export writes for <see cref="JobTitlesChangeWithTheSeatsKeyAtTenant"/>.</summary>
     private const string JobTitleRule = "seats_jobtitle_column_rule";
 
     /// <summary>The application's column rule on its own field, as the export is handed it.</summary>
     private static readonly RowAccessRule JobTitles = RowAccessRule.ForColumns<HostSeat>(
         "Job titles change with the seats key for the whole tenant",
         [nameof(HostSeat.JobTitle)],
-        JobTitlesChangeWithTheSeatsKeyForTheWholeTenant.RowAccessSql,
+        JobTitlesChangeWithTheSeatsKeyAtTenant.RowAccessSql,
         RowAccessRoles.User);
 
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
@@ -290,8 +290,8 @@ public sealed class SeatColumnsTests(TenancyPostgres postgres)
 /// manages seats for the whole tenant. Tenancy decides nothing about the field, so this rule is all that holds it.
 /// </summary>
 [RowAccess<HostSeat>(RowOperations.Change, To = [RowAccessRoles.User], Columns = [nameof(HostSeat.JobTitle)])]
-public static partial class JobTitlesChangeWithTheSeatsKeyForTheWholeTenant
+public static partial class JobTitlesChangeWithTheSeatsKeyAtTenant
 {
     /// <summary>Whether the calling seat manages seats for the whole tenant.</summary>
-    public static bool Allows(HostSeat seat, Caller caller) => TenancyRowAccess.HoldsTenantWide(TenancyKeys.SeatsManage);
+    public static bool Allows(HostSeat seat, Caller caller) => TenancyRowAccess.HoldsAtTenant(TenancyKeys.SeatsManage);
 }

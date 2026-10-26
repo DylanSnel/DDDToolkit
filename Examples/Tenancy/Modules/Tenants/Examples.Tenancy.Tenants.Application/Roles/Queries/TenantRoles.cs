@@ -29,6 +29,6 @@ public sealed class TenantRolesHandler(ITenancyReads reads, SampleAnswers answer
     {
         // The directory first: it refuses a caller who may not ask, before anything else is read.
         var roles = await reads.AskDirectoryAsync(directory => directory.ListRolesAsync(cancellationToken));
-        return RoleListing.From(roles, withKeys: await TenantWideKey.IsHeldAsync(answers, reads, RoleListing.KeysKey, cancellationToken));
+        return RoleListing.From(roles, withKeys: await AtTenantKey.IsHeldAsync(answers, reads, RoleListing.KeysKey, cancellationToken));
     }
 }

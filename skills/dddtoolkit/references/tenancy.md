@@ -171,7 +171,7 @@ public sealed partial class ShopSeat
   | Question | Answers |
   |---|---|
   | `UnitsWhereIHold(key)` | the units where the calling seat holds the key, and every unit below them |
-  | `HoldsAtAsync(key, unit)`, `HoldsTenantWideAsync(key)` | whether it holds the key there, or for the whole tenant |
+  | `HoldsAtAsync(key, unit)`, `HoldsAtTenantAsync(key)` | whether it holds the key there, or for the whole tenant |
   | `WhereIHold(keys)` | every pair of a unit and a key, for several keys in one query |
   | `RolesWithKey(key)`, `RoleKeys(keys)` | the active roles that grant a key |
 
@@ -301,7 +301,7 @@ database guards on a seat".
   module's own, a requirement computed from its values (`SeatGrants`, `OpenProject`), or one that combines what no
   stack of attributes says: two keys, `AccessRequirement.All(MemberAccess.On(...), new ProjectsRequirement.AtUnit(...))`
   (`MoveProjectToUnit`), or one caller or another, `AccessRequirement.Any(TenancyAccess.RequiresOperator(),
-  TenancyAccess.ForTheWholeTenant(key))`, with a row rule for each way onto the module's own table. None leaves the decision to a package: a request handed to Tenancy's use case says what that use
+  TenancyAccess.AtTenant(key))`, with a row rule for each way onto the module's own table. None leaves the decision to a package: a request handed to Tenancy's use case says what that use
   case asks first, and the use case keeps the rest. System work is no requirement: trusted code begins it around
   the work (`TenancyUseCases.BeginSystemIn(tenant)`), a request it sends in a tenant is `[InTenant]`, and the
   handler refuses everyone else (`access.system-only`). A request that declares nothing is DDD00077.

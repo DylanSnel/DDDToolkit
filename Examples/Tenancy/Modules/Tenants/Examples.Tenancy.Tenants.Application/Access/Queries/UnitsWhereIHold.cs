@@ -22,8 +22,8 @@ public sealed record UnitsWhereIHold(string Key) : IQuery<HeldUnits>, ITenantsRe
 
 /// <summary>Where a caller holds a key: the units, and whether it holds the key tenant-wide.</summary>
 /// <param name="Units">Each unit where the key applies, by its id, ordered by the id's value so the answer is the same every time.</param>
-/// <param name="WholeTenant">Whether the key applies across the whole tenant: whether it is held at the root.</param>
-public sealed record HeldUnits(IReadOnlyList<OrganizationUnitId> Units, bool WholeTenant);
+/// <param name="AtTenant">Whether the key applies across the whole tenant: whether it is held at the root.</param>
+public sealed record HeldUnits(IReadOnlyList<OrganizationUnitId> Units, bool AtTenant);
 
 /// <summary>
 /// Answers <see cref="UnitsWhereIHold"/> with the Tenancy package's access questions, asked over a reading of
@@ -67,7 +67,7 @@ public sealed class UnitsWhereIHoldHandler(ITenancyReads reads, TenancyCatalogue
 
         return new HeldUnits(
             [.. units.Where(unit => unit.Held).Select(unit => unit.Id).OrderBy(unit => unit.Value)],
-            WholeTenant: units.Any(unit => unit.ParentId is null && unit.Held));
+            AtTenant: units.Any(unit => unit.ParentId is null && unit.Held));
     }
 
     /// <summary>What the statement reads of a unit: whether it is the root, and whether the caller holds the key there.</summary>

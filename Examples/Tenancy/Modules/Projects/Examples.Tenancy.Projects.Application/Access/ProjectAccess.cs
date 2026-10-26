@@ -89,7 +89,7 @@ public sealed class ProjectAccess(IMemberQuestions<ProjectId> members, IProjectR
     /// <param name="cancellationToken">Cancels the query.</param>
     /// <returns>The keys held, each once, in the order of their text.</returns>
     /// <exception cref="ArgumentException">The catalogue does not know one of <paramref name="keys"/>.</exception>
-    public async Task<IReadOnlyList<string>> HeldTenantWideAsync(IProjectReading reading, IReadOnlyCollection<string> keys, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<string>> HeldAtTenantAsync(IProjectReading reading, IReadOnlyCollection<string> keys, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(keys);
         if (keys.Count == 0)

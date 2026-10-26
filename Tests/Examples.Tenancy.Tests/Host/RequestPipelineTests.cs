@@ -328,7 +328,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
 
                 atTheDoor.Code.Should().Be(TenancyRefusals.NotPermitted, "{0} requires a key juno does not hold", name);
                 pastTheDoor.Code.Should().Be(atTheDoor.Code, "the use case of {0} asks first what its request requires", name);
-                atTheDoor.Arguments["Key"].Should().Be(declared is TenancyRequirement.AtUnit<OrganizationUnitId> at ? at.Key : ((TenancyRequirement.ForTheWholeTenant)declared).Key, name)
+                atTheDoor.Arguments["Key"].Should().Be(declared is TenancyRequirement.AtUnit<OrganizationUnitId> at ? at.Key : ((TenancyRequirement.AtTenant)declared).Key, name)
                     .And.Be(pastTheDoor.Arguments["Key"], "the door and the use case name the same key for {0}", name);
                 if (declared is TenancyRequirement.AtUnit<OrganizationUnitId> atUnit)
                 {

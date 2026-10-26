@@ -140,7 +140,7 @@ public abstract class TenancyAccessCheckTests(TestDatabases databases) : IAsyncL
     [Fact]
     public async Task A_key_for_the_whole_tenant_is_asked_at_the_root_in_one_statement()
     {
-        var seats = new Declaring(TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage));
+        var seats = new Declaring(TenancyAccess.AtTenant(TenancyKeys.SeatsManage));
 
         // Ada administers the tenant: every key, at the root.
         await _services.BySeat(_harbor.Tenant, _harbor.AdminSeat, scoped => RequireAsync(scoped, seats));
@@ -164,7 +164,7 @@ public abstract class TenancyAccessCheckTests(TestDatabases databases) : IAsyncL
     [Fact]
     public async Task Nobody_is_refused_as_nobody_before_anything_is_read_for_a_key()
     {
-        var seats = new Declaring(TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage));
+        var seats = new Declaring(TenancyAccess.AtTenant(TenancyKeys.SeatsManage));
 
         await Refused.WithCodeAsync(TenancyRefusals.NotSeated, () => ByNobody(seats));
 
@@ -174,7 +174,7 @@ public abstract class TenancyAccessCheckTests(TestDatabases databases) : IAsyncL
     [Fact]
     public async Task A_key_the_catalogue_does_not_know_is_a_mistake_in_the_request_whoever_calls()
     {
-        var unknown = new Declaring(TenancyAccess.ForTheWholeTenant("widget.polish"));
+        var unknown = new Declaring(TenancyAccess.AtTenant("widget.polish"));
 
         await FluentActions.Awaiting(() => _services.BySeat(_harbor.Tenant, _harbor.AdminSeat, scoped => RequireAsync(scoped, unknown)))
             .Should().ThrowAsync<ArgumentException>("a request that required a key nobody can hold would refuse everyone, so it fails as the bug it is");
@@ -272,7 +272,7 @@ public abstract class TenancyAccessCheckTests(TestDatabases databases) : IAsyncL
         Of(new StatedRequests.ForAnyone()).Should().Be(AccessRequirement.AllowAnonymous());
         Of(new StatedRequests.ForTheSignedIn()).Should().Be(AccessRequirement.SignedIn());
         Of(new StatedRequests.InTheTenant()).Should().Be(TenancyAccess.InTenant());
-        Of(new StatedRequests.ManageEverySeat()).Should().Be(TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage), "a key without a marker is held for the whole tenant");
+        Of(new StatedRequests.ManageEverySeat()).Should().Be(TenancyAccess.AtTenant(TenancyKeys.SeatsManage), "a key without a marker is held for the whole tenant");
         Of(new StatedRequests.ManageSeatsAt(_north)).Should().Be(TenancyAccess.AtUnit(TenancyKeys.SeatsManage, _north), "[AtUnit] marks the unit");
         Of(new StatedRequests.ForOperators()).Should().Be(TenancyAccess.RequiresOperator());
     }
@@ -311,7 +311,7 @@ public abstract class TenancyAccessCheckTests(TestDatabases databases) : IAsyncL
     {
         var renameWes = new StatedRequests.RenameSeat(_wes);
         ((IHostRequest)renameWes).RequiredAccess.Should().Be(
-            AccessRequirement.Any(TenancyAccess.Own(_wes), TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage)), "[OrOwn] beside the key is the caller's own, or the key");
+            AccessRequirement.Any(TenancyAccess.Own(_wes), TenancyAccess.AtTenant(TenancyKeys.SeatsManage)), "[OrOwn] beside the key is the caller's own, or the key");
 
         // Wes renames himself: his own seat in the tenant, compared at the door, and the key after it is not asked.
         _services.Commands.Reset();
@@ -358,7 +358,7 @@ public abstract class TenancyAccessCheckTests(TestDatabases databases) : IAsyncL
     public async Task Stacked_attributes_all_hold_and_the_first_that_fails_refuses_with_its_own_reason()
     {
         var asAPerson = new StatedRequests.ManageEverySeatAsAPerson();
-        ((IHostRequest)asAPerson).RequiredAccess.Should().Be(AccessRequirement.All(AccessRequirement.SignedIn(), TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage)));
+        ((IHostRequest)asAPerson).RequiredAccess.Should().Be(AccessRequirement.All(AccessRequirement.SignedIn(), TenancyAccess.AtTenant(TenancyKeys.SeatsManage)));
 
         // Ada signed in, and administers Harbor.
         using (Callers.Begin(Caller.User(Guid.NewGuid())))
@@ -382,7 +382,7 @@ public abstract class TenancyAccessCheckTests(TestDatabases databases) : IAsyncL
     public async Task One_caller_or_another_is_let_through_by_the_first_case_it_meets_and_refused_once_with_each_reason()
     {
         // The tenant's access history: one of the application's operators, or a seat that manages seats for the whole tenant.
-        var auditLog = new Declaring(AccessRequirement.Any(TenancyAccess.RequiresOperator(), TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage)));
+        var auditLog = new Declaring(AccessRequirement.Any(TenancyAccess.RequiresOperator(), TenancyAccess.AtTenant(TenancyKeys.SeatsManage)));
 
         // An operator is let through by the first case, with nothing read.
         _services.Commands.Reset();
@@ -436,7 +436,7 @@ public abstract class TenancyAccessCheckTests(TestDatabases databases) : IAsyncL
         AccessRequirement[] ofTenancy =
         [
             TenancyAccess.InTenant(),
-            TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage),
+            TenancyAccess.AtTenant(TenancyKeys.SeatsManage),
             TenancyAccess.RequiresOperator(),
             TenancyAccess.AtUnit(TenancyKeys.SeatsManage, _north),
         ];
@@ -469,7 +469,7 @@ public abstract class TenancyAccessCheckTests(TestDatabases databases) : IAsyncL
     [Fact]
     public async Task A_module_is_checked_over_its_own_context()
     {
-        var seats = new OfWidgetsDeclaring(TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage));
+        var seats = new OfWidgetsDeclaring(TenancyAccess.AtTenant(TenancyKeys.SeatsManage));
 
         await _services.BySeat(_harbor.Tenant, _harbor.AdminSeat, scoped => scoped.GetRequiredService<AccessChecks<IWidgetRequest>>().RequireAsync(seats, Cancellation).AsTask());
 
@@ -484,7 +484,7 @@ public abstract class TenancyAccessCheckTests(TestDatabases databases) : IAsyncL
     [Fact]
     public async Task Without_a_factory_the_key_is_asked_on_the_scope_s_own_context()
     {
-        var seats = new Declaring(TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage));
+        var seats = new Declaring(TenancyAccess.AtTenant(TenancyKeys.SeatsManage));
 
         await _services.BySeat(_harbor.Tenant, _harbor.AdminSeat, async scoped =>
         {
@@ -498,7 +498,7 @@ public abstract class TenancyAccessCheckTests(TestDatabases databases) : IAsyncL
     {
         using var pooled = await ServicesAsync(pooled: true);
         var harbor = await pooled.ProvisionAsync("harbor");
-        var seats = new Declaring(TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage));
+        var seats = new Declaring(TenancyAccess.AtTenant(TenancyKeys.SeatsManage));
 
         await pooled.BySeat(harbor.Tenant, harbor.AdminSeat, async scoped =>
         {

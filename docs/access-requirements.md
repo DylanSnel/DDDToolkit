@@ -220,7 +220,7 @@ partial interface IBoardsRequest
 {
     AccessRequirement IRequireAccess.RequiredAccess => this switch
     {
-        ArchiveBoard => TenancyAccess.ForTheWholeTenant("boards.archive"),
+        ArchiveBoard => TenancyAccess.AtTenant("boards.archive"),
         ListBoards => TenancyAccess.InTenant(),
         MyInvitations => AccessRequirement.SignedIn(),
         // A request this project cannot name, one of another project say, takes the module's default as well.
@@ -245,7 +245,7 @@ stands for, and what a request that computes its requirement writes:
 | anyone, a caller who did not sign in too | `[AllowAnonymous]` | `AccessRequirement.AllowAnonymous()` | everyone: nobody is asked | |
 | a signed-in user, who need not hold anything yet | `[SignedIn]` | `AccessRequirement.SignedIn()` | a user who signed in, an anonymous sign-in of the identity provider too | `access.not-signed-in` |
 | a caller who works in the tenant | `[InTenant]`, of [Tenancy](tenancy.md#what-a-request-requires-of-its-caller) | `TenancyAccess.InTenant()` | a seat in the tenant the request was sent for, and system work there | the caller's own reason, such as `tenancy.not-seated` |
-| a key for the whole tenant | `[RequiresKey(key)]` | `TenancyAccess.ForTheWholeTenant(key)` | whoever holds the key at the tenant's root now | `tenancy.not-permitted`, naming the key |
+| a key for the whole tenant | `[RequiresKey(key)]` | `TenancyAccess.AtTenant(key)` | whoever holds the key at the tenant's root now | `tenancy.not-permitted`, naming the key |
 | a key at a unit | `[RequiresKey(key)]`, `[AtUnit]` on the unit | `TenancyAccess.AtUnit(key, unit)` | whoever holds the key at that unit now, there or above it | `tenancy.not-permitted`, with the key and the unit |
 | a key on a resource | `[RequiresKey(key)]`, `[OnResource]` on the resource, `[ExpectedVersion]` on the version read, of [Membership](membership.md#a-document-and-the-people-it-is-shared-with) | `MemberAccess.On(key, resource, expectedVersion)` | whoever holds the key on it, through its members or from above | the resource's `not-found` or `not-permitted` |
 | a query that shows the resources a key is held on | `[SeenWith<TResourceId>(key)]`, of [Membership](membership.md#inside-your-own-statements) | `MemberAccess.SeenWith<TResourceId>(key)` | every caller who signed in, and system work: the query's own statement leaves out what the caller does not hold the key on | the caller's own reason where it is nobody; the resource's `not-permitted`, naming the key, for a caller who did not sign in |
@@ -321,8 +321,8 @@ its neighbour is a warning:
 
 | `[RequiresKey(key)]` with | no marker | `[AtUnit]` | `[OnResource]` | `[OnResource]` and `[ExpectedVersion]` |
 |---|---|---|---|---|
-| is | `ForTheWholeTenant(key)` | `AtUnit(key, unit)` | `On(key, resource)` | `On(key, resource, version)` |
-| and `[OrOwn]` on a member | `Any(Own(member), ForTheWholeTenant(key))` | not: [DDD00085](diagnostics.md#ddd00085) | `Any(All(Own(member), Sees(key, resource)), On(key, resource))` | `Any(All(Own(member), Sees(key, resource, version)), On(key, resource, version))` |
+| is | `AtTenant(key)` | `AtUnit(key, unit)` | `On(key, resource)` | `On(key, resource, version)` |
+| and `[OrOwn]` on a member | `Any(Own(member), AtTenant(key))` | not: [DDD00085](diagnostics.md#ddd00085) | `Any(All(Own(member), Sees(key, resource)), On(key, resource))` | `Any(All(Own(member), Sees(key, resource, version)), On(key, resource, version))` |
 
 Beside `[OnResource]` the caller's own way through is held to the resource too: the caller sees it, its version is
 compared, and what a save is held to is kept, as on the key's way ([Yours, or the key](#yours-or-the-key)). On the id
@@ -369,7 +369,7 @@ public sealed record ListLedgers(OrganizationUnitId? Unit) : IBillingRequest
 {
     AccessRequirement IRequireAccess.RequiredAccess => Unit is { } unit
         ? TenancyAccess.AtUnit(BillingKeys.Read, unit)
-        : TenancyAccess.ForTheWholeTenant(BillingKeys.Read);
+        : TenancyAccess.AtTenant(BillingKeys.Read);
 }
 ```
 
@@ -420,7 +420,7 @@ case alone. A refusal of `Any` is one `access.refused`, `RefusalKind.NotPermitte
 case's reason is the answer: its argument `Reasons` lists them, each with its code and arguments, and its message names
 them for a log. A case that fails with anything but a refusal, a lost race on a version say, is the answer as it is,
 and the cases after it are not asked. `RequestInHand.ToString()` names a combination by its cases' types,
-`RenameSeat (AccessRequirement.Any(AccessRequirement.Owned<SeatId>, TenancyRequirement.ForTheWholeTenant))`.
+`RenameSeat (AccessRequirement.Any(AccessRequirement.Owned<SeatId>, TenancyRequirement.AtTenant))`.
 
 <details>
 <summary>Show the code: a refusal of one way or another, as an edge writes it</summary>
@@ -429,7 +429,7 @@ and the cases after it are not asked. `RequestInHand.ToString()` names a combina
 // The request: one of the application's operators, or a seat that manages seats for the whole tenant
 AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.Any(
     TenancyAccess.RequiresOperator(),
-    TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage));
+    TenancyAccess.AtTenant(TenancyKeys.SeatsManage));
 
 // A client that wants each reason reads them from the refusal's arguments
 catch (RefusalException refused) when (refused.Code == ToolkitRefusals.Refused
@@ -472,7 +472,7 @@ public sealed record ExportBoard(BoardId Board) : IBoardsRequest;
 ```
 
 is, in the module's interface, `ExportBoard => AccessRequirement.All(PlanAtLeast.RequiresPlan(Plan.Pro),
-TenancyAccess.ForTheWholeTenant("boards.export"))`. Put the case that reads nothing first: a refusal there costs no
+TenancyAccess.AtTenant("boards.export"))`. Put the case that reads nothing first: a refusal there costs no
 statement. [A requirement of your own](how-a-request-is-checked.md#a-requirement-of-your-own) builds this one whole:
 the requirement, the attribute, `PlanCheck` and its registration.
 
@@ -527,7 +527,7 @@ partial interface IBoardsRequest
     {
         ExportBoard => AccessRequirement.All(
             PlanAtLeast.RequiresPlan((Plan)(2)),
-            TenancyAccess.ForTheWholeTenant("boards.export")),
+            TenancyAccess.AtTenant("boards.export")),
         // ...
     };
 }
@@ -541,7 +541,7 @@ Where a request lets one caller or another through, or needs two keys in two pla
 and the request answers the property with `Any` or `All`:
 
 - **One caller or another.** A tenant's audit log, read by the application's operators across tenants, and by a
-  seat that manages the tenant's seats: `Any(TenancyAccess.RequiresOperator(), TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage))`.
+  seat that manages the tenant's seats: `Any(TenancyAccess.RequiresOperator(), TenancyAccess.AtTenant(TenancyKeys.SeatsManage))`.
   An operator is let through by the first case with nothing read; a seat manager by the second, in one statement.
 - **Two keys at two units.** Moving a seat from one unit to another needs the key that manages seats at both:
   `All(TenancyAccess.AtUnit(TenancyKeys.SeatsManage, From), TenancyAccess.AtUnit(TenancyKeys.SeatsManage, To))`. The
@@ -561,7 +561,7 @@ public sealed record TenantAuditLog(TenantId Tenant, PagingArguments Paging) : I
 {
     AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.Any(
         TenancyAccess.RequiresOperator(),
-        TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage));
+        TenancyAccess.AtTenant(TenancyKeys.SeatsManage));
 }
 
 public sealed record MoveSeat(SeatId Seat, OrganizationUnitId From, OrganizationUnitId To) : ICommand, ISeatsRequest
@@ -638,7 +638,7 @@ with no key standing in: leaving a tenant, closing one's own account.
   request would be stopped every time it is sent. The id of an aggregate that marks its owner is no such type: it
   is about that owner.
 - **As the property.** `AccessRequirement.Own(value)` is the case, and `TenancyAccess.Own(seat)` the same case
-  spelled beside Tenancy's others: `Any(TenancyAccess.Own(Seat), TenancyAccess.ForTheWholeTenant(key))`.
+  spelled beside Tenancy's others: `Any(TenancyAccess.Own(Seat), TenancyAccess.AtTenant(key))`.
 
 <details>
 <summary>Show the code: yours or the key, yours alone, and a handle of the application's own</summary>
@@ -666,7 +666,7 @@ services.AddCallersOwn<UserId, CallersUser>();
 ```csharp title="the lines the generator writes, each into its module's interface, shortened"
 RenameSeat request => AccessRequirement.Any(
     AccessRequirement.Own(request.Seat),
-    TenancyAccess.ForTheWholeTenant("tenancy.seats.manage")),
+    TenancyAccess.AtTenant("tenancy.seats.manage")),
 LeaveCrew request => AccessRequirement.Any(
     AccessRequirement.All(AccessRequirement.Own(request.Seat), MemberAccess.Sees("projects.crew.manage", request.Project)),
     MemberAccess.On("projects.crew.manage", request.Project)),
@@ -710,7 +710,7 @@ public sealed record RenameBoard([OrOwn] BoardId Board, string Name) : IBoardsRe
 ArchiveBoard request => AccessRequirement.OwnerOf(request.Board),
 RenameBoard request => AccessRequirement.Any(
     AccessRequirement.OwnerOf(request.Board),
-    TenancyAccess.ForTheWholeTenant("boards.manage")),
+    TenancyAccess.AtTenant("boards.manage")),
 ```
 
 The check asks the caller's own of the owner's type first, as for a value: a caller who has none, one who did not
@@ -874,7 +874,7 @@ public sealed record TenantAuditLog(TenantId Tenant, PagingArguments Paging) : I
 {
     AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.Any(
         TenancyAccess.RequiresOperator(),
-        TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage));
+        TenancyAccess.AtTenant(TenancyKeys.SeatsManage));
 }
 
 // Which rows: a rule for each way, each for its own role
@@ -887,7 +887,7 @@ public static partial class OperatorsReadTheAuditLog
 [RowAccess<AuditEntry>(RowOperations.Read, To = [RowAccessRoles.User])]
 public static partial class SeatManagersReadTheAuditLog
 {
-    public static bool Allows(AuditEntry entry, Caller caller) => TenancyRowAccess.HoldsTenantWide(TenancyKeys.SeatsManage);
+    public static bool Allows(AuditEntry entry, Caller caller) => TenancyRowAccess.HoldsAtTenant(TenancyKeys.SeatsManage);
 }
 ```
 
@@ -915,7 +915,7 @@ export finds it by again.
 
 The same holds for the caller's own: `RenameSeat` lets a seat rename itself or any seat with the key, and the Tenancy
 sample's column rule on the seat's name, `NameChangesByTheSeatOrWithTheSeatsKey`, says both branches again for each
-row, `seat.Id == TenancyRowAccess.CallerSeat<SeatId>() || TenancyRowAccess.HoldsTenantWide(RenameSeat.RequiredKey)`.
+row, `seat.Id == TenancyRowAccess.CallerSeat<SeatId>() || TenancyRowAccess.HoldsAtTenant(RenameSeat.RequiredKey)`.
 
 ## System work is a scope
 

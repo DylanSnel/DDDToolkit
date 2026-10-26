@@ -14,7 +14,7 @@ namespace DDDToolkit.Supporting.Tenancy.Postgres.Tests;
 
 /// <summary>
 /// A request that lets one caller or another through, <c>AccessRequirement.Any(TenancyAccess.RequiresOperator(),
-/// TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage))</c>, over a table of the application's own, the tallies:
+/// TenancyAccess.AtTenant(TenancyKeys.SeatsManage))</c>, over a table of the application's own, the tallies:
 /// the door decides per request and reads no row, and the policies decide per row, as the caller. Postgres lets a row
 /// through that one permissive policy allows, so each way the door lets a caller in needs a row rule of its own: without
 /// it the caller passes the door and reads nothing.
@@ -39,7 +39,7 @@ public sealed class OneCallerOrAnotherTests(TenancyPostgres postgres)
     /// <summary>What the request requires: an operator, or a seat that manages seats for the whole tenant.</summary>
     private static readonly AccessRequirement OperatorOrSeatManager = AccessRequirement.Any(
         TenancyAccess.RequiresOperator(),
-        TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage));
+        TenancyAccess.AtTenant(TenancyKeys.SeatsManage));
 
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
@@ -162,5 +162,5 @@ public static partial class OperatorsReadEveryTally
 public static partial class SeatManagersReadTheTallies
 {
     /// <summary>Whether the calling seat manages seats for the whole tenant.</summary>
-    public static bool Allows(Tally tally, Caller caller) => TenancyRowAccess.HoldsTenantWide(TenancyKeys.SeatsManage);
+    public static bool Allows(Tally tally, Caller caller) => TenancyRowAccess.HoldsAtTenant(TenancyKeys.SeatsManage);
 }

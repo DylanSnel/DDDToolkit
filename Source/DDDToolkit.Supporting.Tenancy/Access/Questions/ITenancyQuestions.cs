@@ -131,7 +131,7 @@ public interface ITenancyQuestions<TTenantId, TSeatId, TUnitId, TRoleId>
     /// <param name="cancellationToken">Cancels the query.</param>
     /// <exception cref="ArgumentException">The catalogue does not know <paramref name="key"/>.</exception>
     /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>
-    Task<bool> HoldsTenantWideAsync(string key, CancellationToken cancellationToken);
+    Task<bool> HoldsAtTenantAsync(string key, CancellationToken cancellationToken);
 
     /// <summary>Whether the caller holds <paramref name="key"/> now at <paramref name="unit"/>, held there or above it.</summary>
     /// <param name="key">A key of the catalogue.</param>

@@ -175,8 +175,8 @@ public class RequirementAttributeGenerationTests
 
         result.ShouldCompile();
         result.ShouldHaveExactlyDiagnostics();
-        result.ShouldContain(Hint, "global::Shop.Billing.CloseTheBooks => global::DDDToolkit.Supporting.Tenancy.Access.TenancyAccess.ForTheWholeTenant(\"billing.close\"),");
-        Asked(result, "CloseTheBooks", 2026).Should().Be(TenancyAccess.ForTheWholeTenant("billing.close"));
+        result.ShouldContain(Hint, "global::Shop.Billing.CloseTheBooks => global::DDDToolkit.Supporting.Tenancy.Access.TenancyAccess.AtTenant(\"billing.close\"),");
+        Asked(result, "CloseTheBooks", 2026).Should().Be(TenancyAccess.AtTenant("billing.close"));
     }
 
     [Fact]
@@ -197,7 +197,7 @@ public class RequirementAttributeGenerationTests
             """).RunCore();
 
         result.ShouldCompile();
-        Asked(result, "CloseTheBooks", 2026).Should().Be(TenancyAccess.ForTheWholeTenant("billing.close"), "a request's own constant is in scope of its attributes");
+        Asked(result, "CloseTheBooks", 2026).Should().Be(TenancyAccess.AtTenant("billing.close"), "a request's own constant is in scope of its attributes");
     }
 
     [Theory]
@@ -276,7 +276,7 @@ public class RequirementAttributeGenerationTests
             {
                 AccessRequirement IRequireAccess.RequiredAccess => Unit is { } unit
                     ? TenancyAccess.AtUnit("billing.read", unit)
-                    : TenancyAccess.ForTheWholeTenant("billing.read");
+                    : TenancyAccess.AtTenant("billing.read");
             }
 
             [InTenant] public sealed record Invoices : IBillingRequest;
@@ -285,7 +285,7 @@ public class RequirementAttributeGenerationTests
         result.ShouldCompile();
         result.ShouldHaveExactlyDiagnostics();
         result.ShouldNotContain(Hint, "ListSeats", "a request that answers the property itself is answered by C#, not by a line");
-        Asked(result, "ListSeats", new object?[] { null }).Should().Be(TenancyAccess.ForTheWholeTenant("billing.read"));
+        Asked(result, "ListSeats", new object?[] { null }).Should().Be(TenancyAccess.AtTenant("billing.read"));
         Asked(result, "Invoices").Should().Be(TenancyAccess.InTenant());
     }
 
@@ -315,7 +315,7 @@ public class RequirementAttributeGenerationTests
         result.ShouldContain(
             Hint,
             "global::Shop.Billing.RenameMySeat request => global::DDDToolkit.Access.AccessRequirement.All(global::DDDToolkit.Access.AccessRequirement.Any(global::DDDToolkit.Access.AccessRequirement.Own(request.Seat), "
-            + "global::DDDToolkit.Supporting.Tenancy.Access.TenancyAccess.ForTheWholeTenant(\"tenancy.seats.manage\")), global::DDDToolkit.Access.AccessRequirement.SignedIn()),",
+            + "global::DDDToolkit.Supporting.Tenancy.Access.TenancyAccess.AtTenant(\"tenancy.seats.manage\")), global::DDDToolkit.Access.AccessRequirement.SignedIn()),",
             "the base's key, with the caller's own it marks, then the derived request's own attribute");
     }
 
@@ -337,7 +337,7 @@ public class RequirementAttributeGenerationTests
                 /// <inheritdoc cref="global::DDDToolkit.Access.IRequireAccess.RequiredAccess"/>
                 global::DDDToolkit.Access.AccessRequirement DDDToolkit_Generated_IRequireAccess.RequiredAccess => this switch
                 {
-                    global::Shop.Billing.CloseTheBooks => global::DDDToolkit.Supporting.Tenancy.Access.TenancyAccess.ForTheWholeTenant("billing.close"),
+                    global::Shop.Billing.CloseTheBooks => global::DDDToolkit.Supporting.Tenancy.Access.TenancyAccess.AtTenant("billing.close"),
                     global::Shop.Billing.MyInvoices => global::DDDToolkit.Access.AccessRequirement.SignedIn(),
                     _ => throw new global::System.InvalidOperationException(
                         this.GetType().FullName + " declares no access requirement: it carries no requirement attribute, and does not answer RequiredAccess itself. "

@@ -396,7 +396,7 @@ public abstract class PooledContextTests(TenancyPostgres postgres, TenancyNaming
         var catalogue = services.Provider.GetRequiredService<Catalogue.TenancyCatalogue>();
         var overview = await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.Directory().WhoAmIAsync(Cancellation));
         overview.Seat.Id.Should().Be(Ada.Seat);
-        overview.Keys.Should().HaveCount(catalogue.LiveKeys.Count).And.OnlyContain(reach => reach.WholeTenant);
+        overview.Keys.Should().HaveCount(catalogue.LiveKeys.Count).And.OnlyContain(reach => reach.AtTenant);
 
         (await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => HoldersAsync<WidgetContext>(scoped, HarborRoot, _ => { }))).Should().Equal(Ada.Seat);
 

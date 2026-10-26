@@ -74,16 +74,16 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
         (new TenantProjects(TheTenant), TenancyAccess.RequiresOperator()),
         (new TenantProjectRoles(), TenancyAccess.InTenant()),
         (new ProjectRolesById([ProjectRoleId.CreateSequential()]), TenancyAccess.InTenant()),
-        (new MakeProjectRole("Rigger", "Rigs the hoists", [ProjectKeys.View]), TenancyAccess.ForTheWholeTenant(TenancyKeys.RolesManage)),
-        (new RenameProjectRole(ProjectRoleId.CreateSequential(), "Rigger", null), TenancyAccess.ForTheWholeTenant(TenancyKeys.RolesManage)),
-        (new SetProjectRoleKeys(ProjectRoleId.CreateSequential(), []), TenancyAccess.ForTheWholeTenant(TenancyKeys.RolesManage)),
-        (new ArchiveProjectRole(ProjectRoleId.CreateSequential()), TenancyAccess.ForTheWholeTenant(TenancyKeys.RolesManage)),
+        (new MakeProjectRole("Rigger", "Rigs the hoists", [ProjectKeys.View]), TenancyAccess.AtTenant(TenancyKeys.RolesManage)),
+        (new RenameProjectRole(ProjectRoleId.CreateSequential(), "Rigger", null), TenancyAccess.AtTenant(TenancyKeys.RolesManage)),
+        (new SetProjectRoleKeys(ProjectRoleId.CreateSequential(), []), TenancyAccess.AtTenant(TenancyKeys.RolesManage)),
+        (new ArchiveProjectRole(ProjectRoleId.CreateSequential()), TenancyAccess.AtTenant(TenancyKeys.RolesManage)),
         (new SetUpProjectRoles(), TenancyAccess.InTenant()),
         (new SeatsOfMine(), AccessRequirement.SignedIn()),
         (new OverviewOfMine(), TenancyAccess.InTenant()),
         (new OrganizationUnits(), TenancyAccess.InTenant()),
         (new TenantSeats(), TenancyAccess.InTenant()),
-        (new SeatGrants(SeatId.CreateSequential()), TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage)),
+        (new SeatGrants(SeatId.CreateSequential()), TenancyAccess.AtTenant(TenancyKeys.SeatsManage)),
         (new TenantRoles(), TenancyAccess.InTenant()),
         (new SeatsById([SeatId.CreateSequential()]), TenancyAccess.InTenant()),
         (new OrganizationUnitsById([OrganizationUnitId.CreateSequential()]), TenancyAccess.InTenant()),
@@ -93,21 +93,21 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
         (new AddOrganizationUnit(TheUnit, "North", UnitKind.Region), TenancyAccess.AtUnit(TenancyKeys.UnitsManage, TheUnit)),
         (new MoveOrganizationUnit(OrganizationUnitId.CreateSequential(), TheUnit), TenancyAccess.InTenant()),
         (new ArchiveOrganizationUnit(TheUnit), TenancyAccess.InTenant()),
-        (new ChangeTenantShape(TenantShape.Hierarchical), TenancyAccess.ForTheWholeTenant(TenancyKeys.SettingsManage)),
+        (new ChangeTenantShape(TenantShape.Hierarchical), TenancyAccess.AtTenant(TenancyKeys.SettingsManage)),
         (new MakePlacement(SeatId.CreateSequential(), TheUnit, Primary: true), TenancyAccess.AtUnit(TenancyKeys.SeatsManage, TheUnit)),
         (new WithdrawPlacement(SeatId.CreateSequential(), TheUnit), TenancyAccess.AtUnit(TenancyKeys.SeatsManage, TheUnit)),
         (new MakeGrant(SeatId.CreateSequential(), TheUnit, RoleId.CreateSequential(), Until: null, Reason: null), TenancyAccess.AtUnit(TenancyKeys.GrantsManage, TheUnit)),
         (new RevokeGrant(SeatId.CreateSequential(), TheUnit, RoleId.CreateSequential()), TenancyAccess.AtUnit(TenancyKeys.GrantsManage, TheUnit)),
-        (new SuspendTenantSeat(SeatId.CreateSequential()), TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage)),
-        (new ReactivateTenantSeat(SeatId.CreateSequential()), TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage)),
-        (new DeactivateTenantSeat(SeatId.CreateSequential()), TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage)),
-        (new RenameSeat(TheSeat, "Bert"), AccessRequirement.Any(TenancyAccess.Own(TheSeat), TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage))),
-        (new CreateTenantRole("Storekeeper", "Keeps the stores", []), TenancyAccess.ForTheWholeTenant(TenancyKeys.RolesManage)),
-        (new SetRoleKeys(RoleId.CreateSequential(), []), TenancyAccess.ForTheWholeTenant(TenancyKeys.RolesManage)),
-        (new ArchiveTenantRole(RoleId.CreateSequential()), TenancyAccess.ForTheWholeTenant(TenancyKeys.RolesManage)),
+        (new SuspendTenantSeat(SeatId.CreateSequential()), TenancyAccess.AtTenant(TenancyKeys.SeatsManage)),
+        (new ReactivateTenantSeat(SeatId.CreateSequential()), TenancyAccess.AtTenant(TenancyKeys.SeatsManage)),
+        (new DeactivateTenantSeat(SeatId.CreateSequential()), TenancyAccess.AtTenant(TenancyKeys.SeatsManage)),
+        (new RenameSeat(TheSeat, "Bert"), AccessRequirement.Any(TenancyAccess.Own(TheSeat), TenancyAccess.AtTenant(TenancyKeys.SeatsManage))),
+        (new CreateTenantRole("Storekeeper", "Keeps the stores", []), TenancyAccess.AtTenant(TenancyKeys.RolesManage)),
+        (new SetRoleKeys(RoleId.CreateSequential(), []), TenancyAccess.AtTenant(TenancyKeys.RolesManage)),
+        (new ArchiveTenantRole(RoleId.CreateSequential()), TenancyAccess.AtTenant(TenancyKeys.RolesManage)),
         (new MarkTenantAsDemo(), TenancyAccess.InTenant()),
-        (new AccessHistory(new PagingArguments(first: 10)), TenancyAccess.ForTheWholeTenant(TenancyKeys.HistoryView)),
-        (new InvitePerson("wren@example.test", TheUnit, RoleId.CreateSequential(), Until: null), TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage)),
+        (new AccessHistory(new PagingArguments(first: 10)), TenancyAccess.AtTenant(TenancyKeys.HistoryView)),
+        (new InvitePerson("wren@example.test", TheUnit, RoleId.CreateSequential(), Until: null), TenancyAccess.AtTenant(TenancyKeys.SeatsManage)),
         (new OpenInvitations(), TenancyAccess.InTenant()),
         (new CancelInvitation(InvitationId.CreateSequential()), TenancyAccess.InTenant()),
         (new AcceptInvitation("a-token-nobody-was-given", DisplayName: null), AccessRequirement.SignedIn()),
@@ -216,7 +216,7 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
         // by the toolkit's own, which every module's set asks first.
         foreach (var module in SampleLayout.OnTheMediator.Keys)
         {
-            Decides(scope.ServiceProvider, module, TenancyAccess.ForTheWholeTenant(TenancyKeys.RolesManage)).Should().BeTrue("{0} registers Tenancy's check", module);
+            Decides(scope.ServiceProvider, module, TenancyAccess.AtTenant(TenancyKeys.RolesManage)).Should().BeTrue("{0} registers Tenancy's check", module);
             Decides(scope.ServiceProvider, module, AccessRequirement.SignedIn()).Should().BeTrue("{0}'s set asks the toolkit who is calling", module);
         }
 
@@ -303,11 +303,11 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
     {
         // The guard of the test above, held to the cases it tells apart, so an application that copies it copies a guard
         // that holds: a stack of attributes says All of a sign-in and a key, and [OrOwn] beside a key says Any of the two.
-        OfTheModuleOrTwoKeys(AccessRequirement.All(AccessRequirement.SignedIn(), TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage))).Should().BeFalse("[SignedIn] [RequiresKey(key)] says it");
-        OfTheModuleOrTwoKeys(AccessRequirement.Any(AccessRequirement.Own(TheSeat), TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage))).Should().BeFalse("[RequiresKey(key)] with [OrOwn] says it");
-        OfTheModuleOrTwoKeys(TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage)).Should().BeFalse("[RequiresKey(key)] says it");
+        OfTheModuleOrTwoKeys(AccessRequirement.All(AccessRequirement.SignedIn(), TenancyAccess.AtTenant(TenancyKeys.SeatsManage))).Should().BeFalse("[SignedIn] [RequiresKey(key)] says it");
+        OfTheModuleOrTwoKeys(AccessRequirement.Any(AccessRequirement.Own(TheSeat), TenancyAccess.AtTenant(TenancyKeys.SeatsManage))).Should().BeFalse("[RequiresKey(key)] with [OrOwn] says it");
+        OfTheModuleOrTwoKeys(TenancyAccess.AtTenant(TenancyKeys.SeatsManage)).Should().BeFalse("[RequiresKey(key)] says it");
 
-        OfTheModuleOrTwoKeys(AccessRequirement.Any(TenancyAccess.RequiresOperator(), TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage))).Should().BeTrue("one caller or another is no stack");
+        OfTheModuleOrTwoKeys(AccessRequirement.Any(TenancyAccess.RequiresOperator(), TenancyAccess.AtTenant(TenancyKeys.SeatsManage))).Should().BeTrue("one caller or another is no stack");
         OfTheModuleOrTwoKeys(AccessRequirement.All(TenancyAccess.AtUnit(TenancyKeys.SeatsManage, TheUnit), TenancyAccess.AtUnit(TenancyKeys.SeatsManage, TheOtherUnit))).Should().BeTrue("two keys at once");
         OfTheModuleOrTwoKeys(AccessRequirement.All(TenancyAccess.InTenant(), new ProjectsRequirement.AtUnit(ProjectKeys.Open, TheUnit))).Should().BeTrue("the module's own case, in a combination too");
     }
@@ -328,7 +328,7 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
 
     /// <summary>A key, of Tenancy's for the whole tenant or at a unit, or of Membership's on a resource.</summary>
     private static bool IsAKey(AccessRequirement each)
-        => each is TenancyRequirement.ForTheWholeTenant or TenancyRequirement.AtUnit<OrganizationUnitId>
+        => each is TenancyRequirement.AtTenant or TenancyRequirement.AtUnit<OrganizationUnitId>
            || (each.GetType().IsGenericType && each.GetType().GetGenericTypeDefinition() == typeof(MemberAccess<>.On));
 
     [Fact]
@@ -337,7 +337,7 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
         // The roles a seat holds in every unit take the key for the whole tenant; the roles at one unit take it there.
         var seat = SeatId.CreateSequential();
 
-        DeclaredBy(new SeatGrants(seat)).Should().Be(TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage));
+        DeclaredBy(new SeatGrants(seat)).Should().Be(TenancyAccess.AtTenant(TenancyKeys.SeatsManage));
         DeclaredBy(new SeatGrants(seat, TheUnit)).Should().Be(TenancyAccess.AtUnit(TenancyKeys.SeatsManage, TheUnit));
 
         // A project opened for its caller takes the key at the unit; one opened for an owner it names takes, beside
@@ -355,7 +355,7 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
         // never says whose it is. The key is the alternative, asked only where the seat is not the caller's.
         var declares = DeclaredBy(new RenameSeat(TheSeat, "Bert")).Should().BeOfType<AccessRequirement.AnyOf>().Subject;
 
-        declares.Cases.Should().Equal(AccessRequirement.Own(TheSeat), TenancyAccess.ForTheWholeTenant(RenameSeat.RequiredKey));
+        declares.Cases.Should().Equal(AccessRequirement.Own(TheSeat), TenancyAccess.AtTenant(RenameSeat.RequiredKey));
         declares.Cases[0].Should().Be(TenancyAccess.Own(TheSeat), "Tenancy's spelling of the caller's own seat is the core's case");
     }
 
@@ -465,7 +465,7 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
         foreach (var request in handedOn)
         {
             var declares = DeclaredBy(Declared.Single(row => row.Request.GetType() == request.Type).Request);
-            (declares is TenancyRequirement.InTenant or TenancyRequirement.ForTheWholeTenant or TenancyRequirement.AtUnit<OrganizationUnitId> or AccessRequirement.SignedInUser)
+            (declares is TenancyRequirement.InTenant or TenancyRequirement.AtTenant or TenancyRequirement.AtUnit<OrganizationUnitId> or AccessRequirement.SignedInUser)
                 .Should().BeTrue("{0} is handed to the package's use case, which asks first for a caller of the tenant, a key there, or a signed-in user", request.Type.Name);
         }
     }

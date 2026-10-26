@@ -149,7 +149,7 @@ public abstract class DirectoryTests(TenancyPostgres postgres, TenancyNaming nam
 
         // Hiro's Grants desk is at North itself, where Seth manages.
         var desk = hiro.Keys.Should().ContainSingle().Which;
-        (desk.Key, desk.WholeTenant).Should().Be((TenancyKeys.GrantsManage, false));
+        (desk.Key, desk.AtTenant).Should().Be((TenancyKeys.GrantsManage, false));
         desk.Reaches.Select(unit => unit.Path).Should().Equal("Harbor / North", "Harbor / North / North Pier");
 
         // Ada administers the tenant from the root, above North: Seth reads her seat and where she is placed, which
@@ -171,7 +171,7 @@ public abstract class DirectoryTests(TenancyPostgres postgres, TenancyNaming nam
         // System work in the tenant reads every grant: Ada holds every live key for the whole tenant.
         var bySystem = await services.BySystemIn(Harbor, scoped => scoped.Directory().SeatOverviewAsync(Ada.Seat, Cancellation));
         bySystem.Roles.Select(role => role.Id).Should().Equal(HarborRoles.Administrator);
-        bySystem.Keys.Should().NotBeEmpty().And.OnlyContain(key => key.WholeTenant);
+        bySystem.Keys.Should().NotBeEmpty().And.OnlyContain(key => key.AtTenant);
 
         // Oli's seat in Orchard is no seat of Harbor's: refused as a seat that does not exist is.
         await FluentActions.Awaiting(() => services.BySeat(Seth.Identity, Harbor, Seth.Seat, scoped => scoped.Directory().SeatOverviewAsync(OliInOrchard, Cancellation)))

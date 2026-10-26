@@ -178,7 +178,7 @@ public abstract class StoreTests(TestDatabases databases) : IAsyncLifetime
 
         var overview = await _services.BySeat(harbor.Tenant, harbor.AdminSeat, services => services.Directory().WhoAmIAsync(TestContext.Current.CancellationToken));
         overview.Tenant.Slug.Should().Be("harbor");
-        overview.Keys.Should().OnlyContain(reach => reach.WholeTenant).And.HaveCount(catalogue.LiveKeys.Count);
+        overview.Keys.Should().OnlyContain(reach => reach.AtTenant).And.HaveCount(catalogue.LiveKeys.Count);
     }
 
     [Fact]

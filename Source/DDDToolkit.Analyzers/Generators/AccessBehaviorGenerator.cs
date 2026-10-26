@@ -67,8 +67,8 @@ namespace DDDToolkit.Analyzers;
 ///     AccessRequirement IRequireAccess.RequiredAccess =&gt; this switch
 ///     {
 ///         OpenLedger request =&gt; TenancyAccess.AtUnit("billing.open-ledger", request.Unit),
-///         RenameLedger request =&gt; AccessRequirement.Any(AccessRequirement.Own(request.Owner), TenancyAccess.ForTheWholeTenant("billing.rename")),
-///         ExportLedger =&gt; AccessRequirement.All(BillingAccess.RequiresPlan(Plan.Pro), TenancyAccess.ForTheWholeTenant("billing.export")),
+///         RenameLedger request =&gt; AccessRequirement.Any(AccessRequirement.Own(request.Owner), TenancyAccess.AtTenant("billing.rename")),
+///         ExportLedger =&gt; AccessRequirement.All(BillingAccess.RequiresPlan(Plan.Pro), TenancyAccess.AtTenant("billing.export")),
 ///         MyInvoices =&gt; AccessRequirement.SignedIn(),
 ///         _ =&gt; throw new InvalidOperationException(...),
 ///     };

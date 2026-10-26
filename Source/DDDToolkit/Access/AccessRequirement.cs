@@ -11,7 +11,7 @@ namespace DDDToolkit.Access;
 /// <code>
 /// [AllowAnonymous]                                          // AccessRequirement.AllowAnonymous(): anyone, also not signed in
 /// [SignedIn]                                                // AccessRequirement.SignedIn(): a signed-in user
-/// [RequiresKey(BillingKeys.Close)]                          // a package's case: TenancyAccess.ForTheWholeTenant(BillingKeys.Close)
+/// [RequiresKey(BillingKeys.Close)]                          // a package's case: TenancyAccess.AtTenant(BillingKeys.Close)
 /// [RequiresPlan(Plan.Pro), RequiresKey(BillingKeys.Close)]  // both: AccessRequirement.All(...), in the order they are written
 /// </code>
 /// and where it is computed from the request's values, or is one case or another, the request answers
@@ -19,11 +19,11 @@ namespace DDDToolkit.Access;
 /// <code>
 /// AccessRequirement IRequireAccess.RequiredAccess =&gt; Unit is { } unit
 ///     ? TenancyAccess.AtUnit(BillingKeys.Close, unit)
-///     : TenancyAccess.ForTheWholeTenant(BillingKeys.Close);
+///     : TenancyAccess.AtTenant(BillingKeys.Close);
 ///
 /// AccessRequirement IRequireAccess.RequiredAccess =&gt; AccessRequirement.Any(
 ///     TenancyAccess.RequiresOperator(),
-///     TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage));
+///     TenancyAccess.AtTenant(TenancyKeys.SeatsManage));
 /// </code>
 /// The cases spelled here are about who is calling, or combine other cases, so the core decides them, and a host
 /// without any supporting domain has them. The other cases are records that derive from this one, each owned by
@@ -114,7 +114,7 @@ public abstract partial record AccessRequirement
     /// <code>
     /// AccessRequirement IRequireAccess.RequiredAccess =&gt; AccessRequirement.Any(
     ///     TenancyAccess.RequiresOperator(),
-    ///     TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage));
+    ///     TenancyAccess.AtTenant(TenancyKeys.SeatsManage));
     /// </code>
     /// No attribute says it, since stacked attributes all hold: a request whose caller may be one or another says it
     /// as <see cref="IRequireAccess.RequiredAccess"/>, except for the request about the caller's own, which
@@ -145,7 +145,7 @@ public abstract partial record AccessRequirement
     /// <code>
     /// AccessRequirement IRequireAccess.RequiredAccess =&gt; AccessRequirement.Any(
     ///     AccessRequirement.Own(Seat),                                  // the caller's own seat,
-    ///     TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage));    // or the key for every seat
+    ///     TenancyAccess.AtTenant(TenancyKeys.SeatsManage));    // or the key for every seat
     /// </code>
     /// A request says it with attributes as well: <see cref="OrOwnAttribute"/> beside <see cref="RequiresKeyAttribute"/>
     /// for the caller's own or the key, <see cref="OwnAttribute"/> with <see cref="OwnOnlyAttribute"/> for the

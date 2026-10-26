@@ -55,7 +55,7 @@ public abstract class TenancyFunctionTests(TenancyPostgres postgres, TenancyNami
             sql.Held[key].Should().BeEquivalentTo(csharp.Held[key], "units_where_i_hold('{0}') is UnitsWhereIHold", key);
             sql.Roles[key].Should().BeEquivalentTo(csharp.Roles[key], "roles_with_key('{0}') is RolesWithKey", key);
             sql.HoldsKey[key].Should().Be(csharp.Held[key].Count > 0, "holds_key('{0}') is a unit where the key is held", key);
-            sql.AtTheRoot[key].Should().Be(csharp.AtTheRoot[key], "holds_tenant_wide('{0}') is HoldsTenantWideAsync", key);
+            sql.AtTheRoot[key].Should().Be(csharp.AtTheRoot[key], "holds_tenant_wide('{0}') is HoldsAtTenantAsync", key);
         }
     }
 
@@ -208,7 +208,7 @@ public abstract class TenancyFunctionTests(TenancyPostgres postgres, TenancyNami
             {
                 answers.Held[key] = [.. (await questions.UnitsWhereIHold(key).ToListAsync(Cancellation)).Select(unit => unit.Value)];
                 answers.Roles[key] = [.. (await questions.RolesWithKey(key).ToListAsync(Cancellation)).Select(role => role.Value)];
-                answers.AtTheRoot[key] = await questions.HoldsTenantWideAsync(key, Cancellation);
+                answers.AtTheRoot[key] = await questions.HoldsAtTenantAsync(key, Cancellation);
             }
 
             return answers;

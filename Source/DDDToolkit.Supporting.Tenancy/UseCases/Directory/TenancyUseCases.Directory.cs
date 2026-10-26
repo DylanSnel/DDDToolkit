@@ -88,7 +88,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         /// It asks nothing of the caller beyond what every question of the directory asks, a seat of the tenant or
         /// system work in it. Who may see another person's access is the application's choice, so the request that
         /// asks this states it (<c>IRequireAccess.RequiredAccess</c>), as a request states it for everything else:
-        /// <c>TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage)</c> for a tenant's administration, say, or
+        /// <c>TenancyAccess.AtTenant(TenancyKeys.SeatsManage)</c> for a tenant's administration, say, or
         /// <c>TenancyAccess.InTenant()</c> where the database's read rules are the rule.
         /// <para>
         /// What comes back is what the caller reads, through the store, as the lists read seats. On Postgres Tenancy's

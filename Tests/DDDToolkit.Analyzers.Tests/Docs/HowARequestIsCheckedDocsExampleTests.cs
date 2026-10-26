@@ -276,7 +276,7 @@ public partial class HowARequestIsCheckedDocsExampleTests
 
         // The audit log says it as the property alone, and C# takes its own over the interface's default.
         Required(emitted.New("Examples.Tenancy.TenantAuditLog", emitted.New("Examples.Tenancy.TenantId", Guid.NewGuid()), emitted.New("Examples.Tenancy.PagingArguments", null, null)))
-            .Should().Be(AccessRequirement.Any(TenancyAccess.RequiresOperator(), TenancyAccess.ForTheWholeTenant("tenancy.seats.manage")));
+            .Should().Be(AccessRequirement.Any(TenancyAccess.RequiresOperator(), TenancyAccess.AtTenant("tenancy.seats.manage")));
     }
 
     [Fact]
@@ -307,7 +307,7 @@ public partial class HowARequestIsCheckedDocsExampleTests
         var export = emitted.New("Examples.Tenancy.ExportBoard", emitted.New("Examples.Tenancy.BoardId", Guid.NewGuid()))!;
 
         Required(export).Should().Be(
-            AccessRequirement.All((AccessRequirement)emitted.CallStatic("Examples.Tenancy.PlanAtLeast", "RequiresPlan", PlanOf(emitted, "Pro"))!, TenancyAccess.ForTheWholeTenant("boards.export")),
+            AccessRequirement.All((AccessRequirement)emitted.CallStatic("Examples.Tenancy.PlanAtLeast", "RequiresPlan", PlanOf(emitted, "Pro"))!, TenancyAccess.AtTenant("boards.export")),
             "stacked attributes are All of their calls, in the order they are written");
 
         // A tenant on the Free plan is refused with the module's code, and Tenancy is asked nothing.

@@ -52,6 +52,6 @@ public static class CampusRequests
         /// <inheritdoc />
         AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.Any(
             TenancyAccess.RequiresOperator(),
-            TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage));
+            TenancyAccess.AtTenant(TenancyKeys.SeatsManage));
     }
 }

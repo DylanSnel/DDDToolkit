@@ -65,7 +65,7 @@ public sealed class KeysOnProjectsHandler(IProjectReads reads, ProjectAccess acc
         var keys = KeysHeldAtRoot.Known(query.Keys, catalogue);
 
         await using var reading = reads.Open();
-        var atRoot = await access.HeldTenantWideAsync(reading, keys, cancellationToken);
+        var atRoot = await access.HeldAtTenantAsync(reading, keys, cancellationToken);
 
         if (projects.Count == 0 || keys.Count == 0)
         {

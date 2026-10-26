@@ -381,7 +381,7 @@ partial interface IShopRequest
             MemberAccess.On("shop.orders.watchers", request.Order)),
         ExportSales => AccessRequirement.All(
             AccessRequirement.SignedIn(),
-            TenancyAccess.ForTheWholeTenant("shop.reports.export")),
+            TenancyAccess.AtTenant("shop.reports.export")),
         _ => throw new InvalidOperationException(this.GetType().FullName + " declares no access requirement: ..."),
     };
 }

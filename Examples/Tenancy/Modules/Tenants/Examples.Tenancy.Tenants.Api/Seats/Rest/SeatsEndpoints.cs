@@ -134,7 +134,7 @@ internal static class SeatsEndpoints
         keys = overview.Keys.Select(reach => new
         {
             reach.Key,
-            reach.WholeTenant,
+            reach.AtTenant,
             grantedAt = reach.GrantedAt.Select(OrganizationEndpoints.Describe),
             reaches = reach.Reaches.Select(OrganizationEndpoints.Describe),
         }),

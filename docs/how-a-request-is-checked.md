@@ -144,7 +144,7 @@ public sealed record TenantAuditLog(TenantId Tenant, PagingArguments Paging) : I
 {
     AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.Any(
         TenancyAccess.RequiresOperator(),
-        TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage));
+        TenancyAccess.AtTenant(TenancyKeys.SeatsManage));
 }
 
 [SignedIn]
@@ -170,7 +170,7 @@ public sealed record RenameSeat(SeatId Seat, string? DisplayName) : ICommand, IT
 {
     AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.Any(
         AccessRequirement.Own(Seat),
-        TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage));
+        TenancyAccess.AtTenant(TenancyKeys.SeatsManage));
 }
 
 public sealed record AddCrewMember(ProjectId Project, SeatId Seat, ProjectRoleId? Role, DateTimeOffset? Until, long? ExpectedVersion = null) : ICommand, IProjectsRequest
@@ -218,7 +218,7 @@ partial interface ITenantsRequest
         AddOrganizationUnit request => TenancyAccess.AtUnit("tenancy.units.manage", request.Parent),
         OrganizationUnits => TenancyAccess.InTenant(),
         RegisterOrganization => AccessRequirement.SignedIn(),
-        RenameSeat request => AccessRequirement.Any(AccessRequirement.Own(request.Seat), TenancyAccess.ForTheWholeTenant("tenancy.seats.manage")),
+        RenameSeat request => AccessRequirement.Any(AccessRequirement.Own(request.Seat), TenancyAccess.AtTenant("tenancy.seats.manage")),
         // ... a line for each of the module's other requests that state their requirement with attributes
         _ => throw new InvalidOperationException(
             this.GetType().FullName + " declares no access requirement: it carries no requirement attribute, and does not answer RequiredAccess itself. "
@@ -367,7 +367,7 @@ is nobody in the tenant is refused with its own reason, without a statement made
 | `Own(seat)` | the core's `CallerAccessCheck` | nothing: the caller's seat in the tenant, found when the request came in | `access.not-own`, 403 |
 | `OwnerOf(board)` | the core's `CallerAccessCheck` | one statement, the storage's: the owner's column of the one row, as the caller; nothing for a caller with no own of the owner's type | `access.not-own`, 403; `access.not-found`, 404, for a row the caller does not see ([The owner of an aggregate](access-requirements.md#the-owner-of-an-aggregate)) |
 | `InTenant()` | Tenancy's | nothing: the seat, found when the request came in | the caller's own reason, such as `tenancy.not-seated`, 403 |
-| `ForTheWholeTenant(key)` | Tenancy's | one statement: the key at the tenant's root, for a seat; nothing for system work in the tenant, which holds every key there | `tenancy.not-permitted` with the key, 403 |
+| `AtTenant(key)` | Tenancy's | one statement: the key at the tenant's root, for a seat; nothing for system work in the tenant, which holds every key there | `tenancy.not-permitted` with the key, 403 |
 | `AtUnit(key, unit)` | Tenancy's | one statement: the key at the unit or above it, for a seat; for system work in the tenant, whether the unit is the tenant's | `tenancy.not-permitted` with the key and the unit, 403 |
 | `RequiresOperator()` | Tenancy's | nothing: the token's role | `tenancy.operators-only`, 403 |
 | `On(key, project, version)` | Membership's | one statement: the project as the caller sees it, how the caller holds the key there, and its version; nothing for a caller who is nobody | the caller's own reason for nobody; `projects.not-found`, 404, for a project the caller does not see; `projects.not-permitted` with the key, 403; then a lost race, 409 |
@@ -408,9 +408,9 @@ switch (requirement)
     case TenancyRequirement.InTenant:
         answers.RequireTenant();                                 // a seat here, or system work here
         break;
-    case TenancyRequirement.ForTheWholeTenant required:
+    case TenancyRequirement.AtTenant required:
         answers.RequireTenant();                                 // nobody is refused without a statement
-        if (!await HoldsForTheWholeTenantAsync(required.Key, cancellationToken))
+        if (!await HoldsAtTenantAsync(required.Key, cancellationToken))
             throw TenancyRefusals.Refuse(TenancyRefusals.NotPermitted, ("Key", required.Key));
         break;
     case TenancyRequirement.AtUnit<TUnitId> required:
@@ -489,7 +489,7 @@ SELECT EXISTS (
 
 ```csharp shortened
 // TenancyQuestions, shortened: the two questions a check asks
-public Task<bool> HoldsTenantWideAsync(string key, CancellationToken cancellationToken)
+public Task<bool> HoldsAtTenantAsync(string key, CancellationToken cancellationToken)
     => executor.AnyAsync(
         from right in source.SeatRights
         where right.TenantId.Equals(tenant) && right.SeatId.Equals(seat) && right.Key == key
@@ -504,7 +504,7 @@ public Task<bool> HoldsAtAsync(string key, TUnitId unit, CancellationToken cance
 ```
 
 ```sql shortened
--- HoldsTenantWideAsync: the key at the tenant's root, approximately what Entity Framework sends
+-- HoldsAtTenantAsync: the key at the tenant's root, approximately what Entity Framework sends
 SELECT EXISTS (
     SELECT 1 FROM "tenancy"."SeatRights" AS r
     INNER JOIN "tenancy"."OrganizationUnits" AS root ON r."UnitId" = root."Id"
@@ -967,7 +967,7 @@ partial interface IBoardsRequest
 {
     AccessRequirement DDDToolkit_Generated_IRequireAccess.RequiredAccess => this switch
     {
-        ExportBoard => AccessRequirement.All(PlanAtLeast.RequiresPlan((Plan)(2)), TenancyAccess.ForTheWholeTenant("boards.export")),
+        ExportBoard => AccessRequirement.All(PlanAtLeast.RequiresPlan((Plan)(2)), TenancyAccess.AtTenant("boards.export")),
         // ... and the last arm
     };
 }
@@ -1034,9 +1034,9 @@ with "–" where the door let the caller through, or refused for something other
 | Caller and seat | The door | At the door | The rows | Round the door |
 |---|---|---|---|---|
 | Ada, her own | let through: her own seat, the first way in | nothing | renamed: the policy and the column rule both let a seat change its own name | – |
-| Ada, Leo's | let through: not her own, then `tenancy.seats.manage` for the whole tenant | `HoldsTenantWideAsync` | renamed: she holds the key the policy and the column rule ask | – |
+| Ada, Leo's | let through: not her own, then `tenancy.seats.manage` for the whole tenant | `HoldsAtTenantAsync` | renamed: she holds the key the policy and the column rule ask | – |
 | Juno, her own | let through: her own seat | nothing | renamed | – |
-| Juno, Leo's | `access.refused`, 403, with `access.not-own` and `tenancy.not-permitted` | `HoldsTenantWideAsync` | none | UPDATE 0: the update policy hides Leo's row from her, so nothing changes |
+| Juno, Leo's | `access.refused`, 403, with `access.not-own` and `tenancy.not-permitted` | `HoldsAtTenantAsync` | none | UPDATE 0: the update policy hides Leo's row from her, so nothing changes |
 | the new sign-in | `access.refused`, 403, with `access.not-own` and `tenancy.not-seated` | nothing | none | UPDATE 0: the update policy finds no seat of theirs in harbor, so it lets them change no row |
 | Orla, Anonymous | `access.refused`, 403, with `access.not-own` and `tenancy.not-seated` | nothing | none | refused, 42501: Orla's role holds only `SELECT` on the seats, and `anon` may not use the schema |
 | System work, either | let through: no seat of its own, then every key in harbor | nothing | renamed, under the policy of Tenancy's own work; the column rule holds callers, not the application's own work | – |
@@ -1045,8 +1045,8 @@ with "–" where the door let the caller through, or refused for something other
 
 | Caller and row rules | The door | At the door | The rows | Round the door |
 |---|---|---|---|---|
-| Ada | let through: not an operator, then `tenancy.seats.manage` for the whole tenant | `HoldsTenantWideAsync` | harbor's entries, through the seat managers' rule, kept to her tenant | – |
-| Juno | `access.refused`, 403, with `tenancy.operators-only` and `tenancy.not-permitted` | `HoldsTenantWideAsync` | none | no row: the seat managers' rule lets her read none, as she does not hold the key |
+| Ada | let through: not an operator, then `tenancy.seats.manage` for the whole tenant | `HoldsAtTenantAsync` | harbor's entries, through the seat managers' rule, kept to her tenant | – |
+| Juno | `access.refused`, 403, with `tenancy.operators-only` and `tenancy.not-permitted` | `HoldsAtTenantAsync` | none | no row: the seat managers' rule lets her read none, as she does not hold the key |
 | the new sign-in | `access.refused`, 403, with `tenancy.operators-only` and `tenancy.not-seated` | nothing | none | no row: no seat of theirs manages seats |
 | Anonymous | `access.refused`, 403, with `tenancy.operators-only` and `tenancy.not-seated` | nothing | none | refused, 42501: no permissive policy is for `anon`, so it holds no privilege on the table |
 | Orla | let through: an operator, the first way in | nothing | harbor's entries, through the operators' rule | – |

@@ -104,7 +104,7 @@ else
         <p class="small text-body-secondary">@T.Html("whoami.grants-manage", GrantsManage)</p>
     }
 
-    @if (me.Keys.Any(key => key.Key == SeatsManage && key.WholeTenant))
+    @if (me.Keys.Any(key => key.Key == SeatsManage && key.AtTenant))
     {
         <p class="small text-body-secondary">@T.Html("whoami.seats-manage", SeatsManage)</p>
     }
@@ -131,7 +131,7 @@ else
                             <td><code>@key.Key</code></td>
                             <td>@string.Join("; ", key.GrantedAt.Select(unit => unit.Path))</td>
                             <td>
-                                @if (key.WholeTenant)
+                                @if (key.AtTenant)
                                 {
                                     <span class="badge text-bg-info">@T["whoami.whole-tenant"]</span>
                                 }

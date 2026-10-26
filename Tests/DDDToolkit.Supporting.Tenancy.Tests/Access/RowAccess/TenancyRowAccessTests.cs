@@ -22,7 +22,7 @@ public class TenancyRowAccessTests
         Asked(() => TenancyRowAccess.CallerSeat<SeatId>()).Should().Be("tenancy/caller_seat");
         Asked(() => TenancyRowAccess.CallerTenant<TenantId>()).Should().Be("tenancy/caller_tenant");
         Asked(() => TenancyRowAccess.HoldsKey(HostCatalogue.WidgetRead)).Should().Be("tenancy/holds_key");
-        Asked(() => TenancyRowAccess.HoldsTenantWide(TenancyKeys.SeatsManage)).Should().Be("tenancy/holds_tenant_wide");
+        Asked(() => TenancyRowAccess.HoldsAtTenant(TenancyKeys.SeatsManage)).Should().Be("tenancy/holds_tenant_wide");
     }
 
     [Fact]

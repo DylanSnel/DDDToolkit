@@ -42,7 +42,7 @@ public sealed class AccessAdminScenarios(SampleHosts sample) : IClassFixture<Sam
         // Tenancy's six, the five that manage access and the one that reads the access history, the two the host
         // marks as managing access, and seeing projects. Every one for the whole tenant, since the role is held at
         // the root.
-        me.GetProperty("keys").EnumerateArray().Select(key => (Key: key.GetProperty("key").GetString(), Everywhere: key.GetProperty("wholeTenant").GetBoolean()))
+        me.GetProperty("keys").EnumerateArray().Select(key => (Key: key.GetProperty("key").GetString(), Everywhere: key.GetProperty("atTenant").GetBoolean()))
             .Should().BeEquivalentTo(
             [
                 (TenancyKeys.SettingsManage, true), (TenancyKeys.UnitsManage, true), (TenancyKeys.SeatsManage, true),
@@ -195,7 +195,7 @@ public sealed class AccessAdminScenarios(SampleHosts sample) : IClassFixture<Sam
         // Meadow is flat, so its first seat was granted Tenant admin, which lists no keys and holds them all.
         me.GetProperty("placements").EnumerateArray().Should().ContainSingle().Which.GetProperty("grants").EnumerateArray()
             .Select(grant => grant.GetProperty("roleId").GetGuid()).Should().Equal(meadow.Roles[SampleCatalogue.TenantAdmin].Value);
-        me.GetProperty("keys").EnumerateArray().Where(key => key.GetProperty("wholeTenant").GetBoolean()).Select(key => key.GetProperty("key").GetString())
+        me.GetProperty("keys").EnumerateArray().Where(key => key.GetProperty("atTenant").GetBoolean()).Select(key => key.GetProperty("key").GetString())
             .Should().BeEquivalentTo(catalogue.LiveKeys);
         catalogue.Packs.Single(pack => pack.Key == SampleCatalogue.TenantAdmin).Keys.Should().BeEquivalentTo(catalogue.LiveKeys);
 

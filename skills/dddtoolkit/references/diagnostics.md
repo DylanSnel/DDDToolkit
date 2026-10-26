@@ -713,7 +713,7 @@ Error, at the marker: it is on a member of the wrong type. `[AtUnit]` goes on th
 the class declared `[OrganizationUnit<TUnitId>]`), `[OnResource]` on the id of a resource with members (the aggregate
 root a `[Member<..., TResource>]` class names), `[ExpectedVersion]` on a `long?`. Move the marker to the member the
 message names, or fix the member's type. A unit or resource that may be null is computed:
-`RequiredAccess => Unit is { } unit ? TenancyAccess.AtUnit(key, unit) : TenancyAccess.ForTheWholeTenant(key)`.
+`RequiredAccess => Unit is { } unit ? TenancyAccess.AtUnit(key, unit) : TenancyAccess.AtTenant(key)`.
 
 ## DDD00082
 

@@ -28,18 +28,18 @@ public sealed record ApiProblem(string? Code, string? Title, string? Detail, IRe
     /// refusal says where it was needed. A request that may be sent one way or another, a seat renaming itself or any
     /// seat with the key, is refused with <c>access.refused</c>, whose reasons hold that refusal where one way was the key.
     /// </summary>
-    public bool KeyNeededForTheWholeTenant
-        => IsKeyForTheWholeTenant(Code, Arguments)
+    public bool KeyNeededAtTenant
+        => IsKeyAtTenant(Code, Arguments)
            || (Code == NoWayMet
                && Arguments.TryGetValue(ReasonsArgument, out var reasons)
                && reasons.ValueKind == JsonValueKind.Array
-               && reasons.EnumerateArray().Any(static reason => IsKeyForTheWholeTenant(Text(reason, "code"), ArgumentsOf(reason))));
+               && reasons.EnumerateArray().Any(static reason => IsKeyAtTenant(Text(reason, "code"), ArgumentsOf(reason))));
 
     /// <summary>A problem with no arguments.</summary>
     public static ApiProblem WithoutArguments(string? code, string? title, string? detail = null)
         => new(code, title, detail, new Dictionary<string, JsonElement>());
 
-    private static bool IsKeyForTheWholeTenant(string? code, IReadOnlyDictionary<string, JsonElement> arguments)
+    private static bool IsKeyAtTenant(string? code, IReadOnlyDictionary<string, JsonElement> arguments)
         => code == KeyNotHeld
            && arguments.ContainsKey(KeyArgument)
            && (!arguments.TryGetValue(UnitArgument, out var unit) || unit.ValueKind == JsonValueKind.Null);

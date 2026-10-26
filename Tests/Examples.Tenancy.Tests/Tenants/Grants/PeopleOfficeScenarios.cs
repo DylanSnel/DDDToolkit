@@ -47,7 +47,7 @@ public sealed class PeopleOfficeScenarios(SampleHosts sample) : IClassFixture<Sa
             .GetProperty("unit").GetProperty("path").GetString().Should().Be("Harbor Works");
         var key = me.GetProperty("keys").EnumerateArray().Should().ContainSingle().Which;
         key.GetProperty("key").GetString().Should().Be(TenancyKeys.GrantsManage);
-        key.GetProperty("wholeTenant").GetBoolean().Should().BeTrue();
+        key.GetProperty("atTenant").GetBoolean().Should().BeTrue();
         var role = me.GetProperty("roles").EnumerateArray().Should().ContainSingle().Which;
         role.GetProperty("fromPack").GetString().Should().Be(SampleCatalogue.PeopleOffice);
         role.GetProperty("managesAccess").GetBoolean().Should().BeTrue("its one key gives power over other people's access");

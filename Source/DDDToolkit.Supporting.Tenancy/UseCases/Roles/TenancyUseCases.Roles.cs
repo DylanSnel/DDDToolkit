@@ -57,7 +57,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         {
             var gate = new Gate(store, catalogue, clock);
             var tenantId = gate.RequireTenant();
-            await gate.RequireTenantWideAsync(TenancyKeys.RolesManage, cancellationToken).ConfigureAwait(false);
+            await gate.RequireAtTenantAsync(TenancyKeys.RolesManage, cancellationToken).ConfigureAwait(false);
             await RequireNameFreeAsync(tenantId, name, except: null, cancellationToken).ConfigureAwait(false);
 
             var role = TenancyInstances.NewRole<TRole, TRoleId, TTenantId, TSeatId>(
@@ -77,7 +77,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         {
             var gate = new Gate(store, catalogue, clock);
             var tenantId = gate.RequireTenant();
-            await gate.RequireTenantWideAsync(TenancyKeys.RolesManage, cancellationToken).ConfigureAwait(false);
+            await gate.RequireAtTenantAsync(TenancyKeys.RolesManage, cancellationToken).ConfigureAwait(false);
 
             var renamed = await gate.LoadRoleAsync(role, cancellationToken).ConfigureAwait(false);
             await RequireNameFreeAsync(tenantId, name, except: role, cancellationToken).ConfigureAwait(false);
@@ -104,7 +104,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
             var gate = new Gate(store, catalogue, clock);
             var tenantId = gate.RequireTenant();
             await gate.SerializeAsync(tenantId, cancellationToken).ConfigureAwait(false);
-            await gate.RequireTenantWideAsync(TenancyKeys.RolesManage, cancellationToken).ConfigureAwait(false);
+            await gate.RequireAtTenantAsync(TenancyKeys.RolesManage, cancellationToken).ConfigureAwait(false);
 
             var changed = await gate.LoadRoleAsync(role, cancellationToken).ConfigureAwait(false);
             var next = changed.KeysAfterSetting(keys, catalogue);
@@ -139,7 +139,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
             var gate = new Gate(store, catalogue, clock);
             var tenantId = gate.RequireTenant();
             await gate.SerializeAsync(tenantId, cancellationToken).ConfigureAwait(false);
-            await gate.RequireTenantWideAsync(TenancyKeys.RolesManage, cancellationToken).ConfigureAwait(false);
+            await gate.RequireAtTenantAsync(TenancyKeys.RolesManage, cancellationToken).ConfigureAwait(false);
 
             var archived = await gate.LoadRoleAsync(role, cancellationToken).ConfigureAwait(false);
             if (catalogue.AccessManagingKeysOf(archived.Facts).Count > 0)

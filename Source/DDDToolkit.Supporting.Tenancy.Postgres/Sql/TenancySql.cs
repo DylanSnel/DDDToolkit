@@ -57,7 +57,7 @@ internal static class TenancySql
 
     internal const string HoldsKey = "holds_key";
 
-    internal const string HoldsTenantWide = "holds_tenant_wide";
+    internal const string HoldsAtTenant = "holds_tenant_wide";
 
     internal const string IdentityTenants = "identity_tenants";
 
@@ -285,7 +285,7 @@ internal static class TenancySql
     private static string K(string key) => $"(SELECT {Fn(HoldsKey)}({RowAccessModel.Literal(key)}))";
 
     /// <summary>The calling seat holds <paramref name="key"/> now at the root.</summary>
-    private static string W(string key) => $"(SELECT {Fn(HoldsTenantWide)}({RowAccessModel.Literal(key)}))";
+    private static string W(string key) => $"(SELECT {Fn(HoldsAtTenant)}({RowAccessModel.Literal(key)}))";
 
     /// <summary><paramref name="column"/> is a unit where the calling seat holds <paramref name="key"/> now: asked once per statement.</summary>
     private static string U(string key, string column) => $"{column} = ANY (ARRAY(SELECT {Fn(UnitsWhereIHold)}({RowAccessModel.Literal(key)})))";
@@ -466,7 +466,7 @@ internal static class TenancySql
             GrantTo: callers);
 
         yield return new ContributedFunction(
-            HoldsTenantWide,
+            HoldsAtTenant,
             "key text",
             "boolean",
             $"""
@@ -2268,7 +2268,7 @@ internal static class TenancySql
             $"    IF (SELECT {Fn(CallerSeat)}()) IS NULL THEN\n" +
             "        RETURN NEW;\n" +
             "    END IF;\n" +
-            $"    IF NOT (SELECT {Fn(HoldsTenantWide)}({RowAccessModel.Literal(SeatsKey)}))\n" +
+            $"    IF NOT (SELECT {Fn(HoldsAtTenant)}({RowAccessModel.Literal(SeatsKey)}))\n" +
             $"       OR EXISTS ({beyond}) THEN\n" +
             $"        {RowAccessModel.Refusal(SeatStatusIsManagedConstraint, SeatStatusRefusal)}\n" +
             "    END IF;\n" +

@@ -1671,7 +1671,7 @@ yours to say, with the key your command that changes it asks:
 [RowAccess<Seat>(RowOperations.Change, To = [RowAccessRoles.User], Columns = [nameof(Seat.JobTitle)])]
 public static partial class JobTitlesChangeWithTheSeatsKey
 {
-    public static bool Allows(Seat seat, Caller caller) => TenancyRowAccess.HoldsTenantWide(TenancyKeys.SeatsManage);
+    public static bool Allows(Seat seat, Caller caller) => TenancyRowAccess.HoldsAtTenant(TenancyKeys.SeatsManage);
 }
 ```
 

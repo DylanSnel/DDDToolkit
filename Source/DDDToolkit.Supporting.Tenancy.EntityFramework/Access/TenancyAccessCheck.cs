@@ -58,10 +58,10 @@ internal sealed class TenancyAccessCheck<TTenantId, TSeatId, TUnitId, TRoleId, T
                 answers.RequireTenant();
                 break;
 
-            case TenancyRequirement.ForTheWholeTenant required:
+            case TenancyRequirement.AtTenant required:
                 // The caller before anything is opened: nobody is refused as nobody, without a context made for it.
                 answers.RequireTenant();
-                if (!await HoldsForTheWholeTenantAsync(required.Key, cancellationToken).ConfigureAwait(false))
+                if (!await HoldsAtTenantAsync(required.Key, cancellationToken).ConfigureAwait(false))
                 {
                     throw TenancyRefusals.Refuse(TenancyRefusals.NotPermitted, ("Key", required.Key));
                 }
@@ -96,8 +96,8 @@ internal sealed class TenancyAccessCheck<TTenantId, TSeatId, TUnitId, TRoleId, T
     }
 
     /// <summary>One statement, on a context of its own where the application registered a factory for <typeparamref name="TContext"/>.</summary>
-    private Task<bool> HoldsForTheWholeTenantAsync(string key, CancellationToken cancellationToken)
-        => AskAsync(questions => questions.HoldsTenantWideAsync(key, cancellationToken), cancellationToken);
+    private Task<bool> HoldsAtTenantAsync(string key, CancellationToken cancellationToken)
+        => AskAsync(questions => questions.HoldsAtTenantAsync(key, cancellationToken), cancellationToken);
 
     /// <summary>One statement, on a context of its own where the application registered a factory for <typeparamref name="TContext"/>.</summary>
     private Task<bool> HoldsAtAsync(string key, TUnitId unit, CancellationToken cancellationToken)

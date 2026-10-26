@@ -9,7 +9,7 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// <code>
 /// public sealed record CloseTheBooks(int Year) : IBillingRequest
 /// {
-///     AccessRequirement IRequireAccess.RequiredAccess =&gt; TenancyAccess.ForTheWholeTenant(BillingKeys.CloseTheBooks);
+///     AccessRequirement IRequireAccess.RequiredAccess =&gt; TenancyAccess.AtTenant(BillingKeys.CloseTheBooks);
 /// }
 /// </code>
 /// and the check the storage package registers for the module's request interface, with

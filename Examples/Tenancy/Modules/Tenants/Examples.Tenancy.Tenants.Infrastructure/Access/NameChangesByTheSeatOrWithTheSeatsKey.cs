@@ -31,5 +31,5 @@ public static partial class NameChangesByTheSeatOrWithTheSeatsKey
 {
     /// <summary>Whether <paramref name="seat"/> is the calling seat, or the calling seat manages seats for the whole tenant.</summary>
     public static bool Allows(Seat seat, Caller caller)
-        => seat.Id == TenancyRowAccess.CallerSeat<SeatId>() || TenancyRowAccess.HoldsTenantWide(RenameSeat.RequiredKey);
+        => seat.Id == TenancyRowAccess.CallerSeat<SeatId>() || TenancyRowAccess.HoldsAtTenant(RenameSeat.RequiredKey);
 }

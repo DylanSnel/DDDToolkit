@@ -17,7 +17,7 @@ namespace DDDToolkit.Access;
 /// <remarks>
 /// Where the key is held is the marker's to say, and the case it gives belongs to the package that ships the marker:
 /// <list type="table">
-/// <item><term>no marker</term><description>for the whole tenant: Tenancy's <c>TenancyAccess.ForTheWholeTenant(key)</c></description></item>
+/// <item><term>no marker</term><description>for the whole tenant: Tenancy's <c>TenancyAccess.AtTenant(key)</c></description></item>
 /// <item><term><c>[AtUnit]</c></term><description>at that unit or above it: Tenancy's <c>TenancyAccess.AtUnit(key, unit)</c></description></item>
 /// <item><term><c>[OnResource]</c></term><description>on that resource, through its members: Membership's <c>MemberAccess.On(key, resource)</c>, with the version the caller read where <c>[ExpectedVersion]</c> marks it</description></item>
 /// </list>

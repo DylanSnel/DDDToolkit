@@ -70,15 +70,15 @@ public class RequirementCombinationGenerationTests
         result.ShouldContain(
             Hint,
             "global::Shop.Billing.ExportBoard => global::DDDToolkit.Access.AccessRequirement.All(global::Shop.Billing.BillingAccess.RequiresPlan((global::Shop.Billing.Plan)(1)), "
-            + "global::DDDToolkit.Supporting.Tenancy.Access.TenancyAccess.ForTheWholeTenant(\"boards.export\")),",
+            + "global::DDDToolkit.Supporting.Tenancy.Access.TenancyAccess.AtTenant(\"boards.export\")),",
             "like several [Authorize] in ASP.NET Core, each attribute holds, and a module's own stacks as a package's does");
 
         var emitted = result.Emit();
         var all = Asked(emitted, "ExportBoard").Should().BeOfType<AccessRequirement.AllOf>().Subject;
-        all.Cases.Select(each => each.GetType().Name).Should().Equal(["OnPlan", "ForTheWholeTenant"], "the plan is written first, so it is asked first");
-        all.Cases[1].Should().Be(TenancyAccess.ForTheWholeTenant("boards.export"));
+        all.Cases.Select(each => each.GetType().Name).Should().Equal(["OnPlan", "AtTenant"], "the plan is written first, so it is asked first");
+        all.Cases[1].Should().Be(TenancyAccess.AtTenant("boards.export"));
         ((AccessRequirement.AllOf)Asked(emitted, "ExportBoardKeyFirst")).Cases.Select(each => each.GetType().Name)
-            .Should().Equal(["ForTheWholeTenant", "OnPlan"], "the source order is the order of the cases");
+            .Should().Equal(["AtTenant", "OnPlan"], "the source order is the order of the cases");
     }
 
     [Fact]
@@ -130,7 +130,7 @@ public class RequirementCombinationGenerationTests
         result.ShouldContain(
             Hint,
             "global::Shop.Billing.RenameSeat request => global::DDDToolkit.Access.AccessRequirement.Any(global::DDDToolkit.Access.AccessRequirement.Own(request.Seat), "
-            + "global::DDDToolkit.Supporting.Tenancy.Access.TenancyAccess.ForTheWholeTenant(\"tenancy.seats.manage\")),",
+            + "global::DDDToolkit.Supporting.Tenancy.Access.TenancyAccess.AtTenant(\"tenancy.seats.manage\")),",
             "the caller's own reads nothing, so it is asked first; the key only where the seat is not the caller's");
 
         var emitted = result.Emit();
@@ -138,7 +138,7 @@ public class RequirementCombinationGenerationTests
         var any = Asked(emitted, "RenameSeat", IdOf(emitted, "SeatId", seat), "Bert").Should().BeOfType<AccessRequirement.AnyOf>().Subject;
         any.Cases[0].GetType().Name.Should().Be("Owned`1");
         any.Cases[0].ToString().Should().Contain(seat.ToString());
-        any.Cases[1].Should().Be(TenancyAccess.ForTheWholeTenant("tenancy.seats.manage"));
+        any.Cases[1].Should().Be(TenancyAccess.AtTenant("tenancy.seats.manage"));
     }
 
     [Fact]

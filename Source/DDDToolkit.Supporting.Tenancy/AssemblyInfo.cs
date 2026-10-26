@@ -14,7 +14,7 @@ using DDDToolkit.Supporting.Tenancy.UseCases;
 // for the whole tenant: Tenancy's case, so Tenancy says it. A key at a unit is marked [AtUnit], and one on a resource
 // with members [OnResource], which Membership ships. A key held for the whole tenant is held by a seat in it or by system
 // work there, so [InTenant] beside it says nothing more.
-[assembly: KeyWithoutMarker(typeof(TenancyAccess), nameof(TenancyAccess.ForTheWholeTenant), Implies = [typeof(InTenantAttribute)])]
+[assembly: KeyWithoutMarker(typeof(TenancyAccess), nameof(TenancyAccess.AtTenant), Implies = [typeof(InTenantAttribute)])]
 
 // A request about the caller's own seat, [OrOwn] SeatId Seat, compares it with the caller's seat in the tenant: the handle
 // AddTenancy registers says so, over the seat id the application declares its seat class with, which the generator reads

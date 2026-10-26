@@ -256,7 +256,7 @@ internal sealed class TenancyQuestions<TTenantId, TSeatId, TUnitId, TRoleId>(
         return source.Seats.Where(seat => seat.TenantId.Equals(tenant));
     }
 
-    public Task<bool> HoldsTenantWideAsync(string key, CancellationToken cancellationToken)
+    public Task<bool> HoldsAtTenantAsync(string key, CancellationToken cancellationToken)
     {
         var kind = Kind();
         if (!Askable(key) || kind == TenancyCallerKind.Nobody)
