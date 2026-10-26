@@ -408,12 +408,758 @@ It creates the schema `tenancy` with, among others:
 > **Going further.** Everything `AddTenancy` maps, and naming the tables yourself:
 > [The context and the registration](../tenancy.md#the-context-and-the-registration).
 
-## Next steps
+## Step 4: the module's registration
 
-The tutorial goes on in the same way:
+**Where we are.** Classes and a context, and nothing that registers them.
 
-4. **Registration and the host**: the module's registration, and the host that runs it.
-5. **Provisioning a tenant**: the first request, as system work.
-6. **Who am I**: what the caller is, in the tenant the request names.
-7. **A unit and a seat**: requests that require a permission, at a unit.
-8. **A role at a unit**: a role made by the tenant, given at a unit, and reach.
+**Why now.** The host needs one call to add the module, and every request needs its check before its handler.
+
+**What we want.** `AddTenancyModule(connectionString)`: everything the module needs, registered from its entry
+project.
+
+### The idea: the check before every handler
+
+- Every request of the module implements one interface, `ITenancyRequest`, marked `[AccessRequests]`.
+- The generator writes a pipeline behavior for it: before a handler runs, it checks what the request requires of
+  its caller (an attribute on the request, from step 6 on).
+- A request that states no requirement does not compile: a forgotten requirement never opens a door.
+
+### What you write
+
+**`Harbor.Tenancy.Application/Access/ITenancyRequest.cs`**
+
+```csharp {5-6}
+using DDDToolkit.Abstractions.Attributes;
+
+namespace Harbor.Tenancy.Application.Access;
+
+[AccessRequests]
+public partial interface ITenancyRequest : IRequireAccess;
+```
+
+**`Harbor.Tenancy.Application/GlobalUsings.cs`**: what every request file of the module uses.
+
+```csharp
+global using DDDToolkit.Access;
+global using DDDToolkit.Supporting.Tenancy.Access;
+global using Harbor.Tenancy.Application.Access;
+global using Harbor.Tenancy.Contracts.ValueObjects;
+global using Mediator;
+```
+
+**`Harbor.Tenancy.Application/TenancyApplication.cs`**
+
+```csharp {8}
+using Microsoft.Extensions.DependencyInjection;
+
+namespace Harbor.Tenancy.Application;
+
+public static class TenancyApplication
+{
+    public static IServiceCollection AddTenancyApplication(this IServiceCollection services)
+        => services.AddTenancyAccessBehavior();
+}
+```
+
+**`Harbor.Tenancy.Infrastructure/TenancyInfrastructure.cs`**
+
+```csharp {15-16,18-20,22-24}
+using DDDToolkit.EntityFramework;
+using DDDToolkit.Supporting.Tenancy.EntityFramework;
+using DDDToolkit.Supporting.Tenancy.Postgres;
+using Harbor.Tenancy.Application.Access;
+using Harbor.Tenancy.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace Harbor.Tenancy.Infrastructure;
+
+public static class TenancyInfrastructure
+{
+    public static IServiceCollection AddTenancyInfrastructure(this IServiceCollection services, string connectionString)
+    {
+        services.AddDDDToolkitEntityFramework(options => options.UseOutbox<TenancyContext>(outbox =>
+            outbox.AddTenancyDomainEvents()));
+
+        services.AddDbContext<TenancyContext>((provider, options) => options
+            .UseNpgsql(connectionString)
+            .UseDDDToolkit(provider));
+
+        services.AddTenancy<TenancyContext>();
+        services.AddTenancyPostgres();
+        services.AddTenancyAccess<ITenancyRequest, TenancyContext>();
+        return services;
+    }
+}
+```
+
+**`Harbor.Tenancy.Api/TenancyModule.cs`**: the only thing the host calls.
+
+```csharp {11-12}
+using Harbor.Tenancy.Application;
+using Harbor.Tenancy.Infrastructure;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace Harbor.Tenancy.Api;
+
+// The module's entry: the host calls these, and nothing else of the module.
+public static class TenancyModule
+{
+    public static IServiceCollection AddTenancyModule(this IServiceCollection services, string connectionString)
+        => services.AddTenancyInfrastructure(connectionString).AddTenancyApplication();
+
+    // The routes; each later step adds its own.
+    public static IEndpointRouteBuilder MapTenancyModule(this IEndpointRouteBuilder routes)
+        => routes;
+}
+```
+
+### What it does
+
+- `AddTenancyAccessBehavior()`: generated for `ITenancyRequest`; runs the check before each handler.
+- `UseOutbox` + `AddTenancyDomainEvents()`: Tenancy's events are saved with the change, in one transaction.
+- `UseDDDToolkit(provider)`: every lock the host registered, on this context: the caller's database role on each
+  connection (RLS), and Tenancy's save check (no write into another tenant).
+- `AddTenancy<TenancyContext>()`: the use cases, closed over your classes, storing in this context.
+- `AddTenancyPostgres()`: the tenant of the request on every connection, for the RLS policies.
+- `AddTenancyAccess<ITenancyRequest, TenancyContext>()`: the checks the behavior asks, reading this context.
+
+## Step 5: the host
+
+**Where we are.** A module with one entry, and nothing that runs it.
+
+**Why now.** Every later step sends a request; something has to receive it.
+
+**What we want.** An API that knows who calls, in which tenant, answers a refusal with the right status, and checks
+the database before it starts.
+
+### The idea: the caller, and the seat in the tenant
+
+- **Caller**: who sends the request, from the sign-in. Until the sign-in step, a development header stands in:
+  `X-Dev-User: <user id>`.
+- **Tenant**: the request names it, here with the header `Tenant: harbor`.
+- **Seat**: Tenancy looks up the caller's seat in that tenant. The rest of the request runs as that seat: the checks,
+  the use cases, and the database role (RLS).
+- **Refusal**: a rule that says no throws a `RefusalException` with a code (`tenancy.not-permitted`). The host turns
+  it into a status: 404, 403, 409 or 400.
+
+### What you write
+
+**`src/Harbor.Host/Harbor.Host.csproj`**
+
+```xml {9,11,16-17}
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Modules\Tenancy\Harbor.Tenancy.Api\Harbor.Tenancy.Api.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <!-- Every build writes the SQL file of each migration that has none, into supabase/migrations. -->
+    <SupabaseMigrationsExport>Write</SupabaseMigrationsExport>
+    <!-- The role the API logs in as: the build writes its migration, without a login or a password. -->
+    <SupabaseLoginRole>harbor_api</SupabaseLoginRole>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The mediator is generated here, with every handler of the modules this project references. -->
+    <PackageReference Include="Mediator.Abstractions" />
+    <PackageReference Include="Mediator.SourceGenerator" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>
+```
+
+**`src/Harbor.Host/Program.cs`**
+
+```csharp {11-14,17,21}
+using DDDToolkit.EntityFramework.Supabase;
+using DDDToolkit.Startup;
+using Harbor.Host.Requests;
+using Harbor.Tenancy.Api;
+
+var builder = WebApplication.CreateBuilder(args);
+var database = builder.Configuration.GetConnectionString("Supabase")
+    ?? throw new InvalidOperationException("ConnectionStrings:Supabase is not set.");
+
+builder.Services.AddMediator(options => options.ServiceLifetime = ServiceLifetime.Scoped);
+builder.Services.AddSupabaseRowLevelSecurity();
+builder.Services.AddTenancyModule(database);
+builder.Services.AddTenancyPermissionsOfModules();
+builder.Services.AddSupabaseMigrations();
+builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<RefusalsAsProblems>();
+builder.Services.RunStartupChecks();
+
+var app = builder.Build();
+app.UseExceptionHandler();
+app.UseCallerAndTenant();
+app.MapTenancyModule();
+app.Run();
+```
+
+**`src/Harbor.Host/Requests/RequestPipeline.cs`**
+
+```csharp {14-15,17-19}
+using DDDToolkit.Abstractions.Access;
+using DDDToolkit.Access;
+using DDDToolkit.Supporting.Tenancy.Access;
+
+namespace Harbor.Host.Requests;
+
+public static class RequestPipeline
+{
+    // The rest of the request runs as its caller, and as that caller's seat in the tenant the header names.
+    public static IApplicationBuilder UseCallerAndTenant(this IApplicationBuilder app)
+        => app.Use(async (context, next) =>
+        {
+            // A stand-in for sign-in, for development: a header says who calls.
+            var caller = Guid.TryParse(context.Request.Headers["X-Dev-User"], out var user) ? Caller.User(user) : Caller.Anonymous;
+            using (Callers.Begin(caller))
+            {
+                var seat = await context.RequestServices.GetRequiredService<ITenantSelection>()
+                    .ResolveAsync(caller, context.Request.Headers["Tenant"], context.RequestAborted);
+                using (TenancyCallers.Begin(seat))
+                {
+                    await next(context);
+                }
+            }
+        });
+}
+```
+
+**`src/Harbor.Host/Requests/RefusalsAsProblems.cs`**
+
+```csharp {16-23}
+using DDDToolkit.Exceptions;
+using Microsoft.AspNetCore.Diagnostics;
+
+namespace Harbor.Host.Requests;
+
+// A refusal is an answer, not a crash: its kind is the status, its code is what a client reads.
+public sealed class RefusalsAsProblems : IExceptionHandler
+{
+    public async ValueTask<bool> TryHandleAsync(HttpContext context, Exception exception, CancellationToken cancellationToken)
+    {
+        if (exception is not RefusalException refusal)
+        {
+            return false;
+        }
+
+        context.Response.StatusCode = refusal.Kind switch
+        {
+            RefusalKind.NotFound => StatusCodes.Status404NotFound,
+            RefusalKind.NotPermitted => StatusCodes.Status403Forbidden,
+            RefusalKind.Conflict => StatusCodes.Status409Conflict,
+            _ => StatusCodes.Status400BadRequest,
+        };
+        await context.Response.WriteAsJsonAsync(new { code = refusal.Code, detail = refusal.Message }, cancellationToken);
+        return true;
+    }
+}
+```
+
+### What it does
+
+- `AddSupabaseRowLevelSecurity()`: every query runs as the caller's database role, the one the policies are for.
+- `AddTenancyPermissionsOfModules()`: generated into the host: the permissions of every module it references.
+- `AddSupabaseMigrations()` and `RunStartupChecks()`: before the API serves anything, it checks that the database has
+  every migration and policy, and that the login role may become the callers' roles. A failed check names the fix.
+- `Callers.Begin` / `TenancyCallers.Begin`: who calls, and as which seat, for the rest of the request.
+- `SupabaseLoginRole`: the API logs in as `harbor_api`, a role that owns nothing, so RLS applies to it.
+
+### Run it
+
+1. Start Supabase locally: `npx supabase init` once, then `npx supabase start`.
+2. Build the host: `dotnet build`. The export writes `supabase/migrations`: the Tenancy migration, the access file
+   (functions and policies) and the login role.
+3. Apply them: `npx supabase migration up --local`.
+4. Let the login role log in, locally only:
+
+   ```powershell
+   docker exec supabase_db_harbor psql -U postgres -c "ALTER ROLE harbor_api WITH LOGIN PASSWORD 'local-only'"
+   ```
+
+   `harbor` is the `project_id` in `supabase/config.toml`.
+
+5. Run the host with the connection string:
+
+   ```powershell
+   $env:ConnectionStrings__Supabase = "Host=127.0.0.1;Port=54322;Database=postgres;Username=harbor_api;Password=local-only"
+   dotnet run --project src/Harbor.Host
+   ```
+
+The start-up checks pass, and the API runs, with no routes yet.
+
+## Step 6: provisioning a tenant
+
+**Where we are.** A running API without routes, and no tenant.
+
+**Why now.** Every other request works inside a tenant, so the first one creates one.
+
+**What we want.** `POST /dev/tenants`: a tenant, its root unit, and Ada as its first seat, with the administrators'
+starter role at the root.
+
+### The idea: who may ask, and what the work runs as
+
+- **Who may send it**: an attribute on the request. `[SignedIn]`: anyone signed in, with or without a seat.
+- **What it runs as**: creating a tenant is no seat's work, since no seat exists yet. It is **system work**, and the
+  handler says so explicitly, for that one operation: `using (TenancyUseCases.BeginSystem())`.
+- Tenancy's provisioning refuses anything but system work, so a forgotten `BeginSystem` fails loudly.
+
+### What you write
+
+**`Harbor.Tenancy.Application/Tenants/ProvisionTenant/ProvisionTenant.cs`**
+
+```csharp {5,14,16-18}
+using DDDToolkit.Supporting.Tenancy;
+
+namespace Harbor.Tenancy.Application.Tenants.ProvisionTenant;
+
+[SignedIn]
+public sealed record ProvisionTenant(string Slug, string Name, Guid Admin)
+    : ICommand<TenancyUseCases.ProvisionedTenant>, ITenancyRequest;
+
+public sealed class ProvisionTenantHandler(TenancyUseCases.TenantCommands tenants)
+    : ICommandHandler<ProvisionTenant, TenancyUseCases.ProvisionedTenant>
+{
+    public async ValueTask<TenancyUseCases.ProvisionedTenant> Handle(ProvisionTenant command, CancellationToken cancellationToken)
+    {
+        using (TenancyUseCases.BeginSystem())
+        {
+            return await tenants.ProvisionAsync(
+                new TenancyUseCases.TenantToProvision(command.Slug, command.Name, TenantShape.Hierarchical, command.Name, command.Admin,
+                    ConfigureFirstSeat: seat => seat.ChangeJobTitle("Harbor master")),
+                cancellationToken);
+        }
+    }
+}
+```
+
+**`Harbor.Tenancy.Api/Development/DevelopmentEndpoints.cs`**: a route for development only.
+
+```csharp {13-17}
+using Harbor.Tenancy.Application.Tenants.ProvisionTenant;
+using Mediator;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
+
+namespace Harbor.Tenancy.Api.Development;
+
+internal static class DevelopmentEndpoints
+{
+    public static IEndpointRouteBuilder MapDevelopmentEndpoints(this IEndpointRouteBuilder routes)
+    {
+        routes.MapPost("/dev/tenants", async (NewTenant body, ISender sender, CancellationToken cancellationToken) =>
+        {
+            var made = await sender.Send(new ProvisionTenant(body.Slug, body.Name, body.Admin), cancellationToken);
+            return Results.Ok(new { tenant = made.Tenant, root = made.RootUnit, adminSeat = made.AdminSeat });
+        });
+
+        return routes;
+    }
+
+    public sealed record NewTenant(string Slug, string Name, Guid Admin);
+}
+```
+
+**`Harbor.Tenancy.Api/TenancyModule.cs`**: one more entry, for the host to call in development only.
+
+```csharp {1,19-20}
+using Harbor.Tenancy.Api.Development;
+using Harbor.Tenancy.Application;
+using Harbor.Tenancy.Infrastructure;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace Harbor.Tenancy.Api;
+
+// The module's entry: the host calls these, and nothing else of the module.
+public static class TenancyModule
+{
+    public static IServiceCollection AddTenancyModule(this IServiceCollection services, string connectionString)
+        => services.AddTenancyInfrastructure(connectionString).AddTenancyApplication();
+
+    // The routes; each later step adds its own.
+    public static IEndpointRouteBuilder MapTenancyModule(this IEndpointRouteBuilder routes)
+        => routes;
+
+    public static IEndpointRouteBuilder MapTenancyDevelopment(this IEndpointRouteBuilder routes)
+        => routes.MapDevelopmentEndpoints();
+}
+```
+
+**`src/Harbor.Host/Program.cs`**: the development route, in Development only.
+
+```csharp {23-26}
+using DDDToolkit.EntityFramework.Supabase;
+using DDDToolkit.Startup;
+using Harbor.Host.Requests;
+using Harbor.Tenancy.Api;
+
+var builder = WebApplication.CreateBuilder(args);
+var database = builder.Configuration.GetConnectionString("Supabase")
+    ?? throw new InvalidOperationException("ConnectionStrings:Supabase is not set.");
+
+builder.Services.AddMediator(options => options.ServiceLifetime = ServiceLifetime.Scoped);
+builder.Services.AddSupabaseRowLevelSecurity();
+builder.Services.AddTenancyModule(database);
+builder.Services.AddTenancyPermissionsOfModules();
+builder.Services.AddSupabaseMigrations();
+builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<RefusalsAsProblems>();
+builder.Services.RunStartupChecks();
+
+var app = builder.Build();
+app.UseExceptionHandler();
+app.UseCallerAndTenant();
+app.MapTenancyModule();
+if (app.Environment.IsDevelopment())
+{
+    app.MapTenancyDevelopment();
+}
+
+app.Run();
+```
+
+### What it does
+
+- `[SignedIn]`: the check lets any signed-in caller through, and refuses an anonymous one.
+- `BeginSystem()`: system work until the `using` ends; after it, the caller is who it was.
+- `ProvisionAsync`: the tenant, its organization with the root unit "Harbor Works", every starter role, and Ada's
+  seat at the root with the administrators' role, in one save.
+- `ConfigureFirstSeat`: a field of your own on the first seat, set in the same save.
+
+### Try it
+
+```http
+POST /dev/tenants
+X-Dev-User: d0000000-0000-4000-8000-000000000001
+Content-Type: application/json
+
+{ "slug": "harbor", "name": "Harbor Works", "admin": "d0000000-0000-4000-8000-000000000001" }
+```
+
+`200`, with the ids of the tenant, its root unit and Ada's seat. Keep the root's id for step 8.
+
+## Step 7: who am I
+
+**Where we are.** Harbor Works exists, with Ada as its administrator.
+
+**Why now.** Before Ada does anything, she should see what she is: it shows what the later steps change.
+
+**What we want.** `GET /me`: Ada's seat in the tenant the request names, where it is placed, its roles, and every
+permission it holds with where it reaches.
+
+### The idea: the overview, and your own fields
+
+- `WhoAmIAsync()` answers the calling seat's **overview**: your `Seat` class whole, its units and roles by name, and
+  each permission with the units it reaches.
+- What leaves the API is yours: a record of your own, selected from the overview.
+- `[InTenant]`: any seat in the tenant may ask; a caller without one gets 403.
+
+### What you write
+
+**`Harbor.Tenancy.Application/Seats/WhoAmI/WhoAmI.cs`**
+
+```csharp {3,10,21}
+namespace Harbor.Tenancy.Application.Seats.WhoAmI;
+
+[InTenant]
+public sealed record WhoAmI : IQuery<MyOverview>, ITenancyRequest;
+
+public sealed class WhoAmIHandler(TenancyUseCases.TenancyDirectory directory) : IQueryHandler<WhoAmI, MyOverview>
+{
+    public async ValueTask<MyOverview> Handle(WhoAmI query, CancellationToken cancellationToken)
+    {
+        var overview = await directory.WhoAmIAsync(cancellationToken);
+        return new MyOverview(
+            overview.Tenant.Slug,
+            overview.Seat.Id,
+            overview.Seat.JobTitle,
+            [
+                .. overview.Seat.Placements.Select(placement => new MyPlacement(
+                    overview.UnitOf(placement.UnitId).Path,
+                    placement.IsPrimary,
+                    [.. placement.Grants.Select(grant => new MyGrant(overview.RoleOf(grant.RoleId)?.Name ?? "", grant.AppliesAt(overview.AsOf)))])),
+            ],
+            [.. overview.Permissions.Select(permission => new MyPermission(permission.Permission, permission.AtTenant, [.. permission.Reaches.Select(unit => unit.Path)]))]);
+    }
+}
+
+public sealed record MyOverview(string Tenant, SeatId Seat, string? JobTitle, IReadOnlyList<MyPlacement> Placements, IReadOnlyList<MyPermission> Permissions);
+
+public sealed record MyPlacement(string Unit, bool Primary, IReadOnlyList<MyGrant> Grants);
+
+public sealed record MyGrant(string Role, bool AppliesNow);
+
+public sealed record MyPermission(string Permission, bool AtTenant, IReadOnlyList<string> Reaches);
+```
+
+**`Harbor.Tenancy.Api/Seats/Rest/SeatsEndpoints.cs`**: a route only sends the request; the check is on its way.
+
+```csharp {13-14}
+using Harbor.Tenancy.Application.Seats.WhoAmI;
+using Mediator;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
+
+namespace Harbor.Tenancy.Api.Seats.Rest;
+
+internal static class SeatsEndpoints
+{
+    public static IEndpointRouteBuilder MapSeatsEndpoints(this IEndpointRouteBuilder routes)
+    {
+        routes.MapGet("/me", async (ISender sender, CancellationToken cancellationToken)
+            => Results.Ok(await sender.Send(new WhoAmI(), cancellationToken)));
+
+        return routes;
+    }
+}
+```
+
+In `TenancyModule.cs`, `MapTenancyModule` now maps it: `=> routes.MapSeatsEndpoints();`, with
+`using Harbor.Tenancy.Api.Seats.Rest;`.
+
+### What it does
+
+- `overview.UnitOf(...)`, `overview.RoleOf(...)`: the names of the seat's own units and roles, read in the same query.
+- `grant.AppliesAt(overview.AsOf)`: whether a grant applies at the moment the overview holds for.
+- `permission.AtTenant`: held at the root, so for the whole tenant.
+
+### Try it
+
+```http
+GET /me
+X-Dev-User: d0000000-0000-4000-8000-000000000001
+Tenant: harbor
+```
+
+Ada's seat: placed at `Harbor Works`, with the role Administrator, and every permission `atTenant: true`, reaching
+`Harbor Works`. Without the `Tenant` header the request is refused: it needs a seat, and without a tenant there is none.
+
+## Step 8: a unit and a seat
+
+**Where we are.** A tenant with its root, and Ada.
+
+**Why now.** Roles are given at units, to seats. Both have to exist before step 9 gives one.
+
+**What we want.** North below Harbor Works, Rhea's seat placed at North, and the list of units a seat reads.
+
+### The idea: a permission, and where it must be held
+
+- `[RequiresPermission(...)]`: the caller must hold that permission.
+- **Where**: without a marker, for the whole tenant. `[AtUnit]` on a parameter: at that unit, or above it.
+- Tenancy's use case checks again where it acts, and adds its own rules: the door is the first check, not the only one.
+- A rule only Harbor has, "no two units of one name below one parent", is Harbor's: a refusal of its own, in the
+  handler.
+
+### What you write
+
+**`Harbor.Tenancy.Application/Units/AddUnit/AddUnit.cs`**
+
+```csharp {6-7,14-22,24}
+using DDDToolkit.Supporting.Tenancy;
+using DDDToolkit.Supporting.Tenancy.Catalogue;
+
+namespace Harbor.Tenancy.Application.Units.AddUnit;
+
+[RequiresPermission(TenancyPermissions.UnitsManage)]
+public sealed record AddUnit([AtUnit] OrganizationUnitId Parent, string Name) : ICommand<OrganizationUnitId>, ITenancyRequest;
+
+public sealed class AddUnitHandler(TenancyUseCases.OrganizationCommands organization, TenancyUseCases.TenancyDirectory directory)
+    : ICommandHandler<AddUnit, OrganizationUnitId>
+{
+    public async ValueTask<OrganizationUnitId> Handle(AddUnit command, CancellationToken cancellationToken)
+    {
+        // Harbor's own rule: no two active units of one name below one parent.
+        var name = command.Name.Trim();
+        var units = await directory.ListUnitsAsync(cancellationToken);
+        if (units.Any(found => found.Unit.ParentId == command.Parent
+            && found.Unit.Status == UnitStatus.Active
+            && string.Equals(found.Unit.Name.Trim(), name, StringComparison.OrdinalIgnoreCase)))
+        {
+            throw UnitRefusals.NameTakenBelow(name);
+        }
+
+        return await organization.AddUnitAsync(command.Parent, command.Name, cancellationToken);
+    }
+}
+```
+
+**`Harbor.Tenancy.Application/Units/UnitRefusals.cs`**: Harbor's refusal, with a code a client reads.
+
+```csharp {7,9-11}
+using DDDToolkit.Exceptions;
+
+namespace Harbor.Tenancy.Application.Units;
+
+public static class UnitRefusals
+{
+    public const string NameTaken = "units.name-taken";
+
+    internal static RefusalException NameTakenBelow(string name)
+        => new(NameTaken, RefusalKind.Conflict, $"The unit has a unit named {name} below it already.",
+            new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase) { ["Name"] = name });
+}
+```
+
+**`Harbor.Tenancy.Application/Units/ListUnits/ListUnits.cs`**
+
+```csharp {5,11-12}
+using DDDToolkit.Supporting.Tenancy;
+
+namespace Harbor.Tenancy.Application.Units.ListUnits;
+
+[InTenant]
+public sealed record ListUnits : IQuery<IReadOnlyList<UnitListing>>, ITenancyRequest;
+
+public sealed class ListUnitsHandler(TenancyUseCases.TenancyDirectory directory) : IQueryHandler<ListUnits, IReadOnlyList<UnitListing>>
+{
+    public async ValueTask<IReadOnlyList<UnitListing>> Handle(ListUnits query, CancellationToken cancellationToken)
+        => [.. (await directory.ListUnitsAsync(cancellationToken))
+            .Select(found => new UnitListing(found.Unit.Id, found.Unit.ParentId, found.Unit.Name, found.Unit.Status, found.Path, found.Depth))];
+}
+
+public sealed record UnitListing(OrganizationUnitId Id, OrganizationUnitId? ParentId, string Name, UnitStatus Status, string Path, int Depth);
+```
+
+**`Harbor.Tenancy.Application/Seats/AddSeat/AddSeat.cs`**
+
+```csharp {5,12-13}
+using DDDToolkit.Supporting.Tenancy.Catalogue;
+
+namespace Harbor.Tenancy.Application.Seats.AddSeat;
+
+[RequiresPermission(TenancyPermissions.SeatsManage)]
+public sealed record AddSeat(Guid Identity, OrganizationUnitId Unit) : ICommand<SeatId>, ITenancyRequest;
+
+public sealed class AddSeatHandler(TenancyUseCases.SeatCommands seats) : ICommandHandler<AddSeat, SeatId>
+{
+    public async ValueTask<SeatId> Handle(AddSeat command, CancellationToken cancellationToken)
+    {
+        var seat = await seats.AddSeatAsync(command.Identity, cancellationToken);
+        await seats.PlaceAsync(seat, command.Unit, primary: true, cancellationToken);
+        return seat;
+    }
+}
+```
+
+**The routes.** `UnitsEndpoints.cs` maps `GET /units` and `POST /units`; `SeatsEndpoints.cs` gets `POST /seats`;
+`MapTenancyModule` maps both: `=> routes.MapUnitsEndpoints().MapSeatsEndpoints();`. Each route only sends:
+
+```csharp
+routes.MapPost("/units", async (NewUnit body, ISender sender, CancellationToken cancellationToken)
+    => Results.Ok(new { unit = await sender.Send(new AddUnit(body.Parent, body.Name), cancellationToken) }));
+```
+
+### What it does
+
+- `[AtUnit] Parent`: Ada needs `tenancy.units.manage` at the parent or above. She holds it at the root, so anywhere.
+- `AddUnitAsync`: the unit, and its place in the tree (`OrganizationUnitPaths`), in one save.
+- `ListUnitsAsync`: the units this seat reads: where it is placed, and everything below.
+- `AddSeatAsync` + `PlaceAsync`: a seat for a verified identity, placed at a unit. Adding needs `tenancy.seats.manage`
+  for the whole tenant.
+
+### Try it
+
+As Ada (`X-Dev-User` Ada's id, `Tenant: harbor`):
+
+1. `POST /units` with `{ "parent": "<root id>", "name": "North" }`: `200`, North's id.
+2. The same again: `409`, `units.name-taken`. Harbor's rule.
+3. `POST /seats` with `{ "identity": "d0000000-0000-4000-8000-000000000002", "unit": "<North's id>" }`: Rhea's seat.
+4. `GET /units`: Harbor Works, and `Harbor Works / North` below it.
+
+## Step 9: a role at a unit
+
+**Where we are.** Rhea has a seat at North, and no role: she may do nothing yet.
+
+**Why now.** This is the point of Tenancy: a permission given at one place, reaching below it and nowhere else.
+
+**What we want.** Ada makes a role "Area manager" with `tenancy.units.manage`, and gives it to Rhea at North. Rhea
+may then add units below North, and not below the root.
+
+### The idea: a role of the tenant's own, granted at a unit
+
+- **Making a role** is the tenant's own work, if your application offers it: here a request that requires
+  `tenancy.roles.manage` for the whole tenant.
+- **Granting** gives a role to a seat at a unit. It requires `tenancy.grants.manage` at that unit.
+- **Reach**: a grant at North counts at North and below ([overview](overview.md#reach-a-permission-counts-below-where-it-is-given)).
+- **Containment**: a seat gives a permission that manages access only where it holds it itself, and never to itself
+  ([what your application decides](overview.md#what-your-application-decides)).
+
+### What you write
+
+**`Harbor.Tenancy.Application/Roles/CreateRole/CreateRole.cs`**
+
+```csharp {5-6,10-11}
+using DDDToolkit.Supporting.Tenancy.Catalogue;
+
+namespace Harbor.Tenancy.Application.Roles.CreateRole;
+
+[RequiresPermission(TenancyPermissions.RolesManage)]
+public sealed record CreateRole(string Name, string Description, IReadOnlyList<string> Permissions) : ICommand<RoleId>, ITenancyRequest;
+
+public sealed class CreateRoleHandler(TenancyUseCases.RoleCommands roles) : ICommandHandler<CreateRole, RoleId>
+{
+    public async ValueTask<RoleId> Handle(CreateRole command, CancellationToken cancellationToken)
+        => await roles.CreateAsync(command.Name, command.Description, command.Permissions, cancellationToken);
+}
+```
+
+**`Harbor.Tenancy.Application/Grants/GrantRole/GrantRole.cs`**
+
+```csharp {5-6,12}
+using DDDToolkit.Supporting.Tenancy.Catalogue;
+
+namespace Harbor.Tenancy.Application.Grants.GrantRole;
+
+[RequiresPermission(TenancyPermissions.GrantsManage)]
+public sealed record GrantRole(SeatId Seat, [AtUnit] OrganizationUnitId Unit, RoleId Role) : ICommand, ITenancyRequest;
+
+public sealed class GrantRoleHandler(TenancyUseCases.SeatCommands seats) : ICommandHandler<GrantRole>
+{
+    public async ValueTask<Unit> Handle(GrantRole command, CancellationToken cancellationToken)
+    {
+        await seats.GrantAsync(command.Seat, command.Unit, command.Role, until: null, reason: null, cancellationToken);
+        return Unit.Value;
+    }
+}
+```
+
+**The routes.** `POST /roles` (a new `RolesEndpoints.cs`) and `POST /grants` (in `SeatsEndpoints.cs`), each sending
+its request; `MapTenancyModule` maps `RolesEndpoints` too.
+
+### What it does
+
+- `CreateAsync`: refuses a permission the catalogue does not know (`tenancy.unknown-permission`) and a name the tenant
+  uses already (`tenancy.role-name-taken`).
+- `GrantAsync(..., until: null, ...)`: from now, for good. `until` would end it at a moment.
+- The check at the door asks `tenancy.grants.manage` at the unit; `GrantAsync` adds containment and "never to
+  yourself".
+
+### Try it
+
+1. As Ada: `POST /roles` with `{ "name": "Area manager", "description": "Runs an area", "permissions":
+   ["tenancy.units.manage"] }`.
+2. As Ada: `POST /grants` with Rhea's seat, North, and that role.
+3. As Rhea (`X-Dev-User` Rhea's id): `POST /units` below North, "North Coast": `200`.
+4. As Rhea: `POST /units` below the root: `403`, `tenancy.not-permitted`. Her grant reaches North and below only.
+5. As Rhea: `GET /me`: `tenancy.units.manage`, `atTenant: false`, reaching `Harbor Works / North` and
+   `Harbor Works / North / North Coast`.
+
+## What you built
+
+| Step | What now works |
+|---|---|
+| 1-3 | The module's projects, your classes, the tables |
+| 4-5 | The module registered, a host that knows the caller and the seat, the database checked at start-up |
+| 6 | A tenant, created as system work |
+| 7 | `GET /me`: what a seat is and holds |
+| 8 | Units and seats, behind permissions held at a unit |
+| 9 | A role of the tenant's own, granted at a unit, reaching below it |
+
+Next: access to one thing, such as a board with its own members, is [Membership](../membership.md).
