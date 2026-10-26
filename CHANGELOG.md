@@ -2740,7 +2740,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `permission denied`, an error rather than a refusal; where the host grants the privileges itself, no row. Its own
   requirement attribute example uses the same `PlanAtLeast` as the new page. On a phone a wide table in the docs
   scrolls inside its border instead of widening the page.
-- **A permission says what it lets somebody do, and DDD00099 says when it does not.** Decided for 3.2.0-preview.5.
+- **A permission says what it lets somebody do, and DDD00099 says when it does not.** New in 3.2.0-preview.5.
   The `Description` said on a permission's level, `[On<Board>(Description = "Change a board")]`, is the primary way
   and the one the samples and the docs show; it wins where the constant has a `/// <summary>` too. Where no level says
   one, the summary is the description, read from the comment above the constant whether the project writes a
@@ -2749,7 +2749,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   retired permission needs none. A translation under the permission's name is read on top of either, as before. The
   Tenancy sample's `ProjectPermissions` and `InspectionPermissions` say their descriptions on their levels. See
   [DDD00099](docs/diagnostics.md#ddd00099).
-- **Rules that only narrow: `Restrictive = true`.** Decided for 3.2.0-preview.5. A row access rule marked
+- **Rules that only narrow: `Restrictive = true`.** New in 3.2.0-preview.5. A row access rule marked
   `[RowAccess<T>(..., Restrictive = true)]` is written as a Postgres `AS RESTRICTIVE` policy: AND-ed with every
   permissive one, a package's included, so it takes away from what they allow ("only if") and never allows anything
   itself, where every other rule is OR-ed with the rest ("this is also allowed"). It gets a policy of its own per
@@ -2777,7 +2777,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     that asks the caller's seat has no seat to ask about, while the organizations themselves stay closed to that seat.
     On a provider without policies the names are read from the organizations, as before. See
     [Rules that narrow the organization](docs/tenancy.md#rules-that-narrow-the-organization).
-- **The people the caller works with: `ResourceAccessSet.FellowMembers`.** Decided for 3.2.0-preview.5. A
+- **The people the caller works with: `ResourceAccessSet.FellowMembers`.** New in 3.2.0-preview.5. A
   `[ResourceAccessContract<ProjectId>(ResourceAccessSet.FellowMembers)]` declares `static partial AccessSet<SeatId> Ids();`
   and answers the members now of every resource the caller is a member of now, the caller among them, which
   Membership writes as `<name>_fellow_members()` beside the other four functions of a resource; a contract that does
@@ -3501,7 +3501,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   not. Your own types are described from your own XML documentation, as before. See
   [Typed errors in mutation payloads](docs/graphql.md#typed-errors-in-mutation-payloads).
 
-- **Membership: an owner holds no role, and a resource's rules are made from its permissions.** Decided for
+- **Membership: an owner holds no role, and a resource's rules are made from its permissions.** New in
   3.2.0-preview.5. The owner of a resource holds the permissions said for the owner, by owning it, and nothing
   through a role: there is no owner's role anywhere, so a project, a board or a document opens with its owner on
   the list holding none, a customer archives any role, and naming another owner says what the owner before
@@ -3567,7 +3567,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     trigger that kept an owner's role in use. Rows of an owner's role that were held stay as they were: the role
     gives what it gives, and the owner holds what it holds by owning.
 
-- **"Key" is "permission" everywhere, the database included.** Decided for 3.2.0-preview.5. What a role gives and a
+- **"Key" is "permission" everywhere, the database included.** New in 3.2.0-preview.5. What a role gives and a
   request requires was called a key in one place and a permission in the next; it is a permission now, in the
   types, their members, the refusals' arguments, the SQL functions, the columns and the docs. A key that is not a
   permission stays one: a primary key, a pack's key, a resx key, the schema key, a signing key. Nobody uses the
@@ -3631,7 +3631,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     [Upgrading from key to permission](docs/tenancy.md#upgrading-from-key-to-permission).
 
 - **Tenancy: `CallerSeat<TSeatId>()` is `CallerSeatId<TSeatId>()`, and a unit asked for by id is named alone.**
-  Decided for 3.2.0-preview.5, with the restrictive rules above. Nobody uses the packages yet, so the old names are
+  New in 3.2.0-preview.5, with the restrictive rules above. Nobody uses the packages yet, so the old names are
   gone with no alias.
   - From 3.2.0-preview.4, was, now:
     - `TenancyRowAccess.CallerSeat<SeatId>()`, the calling seat's id: `CallerSeatId<SeatId>()`. `CallerSeat<Seat>()`
