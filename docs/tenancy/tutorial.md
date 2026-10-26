@@ -27,12 +27,30 @@ needs.
 
 ### The idea: a module in layers
 
-A **module** is a part of your application with its own data and its own rules; other modules use only what it
-publishes ([Modules](../modules.md)). Harbor's Tenancy module has five projects, one per layer:
+**Why a module.** A **module** is a part of your application with its own data and its own rules
+([Modules](../modules.md)). Tenancy is one, so that the rest of Harbor can only use it in the ways it allows: a
+Boards module later asks Tenancy who may do what, and cannot change a seat or a role behind Tenancy's back.
+
+**Why layers.** Each layer has one job and may only use the layer below it:
+
+- the **domain** holds the classes and their rules, and knows nothing of databases or HTTP, so its rules are plain
+  C# that you can test without either;
+- the **application** holds the requests and their handlers: what a caller can ask, and what happens then;
+- the **infrastructure** is the only place that knows the database;
+- the **API** holds the routes, and is the only project the host references, so the host cannot reach past it.
+
+**Why a contracts project.** Other modules will need Tenancy's ids. A board in a Boards module has to store which
+tenant it belongs to and which seat owns it, so it needs `TenantId` and `SeatId`. If Boards referenced Tenancy's
+domain project to get them, it could also reach `Seat` and `Role` and change them past Tenancy's rules, and Tenancy
+could never change those classes again without breaking Boards. So the ids go in a small project of their own, the
+**contracts** project: the one part of a module that other modules may reference. The toolkit's analyzer warns when a
+module uses anything of another module outside its contracts ([Module contracts](../module-contracts.md)).
+
+Harbor's Tenancy module therefore has five projects, one per layer:
 
 | Project | What it holds | Tenancy's package in it |
 |---|---|---|
-| `Harbor.Tenancy.Contracts` | What other modules may use: the ids. A board of another module stores a `TenantId` and a `SeatId`. | none, only the toolkit |
+| `Harbor.Tenancy.Contracts` | What other modules may use: the ids. | none, only the toolkit |
 | `Harbor.Tenancy.Domain` | The classes: tenant, organization, unit, seat, role. | `Supporting.Tenancy` |
 | `Harbor.Tenancy.Application` | The requests and their handlers. | none, it gets the domain's |
 | `Harbor.Tenancy.Infrastructure` | Where it is stored: the database context and its migrations. | `Supporting.Tenancy.Postgres` |
@@ -55,8 +73,10 @@ src/
 
 ### What you write
 
-**`Directory.Build.props`**, at the root. It says once, for every project, what each would otherwise repeat. The
-highlighted part tells the toolkit which module a project belongs to: the name of the folder under `src/Modules/`.
+**`Directory.Build.props`**, at the root. **Why:** the toolkit has to know which module each project belongs to,
+because it checks what one module uses of another and names generated code after the module. Saying it here, once,
+from the folder a project is in, means no project has to say it itself, and a new module needs nothing but its
+folder. The highlighted part does that.
 
 ```xml {8-11,13-16}
 <Project>
@@ -82,8 +102,9 @@ highlighted part tells the toolkit which module a project belongs to: the name o
   from it, so no project needs a file to say so.
 - `DDD_ModuleContracts` marks the contracts project as what other modules may use.
 
-**`Directory.Packages.props`**, at the root. Every version in one place, so a project file names a package and
-never its version. The toolkit is a prerelease, so its version is written in full.
+**`Directory.Packages.props`**, at the root. **Why:** the toolkit's packages must all be at the same version, and
+with every version in this one file, a project names a package and never its version, so two projects cannot drift
+apart. The toolkit is a prerelease, so its version is written in full.
 
 ```xml {7-10}
 <Project>
@@ -105,7 +126,8 @@ never its version. The toolkit is a prerelease, so its version is written in ful
 </Project>
 ```
 
-**The five project files.** Each says what it holds, what it references and which packages it uses.
+**The five project files.** Each references only the layer below it, and has only the packages its layer needs:
+that is what keeps the database out of the domain. The comment at the top of each says what the project holds.
 
 **`src/Modules/Tenancy/Harbor.Tenancy.Contracts/Harbor.Tenancy.Contracts.csproj`**
 
@@ -239,7 +261,10 @@ The ids go in the contracts project, because other modules store them: a board o
 
 ### What you write
 
-**The four ids**, in the contracts project. Each is one line; the toolkit writes the rest of it.
+**The four ids**, in the contracts project, because other modules store them (step 1). **Why an id type of its own
+and not a plain `Guid`:** a `SeatId` cannot be passed where a `TenantId` is expected, so mixing the two up is a compile
+error instead of a bug in production. Each is one line; `[EntityId<Guid>]` has the toolkit write the rest: equality,
+parsing, `Create()` for a new one, and how it is stored.
 
 **`Harbor.Tenancy.Contracts/ValueObjects/TenantId.cs`**
 
@@ -254,7 +279,8 @@ public readonly partial record struct TenantId;
 
 `SeatId.cs`, `OrganizationUnitId.cs` and `RoleId.cs` are the same file with another name.
 
-**The switch**, in the domain project. A file of one line, in the project's root folder.
+**The switch**, in the domain project, because the classes it writes belong there. A file of one line, in the
+project's root folder.
 
 **`Harbor.Tenancy.Domain/Module.cs`**
 
@@ -264,7 +290,8 @@ using DDDToolkit.Supporting.Tenancy;
 [assembly: GenerateTenancyClasses]
 ```
 
-**The seat**, in the domain project. The attribute says which template the class is made from, and with which id.
+**The seat**, in the domain project. **Why we declare it ourselves:** Harbor wants a job title on a seat, and a field
+of your own needs a class of your own. The attribute says which template the class is made from, and with which id.
 
 **`Harbor.Tenancy.Domain/Aggregates/Seats/Seat.cs`**
 
@@ -367,8 +394,11 @@ public sealed class TenancyContext(DbContextOptions<TenancyContext> options) : D
   it is on, so it can add the indexes that only some databases have.
 - `AddDomainEventOutbox`: Tenancy raises a domain event for each change, such as a role given. The outbox stores them
   with the change that raised them, in the same save.
-- `AddDDDToolkitConventions` and `AddTenancyConverters`: how the ids are stored. The converters are generated for
-  the module's ids, and named after the module.
+- `AddDDDToolkitConventions` and `AddTenancyConverters`: how the ids are stored. Entity Framework does not know your
+  id types, so each needs a converter to and from its `Guid`; they are generated for the module's ids, and named after
+  the module.
+- `StoreDateTimeOffsetsAsUtc`: a grant starts and ends at a moment, and Tenancy asks "which grants apply now" inside
+  the query. Stored as UTC, those moments compare in SQL on every database.
 
 Now make the first migration. The infrastructure project is its own startup project, through the factory the build
 wrote:
