@@ -72,7 +72,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   template, in the project or in one it references, such as the subscription's id or the application's own
   invoice line class. A parent's `[KeyPart]`s join the key in front of the class's own. See
   [Writing your own supporting domain](docs/writing-a-supporting-domain.md). The toolkit's own supporting
-  domains ship as `DDDToolkit.Supporting.*`, starting with [Tenancy](docs/tenancy.md), described under Tenancy
+  domains ship as `DDDToolkit.Supporting.*`, starting with [Tenancy](docs/tenancy/overview.md), described under Tenancy
   below.
 - DDD00042 to DDD00048 report a parent or a template that cannot be generated, a template over a raw
   value instead of an id, a template argument no class or several classes provide, a class a template
@@ -1258,7 +1258,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   which of its ids are Tenancy's, writes them where they are no arguments. The types generic over the ids, the
   answers, the questions, the records, `TenantSelection<,>` for a person's own seats and `EfTenancyReadSource<,,,>`,
   keep their type arguments, as does `TenancySystemReads.TenantsToSweepAsync<TTenant, TTenantId>`. See
-  [Your ids, named once](docs/tenancy.md#your-ids-named-once).
+  [Your ids, named once](docs/tenancy/your-module.md#your-ids-named-once).
 - **Tenancy makes a new id with the id's own `Create()`, and the id options are gone.** `NewTenantId`, `NewSeatId`,
   `NewUnitId` and `NewRoleId` of `TenancyOptions`, and `NewInvitationId` of `TenancyInvitationOptions`, are removed:
   a use case makes the id of a new tenant, unit, seat, role or invitation with `TTenantId.Create()` and the rest, in
@@ -1268,7 +1268,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   a `long` declares its own, and a class over one that has none is DDD00067, since Tenancy's templates say
   `CreatesIds = true`. The use cases, the stores and the registrations that make ids ask for
   `ICreatableEntityId<T>` of their id type parameters, and `TenantCommands`, `OrganizationCommands`, `SeatCommands`
-  and `RoleCommands` take no options any more. See [How a new id is made](docs/tenancy.md#how-a-new-id-is-made).
+  and `RoleCommands` take no options any more. See [How a new id is made](docs/tenancy/your-module.md#how-a-new-id-is-made).
 - **One line instead of the classes that add nothing.** `[assembly: GenerateTenancyClasses]` has the generator
   write each of Tenancy's classes a project leaves out, `Tenant`, `Organization`, `OrganizationUnit`, `Role` and
   `Seat`, as the package ships it, and `TenantId`, `OrganizationUnitId`, `RoleId` and `SeatId` where no project of
@@ -1277,13 +1277,13 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   over the `SeatId` the switch writes. `[assembly: GenerateTenancyIds]` writes the ids alone, for a module's
   contracts project that references the package; one that does not declares the ids, and the domain project's
   switch takes them. The invitation is never written: declaring it is what turns invitations on. See
-  [The shortest start: the switch](docs/tenancy.md#the-shortest-start-the-switch).
+  [The shortest start: the switch](docs/tenancy/your-module.md#the-shortest-start-the-switch).
 - **Tenancy's checks are start-up checks.** `AddTenancy` brings `tenancy.catalogue-builds`, `tenancy.contexts-wired`
   and `tenancy.unknown-stored-keys`, which logs a key a role holds that the catalogue has lost; `AddTenancyPostgres`
   brings `tenancy.explicit-callers`, `tenancy.seated-token-roles`, `tenancy.system-in-role-confined`,
   `tenancy.system-reads-across-tenants` and `tenancy.policies-in-place`, the last three before the read of the stored
   keys whatever order the two were registered in. A host runs them with `RunStartupChecks()`; the methods of
-  `TenancyChecks` and `TenancyPostgresChecks` stay. See [Setting it up](docs/tenancy.md#setting-it-up).
+  `TenancyChecks` and `TenancyPostgresChecks` stay. See [Setting it up](docs/tenancy/postgres.md#setting-it-up).
 - **The supporting domains are published**: Tenancy as `Temp.DDDToolkit.Supporting.Tenancy`, `.EntityFramework` and
   `.Postgres`, Membership as `Temp.DDDToolkit.Supporting.Membership`, `.EntityFramework` and `.Postgres`, at the
   toolkit's version. Membership's two generators ship inside its packages, not as packages of their own.
@@ -1301,7 +1301,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `TenantSelection` finds the seat a request's verified identity has in the tenant the request names,
   `ScopeToTenant` and Tenancy's save check keep an entity's rows to a tenant with a filter and a save check, and a
   module asks where the caller holds a key inside a query of its own, through `ITenancyQuestions`. Every refusal
-  has a code, with texts in English and Dutch. See [Tenancy](docs/tenancy.md).
+  has a code, with texts in English and Dutch. See [Tenancy](docs/tenancy/overview.md).
 - **Tenancy: the save check comes with `UseDDDToolkit`.** `AddTenancy` brings it as the part `tenancy.save-check`,
   last, at the highest position there is (`TenancySaveInterceptor.PartName` and `PartPosition`): after the
   toolkit's own interceptors, after row level security and after any part of a host's own, so a row such a part
@@ -1315,7 +1315,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   alone, is refused at its first save, naming `AddTenancy` or `UseTenancy`, where `UseTenancy` used to throw.
   `tenancy.contexts-wired` and `TenancyChecks.EnsureWired` hold it to the same, in the same words, and add what
   only Tenancy checks: the save check after the toolkit's interceptors, and who acted where the history is kept.
-  See [Keeping tenants apart](docs/tenancy.md#keeping-tenants-apart-the-filter-and-the-save-check).
+  See [Keeping tenants apart](docs/tenancy/keeping-tenants-apart.md).
 - **Tenancy: an administrators' pack may list its keys.** A `RolePack` with `Administers` that lists no keys
   makes a role that holds every live key. One that lists keys makes a role that holds those and no others, so an
   application can have administrators who run access without holding the keys to its modules' work. The list
@@ -1368,7 +1368,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   keeps the pack it was made from (`tenancy_role_pack_is_fixed`), and a role a seat adds names no pack, or is an
   exact copy of one that remembers exactly the pack's keys. The sync writes under the policies, forced ones
   included. See
-  [Packs after provisioning](docs/tenancy.md#packs-after-provisioning).
+  [Packs after provisioning](docs/tenancy/roles-and-permissions.md#packs-after-provisioning).
 - **Tenancy: a unit has no kind, and an application needs no catalogue.** No access rule read a unit's kind:
   Tenancy only checked that it was one of the catalogue's and kept it. So the package keeps none, and an
   application that tells its units apart adds a field of its own to its unit class, an enum say, set in a
@@ -1388,8 +1388,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   catalogue (the modules' keys, below). A
   catalogue is for what Tenancy decides access with and cannot know by itself: the packs a tenant starts with,
   keys no module owns, and marks on keys that manage access. See
-  [What the catalogue is for](docs/tenancy.md#what-the-catalogue-is-for) and
-  [The kind of a unit](docs/tenancy.md#the-kind-of-a-unit). From 3.2.0-preview.1 or 3.2.0-preview.2:
+  [What the catalogue is for](docs/tenancy/roles-and-permissions.md#what-the-catalogue-is-for) and
+  [The kind of a unit](docs/tenancy/your-module.md#the-kind-of-a-unit). From 3.2.0-preview.1 or 3.2.0-preview.2:
   - Drop `UnitKinds` from `ApplicationCatalogue`, and the `UnitKind` records with it; `Packs` may go too when
     it is empty. A positional `new ApplicationCatalogue(packs, kinds, ...)` becomes `new(packs, ...)`.
   - Drop the root's kind from `TenantToProvision` (the fifth argument, `RootKind`) and the kind from
@@ -1424,7 +1424,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   under Changed), so a screen shows what the application chose with a plain `Select` and no read more. Seats come
   in the order of their ids (by the id's own comparison, so ids that are numbers come as numbers do). Renaming is
   the application's own use case. See
-  [How a seat is shown](docs/tenancy.md#how-a-seat-is-shown). From 3.2.0-preview.1 or 3.2.0-preview.2:
+  [How a seat is shown](docs/tenancy/names-and-languages.md#how-a-seat-is-shown). From 3.2.0-preview.1 or 3.2.0-preview.2:
   - Drop the first administrator's name from `TenantToProvision` (the seventh argument, `AdminDisplayName`,
     after `AdminIdentity`), the name from `AddSeatAsync(identity, displayName, ...)`,
     `AcceptAsync(token, displayName, ...)` and `TenancyInstances.NewSeat`, and the suggested name from
@@ -1465,7 +1465,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `seatGrants(seatId:)` at `/admin/graphql` send, selects its rows from it and states its own choice,
   `tenancy.seats.manage` for the whole tenant; the read it wrote itself, `ITenancyReads.GrantsOfAsync`, is gone, and
   a seat of another tenant is refused with `tenancy.seat-not-found`, a 404, where it answered no roles. See [Another
-  seat's overview](docs/tenancy.md#another-seats-overview).
+  seat's overview](docs/tenancy/names-and-languages.md#another-seats-overview).
 - **Tenancy on Postgres: the database guards a seat's own columns, and leaves the application's to it.** The policy
   on the seats lets a seat change its own row, and a seat that manages seats or grants anywhere in the tenant
   change any seat's row: every save of a seat writes its version, a grant and a placement as much as a status, so
@@ -1490,7 +1490,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   contribution of yours. Where the export writes privileges, the id and the tenant are no column a caller may
   update, as before, and Postgres refuses them before the trigger is asked. The next build writes the access file
   that changes the trigger. See
-  [What the database guards on a seat](docs/tenancy.md#what-the-database-guards-on-a-seat).
+  [What the database guards on a seat](docs/tenancy/postgres.md#what-the-database-guards-on-a-seat).
 - **Tenancy: containment is a setting, on unless you turn it off.** That a seat hands on a key that manages access
   only where it holds it itself is a rule of the access model, not one that keeps the data sound, so the
   application decides it: `ApplicationCatalogue.ContainAccessManagingKeys`, `true` by default, which
@@ -1516,7 +1516,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   database written with containment the other way round, saying which way each one is and what the difference
   would let through or refuse. The next build writes the access file with the function; an application that
   leaves the setting alone applies it and changes nothing else. The sample keeps it on, writes nothing for it,
-  and pins it with its marks in a test. See [Containment, on or off](docs/tenancy.md#containment-on-or-off).
+  and pins it with its marks in a test. See [Containment, on or off](docs/tenancy/roles-and-permissions.md#containment-on-or-off).
 - **Tenancy on Postgres: who reads the seats is the application's to say.** What a member may see of the other
   people in its tenant is a product choice, so Tenancy's read of the seats is now a default, and so is who besides
   the seats managers at its unit reads an invitation. Without a rule nothing changes: the access files are what
@@ -1545,7 +1545,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   sample keeps both defaults: its people work across units and see each other, which is the default. Its
   `TenancyChoicesExportTests` run the exporter's build step with a read rule on its seat, and with containment
   off, and find the default's policy, and `key_is_contained`, the one change to the access file. See
-  [Who reads the seats](docs/tenancy.md#who-reads-the-seats-a-default-you-may-replace).
+  [Who reads the seats](docs/tenancy/postgres.md#who-reads-the-seats-a-default-you-may-replace).
 - **Tenancy: a module states its keys once.** A module declares its permissions as the public constants of a
   static class marked `[Permissions]`, each with its level, the attribute that says where it is asked: `[AtTenant]`
   for the whole tenant, `[AtUnit]` at a unit, or Membership's `[On<TResource>]` on a resource with members. It states
@@ -1570,7 +1570,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   keys added by hand. The start-up check on Postgres that compares the database's functions with the catalogue
   the host runs with stays as well: the host and the export are two programs, and build the same catalogue only
   while they reference the same modules. See
-  [A module states its keys once](docs/tenancy.md#a-module-states-its-keys-once). From 3.2.0-preview.1 or
+  [A module states its keys once](docs/tenancy/roles-and-permissions.md#a-module-states-its-permissions-once). From 3.2.0-preview.1 or
   3.2.0-preview.2:
   - Declare each module's keys as the constants of a `[Permissions]` class, each with its level (see Changed), and
     take `services.AddTenancyPermissions(thatList)` out of the module's registration.
@@ -1588,7 +1588,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   for it. An application whose two modules both declare Tenancy's classes names one module's class with
   `[assembly: TemplateFacadeName("TenancyUseCases", "CustomersTenancyUseCases")]` in that module's domain project,
   as DDD00075 in the host says. Membership's use cases are generic over ids alone and need nothing of the kind. See
-  [Calling a use case](docs/tenancy.md#calling-a-use-case). From 3.2.0-preview.1 or 3.2.0-preview.2:
+  [Calling a use case](docs/tenancy/your-module.md#calling-a-use-case). From 3.2.0-preview.1 or 3.2.0-preview.2:
   - Delete every `global using X = DDDToolkit.Supporting.Tenancy.UseCases.TenancyUseCases<...>;`, and name the
     use cases through `TenancyUseCases`, the invitations' as `TenancyUseCases.InvitationCommands<TInvitation,
     TInvitationId>`. An alias of that very name above the project that declares the classes is now the compiler's
@@ -1616,7 +1616,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   a key the caller holds there, `RoleKeys(keys)` every pair of an active role and a key it grants, and
   `UnitsUnder(unit)` the unit and every unit below it. Each is one query, composes into a module's own, checks
   its keys against the catalogue, and answers nothing to nobody and the whole tenant to system work in it. See
-  [Key sets for navigation, abilities for actions](docs/tenancy.md#key-sets-for-navigation-abilities-for-actions).
+  [Key sets for navigation, abilities for actions](docs/tenancy/who-may-do-what.md#permission-sets-for-navigation-abilities-for-actions).
 - **Tenancy: the read model carries access facts only.** The rows a module maps of Tenancy's, the views of
   `AddTenancy` and `AddTenancyReadModel` and the read functions of `AddTenancyReadFunctions`, carry ids, keys,
   periods, statuses, a unit's parent and a role's pack and keys, and no text that is shown to people. So a
@@ -1629,12 +1629,12 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   another tenant, or of nothing, is left out of the answer without a word. A question takes at most
   `TenancyDirectory.MostIds` ids, 200; more is the new refusal `tenancy.too-many-ids`, with texts in English
   and Dutch. A question costs the same statements however many ids it carries. See
-  [Names](docs/tenancy.md#names).
+  [Names](docs/tenancy/names-and-languages.md#names).
 - `TenancyModel.ReadsBeyondAccessFacts(model, schema, tables)`: what a module's model maps of Tenancy's beyond
   the rows of the read model, one sentence per finding: a type of the module's own on a table, view or function
   of Tenancy's, or a property added to a row, a shadow property included. Empty for a model that reads the
   read model alone, and for Tenancy's own. A test of the application holds every module's context to it. See
-  [What a module reads of Tenancy](docs/tenancy.md#what-a-module-reads-of-tenancy).
+  [What a module reads of Tenancy](docs/tenancy/who-may-do-what.md#what-a-module-reads-of-tenancy).
 - **Tenancy: which token roles hold seats.** `TenancyOptions.TenantSelection.SeatedTokenRoles`
   (`TenantSelectionOptions`) lists the token roles `TenantSelection` seats, `authenticated` by default. A
   signed-in user whose token carries another role is nobody in every tenant, `tenancy.not-seated`, and
@@ -1658,7 +1658,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   table kept to a tenant it reads what a rule of the module admits and writes nothing. The export refuses an
   operator's token role that is mapped to no database role, to the role of a signed-in user or to a role another
   token role shares, and `EnsurePoliciesAreInPlaceAsync` checks that the options and the database agree. See
-  [Operators](docs/tenancy.md#operators).
+  [Operators](docs/tenancy/operators-and-history.md#operators).
 - **Tenancy: what a request requires, and the check that decides it.** `TenancyRequirement` is the set of
   cases a command or query declares where Tenancy is the one that knows, spelled with `TenancyAccess`:
   `InTenant()`, a caller who works in the tenant; `AtTenant(key)`; `AtUnit(key, unit)`, a key held at
@@ -1682,7 +1682,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   in any other. Only a key for the whole tenant or at a unit reads: one statement, over the module's own context, on a
   context of its own where a factory is registered. `TenancyOptions.IsOperator(caller)` says who an operator
   is, for the check and the tenants' directory alike. The packages reference no dispatcher. See
-  [What a request requires of its caller](docs/tenancy.md#what-a-request-requires-of-its-caller).
+  [What a request requires of its caller](docs/tenancy/who-may-do-what.md#what-a-request-requires-of-its-caller).
 - **Tenancy: who acted.** `TenancyActor` names who made a change, with ids only: a seat, an operator's verified
   identity, the system with its scope, or a link's token. Every Tenancy caller that can change something
   carries one, `TenancyCaller.Actor`. `TenancyWork.BeginOperator` and `BeginOperatorIn` begin system work that
@@ -1709,7 +1709,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   signed-in user to its own seat, keeps scoped system work from writing a seat's kind, and lets neither change
   who wrote the row first. The first save refuses a model that calls it on an entity that is not kept to a
   tenant, or on a derived type alone in a hierarchy stored in one table. See
-  [Who changed a row](docs/tenancy.md#who-changed-a-row).
+  [Who changed a row](docs/tenancy/operators-and-history.md#who-changed-a-row).
 - **Tenancy: the tenant of a row is fixed.** `ScopeToTenant`, and `AddTenancy` for Tenancy's own tables, mark
   the property that holds a row's tenant with `IsFixedAfterInsert()`. The save check refuses a row moved to
   another tenant, Entity Framework refuses the change as well, and privileges written from the policies leave
@@ -1723,7 +1723,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   writes privileges and the table lets rows go, the role of your own bookkeeping finds and removes the old
   ones. The history
   belongs in the context that maps Tenancy's tables: the export refuses it in any other. See
-  [Access history](docs/tenancy.md#access-history).
+  [Access history](docs/tenancy/operators-and-history.md#access-history).
 - **Tenancy: the events that change access.** `log.AddTenancyEventLog<TenantId, SeatId, OrganizationUnitId, RoleId>()`,
   inside the outbox's `KeepEventLog`, keeps in the access history every event of Tenancy's that changes who may
   do what, in the save that raised it, with who made the change. The four renames change nobody's access and
@@ -1739,7 +1739,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   provisioning, and with the language passed to `ChangeShapeAsync` when a change of shape copies packs, between
   the role ids and the cancellation token, `null` for the catalogue's own texts. Without texts or without a
   language a role gets the catalogue's. A translated name is checked like any role's name. See
-  [Roles in the tenant's language](docs/tenancy.md#roles-in-the-tenants-language).
+  [Roles in the tenant's language](docs/tenancy/names-and-languages.md#roles-in-the-tenants-language).
 - **Tenancy: the application's own fields at provisioning.** `TenantToProvision.ConfigureTenant` and
   `ConfigureFirstSeat` are called on the new tenant and its first seat before the tenant is activated, so
   fields the application added to its classes are written in the save that provisions, and a callback that
@@ -1750,7 +1750,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   language, "This request names no tenant.": how a request names its tenant is the host's. The Dutch texts have
   no word for the reader, neither the familiar nor the formal one: which of the two fits is the application's to
   choose, in a resx of its own added before the package's. `tenancy.not-permitted`, for one, is "Hiervoor is het
-  recht {Key} nodig." See [Refusals in English and Dutch](docs/tenancy.md#refusals-in-english-and-dutch).
+  recht {Key} nodig." See [Refusals in English and Dutch](docs/tenancy/names-and-languages.md#refusals-in-english-and-dutch).
 - **Tenancy: invitations.** Declare a class with `[InvitationAggregate<InvitationId>]`, map it with
   `modelBuilder.AddTenancyInvitations<TInvitation, TInvitationId>()` and register it with
   `services.AddTenancyInvitations<TInvitation, TInvitationId, TContext>(...)`, and `InvitationCommands` issues
@@ -1772,7 +1772,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   keeps what it offers as it was issued, the digests are read by no caller's role, and `invitation_of_digest`
   answers which invitation a token is for to Tenancy's own system work alone; the start-up checks cover them. A
   context that adds invitations needs a migration for the two tables and a new export of the access files. See
-  [Invitations](docs/tenancy.md#invitations).
+  [Invitations](docs/tenancy/invitations.md).
 - **Tenancy under a naming of your own.** `TenancyTableNames.SnakeCase` names Tenancy's tables, and the two
   filtered indexes `AddTenancy` names itself, in snake_case, for a context that names everything else with a
   naming convention such as `UseSnakeCaseNamingConvention()`. `TenancyTableNames.RootIndex` and `PrimaryIndex`
@@ -1788,7 +1788,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     the value as it is stored, while the functions keep their own names and the columns they answer under, so
     a module's model is the same under every naming.
 
-  Tenancy's tests on Postgres run under both namings. See [Your own naming](docs/tenancy.md#your-own-naming).
+  Tenancy's tests on Postgres run under both namings. See [Your own naming](docs/tenancy/postgres.md#your-own-naming).
 - Tenancy works with contexts from a pool: its tenant filter, its save check and its rights writer read the
   caller at each use, which its tests hold for saves through a pooled context, on SQLite and on Postgres, and on
   a data source of one connection. Its messages for a read across tenants that finds no context to make, and for
@@ -1808,7 +1808,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   administrator its trigger keeps into Tenancy's refusal and requires explicit callers, and
   `TenancyPostgresChecks` checks at start-up that the host and the database are set up as the policies rely on.
   Modules ask Tenancy's questions in their rules through `TenancyRowAccess`. See
-  [On Postgres: the second lock](docs/tenancy.md#on-postgres-the-second-lock).
+  [On Postgres: the second lock](docs/tenancy/postgres.md).
 - `TenancyStoreOptions`, with `DatabaseKeepsRights`: the database writes the rights and answers the questions
   about other seats' rights, so the save writes none and Tenancy's store asks the database's functions, which
   `TenancyFunctionNames` names. `AddTenancyPostgres()` turns it on; on SQLite, and on a Postgres without the
@@ -1845,7 +1845,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   for the whole tenant. The check finds the index by what it does, whatever it is called, and says which half is
   missing: the migration, where the model maps the index, or the context's `Database` in the call to
   `AddTenancy`, where it does not. See
-  [The index on a tenant's root](docs/tenancy.md#the-index-on-a-tenants-root).
+  [The index on a tenant's root](docs/tenancy/postgres.md#the-index-on-a-tenants-root).
 - Tenancy on Postgres: a unit is changed with the units key at the unit itself or at its parent, which says the
   same by the tree. So a move by a seat that holds the key at the old parent through one grant and at the new
   parent through another goes through, although the save removes the unit's old paths before it changes the
@@ -1861,7 +1861,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `TenancyModel.ReadsThroughFunctions` says whether a model does, and `EnsurePoliciesAreInPlaceAsync` checks
   that the six functions are in the database as the contribution writes them and that each answers exactly the
   columns of its row of the read model, in order, naming the function that differs. See
-  [Modules read through functions](docs/tenancy.md#modules-read-through-functions).
+  [Modules read through functions](docs/tenancy/postgres.md#modules-read-through-functions).
 - **Tenancy's questions that take the tenant as an argument**, for a policy that runs where the connection names
   no tenant, such as one on the path of a stored file or on a channel: `seat_in_tenant`, `seated_in_tenant`,
   `holds_key_in_tenant`, `units_where_i_hold_in_tenant` and `roles_with_key_in_tenant` on Postgres, and
@@ -1870,7 +1870,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   signed-in users alone, and answer for the seat the caller's verified identity has in that tenant, only while
   that seat and the tenant are active: a suspended seat, a suspended or closed tenant, a tenant the caller has
   no seat in and someone without a seat learn nothing, the tenant's roles included. See
-  [Where the connection names no tenant](docs/tenancy.md#where-the-connection-names-no-tenant).
+  [Where the connection names no tenant](docs/tenancy/postgres.md#where-the-connection-names-no-tenant).
 - **Tenancy on Postgres: the reads across tenants run without a bypass.** The few reads Tenancy makes before any
   tenant is known do not run as the application itself, `Caller.System`, past the policies. Where the database
   keeps the rights, each runs as Tenancy's scoped system work, `Caller.SystemIn`, in no tenant, where the
@@ -2225,7 +2225,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   runs once per pool, with the application's services, so it reads no caller and nothing scoped. The webshop's
   modules keep `AddDbContext`. The sample is in the namespace `Examples.Tenancy` and its settings are under
   `Sample:`. See
-  [Who may do what, in the sample](docs/tenancy.md#who-may-do-what-in-the-sample).
+  [Who may do what, in the sample](docs/tenancy/the-sample.md#who-may-do-what-in-the-sample).
 - **Tenancy sample: no module writes its access behavior.** A module's request interface is one line,
   `[AccessRequests] public partial interface IProjectsRequest : IRequireAccess;`. A request states what it
   requires, with an attribute or as the property: one of the Tenancy package's cases, which the package's check
@@ -2331,7 +2331,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   beside `Rest`, and the host composes them in the process with the in-memory gateway, one for the users and one
   for the tenant's administration (below). Every
   query and mutation sends the command or query its route sends. See
-  [GraphQL in the sample](docs/tenancy.md#graphql-in-the-sample).
+  [GraphQL in the sample](docs/tenancy/the-sample.md#graphql-in-the-sample).
   - A query or a mutation is a static method marked `[Query]` or `[Mutation]`, with `[Service]` on what is
     injected, and HotChocolate's generated `Add{Name}Types()` registers them.
   - A type of a schema is declared over the record the application's query answers with, in a static partial
@@ -2485,7 +2485,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   such. With the dev login, and without the setting, the token reaches the person from whoever invited them. The
   AppHost sets it and names the UI as Auth's site, and `supabase/config.toml` names the UI as
   the site of the stack the Supabase CLI starts: Auth sends a browser on only to its site, told by host name.
-  See [Inviting a person by address](docs/tenancy.md#inviting-a-person-by-address).
+  See [Inviting a person by address](docs/tenancy/the-sample.md#inviting-a-person-by-address).
 - **The Tenancy sample runs on Postgres, as Supabase runs it, and on no other database.** Its host logs in at
   `ConnectionStrings:Supabase` as a login role that owns nothing, `tenancy_api`, under forced policies and
   privileges written from them; without that setting it stops before it is built and says how to get one. The
@@ -2514,7 +2514,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   toolkit's hint, the module's trigger through `RowAccessModel.Refusal`, so a save one of them refuses is
   `access.refused`, a 403 from a route and a `RefusalError` from a mutation, where an owner named by a seat that
   lost the key after the check ended as a failure of the server;
-  [What stays in C#](docs/tenancy.md#what-stays-in-c) lists what the policy still lets a statement do that goes
+  [What stays in C#](docs/tenancy/postgres.md#what-stays-in-c) lists what the policy still lets a statement do that goes
   round the application. A statement that runs for a signed-in user has a timeout of ten seconds
   (`StatementTimeouts[CallerKind.User]`). At start-up the host checks that
   every migration is applied, that the login role owns nothing and that Tenancy's second lock is in place.
@@ -2687,14 +2687,14 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   attribute on the module's interface does, with a diagram of which requirement a request gets, what may be a default
   and what it costs; its example is read from the page by a docs test and compiled as it stands. What goes together,
   Holding it with a test, Tenancy's requirements, How a request is checked and the diagnostics say it where they meet it.
-- **Docs: your ids, named once.** [Your ids, named once](docs/tenancy.md#your-ids-named-once) has which call of
+- **Docs: your ids, named once.** [Your ids, named once](docs/tenancy/your-module.md#your-ids-named-once) has which call of
   Tenancy's is closed over your ids where, with a diagram, and why another module writes them; the System work,
   Operators, Access history and tenant selection sections show the closed calls, and
   [Use cases closed over your classes](docs/writing-a-supporting-domain.md#use-cases-closed-over-your-classes) says a
   package may put static members on the class it asks for, which the generated class's documentation now says too.
 - **Docs: how a new id is made.** [Creating identifiers](docs/identifiers.md#creating-identifiers) and
   [The identifier](docs/generated-code.md#the-identifier) show `Create()` and `ICreatableEntityId<TSelf>`,
-  [How a new id is made](docs/tenancy.md#how-a-new-id-is-made) draws how Tenancy gets one, and
+  [How a new id is made](docs/tenancy/your-module.md#how-a-new-id-is-made) draws how Tenancy gets one, and
   [Ids the database never makes](docs/entity-framework.md#ids-the-database-never-makes) says why Entity Framework
   stores the key of an id as it is given, on every provider, which new tests on Postgres and SQLite hold it to.
 - **Docs: Start-up checks, a page of its own.** [Start-up checks](docs/startup-checks.md) says what each
@@ -2707,7 +2707,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   examples, and the first example of [Membership](docs/membership.md), are read from the pages by docs tests
   and compiled as they stand.
 - **Docs: Tenancy's design choices, each with where to see it.**
-  [The Tenancy page](docs/tenancy.md#design-choices-and-where-to-see-them) lists every choice with its code,
+  [The Tenancy page](docs/tenancy/the-sample.md#design-choices-and-where-to-see-them) lists every choice with its code,
   something to try on the sample and the test that holds it, and a docs test fails for a path, a test or a
   preset it names that is gone. The page goes from what Tenancy is, through adopting it step by step and the
   sample, to the reference for Postgres, and the agent skill has a reference for supporting domains and Tenancy
@@ -2776,7 +2776,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     names every tenant, to an employee and to a seat the rule keeps out alike, before a tenant is chosen, where a rule
     that asks the caller's seat has no seat to ask about, while the organizations themselves stay closed to that seat.
     On a provider without policies the names are read from the organizations, as before. See
-    [Rules that narrow the organization](docs/tenancy.md#rules-that-narrow-the-organization).
+    [Rules that narrow the organization](docs/tenancy/postgres.md#rules-that-narrow-the-organization).
 - **The people the caller works with: `ResourceAccessSet.FellowMembers`.** New in 3.2.0-preview.5. A
   `[ResourceAccessContract<ProjectId>(ResourceAccessSet.FellowMembers)]` declares `static partial AccessSet<SeatId> Ids();`
   and answers the members now of every resource the caller is a member of now, the caller among them, which
@@ -2891,7 +2891,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   same on every database. Every use case works as before for every caller its request admits, since each command
   asks its key where it acts, and a change of a seat's status asks `tenancy.seats.manage` for the whole tenant.
   The next build writes the access file that changes the policy and the three functions; the start-up check
-  compares them as before. See [Who reads which grants](docs/tenancy.md#who-reads-which-grants).
+  compares them as before. See [Who reads which grants](docs/tenancy/postgres.md#who-reads-which-grants).
 - **For the 3.2.0 previews: the directory answers the application's own seats and units, whole.** A seat and a
   unit are the application's classes, with every field it added, so Tenancy no longer answers half of one for the
   application to put beside the other. `TenancyDirectory.ListSeatsAsync(ct)` and `SeatsByIdAsync(ids, ct)` answer
@@ -2913,7 +2913,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   what leaves is what the application selects. The Tenancy sample's queries select its `SeatListing`, `UnitListing`, `SeatOfMine` with `TenantOfSeat`
   (now a record of the application layer, so the Tenants schema has no record of its own) and
   `SeatOverviewListing`, and its routes and both GraphQL schemas answer as before. See
-  [Names](docs/tenancy.md#names) and [How a seat is shown](docs/tenancy.md#how-a-seat-is-shown). From
+  [Names](docs/tenancy/names-and-languages.md#names) and [How a seat is shown](docs/tenancy/names-and-languages.md#how-a-seat-is-shown). From
   3.2.0-preview.1 or 3.2.0-preview.2:
   - `SeatSummary`, `UnitSummary`, `PlacementSummary` and `GrantSummary` are gone. Read the seat's own fields
     where you read a seat summary's, and a unit's own fields where you read a unit summary's `Name`, `ParentId`
@@ -3041,7 +3041,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     name, `TenancyAccess.InTenant()`, `TenancyAccess.AtTenant(key)` or `TenancyAccess.AtUnit(key,
     unit)`, and `AccessRequirement.SignedIn()` for accepting an invitation or listing one's own seats. The use
     case still asks the rest. The sample's requests show each
-    ([What a request requires of its caller](docs/tenancy.md#what-a-request-requires-of-its-caller)).
+    ([What a request requires of its caller](docs/tenancy/who-may-do-what.md#what-a-request-requires-of-its-caller)).
   - `new TenancyRequirement.SystemWorkInTenant()`: `[InTenant]`, with system work in the tenant begun around the
     send, since 3.2.0 has no requirement for system work (see the entry above). A handler that must act in a tenant
     as system work asks Tenancy which (`RequireTenant()`, and `BySystem` where only system work may go on), as the
@@ -3099,7 +3099,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   them by seeding the others for another shape or declaring them without `Administers`. The Tenancy sample's
   catalogue query follows it: `PackOverview.SeededFor`, answered as `seededFor` over REST and as
   `RolePack.seededFor` in GraphQL, where both answered `shape`. See
-  [The administrators' pack](docs/tenancy.md#the-administrators-pack).
+  [The administrators' pack](docs/tenancy/roles-and-permissions.md#the-administrators-pack).
 - **For the 3.2.0 previews: `AddSupabaseAuthAdmin` takes the project's URL**, as `AddSupabaseJwtBearer` does,
   and calls Auth at `{projectUrl}/auth/v1`. `3.2.0-preview.1` and `3.2.0-preview.2` took Auth's own address
   there. A call that passes a project's `https://<ref>.supabase.co/auth/v1` works as before, because a URL that
@@ -3123,7 +3123,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `services.AddTenancy<TContext>()` needs no callback. An id the generator writes over a `Guid` has the method
   already; one over a `long`, an `int` or a `string` declares it in its partial declaration, or the class over it is
   DDD00067, whose code fix adds a `Create()` for you to write. See
-  [How a new id is made](docs/tenancy.md#how-a-new-id-is-made).
+  [How a new id is made](docs/tenancy/your-module.md#how-a-new-id-is-made).
 - **Every schema the toolkit writes is in double quotes, so a module's schema may be any name Entity Framework
   takes.** `HasDefaultSchema("Tenancy")`, `"Help_Desk"` and `"order"` work as `HasDefaultSchema("tenancy")` does. A
   script, and so every Supabase access file, the setup script and the statement the interceptor sends name every
@@ -3628,7 +3628,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     name of the event that was renamed, for the rows the event log and the outbox hold already:
     `UPDATE ... SET "EventName" = 'tenancy.role-permissions-changed' WHERE "EventName" = 'tenancy.role-keys-changed'`
     on Tenancy's event log and outbox. On Postgres, let the export write the new access file after it. See
-    [Upgrading from key to permission](docs/tenancy.md#upgrading-from-key-to-permission).
+    [Upgrading from key to permission](docs/tenancy/design.md#upgrading-from-key-to-permission).
 
 - **Tenancy: `CallerSeat<TSeatId>()` is `CallerSeatId<TSeatId>()`, and a unit asked for by id is named alone.**
   New in 3.2.0-preview.5, with the restrictive rules above. Nobody uses the packages yet, so the old names are

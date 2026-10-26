@@ -133,7 +133,7 @@ SKU (`ProductStub.cs`), Payments and Shipping say what they add to the `Order` w
 is answered by three modules, the name by Catalog and the stock by Inventory, merged on the SKU. No module
 knows another's classes; they agree on a type's name and its key. The shop's types, data loaders and errors
 are still written by hand, so for how to declare a schema, read the
-[Tenancy sample](../docs/tenancy.md#graphql-in-the-sample), which is the reference for GraphQL.
+[Tenancy sample](../docs/tenancy/the-sample.md#graphql-in-the-sample), which is the reference for GraphQL.
 
 A Fusion gateway inside the monolith composes the five into the one schema at start-up and answers each
 query by calling the modules' schemas directly, in the process, with no HTTP between them. It is the same
@@ -562,12 +562,12 @@ What it does not show: Newtonsoft, FluentValidation validators, and upcasting an
 ## The Tenancy sample
 
 A second application, smaller than the shop and apart from it: crews, the people who work on a project,
-in two tenants, on the [Tenancy](../docs/tenancy.md) supporting domain, and on the
+in two tenants, on the [Tenancy](../docs/tenancy/overview.md) supporting domain, and on the
 [Membership](../docs/membership.md) one for the crews. It is there to show who may see and do what, and to let
 you try it: a dev login with seeded people, a UI that calls the API with each person's token and tenant, and
-calls that deliberately break a rule and show the refusal. How the access works is explained on the Tenancy
-page, in [Who may do what, in the sample](../docs/tenancy.md#who-may-do-what-in-the-sample) and
-[Try it](../docs/tenancy.md#try-it), and [How a request is checked](../docs/how-a-request-is-checked.md) follows
+calls that deliberately break a rule and show the refusal. How the access works is explained on Tenancy's
+sample page, in [Who may do what, in the sample](../docs/tenancy/the-sample.md#who-may-do-what-in-the-sample) and
+[Try it](../docs/tenancy/the-sample.md#try-it), and [How a request is checked](../docs/how-a-request-is-checked.md) follows
 four of its requests and its seeded people from the attribute on a request to the policies of the rows it touches.
 
 A crew is the Membership package's: its members are seats, and the roles they hold are project roles, which
@@ -837,7 +837,7 @@ about this stack are worth knowing:
   `config.toml` says is the UI (`site_url`), and it tells the site by host name: `localhost` is not
   `127.0.0.1`. A page given under the other name is not refused. Auth sends the person to the site's own
   address instead, without the invitation's token
-  ([Inviting a person by address](../docs/tenancy.md#inviting-a-person-by-address)).
+  ([Inviting a person by address](../docs/tenancy/the-sample.md#inviting-a-person-by-address)).
 
 `supabase stop` keeps the data for the next `supabase start`, and `supabase stop --no-backup` removes it.
 `supabase db reset` applies the files again to an empty database: the login role is there again with no
@@ -861,21 +861,21 @@ afterwards, and gives the people theirs again when it starts.
 
 ### How it is built, and what is where
 
-The Tenancy page explains the sample, with diagrams and the code beside them, and this page does not say it
-again:
+[Tenancy's sample page](../docs/tenancy/the-sample.md) explains the sample, with diagrams and the code beside
+them, and this page does not say it again:
 
-- [Who may do what, in the sample](../docs/tenancy.md#who-may-do-what-in-the-sample): a module's layers and
+- [Who may do what, in the sample](../docs/tenancy/the-sample.md#who-may-do-what-in-the-sample): a module's layers and
   its entry, which registers the module and maps its routes for callers with a seat and for operators (Tenants
   also for a signed-in person who has no seat yet); what every request declares and the pipeline it passes;
   the ports; the routes of a crew, the paged lists and a project's version; and how a module answers ids and
   a screen asks the directory what they are called.
-- [GraphQL in the sample](../docs/tenancy.md#graphql-in-the-sample): one schema over the three modules, as
+- [GraphQL in the sample](../docs/tenancy/the-sample.md#graphql-in-the-sample): one schema over the three modules, as
   types over the application's own records with generated data loaders. A token is needed as for every route,
   and a seat for every field but `seatsOfMine` and `invitationAccept`, which need none, and the operators'
   four, which ask for an operator.
-- [Inviting a person by address](../docs/tenancy.md#inviting-a-person-by-address) and
-  [An operator, who changed a row, and the history as a list](../docs/tenancy.md#an-operator-who-changed-a-row-and-the-history-as-a-list).
-- [Design choices and where to see them](../docs/tenancy.md#design-choices-and-where-to-see-them): every choice
+- [Inviting a person by address](../docs/tenancy/the-sample.md#inviting-a-person-by-address) and
+  [An operator, who changed a row, and the history as a list](../docs/tenancy/the-sample.md#an-operator-who-changed-a-row-and-the-history-as-a-list).
+- [Design choices and where to see them](../docs/tenancy/the-sample.md#design-choices-and-where-to-see-them): every choice
   the sample makes, with its code, something to try and its test.
 - [Folders inside the layers](../docs/modules.md#folders-inside-the-layers): the tree of one module and the
   reason for each folder. `FeatureFolderTests` and `SourceTreeTests` hold the sample to it, and
