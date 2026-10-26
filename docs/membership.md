@@ -96,16 +96,13 @@ constant of it a permission, with where it is asked and how it is held there.
 [Permissions]
 public static class DocumentPermissions
 {
-    /// <summary>See a document.</summary>
-    [On<Document>(EveryMember = true)]
+    [On<Document>(EveryMember = true, Description = "See a document")]
     public const string View = "documents.view";
 
-    /// <summary>Change a document.</summary>
-    [On<Document>]
+    [On<Document>(Description = "Change a document")]
     public const string Edit = "documents.edit";
 
-    /// <summary>Say who a document is shared with, and hand it on.</summary>
-    [On<Document>(LocksMembers = true, LocksOwner = true)]
+    [On<Document>(LocksMembers = true, LocksOwner = true, Description = "Say who a document is shared with, and hand it on")]
     public const string Share = "documents.share";
 }
 ```
@@ -421,13 +418,14 @@ module's catalogue lists them all. A permission asked on a document says how it 
 | `LocksOwner` | it locks nothing | `LocksOwner = true`: what your command that hands a document on requires, which the database holds the owner column to. One at most |
 | `FromAbove` | it reaches the document from above, where the rules let one be reached so | `FromAbove = false`: held where the document sits, it gives nothing on it ([beside an organization](#beside-an-organization)) |
 
-Every level takes three more. Its summary, as text, is what the permission lets somebody do, the text an
-administrator reads where roles are made; `Description = "..."` says it instead. Either is the English text: a
-translation of yours, under the permission's key in a resx your failure localizer reads, says it in another
-language, as refusal texts are said ([Localization](localization.md)). `Implies` names what holding it brings with
-it, so a role with only this one does what those let it do too. And `Retired = true` keeps a permission nobody
-holds any more, so a role that lists it keeps it and no stored right breaks: a permission is retired, and never
-deleted.
+Every level takes three more. `Description = "..."` is what the permission lets somebody do, the text an
+administrator reads where roles are made. It is the English text: a translation of yours, under the permission's
+name in a resx your failure localizer reads, says it in another language, as refusal texts are said
+([Localization](localization.md)). Where no level says one, the constant's `/// <summary>` is the description,
+read whether the project writes a documentation file or not, and a `Description` beside it wins; a permission with
+neither is [DDD00099](diagnostics.md#ddd00099), a warning. `Implies` names what holding it brings with it, so a role
+with only this one does what those let it do too. And `Retired = true` keeps a permission nobody holds any more, so
+a role that lists it keeps it and no stored right breaks: a permission is retired, and never deleted.
 
 The generator reads the class and nothing else. A class marked `[Permissions]` that is not static, a constant
 without a level and a permission declared twice in it are [DDD00092](diagnostics.md#ddd00092); `[On<T>]` on a class that
@@ -893,14 +891,14 @@ your commands require for that, and the package writes a lock from them:
 [Permissions]
 public static class DocumentPermissions
 {
-    [On<Document>(EveryMember = true)]
+    [On<Document>(EveryMember = true, Description = "See a document")]
     public const string View = "documents.view";
 
-    [On<Document>]
+    [On<Document>(Description = "Change a document")]
     public const string Edit = "documents.edit";
 
     // What your commands that change the shares require, and your command that hands a document on
-    [On<Document>(LocksMembers = true, LocksOwner = true)]
+    [On<Document>(LocksMembers = true, LocksOwner = true, Description = "Say who a document is shared with, and hand it on")]
     public const string Share = "documents.share";
 }
 ```
@@ -1021,10 +1019,10 @@ public sealed partial class Crate
 [Permissions]
 public static class CratePermissions
 {
-    [On<Crate>(EveryMember = true)] public const string See = "crates.see";
-    [On<Crate>] public const string Pack = "crates.pack";
-    [On<Crate>(Owner = false, InRoles = false)] public const string Move = "crates.move";   // held from above alone
-    [On<Crate>] public const string Scrap = "crates.scrap";
+    [On<Crate>(EveryMember = true, Description = "See a crate")] public const string See = "crates.see";
+    [On<Crate>(Description = "Pack a crate")] public const string Pack = "crates.pack";
+    [On<Crate>(Owner = false, InRoles = false, Description = "Move a crate")] public const string Move = "crates.move";   // held from above alone
+    [On<Crate>(Description = "Scrap a crate")] public const string Scrap = "crates.scrap";
 }
 
 // The depot's functions in the database, each named once, by its logical name
@@ -1202,11 +1200,11 @@ public sealed partial class PlotGardener;
 [Permissions]
 public static class PlotPermissions
 {
-    [On<Plot>(EveryMember = true)] public const string See = "plots.see";
-    [On<Plot>] public const string Plant = "plots.plant";
-    [On<Plot>] public const string Water = "plots.water";
-    [On<Plot>(LocksMembers = true)] public const string Fence = "plots.fence";
-    [On<Plot>(InRoles = false, LocksOwner = true)] public const string Sell = "plots.sell";   // the owner's alone
+    [On<Plot>(EveryMember = true, Description = "See a plot")] public const string See = "plots.see";
+    [On<Plot>(Description = "Plant on a plot")] public const string Plant = "plots.plant";
+    [On<Plot>(Description = "Water a plot")] public const string Water = "plots.water";
+    [On<Plot>(LocksMembers = true, Description = "Say who tends a plot")] public const string Fence = "plots.fence";
+    [On<Plot>(InRoles = false, LocksOwner = true, Description = "Sell a plot")] public const string Sell = "plots.sell";   // the owner's alone
 }
 
 // Roles are rows; the roles named here are the starter roles every garden begins with
@@ -1374,11 +1372,11 @@ public sealed partial class Course
 [Permissions]
 public static class CoursePermissions
 {
-    [On<Course>(EveryMember = true)] public const string See = "courses.see";
-    [On<Course>] public const string Grade = "courses.grade";
-    [On<Course>] public const string Outline = "courses.outline";
-    [On<Course>(InRoles = false)] public const string Dissolve = "courses.dissolve";
-    [AtUnit] public const string Open = "courses.open";             // asked at a unit, as Tenancy asks it
+    [On<Course>(EveryMember = true, Description = "See a course")] public const string See = "courses.see";
+    [On<Course>(Description = "Grade a course")] public const string Grade = "courses.grade";
+    [On<Course>(Description = "Change a course's outline")] public const string Outline = "courses.outline";
+    [On<Course>(InRoles = false, Description = "Dissolve a course")] public const string Dissolve = "courses.dissolve";
+    [AtUnit(Description = "Open a course at a unit")] public const string Open = "courses.open";   // asked at a unit, as Tenancy asks it
 }
 
 public static class CourseMembership

@@ -829,7 +829,7 @@ projects it references. Declare the permissions asked on the resource in a `[Per
 
 Error, on a property or field a project marks `[TenancyPermissions]` by hand. Declare each permission as a
 `public const string` of a `public static` class marked `[Permissions]`, with its level (`[AtTenant]`, `[AtUnit]`
-or `[On<TResource>]`) and a `<summary>` for its description; Tenancy's generator writes the module's
+or `[On<TResource>]`) and `Description = "..."` on the level for its description; Tenancy's generator writes the module's
 `DeclaredPermissions.All` from it and marks that. Remove the hand-written list, and any
 `services.AddTenancyPermissions(...)` call for it.
 
@@ -850,6 +850,13 @@ on one aggregate, not on a property that may be empty.
 Error, at `MembershipRules.For<TResource>(..., reachFromAbove: ...)`: `TResource` marks no property `[At]`. Mark the
 property that holds where it hangs `[At]` (an `OrganizationUnitId` beside Tenancy, a place of your own otherwise),
 or leave `reachFromAbove` out.
+
+## DDD00099
+
+Warning, on a constant of a `[Permissions]` class whose levels say no `Description` and which has no `<summary>`:
+the screens that put permissions into roles show the description. Say it on the level,
+`[AtUnit(Description = "Open a board at a unit")]` (it wins over a summary), or give the constant a `<summary>`,
+which is read whether the project writes a documentation file or not. Not reported for `Retired = true`.
 
 ## Not a diagnostic: the owned type must carry the key part
 

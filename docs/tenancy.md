@@ -711,7 +711,7 @@ it is [yours to keep](#the-kind-of-a-unit), on your own unit class.
 ### A module states its permissions once
 
 A module declares its permissions once, next to the code that asks for them: the constants of a static class it
-marks `[Permissions]`, each with its **level**, the attribute that says where it is asked, and a summary that says
+marks `[Permissions]`, each with its **level**, the attribute that says where it is asked, and its `Description`,
 what it lets somebody do.
 
 ```csharp
@@ -719,12 +719,10 @@ what it lets somebody do.
 [Permissions]
 public static class OrderingPermissions
 {
-    /// <summary>See the orders.</summary>
-    [AtTenant]
+    [AtTenant(Description = "See the orders")]
     public const string View = "orders.view";
 
-    /// <summary>Refund an order.</summary>
-    [AtUnit(Implies = [View])]
+    [AtUnit(Implies = [View], Description = "Refund an order")]
     public const string Refund = "orders.refund";
 }
 ```
@@ -736,12 +734,18 @@ public static class OrderingPermissions
 | `[On<TResource>]`, [Membership's](membership.md#the-settings-of-a-permission) | on one resource with members | its owner, its members through their roles, and, where its rules say so, a role granted where it hangs |
 
 A permission asked both for the whole tenant and at a unit carries both levels. Whatever the level, the permission is in
-Tenancy's catalogue under the module, so a role of the organization can hold it. Its description is its summary as
-text, or the level's `Description` where one is said; a translation of the application's, under the permission's name
-in a resx its [failure localizer](localization.md) reads, says it in another language, as a refusal's text is said.
-`Implies` names what holding it brings with it, as a pack's permissions do, and `Retired = true` keeps a permission that grants
-nothing any more, so no stored right breaks. A class marked `[Permissions]` that is not static, a constant without a
-level and a permission declared twice are [DDD00092](diagnostics.md#ddd00092).
+Tenancy's catalogue under the module, so a role of the organization can hold it, with its description: the text a
+screen that puts permissions into roles shows beside it. That is the English text; a translation of the
+application's, under the permission's name in a resx its [failure localizer](localization.md) reads, says it in
+another language, as a refusal's text is said. `Implies` names what holding it brings with it, as a pack's
+permissions do, and `Retired = true` keeps a permission that grants nothing any more, so no stored right breaks. A
+class marked `[Permissions]` that is not static, a constant without a level and a permission declared twice are
+[DDD00092](diagnostics.md#ddd00092).
+
+> **The summary instead.** Where no level says a `Description`, the constant's `/// <summary>` is the description,
+> read from the comment above it whether the project writes a documentation file or not. A `Description` said
+> beside it wins. A permission with neither is [DDD00099](diagnostics.md#ddd00099), a warning: a screen would show
+> it as a bare name.
 
 A module's permissions are needed by two programs that cannot ask each other: the host, which builds its catalogue
 from its services, and the program that exports the database's policies, which builds the same catalogue

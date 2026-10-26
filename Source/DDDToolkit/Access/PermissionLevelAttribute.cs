@@ -14,14 +14,18 @@ namespace DDDToolkit.Access;
 public abstract class PermissionLevelAttribute : Attribute
 {
     /// <summary>
-    /// What holding the permission lets somebody do, for the screens that put permissions into roles: <c>"See a board
-    /// and who is on it"</c>. Left out, the constant's <c>&lt;summary&gt;</c> is the description, which IntelliSense
-    /// shows as well, so a permission is described once.
+    /// What holding the permission lets somebody do, for the screens that put permissions into roles:
+    /// <c>[On&lt;Board&gt;(Description = "See a board and who is on it")]</c>. Said here, it is where a reader of the
+    /// class sees it, and it wins over a <c>&lt;summary&gt;</c> the constant has as well.
+    /// <para>
+    /// Left out, the constant's <c>&lt;summary&gt;</c> is the description, read from the comment above it whether the
+    /// project writes a documentation file or not. A permission with neither, which a screen would show as a bare
+    /// name, is DDD00099, a warning; a retired one is shown nowhere and needs none.
+    /// </para>
     /// <para>
     /// It is the English text, and the fallback: a reader in another language gets what the application's
     /// translations hold under the permission's name, in a resx it adds to its failure localizer, as refusal texts
-    /// are translated (<c>IFailureLocalizer.Text(permission, description)</c>). A permission without either has an empty
-    /// description in the catalogue.
+    /// are translated (<c>IFailureLocalizer.Text(permission, description)</c>), whichever of the two said it.
     /// </para>
     /// </summary>
     public string? Description { get; set; }

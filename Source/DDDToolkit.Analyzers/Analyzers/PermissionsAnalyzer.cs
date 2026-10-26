@@ -13,6 +13,11 @@ namespace DDDToolkit.Analyzers.Analyzers;
 /// attribute derived from <c>PermissionLevelAttribute</c>; a level is on such a constant and nowhere else; and a permission
 /// is declared once in a class.
 /// <para>
+/// DDD00099: a permission says what it lets somebody do, for the screens that put permissions into roles, with
+/// <c>Description</c> on its level or in the constant's <c>&lt;summary&gt;</c>; a retired one is shown nowhere and needs
+/// neither.
+/// </para>
+/// <para>
 /// The levels are the packages' own, Tenancy's <c>[AtTenant]</c> and <c>[AtUnit]</c> and Membership's
 /// <c>[On&lt;TResource&gt;]</c>, and the core knows them only by what they derive from. Whether a level fits what it is
 /// asked on is the package's to say. <c>[AtUnit]</c> on a member of a request is the request's marker, and is not
@@ -26,7 +31,7 @@ public sealed class PermissionsAnalyzer : DiagnosticAnalyzer
     private const string Level = "DDDToolkit.Access.PermissionLevelAttribute";
 
     /// <inheritdoc />
-    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = [DiagnosticDescriptors.PermissionMisdeclared];
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = [DiagnosticDescriptors.PermissionMisdeclared, DiagnosticDescriptors.PermissionWithoutDescription];
 
     /// <inheritdoc />
     public override void Initialize(AnalysisContext context)
@@ -96,6 +101,21 @@ public sealed class PermissionsAnalyzer : DiagnosticAnalyzer
             Report(context, field.Locations.FirstOrDefault(), at,
                 "is a permission without a level: say where it is asked, [AtTenant] for the whole tenant or [AtUnit] at a unit (Tenancy), or [On<TResource>] on a resource with members (Membership).");
         }
+        else if (levels.Count > 0 && inPermissions && isPermission
+                 && !PermissionDescriptions.Retired(levels)
+                 && PermissionDescriptions.Said(levels) is null
+                 && PermissionDescriptions.Summary(field, context.CancellationToken) is null)
+        {
+            context.ReportDiagnostic(Diagnostic.Create(DiagnosticDescriptors.PermissionWithoutDescription, field.Locations.FirstOrDefault(), at, AsWritten(levels[0])));
+        }
+    }
+
+    /// <summary>A level as code writes it: <c>AtUnit</c>, <c>On&lt;Board&gt;</c>.</summary>
+    private static string AsWritten(AttributeData level)
+    {
+        var type = level.AttributeClass!;
+        var name = type.Name.EndsWith("Attribute", StringComparison.Ordinal) ? type.Name.Substring(0, type.Name.Length - "Attribute".Length) : type.Name;
+        return type.TypeArguments.Length == 0 ? name : name + "<" + string.Join(", ", type.TypeArguments.Select(static argument => argument.Name)) + ">";
     }
 
     private static Location? Where(AttributeData attribute, ISymbol symbol)

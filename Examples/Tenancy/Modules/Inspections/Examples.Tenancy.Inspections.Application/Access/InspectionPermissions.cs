@@ -4,7 +4,7 @@ namespace Examples.Tenancy.Inspections.Application.Access;
 
 /// <summary>
 /// Inspections' permission, declared once, next to the code that asks for it: Tenancy's generator puts it into the
-/// catalogue under the module's name, with the description of its summary, so a role of the organization can hold it.
+/// catalogue under the module's name, with the description its level says, so a role of the organization can hold it.
 /// </summary>
 /// <remarks>
 /// Like Projects' permissions, it reaches a project in two ways: held at a unit, on every project there and below it;
@@ -16,7 +16,6 @@ namespace Examples.Tenancy.Inspections.Application.Access;
 [Permissions]
 public static class InspectionPermissions
 {
-    /// <summary>Record an inspection on a project.</summary>
-    [AtUnit(Implies = [ProjectPermissionNames.View])]
+    [AtUnit(Implies = [ProjectPermissionNames.View], Description = "Record an inspection on a project.")]
     public const string Record = InspectionPermissionNames.Record;
 }

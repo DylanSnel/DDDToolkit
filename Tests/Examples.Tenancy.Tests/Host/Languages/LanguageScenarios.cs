@@ -96,8 +96,8 @@ public sealed class LanguageScenarios(SampleHosts sample) : IClassFixture<Sample
     [Fact]
     public async Task What_a_permission_lets_somebody_do_is_answered_in_the_language_asked_for()
     {
-        // The catalogue the screens that make roles read: each permission's text is its summary, or the module's
-        // translation under the permission's name.
+        // The catalogue the screens that make roles read: each permission's text is the Description its level says, or
+        // the module's translation under the permission's name.
         using var ada = await sample.ClientAsync("ada", Harbor.Slug);
 
         async Task<string?> DescriptionAsync(string permission, string language)

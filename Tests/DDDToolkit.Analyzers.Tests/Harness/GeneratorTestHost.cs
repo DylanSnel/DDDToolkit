@@ -101,6 +101,7 @@ public sealed class GeneratorTestHost
     private string _assemblyName = DefaultAssemblyName;
     private OutputKind _outputKind = OutputKind.DynamicallyLinkedLibrary;
     private bool _withoutTheToolkit;
+    private DocumentationMode _documentationMode = DocumentationMode.Parse;
 
     private GeneratorTestHost()
     {
@@ -199,6 +200,17 @@ public sealed class GeneratorTestHost
     public GeneratorTestHost WithNoWarn(params string[] diagnosticIds)
     {
         _noWarn.AddRange(diagnosticIds);
+        return this;
+    }
+
+    /// <summary>
+    /// Parses the sources as a project with the given documentation mode does: <see cref="DocumentationMode.None"/> for
+    /// one that writes no documentation file, where <c>///</c> lines are plain comments, and
+    /// <see cref="DocumentationMode.Diagnose"/> for one that writes it. <see cref="DocumentationMode.Parse"/> unless said.
+    /// </summary>
+    public GeneratorTestHost WithDocumentationMode(DocumentationMode mode)
+    {
+        _documentationMode = mode;
         return this;
     }
 
@@ -561,7 +573,7 @@ public sealed class GeneratorTestHost
     public static bool ParsesExtensionBlocks { get; } = Enum.IsDefined(typeof(LanguageVersion), 1400);
 
     public CSharpParseOptions CreateParseOptions()
-        => new CSharpParseOptions(LanguageVersion.Latest).WithPreprocessorSymbols(PreprocessorSymbols);
+        => new CSharpParseOptions(LanguageVersion.Latest, _documentationMode).WithPreprocessorSymbols(PreprocessorSymbols);
 
     /// <summary>Every reference the snippet compiles against.</summary>
     public IReadOnlyList<PortableExecutableReference> References

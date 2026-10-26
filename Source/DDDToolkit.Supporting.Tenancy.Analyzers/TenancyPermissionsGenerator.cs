@@ -20,8 +20,7 @@ namespace DDDToolkit.Supporting.Tenancy.Analyzers;
 /// [Permissions]
 /// public static class OrderingPermissions
 /// {
-///     /// &lt;summary&gt;See the orders.&lt;/summary&gt;
-///     [AtTenant]
+///     [AtTenant(Description = "See the orders.")]
 ///     public const string View = "orders.view";
 /// }
 ///
@@ -43,7 +42,8 @@ namespace DDDToolkit.Supporting.Tenancy.Analyzers;
 /// <b>The module's list.</b> Every <c>public const string</c> of a <c>[Permissions]</c> class, whatever its level,
 /// under the module the project declares with <c>DDD_Module</c> or <c>[assembly: Module]</c>, or its assembly's name
 /// where it declares none, in the order the classes' names and their constants are written. A permission's
-/// description is its level's <c>Description</c>, or else its <c>&lt;summary&gt;</c>, as text; its <c>Implies</c> and
+/// description is its level's <c>Description</c>, or else its <c>&lt;summary&gt;</c>, as text, read whether the project
+/// writes a documentation file or not; with neither it is empty, and the core reports DDD00099. Its <c>Implies</c> and
 /// <c>Retired</c> are said on the level. The list is marked <c>[TenancyPermissions]</c>, the mark the project that
 /// composes the modules collects; a list a module marks by hand is DDD00095.
 /// </para>
@@ -391,83 +391,28 @@ public sealed class TenancyPermissionsGenerator : IIncrementalGenerator
                 continue;
             }
 
-            string? description = null;
             string[]? implies = null;
-            var retired = false;
             foreach (var level in levels)
             {
                 foreach (var named in level.NamedArguments)
                 {
-                    switch (named.Key)
+                    if (named.Key == "Implies" && implies is null && !named.Value.IsNull)
                     {
-                        case "Description" when description is null && named.Value.Value is string said:
-                            description = said;
-                            break;
-                        case "Implies" when implies is null && !named.Value.IsNull:
-                            implies = [.. named.Value.Values.Select(static value => value.Value as string).Where(static value => value is not null).Select(static value => value!)];
-                            break;
-                        case "Retired" when named.Value.Value is true:
-                            retired = true;
-                            break;
+                        implies = [.. named.Value.Values.Select(static value => value.Value as string).Where(static value => value is not null).Select(static value => value!)];
                     }
                 }
             }
 
+            // The Description said on a level first, the constant's summary where none is said; a permission with
+            // neither is DDD00099, the core's to report, and is written with an empty description.
             permissions.Add(new DeclaredPermission(
                 permission,
-                description ?? Summary(field, cancellationToken) ?? string.Empty,
+                PermissionDescriptions.Said(levels) ?? PermissionDescriptions.Summary(field, cancellationToken) ?? string.Empty,
                 (implies ?? []).ToEquatableArray(),
-                retired));
+                PermissionDescriptions.Retired(levels)));
         }
 
         return new DeclaredClass(type.ToDisplayString(), permissions.ToEquatableArray());
-    }
-
-    /// <summary>
-    /// The text of a constant's <c>&lt;summary&gt;</c>, read off the comment lines written above it, whether the project
-    /// parses documentation comments or not: tags dropped, a <c>cref</c> as the name it points at, white space
-    /// collapsed. Null where there is none.
-    /// </summary>
-    private static string? Summary(IFieldSymbol field, CancellationToken cancellationToken)
-    {
-        if (field.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax(cancellationToken) is not { } declarator
-            || declarator.FirstAncestorOrSelf<FieldDeclarationSyntax>() is not { } declaration)
-        {
-            return null;
-        }
-
-        var comment = new StringBuilder();
-        foreach (var line in declaration.GetLeadingTrivia().ToFullString().Split('\n'))
-        {
-            var trimmed = line.Trim();
-            if (trimmed.StartsWith("///", StringComparison.Ordinal))
-            {
-                comment.Append(trimmed.Substring(3)).Append(' ');
-            }
-        }
-
-        var text = comment.ToString();
-        var start = text.IndexOf("<summary>", StringComparison.Ordinal);
-        var end = text.IndexOf("</summary>", StringComparison.Ordinal);
-        if (start < 0 || end < start)
-        {
-            return null;
-        }
-
-        var summary = text.Substring(start + "<summary>".Length, end - start - "<summary>".Length);
-        summary = System.Text.RegularExpressions.Regex.Replace(summary, "<(see|seealso)\\s+(cref|langword|href)=\"(?:[A-Z]:)?([^\"]+)\"\\s*/>", static match => LastName(match.Groups[3].Value));
-        summary = System.Text.RegularExpressions.Regex.Replace(summary, "<(paramref|typeparamref)\\s+name=\"([^\"]+)\"\\s*/>", "$2");
-        summary = System.Text.RegularExpressions.Regex.Replace(summary, "<[^>]+>", string.Empty);
-        summary = summary.Replace("&lt;", "<").Replace("&gt;", ">").Replace("&quot;", "\"").Replace("&apos;", "'").Replace("&amp;", "&");
-        summary = System.Text.RegularExpressions.Regex.Replace(summary, "\\s+", " ").Trim();
-        return summary.Length == 0 ? null : summary;
-    }
-
-    private static string LastName(string reference)
-    {
-        var withoutArguments = reference.Split('(')[0];
-        var dot = withoutArguments.LastIndexOf('.');
-        return dot < 0 ? withoutArguments : withoutArguments.Substring(dot + 1);
     }
 
     private static bool DerivesFrom(INamedTypeSymbol? type, string metadataName)

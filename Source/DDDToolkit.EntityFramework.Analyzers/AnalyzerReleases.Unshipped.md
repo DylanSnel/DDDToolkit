@@ -77,7 +77,7 @@ DDD00076 | DDDToolkit.Entities | Warning | [assembly: TemplateFacadeName] names,
 DDD00077 | DDDToolkit.Access | Error | A request says what it requires of its caller
 DDD00078 | DDDToolkit.Access | Error | A request says what it requires in one way
 DDD00079 | DDDToolkit.Access | Error | [AllowAnonymous] goes with no other requirement attribute
-DDD00080 | DDDToolkit.Access | Error | A marker on a request says where the key of its [RequiresPermission] is held
+DDD00080 | DDDToolkit.Access | Error | A marker on a request says where the permission of its [RequiresPermission] is held
 DDD00081 | DDDToolkit.Access | Error | A marker is on a member of the id it marks
 DDD00082 | DDDToolkit.Access | Error | A requirement for queries only is on a query
 DDD00083 | DDDToolkit.Access | Error | A request's requirement attributes are read where its module's interface is partial
@@ -93,6 +93,7 @@ DDD00092 | DDDToolkit.Access | Error | A permission is a public constant of a [P
 DDD00093 | DDDToolkit.Membership | Error | A permission's level fits what it is asked on
 DDD00094 | DDDToolkit.Membership | Error | The rules of a resource are made from the permissions declared on it
 DDD00095 | DDDToolkit.Tenancy | Error | A module's permissions are declared in a [Permissions] class, not on a list of its own
-DDD00096 | DDDToolkit.Access | Warning | [OrOwn] beside a key the owner of the resource holds already says nothing more
+DDD00096 | DDDToolkit.Access | Warning | [OrOwn] beside a permission the owner of the resource holds already says nothing more
 DDD00097 | DDDToolkit.Access | Error | [At] marks the one place an aggregate root hangs at
 DDD00098 | DDDToolkit.Membership | Error | Rules that reach a resource from above read where it hangs from its [At] property
+DDD00099 | DDDToolkit.Access | Warning | A permission says what it lets somebody do

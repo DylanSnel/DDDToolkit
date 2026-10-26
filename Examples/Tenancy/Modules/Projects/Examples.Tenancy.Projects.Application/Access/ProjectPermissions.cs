@@ -5,7 +5,7 @@ namespace Examples.Tenancy.Projects.Application.Access;
 /// <summary>
 /// Projects' permissions, each declared once, with where it is asked and what holds it: the one place the module
 /// says them. Tenancy's generator puts every one into the catalogue under the module's name, with the description
-/// of its summary, so a role of the organization can hold it; the Membership package's generator hands those asked
+/// its level says, so a role of the organization can hold it; the Membership package's generator hands those asked
 /// on a project to the projects' rules (<see cref="ProjectMembership"/>), so the check in front of a handler and the
 /// functions in the database answer from the same lines.
 /// </summary>
@@ -22,33 +22,28 @@ namespace Examples.Tenancy.Projects.Application.Access;
 /// <item>Reached from above: a role of the organization that holds one at the unit a project hangs at, or above
 /// it, holds it on the project; naming an owner is held that way and no other.</item>
 /// </list>
-/// The descriptions are the English texts; <c>ProjectPermissions.nl.resx</c> beside this class has the Dutch, by the
-/// permission's name, as the refusal texts do.
+/// The descriptions are the English texts, which the screens that put permissions into roles show;
+/// <c>ProjectPermissionTexts.nl.resx</c> beside this class has the Dutch, by the permission's name, as the refusal
+/// texts do.
 /// </remarks>
 [Permissions]
 public static class ProjectPermissions
 {
-    /// <summary>See a project and its crew.</summary>
-    [On<Project>(EveryMember = true)]
+    [On<Project>(EveryMember = true, Description = "See a project and its crew.")]
     public const string View = ProjectPermissionNames.View;
 
-    /// <summary>Open a project at a unit.</summary>
-    [AtUnit]
+    [AtUnit(Description = "Open a project at a unit.")]
     public const string Open = ProjectPermissionNames.Open;
 
-    /// <summary>Rename or move a project.</summary>
-    [On<Project>(Implies = [ProjectPermissionNames.View])]
+    [On<Project>(Implies = [ProjectPermissionNames.View], Description = "Rename or move a project.")]
     public const string Edit = ProjectPermissionNames.Edit;
 
-    /// <summary>Close or reopen a project.</summary>
-    [On<Project>]
+    [On<Project>(Description = "Close or reopen a project.")]
     public const string Close = ProjectPermissionNames.Close;
 
-    /// <summary>Add and remove crew members, give and take their project roles.</summary>
-    [On<Project>(LocksMembers = true, Implies = [ProjectPermissionNames.View])]
+    [On<Project>(LocksMembers = true, Implies = [ProjectPermissionNames.View], Description = "Add and remove crew members, give and take their project roles.")]
     public const string ManageCrew = ProjectPermissionNames.ManageCrew;
 
-    /// <summary>Name a project's owner.</summary>
-    [On<Project>(Owner = false, InRoles = false, LocksOwner = true)]
+    [On<Project>(Owner = false, InRoles = false, LocksOwner = true, Description = "Name a project's owner.")]
     public const string ChangeOwner = ProjectPermissionNames.ChangeOwner;
 }

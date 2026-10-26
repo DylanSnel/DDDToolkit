@@ -96,6 +96,7 @@ type looks annotated and behaves like a plain class. Every misuse below reports 
 | [DDD00096](#ddd00096) | Warning | [OrOwn] beside a permission the owner of the resource holds already says nothing more |
 | [DDD00097](#ddd00097) | Error | [At] marks the one place an aggregate root hangs at |
 | [DDD00098](#ddd00098) | Error | Rules that reach a resource from above read where it hangs from its [At] property |
+| [DDD00099](#ddd00099) | Warning | A permission says what it lets somebody do |
 
 Most of these say the generator could not do what you asked. The rest are a different kind: they are
 rules about the model rather than about the declaration, and each of them names code that compiles,
@@ -3251,7 +3252,7 @@ public static class OrderingList
 ```
 
 A module declares its permissions once, as the constants of a static class marked `[Permissions]`, each with its
-level and, in its summary or its `Description`, what it lets somebody do. Tenancy's generator writes the module's
+level and, in its `Description` or its summary, what it lets somebody do. Tenancy's generator writes the module's
 list for the catalogue from that class, under the module `DDD_Module` or `[assembly: Module]` names, marks it
 `[TenancyPermissions]`, and the project that composes the modules collects every such list
 ([A module states its permissions once](tenancy.md#a-module-states-its-permissions-once)). A list a module marks with it by hand
@@ -3262,8 +3263,7 @@ a constant instead:
 [Permissions]
 public static class OrderingPermissions
 {
-    /// <summary>See the orders.</summary>
-    [AtTenant]
+    [AtTenant(Description = "See the orders")]
     public const string View = "orders.view";
 }
 ```
@@ -3329,6 +3329,31 @@ property that holds it, and read from there by the mapping and by the functions 
 from above a resource that marks no such property would be refused when the resource is first asked about, and when
 its functions are written; this says it where the rules are made. Mark the property `[At]`, or leave
 `reachFromAbove` out.
+
+## DDD00099
+
+**A permission says what it lets somebody do.**
+
+```csharp
+[Permissions]
+public static class BoardPermissions
+{
+    [On<Board>] public const string Pin = "boards.pin";                                   // DDD00099: no description
+
+    [On<Board>(Description = "Archive a board")] public const string Archive = "boards.archive";   // said on the level
+
+    /// <summary>Comment on a board.</summary>
+    [On<Board>] public const string Comment = "boards.comment";                           // or in its summary
+}
+```
+
+The catalogue gives every permission a description, which a screen that puts permissions into roles shows beside
+it. It is said with `Description` on the permission's level, which wins where the constant has a `<summary>` as
+well; where no level says one, the constant's `<summary>` is the description, read from the comment above it whether
+the project writes a documentation file or not. A permission with neither would show as a bare name, so it is a
+warning, on the constant. A description of white space alone is none, and a retired permission, which no screen
+offers, needs none. A translation under the permission's name, in a resx your failure localizer reads, is read on
+top of whichever said it ([A module states its permissions once](tenancy.md#a-module-states-its-permissions-once)).
 
 ## Building the model fails: the owned type must carry the key part
 

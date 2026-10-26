@@ -144,9 +144,10 @@ public sealed partial class ShopSeat
 6. A module's own tables: `modelBuilder.Entity<Project>().ScopeToTenant(project => project.TenantId)`; the
    model then requires the save check, so such a context without it is refused at its first save, and the
    start-up check `AddTenancy` brings holds every context that keeps rows to a tenant to it. A module's permissions,
-   stated once, as the constants of a `[Permissions] public static class` with a level each:
-   `/// <summary>See the orders.</summary> [AtTenant] public const string View = "orders.view";` (`[AtUnit]` for a
-   permission asked at a unit, Membership's `[On<TResource>]` for one asked on a resource with members). Tenancy's generator
+   stated once, as the constants of a `[Permissions] public static class` with a level and a description each:
+   `[AtTenant(Description = "See the orders")] public const string View = "orders.view";` (`[AtUnit]` for a
+   permission asked at a unit, Membership's `[On<TResource>]` for one asked on a resource with members; the constant's
+   `<summary>` is the description where no level says one, and neither is DDD00099). Tenancy's generator
    writes the module's `DeclaredPermissions.All` from it (marked `[TenancyPermissions]`, never by hand: DDD00095), and
    in the host, which references every module, `services.AddTenancyPermissionsOfModules()`, generated in every
    application (module or not) and every library that declares no module, in the namespace named after the

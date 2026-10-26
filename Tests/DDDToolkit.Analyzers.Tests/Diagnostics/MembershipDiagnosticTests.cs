@@ -165,6 +165,19 @@ public class MembershipDiagnosticTests
     }
 
     [Fact]
+    public void A_permission_on_a_resource_with_no_description_is_DDD00099_naming_its_level()
+    {
+        var result = Run(Board(), PermissionsWith(extra:
+            """
+                [On<Board>]
+                public const string Pin = "boards.pin";
+            """));
+
+        Message(result, "DDD00099", "Pin").Should()
+            .Be("'BoardPermissions.Pin' has no description, and the screens that put permissions into roles show it: say it on its level, [On<Board>(Description = \"...\")], or in the constant's <summary>");
+    }
+
+    [Fact]
     public void A_permissions_class_that_is_not_static_is_DDD00092()
     {
         var result = Run(Board(), PermissionsWith(modifiers: "public"));

@@ -7,12 +7,10 @@ namespace DDDToolkit.Access;
 /// [Permissions]
 /// public static class BoardPermissions
 /// {
-///     /// &lt;summary&gt;See a board and who is on it.&lt;/summary&gt;
-///     [On&lt;Board&gt;(EveryMember = true)]
+///     [On&lt;Board&gt;(EveryMember = true, Description = "See a board and who is on it")]
 ///     public const string View = "boards.view";
 ///
-///     /// &lt;summary&gt;Open a board at a unit.&lt;/summary&gt;
-///     [AtUnit]
+///     [AtUnit(Description = "Open a board at a unit")]
 ///     public const string Create = "boards.create";
 /// }
 /// </code>
@@ -29,7 +27,8 @@ namespace DDDToolkit.Access;
 /// The packages' generators collect what is declared here, so the module says it nowhere else: Membership's into the
 /// rules of each resource (<c>MembershipRules.For&lt;Board&gt;</c>), and Tenancy's into its catalogue, under the module
 /// the project declares with <c>DDD_Module</c>, with the description of each permission:
-/// <see cref="PermissionLevelAttribute.Description"/>, or else the constant's <c>&lt;summary&gt;</c>.
+/// <see cref="PermissionLevelAttribute.Description"/>, or else the constant's <c>&lt;summary&gt;</c>. A permission with
+/// neither is DDD00099, a warning, since the screens that put permissions into roles show it.
 /// </para>
 /// </remarks>
 [AttributeUsage(AttributeTargets.Class, Inherited = false)]

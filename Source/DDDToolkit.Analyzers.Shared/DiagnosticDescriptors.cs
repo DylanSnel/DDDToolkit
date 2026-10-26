@@ -855,4 +855,13 @@ internal static class DiagnosticDescriptors
         DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
         description: "[OrOwn] on a request's member says the request is about the caller's own, or the caller holds the permission of its [RequiresPermission]. On the id of a resource with members, beside [OnResource] on it, the permission is asked on that resource, and its owner holds every permission declared [On<TResource>] with Owner = true by owning it: the owner is let through by the permission already, so [OrOwn] adds nothing and only makes the request read as if it did. [Own] and [OrOwn] stay meant for an aggregate with an [Owner] and no members, and for a permission the owner does not hold, one declared with Owner = false.");
+
+    public static readonly DiagnosticDescriptor PermissionWithoutDescription = Create(
+        id: "DDD00099",
+        title: "A permission says what it lets somebody do",
+        messageFormat: "'{0}' has no description, and the screens that put permissions into roles show it: say it on its level, [{1}(Description = \"...\")], or in the constant's <summary>",
+        category: Access,
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "The catalogue gives every permission a description, which a screen that puts permissions into roles shows beside it: what holding it lets somebody do. It is said with Description on the permission's level, [AtUnit(Description = \"Open a board at a unit\")] say, which wins where the constant has a <summary> too; where no level says one, the constant's <summary> is the description, read from the comment above it whether the project writes a documentation file or not. A permission with neither would show as a bare name. A retired permission is shown nowhere, and needs none. A translation, in a resx your failure localizer reads, under the permission's name, is read on top of either.");
 }

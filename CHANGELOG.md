@@ -2729,6 +2729,15 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `permission denied`, an error rather than a refusal; where the host grants the privileges itself, no row. Its own
   requirement attribute example uses the same `PlanAtLeast` as the new page. On a phone a wide table in the docs
   scrolls inside its border instead of widening the page.
+- **A permission says what it lets somebody do, and DDD00099 says when it does not.** Decided for 3.2.0-preview.5.
+  The `Description` said on a permission's level, `[On<Board>(Description = "Change a board")]`, is the primary way
+  and the one the samples and the docs show; it wins where the constant has a `/// <summary>` too. Where no level says
+  one, the summary is the description, read from the comment above the constant whether the project writes a
+  documentation file or not, as before. A permission with neither is DDD00099, a warning on the constant, since the
+  screens that put permissions into roles show the description; a description of white space alone is none, and a
+  retired permission needs none. A translation under the permission's name is read on top of either, as before. The
+  Tenancy sample's `ProjectPermissions` and `InspectionPermissions` say their descriptions on their levels. See
+  [DDD00099](docs/diagnostics.md#ddd00099).
 
 ### Changed
 

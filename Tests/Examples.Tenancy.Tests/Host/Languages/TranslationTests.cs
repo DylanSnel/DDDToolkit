@@ -71,7 +71,7 @@ public sealed partial class TranslationTests(SampleWithoutDatabase sample) : ICl
         inspections.Keys.Should().BeEquivalentTo(InspectionRefusals.Codes.Except(PassedOn), "InspectionFailures.resx holds exactly Inspections' own codes");
         inspections.Should().OnlyContain(text => text.Value == InspectionRefusals.TemplateOf(text.Key));
 
-        // A permission's English is its summary, which the module's generated list holds: the file repeats it, for
+        // A permission's English is its Description, which the module's generated list holds: the file repeats it, for
         // the translator, and holds no other key.
         foreach (var (marker, declared) in new[]
                  {
@@ -81,7 +81,7 @@ public sealed partial class TranslationTests(SampleWithoutDatabase sample) : ICl
         {
             Texts(marker, CultureInfo.InvariantCulture).Should().Equal(
                 declared.ToDictionary(permission => permission.Name, permission => permission.Description),
-                "{0}.resx holds every permission the module declares, in the words of its summary", marker.Name);
+                "{0}.resx holds every permission the module declares, in the words of its Description", marker.Name);
         }
 
         // A code has one text: what Inspections passes on from Projects reads as Projects says it.
