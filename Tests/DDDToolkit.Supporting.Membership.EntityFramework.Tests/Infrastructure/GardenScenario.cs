@@ -72,8 +72,8 @@ public sealed class GardenScenario
         OrchardWaterer = Starter(Orchard, PlotMembership.Waterer);
 
         // And what each garden did with them since.
-        Fencer = new PlotRole(PlotRoleId.CreateSequential(), Meadow, new KeptRoleDraft("Fencer", "Keeps the rabbits out.", [PlotKeys.See, PlotKeys.Fence]));
-        Seasonal = new PlotRole(PlotRoleId.CreateSequential(), Meadow, new KeptRoleDraft("Seasonal hand", null, [PlotKeys.Plant, PlotKeys.Water]));
+        Fencer = new PlotRole(PlotRoleId.CreateSequential(), Meadow, new CustomRoleDraft("Fencer", "Keeps the rabbits out.", [PlotKeys.See, PlotKeys.Fence]));
+        Seasonal = new PlotRole(PlotRoleId.CreateSequential(), Meadow, new CustomRoleDraft("Seasonal hand", null, [PlotKeys.Plant, PlotKeys.Water]));
         Seasonal.PutAway();
         OrchardOwner.CallIt("Head gardener", "Whoever a plot of the orchard belongs to.");
         OrchardTender.HaveItGive(PlotKeys.See, PlotKeys.Plant);
@@ -98,7 +98,7 @@ public sealed class GardenScenario
 
         // The sheds' roles: the one starter role, and one made since.
         ShedKeeper = new ShedRole(ShedRoleId.CreateSequential(), StarterRoles.Missing<ShedRoleId>(ShedMembership.Rules, []).Single());
-        Lender = new ShedRole(ShedRoleId.CreateSequential(), new KeptRoleDraft("Lender", "Lends the tools out.", [ShedKeys.Open, ShedKeys.LendTools]));
+        Lender = new ShedRole(ShedRoleId.CreateSequential(), new CustomRoleDraft("Lender", "Lends the tools out.", [ShedKeys.Open, ShedKeys.LendTools]));
         ShedRoles = [ShedKeeper, Lender];
 
         var tools = new Shed(ToolShed, "Tools", Ada.Member, ShedKeeper.Id, monthAgo);

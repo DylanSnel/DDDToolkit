@@ -303,7 +303,7 @@ public sealed partial class RolesACustomerMakesOnPostgresTests(FilingPostgres po
                 .Should().ThrowAsync<Npgsql.PostgresException>()).Which.SqlState.Should().Be(Npgsql.PostgresErrorCodes.CheckViolation);
         }
 
-        (await garden.Services.ReadAsync(data.MeadowOwner.Id)).Should().Match<PlotRole>(role => role.MadeFrom == MembershipRules.DefaultOwnerRole && role.Status == KeptRoleStatus.Active);
+        (await garden.Services.ReadAsync(data.MeadowOwner.Id)).Should().Match<PlotRole>(role => role.MadeFrom == MembershipRules.DefaultOwnerRole && role.Status == CustomRoleStatus.Active);
     }
 
     [Fact]
@@ -418,7 +418,7 @@ public sealed partial class RolesACustomerMakesOnPostgresTests(FilingPostgres po
 
         // The rows are what they were, and so is what he holds: in the database and in the application.
         (await garden.Services.ReadAsync(data.MeadowTender.Id)).Keys.Should().BeEquivalentTo([PlotKeys.See, PlotKeys.Plant, PlotKeys.Water]);
-        (await garden.Services.ReadAsync(data.Seasonal.Id)).Status.Should().Be(KeptRoleStatus.Archived);
+        (await garden.Services.ReadAsync(data.Seasonal.Id)).Status.Should().Be(CustomRoleStatus.Archived);
         (await FencedByBenAsync()).Should().BeEquivalentTo(before);
         (await garden.Services.PlotsAsync(data.Ben, access => access.HoldAsync(data.Beans, PlotKeys.Fence, Cancellation)))!.Via.Should().BeNull();
 
@@ -559,13 +559,13 @@ public sealed partial class RolesACustomerMakesOnPostgresTests(FilingPostgres po
         using var bare = new PlotsWithoutRoles(new DbContextOptionsBuilder<PlotsWithoutRoles>().UseNpgsql("Host=model-only").Options);
         FluentActions.Invoking(() => new MembershipRowAccessContribution<PlotGardener>(PlotMembership.Rules).Contribute(bare, Export))
             .Should().Throw<InvalidOperationException>()
-            .WithMessage("The rules 'plots' say the roles of Plot are kept, and the model maps no role class for it.*[KeptRole<TRoleId, Plot>]*modelBuilder.Entity<PlotRole>().IsKeptRole().");
+            .WithMessage("The rules 'plots' say the roles of Plot are kept, and the model maps no role class for it.*[CustomRole<TRoleId, Plot>]*modelBuilder.Entity<PlotRole>().IsCustomRole().");
 
         // The keys are kept as something the functions do not read.
         using var documents = new PlotsWithKeysAsJson(new DbContextOptionsBuilder<PlotsWithKeysAsJson>().UseNpgsql("Host=model-only").Options);
         FluentActions.Invoking(() => new MembershipRowAccessContribution<PlotGardener>(PlotMembership.Rules).Contribute(documents, Export))
             .Should().Throw<InvalidOperationException>()
-            .WithMessage("PlotRole.Keys is stored as jsonb, and the functions read a role's keys from an array, such as text[]. Leave the column as IsKeptRole maps it.");
+            .WithMessage("PlotRole.Keys is stored as jsonb, and the functions read a role's keys from an array, such as text[]. Leave the column as IsCustomRole maps it.");
 
         // A role class known by another id than the gardeners hold their roles by: nothing to join the two on.
         using var stray = new PlotsWithStrayRoles(new DbContextOptionsBuilder<PlotsWithStrayRoles>().UseNpgsql("Host=model-only").Options);
@@ -618,7 +618,7 @@ public sealed partial class RolesACustomerMakesOnPostgresTests(FilingPostgres po
         (await FluentActions.Awaiting(() => MembershipPostgresChecks.EnsureFunctionsAreInPlaceAsync(provider, Cancellation)).Should().ThrowAsync<InvalidOperationException>())
             .Which.Message.Should().Be(
                 "The rules 'plots' say the roles of Plot are kept, and PlotsWithoutRoles maps no role class for it, so its functions cannot be the ones the rules say. "
-                + "Map the role class where the context builds its model: modelBuilder.Entity<PlotRole>().IsKeptRole().");
+                + "Map the role class where the context builds its model: modelBuilder.Entity<PlotRole>().IsCustomRole().");
     }
 
     /// <summary>
@@ -726,7 +726,7 @@ public sealed partial class RolesACustomerMakesOnPostgresTests(FilingPostgres po
 
         public List<string> Keys { get; set; } = [];
 
-        public KeptRoleStatus Status { get; set; }
+        public CustomRoleStatus Status { get; set; }
     }
 
     /// <summary>A context that maps the plots as sitting in their garden, and their role class.</summary>
@@ -735,7 +735,7 @@ public sealed partial class RolesACustomerMakesOnPostgresTests(FilingPostgres po
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             modelBuilder.Entity<Plot>().HasMembers(plot => plot.Gardeners, plot => plot.OwnerId, at: plot => plot.GardenId);
-            modelBuilder.Entity<PlotRole>().IsKeptRole();
+            modelBuilder.Entity<PlotRole>().IsCustomRole();
         }
 
         protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
@@ -753,7 +753,7 @@ public sealed partial class RolesACustomerMakesOnPostgresTests(FilingPostgres po
             modelBuilder.Entity<Plot>().HasMembers(plot => plot.Gardeners, plot => plot.OwnerId);
             modelBuilder.Entity<PlotRole>(role =>
             {
-                role.IsKeptRole();
+                role.IsCustomRole();
                 role.PrimitiveCollection(row => row.Keys).HasColumnType("jsonb");
             });
         }

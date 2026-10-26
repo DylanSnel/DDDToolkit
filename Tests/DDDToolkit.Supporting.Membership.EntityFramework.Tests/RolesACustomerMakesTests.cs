@@ -19,7 +19,7 @@ public sealed class RolesACustomerMakesTests
         var data = garden.Scenario;
 
         // The meadow makes a role, and says what it gives. White space around its name is dropped.
-        var pruner = new PlotRole(PlotRoleId.CreateSequential(), data.Meadow, new KeptRoleDraft("  Pruner ", null, []));
+        var pruner = new PlotRole(PlotRoleId.CreateSequential(), data.Meadow, new CustomRoleDraft("  Pruner ", null, []));
         pruner.HaveItGive(PlotKeys.Fence, PlotKeys.Plant);
         await garden.Services.ChangeAsync(context =>
         {
@@ -28,7 +28,7 @@ public sealed class RolesACustomerMakesTests
         });
 
         var kept = await garden.Services.ReadAsync(pruner.Id);
-        (kept.Name, kept.Description, kept.Status, kept.MadeFrom, kept.GardenId).Should().Be(("Pruner", string.Empty, KeptRoleStatus.Active, null, data.Meadow));
+        (kept.Name, kept.Description, kept.Status, kept.MadeFrom, kept.GardenId).Should().Be(("Pruner", string.Empty, CustomRoleStatus.Active, null, data.Meadow));
         kept.Keys.Should().Equal(PlotKeys.Fence, PlotKeys.Plant);
 
         // Di is on the beans with no role: she sees them, and that is all.
@@ -100,7 +100,7 @@ public sealed class RolesACustomerMakesTests
         garden.Services.Raised.Should().BeEmpty();
 
         // A role is not made with such a key either.
-        Refused.With(PlotMembership.Codes, MembershipRefusals.KeyNotForMembers, () => _ = new PlotRole(PlotRoleId.CreateSequential(), data.Meadow, new KeptRoleDraft("Seller", null, [PlotKeys.Sell])))
+        Refused.With(PlotMembership.Codes, MembershipRefusals.KeyNotForMembers, () => _ = new PlotRole(PlotRoleId.CreateSequential(), data.Meadow, new CustomRoleDraft("Seller", null, [PlotKeys.Sell])))
             .Arguments["Keys"].Should().Be(PlotKeys.Sell);
 
         // The owner holds it all the same, by owning the plot, and no role of anybody's has a part in that.
@@ -148,7 +148,7 @@ public sealed class RolesACustomerMakesTests
         var beans = await garden.Services.ReadAsync(data.Beans);
         beans.Gardeners.Single(row => row.MemberId == data.Eve.Member).Roles.Should().ContainSingle().Which.RoleId.Should().Be(data.Fencer.Id);
         var archived = await garden.Services.ReadAsync(data.Fencer.Id);
-        (archived.Status, archived.Name).Should().Be((KeptRoleStatus.Archived, "Fencer"));
+        (archived.Status, archived.Name).Should().Be((CustomRoleStatus.Archived, "Fencer"));
         archived.Keys.Should().Equal(PlotKeys.Fence, PlotKeys.See);
 
         // It is not given again: to the admission of plots it is no role there is.
@@ -178,9 +178,9 @@ public sealed class RolesACustomerMakesTests
         var made = await garden.Services.AsAsync(Caller.System, provider => provider.GetRequiredService<GardenRoles>().MakeFirstAsync(paddock, Cancellation));
 
         made.Select(role => (role.Name, role.MadeFrom, role.GardenId, role.Status)).Should().Equal(
-            (PlotMembership.Tender, PlotMembership.Tender, paddock, KeptRoleStatus.Active),
-            (PlotMembership.Waterer, PlotMembership.Waterer, paddock, KeptRoleStatus.Active),
-            (MembershipRules.DefaultOwnerRole, MembershipRules.DefaultOwnerRole, paddock, KeptRoleStatus.Active));
+            (PlotMembership.Tender, PlotMembership.Tender, paddock, CustomRoleStatus.Active),
+            (PlotMembership.Waterer, PlotMembership.Waterer, paddock, CustomRoleStatus.Active),
+            (MembershipRules.DefaultOwnerRole, MembershipRules.DefaultOwnerRole, paddock, CustomRoleStatus.Active));
         made[0].Keys.Should().Equal(PlotKeys.Plant, PlotKeys.See, PlotKeys.Water);
         made[1].Keys.Should().Equal(PlotKeys.See, PlotKeys.Water);
         made[2].Keys.Should().Equal([PlotKeys.Fence, PlotKeys.Plant, PlotKeys.See, PlotKeys.Water], "the owner's role gives every key of a plot a member's role can give; selling stays the owner's by owning");
@@ -249,7 +249,7 @@ public sealed class RolesACustomerMakesTests
 
         // The role every owner holds is not put away: nobody could be made an owner after.
         await Refused.WithCodeAsync(PlotMembership.Codes, MembershipRefusals.OwnerRoleStays, () => garden.Services.ChangeAsync(data.MeadowOwner.Id, role => role.PutAway()));
-        (await garden.Services.ReadAsync(data.MeadowOwner.Id)).Status.Should().Be(KeptRoleStatus.Active);
+        (await garden.Services.ReadAsync(data.MeadowOwner.Id)).Status.Should().Be(CustomRoleStatus.Active);
 
         // A garden that has no roles yet has no owner's role, and says so in the plots' own code.
         var paddock = GardenId.CreateSequential();
@@ -505,7 +505,7 @@ public sealed class RolesACustomerMakesTests
         // of a garden is the host's index over its own column, refusing in the host's own code.
         var refusal = (await FluentActions.Awaiting(() => garden.Services.ChangeAsync(context =>
         {
-            context.PlotRoles.Add(new PlotRole(PlotRoleId.CreateSequential(), data.Meadow, new KeptRoleDraft("Fencer", null, [PlotKeys.See])));
+            context.PlotRoles.Add(new PlotRole(PlotRoleId.CreateSequential(), data.Meadow, new CustomRoleDraft("Fencer", null, [PlotKeys.See])));
             return Task.CompletedTask;
         })).Should().ThrowAsync<RefusalException>()).Which;
         (refusal.Code, refusal.Kind).Should().Be((PlotMembership.RoleNameTaken, RefusalKind.Conflict));
@@ -514,7 +514,7 @@ public sealed class RolesACustomerMakesTests
         // In another garden the name is free.
         await garden.Services.ChangeAsync(context =>
         {
-            context.PlotRoles.Add(new PlotRole(PlotRoleId.CreateSequential(), data.Orchard, new KeptRoleDraft("Fencer", null, [PlotKeys.See])));
+            context.PlotRoles.Add(new PlotRole(PlotRoleId.CreateSequential(), data.Orchard, new CustomRoleDraft("Fencer", null, [PlotKeys.See])));
             return Task.CompletedTask;
         });
         (await garden.Services.InAsync(data.Orchard, provider => provider.GetRequiredService<GardenContext>().PlotRoles.CountAsync(role => role.Name == "Fencer", Cancellation))).Should().Be(1);
@@ -873,7 +873,7 @@ public sealed class RolesACustomerMakesTests
                 plot.Property(row => row.Id).ValueGeneratedNever();
                 plot.HasMembers(row => row.Gardeners, row => row.OwnerId, at: row => row.GardenId);
             });
-            modelBuilder.Entity<PlotRole>().IsKeptRole();
+            modelBuilder.Entity<PlotRole>().IsCustomRole();
             modelBuilder.Entity<GardenKey>().HasKey(held => new { held.UserId, held.GardenId, held.Key });
         }
 

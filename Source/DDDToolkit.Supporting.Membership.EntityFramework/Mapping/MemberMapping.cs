@@ -18,7 +18,7 @@ namespace DDDToolkit.Supporting.Membership.EntityFramework;
 /// <see langword="null"/>: what a key held from above is compared with.
 /// </param>
 /// <param name="RoleClass">
-/// The entity type of the application's role class for this resource, mapped with <c>IsKeptRole</c>, or
+/// The entity type of the application's role class for this resource, mapped with <c>IsCustomRole</c>, or
 /// <see langword="null"/> when the model maps none: the rows a role's keys are read from, for a resource whose
 /// roles are kept.
 /// </param>

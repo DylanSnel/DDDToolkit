@@ -34,7 +34,7 @@ internal static class ProjectRolesDataLoaders
         CancellationToken cancellationToken)
         => context.IsSelected(ReadFromTheRow)
             ? [.. (await roles.LoadAsync(ids, cancellationToken)).OfType<ProjectRoleListing>()]
-            : [.. ids.Select(id => new ProjectRoleListing(id, string.Empty, string.Empty, MadeFrom: null, KeptRoleStatus.Active, Keys: null))];
+            : [.. ids.Select(id => new ProjectRoleListing(id, string.Empty, string.Empty, MadeFrom: null, CustomRoleStatus.Active, Keys: null))];
 
     /// <summary>
     /// The project roles with these ids, of the caller's tenant, as <see cref="ProjectRolesById"/> answers them: in

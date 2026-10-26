@@ -60,7 +60,7 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
     private const int Member = 0, MemberOwnId = 1, MemberId = 2, RoleId = 3, Resource = 5, IdOfResource = 6, TypeParameters = 8;
 
     private const string NamedRole = "global::DDDToolkit.Supporting.Membership.NamedRole";
-    private const string KeptRoleTemplate = "DDDToolkit.Supporting.Membership.KeptRoleAttribute`2";
+    private const string CustomRoleTemplate = "DDDToolkit.Supporting.Membership.CustomRoleAttribute`2";
 
     private const string Tenancy = "DDDToolkit.Supporting.Tenancy";
     private const string TenantTemplate = Tenancy + ".TenantAggregateAttribute`1";
@@ -132,7 +132,7 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
 
         // Only a project that cannot see Tenancy's role class has to tell the tenant's roles from kept ones another way:
         // by the role classes kept for a resource, wherever the project can see one.
-        var kept = seen ? null : IdsOf(KeptRoleTemplate, declared, compilation, cancellationToken, everywhere: true);
+        var kept = seen ? null : IdsOf(CustomRoleTemplate, declared, compilation, cancellationToken, everywhere: true);
 
         var joins = ImmutableArray.CreateBuilder<Join>();
         foreach (var wrapper in wrappers)

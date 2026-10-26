@@ -398,9 +398,9 @@ internal static class MembershipSql
         {
             // Asked as the caller, so the application's rules on its role table decide which roles are there to
             // see. Removing a row asks nothing of its role, so one that should not be there can be taken away.
-            var kept = KeptRoleClass(rules, mapping);
+            var kept = CustomRoleClass(rules, mapping);
             var held = mapping.Roles;
-            var seen = $"EXISTS (SELECT 1 FROM {Table(kept)} k WHERE k.{Column(kept, nameof(KeptRoleAggregate<>.Id))} = "
+            var seen = $"EXISTS (SELECT 1 FROM {Table(kept)} k WHERE k.{Column(kept, nameof(CustomRoleAggregate<>.Id))} = "
                        + $"{Table(held)}.{Column(held, nameof(MemberRole<,>.RoleId))})";
             foreach (var role in rules.GrantTo)
             {
@@ -476,12 +476,12 @@ internal static class MembershipSql
     /// </summary>
     private static IReadOnlyList<string> OwnerRoleStatements(MemberMapping mapping, MembershipRules rules, string schema, string systemInRole)
     {
-        var kept = KeptRoleClass(rules, mapping);
+        var kept = CustomRoleClass(rules, mapping);
         var name = OwnerRoleLock(rules);
         var function = FunctionIn(schema, name);
-        var madeFrom = Column(kept, nameof(KeptRoleAggregate<>.MadeFrom));
-        var status = Column(kept, nameof(KeptRoleAggregate<>.Status));
-        var active = Braces(RowAccessModel.Stored(kept, nameof(KeptRoleAggregate<>.Status), KeptRoleStatus.Active));
+        var madeFrom = Column(kept, nameof(CustomRoleAggregate<>.MadeFrom));
+        var status = Column(kept, nameof(CustomRoleAggregate<>.Status));
+        var active = Braces(RowAccessModel.Stored(kept, nameof(CustomRoleAggregate<>.Status), CustomRoleStatus.Active));
         var message = "A row of " + RowAccessModel.Table(kept) + " made from the starter role '" + rules.OwnerRole + "' is the role every owner of a "
                       + mapping.Resource.DisplayName() + " holds, and is not archived.";
         var written = Lines(
@@ -627,7 +627,7 @@ internal static class MembershipSql
         var heldRole = "h." + Column(held, role.Name);
         if (rules.RolesKept)
         {
-            return KeptRoleThatGives(rules, mapping, heldRole, memberOfRole);
+            return CustomRoleThatGives(rules, mapping, heldRole, memberOfRole);
         }
 
         if (rules.RolesKeptElsewhere is not { } elsewhere)
@@ -668,13 +668,13 @@ internal static class MembershipSql
     /// read straight from its table, for a key a member's role can give at all.
     /// </summary>
     /// <exception cref="InvalidOperationException">The model maps no role class for the resource, one known by another id than a member holds, or one whose keys are no array.</exception>
-    private static List<string> KeptRoleThatGives(MembershipRules rules, MemberMapping mapping, string heldRole, string memberOfRole)
+    private static List<string> CustomRoleThatGives(MembershipRules rules, MemberMapping mapping, string heldRole, string memberOfRole)
     {
         var held = mapping.Roles;
         var what = mapping.Resource.DisplayName();
-        var kept = KeptRoleClass(rules, mapping);
+        var kept = CustomRoleClass(rules, mapping);
 
-        var id = kept.FindProperty(nameof(KeptRoleAggregate<>.Id))!;
+        var id = kept.FindProperty(nameof(CustomRoleAggregate<>.Id))!;
         var heldBy = held.FindProperty(nameof(MemberRole<,>.RoleId))!;
         if (id.ClrType != heldBy.ClrType)
         {
@@ -683,12 +683,12 @@ internal static class MembershipSql
                 + ". A member holds a role of the resource by that role's id: declare the member class with " + id.ClrType.Name + " as its role.");
         }
 
-        var stored = RowAccessModel.ColumnType(kept, nameof(KeptRoleAggregate<>.Keys)).Trim();
+        var stored = RowAccessModel.ColumnType(kept, nameof(CustomRoleAggregate<>.Keys)).Trim();
         if (!stored.EndsWith("[]", StringComparison.Ordinal))
         {
             throw new InvalidOperationException(
-                kept.DisplayName() + "." + nameof(KeptRoleAggregate<>.Keys) + " is stored as " + stored + ", and the functions read a role's keys from an array, such as text[]. "
-                + "Leave the column as IsKeptRole maps it.");
+                kept.DisplayName() + "." + nameof(CustomRoleAggregate<>.Keys) + " is stored as " + stored + ", and the functions read a role's keys from an array, such as text[]. "
+                + "Leave the column as IsCustomRole maps it.");
         }
 
         // What a row holds it may hold from before the rules changed: it gives a member only a key the rules
@@ -698,21 +698,21 @@ internal static class MembershipSql
         lines.Add($"              JOIN {Table(kept)} k ON k.{Column(kept, id.Name)} = {heldRole}");
         lines.Add($"              WHERE {memberOfRole} AND {Now(held, "h")}");
         lines.Add(
-            $"                AND k.{Column(kept, nameof(KeptRoleAggregate<>.Status))} = "
-            + Braces(RowAccessModel.Stored(kept, nameof(KeptRoleAggregate<>.Status), KeptRoleStatus.Active))
-            + $" AND $1 = ANY (k.{Column(kept, nameof(KeptRoleAggregate<>.Keys))}))");
+            $"                AND k.{Column(kept, nameof(CustomRoleAggregate<>.Status))} = "
+            + Braces(RowAccessModel.Stored(kept, nameof(CustomRoleAggregate<>.Status), CustomRoleStatus.Active))
+            + $" AND $1 = ANY (k.{Column(kept, nameof(CustomRoleAggregate<>.Keys))}))");
         return lines;
     }
 
     /// <summary>The application's role class of a resource whose roles are kept for it.</summary>
     /// <exception cref="InvalidOperationException">The model maps none for the resource.</exception>
-    private static IEntityType KeptRoleClass(MembershipRules rules, MemberMapping mapping)
+    private static IEntityType CustomRoleClass(MembershipRules rules, MemberMapping mapping)
     {
         var what = mapping.Resource.DisplayName();
         return mapping.RoleClass
             ?? throw new InvalidOperationException(
                 "The rules '" + rules.Name + "' say the roles of " + what + " are kept, and the model maps no role class for it. Declare one with the role template, "
-                + "[KeptRole<TRoleId, " + what + ">], and map it where the context builds its model: modelBuilder.Entity<" + what + "Role>().IsKeptRole().");
+                + "[CustomRole<TRoleId, " + what + ">], and map it where the context builds its model: modelBuilder.Entity<" + what + "Role>().IsCustomRole().");
     }
 
     /// <summary>

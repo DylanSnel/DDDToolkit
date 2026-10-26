@@ -80,7 +80,7 @@ public sealed class CampusContext(DbContextOptions<CampusContext> options) : DbC
         modelBuilder.Entity<CourseRole>(role =>
         {
             // Membership's part of a role: its name, what it is for, its keys, its status, and the starter role it came from.
-            role.IsKeptRole();
+            role.IsCustomRole();
 
             // The application's part: whose it is. A name is used once in a college, and a college has each starter role once.
             role.ScopeToTenant(row => row.TenantId);

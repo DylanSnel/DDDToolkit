@@ -12,47 +12,47 @@ namespace DDDToolkit.Supporting.Membership.Tests;
 /// no event and knows nothing of whose a role is. Two role classes are declared in one project, the TestHost:
 /// the plots', which the host wraps in words and events of its own, and the sheds', which adds nothing.
 /// </summary>
-public sealed class KeptRoleTests
+public sealed class CustomRoleTests
 {
     private static readonly GardenId Meadow = GardenId.CreateSequential();
 
     private static MembershipRules Sheds => ShedMembership.Rules;
 
     private static ShedRole Role(string name = "Lender", string? description = null, params string[] keys)
-        => new(ShedRoleId.CreateSequential(), new KeptRoleDraft(name, description, keys));
+        => new(ShedRoleId.CreateSequential(), new CustomRoleDraft(name, description, keys));
 
     // ---------------------------------------------------------------- the template
 
     [Fact]
     public void Each_role_class_derives_from_the_parent_closed_over_its_own_id_and_is_an_aggregate_of_the_hosts()
     {
-        typeof(PlotRole).BaseType.Should().Be(typeof(KeptRoleAggregate<PlotRoleId>));
-        typeof(ShedRole).BaseType.Should().Be(typeof(KeptRoleAggregate<ShedRoleId>));
-        typeof(KeptRoleAggregate<PlotRoleId>).BaseType.Should().Be(typeof(AggregateRoot<PlotRoleId>), "a role is an aggregate beside the resource, with a version of its own");
+        typeof(PlotRole).BaseType.Should().Be(typeof(CustomRoleAggregate<PlotRoleId>));
+        typeof(ShedRole).BaseType.Should().Be(typeof(CustomRoleAggregate<ShedRoleId>));
+        typeof(CustomRoleAggregate<PlotRoleId>).BaseType.Should().Be(typeof(AggregateRoot<PlotRoleId>), "a role is an aggregate beside the resource, with a version of its own");
 
         // What the host added is the host's: the plots' roles are a garden's, and the package has no such column.
         typeof(PlotRole).GetProperty(nameof(PlotRole.GardenId))!.DeclaringType.Should().Be(typeof(PlotRole));
-        typeof(KeptRoleAggregate<>).GetProperties(BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly).Select(property => property.Name)
+        typeof(CustomRoleAggregate<>).GetProperties(BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly).Select(property => property.Name)
             .Should().BeEquivalentTo("Name", "Description", "Keys", "Status", "MadeFrom");
     }
 
     [Fact]
     public void The_role_template_names_the_resource_and_may_be_declared_once_for_each_kind_of_resource()
     {
-        var template = typeof(KeptRoleAttribute<,>).GetCustomAttribute<AggregateRootTemplateAttribute>()!;
+        var template = typeof(CustomRoleAttribute<,>).GetCustomAttribute<AggregateRootTemplateAttribute>()!;
 
-        template.Parent.Should().Be(typeof(KeptRoleAggregate<>));
+        template.Parent.Should().Be(typeof(CustomRoleAggregate<>));
         template.AllowSeveral.Should().BeTrue("an application has roles of plots and roles of sheds, each a class of its own");
-        typeof(KeptRoleAttribute<,>).GetCustomAttributes<TemplateArgumentAttribute>().Should().BeEmpty("nothing is taken from another class");
+        typeof(CustomRoleAttribute<,>).GetCustomAttributes<TemplateArgumentAttribute>().Should().BeEmpty("nothing is taken from another class");
 
         static Type[] DeclaredWith(Type roleClass)
-            => roleClass.GetCustomAttributes().Single(attribute => attribute.GetType().IsGenericType && attribute.GetType().GetGenericTypeDefinition() == typeof(KeptRoleAttribute<,>))
+            => roleClass.GetCustomAttributes().Single(attribute => attribute.GetType().IsGenericType && attribute.GetType().GetGenericTypeDefinition() == typeof(CustomRoleAttribute<,>))
                 .GetType().GetGenericArguments();
 
         // The second type is the resource: how the roles of a resource are found. The parent takes the id alone.
         DeclaredWith(typeof(PlotRole)).Should().Equal(typeof(PlotRoleId), typeof(Plot));
         DeclaredWith(typeof(ShedRole)).Should().Equal(typeof(ShedRoleId), typeof(Shed));
-        typeof(KeptRoleAggregate<>).GetGenericArguments().Should().ContainSingle();
+        typeof(CustomRoleAggregate<>).GetGenericArguments().Should().ContainSingle();
 
         // A member of the resource holds a role by the role class's id.
         typeof(PlotGardener).BaseType.Should().Be(typeof(MemberEntity<PlotGardenerId, UserId, PlotRoleId>));
@@ -62,7 +62,7 @@ public sealed class KeptRoleTests
     [Fact]
     public void Nothing_about_a_role_is_changed_but_through_what_it_offers_and_nothing_it_decides_is_overridden()
     {
-        var parent = typeof(KeptRoleAggregate<>);
+        var parent = typeof(CustomRoleAggregate<>);
 
         parent.GetProperties(BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly)
             .Where(property => property.SetMethod is { IsPublic: true } or { IsFamily: true } or { IsFamilyOrAssembly: true })
@@ -95,7 +95,7 @@ public sealed class KeptRoleTests
         role.Name.Should().Be("Lender");
         role.Description.Should().Be("Lends the tools out.");
         role.Keys.Should().Equal(ShedKeys.Open, ShedKeys.Stock, ShedKeys.LendTools);
-        role.Status.Should().Be(KeptRoleStatus.Active);
+        role.Status.Should().Be(CustomRoleStatus.Active);
         role.MadeFrom.Should().BeNull("a role a customer makes came from no starter role");
         role.GetInvariantViolations().Should().BeEmpty();
         role.DomainEvents.Should().BeEmpty("the package raises nothing: what a host tells the world about its roles is the host's to say");
@@ -116,7 +116,7 @@ public sealed class KeptRoleTests
 
         refusal.Code.Should().Be("sheds.role-name-invalid");
         refusal.Message.Should().Be("Enter 1 to 120 characters.");
-        refusal.Arguments.Should().Contain("Min", 1).And.Contain("Max", KeptRoleAggregate<ShedRoleId>.MaxNameLength).And.Contain(RefusalException.FieldArgument, "name");
+        refusal.Arguments.Should().Contain("Min", 1).And.Contain("Max", CustomRoleAggregate<ShedRoleId>.MaxNameLength).And.Contain(RefusalException.FieldArgument, "name");
 
         // Renaming is held to the same, and leaves the role as it was.
         var role = Role();
@@ -127,11 +127,11 @@ public sealed class KeptRoleTests
     [Fact]
     public void A_name_and_a_description_are_no_longer_than_a_role_allows_counted_without_the_space_around_them()
     {
-        var longest = new string('n', KeptRoleAggregate<ShedRoleId>.MaxNameLength);
+        var longest = new string('n', CustomRoleAggregate<ShedRoleId>.MaxNameLength);
         Role(" " + longest + " ").Name.Should().Be(longest);
         Refused.With(ShedMembership.Codes, MembershipRefusals.RoleNameInvalid, () => Role(longest + "n"));
 
-        var wordy = new string('d', KeptRoleAggregate<ShedRoleId>.MaxDescriptionLength);
+        var wordy = new string('d', CustomRoleAggregate<ShedRoleId>.MaxDescriptionLength);
         Role(description: wordy + "  ").Description.Should().Be(wordy);
 
         // The one rule is about both texts, and says which input it is about.
@@ -154,7 +154,7 @@ public sealed class KeptRoleTests
 
         // The plots' rules list what a role may give: any other key is refused, and every one refused is named.
         var listed = Refused.With(PlotMembership.Codes, MembershipRefusals.KeyNotForMembers, () => new PlotRole(
-            PlotRoleId.CreateSequential(), Meadow, new KeptRoleDraft("Seller", null, [PlotKeys.Water, PlotKeys.Sell, "compost.turn", PlotKeys.Fence])));
+            PlotRoleId.CreateSequential(), Meadow, new CustomRoleDraft("Seller", null, [PlotKeys.Water, PlotKeys.Sell, "compost.turn", PlotKeys.Fence])));
         listed.Arguments["Keys"].Should().Be("compost.turn, plots.sell");
 
         // A blank key is no key: refused like one the rules keep from a role.
@@ -233,7 +233,7 @@ public sealed class KeptRoleTests
 
         role.Archive(Sheds);
 
-        role.Status.Should().Be(KeptRoleStatus.Archived);
+        role.Status.Should().Be(CustomRoleStatus.Archived);
         (role.Name, role.Description).Should().Be(("Lender", "Lends the tools out."));
         role.Keys.Should().Equal(ShedKeys.Open, ShedKeys.LendTools);
         role.GetInvariantViolations().Should().BeEmpty();
@@ -263,18 +263,18 @@ public sealed class KeptRoleTests
 
         // Not archived: nobody could be made an owner after, and there is no way back from archived.
         Refused.With(ShedMembership.Codes, MembershipRefusals.OwnerRoleStays, () => keeper.Archive(Sheds)).Code.Should().Be("sheds.owner-role-stays");
-        keeper.Status.Should().Be(KeptRoleStatus.Active);
+        keeper.Status.Should().Be(CustomRoleStatus.Active);
 
         // A role made from another starter role is archived like any other: the plots' tender.
         var tender = new PlotRole(PlotRoleId.CreateSequential(), Meadow, StarterRoles.Missing<PlotRoleId>(PlotMembership.Rules, []).Single(draft => draft.MadeFrom == PlotMembership.Tender));
         tender.PutAway();
-        (tender.Status, tender.MadeFrom).Should().Be((KeptRoleStatus.Archived, PlotMembership.Tender));
+        (tender.Status, tender.MadeFrom).Should().Be((CustomRoleStatus.Archived, PlotMembership.Tender));
 
         // What a role was made from is one of the roles its resource's rules declare, and a draft made from
         // what a customer entered names none.
-        FluentActions.Invoking(() => new ShedRole(ShedRoleId.CreateSequential(), new KeptRoleDraft("Boss", null, [], MadeFrom: PlotMembership.Tender)))
+        FluentActions.Invoking(() => new ShedRole(ShedRoleId.CreateSequential(), new CustomRoleDraft("Boss", null, [], MadeFrom: PlotMembership.Tender)))
             .Should().Throw<ArgumentException>().WithMessage("*made from the starter role 'tender', and the rules 'sheds' declare no role of that name*StarterRoles.Missing*");
-        new ShedRole(ShedRoleId.CreateSequential(), new KeptRoleDraft("Boss", null, [], MadeFrom: " ")).MadeFrom.Should().BeNull();
+        new ShedRole(ShedRoleId.CreateSequential(), new CustomRoleDraft("Boss", null, [], MadeFrom: " ")).MadeFrom.Should().BeNull();
     }
 
     // ---------------------------------------------------------------- the rules it is held to
@@ -297,7 +297,7 @@ public sealed class KeptRoleTests
         FluentActions.Invoking(() => role.Archive(null!)).Should().Throw<ArgumentNullException>();
         FluentActions.Invoking(() => role.Gives(ShedKeys.Open, null!)).Should().Throw<ArgumentNullException>();
         FluentActions.Invoking(() => new ShedRole(ShedRoleId.CreateSequential(), null!)).Should().Throw<ArgumentNullException>();
-        (role.Name, role.Status).Should().Be(("Lender", KeptRoleStatus.Active));
+        (role.Name, role.Status).Should().Be(("Lender", CustomRoleStatus.Active));
     }
 
     [Fact]
@@ -305,7 +305,7 @@ public sealed class KeptRoleTests
     {
         // Two kinds of resource keep roles in one project, and a client reads from a code which one refused it.
         Refused.With(ShedMembership.Codes, MembershipRefusals.RoleNameInvalid, () => Role(" ")).Code.Should().StartWith("sheds.");
-        Refused.With(PlotMembership.Codes, MembershipRefusals.RoleNameInvalid, () => new PlotRole(PlotRoleId.CreateSequential(), Meadow, new KeptRoleDraft(" ", null, [])))
+        Refused.With(PlotMembership.Codes, MembershipRefusals.RoleNameInvalid, () => new PlotRole(PlotRoleId.CreateSequential(), Meadow, new CustomRoleDraft(" ", null, [])))
             .Code.Should().StartWith("plots.");
     }
 
@@ -323,7 +323,7 @@ public sealed class KeptRoleTests
         named.Message.Should().Be("Enter 1 to 120 characters.");
 
         Break.Set(role, nameof(ShedRole.Name), "Lender");
-        Break.Set(role, nameof(ShedRole.Description), new string('d', KeptRoleAggregate<ShedRoleId>.MaxDescriptionLength + 1));
+        Break.Set(role, nameof(ShedRole.Description), new string('d', CustomRoleAggregate<ShedRoleId>.MaxDescriptionLength + 1));
         role.GetInvariantViolations().Should().ContainSingle().Which.Message.Should().Be("Enter 0 to 1000 characters.");
         Break.Set(role, nameof(ShedRole.Description), string.Empty);
 
@@ -352,7 +352,7 @@ public sealed class KeptRoleTests
         shed.DomainEvents.Should().BeEmpty();
 
         // The plots' role class raises its own from what each operation answered.
-        var plot = new PlotRole(PlotRoleId.CreateSequential(), Meadow, new KeptRoleDraft("Fencer", null, [PlotKeys.See]));
+        var plot = new PlotRole(PlotRoleId.CreateSequential(), Meadow, new CustomRoleDraft("Fencer", null, [PlotKeys.See]));
         plot.CallIt("Fencer", null);
         plot.HaveItGive(PlotKeys.See);
         plot.CallIt("Hedger", null);
@@ -382,7 +382,7 @@ public sealed class KeptRoleTests
 
         // A host makes each with its own constructor, and may call it otherwise from the start: what it was made from stays.
         var named = new PlotRole(PlotRoleId.CreateSequential(), Meadow, drafts[1] with { Name = "Watering can", Description = "Waters." });
-        (named.Name, named.MadeFrom, named.Status).Should().Be(("Watering can", PlotMembership.Waterer, KeptRoleStatus.Active));
+        (named.Name, named.MadeFrom, named.Status).Should().Be(("Watering can", PlotMembership.Waterer, CustomRoleStatus.Active));
     }
 
     [Fact]
@@ -401,7 +401,7 @@ public sealed class KeptRoleTests
         StarterRoles.Missing(rules, meadow).Should().BeEmpty();
 
         // A role a customer made with a starter role's name is no starter role: that one is still to be made.
-        var orchard = new List<PlotRole> { new(PlotRoleId.CreateSequential(), GardenId.CreateSequential(), new KeptRoleDraft(PlotMembership.Tender, null, [PlotKeys.See])) };
+        var orchard = new List<PlotRole> { new(PlotRoleId.CreateSequential(), GardenId.CreateSequential(), new CustomRoleDraft(PlotMembership.Tender, null, [PlotKeys.See])) };
         StarterRoles.Missing(rules, orchard).Select(draft => draft.MadeFrom).Should().Equal(PlotMembership.Tender, PlotMembership.Waterer, MembershipRules.DefaultOwnerRole);
 
         // Only what is missing: a scope that has the owner's role alone is given the other two.

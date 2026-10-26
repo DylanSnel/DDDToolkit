@@ -75,17 +75,17 @@ internal sealed class MemberNamesOf<TContext, TResource, TRoleId>
                 at.Name)!;
         }
 
-        KeptRoles<TRoleId>? roles = null;
+        CustomRoles<TRoleId>? roles = null;
         if (rules.RolesKept)
         {
             var roleClass = mapping.RoleClass
                 ?? throw new InvalidOperationException(
                     "The rules '" + rules.Name + "' say the roles of " + typeof(TResource).Name + " are kept, and " + typeof(TContext).Name + " maps no role class for it. "
-                    + "Declare one with the role template, [KeptRole<" + typeof(TRoleId).Name + ", " + typeof(TResource).Name + ">] public sealed partial class "
-                    + typeof(TResource).Name + "Role, and map it where the context builds its model: modelBuilder.Entity<" + typeof(TResource).Name + "Role>().IsKeptRole().");
+                    + "Declare one with the role template, [CustomRole<" + typeof(TRoleId).Name + ", " + typeof(TResource).Name + ">] public sealed partial class "
+                    + typeof(TResource).Name + "Role, and map it where the context builds its model: modelBuilder.Entity<" + typeof(TResource).Name + "Role>().IsCustomRole().");
 
             // Which class the roles are of is the model's to say, and a member holds one of them by that class's id.
-            var known = roleClass.FindProperty(nameof(KeptRoleAggregate<TRoleId>.Id))!.ClrType;
+            var known = roleClass.FindProperty(nameof(CustomRoleAggregate<TRoleId>.Id))!.ClrType;
             if (known != typeof(TRoleId))
             {
                 throw new InvalidOperationException(
@@ -93,7 +93,7 @@ internal sealed class MemberNamesOf<TContext, TResource, TRoleId>
                     + " is known by " + known.Name + ". A member holds a role of the resource by that role's id: declare the member class with " + known.Name + " as its role.");
             }
 
-            roles = (KeptRoles<TRoleId>)Activator.CreateInstance(typeof(KeptRoles<,>).MakeGenericType(roleClass.ClrType, typeof(TRoleId)))!;
+            roles = (CustomRoles<TRoleId>)Activator.CreateInstance(typeof(CustomRoles<,>).MakeGenericType(roleClass.ClrType, typeof(TRoleId)))!;
         }
 
         // A query filter that reads a member of the context it runs on is the application's rule as that one

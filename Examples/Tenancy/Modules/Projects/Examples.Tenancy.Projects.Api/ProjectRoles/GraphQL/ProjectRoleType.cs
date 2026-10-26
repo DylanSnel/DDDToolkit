@@ -28,7 +28,7 @@ internal static partial class ProjectRoleType
     public static string? GetMadeFrom([Parent] ProjectRoleListing role) => role.MadeFrom;
 
     /// <summary>Whether it can still be given.</summary>
-    public static KeptRoleStatus GetStatus([Parent] ProjectRoleListing role) => role.Status;
+    public static CustomRoleStatus GetStatus([Parent] ProjectRoleListing role) => role.Status;
 
     /// <summary>
     /// The keys it gives on a crew. What a role lets its holders do is for whoever manages the tenant's roles: a

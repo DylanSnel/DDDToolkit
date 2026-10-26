@@ -24,11 +24,11 @@ public sealed partial class ShedHand;
 /// is a role of. The host adds nothing to it: the sheds' roles are the whole application's, kept in no
 /// customer's name, so there is one set of them and no rule about whose a request reads.
 /// </summary>
-[KeptRole<ShedRoleId, Shed>]
+[CustomRole<ShedRoleId, Shed>]
 public sealed partial class ShedRole
 {
     /// <summary>Makes a role of sheds.</summary>
-    public ShedRole(ShedRoleId id, KeptRoleDraft draft) : base(id, draft, ShedMembership.Rules)
+    public ShedRole(ShedRoleId id, CustomRoleDraft draft) : base(id, draft, ShedMembership.Rules)
     {
     }
 }

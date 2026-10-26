@@ -412,7 +412,7 @@ public sealed class ReachedFromAboveOnPostgresTests(FilingPostgres postgres)
                 plot.Property(row => row.Id).ValueGeneratedNever();
                 plot.HasMembers(row => row.Gardeners, row => row.OwnerId, at: row => row.GardenId);
             });
-            modelBuilder.Entity<PlotRole>().IsKeptRole();
+            modelBuilder.Entity<PlotRole>().IsCustomRole();
             modelBuilder.Entity<GardenKey>().HasKey(held => new { held.UserId, held.GardenId, held.Key });
             modelBuilder.Entity<LetGo>().HasKey(row => row.UserId);
         }

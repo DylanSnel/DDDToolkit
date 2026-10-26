@@ -67,7 +67,7 @@ public sealed class PressContext(DbContextOptions<PressContext> options) : DbCon
 
         modelBuilder.Entity<ManuscriptRole>(role =>
         {
-            role.IsKeptRole();
+            role.IsCustomRole();
             role.ScopeToTenant(row => row.TenantId);
             role.HasIndex(row => new { row.TenantId, row.Name }).IsUnique();
         });

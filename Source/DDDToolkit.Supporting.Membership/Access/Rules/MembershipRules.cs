@@ -103,7 +103,7 @@ public sealed class MembershipRules
     /// </param>
     /// <param name="rolesKept">
     /// Says that the roles a member holds are kept for the resource: rows of the application's role class
-    /// (<see cref="KeptRoleAttribute{TRoleId, TResource}"/>), which a customer makes, renames, gives keys
+    /// (<see cref="CustomRoleAttribute{TRoleId, TResource}"/>), which a customer makes, renames, gives keys
     /// and archives. <paramref name="roles"/> are then the starter roles those rows begin from. Left out, the
     /// roles are the ones the rules declare.
     /// </param>
@@ -276,7 +276,7 @@ public sealed class MembershipRules
 
     /// <summary>
     /// Whether the roles a member holds are kept for the resource: rows of the application's role class,
-    /// declared with <see cref="KeptRoleAttribute{TRoleId, TResource}"/>, which a customer makes, renames,
+    /// declared with <see cref="CustomRoleAttribute{TRoleId, TResource}"/>, which a customer makes, renames,
     /// gives keys and archives, and which a member holds by their id. What such a role gives is read from its
     /// row, cut by <see cref="MemberKeys"/>, and <see cref="Roles"/> are the starter roles the rows begin from
     /// (<see cref="UseCases.StarterRoles"/>).

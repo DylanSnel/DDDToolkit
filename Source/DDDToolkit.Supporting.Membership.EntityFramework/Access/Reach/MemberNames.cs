@@ -16,6 +16,6 @@ namespace DDDToolkit.Supporting.Membership.EntityFramework;
 /// </param>
 /// <typeparam name="TResource">The resource's aggregate.</typeparam>
 /// <typeparam name="TRoleId">What a role is known by.</typeparam>
-internal sealed record MemberNames<TResource, TRoleId>(string Members, string Owner, PlacesAbove<TResource>? Above, KeptRoles<TRoleId>? Roles, bool FollowTheRequest)
+internal sealed record MemberNames<TResource, TRoleId>(string Members, string Owner, PlacesAbove<TResource>? Above, CustomRoles<TRoleId>? Roles, bool FollowTheRequest)
     where TResource : class
     where TRoleId : struct, IEntityId, IEquatable<TRoleId>;

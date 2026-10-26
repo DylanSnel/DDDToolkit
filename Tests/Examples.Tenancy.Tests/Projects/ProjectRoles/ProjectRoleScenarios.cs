@@ -236,7 +236,7 @@ public sealed class ProjectRoleScenarios(SampleHosts sample) : IClassFixture<Sam
         await SampleTenants.SendAsSystemAsync(host, quarry.Tenant, new SetUpProjectRoles());
         var made = await SampleTenants.AskAsSystemAsync(host, quarry.Tenant, new TenantProjectRoles());
         made.Select(role => (role.MadeFrom, role.Name, role.Description, role.Status, Keys: string.Join(" ", role.Keys!)))
-            .Should().BeEquivalentTo(SampleCatalogue.ProjectRoles.Select(starter => ((string?)starter.Key, starter.Name, starter.Description, KeptRoleStatus.Active, string.Join(" ", starter.Keys.Order(StringComparer.Ordinal)))));
+            .Should().BeEquivalentTo(SampleCatalogue.ProjectRoles.Select(starter => ((string?)starter.Key, starter.Name, starter.Description, CustomRoleStatus.Active, string.Join(" ", starter.Keys.Order(StringComparer.Ordinal)))));
 
         // Once: set up again, it makes nothing.
         await SampleTenants.SendAsSystemAsync(host, quarry.Tenant, new SetUpProjectRoles());

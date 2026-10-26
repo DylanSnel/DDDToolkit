@@ -67,7 +67,7 @@ internal static class ProjectsGraphQL
             .AddObjectType<ReferencedSeat>()
             .AddObjectType<ReferencedOrganizationUnit>()
             // The package's status of a role, under this schema's word for what it is the status of.
-            .AddEnumType<KeptRoleStatus>(status => status.Name("ProjectRoleStatus"));
+            .AddEnumType<CustomRoleStatus>(status => status.Name("ProjectRoleStatus"));
 
         // What the host gives every module's schema: typed errors, one spelling for enum values, a scope per
         // field, and the check that the caller has a seat.

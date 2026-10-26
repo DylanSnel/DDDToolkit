@@ -87,10 +87,10 @@ public class MembershipWithTenancyGeneratorTests
         [Member<CourseTutorId, SeatId, CourseRoleId, Course>]
         public sealed partial class CourseTutor;
 
-        [KeptRole<CourseRoleId, Course>]
+        [CustomRole<CourseRoleId, Course>]
         public sealed partial class CourseRole
         {
-            public CourseRole(CourseRoleId id, KeptRoleDraft draft, MembershipRules rules) : base(id, draft, rules) { }
+            public CourseRole(CourseRoleId id, CustomRoleDraft draft, MembershipRules rules) : base(id, draft, rules) { }
         }
 
         [AggregateRoot<CourseId>]

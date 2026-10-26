@@ -366,7 +366,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
             (await handle.Should().ThrowAsync<RefusalException>()).Which.Code.Should().Be(TenancyRefusals.NotSeated);
         }
 
-        (await StatusOfAsync(host, observer)).Should().Be(KeptRoleStatus.Active, "a refused command changes nothing");
+        (await StatusOfAsync(host, observer)).Should().Be(CustomRoleStatus.Active, "a refused command changes nothing");
 
         // Maud holds the key for the whole tenant, so the handler goes on for her wherever it runs.
         using (AsSeatOf(DemoPeople.Maud))
@@ -375,7 +375,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
             await ArchiveHandlerOf(scope).Handle(archive, Cancellation);
         }
 
-        (await StatusOfAsync(host, observer)).Should().Be(KeptRoleStatus.Archived);
+        (await StatusOfAsync(host, observer)).Should().Be(CustomRoleStatus.Archived);
     }
 
     [Fact]
@@ -1407,7 +1407,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
             scope.ServiceProvider.GetRequiredService<AccessChecks<IProjectsRequest>>());
 
     /// <summary>Whether harbor's project role <paramref name="role"/> is in use, read as system work there.</summary>
-    private static async Task<KeptRoleStatus> StatusOfAsync(SampleFactory host, ProjectRoleId role)
+    private static async Task<CustomRoleStatus> StatusOfAsync(SampleFactory host, ProjectRoleId role)
     {
         using (TenancyUseCases.BeginSystemIn(Harbor.Id))
         {

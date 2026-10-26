@@ -22,11 +22,11 @@ public readonly partial record struct ManuscriptRoleId;
 public sealed partial class ManuscriptEditor;
 
 /// <summary>A role of manuscripts, as Membership declares one, with the house it is of beside it.</summary>
-[KeptRole<ManuscriptRoleId, Manuscript>]
+[CustomRole<ManuscriptRoleId, Manuscript>]
 public sealed partial class ManuscriptRole
 {
     /// <summary>Makes a role of manuscripts for a house.</summary>
-    public ManuscriptRole(ManuscriptRoleId id, TenantId tenant, KeptRoleDraft draft) : base(id, draft, ManuscriptMembership.Rules) => TenantId = tenant;
+    public ManuscriptRole(ManuscriptRoleId id, TenantId tenant, CustomRoleDraft draft) : base(id, draft, ManuscriptMembership.Rules) => TenantId = tenant;
 
     /// <summary>The house the role is of: the application's own column.</summary>
     public TenantId TenantId { get; private set; }

@@ -207,7 +207,7 @@ public static class MembershipEntityTypeBuilderExtensions
     /// <code>
     /// modelBuilder.Entity&lt;PlotRole&gt;(role =&gt;
     /// {
-    ///     role.IsKeptRole();
+    ///     role.IsCustomRole();
     ///
     ///     // The application's own: whose a role is, that a name is used once there, and that a starter role is made once there
     ///     role.HasIndex(row =&gt; new { row.GardenId, row.Name }).IsUnique().RefusesAs("plots.role-name-taken", "Another role is called {Name} already.");
@@ -238,7 +238,7 @@ public static class MembershipEntityTypeBuilderExtensions
     /// <typeparam name="TRole">The application's role class, declared with the role template.</typeparam>
     /// <exception cref="ArgumentNullException"><paramref name="role"/> is null.</exception>
     /// <exception cref="ArgumentException"><typeparamref name="TRole"/> was not declared with the role template.</exception>
-    public static EntityTypeBuilder<TRole> IsKeptRole<TRole>(this EntityTypeBuilder<TRole> role)
+    public static EntityTypeBuilder<TRole> IsCustomRole<TRole>(this EntityTypeBuilder<TRole> role)
         where TRole : class
     {
         ArgumentNullException.ThrowIfNull(role);
@@ -246,12 +246,12 @@ public static class MembershipEntityTypeBuilderExtensions
         var parent = RoleParentOf(typeof(TRole));
         var resource = typeof(TRole).GetCustomAttributes(inherit: false)
             .Select(attribute => attribute.GetType())
-            .FirstOrDefault(attribute => attribute.IsGenericType && attribute.GetGenericTypeDefinition() == typeof(KeptRoleAttribute<,>))
+            .FirstOrDefault(attribute => attribute.IsGenericType && attribute.GetGenericTypeDefinition() == typeof(CustomRoleAttribute<,>))
             ?.GenericTypeArguments[1];
         if (parent is null || resource is null)
         {
             throw new ArgumentException(
-                typeof(TRole).Name + " is not a role class. Declare it with the role template, naming the resource its roles are of, [KeptRole<"
+                typeof(TRole).Name + " is not a role class. Declare it with the role template, naming the resource its roles are of, [CustomRole<"
                 + typeof(TRole).Name + "Id, Document>] public sealed partial class " + typeof(TRole).Name + " for the roles of a Document, and the generator derives it from the package's role.",
                 nameof(role));
         }
@@ -273,12 +273,12 @@ public static class MembershipEntityTypeBuilderExtensions
 
     /// <summary>The package's part of a role, with the role's id known.</summary>
     private static void MapRoleClass<TRole, TRoleId>(EntityTypeBuilder<TRole> role)
-        where TRole : KeptRoleAggregate<TRoleId>
+        where TRole : CustomRoleAggregate<TRoleId>
         where TRoleId : struct, IEntityId, IEquatable<TRoleId>
     {
         role.Property(row => row.Id).ValueGeneratedNever();
-        role.Property(row => row.Name).HasMaxLength(KeptRoleAggregate<TRoleId>.MaxNameLength);
-        role.Property(row => row.Description).HasMaxLength(KeptRoleAggregate<TRoleId>.MaxDescriptionLength);
+        role.Property(row => row.Name).HasMaxLength(CustomRoleAggregate<TRoleId>.MaxNameLength);
+        role.Property(row => row.Description).HasMaxLength(CustomRoleAggregate<TRoleId>.MaxDescriptionLength);
 
         // A starter role is one of the roles the rules declare, and those are named as a role is held by name.
         // Where a role came from is how the owner's role is found, so it is said once, when the row is added:
@@ -299,7 +299,7 @@ public static class MembershipEntityTypeBuilderExtensions
     {
         for (var type = roleClass.BaseType; type is not null; type = type.BaseType)
         {
-            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(KeptRoleAggregate<>))
+            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(CustomRoleAggregate<>))
             {
                 return type;
             }

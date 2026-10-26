@@ -28,7 +28,7 @@ public sealed record ProjectRoleListing(
     string Name,
     string Description,
     string? MadeFrom,
-    KeptRoleStatus Status,
+    CustomRoleStatus Status,
     IReadOnlyList<string>? Keys)
 {
     /// <summary>

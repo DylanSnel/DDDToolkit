@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore.Metadata;
 namespace DDDToolkit.Supporting.Membership.EntityFramework.Tests;
 
 /// <summary>
-/// What <c>IsKeptRole</c> maps of a role class, the mark it leaves, which is how the roles of a resource are
+/// What <c>IsCustomRole</c> maps of a role class, the mark it leaves, which is how the roles of a resource are
 /// found without anything registered for them, and what is said when the rules, the registration and the
 /// model do not agree about a resource's roles.
 /// </summary>
@@ -32,8 +32,8 @@ public sealed class RoleClassMappingTests
             "the package's six, the host's garden, and the version every aggregate has");
 
         role.FindProperty("Id")!.ValueGenerated.Should().Be(ValueGenerated.Never, "the host makes a role's id");
-        role.FindProperty("Name")!.GetMaxLength().Should().Be(KeptRoleAggregate<PlotRoleId>.MaxNameLength).And.Be(120);
-        role.FindProperty("Description")!.GetMaxLength().Should().Be(KeptRoleAggregate<PlotRoleId>.MaxDescriptionLength).And.Be(1000);
+        role.FindProperty("Name")!.GetMaxLength().Should().Be(CustomRoleAggregate<PlotRoleId>.MaxNameLength).And.Be(120);
+        role.FindProperty("Description")!.GetMaxLength().Should().Be(CustomRoleAggregate<PlotRoleId>.MaxDescriptionLength).And.Be(1000);
         role.FindProperty("MadeFrom")!.GetMaxLength().Should().Be(NamedRole.MaxLength, "a starter role is one the rules declare, by a name a role can have");
         role.FindProperty("MadeFrom")!.IsNullable.Should().BeTrue("a role a garden made itself came from no starter role");
 
@@ -88,11 +88,11 @@ public sealed class RoleClassMappingTests
     [Fact]
     public void A_class_that_was_not_declared_with_the_role_template_is_not_mapped_as_one()
     {
-        FluentActions.Invoking(() => ModelOf(builder => builder.Entity<Barrow>().IsKeptRole()))
+        FluentActions.Invoking(() => ModelOf(builder => builder.Entity<Barrow>().IsCustomRole()))
             .Should().Throw<ArgumentException>()
-            .WithMessage("Barrow is not a role class. Declare it with the role template*[KeptRole<BarrowId, Document>] public sealed partial class Barrow*");
+            .WithMessage("Barrow is not a role class. Declare it with the role template*[CustomRole<BarrowId, Document>] public sealed partial class Barrow*");
 
-        FluentActions.Invoking(() => MembershipEntityTypeBuilderExtensions.IsKeptRole<PlotRole>(null!)).Should().Throw<ArgumentNullException>();
+        FluentActions.Invoking(() => MembershipEntityTypeBuilderExtensions.IsCustomRole<PlotRole>(null!)).Should().Throw<ArgumentNullException>();
     }
 
     [Fact]
@@ -102,20 +102,20 @@ public sealed class RoleClassMappingTests
         var two = ModelOf(builder =>
         {
             builder.Entity<Plot>().HasMembers(plot => plot.Gardeners, plot => plot.OwnerId);
-            builder.Entity<PlotRole>().IsKeptRole();
+            builder.Entity<PlotRole>().IsCustomRole();
             builder.Entity<StrayRole>().HasAnnotation(MembershipModel.RoleOfAnnotation, typeof(Plot).FullName);
         });
         FluentActions.Invoking(() => MembershipModel.MembersOf(two.FindEntityType(typeof(Plot))!))
             .Should().Throw<InvalidOperationException>().WithMessage("Plot has two role classes in this model, *Role and *Role. A resource has one*");
 
-        // A mark on something that has no keys: the mapping was changed after IsKeptRole, or never was one.
+        // A mark on something that has no keys: the mapping was changed after IsCustomRole, or never was one.
         var unkeyed = ModelOf(builder =>
         {
             builder.Entity<Plot>().HasMembers(plot => plot.Gardeners, plot => plot.OwnerId);
             builder.Entity<Barrow>().HasAnnotation(MembershipModel.RoleOfAnnotation, typeof(Plot).FullName);
         });
         FluentActions.Invoking(() => MembershipModel.MembersOf(unkeyed.FindEntityType(typeof(Plot))!))
-            .Should().Throw<InvalidOperationException>().WithMessage("Barrow was mapped with IsKeptRole as the role class of Plot, and the model no longer has its keys, its status or its id.*");
+            .Should().Throw<InvalidOperationException>().WithMessage("Barrow was mapped with IsCustomRole as the role class of Plot, and the model no longer has its keys, its status or its id.*");
     }
 
     [Fact]
@@ -126,7 +126,7 @@ public sealed class RoleClassMappingTests
         // A document's members hold their roles by name, and a role that is a row is not held by a name.
         FluentActions.Invoking(() => new ServiceCollection().AddMembership<DocumentShare, DocumentShareId, UserId, NamedRole, FilingContext, Document, DocumentId>(kept))
             .Should().Throw<ArgumentException>().WithParameterName("rules")
-            .WithMessage("The rules 'papers' say the roles of Document are kept, as rows of a role class, and its members hold roles by name.*[KeptRole<DocumentRoleId, Document>]*[Member<DocumentShareId, UserId, DocumentRoleId, Document>]*");
+            .WithMessage("The rules 'papers' say the roles of Document are kept, as rows of a role class, and its members hold roles by name.*[CustomRole<DocumentRoleId, Document>]*[Member<DocumentShareId, UserId, DocumentRoleId, Document>]*");
 
         // And rules that declare the roles are not for members that hold a role by an id: the plots' gardeners do.
         var declared = new MembershipRules("beds", keys: ["beds.view"], roles: [new("reader", ["beds.view"])]);
@@ -196,8 +196,8 @@ public sealed class RoleClassMappingTests
         // The plots are mapped with their gardeners, and the context never mapped a role class for them.
         (await AskedAsync<PlotsWithoutRoles>()).Message.Should()
             .StartWith("The rules 'plots' say the roles of Plot are kept, and PlotsWithoutRoles maps no role class for it.")
-            .And.Contain("[KeptRole<PlotRoleId, Plot>]")
-            .And.EndWith("modelBuilder.Entity<PlotRole>().IsKeptRole().");
+            .And.Contain("[CustomRole<PlotRoleId, Plot>]")
+            .And.EndWith("modelBuilder.Entity<PlotRole>().IsCustomRole().");
 
         // A role class known by another id than the gardeners hold their roles by.
         (await AskedAsync<PlotsWithStrayRoles>()).Message.Should()
@@ -268,7 +268,7 @@ public sealed class RoleClassMappingTests
 
         public List<string> Keys { get; set; } = [];
 
-        public KeptRoleStatus Status { get; set; }
+        public CustomRoleStatus Status { get; set; }
     }
 
     /// <summary>A host's own answer to which roles there are for its plots: one role, the owner's.</summary>

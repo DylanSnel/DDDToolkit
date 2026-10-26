@@ -4,7 +4,7 @@ namespace DDDToolkit.Supporting.Membership;
 /// Whether a role kept for a resource is in use. An archived role gives nothing, on whichever member holds
 /// it, and is not given again.
 /// </summary>
-public enum KeptRoleStatus
+public enum CustomRoleStatus
 {
     /// <summary>In use.</summary>
     Active,

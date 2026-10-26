@@ -29,7 +29,7 @@ namespace Examples.Tenancy.Projects.Domain.Aggregates.ProjectRoles;
 /// own from that, so a change that changes nothing raises nothing.
 /// </para>
 /// </remarks>
-[KeptRole<ProjectRoleId, Project>]
+[CustomRole<ProjectRoleId, Project>]
 public sealed partial class ProjectRole
 {
     /// <summary>
@@ -44,7 +44,7 @@ public sealed partial class ProjectRole
     /// <c>projects.role-name-invalid</c>, naming the field; <c>projects.key-not-for-members</c>, naming the keys
     /// no crew role may give.
     /// </exception>
-    public ProjectRole(ProjectRoleId id, TenantId tenantId, KeptRoleDraft draft, MembershipRules rules) : base(id, draft, rules)
+    public ProjectRole(ProjectRoleId id, TenantId tenantId, CustomRoleDraft draft, MembershipRules rules) : base(id, draft, rules)
     {
         TenantId = tenantId;
         RaiseDomainEvent(new ProjectRoleMade(id, tenantId));

@@ -8,7 +8,7 @@ namespace DDDToolkit.Supporting.Membership;
 /// <summary>
 /// A role of one kind of resource, kept as a row: a name, what it is for, and the permission keys it gives
 /// a member that holds it. The application declares its own class with
-/// <see cref="KeptRoleAttribute{TRoleId, TResource}"/>, for a resource whose rules say its roles are kept
+/// <see cref="CustomRoleAttribute{TRoleId, TResource}"/>, for a resource whose rules say its roles are kept
 /// (<see cref="MembershipRules.RolesKept"/>): roles a customer makes for itself, where the roles a
 /// resource's rules declare are the same for everybody.
 /// <para>
@@ -37,7 +37,7 @@ namespace DDDToolkit.Supporting.Membership;
 /// </summary>
 /// <typeparam name="TRoleId">The application's id of the role: what a member holds it by.</typeparam>
 [AggregateRootBase]
-public abstract partial class KeptRoleAggregate<TRoleId>
+public abstract partial class CustomRoleAggregate<TRoleId>
     where TRoleId : struct, IEntityId, IEquatable<TRoleId>
 {
     /// <summary>The longest name a role may have.</summary>
@@ -50,7 +50,7 @@ public abstract partial class KeptRoleAggregate<TRoleId>
     /// Makes a role from <paramref name="draft"/>, in use. The application's class calls it from a
     /// constructor of its own, which sets what it added:
     /// <code>
-    /// public PlotRole(PlotRoleId id, GardenId garden, KeptRoleDraft draft) : base(id, draft, PlotMembership.Rules)
+    /// public PlotRole(PlotRoleId id, GardenId garden, CustomRoleDraft draft) : base(id, draft, PlotMembership.Rules)
     ///     =&gt; GardenId = garden;
     /// </code>
     /// </summary>
@@ -66,7 +66,7 @@ public abstract partial class KeptRoleAggregate<TRoleId>
     /// <c>role-name-invalid</c> for a name that is blank or too long, or a description that is too long;
     /// <c>key-not-for-members</c> for a key the rules do not let a member's role give. Under the resource's codes.
     /// </exception>
-    protected KeptRoleAggregate(TRoleId id, KeptRoleDraft draft, MembershipRules rules)
+    protected CustomRoleAggregate(TRoleId id, CustomRoleDraft draft, MembershipRules rules)
         : base(id)
     {
         ArgumentNullException.ThrowIfNull(draft);
@@ -76,7 +76,7 @@ public abstract partial class KeptRoleAggregate<TRoleId>
         Description = ValidDescription(draft.Description, codes);
         Keys = ValidKeys(draft.Keys, rules);
         MadeFrom = StarterNamed(draft.MadeFrom, rules);
-        Status = KeptRoleStatus.Active;
+        Status = CustomRoleStatus.Active;
     }
 
     /// <summary>The role's name, with no white space around it.</summary>
@@ -89,7 +89,7 @@ public abstract partial class KeptRoleAggregate<TRoleId>
     public IReadOnlyList<string> Keys { get; private set; } = [];
 
     /// <summary>Whether the role is in use. An archived role gives nothing.</summary>
-    public KeptRoleStatus Status { get; private set; }
+    public CustomRoleStatus Status { get; private set; }
 
     /// <summary>
     /// The name of the starter role this one was made from, as the resource's rules declare it, or
@@ -111,7 +111,7 @@ public abstract partial class KeptRoleAggregate<TRoleId>
         ArgumentNullException.ThrowIfNull(key);
         ArgumentNullException.ThrowIfNull(rules);
 
-        return Status == KeptRoleStatus.Active && Keys.Contains(key, StringComparer.Ordinal) && rules.MemberKeys.Allows(key);
+        return Status == CustomRoleStatus.Active && Keys.Contains(key, StringComparer.Ordinal) && rules.MemberKeys.Allows(key);
     }
 
     /// <summary>Renames the role and says again what it is for.</summary>
@@ -188,7 +188,7 @@ public abstract partial class KeptRoleAggregate<TRoleId>
             throw codes.Refuse(MembershipRefusals.OwnerRoleStays);
         }
 
-        Status = KeptRoleStatus.Archived;
+        Status = CustomRoleStatus.Archived;
     }
 
     /// <summary>The codes of rules whose roles are kept for the resource: the only rules a role is made and changed under.</summary>
@@ -206,7 +206,7 @@ public abstract partial class KeptRoleAggregate<TRoleId>
 
     private void RequireInUse(MembershipCodes codes)
     {
-        if (Status == KeptRoleStatus.Archived)
+        if (Status == CustomRoleStatus.Archived)
         {
             throw codes.Refuse(MembershipRefusals.RoleIsArchived);
         }

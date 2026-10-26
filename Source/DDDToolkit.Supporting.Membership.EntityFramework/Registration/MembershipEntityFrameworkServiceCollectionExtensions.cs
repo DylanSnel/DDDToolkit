@@ -64,7 +64,7 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
     /// <item><b>Where the roles come from.</b> The rules declare them, and a member holds them as
     /// <see cref="NamedRole"/>; or they are kept for the resource (<see cref="MembershipRules.RolesKept"/>), as
     /// rows of the application's role class, which needs nothing registered: the context maps that class
-    /// with <c>IsKeptRole</c>, and the roles are read from there; or they are kept elsewhere
+    /// with <c>IsCustomRole</c>, and the roles are read from there; or they are kept elsewhere
     /// (<see cref="MembershipRules.RolesKeptElsewhere"/>), which needs an
     /// <see cref="IRolesWithKey{TResourceId, TRoleId}"/> for which roles give a key and an
     /// <see cref="IMemberRoles{TResourceId, TRoleId}"/> for which roles there are.</item>
@@ -185,7 +185,7 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
         {
             // The rows of the application's role class, read on the request's own context. One the
             // application registered before stays, as every answer of its own does.
-            services.TryAddScoped<IMemberRoles<TResourceId, TRoleId>>(provider => new KeptMemberRoles<TContext, TResource, TResourceId, TRoleId>(registration, provider));
+            services.TryAddScoped<IMemberRoles<TResourceId, TRoleId>>(provider => new CustomMemberRoles<TContext, TResource, TResourceId, TRoleId>(registration, provider));
         }
         else if (rules.RolesKeptElsewhere is null)
         {
@@ -464,7 +464,7 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
             {
                 throw new ArgumentException(
                     "The rules '" + rules.Name + "' say the roles of " + typeof(TResource).Name + " are kept, as rows of a role class, and its members hold roles by name. "
-                    + "Declare a role class for it, [KeptRole<" + typeof(TResource).Name + "RoleId, " + typeof(TResource).Name + ">], and the member class with that class's id as its role: "
+                    + "Declare a role class for it, [CustomRole<" + typeof(TResource).Name + "RoleId, " + typeof(TResource).Name + ">], and the member class with that class's id as its role: "
                     + "[Member<" + typeof(TId).Name + ", " + typeof(TMemberId).Name + ", " + typeof(TResource).Name + "RoleId, " + typeof(TResource).Name + ">].",
                     nameof(rules));
             }

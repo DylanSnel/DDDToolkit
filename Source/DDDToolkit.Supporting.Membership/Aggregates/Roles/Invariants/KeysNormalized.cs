@@ -2,7 +2,7 @@ using DDDToolkit.Invariants;
 
 namespace DDDToolkit.Supporting.Membership;
 
-public abstract partial class KeptRoleAggregate<TRoleId>
+public abstract partial class CustomRoleAggregate<TRoleId>
 {
     /// <summary>
     /// A role's keys are distinct, not blank, and in ordinal order: the one way a set of keys is written
@@ -15,13 +15,13 @@ public abstract partial class KeptRoleAggregate<TRoleId>
     /// <see cref="MembershipRefusals.RoleKeysNotNormalized"/>.
     /// </para>
     /// </summary>
-    public sealed class KeysNormalized : IInvariant<KeptRoleAggregate<TRoleId>>
+    public sealed class KeysNormalized : IInvariant<CustomRoleAggregate<TRoleId>>
     {
         /// <inheritdoc />
         public string Code => MembershipRefusals.RoleKeysNotNormalized;
 
         /// <inheritdoc />
-        public InvariantFailure? Check(KeptRoleAggregate<TRoleId> entity)
+        public InvariantFailure? Check(CustomRoleAggregate<TRoleId> entity)
         {
             var keys = entity.Keys ?? [];
             for (var index = 0; index < keys.Count; index++)

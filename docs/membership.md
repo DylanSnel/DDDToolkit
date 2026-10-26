@@ -16,7 +16,7 @@ It comes in three packages:
 | Package | What it holds |
 |---|---|
 | `DDDToolkit.Supporting.Membership` | The member template, the member list with its rules, the role template for [roles a customer makes](#roles-a-customer-makes), the rules of access as one declaration, and the access questions and requirements. No database in it. Its generator writes [the member list](#the-member-list-is-written-for-you) on your aggregate. |
-| `DDDToolkit.Supporting.Membership.EntityFramework` | `HasMembers()` and `IsKeptRole()` for your context, two registrations per resource named after it, `AddDocumentMembership()` and `AddDocumentMemberAccess()`, and the access questions answered inside your own statements. Works on every provider. Its generator writes what joins a resource to [Tenancy](#with-tenancy), in an application that has both. |
+| `DDDToolkit.Supporting.Membership.EntityFramework` | `HasMembers()` and `IsCustomRole()` for your context, two registrations per resource named after it, `AddDocumentMembership()` and `AddDocumentMemberAccess()`, and the access questions answered inside your own statements. Works on every provider. Its generator writes what joins a resource to [Tenancy](#with-tenancy), in an application that has both. |
 | `DDDToolkit.Supporting.Membership.Postgres` | The same questions as four SQL functions per resource, for your [row access rules](row-level-security.md#row-access-rules-written-in-c) to ask, and a start-up check. |
 
 It needs nothing else: no dispatcher, and no [Tenancy](tenancy.md). Members are your users, unless you say
@@ -1014,10 +1014,10 @@ A plot in a garden, whose roles each garden makes for itself:
 [EntityId<Guid>] public readonly partial record struct PlotRoleId;
 
 // The role class: an aggregate of its own beside the resource, named for the resource it is a role of
-[KeptRole<PlotRoleId, Plot>]
+[CustomRole<PlotRoleId, Plot>]
 public sealed partial class PlotRole
 {
-    public PlotRole(PlotRoleId id, GardenId garden, KeptRoleDraft draft) : base(id, draft, PlotMembership.Rules)
+    public PlotRole(PlotRoleId id, GardenId garden, CustomRoleDraft draft) : base(id, draft, PlotMembership.Rules)
         => GardenId = garden;
 
     public GardenId GardenId { get; private set; }               // yours: whose a role is
@@ -1038,7 +1038,7 @@ public static MembershipRules Rules { get; } = new(
 // OnModelCreating: the package's part of a role, then yours
 modelBuilder.Entity<PlotRole>(role =>
 {
-    role.IsKeptRole();
+    role.IsCustomRole();
     role.HasIndex(row => new { row.GardenId, row.Name }).IsUnique()
         .RefusesAs("plots.role-name-taken", "Another role of this garden is called {Name} already.");
     role.HasIndex(row => new { row.GardenId, row.MadeFrom }).IsUnique();
@@ -1084,7 +1084,7 @@ A role is made with your constructor, and changed with three operations of the p
 happened, so you raise your own events: the package raises none.
 
 ```csharp
-var role = new PlotRole(PlotRoleId.Create(), garden, new KeptRoleDraft("Fencer", "Keeps the rabbits out.", ["plots.fence"]));
+var role = new PlotRole(PlotRoleId.Create(), garden, new CustomRoleDraft("Fencer", "Keeps the rabbits out.", ["plots.fence"]));
 
 bool renamed = role.Rename("Hedger", "Keeps the rabbits out.", PlotMembership.Rules);     // the name and what it is for, both as they are to be
 RoleKeysSet set = role.SetKeys(["plots.see", "plots.fence"], PlotMembership.Rules);       // set.Added, set.Removed
@@ -1114,7 +1114,7 @@ role.Archive(PlotMembership.Rules);
   table refuses it as well, whoever writes the row: your application's own work and the table's owner
   included, since no command archives that role either. A role is archived and never removed, so the trigger
   holds archiving; who may delete a row of the table is your rules', and callers need no DELETE on it.
-- **Where a role came from is written once.** `IsKeptRole` maps `MadeFrom` as fixed once the row is there
+- **Where a role came from is written once.** `IsCustomRole` maps `MadeFrom` as fixed once the row is there
   (`IsFixedAfterInsert`): a save that changed it is refused, and where the export writes the privileges from
   the policies, a caller may update every column of a role but that one. The owner's role is found by it.
 - **Who may make, change or archive a role** is a requirement on your command, like

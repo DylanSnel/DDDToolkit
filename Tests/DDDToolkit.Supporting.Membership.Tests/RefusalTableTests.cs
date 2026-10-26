@@ -331,9 +331,9 @@ public partial class RefusalTableTests
 
             // A role kept for a resource, refused under that resource's codes: its name, and the keys it would give.
             (MembershipRefusals.RoleNameInvalid, "name",
-                Refused.With(PlotMembership.Codes, MembershipRefusals.RoleNameInvalid, () => _ = new PlotRole(PlotRoleId.CreateSequential(), GardenId.CreateSequential(), new KeptRoleDraft("  ", null, []))).Arguments),
+                Refused.With(PlotMembership.Codes, MembershipRefusals.RoleNameInvalid, () => _ = new PlotRole(PlotRoleId.CreateSequential(), GardenId.CreateSequential(), new CustomRoleDraft("  ", null, []))).Arguments),
             (MembershipRefusals.KeyNotForMembers, "keys",
-                Refused.With(PlotMembership.Codes, MembershipRefusals.KeyNotForMembers, () => _ = new PlotRole(PlotRoleId.CreateSequential(), GardenId.CreateSequential(), new KeptRoleDraft("Seller", null, [PlotKeys.Sell]))).Arguments),
+                Refused.With(PlotMembership.Codes, MembershipRefusals.KeyNotForMembers, () => _ = new PlotRole(PlotRoleId.CreateSequential(), GardenId.CreateSequential(), new CustomRoleDraft("Seller", null, [PlotKeys.Sell]))).Arguments),
         };
 
         var invalid = MembershipRefusals.Codes.Where(code => MembershipRefusals.KindOf(code) == RefusalKind.Invalid).ToArray();
@@ -469,7 +469,7 @@ public partial class RefusalTableTests
         var meadow = GardenId.CreateSequential();
 
         // Refused where a role is given keys, under the plots' own code.
-        var refused = Refused.With(PlotMembership.Codes, MembershipRefusals.KeyNotForMembers, () => _ = new PlotRole(PlotRoleId.CreateSequential(), meadow, new KeptRoleDraft("Seller", null, [PlotKeys.Sell])));
+        var refused = Refused.With(PlotMembership.Codes, MembershipRefusals.KeyNotForMembers, () => _ = new PlotRole(PlotRoleId.CreateSequential(), meadow, new CustomRoleDraft("Seller", null, [PlotKeys.Sell])));
         refused.Code.Should().Be("plots.key-not-for-members");
         localizer.Localize(refused, CultureInfo.GetCultureInfo("nl-NL")).Should().Be("Deze rechten kan een rol hier niet geven: plots.sell.");
         localizer.Localize(refused, CultureInfo.GetCultureInfo("en-GB")).Should().Be(refused.Message).And.Be("A role cannot give these keys here: plots.sell.");
@@ -479,7 +479,7 @@ public partial class RefusalTableTests
         localizer.Localize(PlotMembership.Codes.Refuse(MembershipRefusals.OwnerRoleStays), CultureInfo.GetCultureInfo("nl")).Should().Be("De rol die elke eigenaar heeft, kan niet worden gearchiveerd.");
 
         // What a role checks by itself it reports under the package's name for the rule, and that reads in the reader's language too.
-        var role = new PlotRole(PlotRoleId.CreateSequential(), meadow, new KeptRoleDraft("Fencer", null, [PlotKeys.See]));
+        var role = new PlotRole(PlotRoleId.CreateSequential(), meadow, new CustomRoleDraft("Fencer", null, [PlotKeys.See]));
         Break.Set(role, nameof(PlotRole.Name), string.Empty);
         var violation = role.GetInvariantViolations().Should().ContainSingle().Which;
         violation.Code.Should().Be(MembershipRefusals.RoleNameInvalid);

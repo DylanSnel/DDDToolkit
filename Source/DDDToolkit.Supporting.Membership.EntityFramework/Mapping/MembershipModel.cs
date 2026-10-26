@@ -32,7 +32,7 @@ public static class MembershipModel
     public const string AtAnnotation = "DDDToolkit:Membership:At";
 
     /// <summary>
-    /// The annotation <c>IsKeptRole</c> leaves on the entity type of a role class: the full name of the
+    /// The annotation <c>IsCustomRole</c> leaves on the entity type of a role class: the full name of the
     /// resource the roles are of, as its template names it.
     /// </summary>
     public const string RoleOfAnnotation = "DDDToolkit:Membership:RoleOf";
@@ -47,7 +47,7 @@ public static class MembershipModel
     /// The entity type is marked, and the model no longer has what the mark names: the mapping was changed
     /// after <c>HasMembers</c>. Or the resource was given another key after its members were mapped, which
     /// does not reach their tables. Or the model maps two role classes for the resource, or a role class
-    /// without what <c>IsKeptRole</c> maps of it.
+    /// without what <c>IsCustomRole</c> maps of it.
     /// </exception>
     public static MemberMapping? MembersOf(IEntityType resource)
     {
@@ -94,7 +94,7 @@ public static class MembershipModel
     }
 
     /// <summary>
-    /// The role class the model maps for <paramref name="resource"/> with <c>IsKeptRole</c>, or
+    /// The role class the model maps for <paramref name="resource"/> with <c>IsCustomRole</c>, or
     /// <see langword="null"/>: found by the resource its template names, so a model with several kinds of
     /// resource has each one's roles apart.
     /// </summary>
@@ -115,13 +115,13 @@ public static class MembershipModel
                     + ". A resource has one: a member holds a role of it by its id, and that id is one class's.");
             }
 
-            if (entityType.FindProperty(nameof(KeptRoleAggregate<>.Keys)) is null
-                || entityType.FindProperty(nameof(KeptRoleAggregate<>.Status)) is null
-                || entityType.FindProperty(nameof(KeptRoleAggregate<>.Id)) is null)
+            if (entityType.FindProperty(nameof(CustomRoleAggregate<>.Keys)) is null
+                || entityType.FindProperty(nameof(CustomRoleAggregate<>.Status)) is null
+                || entityType.FindProperty(nameof(CustomRoleAggregate<>.Id)) is null)
             {
                 throw new InvalidOperationException(
-                    entityType.DisplayName() + " was mapped with IsKeptRole as the role class of " + resource.DisplayName()
-                    + ", and the model no longer has its keys, its status or its id. Map the role class with IsKeptRole alone: it maps all three.");
+                    entityType.DisplayName() + " was mapped with IsCustomRole as the role class of " + resource.DisplayName()
+                    + ", and the model no longer has its keys, its status or its id. Map the role class with IsCustomRole alone: it maps all three.");
             }
 
             found = entityType;

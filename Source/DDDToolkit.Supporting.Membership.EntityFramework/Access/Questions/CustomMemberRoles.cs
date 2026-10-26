@@ -14,7 +14,7 @@ namespace DDDToolkit.Supporting.Membership.EntityFramework;
 /// </summary>
 /// <param name="registration">The resource, with its rules.</param>
 /// <param name="services">The services of the scope the admission is asked in.</param>
-internal sealed class KeptMemberRoles<TContext, TResource, TResourceId, TRoleId>(MembershipRegistration registration, IServiceProvider services)
+internal sealed class CustomMemberRoles<TContext, TResource, TResourceId, TRoleId>(MembershipRegistration registration, IServiceProvider services)
     : IMemberRoles<TResourceId, TRoleId>
     where TContext : DbContext
     where TResource : class
@@ -35,7 +35,7 @@ internal sealed class KeptMemberRoles<TContext, TResource, TResourceId, TRoleId>
     /// Runs one reading of the roles' rows: on the request's own context where the scope has one, and
     /// otherwise on a context of the factory's, disposed when the reading is done.
     /// </summary>
-    private async Task<T> ReadAsync<T>(Func<KeptRoles<TRoleId>, DbContext, Task<T>> read, CancellationToken cancellationToken)
+    private async Task<T> ReadAsync<T>(Func<CustomRoles<TRoleId>, DbContext, Task<T>> read, CancellationToken cancellationToken)
     {
         var rows = services.GetRequiredService<MemberNamesOf<TContext, TResource, TRoleId>>().Read(services, registration).Roles!;
         if (services.GetService<TContext>() is { } own)

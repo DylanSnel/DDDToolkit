@@ -231,7 +231,7 @@ public static class MembershipPostgresChecks
                     throw new InvalidOperationException(
                         "The rules '" + rules.Name + "' say the roles of " + registration.Resource.Name + " are kept, and " + registration.Context.Name
                         + " maps no role class for it, so its functions cannot be the ones the rules say. Map the role class where the context builds its model: modelBuilder.Entity<"
-                        + registration.Resource.Name + "Role>().IsKeptRole().");
+                        + registration.Resource.Name + "Role>().IsCustomRole().");
                 }
 
                 var names = services.GetService<PostgresRowLevelSecurityOptions>() is { } options ? RowAccessRoleNames.From(options) : RowAccessRoleNames.Default;

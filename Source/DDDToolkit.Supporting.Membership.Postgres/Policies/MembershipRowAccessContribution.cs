@@ -62,7 +62,7 @@ namespace DDDToolkit.Supporting.Membership.Postgres;
 /// </para>
 /// <para>
 /// Roles kept for the resource (<see cref="MembershipRules.RolesKept"/>) are read from the table of the
-/// application's role class, which the context maps with <c>IsKeptRole</c>: a role in use that holds the
+/// application's role class, which the context maps with <c>IsCustomRole</c>: a role in use that holds the
 /// key, cut the same way. No function is asked for them, and the functions read those rows as they read the
 /// member rows, as their owner: which rows a caller may read of that table is the application's own rule,
 /// and the functions do not lean on it. The row of the owner's role, made from the starter role the rules

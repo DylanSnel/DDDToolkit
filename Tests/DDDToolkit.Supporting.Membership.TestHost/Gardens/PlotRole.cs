@@ -11,11 +11,11 @@ namespace DDDToolkit.Supporting.Membership.TestHost.Gardens;
 /// the plot it is a role of. The host adds whose it is, a garden's, and raises its own events from what the
 /// package's operations answer. Which garden's roles a request reads is the host's rule too, on its context.
 /// </summary>
-[KeptRole<PlotRoleId, Plot>]
+[CustomRole<PlotRoleId, Plot>]
 public sealed partial class PlotRole
 {
     /// <summary>Makes a role for a garden, from what a gardener entered or from a starter role.</summary>
-    public PlotRole(PlotRoleId id, GardenId garden, KeptRoleDraft draft) : base(id, draft, PlotMembership.Rules)
+    public PlotRole(PlotRoleId id, GardenId garden, CustomRoleDraft draft) : base(id, draft, PlotMembership.Rules)
     {
         GardenId = garden;
         RaiseDomainEvent(new PlotRoleMade(id, garden, MadeFrom));

@@ -21,7 +21,7 @@ namespace DDDToolkit.Supporting.Membership.UseCases;
 /// </code>
 /// <para>
 /// Asked again for the same scope, it answers nothing: a starter role is made once, and is told by what it
-/// was made from (<see cref="KeptRoleAggregate{TRoleId}.MadeFrom"/>), not by its name, so a role a
+/// was made from (<see cref="CustomRoleAggregate{TRoleId}.MadeFrom"/>), not by its name, so a role a
 /// customer renamed or archived is not made a second time. Two requests that ask at the same moment are kept
 /// apart by a unique index the application declares over its scope and that property.
 /// </para>
@@ -38,7 +38,7 @@ public static class StarterRoles
     /// <typeparam name="TRoleId">The application's id of a role.</typeparam>
     /// <exception cref="ArgumentNullException"><paramref name="rules"/> or <paramref name="rolesOfTheScope"/> is null.</exception>
     /// <exception cref="ArgumentException">The rules do not say the resource's roles are kept.</exception>
-    public static IReadOnlyList<KeptRoleDraft> Missing<TRoleId>(MembershipRules rules, IEnumerable<KeptRoleAggregate<TRoleId>> rolesOfTheScope)
+    public static IReadOnlyList<CustomRoleDraft> Missing<TRoleId>(MembershipRules rules, IEnumerable<CustomRoleAggregate<TRoleId>> rolesOfTheScope)
         where TRoleId : struct, IEntityId, IEquatable<TRoleId>
     {
         ArgumentNullException.ThrowIfNull(rules);
@@ -58,6 +58,6 @@ public static class StarterRoles
 
         return [.. rules.Roles
             .Where(starter => !made.Contains(starter.Name))
-            .Select(starter => new KeptRoleDraft(starter.Name, null, rules.KeysOf(new NamedRole(starter.Name)), starter.Name))];
+            .Select(starter => new CustomRoleDraft(starter.Name, null, rules.KeysOf(new NamedRole(starter.Name)), starter.Name))];
     }
 }

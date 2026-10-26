@@ -33,7 +33,7 @@ namespace DDDToolkit.Supporting.Membership;
 /// <typeparam name="TRoleId">
 /// What a role is known by: <see cref="NamedRole"/> when the roles are the ones the resource's rules declare,
 /// or the id of the application's own roles, a <c>readonly partial record struct</c> marked <c>[EntityId&lt;T&gt;]</c>:
-/// that of its role class for this resource (<see cref="KeptRoleAttribute{TRoleId, TResource}"/>), or of
+/// that of its role class for this resource (<see cref="CustomRoleAttribute{TRoleId, TResource}"/>), or of
 /// roles it keeps elsewhere.
 /// </typeparam>
 /// <typeparam name="TResource">The resource the members are of: the application's aggregate that holds them.</typeparam>

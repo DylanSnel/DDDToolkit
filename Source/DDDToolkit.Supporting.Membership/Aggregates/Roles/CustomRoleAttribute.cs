@@ -5,12 +5,12 @@ namespace DDDToolkit.Supporting.Membership;
 /// <summary>
 /// Declares the role class of one of the application's resources: the roles a member of that resource can
 /// hold, kept as rows a customer makes and changes. The generator derives it from
-/// <see cref="KeptRoleAggregate{TRoleId}"/>, closed over the id given here:
+/// <see cref="CustomRoleAggregate{TRoleId}"/>, closed over the id given here:
 /// <code>
-/// [KeptRole&lt;PlotRoleId, Plot&gt;]
+/// [CustomRole&lt;PlotRoleId, Plot&gt;]
 /// public sealed partial class PlotRole
 /// {
-///     public PlotRole(PlotRoleId id, KeptRoleDraft draft) : base(id, draft, PlotMembership.Rules) { }
+///     public PlotRole(PlotRoleId id, CustomRoleDraft draft) : base(id, draft, PlotMembership.Rules) { }
 /// }
 /// </code>
 /// A role is an aggregate of its own, beside the resource: it is made, renamed, given keys and archived by
@@ -31,7 +31,7 @@ namespace DDDToolkit.Supporting.Membership;
 /// </summary>
 /// <typeparam name="TRoleId">The role class's id, a <c>readonly partial record struct</c> marked <c>[EntityId&lt;T&gt;]</c>: what a member holds a role by.</typeparam>
 /// <typeparam name="TResource">The resource the roles are of: the application's aggregate whose members hold them.</typeparam>
-[AggregateRootTemplate(typeof(KeptRoleAggregate<>), AllowSeveral = true)]
+[AggregateRootTemplate(typeof(CustomRoleAggregate<>), AllowSeveral = true)]
 [AttributeUsage(AttributeTargets.Class, Inherited = false)]
-public sealed class KeptRoleAttribute<TRoleId, TResource> : Attribute
+public sealed class CustomRoleAttribute<TRoleId, TResource> : Attribute
     where TResource : class;

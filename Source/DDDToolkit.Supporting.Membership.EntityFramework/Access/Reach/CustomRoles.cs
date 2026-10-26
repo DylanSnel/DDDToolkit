@@ -8,7 +8,7 @@ namespace DDDToolkit.Supporting.Membership.EntityFramework;
 /// class, in the context that maps the resource. Closed over the role class, which only the model knows.
 /// </summary>
 /// <typeparam name="TRoleId">What a role is known by.</typeparam>
-internal abstract class KeptRoles<TRoleId>
+internal abstract class CustomRoles<TRoleId>
     where TRoleId : struct, IEntityId, IEquatable<TRoleId>
 {
     /// <summary>
@@ -31,19 +31,19 @@ internal abstract class KeptRoles<TRoleId>
 /// <inheritdoc />
 /// <typeparam name="TRole">The application's role class.</typeparam>
 /// <typeparam name="TRoleId">What a role is known by.</typeparam>
-internal sealed class KeptRoles<TRole, TRoleId> : KeptRoles<TRoleId>
-    where TRole : KeptRoleAggregate<TRoleId>
+internal sealed class CustomRoles<TRole, TRoleId> : CustomRoles<TRoleId>
+    where TRole : CustomRoleAggregate<TRoleId>
     where TRoleId : struct, IEntityId, IEquatable<TRoleId>
 {
     /// <inheritdoc />
     public override Func<DbContext, IQueryable<TRoleId>> ThatGive(string key)
         => context => context.Set<TRole>()
-            .Where(role => role.Status == KeptRoleStatus.Active && role.Keys.Contains(key))
+            .Where(role => role.Status == CustomRoleStatus.Active && role.Keys.Contains(key))
             .Select(role => role.Id);
 
     /// <inheritdoc />
     public override Task<bool> InUseAsync(DbContext context, TRoleId role, CancellationToken cancellationToken)
-        => context.Set<TRole>().AnyAsync(kept => kept.Id.Equals(role) && kept.Status == KeptRoleStatus.Active, cancellationToken);
+        => context.Set<TRole>().AnyAsync(kept => kept.Id.Equals(role) && kept.Status == CustomRoleStatus.Active, cancellationToken);
 
     /// <inheritdoc />
     public override async Task<TRoleId?> MadeFromAsync(DbContext context, string starter, CancellationToken cancellationToken)
@@ -51,7 +51,7 @@ internal sealed class KeptRoles<TRole, TRoleId> : KeptRoles<TRoleId>
         // Two are enough to tell that there is more than one. Which two does not matter, but a limit without an
         // order is what Entity Framework warns about, once for each query it compiles, so they come in one.
         var made = await context.Set<TRole>()
-            .Where(kept => kept.MadeFrom == starter && kept.Status == KeptRoleStatus.Active)
+            .Where(kept => kept.MadeFrom == starter && kept.Status == CustomRoleStatus.Active)
             .OrderBy(kept => kept.Id)
             .Select(kept => kept.Id)
             .Take(2)
