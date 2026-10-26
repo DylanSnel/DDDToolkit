@@ -87,3 +87,4 @@ DDD00085 | DDDToolkit.Access | Error | [OrOwn] goes beside [RequiresKey], and [O
 DDD00086 | DDDToolkit.Access | Error | [OrOwn] and [Own] mark a member of a type something says the caller's own of
 DDD00087 | DDDToolkit.Access | Error | [Owner] marks the one owner of an aggregate root
 DDD00088 | DDDToolkit.Access | Error | [Owner] marks a property of a type the caller has an own of
+DDD00089 | DDDToolkit.Access | Error | A module's default requirement is one any of its requests may take

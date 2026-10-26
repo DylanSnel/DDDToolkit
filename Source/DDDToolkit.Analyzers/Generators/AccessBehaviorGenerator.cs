@@ -81,6 +81,13 @@ namespace DDDToolkit.Analyzers;
 /// with a request's attributes is DDD00077 to DDD00086 (<see cref="RequestRequirement"/>).
 /// </para>
 /// <para>
+/// <b>A module's default.</b> A requirement attribute on the interface itself, <c>[AccessRequests, InTenant]</c>, is the
+/// default of the module's requests: a request that states nothing of its own gets a line with the default's call,
+/// <c>ListUnits =&gt; TenancyAccess.InTenant()</c>, so the switch shows per request what it requires, and the last arm
+/// answers the default too, for a request of another project the switch cannot name. Without one, a request that
+/// states nothing is DDD00077 and the last arm throws. What may not be a default is DDD00089.
+/// </para>
+/// <para>
 /// The file also says what it wrote, in an assembly attribute,
 /// <c>[assembly: AccessBehavior(typeof(IBillingRequest), typeof(BillingAccessBehavior&lt;,&gt;), ...)]</c>, where the
 /// project can see that attribute. The registration of the checks reads it to bring the start-up check
@@ -360,7 +367,9 @@ public sealed class AccessBehaviorGenerator : IIncrementalGenerator
 
     /// <summary>
     /// The interface's part that implements <c>IRequireAccess.RequiredAccess</c> from its requests' attributes: one line
-    /// per request, and for any other type a request that states nothing, which lets nobody through.
+    /// per request, and for any other type a request that states nothing, which lets nobody through. Where the interface
+    /// carries a default, a request of the module that states nothing gets a line with the default's call, and any other
+    /// type, a request of another project, the default in the last arm.
     /// </summary>
     private static void EmitRequirements(CodeWriter writer, AccessRequestsInterface requests, List<string> lines)
     {
@@ -369,6 +378,11 @@ public sealed class AccessBehaviorGenerator : IIncrementalGenerator
         writer.Line("// What the requests of " + requests.Name + " that state their requirement with attributes require of their caller: the");
         writer.Line("// call each attribute stands for, written out by DDDToolkit, one line per request. A request that answers");
         writer.Line("// RequiredAccess itself answers with its own, which C# takes over this one, so it is never asked here.");
+        if (requests.Default is not null)
+        {
+            writer.Line("// A request that states none takes the module's default, " + requests.DefaultNamed + " on the interface, on a line of its own.");
+        }
+
         using (writer.Block("partial interface " + requests.Name))
         {
             writer.Line("/// <inheritdoc cref=\"" + RequireAccess + ".RequiredAccess\"/>");
@@ -380,9 +394,19 @@ public sealed class AccessBehaviorGenerator : IIncrementalGenerator
                 writer.Line("    " + line + ",");
             }
 
-            writer.Line("    _ => throw new global::System.InvalidOperationException(");
-            writer.Line("        this.GetType().FullName + \" declares no access requirement: it carries no requirement attribute, and does not answer RequiredAccess itself. \"");
-            writer.Line("        + \"A request that declares nothing lets nobody through.\"),");
+            if (requests.Default is { } byDefault)
+            {
+                // What the module's default means: a request no line names, one of another project, requires it too.
+                writer.Line("    // A request this project cannot name, one of another project say, takes the module's default as well.");
+                writer.Line("    _ => " + byDefault + ",");
+            }
+            else
+            {
+                writer.Line("    _ => throw new global::System.InvalidOperationException(");
+                writer.Line("        this.GetType().FullName + \" declares no access requirement: it carries no requirement attribute, and does not answer RequiredAccess itself. \"");
+                writer.Line("        + \"A request that declares nothing lets nobody through.\"),");
+            }
+
             writer.Line("};");
         }
     }
@@ -551,6 +575,11 @@ public sealed class AccessBehaviorGenerator : IIncrementalGenerator
 /// <param name="CanRegister">Whether the project can see what the registration is written with.</param>
 /// <param name="CanDescribe">Whether the project can see the attribute that says what was written for the interface.</param>
 /// <param name="IsPartial">Whether the interface is declared <c>partial</c>, so its requests' attributes can be written into it.</param>
+/// <param name="Default">
+/// The call the requirement attributes on the interface stand for, the default of a request of the module that states
+/// none of its own; <see langword="null"/> where it carries none, or one that may not be a default.
+/// </param>
+/// <param name="DefaultNamed">Those attributes as a reader writes them, <c>[InTenant]</c>; empty where there is no default.</param>
 /// <param name="Location">Where the interface is named.</param>
 internal sealed record AccessRequestsInterface(
     string Name,
@@ -567,6 +596,8 @@ internal sealed record AccessRequestsInterface(
     bool CanRegister,
     bool CanDescribe,
     bool IsPartial,
+    string? Default,
+    string DefaultNamed,
     LocationInfo? Location)
 {
     public static AccessRequestsInterface Create(GeneratorAttributeSyntaxContext context, CancellationToken cancellationToken)
@@ -584,6 +615,7 @@ internal sealed record AccessRequestsInterface(
             ? (null, null)
             : PipelineShape.Read(compilation, KnownTypes.MediatorStreamPipelineBehavior, streams: true);
         var namedAfter = NamedAfter(symbol.Name);
+        var byDefault = RequestRequirement.DefaultOf(symbol, compilation);
 
         return new AccessRequestsInterface(
             Name: symbol.Name,
@@ -603,6 +635,8 @@ internal sealed record AccessRequestsInterface(
                 && registration.GetMembers("AddAccessChecks").Length > 0,
             CanDescribe: compilation.GetTypeByMetadataName(KnownTypes.AccessBehaviorAttribute) is not null,
             IsPartial: symbol.DeclaringSyntaxReferences.Any(reference => reference.GetSyntax(cancellationToken) is InterfaceDeclarationSyntax declaration && declaration.Modifiers.Any(SyntaxKind.PartialKeyword)),
+            Default: byDefault,
+            DefaultNamed: byDefault is null ? string.Empty : RequestRequirement.DefaultNamed(symbol),
             Location: LocationInfo.From(syntax.Identifier));
     }
 

@@ -39,9 +39,14 @@ namespace DDDToolkit.Access;
 /// written; a second key is not stacked, since its marker could not tell which key it says where of, and two keys are
 /// written as the property, <c>AccessRequirement.All(TenancyAccess.AtUnit(key, From), TenancyAccess.AtUnit(key, To))</c>.
 /// </para>
+/// <para>
+/// On the module's interface, <c>[AccessRequests, RequiresKey(BillingKeys.Read)]</c>, it is the module's default: a
+/// request of it that states nothing of its own requires the key for the whole tenant, since a default reads no member
+/// of a request and so has no marker.
+/// </para>
 /// </remarks>
 /// <param name="key">The key the caller holds: a constant, one of the catalogue's.</param>
-[AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, Inherited = false)]
+[AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct | AttributeTargets.Interface, Inherited = false)]
 public sealed class RequiresKeyAttribute(string key) : Attribute
 {
     /// <summary>The key the caller holds.</summary>

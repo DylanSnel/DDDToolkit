@@ -5,7 +5,7 @@ namespace DDDToolkit.Access;
 /// core declares its own this way, and Tenancy and Membership theirs:
 /// <code>
 /// [StatesRequirement(typeof(TenancyAccess), nameof(TenancyAccess.InTenant))]
-/// [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, Inherited = false)]
+/// [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct | AttributeTargets.Interface, Inherited = false)]
 /// public sealed class InTenantAttribute : Attribute;
 /// </code>
 /// A request that carries <c>[InTenant]</c> then answers <see cref="IRequireAccess.RequiredAccess"/> with
@@ -25,6 +25,14 @@ namespace DDDToolkit.Access;
 /// None goes with a request that answers the property itself (DDD00078), and none with <c>[AllowAnonymous]</c>, which
 /// would open the door the other closes (DDD00079). One that says less than another beside it, which already requires
 /// it, is reported as redundant (DDD00084): say so with <see cref="Implies"/>.
+/// </para>
+/// <para>
+/// On the module's interface, <c>[AccessRequests, InTenant]</c>, the attribute is the module's default: a request of it
+/// that states nothing of its own gets a line with the call. An attribute is one there where its class's
+/// <see cref="AttributeUsageAttribute"/> allows <see cref="AttributeTargets.Interface"/>, as <c>[InTenant]</c>'s does;
+/// one for a request alone leaves it out, and the compiler refuses it on an interface (CS0592). One for queries only,
+/// <see cref="QueriesOnly"/>, is no default, since a command that says nothing would take it, and neither is
+/// <c>[AllowAnonymous]</c>, which would let anyone send a request that forgot its own: each is DDD00089.
 /// </para>
 /// </remarks>
 /// <param name="factory">The class whose static method makes the requirement: <c>typeof(TenancyAccess)</c>.</param>

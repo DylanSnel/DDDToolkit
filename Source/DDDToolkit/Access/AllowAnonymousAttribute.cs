@@ -22,7 +22,9 @@ namespace DDDToolkit.Access;
 /// request interface (<c>[AccessRequests]</c>, declared <c>partial</c>), so the request answers
 /// <see cref="IRequireAccess.RequiredAccess"/> with it wherever that is read. Requirement attributes stacked on one
 /// request all hold, so this one goes with no other: beside a key it would open the door the key closes, and the
-/// generator reports it (DDD00079).
+/// generator reports it (DDD00079). It is never a module's default on its interface: every request that forgot what it
+/// requires would let anyone in, and a forgotten requirement never opens a door (DDD00089). So it goes on each
+/// request anyone may send, where a review reads it.
 /// </para>
 /// </remarks>
 [StatesRequirement(typeof(AccessRequirement), nameof(AccessRequirement.AllowAnonymous))]

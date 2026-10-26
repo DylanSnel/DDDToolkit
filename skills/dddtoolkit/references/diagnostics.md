@@ -670,7 +670,10 @@ that says nothing of what it requires. Put the requirement attribute on it that 
 where anyone may send it, `[OrOwn]` on the member beside the key for the caller's own or the key, several stacked
 where all hold. Answer `RequiredAccess` instead only for a case of the module's own, a requirement computed from the
 request's values, or one caller or another and two keys (`AccessRequirement.Any`, `All`). A request of another project than its interface answers `RequiredAccess`. Never
-answer it with `[AllowAnonymous]` to make it build, and never with system work: there is no such requirement.
+answer it with `[AllowAnonymous]` to make it build, and never with system work: there is no such requirement. Do not
+add a module default (`[AccessRequests, InTenant]` on the interface) only to silence this: a default is the module's
+choice, made where nearly every request requires the same, and then a command that forgets its key requires the
+default without a word. Where the module has one, a request that states nothing is not reported.
 
 ## DDD00078
 
@@ -700,7 +703,9 @@ key is held, as in a project with Membership and no Tenancy (mark `[OnResource]`
 record that carries the unit is not reported; a request that derives from it and "inherits" a marker without
 `[RequiresKey]` is (add the key). A derived record's positional parameter may carry `[AtUnit]` even where its base
 declares the property. A request with a `[RequiresKey]` of its own that derives from one with a `[RequiresKey]`
-requires two keys: write `AccessRequirement.All` of the two as `RequiredAccess`.
+requires two keys: write `AccessRequirement.All` of the two as `RequiredAccess`. A module default of
+`[RequiresKey(key)]` on the interface reads no marker: it is held for the whole tenant, so it needs Tenancy, and a
+request's marker goes with the request's own `[RequiresKey]`.
 
 ## DDD00081
 
@@ -727,7 +732,10 @@ Error, on a request whose requirement attributes nothing turns into `RequiredAcc
 module's interface `partial` (`[AccessRequests] public partial interface IBillingRequest : IRequireAccess;`), implement
 the module's interface, move the request into the project that declares it, or, for a generic request, one nested
 private, or one that implements two partial module interfaces (C# takes neither's property, CS8705), answer
-`RequiredAccess` itself (or make the nested type internal, or implement one interface).
+`RequiredAccess` itself (or make the nested type internal, or implement one interface). At an interface: a requirement
+attribute there is a module default, read only on the module's interface, `[AccessRequests]` and `partial`; declare it
+partial, or, on another interface (one between the module's and its requests), move the attribute to each request or
+answer `RequiredAccess` in that interface.
 
 ## DDD00084
 
@@ -739,7 +747,9 @@ Tenancy's with `[OrOwn]` on the seat id (either way the caller is in the tenant)
 request derives from carries already. Take it off. Not reported: `[SignedIn]` beside `[RequiresKey]` (it keeps system
 work out), with or without `[OrOwn]`, and `[InTenant]` beside a key with `[OrOwn]` on a `Guid`. A package says what its
 requirement implies with `Implies` on its mark, and what its caller's own implies with `Implies` on
-`[assembly: CallersOwn]`.
+`[assembly: CallersOwn]`. Also reported: a sealed request's own attributes that say exactly what its module's default
+says (`[InTenant]` on a request of an `[AccessRequests, InTenant]` module); take them off, the request takes the
+default. Not on a request another derives from, which holds to them beside its own.
 
 ## DDD00085
 
@@ -778,6 +788,18 @@ a class or an enum can never be compared; mark the property that names the owner
 id of the application's own). At the request: nothing the requests' project sees says what the caller's own of the
 owner's type is; write a small `ICallersOwn<T>` beside the requests and register it,
 `services.AddCallersOwn<T, TCallersOwn>()`. A nullable owner is fine: a row whose owner is null is nobody's.
+
+## DDD00089
+
+Error, at a requirement attribute on a module's interface (`[AccessRequests, ...]`): it may not be the module's
+default, which every request that states nothing takes, a command that forgot its key included. `[AllowAnonymous]`
+(a forgotten requirement would open the door): put it on each request anyone may send. `[RequiresOperator]`,
+`[SeenWith<TResourceId>(key)]` or another queries-only one (a command would take it): put it on each query. `[OwnOnly]`
+(it reads a member marked `[Own]`): put it on each request about the caller's own. An attribute whose class's
+`AttributeUsage` leaves out `AttributeTargets.Interface` (CS0592 too): add `Interface` to the class, where it is the
+application's own and may be a default, or put it on each request. Defaults that work: `[SignedIn]`, `[InTenant]`,
+`[RequiresKey(key)]` (for the whole tenant), and an application's own `[StatesRequirement]` attribute that allows an
+interface; several are `All`, in the order written.
 
 ## Not a diagnostic: the owned type must carry the key part
 

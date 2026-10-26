@@ -87,6 +87,7 @@ type looks annotated and behaves like a plain class. Every misuse below reports 
 | [DDD00086](#ddd00086) | Error | [OrOwn] and [Own] mark a member of a type something says the caller's own of |
 | [DDD00087](#ddd00087) | Error | [Owner] marks the one owner of an aggregate root |
 | [DDD00088](#ddd00088) | Error | [Owner] marks a property of a type the caller has an own of |
+| [DDD00089](#ddd00089) | Error | A module's default requirement is one any of its requests may take |
 
 Most of these say the generator could not do what you asked. The rest are a different kind: they are
 rules about the model rather than about the declaration, and each of them names code that compiles,
@@ -2777,6 +2778,12 @@ A request of a project other than its interface's is reported too: the line writ
 declared knows only that project's requests, so this one answers `RequiredAccess` itself. An abstract request is not
 reported; what derives from it is. Where the interface is not `partial`, the compiler's own CS0535 says the same.
 
+A module whose requests nearly all require the same says it once, on its interface: `[AccessRequests, InTenant]`.
+A request of it that states nothing then takes that default, on a line of its own in the generated switch, and is
+not reported; nor is one of another project, which the interface's last arm answers with the default
+([A module's default](access-requirements.md#a-modules-default)). That is the module's choice, and its price: a
+command of it that forgets its `[RequiresKey]` requires what the default says, and the build says nothing of it.
+
 ## DDD00078
 
 **A request says what it requires in one way.**
@@ -2844,6 +2851,8 @@ the whole tenant, `[AtUnit]` at that unit or above it, `[OnResource]` on that re
 | marks a private or protected property | the requirement is read in the module's interface, which needs a public or internal getter |
 | requires a key and marks nothing, where no package says where such a key is held | Tenancy says it for the whole tenant, `[assembly: KeyWithoutMarker]`; a project with Membership alone, or two such packages, asks for a marker |
 | requires two keys, its own `[RequiresKey]` and one of a request it derives from | the attributes of a request and of its base all hold, and one marker says where for one key; two keys are `AccessRequirement.All` of the two, as `RequiredAccess` |
+| is a module's interface whose default is `[RequiresKey(key)]`, where no package says where a key without a marker is held | a default reads no member of a request, so its key is one without a marker |
+| marks a member, requires no key of its own, and its module's default is a key | the default's key reads no member of a request: a marker goes with the request's own `[RequiresKey]` |
 
 An abstract request is a shape the requests that derive from it share, a record that carries the unit say, so it is
 not reported for a marker without a key: each request that derives from it says its key, and one that does not is
@@ -2932,6 +2941,12 @@ to change:
 | is nested private in another type | make it internal, or answer `RequiredAccess`: the interface cannot name it |
 | implements two module interfaces that are both `partial` | answer `RequiredAccess`, or implement one of them: each implements the property, and C# takes neither (its CS8705) |
 
+A requirement attribute on an interface, the default of a module's requests
+([A module's default](access-requirements.md#a-modules-default)), is read the same way: on the module's interface,
+marked `[AccessRequests]` and `partial`. On one that is not `partial` it is reported at the interface, with the line to
+write. On any other interface, one between the module's and its requests say, nothing reads it either: such an
+interface answers `RequiredAccess` itself where its requests share a requirement, and C# takes that over the module's.
+
 ## DDD00084
 
 **A requirement attribute beside another adds what that one does not require already.** A warning.
@@ -2957,7 +2972,9 @@ attribute is held to it the same way. What the caller's own requires, the packag
 `[assembly: CallersOwn]`: a `Guid` is a signed-in user's identity, `[SignedIn]`, and Tenancy's seat id is a seat in
 the tenant, `[InTenant]` and `[SignedIn]`. Beside `[OwnOnly]` with `[Own]` on such a member, they are reported; beside a
 key with `[OrOwn]`, only what both the key and the caller's own require is. An attribute that a request the request
-derives from carries already is reported too, since the base's attributes hold for it as well. Reported and not:
+derives from carries already is reported too, since the base's attributes hold for it as well. So are a request's
+own attributes that say what its module's default says, call for call: without them the request takes the default,
+and requires the same ([A module's default](access-requirements.md#a-modules-default)). Reported and not:
 
 | Beside | Reported | Because |
 |---|---|---|
@@ -2966,6 +2983,10 @@ derives from carries already is reported too, since the base's attributes hold f
 | `[InTenant]` beside `[RequiresKey]` with `[OrOwn]` on a `Guid` | no | a caller's verified identity is no seat, so the caller's own way says nothing of the tenant |
 | `[SignedIn]` beside `[RequiresKey]` with `[OrOwn]` on the seat id | no | system work holds the key and is nobody's sign-in |
 | `[InTenant]` on `CloseTheBooks : Closing`, where `Closing` is `[RequiresKey(key)]` | yes | the base's key holds for it as well |
+| `[InTenant]` on a sealed request of a module whose default is `[InTenant]` | yes | without it the request takes the default, which is the same |
+| `[SignedIn, InTenant]` on a request of a module whose default is `[InTenant]` | no | it says more than the default: a signed-in user, in the tenant |
+| `[InTenant]` on a request another derives from, in that module | no | the request that derives from it holds to its attribute beside its own, and would require less without it |
+| `[InTenant]` beside `[RequiresKey(key)]` on the module's interface | yes | as on a request: the key of the default requires it already |
 
 ## DDD00085
 
@@ -3104,6 +3125,34 @@ handle is declared beside them and the domain does not see it: a request that na
 at its marker, where the project can tell that nothing does, and no line is written for it. Where a package names the
 owner's type by a template whose classes the project does not see, nothing can be told, and the check says so when
 the request is sent.
+
+## DDD00089
+
+**A module's default requirement is one any of its requests may take.**
+
+```csharp
+[AccessRequests, AllowAnonymous]                                    // DDD00089: a forgotten requirement would open the door
+public partial interface IBillingRequest : IRequireAccess;
+
+[AccessRequests, RequiresOperator]                                  // DDD00089: a command that says nothing would take it
+public partial interface IOperationsRequest : IRequireAccess;
+```
+
+A requirement attribute on a module's interface is the default of its requests: one that states nothing of its own
+takes it, on a line of its own in the generated switch ([A module's default](access-requirements.md#a-modules-default)).
+So every request that forgets its requirement takes the default, a command that forgets its key included, and a
+default is a requirement any of them may take. Reported, at the attribute:
+
+| On the interface | Because | Instead |
+|---|---|---|
+| `[AllowAnonymous]` | a request that forgot what it requires would let anyone in, and a forgotten requirement never opens a door | `[AllowAnonymous]` on each request anyone may send, where a review reads it |
+| `[RequiresOperator]`, `[SeenWith<TResourceId>(key)]`, any attribute its package declares for queries only | a command of the module that says nothing would take it, where it holds the caller to nothing the command changes ([DDD00082](#ddd00082)) | the attribute on each query |
+| `[OwnOnly]` | it reads the member of a request marked `[Own]`, and a default reads no member | `[OwnOnly]` on each request about the caller's own |
+| an attribute whose class's `AttributeUsage` leaves out interfaces | it is declared for a request alone, which the compiler says as well (CS0592) | `AttributeTargets.Interface` in its class's `AttributeUsage`, where it may be a default |
+
+A refused default is no default: the interface's last arm stops a request that states nothing, as without one. The
+attributes a package ships that may be a default allow an interface already: `[SignedIn]`, `[InTenant]`, and
+`[RequiresKey(key)]`, whose key is then held for the whole tenant, since a default reads no member and has no marker.
 
 ## Building the model fails: the owned type must carry the key part
 

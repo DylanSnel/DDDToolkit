@@ -31,6 +31,13 @@ namespace DDDToolkit.Analyzers;
 /// reports is what the project sees. A type declared in parts is read once, at the first of its parts that may be a
 /// request, whichever part carries the attributes or the interface.
 /// </para>
+/// <para>
+/// A requirement attribute on the module's interface, <c>[AccessRequests, InTenant]</c>, is the module's default: a
+/// request of it that states nothing of its own, by attribute, by answering the property or through a request it
+/// derives from, gets a line with the default's call, <c>global::Shop.ListUnits =&gt; ...TenancyAccess.InTenant()</c>.
+/// The default replaces nothing and stacks onto nothing a request states itself. The interface is read here too, for
+/// what is wrong with its default (DDD00083, DDD00084, DDD00089), and gets no line of its own.
+/// </para>
 /// </remarks>
 /// <param name="FullyQualifiedName">The request's name from <c>global::</c> on.</param>
 /// <param name="Depth">How many classes it derives from: a line for a derived request comes before its base's.</param>
@@ -62,11 +69,17 @@ internal sealed record RequestRequirement(
 
     private static readonly ConditionalWeakTable<IAssemblySymbol, string[]> HandlesByAssembly = new();
 
-    /// <summary>A class, a record or a struct that implements something or carries an attribute: what may be a request.</summary>
+    /// <summary>
+    /// A class, a record or a struct that implements something or carries an attribute: what may be a request; and an
+    /// interface that carries an attribute, which may be a module's interface with a default.
+    /// </summary>
     public static bool MayBeOne(SyntaxNode node, CancellationToken cancellationToken)
-        => node is ClassDeclarationSyntax or RecordDeclarationSyntax or StructDeclarationSyntax
-           && node is TypeDeclarationSyntax { } type
-           && (type.BaseList is not null || type.AttributeLists.Count > 0);
+        => node switch
+        {
+            ClassDeclarationSyntax or RecordDeclarationSyntax or StructDeclarationSyntax => node is TypeDeclarationSyntax type && (type.BaseList is not null || type.AttributeLists.Count > 0),
+            InterfaceDeclarationSyntax declaration => declaration.AttributeLists.Count > 0,
+            _ => false,
+        };
 
     /// <summary>
     /// What the type says it requires, or <see langword="null"/> for a type that is no request and carries no
@@ -94,6 +107,18 @@ internal sealed record RequestRequirement(
             return null;
         }
 
+        var identifier = ((BaseTypeDeclarationSyntax)context.Node).Identifier;
+
+        // An interface is no request: a requirement attribute on it is the default of a module, read for what is wrong
+        // with it. One that carries none is nothing of this.
+        if (type.TypeKind == TypeKind.Interface)
+        {
+            var defaults = StatedOn(type);
+            return defaults.Count == 0
+                ? null
+                : new Reading(type, compilation, requiredAccess, [.. type.AllInterfaces.Where(static each => DefinitionFactory.HasAttribute(each, KnownTypes.AccessRequestsAttribute))], defaults, [], identifier, cancellationToken).AsADefault();
+        }
+
         // A type that is no request and carries no requirement attribute is not looked into further: a marker on a
         // member of a type no requirement is read from marks nothing, and most types of a project are such types.
         var modules = type.AllInterfaces.Where(static each => DefinitionFactory.HasAttribute(each, KnownTypes.AccessRequestsAttribute)).ToList();
@@ -113,8 +138,89 @@ internal sealed record RequestRequirement(
             stated = [.. InheritedBy(type), .. stated];
         }
 
-        var reading = new Reading(type, compilation, requiredAccess, modules, stated, markers, ((TypeDeclarationSyntax)context.Node).Identifier, cancellationToken);
+        var reading = new Reading(type, compilation, requiredAccess, modules, stated, markers, identifier, cancellationToken);
         return reading.Result();
+    }
+
+    // ------------------------------------------------------------------ the default of a module
+
+    /// <summary>
+    /// The call the default of <paramref name="module"/> stands for, the requirement attributes on the interface, each
+    /// call in the order they are written and <c>AccessRequirement.All</c> of them where there are several;
+    /// <see langword="null"/> where the interface carries none, or one that may not be a default, which is reported at
+    /// the interface.
+    /// </summary>
+    internal static string? DefaultOf(INamedTypeSymbol module, Compilation compilation)
+    {
+        var stated = StatedOn(module);
+        if (stated.Count == 0
+            || stated.Any(each => RefusedAsADefault(each) is not null)
+            || (stated.Any(static each => each.IsKey) && KeyWithoutMarkerIn(compilation).Count != 1))
+        {
+            return null;
+        }
+
+        var calls = stated.Select(each => each.IsKey ? KeyWithoutAMarker(each, compilation) : CallOf(each)).ToList();
+        return calls.Count == 1 ? calls[0] : KnownTypes.AccessRequirementUsage + ".All(" + string.Join(", ", calls) + ")";
+    }
+
+    /// <summary>The requirement attributes on a module's interface as a reader writes them: <c>[InTenant]</c>, <c>[SignedIn] and [InTenant]</c>.</summary>
+    internal static string DefaultNamed(INamedTypeSymbol module) => Listed(StatedOn(module).Select(static each => Bracketed(each.Class)));
+
+    /// <summary>
+    /// Why a requirement attribute on a module's interface may not be its default, as a message goes on after naming it;
+    /// <see langword="null"/> where it may. A default is taken by every request of the module that forgets its own, so
+    /// what it lets through, a request that forgot lets through as well.
+    /// </summary>
+    private static string? RefusedAsADefault(Stated each)
+    {
+        if (each.IsAnonymous)
+        {
+            return "a request of the module that forgets to say what it requires would let anyone send it, and a forgotten requirement never opens a door; "
+                   + "put [AllowAnonymous] on each request anyone may send";
+        }
+
+        if (each.Kind == StatedKind.OwnOnly)
+        {
+            return "it reads the member of a request marked [Own], and a default reads no member of a request; put [OwnOnly] on each request about the caller's own";
+        }
+
+        if (each.QueriesOnly)
+        {
+            return "its package declares it for queries only, and a command of the module that says nothing would take it too, where it holds the caller to nothing the command changes (DDD00082); "
+                   + "put " + Bracketed(each.Class) + " on each query";
+        }
+
+        // AttributeUsage leaves the attribute off an interface with CS0592; this says what makes it a default.
+        var usage = each.Class.OriginalDefinition.GetAttributes()
+            .FirstOrDefault(static attribute => attribute.AttributeClass?.ToDisplayString() == "System.AttributeUsageAttribute");
+        return usage is { ConstructorArguments.Length: > 0 } && usage.ConstructorArguments[0].Value is int targets && (targets & (int)AttributeTargets.Interface) == 0
+            ? "the AttributeUsage of its class leaves out interfaces (CS0592), and a requirement attribute is a default where its class allows AttributeTargets.Interface; add it there, or put the attribute on each request"
+            : null;
+    }
+
+    /// <summary>The call of a requirement attribute a package marked <c>[StatesRequirement]</c>: its method, with the attribute's arguments.</summary>
+    private static string CallOf(Stated each)
+    {
+        var typeArguments = each.Class.TypeArguments.Length > 0
+            ? "<" + string.Join(", ", each.Class.TypeArguments.Select(static argument => argument.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat))) + ">"
+            : string.Empty;
+        return each.Factory!.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + "." + Identifier(each.Method) + typeArguments
+               + "(" + string.Join(", ", each.Attribute.ConstructorArguments.Select(Literal)) + ")";
+    }
+
+    /// <summary>The key of <c>[RequiresKey]</c>, as C# writes it.</summary>
+    private static string KeyOf(Stated each)
+        => each.Attribute.ConstructorArguments.Length > 0 ? Literal(each.Attribute.ConstructorArguments[0]) : "null";
+
+    /// <summary>
+    /// The call of <c>[RequiresKey]</c> where no member says where the key is held: the one a package says with
+    /// <c>[assembly: KeyWithoutMarker]</c>, which there is one of, Tenancy's for the whole tenant.
+    /// </summary>
+    private static string KeyWithoutAMarker(Stated each, Compilation compilation)
+    {
+        var only = KeyWithoutMarkerIn(compilation)[0];
+        return only.Factory + "." + Identifier(only.Method) + "(" + KeyOf(each) + ")";
     }
 
     /// <summary>
@@ -776,7 +882,11 @@ internal sealed record RequestRequirement(
 
             // An attribute the compiler could not bind, a missing using say, is its error to report, not this.
             var unbound = type.GetAttributes().Any(static attribute => attribute.AttributeClass is null or { TypeKind: TypeKind.Error });
-            if (!hasAttributes && !answersItself && !unbound && !type.IsAbstract && type.TypeKind != TypeKind.Interface && modules.Count > 0 && !InheritsAStatedRequirement())
+            var statesNothing = !hasAttributes && !answersItself && !unbound && !type.IsAbstract && type.TypeKind != TypeKind.Interface && modules.Count > 0 && !InheritsAStatedRequirement();
+
+            // A module with a default answers for a request that states nothing: on a line of its own where the interface
+            // can name it, and in the last arm otherwise, a request of another project's included.
+            if (statesNothing && !modules.Any(static module => StatedOn(module).Count > 0))
             {
                 if (writable.Count > 0)
                 {
@@ -792,7 +902,17 @@ internal sealed record RequestRequirement(
             }
 
             // A warning says what reads oddly and leaves the line as it is; an error means no line, which nothing reads.
-            var arm = _errors == 0 && hasAttributes && writable.Count > 0 ? Arm() : null;
+            string? arm = null;
+            if (_errors == 0 && hasAttributes && writable.Count > 0)
+            {
+                arm = Arm(out var requirement);
+                SameAsTheDefault(writable, requirement, answersItself);
+            }
+            else if (_errors == 0 && statesNothing && writable.Count == 1 && CanBeNamedBy(writable[0]) && DefaultOf(writable[0], compilation) is { } byDefault)
+            {
+                arm = type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + " => " + byDefault;
+            }
+
             return new RequestRequirement(
                 type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
                 DepthOf(type),
@@ -806,6 +926,105 @@ internal sealed record RequestRequirement(
         private bool IsWritable(INamedTypeSymbol module)
             => AccessRequestsInterface.ProblemWith(module, compilation) is null
                && module.DeclaringSyntaxReferences.Any(reference => reference.GetSyntax(cancellationToken) is InterfaceDeclarationSyntax declaration && declaration.Modifiers.Any(SyntaxKind.PartialKeyword));
+
+        /// <summary>
+        /// Whether a line of <paramref name="module"/>'s switch can name the request: no type parameters, which a line
+        /// cannot close, and visible from the interface. One that cannot takes the module's default in the last arm.
+        /// </summary>
+        private bool CanBeNamedBy(INamedTypeSymbol module)
+            => type.TypeParameters.Length == 0
+               && type.ContainingType is not { IsGenericType: true }
+               && compilation.IsSymbolAccessibleWithin(type, module);
+
+        /// <summary>
+        /// DDD00084: requirement attributes of the request's own that say what its module's default says, call for call,
+        /// in the same order, so the request would require the same without them. Only on a request nothing derives from:
+        /// one that derives from it holds to its attributes beside its own, and would require less without them.
+        /// </summary>
+        private void SameAsTheDefault(List<INamedTypeSymbol> writable, string requirement, bool answersItself)
+        {
+            if (answersItself
+                || writable.Count != 1
+                || !(type.IsSealed || type.IsValueType)
+                || stated.Any(static each => each.InheritedFrom is not null)
+                || DefaultOf(writable[0], compilation) is not { } byDefault
+                || !string.Equals(byDefault, requirement, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            Report(DiagnosticDescriptors.RedundantRequirement, WhereWritten(stated[0].Attribute, cancellationToken) ?? _location, _name,
+                Listed(stated.Select(static each => Bracketed(each.Class))),
+                "the default of its module, " + Listed(StatedOn(writable[0]).Select(static each => Bracketed(each.Class))) + " on '" + writable[0].Name + "'");
+        }
+
+        /// <summary>
+        /// The interface read for its requirement attributes: on the module's interface, marked <c>[AccessRequests]</c> and
+        /// partial, they are the default of its requests, and nothing is wrong with them where each may be one (DDD00089),
+        /// a key without a marker is held where a package says (DDD00080), and none says what another beside it requires
+        /// already (DDD00084). On any other interface nothing reads them (DDD00083). No line is written for an interface.
+        /// </summary>
+        public RequestRequirement AsADefault()
+        {
+            var carried = Listed(stated.Select(static each => Bracketed(each.Class)));
+            if (!DefinitionFactory.HasAttribute(type, KnownTypes.AccessRequestsAttribute))
+            {
+                Report(DiagnosticDescriptors.RequirementAttributesNotRead, _location, _name, carried,
+                    "a requirement attribute on an interface is the default of a module's requests, which only the module's interface has, the one marked [AccessRequests]"
+                    + (modules.FirstOrDefault() is { } module ? ", '" + module.Name + "' here" : string.Empty)
+                    + "; put it on each request of '" + type.Name + "', or answer RequiredAccess in '" + type.Name + "', which C# takes over the module's for its requests");
+            }
+            else if (AccessRequestsInterface.ProblemWith(type, compilation) is not null)
+            {
+                Report(DiagnosticDescriptors.RequirementAttributesNotRead, _location, _name, carried,
+                    "'" + type.Name + "' is not an interface a behavior can be written for (DDD00056), so nothing is written into it");
+            }
+            else if (!IsWritable(type))
+            {
+                Report(DiagnosticDescriptors.RequirementAttributesNotRead, _location, _name, carried,
+                    "'" + type.Name + "' is not partial, and the generator writes RequiredAccess into it, with its default for the requests that state none; declare it '"
+                    + (type.DeclaredAccessibility == Accessibility.Public ? "public " : "internal ") + "partial interface " + type.Name + " : IRequireAccess;'");
+            }
+            else
+            {
+                foreach (var each in stated)
+                {
+                    if (RefusedAsADefault(each) is { } why)
+                    {
+                        Report(DiagnosticDescriptors.DefaultRequirementRefused, WhereWritten(each.Attribute, cancellationToken) ?? _location, _name, Bracketed(each.Class), why);
+                    }
+                }
+
+                var defaults = KeyWithoutMarkerIn(compilation);
+                if (stated.Any(static each => each.IsKey) && defaults.Count != 1)
+                {
+                    Report(DiagnosticDescriptors.KeyMarkerOutOfPlace, _location, _name,
+                        "requires a key as the default of its module, and " + (defaults.Count == 0
+                            ? "no package this project references says where a key without a marker is held"
+                            : Listed(defaults.Select(static each => "'" + each.Assembly + "'")) + " each say where a key without a marker is held")
+                        + ": a default reads no member of a request, so its key is one without a marker; put [RequiresKey(key)] on each request, with the marker of where it is held");
+                }
+
+                if (_errors == 0)
+                {
+                    Redundant();
+                }
+            }
+
+            return new RequestRequirement(type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), 0, [], null, _diagnostics.ToEquatableArray(), []);
+        }
+
+        /// <summary>
+        /// What a message about a marker read by nothing adds where the request's module has a default with a key: that
+        /// key is held where a key without a marker is, and reads no member of a request.
+        /// </summary>
+        private string KeyOfTheDefault()
+        {
+            var local = modules.Where(module => SymbolEqualityComparer.Default.Equals(module.ContainingAssembly, compilation.Assembly) && IsWritable(module)).ToList();
+            return local.Count == 1 && StatedOn(local[0]).Any(static each => each.IsKey)
+                ? "; the key of its module's default, on '" + local[0].Name + "', reads no member of a request"
+                : string.Empty;
+        }
 
         /// <summary>DDD00079 and DDD00078: no attribute that opens the door beside one that closes it, and the requirement said one way.</summary>
         /// <param name="answeredBy">What answers RequiredAccess for the request other than a line, or <see langword="null"/>.</param>
@@ -905,7 +1124,8 @@ internal sealed record RequestRequirement(
                         Listed(unread.Select(each => DeclaredHere(each)
                             ? "marks '" + each.Name + "' " + Bracketed(each.Class)
                             : "inherits '" + each.Name + "' " + Bracketed(each.Class) + " from '" + each.Property!.ContainingType.Name + "'"))
-                        + ", and requires no key: a marker says where the key of [RequiresKey(key)] is held, so put that on the request, or take the marker off");
+                        + ", and requires no key: a marker says where the key of [RequiresKey(key)] is held, so put that on the request, or take the marker off"
+                        + KeyOfTheDefault());
                 }
 
                 return;
@@ -1361,7 +1581,7 @@ internal sealed record RequestRequirement(
         /// The line: the pattern of the request's type, and the call that makes its requirement. Several attributes all
         /// hold, so their calls go into <c>AccessRequirement.All</c>, in the order the attributes are written.
         /// </summary>
-        private string Arm()
+        private string Arm(out string requirement)
         {
             var pattern = type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
             var reads = false;
@@ -1371,7 +1591,7 @@ internal sealed record RequestRequirement(
                 calls.Add(CallOf(each, ref reads));
             }
 
-            var requirement = calls.Count == 1 ? calls[0] : KnownTypes.AccessRequirementUsage + ".All(" + string.Join(", ", calls) + ")";
+            requirement = calls.Count == 1 ? calls[0] : KnownTypes.AccessRequirementUsage + ".All(" + string.Join(", ", calls) + ")";
             return pattern + (reads ? " " + Designation : string.Empty) + " => " + requirement;
         }
 
@@ -1385,14 +1605,13 @@ internal sealed record RequestRequirement(
                     return Own(markers.First(static marker => marker.Kind == MarkerKind.Own));
 
                 case StatedKind.Key:
-                    var key = each.Attribute.ConstructorArguments.Length > 0 ? Literal(each.Attribute.ConstructorArguments[0]) : "null";
+                    var key = KeyOf(each);
                     var place = KeyMarkers.FirstOrDefault(static marker => marker.Place);
                     string held;
                     string? there = null;
                     if (place is null)
                     {
-                        var only = KeyWithoutMarkerIn(compilation)[0];
-                        held = only.Factory + "." + Identifier(only.Method) + "(" + key + ")";
+                        held = KeyWithoutAMarker(each, compilation);
                     }
                     else
                     {
@@ -1418,11 +1637,7 @@ internal sealed record RequestRequirement(
                     return held;
 
                 default:
-                    var typeArguments = each.Class.TypeArguments.Length > 0
-                        ? "<" + string.Join(", ", each.Class.TypeArguments.Select(static argument => argument.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat))) + ">"
-                        : string.Empty;
-                    return each.Factory!.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + "." + Identifier(each.Method) + typeArguments
-                           + "(" + string.Join(", ", each.Attribute.ConstructorArguments.Select(Literal)) + ")";
+                    return RequestRequirement.CallOf(each);
             }
         }
 

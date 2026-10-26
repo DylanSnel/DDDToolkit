@@ -163,10 +163,18 @@ public class CallerRequirementTests
         StatedBy(typeof(SignedInAttribute)).Should().Be((typeof(AccessRequirement), nameof(AccessRequirement.SignedIn)));
         typeof(AccessRequirement).GetMethod(nameof(AccessRequirement.AllowAnonymous))!.Invoke(null, null).Should().Be(AccessRequirement.AllowAnonymous());
 
-        foreach (var attribute in new[] { typeof(AllowAnonymousAttribute), typeof(SignedInAttribute), typeof(RequiresKeyAttribute) })
+        // A request carries each; the module's interface carries those that may be its default, and [AllowAnonymous]
+        // and [OwnOnly] never are: a forgotten requirement never opens a door, and a default reads no member.
+        foreach (var (attribute, validOn) in new[]
+                 {
+                     (typeof(AllowAnonymousAttribute), AttributeTargets.Class | AttributeTargets.Struct),
+                     (typeof(OwnOnlyAttribute), AttributeTargets.Class | AttributeTargets.Struct),
+                     (typeof(SignedInAttribute), AttributeTargets.Class | AttributeTargets.Struct | AttributeTargets.Interface),
+                     (typeof(RequiresKeyAttribute), AttributeTargets.Class | AttributeTargets.Struct | AttributeTargets.Interface),
+                 })
         {
             var usage = attribute.GetCustomAttribute<AttributeUsageAttribute>()!;
-            usage.ValidOn.Should().Be(AttributeTargets.Class | AttributeTargets.Struct, "{0} goes on a request", attribute.Name);
+            usage.ValidOn.Should().Be(validOn, "{0} goes on a request, and on a module's interface only where it may be its default", attribute.Name);
             usage.Inherited.Should().BeFalse();
         }
 

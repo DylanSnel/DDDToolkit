@@ -123,7 +123,8 @@ public sealed record CloseInvoice(InvoiceId Invoice) : IBillingRequest
   somebody forgot never opens a door, and where the interface is partial it is [DDD00077](diagnostics.md#ddd00077)
   when it builds (the compiler's own CS0535 where it is not). A request anyone may send says so:
   `[AllowAnonymous]`, or `AccessRequirement.AllowAnonymous()`, so it reads as meant in a review where `None`
-  would read as forgotten.
+  would read as forgotten. A module whose requests nearly all require the same may say it once, on its interface,
+  and a request that declares nothing then requires that ([A module's default](#a-modules-default)).
 - **`[AllowAnonymous]` is named as ASP.NET Core's and HotChocolate's are.** It goes on a request, in the
   application layer, which references neither library, so the name is free there. A file that imports
   `Microsoft.AspNetCore.Authorization` or `HotChocolate.Authorization` beside `DDDToolkit.Access`, a route or a
@@ -151,6 +152,85 @@ partial interface IBillingRequest
 `CloseInvoice` has no line: it answers the property itself. The same file holds the
 [behavior](#the-generated-behavior-with-mediator) where the project uses Mediator, and the lines alone where it does
 not, since whatever asks the checks reads them.
+
+</details>
+
+### A module's default
+
+Nearly every request of a module that reads a tenant's data requires a seat in the tenant, `[InTenant]`, and a key
+a request requires already requires one, so `[InTenant]` stands alone on the requests any seat may send. A module
+like that says it once, on its interface: a requirement attribute there is the module's default, and a request of
+the module that states nothing of its own requires what the default says. The Tenancy sample's Projects module
+says it so.
+
+```csharp
+[AccessRequests, InTenant]                                                   // the module's default: a caller in the tenant
+public partial interface IBoardsRequest : IRequireAccess;
+
+public sealed record ListBoards : IBoardsRequest;                            // states nothing: takes the default
+
+[RequiresKey(BoardKeys.Archive)]                                             // states its own: the key, and only the key
+public sealed record ArchiveBoard(BoardId Board) : IBoardsRequest;
+
+[SignedIn]                                                                   // its own too: a signed-in user, a seat or not
+public sealed record MyInvitations : IBoardsRequest;
+```
+
+```mermaid
+flowchart LR
+    Request["a request<br/>of the module"] --> Own{"states its own?<br/>an attribute, the property,<br/>a request it derives from"}
+    Own -- "yes" --> Its["its own,<br/>and only its own"]
+    Own -- "no" --> Default{"the interface<br/>has a default?"}
+    Default -- "yes" --> Taken["the default,<br/>on a line of its own"]
+    Default -- "no" --> Stopped["DDD00077 at build,<br/>stopped when sent"]
+```
+
+- **What a request states is all it requires.** A request that states its requirement, with an attribute, the
+  property or the attributes of a request it derives from, keeps only its own: the default replaces nothing and
+  stacks onto nothing. `MyInvitations` lets a signed-in user without a seat through, as it says, and `ArchiveBoard`
+  asks the key alone. Several attributes on the interface all hold, `AccessRequirement.All` in the order written, as
+  on a request.
+- **The switch shows what each request got.** A request that takes the default gets a line of its own with the
+  default's call, `ListBoards => TenancyAccess.InTenant()`, so the generated file still reads as the list of the
+  module's requests and what each requires. A request no line can name, one of another project or one with type
+  parameters, takes the default in the last arm, which answers it where it would otherwise stop the request: that is
+  what a module's default means.
+- **A default is one any request may take.** `[SignedIn]`, `[InTenant]`, `[RequiresKey(key)]`, whose key is held for
+  the whole tenant, since a default reads no member of a request and so has no marker, and an attribute of your own
+  whose class allows `AttributeTargets.Interface` in its `AttributeUsage`. Not `[AllowAnonymous]`: every request that
+  forgot its own would let anyone in, and a forgotten requirement never opens a door. Not a requirement for queries
+  only, `[RequiresOperator]` or `[SeenWith<TResourceId>(key)]`: a command that says nothing would take it. Not
+  `[OwnOnly]`, which reads a member. Each is [DDD00089](diagnostics.md#ddd00089), and a default on an interface that
+  is not `partial`, or on one that is not the module's, is [DDD00083](diagnostics.md#ddd00083).
+- **Said once is said once.** A request's own attributes that say what the default says, `[InTenant]` on `ListBoards`,
+  add nothing: [DDD00084](diagnostics.md#ddd00084), a warning. On a request another derives from they are kept, since
+  the request that derives from it holds to them beside its own.
+- **What it costs.** [DDD00077](diagnostics.md#ddd00077) no longer reports a request of the module that states
+  nothing, since it takes the default. So a command that forgets its `[RequiresKey]` lets every seat in the tenant
+  through, and the build says nothing of it. That is why the default is an opt-in you write, for a module whose
+  requests nearly all require it, and why the generated switch shows per request what it got; a test that pins what
+  each request requires ([Holding it with a test](#holding-it-with-a-test)) finds the forgotten key where the build
+  does not.
+
+<details>
+<summary>Show the code: what the generator writes for a module with a default</summary>
+
+```csharp title="BoardsAccessBehavior.g.cs, with the module's default, shortened"
+partial interface IBoardsRequest
+{
+    AccessRequirement IRequireAccess.RequiredAccess => this switch
+    {
+        ArchiveBoard => TenancyAccess.ForTheWholeTenant("boards.archive"),
+        ListBoards => TenancyAccess.InTenant(),
+        MyInvitations => AccessRequirement.SignedIn(),
+        // A request this project cannot name, one of another project say, takes the module's default as well.
+        _ => TenancyAccess.InTenant(),
+    };
+}
+```
+
+Without a default the last arm stops a request it has no line for; with one it answers the default, the same call
+the lines above it write for each request that takes it.
 
 </details>
 
@@ -253,7 +333,7 @@ of an aggregate whose owner it marks `[Owner]`, `[OrOwn]` is the same with `Owne
 |---|---|---|
 | `[AllowAnonymous]` | no other requirement attribute, on it or on a request it derives from, and not the property | [DDD00079](diagnostics.md#ddd00079), [DDD00078](diagnostics.md#ddd00078) |
 | any other requirement attribute | other requirement attributes, on it and on the requests it derives from, all of which hold; not the property | [DDD00078](diagnostics.md#ddd00078) |
-| `[InTenant]`, `[SignedIn]` | a neighbour that does not already require it: not a key of Tenancy's for `[InTenant]`, not `[RequiresOperator]` for `[SignedIn]`, not `[OwnOnly]` with `[Own]` on a member whose own requires it, not the same attribute on a request it derives from | [DDD00084](diagnostics.md#ddd00084), a warning |
+| `[InTenant]`, `[SignedIn]` | a neighbour that does not already require it: not a key of Tenancy's for `[InTenant]`, not `[RequiresOperator]` for `[SignedIn]`, not `[OwnOnly]` with `[Own]` on a member whose own requires it, not the same attribute on a request it derives from; and not alone what its module's default says, on a sealed request | [DDD00084](diagnostics.md#ddd00084), a warning |
 | `[RequiresKey]` | one per request, the requests it derives from counted | [DDD00080](diagnostics.md#ddd00080) |
 | `[AtUnit]` or `[OnResource]` | `[RequiresKey]`, one of the two, on a member of the id it marks that is never null | [DDD00080](diagnostics.md#ddd00080), [DDD00081](diagnostics.md#ddd00081) |
 | `[ExpectedVersion]` | `[OnResource]`, on a `long?` | [DDD00080](diagnostics.md#ddd00080), [DDD00081](diagnostics.md#ddd00081) |
@@ -263,6 +343,11 @@ of an aggregate whose owner it marks `[Owner]`, `[OrOwn]` is the same with `Owne
 | `[Owner]`, on an aggregate's property | the root itself, once, on a property of a type with an own, nullable or not | [DDD00087](diagnostics.md#ddd00087), [DDD00088](diagnostics.md#ddd00088) |
 | `[SeenWith<TResourceId>(key)]`, `[RequiresOperator]` | a query | [DDD00082](diagnostics.md#ddd00082) on a command or a plain request of Mediator's |
 | any of them | one module interface of the same project, `[AccessRequests]` and `partial` | [DDD00083](diagnostics.md#ddd00083) |
+
+| On the module's interface | Goes with | Reported otherwise |
+|---|---|---|
+| `[SignedIn]`, `[InTenant]`, `[RequiresKey(key)]`, your own that allows an interface | `[AccessRequests]` and `partial`; each other, all of which hold; a key without a marker, held where a package says, Tenancy | [DDD00083](diagnostics.md#ddd00083), [DDD00080](diagnostics.md#ddd00080), [DDD00084](diagnostics.md#ddd00084) |
+| `[AllowAnonymous]`, `[RequiresOperator]`, `[SeenWith<TResourceId>(key)]`, `[OwnOnly]` | nothing: they are no default | [DDD00089](diagnostics.md#ddd00089) |
 
 `[AllowAnonymous]` beside `[RequiresKey]` would open the door the key closes, whichever was meant. `[InTenant]`
 beside `[RequiresKey]` says nothing the key does not: only a seat in the tenant or system work there holds a key of
@@ -406,6 +491,9 @@ the requirement, the attribute, `PlanCheck` and its registration.
   without attributes of its own takes its base's line as it is. A derived request cannot take back what its base
   requires: `[AllowAnonymous]` on it below a base that requires something is DDD00079, a second `[RequiresKey]` is
   DDD00080, and an attribute its base carries already is DDD00084.
+- **A module's default stacks onto nothing.** It is no attribute of a request: a request that states nothing takes
+  it, and one that states its own, or derives from one that does, keeps that alone
+  ([A module's default](#a-modules-default)).
 
 <details>
 <summary>Show the code: a module's own requirement attribute, declared and stacked</summary>
@@ -1353,4 +1441,7 @@ A few things no check can see are worth a test of your own, over the requests of
   the caller's own and a key is `[OrOwn]`: the sample holds its guard to those too.
 
 Because a requirement is a record, the same test can pin which request declares which: a table of request
-types and the requirement each is meant to answer, compared with what they do answer.
+types and the requirement each is meant to answer, compared with what they do answer. Where a module has a
+[default](#a-modules-default) that table is what finds a command that forgot its key, which the build does not: it
+takes the default, and the table says the key. The Tenancy sample's `AccessDeclarationTests` holds its Projects module,
+whose default is `[InTenant]`, to such a table.
