@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore.Metadata;
 namespace DDDToolkit.Supporting.Membership.EntityFramework.Tests;
 
 /// <summary>
-/// What <c>IsKeptRole</c> maps of a role class, the mark it leaves, which is how the roles of a resource are
+/// What <c>IsCustomRole</c> maps of a role class, the mark it leaves, which is how the roles of a resource are
 /// found without anything registered for them, and what is said when the rules, the registration and the
 /// model do not agree about a resource's roles.
 /// </summary>
@@ -28,18 +28,18 @@ public sealed class RoleClassMappingTests
         (role.GetTableName(), role.GetSchema()).Should().Be(("PlotRoles", GardenContext.Schema));
         role.FindOwnership().Should().BeNull("a role is an aggregate beside the plot, not a part of one");
         role.GetProperties().Select(property => property.Name).Should().BeEquivalentTo(
-            ["Id", "Name", "Description", "Keys", "Status", "MadeFrom", "GardenId", "Version"],
+            ["Id", "Name", "Description", "Permissions", "Status", "MadeFrom", "GardenId", "Version"],
             "the package's six, the host's garden, and the version every aggregate has");
 
         role.FindProperty("Id")!.ValueGenerated.Should().Be(ValueGenerated.Never, "the host makes a role's id");
-        role.FindProperty("Name")!.GetMaxLength().Should().Be(KeptRoleAggregate<PlotRoleId>.MaxNameLength).And.Be(120);
-        role.FindProperty("Description")!.GetMaxLength().Should().Be(KeptRoleAggregate<PlotRoleId>.MaxDescriptionLength).And.Be(1000);
+        role.FindProperty("Name")!.GetMaxLength().Should().Be(CustomRoleAggregate<PlotRoleId>.MaxNameLength).And.Be(120);
+        role.FindProperty("Description")!.GetMaxLength().Should().Be(CustomRoleAggregate<PlotRoleId>.MaxDescriptionLength).And.Be(1000);
         role.FindProperty("MadeFrom")!.GetMaxLength().Should().Be(NamedRole.MaxLength, "a starter role is one the rules declare, by a name a role can have");
         role.FindProperty("MadeFrom")!.IsNullable.Should().BeTrue("a role a garden made itself came from no starter role");
 
-        // The status as its name, and the keys as one collection in one column, read inside a statement.
+        // The status as its name, and the permissions as one collection in one column, read inside a statement.
         role.FindProperty("Status")!.GetProviderClrType().Should().Be(typeof(string));
-        role.FindProperty("Keys")!.IsPrimitiveCollection.Should().BeTrue();
+        role.FindProperty("Permissions")!.IsPrimitiveCollection.Should().BeTrue();
 
         // What is the host's: the two indexes over its garden, and the rule about which roles a request reads.
         role.GetIndexes().Select(index => string.Join("+", index.Properties.Select(property => property.Name)) + (index.IsUnique ? " once" : string.Empty))
@@ -82,17 +82,18 @@ public sealed class RoleClassMappingTests
         filingModel.GetEntityTypes().Select(entity => entity.GetTableName()).Should().BeEquivalentTo(
             "Documents", "DocumentShares", "DocumentShareRoles", "Folders", FilingContext.FolderStaffTable, FilingContext.FolderStaffRolesTable);
         depotModel.FindEntityType(typeof(PlotRole)).Should().BeNull();
-        (DocumentMembership.Rules.RolesKept, FolderMembership.Rules.RolesKept, PalletMembership.Rules.RolesKept, CrateMembership.Rules.RolesKept).Should().Be((false, false, false, false));
+        (DocumentMembership.Rules.Roles.Kind, FolderMembership.Rules.Roles.Kind, PalletMembership.Rules.Roles.Kind, CrateMembership.Rules.Roles.Kind)
+            .Should().Be((RolesKind.Fixed, RolesKind.Fixed, RolesKind.Fixed, RolesKind.External));
     }
 
     [Fact]
     public void A_class_that_was_not_declared_with_the_role_template_is_not_mapped_as_one()
     {
-        FluentActions.Invoking(() => ModelOf(builder => builder.Entity<Barrow>().IsKeptRole()))
+        FluentActions.Invoking(() => ModelOf(builder => builder.Entity<Barrow>().IsCustomRole()))
             .Should().Throw<ArgumentException>()
-            .WithMessage("Barrow is not a role class. Declare it with the role template*[KeptRole<BarrowId, Document>] public sealed partial class Barrow*");
+            .WithMessage("Barrow is not a role class. Declare it with the role template*[CustomRole<BarrowId, Document>] public sealed partial class Barrow*");
 
-        FluentActions.Invoking(() => MembershipEntityTypeBuilderExtensions.IsKeptRole<PlotRole>(null!)).Should().Throw<ArgumentNullException>();
+        FluentActions.Invoking(() => MembershipEntityTypeBuilderExtensions.IsCustomRole<PlotRole>(null!)).Should().Throw<ArgumentNullException>();
     }
 
     [Fact]
@@ -101,44 +102,44 @@ public sealed class RoleClassMappingTests
         // Two classes marked as the roles of one resource: a member holds a role by one class's id.
         var two = ModelOf(builder =>
         {
-            builder.Entity<Plot>().HasMembers(plot => plot.Gardeners, plot => plot.OwnerId);
-            builder.Entity<PlotRole>().IsKeptRole();
+            builder.Entity<Plot>().HasMembers(plot => plot.Gardeners);
+            builder.Entity<PlotRole>().IsCustomRole();
             builder.Entity<StrayRole>().HasAnnotation(MembershipModel.RoleOfAnnotation, typeof(Plot).FullName);
         });
         FluentActions.Invoking(() => MembershipModel.MembersOf(two.FindEntityType(typeof(Plot))!))
             .Should().Throw<InvalidOperationException>().WithMessage("Plot has two role classes in this model, *Role and *Role. A resource has one*");
 
-        // A mark on something that has no keys: the mapping was changed after IsKeptRole, or never was one.
+        // A mark on something that has no permissions: the mapping was changed after IsCustomRole, or never was one.
         var unkeyed = ModelOf(builder =>
         {
-            builder.Entity<Plot>().HasMembers(plot => plot.Gardeners, plot => plot.OwnerId);
+            builder.Entity<Plot>().HasMembers(plot => plot.Gardeners);
             builder.Entity<Barrow>().HasAnnotation(MembershipModel.RoleOfAnnotation, typeof(Plot).FullName);
         });
         FluentActions.Invoking(() => MembershipModel.MembersOf(unkeyed.FindEntityType(typeof(Plot))!))
-            .Should().Throw<InvalidOperationException>().WithMessage("Barrow was mapped with IsKeptRole as the role class of Plot, and the model no longer has its keys, its status or its id.*");
+            .Should().Throw<InvalidOperationException>().WithMessage("Barrow was mapped with IsCustomRole as the role class of Plot, and the model no longer has its permissions, its status or its id.*");
     }
 
     [Fact]
     public void Rules_that_keep_the_roles_are_for_members_that_hold_a_role_by_an_id_of_the_hosts()
     {
-        var kept = new MembershipRules("papers", keys: ["papers.view"], roles: [new("reader", ["papers.view"])], rolesKept: true);
+        var kept = MembershipRules.Declare(typeof(Document), "papers", [new("papers.view")], Roles.Custom(starters: [new("reader", ["papers.view"])]));
 
         // A document's members hold their roles by name, and a role that is a row is not held by a name.
         FluentActions.Invoking(() => new ServiceCollection().AddMembership<DocumentShare, DocumentShareId, UserId, NamedRole, FilingContext, Document, DocumentId>(kept))
             .Should().Throw<ArgumentException>().WithParameterName("rules")
-            .WithMessage("The rules 'papers' say the roles of Document are kept, as rows of a role class, and its members hold roles by name.*[KeptRole<DocumentRoleId, Document>]*[Member<DocumentShareId, UserId, DocumentRoleId, Document>]*");
+            .WithMessage("The rules 'papers' say a customer makes the roles of Document, as rows of a role class, and its members hold roles by name.*[CustomRole<DocumentRoleId, Document>]*[Member<DocumentShareId, UserId, DocumentRoleId, Document>]*");
 
         // And rules that declare the roles are not for members that hold a role by an id: the plots' gardeners do.
-        var declared = new MembershipRules("beds", keys: ["beds.view"], roles: [new("reader", ["beds.view"])]);
+        var declared = MembershipRules.Declare(typeof(Plot), "beds", [new("beds.view")], Roles.Fixed([new("reader", ["beds.view"])]));
         FluentActions.Invoking(() => new ServiceCollection().AddMembership<PlotGardener, PlotGardenerId, UserId, PlotRoleId, GardenContext, Plot, PlotId>(declared))
             .Should().Throw<ArgumentException>().WithParameterName("rules")
-            .WithMessage("The members of Plot hold roles known by PlotRoleId, and the rules 'beds' declare the roles*rolesKept: true for a role class of this resource*");
+            .WithMessage("The members of Plot hold roles known by PlotRoleId, and the rules 'beds' have fixed roles*Roles.Custom() for a role class of this resource*");
 
         // Nothing is registered for the roles themselves: the rules say they are kept, and the model says where.
         var services = new ServiceCollection();
         services.AddMembership<PlotGardener, PlotGardenerId, UserId, PlotRoleId, GardenContext, Plot, PlotId>(PlotMembership.Rules);
         services.Should().ContainSingle(descriptor => descriptor.ServiceType == typeof(IMemberRoles<PlotId, PlotRoleId>));
-        services.Select(descriptor => descriptor.ServiceType).Should().NotContain(typeof(IRolesWithKey<PlotId, PlotRoleId>));
+        services.Select(descriptor => descriptor.ServiceType).Should().NotContain(typeof(IRolesWithPermission<PlotId, PlotRoleId>));
 
         // A host that answers which roles there are itself, by a scope it reads from elsewhere say, registers
         // its answer before the resource, and that one stays: the admission asks it, and not the rows.
@@ -162,7 +163,6 @@ public sealed class RoleClassMappingTests
 
         // No context is registered here at all: nothing of the roles' rows is read for the admission.
         var admission = scope.ServiceProvider.GetRequiredService<MemberAdmission<PlotId, UserId, PlotRoleId>>();
-        (await admission.OwnerRoleAsync(Cancellation)).Should().Be(owners);
         await admission.RequireRoleAsync(owners, Cancellation);
         await Refused.WithCodeAsync(PlotMembership.Codes, MembershipRefusals.RoleNotForMembers, () => admission.RequireRoleAsync(PlotRoleId.CreateSequential(), Cancellation).AsTask());
     }
@@ -182,11 +182,11 @@ public sealed class RoleClassMappingTests
             await using var scope = provider.CreateAsyncScope();
             using (Callers.Begin(TestCallers.User(UserId.CreateSequential())))
             {
-                var asked = FluentActions.Invoking(() => scope.ServiceProvider.GetRequiredService<IMemberQuestions<PlotId>>().Reach(PlotKeys.Plant))
+                var asked = FluentActions.Invoking(() => scope.ServiceProvider.GetRequiredService<IMemberQuestions<PlotId>>().Reach(PlotPermissions.Plant))
                     .Should().Throw<InvalidOperationException>().Which;
 
                 // The admission is told the same: it reads the same rows.
-                (await FluentActions.Awaiting(() => scope.ServiceProvider.GetRequiredService<MemberAdmission<PlotId, UserId, PlotRoleId>>().FindOwnerRoleAsync(Cancellation).AsTask())
+                (await FluentActions.Awaiting(() => scope.ServiceProvider.GetRequiredService<MemberAdmission<PlotId, UserId, PlotRoleId>>().RequireRoleAsync(PlotRoleId.CreateSequential(), Cancellation).AsTask())
                     .Should().ThrowAsync<InvalidOperationException>()).Which.Message.Should().Be(asked.Message);
 
                 return asked;
@@ -195,9 +195,9 @@ public sealed class RoleClassMappingTests
 
         // The plots are mapped with their gardeners, and the context never mapped a role class for them.
         (await AskedAsync<PlotsWithoutRoles>()).Message.Should()
-            .StartWith("The rules 'plots' say the roles of Plot are kept, and PlotsWithoutRoles maps no role class for it.")
-            .And.Contain("[KeptRole<PlotRoleId, Plot>]")
-            .And.EndWith("modelBuilder.Entity<PlotRole>().IsKeptRole().");
+            .StartWith("The rules 'plots' say a customer makes the roles of Plot, and PlotsWithoutRoles maps no role class for it.")
+            .And.Contain("[CustomRole<PlotRoleId, Plot>]")
+            .And.EndWith("modelBuilder.Entity<PlotRole>().IsCustomRole().");
 
         // A role class known by another id than the gardeners hold their roles by.
         (await AskedAsync<PlotsWithStrayRoles>()).Message.Should()
@@ -236,7 +236,7 @@ public sealed class RoleClassMappingTests
     /// <summary>A context that maps the plots with their gardeners, and no role class for them.</summary>
     private sealed class PlotsWithoutRoles(DbContextOptions<PlotsWithoutRoles> options) : DbContext(options)
     {
-        protected override void OnModelCreating(ModelBuilder modelBuilder) => modelBuilder.Entity<Plot>().HasMembers(plot => plot.Gardeners, plot => plot.OwnerId);
+        protected override void OnModelCreating(ModelBuilder modelBuilder) => modelBuilder.Entity<Plot>().HasMembers(plot => plot.Gardeners);
 
         protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
         {
@@ -250,7 +250,7 @@ public sealed class RoleClassMappingTests
     {
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
-            modelBuilder.Entity<Plot>().HasMembers(plot => plot.Gardeners, plot => plot.OwnerId);
+            modelBuilder.Entity<Plot>().HasMembers(plot => plot.Gardeners);
             modelBuilder.Entity<StrayRole>().HasAnnotation(MembershipModel.RoleOfAnnotation, typeof(Plot).FullName);
         }
 
@@ -266,17 +266,15 @@ public sealed class RoleClassMappingTests
     {
         public GardenId Id { get; set; }
 
-        public List<string> Keys { get; set; } = [];
+        public List<string> Permissions { get; set; } = [];
 
-        public KeptRoleStatus Status { get; set; }
+        public CustomRoleStatus Status { get; set; }
     }
 
-    /// <summary>A host's own answer to which roles there are for its plots: one role, the owner's.</summary>
+    /// <summary>A host's own answer to which roles there are for its plots: one role.</summary>
     private sealed class RolesTheHostAnswers(PlotRoleId owners) : IMemberRoles<PlotId, PlotRoleId>
     {
         public ValueTask<bool> ExistsAsync(PlotRoleId role, CancellationToken cancellationToken) => ValueTask.FromResult(role == owners);
-
-        public ValueTask<PlotRoleId?> FindOwnerRoleAsync(CancellationToken cancellationToken) => ValueTask.FromResult<PlotRoleId?>(owners);
     }
 
     /// <summary>Something that is no role class.</summary>

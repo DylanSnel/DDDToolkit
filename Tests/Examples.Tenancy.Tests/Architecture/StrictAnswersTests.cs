@@ -53,7 +53,7 @@ public sealed class StrictAnswersTests(SampleHosts sample) : IClassFixture<Sampl
             ("GET /projects", await rhea.ProjectPageAsync()),
             ("GET /projects/{id}", await rhea.GetFromJsonAsync<JsonElement>($"/projects/{pier}", Cancellation)),
             ("GET /projects/{id}/inspections", await rhea.GetFromJsonAsync<JsonElement>($"/projects/{pier}/inspections", Cancellation)),
-            ("GET /access/projects/{id}?key=", await rhea.GetFromJsonAsync<JsonElement>($"/access/projects/{pier}?key={ProjectKeys.View}", Cancellation)),
+            ("GET /access/projects/{id}?permission=", await rhea.GetFromJsonAsync<JsonElement>($"/access/projects/{pier}?permission={ProjectPermissionNames.View}", Cancellation)),
         ];
 
         foreach (var (route, answer) in answers)
@@ -64,15 +64,15 @@ public sealed class StrictAnswersTests(SampleHosts sample) : IClassFixture<Sampl
 
         // The answers do carry what the names are asked by: the ids, and the project's own texts.
         var detail = answers[1].Answer;
-        TextsOf(detail).Should().Contain(["Pier 7", "P-001", Harbor.UnitNamed("North Coast").Value.ToString(), Harbor.SeatOf(DemoPeople.Leo).Value.ToString(), Harbor.ProjectRoles[SampleCatalogue.CrewLead].Value.ToString()]);
+        TextsOf(detail).Should().Contain(["Pier 7", "P-001", Harbor.UnitNamed("North Coast").Value.ToString(), Harbor.SeatOf(DemoPeople.Leo).Value.ToString(), Harbor.ProjectRoles[SampleCatalogue.Surveyor].Value.ToString()]);
         detail.EnumerateObject().Select(property => property.Name).Should().Equal(
             ["id", "version", "number", "name", "unitId", "state", "ownerSeat", "plannedFrom", "plannedUntil", "myRoleIds", "via", "crew", "can", "changedBy"], "a project answers exactly these");
         detail.GetProperty("changedBy").EnumerateObject().Select(property => property.Name).Should().Equal(["kind", "seatId"], "and who changed it last a kind and a seat's id, never a name");
         detail.GetProperty("myRoleIds").ValueKind.Should().Be(JsonValueKind.Array, "the caller's crew roles are a list of ids, empty for a caller who is not on the crew");
         detail.GetProperty("crew")[0].EnumerateObject().Select(property => property.Name).Should().Equal(
             ["seatId", "isOwner", "startsAt", "endsAt", "appliesNow", "roles"], "a crew member exactly these");
-        detail.GetProperty("crew")[0].GetProperty("roles")[0].EnumerateObject().Select(property => property.Name).Should().Equal(
-            ["roleId", "startsAt", "endsAt", "appliesNow"], "and a role it holds exactly these");
+        detail.GetProperty("crew")[1].GetProperty("roles")[0].EnumerateObject().Select(property => property.Name).Should().Equal(
+            ["roleId", "startsAt", "endsAt", "appliesNow"], "and a role it holds exactly these: Juno's, since the owner holds none");
         TextsOf(answers[2].Answer).Should().Contain(Harbor.SeatOf(DemoPeople.Juno).Value.ToString(), "an inspection names who recorded it by the seat's id");
     }
 

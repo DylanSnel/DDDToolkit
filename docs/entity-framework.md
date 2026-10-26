@@ -786,6 +786,84 @@ ALTER TABLE public."__EFMigrationsHistory" SET SCHEMA ordering;
 ALTER SCHEMA ordering TRANSFER dbo.__EFMigrationsHistory;
 ```
 
+### Several services on one database
+
+Several services may share one Postgres database, each with modules of its own, and migrate it as they start.
+Entity Framework takes a lock while it migrates. On SQL Server and SQLite that lock is the whole database's. On
+Postgres, Npgsql's is the context's migration history table, and the toolkit keeps a history per module, so it kept
+two services from migrating one module at once and let two modules migrate side by side. Where their migrations make
+the same thing, a schema both use such as `ddd`, each makes it in a transaction of its own: the second asks whether
+it exists while the first has made it and not yet committed, makes it as well, and fails as soon as the first commits.
+
+```text
+23505: duplicate key value violates unique constraint "pg_namespace_nspname_index"
+```
+
+`IF NOT EXISTS` does not help between two transactions, and the window is short, so it happened now and then, when
+two services happened to start together.
+
+So on Postgres every context the toolkit wires takes one more lock when it migrates: the database's, an advisory lock
+taken in the migration's transaction before Npgsql's own. The migrations of every module, in every service on that
+database, run one after the other.
+
+```mermaid
+sequenceDiagram
+    participant S as storefront
+    participant DB as Postgres
+    participant F as fulfilment
+    S->>DB: BEGIN, the database's lock
+    F->>DB: BEGIN, the database's lock
+    Note over DB,F: waits
+    S->>DB: Ordering: CREATE SCHEMA ddd, COMMIT
+    DB-->>F: the lock
+    F->>DB: Shipping: ddd is there, COMMIT
+```
+
+- **Every way in.** `UseDDDToolkit`, `UseDDDToolkitCore` and a design-time factory's `UseDDDToolkitDesignTime()` bring
+  it, so it holds for `Migrate()`, `MigrateAsync()`, `dotnet ef database update` and a migration bundle. Entity
+  Framework asks for it before it reads what is applied, so a service with nothing to apply waits for one that is
+  migrating, and then finds it all applied.
+- **Nothing left behind.** It lasts until the migration's transaction commits or rolls back, so a service that fails
+  or is stopped halfway never keeps it, a pooled connection never carries it back to the pool, and it works through a
+  pooler that hands out a connection per transaction.
+- **One database.** Advisory locks belong to a database, so services on two databases of one server never wait for
+  each other.
+- **How long it waits.** As long as the context's command timeout, as for Entity Framework's own lock, and then the
+  migration fails with a timeout on `pg_advisory_xact_lock`. A service that may wait behind a long migration of
+  another's gives its own a timeout as long: `Database.SetCommandTimeout(...)` before it migrates.
+- **The toolkit's scripts.** `PostgresRowAccess.SetupScript()` and the row access scripts, with what Tenancy and
+  Membership add to them, make `ddd`, its functions and roles. They run in a migration of your own
+  (`migrationBuilder.Sql(...)`), so under the lock; on Supabase they are files the CLI applies one at a time. A script
+  you run yourself, outside the migrations, waits for them when its transaction runs
+  `DatabaseMigrationLock.PostgresStatement` first.
+
+A context whose migrations make nothing another context's do, and that should not wait behind one that takes long,
+leaves the lock out with `WithoutDatabaseMigrationLock()`, in the host's options and its design-time factory's. A
+migrations script, `dotnet ef migrations script`, takes no lock, as Entity Framework's own takes none. A history
+repository of your own, put in with `ReplaceService`, decides its own lock, as it decides where its history is; so do
+options with an internal service provider of their own, which the toolkit cannot reach.
+
+<details>
+<summary>Show the code: leaving the lock out, and seeing who waits</summary>
+
+```csharp
+// a context whose migrations should not wait for the others
+services.AddDbContext<ReportingContext>((services, options) => options
+    .UseNpgsql(connectionString)
+    .UseDDDToolkit(services)
+    .WithoutDatabaseMigrationLock());
+```
+
+The key is `DatabaseMigrationLock.PostgresKey`, 4919131821860013906, the bytes of `DDDTMIGR`. `pg_locks` shows it in
+two halves:
+
+```sql
+SELECT pid, granted FROM pg_catalog.pg_locks
+WHERE locktype = 'advisory' AND classid = 1145324628 AND objid = 1296648018 AND objsubid = 1;
+```
+
+</details>
+
 ### The design-time factory
 
 `dotnet ef` makes a context without the application, through an `IDesignTimeDbContextFactory<TContext>`: it looks
@@ -995,7 +1073,9 @@ builder.Services.RunStartupChecks();
 It looks at every context the host registers that maps one of the toolkit's classes: an entity or an aggregate,
 or the table of the outbox, the inbox or the event log. A context a library brings for its own tables needs none
 of the interceptors, and is passed over. Every context, either kind, is also held to the parts its model requires
-([A part a model cannot do without](#a-part-a-model-cannot-do-without)). By hand, it is:
+([A part a model cannot do without](#a-part-a-model-cannot-do-without)). Beside it the registration brings
+`entity-framework.owners-mapped`, which finds the context of every aggregate the host's requests ask the owner of
+([The owner of an aggregate](access-requirements.md#the-owner-of-an-aggregate)). By hand, the first is:
 
 ```csharp
 var app = builder.Build();

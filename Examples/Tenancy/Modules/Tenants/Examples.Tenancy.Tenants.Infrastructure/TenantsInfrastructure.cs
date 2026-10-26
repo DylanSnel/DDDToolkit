@@ -37,9 +37,9 @@ public static class TenantsInfrastructure
     /// <summary>
     /// Registers how Tenancy is stored. The host says where its tables live and where what it publishes goes (see
     /// <see cref="ModuleHost"/>), and passes the application's part of the catalogue: the packs a new tenant's
-    /// roles are copied from, and the keys of other modules it marks as managing access. It is the application's
-    /// data, so it lives in the composition root, not here; the other modules state their keys themselves, on the
-    /// lists they mark with <c>[TenancyPermissions]</c>, and the host adds them all with
+    /// roles are copied from, and the permissions of other modules it marks as managing access. It is the application's
+    /// data, so it lives in the composition root, not here; the other modules state their permissions themselves, on the
+    /// <c>[Permissions]</c> classes they declare, and the host adds them all with
     /// <c>services.AddTenancyPermissionsOfModules()</c>, which Tenancy's generator writes into it.
     /// <para>
     /// The module runs on Postgres and on nothing else, so the host is one built on its connections
@@ -83,7 +83,7 @@ public static class TenantsInfrastructure
         // cases, the access questions, tenant selection, the store over this context and the save interceptor. A new
         // id is the id's own, made in code before the save: TenantId.Create(), a time-ordered Guid the generator
         // writes for every id of the contracts project. It brings the start-up checks that the catalogue builds, that
-        // every context that keeps rows to a tenant checks its saves, and the warning for a key a role holds that the
+        // every context that keeps rows to a tenant checks its saves, and the warning for a permission a role holds that the
         // catalogue has lost.
         services.AddTenancy<TenantsContext>(options =>
         {
@@ -101,7 +101,7 @@ public static class TenantsInfrastructure
 
         // What a request of this module requires of its caller is one of Tenancy's cases, and the package's check
         // decides them: added for the module's request interface, generated like AddTenancy and closed over the
-        // module's four ids. A key for the whole tenant is asked over this module's context, on one of the pool's.
+        // module's four ids. A permission for the whole tenant is asked over this module's context, on one of the pool's.
         services.AddTenancyAccess<ITenantsRequest, TenantsContext>();
 
         // The application's port: where its queries read, each on a context of its own from the pool. What the
@@ -119,7 +119,7 @@ public static class TenantsInfrastructure
             // the outbox, and each row says who made the change. A rename changes nobody's access, and is left out.
             // A role that followed its pack, once the host's SyncRolePacks() found the pack changed, is among what is
             // kept: it is how the sample tells a tenant's administrators, who read it on the History page, with the
-            // keys that came in and went out. A host that mails them maps the event to a contract of its own.
+            // permissions that came in and went out. A host that mails them maps the event to a contract of its own.
             // An invitation's own events are stored and kept off the sinks like the rest, and are no part of the
             // history: what an acceptance changes is in it as the seat's own events. All three calls are generated
             // like AddTenancy, closed over the module's four ids; the invitation's id is named, as it is above.

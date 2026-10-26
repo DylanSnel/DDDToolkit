@@ -10,13 +10,11 @@ namespace Examples.Tenancy.Tenants.Api.Organization.GraphQL;
 /// class beside it.
 /// </summary>
 /// <remarks>
-/// Other modules name a unit by its id, and the gateway fills in the rest from here. Every field but the key may
-/// be <see langword="null"/> in the schema, by the host's convention for a type with a key: a unit that is not
-/// there, or not the caller's to see, arrives as its id with nothing else, and without an error. Within Tenancy's
-/// own answers the fields are always filled, but <c>parentId</c>, which the root has none of.
+/// It is what the list of the units a caller reads answers, and what a mutation of the tree answers. Other modules
+/// name a unit by its id, and the gateway names it from the directory (<see cref="Directory.GraphQL.OrganizationUnitNameType"/>):
+/// its name and its path, and nothing more.
 /// </remarks>
 [ObjectType<UnitListing>]
-[EntityKey("id")]
 internal static partial class OrganizationUnitType
 {
     static partial void Configure(IObjectTypeDescriptor<UnitListing> descriptor) => descriptor.Name("OrganizationUnit");

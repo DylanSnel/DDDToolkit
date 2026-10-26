@@ -1,7 +1,6 @@
 using Acme.Press.Manuscripts;
 using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.Supporting.Tenancy;
-using DDDToolkit.Supporting.Tenancy.Access;
 using DDDToolkit.Supporting.Tenancy.Catalogue;
 
 namespace Acme.Press.Tenants;
@@ -47,44 +46,24 @@ public sealed partial class Seat;
 [RoleAggregate<RoleId>]
 public sealed partial class Role;
 
-/// <summary>The roles a publishing house starts with, and the keys of its manuscripts a role of the organization can hold.</summary>
+/// <summary>The roles a publishing house starts with.</summary>
 public static class PressCatalogue
 {
     /// <summary>Heads an imprint: reads and edits its manuscripts.</summary>
     public const string ImprintHeadPack = "imprint-head";
 
     /// <summary>
-    /// The keys of the manuscripts that a role of the organization can hold, stated once and marked: the host, which
-    /// declares no module, gets them from Tenancy's generator, and registers them with the one call it writes there.
-    /// </summary>
-    [TenancyPermissions]
-    public static IReadOnlyList<Permission> Permissions { get; } =
-    [
-        new(ManuscriptKeys.Read, "Manuscripts", "Read manuscripts", Order: 10),
-        new(ManuscriptKeys.Edit, "Manuscripts", "Edit a manuscript", Order: 20),
-    ];
-
-    /// <summary>
     /// What the application passes as <c>TenancyOptions.Catalogue</c>, marked so the export writes Tenancy's policies
-    /// from it, with the keys marked above: Tenancy on Postgres writes them because the infrastructure project
-    /// references it, and the host gets nothing more to write. It declares no administrators' pack, so the
-    /// catalogue adds Tenancy's own, <see cref="TenancyPacks.DefaultAdministrators"/>, which holds every key for
-    /// the whole house, and the access file the export writes has it.
+    /// from it, with the module's permissions, which <see cref="ManuscriptPermissions"/> states: Tenancy on Postgres
+    /// writes them because the infrastructure project references it, and the host gets nothing more to write. It
+    /// declares no administrators' pack, so the catalogue adds Tenancy's own,
+    /// <see cref="TenancyPacks.DefaultAdministrators"/>, which holds every permission for the whole house, and the
+    /// access file the export writes has it.
     /// </summary>
     [TenancyCatalogue]
     public static ApplicationCatalogue Application { get; } = new(
         Packs:
         [
-            new(ImprintHeadPack, "Head of imprint", "Heads an imprint", [ManuscriptKeys.Read, ManuscriptKeys.Edit], Order: 20),
+            new(ImprintHeadPack, "Head of imprint", "Heads an imprint", [ManuscriptPermissions.Read, ManuscriptPermissions.Edit], Order: 20),
         ]);
-}
-
-/// <summary>The logical names of Tenancy's functions, which a manuscript's rules name so its own functions ask them.</summary>
-public static class TenancyFunctions
-{
-    /// <summary>Answers the calling seat.</summary>
-    public const string CallerSeat = TenancyRowAccess.Owner + "/caller_seat";
-
-    /// <summary>Answers, for a key, the units the calling seat's hold of it reaches.</summary>
-    public const string UnitsWhereIHold = TenancyRowAccess.Owner + "/units_where_i_hold";
 }

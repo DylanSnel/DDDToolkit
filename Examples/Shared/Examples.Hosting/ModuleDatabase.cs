@@ -21,7 +21,9 @@ namespace Examples.Hosting;
 /// every context marked <c>[SupabaseMigrations]</c>, <c>AddSupabaseMigrations()</c>. Once the host registers
 /// <c>services.AddSupabaseRowLevelSecurity()</c>, Supabase's policies apply to the modules' queries as well:
 /// <c>UseDDDToolkit</c> brings it to every module's context.</item>
-/// <item><see cref="Postgres"/>: Postgres, where the application applies its own migrations on start-up.</item>
+/// <item><see cref="Postgres"/>: Postgres, where the application applies its own migrations on start-up, one host
+/// at a time when several share the database: <c>UseDDDToolkit</c> brings the toolkit's migration lock, which is the
+/// whole database's.</item>
 /// <item><see cref="SqlServer"/>: SQL Server, likewise, from the module's
 /// <c>Examples.Webshop.{Module}.Migrations.SqlServer</c> assembly.</item>
 /// </list>
@@ -145,7 +147,9 @@ public abstract record ModuleDatabase
             // Supabase: the CLI applies the migrations, and the host checks them all with AddSupabaseMigrations().
             case PostgresDatabase { AppliesMigrations: false }:
                 break;
-            // Postgres and SQL Server: the application applies the module's migrations.
+            // Postgres and SQL Server: the application applies the module's migrations. On Postgres they wait for every
+            // other host that migrates the same database, with the lock UseDDDToolkit brings (DatabaseMigrationLock);
+            // on SQL Server, Entity Framework's own lock is the database's already.
             default:
                 services.AddHostedService<PrepareDatabase<TContext>>(provider => new(provider.GetRequiredService<IServiceScopeFactory>(), migrate: true));
                 break;
@@ -167,7 +171,10 @@ public abstract record ModuleDatabase
     private sealed record PostgresDatabase(string ConnectionString, bool AppliesMigrations) : ModuleDatabase
     {
         // The migrations are the ones next to the context, in its own assembly, where Entity Framework looks when it
-        // is told nothing else; their history is in the module's schema, where UseDDDToolkit keeps it.
+        // is told nothing else; their history is in the module's schema, where UseDDDToolkit keeps it. UseDDDToolkit,
+        // called after this, also brings the toolkit's migration lock, the whole database's: the services of
+        // Microservices.Pgmq share one database and migrate it as they start, and the first migrations of Ordering and
+        // Shipping both make the schema ddd, which two transactions side by side cannot both do.
         private protected override void Configure(DbContextOptionsBuilder options, string schema)
             => options.UseNpgsql(ConnectionString);
     }

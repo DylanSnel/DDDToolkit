@@ -22,7 +22,7 @@ namespace Examples.Tenancy.Tenants.Api.GraphQL;
 /// A type of the schema is declared over the record the application layer answers, in a type class beside the
 /// fields that answer it, so no record is copied for the schema's sake. HotChocolate's generator registers the
 /// type classes, the fields and the data loaders, in both schemas; what is left to say here is who answers a
-/// field's permission key. No record exists only for the schema.
+/// field's permission. No record exists only for the schema.
 /// </para>
 /// <para>
 /// The two schemas are made of the same calls, and differ by name only. A class of fields marked
@@ -60,8 +60,8 @@ internal static class TenantsGraphQL
             return null;
         }
 
-        // Who answers the key a field of a role asks for. The host's conventions add the handler that asks.
-        services.AddScoped<IFieldKeys<RoleListing>, RoleFieldKeys>();
+        // Who answers the permission a field of a role asks for. The host's conventions add the handler that asks.
+        services.AddScoped<IFieldPermissions<RoleListing>, RoleFieldPermissions>();
 
         // Two schemas a gateway composes: their lookups are how a gateway finds an entity by its key.
         var schema = Tenancy(services.AddGraphQLServer(SourceSchemaName).AddSourceSchemaDefaults());
@@ -69,7 +69,7 @@ internal static class TenantsGraphQL
 
         // What the host gives every schema of a module: typed errors, one spelling for enum values, a scope per
         // field, the check that the caller has a seat, nullable fields for a type with a key, and a field's
-        // permission key asked of the class above.
+        // permission asked of the class above.
         conventions(schema);
         conventions(administration);
         return schema;

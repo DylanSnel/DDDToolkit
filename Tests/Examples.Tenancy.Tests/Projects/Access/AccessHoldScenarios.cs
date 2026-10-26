@@ -38,7 +38,7 @@ public sealed class AccessHoldScenarios(SampleHosts sample) : IClassFixture<Samp
     /// </summary>
     public static TheoryData<string, bool, HttpStatusCode, string?> Races => new()
     {
-        // Vic is crew lead, and Leo takes the role away: Vic holds no key left that writes a project, so the database
+        // Vic is crew lead, and Leo takes the role away: Vic holds no permission left that writes a project, so the database
         // refuses his write. Under the hold the crew row moved the project's version on: a lost race.
         { "lead-role-taken", false, HttpStatusCode.Forbidden, ToolkitRefusals.Refused },
         { "lead-role-taken", true, HttpStatusCode.Conflict, RefusalProblems.ConcurrencyConflict },
@@ -52,7 +52,7 @@ public sealed class AccessHoldScenarios(SampleHosts sample) : IClassFixture<Samp
         { "moved-out-of-reach", false, HttpStatusCode.NotFound, ProjectRefusals.NotFound },
         { "moved-out-of-reach", true, HttpStatusCode.NotFound, ProjectRefusals.NotFound },
 
-        // Ada moves it to North Inland, where Rhea still holds the key: who she is did not change, so the default
+        // Ada moves it to North Inland, where Rhea still holds the permission: who she is did not change, so the default
         // path renames it. Under the hold the move was a change to the project since the check: a lost race.
         { "moved-within-reach", false, HttpStatusCode.NoContent, null },
         { "moved-within-reach", true, HttpStatusCode.Conflict, RefusalProblems.ConcurrencyConflict },
@@ -135,7 +135,7 @@ public sealed class AccessHoldScenarios(SampleHosts sample) : IClassFixture<Samp
     {
         await using var onPostgres = await sample.StartOnPostgresAsync();
 
-        // Hana does not see Pier 7: there is nothing to load. Juno sees it, as its surveyor, and holds no key that writes
+        // Hana does not see Pier 7: there is nothing to load. Juno sees it, as its surveyor, and holds no permission that writes
         // it: the database refuses the write.
         (await DirectRenameAsync(onPostgres, DemoPeople.Hana)).Should().BeOfType<RefusalException>().Which.Code.Should().Be(ProjectRefusals.NotFound);
         (await DirectRenameAsync(onPostgres, DemoPeople.Juno)).Should().BeOfType<RefusalException>().Which.Code.Should().Be(ToolkitRefusals.Refused);
@@ -211,7 +211,7 @@ public sealed class AccessHoldScenarios(SampleHosts sample) : IClassFixture<Samp
     {
         await using var onPostgres = await sample.StartOnPostgresAsync(services => services.HoldProjectSaves());
 
-        using (TenancyUseCases.BeginSystemIn(Harbor.Id, Harbor.Administrator.Id))
+        using (TenancyUseCases.BeginSystemIn(Harbor.Id, Harbor.Administrator.Id, ProjectMembership.Scope))
         {
             await using var scope = onPostgres.Host.Services.CreateAsyncScope();
             await new ChangeProjectNameHandler(scope.ServiceProvider.GetRequiredService<IProjectStore>())

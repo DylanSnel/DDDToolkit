@@ -14,7 +14,7 @@ public class DirectoryTests
     private static readonly DateTimeOffset Now = FixedClock.Start;
 
     [Fact]
-    public async Task WhoAmI_hands_the_hosts_own_seat_with_the_paths_roles_and_keys_that_are_not_on_it()
+    public async Task WhoAmI_hands_the_hosts_own_seat_with_the_paths_roles_and_permissions_that_are_not_on_it()
     {
         var harness = Harness.OfHarbor();
         var bert = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.SupervisorPack);
@@ -45,28 +45,28 @@ public class DirectoryTests
             .Select(placement => (me.UnitOf(placement.UnitId).Path, placement.IsPrimary, Roles: string.Join(", ", placement.Grants.Select(grant => me.RoleOf(grant.RoleId)?.Name))))
             .Should().Equal(("Harbor Works / North", true, "Supervisor"), ("Harbor Works / South", false, "Watcher"));
 
-        me.Keys.Select(key => key.Key).Should().Equal(
-            TenancyKeys.GrantsManage, TenancyKeys.SeatsManage, TenancyKeys.UnitsManage,
+        me.Permissions.Select(permission => permission.Permission).Should().Equal(
+            TenancyPermissions.GrantsManage, TenancyPermissions.SeatsManage, TenancyPermissions.UnitsManage,
             HostCatalogue.WidgetChange, HostCatalogue.WidgetCreate, HostCatalogue.WidgetRead);
 
-        var units = me.Keys.Single(key => key.Key == TenancyKeys.UnitsManage);
-        units.WholeTenant.Should().BeFalse();
+        var units = me.Permissions.Single(permission => permission.Permission == TenancyPermissions.UnitsManage);
+        units.AtTenant.Should().BeFalse();
         units.GrantedAt.Select(unit => unit.Path).Should().Equal("Harbor Works / North");
         units.Reaches.Select(unit => unit.Path).Should().Equal("Harbor Works / North", "Harbor Works / North / North Coast");
 
-        var read = me.Keys.Single(key => key.Key == HostCatalogue.WidgetRead);
+        var read = me.Permissions.Single(permission => permission.Permission == HostCatalogue.WidgetRead);
         read.GrantedAt.Select(unit => unit.Id).Should().Equal(harness.Harbor.North, harness.Harbor.South);
         read.Reaches.Select(unit => unit.Path).Should().Equal("Harbor Works / North", "Harbor Works / North / North Coast", "Harbor Works / South");
 
         var administrator = await harness.As(harness.Administrator, h => h.Directory.WhoAmIAsync(default));
-        administrator.Keys.Should().HaveCount(harness.Catalogue.LiveKeys.Count).And.OnlyContain(key => key.WholeTenant && key.Reaches.Count == 4);
+        administrator.Permissions.Should().HaveCount(harness.Catalogue.LivePermissions.Count).And.OnlyContain(permission => permission.AtTenant && permission.Reaches.Count == 4);
 
         harness.Clock.Advance(TimeSpan.FromDays(7));
         var later = await harness.As(bert, h => h.Directory.WhoAmIAsync(default));
         later.AsOf.Should().Be(Now.AddDays(7));
         later.Seat.Placements.Single(placement => placement.UnitId == harness.Harbor.South).Grants.Single().AppliesAt(later.AsOf).Should().BeFalse();
         later.Roles.Select(role => role.Name).Should().Equal(["Supervisor", "Watcher"], "the roles its grants name, whether or not a grant applies now");
-        later.Keys.Single(key => key.Key == HostCatalogue.WidgetRead).GrantedAt.Select(unit => unit.Id).Should().Equal(harness.Harbor.North);
+        later.Permissions.Single(permission => permission.Permission == HostCatalogue.WidgetRead).GrantedAt.Select(unit => unit.Id).Should().Equal(harness.Harbor.North);
     }
 
     [Fact]
@@ -175,14 +175,14 @@ public class DirectoryTests
             (overview.Seat.Id, overview.Seat.DisplayName, overview.Seat.Identity).Should().Be((bert, "Bert", own.Seat.Identity), "the host's own seat, whole");
             overview.Units.Should().Equal(own.Units);
             overview.Roles.Should().BeEquivalentTo(own.Roles, options => options.WithStrictOrdering());
-            overview.Keys.Should().BeEquivalentTo(own.Keys, options => options.WithStrictOrdering());
+            overview.Permissions.Should().BeEquivalentTo(own.Permissions, options => options.WithStrictOrdering());
             overview.AsOf.Should().Be(own.AsOf);
             overview.Seat.Placements.SelectMany(placement => placement.Grants).Should().HaveCount(2);
         }
 
-        // Cy holds no key at all: the directory asks none, so who may ask about another seat is the request's to say,
+        // Cy holds no permission at all: the directory asks none, so who may ask about another seat is the request's to say,
         // and where no policy narrows the read, as here, the overview is the seat's whole.
-        byCy.Keys.Select(key => key.Key).Should().Contain(TenancyKeys.SeatsManage);
+        byCy.Permissions.Select(permission => permission.Permission).Should().Contain(TenancyPermissions.SeatsManage);
         byCy.RoleOf(harness.RoleFromPack(HostCatalogue.WatcherPack))!.Name.Should().Be("Watcher");
         byCy.UnitOf(harness.Harbor.South).Path.Should().Be("Harbor Works / South");
     }
@@ -211,35 +211,35 @@ public class DirectoryTests
     }
 
     [Fact]
-    public async Task An_overviews_keys_are_those_the_grants_it_read_give_and_none_of_a_seat_that_is_not_active()
+    public async Task An_overviews_permissions_are_those_the_grants_it_read_give_and_none_of_a_seat_that_is_not_active()
     {
         var harness = Harness.OfHarbor();
         var bert = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.SupervisorPack);
         await harness.Place(bert, harness.Harbor.South);
         await harness.Grant(bert, harness.Harbor.South, HostCatalogue.WatcherPack);
 
-        // A database that keeps the rights shows a seat only its own: the keys come from the grants, not from those rows.
+        // A database that keeps the rights shows a seat only its own: the permissions come from the grants, not from those rows.
         harness.Store.KeepsOtherSeatsRights = true;
         var byAdministrator = await harness.As(harness.Administrator, h => h.Directory.SeatOverviewAsync(bert, default));
-        byAdministrator.Keys.Select(key => key.Key).Should().Equal(
-            TenancyKeys.GrantsManage, TenancyKeys.SeatsManage, TenancyKeys.UnitsManage,
+        byAdministrator.Permissions.Select(permission => permission.Permission).Should().Equal(
+            TenancyPermissions.GrantsManage, TenancyPermissions.SeatsManage, TenancyPermissions.UnitsManage,
             HostCatalogue.WidgetChange, HostCatalogue.WidgetCreate, HostCatalogue.WidgetRead);
-        byAdministrator.Keys.Single(key => key.Key == HostCatalogue.WidgetRead).GrantedAt.Select(unit => unit.Id).Should().Equal(harness.Harbor.North, harness.Harbor.South);
+        byAdministrator.Permissions.Single(permission => permission.Permission == HostCatalogue.WidgetRead).GrantedAt.Select(unit => unit.Id).Should().Equal(harness.Harbor.North, harness.Harbor.South);
 
         // A filter of the host's own hides the Watcher's name, and not what its grant gives, as the rights the
         // questions decide by still hold it.
         harness.Store.HiddenRoles.Add(harness.RoleFromPack(HostCatalogue.WatcherPack));
         var hidden = await harness.As(harness.Administrator, h => h.Directory.SeatOverviewAsync(bert, default));
         hidden.Roles.Select(role => role.Name).Should().Equal("Supervisor");
-        hidden.Keys.Single(key => key.Key == HostCatalogue.WidgetRead).GrantedAt.Select(unit => unit.Id).Should().Equal(harness.Harbor.North, harness.Harbor.South);
-        harness.Store.SavedRights.Where(right => right.SeatId == bert && right.UnitId == harness.Harbor.South).Select(right => right.Key).Should().Equal(HostCatalogue.WidgetRead);
+        hidden.Permissions.Single(permission => permission.Permission == HostCatalogue.WidgetRead).GrantedAt.Select(unit => unit.Id).Should().Equal(harness.Harbor.North, harness.Harbor.South);
+        harness.Store.SavedRights.Where(right => right.SeatId == bert && right.UnitId == harness.Harbor.South).Select(right => right.Permission).Should().Equal(HostCatalogue.WidgetRead);
 
         // A suspended seat keeps its placements and grants, and holds nothing while it is suspended.
         await harness.BySystemWork(h => h.Seats.SuspendAsync(bert, default));
         var suspended = await harness.As(harness.Administrator, h => h.Directory.SeatOverviewAsync(bert, default));
         suspended.Seat.Status.Should().Be(SeatStatus.Suspended);
         suspended.Seat.Placements.SelectMany(placement => placement.Grants).Should().HaveCount(2);
-        suspended.Keys.Should().BeEmpty("a seat that is not active holds no key, as it has no rights");
+        suspended.Permissions.Should().BeEmpty("a seat that is not active holds no permission, as it has no rights");
     }
 
     [Fact]
@@ -311,7 +311,7 @@ public class DirectoryTests
     }
 
     [Fact]
-    public async Task An_overview_shows_no_key_retired_since_the_rights_were_written()
+    public async Task An_overview_shows_no_permission_retired_since_the_rights_were_written()
     {
         var gauge = new Permission("gauges.read", "Gauges", "Read gauges");
         var harness = Harness.OfHarbor(New.Catalogue(gauge));
@@ -321,10 +321,10 @@ public class DirectoryTests
         var after = await harness.As(harness.Administrator, h => new HostTenancy.TenancyDirectory(h.Store, retired, h.Clock).WhoAmIAsync(default));
         var asked = await harness.BySystemWork(h => new HostTenancy.TenancyDirectory(h.Store, retired, h.Clock).SeatOverviewAsync(harness.Administrator, default));
 
-        before.Keys.Should().Contain(key => key.Key == "gauges.read");
-        harness.Store.SavedRights.Should().Contain(right => right.Key == "gauges.read", "the rows are still there");
-        after.Keys.Select(key => key.Key).Should().Equal(retired.LiveKeys, "a retired key holds nowhere");
-        asked.Keys.Select(key => key.Key).Should().Equal(retired.LiveKeys, "nor in another seat's overview");
+        before.Permissions.Should().Contain(permission => permission.Permission == "gauges.read");
+        harness.Store.SavedRights.Should().Contain(right => right.Permission == "gauges.read", "the rows are still there");
+        after.Permissions.Select(permission => permission.Permission).Should().Equal(retired.LivePermissions, "a retired permission holds nowhere");
+        asked.Permissions.Select(permission => permission.Permission).Should().Equal(retired.LivePermissions, "nor in another seat's overview");
     }
 
     [Fact]
@@ -336,7 +336,7 @@ public class DirectoryTests
         var cy = await harness.SeatAt("Cy", harness.Harbor.South);
         await harness.BySystemWork(h => h.Seats.SuspendAsync(cy, default));
 
-        // Bert holds no key at all: whoever works in a tenant reads its seats. The name is the host's own field, on
+        // Bert holds no permission at all: whoever works in a tenant reads its seats. The name is the host's own field, on
         // the seats the directory read.
         var seats = await harness.As(bert, h => h.Directory.SeatsByIdAsync([cy, harness.Administrator, orchard.Administrator.Id, SeatId.CreateSequential(), cy], default));
 
@@ -379,11 +379,12 @@ public class DirectoryTests
         var named = await harness.As(bert, h => h.Directory.UnitsByIdAsync(
             [harness.Harbor.South, harness.Harbor.NorthCoast, harness.Harbor.Root, orchard.North, OrganizationUnitId.CreateSequential(), harness.Harbor.South], default));
 
-        named.Select(unit => (unit.Unit.Id, unit.Unit.ParentId, unit.Unit.Name, unit.Unit.Status, unit.Path, unit.Depth)).Should().Equal(
-            (harness.Harbor.Root, (OrganizationUnitId?)null, "Harbor Works", UnitStatus.Active, "Harbor Works", 1),
-            (harness.Harbor.NorthCoast, harness.Harbor.North, "North Coast", UnitStatus.Archived, "Harbor Works / North / North Coast", 3),
-            (harness.Harbor.South, harness.Harbor.Root, "South", UnitStatus.Active, "Harbor Works / South", 2));
-        harness.Store.Calls.Should().NotContain("ListSeatsAsync").And.Contain("ReadOrganizationAsync", "the names are the organization's own units'");
+        named.Select(unit => (unit.Id, unit.Name, unit.Path, unit.Depth)).Should().Equal(
+            (harness.Harbor.Root, "Harbor Works", "Harbor Works", 1),
+            (harness.Harbor.NorthCoast, "North Coast", "Harbor Works / North / North Coast", 3),
+            (harness.Harbor.South, "South", "Harbor Works / South", 2));
+        harness.Store.Calls.Should().NotContain("ListSeatsAsync").And.ContainInOrder(
+            ["UnitsNamedAsync", "ReadOrganizationAsync"], "a store that keeps no policies of its own answers nothing, and the names are the organization's own units'");
 
         (await harness.As(bert, h => h.Directory.UnitsByIdAsync([orchard.North, orchard.Root], default)))
             .Should().BeEmpty("another tenant's units are left out without a word");
@@ -405,9 +406,10 @@ public class DirectoryTests
         harness.Store.Calls.Where(call => call.EndsWith("Async", StringComparison.Ordinal) && call != "ListAsync")
             .Should().Equal(["ReadOrganizationAsync"], "the units come from the organization the directory read once; the closure and what the seat reads are queries over the read rows");
 
-        // By id, whichever unit of the tenant the caller is placed under; another tenant's are left out as before.
+        // By id, whichever unit of the tenant the caller is placed under, a unit is named, and nothing more: the cost
+        // centre is the list's. Another tenant's are left out as before.
         var named = await harness.As(bert, h => h.Directory.UnitsByIdAsync([harness.Harbor.South, bay, orchard.North], default));
-        named.Select(unit => (unit.Path, unit.Unit.CostCentre)).Should().Equal(("Harbor Works / North / North Bay", "NB-104"), ("Harbor Works / South", null));
+        named.Select(unit => (unit.Name, unit.Path)).Should().Equal(("North Bay", "Harbor Works / North / North Bay"), ("South", "Harbor Works / South"));
     }
 
     [Fact]
@@ -429,7 +431,7 @@ public class DirectoryTests
             (watcher, "Watcher", RoleStatus.Active, false),
             (operators, "Operator", RoleStatus.Archived, false));
         named[0].FromPack.Should().Be(HostCatalogue.SupervisorPack);
-        named[0].Keys.Should().Contain(TenancyKeys.GrantsManage);
+        named[0].Permissions.Should().Contain(TenancyPermissions.GrantsManage);
         harness.Store.Calls.Should().Equal(["ListRolesAsync"], "a tenant's roles are few: one read, and the ones asked for are picked from it");
     }
 

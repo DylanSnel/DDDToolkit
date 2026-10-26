@@ -14,7 +14,7 @@ namespace DDDToolkit.Supporting.Tenancy.Postgres.Tests;
 
 /// <summary>
 /// A request that lets one caller or another through, <c>AccessRequirement.Any(TenancyAccess.RequiresOperator(),
-/// TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage))</c>, over a table of the application's own, the tallies:
+/// TenancyAccess.AtTenant(TenancyPermissions.SeatsManage))</c>, over a table of the application's own, the tallies:
 /// the door decides per request and reads no row, and the policies decide per row, as the caller. Postgres lets a row
 /// through that one permissive policy allows, so each way the door lets a caller in needs a row rule of its own: without
 /// it the caller passes the door and reads nothing.
@@ -39,7 +39,7 @@ public sealed class OneCallerOrAnotherTests(TenancyPostgres postgres)
     /// <summary>What the request requires: an operator, or a seat that manages seats for the whole tenant.</summary>
     private static readonly AccessRequirement OperatorOrSeatManager = AccessRequirement.Any(
         TenancyAccess.RequiresOperator(),
-        TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage));
+        TenancyAccess.AtTenant(TenancyPermissions.SeatsManage));
 
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
@@ -59,7 +59,7 @@ public sealed class OneCallerOrAnotherTests(TenancyPostgres postgres)
         await SeedAsync(services);
         var log = new Declaring(OperatorOrSeatManager);
 
-        // Ada administers Harbor: let through by the key, and the seat managers' rule lets her read Harbor's tallies.
+        // Ada administers Harbor: let through by the permission, and the seat managers' rule lets her read Harbor's tallies.
         var read = await services.BySeat(Ada.Identity, Harbor, Ada.Seat, async scoped =>
         {
             await RequireAsync(scoped, log);
@@ -118,7 +118,7 @@ public sealed class OneCallerOrAnotherTests(TenancyPostgres postgres)
             + "    USING (TRUE);\n");
         script.Should().Contain(
             "CREATE POLICY \"Seat managers read the tallies (select) for authenticated\" ON \"tallies\".\"Tallies\" FOR SELECT TO authenticated\n"
-            + "    USING ((SELECT \"tenancy\".holds_tenant_wide('tenancy.seats.manage')));\n");
+            + "    USING ((SELECT \"tenancy\".holds_at_tenant('tenancy.seats.manage')));\n");
     }
 
     /// <summary>Two tallies in Harbor and one in Orchard, as the tallies' own system work in each.</summary>
@@ -162,5 +162,5 @@ public static partial class OperatorsReadEveryTally
 public static partial class SeatManagersReadTheTallies
 {
     /// <summary>Whether the calling seat manages seats for the whole tenant.</summary>
-    public static bool Allows(Tally tally, Caller caller) => TenancyRowAccess.HoldsTenantWide(TenancyKeys.SeatsManage);
+    public static bool Allows(Tally tally, Caller caller) => TenancyRowAccess.HoldsAtTenant(TenancyPermissions.SeatsManage);
 }

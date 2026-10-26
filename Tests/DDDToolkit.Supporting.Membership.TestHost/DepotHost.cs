@@ -28,7 +28,7 @@ public static class DepotHost
         // A pallet: the depot says who a member is, and nothing else.
         services.AddPalletMembership<DepotContext, PalletsInTheDepot>(PalletMembership.Rules);
 
-        // A crate: the depot says who a member is, which roles there are and what they give, and where a key is held.
+        // A crate: the depot says who a member is, which roles there are and what they give, and where a permission is held.
         services.AddCrateMembership<DepotContext, CratesInTheDepot>(CrateMembership.Rules);
 
         return services;

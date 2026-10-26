@@ -8,11 +8,11 @@ namespace Examples.Tenancy.Projects.Application.Overview.Queries;
 /// at once, where a project out of reach is simply left out, it is <see cref="ProjectsById"/>.
 /// </remarks>
 /// <param name="Id">The project.</param>
-[RequiresKey(RequiredKey)]
+[RequiresPermission(RequiredPermission)]
 public sealed record ProjectDetail([OnResource] ProjectId Id) : IQuery<ProjectOverview>, IProjectsRequest
 {
-    /// <summary>The key the caller holds on the project.</summary>
-    public const string RequiredKey = ProjectKeys.View;
+    /// <summary>The permission the caller holds on the project.</summary>
+    public const string RequiredPermission = ProjectPermissionNames.View;
 }
 
 /// <summary>Answers <see cref="ProjectDetail"/> in one statement, on a reading of this query's own.</summary>
@@ -26,7 +26,7 @@ public sealed class ProjectDetailHandler(IProjectReads reads, ProjectAccess acce
     {
         await using var reading = reads.Open();
 
-        var found = await reading.ByIdsAsync([query.Id], access.ReachFor(ProjectDetail.RequiredKey), cancellationToken);
+        var found = await reading.ByIdsAsync([query.Id], access.ReachFor(ProjectDetail.RequiredPermission), cancellationToken);
         return found.Count == 1 ? found[0] : throw ProjectRefusals.Refuse(ProjectRefusals.NotFound);
     }
 }

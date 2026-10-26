@@ -1,5 +1,4 @@
 using DDDToolkit.Abstractions.Access;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace DDDToolkit.Access;
 
@@ -23,21 +22,13 @@ public abstract partial record AccessRequirement
         public TValue Value { get; }
 
         /// <inheritdoc />
-        bool IOwnedRequirement.CanBeAnswered(IServiceProvider? services) => HandleIn(services) is not null;
+        bool IOwnedRequirement.CanBeAnswered(IServiceProvider? services) => OwnHandle<TValue>.In(services) is not null;
 
         /// <inheritdoc />
         bool IOwnedRequirement.IsTheCallers(Caller caller, IServiceProvider? services)
-            => (HandleIn(services) ?? throw new InvalidOperationException(
+            => (OwnHandle<TValue>.In(services) ?? throw new InvalidOperationException(
                     $"Nothing says what the caller's own {WrittenTypeNames.Of(typeof(TValue))} is. Register an ICallersOwn<{WrittenTypeNames.Of(typeof(TValue))}> with services.AddCallersOwn<{WrittenTypeNames.Of(typeof(TValue))}, TCallersOwn>(); a requirement nothing checks lets nobody through."))
                 .Find(caller) is { } own && own.Equals(Value);
-
-        /// <summary>
-        /// What says the caller's own <typeparamref name="TValue"/>: the one registered for it, or, for a
-        /// <see cref="Guid"/>, the caller's verified identity; <see langword="null"/> where nothing does.
-        /// </summary>
-        private static ICallersOwn<TValue>? HandleIn(IServiceProvider? services)
-            => services?.GetService<ICallersOwn<TValue>>()
-               ?? (typeof(TValue) == typeof(Guid) ? (ICallersOwn<TValue>)(object)CallersIdentity.Instance : null);
     }
 }
 

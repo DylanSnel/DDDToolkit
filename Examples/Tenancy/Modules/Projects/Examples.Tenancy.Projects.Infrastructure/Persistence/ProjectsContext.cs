@@ -31,7 +31,7 @@ namespace Examples.Tenancy.Projects.Infrastructure.Persistence;
 /// <item><b>The crew.</b> The domain project references no Entity Framework, so nothing on its classes says how
 /// they are stored. The crew is the Membership package's, and <c>HasMembers</c> maps it, under the tables and the
 /// column it has always had: the members owned by their project, a member's roles owned by the member, each in a
-/// table of its own, and the unit a project hangs at as where a key held above reaches it. <c>IsKeptRole</c>
+/// table of its own, and the unit a project hangs at as where a permission held above reaches it. <c>IsCustomRole</c>
 /// maps the package's part of a project role; whose a role is, and that a name is used once in a tenant, are
 /// said here.</item>
 /// </list>
@@ -92,7 +92,7 @@ public sealed class ProjectsContext(DbContextOptions<ProjectsContext> options) :
     {
         modelBuilder.HasDefaultSchema(Schema);
 
-        // Tenancy's rows, read in this context's queries: asked over them, UnitsWhereIHold(key) becomes a
+        // Tenancy's rows, read in this context's queries: asked over them, UnitsWhereIHold(permission) becomes a
         // subquery of the project statement rather than a list fetched first (see EfProjectReads). They come from
         // Tenancy's read functions and from none of its tables: what a module may read of Tenancy is what Tenancy
         // offers it. This module sees Tenancy's ids, from the Tenants module's contracts, and none of its classes,
@@ -133,17 +133,18 @@ public sealed class ProjectsContext(DbContextOptions<ProjectsContext> options) :
             });
 
             // The crew, as the Membership package keeps it: who is on it for which period, the roles each holds there,
-            // and the owner among them. The unit is where a key held in the organization reaches the project from.
-            // The tables and the seat's column keep the names they have always had.
-            project.HasMembers(row => row.Crew, row => row.OwnerSeatId, at: row => row.UnitId, new MemberTableNames(CrewTable, CrewRolesTable, MemberColumn: CrewSeatColumn));
+            // and the owner among them, the property the project marks [Owner]. The unit, the one it marks [At], is
+            // where a permission held in the organization reaches the project from. The tables and the seat's column keep
+            // the names they have always had.
+            project.HasMembers(row => row.Crew, new MemberTableNames(CrewTable, CrewRolesTable, MemberColumn: CrewSeatColumn));
         });
 
         modelBuilder.Entity<ProjectRole>(role =>
         {
             role.ToTable(ProjectRolesTable);
 
-            // The package's part of a role: its name, what it is for, its keys, its status, and the starter role it came from.
-            role.IsKeptRole();
+            // The package's part of a role: its name, what it is for, its permissions, its status, and the starter role it came from.
+            role.IsCustomRole();
 
             // This module's: whose a role is. A name is used once in a tenant, and a tenant has each starter role
             // once, which also keeps two set-ups of one tenant at the same moment apart.

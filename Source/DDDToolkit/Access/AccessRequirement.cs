@@ -6,24 +6,24 @@ namespace DDDToolkit.Access;
 /// </summary>
 /// <remarks>
 /// A request answers with a requirement that says what it requires, from a small vocabulary. Where the requirement
-/// reads no value of the request but a key and an id it carries, an attribute on the request says it, and the
+/// reads no value of the request but a permission and an id it carries, an attribute on the request says it, and the
 /// toolkit's generator turns the attribute into the same call at compile time:
 /// <code>
 /// [AllowAnonymous]                                          // AccessRequirement.AllowAnonymous(): anyone, also not signed in
 /// [SignedIn]                                                // AccessRequirement.SignedIn(): a signed-in user
-/// [RequiresKey(BillingKeys.Close)]                          // a package's case: TenancyAccess.ForTheWholeTenant(BillingKeys.Close)
-/// [RequiresPlan(Plan.Pro), RequiresKey(BillingKeys.Close)]  // both: AccessRequirement.All(...), in the order they are written
+/// [RequiresPermission(BillingPermissions.Close)]                          // a package's case: TenancyAccess.AtTenant(BillingPermissions.Close)
+/// [RequiresPlan(Plan.Pro), RequiresPermission(BillingPermissions.Close)]  // both: AccessRequirement.All(...), in the order they are written
 /// </code>
 /// and where it is computed from the request's values, or is one case or another, the request answers
 /// <see cref="IRequireAccess.RequiredAccess"/> itself:
 /// <code>
 /// AccessRequirement IRequireAccess.RequiredAccess =&gt; Unit is { } unit
-///     ? TenancyAccess.AtUnit(BillingKeys.Close, unit)
-///     : TenancyAccess.ForTheWholeTenant(BillingKeys.Close);
+///     ? TenancyAccess.AtUnit(BillingPermissions.Close, unit)
+///     : TenancyAccess.AtTenant(BillingPermissions.Close);
 ///
 /// AccessRequirement IRequireAccess.RequiredAccess =&gt; AccessRequirement.Any(
 ///     TenancyAccess.RequiresOperator(),
-///     TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage));
+///     TenancyAccess.AtTenant(TenancyPermissions.SeatsManage));
 /// </code>
 /// The cases spelled here are about who is calling, or combine other cases, so the core decides them, and a host
 /// without any supporting domain has them. The other cases are records that derive from this one, each owned by
@@ -34,7 +34,7 @@ namespace DDDToolkit.Access;
 /// A requirement says who may send a request, never what the work runs with: the application's own work is
 /// no requirement but a scope, begun on purpose by trusted code around the work, <c>Callers.Begin(Caller.System)</c>
 /// or a supporting domain's own way such as Tenancy's <c>TenancyUseCases.BeginSystem()</c>, after which the caller
-/// before it is current again. And it says what is asked, never who may: it carries a key and the ids the request
+/// before it is current again. And it says what is asked, never who may: it carries a permission and the ids the request
 /// names, and the check reads the rest where it is kept. What a requirement cannot say is decided where it can
 /// be: in the handler, in plain sight; in the use case of the package the handler calls; and in the database's
 /// own row level security, which asks again for every row, as the caller.
@@ -84,12 +84,12 @@ public abstract partial record AccessRequirement
 
     /// <summary>
     /// Every one of <paramref name="requirements"/> holds: the caller meets each, in the order they are given, and a
-    /// refusal is the first failing case's own. Cases of different owners combine, a key on a project of Membership's
-    /// with a key at a unit of Tenancy's say, and a combination may hold another.
+    /// refusal is the first failing case's own. Cases of different owners combine, a permission on a project of Membership's
+    /// with a permission at a unit of Tenancy's say, and a combination may hold another.
     /// <code>
     /// AccessRequirement IRequireAccess.RequiredAccess =&gt; AccessRequirement.All(
-    ///     MemberAccess.On(ProjectKeys.Edit, Project, ExpectedVersion),
-    ///     TenancyAccess.AtUnit(ProjectKeys.Open, To));
+    ///     MemberAccess.On(ProjectPermissionNames.Edit, Project, ExpectedVersion),
+    ///     TenancyAccess.AtUnit(ProjectPermissionNames.Open, To));
     /// </code>
     /// Requirement attributes stacked on one request are this, in the order they are written above it.
     /// </summary>
@@ -114,7 +114,7 @@ public abstract partial record AccessRequirement
     /// <code>
     /// AccessRequirement IRequireAccess.RequiredAccess =&gt; AccessRequirement.Any(
     ///     TenancyAccess.RequiresOperator(),
-    ///     TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage));
+    ///     TenancyAccess.AtTenant(TenancyPermissions.SeatsManage));
     /// </code>
     /// No attribute says it, since stacked attributes all hold: a request whose caller may be one or another says it
     /// as <see cref="IRequireAccess.RequiredAccess"/>, except for the request about the caller's own, which
@@ -145,10 +145,10 @@ public abstract partial record AccessRequirement
     /// <code>
     /// AccessRequirement IRequireAccess.RequiredAccess =&gt; AccessRequirement.Any(
     ///     AccessRequirement.Own(Seat),                                  // the caller's own seat,
-    ///     TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage));    // or the key for every seat
+    ///     TenancyAccess.AtTenant(TenancyPermissions.SeatsManage));    // or the permission for every seat
     /// </code>
-    /// A request says it with attributes as well: <see cref="OrOwnAttribute"/> beside <see cref="RequiresKeyAttribute"/>
-    /// for the caller's own or the key, <see cref="OwnAttribute"/> with <see cref="OwnOnlyAttribute"/> for the
+    /// A request says it with attributes as well: <see cref="OrOwnAttribute"/> beside <see cref="RequiresPermissionAttribute"/>
+    /// for the caller's own or the permission, <see cref="OwnAttribute"/> with <see cref="OwnOnlyAttribute"/> for the
     /// caller's own alone.
     /// </summary>
     /// <remarks>

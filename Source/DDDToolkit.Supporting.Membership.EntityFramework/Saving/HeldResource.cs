@@ -54,7 +54,7 @@ internal sealed class HeldResource<TResource, TResourceId>(MembershipRegistratio
     /// <inheritdoc />
     public override HeldVersion? HoldInHand(object entity)
     {
-        // The hold on this very resource: a request whose requirement names two of this kind, All of a key on each say,
+        // The hold on this very resource: a request whose requirement names two of this kind, All of a permission on each say,
         // has a hold for each, and each save is held to its own.
         var id = ((TResource)entity).Id;
         return Checked<MemberHold<TResourceId>>.TryFindInHand(hold => hold.Resource.Equals(id), out var hold)

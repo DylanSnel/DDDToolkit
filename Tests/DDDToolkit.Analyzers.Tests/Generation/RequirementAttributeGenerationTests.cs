@@ -61,7 +61,7 @@ public class RequirementAttributeGenerationTests
         """;
 
     /// <summary>The module's domain, in a project of its own as an application has it: Tenancy's classes, and a document with members.</summary>
-    private const string Domain =
+    internal const string Domain =
         """
         using System;
         using System.Collections.Generic;
@@ -171,12 +171,12 @@ public class RequirementAttributeGenerationTests
     [Fact]
     public void A_key_without_a_marker_is_held_for_the_whole_tenant_where_tenancy_says_so()
     {
-        var result = Module("[RequiresKey(\"billing.close\")] public sealed record CloseTheBooks(int Year) : IBillingRequest;").RunCore();
+        var result = Module("[RequiresPermission(\"billing.close\")] public sealed record CloseTheBooks(int Year) : IBillingRequest;").RunCore();
 
         result.ShouldCompile();
         result.ShouldHaveExactlyDiagnostics();
-        result.ShouldContain(Hint, "global::Shop.Billing.CloseTheBooks => global::DDDToolkit.Supporting.Tenancy.Access.TenancyAccess.ForTheWholeTenant(\"billing.close\"),");
-        Asked(result, "CloseTheBooks", 2026).Should().Be(TenancyAccess.ForTheWholeTenant("billing.close"));
+        result.ShouldContain(Hint, "global::Shop.Billing.CloseTheBooks => global::DDDToolkit.Supporting.Tenancy.Access.TenancyAccess.AtTenant(\"billing.close\"),");
+        Asked(result, "CloseTheBooks", 2026).Should().Be(TenancyAccess.AtTenant("billing.close"));
     }
 
     [Fact]
@@ -184,20 +184,20 @@ public class RequirementAttributeGenerationTests
     {
         var result = Module(
             """
-            public static class BillingKeys
+            public static class BillingPermissions
             {
                 public const string Close = "billing.close";
             }
 
-            [RequiresKey(RequiredKey)]
+            [RequiresPermission(RequiredPermission)]
             public sealed record CloseTheBooks(int Year) : IBillingRequest
             {
-                public const string RequiredKey = BillingKeys.Close;
+                public const string RequiredPermission = BillingPermissions.Close;
             }
             """).RunCore();
 
         result.ShouldCompile();
-        Asked(result, "CloseTheBooks", 2026).Should().Be(TenancyAccess.ForTheWholeTenant("billing.close"), "a request's own constant is in scope of its attributes");
+        Asked(result, "CloseTheBooks", 2026).Should().Be(TenancyAccess.AtTenant("billing.close"), "a request's own constant is in scope of its attributes");
     }
 
     [Theory]
@@ -206,7 +206,7 @@ public class RequirementAttributeGenerationTests
     [InlineData("public sealed class OpenLedger(string name, OrganizationUnitId unit) : IBillingRequest { public string Name { get; } = name; [AtUnit] public OrganizationUnitId Unit { get; } = unit; }", "an ordinary property")]
     public void A_key_at_a_unit_reads_the_member_its_marker_is_on(string request, string marked)
     {
-        var result = Module("[RequiresKey(\"billing.open-ledger\")]\n" + request).RunCore();
+        var result = Module("[RequiresPermission(\"billing.open-ledger\")]\n" + request).RunCore();
 
         result.ShouldCompile();
         result.ShouldHaveExactlyDiagnostics();
@@ -230,10 +230,10 @@ public class RequirementAttributeGenerationTests
     {
         var result = Module(
             """
-            [RequiresKey("documents.share")]
+            [RequiresPermission("documents.share")]
             public sealed record ShareDocument([OnResource] DocumentId Document, UserId With, [ExpectedVersion] long? ExpectedVersion = null) : IBillingRequest;
 
-            [RequiresKey("documents.read")]
+            [RequiresPermission("documents.read")]
             public sealed record ReadDocument([OnResource] DocumentId Document) : IBillingRequest;
             """).RunCore();
 
@@ -276,7 +276,7 @@ public class RequirementAttributeGenerationTests
             {
                 AccessRequirement IRequireAccess.RequiredAccess => Unit is { } unit
                     ? TenancyAccess.AtUnit("billing.read", unit)
-                    : TenancyAccess.ForTheWholeTenant("billing.read");
+                    : TenancyAccess.AtTenant("billing.read");
             }
 
             [InTenant] public sealed record Invoices : IBillingRequest;
@@ -285,7 +285,7 @@ public class RequirementAttributeGenerationTests
         result.ShouldCompile();
         result.ShouldHaveExactlyDiagnostics();
         result.ShouldNotContain(Hint, "ListSeats", "a request that answers the property itself is answered by C#, not by a line");
-        Asked(result, "ListSeats", new object?[] { null }).Should().Be(TenancyAccess.ForTheWholeTenant("billing.read"));
+        Asked(result, "ListSeats", new object?[] { null }).Should().Be(TenancyAccess.AtTenant("billing.read"));
         Asked(result, "Invoices").Should().Be(TenancyAccess.InTenant());
     }
 
@@ -298,7 +298,7 @@ public class RequirementAttributeGenerationTests
             public sealed record MonthlyReport(int Month) : Report;
             [SignedIn] public sealed record MyReport : Report;
 
-            [RequiresKey("tenancy.seats.manage")] public abstract record SeatCommand([OrOwn] SeatId Seat) : IBillingRequest;
+            [RequiresPermission("tenancy.seats.manage")] public abstract record SeatCommand([OrOwn] SeatId Seat) : IBillingRequest;
             [SignedIn] public sealed record RenameMySeat(SeatId Seat) : SeatCommand(Seat);
             """).RunCore();
 
@@ -315,7 +315,7 @@ public class RequirementAttributeGenerationTests
         result.ShouldContain(
             Hint,
             "global::Shop.Billing.RenameMySeat request => global::DDDToolkit.Access.AccessRequirement.All(global::DDDToolkit.Access.AccessRequirement.Any(global::DDDToolkit.Access.AccessRequirement.Own(request.Seat), "
-            + "global::DDDToolkit.Supporting.Tenancy.Access.TenancyAccess.ForTheWholeTenant(\"tenancy.seats.manage\")), global::DDDToolkit.Access.AccessRequirement.SignedIn()),",
+            + "global::DDDToolkit.Supporting.Tenancy.Access.TenancyAccess.AtTenant(\"tenancy.seats.manage\")), global::DDDToolkit.Access.AccessRequirement.SignedIn()),",
             "the base's key, with the caller's own it marks, then the derived request's own attribute");
     }
 
@@ -325,7 +325,7 @@ public class RequirementAttributeGenerationTests
         var result = Module(
             """
             [SignedIn] public sealed record MyInvoices : IBillingRequest;
-            [RequiresKey("billing.close")] public sealed record CloseTheBooks(int Year) : IBillingRequest;
+            [RequiresPermission("billing.close")] public sealed record CloseTheBooks(int Year) : IBillingRequest;
             """).RunCore();
 
         result.ShouldCompile();
@@ -337,7 +337,7 @@ public class RequirementAttributeGenerationTests
                 /// <inheritdoc cref="global::DDDToolkit.Access.IRequireAccess.RequiredAccess"/>
                 global::DDDToolkit.Access.AccessRequirement DDDToolkit_Generated_IRequireAccess.RequiredAccess => this switch
                 {
-                    global::Shop.Billing.CloseTheBooks => global::DDDToolkit.Supporting.Tenancy.Access.TenancyAccess.ForTheWholeTenant("billing.close"),
+                    global::Shop.Billing.CloseTheBooks => global::DDDToolkit.Supporting.Tenancy.Access.TenancyAccess.AtTenant("billing.close"),
                     global::Shop.Billing.MyInvoices => global::DDDToolkit.Access.AccessRequirement.SignedIn(),
                     _ => throw new global::System.InvalidOperationException(
                         this.GetType().FullName + " declares no access requirement: it carries no requirement attribute, and does not answer RequiredAccess itself. "
@@ -428,12 +428,12 @@ public class RequirementAttributeGenerationTests
             """
             public abstract record UnitCommand([property: AtUnit] OrganizationUnitId Unit) : IBillingRequest;
 
-            [RequiresKey("billing.open-ledger")]
+            [RequiresPermission("billing.open-ledger")]
             public sealed record OpenLedger(OrganizationUnitId Unit) : UnitCommand(Unit);
 
             public abstract record PlainUnitCommand(OrganizationUnitId Unit) : IBillingRequest;
 
-            [RequiresKey("billing.close-ledger")]
+            [RequiresPermission("billing.close-ledger")]
             public sealed record CloseLedger([AtUnit] OrganizationUnitId Unit) : PlainUnitCommand(Unit);
             """).RunCore();
 

@@ -31,7 +31,7 @@ public sealed class StoredNameTests
         { typeof(OwnerChanged), "projects.owner-changed" },
         { typeof(ProjectRoleMade), "projects.project-role-made" },
         { typeof(ProjectRoleRenamed), "projects.project-role-renamed" },
-        { typeof(ProjectRoleKeysChanged), "projects.project-role-keys-changed" },
+        { typeof(ProjectRolePermissionsChanged), "projects.project-role-permissions-changed" },
         { typeof(ProjectRoleArchived), "projects.project-role-archived" },
         { typeof(InspectionRecorded), "inspections.inspection-recorded" },
     };

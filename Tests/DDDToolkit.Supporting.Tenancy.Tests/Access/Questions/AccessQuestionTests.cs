@@ -1,8 +1,8 @@
 namespace DDDToolkit.Supporting.Tenancy.Tests;
 
 /// <summary>
-/// The access questions over read rows in memory: a key granted at a unit covers that unit's subtree and
-/// nothing beside or above it, a key held at the root holds for the whole tenant, a grant counts only inside
+/// The access questions over read rows in memory: a permission granted at a unit covers that unit's subtree and
+/// nothing beside or above it, a permission held at the root holds for the whole tenant, a grant counts only inside
 /// its period without anything being written, and system work in a tenant holds everything there and nothing
 /// elsewhere.
 /// </summary>
@@ -47,25 +47,25 @@ public class AccessQuestionTests
         }
     }
 
-    private OrganizationUnitId[] UnitsWhere(HostCaller caller, string key, ITenancyReadSource<TenantId, SeatId, OrganizationUnitId, RoleId>? source = null)
-        => Ask(caller, questions => questions.UnitsWhereIHold(key).ToArray(), source);
+    private OrganizationUnitId[] UnitsWhere(HostCaller caller, string permission, ITenancyReadSource<TenantId, SeatId, OrganizationUnitId, RoleId>? source = null)
+        => Ask(caller, questions => questions.UnitsWhereIHold(permission).ToArray(), source);
 
-    private bool HoldsAt(HostCaller caller, string key, OrganizationUnitId unit, ITenancyReadSource<TenantId, SeatId, OrganizationUnitId, RoleId>? source = null)
-        => Ask(caller, questions => questions.HoldsAtAsync(key, unit, default).GetAwaiter().GetResult(), source);
+    private bool HoldsAt(HostCaller caller, string permission, OrganizationUnitId unit, ITenancyReadSource<TenantId, SeatId, OrganizationUnitId, RoleId>? source = null)
+        => Ask(caller, questions => questions.HoldsAtAsync(permission, unit, default).GetAwaiter().GetResult(), source);
 
-    private bool HoldsTenantWide(HostCaller caller, string key)
-        => Ask(caller, questions => questions.HoldsTenantWideAsync(key, default).GetAwaiter().GetResult());
+    private bool HoldsAtTenant(HostCaller caller, string permission)
+        => Ask(caller, questions => questions.HoldsAtTenantAsync(permission, default).GetAwaiter().GetResult());
 
     private HostCaller As(HostSeat seat) => HostCaller.InSeat(seat.TenantId, seat.Id);
 
     [Fact]
-    public void A_key_held_at_a_unit_reaches_its_whole_subtree()
+    public void A_permission_held_at_a_unit_reaches_its_whole_subtree()
     {
         var supervisor = As(SeatAt(_harbor.North, HostCatalogue.SupervisorPack));
 
-        UnitsWhere(supervisor, TenancyKeys.UnitsManage).Should().BeEquivalentTo([_harbor.North, _harbor.NorthCoast]);
-        UnitsWhere(supervisor, HostCatalogue.WidgetRead).Should().BeEquivalentTo([_harbor.North, _harbor.NorthCoast], "an implied key reaches as far");
-        UnitsWhere(As(_harbor.Administrator), TenancyKeys.UnitsManage)
+        UnitsWhere(supervisor, TenancyPermissions.UnitsManage).Should().BeEquivalentTo([_harbor.North, _harbor.NorthCoast]);
+        UnitsWhere(supervisor, HostCatalogue.WidgetRead).Should().BeEquivalentTo([_harbor.North, _harbor.NorthCoast], "an implied permission reaches as far");
+        UnitsWhere(As(_harbor.Administrator), TenancyPermissions.UnitsManage)
             .Should().BeEquivalentTo([_harbor.Root, _harbor.North, _harbor.NorthCoast, _harbor.South]);
     }
 
@@ -74,23 +74,23 @@ public class AccessQuestionTests
     {
         var supervisor = As(SeatAt(_harbor.North, HostCatalogue.SupervisorPack));
 
-        UnitsWhere(supervisor, TenancyKeys.UnitsManage).Should().NotContain([_harbor.Root, _harbor.South]);
-        HoldsAt(supervisor, TenancyKeys.UnitsManage, _harbor.South).Should().BeFalse();
-        HoldsAt(supervisor, TenancyKeys.UnitsManage, _harbor.Root).Should().BeFalse();
-        UnitsWhere(supervisor, TenancyKeys.RolesManage).Should().BeEmpty("the supervisor's role does not grant it");
+        UnitsWhere(supervisor, TenancyPermissions.UnitsManage).Should().NotContain([_harbor.Root, _harbor.South]);
+        HoldsAt(supervisor, TenancyPermissions.UnitsManage, _harbor.South).Should().BeFalse();
+        HoldsAt(supervisor, TenancyPermissions.UnitsManage, _harbor.Root).Should().BeFalse();
+        UnitsWhere(supervisor, TenancyPermissions.RolesManage).Should().BeEmpty("the supervisor's role does not grant it");
     }
 
     [Fact]
-    public void HoldsTenantWideAsync_only_for_a_key_held_at_the_root()
+    public void HoldsAtTenantAsync_only_for_a_permission_held_at_the_root()
     {
         var supervisor = As(SeatAt(_harbor.North, HostCatalogue.SupervisorPack));
         var administrator = As(_harbor.Administrator);
 
-        HoldsTenantWide(supervisor, TenancyKeys.UnitsManage).Should().BeFalse("a key held below the root is not tenant-wide, however far it reaches");
-        HoldsTenantWide(administrator, TenancyKeys.UnitsManage).Should().BeTrue();
-        HoldsTenantWide(administrator, TenancyKeys.RolesManage).Should().BeTrue();
-        HoldsTenantWide(As(SeatAt(_harbor.Root, HostCatalogue.WatcherPack)), HostCatalogue.WidgetRead).Should().BeTrue();
-        HoldsTenantWide(As(SeatAt(_harbor.Root, HostCatalogue.WatcherPack)), HostCatalogue.WidgetChange).Should().BeFalse();
+        HoldsAtTenant(supervisor, TenancyPermissions.UnitsManage).Should().BeFalse("a permission held below the root is not tenant-wide, however far it reaches");
+        HoldsAtTenant(administrator, TenancyPermissions.UnitsManage).Should().BeTrue();
+        HoldsAtTenant(administrator, TenancyPermissions.RolesManage).Should().BeTrue();
+        HoldsAtTenant(As(SeatAt(_harbor.Root, HostCatalogue.WatcherPack)), HostCatalogue.WidgetRead).Should().BeTrue();
+        HoldsAtTenant(As(SeatAt(_harbor.Root, HostCatalogue.WatcherPack)), HostCatalogue.WidgetChange).Should().BeFalse();
     }
 
     [Fact]
@@ -98,11 +98,11 @@ public class AccessQuestionTests
     {
         var supervisor = As(SeatAt(_harbor.North, HostCatalogue.SupervisorPack));
 
-        HoldsAt(supervisor, TenancyKeys.UnitsManage, _harbor.North).Should().BeTrue();
-        HoldsAt(supervisor, TenancyKeys.UnitsManage, _harbor.NorthCoast).Should().BeTrue();
+        HoldsAt(supervisor, TenancyPermissions.UnitsManage, _harbor.North).Should().BeTrue();
+        HoldsAt(supervisor, TenancyPermissions.UnitsManage, _harbor.NorthCoast).Should().BeTrue();
         HoldsAt(supervisor, HostCatalogue.WidgetCreate, _harbor.NorthCoast).Should().BeTrue();
-        HoldsAt(supervisor, TenancyKeys.RolesManage, _harbor.North).Should().BeFalse();
-        HoldsAt(supervisor, TenancyKeys.UnitsManage, OrganizationUnitId.CreateSequential()).Should().BeFalse("a unit of no tenant");
+        HoldsAt(supervisor, TenancyPermissions.RolesManage, _harbor.North).Should().BeFalse();
+        HoldsAt(supervisor, TenancyPermissions.UnitsManage, OrganizationUnitId.CreateSequential()).Should().BeFalse("a unit of no tenant");
     }
 
     [Fact]
@@ -117,7 +117,7 @@ public class AccessQuestionTests
 
         UnitsWhere(worker, HostCatalogue.WidgetChange).Should().BeEmpty("a grant no longer applies at the moment it ends");
         HoldsAt(worker, HostCatalogue.WidgetChange, _harbor.North).Should().BeFalse();
-        Ask(worker, questions => questions.KeysIHoldAt(_harbor.North).ToArray()).Should().BeEmpty();
+        Ask(worker, questions => questions.PermissionsIHoldAt(_harbor.North).ToArray()).Should().BeEmpty();
         _store.SaveCount.Should().Be(0, "nothing was saved to make the grant expire");
         _store.SavedRights.Should().HaveCount(rows, "the rows stay; they are read against the clock");
     }
@@ -155,15 +155,15 @@ public class AccessQuestionTests
         var administrator = As(_harbor.Administrator);
         var roles = _harbor.RolesByPack;
 
-        Ask(administrator, questions => questions.RolesWithKey(TenancyKeys.UnitsManage).ToArray())
+        Ask(administrator, questions => questions.RolesWithPermission(TenancyPermissions.UnitsManage).ToArray())
             .Should().BeEquivalentTo([roles[HostCatalogue.AdministratorPack].Id, roles[HostCatalogue.SupervisorPack].Id]);
-        Ask(administrator, questions => questions.RolesWithKey(HostCatalogue.WidgetRead).ToArray())
+        Ask(administrator, questions => questions.RolesWithPermission(HostCatalogue.WidgetRead).ToArray())
             .Should().HaveCount(4, "every pack of the host grants seeing widgets");
 
         roles[HostCatalogue.WatcherPack].Archive<SeatId>();
         _store.Seed(roles[HostCatalogue.WatcherPack]);
 
-        Ask(administrator, questions => questions.RolesWithKey(HostCatalogue.WidgetRead).ToArray())
+        Ask(administrator, questions => questions.RolesWithPermission(HostCatalogue.WidgetRead).ToArray())
             .Should().NotContain(roles[HostCatalogue.WatcherPack].Id).And.HaveCount(3);
     }
 
@@ -176,12 +176,12 @@ public class AccessQuestionTests
 
         Ask(As(seat), questions => questions.ReadableUnits().ToArray())
             .Should().BeEquivalentTo([_harbor.North, _harbor.NorthCoast, _harbor.South], "a placement is where a seat belongs, with or without a role");
-        UnitsWhere(As(seat), HostCatalogue.WidgetRead).Should().BeEmpty("belonging somewhere grants no key");
+        UnitsWhere(As(seat), HostCatalogue.WidgetRead).Should().BeEmpty("belonging somewhere grants no permission");
         Ask(As(_harbor.Administrator), questions => questions.ReadableUnits().ToArray()).Should().HaveCount(4);
     }
 
     [Fact]
-    public void KeysIHoldAt_lists_the_keys_reaching_that_unit()
+    public void PermissionsIHoldAt_lists_the_permissions_reaching_that_unit()
     {
         var seat = SeatAt(_harbor.North, HostCatalogue.SupervisorPack);
         var watcher = _harbor.RolesByPack[HostCatalogue.WatcherPack];
@@ -189,13 +189,13 @@ public class AccessQuestionTests
         seat.Grant(_harbor.South, watcher.Id, watcher.Facts, GrantPeriod.Open(Now), null, null);
         _store.Seed(seat);
 
-        Ask(As(seat), questions => questions.KeysIHoldAt(_harbor.NorthCoast).ToArray()).Should().BeEquivalentTo(
+        Ask(As(seat), questions => questions.PermissionsIHoldAt(_harbor.NorthCoast).ToArray()).Should().BeEquivalentTo(
         [
-            TenancyKeys.GrantsManage, TenancyKeys.SeatsManage, TenancyKeys.UnitsManage,
+            TenancyPermissions.GrantsManage, TenancyPermissions.SeatsManage, TenancyPermissions.UnitsManage,
             HostCatalogue.WidgetChange, HostCatalogue.WidgetCreate, HostCatalogue.WidgetRead,
         ]);
-        Ask(As(seat), questions => questions.KeysIHoldAt(_harbor.South).ToArray()).Should().Equal(HostCatalogue.WidgetRead);
-        Ask(As(seat), questions => questions.KeysIHoldAt(_harbor.Root).ToArray()).Should().BeEmpty();
+        Ask(As(seat), questions => questions.PermissionsIHoldAt(_harbor.South).ToArray()).Should().Equal(HostCatalogue.WidgetRead);
+        Ask(As(seat), questions => questions.PermissionsIHoldAt(_harbor.Root).ToArray()).Should().BeEmpty();
     }
 
     [Fact]
@@ -205,10 +205,10 @@ public class AccessQuestionTests
 
         UnitsWhere(nobody, HostCatalogue.WidgetRead).Should().BeEmpty();
         HoldsAt(nobody, HostCatalogue.WidgetRead, _harbor.Root).Should().BeFalse();
-        HoldsTenantWide(nobody, TenancyKeys.RolesManage).Should().BeFalse();
+        HoldsAtTenant(nobody, TenancyPermissions.RolesManage).Should().BeFalse();
         Ask(nobody, questions => questions.ReadableUnits().ToArray()).Should().BeEmpty();
-        Ask(nobody, questions => questions.RolesWithKey(HostCatalogue.WidgetRead).ToArray()).Should().BeEmpty();
-        Ask(nobody, questions => questions.KeysIHoldAt(_harbor.Root).ToArray()).Should().BeEmpty();
+        Ask(nobody, questions => questions.RolesWithPermission(HostCatalogue.WidgetRead).ToArray()).Should().BeEmpty();
+        Ask(nobody, questions => questions.PermissionsIHoldAt(_harbor.Root).ToArray()).Should().BeEmpty();
         Ask(nobody, questions => questions.Units().ToArray()).Should().BeEmpty();
         Ask(nobody, questions => questions.Roles().ToArray()).Should().BeEmpty();
         Ask(nobody, questions => questions.Seats().ToArray()).Should().BeEmpty();
@@ -231,18 +231,18 @@ public class AccessQuestionTests
         foreach (var source in new[] { _store.Filtered, _store.Unfiltered })
         {
             UnitsWhere(system, HostCatalogue.WidgetCreate, source).Should().BeEquivalentTo(harborUnits);
-            HoldsAt(system, TenancyKeys.RolesManage, _harbor.NorthCoast, source).Should().BeTrue();
-            HoldsAt(system, TenancyKeys.RolesManage, other.NorthCoast, source).Should().BeFalse("system work in one tenant holds nothing in another");
+            HoldsAt(system, TenancyPermissions.RolesManage, _harbor.NorthCoast, source).Should().BeTrue();
+            HoldsAt(system, TenancyPermissions.RolesManage, other.NorthCoast, source).Should().BeFalse("system work in one tenant holds nothing in another");
             Ask(system, questions => questions.Units().Select(unit => unit.Id).ToArray(), source).Should().BeEquivalentTo(harborUnits);
             Ask(system, questions => questions.Roles().ToArray(), source).Should().OnlyContain(role => role.TenantId == _harbor.Tenant.Id);
             Ask(system, questions => questions.Seats().ToArray(), source).Should().OnlyContain(seat => seat.TenantId == _harbor.Tenant.Id);
         }
 
-        HoldsTenantWide(system, TenancyKeys.RolesManage).Should().BeTrue();
-        Ask(system, questions => questions.KeysIHoldAt(_harbor.North).ToArray()).Should().BeEquivalentTo(_harbor.Catalogue.LiveKeys);
+        HoldsAtTenant(system, TenancyPermissions.RolesManage).Should().BeTrue();
+        Ask(system, questions => questions.PermissionsIHoldAt(_harbor.North).ToArray()).Should().BeEquivalentTo(_harbor.Catalogue.LivePermissions);
 
         // A seat's own questions keep to its tenant too, even over rows that are not filtered.
-        UnitsWhere(As(_harbor.Administrator), TenancyKeys.UnitsManage, _store.Unfiltered).Should().BeEquivalentTo(harborUnits);
+        UnitsWhere(As(_harbor.Administrator), TenancyPermissions.UnitsManage, _store.Unfiltered).Should().BeEquivalentTo(harborUnits);
 
         using (TenancyCallers.Begin(system))
         {
@@ -260,10 +260,10 @@ public class AccessQuestionTests
         {
             () => UnitsWhere(system, HostCatalogue.WidgetRead),
             () => HoldsAt(system, HostCatalogue.WidgetRead, _harbor.Root),
-            () => HoldsTenantWide(system, HostCatalogue.WidgetRead),
+            () => HoldsAtTenant(system, HostCatalogue.WidgetRead),
             () => Ask(system, ask => ask.ReadableUnits()),
-            () => Ask(system, ask => ask.RolesWithKey(HostCatalogue.WidgetRead)),
-            () => Ask(system, ask => ask.KeysIHoldAt(_harbor.Root)),
+            () => Ask(system, ask => ask.RolesWithPermission(HostCatalogue.WidgetRead)),
+            () => Ask(system, ask => ask.PermissionsIHoldAt(_harbor.Root)),
             () => Ask(system, ask => ask.Units()),
             () => Ask(system, ask => ask.Roles()),
             () => Ask(system, ask => ask.Seats()),
@@ -284,20 +284,20 @@ public class AccessQuestionTests
     }
 
     [Fact]
-    public void An_unknown_key_is_a_programming_error()
+    public void An_unknown_permission_is_a_programming_error()
     {
         var administrator = As(_harbor.Administrator);
 
         FluentActions.Invoking(() => UnitsWhere(administrator, "widget.fly")).Should().Throw<ArgumentException>().WithMessage("*widget.fly*");
-        FluentActions.Invoking(() => HoldsTenantWide(administrator, "widget.fly")).Should().Throw<ArgumentException>();
+        FluentActions.Invoking(() => HoldsAtTenant(administrator, "widget.fly")).Should().Throw<ArgumentException>();
         FluentActions.Invoking(() => HoldsAt(administrator, "widget.fly", _harbor.Root)).Should().Throw<ArgumentException>();
-        FluentActions.Invoking(() => Ask(administrator, questions => questions.RolesWithKey("widget.fly"))).Should().Throw<ArgumentException>();
+        FluentActions.Invoking(() => Ask(administrator, questions => questions.RolesWithPermission("widget.fly"))).Should().Throw<ArgumentException>();
         FluentActions.Invoking(() => UnitsWhere(HostCaller.Nobody(TenancyRefusals.NotSeated), "widget.fly"))
             .Should().Throw<ArgumentException>("a typo is a typo, whoever runs it");
     }
 
     [Fact]
-    public void A_retired_key_is_askable_and_holds_nowhere()
+    public void A_retired_permission_is_askable_and_holds_nowhere()
     {
         var gauge = new Permission("gauges.read", "Gauges", "Read gauges");
         var harbor = new HarborBuilder().With(New.Catalogue(gauge)).Build();
@@ -311,11 +311,11 @@ public class AccessQuestionTests
             var live = new TenancyAnswers<TenantId, SeatId, OrganizationUnitId, RoleId>(harbor.Catalogue, _clock).Over(store, store);
             var now = new TenancyAnswers<TenantId, SeatId, OrganizationUnitId, RoleId>(retired, _clock).Over(store, store);
 
-            live.UnitsWhereIHold("gauges.read").Should().HaveCount(4, "the administrators' role was made while the key was live");
-            now.UnitsWhereIHold("gauges.read").Should().BeEmpty("the rows are still there, and the key is retired");
-            now.RolesWithKey("gauges.read").Should().BeEmpty();
-            live.KeysIHoldAt(harbor.North).Should().Contain("gauges.read");
-            now.KeysIHoldAt(harbor.North).Should().NotContain("gauges.read").And.Contain(TenancyKeys.AdministratorKey);
+            live.UnitsWhereIHold("gauges.read").Should().HaveCount(4, "the administrators' role was made while the permission was live");
+            now.UnitsWhereIHold("gauges.read").Should().BeEmpty("the rows are still there, and the permission is retired");
+            now.RolesWithPermission("gauges.read").Should().BeEmpty();
+            live.PermissionsIHoldAt(harbor.North).Should().Contain("gauges.read");
+            now.PermissionsIHoldAt(harbor.North).Should().NotContain("gauges.read").And.Contain(TenancyPermissions.AdministratorPermission);
         }
     }
 }

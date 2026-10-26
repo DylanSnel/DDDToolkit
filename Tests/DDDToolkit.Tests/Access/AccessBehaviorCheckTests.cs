@@ -139,7 +139,7 @@ public sealed class AccessBehaviorCheckTests
             + "that one reaches its handler with nothing asking what it requires, held only by what the database checks. "
             + "The host lists its behaviors for the Mediator library: list typeof(PondAccessBehavior<,>) among its PipelineBehaviors as well.");
 
-        // Under a key, or as itself, it is none the pipeline asks the container for.
+        // Under a permission, or as itself, it is none the pipeline asks the container for.
         var keyed = Pond().AddKeyedScoped<IPipe<FeedFish, int>, PondAccessBehavior<FeedFish, int>>("pond");
         var asItself = Pond().AddScoped(typeof(PondAccessBehavior<,>));
 

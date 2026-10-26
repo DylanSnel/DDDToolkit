@@ -42,10 +42,10 @@ type Query {
     )
     @cost(weight: "10")
   seat(id: UUID!): Seat @lookup @internal
-  organizationUnit(id: UUID!): OrganizationUnit @lookup @internal
+  organizationUnitName(id: UUID!): OrganizationUnitName @lookup @internal
   role(id: UUID!): Role @lookup @internal
   seatGrants(seatId: UUID!): [SeatGrant!]! @cost(weight: "10")
-  unitsWhereIHold(key: String!): HeldUnits! @cost(weight: "10")
+  unitsWhereIHold(permission: String!): HeldUnits! @cost(weight: "10")
   catalogue: Catalogue! @cost(weight: "10")
   openInvitations: [Invitation!]! @cost(weight: "10")
   tenants(after: String, size: Int): TenantDirectoryPage! @cost(weight: "10")
@@ -75,7 +75,8 @@ type Mutation {
   placementWithdraw(input: PlacementWithdrawInput!): PlacementWithdrawPayload!
     @cost(weight: "10")
   roleCreate(input: RoleCreateInput!): RoleCreatePayload! @cost(weight: "10")
-  roleKeysSet(input: RoleKeysSetInput!): RoleKeysSetPayload! @cost(weight: "10")
+  rolePermissionsSet(input: RolePermissionsSetInput!): RolePermissionsSetPayload!
+    @cost(weight: "10")
   roleArchive(input: RoleArchiveInput!): RoleArchivePayload! @cost(weight: "10")
   seatRename(input: SeatRenameInput!): SeatRenamePayload! @cost(weight: "10")
   seatSuspend(input: SeatSuspendInput!): SeatSuspendPayload! @cost(weight: "10")
@@ -161,7 +162,7 @@ type GrantOfMine {
 
 type HeldUnits {
   units: [UUID!]!
-  wholeTenant: Boolean!
+  atTenant: Boolean!
 }
 
 "A value that broke its own rules: one error for the command, with every reason in its failures. The value that was rejected is not sent back."
@@ -177,7 +178,7 @@ type InvalidValuesError implements CodedError @shareable {
 }
 
 type Invitation {
-  unit: OrganizationUnit
+  unit: OrganizationUnitName
   role: Role
   issuedBy: Seat
   until: DateTime
@@ -203,21 +204,14 @@ type IssuedInvitation {
   expiresAt: DateTime!
 }
 
-type KeyOfMine {
-  key: String!
-  wholeTenant: Boolean!
-  grantedAt: [UnitPath!]!
-  reaches: [UnitPath!]!
-}
-
-type OrganizationUnit @key(fields: "id") {
+type OrganizationUnit {
   id: UUID!
   parentId: UUID
-  name: String
+  name: String!
   kind: UnitKind
-  status: UnitStatus
-  path: String
-  depth: Int
+  status: UnitStatus!
+  path: String!
+  depth: Int!
 }
 
 type OrganizationUnitAddPayload {
@@ -233,6 +227,13 @@ type OrganizationUnitArchivePayload {
 type OrganizationUnitMovePayload {
   organizationUnit: OrganizationUnit
   errors: [OrganizationUnitMoveError!]
+}
+
+type OrganizationUnitName @key(fields: "id") {
+  id: UUID!
+  name: String
+  path: String
+  depth: Int
 }
 
 "A cursor that points to a specific page."
@@ -260,12 +261,19 @@ type PageInfo @shareable {
 }
 
 type Permission {
-  key: String!
+  name: String!
   module: String!
   description: String!
   implies: [String!]!
   retired: Boolean!
   managesAccess: Boolean!
+}
+
+type PermissionOfMine {
+  permission: String!
+  atTenant: Boolean!
+  grantedAt: [UnitPath!]!
+  reaches: [UnitPath!]!
 }
 
 type PersonInvitePayload {
@@ -303,7 +311,7 @@ type Role @key(fields: "id") {
   name: String
   fromPack: String
   status: RoleStatus
-  keys: [String!] @authorize(policy: "tenancy.roles.manage")
+  permissions: [String!] @authorize(policy: "tenancy.roles.manage")
   managesAccess: Boolean
 }
 
@@ -322,27 +330,27 @@ type RoleGrantPayload {
   errors: [RoleGrantError!]
 }
 
-type RoleKeysSetPayload {
-  role: Role
-  errors: [RoleKeysSetError!]
-}
-
 type RoleOfMine {
   id: UUID!
   name: String!
   fromPack: String
   status: RoleStatus!
-  keys: [String!]!
+  permissions: [String!]!
   managesAccess: Boolean!
 }
 
 type RolePack {
   key: String!
-  keys: [String!]!
+  permissions: [String!]!
   name: String!
   description: String!
   seededFor: TenantShape
   administers: Boolean!
+}
+
+type RolePermissionsSetPayload {
+  role: Role
+  errors: [RolePermissionsSetError!]
 }
 
 type RoleRevokePayload {
@@ -395,7 +403,7 @@ type SeatOverview {
   seat: Seat!
   placements: [PlacementOfMine!]!
   roles: [RoleOfMine!]!
-  keys: [KeyOfMine!]!
+  permissions: [PermissionOfMine!]!
 }
 
 type SeatPlacePayload {
@@ -548,7 +556,7 @@ union RoleGrantError =
   | BrokenRulesError
   | ConcurrencyConflictError
 
-union RoleKeysSetError =
+union RolePermissionsSetError =
   | RefusalError
   | InvalidValuesError
   | BrokenRulesError
@@ -639,7 +647,7 @@ input RoleArchiveInput {
 input RoleCreateInput {
   name: String!
   description: String
-  keys: [String!]
+  permissions: [String!]
 }
 
 input RoleGrantInput {
@@ -650,9 +658,9 @@ input RoleGrantInput {
   reason: String
 }
 
-input RoleKeysSetInput {
+input RolePermissionsSetInput {
   id: UUID!
-  keys: [String!]!
+  permissions: [String!]!
 }
 
 input RoleRevokeInput {

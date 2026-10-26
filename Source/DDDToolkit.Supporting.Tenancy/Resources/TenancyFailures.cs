@@ -12,7 +12,7 @@ namespace DDDToolkit.Supporting.Tenancy;
 /// <para>
 /// The Dutch texts never use a word for the reader, neither the familiar one nor the formal one: which of the
 /// two fits is the application's to say. Another tone, or another word for a tenant or a seat, is a resx of
-/// your own as well, with the keys you want to say differently, in every language you support, added before
+/// your own as well, with the permissions you want to say differently, in every language you support, added before
 /// this one.
 /// </para>
 /// </summary>

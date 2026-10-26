@@ -24,7 +24,7 @@ public static class TenancyEventLogExtensions
     /// <item>A unit added, moved or archived.</item>
     /// <item>A seat added, suspended, reactivated or deactivated; placed in a unit, withdrawn from one, and its primary placement changed.</item>
     /// <item>A role granted to a seat or revoked from it.</item>
-    /// <item>A role created, its keys changed, with the keys that came in and went out, or archived; and a role that
+    /// <item>A role created, its permissions changed, with the permissions that came in and went out, or archived; and a role that
     /// followed its pack once the application changed the pack, with the same.</item>
     /// </list>
     /// <para>
@@ -34,7 +34,7 @@ public static class TenancyEventLogExtensions
     /// it, with a <c>Keep</c> next to this call when it belongs in the history.
     /// </para>
     /// <para>
-    /// Each row is the event as the outbox stores it, written by the save that raised it: the ids, the keys, the
+    /// Each row is the event as the outbox stores it, written by the save that raised it: the ids, the permissions, the
     /// dates and who made the change (<c>By</c>, which every event of Tenancy's carries), and never what a
     /// tenant, a unit, a seat or a role is called. The row's own columns say the same actor again and the tenant,
     /// so a history is read and kept apart per tenant without opening a payload. Map the table with
@@ -91,7 +91,7 @@ public static class TenancyEventLogExtensions
 
         // Roles: what a grant gives.
         log.Keep<RoleCreated<TTenantId, TRoleId, TSeatId>>();
-        log.Keep<RoleKeysChanged<TTenantId, TRoleId, TSeatId>>();
+        log.Keep<RolePermissionsChanged<TTenantId, TRoleId, TSeatId>>();
         log.Keep<RoleArchived<TTenantId, TRoleId, TSeatId>>();
         log.Keep<RoleFollowedItsPack<TTenantId, TRoleId, TSeatId>>();
 

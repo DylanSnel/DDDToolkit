@@ -89,7 +89,7 @@ public sealed class TenancyModelTests : IDisposable
         }
 
         tables.Keys.Should().OnlyContain(type => tenancy.FindEntityType(type) != null, "every Tenancy table is in Tenancy's own model");
-        tenancy.GetEntityTypes().Where(AnswersAFunction).Should().HaveCount(5, "the administrators, the rights a move changes, the holders of a key, the tenants to visit and the invitation of a token's digest")
+        tenancy.GetEntityTypes().Where(AnswersAFunction).Should().HaveCount(7, "the administrators, the rights a move changes, the holders of a permission, the names of units, the names of the person's tenants, the tenants to visit and the invitation of a token's digest")
             .And.Contain(entityType => entityType.ClrType == typeof(MoveReach<OrganizationUnitId>));
 
         // A consumer's context: its own entity is kept to a tenant, and every row of the read model is a view.
@@ -99,7 +99,7 @@ public sealed class TenancyModelTests : IDisposable
             TenantOf(entityType).Should().Be(AnswersAFunction(entityType) ? null : "TenantId", entityType.DisplayName() + " is kept to a tenant, unless a function answers it");
         }
 
-        widgets.GetEntityTypes().Where(AnswersAFunction).Should().ContainSingle("a consumer asks who holds a key, and nothing else of other seats");
+        widgets.GetEntityTypes().Where(AnswersAFunction).Should().ContainSingle("a consumer asks who holds a permission, and nothing else of other seats");
 
         widgets.GetEntityTypes().Select(entityType => entityType.ClrType).Should().Contain(
             [typeof(Widget), typeof(SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId>), typeof(OrganizationUnitPath<TenantId, OrganizationUnitId>)]);
@@ -239,7 +239,7 @@ public sealed class TenancyModelTests : IDisposable
         {
             modelBuilder.Entity<SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId>>()
                 .ToTable("SeatRights", TestTenancyContext.Schema)
-                .HasKey(right => new { right.SeatId, right.UnitId, right.RoleId, right.Key });
+                .HasKey(right => new { right.SeatId, right.UnitId, right.RoleId, right.Permission });
             modelBuilder.Entity<OrganizationUnitPath<TenantId, OrganizationUnitId>>()
                 .ToTable("OrganizationUnitPaths", TestTenancyContext.Schema)
                 .HasKey(path => new { path.AncestorId, path.DescendantId });

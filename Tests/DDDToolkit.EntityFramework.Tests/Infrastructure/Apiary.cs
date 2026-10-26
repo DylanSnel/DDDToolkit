@@ -45,6 +45,8 @@ public partial class Hive
 
     public string Label { get; private set; }
 
+    /// <summary>The keeper who alone changes the hive, its owner; or nobody, for a hive nobody keeps.</summary>
+    [Owner]
     public Guid? Keeper { get; private set; }
 
     /// <summary>Whether visitors may see the hive.</summary>

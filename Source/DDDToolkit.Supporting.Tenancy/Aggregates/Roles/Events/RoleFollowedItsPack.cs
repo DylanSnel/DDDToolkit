@@ -14,12 +14,12 @@ namespace DDDToolkit.Supporting.Tenancy;
 /// <param name="TenantId">The tenant the role belongs to.</param>
 /// <param name="RoleId">The role.</param>
 /// <param name="Pack">The key of the pack the role was made from, and followed.</param>
-/// <param name="Added">The keys the role grants from now on and did not before, the keys they imply included, in ordinal order.</param>
-/// <param name="Removed">The keys the role granted before and no longer does, in ordinal order.</param>
+/// <param name="Added">The permissions the role grants from now on and did not before, the permissions they imply included, in ordinal order.</param>
+/// <param name="Removed">The permissions the role granted before and no longer does, in ordinal order.</param>
 /// <param name="ManagingAccess">
-/// The keys of <paramref name="Added"/> and <paramref name="Removed"/> that manage access, as the catalogue marked
+/// The permissions of <paramref name="Added"/> and <paramref name="Removed"/> that manage access, as the catalogue marked
 /// them at the time, in ordinal order: empty when the change gives and takes no power over other people's access.
-/// A seat's own change of such a key is an administrator's alone; this one the application made.
+/// A seat's own change of such a permission is an administrator's alone; this one the application made.
 /// </param>
 /// <param name="By">Who made the change: system work, the application's own, unless it was begun for an operator.</param>
 [DomainEventName("tenancy.role-followed-its-pack")]

@@ -89,12 +89,12 @@ builder.Services.AddTenantsModule(host, SampleCatalogue.Application);
 builder.Services.AddProjectsModule(host, SampleCatalogue.ProjectRoles);
 builder.Services.AddInspectionsModule(host);
 
-// Every module's permission keys, in one call that names no module. Each module states its keys once, on the
-// list it marks with [TenancyPermissions]; Tenancy's generator finds those lists in the modules this host
-// references, and wrote this call into it, in the namespace named after the host's assembly, which the using of
+// Every module's permissions, in one call that names no module. Each module declares its permissions once, in a
+// [Permissions] class; Tenancy's generator lists them in the module's project, finds those lists in the modules this
+// host references, and wrote this call into it, in the namespace named after the host's assembly, which the using of
 // Examples.Tenancy.Host above brings in. A module that is added reaches the host with no change here. The program
-// that exports the policies finds the same marked lists in the modules it references and writes Tenancy's policies
-// with them, so the new module's keys reach the export with the reference it gets for the module's migrations.
+// that exports the policies finds the same lists in the modules it references and writes Tenancy's policies with
+// them, so the new module's permissions reach the export with the reference it gets for the module's migrations.
 builder.Services.AddTenancyPermissionsOfModules();
 
 // The check that the database has every migration of every module: the migrations are the Supabase CLI's to apply,
@@ -145,11 +145,11 @@ builder.Logging.AddFilter("Microsoft.EntityFrameworkCore.Update", LogLevel.Criti
 builder.Services.RunStartupChecks();
 
 // Once the host has started, in the background: every tenant's roles made from a pack follow that pack as the
-// catalogue has it now. A key a module brings later reaches the flat tenants' Tenant admin, whose pack lists none and
-// so holds every key, and a key added to a pack reaches every role made from it; what a tenant changed in a role
-// itself stays. It is a call of its own and not a check, since it changes the tenants' roles. Each role whose keys
-// change raises RoleFollowedItsPack, which the Tenants module keeps in the access history, where the tenant's
-// administrators read it on the History page; the host logs what the run did.
+// catalogue has it now. A permission a module brings later reaches the flat tenants' Tenant admin, whose pack lists
+// none and so holds every permission, and a permission added to a pack reaches every role made from it; what a tenant
+// changed in a role itself stays. It is a call of its own and not a check, since it changes the tenants' roles. Each
+// role whose permissions change raises RoleFollowedItsPack, which the Tenants module keeps in the access history,
+// where the tenant's administrators read it on the History page; the host logs what the run did.
 builder.Services.SyncRolePacks();
 
 // Hosted services start in the order they are added, all of them after the checks above. With

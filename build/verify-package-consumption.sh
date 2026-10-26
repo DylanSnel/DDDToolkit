@@ -27,7 +27,8 @@
 #      domain packages, an infrastructure project on their Postgres packages and a host, builds with
 #      everything it needs arriving as a dependency, Membership's two generators among it, which ship
 #      inside Membership's packages and write nothing in the host; Tenancy's generator, which ships inside
-#      Tenancy's package and writes the modules' keys into the host and nowhere else; the toolkit's, which
+#      Tenancy's package and writes the module's list of permissions where its [Permissions] class is, and
+#      the modules' lists into the host, and nothing into the infrastructure project; the toolkit's, which
 #      writes Tenancy's use cases closed over the classes, TenancyUseCases, into the domain project alone, for
 #      the host to name them through; and the packages carry their Dutch texts. Its module is declared by
 #      DDD_Module, from a Directory.Build.props, and not by a file in either project: the package's targets
@@ -499,16 +500,16 @@ done
 
 echo "    SupportingDomains/Host: handed both of Membership's generators, and written nothing by either"
 
-# Tenancy's generator is the other way round: the host, which declares no module and references the module that
-# marks its keys with [TenancyPermissions], is where it writes the list of them and the call that registers them,
-# which PressStartup makes, and the module's own projects get nothing of it.
+# Tenancy's generator writes twice. In the domain project, which declares the module's permissions in a
+# [Permissions] class, it writes the module's list of them, marked [TenancyPermissions]. In the host, which declares
+# no module and references the module, it writes the list of every module's and the call that registers them, which
+# PressStartup makes. The infrastructure project, of the module and with no [Permissions] class, gets nothing of it.
+expect_generators_wrote SupportingDomains/Domain "DDDToolkit.Supporting.Tenancy.Analyzers"
 expect_generators_wrote SupportingDomains/Host "DDDToolkit.Supporting.Tenancy.Analyzers"
-for project in Domain Infrastructure; do
-  if grep -qxF "DDDToolkit.Supporting.Tenancy.Analyzers" <<< "$(generators_that_wrote "SupportingDomains/$project")"; then
-    echo "FAILED: SupportingDomains/$project: Tenancy's generator wrote into a project of the module, which composes no module's keys." >&2
-    exit 1
-  fi
-done
+if grep -qxF "DDDToolkit.Supporting.Tenancy.Analyzers" <<< "$(generators_that_wrote SupportingDomains/Infrastructure)"; then
+  echo "FAILED: SupportingDomains/Infrastructure: Tenancy's generator wrote into a project of the module that declares no permissions and composes no module's." >&2
+  exit 1
+fi
 
 # The module, Press, is declared by the build: DDD_Module in SupportingDomains' Directory.Build.props, and no
 # Module.cs. The build above compiled only because the infrastructure project took the domain project for one of
@@ -650,15 +651,15 @@ if [ "$(find "$supabase_migrations" -name '*_access.press.ddd.sql' | wc -l | tr 
   exit 1
 fi
 
-# The house declares no administrators' pack, so the packaged catalogue adds Tenancy's own, and pack_keys in the
-# access file the export wrote from that catalogue answers its keys: every live key, the manuscripts' included,
+# The house declares no administrators' pack, so the packaged catalogue adds Tenancy's own, and pack_permissions in
+# the access file the export wrote from that catalogue answers its permissions: every live one, the manuscripts' included,
 # which the house never listed for it.
 if ! grep -qE "WHEN 'administrator' THEN ARRAY\[[^]]*'manuscripts\.edit'" "$supabase_migrations"/*_access.press.ddd.sql; then
-  echo "FAILED: the access files in $supabase_migrations have no pack_keys answer for the default administrators' pack, 'administrator', holding the manuscripts' keys." >&2
+  echo "FAILED: the access files in $supabase_migrations have no pack_permissions answer for the default administrators' pack, 'administrator', holding the manuscripts' permissions." >&2
   exit 1
 fi
 
-echo "    SupportingDomains/Host: pack_keys answers the default administrators' pack"
+echo "    SupportingDomains/Host: pack_permissions answers the default administrators' pack"
 
 # The packages' contributions were made where the export runs, in the file named for them, from what the domain
 # project marks: Tenancy's from the catalogue, and one of Membership's for the manuscripts, closed over their editors.

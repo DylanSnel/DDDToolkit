@@ -6,4 +6,4 @@ public sealed record WhoAmIAnswer(
     SeatInfo Seat,
     IReadOnlyList<PlacementInfo> Placements,
     IReadOnlyList<RoleInfo> Roles,
-    IReadOnlyList<KeyInfo> Keys);
+    IReadOnlyList<PermissionOfMineInfo> Permissions);

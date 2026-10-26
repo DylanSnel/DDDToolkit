@@ -5,7 +5,7 @@ namespace DDDToolkit.Supporting.Membership;
 /// <summary>
 /// A role known by its name: what a member holds when the roles are the ones a resource's rules declare
 /// (<see cref="Access.DeclaredRole"/>), rather than rows: the application's role class
-/// (<see cref="KeptRoleAttribute{TRoleId, TResource}"/>), or roles it keeps somewhere else.
+/// (<see cref="CustomRoleAttribute{TRoleId, TResource}"/>), or roles it keeps somewhere else.
 /// <code>
 /// [Member&lt;DocumentShareId, UserId, NamedRole, Document&gt;]
 /// public sealed partial class DocumentShare;

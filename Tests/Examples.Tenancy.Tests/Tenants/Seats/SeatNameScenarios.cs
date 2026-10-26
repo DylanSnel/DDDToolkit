@@ -33,7 +33,7 @@ public sealed class SeatNameScenarios(SampleHosts sample) : IClassFixture<Sample
     [Fact]
     public async Task Leo_renames_his_own_seat_and_every_answer_about_it_shows_the_new_name()
     {
-        // It renames, so it has a host of its own. Leo holds no key of the organization's at all.
+        // It renames, so it has a host of its own. Leo holds no permission of the organization's at all.
         await using var host = await sample.StartAsync();
         using var leo = await host.ClientAsync("leo", Harbor.Slug);
 
@@ -70,7 +70,7 @@ public sealed class SeatNameScenarios(SampleHosts sample) : IClassFixture<Sample
         using (var refused = await rhea.PutAsJsonAsync($"/tenancy/seats/{Leo}/name", new { displayName = "Leopold" }, Cancellation))
         {
             (await refused.ShouldBeRefusedAsync(HttpStatusCode.Forbidden, ToolkitRefusals.Refused)).Reasons
-                .Should().Equal([ToolkitRefusals.NotOwn, TenancyRefusals.NotPermitted], "her own seat is asked first, and the key after it");
+                .Should().Equal([ToolkitRefusals.NotOwn, TenancyRefusals.NotPermitted], "her own seat is asked first, and the permission after it");
         }
 
         // Ada administers harbor and holds it. A name the seat's rule refuses is refused with the rule's own code.

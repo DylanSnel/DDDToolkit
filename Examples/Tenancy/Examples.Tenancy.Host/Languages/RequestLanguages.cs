@@ -13,7 +13,7 @@ namespace Examples.Tenancy.Host.Languages;
 /// link cannot carry a language to somebody else's browser and nothing about a caller is kept between requests.
 /// <para>
 /// What follows the language is the text a person reads: a refusal's title, and the message of each broken rule.
-/// Codes, arguments, keys and the names a tenant gave its own roles and units are the same in every language.
+/// Codes, arguments, permissions and the names a tenant gave its own roles and units are the same in every language.
 /// </para>
 /// </remarks>
 public static class RequestLanguages

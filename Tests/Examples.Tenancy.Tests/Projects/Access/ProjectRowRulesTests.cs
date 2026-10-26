@@ -8,7 +8,7 @@ namespace Examples.Tenancy.Tests.Projects.Access;
 /// What the database itself lets a seat read and change of the projects and their roles, as Projects writes it for
 /// a database that checks every row: the rule classes, each translated to the SQL an export fills in. These pin
 /// that text, without a database: a seat reads the projects the projects' rules say it sees, changes one where it
-/// holds a key on it, and reads its tenant's project roles, which only whoever manages the tenant's roles changes.
+/// holds a permission on it, and reads its tenant's project roles, which only whoever manages the tenant's roles changes.
 /// What the functions answer once they are in a database is <c>SampleOnPostgresTests</c>' to show.
 /// </summary>
 public sealed class ProjectRowRulesTests
@@ -32,9 +32,9 @@ public sealed class ProjectRowRulesTests
     }
 
     [Fact]
-    public void A_seat_changes_a_project_where_it_holds_any_key_that_changes_one()
+    public void A_seat_changes_a_project_where_it_holds_any_permission_that_changes_one()
     {
-        // Each key a command of the module asks on a project, through the same function, and opening a project at
+        // Each permission a command of the module asks on a project, through the same function, and opening a project at
         // a unit, which Tenancy answers.
         var held = "{fn:" + ProjectsWhereIHold.Name + "}";
         SeatsChangeTheProjectsTheyWorkOn.RowAccessSql.Should().Be(
@@ -42,7 +42,7 @@ public sealed class ProjectRowRulesTests
             + $" OR ({{col:Id}} = ANY (ARRAY(SELECT {held}('projects.close')))))"
             + $" OR ({{col:Id}} = ANY (ARRAY(SELECT {held}('projects.crew.manage')))))"
             + $" OR ({{col:Id}} = ANY (ARRAY(SELECT {held}('projects.owner.change')))))"
-            + " OR ({col:UnitId} = ANY (ARRAY(SELECT {fn:tenancy/units_where_i_hold}('projects.open')))))");
+            + " OR ({col:UnitId} = ANY (ARRAY(SELECT {fn:tenancy/units_where_i_hold_permission}('projects.open')))))");
     }
 
     [Fact]
@@ -50,6 +50,6 @@ public sealed class ProjectRowRulesTests
     {
         SeatsReadTheProjectRolesOfTheirTenant.RowAccessSql.Should().Be("({col:TenantId} = (SELECT {fn:tenancy/caller_tenant}()))");
         // One question and nothing else: the tenant of the row is Tenancy's own policy on the table to keep.
-        RoleManagersChangeTheProjectRoles.RowAccessSql.Should().Be("(SELECT {fn:tenancy/holds_tenant_wide}('tenancy.roles.manage'))");
+        RoleManagersChangeTheProjectRoles.RowAccessSql.Should().Be("(SELECT {fn:tenancy/holds_at_tenant}('tenancy.roles.manage'))");
     }
 }

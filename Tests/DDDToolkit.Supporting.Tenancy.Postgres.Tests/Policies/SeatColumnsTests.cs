@@ -27,14 +27,14 @@ public sealed class SeatColumnsTests(TenancyPostgres postgres)
     /// <summary>The trigger on a seat's status.</summary>
     private const string StatusIsManaged = "tenancy_seat_status_is_managed";
 
-    /// <summary>The trigger the export writes for <see cref="JobTitlesChangeWithTheSeatsKeyForTheWholeTenant"/>.</summary>
+    /// <summary>The trigger the export writes for <see cref="JobTitlesChangeWithTheSeatsPermissionAtTenant"/>.</summary>
     private const string JobTitleRule = "seats_jobtitle_column_rule";
 
     /// <summary>The application's column rule on its own field, as the export is handed it.</summary>
     private static readonly RowAccessRule JobTitles = RowAccessRule.ForColumns<HostSeat>(
-        "Job titles change with the seats key for the whole tenant",
+        "Job titles change with the seats permission for the whole tenant",
         [nameof(HostSeat.JobTitle)],
-        JobTitlesChangeWithTheSeatsKeyForTheWholeTenant.RowAccessSql,
+        JobTitlesChangeWithTheSeatsPermissionAtTenant.RowAccessSql,
         RowAccessRoles.User);
 
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
@@ -50,7 +50,7 @@ public sealed class SeatColumnsTests(TenancyPostgres postgres)
             "UPDATE tenancy.\"Seats\" SET \"Id\" = gen_random_uuid() WHERE \"Id\" = $1",
         ];
 
-        // Each of them the policy lets change Oli's row: Ada holds every key, Seth manages seats at North, Hiro gives
+        // Each of them the policy lets change Oli's row: Ada holds every permission, Seth manages seats at North, Hiro gives
         // roles there, and the row is Oli's own. Handing his seat to another account, moving it to Orchard or giving it
         // another id is none of theirs.
         (Person Caller, string Who)[] callers = [(Ada, "the administrator"), (Seth, "a seats manager"), (Hiro, "a grants manager"), (Oli, "the seat itself")];
@@ -161,22 +161,22 @@ public sealed class SeatColumnsTests(TenancyPostgres postgres)
     }
 
     [Fact]
-    public async Task Every_use_case_that_writes_a_seat_does_so_for_the_least_its_request_admits_and_the_policy_takes_the_keys_wherever_held_and_keeps_out_the_rest()
+    public async Task Every_use_case_that_writes_a_seat_does_so_for_the_least_its_request_admits_and_the_policy_takes_the_permissions_wherever_held_and_keeps_out_the_rest()
     {
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation);
 
         // Eve gets a desk that manages seats at North and nothing else, as Hiro's gives roles there and nothing else.
-        await HoldAtAsync(database, Eve, North, [TenancyKeys.SeatsManage], Cancellation);
+        await HoldAtAsync(database, Eve, North, [TenancyPermissions.SeatsManage], Cancellation);
         await TenancyPostgres.ForceAsync(database, Cancellation);
         await using var services = new TenancyServices(database);
 
         // Every save of a seat writes its version: a grant and a placement as much as a status. So the policy on the
-        // seats asks the grants key as well: Hiro gives Oli a role at North Pier and takes it away again, which changes
+        // seats asks the grants permission as well: Hiro gives Oli a role at North Pier and takes it away again, which changes
         // Oli's row each time.
         await WritesOlisRowAsync(Hiro, seats => seats.GrantAsync(Oli.Seat, NorthPier, HarborRoles.Watcher, until: null, reason: null, Cancellation));
         await WritesOlisRowAsync(Hiro, seats => seats.RevokeAsync(Oli.Seat, NorthPier, HarborRoles.Watcher, Cancellation));
 
-        // The policy asks the grants key held anywhere, not at the seat's units, on purpose: it is all that lets the
+        // The policy asks the grants permission held anywhere, not at the seat's units, on purpose: it is all that lets the
         // application's own commands write the row, and holding it to the units would decide for the application which
         // of its fields a grants manager writes. So Hiro, who gives roles at North alone, writes the version of Sue, at
         // South, which no use case of his would; it changes nothing she holds.
@@ -186,13 +186,13 @@ public sealed class SeatColumnsTests(TenancyPostgres postgres)
         }
 
         // Eve places Oli at North, makes it his primary placement and North Pier again, and withdraws him, with the
-        // seats key alone.
+        // seats permission alone.
         await WritesOlisRowAsync(Eve, seats => seats.PlaceAsync(Oli.Seat, North, primary: false, Cancellation));
         await WritesOlisRowAsync(Eve, seats => seats.MakePrimaryAsync(Oli.Seat, North, Cancellation));
         await WritesOlisRowAsync(Eve, seats => seats.MakePrimaryAsync(Oli.Seat, NorthPier, Cancellation));
         await WritesOlisRowAsync(Eve, seats => seats.WithdrawAsync(Oli.Seat, North, Cancellation));
 
-        // Hiro takes away his own Grants desk: the save takes his key with it, and the row is his own all the same.
+        // Hiro takes away his own Grants desk: the save takes his permission with it, and the row is his own all the same.
         await services.BySeat(Hiro.Identity, Harbor, Hiro.Seat, scoped => scoped.Seats().RevokeAsync(Hiro.Seat, North, GrantsDesk, Cancellation));
 
         // A seat that manages neither writes no other seat's row, the version included: the row is not its to find.
@@ -234,7 +234,7 @@ public sealed class SeatColumnsTests(TenancyPostgres postgres)
             (await asCaller.ExecuteAsync(Renaming, Cancellation, seat.Seat.Value)).Should().Be(1, "{0} may write {1}'s row", caller.Name, seat.Name);
         }
 
-        // The job title has one: it changes with the seats key for the whole tenant, which neither Hiro, Seth nor Oli
+        // The job title has one: it changes with the seats permission for the whole tenant, which neither Hiro, Seth nor Oli
         // holds, the seat's own row included.
         foreach (var (caller, seat) in new[] { (Hiro, Sue), (Seth, Sue), (Oli, Oli) })
         {
@@ -290,8 +290,8 @@ public sealed class SeatColumnsTests(TenancyPostgres postgres)
 /// manages seats for the whole tenant. Tenancy decides nothing about the field, so this rule is all that holds it.
 /// </summary>
 [RowAccess<HostSeat>(RowOperations.Change, To = [RowAccessRoles.User], Columns = [nameof(HostSeat.JobTitle)])]
-public static partial class JobTitlesChangeWithTheSeatsKeyForTheWholeTenant
+public static partial class JobTitlesChangeWithTheSeatsPermissionAtTenant
 {
     /// <summary>Whether the calling seat manages seats for the whole tenant.</summary>
-    public static bool Allows(HostSeat seat, Caller caller) => TenancyRowAccess.HoldsTenantWide(TenancyKeys.SeatsManage);
+    public static bool Allows(HostSeat seat, Caller caller) => TenancyRowAccess.HoldsAtTenant(TenancyPermissions.SeatsManage);
 }

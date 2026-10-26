@@ -27,7 +27,7 @@ internal static class OwnershipEndpoints
         // Like every change to a project, naming an owner takes the version its caller read, as If-Match.
         group.MapPut("/projects/{id}/owner", async (ProjectId id, NewOwner body, HttpRequest request, ISender sender, CancellationToken cancellationToken) =>
         {
-            await sender.Send(new ChangeProjectOwner(id, body.SeatId, ProjectVersions.Expected(request)), cancellationToken);
+            await sender.Send(new ChangeProjectOwner(id, body.SeatId, body.FormerOwnerRoleId, ProjectVersions.Expected(request)), cancellationToken);
             return Results.NoContent();
         });
 
@@ -35,8 +35,12 @@ internal static class OwnershipEndpoints
     }
 
     /// <summary>
+    /// The seat to name owner, and the project role the old owner stays on the crew in.
+    /// </summary>
+    /// <param name="SeatId">
     /// The seat to name owner. Required: left out, it would bind as an empty id and come back as a refusal about a
     /// seat nobody named, where a 400 invalid-request says what is wrong.
-    /// </summary>
-    public sealed record NewOwner([property: JsonRequired] SeatId SeatId);
+    /// </param>
+    /// <param name="FormerOwnerRoleId">The project role the old owner stays on the crew in; left out, the old owner leaves the crew.</param>
+    public sealed record NewOwner([property: JsonRequired] SeatId SeatId, ProjectRoleId? FormerOwnerRoleId = null);
 }

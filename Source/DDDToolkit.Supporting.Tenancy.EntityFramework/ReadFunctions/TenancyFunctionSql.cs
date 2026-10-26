@@ -75,4 +75,17 @@ internal static class TenancyFunctionSql
         => context.GetService<ITypeMappingSource>().FindMapping(typeof(TId), context.Model)?.Converter is { } converter
             ? converter.ConvertToProvider(id) ?? id
             : id;
+
+    /// <summary>
+    /// <paramref name="ids"/> as the database stores them, as one array of the stored type, a <see cref="Guid"/>[] or
+    /// a <see cref="long"/>[]: what a function that takes an array of ids is given. At least one id.
+    /// </summary>
+    public static Array StoredArray<TId>(DbContext context, IReadOnlyCollection<TId> ids)
+        where TId : struct
+    {
+        var stored = ids.Select(id => Stored(context, id)).ToArray();
+        var array = Array.CreateInstance(stored[0].GetType(), stored.Length);
+        Array.Copy(stored, array, stored.Length);
+        return array;
+    }
 }

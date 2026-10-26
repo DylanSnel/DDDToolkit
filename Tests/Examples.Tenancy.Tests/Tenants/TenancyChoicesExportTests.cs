@@ -6,7 +6,7 @@ namespace Examples.Tenancy.Tests.Tenants;
 
 /// <summary>
 /// The two choices Tenancy leaves to the application that the database holds too, written by the exporter's own
-/// build step: whether a seat hands on a key that manages access only where it holds it, containment, which the
+/// build step: whether a seat hands on a permission that manages access only where it holds it, containment, which the
 /// sample leaves on, and who reads the seats, which the sample leaves to Tenancy's default, every member of the
 /// tenant. Tenancy's SQL reaches the sample's files because its modules reference Tenancy's Postgres package, made
 /// from the catalogue the sample marks, for the roles its exporter says once, from the contexts marked
@@ -20,7 +20,7 @@ namespace Examples.Tenancy.Tests.Tenants;
 public sealed class TenancyChoicesExportTests
 {
     /// <summary>The Tenants module's access file the sample's build wrote last.</summary>
-    private const string TenantsAccessFile = "20261023170856_access.tenants.ddd.sql";
+    private const string TenantsAccessFile = "20261026210726_access.tenants.ddd.sql";
 
     /// <summary>
     /// A read rule on the sample's seat the sample does not have, as the generator writes one:
@@ -54,8 +54,8 @@ public sealed class TenancyChoicesExportTests
                      "DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres")
             .And.Contain("CREATE POLICY \"Seats (select) for authenticated\" ON \"tenancy\".\"Seats\" FOR SELECT TO authenticated")
             .And.Contain(
-                "    USING ((\"Identity\" = (SELECT auth.uid()) OR ((\"TenantId\" = (SELECT \"tenancy\".caller_tenant())) AND ((SELECT \"tenancy\".holds_key('tenancy.seats.manage')) " +
-                "OR (SELECT \"tenancy\".holds_key('tenancy.grants.manage')) OR (SELECT \"tenancy\".holds_key('tenancy.units.manage')) OR (SELECT \"tenancy\".holds_tenant_wide('tenancy.roles.manage')))))" +
+                "    USING ((\"Identity\" = (SELECT auth.uid()) OR ((\"TenantId\" = (SELECT \"tenancy\".caller_tenant())) AND ((SELECT \"tenancy\".holds_permission('tenancy.seats.manage')) " +
+                "OR (SELECT \"tenancy\".holds_permission('tenancy.grants.manage')) OR (SELECT \"tenancy\".holds_permission('tenancy.units.manage')) OR (SELECT \"tenancy\".holds_at_tenant('tenancy.roles.manage')))))" +
                 " OR ((\"TenantId\" = (SELECT \"tenancy\".caller_tenant())) AND (\"Id\" = ANY (ARRAY(SELECT \"tenancy\".seats_in_my_units())))));",
                 "the rule decides within the calling seat's tenant, beside a person's own seats and what Tenancy's managers read, for authenticated, the user's role, which nothing had to say");
         added.Should().OnlyContain(line => line.Contains("Seats (select) for authenticated") || line.StartsWith("    USING ((\"Identity\"", StringComparison.Ordinal),
@@ -63,11 +63,11 @@ public sealed class TenancyChoicesExportTests
     }
 
     [Fact]
-    public void With_containment_off_the_export_writes_key_is_contained_to_answer_no_key_and_changes_nothing_else()
+    public void With_containment_off_the_export_writes_permission_is_contained_to_answer_no_permission_and_changes_nothing_else()
     {
-        var (removed, added) = Changed(ExporterBuild.Written(application: catalogue => catalogue with { ContainAccessManagingKeys = false }));
+        var (removed, added) = Changed(ExporterBuild.Written(application: catalogue => catalogue with { ContainAccessManagingPermissions = false }));
 
-        removed.Should().ContainSingle().Which.Should().StartWith("SELECT $1 IN ('projects.crew.manage', ", "on, the function answers the keys that manage access");
+        removed.Should().ContainSingle().Which.Should().StartWith("SELECT $1 IN ('projects.crew.manage', ", "on, the function answers the permissions that manage access");
         added.Should().Equal(["SELECT false"], "off, it answers none, and the policies and the trigger that ask it stay as they are");
     }
 

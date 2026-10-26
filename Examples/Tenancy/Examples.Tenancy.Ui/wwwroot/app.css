@@ -154,7 +154,7 @@ h1:focus {
     gap: 1rem;
 }
 
-.keys {
+.permissions {
     display: flex;
     flex-wrap: wrap;
     gap: 0.15rem 0.75rem;

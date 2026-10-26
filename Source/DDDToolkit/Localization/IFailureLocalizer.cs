@@ -58,4 +58,20 @@ public interface IFailureLocalizer
     /// </summary>
     /// <param name="refusal">The refusal to phrase.</param>
     string Localize(RefusalException refusal) => (refusal ?? throw new ArgumentNullException(nameof(refusal))).Message;
+
+    /// <summary>
+    /// A text of the application's own, by its key, in the reader's language: what the translations hold under
+    /// <paramref name="key"/>, or <paramref name="fallback"/> where none does. A permission's description is read so,
+    /// by the permission's name, with the description its <c>[Permissions]</c> class gives it as the fallback, from the
+    /// same resx files refusal texts are kept in:
+    /// <code>
+    /// localizer.Text(permission.Name, permission.Description)
+    /// </code>
+    /// <para>
+    /// A default member, so a localizer written before it existed keeps compiling and answers the fallback.
+    /// </para>
+    /// </summary>
+    /// <param name="key">The text's key, such as a permission's name: <c>boards.view</c>.</param>
+    /// <param name="fallback">What is answered where no translation holds the key: the English text.</param>
+    string Text(string key, string fallback) => fallback;
 }

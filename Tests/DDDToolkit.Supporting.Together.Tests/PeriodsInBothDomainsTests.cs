@@ -27,8 +27,8 @@ public sealed class PeriodsInBothDomainsTests
         var threeDays = TimeSpan.FromDays(3);
 
         // Ned has a seat at Arts, is on no list and holds nothing: Poetry and the darkroom, which are there, are not there for him.
-        (await HoldOnAsync(campus, ned, data.Poetry, CourseKeys.Grade)).Should().BeNull();
-        (await HoldInAsync(campus, ned, data.Darkroom, LabKeys.Equip)).Should().BeNull();
+        (await HoldOnAsync(campus, ned, data.Poetry, CoursePermissions.Grade)).Should().BeNull();
+        (await HoldInAsync(campus, ned, data.Darkroom, LabPermissions.Equip)).Should().BeNull();
 
         // He is made a dean of Arts for three days.
         await campus.Services.BySystemInAsync(
@@ -36,24 +36,24 @@ public sealed class PeriodsInBothDomainsTests
             provider => provider.Seats().GrantAsync(data.NedSeat, data.Arts, data.AlderDean, until: data.Now + threeDays, reason: null, Cancellation));
 
         // From then on he grades what is given at Arts. The hold names no end: when a role of the organization ends is
-        // Tenancy's to know, so a key held from above is held for as long as the course is seen.
-        var grade = await HoldOnAsync(campus, ned, data.Poetry, CourseKeys.Grade);
+        // Tenancy's to know, so a permission held from above is held for as long as the course is seen.
+        var grade = await HoldOnAsync(campus, ned, data.Poetry, CoursePermissions.Grade);
         (grade!.Via, grade.Until).Should().Be((MemberVia.Above, (DateTimeOffset?)null));
-        (await HoldInAsync(campus, ned, data.Darkroom, LabKeys.Equip))!.Via.Should().Be(MemberVia.Above);
-        (await HoldOnAsync(campus, ned, data.Optics, CourseKeys.Grade)).Should().BeNull("Optics is given at Physics, which is not below Arts");
+        (await HoldInAsync(campus, ned, data.Darkroom, LabPermissions.Equip))!.Via.Should().Be(MemberVia.Above);
+        (await HoldOnAsync(campus, ned, data.Optics, CoursePermissions.Grade)).Should().BeNull("Optics is given at Physics, which is not below Arts");
 
         // One tick before the role ends he still does, and passes where a question refuses.
         clock.Advance(threeDays - Tick);
-        (await HoldOnAsync(campus, ned, data.Poetry, CourseKeys.Grade))!.Via.Should().Be(MemberVia.Above);
-        (await HoldInAsync(campus, ned, data.Darkroom, LabKeys.Equip))!.Via.Should().Be(MemberVia.Above);
-        await campus.Services.CoursesAsync(data.Ned, CampusScenario.InAlder, access => access.RequireAsync(data.Poetry, CourseKeys.Grade, Cancellation));
+        (await HoldOnAsync(campus, ned, data.Poetry, CoursePermissions.Grade))!.Via.Should().Be(MemberVia.Above);
+        (await HoldInAsync(campus, ned, data.Darkroom, LabPermissions.Equip))!.Via.Should().Be(MemberVia.Above);
+        await campus.Services.CoursesAsync(data.Ned, CampusScenario.InAlder, access => access.RequireAsync(data.Poetry, CoursePermissions.Grade, Cancellation));
 
         // At the moment it ends the course and the lab are not there for him: he saw them through that role alone.
         clock.Advance(Tick);
-        (await HoldOnAsync(campus, ned, data.Poetry, CourseKeys.Grade)).Should().BeNull();
-        (await HoldOnAsync(campus, ned, data.Poetry, CourseKeys.See)).Should().BeNull();
-        (await HoldInAsync(campus, ned, data.Darkroom, LabKeys.Equip)).Should().BeNull();
-        (await FluentActions.Awaiting(() => campus.Services.CoursesAsync(data.Ned, CampusScenario.InAlder, access => access.RequireAsync(data.Poetry, CourseKeys.Grade, Cancellation)))
+        (await HoldOnAsync(campus, ned, data.Poetry, CoursePermissions.Grade)).Should().BeNull();
+        (await HoldOnAsync(campus, ned, data.Poetry, CoursePermissions.See)).Should().BeNull();
+        (await HoldInAsync(campus, ned, data.Darkroom, LabPermissions.Equip)).Should().BeNull();
+        (await FluentActions.Awaiting(() => campus.Services.CoursesAsync(data.Ned, CampusScenario.InAlder, access => access.RequireAsync(data.Poetry, CoursePermissions.Grade, Cancellation)))
             .Should().ThrowAsync<RefusalException>()).Which.Code.Should().Be(CourseMembership.Codes[MembershipRefusals.NotFound]);
 
         // His seat is as active as it was: he is refused for the course, and not as nobody.
@@ -71,26 +71,26 @@ public sealed class PeriodsInBothDomainsTests
         var pia = new Asking(data.Pia, CampusScenario.InAlder);
         var twoDays = TimeSpan.FromDays(2);
 
-        // Ada administers Alder, so she holds every key of the catalogue on Optics from above. She tutors it for two days.
+        // Ada administers Alder, so she holds every permission of the catalogue on Optics from above. She tutors it for two days.
         await campus.Services.ChangeAsync(data.Alder, async context =>
             (await context.Courses.SingleAsync(course => course.Id == data.Optics, Cancellation))
                 .TakeOn(data.AdaSeat, data.AlderCourseRoles[CourseMembership.Tutor], MemberPeriod.Between(data.Now, data.Now + twoDays), data.Now, by: data.OwenSeat));
 
         // What she holds both ways she holds as a member, with no end: the course stays in sight when she is off it.
-        var grade = await HoldOnAsync(campus, ada, data.Optics, CourseKeys.Grade);
+        var grade = await HoldOnAsync(campus, ada, data.Optics, CoursePermissions.Grade);
         (grade!.Via, grade.Until).Should().Be((MemberVia.Members, (DateTimeOffset?)null));
-        (await HoldOnAsync(campus, ada, data.Optics, CourseKeys.Outline))!.Via.Should().Be(MemberVia.Above, "a tutor does not write the outline, and an administrator does");
+        (await HoldOnAsync(campus, ada, data.Optics, CoursePermissions.Outline))!.Via.Should().Be(MemberVia.Above, "a tutor does not write the outline, and an administrator does");
 
         clock.Advance(twoDays - Tick);
-        (await HoldOnAsync(campus, ada, data.Optics, CourseKeys.Grade))!.Via.Should().Be(MemberVia.Members);
+        (await HoldOnAsync(campus, ada, data.Optics, CoursePermissions.Grade))!.Via.Should().Be(MemberVia.Members);
 
-        // At the moment her place ends, the organization still gives her the key, and nothing says she tutors.
+        // At the moment her place ends, the organization still gives her the permission, and nothing says she tutors.
         clock.Advance(Tick);
-        grade = await HoldOnAsync(campus, ada, data.Optics, CourseKeys.Grade);
+        grade = await HoldOnAsync(campus, ada, data.Optics, CoursePermissions.Grade);
         (grade!.Via, grade.Until).Should().Be((MemberVia.Above, (DateTimeOffset?)null));
         (await campus.Services.AsAsync(data.Ada, CampusScenario.InAlder, async provider =>
             {
-                var reach = provider.GetRequiredService<IMemberQuestions<CourseId>>().Reach(CourseKeys.Grade);
+                var reach = provider.GetRequiredService<IMemberQuestions<CourseId>>().Reach(CoursePermissions.Grade);
                 return await provider.Campus().Courses.Reached(reach).Where(found => found.Resource.Id == data.Optics).Select(found => new { found.AsMember, found.FromAbove }).SingleAsync(Cancellation);
             }))
             .Should().Be(new { AsMember = false, FromAbove = true });
@@ -98,18 +98,18 @@ public sealed class PeriodsInBothDomainsTests
         // Pia convenes Optics until next week, and holds nothing in the organization where it is given. One tick before
         // her place ends she writes its outline, until then; at that moment the course is not there for her.
         clock.Advance(data.NextWeek - clock.Now - Tick);
-        var outline = await HoldOnAsync(campus, pia, data.Optics, CourseKeys.Outline);
+        var outline = await HoldOnAsync(campus, pia, data.Optics, CoursePermissions.Outline);
         (outline!.Via, outline.Until).Should().Be((MemberVia.Members, (DateTimeOffset?)data.NextWeek));
 
         clock.Advance(Tick);
-        (await HoldOnAsync(campus, pia, data.Optics, CourseKeys.Outline)).Should().BeNull();
-        (await HoldOnAsync(campus, pia, data.Optics, CourseKeys.See)).Should().BeNull();
-        (await HoldOnAsync(campus, pia, data.Poetry, CourseKeys.Dissolve))!.Via.Should().Be(MemberVia.Members, "she owns Poetry, with no end");
+        (await HoldOnAsync(campus, pia, data.Optics, CoursePermissions.Outline)).Should().BeNull();
+        (await HoldOnAsync(campus, pia, data.Optics, CoursePermissions.See)).Should().BeNull();
+        (await HoldOnAsync(campus, pia, data.Poetry, CoursePermissions.Dissolve))!.Via.Should().Be(MemberVia.Members, "she owns Poetry, with no end");
     }
 
-    private static Task<MemberHold<CourseId>?> HoldOnAsync(CampusApp campus, Asking asking, CourseId course, string key)
-        => campus.Services.CoursesAsync(asking.Person, asking.College, access => access.HoldAsync(course, key, Cancellation));
+    private static Task<MemberHold<CourseId>?> HoldOnAsync(CampusApp campus, Asking asking, CourseId course, string permission)
+        => campus.Services.CoursesAsync(asking.Person, asking.College, access => access.HoldAsync(course, permission, Cancellation));
 
-    private static Task<MemberHold<LabId>?> HoldInAsync(CampusApp campus, Asking asking, LabId lab, string key)
-        => campus.Services.LabsAsync(asking.Person, asking.College, access => access.HoldAsync(lab, key, Cancellation));
+    private static Task<MemberHold<LabId>?> HoldInAsync(CampusApp campus, Asking asking, LabId lab, string permission)
+        => campus.Services.LabsAsync(asking.Person, asking.College, access => access.HoldAsync(lab, permission, Cancellation));
 }

@@ -133,7 +133,7 @@ public class CallerRequirementTests
     public void There_is_one_way_to_spell_each_case()
     {
         // A request writes [SignedIn] or AccessRequirement.SignedIn(), never a constructor: nothing else makes one.
-        foreach (var each in new[] { typeof(AccessRequirement.Anyone), typeof(AccessRequirement.SignedInUser), typeof(AccessRequirement.Owned<Guid>), typeof(AccessRequirement.AllOf), typeof(AccessRequirement.AnyOf) })
+        foreach (var each in new[] { typeof(AccessRequirement.Anyone), typeof(AccessRequirement.SignedInUser), typeof(AccessRequirement.Owned<Guid>), typeof(AccessRequirement.OwnedAggregate<OwnedBoardId>), typeof(AccessRequirement.AllOf), typeof(AccessRequirement.AnyOf) })
         {
             each.IsSealed.Should().BeTrue();
             each.GetConstructors(BindingFlags.Instance | BindingFlags.Public).Should().BeEmpty("{0} is made by its method alone", each.Name);
@@ -145,13 +145,14 @@ public class CallerRequirementTests
         AccessRequirement.AllowAnonymous().Should().BeOfType<AccessRequirement.Anyone>();
         AccessRequirement.SignedIn().Should().BeOfType<AccessRequirement.SignedInUser>();
         AccessRequirement.Own(Guid.NewGuid()).Should().BeOfType<AccessRequirement.Owned<Guid>>();
+        AccessRequirement.OwnerOf(OwnedBoardId.Create()).Should().BeOfType<AccessRequirement.OwnedAggregate<OwnedBoardId>>();
         AccessRequirement.All(AccessRequirement.SignedIn()).Should().BeOfType<AccessRequirement.AllOf>();
         AccessRequirement.Any(AccessRequirement.SignedIn()).Should().BeOfType<AccessRequirement.AnyOf>();
         typeof(AccessRequirement).GetNestedTypes().Select(each => each.Name).Should().BeEquivalentTo(
-            ["Anyone", "SignedInUser", "Owned`1", "Combined", "AllOf", "AnyOf"],
-            "the core's cases are about who may send a request, or combine other cases; there is no case that says nothing, and system work is no case but a scope");
+            ["Anyone", "SignedInUser", "Owned`1", "OwnedAggregate`1", "Combined", "AllOf", "AnyOf"],
+            "the core's cases are about who may send a request, the owner of what it names among them, or combine other cases; there is no case that says nothing, and system work is no case but a scope");
         typeof(AccessRequirement).GetMethods(BindingFlags.Public | BindingFlags.Static).Where(method => !method.IsSpecialName).Select(method => method.Name)
-            .Should().BeEquivalentTo(["AllowAnonymous", "SignedIn", "Own", "All", "Any"], "the record's operators aside, a spelling for each case and none for system work");
+            .Should().BeEquivalentTo(["AllowAnonymous", "SignedIn", "Own", "OwnerOf", "All", "Any"], "the record's operators aside, a spelling for each case and none for system work");
     }
 
     [Fact]
@@ -162,10 +163,18 @@ public class CallerRequirementTests
         StatedBy(typeof(SignedInAttribute)).Should().Be((typeof(AccessRequirement), nameof(AccessRequirement.SignedIn)));
         typeof(AccessRequirement).GetMethod(nameof(AccessRequirement.AllowAnonymous))!.Invoke(null, null).Should().Be(AccessRequirement.AllowAnonymous());
 
-        foreach (var attribute in new[] { typeof(AllowAnonymousAttribute), typeof(SignedInAttribute), typeof(RequiresKeyAttribute) })
+        // A request carries each; the module's interface carries those that may be its default, and [AllowAnonymous]
+        // and [OwnOnly] never are: a forgotten requirement never opens a door, and a default reads no member.
+        foreach (var (attribute, validOn) in new[]
+                 {
+                     (typeof(AllowAnonymousAttribute), AttributeTargets.Class | AttributeTargets.Struct),
+                     (typeof(OwnOnlyAttribute), AttributeTargets.Class | AttributeTargets.Struct),
+                     (typeof(SignedInAttribute), AttributeTargets.Class | AttributeTargets.Struct | AttributeTargets.Interface),
+                     (typeof(RequiresPermissionAttribute), AttributeTargets.Class | AttributeTargets.Struct | AttributeTargets.Interface),
+                 })
         {
             var usage = attribute.GetCustomAttribute<AttributeUsageAttribute>()!;
-            usage.ValidOn.Should().Be(AttributeTargets.Class | AttributeTargets.Struct, "{0} goes on a request", attribute.Name);
+            usage.ValidOn.Should().Be(validOn, "{0} goes on a request, and on a module's interface only where it may be its default", attribute.Name);
             usage.Inherited.Should().BeFalse();
         }
 

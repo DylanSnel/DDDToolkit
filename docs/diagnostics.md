@@ -61,7 +61,6 @@ type looks annotated and behaves like a plain class. Every misuse below reports 
 | [DDD00060](#ddd00060) | Warning | A member class names an aggregate root whose members it is |
 | [DDD00061](#ddd00061) | Warning | A request that declares its access is sent, not handed to its handler |
 | [DDD00062](#ddd00062) | Error | A class of one GraphQL schema is one the toolkit alone registers |
-| [DDD00063](#ddd00063) | Error | A module's keys marked [TenancyPermissions] are a list the project that composes the modules can read |
 | [DDD00064](#ddd00064) | Warning | DDD_Module declares the module where the package's build step runs |
 | [DDD00065](#ddd00065) | Info | The class a package's use cases are named through is written where each of its templates has one class |
 | [DDD00066](#ddd00066) | Error | A package's switch writes a class or an id where its name is free and its id is known |
@@ -78,13 +77,28 @@ type looks annotated and behaves like a plain class. Every misuse below reports 
 | [DDD00077](#ddd00077) | Error | A request says what it requires of its caller |
 | [DDD00078](#ddd00078) | Error | A request says what it requires in one way |
 | [DDD00079](#ddd00079) | Error | [AllowAnonymous] goes with no other requirement attribute |
-| [DDD00080](#ddd00080) | Error | A marker on a request says where the key of its [RequiresKey] is held |
+| [DDD00080](#ddd00080) | Error | A marker on a request says where the permission of its [RequiresPermission] is held |
 | [DDD00081](#ddd00081) | Error | A marker is on a member of the id it marks |
 | [DDD00082](#ddd00082) | Error | A requirement for queries only is on a query |
 | [DDD00083](#ddd00083) | Error | A request's requirement attributes are read where its module's interface is partial |
 | [DDD00084](#ddd00084) | Warning | A requirement attribute beside another adds what that one does not require already |
-| [DDD00085](#ddd00085) | Error | [OrOwn] goes beside [RequiresKey], and [Own] with [OwnOnly] |
+| [DDD00085](#ddd00085) | Error | [OrOwn] goes beside [RequiresPermission], and [Own] with [OwnOnly] |
 | [DDD00086](#ddd00086) | Error | [OrOwn] and [Own] mark a member of a type something says the caller's own of |
+| [DDD00087](#ddd00087) | Error | [Owner] marks the one owner of an aggregate root |
+| [DDD00088](#ddd00088) | Error | [Owner] marks a property of a type the caller has an own of |
+| [DDD00089](#ddd00089) | Error | A module's default requirement is one any of its requests may take |
+| [DDD00090](#ddd00090) | Warning | The names of resources with members are those of the newest access file |
+| [DDD00091](#ddd00091) | Error | [Members] names a resource with what can be converted to a code and a function's name |
+| [DDD00092](#ddd00092) | Error | A permission is a public constant of a [Permissions] class, with a level |
+| [DDD00093](#ddd00093) | Error | A permission's level fits what it is asked on |
+| [DDD00094](#ddd00094) | Error | The rules of a resource are made from the permissions declared on it |
+| [DDD00095](#ddd00095) | Error | A module's permissions are declared in a [Permissions] class, not on a list of its own |
+| [DDD00096](#ddd00096) | Warning | [OrOwn] beside a permission the owner of the resource holds already says nothing more |
+| [DDD00097](#ddd00097) | Error | [At] marks the one place an aggregate root hangs at |
+| [DDD00098](#ddd00098) | Error | Rules that reach a resource from above read where it hangs from its [At] property |
+| [DDD00099](#ddd00099) | Warning | A permission says what it lets somebody do |
+| [DDD00100](#ddd00100) | Error | A restrictive rule narrows a table it can reach |
+| [DDD00101](#ddd00101) | Error | TenancyRowAccess.CallerSeat answers with the application's seat class |
 
 Most of these say the generator could not do what you asked. The rest are a different kind: they are
 rules about the model rather than about the declaration, and each of them names code that compiles,
@@ -117,11 +131,17 @@ enforces differently from the C# that states it, asks more often than it has to,
 is a message that reaches its handler with nothing having asked what it requires, and [DDD00077](#ddd00077) to
 [DDD00086](#ddd00086) about [what a request declares](access-requirements.md#what-a-request-declares), where it is a
 request that says nothing, reads as if it said one thing with its attributes and says another, or says a thing twice.
+[DDD00087](#ddd00087) and [DDD00088](#ddd00088) are about [the owner an aggregate marks](access-requirements.md#the-owner-of-an-aggregate),
+where it is a request about the owner's own that no row could ever let through.
 [DDD00059](#ddd00059) and [DDD00060](#ddd00060) are about the
 [member list of a resource](membership.md#the-member-list-is-written-for-you), and say what the generator of
 the Membership package could not tell, and which member class names the wrong resource.
-[DDD00063](#ddd00063) is about [a module's permission keys](tenancy.md#a-module-states-its-keys-once), where it
-is a module whose keys never reach the catalogue the host runs with.
+[DDD00092](#ddd00092) to [DDD00095](#ddd00095) are about [permissions declared once](membership.md#the-settings-of-a-permission),
+where it is a permission read as something it is not, said twice, or that never reaches the rules or the catalogue;
+[DDD00090](#ddd00090) and [DDD00091](#ddd00091) about [the names of resources with members](membership.md#names), where
+it is a code clients read or a function that changes with a class's name; and [DDD00096](#ddd00096) to
+[DDD00098](#ddd00098) about the owner and the place of a resource with members, where it is an attribute that adds
+nothing, or rules that read a place nobody said.
 [DDD00074](#ddd00074) is about [the migration history](entity-framework.md#the-migration-history), where it is a
 `dotnet ef database update` or an exported file that records the migrations in a table the application never reads.
 [DDD00075](#ddd00075) is about [two modules with Tenancy's classes](tenancy.md#two-modules-with-the-classes), where it is a name that
@@ -976,7 +996,7 @@ public partial record Address
 ```
 
 `[KeyPart]` puts a property into a primary key ahead of the identifier. Only an `[AggregateRoot<T>]`
-or an `[Entity<T>]` has an identifier and a key, so anywhere else the attribute would do nothing,
+or an `[Entity<T>]` has an identifier and a permission, so anywhere else the attribute would do nothing,
 silently. Remove it, or move the property to the entity that is keyed on it. See
 [Composite keys](composite-keys.md).
 
@@ -1028,7 +1048,7 @@ public partial class Project
 }
 ```
 
-Move them into one part of the class, in the order you want the key:
+Move them into one part of the class, in the order you want the permission:
 
 ```csharp
 public partial class Project
@@ -1040,7 +1060,7 @@ public partial class Project
 
 Key parts join the primary key in declaration order. Within one file that order is plain; between
 the files of a partial class there is none, only the order the compiler happens to read the files in,
-and a key whose column order could change with a file rename is not a key you want. Nothing is
+and a permission whose column order could change with a file rename is not a permission you want. Nothing is
 generated for the type until the key parts are together.
 
 ---
@@ -1259,11 +1279,11 @@ Nothing is generated until the rule has that shape, and a rule without SQL never
 The same holds, with a little more, for the others the generator reads:
 
 - **An `[AccessFunction]`** has a rule's shape, and may take more after the caller: `string`, `bool`, `int`,
-  `long`, `Guid` or an id, each a parameter of the SQL function after the key. A decimal, a list or a
-  nullable value type is not one. With `Shape = AccessFunctionShape.Set` its aggregate's key is one
-  column, because the function answers with the keys of the rows it allows.
+  `long`, `Guid` or an id, each a parameter of the SQL function after the permission. A decimal, a list or a
+  nullable value type is not one. With `Shape = AccessFunctionShape.Set` its aggregate's permission is one
+  column, because the function answers with the permissions of the rows it allows.
 - **An `[AccessFunctionContract]`** declares nothing, or one question for the generator to implement:
-  `static partial bool Allows(TKey key, ...)`, or `static partial AccessSet<TKey> Ids(...)`, which also needs
+  `static partial bool Allows(TKey permission, ...)`, or `static partial AccessSet<TKey> Ids(...)`, which also needs
   `Shape = AccessFunctionShape.Set` if the attribute names a shape.
 - **A `[ResourceAccessContract]`** is keyed by the id of the resource's aggregate, such as `ProjectId`, since
   the export finds the resource by the type of its id, and publishes `ResourceAccessSet.Seen` or `HeldOn`. The
@@ -1274,7 +1294,7 @@ The same holds, with a little more, for the others the generator reads:
   publishes the sets of its own resources: one of an id whose assembly declares another module is reported,
   and the other module's rules ask the contract the owner publishes. It declares nothing, or the `Ids` its set
   is asked with for the generator to implement: `static partial AccessSet<ProjectId> Ids()` for the resources
-  seen, `static partial AccessSet<ProjectId> Ids(string key)` for those a key is held on
+  seen, `static partial AccessSet<ProjectId> Ids(string permission)` for those a permission is held on
   ([a resource's access, asked by its id](row-level-security.md#a-resources-access-asked-by-its-id)).
 - **A question of an `[AccessFunctions]` class** is a `static partial` method without a body, in a
   `static partial` class: an `[AccessSet]` returns `AccessSet<T>`, an `[AccessScalar]` returns a value, and
@@ -2002,7 +2022,7 @@ that declares the requirement.
 public sealed partial class DocumentShare;
 
 [AggregateRoot<DocumentId>]
-public sealed partial class Document                    // DDD00059: two properties of UserId, and no codes
+public sealed partial class Document                    // DDD00059: no property marked [Owner]
 {
     public UserId OwnerId { get; private set; }
 
@@ -2020,9 +2040,9 @@ class's own id, and only when each can be told without a guess:
 | The list needs | It is | Not told when |
 |---|---|---|
 | the members | the one get-only `partial` property of `IReadOnlyList<TMember>`, `IReadOnlyCollection<TMember>` or `IEnumerable<TMember>`, which the toolkit keeps in a list | there is none, or there are two; a set is kept in a `HashSet` |
-| the owner | the one property of what a member is known by, the template's second type | there is none, or there are two |
+| the owner | the one property marked `[Owner]`, of what a member is known by, the template's second type | none is marked, two are, or the one marked is of another type |
 | a new row's id | the `Create()` of the member class's own id, which the generator writes for an `[EntityId<Guid>]` | the id is over something else, a `long` say, and declares no `Create()` |
-| the codes | the one static property or field of `MembershipCodes` on the resource | there is none, or there are two |
+| the codes | the one static property or field of `MembershipCodes` on the resource, or, where it declares none, the ones the generator writes under the resource's [name](membership.md#names) | there are two, or a member called `Codes` that is not one |
 
 It is also not written when the resource has a member called `Members` already, and when two member classes
 name the same resource and it keeps a collection of both, or of neither, since both lists would be called the
@@ -2038,9 +2058,9 @@ Say what is missing, and the list is written:
 [AggregateRoot<DocumentId>]
 public sealed partial class Document
 {
-    public static MembershipCodes Codes { get; } = MembershipCodes.Under("documents");
+    [Owner] public UserId OwnerId { get; private set; }
 
-    public UserId OwnerId { get; private set; }
+    public UserId WrittenBy { get; private set; }
 
     public partial IReadOnlyList<DocumentShare> Shares { get; }
 }
@@ -2202,47 +2222,6 @@ And when the attribute names no schema, and when the class is one the generated 
 generic class, a `file` class, or a class that is private or protected inside another. It is an error because each
 of these puts a field where it was meant not to be, or leaves it out where it was meant to be, without another
 word. See [A field for one schema only](graphql.md#a-field-for-one-schema-only).
-
-## DDD00063
-
-**A module's keys marked [TenancyPermissions] are a list the project that composes the modules can read.**
-
-```csharp
-[assembly: Module("Ordering")]
-
-public static class OrderingKeys
-{
-    [TenancyPermissions]
-    internal static IReadOnlyList<Permission> Permissions { get; } = [...];   // DDD00063: not public
-
-    [TenancyPermissions]
-    public static IReadOnlyList<string> Codes { get; } = [...];               // DDD00063: no sequence of Permission
-}
-```
-
-A module states its permission keys once, on the static list it marks with `[TenancyPermissions]`
-([A module states its keys once](tenancy.md#a-module-states-its-keys-once)). Tenancy's generator collects every
-marked list into the project that composes the modules, an application such as your host, whether it declares a
-module or not, or a library that declares none: `TenancyPermissionsOfModules.All`, and `services.AddTenancyPermissionsOfModules()`. It reads a list as
-`Type.Member`, from another project, so the list is:
-
-| The list is | Reported as |
-|---|---|
-| static | is not static |
-| readable: a field, or a property with a getter | has no getter |
-| no static virtual or abstract member of an interface | is a static virtual or abstract member of an interface |
-| declared in a class that is not generic, nor nested in one | is declared in the generic type |
-| declared in a type code can name: not in an extension block, nor in a file-local type | is declared in '...', which code cannot name; is declared in the file-local type |
-| of a type that is a sequence of `Permission`: `IReadOnlyList<Permission>`, `IEnumerable<Permission>`, an array | is of type ..., which is no sequence of Permission |
-| public, in public types, when its project is a library, whether it declares a module or not | is not public, and its project is a library |
-| readable outside its own type, in an application: not private or protected | cannot be read outside the type it is declared in |
-
-A list the composing project cannot read is left out of what it collects, and nothing else would say so: the
-module's keys would be missing from the catalogue the host runs with, and the first question about one of them
-would throw. That is why it is an error, reported where the list is declared. A library is public about it even
-when it declares no module, as a project of shared code does: the host references it all the same. Only an
-application, the program itself, may keep a list of its own internal: it collects that list itself, and no
-other project composes from it.
 
 ## DDD00064
 
@@ -2478,10 +2457,10 @@ references:
 
 ```csharp
 // In the module's infrastructure project
-[assembly: RowAccessContribution(typeof(UnitChangesWithItsKeys))]
+[assembly: RowAccessContribution(typeof(UnitChangesWithItsPermissions))]
 
 // In the project that runs the export: without this line, DDD00069
-[assembly: UseRowAccessContribution(typeof(UnitChangesWithItsKeys))]
+[assembly: UseRowAccessContribution(typeof(UnitChangesWithItsPermissions))]
 ```
 
 A module that writes SQL of its own, a trigger or a policy, declares its class with
@@ -2520,8 +2499,7 @@ would be written from the default catalogue rather than yours, or a resource's f
 project could not say why. Make the member public, in public types, with a public getter.
 
 An application, the program that runs the export or the host, may keep its own marks internal: nothing
-references it for them. A list of keys marked `[TenancyPermissions]` is held to the same by
-[DDD00063](#ddd00063).
+references it for them.
 
 ## DDD00071
 
@@ -2550,7 +2528,7 @@ reads them in the project that runs the export, so a marked member is:
 | What | Why |
 |---|---|
 | marked once in all the projects the export sees, or once per type for a generic mark | the build cannot tell which of two your application runs with, and writes neither rather than guess |
-| of a type the package takes: an `ApplicationCatalogue` for `[TenancyCatalogue]`, not the catalogue built from it | the package builds it, from your part and your modules' keys, as your registration does |
+| of a type the package takes: an `ApplicationCatalogue` for `[TenancyCatalogue]`, not the catalogue built from it | the package builds it, from your part and your modules' permissions, as your registration does |
 | static, with a getter, in a type that is not generic | the code the build writes reads it as `Type.Member` |
 | readable from the exporting project | the code the build writes is in that project |
 
@@ -2607,7 +2585,7 @@ Reported in the project that turns the Supabase export on (`<SupabaseMigrationsE
 
 ```csharp
 [assembly: LeaveOutRowAccessContribution(typeof(AuditRowAccess), Context = typeof(string))]   // DDD00073: no context
-[assembly: LeaveOutRowAccessContribution(typeof(UnitChangesWithItsKeys))]                       // DDD00073: a module's own
+[assembly: LeaveOutRowAccessContribution(typeof(UnitChangesWithItsPermissions))]                       // DDD00073: a module's own
 ```
 
 The line keeps a package's SQL out of your migrations, or with `Context` out of one context's access file. It
@@ -2757,7 +2735,7 @@ public sealed record CloseInvoice(InvoiceId Invoice) : IBillingRequest;   // DDD
 ```
 
 Every command and query says who may send it, and the module's checks hold the caller to that before the handler
-runs: with an attribute, `[SignedIn]` or `[RequiresKey(key)]` with a marker of where the key is held, or by answering
+runs: with an attribute, `[SignedIn]` or `[RequiresPermission(permission)]` with a marker of where the permission is held, or by answering
 `RequiredAccess` itself where the requirement is computed
 ([What a request declares](access-requirements.md#what-a-request-declares)). Where the module's interface is
 `partial`, the generator implements `RequiredAccess` in it, so the compiler no longer asks a request for the
@@ -2765,13 +2743,19 @@ property, and a request that says neither is reported here instead: sent, it wou
 exception that says it declares nothing. A request anyone may send says `[AllowAnonymous]`.
 
 ```csharp
-[RequiresKey(BillingKeys.Close)]
+[RequiresPermission(BillingPermissions.Close)]
 public sealed record CloseInvoice(InvoiceId Invoice) : IBillingRequest;
 ```
 
 A request of a project other than its interface's is reported too: the line written into the interface where it is
 declared knows only that project's requests, so this one answers `RequiredAccess` itself. An abstract request is not
 reported; what derives from it is. Where the interface is not `partial`, the compiler's own CS0535 says the same.
+
+A module whose requests nearly all require the same says it once, on its interface: `[AccessRequests, InTenant]`.
+A request of it that states nothing then takes that default, on a line of its own in the generated switch, and is
+not reported; nor is one of another project, which the interface's last arm answers with the default
+([A module's default](access-requirements.md#a-modules-default)). That is the module's choice, and its price: a
+command of it that forgets its `[RequiresPermission]` requires what the default says, and the build says nothing of it.
 
 ## DDD00078
 
@@ -2796,7 +2780,7 @@ say: C# takes that default over the module's, so the message says the request an
 **`[AllowAnonymous]` goes with no other requirement attribute.**
 
 ```csharp
-[AllowAnonymous, RequiresKey(BillingKeys.Close)]                   // DDD00079: open beside closed
+[AllowAnonymous, RequiresPermission(BillingPermissions.Close)]                   // DDD00079: open beside closed
 public sealed record CloseInvoice(InvoiceId Invoice) : IBillingRequest;
 ```
 
@@ -2804,7 +2788,7 @@ Requirement attributes stacked on one request all hold, as several `[Authorize]`
 ([Stacked attributes are all](access-requirements.md#stacked-attributes-are-all)). `[AllowAnonymous]` says that
 anyone may send the request, a caller who did not sign in too, so beside a requirement that says who may it
 contradicts it: read one way the door is open, read the other it is closed, and a review cannot tell which was meant.
-It is an error beside any other requirement attribute, `[RequiresKey]` and `[OwnOnly]` included, and no line is
+It is an error beside any other requirement attribute, `[RequiresPermission]` and `[OwnOnly]` included, and no line is
 written. Keep the one the request requires; a request anyone may send says `[AllowAnonymous]` alone. A request holds
 to the attributes of the requests it derives from as well, theirs first, so `[AllowAnonymous]` on a request that
 derives from one carrying `[SignedIn]` is the same contradiction, and is reported at the derived request, naming the
@@ -2815,41 +2799,43 @@ already requires is [DDD00084](#ddd00084), a warning.
 
 ## DDD00080
 
-**A marker on a request says where the key of its `[RequiresKey]` is held.**
+**A marker on a request says where the permission of its `[RequiresPermission]` is held.**
 
 ```csharp
 [InTenant]
-public sealed record OpenLedger([AtUnit] OrganizationUnitId Unit) : IBillingRequest;                  // DDD00080: no key to hold there
+public sealed record OpenLedger([AtUnit] OrganizationUnitId Unit) : IBillingRequest;                  // DDD00080: no permission to hold there
 
-[RequiresKey(BillingKeys.Move)]
+[RequiresPermission(BillingPermissions.Move)]
 public sealed record MoveLedger([AtUnit] OrganizationUnitId From, [OnResource] LedgerId Ledger) : IBillingRequest;   // DDD00080: two places
 ```
 
-`[RequiresKey(key)]` says the key, and one marker on one of the request's members says where it is held: none for
+`[RequiresPermission(permission)]` says the permission, and one marker on one of the request's members says where it is held: none for
 the whole tenant, `[AtUnit]` at that unit or above it, `[OnResource]` on that resource through its members, with
 `[ExpectedVersion]` beside `[OnResource]` for the version the caller read
-([Where the key is held](access-requirements.md#where-the-key-is-held)). Reported, at the marker or the request:
+([Where the permission is held](access-requirements.md#where-the-permission-is-held)). Reported, at the marker or the request:
 
 | It | Because |
 |---|---|
-| marks a member, and requires no key | a marker says where the key of `[RequiresKey]` is held |
-| marks where its key is held twice, or `[AtUnit]` with `[OnResource]` | a key is held in one place; one or the other, depending on the request, is computed as `RequiredAccess` |
+| marks a member, and requires no permission | a marker says where the permission of `[RequiresPermission]` is held |
+| marks where its permission is held twice, or `[AtUnit]` with `[OnResource]` | a permission is held in one place; one or the other, depending on the request, is computed as `RequiredAccess` |
 | marks `[ExpectedVersion]` and no member `[OnResource]` | the version is of the resource it goes with |
 | marks one argument twice, two `[ExpectedVersion]` | the call takes it once |
 | marks a parameter of a class's primary constructor | it is no member the requirement reads: mark the property; a positional record's parameter is its property, and is fine |
 | marks a private or protected property | the requirement is read in the module's interface, which needs a public or internal getter |
-| requires a key and marks nothing, where no package says where such a key is held | Tenancy says it for the whole tenant, `[assembly: KeyWithoutMarker]`; a project with Membership alone, or two such packages, asks for a marker |
-| requires two keys, its own `[RequiresKey]` and one of a request it derives from | the attributes of a request and of its base all hold, and one marker says where for one key; two keys are `AccessRequirement.All` of the two, as `RequiredAccess` |
+| requires a permission and marks nothing, where no package says where such a permission is held | Tenancy says it for the whole tenant, `[assembly: PermissionWithoutMarker]`; a project with Membership alone, or two such packages, asks for a marker |
+| requires two permissions, its own `[RequiresPermission]` and one of a request it derives from | the attributes of a request and of its base all hold, and one marker says where for one permission; two permissions are `AccessRequirement.All` of the two, as `RequiredAccess` |
+| is a module's interface whose default is `[RequiresPermission(permission)]`, where no package says where a permission without a marker is held | a default reads no member of a request, so its permission is one without a marker |
+| marks a member, requires no permission of its own, and its module's default is a permission | the default's permission reads no member of a request: a marker goes with the request's own `[RequiresPermission]` |
 
 An abstract request is a shape the requests that derive from it share, a record that carries the unit say, so it is
-not reported for a marker without a key: each request that derives from it says its key, and one that does not is
+not reported for a marker without a permission: each request that derives from it says its permission, and one that does not is
 reported where it is declared, for the marker it inherits. A record's positional parameter is the property a record
 it derives from declares, where that one has it, so `[AtUnit]` goes on the derived record's parameter as well:
 
 ```csharp
 public abstract record UnitCommand(OrganizationUnitId Unit) : IBillingRequest;
 
-[RequiresKey(BillingKeys.OpenLedger)]
+[RequiresPermission(BillingPermissions.OpenLedger)]
 public sealed record OpenLedger([AtUnit] OrganizationUnitId Unit) : UnitCommand(Unit);
 ```
 
@@ -2858,10 +2844,10 @@ public sealed record OpenLedger([AtUnit] OrganizationUnitId Unit) : UnitCommand(
 **A marker is on a member of the id it marks.**
 
 ```csharp
-[RequiresKey(TenancyKeys.SeatsManage)]
+[RequiresPermission(TenancyPermissions.SeatsManage)]
 public sealed record MakePlacement(SeatId Seat, [AtUnit] SeatId Unit) : ITenantsRequest;           // DDD00081: a seat's id, no unit's
 
-[RequiresKey(BillingKeys.Read)]
+[RequiresPermission(BillingPermissions.Read)]
 public sealed record ListLedgers([AtUnit] OrganizationUnitId? Unit) : IBillingRequest;              // DDD00081: may be null
 ```
 
@@ -2869,10 +2855,10 @@ The call a marker stands for takes any id, so a unit marked on a seat's id compi
 package's check stops a case over an id it does not decide. `[AtUnit]` marks your unit id, the one your class
 declared with `[OrganizationUnit<TUnitId>]` is declared over, and `[OnResource]` the id of a resource with members,
 the aggregate root a class declared with `[Member<TId, TMemberId, TRoleId, TResource>]` names; the package says which
-with `[KeyMarker(..., IdOf = ...)]`. It is reported where the project sees such classes, as a module's application
+with `[PermissionMarker(..., IdOf = ...)]`. It is reported where the project sees such classes, as a module's application
 project sees its domain's; where it sees none, nothing can be told, and the check says so when the request is sent. A
 member that may be null is a requirement computed from whether it is given, written as `RequiredAccess`:
-`Unit is { } unit ? TenancyAccess.AtUnit(key, unit) : TenancyAccess.ForTheWholeTenant(key)`. `[ExpectedVersion]` marks
+`Unit is { } unit ? TenancyAccess.AtUnit(permission, unit) : TenancyAccess.AtTenant(permission)`. `[ExpectedVersion]` marks
 a member of the type the call takes there, a `long?` or a `long`.
 
 ## DDD00082
@@ -2880,14 +2866,14 @@ a member of the type the call takes there, a `long?` or a `long`.
 **A requirement for queries only is on a query.**
 
 ```csharp
-[SeenWith<DocumentId>(DocumentKeys.View)]
+[SeenWith<DocumentId>(DocumentPermissions.View)]
 public sealed record ArchiveDocuments : ICommand, IDocumentsRequest;                                // DDD00082
 ```
 
-Membership's `[SeenWith<TResourceId>(key)]` refuses nobody for want of the key: it lets a signed-in caller through,
+Membership's `[SeenWith<TResourceId>(permission)]` refuses nobody for want of the permission: it lets a signed-in caller through,
 one that holds nothing too, and says what the query's own statement filters by, which is the check. On a command
 the handler would run unchecked. Tenancy's `[RequiresOperator]` lets through an operator, who holds no seat and no
-key and changes nothing itself. Their packages declare them for queries only, `[StatesRequirement(..., QueriesOnly
+permission and changes nothing itself. Their packages declare them for queries only, `[StatesRequirement(..., QueriesOnly
 = true)]`, and a message of the Mediator library that is no query and carries one is reported: a command, `ICommand`
 or `IStreamCommand`, and a plain `IRequest` or `IStreamRequest`, which may change as much as a command does. What
 to do instead:
@@ -2895,7 +2881,7 @@ to do instead:
 | The request | Instead |
 |---|---|
 | only reads | make it a query, `IQuery` or `IStreamQuery` |
-| changes something, `[SeenWith]` on it | require the key where it acts, `[RequiresKey(key)]` with `[OnResource]` on the resource |
+| changes something, `[SeenWith]` on it | require the permission where it acts, `[RequiresPermission(permission)]` with `[OnResource]` on the resource |
 | carries out what an operator asks, `[RequiresOperator]` on it | let trusted code carry it out as system work that names the operator, `TenancyUseCases.BeginOperatorIn(tenant, identity)`, behind a requirement of the module's own ([Operators](tenancy.md#operators)) |
 
 A request of another dispatcher, which the generator cannot tell for a command or a query, is not reported, and
@@ -2928,13 +2914,19 @@ to change:
 | is nested private in another type | make it internal, or answer `RequiredAccess`: the interface cannot name it |
 | implements two module interfaces that are both `partial` | answer `RequiredAccess`, or implement one of them: each implements the property, and C# takes neither (its CS8705) |
 
+A requirement attribute on an interface, the default of a module's requests
+([A module's default](access-requirements.md#a-modules-default)), is read the same way: on the module's interface,
+marked `[AccessRequests]` and `partial`. On one that is not `partial` it is reported at the interface, with the line to
+write. On any other interface, one between the module's and its requests say, nothing reads it either: such an
+interface answers `RequiredAccess` itself where its requests share a requirement, and C# takes that over the module's.
+
 ## DDD00084
 
 **A requirement attribute beside another adds what that one does not require already.** A warning.
 
 ```csharp
-[InTenant]                                                          // DDD00084: the key requires it already
-[RequiresKey(BillingKeys.Close)]
+[InTenant]                                                          // DDD00084: the permission requires it already
+[RequiresPermission(BillingPermissions.Close)]
 public sealed record CloseTheBooks(int Year) : IBillingRequest;
 
 [SignedIn, RequiresOperator]                                        // DDD00084: an operator is signed in
@@ -2945,62 +2937,68 @@ public sealed record CloseAccount([Own] Guid User) : IAccountsRequest;
 ```
 
 Stacked attributes all hold, so one its neighbour already requires says nothing more: only a seat in the tenant or
-system work there holds a key of Tenancy's, with or without `[AtUnit]`, and `[RequiresOperator]` lets only a signed-in
+system work there holds a permission of Tenancy's, with or without `[AtUnit]`, and `[RequiresOperator]` lets only a signed-in
 user with an operator's token role through. It checks nothing wrong, and the line is written; a reader takes it for a
 second condition and looks for what it adds, so take it off. What a requirement already requires its package says
-with `Implies` on its mark, `[StatesRequirement]`, `[KeyMarker]` or `[KeyWithoutMarker]`, so a module's own
+with `Implies` on its mark, `[StatesRequirement]`, `[PermissionMarker]` or `[PermissionWithoutMarker]`, so a module's own
 attribute is held to it the same way. What the caller's own requires, the package of its type says with `Implies` on
 `[assembly: CallersOwn]`: a `Guid` is a signed-in user's identity, `[SignedIn]`, and Tenancy's seat id is a seat in
 the tenant, `[InTenant]` and `[SignedIn]`. Beside `[OwnOnly]` with `[Own]` on such a member, they are reported; beside a
-key with `[OrOwn]`, only what both the key and the caller's own require is. An attribute that a request the request
-derives from carries already is reported too, since the base's attributes hold for it as well. Reported and not:
+permission with `[OrOwn]`, only what both the permission and the caller's own require is. An attribute that a request the request
+derives from carries already is reported too, since the base's attributes hold for it as well. So are a request's
+own attributes that say what its module's default says, call for call: without them the request takes the default,
+and requires the same ([A module's default](access-requirements.md#a-modules-default)). Reported and not:
 
 | Beside | Reported | Because |
 |---|---|---|
-| `[SignedIn]` beside `[RequiresKey]` | no | system work holds every key and is nobody's sign-in, so the two say more than the key alone |
-| `[InTenant]` beside `[RequiresKey]` with `[OrOwn]` on the seat id | yes | either way through the caller is in the tenant: its own seat, or a key of Tenancy's |
-| `[InTenant]` beside `[RequiresKey]` with `[OrOwn]` on a `Guid` | no | a caller's verified identity is no seat, so the caller's own way says nothing of the tenant |
-| `[SignedIn]` beside `[RequiresKey]` with `[OrOwn]` on the seat id | no | system work holds the key and is nobody's sign-in |
-| `[InTenant]` on `CloseTheBooks : Closing`, where `Closing` is `[RequiresKey(key)]` | yes | the base's key holds for it as well |
+| `[SignedIn]` beside `[RequiresPermission]` | no | system work holds every permission and is nobody's sign-in, so the two say more than the permission alone |
+| `[InTenant]` beside `[RequiresPermission]` with `[OrOwn]` on the seat id | yes | either way through the caller is in the tenant: its own seat, or a permission of Tenancy's |
+| `[InTenant]` beside `[RequiresPermission]` with `[OrOwn]` on a `Guid` | no | a caller's verified identity is no seat, so the caller's own way says nothing of the tenant |
+| `[SignedIn]` beside `[RequiresPermission]` with `[OrOwn]` on the seat id | no | system work holds the permission and is nobody's sign-in |
+| `[InTenant]` on `CloseTheBooks : Closing`, where `Closing` is `[RequiresPermission(permission)]` | yes | the base's permission holds for it as well |
+| `[InTenant]` on a sealed request of a module whose default is `[InTenant]` | yes | without it the request takes the default, which is the same |
+| `[SignedIn, InTenant]` on a request of a module whose default is `[InTenant]` | no | it says more than the default: a signed-in user, in the tenant |
+| `[InTenant]` on a request another derives from, in that module | no | the request that derives from it holds to its attribute beside its own, and would require less without it |
+| `[InTenant]` beside `[RequiresPermission(permission)]` on the module's interface | yes | as on a request: the permission of the default requires it already |
 
 ## DDD00085
 
-**`[OrOwn]` goes beside `[RequiresKey]`, and `[Own]` with `[OwnOnly]`.**
+**`[OrOwn]` goes beside `[RequiresPermission]`, and `[Own]` with `[OwnOnly]`.**
 
 ```csharp
 [InTenant]
-public sealed record RenameSeat([OrOwn] SeatId Seat) : ITenantsRequest;                              // DDD00085: no key to be the alternative of
+public sealed record RenameSeat([OrOwn] SeatId Seat) : ITenantsRequest;                              // DDD00085: no permission to be the alternative of
 
-[RequiresKey(TenancyKeys.SeatsManage)]
+[RequiresPermission(TenancyPermissions.SeatsManage)]
 public sealed record MoveSeat([OrOwn] SeatId Seat, [AtUnit] OrganizationUnitId To) : ITenantsRequest;   // DDD00085: beside [AtUnit]
 ```
 
-A request about the caller's own says it one of two ways ([Yours, or the key](access-requirements.md#yours-or-the-key)):
-`[OrOwn]` on the member, beside `[RequiresKey(key)]`, for the caller's own or the key, and `[Own]` on the member, with
+A request about the caller's own says it one of two ways ([Yours, or the permission](access-requirements.md#yours-or-the-permission)):
+`[OrOwn]` on the member, beside `[RequiresPermission(permission)]`, for the caller's own or the permission, and `[Own]` on the member, with
 `[OwnOnly]` on the request, for the caller's own alone. Reported, at the marker or the request:
 
 | It | Because |
 |---|---|
-| marks `[OrOwn]`, and requires no key | `[OrOwn]` makes the caller's own the alternative of the key; for the caller's own alone, `[OwnOnly]` with `[Own]` |
+| marks `[OrOwn]`, and requires no permission | `[OrOwn]` makes the caller's own the alternative of the permission; for the caller's own alone, `[OwnOnly]` with `[Own]` |
 | marks `[Own]`, and is not `[OwnOnly]` | `[Own]` names the value of a request about the caller's own alone |
 | carries `[OwnOnly]`, and marks no member `[Own]` | it names no value to compare with the caller's |
-| marks one member `[Own]` and `[OrOwn]` | one says the caller's own alone, the other the caller's own or the key |
+| marks one member `[Own]` and `[OrOwn]` | one says the caller's own alone, the other the caller's own or the permission |
 | marks two members `[OrOwn]`, or two `[Own]` | the caller's own is one value; a request about one of two computes its requirement as `RequiredAccess` |
-| marks `[OrOwn]` beside `[AtUnit]` | the unit says where the key is checked, not what the request acts on: a caller would send a unit where it holds the key for another person's seat, and a key held at one unit would act on a seat anywhere |
+| marks `[OrOwn]` beside `[AtUnit]` | the unit says where the permission is checked, not what the request acts on: a caller would send a unit where it holds the permission for another person's seat, and a permission held at one unit would act on a seat anywhere |
 | marks a parameter of a class's primary constructor, or a private property | the line is written in the module's interface, which reads a property with a public or internal getter |
 
 `[OrOwn]` beside `[OnResource]` is fine: the resource is what the request acts on, as Membership says with
-`OwnAlternative` on its `[KeyMarker]`, which names the case the caller's own way through still meets there,
+`OwnAlternative` on its `[PermissionMarker]`, which names the case the caller's own way through still meets there,
 `MemberAccess.Sees`: the caller sees the resource, and the check reads it, compares its version and keeps its hold
 ([The caller's own on a resource](access-requirements.md#the-callers-own-on-a-resource)). A package's marker of where
-a key is checked whatever the request acts on names none, and `[OrOwn]` beside it is reported the same way.
+a permission is checked whatever the request acts on names none, and `[OrOwn]` beside it is reported the same way.
 
 ## DDD00086
 
 **`[OrOwn]` and `[Own]` mark a member of a type something says the caller's own of.**
 
 ```csharp
-[RequiresKey(ProfileKeys.Edit)]
+[RequiresPermission(ProfilePermissions.Edit)]
 public sealed record EditProfile([OrOwn] UserId User) : IProfilesRequest;                          // DDD00086: nothing says the caller's own UserId
 
 [OwnOnly]
@@ -3030,6 +3028,367 @@ requirement computed from whether it is given is written as `RequiredAccess`. An
 compared with the caller's, a struct that is `IEquatable` of itself, such as a `Guid` or an id declared with
 `[EntityId]`: a member that is a `string`, a class or an enum has no own whatever the project sees, and is reported
 always, `[OrOwn] string Name` say.
+
+The id of an aggregate root that marks its owner `[Owner]` is no case of it, though nothing says the caller's own of
+the id: `[Own] BoardId Board` there is about the board's owner, and the line is `AccessRequirement.OwnerOf(request.Board)`
+([The owner of an aggregate](access-requirements.md#the-owner-of-an-aggregate)). The id of an aggregate that marks
+none is reported as above, and the message says where the owner would be marked. Where something does say the
+caller's own of the id itself, its own handle wins, and the owner is not read.
+
+## DDD00087
+
+**`[Owner]` marks the one owner of an aggregate root.**
+
+```csharp
+[Entity<ColumnId>]
+public sealed partial class Column
+{
+    [Owner] public UserId Keeper { get; private set; }                       // DDD00087: an entity inside an aggregate
+}
+
+[AggregateRoot<BoardId>]
+public sealed partial class Board
+{
+    [Owner] public UserId Owner { get; private set; }
+
+    [Owner] public UserId CoOwner { get; private set; }                      // DDD00087: an aggregate has one owner
+}
+```
+
+The aggregate says who owns it, a fact about what it is, and a request about the owner's own names it by its id: the
+check reads the owner's column of the one row the id names, as the caller
+([The owner of an aggregate](access-requirements.md#the-owner-of-an-aggregate)). So `[Owner]` goes on an instance
+property of the aggregate root itself, once. Reported where the property is declared:
+
+| It is on | Because |
+|---|---|
+| an entity inside an aggregate | a request names the root by the root's id, and the check reads the root's row |
+| a type that is no aggregate root | no request names it by an id whose row the check reads |
+| a static property | the owner is a column of each row |
+| a second property of one aggregate | an aggregate has one owner; several owners are members, a resource with members, which [Membership](membership.md) keeps |
+
+The first of two in the order they are written is the one, and the second is reported. And at a request: an id the
+project sees as the id of two aggregate roots that each mark an owner cannot say which aggregate the request is about,
+so give each aggregate an id of its own.
+
+## DDD00088
+
+**`[Owner]` marks a property of a type the caller has an own of.**
+
+```csharp
+[AggregateRoot<BoardId>]
+public sealed partial class Board
+{
+    [Owner] public string Owner { get; private set; }                        // DDD00088: a string has no own
+}
+
+[OwnOnly]
+public sealed record ArchiveBoard([Own] BoardId Board) : IBoardsRequest;     // DDD00088: nothing says what the caller's own UserId is
+```
+
+The check compares the owner the row holds with the caller's own of the same type, as [DDD00086](#ddd00086) compares
+a value the request names: a `Guid`, the caller's verified identity; your seat id, the caller's seat, of Tenancy's; or
+a kind of your own, with a small `ICallersOwn<TValue>` beside your requests, which the host registers with
+`services.AddCallersOwn<UserId, CallersUser>()`. An owner that may be null is fine: a row whose owner is null is
+nobody's, and nobody comes through as its owner.
+
+A `string`, a class or an enum can never be compared, whatever a project sees, so it is reported where the property is
+declared. Whether something says the caller's own of the owner's type is told where the requests are, since your
+handle is declared beside them and the domain does not see it: a request that names the aggregate is reported there,
+at its marker, where the project can tell that nothing does, and no line is written for it. Where a package names the
+owner's type by a template whose classes the project does not see, nothing can be told, and the check says so when
+the request is sent.
+
+## DDD00089
+
+**A module's default requirement is one any of its requests may take.**
+
+```csharp
+[AccessRequests, AllowAnonymous]                                    // DDD00089: a forgotten requirement would open the door
+public partial interface IBillingRequest : IRequireAccess;
+
+[AccessRequests, RequiresOperator]                                  // DDD00089: a command that says nothing would take it
+public partial interface IOperationsRequest : IRequireAccess;
+```
+
+A requirement attribute on a module's interface is the default of its requests: one that states nothing of its own
+takes it, on a line of its own in the generated switch ([A module's default](access-requirements.md#a-modules-default)).
+So every request that forgets its requirement takes the default, a command that forgets its permission included, and a
+default is a requirement any of them may take. Reported, at the attribute:
+
+| On the interface | Because | Instead |
+|---|---|---|
+| `[AllowAnonymous]` | a request that forgot what it requires would let anyone in, and a forgotten requirement never opens a door | `[AllowAnonymous]` on each request anyone may send, where a review reads it |
+| `[RequiresOperator]`, `[SeenWith<TResourceId>(permission)]`, any attribute its package declares for queries only | a command of the module that says nothing would take it, where it holds the caller to nothing the command changes ([DDD00082](#ddd00082)) | the attribute on each query |
+| `[OwnOnly]` | it reads the member of a request marked `[Own]`, and a default reads no member | `[OwnOnly]` on each request about the caller's own |
+| an attribute whose class's `AttributeUsage` leaves out interfaces | it is declared for a request alone, which the compiler says as well (CS0592) | `AttributeTargets.Interface` in its class's `AttributeUsage`, where it may be a default |
+
+A refused default is no default: the interface's last arm stops a request that states nothing, as without one. The
+attributes a package ships that may be a default allow an interface already: `[SignedIn]`, `[InTenant]`, and
+`[RequiresPermission(permission)]`, whose permission is then held for the whole tenant, since a default reads no member and has no marker.
+
+## DDD00090
+
+**The names of resources with members are those of the newest access file.**
+
+```text
+warning DDD00090: Membership names changed since the last access file. Gone: boards (was Board). New: whiteboards
+(Whiteboard). Codes clients read change with them, and the database gets new functions. A class you renamed keeps
+its old name with [Members("...")].
+```
+
+A resource with members is [named after its class](membership.md#names), and the name is what its codes start with,
+`boards.already-member`, and what its five functions in the database are named after, `boards_i_see`. Renaming the
+class renames both: a client that branches on a code reads another one, and the next access file writes new
+functions and drops the old. The Supabase export the build runs compares the names of the resources it writes with
+those the newest access file of each module recorded, with the class each came from, and says once, in that build,
+which are gone and which are new. It does not guess which became which.
+
+A class renamed on purpose that should keep its name says so, `[Members("Boards")]`; one that should take the new
+name needs nothing more, and the warning is not given again once the new access file is there. Without the export,
+`SupabaseMigrationsExport` unset, nothing compares the names, and no warning is given.
+
+## DDD00091
+
+**[Members] names a resource with what can be converted to a code and a function's name.**
+
+```csharp
+[Members("Crane boards")]                              // DDD00091: a space
+[AggregateRoot<BoardId>]
+public sealed partial class Board;
+```
+
+What `[Members]` says is written in two forms, as a class's name is: in lower case with a dash between words for
+the resource's codes, `crane-boards.already-member`, and with an underscore for its functions, `crane_boards_i_see`.
+It is converted the way a class's name is, PascalCase split into words, and taken as it is, not made plural. Write
+it as a class's name, `CraneBoards`, or as it comes out, `crane-boards`: letters and digits, with `-` or `_`
+between words, starting with a letter. A space, another symbol, a digit or a separator first, or a separator last
+cannot be converted, and nothing of the resource is written: its rules, `MembershipRules.For<Board>`, do not
+compile until the name is put right ([Names](membership.md#names)).
+
+## DDD00092
+
+**A permission is a public constant of a [Permissions] class, with a level.**
+
+```csharp
+[Permissions]
+public class BoardPermissions                                          // DDD00092: not static
+{
+    public const string View = "boards.view";                          // DDD00092: no level
+
+    [On<Board>] internal const string Edit = "boards.edit";            // DDD00092: no public const string
+
+    [On<Board>] public const string Comment = "boards.view";           // DDD00092: 'View' declares it already
+}
+
+public static class BoardPermissions
+{
+    [AtTenant] public const string Manage = "boards.manage";           // DDD00092: the class is not marked [Permissions]
+}
+```
+
+A module declares its permissions in a static class marked `[Permissions]`: every public `const string` of it is a
+permission, which a request names in `[RequiresPermission]` and a role gives, and each carries its **level**, the
+attribute that says where it is asked: Tenancy's `[AtTenant]` or `[AtUnit]`, or Membership's `[On<TResource>]`
+([The settings of a permission](membership.md#the-settings-of-a-permission),
+[A module states its permissions once](tenancy.md#a-module-states-its-permissions-once)). The packages' generators read the class
+and nothing else, so each of these would be read as something it is not, or not at all:
+
+| Reported | Because |
+|---|---|
+| a class marked `[Permissions]` that is not static | it holds constants and nothing else |
+| a public `const string` of such a class without a level | nobody could tell where it is asked, so no catalogue and no rules would hold it |
+| a level on a field that is no public `const string` | a request names a permission by its constant, from another module too |
+| a level on a constant of a class not marked `[Permissions]` | nothing reads that class |
+| one permission declared twice in one class | a permission is declared once; the second constant is the slip |
+
+## DDD00093
+
+**A permission's level fits what it is asked on.**
+
+```csharp
+[Permissions]
+public static class BoardPermissions
+{
+    [On<Column>] public const string Move = "columns.move";                   // DDD00093: no member class names Column
+
+    [On<Board>(EveryMember = true)] public const string View = "boards.view";
+    [On<Board>(EveryMember = true)] public const string Read = "boards.read";  // DDD00093: one permission every member holds
+}
+```
+
+`[On<TResource>]` says a permission is asked on one resource with members, and how it is held there. `TResource` is
+the aggregate root a member class names, `[Member<TId, TMemberId, TRoleId, TResource>]`: on another class the
+permission would be asked on something that has no members, and its rules could not be made. Of the permissions on
+one resource, one at most is held by every member (`EveryMember`), since that is also the one that sees the resource
+from above; one at most locks the members (`LocksMembers`) and one at most locks the owner (`LocksOwner`), since
+each is the one permission the database's lock asks for. A permission declared on one resource by two constants is reported as
+well. Each is said where it is declared, among the permissions the project sees.
+
+## DDD00094
+
+**The rules of a resource are made from the permissions declared on it.**
+
+```csharp
+public static MembershipRules Rules { get; } = MembershipRules.For<Board>(   // DDD00094: no permission on Board
+    Roles.Custom());
+```
+
+`MembershipRules.For<TResource>` makes the rules of a resource from the permissions declared on it: the constants of
+a `[Permissions]` class marked `[On<TResource>]`, in the project that makes the rules or in a project it references,
+which the package's generator hands over when the project is first used. Rules without a permission give the owner
+nothing and every role nothing, and the call would throw when the rules are made, so it is said where they are
+made. Declare the permissions asked on the resource:
+[The settings of a permission](membership.md#the-settings-of-a-permission).
+
+## DDD00095
+
+**A module's permissions are declared in a [Permissions] class, not on a list of its own.**
+
+```csharp
+public static class OrderingList
+{
+    [TenancyPermissions]                                                       // DDD00095
+    public static IReadOnlyList<Permission> Permissions { get; } = [new("orders.view", "Ordering", "See the orders")];
+}
+```
+
+A module declares its permissions once, as the constants of a static class marked `[Permissions]`, each with its
+level and, in its `Description` or its summary, what it lets somebody do. Tenancy's generator writes the module's
+list for the catalogue from that class, under the module `DDD_Module` or `[assembly: Module]` names, marks it
+`[TenancyPermissions]`, and the project that composes the modules collects every such list
+([A module states its permissions once](tenancy.md#a-module-states-its-permissions-once)). A list a module marks with it by hand
+says the same permissions a second time, apart from the constants a request requires, and is refused. Declare each permission as
+a constant instead:
+
+```csharp
+[Permissions]
+public static class OrderingPermissions
+{
+    [AtTenant(Description = "See the orders")]
+    public const string View = "orders.view";
+}
+```
+
+## DDD00096
+
+**[OrOwn] beside a permission the owner of the resource holds already says nothing more.**
+
+```csharp
+[RequiresPermission(BoardPermissions.Edit)]
+public sealed record RenameBoard([OnResource, OrOwn] BoardId Board, string Name) : IBoardsRequest;   // DDD00096
+```
+
+`[OrOwn]` on a request's member says the request is about the caller's own, or the caller holds the permission of its
+`[RequiresPermission]`. On the id of a resource with members, beside `[OnResource]` on it, the permission is asked on that
+resource, and its owner holds every permission declared `[On<TResource>]` with `Owner = true` by owning it: the owner
+is let through by the permission already, so `[OrOwn]` adds nothing and only makes the request read as if it did. Take it
+off. `[Own]` and `[OrOwn]` stay meant for an aggregate with an `[Owner]` and no members
+([The owner of an aggregate](access-requirements.md#the-owner-of-an-aggregate)), and for a permission the owner does not
+hold, one declared with `Owner = false`. It is a warning because the request does what it would do without it.
+
+## DDD00097
+
+**[At] marks the one place an aggregate root hangs at.**
+
+```csharp
+[AggregateRoot<BoardId>]
+public sealed partial class Board
+{
+    [At] public OrganizationUnitId UnitId { get; private set; }
+
+    [At] public OrganizationUnitId? FormerUnitId { get; private set; }     // DDD00097: a second, and may be empty
+}
+
+[Entity<ColumnId>]
+public sealed partial class Column
+{
+    [At] public OrganizationUnitId UnitId { get; private set; }            // DDD00097: an entity inside an aggregate
+}
+```
+
+`[At]` marks the property of an aggregate root that says where it hangs: the unit of an organization a board belongs
+to, the bay a crate stands in. A fact of the domain, which the rules of a resource with members read where they let
+it be reached from above: a permission held at that place, or above it, reaches the aggregate
+([Beside an organization](membership.md#beside-an-organization)). So it goes on one instance property of an
+aggregate root, the root itself and never an entity inside it, and that property is never empty: an aggregate that
+hangs nowhere could not be reached from above, which is what `[At]` says. A static property, one on a type that is
+no aggregate root, a second one and a nullable one are each refused, where the property is declared.
+
+## DDD00098
+
+**Rules that reach a resource from above read where it hangs from its [At] property.**
+
+```csharp
+public static MembershipRules Rules { get; } = MembershipRules.For<Board>(    // DDD00098: Board marks no property [At]
+    Roles.Custom(),
+    reachFromAbove: true);
+```
+
+`reachFromAbove` in the rules of a resource with members says that a permission held where the resource hangs, or above it,
+reaches the resource. Where it hangs is a fact of the domain, said on the resource's class with `[At]` on the
+property that holds it, and read from there by the mapping and by the functions in the database. Rules that reach
+from above a resource that marks no such property would be refused when the resource is first asked about, and when
+its functions are written; this says it where the rules are made. Mark the property `[At]`, or leave
+`reachFromAbove` out.
+
+## DDD00099
+
+**A permission says what it lets somebody do.**
+
+```csharp
+[Permissions]
+public static class BoardPermissions
+{
+    [On<Board>] public const string Pin = "boards.pin";                                   // DDD00099: no description
+
+    [On<Board>(Description = "Archive a board")] public const string Archive = "boards.archive";   // said on the level
+
+    /// <summary>Comment on a board.</summary>
+    [On<Board>] public const string Comment = "boards.comment";                           // or in its summary
+}
+```
+
+The catalogue gives every permission a description, which a screen that puts permissions into roles shows beside
+it. It is said with `Description` on the permission's level, which wins where the constant has a `<summary>` as
+well; where no level says one, the constant's `<summary>` is the description, read from the comment above it whether
+the project writes a documentation file or not. A permission with neither would show as a bare name, so it is a
+warning, on the constant. A description of white space alone is none, and a retired permission, which no screen
+offers, needs none. A translation under the permission's name, in a resx your failure localizer reads, is read on
+top of whichever said it ([A module states its permissions once](tenancy.md#a-module-states-its-permissions-once)).
+
+## DDD00100
+
+**A restrictive rule narrows a table it can reach.**
+
+```csharp
+[RowAccess<Organization>(RowOperations.Read, Restrictive = true)]   // the organization, its units and its tree: fine
+public static partial class OnlyEmployeesReadTheOrganization { ... }
+
+[RowAccess<Tenant>(RowOperations.Read, Restrictive = true)]         // DDD00100: a tenant of Tenancy's
+public static partial class OnlyEmployeesReadTheTenant { ... }
+```
+
+A restrictive rule (`Restrictive = true`) is AND-ed with every policy that allows on its aggregate's table, and
+narrows what they allow. On Tenancy's tables it reaches the organization with its units and the closure of its
+tree, the seats with their placements and grants, and the roles: what an application narrows to keep a seat that is
+not an employee out of the organization. A tenant and an invitation are read by Tenancy's own work and by a person
+accepting an invitation, who has no seat yet, so a rule there is refused. Put it on one of the others, or leave
+`Restrictive` out ([Rules that narrow the organization](tenancy.md#rules-that-narrow-the-organization)).
+
+## DDD00101
+
+**`TenancyRowAccess.CallerSeat` answers with the application's seat class.**
+
+```csharp
+TenancyRowAccess.CallerSeat<Seat>().Kind == SeatKind.Employee      // the class declared with [SeatAggregate]
+TenancyRowAccess.CallerSeat<Role>().Name == "Employee"             // DDD00101: no seat's row
+```
+
+`CallerSeat<TSeat>()` is the calling seat's own row, which a rule reads a field of, asked of a function that
+answers with a row of Tenancy's seats table: so `TSeat` is the class that table is mapped to, the one declared with
+`[SeatAggregate]`. For the seat's id in a rule of a module whose context does not map the seats, ask
+`TenancyRowAccess.CallerSeatId<SeatId>()`.
 
 ## Building the model fails: the owned type must carry the key part
 

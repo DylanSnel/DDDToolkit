@@ -11,10 +11,9 @@ namespace Examples.Tenancy.Projects.Application;
 /// package, so the host still makes one call per module.
 /// </summary>
 /// <remarks>
-/// Projects' keys are not registered here: the module states them once, on the list it marks with
-/// <c>[TenancyPermissions]</c> (<see cref="ProjectCatalogue.Permissions"/>), and the host adds every module's list
-/// with the one call Tenancy's generator writes into it. A second registration here would add the keys twice,
-/// which the catalogue refuses.
+/// Projects' permissions are not registered here: the module states them once, in its <c>[Permissions]</c> class
+/// (<see cref="ProjectPermissions"/>), and the host adds every module's permissions with the one call Tenancy's
+/// generator writes into it. A second registration here would add the permissions twice, which the catalogue refuses.
 /// </remarks>
 public static class ProjectsApplicationServices
 {
@@ -28,7 +27,7 @@ public static class ProjectsApplicationServices
     /// <remarks>
     /// The behavior is the one the toolkit's generator writes for <see cref="IProjectsRequest"/>, and
     /// <c>AddProjectsAccessBehavior</c> is written with it. It asks the checks registered for the interface: the
-    /// module's own, added here; the Membership package's, for a key held on a project, which the infrastructure
+    /// module's own, added here; the Membership package's, for a permission held on a project, which the infrastructure
     /// project adds with the projects' registration; and the Tenancy package's for the cases that are Tenancy's,
     /// which the infrastructure project adds over the module's context with <c>AddTenancyAccess</c>.
     /// <para>
@@ -68,15 +67,16 @@ public static class ProjectsApplicationServices
         // What the commands ask of the organization: one per scope, and safe for the requests of a scope that run at once.
         services.AddScoped<ProjectTenancy>();
 
-        // The check for the case only Projects can decide, a key at a unit, and the behavior that asks the module's
+        // The check for the case only Projects can decide, a permission at a unit, and the behavior that asks the module's
         // checks before every handler. A handler takes nothing from them: it acts on what its command names, which is
         // what was checked, and the database checks the write again as the caller.
         services.AddAccessCheck<IProjectsRequest, ProjectsAccessCheck>();
         services.AddProjectsAccessBehavior();
 
         // What Projects refuses with, in English and Dutch, for the edge to phrase in its reader's language. The
-        // codes a crew's rules refuse under are among them, in the module's own words.
-        services.AddDDDToolkitLocalization(texts => texts.AddResource<ProjectFailures>());
+        // codes a crew's rules refuse under are among them, in the module's own words. Beside them, what each of
+        // its permissions lets somebody do, which the catalogue answers in the reader's language.
+        services.AddDDDToolkitLocalization(texts => texts.AddResource<ProjectFailures>().AddResource<ProjectPermissionTexts>());
 
         return services;
     }

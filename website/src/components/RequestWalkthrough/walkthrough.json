@@ -5,14 +5,14 @@
     {
       "id": "ada",
       "name": "Ada",
-      "who": "Harbor's first administrator: Access admin and Area manager at the root, so she holds every key in harbor.",
+      "who": "Harbor's first administrator: Access admin and Area manager at the root, so she holds every permission in harbor.",
       "runsAs": "authenticated",
       "connection": "SELECT set_config('role', 'authenticated', false), set_config('request.jwt.claims', '{\"sub\":\"<Ada>\",\"role\":\"authenticated\",…}', false), …, set_config('tenancy.caller_tenant', '<harbor>', false);"
     },
     {
       "id": "juno",
       "name": "Juno",
-      "who": "A seat at North Coast with no role of the organization; a surveyor on Pier 7's crew, which gives no key to manage it.",
+      "who": "A seat at North Coast with no role of the organization; a surveyor on Pier 7's crew, which gives no permission to manage it.",
       "runsAs": "authenticated",
       "connection": "SELECT set_config('role', 'authenticated', false), set_config('request.jwt.claims', '{\"sub\":\"<Juno>\",\"role\":\"authenticated\",…}', false), …, set_config('tenancy.caller_tenant', '<harbor>', false);"
     },
@@ -325,7 +325,7 @@
       "decides": [
         1
       ],
-      "setSay": "`TenancyAccessCheck` says yes: `AtUnit(key, unit)` is a `TenancyRequirement`. The core's check says no, and is passed by.",
+      "setSay": "`TenancyAccessCheck` says yes: `AtUnit(permission, unit)` is a `TenancyRequirement`. The core's check says no, and is passed by.",
       "check": {
         "snippet": "check.tenancy",
         "highlight": "{14,16-17}"
@@ -365,7 +365,7 @@
           },
           "rows": {
             "result": "200 · a new unit below North Coast",
-            "say": "The handler hands the request to Tenancy's use case, which asks for the key again and writes the unit and its paths. Postgres asks the insert policy of the new row: the same key, at the parent.",
+            "say": "The handler hands the request to Tenancy's use case, which asks for the permission again and writes the unit and its paths. Postgres asks the insert policy of the new row: the same permission, at the parent.",
             "snippet": "rows.units-insert"
           }
         },
@@ -381,7 +381,7 @@
             "pass": false,
             "status": 403,
             "code": "tenancy.not-permitted",
-            "say": "Meadow Gardens' root is not a unit of harbor, and Ada's rights are harbor's: the statement finds the key at no unit above it. The refusal names the key and the unit."
+            "say": "Meadow Gardens' root is not a unit of harbor, and Ada's rights are harbor's: the statement finds the permission at no unit above it. The refusal names the permission and the unit."
           },
           "statement": {
             "snippet": "statement.at-unit",
@@ -390,7 +390,7 @@
           "rows": {
             "round": true,
             "result": "refused, 42501",
-            "say": "Round the door the insert policy refuses the row: it is not of her tenant, and its parent is none of the units where she holds the key.",
+            "say": "Round the door the insert policy refuses the row: it is not of her tenant, and its parent is none of the units where she holds the permission.",
             "snippet": "rows.units-insert"
           }
         },
@@ -405,7 +405,7 @@
             "pass": false,
             "status": 403,
             "code": "tenancy.not-permitted",
-            "say": "Juno holds `tenancy.units.manage` nowhere. The refusal names the key and the unit."
+            "say": "Juno holds `tenancy.units.manage` nowhere. The refusal names the permission and the unit."
           },
           "statement": {
             "snippet": "statement.at-unit",
@@ -414,7 +414,7 @@
           "rows": {
             "round": true,
             "result": "refused, 42501",
-            "say": "Round the door the insert policy refuses the row: the parent is not among `units_where_i_hold('tenancy.units.manage')` for her.",
+            "say": "Round the door the insert policy refuses the row: the parent is not among `units_where_i_hold_permission('tenancy.units.manage')` for her.",
             "snippet": "rows.units-insert"
           }
         },
@@ -500,7 +500,7 @@
           },
           "door": {
             "pass": true,
-            "say": "System work in harbor holds every key there, at a unit of harbor, and North Coast is one."
+            "say": "System work in harbor holds every permission there, at a unit of harbor, and North Coast is one."
           },
           "statement": {
             "snippet": "statement.at-unit-system",
@@ -524,7 +524,7 @@
             "pass": false,
             "status": 403,
             "code": "tenancy.not-permitted",
-            "say": "Every key, but only at a unit of its own tenant: Meadow Gardens' root is not harbor's."
+            "say": "Every permission, but only at a unit of its own tenant: Meadow Gardens' root is not harbor's."
           },
           "statement": {
             "snippet": "statement.at-unit-system",
@@ -556,7 +556,7 @@
       "decides": [
         2
       ],
-      "setSay": "`MemberAccessCheck<Project, ProjectId>` says yes: `On(key, project, version)` is a `MemberAccess<ProjectId>`. Tenancy's check says no to it, though it is earlier in the set.",
+      "setSay": "`MemberAccessCheck<Project, ProjectId>` says yes: `On(permission, project, version)` is a `MemberAccess<ProjectId>`. Tenancy's check says no to it, though it is earlier in the set.",
       "check": {
         "snippet": "check.member",
         "highlight": "{4-5,10-11}"
@@ -608,7 +608,7 @@
           },
           "statement": {
             "snippet": "statement.member-hold",
-            "say": "One statement, as Ada: the project, how she holds the key, and its version."
+            "say": "One statement, as Ada: the project, how she holds the permission, and its version."
           },
           "rows": {
             "result": null,
@@ -625,15 +625,15 @@
           },
           "door": {
             "pass": true,
-            "say": "Ada holds `projects.crew.manage` at the root, and the projects' rules let a key held where a project sits count on the project: from above."
+            "say": "Ada holds `projects.crew.manage` at the root, and the projects' rules let a permission held where a project sits count on the project: from above."
           },
           "statement": {
             "snippet": "statement.member-hold",
-            "say": "One statement, as Ada, built from the projects' rules: the project as she sees it, how she holds the key, and its version. What it read is kept for the save."
+            "say": "One statement, as Ada, built from the projects' rules: the project as she sees it, how she holds the permission, and its version. What it read is kept for the save."
           },
           "rows": {
             "result": "200 · the seat is on the crew",
-            "say": "The handler loads the project, admits the seat, adds it and saves. Postgres asks the crew's policies of the new row: a permissive one for whoever may change the project, and Membership's restrictive lock, which asks for the key that changes the members.",
+            "say": "The handler loads the project, admits the seat, adds it and saves. Postgres asks the crew's policies of the new row: a permissive one for whoever may change the project, and Membership's restrictive lock, which asks for the permission that changes the members.",
             "snippet": "rows.crew-insert"
           }
         },
@@ -649,16 +649,16 @@
             "pass": false,
             "status": 403,
             "code": "projects.not-permitted",
-            "say": "Juno sees Pier 7, she is on its crew, but a surveyor's role gives no `projects.crew.manage`. The refusal names the key. The version is not compared: she may not act."
+            "say": "Juno sees Pier 7, she is on its crew, but a surveyor's role gives no `projects.crew.manage`. The refusal names the permission. The version is not compared: she may not act."
           },
           "statement": {
             "snippet": "statement.member-hold",
-            "say": "One statement: a row comes back, with no way of holding the key."
+            "say": "One statement: a row comes back, with no way of holding the permission."
           },
           "rows": {
             "round": true,
             "result": "refused, 42501",
-            "say": "Round the door Membership's lock refuses her row: Pier 7 is not among `project_ids_where_i_hold('projects.crew.manage')` for her.",
+            "say": "Round the door Membership's lock refuses her row: Pier 7 is not among `projects_where_i_hold('projects.crew.manage')` for her.",
             "snippet": "rows.crew-insert"
           }
         },
@@ -674,7 +674,7 @@
             "pass": false,
             "status": 404,
             "code": "projects.not-found",
-            "say": "Juno reaches Bay bridge in no way: not on its crew, not its owner, no key where it sits. For her it does not exist, as a project of another tenant does not."
+            "say": "Juno reaches Bay bridge in no way: not on its crew, not its owner, no permission where it sits. For her it does not exist, as a project of another tenant does not."
           },
           "statement": {
             "snippet": "statement.member-hold",
@@ -771,11 +771,11 @@
             "pass": false,
             "status": 409,
             "code": "concurrency-conflict",
-            "say": "The application's own work holds every key, so only the project and its version are read, and the version is not the one it read."
+            "say": "The application's own work holds every permission, so only the project and its version are read, and the version is not the one it read."
           },
           "statement": {
             "snippet": "statement.member-hold-system",
-            "say": "One statement: the project and its version, nothing about keys."
+            "say": "One statement: the project and its version, nothing about permissions."
           },
           "rows": {
             "result": null,
@@ -792,15 +792,15 @@
           },
           "door": {
             "pass": true,
-            "say": "The application's own work holds every key on every project."
+            "say": "The projects' own work, in their scope, holds every permission on every project."
           },
           "statement": {
             "snippet": "statement.member-hold-system",
-            "say": "One statement: the project and its version, nothing about keys."
+            "say": "One statement: the project and its version, nothing about permissions."
           },
           "rows": {
             "result": "200 · the seat is on the crew",
-            "say": "Written as `ddd_system_in`: the policy of system work in its tenant lets it add a member to a project of harbor. Membership's lock is for signed-in callers, not for the application's own work.",
+            "say": "Written as `ddd_system_in`, in the projects' scope: the policy of system work in its tenant lets it add a member to a project of harbor, and Membership's lock lets through the scope the projects' rules name. Work in Tenancy's scope would hold nothing on a project.",
             "snippet": "rows.crew-insert-system"
           }
         }
@@ -824,7 +824,7 @@
         0,
         1
       ],
-      "setSay": "An `Any` is decided by the set, case by case: `Own(seat)` by the core's check, `ForTheWholeTenant(key)` by Tenancy's. Both must have a check before either is asked.",
+      "setSay": "An `Any` is decided by the set, case by case: `Own(seat)` by the core's check, `AtTenant(permission)` by Tenancy's. Both must have a check before either is asked.",
       "check": {
         "snippet": "check.combined",
         "highlight": "{2,6-7,9}"
@@ -856,7 +856,7 @@
           },
           "door": {
             "pass": true,
-            "say": "The first way in holds: the seat the request names is Ada's own in harbor. The key is not asked."
+            "say": "The first way in holds: the seat the request names is Ada's own in harbor. The permission is not asked."
           },
           "statement": {
             "snippet": null,
@@ -882,11 +882,11 @@
           },
           "statement": {
             "snippet": "statement.tenant-wide",
-            "say": "One statement, for the second way in: the key at harbor's root."
+            "say": "One statement, for the second way in: the permission at harbor's root."
           },
           "rows": {
             "result": "200 · renamed",
-            "say": "The update policy lets a holder of `tenancy.seats.manage` change any seat's row, and the column rule on the name asks the same key for the whole tenant.",
+            "say": "The update policy lets a holder of `tenancy.seats.manage` change any seat's row, and the column rule on the name asks the same permission for the whole tenant.",
             "snippet": "rows.seat-update"
           }
         },
@@ -924,7 +924,7 @@
             "pass": false,
             "status": 403,
             "code": "access.refused",
-            "say": "Neither way holds: not her own seat, and no `tenancy.seats.manage`. One `access.refused` carries both reasons, `access.not-own` and `tenancy.not-permitted` with the key."
+            "say": "Neither way holds: not her own seat, and no `tenancy.seats.manage`. One `access.refused` carries both reasons, `access.not-own` and `tenancy.not-permitted` with the permission."
           },
           "statement": {
             "snippet": "statement.tenant-wide",
@@ -948,11 +948,11 @@
             "pass": false,
             "status": 403,
             "code": "access.refused",
-            "say": "No seat in harbor, so no seat of their own; and the key's way refuses nobody in harbor with its own reason. Both reasons, `access.not-own` and `tenancy.not-seated`, in one `access.refused`."
+            "say": "No seat in harbor, so no seat of their own; and the permission's way refuses nobody in harbor with its own reason. Both reasons, `access.not-own` and `tenancy.not-seated`, in one `access.refused`."
           },
           "statement": {
             "snippet": null,
-            "say": "Nothing is sent: the caller's own reads nothing, and the key's way refuses nobody first."
+            "say": "Nothing is sent: the caller's own reads nothing, and the permission's way refuses nobody first."
           },
           "rows": {
             "round": true,
@@ -973,11 +973,11 @@
             "pass": false,
             "status": 403,
             "code": "access.refused",
-            "say": "No seat in harbor, so no seat of their own; and the key's way refuses nobody in harbor with its own reason. Both reasons, `access.not-own` and `tenancy.not-seated`, in one `access.refused`."
+            "say": "No seat in harbor, so no seat of their own; and the permission's way refuses nobody in harbor with its own reason. Both reasons, `access.not-own` and `tenancy.not-seated`, in one `access.refused`."
           },
           "statement": {
             "snippet": null,
-            "say": "Nothing is sent: the caller's own reads nothing, and the key's way refuses nobody first."
+            "say": "Nothing is sent: the caller's own reads nothing, and the permission's way refuses nobody first."
           },
           "rows": {
             "round": true,
@@ -995,11 +995,11 @@
           },
           "door": {
             "pass": true,
-            "say": "System work has no seat of its own, so the first way in refuses; it holds every key in harbor, so the second lets it through, with nothing read."
+            "say": "System work has no seat of its own, so the first way in refuses; it holds every permission in harbor, so the second lets it through, with nothing read."
           },
           "statement": {
             "snippet": null,
-            "say": "Nothing is sent: system work in the tenant holds every key there."
+            "say": "Nothing is sent: system work in the tenant holds every permission there."
           },
           "rows": {
             "result": "200 · renamed",
@@ -1013,7 +1013,7 @@
       "id": "audit-log",
       "request": "TenantAuditLog",
       "from": "the audit log of Access requirements, not the sample's",
-      "summary": "Reads a tenant's audit log: an operator, or the key that manages seats for the whole tenant.",
+      "summary": "Reads a tenant's audit log: an operator, or the permission that manages seats for the whole tenant.",
       "set": "audit",
       "interface": "IAuditRequest",
       "propertyOnly": true,
@@ -1027,7 +1027,7 @@
       "decides": [
         1
       ],
-      "setSay": "An `Any` of two of Tenancy's cases: the set gives `RequiresOperator()` and `ForTheWholeTenant(key)` each to Tenancy's check, in that order.",
+      "setSay": "An `Any` of two of Tenancy's cases: the set gives `RequiresOperator()` and `AtTenant(permission)` each to Tenancy's check, in that order.",
       "check": {
         "snippet": "check.combined",
         "highlight": "{2,6-7,9}"
@@ -1081,7 +1081,7 @@
           },
           "door": {
             "pass": true,
-            "say": "The first way in holds: her token's role is an operator's. The key is not asked."
+            "say": "The first way in holds: her token's role is an operator's. The permission is not asked."
           },
           "statement": {
             "snippet": null,
@@ -1125,7 +1125,7 @@
             "pass": false,
             "status": 403,
             "code": "access.refused",
-            "say": "Neither way: `tenancy.operators-only`, then `tenancy.not-permitted` for the key. One `access.refused`, with both."
+            "say": "Neither way: `tenancy.operators-only`, then `tenancy.not-permitted` for the permission. One `access.refused`, with both."
           },
           "statement": {
             "snippet": "statement.tenant-wide",
@@ -1134,7 +1134,7 @@
           "rows": {
             "round": true,
             "result": "no row",
-            "say": "Round the door the seat managers' rule lets her read no row: she does not hold the key.",
+            "say": "Round the door the seat managers' rule lets her read no row: she does not hold the permission.",
             "snippet": "rows.audit"
           }
         },
@@ -1195,11 +1195,11 @@
           },
           "door": {
             "pass": true,
-            "say": "Not an operator; the second way holds: system work holds every key in harbor, with nothing read."
+            "say": "Not an operator; the second way holds: system work holds every permission in harbor, with nothing read."
           },
           "statement": {
             "snippet": null,
-            "say": "Nothing is sent: system work in the tenant holds every key there."
+            "say": "Nothing is sent: system work in the tenant holds every permission there."
           },
           "rows": {
             "result": "200 · harbor's entries",
@@ -1385,27 +1385,27 @@
     "write.add-unit": {
       "language": "csharp",
       "lines": [
-        "[RequiresKey(TenancyKeys.UnitsManage)]",
+        "[RequiresPermission(TenancyPermissions.UnitsManage)]",
         "public sealed record AddOrganizationUnit([AtUnit] OrganizationUnitId Parent, string Name, UnitKind? Kind) : ICommand<OrganizationUnitId>, ITenantsRequest;"
       ]
     },
     "write.rename-seat": {
       "language": "csharp",
       "lines": [
-        "[RequiresKey(RequiredKey)]",
+        "[RequiresPermission(RequiredPermission)]",
         "public sealed record RenameSeat([OrOwn] SeatId Seat, string? DisplayName) : ICommand, ITenantsRequest",
         "{",
-        "    public const string RequiredKey = TenancyKeys.SeatsManage;",
+        "    public const string RequiredPermission = TenancyPermissions.SeatsManage;",
         "}"
       ]
     },
     "write.add-crew-member": {
       "language": "csharp",
       "lines": [
-        "[RequiresKey(RequiredKey)]",
+        "[RequiresPermission(RequiredPermission)]",
         "public sealed record AddCrewMember([OnResource] ProjectId Project, SeatId Seat, ProjectRoleId? Role, DateTimeOffset? Until, [ExpectedVersion] long? ExpectedVersion = null) : ICommand, IProjectsRequest",
         "{",
-        "    public const string RequiredKey = ProjectKeys.ManageCrew;",
+        "    public const string RequiredPermission = ProjectPermissionNames.ManageCrew;",
         "}"
       ]
     },
@@ -1416,7 +1416,7 @@
         "{",
         "    AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.Any(",
         "        TenancyAccess.RequiresOperator(),",
-        "        TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage));",
+        "        TenancyAccess.AtTenant(TenancyPermissions.SeatsManage));",
         "}"
       ]
     },
@@ -1441,7 +1441,7 @@
       "lines": [
         "public sealed record AddOrganizationUnit(OrganizationUnitId Parent, string Name, UnitKind? Kind) : ICommand<OrganizationUnitId>, ITenantsRequest",
         "{",
-        "    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.AtUnit(TenancyKeys.UnitsManage, Parent);",
+        "    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.AtUnit(TenancyPermissions.UnitsManage, Parent);",
         "}"
       ]
     },
@@ -1452,7 +1452,7 @@
         "{",
         "    AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.Any(",
         "        AccessRequirement.Own(Seat),",
-        "        TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage));",
+        "        TenancyAccess.AtTenant(TenancyPermissions.SeatsManage));",
         "}"
       ]
     },
@@ -1461,7 +1461,7 @@
       "lines": [
         "public sealed record AddCrewMember(ProjectId Project, SeatId Seat, ProjectRoleId? Role, DateTimeOffset? Until, long? ExpectedVersion = null) : ICommand, IProjectsRequest",
         "{",
-        "    AccessRequirement IRequireAccess.RequiredAccess => MemberAccess.On(ProjectKeys.ManageCrew, Project, ExpectedVersion);",
+        "    AccessRequirement IRequireAccess.RequiredAccess => MemberAccess.On(ProjectPermissionNames.ManageCrew, Project, ExpectedVersion);",
         "}"
       ]
     },
@@ -1507,7 +1507,7 @@
         "{",
         "    AccessRequirement DDDToolkit_Generated_IRequireAccess.RequiredAccess => this switch",
         "    {",
-        "        RenameSeat request => AccessRequirement.Any(AccessRequirement.Own(request.Seat), TenancyAccess.ForTheWholeTenant(\"tenancy.seats.manage\")),",
+        "        RenameSeat request => AccessRequirement.Any(AccessRequirement.Own(request.Seat), TenancyAccess.AtTenant(\"tenancy.seats.manage\")),",
         "        // ... a line for each of the module's other requests that state their requirement with attributes",
         "    };",
         "}"
@@ -1534,7 +1534,7 @@
         "    AccessRequirement DDDToolkit_Generated_IRequireAccess.RequiredAccess => this switch",
         "    {",
         "        AddCrewMember request => MemberAccess.On(\"projects.crew.manage\", request.Project, request.ExpectedVersion),",
-        "        // ... the module's other lines, and the same last arm",
+        "        // ... the module's other lines, and a last arm that answers the module's default, TenancyAccess.InTenant()",
         "    };",
         "}"
       ]
@@ -1580,15 +1580,15 @@
         "    case TenancyRequirement.InTenant:",
         "        answers.RequireTenant();                                 // a seat here, or system work here",
         "        break;",
-        "    case TenancyRequirement.ForTheWholeTenant required:",
+        "    case TenancyRequirement.AtTenant required:",
         "        answers.RequireTenant();                                 // nobody is refused without a statement",
-        "        if (!await HoldsForTheWholeTenantAsync(required.Key, cancellationToken))",
-        "            throw TenancyRefusals.Refuse(TenancyRefusals.NotPermitted, (\"Key\", required.Key));",
+        "        if (!await HoldsAtTenantAsync(required.Permission, cancellationToken))",
+        "            throw TenancyRefusals.Refuse(TenancyRefusals.NotPermitted, (\"Permission\", required.Permission));",
         "        break;",
         "    case TenancyRequirement.AtUnit<TUnitId> required:",
         "        answers.RequireTenant();",
-        "        if (!await HoldsAtAsync(required.Key, required.Unit, cancellationToken))",
-        "            throw TenancyRefusals.Refuse(TenancyRefusals.NotPermitted, (\"Key\", required.Key), (\"Unit\", required.Unit));",
+        "        if (!await HoldsAtAsync(required.Permission, required.Unit, cancellationToken))",
+        "            throw TenancyRefusals.Refuse(TenancyRefusals.NotPermitted, (\"Permission\", required.Permission), (\"Unit\", required.Unit));",
         "        break;",
         "    case TenancyRequirement.Operator:",
         "        if (!options.IsOperator(callers.Current))                // the token's role, never a seat",
@@ -1602,14 +1602,14 @@
     "check.member": {
       "language": "csharp",
       "lines": [
-        "// MemberAccessCheck<Project, ProjectId>, Membership, the case of a key on a project, shortened",
+        "// MemberAccessCheck<Project, ProjectId>, Membership, the case of a permission on a project, shortened",
         "public bool Decides(AccessRequirement requirement) => requirement is MemberAccess<ProjectId>;",
         "",
         "case MemberAccess<ProjectId>.On required:",
-        "    var hold = await access.RequireAsync(required.Resource, required.Key, cancellationToken);",
+        "    var hold = await access.RequireAsync(required.Resource, required.Permission, cancellationToken);",
         "    //   nobody                         -> the caller's own refusal, tenancy.not-seated",
         "    //   does not see the project       -> projects.not-found",
-        "    //   sees it, does not hold the key -> projects.not-permitted",
+        "    //   sees it, does not hold the permission -> projects.not-permitted",
         "    if (required.ExpectedVersion is { } expected && expected != hold.Version)",
         "        throw new ConcurrencyConflictException(typeof(Project), required.Resource);    // 409, only now",
         "    kept.KeepFor(request, hold);                                 // what the save is held to",
@@ -1637,11 +1637,11 @@
     "statement.tenant-wide": {
       "language": "sql",
       "lines": [
-        "-- HoldsTenantWideAsync: the key at the tenant's root, approximately what Entity Framework sends",
+        "-- HoldsAtTenantAsync: the permission at the tenant's root, approximately what Entity Framework sends",
         "SELECT EXISTS (",
         "    SELECT 1 FROM \"tenancy\".\"SeatRights\" AS r",
         "    INNER JOIN \"tenancy\".\"OrganizationUnits\" AS root ON r.\"UnitId\" = root.\"Id\"",
-        "    WHERE r.\"TenantId\" = @tenant AND r.\"SeatId\" = @seat AND r.\"Key\" = @key",
+        "    WHERE r.\"TenantId\" = @tenant AND r.\"SeatId\" = @seat AND r.\"Permission\" = @permission",
         "      AND r.\"StartsAt\" <= @now AND (r.\"EndsAt\" IS NULL OR r.\"EndsAt\" > @now)",
         "      AND root.\"TenantId\" = @tenant AND root.\"ParentId\" IS NULL)"
       ]
@@ -1649,11 +1649,11 @@
     "statement.at-unit": {
       "language": "sql",
       "lines": [
-        "-- HoldsAtAsync: the key at the unit or above it, approximately what Entity Framework sends",
+        "-- HoldsAtAsync: the permission at the unit or above it, approximately what Entity Framework sends",
         "SELECT EXISTS (",
         "    SELECT 1 FROM \"tenancy\".\"SeatRights\" AS r",
         "    INNER JOIN \"tenancy\".\"OrganizationUnitPaths\" AS p ON r.\"UnitId\" = p.\"AncestorId\"",
-        "    WHERE r.\"TenantId\" = @tenant AND r.\"SeatId\" = @seat AND r.\"Key\" = @key",
+        "    WHERE r.\"TenantId\" = @tenant AND r.\"SeatId\" = @seat AND r.\"Permission\" = @permission",
         "      AND r.\"StartsAt\" <= @now AND (r.\"EndsAt\" IS NULL OR r.\"EndsAt\" > @now)",
         "      AND p.\"TenantId\" = @tenant AND p.\"DescendantId\" = @unit)"
       ]
@@ -1661,24 +1661,24 @@
     "statement.at-unit-system": {
       "language": "sql",
       "lines": [
-        "-- HoldsAtAsync for system work in the tenant: every key there, at a unit of the tenant, approximately",
+        "-- HoldsAtAsync for system work in the tenant: every permission there, at a unit of the tenant, approximately",
         "SELECT EXISTS (SELECT 1 FROM \"tenancy\".\"OrganizationUnits\" AS u WHERE u.\"TenantId\" = @tenant AND u.\"Id\" = @unit)"
       ]
     },
     "statement.member-hold": {
       "language": "sql",
       "lines": [
-        "-- EfMemberQuestions.HoldAsync: the project as the caller sees it, and how the key is held, approximately",
+        "-- EfMemberQuestions.HoldAsync: the project as the caller sees it, and how the permission is held, approximately",
         "SELECT p.\"Version\",",
         "       EXISTS (SELECT 1 FROM \"projects\".\"ProjectCrewMembers\" AS m                 -- on the crew now,",
         "               WHERE m.\"ProjectId\" = p.\"Id\" AND m.\"SeatId\" = @seat",
-        "                 AND EXISTS (SELECT 1 FROM \"projects\".\"ProjectCrewRoleGrants\" AS h   -- in a role that gives the key",
+        "                 AND EXISTS (SELECT 1 FROM \"projects\".\"ProjectCrewRoleGrants\" AS h   -- in a role that gives the permission",
         "                             INNER JOIN \"projects\".\"ProjectRoles\" AS k ON h.\"RoleId\" = k.\"Id\"",
-        "                             WHERE h.\"CrewMemberId\" = m.\"Id\" AND k.\"Status\" = 'Active' AND @key = ANY (k.\"Keys\")))",
+        "                             WHERE h.\"CrewMemberId\" = m.\"Id\" AND k.\"Status\" = 'Active' AND @permission = ANY (k.\"Permissions\")))",
         "         OR p.\"OwnerSeatId\" = @seat AS \"AsMember\",                                 -- or its owner",
-        "       p.\"UnitId\" IN (SELECT path.\"DescendantId\" FROM \"tenancy\".caller_rights() AS r   -- or the key where it sits",
+        "       p.\"UnitId\" IN (SELECT path.\"DescendantId\" FROM \"tenancy\".caller_permissions() AS r   -- or the permission where it sits",
         "                      INNER JOIN \"tenancy\".tenant_unit_paths() AS path ON r.\"UnitId\" = path.\"AncestorId\"",
-        "                      WHERE r.\"SeatId\" = @seat AND r.\"Key\" = @key) AS \"FromAbove\"",
+        "                      WHERE r.\"SeatId\" = @seat AND r.\"Permission\" = @permission) AS \"FromAbove\"",
         "FROM \"projects\".\"Projects\" AS p",
         "WHERE p.\"Id\" = @project",
         "  AND (/* the caller sees it: on the crew, its owner, or projects.view where it sits */)",
@@ -1689,7 +1689,7 @@
     "statement.member-hold-system": {
       "language": "sql",
       "lines": [
-        "-- EfMemberQuestions.HoldAsync for the application's own work: every key, so only the project and its version",
+        "-- EfMemberQuestions.HoldAsync for the application's own work: every permission, so only the project and its version",
         "SELECT p.\"Version\" FROM \"projects\".\"Projects\" AS p WHERE p.\"Id\" = @project LIMIT 1"
       ]
     },
@@ -1718,13 +1718,13 @@
       "language": "sql",
       "lines": [
         "CREATE POLICY \"Unit managers add below their units (insert) for authenticated\" ON \"tenancy\".\"OrganizationUnits\" FOR INSERT TO authenticated",
-        "    WITH CHECK ((\"TenantId\" = (SELECT \"tenancy\".caller_tenant())) AND (\"ParentId\" = ANY (ARRAY(SELECT \"tenancy\".units_where_i_hold('tenancy.units.manage')))));",
+        "    WITH CHECK ((\"TenantId\" = (SELECT \"tenancy\".caller_tenant())) AND (\"ParentId\" = ANY (ARRAY(SELECT \"tenancy\".units_where_i_hold_permission('tenancy.units.manage')))));",
         "",
-        "CREATE OR REPLACE FUNCTION \"tenancy\".units_where_i_hold(key text) RETURNS SETOF uuid",
+        "CREATE OR REPLACE FUNCTION \"tenancy\".units_where_i_hold_permission(permission text) RETURNS SETOF uuid",
         "    LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$",
         "SELECT DISTINCT p.\"DescendantId\" FROM \"tenancy\".\"SeatRights\" r",
         "JOIN \"tenancy\".\"OrganizationUnitPaths\" p ON p.\"AncestorId\" = r.\"UnitId\" AND p.\"TenantId\" = r.\"TenantId\"",
-        "WHERE r.\"SeatId\" = (SELECT \"tenancy\".caller_seat()) AND r.\"Key\" = $1 AND \"tenancy\".key_is_live($1)",
+        "WHERE r.\"SeatId\" = (SELECT \"tenancy\".caller_seat()) AND r.\"Permission\" = $1 AND \"tenancy\".permission_is_live($1)",
         "  AND r.\"StartsAt\" <= pg_catalog.now() AND (r.\"EndsAt\" IS NULL OR r.\"EndsAt\" > pg_catalog.now())",
         "$function$;"
       ]
@@ -1748,15 +1748,15 @@
       "language": "sql",
       "lines": [
         "CREATE POLICY \"Managers and the seat change it (update) for authenticated\" ON \"tenancy\".\"Seats\" FOR UPDATE TO authenticated",
-        "    USING ((\"TenantId\" = (SELECT \"tenancy\".caller_tenant())) AND ((SELECT \"tenancy\".holds_key('tenancy.seats.manage')) OR (SELECT \"tenancy\".holds_key('tenancy.grants.manage')) OR \"Id\" = (SELECT \"tenancy\".caller_seat())))",
-        "    WITH CHECK ((\"TenantId\" = (SELECT \"tenancy\".caller_tenant())) AND ((SELECT \"tenancy\".holds_key('tenancy.seats.manage')) OR (SELECT \"tenancy\".holds_key('tenancy.grants.manage')) OR \"Id\" = (SELECT \"tenancy\".caller_seat())));",
+        "    USING ((\"TenantId\" = (SELECT \"tenancy\".caller_tenant())) AND ((SELECT \"tenancy\".holds_permission('tenancy.seats.manage')) OR (SELECT \"tenancy\".holds_permission('tenancy.grants.manage')) OR \"Id\" = (SELECT \"tenancy\".caller_seat())))",
+        "    WITH CHECK ((\"TenantId\" = (SELECT \"tenancy\".caller_tenant())) AND ((SELECT \"tenancy\".holds_permission('tenancy.seats.manage')) OR (SELECT \"tenancy\".holds_permission('tenancy.grants.manage')) OR \"Id\" = (SELECT \"tenancy\".caller_seat())));",
         "",
         "CREATE OR REPLACE FUNCTION \"tenancy\".seats_displayname_column_rule() RETURNS trigger",
         "    LANGUAGE plpgsql SET search_path = '' AS $body$",
         "BEGIN",
         "    IF CURRENT_USER = 'authenticated' THEN",
-        "        IF ((OLD.\"Id\" = (SELECT \"tenancy\".caller_seat())) OR (SELECT \"tenancy\".holds_tenant_wide('tenancy.seats.manage'))) IS NOT TRUE OR (OLD.\"Id\" IS DISTINCT FROM NEW.\"Id\" AND ((NEW.\"Id\" = (SELECT \"tenancy\".caller_seat())) OR (SELECT \"tenancy\".holds_tenant_wide('tenancy.seats.manage'))) IS NOT TRUE) THEN",
-        "            RAISE EXCEPTION USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'seats_displayname_column_rule', HINT = 'ddd:access.refused', MESSAGE = 'The column rule ''Name changes by the seat or with the seats key'' does not let this caller change \"DisplayName\" of \"tenancy\".\"Seats\".';",
+        "        IF ((OLD.\"Id\" = (SELECT \"tenancy\".caller_seat())) OR (SELECT \"tenancy\".holds_at_tenant('tenancy.seats.manage'))) IS NOT TRUE OR (OLD.\"Id\" IS DISTINCT FROM NEW.\"Id\" AND ((NEW.\"Id\" = (SELECT \"tenancy\".caller_seat())) OR (SELECT \"tenancy\".holds_at_tenant('tenancy.seats.manage'))) IS NOT TRUE) THEN",
+        "            RAISE EXCEPTION USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'seats_displayname_column_rule', HINT = 'ddd:access.refused', MESSAGE = 'The column rule ''Name changes by the seat or with the seats permission'' does not let this caller change \"DisplayName\" of \"tenancy\".\"Seats\".';",
         "        END IF;",
         "    ELSIF CURRENT_USER IN ('anon', 'tenancy_operator') THEN",
         "        RAISE EXCEPTION USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'seats_displayname_column_rule', HINT = 'ddd:access.refused', MESSAGE = 'No column rule is for this caller''s role, so it may not change \"DisplayName\" of \"tenancy\".\"Seats\".';",
@@ -1780,20 +1780,20 @@
     "rows.crew-insert": {
       "language": "sql",
       "lines": [
-        "CREATE POLICY \"Members change with the key (insert) for authenticated\" ON \"projects\".\"ProjectCrewMembers\" AS RESTRICTIVE FOR INSERT TO authenticated",
-        "    WITH CHECK (\"ProjectId\" IN (SELECT held.id FROM \"projects\".project_ids_where_i_hold('projects.crew.manage') AS held(id)) OR \"ProjectId\" IN (SELECT held.id FROM \"projects\".project_ids_where_i_hold('projects.owner.change') AS held(id)));",
+        "CREATE POLICY \"Members change with the permission (insert) for authenticated\" ON \"projects\".\"ProjectCrewMembers\" AS RESTRICTIVE FOR INSERT TO authenticated",
+        "    WITH CHECK (\"ProjectId\" IN (SELECT held.id FROM \"projects\".projects_where_i_hold('projects.crew.manage') AS held(id)) OR \"ProjectId\" IN (SELECT held.id FROM \"projects\".projects_where_i_hold('projects.owner.change') AS held(id)));",
         "",
-        "CREATE OR REPLACE FUNCTION \"projects\".project_ids_where_i_hold(text) RETURNS SETOF uuid",
+        "CREATE OR REPLACE FUNCTION \"projects\".projects_where_i_hold(text) RETURNS SETOF uuid",
         "    LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$",
-        "SELECT holding.id FROM \"projects\".crew_project_ids($1) AS holding(id)",
+        "SELECT holding.id FROM \"projects\".projects_as_member_with($1) AS holding(id)",
         "UNION",
-        "SELECT joined.id FROM \"projects\".crew_member_project_ids() AS joined(id) WHERE $1 = 'projects.view'",
+        "SELECT joined.id FROM \"projects\".projects_as_member() AS joined(id) WHERE $1 = 'projects.view'",
         "UNION",
         "SELECT r.\"Id\" FROM \"projects\".\"Projects\" r WHERE $1 IN ('projects.view', 'projects.edit', 'projects.close', 'projects.crew.manage') AND r.\"OwnerSeatId\" = (SELECT \"tenancy\".caller_seat())",
         "UNION",
-        "SELECT r.\"Id\" FROM \"projects\".\"Projects\" r WHERE $1 IS NOT NULL AND r.\"UnitId\" IN (SELECT reached.place FROM \"tenancy\".units_where_i_hold($1) AS reached(place))",
+        "SELECT r.\"Id\" FROM \"projects\".\"Projects\" r WHERE $1 IS NOT NULL AND r.\"UnitId\" IN (SELECT reached.place FROM \"tenancy\".units_where_i_hold_permission($1) AS reached(place))",
         "UNION",
-        "SELECT r.\"Id\" FROM \"projects\".\"Projects\" r WHERE (SELECT auth.role()) = 'ddd_system_in' AND (SELECT auth.jwt() ->> 'scope') IN ('tenancy', 'projects') AND $1 IS NOT NULL",
+        "SELECT r.\"Id\" FROM \"projects\".\"Projects\" r WHERE (SELECT auth.role()) = 'ddd_system_in' AND (SELECT auth.jwt() ->> 'scope') IN ('projects') AND $1 IS NOT NULL",
         "$function$;"
       ]
     },
@@ -1810,7 +1810,7 @@
         "CREATE POLICY \"Operators read the audit log (select) for tenancy_operator\" ON \"audit\".\"AuditEntries\" FOR SELECT TO tenancy_operator",
         "    USING (TRUE);",
         "CREATE POLICY \"Seat managers read the audit log (select) for authenticated\" ON \"audit\".\"AuditEntries\" FOR SELECT TO authenticated",
-        "    USING ((SELECT \"tenancy\".holds_tenant_wide('tenancy.seats.manage')));",
+        "    USING ((SELECT \"tenancy\".holds_at_tenant('tenancy.seats.manage')));",
         "-- Tenancy's own, on every table kept to a tenant: a seat reads its tenant's rows alone, and an operator writes none",
         "CREATE POLICY \"Kept to its tenant (all) for authenticated\" ON \"audit\".\"AuditEntries\" AS RESTRICTIVE FOR ALL TO authenticated",
         "    USING (\"TenantId\" = (SELECT \"tenancy\".caller_tenant()))",
@@ -1824,7 +1824,7 @@
       "language": "sql",
       "lines": [
         "CREATE POLICY \"Seat managers read the audit log (select) for authenticated\" ON \"audit\".\"AuditEntries\" FOR SELECT TO authenticated",
-        "    USING ((SELECT \"tenancy\".holds_tenant_wide('tenancy.seats.manage')));",
+        "    USING ((SELECT \"tenancy\".holds_at_tenant('tenancy.seats.manage')));",
         "-- Tenancy's own, on every table kept to a tenant: a seat reads its tenant's rows alone, and an operator writes none",
         "CREATE POLICY \"Kept to its tenant (all) for authenticated\" ON \"audit\".\"AuditEntries\" AS RESTRICTIVE FOR ALL TO authenticated",
         "    USING (\"TenantId\" = (SELECT \"tenancy\".caller_tenant()))",

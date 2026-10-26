@@ -393,11 +393,11 @@ public sealed class RowAccessContributionTests
     public void An_answer_that_cannot_be_named_still_prints_for_the_message_that_shows_it()
     {
         var noSet = new ResourceAccessAnswer(typeof(TicketId), (ResourceAccessSet)7);
-        var noKey = new ResourceAccessAnswer(null!, ResourceAccessSet.Seen);
+        var noPermission = new ResourceAccessAnswer(null!, ResourceAccessSet.Seen);
         var function = new ContributedFunction("tickets_somehow", "", "SETOF uuid", "SELECT NULL::uuid", Answers: noSet);
 
         noSet.ToString().Should().Be("ResourceAccessAnswer { Key = DDDToolkit.EntityFramework.Tests.Infrastructure.TicketId, Set = 7 }");
-        noKey.ToString().Should().Be("ResourceAccessAnswer { Key = , Set = Seen }");
+        noPermission.ToString().Should().Be("ResourceAccessAnswer { Key = , Set = Seen }");
         function.ToString().Should().Contain(
             "Answers = ResourceAccessAnswer { Key = DDDToolkit.EntityFramework.Tests.Infrastructure.TicketId, Set = 7 }",
             "a log line or an assertion that prints the function shows what it says it answers");
@@ -424,12 +424,13 @@ public sealed class RowAccessContributionTests
     }
 
     [Theory]
-    [InlineData(ResourceAccessSet.Seen, "key text", "SETOF uuid", "takes (key text), where the resources seen are asked without arguments")]
-    [InlineData(ResourceAccessSet.HeldOn, "", "SETOF uuid", "takes (), where the resources a key is held on are asked with the key alone, as text")]
-    [InlineData(ResourceAccessSet.HeldOn, "key text, more text", "SETOF uuid", "takes (key text, more text), where*")]
+    [InlineData(ResourceAccessSet.Seen, "permission text", "SETOF uuid", "takes (permission text), where the resources seen are asked without arguments")]
+    [InlineData(ResourceAccessSet.HeldOn, "", "SETOF uuid", "takes (), where the resources a permission is held on are asked with the permission alone, as text")]
+    [InlineData(ResourceAccessSet.HeldOn, "permission text, more text", "SETOF uuid", "takes (permission text, more text), where*")]
+    [InlineData(ResourceAccessSet.FellowMembers, "permission text", "SETOF uuid", "takes (permission text), where the members of the resources the caller is a member of are asked without arguments")]
     [InlineData(ResourceAccessSet.HeldOn, "level integer", "SETOF uuid", "takes (level integer), where*")]
     [InlineData(ResourceAccessSet.Seen, "", "boolean", "returns boolean, where a set is answered with the resource's ids, SETOF their type")]
-    [InlineData((ResourceAccessSet)7, "", "SETOF uuid", "'7' is no set: a resource access set is Seen or HeldOn")]
+    [InlineData((ResourceAccessSet)7, "", "SETOF uuid", "'7' is no set: a resource access set is Seen, HeldOn or FellowMembers")]
     public void A_function_that_cannot_answer_the_set_it_says_it_answers_is_refused(ResourceAccessSet set, string parameters, string returns, string problem)
     {
         using var desk = DeskContext.Create();
@@ -696,12 +697,44 @@ public sealed class RowAccessContributionTests
         var crates = new SpotContribution("crates", context => context is YardContext
             ? new([new ContributedFunction("crate_ids", "", "SETOF uuid", "SELECT c.\"Id\" FROM \"yard\".\"Crates\" c WHERE {fn:duty/on_duty}()", SecurityDefiner: true, GrantTo: [RowAccessRoles.User])], [], [])
             : null);
-        var ticketsOfCrates = RowAccessRule.For<Ticket>("Tickets of crates", RowOperations.Read, "({col:Id} = ANY (ARRAY(SELECT {fn:crates/crate_ids}())))", RowAccessRoles.User);
 
-        var scripts = () => PostgresRowAccess.Scripts([desk, yard], [ticketsOfCrates], [], With(new DutyRowAccess(), crates));
+        // A function of the desk's that asks the crates' in its body: no policy to ask it late, so a circle.
+        var tickets = new SpotContribution("tickets", context => context is DeskContext
+            ? new([new ContributedFunction("ticket_ids", "", "SETOF uuid", "SELECT c.id FROM {fn:crates/crate_ids}() AS c(id)", SecurityDefiner: true, GrantTo: [RowAccessRoles.User])], [], [])
+            : null);
+
+        var scripts = () => PostgresRowAccess.Scripts([desk, yard], [], [], With(new DutyRowAccess(), crates, tickets));
 
         scripts.Should().Throw<InvalidOperationException>().WithMessage(
             "The contexts ask each other's functions in a circle: DeskContext asks \"yard\".crate_ids, which YardContext defines; YardContext asks \"desk\".on_duty, which DeskContext defines. *Move one of the functions into the module that asks it.");
+    }
+
+    [Fact]
+    public void A_rule_that_asks_a_function_of_a_context_that_asks_its_own_in_turn_asks_it_through_one_of_its_own()
+    {
+        using var desk = DeskContext.Create();
+        using var yard = YardContext.Create();
+        var crates = new SpotContribution("crates", context => context is YardContext
+            ? new([new ContributedFunction("crate_ids", "", "SETOF uuid", "SELECT c.\"Id\" FROM \"yard\".\"Crates\" c WHERE {fn:duty/on_duty}()", SecurityDefiner: true, GrantTo: [RowAccessRoles.User])], [], [])
+            : null);
+        var ticketsOfCrates = RowAccessRule.For<Ticket>("Tickets of crates", RowOperations.Read, "({col:Id} = ANY (ARRAY(SELECT {fn:crates/crate_ids}())))", RowAccessRoles.User);
+
+        var scripts = PostgresRowAccess.Scripts([desk, yard], [ticketsOfCrates], [], With(new DutyRowAccess(), crates));
+
+        // The desk's file runs first, since the crates' function asks the desk's on_duty: its policy asks the crates'
+        // function through one of the desk's own, made without its body checked, which finds it when it runs.
+        scripts.Select(each => each.Context).Should().Equal(desk, yard);
+        var deskScript = scripts[0].Script;
+        deskScript.Should().Contain(
+            "SET check_function_bodies = off;\n" +
+            "CREATE OR REPLACE FUNCTION \"desk\".crate_ids() RETURNS SETOF uuid\n" +
+            "    LANGUAGE sql STABLE SET search_path = '' AS $function$\n" +
+            "SELECT * FROM \"yard\".crate_ids()\n" +
+            "$function$;\n" +
+            "RESET check_function_bodies;\n");
+        deskScript.Should().Contain("(\"Id\" = ANY (ARRAY(SELECT \"desk\".crate_ids())))", "the policy asks the desk's own function")
+            .And.Contain("GRANT EXECUTE ON FUNCTION \"desk\".crate_ids() TO authenticated;", "for the roles of the rules that ask it");
+        scripts[1].Script.Should().Contain("CREATE OR REPLACE FUNCTION \"yard\".crate_ids() RETURNS SETOF uuid");
     }
 
     [Fact]

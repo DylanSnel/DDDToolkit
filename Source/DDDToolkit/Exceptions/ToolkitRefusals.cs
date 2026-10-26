@@ -31,7 +31,7 @@ public static class ToolkitRefusals
     /// </description></item>
     /// <item><description>
     /// A request lets one caller or another through (<see cref="Access.AccessRequirement.Any"/>, or
-    /// <see cref="Access.OrOwnAttribute"/> beside a key), and the caller is neither: its argument
+    /// <see cref="Access.OrOwnAttribute"/> beside a permission), and the caller is neither: its argument
     /// <see cref="ReasonsArgument"/> is each case's own refusal, its code and its arguments, in the order of the cases
     /// (<see cref="RefusalReason"/>), and the refusal's message names them for a log.
     /// </description></item>
@@ -51,8 +51,23 @@ public static class ToolkitRefusals
     /// <see cref="RefusalKind.NotPermitted"/>, and the same request gets the same answer from the same caller. The core's
     /// <c>CallerAccessCheck</c> makes it, before the handler runs, for anyone the value is not the own of: a caller who did
     /// not sign in and the application's own work too. No arguments: the value is the request's, and the caller sent it.
+    /// <para>
+    /// A request about the owner of an aggregate (<see cref="Access.AccessRequirement.OwnerOf{TId}"/>) is refused with it
+    /// too, where the aggregate is somebody else's, or nobody's, its owner left empty: whoever it is about is not the
+    /// caller.
+    /// </para>
     /// </summary>
     public const string NotOwn = "access.not-own";
+
+    /// <summary>
+    /// A request is about the owner of an aggregate (<see cref="Access.AccessRequirement.OwnerOf{TId}"/>, <see cref="Access.OwnAttribute"/>
+    /// or <see cref="Access.OrOwnAttribute"/> on the id of an aggregate whose owner is marked <c>[Owner]</c>), and names one
+    /// there is no row of for the caller: none was ever made, it is gone, or row level security, or a query filter, keeps
+    /// it from the caller. It is <see cref="RefusalKind.NotFound"/>, and one the caller may not see reads the same as one
+    /// that does not exist. The core's <c>CallerAccessCheck</c> makes it, before the handler runs, as Membership makes its
+    /// own <c>not-found</c> for a resource the caller does not see. No arguments: the id is the request's.
+    /// </summary>
+    public const string NotFound = "access.not-found";
 
     /// <summary>
     /// A signed-in user's token carries a role the host gave no database role: neither the role of a signed-in
@@ -74,7 +89,7 @@ public static class ToolkitRefusals
     /// <summary>
     /// What only the application's own work may do, and the caller is not that work: a signed-in user, whatever
     /// they hold, a caller who did not sign in, or work nobody began a caller for. It is
-    /// <see cref="RefusalKind.NotPermitted"/>, and no key or role gives it. System work is a scope trusted code
+    /// <see cref="RefusalKind.NotPermitted"/>, and no permission or role gives it. System work is a scope trusted code
     /// begins around the work, not a requirement a request declares, so this is made past the door: by a
     /// supporting domain's use case that only system work may call, such as Tenancy's provisioning of a tenant,
     /// and by a handler that only system work may run. So "only the application itself" has one code. No arguments.
@@ -93,6 +108,7 @@ public static class ToolkitRefusals
             [NotSignedIn] = (RefusalKind.NotPermitted, "Only a signed-in user can do this."),
             [SystemOnly] = (RefusalKind.NotPermitted, "Only the application itself can do this."),
             [NotOwn] = (RefusalKind.NotPermitted, "Only whoever this is about can do this."),
+            [NotFound] = (RefusalKind.NotFound, "That was not found, or it is not one you can see."),
         });
 
     /// <summary>Every code, in the order the table lists them.</summary>

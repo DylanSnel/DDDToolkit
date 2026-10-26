@@ -86,7 +86,7 @@ public sealed class SampleApi(HttpClient http, UiSession session)
 
     /// <summary>
     /// <c>GET /tenancy/history</c>: a page of the tenant's access history, newest first, for a seat that holds the
-    /// key that reads it. <paramref name="after"/> is the marker the page before gave as its next, and
+    /// permission that reads it. <paramref name="after"/> is the marker the page before gave as its next, and
     /// <paramref name="size"/> how many rows a page holds, the API's own choice when left out.
     /// </summary>
     public Task<ApiOutcome<HistoryPageInfo>> AccessHistoryAsync(string? after = null, int? size = null, CancellationToken cancellationToken = default)
@@ -117,8 +117,8 @@ public sealed class SampleApi(HttpClient http, UiSession session)
     public Task<ApiOutcome<IReadOnlyList<ProjectRoleInfo>>> ProjectRolesAsync(CancellationToken cancellationToken = default)
         => GetAsync<IReadOnlyList<ProjectRoleInfo>>("/project-roles", cancellationToken);
 
-    /// <summary><c>GET /tenancy/catalogue</c>: every key the application knows.</summary>
-    public Task<ApiOutcome<CatalogueInfo>> KeyCatalogueAsync(CancellationToken cancellationToken = default)
+    /// <summary><c>GET /tenancy/catalogue</c>: every permission the application knows.</summary>
+    public Task<ApiOutcome<CatalogueInfo>> PermissionCatalogueAsync(CancellationToken cancellationToken = default)
         => GetAsync<CatalogueInfo>("/tenancy/catalogue", cancellationToken);
 
     // The directory by id, in the session's tenant: what the ids another answer carried are called. A page asks
@@ -128,9 +128,9 @@ public sealed class SampleApi(HttpClient http, UiSession session)
     public Task<ApiOutcome<IReadOnlyList<SeatInfo>>> SeatsByIdAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken = default)
         => AskDirectoryAsync<SeatInfo>("/tenancy/directory/seats", ids, cancellationToken);
 
-    /// <summary><c>POST /tenancy/directory/units</c>: the units with these ids, by path, whichever the session's seat is placed under.</summary>
-    public Task<ApiOutcome<IReadOnlyList<UnitInfo>>> UnitsByIdAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken = default)
-        => AskDirectoryAsync<UnitInfo>("/tenancy/directory/units", ids, cancellationToken);
+    /// <summary><c>POST /tenancy/directory/units</c>: what the units with these ids are called, by path, whichever the session's seat is placed under.</summary>
+    public Task<ApiOutcome<IReadOnlyList<UnitNameInfo>>> UnitsByIdAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken = default)
+        => AskDirectoryAsync<UnitNameInfo>("/tenancy/directory/units", ids, cancellationToken);
 
     /// <summary><c>POST /tenancy/directory/roles</c>: the roles with these ids, by name.</summary>
     public Task<ApiOutcome<IReadOnlyList<RoleInfo>>> RolesByIdAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken = default)
@@ -186,17 +186,17 @@ public sealed class SampleApi(HttpClient http, UiSession session)
     public Task<ApiOutcome<JsonElement?>> TakeCrewRoleAsync(string projectId, string seatId, string roleId, CancellationToken cancellationToken = default)
         => CommandAsync(HttpMethod.Delete, $"/projects/{Segment(projectId)}/crew/{Segment(seatId)}/roles/{Segment(roleId)}", null, cancellationToken);
 
-    /// <summary><c>POST /project-roles</c>: makes a project role with a name, what it is for, and the keys it gives.</summary>
-    public Task<ApiOutcome<JsonElement?>> MakeProjectRoleAsync(string? name, string? description, IReadOnlyList<string> keys, CancellationToken cancellationToken = default)
-        => CommandAsync(HttpMethod.Post, "/project-roles", new { name, description = Blank(description), keys }, cancellationToken);
+    /// <summary><c>POST /project-roles</c>: makes a project role with a name, what it is for, and the permissions it gives.</summary>
+    public Task<ApiOutcome<JsonElement?>> MakeProjectRoleAsync(string? name, string? description, IReadOnlyList<string> permissions, CancellationToken cancellationToken = default)
+        => CommandAsync(HttpMethod.Post, "/project-roles", new { name, description = Blank(description), permissions }, cancellationToken);
 
     /// <summary><c>PUT /project-roles/{id}</c>: a project role's name and description, as they are to be.</summary>
     public Task<ApiOutcome<JsonElement?>> RenameProjectRoleAsync(string roleId, string? name, string? description, CancellationToken cancellationToken = default)
         => CommandAsync(HttpMethod.Put, $"/project-roles/{Segment(roleId)}", new { name, description = Blank(description) }, cancellationToken);
 
-    /// <summary><c>PUT /project-roles/{id}/keys</c>: every key a project role is to give, none taking them all off.</summary>
-    public Task<ApiOutcome<JsonElement?>> SetProjectRoleKeysAsync(string roleId, IReadOnlyList<string> keys, CancellationToken cancellationToken = default)
-        => CommandAsync(HttpMethod.Put, $"/project-roles/{Segment(roleId)}/keys", new { keys }, cancellationToken);
+    /// <summary><c>PUT /project-roles/{id}/permissions</c>: every permission a project role is to give, none taking them all off.</summary>
+    public Task<ApiOutcome<JsonElement?>> SetProjectRolePermissionsAsync(string roleId, IReadOnlyList<string> permissions, CancellationToken cancellationToken = default)
+        => CommandAsync(HttpMethod.Put, $"/project-roles/{Segment(roleId)}/permissions", new { permissions }, cancellationToken);
 
     /// <summary><c>POST /project-roles/{id}/archive</c>: the role gives nothing from now on and is given no more.</summary>
     public Task<ApiOutcome<JsonElement?>> ArchiveProjectRoleAsync(string roleId, CancellationToken cancellationToken = default)

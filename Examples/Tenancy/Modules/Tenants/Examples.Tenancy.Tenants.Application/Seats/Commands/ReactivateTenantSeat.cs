@@ -7,11 +7,11 @@ namespace Examples.Tenancy.Tenants.Application.Seats.Commands;
 /// Makes a suspended seat active again, with every grant that has not ended.
 /// </summary>
 /// <remarks>
-/// It requires <c>tenancy.seats.manage</c> for the whole tenant. The package's use case asks for that key again, and
+/// It requires <c>tenancy.seats.manage</c> for the whole tenant. The package's use case asks for that permission again, and
 /// for what giving each of the seat's roles would need.
 /// </remarks>
 /// <param name="Seat">The seat.</param>
-[RequiresKey(TenancyKeys.SeatsManage)]
+[RequiresPermission(TenancyPermissions.SeatsManage)]
 public sealed record ReactivateTenantSeat(SeatId Seat) : ICommand, ITenantsRequest;
 
 /// <summary>Handles <see cref="ReactivateTenantSeat"/> with the Tenancy package's use case, which checks the caller, decides and saves.</summary>

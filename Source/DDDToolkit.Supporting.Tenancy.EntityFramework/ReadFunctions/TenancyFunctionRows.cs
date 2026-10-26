@@ -18,7 +18,7 @@ internal sealed class TenantAdministratorRow<TSeatId, TRoleId>
     public TRoleId RoleId { get; set; }
 }
 
-/// <summary>One seat that holds a key at a unit, as <see cref="TenancyFunctionNames.SeatsHoldingAt"/> answers it.</summary>
+/// <summary>One seat that holds a permission at a unit, as <see cref="TenancyFunctionNames.SeatsHoldingPermissionAt"/> answers it.</summary>
 internal sealed class SeatHolderRow<TSeatId>
     where TSeatId : struct, IEntityId, IEquatable<TSeatId>
 {
@@ -40,6 +40,20 @@ internal sealed class InvitationOfDigestRow<TTenantId, TInvitationId, TSeatId>
 
     /// <summary>The seat that issued it, or that system work issued it for; <see langword="null"/> for none.</summary>
     public TSeatId? IssuedBy { get; set; }
+}
+
+/// <summary>What one tenant of the caller's identity is called, as <see cref="TenancyFunctionNames.TenantNamesOfIdentity"/> answers it.</summary>
+internal sealed class TenantNameRow<TTenantId>
+    where TTenantId : struct, IEntityId, IEquatable<TTenantId>
+{
+    /// <summary>The tenant.</summary>
+    public TTenantId Id { get; set; }
+
+    /// <summary>The tenant's slug, as it is stored.</summary>
+    public string Slug { get; set; } = string.Empty;
+
+    /// <summary>Its organization's name, or <see langword="null"/> where it has none.</summary>
+    public string? Name { get; set; }
 }
 
 /// <summary>One tenant a round of system work visits, as <see cref="TenancyFunctionNames.TenantsToSweep"/> answers it.</summary>

@@ -21,7 +21,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
     public static IDisposable BeginSystem() => TenancyWork.BeginSystem<TTenantId, TSeatId>();
 
     /// <summary>
-    /// Begins system work inside one tenant, such as an import, seeding or an operator's command: it holds every key
+    /// Begins system work inside one tenant, such as an import, seeding or an operator's command: it holds every permission
     /// there, and nothing in any other tenant. <see cref="TenancyWork.BeginSystemIn{TTenantId, TSeatId}(TTenantId, TSeatId?, string)"/>
     /// closed over the application's ids. Ends when the result is disposed.
     /// </summary>

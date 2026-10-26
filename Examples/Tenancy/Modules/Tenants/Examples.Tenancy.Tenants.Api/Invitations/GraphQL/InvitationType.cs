@@ -1,5 +1,5 @@
 using Examples.Tenancy.Tenants.Api.Directory.GraphQL;
-using Examples.Tenancy.Tenants.Application.Organization;
+using Examples.Tenancy.Tenants.Application.Directory;
 using Examples.Tenancy.Tenants.Application.Roles;
 using Examples.Tenancy.Tenants.Application.Seats;
 using HotChocolate;
@@ -34,11 +34,11 @@ internal static partial class InvitationType
         descriptor.Field(invitation => invitation.GrantUntil).Name("until");
     }
 
-    /// <summary>The unit the seat would be placed in.</summary>
+    /// <summary>The unit the seat would be placed in, by name.</summary>
     [Cost(DirectoryQueries.LoadedForTheRequest)]
-    public static async Task<UnitListing?> GetUnitAsync(
+    public static async Task<UnitName?> GetUnitAsync(
         [Parent] TenancyUseCases.OpenInvitation<InvitationId> invitation,
-        IOrganizationUnitByIdDataLoader units,
+        IOrganizationUnitNameByIdDataLoader units,
         CancellationToken cancellationToken)
         => await units.LoadAsync(invitation.UnitId, cancellationToken);
 

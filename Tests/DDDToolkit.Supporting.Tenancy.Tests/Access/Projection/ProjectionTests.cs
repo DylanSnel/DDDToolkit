@@ -2,8 +2,8 @@ namespace DDDToolkit.Supporting.Tenancy.Tests;
 
 /// <summary>
 /// The rows the access questions read are worked out from the aggregates by pure functions: the closure of
-/// the tree, every ancestor with every descendant, and one right per unit, role and key, which only an active
-/// seat with an active role and a live key has.
+/// the tree, every ancestor with every descendant, and one right per unit, role and permission, which only an active
+/// seat with an active role and a live permission has.
 /// </summary>
 public class ProjectionTests
 {
@@ -65,7 +65,7 @@ public class ProjectionTests
     }
 
     [Fact]
-    public void Rights_are_one_row_per_unit_role_and_key_with_the_grant_period()
+    public void Rights_are_one_row_per_unit_role_and_permission_with_the_grant_period()
     {
         var harbor = new HarborBuilder().Build();
         var seat = harbor.NewSeat();
@@ -80,7 +80,7 @@ public class ProjectionTests
 
         var rights = TenancyProjection.RightsOf(seat.TenantId, seat.Id, seat.Status, TenancyProjection.GrantsOf(seat), harbor.FactsOf, harbor.Catalogue);
 
-        rights.Select(right => (right.UnitId, right.RoleId, right.Key, right.StartsAt, right.EndsAt)).Should().BeEquivalentTo(
+        rights.Select(right => (right.UnitId, right.RoleId, right.Permission, right.StartsAt, right.EndsAt)).Should().BeEquivalentTo(
         [
             (harbor.North, operatorRole.Id, HostCatalogue.WidgetChange, Now, (DateTimeOffset?)ends),
             (harbor.North, operatorRole.Id, HostCatalogue.WidgetCreate, Now, (DateTimeOffset?)ends),
@@ -99,7 +99,7 @@ public class ProjectionTests
         var grants = TenancyProjection.GrantsOf(administrator);
 
         TenancyProjection.RightsOf(administrator.TenantId, administrator.Id, SeatStatus.Active, grants, harbor.FactsOf, harbor.Catalogue)
-            .Should().HaveCount(harbor.Catalogue.LiveKeys.Count, "the administrators' role holds every live key, at the root");
+            .Should().HaveCount(harbor.Catalogue.LivePermissions.Count, "the administrators' role holds every live permission, at the root");
 
         TenancyProjection.RightsOf(administrator.TenantId, administrator.Id, SeatStatus.Suspended, grants, harbor.FactsOf, harbor.Catalogue).Should().BeEmpty();
         TenancyProjection.RightsOf(administrator.TenantId, administrator.Id, SeatStatus.Deactivated, grants, harbor.FactsOf, harbor.Catalogue).Should().BeEmpty();
@@ -122,7 +122,7 @@ public class ProjectionTests
     }
 
     [Fact]
-    public void A_retired_key_conveys_nothing()
+    public void A_retired_permission_conveys_nothing()
     {
         var gauge = new Permission("gauges.read", "Gauges", "Read gauges");
         var before = New.Catalogue(gauge);
@@ -134,13 +134,13 @@ public class ProjectionTests
         seat.Grant(unit, role.Id, role.Facts, GrantPeriod.Open(Now), null, null);
 
         TenancyProjection.RightsOf(seat.TenantId, seat.Id, seat.Status, TenancyProjection.GrantsOf(seat), _ => role.Facts, before)
-            .Select(right => right.Key).Should().BeEquivalentTo(["gauges.read", HostCatalogue.WidgetRead]);
+            .Select(right => right.Permission).Should().BeEquivalentTo(["gauges.read", HostCatalogue.WidgetRead]);
         TenancyProjection.RightsOf(seat.TenantId, seat.Id, seat.Status, TenancyProjection.GrantsOf(seat), _ => role.Facts, after)
-            .Select(right => right.Key).Should().Equal(HostCatalogue.WidgetRead);
+            .Select(right => right.Permission).Should().Equal(HostCatalogue.WidgetRead);
     }
 
     [Fact]
-    public void A_key_the_catalogue_no_longer_knows_conveys_nothing()
+    public void A_permission_the_catalogue_no_longer_knows_conveys_nothing()
     {
         var withGauges = New.Catalogue(new Permission("gauges.read", "Gauges", "Read gauges"));
         var withoutGauges = New.Catalogue();
@@ -152,6 +152,6 @@ public class ProjectionTests
 
         withoutGauges.Knows("gauges.read").Should().BeFalse();
         TenancyProjection.RightsOf(seat.TenantId, seat.Id, seat.Status, TenancyProjection.GrantsOf(seat), _ => role.Facts, withoutGauges)
-            .Select(right => right.Key).Should().Equal(HostCatalogue.WidgetRead);
+            .Select(right => right.Permission).Should().Equal(HostCatalogue.WidgetRead);
     }
 }

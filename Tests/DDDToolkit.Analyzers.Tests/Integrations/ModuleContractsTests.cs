@@ -43,7 +43,7 @@ public class ModuleContractsTests
             Gold,
         }
 
-        public static class CustomerKeys
+        public static class CustomerPermissions
         {
             public const string View = "crm.customers.view";
 
@@ -66,7 +66,7 @@ public class ModuleContractsTests
             public CustomerTier Tier { get; init; } = CustomerTier.Gold;
 
             public string Describe(CustomerId customer)
-                => directory.Find(customer)?.Name ?? CustomerKeys.View + CustomerKeys.Addresses.Edit;
+                => directory.Find(customer)?.Name ?? CustomerPermissions.View + CustomerPermissions.Addresses.Edit;
         }
         """;
 
@@ -306,7 +306,7 @@ public class ModuleContractsTests
         result.ShouldHaveDiagnostic("DDD00022", at: "ICustomerDirectory").GetMessage().Should().Contain("module 'Crm'");
         result.ShouldHaveDiagnostic("DDD00022", at: "CustomerTier");
         result.ShouldHaveDiagnostic("DDD00022", at: "CustomerId");
-        result.ShouldHaveDiagnostic("DDD00022", at: "CustomerKeys");
+        result.ShouldHaveDiagnostic("DDD00022", at: "CustomerPermissions");
         result.ShouldHaveDiagnostic("DDD00022", at: "Addresses");
     }
 
@@ -320,7 +320,7 @@ public class ModuleContractsTests
 
             public sealed class InvoiceHeader
             {
-                public string Describe() => Crm.Contracts.CustomerLedger.Name + Crm.Contracts.CustomerKeys.View;
+                public string Describe() => Crm.Contracts.CustomerLedger.Name + Crm.Contracts.CustomerPermissions.View;
             }
             """,
             crm => crm

@@ -44,10 +44,10 @@ public class RolePackTextsTests
             (HostCatalogue.WatcherPack, "Toeschouwer", "Bekijkt widgets"),
         ]);
 
-        // Only the texts differ: the keys are the pack's, and the first seat holds the administrators' role.
+        // Only the texts differ: the permissions are the pack's, and the first seat holds the administrators' role.
         foreach (var role in roles)
         {
-            role.Keys.Should().Equal(harness.Catalogue.Packs.Single(pack => pack.Key == role.FromPack).Keys);
+            role.Permissions.Should().Equal(harness.Catalogue.Packs.Single(pack => pack.Key == role.FromPack).Permissions);
         }
 
         harness.Store.Role(provisioned.AdministratorRole).Name.Should().Be("Hoofdgebruiker");
@@ -285,7 +285,7 @@ public class RolePackTextsTests
     }
 
     [Fact]
-    public async Task A_pack_of_the_applications_own_under_the_default_key_keeps_the_applications_texts()
+    public async Task A_pack_of_the_applications_own_under_the_default_permission_keeps_the_applications_texts()
     {
         // The application declares an administrators' pack keyed as the default is: it is the application's, and the
         // package has no texts for it.

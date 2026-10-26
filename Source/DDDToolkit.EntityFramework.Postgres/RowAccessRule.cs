@@ -26,7 +26,14 @@ public sealed class RowAccessRule
     /// </summary>
     internal const string ColumnRuleMarker = "{columns}";
 
-    private RowAccessRule(string name, string aggregateTypeName, RowOperations operations, string sql, IReadOnlyList<string> roles, IReadOnlyList<string> columns)
+    /// <summary>
+    /// What the generator writes at the start of a restrictive rule's SQL. An export of a version that knows no
+    /// restrictive rules stops at it, as at any placeholder it does not know, rather than write a rule meant to narrow
+    /// as a policy that allows more.
+    /// </summary>
+    internal const string RestrictiveRuleMarker = "{restrictive}";
+
+    private RowAccessRule(string name, string aggregateTypeName, RowOperations operations, string sql, IReadOnlyList<string> roles, IReadOnlyList<string> columns, bool restrictive = false)
     {
         Name = name;
         AggregateTypeName = aggregateTypeName;
@@ -34,6 +41,7 @@ public sealed class RowAccessRule
         Sql = sql;
         Roles = roles;
         Columns = columns;
+        Restrictive = restrictive;
     }
 
     /// <summary>The policy's name, as Postgres lists it: <c>A customer sees their orders</c>.</summary>
@@ -67,6 +75,14 @@ public sealed class RowAccessRule
 
     /// <summary>Whether this is a column rule: a trigger on a change of <see cref="Columns"/>, and no policy.</summary>
     public bool IsColumnRule => Columns.Count > 0;
+
+    /// <summary>
+    /// Whether the rule narrows rather than allows: written as <c>RESTRICTIVE</c> policies, which a row passes only
+    /// where a permissive policy lets it through as well. Its <c>[RowAccess]</c> says <c>Restrictive = true</c>, and its
+    /// generated SQL starts with <c>{restrictive}</c>, which <see cref="For(string, string, RowOperations, string, string[])"/>
+    /// takes off and remembers here.
+    /// </summary>
+    public bool Restrictive { get; }
 
     /// <summary>
     /// A rule on <typeparamref name="TAggregate"/>, for <paramref name="roles"/>: symbolic ones, such as
@@ -105,7 +121,10 @@ public sealed class RowAccessRule
                 nameof(sql));
         }
 
-        return new(name, aggregateTypeName, operations & RowOperations.All, sql, Named(roles), []);
+        var restrictive = sql.StartsWith(RestrictiveRuleMarker, StringComparison.Ordinal);
+        var template = restrictive ? sql[RestrictiveRuleMarker.Length..] : sql;
+        ArgumentException.ThrowIfNullOrWhiteSpace(template, nameof(sql));
+        return new(name, aggregateTypeName, operations & RowOperations.All, template, Named(roles), [], restrictive);
     }
 
     /// <summary>
@@ -159,5 +178,6 @@ public sealed class RowAccessRule
     private static string[] Named(string[] roles) => [.. roles.Where(role => !string.IsNullOrWhiteSpace(role)).Distinct(StringComparer.Ordinal)];
 
     /// <inheritdoc />
-    public override string ToString() => IsColumnRule ? $"{Name} ({AggregateTypeName}: {string.Join(", ", Columns)})" : $"{Name} ({AggregateTypeName})";
+    public override string ToString()
+        => IsColumnRule ? $"{Name} ({AggregateTypeName}: {string.Join(", ", Columns)})" : Restrictive ? $"{Name} ({AggregateTypeName}, restrictive)" : $"{Name} ({AggregateTypeName})";
 }

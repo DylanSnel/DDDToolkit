@@ -39,37 +39,35 @@ public static class MembershipPostgresChecks
     private const string LogCategory = "DDDToolkit.Supporting.Membership.Postgres";
 
     /// <summary>
-    /// Proves that, for every kind of resource with members the application registered, the database has the four
-    /// functions of its membership in the schema of the context that maps it, under the names its rules give
+    /// Proves that, for every kind of resource with members the application registered, the database has the five
+    /// functions of its membership in the schema of the context that maps it, under the names its name gives
     /// them, each running as its owner with an empty search path and answering a set, each written from the
     /// rules the resource is registered with by this version of the package, and each executable by the
-    /// database roles those rules name and by no other.
+    /// database roles the export granted it to and by no other.
     /// <para>
     /// The functions come with the access files the export writes, which makes
     /// <see cref="MembershipRowAccessContribution{TMember}"/> for every resource whose rules the application marks.
     /// Rules it does not mark get no functions, and functions written from other rules, a role that gives another
-    /// key say, would have the database answer otherwise than the application's own check, and nothing else would
+    /// permission say, would have the database answer otherwise than the application's own check, and nothing else would
     /// say so. The rules a
     /// function was written from are read from its body, which says them in its first line. That line is what
     /// is compared: a body changed by hand below it is not found.
     /// </para>
     /// <para>
-    /// Who may execute a function is not in its body, so it is asked of the database: a grant taken back by
-    /// hand would fail every policy that asks the function, and one given to <c>PUBLIC</c>, or to one more role
-    /// than the rules name, would let a role the rules never named ask a function that runs as its owner. The
-    /// roles the rules name (<see cref="MembershipRules.GrantTo"/>) are the database roles the host's row level
-    /// security runs its callers as (<see cref="PostgresRowLevelSecurityOptions"/>), or the roles a script is
-    /// written for by default where the host registered none.
+    /// Who may execute a function follows from the row access rules of the resource, which the host does not see:
+    /// the export grants each function to every role a rule of the resource is for, never the anonymous caller's,
+    /// and to the role scoped system work runs as where the rules name a scope, and records them in a line of the
+    /// function's body. The grants are asked of the database and held to that line: a grant taken back by hand would
+    /// fail every policy that asks the function, and one given to <c>PUBLIC</c>, or to one more role, would let a role
+    /// no rule names ask a function that runs as its owner.
     /// </para>
     /// <para>
-    /// Where the rules name the key that changes the members, or the key that changes the owner, the lock
-    /// written from them is held to as well: a restrictive policy on both member tables for each of those
-    /// roles, where the roles are kept the one that holds a role given to one the caller sees, and the trigger
-    /// on the owner column. Where the roles are kept for the resource, the trigger that keeps the owner's role
-    /// in use is held to, written from these rules; and their table is one a caller must not write as it
-    /// likes: a role's row says what everybody who holds it may do. A role table without row security that one
-    /// of those roles may write is refused. Which rows a caller reads and changes there stays the application's
-    /// own rules to say.
+    /// Where a permission locks the members, or the owner, the lock written from it is held to as well: a
+    /// restrictive policy on both member tables for each of those roles, where a customer makes the roles the one
+    /// that holds a role given to one the caller sees, and the trigger on the owner column. Where a customer makes
+    /// the roles, their table is one a caller must not write as it likes: a role's row says what everybody who holds
+    /// it may do. A role table without row security that one of those roles may write is refused. Which rows a
+    /// caller reads and changes there stays the application's own rules to say.
     /// </para>
     /// <para>
     /// It asks the database on the context of each resource, made in a scope of its own, as the application
@@ -81,21 +79,19 @@ public static class MembershipPostgresChecks
     /// <param name="cancellationToken">Cancels the check.</param>
     /// <returns>
     /// What the check remarks on without refusing, one line for each resource it concerns, empty when there is
-    /// nothing: a resource whose rules name no key that changes its members, or none that changes its owner,
+    /// nothing: a resource whose rules name no permission that changes its members, or none that changes its owner,
     /// so the database leaves those rows to whoever the application's row access rules let change the
     /// resource. Each line is logged as a warning as well, where the services have a logger.
     /// </returns>
     /// <exception cref="ArgumentNullException"><paramref name="services"/> is null.</exception>
     /// <exception cref="InvalidOperationException">
-    /// No resource is registered; a resource's context is not registered, does not map its members, does
-    /// not say where a resource sits that its rules reach from above, or maps no role class for a resource
-    /// whose rules say its roles are kept; a role the rules name is one the host
-    /// runs no caller as; a function is missing, does not run as its owner,
-    /// has no empty search path, answers no set, was written from other rules, may be executed by every role
-    /// or by one the rules do not name, or may not be executed by a role the rules name; the lock the rules
-    /// name a key for is not in place; the trigger that keeps the owner's role of a resource whose roles are
-    /// kept in use is not in place; or the table of the roles kept for a resource has no row security and
-    /// may be written by a role the rules name. Each finding is named, with the resource it is of.
+    /// No resource is registered; a resource's context is not registered, does not map its members, marks no
+    /// place a resource hangs at that its rules reach from above, or maps no role class for a resource whose roles
+    /// a customer makes; a function is missing, does not run as its owner, has no empty search path, answers no
+    /// set, was written from other rules, may be executed by every role or by one it was not granted to, or may
+    /// not be executed by a role it was granted to; the lock a permission asks for is not in place; or the table of
+    /// the roles a customer makes has no row security and may be written by a role the functions are granted to.
+    /// Each finding is named, with the resource it is of.
     /// </exception>
     public static async Task<IReadOnlyList<string>> EnsureFunctionsAreInPlaceAsync(IServiceProvider services, CancellationToken cancellationToken)
     {
@@ -124,24 +120,16 @@ public static class MembershipPostgresChecks
             if (found.Lock.Count > 0)
             {
                 throw new InvalidOperationException(
-                    "The rules '" + registration.Rules.Name + "' of " + registration.Resource.Name + " name the key a caller needs to change its members or its owner, and the database does not hold callers to it: "
+                    "A permission of " + registration.Resource.Name + " locks its members or its owner, and the database does not hold callers to it: "
                     + string.Join(", ", found.Lock) + ". Whoever the application's row access rules let change a " + registration.Resource.Name + " could write those rows past the application. "
                     + "Apply the access files the export writes with the rules the resource is registered with: the lock comes with the functions.");
-            }
-
-            if (found.OwnerRole is { } keptIn)
-            {
-                throw new InvalidOperationException(
-                    "The roles of " + registration.Resource.Name + " are kept in " + keptIn + ", and the database lets the owner's role, the one made from '" + registration.Rules.OwnerRole
-                    + "', be archived: the trigger that keeps it in use, " + MembershipSql.OwnerRoleLock(registration.Rules) + ", is missing, disabled, or written from other rules. "
-                    + "Nobody could be made an owner after. Apply the access files the export writes with the rules the resource is registered with: the trigger comes with the functions.");
             }
 
             if (found.RoleTable is { } unguarded)
             {
                 throw new InvalidOperationException(
-                    "The roles of " + registration.Resource.Name + " are kept in " + unguarded.Table + ", which has no row security, and " + unguarded.Roles + " may write it. "
-                    + "A role's row says what everybody who holds the role may do, so whoever changes its keys there changes that, past the application. "
+                    "The roles of " + registration.Resource.Name + " are made in " + unguarded.Table + ", which has no row security, and " + unguarded.Roles + " may write it. "
+                    + "A role's row says what everybody who holds the role may do, so whoever changes its permissions there changes that, past the application. "
                     + "Give " + unguarded.RoleClass + " row access rules of its own, [RowAccess<" + unguarded.RoleClass + ">], so the access file turns row security on for its table, "
                     + "or take the privileges to write the table from those roles.");
             }
@@ -170,25 +158,26 @@ public static class MembershipPostgresChecks
     /// <summary>
     /// What is to be said, without refusing, of a resource whose rules leave its member rows or its owner
     /// column to the application's own rules about changing the resource; <see langword="null"/> for rules
-    /// that name both keys.
+    /// that name both permissions.
     /// </summary>
     private static string? Remark(MembershipRegistration registration)
     {
         var rules = registration.Rules;
         var resource = registration.Resource.Name;
-        var open = (rules.ChangeMembersKey, rules.ChangeOwnerKey) switch
+        var open = (rules.MembersLockPermission, rules.OwnerLockPermission) switch
         {
-            (null, null) => "name no key that changes its members and none that changes its owner (changeMembersKey, changeOwnerKey), so the database leaves its member rows and its owner column",
-            (null, _) => "name no key that changes its members (changeMembersKey), so the database leaves its member rows",
-            (_, null) => "name no key that changes its owner (changeOwnerKey), so the database leaves its owner column, and with it every key an owner holds,",
+            (null, null) => "has no permission that locks its members and none that locks its owner (LocksMembers, LocksOwner), so the database leaves its member rows and its owner column",
+            (null, _) => "has no permission that locks its members (LocksMembers), so the database leaves its member rows",
+            (_, null) => "has no permission that locks its owner (LocksOwner), so the database leaves its owner column, and with it every permission an owner holds,",
             _ => null,
         };
 
         return open is null
             ? null
-            : "The rules '" + rules.Name + "' of " + resource + " " + open + " to whoever the application's row access rules let change a " + resource
+            : resource + " " + open + " to whoever the application's row access rules let change a " + resource
               + ": such a caller writes them by any statement that reaches the database, without a command of the application's having asked anything. "
-              + "Name the keys the application's commands require for it in the rules, or let no caller that may change a " + resource + " reach the database past the application.";
+              + "Mark the permissions the application's commands require for it [On<" + resource + ">(LocksMembers = true)] and [On<" + resource + ">(LocksOwner = true)], "
+              + "or let no caller that may change a " + resource + " reach the database past the application.";
     }
 
     /// <summary>
@@ -218,43 +207,39 @@ public static class MembershipPostgresChecks
                 }
 
                 var rules = registration.Rules;
-                if (rules.Above is not null && mapping.At is null)
+                if (rules.ReachFromAbove is not null && mapping.At is null)
                 {
                     throw new InvalidOperationException(
-                        "The rules '" + rules.Name + "' let " + registration.Resource.Name + " be reached from above, and " + registration.Context.Name
-                        + " does not say where it sits, so its functions cannot be the ones the rules say. Say it where the context maps its members: modelBuilder.Entity<"
-                        + registration.Resource.Name + ">().HasMembers(..., at: resource => resource.PlaceId).");
+                        "The rules '" + rules.Name + "' let " + registration.Resource.Name + " be reached from above, and it marks no place it hangs at, so its functions cannot be "
+                        + "the ones the rules say. Mark the property that says where it hangs [At], and map it with HasMembers.");
                 }
 
-                if (rules.RolesKept && mapping.RoleClass is null)
+                if (rules.Roles.Kind == RolesKind.Custom && mapping.RoleClass is null)
                 {
                     throw new InvalidOperationException(
-                        "The rules '" + rules.Name + "' say the roles of " + registration.Resource.Name + " are kept, and " + registration.Context.Name
+                        "The rules '" + rules.Name + "' say a customer makes the roles of " + registration.Resource.Name + ", and " + registration.Context.Name
                         + " maps no role class for it, so its functions cannot be the ones the rules say. Map the role class where the context builds its model: modelBuilder.Entity<"
-                        + registration.Resource.Name + "Role>().IsKeptRole().");
+                        + registration.Resource.Name + "Role>().IsCustomRole().");
                 }
 
                 var names = services.GetService<PostgresRowLevelSecurityOptions>() is { } options ? RowAccessRoleNames.From(options) : RowAccessRoleNames.Default;
-                var roles = RolesOf(names, registration);
-                var marker = MembershipSql.Marker(rules, names.SystemIn);
+                var marker = MembershipSql.Marker(rules, mapping, names.SystemIn);
                 var schema = context.Model.GetDefaultSchema() ?? PostgresRowAccess.DefaultSchema;
 
                 await context.Database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
                 try
                 {
                     var connection = context.Database.GetDbConnection();
+                    var roles = await ExecutorsAsync(connection, schema, rules, cancellationToken).ConfigureAwait(false);
                     var functions = await FunctionsAsync(connection, schema, rules, marker, roles, cancellationToken).ConfigureAwait(false);
 
-                    // Asked only of a database whose functions are the rules': a lock and a trigger are written with them.
+                    // Asked only of a database whose functions are the rules': a lock is written with them.
                     var locks = functions.Count > 0 ? [] : await LockAsync(connection, schema, mapping, rules, marker, roles, cancellationToken).ConfigureAwait(false);
-                    var ownerRole = functions.Count > 0 || locks.Count > 0 || !rules.RolesKept
-                        ? null
-                        : await ArchivableOwnerRoleAsync(connection, schema, mapping.RoleClass!, rules, marker, cancellationToken).ConfigureAwait(false);
-                    var roleTable = functions.Count > 0 || locks.Count > 0 || ownerRole is not null || !rules.RolesKept
+                    var roleTable = functions.Count > 0 || locks.Count > 0 || rules.Roles.Kind != RolesKind.Custom
                         ? null
                         : await UnguardedRoleTableAsync(connection, mapping.RoleClass!, roles, cancellationToken).ConfigureAwait(false);
 
-                    return new Found(functions, locks, ownerRole, roleTable);
+                    return new Found(functions, locks, roleTable);
                 }
                 finally
                 {
@@ -264,11 +249,35 @@ public static class MembershipPostgresChecks
         }
     }
 
-    /// <summary>What is wrong with the four functions of a resource, each as its name with what is wrong in brackets.</summary>
+    /// <summary>
+    /// The roles the export granted a resource's functions to, as the bodies of its functions record them, the first of
+    /// the five that does; none where none does, which the functions' check names.
+    /// </summary>
+    private static async Task<string[]> ExecutorsAsync(DbConnection connection, string schema, MembershipRules rules, CancellationToken cancellationToken)
+    {
+        var bodies = await ListAsync(
+            connection,
+            """
+            SELECT p.prosrc FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+            WHERE n.nspname = $1 AND p.proname = ANY ($2::pg_catalog.text[])
+            ORDER BY pg_catalog.array_position($2::pg_catalog.text[], p.proname::pg_catalog.text)
+            """,
+            [schema, new[] { rules.Functions.AsMember, rules.Functions.AsMemberWith, rules.Functions.Seen, rules.Functions.HeldOn, rules.Functions.FellowMembers }],
+            cancellationToken).ConfigureAwait(false);
+
+        var line = bodies
+            .Select(body => body.Split('\n').Select(each => each.Trim()).FirstOrDefault(each => each.StartsWith(MembershipSql.ExecutedBy, StringComparison.Ordinal)))
+            .FirstOrDefault(found => found is not null);
+        return line is null
+            ? []
+            : [.. line[MembershipSql.ExecutedBy.Length..].Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)];
+    }
+
+    /// <summary>What is wrong with the five functions of a resource, each as its name with what is wrong in brackets.</summary>
     private static Task<List<string>> FunctionsAsync(DbConnection connection, string schema, MembershipRules rules, string marker, string[] roles, CancellationToken cancellationToken)
     {
-        string[] names = [rules.Functions.AsMember, rules.Functions.AsMemberWith, rules.Functions.Seen, rules.Functions.HeldOn];
-        int[] arguments = [0, 1, 0, 1];
+        string[] names = [rules.Functions.AsMember, rules.Functions.AsMemberWith, rules.Functions.Seen, rules.Functions.HeldOn, rules.Functions.FellowMembers];
+        int[] arguments = [0, 1, 0, 1, 0];
 
         // Found by name in the catalog, which needs no privilege on the schema. Positional parameters, as the
         // row level security interceptor's own statement binds.
@@ -282,7 +291,7 @@ public static class MembershipPostgresChecks
                        WHEN NOT found.proretset THEN ' (it answers no set)'
                        WHEN pg_catalog.strpos(found.prosrc, $4) = 0 THEN ' (it was written from other rules)'
                        WHEN found.everybody THEN ' (every role may execute it)'
-                       WHEN found.others IS NOT NULL THEN ' (' || found.others || ' may execute it, which the rules do not name)'
+                       WHEN found.others IS NOT NULL THEN ' (' || found.others || ' may execute it, which no row access rule of the resource is for)'
                        ELSE ' (' || found.unable || ' may not execute it)' END
             FROM ROWS FROM (pg_catalog.unnest($2::pg_catalog.text[]), pg_catalog.unnest($3::pg_catalog.int4[])) AS listed(name, arguments)
             LEFT JOIN LATERAL (SELECT p.oid, p.prosecdef, p.proretset, p.prosrc,
@@ -310,10 +319,10 @@ public static class MembershipPostgresChecks
     }
 
     /// <summary>
-    /// What is missing of the lock the rules name a key for: a member table a role is not held on, for adding,
-    /// changing or removing a row; where the roles are kept, the table of the roles a member holds where a
+    /// What is missing of the lock a permission asks for: a member table a role is not held on, for adding,
+    /// changing or removing a row; where a customer makes the roles, the table of the roles a member holds where a
     /// role is not held to roles it sees, for adding or changing a row; and a resource's table whose owner
-    /// column is not held. Nothing for rules that name neither key.
+    /// column is not held. Nothing for rules with neither permission.
     /// </summary>
     private static async Task<List<string>> LockAsync(
         DbConnection connection,
@@ -325,19 +334,19 @@ public static class MembershipPostgresChecks
         CancellationToken cancellationToken)
     {
         var findings = new List<string>();
-        if (rules.ChangeMembersKey is not null)
+        if (rules.MembersLockPermission is not null)
         {
             findings.AddRange(await UnheldAsync(
-                connection, [mapping.Members, mapping.Roles], ["a", "w", "d"], roles, MembershipSql.MemberLock, "is not held to the key that changes the members", cancellationToken).ConfigureAwait(false));
+                connection, [mapping.Members, mapping.Roles], ["a", "w", "d"], roles, MembershipSql.MemberLock, "is not held to the permission that locks the members", cancellationToken).ConfigureAwait(false));
 
-            if (rules.RolesKept)
+            if (rules.Roles.Kind == RolesKind.Custom)
             {
                 findings.AddRange(await UnheldAsync(
                     connection, [mapping.Roles], ["a", "w"], roles, MembershipSql.RoleSeen, "is not held to the roles it sees", cancellationToken).ConfigureAwait(false));
             }
         }
 
-        if (rules.ChangeOwnerKey is not null)
+        if (rules.OwnerLockPermission is not null && roles.Length > 0)
         {
             var table = mapping.Resource.GetTableName()!;
             var tableSchema = mapping.Resource.GetSchema() ?? PostgresRowAccess.DefaultSchema;
@@ -346,7 +355,7 @@ public static class MembershipPostgresChecks
             findings.AddRange(await ListAsync(
                 connection,
                 """
-                SELECT '"' || pg_catalog.replace($1, '"', '""') || '".' || pg_catalog.quote_ident($2) || ' (its owner column is not held to the key that changes the owner)'
+                SELECT '"' || pg_catalog.replace($1, '"', '""') || '".' || pg_catalog.quote_ident($2) || ' (its owner column is not held to the permission that locks the owner)'
                 WHERE NOT EXISTS (SELECT 1 FROM pg_catalog.pg_trigger t
                                   JOIN pg_catalog.pg_class c ON c.oid = t.tgrelid
                                   JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
@@ -404,42 +413,8 @@ public static class MembershipPostgresChecks
     }
 
     /// <summary>
-    /// The table of the roles kept for a resource, with its schema, when the trigger that keeps the owner's
-    /// role in use is not there, is disabled, or runs a function not written from these rules by this version
-    /// of the package; <see langword="null"/> when it is in place.
-    /// </summary>
-    private static async Task<string?> ArchivableOwnerRoleAsync(
-        DbConnection connection,
-        string schema,
-        Microsoft.EntityFrameworkCore.Metadata.IEntityType roleClass,
-        MembershipRules rules,
-        string marker,
-        CancellationToken cancellationToken)
-    {
-        var table = roleClass.GetTableName()!;
-        var tableSchema = roleClass.GetSchema() ?? PostgresRowAccess.DefaultSchema;
-
-        var missing = await ListAsync(
-            connection,
-            """
-            SELECT '"' || pg_catalog.replace($1, '"', '""') || '".' || pg_catalog.quote_ident($2)
-            WHERE NOT EXISTS (SELECT 1 FROM pg_catalog.pg_trigger t
-                              JOIN pg_catalog.pg_class c ON c.oid = t.tgrelid
-                              JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-                              JOIN pg_catalog.pg_proc f ON f.oid = t.tgfoid
-                              JOIN pg_catalog.pg_namespace fn ON fn.oid = f.pronamespace
-                              WHERE n.nspname = $1 AND c.relname = $2 AND t.tgname = $3 AND NOT t.tgisinternal AND t.tgenabled <> 'D'
-                                AND fn.nspname = $5 AND pg_catalog.strpos(f.prosrc, $4) > 0)
-            """,
-            [tableSchema, table, MembershipSql.OwnerRoleLock(rules), marker, schema],
-            cancellationToken).ConfigureAwait(false);
-
-        return missing.Count == 0 ? null : missing[0];
-    }
-
-    /// <summary>
-    /// The table of the roles kept for a resource, when it has no row security and a role the rules name may
-    /// write it, with those roles; <see langword="null"/> when it is guarded, or nobody of them may write it.
+    /// The table of the roles a customer makes for a resource, when it has no row security and a role the functions
+    /// are granted to may write it, with those roles; <see langword="null"/> when it is guarded, or nobody of them may write it.
     /// </summary>
     private static async Task<UnguardedRoleTable?> UnguardedRoleTableAsync(
         DbConnection connection,
@@ -450,7 +425,7 @@ public static class MembershipPostgresChecks
         var table = roleClass.GetTableName()!;
         var tableSchema = roleClass.GetSchema() ?? PostgresRowAccess.DefaultSchema;
 
-        // A privilege on the table, or on any column of it: either writes a role's keys.
+        // A privilege on the table, or on any column of it: either writes a role's permissions.
         var able = await ListAsync(
             connection,
             """
@@ -498,47 +473,13 @@ public static class MembershipPostgresChecks
         }
     }
 
-    /// <summary>
-    /// The database roles the rules of <paramref name="registration"/> let ask its functions, each once: the
-    /// roles the host's row level security runs its callers as, for the symbolic ones the rules name, and a
-    /// role's own name as it is.
-    /// </summary>
-    /// <exception cref="InvalidOperationException">The rules name a role the host runs no caller as, such as a token role it did not map.</exception>
-    private static string[] RolesOf(RowAccessRoleNames names, MembershipRegistration registration)
-    {
-        var roles = new List<string>();
-        foreach (var role in registration.Rules.GrantTo)
-        {
-            string resolved;
-            try
-            {
-                resolved = names.Resolve(role);
-            }
-            catch (ArgumentException unresolved)
-            {
-                throw new InvalidOperationException(
-                    "The rules '" + registration.Rules.Name + "' of " + registration.Resource.Name + " let the role '" + role + "' ask its functions, and the host runs no caller as it: "
-                    + unresolved.Message + " Name the roles in the rules' grantTo that the host's row level security is registered with.",
-                    unresolved);
-            }
-
-            if (!roles.Contains(resolved, StringComparer.Ordinal))
-            {
-                roles.Add(resolved);
-            }
-        }
-
-        return [.. roles];
-    }
-
     /// <summary>What is wrong with the database's part of one resource.</summary>
     /// <param name="Functions">The functions that are not as the rules say them.</param>
-    /// <param name="Lock">What is missing of the lock the rules name a key for.</param>
-    /// <param name="OwnerRole">The table of the roles kept for the resource, when nothing there keeps the owner's role in use.</param>
-    /// <param name="RoleTable">The table of the roles kept for the resource, when callers may write it unguarded.</param>
-    private sealed record Found(List<string> Functions, List<string> Lock, string? OwnerRole, UnguardedRoleTable? RoleTable);
+    /// <param name="Lock">What is missing of the lock a permission asks for.</param>
+    /// <param name="RoleTable">The table of the roles a customer makes for the resource, when callers may write it unguarded.</param>
+    private sealed record Found(List<string> Functions, List<string> Lock, UnguardedRoleTable? RoleTable);
 
-    /// <summary>A role table without row security that roles the rules name may write.</summary>
+    /// <summary>A role table without row security that roles the functions are granted to may write.</summary>
     /// <param name="Table">The table, with its schema.</param>
     /// <param name="Roles">The roles that may write it.</param>
     /// <param name="RoleClass">The application's role class.</param>

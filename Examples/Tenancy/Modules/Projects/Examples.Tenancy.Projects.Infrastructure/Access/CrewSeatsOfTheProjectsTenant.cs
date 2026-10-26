@@ -16,7 +16,7 @@ namespace Examples.Tenancy.Projects.Infrastructure.Access;
 /// module.
 /// </summary>
 /// <remarks>
-/// The lock holds a crew's rows to the keys that change the crew, and Tenancy's policy keeps every row to a project
+/// The lock holds a crew's rows to the permissions that change the crew, and Tenancy's policy keeps every row to a project
 /// of the caller's tenant; neither asks whose the seat is. In C# the crew takes only an active seat of the tenant
 /// (<c>MemberAdmission.RequireMemberAsync</c>). A statement that went round the application could put a seat of
 /// another tenant on the crew, and that seat, acting in its own tenant, would then be answered the project by the

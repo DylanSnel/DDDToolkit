@@ -38,18 +38,18 @@ public class OwnRequirementTests
         public Guid? Find(Caller caller) => null;
     }
 
-    /// <summary>A case of the module's own: a key, held by the callers a test says.</summary>
-    public sealed record HoldsKey(string Key) : AccessRequirement;
+    /// <summary>A case of the module's own: a permission, held by the callers a test says.</summary>
+    public sealed record HoldsPermission(string Key) : AccessRequirement;
 
-    /// <summary>Decides the module's key, held by nobody, and says it was asked.</summary>
-    public sealed class KeyCheck(List<string> asked) : IAccessCheck
+    /// <summary>Decides the module's permission, held by nobody, and says it was asked.</summary>
+    public sealed class PermissionCheck(List<string> asked) : IAccessCheck
     {
-        public bool Decides(AccessRequirement requirement) => requirement is HoldsKey;
+        public bool Decides(AccessRequirement requirement) => requirement is HoldsPermission;
 
         public ValueTask RequireAsync(AccessRequirement requirement, IRequireAccess request, CancellationToken cancellationToken)
         {
-            asked.Add(((HoldsKey)requirement).Key);
-            return ValueTask.FromException(new RefusalException("profiles.not-permitted", RefusalKind.NotPermitted, "That takes the key."));
+            asked.Add(((HoldsPermission)requirement).Key);
+            return ValueTask.FromException(new RefusalException("profiles.not-permitted", RefusalKind.NotPermitted, "That takes the permission."));
         }
     }
 
@@ -138,17 +138,17 @@ public class OwnRequirementTests
     }
 
     [Fact]
-    public async Task Yours_or_the_key_asks_the_key_only_where_the_value_is_not_the_caller_s()
+    public async Task Yours_or_the_permission_asks_the_permission_only_where_the_value_is_not_the_caller_s()
     {
         var asked = new List<string>();
-        using var provider = Provider(Caller.User(Ann), services => services.AddSingleton(asked).AddAccessCheck<IProfileRequest, KeyCheck>());
+        using var provider = Provider(Caller.User(Ann), services => services.AddSingleton(asked).AddAccessCheck<IProfileRequest, PermissionCheck>());
         using var scope = provider.CreateScope();
-        AccessRequirement YoursOrTheKey(Guid profile) => AccessRequirement.Any(AccessRequirement.Own(profile), new HoldsKey("profiles.edit"));
+        AccessRequirement YoursOrThePermission(Guid profile) => AccessRequirement.Any(AccessRequirement.Own(profile), new HoldsPermission("profiles.edit"));
 
-        await Checks(scope).RequireAsync(new EditProfile(YoursOrTheKey(Ann)), Cancellation);
-        asked.Should().BeEmpty("her own profile is hers, and the key is not asked");
+        await Checks(scope).RequireAsync(new EditProfile(YoursOrThePermission(Ann)), Cancellation);
+        asked.Should().BeEmpty("her own profile is hers, and the permission is not asked");
 
-        var refusal = await RefusedAsync(scope, YoursOrTheKey(Bob));
+        var refusal = await RefusedAsync(scope, YoursOrThePermission(Bob));
         asked.Should().Equal("profiles.edit");
         refusal.Code.Should().Be(ToolkitRefusals.Refused);
         ((IReadOnlyList<RefusalReason>)refusal.Arguments[ToolkitRefusals.ReasonsArgument]!).Select(reason => reason.Code)

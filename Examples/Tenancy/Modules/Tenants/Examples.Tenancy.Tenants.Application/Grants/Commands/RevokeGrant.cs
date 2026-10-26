@@ -8,13 +8,13 @@ namespace Examples.Tenancy.Tenants.Application.Grants.Commands;
 /// </summary>
 /// <remarks>
 /// It requires <c>tenancy.grants.manage</c> at the unit, which the request names. The package's use case asks for
-/// that key again, and then for what only it can read: for a role that manages access, that the caller holds its
-/// keys that do, there and until the grant's end; and it keeps the tenant an administrator.
+/// that permission again, and then for what only it can read: for a role that manages access, that the caller holds its
+/// permissions that do, there and until the grant's end; and it keeps the tenant an administrator.
 /// </remarks>
 /// <param name="Seat">The seat.</param>
 /// <param name="Unit">The unit the role is held at.</param>
 /// <param name="Role">The role.</param>
-[RequiresKey(TenancyKeys.GrantsManage)]
+[RequiresPermission(TenancyPermissions.GrantsManage)]
 public sealed record RevokeGrant(SeatId Seat, [AtUnit] OrganizationUnitId Unit, RoleId Role) : ICommand, ITenantsRequest;
 
 /// <summary>Handles <see cref="RevokeGrant"/> with the Tenancy package's use case, which checks the caller, decides and saves.</summary>

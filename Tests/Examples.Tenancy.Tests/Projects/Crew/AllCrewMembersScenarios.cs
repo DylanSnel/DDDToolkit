@@ -45,14 +45,15 @@ public sealed class AllCrewMembersScenarios(SampleHosts sample) : IClassFixture<
         // rather than an empty list, which would say a member holds none.
         members.Should().OnlyContain(member => member.GetProperty("roles").ValueKind == JsonValueKind.Null);
 
-        // Leo leads the crew. His answer names seats and project roles by their ids: what a seat is called is asked
-        // of Tenancy's directory, and what a project role is, of the tenant's project roles.
+        // Leo owns the project, and so manages its crew. His answer names seats and project roles by their ids: what
+        // a seat is called is asked of Tenancy's directory, and what a project role is, of the tenant's project roles.
+        // The owner holds none: an empty list, which says so.
         using var leo = await sample.ClientAsync("leo", Harbor.Slug);
         var managed = (await leo.CrewAsync(PierSeven)).EnumerateArray().ToList();
         managed.Select(member => member.GetProperty("seatId").GetGuid()).Should().Equal(members.Select(member => member.GetProperty("seatId").GetGuid()), "the same crew, in the same order");
         var roles = await leo.ProjectRoleNamesAsync();
-        managed.Select(member => roles[member.GetProperty("roles").EnumerateArray().Single().GetProperty("roleId").GetGuid()])
-            .Should().Equal("Crew lead", "Surveyor", "Observer");
+        managed.Select(member => string.Join(", ", member.GetProperty("roles").EnumerateArray().Select(held => roles[held.GetProperty("roleId").GetGuid()])))
+            .Should().Equal("", "Surveyor", "Observer");
     }
 
     [Fact]
@@ -71,7 +72,7 @@ public sealed class AllCrewMembersScenarios(SampleHosts sample) : IClassFixture<
             crew[0].EnumerateObject().Select(field => field.Name).Should().Equal("seatId", "isOwner", "startsAt", "endsAt", "appliesNow", "roles");
             if (person == "leo")
             {
-                crew[0].GetProperty("roles")[0].EnumerateObject().Select(field => field.Name).Should().Equal("roleId", "startsAt", "endsAt", "appliesNow");
+                crew[1].GetProperty("roles")[0].EnumerateObject().Select(field => field.Name).Should().Equal("roleId", "startsAt", "endsAt", "appliesNow");
             }
         }
     }
@@ -82,7 +83,7 @@ public sealed class AllCrewMembersScenarios(SampleHosts sample) : IClassFixture<
         using var juno = await sample.ClientAsync("juno", Harbor.Slug);
         using var rhea = await sample.ClientAsync("rhea", Harbor.Slug);
 
-        // Rhea is on no crew of Pier 7: she holds the key to see it at North, above its unit.
+        // Rhea is on no crew of Pier 7: she holds the permission to see it at North, above its unit.
         var asRhea = await rhea.CrewAsync(PierSeven);
 
         asRhea.EnumerateArray().Select(member => member.GetProperty("seatId").GetGuid())

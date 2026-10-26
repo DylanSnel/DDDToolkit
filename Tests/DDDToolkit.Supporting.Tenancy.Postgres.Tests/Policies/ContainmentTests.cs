@@ -8,9 +8,9 @@ namespace DDDToolkit.Supporting.Tenancy.Postgres.Tests;
 
 /// <summary>
 /// Containment in the database, with every policy forced on the tables' owner. The export writes the catalogue's
-/// setting into <c>key_is_contained</c>, which the policies on the grants and the invitations and the trigger on a
+/// setting into <c>permission_is_contained</c>, which the policies on the grants and the invitations and the trigger on a
 /// seat's status ask: on by default, a seat gives, changes, takes away, offers and stops, by a query of its own as
-/// through the use cases, only what it holds the keys that manage access for; written with containment off, a role
+/// through the use cases, only what it holds the permissions that manage access for; written with containment off, a role
 /// that manages access goes as one that manages none, as the use cases then let it. Either way the database keeps a
 /// tenant's administrator and a seat's identity, and system work in a tenant, a handler that checked a quiz of the
 /// application's own say, gives what it gives.
@@ -41,7 +41,7 @@ public sealed class ContainmentTests(TenancyPostgres postgres)
     private const string Suspend = "UPDATE tenancy.\"Seats\" SET \"Status\" = 'Suspended' WHERE \"Id\" = $1";
 
     /// <summary>The application's part of the catalogue with containment turned off.</summary>
-    private static readonly ApplicationCatalogue Off = HostCatalogue.Application with { ContainAccessManagingKeys = false };
+    private static readonly ApplicationCatalogue Off = HostCatalogue.Application with { ContainAccessManagingPermissions = false };
 
     /// <summary>A person with no seat anywhere, who accepts an invitation.</summary>
     private static readonly Guid Wren = Guid.Parse("d0000000-0000-4000-8000-000000000096");
@@ -49,7 +49,7 @@ public sealed class ContainmentTests(TenancyPostgres postgres)
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
     [Fact]
-    public async Task With_containment_on_a_grants_manager_gives_neither_anyone_else_nor_itself_a_role_whose_keys_that_manage_access_it_lacks()
+    public async Task With_containment_on_a_grants_manager_gives_neither_anyone_else_nor_itself_a_role_whose_permissions_that_manage_access_it_lacks()
     {
         var database = await ForcedAsync(contained: true);
 
@@ -93,11 +93,11 @@ public sealed class ContainmentTests(TenancyPostgres postgres)
         // Read as Tenancy's system work in Harbor, which reads every seat's rights there: the login role owns nothing here.
         await using var system = await AsCaller.SystemInAsync(database, Harbor, TenancyWork.SystemScope, Cancellation);
         (await system.ScalarAsync<long>(
-                "SELECT count(*) FROM tenancy.\"SeatRights\" WHERE \"SeatId\" = $1 AND \"Key\" = 'tenancy.units.manage'",
+                "SELECT count(*) FROM tenancy.\"SeatRights\" WHERE \"SeatId\" = $1 AND \"Permission\" = 'tenancy.units.manage'",
                 Cancellation,
                 Hiro.Seat.Value))
-            .Should().Be(1, "with a key that manages access he gave himself what that key reaches");
-        (await system.ScalarAsync<long>("SELECT count(*) FROM tenancy.\"SeatRights\" WHERE \"SeatId\" = $1 AND \"Key\" = 'tenancy.units.manage'", Cancellation, Oli.Seat.Value))
+            .Should().Be(1, "with a permission that manages access he gave himself what that permission reaches");
+        (await system.ScalarAsync<long>("SELECT count(*) FROM tenancy.\"SeatRights\" WHERE \"SeatId\" = $1 AND \"Permission\" = 'tenancy.units.manage'", Cancellation, Oli.Seat.Value))
             .Should().Be(1);
         (await system.ScalarAsync<long>("SELECT count(*) FROM tenancy.\"SeatRights\" WHERE \"SeatId\" = $1 AND \"RoleId\" = $2", Cancellation, Seth.Seat.Value, HarborRoles.Supervisor.Value))
             .Should().Be(0);
@@ -109,10 +109,10 @@ public sealed class ContainmentTests(TenancyPostgres postgres)
     public async Task A_seats_manager_stops_a_seat_whose_roles_manage_access_it_does_not_hold_by_a_query_only_with_containment_off(bool contained)
     {
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation);
-        await HoldAtAsync(database, Eve, HarborRoot, [TenancyKeys.SeatsManage], Cancellation);
+        await HoldAtAsync(database, Eve, HarborRoot, [TenancyPermissions.SeatsManage], Cancellation);
         await TenancyPostgres.ForceAsync(database, Cancellation, catalogue: Catalogue(contained));
 
-        // Eve manages seats for the whole tenant, and holds none of the Supervisor's other keys.
+        // Eve manages seats for the whole tenant, and holds none of the Supervisor's other permissions.
         await using var eve = await AsCaller.PersonAsync(database, Eve.Identity, Harbor, Cancellation);
         if (contained)
         {
@@ -124,7 +124,7 @@ public sealed class ContainmentTests(TenancyPostgres postgres)
         (await eve.ExecuteAsync(Suspend, Cancellation, Seth.Seat.Value)).Should().Be(1);
         await eve.CommitAsync(Cancellation);
 
-        // The seats key for the whole tenant is asked either way: Hiro, who may write Oli's row, may not stop him.
+        // The seats permission for the whole tenant is asked either way: Hiro, who may write Oli's row, may not stop him.
         await using var hiro = await AsCaller.PersonAsync(database, Hiro.Identity, Harbor, Cancellation);
         var stopping = (await FluentActions.Awaiting(() => hiro.ExecuteAsync(Suspend, Cancellation, Oli.Seat.Value)).Should().ThrowAsync<PostgresException>()).Which;
         stopping.ConstraintName.Should().Be("tenancy_seat_status_is_managed");
@@ -136,7 +136,7 @@ public sealed class ContainmentTests(TenancyPostgres postgres)
     public async Task An_invitation_offers_a_role_that_manages_access_its_issuer_does_not_hold_by_a_query_or_the_use_case_only_with_containment_off(bool contained)
     {
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation);
-        await HoldAtAsync(database, Eve, HarborRoot, [TenancyKeys.SeatsManage, TenancyKeys.GrantsManage], Cancellation);
+        await HoldAtAsync(database, Eve, HarborRoot, [TenancyPermissions.SeatsManage, TenancyPermissions.GrantsManage], Cancellation);
         await TenancyPostgres.ForceAsync(database, Cancellation, catalogue: Catalogue(contained));
 
         // Eve manages seats and grants for the whole tenant, and does not hold the Supervisor's tenancy.units.manage.
@@ -166,7 +166,7 @@ public sealed class ContainmentTests(TenancyPostgres postgres)
         var accepted = await services.BySignedInUser(Wren, scoped => scoped.Invitations().AcceptAsync(issued.Token, verifiedAddress: null, Cancellation, configure: seat => seat.Rename("Wren")));
 
         await using var system = await AsCaller.SystemInAsync(database, Harbor, TenancyWork.SystemScope, Cancellation);
-        (await system.ScalarAsync<long>("SELECT count(*) FROM tenancy.\"SeatRights\" WHERE \"SeatId\" = $1 AND \"Key\" = 'tenancy.units.manage' AND \"UnitId\" = $2", Cancellation, accepted.Seat.Value, North.Value))
+        (await system.ScalarAsync<long>("SELECT count(*) FROM tenancy.\"SeatRights\" WHERE \"SeatId\" = $1 AND \"Permission\" = 'tenancy.units.manage' AND \"UnitId\" = $2", Cancellation, accepted.Seat.Value, North.Value))
             .Should().Be(1, "accepting asks the issuer again, by the same setting, and the database lets the grant through");
     }
 
@@ -209,7 +209,7 @@ public sealed class ContainmentTests(TenancyPostgres postgres)
         }
 
         await using var system = await AsCaller.SystemInAsync(database, Harbor, TenancyWork.SystemScope, Cancellation);
-        (await system.ScalarAsync<long>("SELECT count(*) FROM tenancy.\"SeatRights\" WHERE \"SeatId\" = $1 AND \"Key\" = 'tenancy.units.manage' AND \"UnitId\" = $2", Cancellation, Hiro.Seat.Value, North.Value))
+        (await system.ScalarAsync<long>("SELECT count(*) FROM tenancy.\"SeatRights\" WHERE \"SeatId\" = $1 AND \"Permission\" = 'tenancy.units.manage' AND \"UnitId\" = $2", Cancellation, Hiro.Seat.Value, North.Value))
             .Should().Be(1);
     }
 

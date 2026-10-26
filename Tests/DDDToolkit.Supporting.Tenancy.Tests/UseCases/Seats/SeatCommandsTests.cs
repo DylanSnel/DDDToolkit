@@ -1,9 +1,9 @@
 namespace DDDToolkit.Supporting.Tenancy.Tests;
 
 /// <summary>
-/// Seats are placed and granted where the caller holds the key. Whoever manages grants there gives and takes
+/// Seats are placed and granted where the caller holds the permission. Whoever manages grants there gives and takes
 /// away any role that manages no access, itself included for no longer than it manages grants, while a role
-/// that manages access goes only from a seat that holds its keys that do, for long enough, and never to that
+/// that manages access goes only from a seat that holds its permissions that do, for long enough, and never to that
 /// seat itself; suspending, deactivating or reactivating a seat that holds one follows the same rule. A grant a
 /// seat makes starts now, nothing leaves the tenant without an administrator, and every
 /// command that changes rights takes the access revision before it reads anything.
@@ -43,7 +43,7 @@ public class SeatCommandsTests
         refusal.Arguments["Unit"].Should().Be(harness.Harbor.NorthCoast);
         await Refused.WithCodeAsync(TenancyRefusals.NotPermitted,
             () => harness.As(harness.Administrator, h => h.Seats.PlaceAsync(seat, OrganizationUnitId.CreateSequential(), false, default)),
-            "a seat holds no key at a unit that is not there");
+            "a seat holds no permission at a unit that is not there");
         await Refused.WithCodeAsync(TenancyRefusals.UnitNotFound,
             () => harness.BySystemWork(h => h.Seats.PlaceAsync(seat, OrganizationUnitId.CreateSequential(), false, default)));
         harness.Store.Seat(seat).Placements.Should().ContainSingle();
@@ -60,7 +60,7 @@ public class SeatCommandsTests
 
         var refusal = await Refused.WithCodeAsync(TenancyRefusals.NotPermitted,
             () => harness.As(worker, h => h.Seats.GrantAsync(newcomer, harness.Harbor.NorthCoast, watcher, null, null, default)));
-        refusal.Arguments["Key"].Should().Be(TenancyKeys.GrantsManage);
+        refusal.Arguments["Permission"].Should().Be(TenancyPermissions.GrantsManage);
 
         await harness.As(supervisor, h => h.Seats.GrantAsync(newcomer, harness.Harbor.NorthCoast, watcher, Now.AddDays(7), " covers the pier ", default));
 
@@ -70,11 +70,11 @@ public class SeatCommandsTests
         grant.StartsAt.Should().Be(Now, "a grant a seat makes starts now");
         grant.EndsAt.Should().Be(Now.AddDays(7));
         grant.Reason.Should().Be("covers the pier");
-        harness.Store.SavedRights.Should().Contain(right => right.SeatId == newcomer && right.Key == HostCatalogue.WidgetRead && right.UnitId == harness.Harbor.NorthCoast);
+        harness.Store.SavedRights.Should().Contain(right => right.SeatId == newcomer && right.Permission == HostCatalogue.WidgetRead && right.UnitId == harness.Harbor.NorthCoast);
     }
 
     [Fact]
-    public async Task Granting_a_role_that_manages_access_needs_its_access_managing_keys_there()
+    public async Task Granting_a_role_that_manages_access_needs_its_access_managing_permissions_there()
     {
         var harness = Harness.OfHarbor();
         var supervisor = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.SupervisorPack);
@@ -85,8 +85,8 @@ public class SeatCommandsTests
             () => harness.As(supervisor, h => h.Seats.GrantAsync(newcomer, harness.Harbor.North, administrators, null, null, default)));
 
         refusal.Arguments["Role"].Should().Be(administrators);
-        refusal.Arguments["Missing"].Should().Be(TenancyKeys.RolesManage + ", " + TenancyKeys.SettingsManage);
-        refusal.Message.Should().Contain(TenancyKeys.RolesManage);
+        refusal.Arguments["Missing"].Should().Be(TenancyPermissions.RolesManage + ", " + TenancyPermissions.SettingsManage);
+        refusal.Message.Should().Contain(TenancyPermissions.RolesManage);
         harness.Store.Seat(newcomer).Placements.Single().Grants.Should().BeEmpty();
     }
 
@@ -97,14 +97,14 @@ public class SeatCommandsTests
         var supervisor = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.SupervisorPack);
         var newcomer = await harness.SeatAt("Di", harness.Harbor.NorthCoast);
 
-        // Supervisor manages access: its keys that do are held at North, above North Coast, for good.
+        // Supervisor manages access: its permissions that do are held at North, above North Coast, for good.
         await harness.As(supervisor, h => h.Seats.GrantAsync(newcomer, harness.Harbor.NorthCoast, harness.RoleFromPack(HostCatalogue.SupervisorPack), null, null, default));
 
         harness.Store.Seat(newcomer).Placements.Single().Grants.Single().RoleId.Should().Be(harness.RoleFromPack(HostCatalogue.SupervisorPack));
     }
 
     [Fact]
-    public async Task A_role_holding_a_retired_key_is_still_grantable()
+    public async Task A_role_holding_a_retired_permission_is_still_grantable()
     {
         var gauge = new Permission("gauges.read", "Gauges", "Read gauges");
         var gauges = New.Role(New.Catalogue(gauge), "Gauge watcher", "gauges.read", HostCatalogue.WidgetRead);
@@ -115,8 +115,8 @@ public class SeatCommandsTests
 
         await harness.As(supervisor, h => h.Seats.GrantAsync(newcomer, harness.Harbor.North, gauges.Id, null, null, default));
 
-        harness.Store.SavedRights.Where(right => right.SeatId == newcomer).Select(right => right.Key)
-            .Should().Equal([HostCatalogue.WidgetRead], "the retired key is carried, and conveys nothing");
+        harness.Store.SavedRights.Where(right => right.SeatId == newcomer).Select(right => right.Permission)
+            .Should().Equal([HostCatalogue.WidgetRead], "the retired permission is carried, and conveys nothing");
     }
 
     [Fact]
@@ -145,7 +145,7 @@ public class SeatCommandsTests
         await harness.Run(harness.SystemCaller(actingSeat: harness.Administrator),
             h => h.Seats.GrantAsync(newcomer, harness.Harbor.Root, administrators, null, "second pair of hands", default));
 
-        harness.Store.Calls.Should().NotContain(["Reads", "Queries"], "system work in a tenant asks nothing about its own keys");
+        harness.Store.Calls.Should().NotContain(["Reads", "Queries"], "system work in a tenant asks nothing about its own permissions");
         harness.Store.Seat(newcomer).Placements.Single().Grants.Single().GrantedBy.Should().Be(harness.Administrator, "the seat the work was done for is recorded");
 
         await harness.BySystemWork(h => h.Seats.RevokeAsync(harness.Administrator, harness.Harbor.Root, administrators, default));
@@ -154,7 +154,7 @@ public class SeatCommandsTests
     }
 
     [Fact]
-    public async Task Revoking_a_role_that_manages_access_needs_its_access_managing_keys()
+    public async Task Revoking_a_role_that_manages_access_needs_its_access_managing_permissions()
     {
         var harness = Harness.OfHarbor();
         var supervisor = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.SupervisorPack);
@@ -171,7 +171,7 @@ public class SeatCommandsTests
     }
 
     [Fact]
-    public async Task Withdrawing_a_placement_needs_the_access_managing_keys_of_its_roles()
+    public async Task Withdrawing_a_placement_needs_the_access_managing_permissions_of_its_roles()
     {
         var harness = Harness.OfHarbor();
         var supervisor = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.SupervisorPack);
@@ -180,7 +180,7 @@ public class SeatCommandsTests
 
         var refusal = await Refused.WithCodeAsync(TenancyRefusals.GrantExceedsOwn,
             () => harness.As(supervisor, h => h.Seats.WithdrawAsync(deputy, harness.Harbor.NorthCoast, default)));
-        refusal.Arguments["Missing"].Should().Be(TenancyKeys.RolesManage + ", " + TenancyKeys.SettingsManage);
+        refusal.Arguments["Missing"].Should().Be(TenancyPermissions.RolesManage + ", " + TenancyPermissions.SettingsManage);
         refusal.Arguments["Role"].Should().Be(harness.RoleFromPack(HostCatalogue.AdministratorPack), "each grant is taken away by the rule for its role");
 
         await harness.As(supervisor, h => h.Seats.WithdrawAsync(worker, harness.Harbor.NorthCoast, default));
@@ -194,7 +194,7 @@ public class SeatCommandsTests
     public async Task Withdrawing_a_placement_with_grants_needs_grants_manage()
     {
         var harness = Harness.OfHarbor();
-        var placer = await harness.BySystemWork(h => h.Roles.CreateAsync("Placer", "Places people", [TenancyKeys.SeatsManage, HostCatalogue.WidgetRead], default));
+        var placer = await harness.BySystemWork(h => h.Roles.CreateAsync("Placer", "Places people", [TenancyPermissions.SeatsManage, HostCatalogue.WidgetRead], default));
         var bert = await harness.SeatAt("Bert", harness.Harbor.North);
         await harness.BySystemWork(h => h.Seats.GrantAsync(bert, harness.Harbor.North, placer, null, null, default));
         var granted = await harness.SeatAt("Di", harness.Harbor.NorthCoast, HostCatalogue.WatcherPack);
@@ -202,7 +202,7 @@ public class SeatCommandsTests
 
         var refusal = await Refused.WithCodeAsync(TenancyRefusals.NotPermitted,
             () => harness.As(bert, h => h.Seats.WithdrawAsync(granted, harness.Harbor.NorthCoast, default)));
-        refusal.Arguments["Key"].Should().Be(TenancyKeys.GrantsManage);
+        refusal.Arguments["Permission"].Should().Be(TenancyPermissions.GrantsManage);
 
         await harness.As(bert, h => h.Seats.WithdrawAsync(placedOnly, harness.Harbor.NorthCoast, default));
         harness.Store.Seat(placedOnly).Placements.Should().BeEmpty();
@@ -392,7 +392,7 @@ public class SeatCommandsTests
     [InlineData("suspending a seat")]
     [InlineData("reactivating a seat")]
     [InlineData("deactivating a seat")]
-    [InlineData("changing a role's keys")]
+    [InlineData("changing a role's permissions")]
     [InlineData("archiving roles")]
     [InlineData("placing a seat")]
     [InlineData("archiving a unit")]
@@ -415,14 +415,14 @@ public class SeatCommandsTests
             "suspending a seat" => h => h.Seats.SuspendAsync(seat, default),
             "reactivating a seat" => h => h.Seats.ReactivateAsync(seat, default),
             "deactivating a seat" => h => h.Seats.DeactivateAsync(seat, default),
-            "changing a role's keys" => h => h.Roles.SetKeysAsync(harness.RoleFromPack(HostCatalogue.OperatorPack), [HostCatalogue.WidgetRead], default),
+            "changing a role's permissions" => h => h.Roles.SetPermissionsAsync(harness.RoleFromPack(HostCatalogue.OperatorPack), [HostCatalogue.WidgetRead], default),
             "archiving roles" => h => h.Roles.ArchiveAsync(harness.RoleFromPack(HostCatalogue.WatcherPack), default),
             "placing a seat" => h => h.Seats.PlaceAsync(seat, harness.Harbor.South, false, default),
             "archiving a unit" => h => h.Organization.ArchiveUnitAsync(harness.Harbor.NorthCoast, default),
             _ => throw new ArgumentOutOfRangeException(nameof(command)),
         };
 
-        // A seat without the key is refused, after the revision was taken, and nothing is saved.
+        // A seat without the permission is refused, after the revision was taken, and nothing is saved.
         await FluentActions.Awaiting(() => harness.As(seat, act)).Should().ThrowAsync<Exceptions.RefusalException>();
         harness.Store.Calls[0].Should().Be(nameof(InMemoryTenancyStore.SerializeAccessChangesAsync), "the first call of a refused " + command + " was " + string.Join(", ", harness.Store.Calls));
         harness.Store.RevisionOf(harness.Tenant).Should().Be(revision);
@@ -456,7 +456,7 @@ public class SeatCommandsTests
     [InlineData("suspending")]
     [InlineData("deactivating")]
     [InlineData("archiving the role")]
-    [InlineData("changing the role's keys")]
+    [InlineData("changing the role's permissions")]
     public async Task A_refused_command_leaves_nothing_for_a_later_save_in_its_unit_of_work(string command)
     {
         var harness = Harness.OfHarbor();
@@ -470,7 +470,7 @@ public class SeatCommandsTests
             "suspending" => h => h.Seats.SuspendAsync(ada, default),
             "deactivating" => h => h.Seats.DeactivateAsync(ada, default),
             "archiving the role" => h => h.Roles.ArchiveAsync(administrators, default),
-            "changing the role's keys" => h => h.Roles.SetKeysAsync(administrators, [HostCatalogue.WidgetRead], default),
+            "changing the role's permissions" => h => h.Roles.SetPermissionsAsync(administrators, [HostCatalogue.WidgetRead], default),
             _ => throw new ArgumentOutOfRangeException(nameof(command)),
         };
 
@@ -486,12 +486,12 @@ public class SeatCommandsTests
         seat.Status.Should().Be(SeatStatus.Active);
         seat.Placements.Should().ContainSingle().Which.Grants.Should().ContainSingle(grant => grant.RoleId == administrators);
         harness.Store.Role(administrators).Status.Should().Be(RoleStatus.Active);
-        harness.Store.Role(administrators).Keys.Should().Contain(TenancyKeys.AdministratorKey);
-        harness.Store.SavedRights.Should().Contain(right => right.SeatId == ada && right.Key == TenancyKeys.AdministratorKey, "the tenant keeps its administrator");
+        harness.Store.Role(administrators).Permissions.Should().Contain(TenancyPermissions.AdministratorPermission);
+        harness.Store.SavedRights.Should().Contain(right => right.SeatId == ada && right.Permission == TenancyPermissions.AdministratorPermission, "the tenant keeps its administrator");
     }
 
     [Fact]
-    public async Task A_role_that_manages_access_is_granted_for_no_longer_than_the_granter_holds_those_keys()
+    public async Task A_role_that_manages_access_is_granted_for_no_longer_than_the_granter_holds_those_permissions()
     {
         var harness = Harness.OfHarbor();
         var administrators = harness.RoleFromPack(HostCatalogue.AdministratorPack);
@@ -502,7 +502,7 @@ public class SeatCommandsTests
         var forGood = await Refused.WithCodeAsync(TenancyRefusals.GrantExceedsOwn,
             () => harness.As(temporary, h => h.Seats.GrantAsync(newcomer, harness.Harbor.Root, administrators, null, null, default)),
             "an administrator for a week does not make one for good");
-        forGood.Arguments["Missing"].Should().Be(string.Join(", ", harness.Catalogue.AccessManagingKeys), "only the keys that manage access are counted");
+        forGood.Arguments["Missing"].Should().Be(string.Join(", ", harness.Catalogue.AccessManagingPermissions), "only the permissions that manage access are counted");
         await Refused.WithCodeAsync(TenancyRefusals.GrantExceedsOwn,
             () => harness.As(temporary, h => h.Seats.GrantAsync(newcomer, harness.Harbor.Root, administrators, Now.AddDays(8), null, default)));
         harness.Store.Seat(newcomer).Placements.Single().Grants.Should().BeEmpty();
@@ -517,7 +517,7 @@ public class SeatCommandsTests
     }
 
     [Fact]
-    public async Task Granting_a_role_that_manages_no_access_needs_grant_management_and_none_of_its_keys()
+    public async Task Granting_a_role_that_manages_no_access_needs_grant_management_and_none_of_its_permissions()
     {
         var harness = Harness.OfHarbor();
         var clerk = await GrantDeskAt(harness, "Fay", harness.Harbor.North);
@@ -528,16 +528,16 @@ public class SeatCommandsTests
         await harness.As(clerk, h => h.Seats.GrantAsync(newcomer, harness.Harbor.NorthCoast, operatorRole, null, null, default));
 
         harness.Store.Seat(newcomer).Placements.Single().Grants.Single().GrantedBy.Should().Be(clerk);
-        harness.Store.SavedRights.Where(right => right.SeatId == newcomer).Select(right => right.Key)
+        harness.Store.SavedRights.Where(right => right.SeatId == newcomer).Select(right => right.Permission)
             .Should().BeEquivalentTo([HostCatalogue.WidgetChange, HostCatalogue.WidgetCreate, HostCatalogue.WidgetRead], "the clerk holds none of them, and gives them all");
 
         var outside = await Refused.WithCodeAsync(TenancyRefusals.NotPermitted,
             () => harness.As(clerk, h => h.Seats.GrantAsync(southerner, harness.Harbor.South, operatorRole, null, null, default)));
-        outside.Arguments["Key"].Should().Be(TenancyKeys.GrantsManage, "roles are given where the key is held, and below");
+        outside.Arguments["Permission"].Should().Be(TenancyPermissions.GrantsManage, "roles are given where the permission is held, and below");
 
         var contained = await Refused.WithCodeAsync(TenancyRefusals.GrantExceedsOwn,
             () => harness.As(clerk, h => h.Seats.GrantAsync(newcomer, harness.Harbor.NorthCoast, harness.RoleFromPack(HostCatalogue.SupervisorPack), null, null, default)));
-        contained.Arguments["Missing"].Should().Be(TenancyKeys.SeatsManage + ", " + TenancyKeys.UnitsManage, "a role that manages access still needs its keys that do");
+        contained.Arguments["Missing"].Should().Be(TenancyPermissions.SeatsManage + ", " + TenancyPermissions.UnitsManage, "a role that manages access still needs its permissions that do");
         contained.Arguments["Role"].Should().Be(harness.RoleFromPack(HostCatalogue.SupervisorPack));
     }
 
@@ -555,7 +555,7 @@ public class SeatCommandsTests
     }
 
     [Fact]
-    public async Task Revoking_a_role_that_manages_no_access_needs_none_of_its_keys()
+    public async Task Revoking_a_role_that_manages_no_access_needs_none_of_its_permissions()
     {
         var harness = Harness.OfHarbor();
         var clerk = await GrantDeskAt(harness, "Fay", harness.Harbor.North);
@@ -565,15 +565,15 @@ public class SeatCommandsTests
 
         var refusal = await Refused.WithCodeAsync(TenancyRefusals.GrantExceedsOwn,
             () => harness.As(clerk, h => h.Seats.RevokeAsync(worker, harness.Harbor.NorthCoast, harness.RoleFromPack(HostCatalogue.SupervisorPack), default)));
-        refusal.Arguments["Missing"].Should().Be(TenancyKeys.SeatsManage + ", " + TenancyKeys.UnitsManage);
+        refusal.Arguments["Missing"].Should().Be(TenancyPermissions.SeatsManage + ", " + TenancyPermissions.UnitsManage);
         harness.Store.Seat(worker).Placements.Single().Grants.Select(grant => grant.RoleId).Should().Equal(harness.RoleFromPack(HostCatalogue.SupervisorPack));
     }
 
     [Fact]
-    public async Task Withdrawing_a_placement_whose_roles_manage_no_access_needs_none_of_their_keys()
+    public async Task Withdrawing_a_placement_whose_roles_manage_no_access_needs_none_of_their_permissions()
     {
         var harness = Harness.OfHarbor();
-        var placer = await harness.BySystemWork(h => h.Roles.CreateAsync("Placer", "Places people and gives them roles", [TenancyKeys.SeatsManage, TenancyKeys.GrantsManage], default));
+        var placer = await harness.BySystemWork(h => h.Roles.CreateAsync("Placer", "Places people and gives them roles", [TenancyPermissions.SeatsManage, TenancyPermissions.GrantsManage], default));
         var bert = await harness.SeatAt("Bert", harness.Harbor.North);
         await harness.BySystemWork(h => h.Seats.GrantAsync(bert, harness.Harbor.North, placer, null, null, default));
         var worker = await harness.SeatAt("Di", harness.Harbor.NorthCoast, HostCatalogue.OperatorPack, HostCatalogue.WatcherPack);
@@ -584,7 +584,7 @@ public class SeatCommandsTests
         harness.Store.Seat(worker).Placements.Should().BeEmpty();
         var refusal = await Refused.WithCodeAsync(TenancyRefusals.GrantExceedsOwn,
             () => harness.As(bert, h => h.Seats.WithdrawAsync(supervisor, harness.Harbor.NorthCoast, default)));
-        refusal.Arguments["Missing"].Should().Be(TenancyKeys.UnitsManage);
+        refusal.Arguments["Missing"].Should().Be(TenancyPermissions.UnitsManage);
         harness.Store.Seat(supervisor).Placements.Should().ContainSingle();
     }
 
@@ -599,7 +599,7 @@ public class SeatCommandsTests
 
         var grant = harness.Store.Seat(clerk).Placements.Single().Grants.Single(candidate => candidate.RoleId == operatorRole);
         grant.GrantedBy.Should().Be(clerk, "a seat's grant to itself records it as the granter");
-        harness.Store.SavedRights.Should().Contain(right => right.SeatId == clerk && right.Key == HostCatalogue.WidgetChange && right.UnitId == harness.Harbor.North);
+        harness.Store.SavedRights.Should().Contain(right => right.SeatId == clerk && right.Permission == HostCatalogue.WidgetChange && right.UnitId == harness.Harbor.North);
         await Refused.WithCodeAsync(TenancyRefusals.PlacementNotFound,
             () => harness.As(clerk, h => h.Seats.GrantAsync(clerk, harness.Harbor.NorthCoast, harness.RoleFromPack(HostCatalogue.WatcherPack), null, null, default)),
             "a seat gives itself roles only where someone else placed it");
@@ -615,7 +615,7 @@ public class SeatCommandsTests
 
         var forGood = await Refused.WithCodeAsync(TenancyRefusals.GrantExceedsOwn,
             () => harness.As(clerk, h => h.Seats.GrantAsync(clerk, harness.Harbor.North, watcher, null, null, default)));
-        forGood.Arguments["Missing"].Should().Be(TenancyKeys.GrantsManage);
+        forGood.Arguments["Missing"].Should().Be(TenancyPermissions.GrantsManage);
         forGood.Arguments["Role"].Should().Be(watcher);
         await Refused.WithCodeAsync(TenancyRefusals.GrantExceedsOwn,
             () => harness.As(clerk, h => h.Seats.GrantAsync(clerk, harness.Harbor.North, watcher, Now.AddDays(8), null, default)));
@@ -636,11 +636,11 @@ public class SeatCommandsTests
 
         var administrator = await Refused.WithCodeAsync(TenancyRefusals.SelfAppointment,
             () => harness.As(harness.Administrator, h => h.Seats.GrantAsync(harness.Administrator, harness.Harbor.Root, supervisors, null, null, default)),
-            "holding every key does not let a seat appoint itself");
+            "holding every permission does not let a seat appoint itself");
         administrator.Arguments["Role"].Should().Be(supervisors);
         await Refused.WithCodeAsync(TenancyRefusals.SelfAppointment,
             () => harness.As(clerk, h => h.Seats.GrantAsync(clerk, harness.Harbor.North, supervisors, null, null, default)),
-            "self-appointment is decided before the keys are counted");
+            "self-appointment is decided before the permissions are counted");
 
         harness.Store.Seat(harness.Administrator).Placements.Single().Grants.Should().ContainSingle();
         harness.Store.Seat(clerk).Placements.Single().Grants.Should().ContainSingle();
@@ -655,19 +655,19 @@ public class SeatCommandsTests
         await harness.As(bert, h => h.Seats.RevokeAsync(bert, harness.Harbor.North, harness.RoleFromPack(HostCatalogue.OperatorPack), default));
         await harness.As(bert, h => h.Seats.RevokeAsync(bert, harness.Harbor.North, harness.RoleFromPack(HostCatalogue.SupervisorPack), default));
 
-        harness.Store.Seat(bert).Placements.Single().Grants.Should().BeEmpty("a seat's own grant that applies now is its own hold of the keys");
+        harness.Store.Seat(bert).Placements.Single().Grants.Should().BeEmpty("a seat's own grant that applies now is its own hold of the permissions");
         harness.Store.SavedRights.Should().NotContain(right => right.SeatId == bert);
 
-        // A grant of its own that is still to start is no hold: taking it away needs the keys like anyone else's.
+        // A grant of its own that is still to start is no hold: taking it away needs the permissions like anyone else's.
         var clerk = await GrantDeskAt(harness, "Fay", harness.Harbor.North);
         await harness.Grant(clerk, harness.Harbor.North, HostCatalogue.SupervisorPack, from: Now.AddDays(1));
         var refusal = await Refused.WithCodeAsync(TenancyRefusals.GrantExceedsOwn,
             () => harness.As(clerk, h => h.Seats.RevokeAsync(clerk, harness.Harbor.North, harness.RoleFromPack(HostCatalogue.SupervisorPack), default)));
-        refusal.Arguments["Missing"].Should().Be(TenancyKeys.SeatsManage + ", " + TenancyKeys.UnitsManage);
+        refusal.Arguments["Missing"].Should().Be(TenancyPermissions.SeatsManage + ", " + TenancyPermissions.UnitsManage);
     }
 
     [Fact]
-    public async Task Taking_away_a_role_that_manages_access_needs_its_keys_for_as_long_as_the_grant_runs()
+    public async Task Taking_away_a_role_that_manages_access_needs_its_permissions_for_as_long_as_the_grant_runs()
     {
         var harness = Harness.OfHarbor();
         var temporary = await harness.SeatAt("Bert", harness.Harbor.Root);
@@ -679,8 +679,8 @@ public class SeatCommandsTests
 
         var revoke = await Refused.WithCodeAsync(TenancyRefusals.GrantExceedsOwn,
             () => harness.As(temporary, h => h.Seats.RevokeAsync(lasting, harness.Harbor.North, supervisors, default)),
-            "a grant for good is taken away only by a seat that holds its keys for good");
-        revoke.Arguments["Missing"].Should().Be(TenancyKeys.GrantsManage + ", " + TenancyKeys.SeatsManage + ", " + TenancyKeys.UnitsManage);
+            "a grant for good is taken away only by a seat that holds its permissions for good");
+        revoke.Arguments["Missing"].Should().Be(TenancyPermissions.GrantsManage + ", " + TenancyPermissions.SeatsManage + ", " + TenancyPermissions.UnitsManage);
         await Refused.WithCodeAsync(TenancyRefusals.GrantExceedsOwn,
             () => harness.As(temporary, h => h.Seats.WithdrawAsync(lasting, harness.Harbor.North, default)));
 
@@ -691,10 +691,10 @@ public class SeatCommandsTests
     }
 
     [Fact]
-    public async Task A_key_the_application_marks_makes_its_roles_contained()
+    public async Task A_permission_the_application_marks_makes_its_roles_contained()
     {
         var gauge = new Permission("gauges.assign", "Gauges", "Hand gauges to people");
-        var marking = HostCatalogue.Application with { AccessManagingKeys = ["gauges.assign"] };
+        var marking = HostCatalogue.Application with { AccessManagingPermissions = ["gauges.assign"] };
         var harness = Harness.OfHarbor(TenancyCatalogue.Build(marking, [gauge]));
         var keepers = await harness.BySystemWork(h => h.Roles.CreateAsync("Gauge keepers", string.Empty, ["gauges.assign", HostCatalogue.WidgetRead], default));
         var clerk = await GrantDeskAt(harness, "Fay", harness.Harbor.North);
@@ -704,7 +704,7 @@ public class SeatCommandsTests
             () => harness.As(clerk, h => h.Seats.GrantAsync(newcomer, harness.Harbor.North, keepers, null, null, default)));
         refusal.Arguments["Missing"].Should().Be("gauges.assign");
 
-        // Retired, the key manages nothing, and the role is given like any other.
+        // Retired, the permission manages nothing, and the role is given like any other.
         var retired = TenancyCatalogue.Build(marking, [gauge with { Retired = true }]);
         await harness.As(clerk, h => new HostTenancy.SeatCommands(h.Store, retired, h.Clock).GrantAsync(newcomer, harness.Harbor.North, keepers, null, null, default));
         harness.Store.Seat(newcomer).Placements.Single().Grants.Single().RoleId.Should().Be(keepers);
@@ -713,7 +713,7 @@ public class SeatCommandsTests
     [Fact]
     public async Task A_listing_administrator_gives_every_role_that_manages_access()
     {
-        // Ada's pack lists Tenancy's keys and the one other key that manages access, and no key to work with widgets.
+        // Ada's pack lists Tenancy's permissions and the one other permission that manages access, and no permission to work with widgets.
         var harness = Harness.OfHarbor(New.ListingCatalogue());
         var ada = harness.Administrator;
         var root = harness.Harbor.Root;
@@ -721,13 +721,13 @@ public class SeatCommandsTests
         var stock = await harness.As(ada, h => h.Roles.CreateAsync("Stock keeper", string.Empty, [New.WidgetAssign, HostCatalogue.WidgetCreate], default));
         RoleId[] roles = [.. harness.Harbor.RolesByPack.Values.Select(role => role.Id), stock];
 
-        harness.Store.SavedRights.Where(right => right.SeatId == ada).Select(right => right.Key)
-            .Should().Contain(harness.Catalogue.AccessManagingKeys)
+        harness.Store.SavedRights.Where(right => right.SeatId == ada).Select(right => right.Permission)
+            .Should().Contain(harness.Catalogue.AccessManagingPermissions)
             .And.NotContain([HostCatalogue.WidgetRead, HostCatalogue.WidgetChange, HostCatalogue.WidgetCreate], "she holds what her pack lists");
 
         // Every role of the tenant, as a seat and not as system work: the administrators' own, the supervisor's
-        // and the two that hold the marked key, which go only from a seat holding their keys that manage access,
-        // and the rest, which whoever manages grants gives without holding their keys.
+        // and the two that hold the marked permission, which go only from a seat holding their permissions that manage access,
+        // and the rest, which whoever manages grants gives without holding their permissions.
         foreach (var role in roles)
         {
             await harness.As(ada, h => h.Seats.GrantAsync(newcomer, root, role, null, null, default));
@@ -735,12 +735,12 @@ public class SeatCommandsTests
 
         harness.Store.Seat(newcomer).Placements.Single().Grants.Select(grant => grant.RoleId).Should().BeEquivalentTo(roles);
         harness.Store.Seat(newcomer).Placements.Single().Grants.Should().OnlyContain(grant => grant.GrantedBy == ada);
-        roles.Where(role => harness.Catalogue.AccessManagingKeysOf(harness.Store.Role(role).Facts).Count > 0)
+        roles.Where(role => harness.Catalogue.AccessManagingPermissionsOf(harness.Store.Role(role).Facts).Count > 0)
             .Should().BeEquivalentTo(
                 [harness.RoleFromPack(HostCatalogue.AdministratorPack), harness.RoleFromPack(HostCatalogue.SupervisorPack), harness.RoleFromPack(New.KeeperPack), stock],
                 "these are the roles that manage access");
-        harness.Store.SavedRights.Where(right => right.SeatId == newcomer).Select(right => right.Key).Distinct()
-            .Should().BeEquivalentTo(harness.Catalogue.LiveKeys, "between them the roles give every live key, the ones Ada does not hold included");
+        harness.Store.SavedRights.Where(right => right.SeatId == newcomer).Select(right => right.Permission).Distinct()
+            .Should().BeEquivalentTo(harness.Catalogue.LivePermissions, "between them the roles give every live permission, the ones Ada does not hold included");
 
         // And she takes each away again, by the same rule.
         foreach (var role in roles)
@@ -751,7 +751,7 @@ public class SeatCommandsTests
         harness.Store.Seat(newcomer).Placements.Single().Grants.Should().BeEmpty();
 
         // What the catalogue asks of her pack is what makes this hold: a seat that manages grants without the
-        // marked key is refused the role that holds it.
+        // marked permission is refused the role that holds it.
         var supervisor = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.SupervisorPack);
         var northerner = await harness.SeatAt("Ed", harness.Harbor.North);
         var refusal = await Refused.WithCodeAsync(TenancyRefusals.GrantExceedsOwn,
@@ -760,7 +760,7 @@ public class SeatCommandsTests
     }
 
     [Fact]
-    public async Task A_listing_administrator_holds_a_key_it_does_not_list_only_through_another_role()
+    public async Task A_listing_administrator_holds_a_permission_it_does_not_list_only_through_another_role()
     {
         // The list is what the administrators' role starts with, not a wall around the seat.
         var harness = Harness.OfHarbor(New.ListingCatalogue());
@@ -769,18 +769,18 @@ public class SeatCommandsTests
         var operatorRole = harness.RoleFromPack(HostCatalogue.OperatorPack);
         string[] work = [HostCatalogue.WidgetChange, HostCatalogue.WidgetCreate, HostCatalogue.WidgetRead];
 
-        IEnumerable<string> Held() => harness.Store.SavedRights.Where(right => right.SeatId == ada).Select(right => right.Key).Distinct();
+        IEnumerable<string> Held() => harness.Store.SavedRights.Where(right => right.SeatId == ada).Select(right => right.Permission).Distinct();
 
-        Held().Should().NotContain(work, "her own role lists none of the keys to work with widgets");
+        Held().Should().NotContain(work, "her own role lists none of the permissions to work with widgets");
 
         // A role that manages no access she gives herself, as every seat that manages grants does where it is
         // placed, and the grant says who gave it.
         await harness.As(ada, h => h.Seats.GrantAsync(ada, root, operatorRole, null, "covers the widgets", default));
 
-        Held().Should().Contain(work).And.Contain(harness.Catalogue.AccessManagingKeys);
+        Held().Should().Contain(work).And.Contain(harness.Catalogue.AccessManagingPermissions);
         harness.Store.Seat(ada).Placements.Single().Grants.Single(grant => grant.RoleId == operatorRole).GrantedBy.Should().Be(ada);
 
-        // A role that manages access she never gives herself, although she holds its keys that do.
+        // A role that manages access she never gives herself, although she holds its permissions that do.
         var refusal = await Refused.WithCodeAsync(TenancyRefusals.SelfAppointment,
             () => harness.As(ada, h => h.Seats.GrantAsync(ada, root, harness.RoleFromPack(New.KeeperPack), null, null, default)));
         refusal.Arguments["Role"].Should().Be(harness.RoleFromPack(New.KeeperPack));
@@ -788,11 +788,11 @@ public class SeatCommandsTests
         // Without the other role she is back to what her pack lists.
         await harness.As(ada, h => h.Seats.RevokeAsync(ada, root, operatorRole, default));
 
-        Held().Should().BeEquivalentTo(harness.Catalogue.AdministratorPackFor(TenantShape.Hierarchical).Keys);
+        Held().Should().BeEquivalentTo(harness.Catalogue.AdministratorPackFor(TenantShape.Hierarchical).Permissions);
     }
 
     [Fact]
-    public async Task An_archived_role_is_taken_away_without_its_keys()
+    public async Task An_archived_role_is_taken_away_without_its_permissions()
     {
         var harness = Harness.OfHarbor();
         var clerk = await GrantDeskAt(harness, "Fay", harness.Harbor.North);
@@ -836,7 +836,7 @@ public class SeatCommandsTests
     }
 
     [Fact]
-    public async Task Suspending_or_deactivating_a_seat_needs_the_keys_of_its_roles_that_manage_access()
+    public async Task Suspending_or_deactivating_a_seat_needs_the_permissions_of_its_roles_that_manage_access()
     {
         var harness = Harness.OfHarbor();
         var oli = await SeatDeskAtRoot(harness, "Oli");
@@ -845,12 +845,12 @@ public class SeatCommandsTests
 
         var suspend = await Refused.WithCodeAsync(TenancyRefusals.GrantExceedsOwn,
             () => harness.As(oli, h => h.Seats.SuspendAsync(supervisor, default)),
-            "suspending takes the supervisor's grant away, which only a seat holding its keys that manage access may");
-        suspend.Arguments["Missing"].Should().Be(TenancyKeys.GrantsManage + ", " + TenancyKeys.UnitsManage, "Oli holds seats.manage, and no other of them");
+            "suspending takes the supervisor's grant away, which only a seat holding its permissions that manage access may");
+        suspend.Arguments["Missing"].Should().Be(TenancyPermissions.GrantsManage + ", " + TenancyPermissions.UnitsManage, "Oli holds seats.manage, and no other of them");
         suspend.Arguments["Role"].Should().Be(harness.RoleFromPack(HostCatalogue.SupervisorPack));
         await Refused.WithCodeAsync(TenancyRefusals.GrantExceedsOwn, () => harness.As(oli, h => h.Seats.DeactivateAsync(supervisor, default)));
         harness.Store.Seat(supervisor).Status.Should().Be(SeatStatus.Active);
-        harness.Store.SavedRights.Should().Contain(right => right.SeatId == supervisor && right.Key == TenancyKeys.UnitsManage);
+        harness.Store.SavedRights.Should().Contain(right => right.SeatId == supervisor && right.Permission == TenancyPermissions.UnitsManage);
 
         await harness.As(oli, h => h.Seats.SuspendAsync(worker, default));
         await harness.As(oli, h => h.Seats.ReactivateAsync(worker, default));
@@ -860,7 +860,7 @@ public class SeatCommandsTests
     }
 
     [Fact]
-    public async Task Reactivating_a_seat_needs_the_keys_of_its_roles_that_manage_access()
+    public async Task Reactivating_a_seat_needs_the_permissions_of_its_roles_that_manage_access()
     {
         var harness = Harness.OfHarbor();
         var oli = await SeatDeskAtRoot(harness, "Oli");
@@ -869,8 +869,8 @@ public class SeatCommandsTests
 
         var refusal = await Refused.WithCodeAsync(TenancyRefusals.GrantExceedsOwn,
             () => harness.As(oli, h => h.Seats.ReactivateAsync(supervisor, default)),
-            "reactivating gives the supervisor's grant back, which only a seat holding its keys that manage access may");
-        refusal.Arguments["Missing"].Should().Be(TenancyKeys.GrantsManage + ", " + TenancyKeys.UnitsManage);
+            "reactivating gives the supervisor's grant back, which only a seat holding its permissions that manage access may");
+        refusal.Arguments["Missing"].Should().Be(TenancyPermissions.GrantsManage + ", " + TenancyPermissions.UnitsManage);
         harness.Store.Seat(supervisor).Status.Should().Be(SeatStatus.Suspended);
         harness.Store.SavedRights.Should().NotContain(right => right.SeatId == supervisor);
 
@@ -897,7 +897,7 @@ public class SeatCommandsTests
         var forGood = await Refused.WithCodeAsync(TenancyRefusals.GrantExceedsOwn,
             () => harness.As(temporary, h => h.Seats.SuspendAsync(lasting, default)),
             "an administrator for a week does not stop a grant for good");
-        forGood.Arguments["Missing"].Should().Be(TenancyKeys.GrantsManage + ", " + TenancyKeys.SeatsManage + ", " + TenancyKeys.UnitsManage);
+        forGood.Arguments["Missing"].Should().Be(TenancyPermissions.GrantsManage + ", " + TenancyPermissions.SeatsManage + ", " + TenancyPermissions.UnitsManage);
         await Refused.WithCodeAsync(TenancyRefusals.GrantExceedsOwn,
             () => harness.As(temporary, h => h.Seats.SuspendAsync(upcoming, default)),
             "a grant still to start is one the seat would hold, so it counts");
@@ -915,11 +915,11 @@ public class SeatCommandsTests
 
     /// <summary>
     /// A new seat placed at the root, granted there for good by system work a role made by hand with nothing but
-    /// <see cref="TenancyKeys.SeatsManage"/>: someone whose work is keeping the tenant's list of people.
+    /// <see cref="TenancyPermissions.SeatsManage"/>: someone whose work is keeping the tenant's list of people.
     /// </summary>
     private static async Task<SeatId> SeatDeskAtRoot(Harness harness, string name)
     {
-        var desk = await harness.BySystemWork(h => h.Roles.CreateAsync("Seat desk", "Keeps the list of people", [TenancyKeys.SeatsManage], default));
+        var desk = await harness.BySystemWork(h => h.Roles.CreateAsync("Seat desk", "Keeps the list of people", [TenancyPermissions.SeatsManage], default));
         var seat = await harness.SeatAt(name, harness.Harbor.Root);
         await harness.BySystemWork(h => h.Seats.GrantAsync(seat, harness.Harbor.Root, desk, null, null, default));
         return seat;
@@ -927,11 +927,11 @@ public class SeatCommandsTests
 
     /// <summary>
     /// A new seat whose primary placement is <paramref name="unit"/>, granted there by system work a role made by
-    /// hand with nothing but <see cref="TenancyKeys.GrantsManage"/>: someone whose work is giving people their roles.
+    /// hand with nothing but <see cref="TenancyPermissions.GrantsManage"/>: someone whose work is giving people their roles.
     /// </summary>
     private static async Task<SeatId> GrantDeskAt(Harness harness, string name, OrganizationUnitId unit, DateTimeOffset? until = null)
     {
-        var desk = await harness.BySystemWork(h => h.Roles.CreateAsync("Grant desk", "Gives people their roles", [TenancyKeys.GrantsManage], default));
+        var desk = await harness.BySystemWork(h => h.Roles.CreateAsync("Grant desk", "Gives people their roles", [TenancyPermissions.GrantsManage], default));
         var seat = await harness.SeatAt(name, unit);
         await harness.BySystemWork(h => h.Seats.GrantAsync(seat, unit, desk, until, null, default));
         return seat;

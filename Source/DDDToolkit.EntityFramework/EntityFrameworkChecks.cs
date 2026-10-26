@@ -1,8 +1,10 @@
 using DDDToolkit.Abstractions.Interfaces;
+using DDDToolkit.Access;
 using DDDToolkit.EntityFramework.EventLog;
 using DDDToolkit.EntityFramework.Interceptors;
 using DDDToolkit.EntityFramework.Options;
 using DDDToolkit.EntityFramework.Outbox;
+using DDDToolkit.EntityFramework.Owners;
 using DDDToolkit.Startup;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -40,6 +42,15 @@ public static class EntityFrameworkChecks
     /// </summary>
     public const string ToolkitWiredCheck = "entity-framework.toolkit-wired";
 
+    /// <summary>
+    /// The start-up check <c>AddDDDToolkitEntityFramework</c> brings, by the name a host turns it off with:
+    /// <see cref="EnsureOwnersMapped"/>, that the owner of every aggregate the host's requests ask about can be read.
+    /// It finds, before the first request does, the context that maps each such aggregate and the column of its
+    /// <c>[Owner]</c>, and keeps what it found for the requests. It opens no connection, so it runs with the checks of
+    /// the services, after <see cref="ToolkitWiredCheck"/>. A host whose requests ask about no owner passes it at once.
+    /// </summary>
+    public const string OwnersMappedCheck = "entity-framework.owners-mapped";
+
     /// <summary>The check <see cref="ToolkitWiredCheck"/> names.</summary>
     internal static StartupCheck ToolkitWired { get; } = new(ToolkitWiredCheck, StartupCheckStage.Services, async (services, _) =>
     {
@@ -58,6 +69,57 @@ public static class EntityFrameworkChecks
             }
         }
     });
+
+    /// <summary>The check <see cref="OwnersMappedCheck"/> names, over the very collection it was brought by.</summary>
+    internal static StartupCheck OwnersMapped(IServiceCollection registered) => new(OwnersMappedCheck, StartupCheckStage.Services, async (services, _) =>
+    {
+        await using var scope = services.CreateAsyncScope();
+        EnsureOwnersMapped(registered, scope.ServiceProvider);
+    });
+
+    /// <summary>
+    /// Throws when the owner of an aggregate the host's requests ask about cannot be read from the contexts it
+    /// registered: no context maps an aggregate of the id, two do, the aggregate marks no property <c>[Owner]</c> or
+    /// two, the context does not map the property, or its type is one nothing can say the caller's own of. The message
+    /// of each is the one the first request about it would fail with, and where several cannot be read it names each.
+    /// What it finds is kept for the requests, which then find nothing more.
+    /// <para>
+    /// The ids are the ones the generator says the requests ask about, <c>[assembly: AsksOwnerOf(typeof(BoardId))]</c>,
+    /// read from the assembly of every request interface whose checks <paramref name="services"/> register: its lines
+    /// for <c>[Own]</c> and <c>[OrOwn]</c> on an aggregate's id, and every call of <c>AccessRequirement.OwnerOf</c> of
+    /// that project. An id the host registers an <see cref="IAggregateOwners{TId}"/> of its own for is that reader's,
+    /// and is passed over. A call in a project no request interface is declared in is found by its first request.
+    /// </para>
+    /// </summary>
+    /// <param name="services">The host's services, as registered.</param>
+    /// <param name="scopedServices">A scope's services, where the contexts are made.</param>
+    /// <exception cref="ArgumentNullException">An argument is null.</exception>
+    /// <exception cref="InvalidOperationException">The owner of an aggregate the requests ask about cannot be read.</exception>
+    public static void EnsureOwnersMapped(IServiceCollection services, IServiceProvider scopedServices)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(scopedServices);
+
+        var asked = OwnerColumns.AskedOf(services);
+        if (asked.Count == 0)
+        {
+            return;
+        }
+
+        var columns = scopedServices.GetRequiredService<OwnerColumns>();
+        var unread = asked.Select(id => columns.ProblemWith(id, scopedServices)).OfType<string>().ToList();
+        if (unread.Count == 1)
+        {
+            throw new InvalidOperationException(unread[0]);
+        }
+
+        if (unread.Count > 1)
+        {
+            throw new InvalidOperationException(
+                $"The owners of {unread.Count} aggregates the host's requests ask about cannot be read:"
+                + string.Concat(unread.Select(static each => Environment.NewLine + "- " + each)));
+        }
+    }
 
     /// <summary>
     /// Throws when <paramref name="context"/> was built without <c>UseDDDToolkit</c> or <c>UseDDDToolkitCore</c>:

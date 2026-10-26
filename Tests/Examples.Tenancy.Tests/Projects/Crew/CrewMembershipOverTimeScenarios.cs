@@ -60,7 +60,7 @@ public sealed class CrewMembershipOverTimeScenarios(SampleHosts sample) : IClass
             given.StatusCode.Should().Be(HttpStatusCode.NoContent);
         }
 
-        var whileItRan = await KeyHeldAsync(vic, InspectionKeys.Record);
+        var whileItRan = await PermissionHeldAsync(vic, InspectionPermissionNames.Record);
         InTime(host, soon);
         whileItRan.Should().Be((true, "crew"));
 
@@ -68,7 +68,7 @@ public sealed class CrewMembershipOverTimeScenarios(SampleHosts sample) : IClass
 
         // Nothing was written when the role ran out: its period is compared when the question is asked. The role is
         // still listed, and counts no longer; the observer's does, and so does the membership.
-        (await KeyHeldAsync(vic, InspectionKeys.Record)).Allowed.Should().BeFalse();
+        (await PermissionHeldAsync(vic, InspectionPermissionNames.Record)).Allowed.Should().BeFalse();
 
         // What the question answers, the command does: he sees the project, and records on it no longer.
         using (var recorded = await vic.PostAsJsonAsync($"/projects/{PierSeven.Id.Value}/inspections", new { title = "Loose railing" }, Cancellation))
@@ -77,7 +77,7 @@ public sealed class CrewMembershipOverTimeScenarios(SampleHosts sample) : IClass
         }
 
         // Which roles a member holds, and until when, is read by whoever manages the crew: Leo.
-        (await KeyHeldAsync(vic, ProjectKeys.View)).Should().Be((true, "crew"));
+        (await PermissionHeldAsync(vic, ProjectPermissionNames.View)).Should().Be((true, "crew"));
         var his = (await leo.WithNamesAsync(await leo.ProjectDetailAsync(PierSeven))).Member("Vic");
         his.AppliesNow.Should().BeTrue();
         his.Holding("Surveyor").AppliesNow.Should().BeFalse();
@@ -93,7 +93,7 @@ public sealed class CrewMembershipOverTimeScenarios(SampleHosts sample) : IClass
 
         var held = (await leo.WithNamesAsync(await leo.ProjectDetailAsync(PierSeven))).Member("Vic").Roles;
         held.Select(role => (role.Name, role.AppliesNow, HasAnEnd: role.EndsAt is not null)).Should().Equal(("Observer", true, false), ("Surveyor", true, false));
-        (await KeyHeldAsync(vic, InspectionKeys.Record)).Should().Be((true, "crew"));
+        (await PermissionHeldAsync(vic, InspectionPermissionNames.Record)).Should().Be((true, "crew"));
     }
 
     [Fact]
@@ -113,7 +113,7 @@ public sealed class CrewMembershipOverTimeScenarios(SampleHosts sample) : IClass
         }
 
         using var given = await leo.GiveCrewRoleAsync(PierSeven, toveSeat, Surveyor);
-        var whileItRan = await KeyHeldAsync(tove, InspectionKeys.Record);
+        var whileItRan = await PermissionHeldAsync(tove, InspectionPermissionNames.Record);
         InTime(host, soon);
         given.StatusCode.Should().Be(HttpStatusCode.NoContent);
         whileItRan.Should().Be((true, "crew"));
@@ -178,10 +178,10 @@ public sealed class CrewMembershipOverTimeScenarios(SampleHosts sample) : IClass
         }
 
         (await tove.VisibleProjectsAsync()).Names().Should().Equal("Pier 7", "Bay bridge");
-        (await KeyHeldAsync(tove, ProjectKeys.View)).Should().Be((true, "crew"));
+        (await PermissionHeldAsync(tove, ProjectPermissionNames.View)).Should().Be((true, "crew"));
 
         // It is a new membership: the surveyor's role of the one that ended did not come back with it.
-        (await KeyHeldAsync(tove, InspectionKeys.Record)).Allowed.Should().BeFalse();
+        (await PermissionHeldAsync(tove, InspectionPermissionNames.Record)).Allowed.Should().BeFalse();
         var hers = (await tove.WithNamesAsync(await tove.ProjectDetailAsync(PierSeven))).Member("Tove");
         hers.AppliesNow.Should().BeTrue();
         hers.Roles.Should().BeEmpty();
@@ -214,9 +214,9 @@ public sealed class CrewMembershipOverTimeScenarios(SampleHosts sample) : IClass
 
         await onPostgres.WaitUntilItIsPastAsync(soon, Cancellation);
 
-        // The role ran out; she is on the crew still, as its surveyor, so the project is there and the key is not.
+        // The role ran out; she is on the crew still, as its surveyor, so the project is there and the permission is not.
         using var later = await juno.PutAsJsonAsync($"/projects/{PierSeven.Id.Value}/name", new { name = "Pier 7 west" }, Cancellation);
-        (await later.ShouldBeRefusedAsync(HttpStatusCode.Forbidden, ProjectRefusals.NotPermitted)).Argument("Key").Should().Be(ProjectKeys.Edit);
+        (await later.ShouldBeRefusedAsync(HttpStatusCode.Forbidden, ProjectRefusals.NotPermitted)).Argument("Permission").Should().Be(ProjectPermissionNames.Edit);
         (await juno.ProjectDetailAsync(PierSeven)).GetProperty("name").GetString().Should().Be("Pier 7 east");
     }
 
@@ -230,10 +230,10 @@ public sealed class CrewMembershipOverTimeScenarios(SampleHosts sample) : IClass
     private static void InTime(SampleFactory host, DateTimeOffset end)
         => Now(host).Should().BeBefore(end, "what was asked above has to be answered while the period runs, which gives it {0} seconds", Soon.TotalSeconds);
 
-    /// <summary>Whether Pier 7 gives the client's caller <paramref name="key"/>, and through what, from <c>GET /access/projects/{id}?key=</c>.</summary>
-    private static async Task<(bool Allowed, string? Via)> KeyHeldAsync(HttpClient client, string key)
+    /// <summary>Whether Pier 7 gives the client's caller <paramref name="permission"/>, and through what, from <c>GET /access/projects/{id}?permission=</c>.</summary>
+    private static async Task<(bool Allowed, string? Via)> PermissionHeldAsync(HttpClient client, string permission)
     {
-        var answer = await client.GetFromJsonAsync<JsonElement>($"/access/projects/{PierSeven.Id.Value}?key={key}", Cancellation);
+        var answer = await client.GetFromJsonAsync<JsonElement>($"/access/projects/{PierSeven.Id.Value}?permission={permission}", Cancellation);
         return (answer.GetProperty("allowed").GetBoolean(), answer.Text("via"));
     }
 }

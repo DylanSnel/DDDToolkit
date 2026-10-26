@@ -530,16 +530,7 @@ internal static class DiagnosticDescriptors
         category: Membership,
         DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
-        description: "For a class declared with the Membership package's member template, [Member<TId, TMemberId, TRoleId, TResource>], the toolkit writes the member list on the resource the template names: a private property Members, of MemberList<TMember, TId, TMemberId, TRoleId>, which the resource's own methods change its members through. It is written from four things the resource declares, and only when each can be told without a guess. The members: exactly one get-only partial property of IReadOnlyList<TMember>, IReadOnlyCollection<TMember> or IEnumerable<TMember>, which the toolkit backs with a list. The owner: exactly one property of TMemberId on the resource. New rows: TId has a public static Create(), which makes a new row's id: the generator writes one for an [EntityId<Guid>], and an id over anything else declares it. The codes: exactly one static property or field of MembershipCodes on the resource, the codes its member rules refuse under. And the resource has no member called Members of its own, and the member class's types are ones the generator can see: the id of an [AggregateRoot<Guid>] is written by another generator, which no generator sees, so an id a member is known by is declared with [EntityId<Guid>]. A resource that declares a MemberList itself, under whatever name, is left alone and hears nothing: that is the form for every other shape, a resource with two properties of the member's id, or codes kept elsewhere. This warning is for a resource that has no member list at all: its members could not be changed, so say what is missing, or write the property by hand. A member class that names no aggregate root, or names one whose members are another class, is DDD00060 on the member class instead.");
-
-    public static readonly DiagnosticDescriptor TenancyPermissionsUnreadable = Create(
-        id: "DDD00063",
-        title: "A module's keys marked [TenancyPermissions] are a list the project that composes the modules can read",
-        messageFormat: "'{0}' is marked [TenancyPermissions] and {1}, so its keys reach no catalogue. Make it a public static property or field with a getter, declared in a class that is not generic, whose type is a sequence of Permission.",
-        category: Tenancy,
-        DiagnosticSeverity.Error,
-        isEnabledByDefault: true,
-        description: "A module states its permission keys once, on a static list marked [TenancyPermissions], and Tenancy's generator collects every marked list into each application, the program the modules are composed in, such as the host, and into each library that declares no module, with DDD_Module or [assembly: Module]: TenancyPermissionsOfModules.All, which an export builds the catalogue from, and services.AddTenancyPermissionsOfModules(), which the host registers them with. It reads a list as the expression Type.Member, so the list is a static property or field, readable, declared in a class that is not generic (nor nested in one) and that code can name, and its type is a sequence of Permission: IReadOnlyList<Permission>, IEnumerable<Permission> or an array. A static virtual or abstract member of an interface, and a member of an extension block or of a file-local type, cannot be read that way. In a library the list is also public, in public types: the projects that reference the library, the one that composes the modules among them, see nothing less of it, whether the library declares a module or not. Only an application, the program the modules are composed in, may keep a list of its own internal, since it collects that one itself; not private or protected, though, since the class it is collected into reads it from outside its type. A list that is none of these is left out of every collection, and nothing else would say so: the module's keys would be missing from the catalogue the host runs with, and asking about one would throw when it is asked. It is an error for that reason.");
+        description: "For a class declared with the Membership package's member template, [Member<TId, TMemberId, TRoleId, TResource>], the toolkit writes onto the resource the template names what makes it a resource with members: its name, the codes it refuses under, as a static property Codes, and the scope of its module's system work, which its rules read through its type, MembershipRules.For<TResource>; and the member list, a private property Members, of MemberList<TMember, TId, TMemberId, TRoleId>, which the resource's own methods change its members through. The list is written from what the resource declares, and only when each can be told without a guess. The members: exactly one get-only partial property of IReadOnlyList<TMember>, IReadOnlyCollection<TMember> or IEnumerable<TMember>, which the toolkit backs with a list. The owner: the one property marked [Owner], of TMemberId, since the owner is a member. New rows: TId has a public static Create(), which makes a new row's id: the generator writes one for an [EntityId<Guid>], and an id over anything else declares it. The codes: the ones the toolkit writes, unless the resource declares one static property or field of MembershipCodes of its own, the form for codes a resource words itself; two of them, or a member called Codes that is not one, cannot be told. And the resource has no member called Members of its own, and the member class's types are ones the generator can see: the id of an [AggregateRoot<Guid>] is written by another generator, which no generator sees, so an id a member is known by is declared with [EntityId<Guid>]. A resource that declares a MemberList itself, under whatever name, is left alone and hears nothing: that is the form for every other shape. This warning is for a resource that has no member list at all: its members could not be changed, so say what is missing, or write the property by hand. A member class that names no aggregate root, or names one whose members are another class, is DDD00060 on the member class instead.");
 
     public static readonly DiagnosticDescriptor ModuleNotDeclaredByTheBuild = Create(
         id: "DDD00064",
@@ -611,7 +602,7 @@ internal static class DiagnosticDescriptors
         category: Supabase,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "A package's row access contribution is made in the project that runs the Supabase export, from the static members the application marks with the attributes the package names, [TenancyCatalogue], [TenancyOperators] or [MembershipRules<TMember>] among them; each such attribute says so with [ApplicationMark]. That project finds the marks in the projects it references, and of a library it sees what is public and nothing else: a member that is internal, or declared in a type that is, is not there for it at all. The export would then write Tenancy's policies from the default catalogue rather than the application's, or leave a resource's functions out, and nothing in that project could say why, since it never saw the mark. So the library that declares the member reports it, where it is declared: make it public, in public types, with a public getter. An application, the program that runs the export itself or the host, may keep its own marks internal, since no project references it for them. A list of keys marked [TenancyPermissions] is held to the same by DDD00063.");
+        description: "A package's row access contribution is made in the project that runs the Supabase export, from the static members the application marks with the attributes the package names, [TenancyCatalogue], [TenancyOperators] or [MembershipRules<TMember>] among them; each such attribute says so with [ApplicationMark]. That project finds the marks in the projects it references, and of a library it sees what is public and nothing else: a member that is internal, or declared in a type that is, is not there for it at all. The export would then write Tenancy's policies from the default catalogue rather than the application's, or leave a resource's functions out, and nothing in that project could say why, since it never saw the mark. So the library that declares the member reports it, where it is declared: make it public, in public types, with a public getter. An application, the program that runs the export itself or the host, may keep its own marks internal, since no project references it for them.");
 
     public static readonly DiagnosticDescriptor RowAccessContributionCannotBeMade = Create(
         id: "DDD00071",
@@ -670,11 +661,11 @@ internal static class DiagnosticDescriptors
     public static readonly DiagnosticDescriptor RequestStatesNoRequirement = Create(
         id: "DDD00077",
         title: "A request says what it requires of its caller",
-        messageFormat: "'{0}' implements '{1}' and says nothing of what it requires of its caller: {2}. Put a requirement attribute on it, [SignedIn] say, or [RequiresKey(key)] with a marker of where the key is held, or answer RequiredAccess where the requirement is computed; [AllowAnonymous] where anyone may send it.",
+        messageFormat: "'{0}' implements '{1}' and says nothing of what it requires of its caller: {2}. Put a requirement attribute on it, [SignedIn] say, or [RequiresPermission(permission)] with a marker of where the permission is held, or answer RequiredAccess where the requirement is computed; [AllowAnonymous] where anyone may send it.",
         category: Access,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "Every command and query of a module says what it requires of its caller, who may send it, and the module's checks hold the caller to that before the handler runs. A request says it with an attribute, which the generator turns into RequiredAccess in its module's interface, [AccessRequests] and partial, or by answering RequiredAccess itself. Where the module's interface is partial the compiler no longer asks a request for RequiredAccess, since the interface implements it, so a request that says neither is reported here: it would be stopped every time it is sent, with an exception that says it declares nothing, and a forgotten requirement never opens a door. A request whose module's interface is declared in another project gets no line from this one either, and is reported the same way. An abstract request is not reported: what derives from it is.");
+        description: "Every command and query of a module says what it requires of its caller, who may send it, and the module's checks hold the caller to that before the handler runs. A request says it with an attribute, which the generator turns into RequiredAccess in its module's interface, [AccessRequests] and partial, or by answering RequiredAccess itself. Where the module's interface is partial the compiler no longer asks a request for RequiredAccess, since the interface implements it, so a request that says neither is reported here: it would be stopped every time it is sent, with an exception that says it declares nothing, and a forgotten requirement never opens a door. A request whose module's interface is declared in another project gets no line from this one either, and is reported the same way. An abstract request is not reported: what derives from it is. Nor is a request of a module whose interface carries a default, [AccessRequests, InTenant] say, which the developer wrote for that: the request takes the default, on a line of its own the generated switch shows.");
 
     public static readonly DiagnosticDescriptor RequestStatesRequirementTwice = Create(
         id: "DDD00078",
@@ -683,7 +674,7 @@ internal static class DiagnosticDescriptors
         category: Access,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "A request says what it requires with an attribute, [SignedIn], [InTenant] or [RequiresKey(key)] with its marker, or by answering RequiredAccess itself, for a requirement computed from the request's values. Both on one request read as two requirements, while C# takes the request's own property and the attribute does nothing: a review that reads the attribute is misled. So it is an error. A request that derives from one that answers RequiredAccess answers it too, and carries no requirement attribute of its own; so does a request whose interface between it and the module's gives RequiredAccess a default of its own, which C# takes over the module's.");
+        description: "A request says what it requires with an attribute, [SignedIn], [InTenant] or [RequiresPermission(permission)] with its marker, or by answering RequiredAccess itself, for a requirement computed from the request's values. Both on one request read as two requirements, while C# takes the request's own property and the attribute does nothing: a review that reads the attribute is misled. So it is an error. A request that derives from one that answers RequiredAccess answers it too, and carries no requirement attribute of its own; so does a request whose interface between it and the module's gives RequiredAccess a default of its own, which C# takes over the module's.");
 
     public static readonly DiagnosticDescriptor AnonymousBesideARequirement = Create(
         id: "DDD00079",
@@ -692,7 +683,7 @@ internal static class DiagnosticDescriptors
         category: Access,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "Requirement attributes stacked on one request all hold, as several [Authorize] attributes do in ASP.NET Core: [RequiresPlan(Plan.Pro)] [RequiresKey(BoardKeys.Export)] is AccessRequirement.All of the two, in the order they are written. [AllowAnonymous] says that anyone may send the request, a caller who did not sign in too, so beside a requirement that says who may it contradicts it: read one way the door is open, read the other way it is closed, and a review cannot tell which was meant. So it is an error, whichever other requirement attribute it stands beside, [RequiresKey] and [OwnOnly] included. A request anyone may send says [AllowAnonymous] alone.");
+        description: "Requirement attributes stacked on one request all hold, as several [Authorize] attributes do in ASP.NET Core: [RequiresPlan(Plan.Pro)] [RequiresPermission(BoardPermissions.Export)] is AccessRequirement.All of the two, in the order they are written. [AllowAnonymous] says that anyone may send the request, a caller who did not sign in too, so beside a requirement that says who may it contradicts it: read one way the door is open, read the other way it is closed, and a review cannot tell which was meant. So it is an error, whichever other requirement attribute it stands beside, [RequiresPermission] and [OwnOnly] included. A request anyone may send says [AllowAnonymous] alone.");
 
     public static readonly DiagnosticDescriptor RedundantRequirement = Create(
         id: "DDD00084",
@@ -701,16 +692,16 @@ internal static class DiagnosticDescriptors
         category: Access,
         DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
-        description: "Requirement attributes stacked on one request all hold, so one that another beside it already requires says nothing more: [InTenant] beside a key of Tenancy's, [RequiresKey(key)] with or without [AtUnit], which only a seat in the tenant or system work there holds, and [SignedIn] beside [RequiresOperator], which lets only a signed-in user with an operator's token role through. It does no harm to what is checked, but a reader takes it for a second condition and looks for what it adds. What a requirement already requires its package says, with Implies on [StatesRequirement], [KeyMarker] or [KeyWithoutMarker], so a module's own attribute is held to it the same way. The caller's own requires what its package says with Implies on [assembly: CallersOwn]: a Guid is the identity of a signed-in user, so [SignedIn] beside [OwnOnly] with [Own] on a Guid says nothing more, and Tenancy's seat id is a seat in the tenant, so [InTenant] beside [OwnOnly] with [Own] on it says nothing more either. A key with [OrOwn] beside it lets the caller's own through as well, so only what both the key and the caller's own require is counted for it. An attribute that the request it derives from carries already says nothing more either: the requirement attributes of a request and of the requests it derives from all hold.");
+        description: "Requirement attributes stacked on one request all hold, so one that another beside it already requires says nothing more: [InTenant] beside a permission of Tenancy's, [RequiresPermission(permission)] with or without [AtUnit], which only a seat in the tenant or system work there holds, and [SignedIn] beside [RequiresOperator], which lets only a signed-in user with an operator's token role through. It does no harm to what is checked, but a reader takes it for a second condition and looks for what it adds. What a requirement already requires its package says, with Implies on [StatesRequirement], [PermissionMarker] or [PermissionWithoutMarker], so a module's own attribute is held to it the same way. The caller's own requires what its package says with Implies on [assembly: CallersOwn]: a Guid is the identity of a signed-in user, so [SignedIn] beside [OwnOnly] with [Own] on a Guid says nothing more, and Tenancy's seat id is a seat in the tenant, so [InTenant] beside [OwnOnly] with [Own] on it says nothing more either. A permission with [OrOwn] beside it lets the caller's own through as well, so only what both the permission and the caller's own require is counted for it. An attribute that the request it derives from carries already says nothing more either: the requirement attributes of a request and of the requests it derives from all hold. Nor do a request's own attributes that say what its module's default says, call for call: without them it takes the default, and requires the same. They are reported on a request nothing derives from, since one that derives from it holds to its attributes beside its own, and on the module's interface an attribute of its default that another there already requires is reported as on a request.");
 
     public static readonly DiagnosticDescriptor OwnMarkerOutOfPlace = Create(
         id: "DDD00085",
-        title: "[OrOwn] goes beside [RequiresKey], and [Own] with [OwnOnly]",
+        title: "[OrOwn] goes beside [RequiresPermission], and [Own] with [OwnOnly]",
         messageFormat: "'{0}' {1}",
         category: Access,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "A request about the caller's own says it one of two ways. [OrOwn] on the member that names the caller's own, beside [RequiresKey(key)], says the caller's own or the key: AccessRequirement.Any(AccessRequirement.Own(request.Seat), the key's case). [Own] on that member, with [OwnOnly] on the request, says the caller's own alone: AccessRequirement.Own(request.Seat). So [OrOwn] without [RequiresKey] is the alternative of nothing, [Own] without [OwnOnly] is read by nothing, and [OwnOnly] without a member marked [Own] names no value; one member marked both ways, or two members marked one way, say two values where one is compared. [OrOwn] does not go beside a marker that says where a key is checked without being what the request acts on, Tenancy's [AtUnit]: a caller who may act on its own would send a unit where it holds the key for another subject, so a key held at one unit would act on a seat anywhere; such a request computes its requirement as RequiredAccess. A package's marker says it may, with OwnAlternative on [KeyMarker], which names the case the caller's own way through still meets where the marker says, as Membership's [OnResource] does: beside it, the caller sees the resource, MemberAccess.Sees. A marker goes on a positional parameter of a record, which is its property, or on a property the module's interface can read.");
+        description: "A request about the caller's own says it one of two ways. [OrOwn] on the member that names the caller's own, beside [RequiresPermission(permission)], says the caller's own or the permission: AccessRequirement.Any(AccessRequirement.Own(request.Seat), the permission's case). [Own] on that member, with [OwnOnly] on the request, says the caller's own alone: AccessRequirement.Own(request.Seat). So [OrOwn] without [RequiresPermission] is the alternative of nothing, [Own] without [OwnOnly] is read by nothing, and [OwnOnly] without a member marked [Own] names no value; one member marked both ways, or two members marked one way, say two values where one is compared. [OrOwn] does not go beside a marker that says where a permission is checked without being what the request acts on, Tenancy's [AtUnit]: a caller who may act on its own would send a unit where it holds the permission for another subject, so a permission held at one unit would act on a seat anywhere; such a request computes its requirement as RequiredAccess. A package's marker says it may, with OwnAlternative on [PermissionMarker], which names the case the caller's own way through still meets where the marker says, as Membership's [OnResource] does: beside it, the caller sees the resource, MemberAccess.Sees. A marker goes on a positional parameter of a record, which is its property, or on a property the module's interface can read.");
 
     public static readonly DiagnosticDescriptor OwnOnATypeWithoutOwn = Create(
         id: "DDD00086",
@@ -721,32 +712,50 @@ internal static class DiagnosticDescriptors
         isEnabledByDefault: true,
         description: "The check compares the value a request names with the caller's own of the same type, at the door, so the request need not know who sends it. What the caller's own is, whoever knows says, with an ICallersOwn<TValue>: the core for a Guid, the caller's verified identity, which is the id its token names; Tenancy for the application's seat id, the caller's seat in the tenant of the request; and an application for a kind of its own, its own user id say, with a small implementation beside its requests, which the host registers with services.AddCallersOwn<UserId, CallersUser>(). On a member of a type nothing says that for, the request would be stopped every time it is sent, so it is reported where the project can tell: a package says its types with [assembly: CallersOwn], and an application's ICallersOwn is found in the requests' project or one it references. A member that may be null, SeatId?, names no value where it is left out: a requirement computed from whether it is given is written as RequiredAccess. And the caller's own is a value compared with the caller's, a struct that is IEquatable of itself, so a member that is a string, a class or an enum is reported whatever the project sees.");
 
-    public static readonly DiagnosticDescriptor KeyMarkerOutOfPlace = Create(
-        id: "DDD00080",
-        title: "A marker on a request says where the key of its [RequiresKey] is held",
+    public static readonly DiagnosticDescriptor OwnerOutOfPlace = Create(
+        id: "DDD00087",
+        title: "[Owner] marks the one owner of an aggregate root",
         messageFormat: "'{0}' {1}",
         category: Access,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "[RequiresKey(key)] says the key a request's caller holds, and a marker on one of the request's members says where: none for the whole tenant (Tenancy's), [AtUnit] at that unit or above it (Tenancy's), [OnResource] on that resource through its members (Membership's), with [ExpectedVersion] beside it for the version the caller read. So a marker without [RequiresKey] says where nothing is held; two markers of where, or [AtUnit] with [OnResource], say two places for one key; [ExpectedVersion] without [OnResource] is the version of nothing; a marker twice of one kind gives the call two arguments for one. A marker goes on a positional parameter of a record, which is its property, or on a property: a parameter of a class's primary constructor is no member the requirement can read, and neither is a private or protected property, since the line is written in the module's interface. A key without a marker is held where a package says, [assembly: KeyWithoutMarker], which Tenancy does: a project that references no such package, or two, cannot tell, and asks for a marker.");
+        description: "[Owner] marks the property of an aggregate root that names its owner, a fact about what the aggregate is: [Owner] public UserId Owner { get; private set; }. A request about the owner's own names the aggregate by its id, [Own] BoardId Board with [OwnOnly], or [OrOwn] BoardId Board beside [RequiresPermission(permission)], and the check reads that one column of the one row the id names, as the caller. So it goes on an instance property of the aggregate root itself: an entity inside an aggregate is no row a request names by its own id, and a type that is no aggregate root has none either. And it goes on one property: an aggregate has one owner, and several owners are members, a resource with members, which Membership keeps. An id the project sees as the id of two aggregate roots that each mark an owner cannot tell which one a request is about, and is reported at the request.");
 
-    public static readonly DiagnosticDescriptor KeyMarkerOnWrongType = Create(
+    public static readonly DiagnosticDescriptor OwnerOfATypeWithoutOwn = Create(
+        id: "DDD00088",
+        title: "[Owner] marks a property of a type the caller has an own of",
+        messageFormat: "'{0}' {1}",
+        category: Access,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "The check of a request about the owner's own compares the owner the row holds with the caller's own of the same type, so the property marked [Owner] is of a type something says the caller's own of: a Guid, the caller's verified identity; Tenancy's seat id, the caller's seat in the tenant of the request; or a kind of the application's own, with an ICallersOwn<TValue> the host registers with services.AddCallersOwn<UserId, CallersUser>(). It may be nullable, and a row whose owner is null is nobody's. The caller's own is a value compared with the caller's, a struct that is IEquatable of itself, so an owner that is a string, a class or an enum can never be compared, and is reported where the property is declared. Whether something says the caller's own of the owner's type is told where the requests are, since an application's ICallersOwn is declared beside them: there a request that names the aggregate is reported where the project can tell that nothing does, and the request would be stopped every time it is sent.");
+
+    public static readonly DiagnosticDescriptor PermissionMarkerOutOfPlace = Create(
+        id: "DDD00080",
+        title: "A marker on a request says where the permission of its [RequiresPermission] is held",
+        messageFormat: "'{0}' {1}",
+        category: Access,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "[RequiresPermission(permission)] says the permission a request's caller holds, and a marker on one of the request's members says where: none for the whole tenant (Tenancy's), [AtUnit] at that unit or above it (Tenancy's), [OnResource] on that resource through its members (Membership's), with [ExpectedVersion] beside it for the version the caller read. So a marker without [RequiresPermission] says where nothing is held; two markers of where, or [AtUnit] with [OnResource], say two places for one permission; [ExpectedVersion] without [OnResource] is the version of nothing; a marker twice of one kind gives the call two arguments for one. A marker goes on a positional parameter of a record, which is its property, or on a property: a parameter of a class's primary constructor is no member the requirement can read, and neither is a private or protected property, since the line is written in the module's interface. A permission without a marker is held where a package says, [assembly: PermissionWithoutMarker], which Tenancy does: a project that references no such package, or two, cannot tell, and asks for a marker.");
+
+    public static readonly DiagnosticDescriptor PermissionMarkerOnWrongType = Create(
         id: "DDD00081",
         title: "A marker is on a member of the id it marks",
         messageFormat: "'{0}' marks '{1}' [{2}], {3}",
         category: Access,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "A marker of where a key is held reads the member it marks: [AtUnit] the application's unit id, the id its class declared with [OrganizationUnit<TUnitId>] has, and [OnResource] the id of a resource with members, an aggregate root a class declared with [Member<TId, TMemberId, TRoleId, TResource>] names. The call it gives takes any id, so a unit marked on a seat's id compiles, and lets nobody through: the package's check stops a case over an id it does not decide. So a member of another type is reported, where the project sees the classes the package's marker names; where it sees none, nothing can be told, and the check says it when the request is sent. A member that may be null, OrganizationUnitId?, is a requirement computed from whether it is given, which the request writes as RequiredAccess. [ExpectedVersion] marks a member of the type the call takes there, a long?.");
+        description: "A marker of where a permission is held reads the member it marks: [AtUnit] the application's unit id, the id its class declared with [OrganizationUnit<TUnitId>] has, and [OnResource] the id of a resource with members, an aggregate root a class declared with [Member<TId, TMemberId, TRoleId, TResource>] names. The call it gives takes any id, so a unit marked on a seat's id compiles, and lets nobody through: the package's check stops a case over an id it does not decide. So a member of another type is reported, where the project sees the classes the package's marker names; where it sees none, nothing can be told, and the check says it when the request is sent. A member that may be null, OrganizationUnitId?, is a requirement computed from whether it is given, which the request writes as RequiredAccess. [ExpectedVersion] marks a member of the type the call takes there, a long?.");
 
     public static readonly DiagnosticDescriptor QueryRequirementOnCommand = Create(
         id: "DDD00082",
         title: "A requirement for queries only is on a query",
-        messageFormat: "'{0}' is {2} and carries [{1}], which its package declares for queries only: on anything but a query it holds the caller to nothing the request changes. Where it only reads, make it a query, IQuery or IStreamQuery; where it changes something, require of its caller what the change needs, [RequiresKey(key)] with a marker of where the key is held, and carry out what no caller may do as system work behind that requirement.",
+        messageFormat: "'{0}' is {2} and carries [{1}], which its package declares for queries only: on anything but a query it holds the caller to nothing the request changes. Where it only reads, make it a query, IQuery or IStreamQuery; where it changes something, require of its caller what the change needs, [RequiresPermission(permission)] with a marker of where the permission is held, and carry out what no caller may do as system work behind that requirement.",
         category: Access,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "Some requirements are for queries only, and their packages say so ([StatesRequirement(..., QueriesOnly = true)]). Membership's [SeenWith<TResourceId>(key)] refuses nobody for want of the key: it lets a signed-in caller through, one that holds nothing too, and says what the query's own statement filters by, which is the check; on a command the handler would run unchecked. Tenancy's [RequiresOperator] lets an operator through, who holds no seat and no key and changes nothing itself: what an operator asks for is carried out by trusted code as system work that names the operator, TenancyUseCases.BeginOperatorIn, behind a requirement of the module's own. A message of the Mediator library that is no query and carries either is reported: a command, ICommand or IStreamCommand, and a plain IRequest or IStreamRequest, which may change as much as a command. A request of another dispatcher, which the generator cannot tell for a command or a query, is not; nor is the same requirement written as RequiredAccess, which a test holds.");
+        description: "Some requirements are for queries only, and their packages say so ([StatesRequirement(..., QueriesOnly = true)]). Membership's [SeenWith<TResourceId>(permission)] refuses nobody for want of the permission: it lets a signed-in caller through, one that holds nothing too, and says what the query's own statement filters by, which is the check; on a command the handler would run unchecked. Tenancy's [RequiresOperator] lets an operator through, who holds no seat and no permission and changes nothing itself: what an operator asks for is carried out by trusted code as system work that names the operator, TenancyUseCases.BeginOperatorIn, behind a requirement of the module's own. A message of the Mediator library that is no query and carries either is reported: a command, ICommand or IStreamCommand, and a plain IRequest or IStreamRequest, which may change as much as a command. A request of another dispatcher, which the generator cannot tell for a command or a query, is not; nor is the same requirement written as RequiredAccess, which a test holds.");
 
     public static readonly DiagnosticDescriptor RequirementAttributesNotRead = Create(
         id: "DDD00083",
@@ -755,5 +764,122 @@ internal static class DiagnosticDescriptors
         category: Access,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "The generator turns a request's requirement attributes into RequiredAccess at compile time, one line per request, in the request's module's interface: the interface marked [AccessRequests] that the request implements, declared partial in the same project, so the generator can write the property into it. Without that, the attributes are read by nothing, and the request reads as if it said what it requires while it says nothing: an interface that is not partial, a request that implements no marked interface, one whose interface is declared in another project, one with type parameters, which a line cannot name, one the interface cannot see, nested private in another type, and one that implements two such interfaces, each of which implements the property, so C# takes neither (CS8705). So each is reported, with what to change: declare the interface partial, implement the module's interface, or answer RequiredAccess.");
+        description: "The generator turns a request's requirement attributes into RequiredAccess at compile time, one line per request, in the request's module's interface: the interface marked [AccessRequests] that the request implements, declared partial in the same project, so the generator can write the property into it. Without that, the attributes are read by nothing, and the request reads as if it said what it requires while it says nothing: an interface that is not partial, a request that implements no marked interface, one whose interface is declared in another project, one with type parameters, which a line cannot name, one the interface cannot see, nested private in another type, and one that implements two such interfaces, each of which implements the property, so C# takes neither (CS8705). So each is reported, with what to change: declare the interface partial, implement the module's interface, or answer RequiredAccess. The same holds for the attributes on an interface, the default of a module's requests: they are read on the module's interface, [AccessRequests] and partial, and on any other interface by nothing.");
+
+    public static readonly DiagnosticDescriptor DefaultRequirementRefused = Create(
+        id: "DDD00089",
+        title: "A module's default requirement is one any of its requests may take",
+        messageFormat: "'{0}' carries {1} as the default of its module's requests: {2}",
+        category: Access,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "A requirement attribute on a module's interface, [AccessRequests, InTenant] say, is the default of its requests: one that states nothing of its own, by attribute or by answering RequiredAccess, requires what the default says, on a line of its own in the generated switch. So every request that forgets its own requirement takes it, a command that forgets its permission included, and a default is a requirement any of them may take. [AllowAnonymous] is none: a request that forgot would let anyone in, and a forgotten requirement never opens a door. A requirement for queries only, Tenancy's [RequiresOperator] or Membership's [SeenWith<TResourceId>(permission)], is none either, since a command that says nothing would take it (DDD00082); [OwnOnly] reads a member of a request marked [Own], and a default reads none. And an attribute whose class's AttributeUsage leaves out interfaces is no default, which the compiler says as well (CS0592): a module's own requirement attribute is one where its class allows AttributeTargets.Interface. Each is reported at the attribute, and the interface's last arm stops a request that states nothing, as it does without a default.");
+
+    public static readonly DiagnosticDescriptor MembershipNamesChanged = Create(
+        id: "DDD00090",
+        title: "The names of resources with members are those of the newest access file",
+        messageFormat: "Membership names changed since the last access file. Gone: {0}. New: {1}. Codes clients read change with them, and the database gets new functions. A class you renamed keeps its old name with [Members(\"...\")].",
+        category: Supabase,
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "A resource with members is named after its class, the plural of it, or what [Members(\"...\")] says, and the name is what its codes start with and what its four functions in the database are named after. Renaming the class renames both: clients that branch on boards.already-member read another code, and the next access file makes new functions beside the old ones. The Supabase export the build runs compares the names of the resources it writes with those the newest access file of each module recorded, with the class each came from, and says once, in that build, which are gone and which are new. It does not guess which became which. A class that was renamed on purpose and should keep its name says so with [Members(\"OldName\")]; one that should take the new name needs nothing more, and the warning is not said again once the new access file is there. Without the export, SupabaseMigrationsExport unset, nothing compares the names, and no warning is given.");
+
+    public static readonly DiagnosticDescriptor MembershipNameUnreadable = Create(
+        id: "DDD00091",
+        title: "[Members] names a resource with what can be converted to a code and a function's name",
+        messageFormat: "'{0}' is named '{1}' with [Members], which cannot be converted to a code and a function's name. Write it as a class's name, such as People or CraneBoards, or as it comes out, crane-boards: letters and digits, with - or _ between words, starting with a letter.",
+        category: Membership,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "A resource with members is named after its class unless [Members(\"...\")] says otherwise, and the name is written in two forms: in lower case with a dash between words for its codes, boards.already-member, and with an underscore for its functions in the database, boards_i_see. What [Members] says is converted the same way a class's name is, PascalCase split into words, and taken as it is, not made plural. A space, a symbol other than - and _, a digit or a separator first, or a separator last cannot be converted, and nothing of the resource is written: its rules, MembershipRules.For<TResource>, do not compile until the name is put right.");
+
+    public static readonly DiagnosticDescriptor PermissionMisdeclared = Create(
+        id: "DDD00092",
+        title: "A permission is a public constant of a [Permissions] class, with a level",
+        messageFormat: "'{0}' {1}",
+        category: Access,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "A module declares its permissions in a static class marked [Permissions]: every public const string of it is a permission, which a request names in [RequiresPermission] and a role gives, and each carries its level, the attribute that says where it is asked: Tenancy's [AtTenant] or [AtUnit], or Membership's [On<TResource>]. The packages' generators read the class and nothing else: Tenancy's puts every permission into its catalogue, Membership's every permission on a resource into the rules of that resource. So a class marked [Permissions] that is not static, a public const string without a level, a level on a field that is no public const string, or on one of a class that is not marked [Permissions], and a key declared twice in one class, would each be read as something it is not, or not at all, and are refused.");
+
+    public static readonly DiagnosticDescriptor PermissionLevelMisfits = Create(
+        id: "DDD00093",
+        title: "A permission's level fits what it is asked on",
+        messageFormat: "'{0}' {1}",
+        category: Membership,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "[On<TResource>] says a permission is asked on one resource with members, and how it is held there. TResource is the aggregate root a member class names, [Member<TId, TMemberId, TRoleId, TResource>]: on another class the permission would be asked on something that has no members, and its rules could not be made. Of the permissions on one resource, one at most is held by every member (EveryMember), since that is also the one that sees the resource from above; one at most locks the members (LocksMembers) and one at most locks the owner (LocksOwner), since each is the one key the database's lock asks for. A second is refused where it is declared, among the permissions the project sees.");
+
+    public static readonly DiagnosticDescriptor RulesWithoutPermissions = Create(
+        id: "DDD00094",
+        title: "The rules of a resource are made from the permissions declared on it",
+        messageFormat: "MembershipRules.For<{0}> finds no permission declared on '{0}' in this project or in the projects it references. Mark the permissions asked on it [On<{0}>] in a [Permissions] class.",
+        category: Membership,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "MembershipRules.For<TResource> makes the rules of a resource from the permissions declared on it: the constants of a [Permissions] class marked [On<TResource>], in the project that makes the rules or in a project it references, which the package's generator hands over when the project is first used. Rules without a permission give the owner nothing and every role nothing, and the call would throw when the rules are made, so it is said where they are made.");
+
+    public static readonly DiagnosticDescriptor HandWrittenTenancyPermissions = Create(
+        id: "DDD00095",
+        title: "A module's permissions are declared in a [Permissions] class, not on a list of its own",
+        messageFormat: "'{0}' is a list of permissions marked [TenancyPermissions] by hand. Declare each permission as a constant of a static class marked [Permissions], with its level, [AtTenant], [AtUnit] or [On<TResource>]: the generator writes the module's list from it.",
+        category: Tenancy,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "A module declares its permissions once, as the constants of a static class marked [Permissions], each with its level and, in its summary or its Description, what it lets somebody do. Tenancy's generator writes the module's list for its catalogue from that class, under the module DDD_Module or [assembly: Module] names, and the project that composes the modules collects every such list. [TenancyPermissions] is the mark the generator puts on what it writes; a list a module marks with it by hand says the same keys a second time, apart from the constants a request requires, and is refused.");
+
+    public static readonly DiagnosticDescriptor PlaceMisdeclared = Create(
+        id: "DDD00097",
+        title: "[At] marks the one place an aggregate root hangs at",
+        messageFormat: "'{0}' {1}",
+        category: Access,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "[At] marks the property of an aggregate root that says where it hangs: the unit of an organization a board belongs to, the bay a crate stands in. A fact of the domain, which the rules of a resource with members read where they let it be reached from above: a key held at that place, or above it, reaches the aggregate. So it goes on one instance property of an aggregate root, the root itself and never an entity inside it, and that property is never empty: an aggregate that hangs nowhere could not be reached from above, which is what [At] says. A static property, one of another type, a second one and a nullable one are each refused.");
+
+    public static readonly DiagnosticDescriptor ReachFromAboveWithoutPlace = Create(
+        id: "DDD00098",
+        title: "Rules that reach a resource from above read where it hangs from its [At] property",
+        messageFormat: "MembershipRules.For<{0}> says reachFromAbove, and '{0}' marks no property [At]: reachFromAbove needs the place the resource hangs at: mark one property [At]",
+        category: Membership,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "reachFromAbove in the rules of a resource with members says that a permission held where the resource hangs, or above it, reaches the resource. Where it hangs is a fact of the domain, said on the resource's class with [At] on the property that holds it, and read from there by the mapping and the functions in the database. Rules that reach from above a resource that marks no such property would be refused when the resource is first asked about, and when its functions are written; this says it where the rules are made.");
+
+    public static readonly DiagnosticDescriptor OwnAlternativeRedundant = Create(
+        id: "DDD00096",
+        title: "[OrOwn] beside a permission the owner of the resource holds already says nothing more",
+        messageFormat: "[OrOwn] on '{0}' says nothing more: the owner of the {1} holds '{2}' already, which is declared [On<{1}>] with Owner = true and is asked on it. Remove [OrOwn].",
+        category: Access,
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "[OrOwn] on a request's member says the request is about the caller's own, or the caller holds the permission of its [RequiresPermission]. On the id of a resource with members, beside [OnResource] on it, the permission is asked on that resource, and its owner holds every permission declared [On<TResource>] with Owner = true by owning it: the owner is let through by the permission already, so [OrOwn] adds nothing and only makes the request read as if it did. [Own] and [OrOwn] stay meant for an aggregate with an [Owner] and no members, and for a permission the owner does not hold, one declared with Owner = false.");
+
+    public static readonly DiagnosticDescriptor PermissionWithoutDescription = Create(
+        id: "DDD00099",
+        title: "A permission says what it lets somebody do",
+        messageFormat: "'{0}' has no description, and the screens that put permissions into roles show it: say it on its level, [{1}(Description = \"...\")], or in the constant's <summary>",
+        category: Access,
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "The catalogue gives every permission a description, which a screen that puts permissions into roles shows beside it: what holding it lets somebody do. It is said with Description on the permission's level, [AtUnit(Description = \"Open a board at a unit\")] say, which wins where the constant has a <summary> too; where no level says one, the constant's <summary> is the description, read from the comment above it whether the project writes a documentation file or not. A permission with neither would show as a bare name. A retired permission is shown nowhere, and needs none. A translation, in a resx your failure localizer reads, under the permission's name, is read on top of either.");
+    public static readonly DiagnosticDescriptor RestrictiveRuleOutOfReach = Create(
+        id: "DDD00100",
+        title: "A restrictive rule narrows a table it can reach",
+        messageFormat: "'{0}' is a restrictive rule on '{1}', {2} of Tenancy's, and a restrictive rule narrows the organization, the seats, the roles and the application's own aggregates alone: put it on one of those, or leave Restrictive out",
+        category: Tenancy,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "A restrictive row access rule, Restrictive = true, narrows what the permissive policies allow on its aggregate's table and the tables of its entities. On Tenancy's tables it reaches the organization with its units and the closure of its tree, the seats with their placements and grants, and the roles: what an application narrows to keep a seat that is not an employee out of the organization. A tenant and an invitation are read by Tenancy's own work and by the person accepting an invitation, who has no seat yet, so a rule there is refused.");
+
+    public static readonly DiagnosticDescriptor CallerSeatOfAnotherType = Create(
+        id: "DDD00101",
+        title: "TenancyRowAccess.CallerSeat answers with the application's seat class",
+        messageFormat: "TenancyRowAccess.CallerSeat<{0}>() asks for a seat of '{0}', which is not the application's seat class: name the class declared with [SeatAggregate], whose row the function answers with",
+        category: Tenancy,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "TenancyRowAccess.CallerSeat<TSeat>() is the calling seat's own row, read by a rule through the fields of the application's seat class: CallerSeat<Seat>().Kind == SeatKind.Employee. The function answers with the row of Tenancy's seats table, which the seat class is mapped to, so TSeat is that class, the one declared with [SeatAggregate]. For the seat's id in a rule of a module whose context does not map the seats, ask TenancyRowAccess.CallerSeatId<TSeatId>().");
+
 }

@@ -1,4 +1,5 @@
 using DDDToolkit.Abstractions.Attributes;
+using DDDToolkit.Access;
 using DDDToolkit.Invariants;
 
 namespace DDDToolkit.Supporting.Membership.TestHost.Gardens;
@@ -29,27 +30,29 @@ public sealed partial class PlotGardener;
 /// <summary>
 /// A plot in a garden, worked by gardeners: the host's kind of resource whose roles are kept. Its members are
 /// plain users, and what they hold on it comes from roles that are rows of <see cref="PlotRole"/>, which each
-/// garden makes, renames, gives keys and archives for itself.
+/// garden makes, renames, gives permissions and archives for itself.
 /// </summary>
 [AggregateRoot<PlotId>]
 public sealed partial class Plot
 {
-    /// <summary>Lays out a plot in a garden, with <paramref name="owner"/> on it from <paramref name="now"/> on, for good, in the garden's role for owners.</summary>
-    public Plot(PlotId id, GardenId garden, string name, UserId owner, PlotRoleId ownerRole, DateTimeOffset now) : base(id)
+    /// <summary>Lays out a plot in a garden, with <paramref name="owner"/> on it from <paramref name="now"/> on, for good, holding no role.</summary>
+    public Plot(PlotId id, GardenId garden, string name, UserId owner, DateTimeOffset now) : base(id)
     {
         GardenId = garden;
         Name = name;
         OwnerId = owner;
-        Members.Open(ownerRole, now);
+        Members.Open(now);
     }
 
     /// <summary>The garden the plot is in.</summary>
+    [At]
     public GardenId GardenId { get; private set; }
 
     /// <summary>What the plot is called.</summary>
     public string Name { get; private set; } = string.Empty;
 
     /// <summary>The user that owns the plot.</summary>
+    [Owner]
     public UserId OwnerId { get; private set; }
 
     /// <summary>The gardeners on the plot.</summary>
@@ -91,55 +94,50 @@ public sealed partial class Plot
     }
 }
 
-/// <summary>The keys a plot is asked about.</summary>
-public static class PlotKeys
+/// <summary>
+/// The permissions asked on a plot: its owner holds all of them; a role a garden makes gives all but the one that
+/// sells it; who fences a plot says who is let on it, and who sells it hands it on.
+/// </summary>
+[Permissions]
+public static class PlotPermissions
 {
-    /// <summary>See a plot: what being on it gives.</summary>
+    /// <summary>See a plot.</summary>
+    [On<Plot>(EveryMember = true)]
     public const string See = "plots.see";
 
     /// <summary>Plant on a plot.</summary>
+    [On<Plot>]
     public const string Plant = "plots.plant";
 
     /// <summary>Water a plot.</summary>
+    [On<Plot>]
     public const string Water = "plots.water";
 
-    /// <summary>Fence a plot: a key no starter role lists, which a garden can put into a role of its own.</summary>
+    /// <summary>Fence a plot: who holds it says who is let on it.</summary>
+    [On<Plot>(LocksMembers = true)]
     public const string Fence = "plots.fence";
 
-    /// <summary>Sell a plot: a key of the plot no role may give, so the owner's alone.</summary>
+    /// <summary>Sell a plot: no role gives it, and who holds it hands the plot on.</summary>
+    [On<Plot>(InRoles = false, LocksOwner = true)]
     public const string Sell = "plots.sell";
 }
 
-/// <summary>
-/// The rules of access through a plot's gardeners. The roles are kept: rows of <see cref="PlotRole"/>, which a
-/// garden makes for itself. The roles declared here are the starter roles a garden begins with, and what a
-/// member's role can give is what a garden chooses a role's keys from.
-/// </summary>
+/// <summary>The rules of access through a plot's gardeners: roles a garden makes for itself, from two starter roles.</summary>
 public static class PlotMembership
 {
-    /// <summary>The starter role that plants and waters.</summary>
+    /// <summary>The starter role that tends a plot.</summary>
     public const string Tender = "tender";
 
-    /// <summary>The starter role that waters.</summary>
+    /// <summary>The starter role that waters a plot.</summary>
     public const string Waterer = "waterer";
 
-    /// <summary>What the host refuses a second role of one name in one garden with: its own code, on its own index.</summary>
+    /// <summary>A role of that name is a garden's already.</summary>
     public const string RoleNameTaken = "plots.role-name-taken";
 
-    /// <summary>The codes a plot refuses with.</summary>
+    /// <summary>The codes a plot refuses under.</summary>
     public static MembershipCodes Codes { get; } = MembershipCodes.Under("plots");
 
     /// <summary>The rules.</summary>
-    public static MembershipRules Rules { get; } = new(
-        "plots",
-        keys: [PlotKeys.See, PlotKeys.Plant, PlotKeys.Water, PlotKeys.Fence, PlotKeys.Sell],
-        roles: [new(Tender, [PlotKeys.See, PlotKeys.Plant, PlotKeys.Water]), new(Waterer, [PlotKeys.See, PlotKeys.Water])],
-        seeKey: PlotKeys.See,
-        memberKeys: MemberKeys.Only(PlotKeys.See, PlotKeys.Plant, PlotKeys.Water, PlotKeys.Fence),
-        codes: Codes,
-        rolesKept: true,
-
-        // What the database holds a caller to: who fences a plot says who is let on it, and who sells it hands it on.
-        changeMembersKey: PlotKeys.Fence,
-        changeOwnerKey: PlotKeys.Sell);
+    public static MembershipRules Rules { get; } = MembershipRules.For<Plot>(
+        Roles.Custom(starters: [new(Tender, [PlotPermissions.See, PlotPermissions.Plant, PlotPermissions.Water]), new(Waterer, [PlotPermissions.See, PlotPermissions.Water])]));
 }

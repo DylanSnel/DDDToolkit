@@ -207,7 +207,7 @@ public class EntityNullabilityTests
             .AddGraphQL()
             .AddSourceSchemaDefaults()
             .AddGalleryTypes()
-            .AddDDDToolkitKeyAuthorization();
+            .AddDDDToolkitPermissionAuthorization();
 
         return nullability ? builder.AddDDDToolkitEntityNullability() : builder;
     }

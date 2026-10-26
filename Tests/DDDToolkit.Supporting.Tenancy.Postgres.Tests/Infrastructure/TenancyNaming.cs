@@ -108,7 +108,7 @@ public sealed partial class TenancyNaming
 
     /// <summary>
     /// <paramref name="written"/>, a statement in the default names, as it reads under this naming: every quoted
-    /// name that is a table, a column, a key or an index of the default model, and every text that is a stored enum
+    /// name that is a table, a column, a permission or an index of the default model, and every text that is a stored enum
     /// value there, replaced by this naming's. A statement that names no table of the model is returned as it is.
     /// </summary>
     public string Sql(string written) => ReferenceEquals(this, Default) ? written : _translation.Value.Sql(written);
@@ -186,7 +186,7 @@ public sealed partial class TenancyNaming
                 ? stored
                 : throw new ArgumentException($"No column of the default model stores '{value}'.", nameof(value));
 
-        /// <summary>Every table of <paramref name="from"/> with its columns, keys, indexes and stored enum values, next to the same in <paramref name="to"/>.</summary>
+        /// <summary>Every table of <paramref name="from"/> with its columns, permissions, indexes and stored enum values, next to the same in <paramref name="to"/>.</summary>
         private void Add(IModel from, IModel to)
         {
             foreach (var written in from.GetEntityTypes())

@@ -55,7 +55,7 @@ public abstract class ThreatModelTests(TenancyPostgres postgres, TenancyNaming n
             .ExecuteUpdateAsync(seats => seats.SetProperty(seat => seat.DisplayName, "Renamed"), Cancellation));
         renamed.Should().Be(1);
 
-        // Ada, who holds every key of Harbor, takes away every right Oli holds, in any tenant: none goes. No caller
+        // Ada, who holds every permission of Harbor, takes away every right Oli holds, in any tenant: none goes. No caller
         // writes a right.
         var deleted = await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.Tenancy().Set<SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId>>()
             .IgnoreQueryFilters()
@@ -69,7 +69,7 @@ public abstract class ThreatModelTests(TenancyPostgres postgres, TenancyNaming n
         (await owner.ScalarAsync<long>("SELECT count(*) FROM tenancy.\"SeatRights\" WHERE \"SeatId\" = $1", Cancellation, OliInOrchard.Value)).Should().Be(1, "and so does Orchard's");
 
         // Hiro, who gives roles at North, takes away every grant there is: Oli's at North Pier goes, which he may take,
-        // and his own, and the rights they gave with them. Every other grant stays, Seth's at North too, whose keys he
+        // and his own, and the rights they gave with them. Every other grant stays, Seth's at North too, whose permissions he
         // does not hold.
         var taken = await services.BySeat(Hiro.Identity, Harbor, Hiro.Seat, scoped => scoped.Tenancy().Database
             .ExecuteSqlRawAsync(names.Sql("DELETE FROM tenancy.\"SeatRoleGrants\""), Cancellation));
@@ -96,7 +96,7 @@ public abstract class ThreatModelTests(TenancyPostgres postgres, TenancyNaming n
         (failure.Which as PostgresException ?? failure.Which.InnerException as PostgresException)!.ConstraintName.Should().Be("tenancy_administrator_remains");
 
         await using var owner = await AsCaller.OwnerAsync(database, Cancellation);
-        (await owner.ScalarAsync<long>("SELECT count(*) FROM tenancy.\"SeatRights\" WHERE \"TenantId\" = 1 AND \"Key\" = $1", Cancellation, TenancyKeys.AdministratorKey))
+        (await owner.ScalarAsync<long>("SELECT count(*) FROM tenancy.\"SeatRights\" WHERE \"TenantId\" = 1 AND \"Permission\" = $1", Cancellation, TenancyPermissions.AdministratorPermission))
             .Should().Be(1, "Ada is still Harbor's administrator");
     }
 

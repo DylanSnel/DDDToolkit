@@ -32,7 +32,7 @@ public abstract class RightsVisibilityTests(TenancyPostgres postgres, TenancyNam
         await using (var oli = await AsCaller.PersonAsync(database, Oli.Identity, Harbor, Cancellation))
         {
             (await oli.ListAsync<Guid>(SeatsWithRights, Cancellation)).Should().Equal(Oli.Seat.Value);
-            (await oli.ListAsync<string>("SELECT \"Key\" FROM tenancy.\"SeatRights\" ORDER BY 1", Cancellation)).Should().Equal("widget.change", "widget.create", "widget.read");
+            (await oli.ListAsync<string>("SELECT \"Permission\" FROM tenancy.\"SeatRights\" ORDER BY 1", Cancellation)).Should().Equal("widget.change", "widget.create", "widget.read");
             (await oli.ScalarAsync<long>("SELECT count(*) FROM tenancy.\"SeatRights\" WHERE \"SeatId\" = $1", Cancellation, Ada.Seat.Value)).Should().Be(0);
         }
 
@@ -94,7 +94,7 @@ public abstract class RightsVisibilityTests(TenancyPostgres postgres, TenancyNam
         // A shed below North Pier, where Eve watches. Oli manages units at North Pier, as someone who runs one pier would.
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
         var shed = await ShedBelowNorthPierAsync(database, watcher: Eve);
-        await HoldAtAsync(database, Oli, NorthPier, [TenancyKeys.UnitsManage], Cancellation);
+        await HoldAtAsync(database, Oli, NorthPier, [TenancyPermissions.UnitsManage], Cancellation);
         var harbor = await GrantsOfAsync(database, Harbor);
 
         // He reads the grants at North Pier, his own, and at the shed below it, Eve's; not Ada's at the root, nor Hiro's
@@ -145,8 +145,8 @@ public abstract class RightsVisibilityTests(TenancyPostgres postgres, TenancyNam
     public async Task A_seats_manager_reads_the_grants_where_it_manages_seats_since_a_withdrawal_takes_them_with_it()
     {
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
-        await HoldAtAsync(database, Eve, North, [TenancyKeys.SeatsManage], Cancellation);
-        await HoldAtAsync(database, Oli, HarborRoot, [TenancyKeys.SeatsManage, HostCatalogue.WidgetRead], Cancellation);
+        await HoldAtAsync(database, Eve, North, [TenancyPermissions.SeatsManage], Cancellation);
+        await HoldAtAsync(database, Oli, HarborRoot, [TenancyPermissions.SeatsManage, HostCatalogue.WidgetRead], Cancellation);
         var harbor = await GrantsOfAsync(database, Harbor);
 
         // Eve manages seats at North alone. Withdrawing a placement there takes its grants with it, so she reads the
@@ -157,15 +157,15 @@ public abstract class RightsVisibilityTests(TenancyPostgres postgres, TenancyNam
             (await eve.ListAsync<string>(Grants, Cancellation)).Should().BeEquivalentTo(At(harbor, North, NorthPier).Union(mine));
         }
 
-        // Which is what keeps the withdrawal contained: she does not hold the grants key at North, and Hiro's placement
-        // there has his grant, so the use case asks the key she lacks, and the database, which reads the grant as her,
+        // Which is what keeps the withdrawal contained: she does not hold the grants permission at North, and Hiro's placement
+        // there has his grant, so the use case asks the permission she lacks, and the database, which reads the grant as her,
         // keeps the placement whatever she sends.
         await using (var services = new TenancyServices(database))
         {
             var refusal = await FluentActions.Awaiting(() => services.BySeat(Eve.Identity, Harbor, Eve.Seat, scoped => scoped.Seats().WithdrawAsync(Hiro.Seat, North, Cancellation)))
                 .Should().ThrowAsync<DDDToolkit.Exceptions.RefusalException>();
             refusal.Which.Code.Should().Be(TenancyRefusals.NotPermitted);
-            refusal.Which.Arguments["Key"].Should().Be(TenancyKeys.GrantsManage);
+            refusal.Which.Arguments["Permission"].Should().Be(TenancyPermissions.GrantsManage);
         }
 
         await using (var eve = await AsCaller.PersonAsync(database, Eve.Identity, Harbor, Cancellation))
@@ -174,7 +174,7 @@ public abstract class RightsVisibilityTests(TenancyPostgres postgres, TenancyNam
         }
 
         // Oli manages seats for the whole tenant: he reads every grant of Harbor, as the administration's overview of
-        // another person's roles needs, which asks that key for the whole tenant.
+        // another person's roles needs, which asks that permission for the whole tenant.
         await using var oli = await AsCaller.PersonAsync(database, Oli.Identity, Harbor, Cancellation);
         (await oli.ListAsync<string>(Grants, Cancellation)).Should().BeEquivalentTo(harbor);
     }
@@ -183,8 +183,8 @@ public abstract class RightsVisibilityTests(TenancyPostgres postgres, TenancyNam
     public async Task A_roles_manager_for_the_whole_tenant_reads_every_grant()
     {
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
-        await HoldAtAsync(database, Eve, HarborRoot, [TenancyKeys.RolesManage], Cancellation);
-        await HoldAtAsync(database, Oli, NorthPier, [TenancyKeys.RolesManage, HostCatalogue.WidgetRead], Cancellation);
+        await HoldAtAsync(database, Eve, HarborRoot, [TenancyPermissions.RolesManage], Cancellation);
+        await HoldAtAsync(database, Oli, NorthPier, [TenancyPermissions.RolesManage, HostCatalogue.WidgetRead], Cancellation);
         var harbor = await GrantsOfAsync(database, Harbor);
 
         // Changing a role reaches every seat that holds it, so whoever manages roles for the whole tenant reads them all.
@@ -193,7 +193,7 @@ public abstract class RightsVisibilityTests(TenancyPostgres postgres, TenancyNam
             (await eve.ListAsync<string>("SELECT \"SeatId\" || ' ' || \"UnitId\" || ' ' || \"RoleId\" FROM tenancy.\"SeatRoleGrants\"", Cancellation)).Should().BeEquivalentTo(harbor);
         }
 
-        // The role key held below the root changes no role, and reads no other seat's grants.
+        // The role permission held below the root changes no role, and reads no other seat's grants.
         await using var oli = await AsCaller.PersonAsync(database, Oli.Identity, Harbor, Cancellation);
         (await oli.ListAsync<Guid>(SeatsWithGrants, Cancellation)).Should().Equal(Oli.Seat.Value);
     }
@@ -203,7 +203,7 @@ public abstract class RightsVisibilityTests(TenancyPostgres postgres, TenancyNam
     {
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
 
-        // Ada holds every key of Harbor, Seth manages units, seats and grants at North, Hiro gives roles there.
+        // Ada holds every permission of Harbor, Seth manages units, seats and grants at North, Hiro gives roles there.
         foreach (var person in new[] { Ada, Seth, Hiro })
         {
             await using var caller = await AsCaller.PersonAsync(database, person.Identity, Harbor, Cancellation);
@@ -227,7 +227,7 @@ public abstract class RightsVisibilityTests(TenancyPostgres postgres, TenancyNam
         List<string> harbor;
         await using (var owner = await AsCaller.OwnerAsync(database, Cancellation))
         {
-            harbor = await owner.ListAsync<string>("SELECT \"SeatId\" || ' ' || \"UnitId\" || ' ' || \"RoleId\" || ' ' || \"Key\" FROM tenancy.\"SeatRights\" WHERE \"TenantId\" = 1", Cancellation);
+            harbor = await owner.ListAsync<string>("SELECT \"SeatId\" || ' ' || \"UnitId\" || ' ' || \"RoleId\" || ' ' || \"Permission\" FROM tenancy.\"SeatRights\" WHERE \"TenantId\" = 1", Cancellation);
         }
 
         harbor.Should().HaveCountGreaterThan(20);
@@ -237,7 +237,7 @@ public abstract class RightsVisibilityTests(TenancyPostgres postgres, TenancyNam
         foreach (var scope in new[] { TenancyWork.SystemScope, "widgets" })
         {
             await using var system = await AsCaller.SystemInAsync(database, Harbor, scope, Cancellation);
-            (await system.ListAsync<string>("SELECT \"SeatId\" || ' ' || \"UnitId\" || ' ' || \"RoleId\" || ' ' || \"Key\" FROM tenancy.\"SeatRights\"", Cancellation))
+            (await system.ListAsync<string>("SELECT \"SeatId\" || ' ' || \"UnitId\" || ' ' || \"RoleId\" || ' ' || \"Permission\" FROM tenancy.\"SeatRights\"", Cancellation))
                 .Should().BeEquivalentTo(harbor, "system work in the scope {0} reads its tenant's rights", scope);
             (await system.ScalarAsync<long>("SELECT count(*) FROM tenancy.\"SeatRoleGrants\"", Cancellation)).Should().Be(7, "and its grants");
         }

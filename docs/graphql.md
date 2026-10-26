@@ -7,7 +7,7 @@ run, and a client has to know that an `OrderId` is a wrapper. With it an `OrderI
 bookkeeping and the methods are gone, and every domain event shares one interface.
 
 This page starts with ids, which every schema needs first, then the conventions every schema gets,
-errors, in the response and in a mutation's payload, a permission key on a field, Relay, and paging by an
+errors, in the response and in a mutation's payload, a permission on a field, Relay, and paging by an
 id. After that come the parts for larger systems: a field for one schema only, one schema over several
 modules, and pushing events to subscribed clients. How the generated bindings work is at the end. For a
 whole schema to read beside this page, the [Tenancy sample](tenancy.md#graphql-in-the-sample) is the
@@ -713,46 +713,46 @@ public sealed class AccountGate : TypeInterceptor
 }
 ```
 
-## A permission key on a field
+## A permission on a field
 
 What a caller may read is decided where it is read: a query answers what the caller may see and says
 nothing about the rest. A field can be another matter. The caller sees the product and may not see what it
 costs, a client should be able to read that rule in the schema, and a caller that asks anyway should be
-told. That is HotChocolate's own `[Authorize]`, with a permission key as its policy:
+told. That is HotChocolate's own `[Authorize]`, with a permission as its policy:
 
 ```csharp
 [ObjectType<ProductOverview>]
 internal static partial class ProductType
 {
-    [Authorize(CatalogKeys.ViewCosts)]        // HotChocolate.Authorization; the key is "catalog.costs.view"
+    [Authorize(CatalogPermissions.ViewCosts)]        // HotChocolate.Authorization; the permission is "catalog.costs.view"
     public static async Task<decimal?> GetCostAsync([Parent] ProductOverview product, ICostByProductIdDataLoader costs, CancellationToken cancellationToken)
         => await costs.LoadAsync(product.Id, cancellationToken);
 }
 ```
 
-HotChocolate does not know who holds a key, and neither does the toolkit. The module does, for its own
-types: it writes one small class per type whose fields carry a rule, an `IFieldKeys<TParent>`, and
-`AddDDDToolkitKeyAuthorization()` has HotChocolate ask it:
+HotChocolate does not know who holds a permission, and neither does the toolkit. The module does, for its own
+types: it writes one small class per type whose fields carry a rule, an `IFieldPermissions<TParent>`, and
+`AddDDDToolkitPermissionAuthorization()` has HotChocolate ask it:
 
 ```csharp
-internal sealed class ProductFieldKeys : IFieldKeys<ProductOverview>
+internal sealed class ProductFieldPermissions : IFieldPermissions<ProductOverview>
 {
-    public async ValueTask<RefusalException?> RefusedAsync(ProductOverview parent, string key, IResolverContext context, CancellationToken cancellationToken)
-        => await context.Service<IHeldKeysByProductIdDataLoader>().LoadAsync(parent.Id, cancellationToken) is { } held && held.Contains(key)
+    public async ValueTask<RefusalException?> RefusedAsync(ProductOverview parent, string permission, IResolverContext context, CancellationToken cancellationToken)
+        => await context.Service<IHeldPermissionsByProductIdDataLoader>().LoadAsync(parent.Id, cancellationToken) is { } held && held.Contains(permission)
             ? null                                                                  // the caller holds it: the field is resolved
             : new RefusalException("catalog.not-permitted", RefusalKind.NotPermitted, "You may not see this.",
-                new Dictionary<string, object?> { ["Key"] = key });
+                new Dictionary<string, object?> { ["Permission"] = permission });
 }
 
-builder.Services.AddScoped<IFieldKeys<ProductOverview>, ProductFieldKeys>();
+builder.Services.AddScoped<IFieldPermissions<ProductOverview>, ProductFieldPermissions>();
 
 builder.Services
     .AddGraphQLServer()
     .AddDDDToolkitErrors()                  // shapes the refusal
-    .AddDDDToolkitKeyAuthorization();
+    .AddDDDToolkitPermissionAuthorization();
 ```
 
-A caller that holds the key on the first product and not on the second gets:
+A caller that holds the permission on the first product and not on the second gets:
 
 ```json
 {
@@ -760,40 +760,40 @@ A caller that holds the key on the first product and not on the second gets:
   "errors": [{
     "message": "You may not see this.",
     "path": ["products", 1, "cost"],
-    "extensions": { "code": "catalog.not-permitted", "kind": "NOT_PERMITTED", "arguments": { "Key": "catalog.costs.view" } }
+    "extensions": { "code": "catalog.not-permitted", "kind": "NOT_PERMITTED", "arguments": { "Permission": "catalog.costs.view" } }
   }]
 }
 ```
 
 - **The rule is in the schema**: `cost: Decimal @authorize(policy: "catalog.costs.view")`, in a module's
   source schema and in the schema a gateway composes of it. A rule on a property of the record itself is a
-  line in the type class's `Configure`: `descriptor.Field(product => product.Sku).Authorize(CatalogKeys.ViewSkus)`.
+  line in the type class's `Configure`: `descriptor.Field(product => product.Sku).Authorize(CatalogPermissions.ViewSkus)`.
 - **A refused field answers the refusal the module gave.** The field is `null`, the object and its other
   fields stay, and `errors` has one entry at the field's path with the refusal's code, kind and arguments,
   shaped by [`AddDDDToolkitErrors()`](#failures-as-graphql-errors) as a refused query is. Give the same
-  refusal the module's access check gives for that key, and a client reads one code either way. The
+  refusal the module's access check gives for that permission, and a client reads one code either way. The
   resolver does not run. A field under a rule has to be nullable: a refused field that is never null takes
   its parent with it.
-- **A batch of parents costs one question.** The key is asked once for every parent, and the parents of a
-  list are asked side by side, so an `IFieldKeys` that awaits a data loader keyed by the parent asks once
+- **A batch of parents costs one question.** The permission is asked once for every parent, and the parents of a
+  list are asked side by side, so an `IFieldPermissions` that awaits a data loader keyed by the parent asks once
   for each batch the loader sends, which is the page as a rule. One that reads on its own asks once per row.
 - **A rule on a field guards that field, and nothing else that answers the same value.** Above, the cost is
   read by the field's own resolver, which a refusal keeps from running, so nothing gives it away. When the
   value is part of the record a query already answers, a route that writes that record, or another field over
   it, answers the value without asking. Then hold the rule where the data is read: the query leaves the value
-  out, as `null`, for a caller who does not hold the key, and the attribute declares the rule and gives the
-  refusal. The Tenancy sample does so for a crew member's roles and a role's keys
+  out, as `null`, for a caller who does not hold the permission, and the attribute declares the rule and gives the
+  refusal. The Tenancy sample does so for a crew member's roles and a role's permissions
   ([GraphQL in the sample](tenancy.md#graphql-in-the-sample)).
-- **What nobody can answer is refused, never allowed.** A parent whose type has no `IFieldKeys`
+- **What nobody can answer is refused, never allowed.** A parent whose type has no `IFieldPermissions`
   registered, a field without a parent (a `[Query]` method), a rule that names roles, and a rule applied
   after the resolver or during validation each answer an error that says what is missing, with
   HotChocolate's code for a policy that does not exist, `AUTH_POLICY_NOT_FOUND`:
-  `The key 'catalog.costs.view' on 'Product.cost' has nobody to answer for it: no IFieldKeys<ProductOverview> is registered.`
+  `The permission 'catalog.costs.view' on 'Product.cost' has nobody to answer for it: no IFieldPermissions<ProductOverview> is registered.`
   An `[Authorize]` without a policy answers HotChocolate's `AUTH_NO_DEFAULT_POLICY`. The parent's own type
-  is asked first, then the types it derives from, so one `IFieldKeys` for a base record answers for the
+  is asked first, then the types it derives from, so one `IFieldPermissions` for a base record answers for the
   records derived from it.
 - **An application has one authorization handler**, in its own services, for all its schemas.
-  `AddDDDToolkitKeyAuthorization()` replaces another, such as the one HotChocolate's ASP.NET Core policies
+  `AddDDDToolkitPermissionAuthorization()` replaces another, such as the one HotChocolate's ASP.NET Core policies
   register, and a registration after it replaces this one. In a modular application call it on every
   source schema: that is how each gets the `@authorize` directive.
 - **It stands beside the request's own check, never in its place.** A resolver still sends a query that
@@ -1481,7 +1481,7 @@ builder.Services.AddGraphQLServer("inventory").AddSourceSchemaDefaults().AddHost
 - **Failures cross the gateway whole.** A refused mutation answers its `RefusalError` in the payload, and a
   refused query its top-level error with `extensions.code`, `kind`, `arguments` and, where the refusal names
   an input, `field`, in the request's language either way. So does the refusal of
-  [a field under a permission key](#a-permission-key-on-a-field).
+  [a field under a permission](#a-permission-on-a-field).
 - **Every field of an entity but its key may be null**, in every module's schema, so a reference its owner
   answers nothing for reaches the client without an error. See
   [Types over your own records](#types-over-your-own-records).
@@ -1568,7 +1568,7 @@ type Product @key(fields: "id") {
 
 A client that reaches a product Catalog does not answer, through an order line of another module, gets
 `{ "id": "…", "name": null, "sku": null }` and no entry in `errors`. A field under
-[a permission key](#a-permission-key-on-a-field) is nullable by the same call, as a field that can be
+[a permission](#a-permission-on-a-field) is nullable by the same call, as a field that can be
 refused has to be.
 
 - **An entity is an object type that carries a key**: the `@key` the module's own printed schema shows on

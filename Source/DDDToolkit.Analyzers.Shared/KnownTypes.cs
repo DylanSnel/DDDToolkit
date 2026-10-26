@@ -30,6 +30,11 @@ internal static class KnownTypes
     public const string InternalAttribute = AttributesNamespace + ".InternalAttribute";
     public const string DontCompareAttribute = AttributesNamespace + ".DontCompareAttribute";
     public const string KeyPartAttribute = AttributesNamespace + ".KeyPartAttribute";
+    /// <summary>The property of an aggregate root that names its owner: <c>[Owner]</c>.</summary>
+    public const string OwnerAttribute = AttributesNamespace + ".OwnerAttribute";
+
+    /// <summary>The property of an aggregate root that says where it hangs: <c>[At]</c>.</summary>
+    public const string AtAttribute = AttributesNamespace + ".AtAttribute";
 
     /// <summary>An abstract generic parent a package ships for aggregate roots declared elsewhere: <c>[AggregateRootBase]</c>.</summary>
     public const string AggregateRootBaseAttribute = AttributesNamespace + ".AggregateRootBaseAttribute";
@@ -100,6 +105,9 @@ internal static class KnownTypes
     /// <summary>A question of an <c>[AccessFunctions]</c> class answered with one value: <c>[AccessScalar("name")]</c>.</summary>
     public const string AccessScalarAttribute = AttributesNamespace + ".AccessScalarAttribute";
 
+    /// <summary>A question of an <c>[AccessFunctions]</c> class answered with one row of a mapped table: <c>[AccessRow("name")]</c>.</summary>
+    public const string AccessRowAttribute = AttributesNamespace + ".AccessRowAttribute";
+
     /// <summary>What a set-shaped question answers with, which a rule asks <c>Contains</c> of.</summary>
     public const string AccessSet = "DDDToolkit.Abstractions.Access.AccessSet`1";
 
@@ -119,6 +127,13 @@ internal static class KnownTypes
     /// </summary>
     public const string ColumnRuleSqlMarker = "{columns}";
 
+    /// <summary>
+    /// What a restrictive rule's <see cref="RowAccessSqlField"/> starts with. An export that does not know
+    /// restrictive rules stops at it, as at any placeholder it does not know, rather than write a rule meant to
+    /// narrow as a policy that allows more.
+    /// </summary>
+    public const string RestrictiveRuleSqlMarker = "{restrictive}";
+
     /// <summary>On a module's request interface: the generator writes the pipeline behavior that holds its requests to what they declare.</summary>
     public const string AccessRequestsAttribute = AttributesNamespace + ".AccessRequestsAttribute";
 
@@ -135,16 +150,16 @@ internal static class KnownTypes
     public const string StatesRequirementAttribute = "DDDToolkit.Access.StatesRequirementAttribute";
 
     /// <summary>On a request: the key its caller holds, where a marker on one of its members says, or for the whole tenant.</summary>
-    public const string RequiresKeyAttribute = "DDDToolkit.Access.RequiresKeyAttribute";
+    public const string RequiresPermissionAttribute = "DDDToolkit.Access.RequiresPermissionAttribute";
 
-    /// <summary>On an attribute a package ships: it marks where the key of <c>[RequiresKey]</c> is held, and names the call.</summary>
-    public const string KeyMarkerAttribute = "DDDToolkit.Access.KeyMarkerAttribute";
+    /// <summary>On an attribute a package ships: it marks where the key of <c>[RequiresPermission]</c> is held, and names the call.</summary>
+    public const string PermissionMarkerAttribute = "DDDToolkit.Access.PermissionMarkerAttribute";
 
     /// <summary>On an attribute a package ships: it marks one more argument of a key marker's call, such as the version read.</summary>
-    public const string KeyMarkerArgumentAttribute = "DDDToolkit.Access.KeyMarkerArgumentAttribute";
+    public const string PermissionMarkerArgumentAttribute = "DDDToolkit.Access.PermissionMarkerArgumentAttribute";
 
-    /// <summary>On a package's assembly: what <c>[RequiresKey]</c> means on a request that marks no member.</summary>
-    public const string KeyWithoutMarkerAttribute = "DDDToolkit.Access.KeyWithoutMarkerAttribute";
+    /// <summary>On a package's assembly: what <c>[RequiresPermission]</c> means on a request that marks no member.</summary>
+    public const string PermissionWithoutMarkerAttribute = "DDDToolkit.Access.PermissionWithoutMarkerAttribute";
 
     /// <summary>On a request: anyone may send it. The core's, which goes beside no other requirement attribute.</summary>
     public const string AllowAnonymousAttribute = "DDDToolkit.Access.AllowAnonymousAttribute";
@@ -193,6 +208,12 @@ internal static class KnownTypes
     /// check that the behavior is in the pipeline reads. Written beside a behavior where the project can see it.
     /// </summary>
     public const string AccessBehaviorAttribute = "DDDToolkit.Access.AccessBehaviorAttribute";
+
+    /// <summary>The assembly attribute that says the id of an aggregate whose owner a project's requests ask about.</summary>
+    public const string AsksOwnerOfAttribute = "DDDToolkit.Access.AsksOwnerOfAttribute";
+
+    /// <summary>The core's requirement record, whose <c>OwnerOf</c> a request's line or a project's own code calls.</summary>
+    public const string AccessRequirement = "DDDToolkit.Access.AccessRequirement";
 
     /// <summary>
     /// The pipeline behavior of the Mediator library (assembly Mediator.Abstractions). A project that can see it

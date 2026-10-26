@@ -1,0 +1,18 @@
+namespace DDDToolkit.Supporting.Membership;
+
+/// <summary>What a new role of a resource is made from.</summary>
+/// <param name="Name">
+/// The role's name, 1 to <see cref="CustomRoleAggregate{TRoleId}.MaxNameLength"/> characters; white space
+/// around it is dropped.
+/// </param>
+/// <param name="Description">
+/// What the role is for, at most <see cref="CustomRoleAggregate{TRoleId}.MaxDescriptionLength"/>
+/// characters, or nothing.
+/// </param>
+/// <param name="Permissions">The permissions it gives: each one a permission the resource's rules let a member's role give.</param>
+/// <param name="MadeFrom">
+/// The name of the starter role it is made from, one of the roles the resource's rules declare, or
+/// <see langword="null"/> for a role a customer makes. The drafts of the starter roles carry it
+/// (<see cref="UseCases.StarterRoles"/>); a draft made from what a customer entered leaves it out.
+/// </param>
+public sealed record CustomRoleDraft(string Name, string? Description, IReadOnlyCollection<string> Permissions, string? MadeFrom = null);

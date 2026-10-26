@@ -17,12 +17,12 @@ public sealed partial class DocumentShare;
 [AggregateRoot<DocumentId>]
 public sealed partial class Document
 {
-    /// <summary>Writes a document, with <paramref name="owner"/> a member from <paramref name="now"/> on, for good, in the owner's role.</summary>
-    public Document(DocumentId id, string title, UserId owner, NamedRole ownerRole, DateTimeOffset now) : base(id)
+    /// <summary>Writes a document, with <paramref name="owner"/> a member from <paramref name="now"/> on, for good, holding no role: it holds what an owner does by owning it.</summary>
+    public Document(DocumentId id, string title, UserId owner, DateTimeOffset now) : base(id)
     {
         Title = title;
         OwnerId = owner;
-        Members.Open(ownerRole, now);
+        Members.Open(now);
         RaiseDomainEvent(new DocumentWritten(id, owner));
     }
 
@@ -33,6 +33,12 @@ public sealed partial class Document
     public bool Archived { get; private set; }
 
     /// <summary>The user that owns the document.</summary>
+    /// <remarks>
+    /// Also where the document hangs, <c>[At]</c>: a suite that lets a user's deputy reach what that user owns reaches a
+    /// document from its owner. Rules that do not reach from above read nothing of it.
+    /// </remarks>
+    [Owner]
+    [At]
     public UserId OwnerId { get; private set; }
 
     /// <summary>Who the document is shared with: the collection the member list works on.</summary>
@@ -73,10 +79,10 @@ public sealed partial class Document
     }
 
     /// <summary>Takes a role from a user the document is shared with.</summary>
-    public void TakeRole(UserId from, NamedRole role, NamedRole? ownerRole)
+    public void TakeRole(UserId from, NamedRole role)
     {
         RequireNotArchived();
-        Members.TakeRole(from, role, ownerRole);
+        Members.TakeRole(from, role);
         RaiseDomainEvent(new DocumentRoleTaken(Id, from, role));
     }
 
@@ -89,13 +95,13 @@ public sealed partial class Document
     }
 
     /// <summary>Hands the document to another owner, and raises the host's events for everything that came with it.</summary>
-    public void HandOver(UserId to, NamedRole ownerRole, DateTimeOffset now)
+    public void HandOver(UserId to, FormerOwner<NamedRole> formerOwner, DateTimeOffset now)
     {
         RequireNotArchived();
-        var named = Members.NameOwner(to, ownerRole, now);
+        var named = Members.NameOwner(to, formerOwner, now);
         OwnerId = named.Owner;
 
-        // What the new owner's membership lost on the way: the roles of one that had ended, or a role that never counted.
+        // What the new owner held on the list: it holds by owning now, so its roles go.
         foreach (var dropped in named.RolesDropped)
         {
             RaiseDomainEvent(new DocumentRoleTaken(Id, named.Owner, dropped.RoleId));
@@ -107,14 +113,14 @@ public sealed partial class Document
             RaiseDomainEvent(new DocumentShared(Id, named.Owner));
         }
 
-        if (named.RoleGiven)
+        // The old owner stays in a role, or leaves.
+        if (named.PreviousRole is { } role)
         {
-            RaiseDomainEvent(new DocumentRoleGiven(Id, named.Owner, ownerRole));
+            RaiseDomainEvent(new DocumentRoleGiven(Id, named.Previous, role));
         }
-
-        if (named.RoleTaken)
+        else if (named.PreviousLeft)
         {
-            RaiseDomainEvent(new DocumentRoleTaken(Id, named.Previous, ownerRole));
+            RaiseDomainEvent(new DocumentUnshared(Id, named.Previous));
         }
 
         RaiseDomainEvent(new DocumentHandedOver(Id, named.Previous, named.Owner));
@@ -142,7 +148,7 @@ public sealed partial class Document
         public InvariantFailure? Check(Document entity) => entity.Members.OneMembershipPerMember();
     }
 
-    /// <summary>The owner stays, with a role that does not run out: the member list's check, under the host's own code.</summary>
+    /// <summary>The owner stays, for good and holding no role: the member list's check, under the host's own code.</summary>
     public sealed class OwnerKeepsAPlace : IInvariant<Document>
     {
         /// <inheritdoc />

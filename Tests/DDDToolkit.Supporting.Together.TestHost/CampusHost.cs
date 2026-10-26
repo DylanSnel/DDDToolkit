@@ -27,7 +27,7 @@ public static class CampusHost
         // Generated for this project's classes: Tenant, TenantId, Organization and the rest. A new id is the id's own.
         services.AddTenancy<TenancyContext>(options => options.Catalogue = CampusCatalogue.Application);
 
-        // The keys of the courses and the labs that a role of the organization can hold.
+        // The permissions of the courses and the labs that a role of the organization can hold.
         services.AddTenancyPermissions(CampusCatalogue.Permissions);
 
         // A course: its members are seats, its roles are kept for it, and the organization reaches it from above.

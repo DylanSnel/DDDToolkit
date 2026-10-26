@@ -8,11 +8,11 @@ namespace DDDToolkit.Supporting.Tenancy.Postgres.Tests;
 
 /// <summary>
 /// What Tenancy's SQL stands on, checked on Npgsql before anything is built on it, on the Entity Framework and
-/// Npgsql this build runs and on the oldest the packages allow: a role's keys are an array SQL asks with
+/// Npgsql this build runs and on the oldest the packages allow: a role's permissions are an array SQL asks with
 /// <c>= ANY</c>, the periods of grants and rights are instants Postgres compares with its own <c>now()</c>, a
-/// key longer than its column is refused by the database, not cut short, a change or a removal that names a row's
+/// permission longer than its column is refused by the database, not cut short, a change or a removal that names a row's
 /// columns reaches only the rows the caller may read, a trigger that fires after a row is written has written
-/// what it writes before the save's next statement runs, a row with no key is read from a function of another
+/// what it writes before the save's next statement runs, a row with no permission is read from a function of another
 /// schema as it would be from a table, and Postgres plans a query over a function that runs as its caller, with no
 /// settings of its own, as a query over the tables the function reads.
 /// </summary>
@@ -25,7 +25,7 @@ public sealed class ProbeTests(TenancyPostgres postgres)
     {
         await using (var model = TenancyPostgres.TenancyModel())
         {
-            model.Model.FindEntityType(typeof(HostRole))!.FindProperty(nameof(HostRole.Keys))!.GetColumnType().Should().Be("text[]");
+            model.Model.FindEntityType(typeof(HostRole))!.FindProperty(nameof(HostRole.Permissions))!.GetColumnType().Should().Be("text[]");
         }
 
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Plain, Cancellation);
@@ -34,26 +34,26 @@ public sealed class ProbeTests(TenancyPostgres postgres)
         await using var connection = await OpenAsync(database);
         (await ScalarAsync<string>(connection, """
             SELECT pg_catalog.format_type(a.atttypid, a.atttypmod) FROM pg_catalog.pg_attribute a
-            WHERE a.attrelid = 'tenancy."Roles"'::regclass AND a.attname = 'Keys'
+            WHERE a.attrelid = 'tenancy."Roles"'::regclass AND a.attname = 'Permissions'
             """)).Should().Be("text[]");
 
-        // The keys are stored expanded, so a key a role's keys imply is among them, and = ANY finds it there.
+        // The permissions are stored expanded, so a permission a role's permissions imply is among them, and = ANY finds it there.
         var catalogue = TenancyPostgres.Catalogue;
-        foreach (var key in catalogue.LiveKeys)
+        foreach (var permission in catalogue.LivePermissions)
         {
-            var expected = catalogue.PacksFor(TenantShape.Hierarchical).Count(pack => pack.Keys.Contains(key));
-            (await ScalarAsync<long>(connection, "SELECT count(*) FROM tenancy.\"Roles\" WHERE $1 = ANY (\"Keys\")", key))
-                .Should().Be(expected, "{0} is held by the roles of the packs that hold it", key);
+            var expected = catalogue.PacksFor(TenantShape.Hierarchical).Count(pack => pack.Permissions.Contains(permission));
+            (await ScalarAsync<long>(connection, "SELECT count(*) FROM tenancy.\"Roles\" WHERE $1 = ANY (\"Permissions\")", permission))
+                .Should().Be(expected, "{0} is held by the roles of the packs that hold it", permission);
         }
 
-        (await ScalarAsync<long>(connection, "SELECT count(*) FROM tenancy.\"Roles\" WHERE 'widget.unknown' = ANY (\"Keys\")")).Should().Be(0);
+        (await ScalarAsync<long>(connection, "SELECT count(*) FROM tenancy.\"Roles\" WHERE 'widget.unknown' = ANY (\"Permissions\")")).Should().Be(0);
 
         // And Entity Framework reads the array back as the list the role holds, in its order.
         await using var services = new TenancyServices(database, rowLevelSecurity: false, databaseKeepsRights: false);
         using (TenancyWork.BeginSystemIn<TenantId, SeatId>(TenancySeed.Harbor))
         {
-            var stored = await services.InScopeAsync(scoped => scoped.Tenancy().Set<HostRole>().ToDictionaryAsync(role => role.FromPack!, role => role.Keys, Cancellation));
-            stored.Should().BeEquivalentTo(catalogue.PacksFor(TenantShape.Hierarchical).ToDictionary(pack => pack.Key, pack => pack.Keys), options => options.WithStrictOrdering());
+            var stored = await services.InScopeAsync(scoped => scoped.Tenancy().Set<HostRole>().ToDictionaryAsync(role => role.FromPack!, role => role.Permissions, Cancellation));
+            stored.Should().BeEquivalentTo(catalogue.PacksFor(TenantShape.Hierarchical).ToDictionary(pack => pack.Key, pack => pack.Permissions), options => options.WithStrictOrdering());
         }
     }
 
@@ -89,7 +89,7 @@ public sealed class ProbeTests(TenancyPostgres postgres)
         await using (var command = new NpgsqlCommand(
             """
             SELECT r."RoleId", r."StartsAt", r."EndsAt", r."StartsAt" <= now() AND (r."EndsAt" IS NULL OR r."EndsAt" > now())
-            FROM tenancy."SeatRights" r WHERE r."SeatId" = $1 AND r."Key" = 'widget.read'
+            FROM tenancy."SeatRights" r WHERE r."SeatId" = $1 AND r."Permission" = 'widget.read'
             """,
             connection))
         {
@@ -121,27 +121,27 @@ public sealed class ProbeTests(TenancyPostgres postgres)
     }
 
     [Fact]
-    public async Task Keys_longer_than_their_columns_fail_on_postgres()
+    public async Task Permissions_longer_than_their_columns_fail_on_postgres()
     {
         await using (var model = TenancyPostgres.TenancyModel())
         {
             var rights = model.Model.GetEntityTypes().Single(entity => entity.GetTableName() == "SeatRights");
-            rights.FindProperty("Key")!.GetColumnType().Should().Be($"character varying({Permission.MaxKeyLength})");
+            rights.FindProperty("Permission")!.GetColumnType().Should().Be($"character varying({Permission.MaxNameLength})");
             model.Model.FindEntityType(typeof(HostRole))!.FindProperty(nameof(HostRole.FromPack))!.GetColumnType().Should().Be($"character varying({RolePack.MaxKeyLength})");
         }
 
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Plain, Cancellation);
         await using var connection = await OpenAsync(database);
 
-        async Task InsertRightAsync(string key)
+        async Task InsertRightAsync(string permission)
         {
             await using var command = new NpgsqlCommand(
                 """
-                INSERT INTO tenancy."SeatRights" ("SeatId", "UnitId", "RoleId", "Key", "TenantId", "StartsAt", "EndsAt")
+                INSERT INTO tenancy."SeatRights" ("SeatId", "UnitId", "RoleId", "Permission", "TenantId", "StartsAt", "EndsAt")
                 VALUES (gen_random_uuid(), gen_random_uuid(), gen_random_uuid(), $1, 1, now(), NULL)
                 """,
                 connection);
-            command.Parameters.Add(new NpgsqlParameter { Value = key });
+            command.Parameters.Add(new NpgsqlParameter { Value = permission });
             await command.ExecuteNonQueryAsync(Cancellation);
         }
 
@@ -149,7 +149,7 @@ public sealed class ProbeTests(TenancyPostgres postgres)
         {
             await using var command = new NpgsqlCommand(
                 """
-                INSERT INTO tenancy."Roles" ("Id", "NormalizedName", "Version", "TenantId", "Name", "Description", "FromPack", "Status", "Keys")
+                INSERT INTO tenancy."Roles" ("Id", "NormalizedName", "Version", "TenantId", "Name", "Description", "FromPack", "Status", "Permissions")
                 VALUES (gen_random_uuid(), gen_random_uuid()::text, 1, 1, 'Packed', '', $1, 'Active', ARRAY['widget.read'])
                 """,
                 connection);
@@ -157,10 +157,10 @@ public sealed class ProbeTests(TenancyPostgres postgres)
             await command.ExecuteNonQueryAsync(Cancellation);
         }
 
-        await InsertRightAsync("widget." + new string('k', Permission.MaxKeyLength - "widget.".Length));
-        (await FluentActions.Awaiting(() => InsertRightAsync("widget." + new string('k', Permission.MaxKeyLength + 1 - "widget.".Length)))
+        await InsertRightAsync("widget." + new string('k', Permission.MaxNameLength - "widget.".Length));
+        (await FluentActions.Awaiting(() => InsertRightAsync("widget." + new string('k', Permission.MaxNameLength + 1 - "widget.".Length)))
                 .Should().ThrowAsync<PostgresException>())
-            .Which.SqlState.Should().Be(PostgresErrorCodes.StringDataRightTruncation, "a key one character too long is refused, not stored cut short");
+            .Which.SqlState.Should().Be(PostgresErrorCodes.StringDataRightTruncation, "a permission one character too long is refused, not stored cut short");
 
         await InsertRoleAsync(new string('p', RolePack.MaxKeyLength));
         (await FluentActions.Awaiting(() => InsertRoleAsync(new string('p', RolePack.MaxKeyLength + 1)))
@@ -194,13 +194,13 @@ public sealed class ProbeTests(TenancyPostgres postgres)
         {
             (await caller.ListAsync<int>("SELECT id FROM widgets.slips", Cancellation)).Should().Equal(1);
 
-            // A statement that names a column of the row, as every statement Entity Framework writes names the key,
+            // A statement that names a column of the row, as every statement Entity Framework writes names the permission,
             // needs to read the row, so Postgres holds it to the policy for reading as well: the other holder's slip
             // is not there to change or to remove, and nothing says so but the count.
             (await caller.ExecuteAsync("UPDATE widgets.slips SET note = 'changed' WHERE id = 2", Cancellation)).Should().Be(0);
             (await caller.ExecuteAsync("DELETE FROM widgets.slips WHERE id = 2", Cancellation)).Should().Be(0);
 
-            // It is there for the key, though: the row a save cannot see, it cannot add again either.
+            // It is there for the permission, though: the row a save cannot see, it cannot add again either.
             var adding = await FluentActions.Awaiting(() => caller.AttemptAsync("INSERT INTO widgets.slips VALUES (2, $1, 'again')", Cancellation, mine))
                 .Should().ThrowAsync<PostgresException>();
             adding.Which.SqlState.Should().Be(PostgresErrorCodes.UniqueViolation);
@@ -355,22 +355,22 @@ public sealed class ProbeTests(TenancyPostgres postgres)
         // new function from any role, so the signed-in holder may run each of them.
         var me = Guid.Parse("d0000000-0000-4000-8000-000000000007");
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Plain, Cancellation);
-        const string Held = """RETURNS TABLE ("HolderId" uuid, "PlaceId" uuid, "Key" text) LANGUAGE sql""";
-        const string Holdings = """AS $body$ SELECT h."HolderId", h."PlaceId", h."Key"::pg_catalog.text FROM folding.holdings h $body$""";
+        const string Held = """RETURNS TABLE ("HolderId" uuid, "PlaceId" uuid, "Permission" text) LANGUAGE sql""";
+        const string Holdings = """AS $body$ SELECT h."HolderId", h."PlaceId", h."Permission"::pg_catalog.text FROM folding.holdings h $body$""";
         await TenancyPostgres.ExecuteAsync(
             database.ConnectionString,
             $"""
             CREATE SCHEMA folding;
             CREATE TABLE folding.holdings (
-                "HolderId" uuid NOT NULL, "PlaceId" uuid NOT NULL, "Key" character varying(100) NOT NULL,
-                PRIMARY KEY ("HolderId", "PlaceId", "Key"));
-            CREATE INDEX holdings_of_a_holder_by_key ON folding.holdings ("HolderId", "Key");
+                "HolderId" uuid NOT NULL, "PlaceId" uuid NOT NULL, "Permission" character varying(100) NOT NULL,
+                PRIMARY KEY ("HolderId", "PlaceId", "Permission"));
+            CREATE INDEX holdings_of_a_holder_by_permission ON folding.holdings ("HolderId", "Permission");
             CREATE TABLE folding.reaches ("FromPlaceId" uuid NOT NULL, "PlaceId" uuid NOT NULL, PRIMARY KEY ("FromPlaceId", "PlaceId"));
             INSERT INTO folding.holdings
             SELECT ('d0000000-0000-4000-8000-' || pg_catalog.lpad(holder::text, 12, '0'))::uuid,
                    ('a0000000-0000-4000-8000-' || pg_catalog.lpad(place::text, 12, '0'))::uuid,
-                   'key.' || key
-            FROM pg_catalog.generate_series(1, 100) holder, pg_catalog.generate_series(1, 100) place, pg_catalog.generate_series(1, 10) key;
+                   'permission.' || permission
+            FROM pg_catalog.generate_series(1, 100) holder, pg_catalog.generate_series(1, 100) place, pg_catalog.generate_series(1, 10) permission;
             INSERT INTO folding.reaches
             SELECT ('a0000000-0000-4000-8000-' || pg_catalog.lpad(place::text, 12, '0'))::uuid,
                    ('a0000000-0000-4000-8000-' || pg_catalog.lpad((place + step)::text, 12, '0'))::uuid
@@ -391,24 +391,24 @@ public sealed class ProbeTests(TenancyPostgres postgres)
             """,
             Cancellation);
 
-        // The places reached from where the holder holds a key: the question a module asks, over two functions.
+        // The places reached from where the holder holds a permission: the question a module asks, over two functions.
         string Reached(string held)
             => $"""
                 SELECT DISTINCT r."PlaceId" FROM folding.{held}() h
                 JOIN folding.reached() r ON r."FromPlaceId" = h."PlaceId"
-                WHERE h."HolderId" = '{me}' AND h."Key" = 'key.3'
+                WHERE h."HolderId" = '{me}' AND h."Permission" = 'permission.3'
                 """;
 
         await using var caller = await AsCaller.PersonAsync(database, me, tenant: null, Cancellation);
 
         // Written plainly, the functions are gone from the plan: Postgres reads the tables, the holdings through the
-        // index on the holder and the key, with the policy on them applied to the caller.
+        // index on the holder and the permission, with the policy on them applied to the caller.
         var asked = await caller.PlanAsync(Reached("held"), Cancellation);
         var folded = QueryPlans.Nodes(asked);
         folded.Should().NotContain(node => node.Type == "Function Scan", "both functions are folded into the query that asks them");
-        folded.Where(node => node.Index is not null && (node.IndexCondition ?? string.Empty).Contains("\"Key\"", StringComparison.Ordinal))
-            .Should().ContainSingle("the holdings are found by the holder and the key")
-            .Which.Index.Should().Be("holdings_of_a_holder_by_key");
+        folded.Where(node => node.Index is not null && (node.IndexCondition ?? string.Empty).Contains("\"Permission\"", StringComparison.Ordinal))
+            .Should().ContainSingle("the holdings are found by the holder and the permission")
+            .Which.Index.Should().Be("holdings_of_a_holder_by_permission");
         folded.Should().Contain(node => node.Relation == "reaches");
         QueryPlans.InitPlansCalling(asked, "ddd.caller_id(").Should().NotBeEmpty("the policy on the holdings is still asked who is calling, once for the statement");
         (await caller.ListAsync<Guid>(Reached("held"), Cancellation)).Should().HaveCount(104, "a hundred places held, each reaching itself and the four after it");

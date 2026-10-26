@@ -40,7 +40,7 @@ namespace DDDToolkit.Access;
 /// <para>
 /// And the check the request passed can be asked again, now, as the same caller (<see cref="StillPassesAsync"/>).
 /// The toolkit does that when the database refuses a save the application allowed. Under row level security that
-/// happens in two ways. The caller's rights changed between the check and the save, a key taken from a role, a
+/// happens in two ways. The caller's rights changed between the check and the save, a permission taken from a role, a
 /// grant revoked, so the policies refuse what the check let through a moment earlier, and the check and the
 /// policies agreed, each when it was asked. Or the check and the policies hold a rule differently, so the policies
 /// refuse what the check still allows: something a developer should look at. Asking the check again tells the two
@@ -134,7 +134,7 @@ public sealed class RequestInHand
     /// <summary>
     /// The request's type and that of its requirement, as their authors write them, <c>CloseInvoice
     /// (BillingAccess.OnInvoice)</c>, and of each case of a combination, <c>RenameSeat (AccessRequirement.Any(AccessRequirement.Owned&lt;SeatId&gt;,
-    /// TenancyRequirement.ForTheWholeTenant))</c>: what a log line names the request by, so that whoever reads it sees
+    /// TenancyRequirement.AtTenant))</c>: what a log line names the request by, so that whoever reads it sees
     /// what was asked again. Nothing of their values, which may say more than a log should.
     /// </summary>
     public override string ToString() => $"{WrittenTypeNames.Of(Request.GetType())} ({WrittenTypeNames.OfRequirement(Requirement)})";

@@ -44,40 +44,40 @@ public abstract class AccessQueryTests(TestDatabases databases) : IAsyncLifetime
                 var held = services.Answers().Over(context).UnitsWhereIHold(HostCatalogue.WidgetChange);
 
                 _services.Commands.Reset();
-                (await held.ToListAsync(TestContext.Current.CancellationToken)).Should().BeEquivalentTo([_north, _coast], "a key held at North reaches the units below it, in " + context.GetType().Name);
+                (await held.ToListAsync(TestContext.Current.CancellationToken)).Should().BeEquivalentTo([_north, _coast], "a permission held at North reaches the units below it, in " + context.GetType().Name);
                 _services.Commands.Count.Should().Be(1);
             }
         });
     }
 
     [Fact]
-    public async Task Who_holds_a_key_at_a_unit_is_one_statement_and_composes()
+    public async Task Who_holds_a_permission_at_a_unit_is_one_statement_and_composes()
     {
         await BuildHarborAsync();
         var hal = await _services.SeatAtAsync(_harbor, "Hal", _south, HostCatalogue.WatcherPack);
         var sue = await _services.SeatAtAsync(_harbor, "Sue", _coast, HostCatalogue.WatcherPack);
         await _services.BySystemIn(_harbor.Tenant, services => services.Seats().SuspendAsync(sue, TestContext.Current.CancellationToken));
 
-        // The administrator reads every grant of Harbor: she, Grace at North and Lin at Coast hold the key at Coast. Sue,
+        // The administrator reads every grant of Harbor: she, Grace at North and Lin at Coast hold the permission at Coast. Sue,
         // who is suspended, holds nothing, and Hal holds it at South.
         await _services.BySeat(_harbor.Tenant, _harbor.AdminSeat, async services =>
         {
             foreach (DbContext context in new DbContext[] { services.Tenancy(), services.Widgets() })
             {
                 var tenancy = services.Answers().Over(context);
-                var holders = tenancy.SeatsHoldingAt(HostCatalogue.WidgetRead, _coast);
+                var holders = tenancy.SeatsHoldingPermissionAt(HostCatalogue.WidgetRead, _coast);
 
                 _services.Commands.Reset();
                 (await holders.ToListAsync(TestContext.Current.CancellationToken)).Should().BeEquivalentTo([_harbor.AdminSeat, _grace, _lin], "asked in " + context.GetType().Name);
                 _services.Commands.Count.Should().Be(1);
 
-                // Inside a query of the context's own it is a subquery: the active seats among those that hold the key there.
+                // Inside a query of the context's own it is a subquery: the active seats among those that hold the permission there.
                 var active = tenancy.Seats().Where(seat => holders.Contains(seat.Id) && seat.Status == SeatStatus.Active).Select(seat => seat.Id);
                 _services.Commands.Reset();
                 (await active.ToListAsync(TestContext.Current.CancellationToken)).Should().BeEquivalentTo([_harbor.AdminSeat, _grace, _lin]);
                 _services.Commands.Count.Should().Be(1, "the question is a subquery of the one statement");
 
-                (await tenancy.SeatsHoldingAt(HostCatalogue.WidgetRead, _south).ToListAsync(TestContext.Current.CancellationToken)).Should().BeEquivalentTo([_harbor.AdminSeat, hal]);
+                (await tenancy.SeatsHoldingPermissionAt(HostCatalogue.WidgetRead, _south).ToListAsync(TestContext.Current.CancellationToken)).Should().BeEquivalentTo([_harbor.AdminSeat, hal]);
             }
         });
 
@@ -89,9 +89,9 @@ public abstract class AccessQueryTests(TestDatabases databases) : IAsyncLifetime
             {
                 var tenancy = services.Answers().Over(context);
                 _services.Commands.Reset();
-                (await tenancy.SeatsHoldingAt(HostCatalogue.WidgetRead, _coast).ToListAsync(TestContext.Current.CancellationToken)).Should().BeEquivalentTo([_grace, _lin], "asked in " + context.GetType().Name);
+                (await tenancy.SeatsHoldingPermissionAt(HostCatalogue.WidgetRead, _coast).ToListAsync(TestContext.Current.CancellationToken)).Should().BeEquivalentTo([_grace, _lin], "asked in " + context.GetType().Name);
                 _services.Commands.Count.Should().Be(1);
-                (await tenancy.SeatsHoldingAt(HostCatalogue.WidgetRead, _south).ToListAsync(TestContext.Current.CancellationToken)).Should().BeEmpty();
+                (await tenancy.SeatsHoldingPermissionAt(HostCatalogue.WidgetRead, _south).ToListAsync(TestContext.Current.CancellationToken)).Should().BeEmpty();
             }
         });
 
@@ -100,13 +100,13 @@ public abstract class AccessQueryTests(TestDatabases databases) : IAsyncLifetime
         {
             var tenancy = services.Answers().Over(services.Widgets());
             _services.Commands.Reset();
-            (await tenancy.SeatsHoldingAt(HostCatalogue.WidgetRead, _coast).ToListAsync(TestContext.Current.CancellationToken)).Should().Equal(_lin);
-            (await tenancy.SeatsHoldingAt(HostCatalogue.WidgetRead, _south).ToListAsync(TestContext.Current.CancellationToken)).Should().BeEmpty();
+            (await tenancy.SeatsHoldingPermissionAt(HostCatalogue.WidgetRead, _coast).ToListAsync(TestContext.Current.CancellationToken)).Should().Equal(_lin);
+            (await tenancy.SeatsHoldingPermissionAt(HostCatalogue.WidgetRead, _south).ToListAsync(TestContext.Current.CancellationToken)).Should().BeEmpty();
             _services.Commands.Count.Should().Be(2);
         });
 
         // System work in the tenant learns every holder.
-        var all = await _services.BySystemIn(_harbor.Tenant, services => services.Answers().Over(services.Widgets()).SeatsHoldingAt(HostCatalogue.WidgetRead, _coast).ToListAsync(TestContext.Current.CancellationToken));
+        var all = await _services.BySystemIn(_harbor.Tenant, services => services.Answers().Over(services.Widgets()).SeatsHoldingPermissionAt(HostCatalogue.WidgetRead, _coast).ToListAsync(TestContext.Current.CancellationToken));
         all.Should().BeEquivalentTo([_harbor.AdminSeat, _grace, _lin]);
     }
 
@@ -131,18 +131,18 @@ public abstract class AccessQueryTests(TestDatabases databases) : IAsyncLifetime
             var tenancy = services.Answers().Over(widgets);
 
             // Written as a module writes it, the questions inside its own query: the widgets Hal may change where
-            // he holds the key, and those handed to a role that changes widgets in the units he belongs to. Each
+            // he holds the permission, and those handed to a role that changes widgets in the units he belongs to. Each
             // question is correlated with the widget; one ended with Any() on its own would run by itself first.
             var mine = widgets.Widgets
                 .Where(widget => tenancy.UnitsWhereIHold(HostCatalogue.WidgetChange).Contains(widget.UnitId)
                                  || (widget.HandedTo != null
-                                     && tenancy.RolesWithKey(HostCatalogue.WidgetChange).Contains(widget.HandedTo.Value)
+                                     && tenancy.RolesWithPermission(HostCatalogue.WidgetChange).Contains(widget.HandedTo.Value)
                                      && tenancy.ReadableUnits().Contains(widget.UnitId)))
                 .OrderBy(widget => widget.Name)
                 .Select(widget => widget.Name);
 
             var sql = mine.ToQueryString();
-            sql.Should().Contain("\"SeatRights\"").And.Contain("\"OrganizationUnitPaths\"").And.Contain("\"SeatPlacements\"").And.Contain(_services.Database.KeysContain);
+            sql.Should().Contain("\"SeatRights\"").And.Contain("\"OrganizationUnitPaths\"").And.Contain("\"SeatPlacements\"").And.Contain(_services.Database.PermissionsContain);
 
             _services.Commands.Reset();
             (await mine.ToListAsync(TestContext.Current.CancellationToken)).Should().Equal("at South, for operators");
@@ -182,57 +182,57 @@ public abstract class AccessQueryTests(TestDatabases databases) : IAsyncLifetime
         await _services.GrantAsync(_harbor, hal, _north, HostCatalogue.SupervisorPack, until: _clock.Now.AddHours(1));
         var stored = await _services.StoredRightsAsync(hal);
 
-        (await HoldsAtAsync(hal, TenancyKeys.UnitsManage, _coast)).Should().BeTrue();
+        (await HoldsAtAsync(hal, TenancyPermissions.UnitsManage, _coast)).Should().BeTrue();
 
         _clock.Advance(TimeSpan.FromHours(2));
         _services.Commands.Reset();
-        (await HoldsAtAsync(hal, TenancyKeys.UnitsManage, _coast)).Should().BeFalse("the grant has ended");
+        (await HoldsAtAsync(hal, TenancyPermissions.UnitsManage, _coast)).Should().BeFalse("the grant has ended");
 
         _services.Commands.Sent.Should().NotContain(command => command.Writes, "the grant expires as it is read; nothing is written when it does");
         (await _services.StoredRightsAsync(hal)).Should().BeEquivalentTo(stored);
     }
 
     [Fact]
-    public async Task HoldsTenantWideAsync_and_HoldsAtAsync_run_through_the_executor()
+    public async Task HoldsAtTenantAsync_and_HoldsAtAsync_run_through_the_executor()
     {
         await BuildHarborAsync();
 
-        (await AskAsync(_harbor.AdminSeat, questions => questions.HoldsTenantWideAsync(TenancyKeys.RolesManage, TestContext.Current.CancellationToken))).Should().BeTrue();
-        (await AskAsync(_grace, questions => questions.HoldsTenantWideAsync(TenancyKeys.UnitsManage, TestContext.Current.CancellationToken))).Should().BeFalse("North is not the root");
-        (await AskAsync(_grace, questions => questions.HoldsAtAsync(TenancyKeys.UnitsManage, _coast, TestContext.Current.CancellationToken))).Should().BeTrue();
-        (await AskAsync(_grace, questions => questions.HoldsAtAsync(TenancyKeys.UnitsManage, _south, TestContext.Current.CancellationToken))).Should().BeFalse();
+        (await AskAsync(_harbor.AdminSeat, questions => questions.HoldsAtTenantAsync(TenancyPermissions.RolesManage, TestContext.Current.CancellationToken))).Should().BeTrue();
+        (await AskAsync(_grace, questions => questions.HoldsAtTenantAsync(TenancyPermissions.UnitsManage, TestContext.Current.CancellationToken))).Should().BeFalse("North is not the root");
+        (await AskAsync(_grace, questions => questions.HoldsAtAsync(TenancyPermissions.UnitsManage, _coast, TestContext.Current.CancellationToken))).Should().BeTrue();
+        (await AskAsync(_grace, questions => questions.HoldsAtAsync(TenancyPermissions.UnitsManage, _south, TestContext.Current.CancellationToken))).Should().BeFalse();
         (await AskAsync(_lin, questions => questions.HoldsAtAsync(HostCatalogue.WidgetCreate, _coast, TestContext.Current.CancellationToken))).Should().BeTrue();
     }
 
     [Fact]
-    public async Task RolesWithKey_reads_the_keys_in_sql()
+    public async Task RolesWithKey_reads_the_permissions_in_sql()
     {
         await BuildHarborAsync();
         var watcher = _harbor.RolesByPack[HostCatalogue.WatcherPack];
 
         var readers = await _services.BySystemIn(_harbor.Tenant, async services =>
             (await services.Tenancy().Set<HostRole>().ToListAsync(TestContext.Current.CancellationToken)).Where(role => role.Holds(HostCatalogue.WidgetRead)).Select(role => role.Id).ToList());
-        readers.Should().HaveCount(4, "the administrators' role holds every key, and the other packs read widgets")
+        readers.Should().HaveCount(4, "the administrators' role holds every permission, and the other packs read widgets")
             .And.Contain(watcher);
 
         await _services.BySeat(_harbor.Tenant, _lin, async services =>
         {
             foreach (DbContext context in new DbContext[] { services.Tenancy(), services.Widgets() })
             {
-                var roles = services.Answers().Over(context).RolesWithKey(HostCatalogue.WidgetRead);
-                roles.ToQueryString().Should().Contain(_services.Database.KeysContain, "the keys are read in SQL: the JSON on SQLite, the array on Postgres");
+                var roles = services.Answers().Over(context).RolesWithPermission(HostCatalogue.WidgetRead);
+                roles.ToQueryString().Should().Contain(_services.Database.PermissionsContain, "the permissions are read in SQL: the JSON on SQLite, the array on Postgres");
                 (await roles.ToListAsync(TestContext.Current.CancellationToken)).Should().BeEquivalentTo(readers);
             }
         });
 
         await _services.BySystemIn(_harbor.Tenant, services => services.Roles().ArchiveAsync(watcher, TestContext.Current.CancellationToken));
         await _services.BySeat(_harbor.Tenant, _lin, async services =>
-            (await services.Answers().Over(services.Widgets()).RolesWithKey(HostCatalogue.WidgetRead).ToListAsync(TestContext.Current.CancellationToken))
+            (await services.Answers().Over(services.Widgets()).RolesWithPermission(HostCatalogue.WidgetRead).ToListAsync(TestContext.Current.CancellationToken))
                 .Should().BeEquivalentTo(readers.Where(role => role != watcher), "an archived role gives no rights"));
     }
 
     [Fact]
-    public async Task KeysIHoldAt_and_ReadableUnits_answer_over_the_database()
+    public async Task PermissionsIHoldAt_and_ReadableUnits_answer_over_the_database()
     {
         await BuildHarborAsync();
 
@@ -241,21 +241,21 @@ public abstract class AccessQueryTests(TestDatabases databases) : IAsyncLifetime
             var questions = services.Answers().Over(services.Tenancy());
             var supervisor = await services.Tenancy().Set<HostRole>().SingleAsync(role => role.Id == _harbor.RolesByPack[HostCatalogue.SupervisorPack], TestContext.Current.CancellationToken);
 
-            (await questions.KeysIHoldAt(_coast).ToListAsync(TestContext.Current.CancellationToken)).Should().BeEquivalentTo(supervisor.Keys, "what Grace holds at North reaches Coast");
-            (await questions.KeysIHoldAt(_south).ToListAsync(TestContext.Current.CancellationToken)).Should().BeEmpty();
+            (await questions.PermissionsIHoldAt(_coast).ToListAsync(TestContext.Current.CancellationToken)).Should().BeEquivalentTo(supervisor.Permissions, "what Grace holds at North reaches Coast");
+            (await questions.PermissionsIHoldAt(_south).ToListAsync(TestContext.Current.CancellationToken)).Should().BeEmpty();
             (await questions.ReadableUnits().ToListAsync(TestContext.Current.CancellationToken)).Should().BeEquivalentTo([_north, _coast]);
         });
 
-        // System work holds every live key: an answer from the catalogue, in memory, which the executor runs as it is.
+        // System work holds every live permission: an answer from the catalogue, in memory, which the executor runs as it is.
         await _services.BySystemIn(_harbor.Tenant, async services =>
         {
-            var keys = services.Answers().Over(services.Tenancy()).KeysIHoldAt(_south);
+            var permissions = services.Answers().Over(services.Tenancy()).PermissionsIHoldAt(_south);
             var catalogue = services.GetRequiredService<TenancyCatalogue>();
 
             _services.Commands.Reset();
-            (await EfQueryExecutor.Instance.ListAsync(keys, TestContext.Current.CancellationToken)).Should().Equal(catalogue.LiveKeys);
-            (await EfQueryExecutor.Instance.AnyAsync(keys, TestContext.Current.CancellationToken)).Should().BeTrue();
-            (await EfQueryExecutor.Instance.FirstOrDefaultAsync(keys, TestContext.Current.CancellationToken)).Should().Be(catalogue.LiveKeys[0]);
+            (await EfQueryExecutor.Instance.ListAsync(permissions, TestContext.Current.CancellationToken)).Should().Equal(catalogue.LivePermissions);
+            (await EfQueryExecutor.Instance.AnyAsync(permissions, TestContext.Current.CancellationToken)).Should().BeTrue();
+            (await EfQueryExecutor.Instance.FirstOrDefaultAsync(permissions, TestContext.Current.CancellationToken)).Should().Be(catalogue.LivePermissions[0]);
             _services.Commands.Count.Should().Be(0);
         });
     }
@@ -312,8 +312,8 @@ public abstract class AccessQueryTests(TestDatabases databases) : IAsyncLifetime
             return await services.Widgets().Widgets.Where(widget => held.Contains(widget.UnitId)).Select(widget => widget.Name).ToListAsync(TestContext.Current.CancellationToken);
         });
 
-    private Task<bool> HoldsAtAsync(SeatId seat, string key, OrganizationUnitId unit)
-        => AskAsync(seat, questions => questions.HoldsAtAsync(key, unit, TestContext.Current.CancellationToken));
+    private Task<bool> HoldsAtAsync(SeatId seat, string permission, OrganizationUnitId unit)
+        => AskAsync(seat, questions => questions.HoldsAtAsync(permission, unit, TestContext.Current.CancellationToken));
 
     /// <summary>Asks as <paramref name="seat"/> over the widgets' context, and checks the answer took one statement.</summary>
     private Task<bool> AskAsync(SeatId seat, Func<ITenancyQuestions<TenantId, SeatId, OrganizationUnitId, RoleId>, Task<bool>> ask)

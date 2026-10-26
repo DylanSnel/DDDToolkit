@@ -6,7 +6,7 @@ namespace Examples.Tenancy.Inspections.Application.Recording.Commands;
 /// Records an inspection on a project, by the caller's seat, or by the seat system work in the tenant acts for.
 /// </summary>
 /// <remarks>
-/// The caller holds <see cref="RequiredKey"/> on the project, and the project is open: Projects' gate answers
+/// The caller holds <see cref="RequiredPermission"/> on the project, and the project is open: Projects' gate answers
 /// both before the handler runs. The project comes first and the title and the days after, so a caller who may
 /// not record learns nothing from a bad title, nor from days outside the project's planned range.
 /// </remarks>
@@ -19,11 +19,11 @@ namespace Examples.Tenancy.Inspections.Application.Recording.Commands;
 /// </param>
 public sealed record RecordInspection(ProjectId Project, string Title, DateRange? Days = null) : ICommand<InspectionId>, IInspectionsRequest
 {
-    /// <summary>The key the caller holds on the project.</summary>
-    public const string RequiredKey = InspectionKeys.Record;
+    /// <summary>The permission the caller holds on the project.</summary>
+    public const string RequiredPermission = InspectionPermissionNames.Record;
 
     /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => new InspectionsRequirement.OnOpenProject(RequiredKey, Project, BySeat: true);
+    AccessRequirement IRequireAccess.RequiredAccess => new InspectionsRequirement.OnOpenProject(RequiredPermission, Project, BySeat: true);
 }
 
 /// <summary>
@@ -42,8 +42,8 @@ public sealed record RecordInspection(ProjectId Project, string Title, DateRange
 /// </para>
 /// <para>
 /// The handler holds that answer to the access check's own rule: a project the caller no longer sees is not
-/// found, a closed one takes nothing, and one where the key is gone is not permitted. The database writes an
-/// inspection only for a seat that holds the key to record and knows nothing of a closed project, which stays the
+/// found, a closed one takes nothing, and one where the permission is gone is not permitted. The database writes an
+/// inspection only for a seat that holds the permission to record and knows nothing of a closed project, which stays the
 /// application's to say; so the handler says it, whether the request came through the check or the handler was
 /// called directly, and a project closed since the check takes nothing.
 /// </para>
@@ -65,14 +65,14 @@ public sealed class RecordInspectionHandler(IInspectionStore store, IProjectGate
     /// <returns>The new inspection's id.</returns>
     /// <exception cref="Exceptions.RefusalException">
     /// <c>projects.not-found</c> for a project the caller sees no longer, <c>projects.closed</c> for one closed
-    /// since, <c>projects.not-permitted</c> where the key is gone; <c>inspections.title-invalid</c>,
+    /// since, <c>projects.not-permitted</c> where the permission is gone; <c>inspections.title-invalid</c>,
     /// <c>inspections.days-invalid</c>, <c>inspections.outside-planned-range</c>.
     /// </exception>
     public async ValueTask<InspectionId> Handle(RecordInspection command, CancellationToken cancellationToken)
     {
         var scope = answers.RequireTenant();
-        var project = await projects.AskAsync(command.Project, RecordInspection.RequiredKey, cancellationToken);
-        InspectionsAccessCheck.Require(project, RecordInspection.RequiredKey, open: true);
+        var project = await projects.AskAsync(command.Project, RecordInspection.RequiredPermission, cancellationToken);
+        InspectionsAccessCheck.Require(project, RecordInspection.RequiredPermission, open: true);
 
         var now = clock.GetUtcNow();
         var inspection = new Inspection(

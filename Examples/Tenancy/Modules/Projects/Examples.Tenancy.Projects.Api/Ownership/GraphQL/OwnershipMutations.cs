@@ -13,11 +13,20 @@ namespace Examples.Tenancy.Projects.Api.Ownership.GraphQL;
 /// </summary>
 internal static class OwnershipMutations
 {
-    /// <summary>Names another seat the owner. Like every change to a project it takes the version its caller read, as <c>expectedVersion</c>.</summary>
+    /// <summary>
+    /// Names another seat the owner; the old owner stays on the crew in <c>formerOwnerRoleId</c>, or leaves it when
+    /// that is left out. Like every change to a project it takes the version its caller read, as <c>expectedVersion</c>.
+    /// </summary>
     [Mutation]
-    public static async Task<ProjectOverview?> ProjectOwnerChangeAsync([ID("Project")] ProjectId id, SeatId seatId, long? expectedVersion, [Service] ISender sender, CancellationToken cancellationToken)
+    public static async Task<ProjectOverview?> ProjectOwnerChangeAsync(
+        [ID("Project")] ProjectId id,
+        SeatId seatId,
+        ProjectRoleId? formerOwnerRoleId,
+        long? expectedVersion,
+        [Service] ISender sender,
+        CancellationToken cancellationToken)
     {
-        await sender.Send(new ChangeProjectOwner(id, seatId, expectedVersion), cancellationToken);
+        await sender.Send(new ChangeProjectOwner(id, seatId, formerOwnerRoleId, expectedVersion), cancellationToken);
         return await ChangedProject.ReadAsync(id, sender, cancellationToken);
     }
 }

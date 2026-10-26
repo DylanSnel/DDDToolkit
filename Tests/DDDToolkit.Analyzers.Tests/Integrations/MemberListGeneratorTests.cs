@@ -52,13 +52,13 @@ public class MemberListGeneratorTests
         {
             public static MembershipCodes Codes { get; } = MembershipCodes.Under("documents");
 
-            public Document(DocumentId id, UserId owner, NamedRole ownerRole, DateTimeOffset now) : base(id)
+            public Document(DocumentId id, UserId owner, DateTimeOffset now) : base(id)
             {
                 OwnerId = owner;
-                Members.Open(ownerRole, now);
+                Members.Open(now);
             }
 
-            public UserId OwnerId { get; private set; }
+            [Owner] public UserId OwnerId { get; private set; }
 
             public partial IReadOnlyList<DocumentShare> Shares { get; }
 
@@ -120,7 +120,7 @@ public class MemberListGeneratorTests
             "the four types are the member class and the three its template was declared with");
         source.Should().Contain(
             "=> new(_shares, OwnerId, Codes);",
-            "the list of the collection, the one property of the member's id, and the one static MembershipCodes: a new row's id is DocumentShareId.Create()");
+            "the list of the collection, the property marked [Owner], and the one static MembershipCodes: a new row's id is DocumentShareId.Create()");
     }
 
     [Fact]
@@ -131,7 +131,7 @@ public class MemberListGeneratorTests
         var owner = emitted.CallStatic("Shop.UserId", "CreateUnique");
         var reader = emitted.CallStatic("Shop.UserId", "CreateUnique");
 
-        var document = emitted.New("Shop.Document", emitted.CallStatic("Shop.DocumentId", "CreateUnique"), owner, new NamedRole("owner"), now);
+        var document = emitted.New("Shop.Document", emitted.CallStatic("Shop.DocumentId", "CreateUnique"), owner, now);
         emitted.Call(document, "ShareWith", reader, new NamedRole("onlooker"), MemberPeriod.Open(now), now);
 
         var shares = ((System.Collections.IEnumerable)emitted.Property(document, "Shares")!).Cast<object>().ToList();
@@ -173,7 +173,7 @@ public class MemberListGeneratorTests
 
                 public Folder(FolderId id, StaffCode keeper) : base(id) => Keeper = keeper;
 
-                public StaffCode Keeper { get; private set; }
+                [Owner] public StaffCode Keeper { get; private set; }
 
                 // Another property of an id, and not of the member's: the owner is the one of StaffCode.
                 public UserId CreatedBy { get; private set; }
@@ -217,7 +217,7 @@ public class MemberListGeneratorTests
 
                     public Document(DocumentId id, UserId owner) : base(id) => OwnerId = owner;
 
-                    public UserId OwnerId { get; private set; }
+                    [Owner] public UserId OwnerId { get; private set; }
 
                     public partial IReadOnlyCollection<DocumentShare> Shares { get; }
 
@@ -258,7 +258,7 @@ public class MemberListGeneratorTests
         var result = Run(
             Document(
                 $$"""
-                  public UserId OwnerId { get; private set; }
+                  [Owner] public UserId OwnerId { get; private set; }
 
                   public UserId WrittenBy { get; private set; }
 
@@ -282,7 +282,7 @@ public class MemberListGeneratorTests
 
         result.ShouldCompile();
         result.ReportedDiagnostics.Should().BeEmpty();
-        result.ShouldNotHaveGeneratedFor("Document.Members");
+        result.ShouldNotHaveGeneratedFor("Document.Members.");
     }
 
     [Fact]
@@ -317,7 +317,25 @@ public class MemberListGeneratorTests
     // ------------------------------------------------------------------ what cannot be told
 
     [Fact]
-    public void A_resource_with_two_properties_of_the_members_id_is_given_no_list_and_told_which_they_are()
+    public void A_resource_with_two_properties_of_the_members_id_gets_its_list_over_the_one_it_marks_owner()
+    {
+        var result = Run(Document(
+            """
+                public static MembershipCodes Codes { get; } = MembershipCodes.Under("documents");
+
+                [Owner] public UserId OwnerId { get; private set; }
+
+                public UserId WrittenBy { get; private set; }
+
+                public partial IReadOnlyList<DocumentShare> Shares { get; }
+            """));
+
+        result.ShouldNotHaveDiagnostic("DDD00059");
+        result.ShouldContain("Document.Members.", "=> new(_shares, OwnerId, Codes);");
+    }
+
+    [Fact]
+    public void A_resource_that_marks_no_owner_is_given_no_list_and_told_to_mark_one()
     {
         var result = Run(Document(
             """
@@ -325,30 +343,27 @@ public class MemberListGeneratorTests
 
                 public UserId OwnerId { get; private set; }
 
-                public UserId WrittenBy { get; private set; }
-
                 public partial IReadOnlyList<DocumentShare> Shares { get; }
             """));
 
-        result.ShouldNotHaveGeneratedFor("Document.Members");
+        result.ShouldNotHaveGeneratedFor("Document.Members.");
         result.Count("DDD00059").Should().Be(1);
         Reported(result, at: "Document").Should()
-            .StartWith("'Document' has no member list, and the toolkit cannot write one over its 'DocumentShare': it declares more than one property of 'UserId' (OwnerId, WrittenBy), so which of them is its owner cannot be told.")
+            .Contain("it marks no property [Owner]: mark the property of 'UserId' that holds its owner [Owner]")
             .And.EndWith("write the list yourself: private MemberList<DocumentShare, DocumentShareId, UserId, NamedRole> Members => new(members, owner, codes);.");
     }
 
     [Fact]
-    public void A_resource_without_an_owner_or_codes_of_its_own_is_told_everything_that_is_missing_at_once()
+    public void A_resource_without_an_owner_or_codes_of_its_own_is_told_of_the_owner_and_gets_its_codes_written()
     {
         var result = Run(Document(
             """
                 public partial IReadOnlyList<DocumentShare> Shares { get; }
             """));
 
-        result.ShouldNotHaveGeneratedFor("Document.Members");
-        Reported(result, at: "Document").Should()
-            .Contain("it declares no property of 'UserId', which its owner is kept in; ")
-            .And.Contain("it declares no static property or field of MembershipCodes, the codes the rules about its members refuse under.");
+        result.ShouldNotHaveGeneratedFor("Document.Members.");
+        Reported(result, at: "Document").Should().Contain("it marks no property [Owner]").And.NotContain("MembershipCodes");
+        result.ShouldContain("Document.Membership.", "public static global::DDDToolkit.Supporting.Membership.MembershipCodes Codes { get; } = global::DDDToolkit.Supporting.Membership.MembershipCodes.Under(\"documents\");");
     }
 
     [Fact]
@@ -360,7 +375,7 @@ public class MemberListGeneratorTests
 
                 private static readonly MembershipCodes Older = MembershipCodes.Under("papers");
 
-                public UserId OwnerId { get; private set; }
+                [Owner] public UserId OwnerId { get; private set; }
 
                 public partial IReadOnlyList<DocumentShare> Shares { get; }
             """));
@@ -376,7 +391,7 @@ public class MemberListGeneratorTests
             """
                 public static MembershipCodes Codes { get; } = MembershipCodes.Under("documents");
 
-                public UserId OwnerId { get; private set; }
+                [Owner] public UserId OwnerId { get; private set; }
 
                 public partial IReadOnlySet<DocumentShare> Shares { get; }
             """));
@@ -392,7 +407,7 @@ public class MemberListGeneratorTests
             """
                 public static MembershipCodes Codes { get; } = MembershipCodes.Under("documents");
 
-                public UserId OwnerId { get; private set; }
+                [Owner] public UserId OwnerId { get; private set; }
 
                 public partial IReadOnlyList<DocumentShare> Shares { get; }
 
@@ -428,7 +443,7 @@ public class MemberListGeneratorTests
             DocumentKeyedByShareNumber());
 
         result.CompilationErrors.Should().BeEmpty("no list is written over an id it cannot make a new row's id of: no CS0315 in code nobody wrote");
-        result.ShouldNotHaveGeneratedFor("Document.Members");
+        result.ShouldNotHaveGeneratedFor("Document.Members.");
         Reported(result, at: "Document").Should().Contain(
             "'ShareNumber', the id of a member's row, has no public static Create(), which a new row's id is made with: declare it on ShareNumber, "
             + "public static ShareNumber Create() => new(...), with a new long made in code: a snowflake, or the next number of a block a HiLo "
@@ -461,7 +476,7 @@ public class MemberListGeneratorTests
             """
                 public static MembershipCodes Codes { get; } = MembershipCodes.Under("documents");
 
-                public UserId OwnerId { get; private set; }
+                [Owner] public UserId OwnerId { get; private set; }
 
                 public partial IReadOnlyList<DocumentShare> Shares { get; }
             """,
@@ -474,13 +489,13 @@ public class MemberListGeneratorTests
             """
                 public static MembershipCodes Codes { get; } = MembershipCodes.Under("documents");
 
-                public UserId OwnerId { get; private set; }
+                [Owner] public UserId OwnerId { get; private set; }
 
                 public partial IReadOnlyList<DocumentShare> Members { get; }
             """));
 
         result.ShouldCompile();
-        result.ShouldNotHaveGeneratedFor("Document.Members");
+        result.ShouldNotHaveGeneratedFor("Document.Members.");
         Reported(result, at: "Document").Should().Contain("it has a member called Members already, which the list would be called too");
     }
 
@@ -492,7 +507,7 @@ public class MemberListGeneratorTests
                 """
                     public static MembershipCodes Codes { get; } = MembershipCodes.Under("documents");
 
-                    public UserId OwnerId { get; private set; }
+                    [Owner] public UserId OwnerId { get; private set; }
 
                     public partial IReadOnlyList<DocumentShare> Shares { get; }
 
@@ -514,7 +529,7 @@ public class MemberListGeneratorTests
 
         // The document keeps both, so there is no telling which is its member class: no list, said once.
         result.ShouldCompile();
-        result.ShouldNotHaveGeneratedFor("Document.Members");
+        result.ShouldNotHaveGeneratedFor("Document.Members.");
         result.Count("DDD00059").Should().Be(1, "the cause is one, whatever the number of member classes");
         Reported(result, at: "Document").Should().Contain("it is the resource of more than one member class ('DocumentShare', 'DocumentWatcher'), and each list needs a name of its own");
         result.Count("DDD00060").Should().Be(0);
@@ -599,13 +614,13 @@ public class MemberListGeneratorTests
                 """
                     public static MembershipCodes Codes { get; } = MembershipCodes.Under("documents");
 
-                    public PatronId OwnerId { get; private set; }
+                    [Owner] public PatronId OwnerId { get; private set; }
 
                     public partial IReadOnlyList<DocumentShare> Shares { get; }
                 """,
                 memberTemplate: "Member<DocumentShareId, PatronId, NamedRole, Document>"));
 
-        result.ShouldNotHaveGeneratedFor("Document.Members");
+        result.ShouldNotHaveGeneratedFor("Document.Members.");
         result.Count("DDD00059").Should().Be(1);
         Reported(result, at: "Document").Should().Contain(
             "'PatronId' is a type it cannot see, one another generator writes or nobody declares: declare it yourself, with [EntityId<T>], where the member class can see it",
@@ -628,7 +643,7 @@ public class MemberListGeneratorTests
             """,
             Document(
                 """
-                    public PatronId OwnerId { get; private set; }
+                    [Owner] public PatronId OwnerId { get; private set; }
 
                     public partial IReadOnlyList<DocumentShare> Shares { get; }
 
@@ -641,7 +656,7 @@ public class MemberListGeneratorTests
 
         result.ShouldCompile();
         result.ShouldNotHaveDiagnostic("DDD00059");
-        result.ShouldNotHaveGeneratedFor("Document.Members");
+        result.ShouldNotHaveGeneratedFor("Document.Members.");
     }
 
     [Fact]
@@ -660,7 +675,7 @@ public class MemberListGeneratorTests
             {
                 public static MembershipCodes Codes { get; } = MembershipCodes.Under("documents");
 
-                public UserId OwnerId { get; private set; }
+                [Owner] public UserId OwnerId { get; private set; }
             }
             """);
 
@@ -675,7 +690,7 @@ public class MemberListGeneratorTests
     public void A_member_class_that_names_itself_as_its_resource_is_told_so_on_itself_and_nothing_else_is_said()
     {
         // The member class is an entity of the document's: no aggregate root, and no member list to speak of.
-        var result = Run(Document("    public UserId OwnerId { get; private set; }\n\n    public partial IReadOnlyList<DocumentShare> Shares { get; }", memberTemplate: "Member<DocumentShareId, UserId, NamedRole, DocumentShare>"));
+        var result = Run(Document("    [Owner] public UserId OwnerId { get; private set; }\n\n    public partial IReadOnlyList<DocumentShare> Shares { get; }", memberTemplate: "Member<DocumentShareId, UserId, NamedRole, DocumentShare>"));
 
         result.ReportedDiagnostics.Where(diagnostic => diagnostic.Id.StartsWith("DDD", StringComparison.Ordinal)).Should().ContainSingle()
             .Which.Id.Should().Be("DDD00060", "no member list of the document is missing: no member class names it");

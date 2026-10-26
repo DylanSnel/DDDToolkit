@@ -11,7 +11,7 @@ namespace Examples.Tenancy.Projects.Application.Access;
 /// whoever asks, and Tenancy's to answer: it is put to Tenancy's questions (<see cref="ProjectAccess.Questions"/>),
 /// over the rows this module reads next to its projects, in one statement on the reading it is given. What a
 /// command asks about a seat and a project role, whether a seat may go on a crew, whether a role is one of the
-/// tenant's project roles in use and which is the crew lead's, the Membership package's admission answers
+/// tenant's project roles in use, the Membership package's admission answers
 /// (<c>MemberAdmission</c>), from the projects' rules.
 /// </remarks>
 /// <param name="access">Tenancy's questions, as this module asks them.</param>

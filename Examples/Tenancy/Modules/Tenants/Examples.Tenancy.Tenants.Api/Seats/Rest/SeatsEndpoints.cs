@@ -45,7 +45,7 @@ internal static class SeatsEndpoints
     {
         ArgumentNullException.ThrowIfNull(group);
 
-        // Who the calling seat is, where it is placed, which roles it holds for which period, and every key it
+        // Who the calling seat is, where it is placed, which roles it holds for which period, and every permission it
         // holds now with where it reaches. Only a seat has a self: everything else is refused.
         group.MapGet("/me", async (ISender sender, CancellationToken cancellationToken)
             => Results.Ok(Describe(await sender.Send(new OverviewOfMine(), cancellationToken))));
@@ -57,7 +57,7 @@ internal static class SeatsEndpoints
 
         // Another seat's roles, where and for when, from the package's overview of that seat: for whoever holds
         // tenancy.seats.manage for the whole tenant, which is this application's choice, and with ?unit= the roles held
-        // at that unit, for whoever holds the key there. A seat of another tenant, or of nobody, is not found: 404.
+        // at that unit, for whoever holds the permission there. A seat of another tenant, or of nobody, is not found: 404.
         group.MapGet("/tenancy/seats/{seatId}/grants", async (SeatId seatId, OrganizationUnitId? unit, ISender sender, CancellationToken cancellationToken)
             => Results.Ok((await sender.Send(new SeatGrants(seatId, unit), cancellationToken)).Select(grant => new
             {
@@ -131,10 +131,10 @@ internal static class SeatsEndpoints
             grants = placement.Grants.Select(grant => new { grant.RoleId, grant.Role, grant.StartsAt, grant.EndsAt, grant.AppliesNow }),
         }),
         roles = overview.Roles.Select(RolesEndpoints.Describe),
-        keys = overview.Keys.Select(reach => new
+        permissions = overview.Permissions.Select(reach => new
         {
-            reach.Key,
-            reach.WholeTenant,
+            reach.Permission,
+            reach.AtTenant,
             grantedAt = reach.GrantedAt.Select(OrganizationEndpoints.Describe),
             reaches = reach.Reaches.Select(OrganizationEndpoints.Describe),
         }),

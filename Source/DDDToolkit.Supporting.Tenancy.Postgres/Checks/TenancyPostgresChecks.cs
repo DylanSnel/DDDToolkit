@@ -164,10 +164,10 @@ public static class TenancyPostgresChecks
 
     /// <summary>
     /// Proves Tenancy's reads across tenants answer, with nothing running past the policies: the few reads made
-    /// before any tenant is known, the keys stored on every tenant's roles among them
+    /// before any tenant is known, the permissions stored on every tenant's roles among them
     /// (<see cref="TenancySystemReads"/>). They run as the scoped system role in no tenant, where the policies show
     /// it no row, and ask three functions of the database, which run as their owner:
-    /// <see cref="TenancyFunctionNames.RoleKeysInUse"/>, <see cref="TenancyFunctionNames.TenantsToSweep"/> and
+    /// <see cref="TenancyFunctionNames.RolePermissionsInUse"/>, <see cref="TenancyFunctionNames.TenantsToSweep"/> and
     /// <see cref="TenancyFunctionNames.SeatsOfIdentity"/>. This proves that
     /// <list type="bullet">
     /// <item>each is there, runs as its owner, and with an empty search path;</item>
@@ -175,7 +175,7 @@ public static class TenancyPostgresChecks
     /// <c>BYPASSRLS</c>, or the table's owner on a table that does not force row level security on its owner;</item>
     /// <item>the scoped system role may execute it, and neither the user's role, the anonymous caller's nor every
     /// role at once, <c>PUBLIC</c>, may;</item>
-    /// <item>asked the way Tenancy asks, the keys in use are answered, on a connection that says who is calling;
+    /// <item>asked the way Tenancy asks, the permissions in use are answered, on a connection that says who is calling;
     /// and asked in another scope, none is.</item>
     /// </list>
     /// <para>
@@ -200,7 +200,7 @@ public static class TenancyPostgresChecks
         if (options.SystemInRole is not { } role)
         {
             throw new InvalidOperationException(
-                "PostgresRowLevelSecurityOptions.SystemInRole is null, so there is no scoped system role, and Tenancy's reads across tenants run as it: the keys stored on every tenant's roles, " +
+                "PostgresRowLevelSecurityOptions.SystemInRole is null, so there is no scoped system role, and Tenancy's reads across tenants run as it: the permissions stored on every tenant's roles, " +
                 "and the tenants a round of system work visits. Leave SystemInRole as it is, '" + PostgresRowLevelSecurityOptions.DefaultSystemInRole + "', or set it to a role of your own.");
         }
 
@@ -216,7 +216,7 @@ public static class TenancyPostgresChecks
             // Each function with the table it answers from, whose policies its owner has to read past.
             (string Function, IEntityType Table)[] reads =
             [
-                (TenancyFunctionNames.RoleKeysInUse, tenancy.Roles),
+                (TenancyFunctionNames.RolePermissionsInUse, tenancy.Roles),
                 (TenancyFunctionNames.TenantsToSweep, tenancy.Tenants),
                 (TenancyFunctionNames.SeatsOfIdentity, tenancy.Seats),
 
@@ -302,11 +302,11 @@ public static class TenancyPostgresChecks
         }
 
         var other = await AskedInAsync(services, AnotherScope, cancellationToken).ConfigureAwait(false);
-        if (other.Keys != 0)
+        if (other.Permissions != 0)
         {
             throw new InvalidOperationException(
-                "The function " + TenancyFunctionNames.RoleKeysInUse + " answered " + other.Keys.ToString(CultureInfo.InvariantCulture) + " keys to system work in another scope than Tenancy's own, " +
-                "so it is not as Tenancy's contribution writes it: the keys stored on every tenant's roles are for Tenancy's own work to read. " +
+                "The function " + TenancyFunctionNames.RolePermissionsInUse + " answered " + other.Permissions.ToString(CultureInfo.InvariantCulture) + " permissions to system work in another scope than Tenancy's own, " +
+                "so it is not as Tenancy's contribution writes it: the permissions stored on every tenant's roles are for Tenancy's own work to read. " +
                 "Export the access files with Tenancy's contribution, and apply them.");
         }
     }
@@ -452,8 +452,8 @@ public static class TenancyPostgresChecks
     /// the database what they take from it: every one of Tenancy's tables has row level security on, and so has
     /// its access history where the context maps one; the units' table has the unique index that keeps a tenant's
     /// organization to a single root; the functions
-    /// written from the catalogue, which say which keys manage access, which of them a seat hands on only where it
-    /// holds them, which keys a copy of each pack holds and which keys are live, answer as the catalogue the
+    /// written from the catalogue, which say which permissions manage access, which of them a seat hands on only where it
+    /// holds them, which permissions a copy of each pack holds and which permissions are live, answer as the catalogue the
     /// application runs with does, so a database written with containment on for an application that turned it off,
     /// or the other way round, is refused and said to be so; the store leaves the rights to
     /// the database (<see cref="TenancyStoreOptions.DatabaseKeepsRights"/>), and the trigger that writes them is
@@ -467,8 +467,8 @@ public static class TenancyPostgresChecks
     /// <para>
     /// The index is the one <c>AddTenancy</c> maps when it is given the context's <c>Database</c>, and on Postgres
     /// it is required. The policies keep a seat from leaving a unit without a parent, and hold neither Tenancy's
-    /// own system work nor the tables' owner, while a key held at any unit without a parent is held for the whole
-    /// tenant: a second root, however it got there, would make whoever holds a key at it a holder for the whole
+    /// own system work nor the tables' owner, while a permission held at any unit without a parent is held for the whole
+    /// tenant: a second root, however it got there, would make whoever holds a permission at it a holder for the whole
     /// tenant. It is found by what it does and not by its name: unique, on the units' tenant alone, over the units
     /// without a parent, and valid, which an index that <c>CREATE INDEX CONCURRENTLY</c> could not finish is not.
     /// </para>
@@ -565,7 +565,7 @@ public static class TenancyPostgresChecks
             }
 
             // The unique index on a tenant's root. The policies keep a seat from making a second root; system work
-            // and the tables' owner they do not hold, and the question that asks whether a key is held for the whole
+            // and the tables' owner they do not hold, and the question that asks whether a permission is held for the whole
             // tenant counts every unit without a parent. It is looked for by what it does, since an application
             // names it as it likes: unique, keyed on the tenant alone, over the units without a parent, and in use.
             // Answered nothing where there is one; otherwise what is missing, and after it every index of that
@@ -607,7 +607,7 @@ public static class TenancyPostgresChecks
                 throw new InvalidOperationException(
                     "The database has no unique index that keeps a tenant's organization to a single root: none in use on " + rootless[0] + ". On Postgres that index is required: " +
                     "the policies keep a seat from making a second root, and hold neither Tenancy's own system work nor the tables' owner, " +
-                    "while a key held at any unit without a parent is held for the whole tenant. " +
+                    "while a permission held at any unit without a parent is held for the whole tenant. " +
                     (unused.Count > 0
                         ? "The index " + string.Join(", ", unused) + " is there, and Postgres does not use it: it is not valid, as CREATE INDEX CONCURRENTLY leaves an index it could not finish. " +
                           "See that no tenant has two roots, and build it again: " + string.Join(" ", unused.Select(index => "REINDEX INDEX " + index + ";"))
@@ -618,15 +618,15 @@ public static class TenancyPostgresChecks
 
             (string Name, string Body, string Says)[] fromTheCatalogue =
             [
-                (TenancySql.ManagesAccess, TenancySql.ManagesAccessBody(catalogue), "the keys that manage access are " + string.Join(", ", catalogue.AccessManagingKeys)),
+                (TenancySql.ManagesAccess, TenancySql.ManagesAccessBody(catalogue), "the permissions that manage access are " + string.Join(", ", catalogue.AccessManagingPermissions)),
                 (
-                    TenancySql.KeyIsContained,
-                    TenancySql.KeyIsContainedBody(catalogue),
-                    catalogue.ContainAccessManagingKeys
-                        ? "the keys a seat hands on only where it holds them are those that manage access, " + string.Join(", ", catalogue.AccessManagingKeys)
-                        : "no key is handed on only where a seat holds it, since ApplicationCatalogue.ContainAccessManagingKeys is off"),
-                (TenancySql.PackKeys, TenancySql.PackKeysBody(catalogue), "the packs are " + string.Join(", ", catalogue.Packs.Select(pack => pack.Key)) + ", with the keys the catalogue gives them"),
-                (TenancySql.KeyIsLive, TenancySql.KeyIsLiveBody(catalogue), "the live keys are " + string.Join(", ", catalogue.LiveKeys)),
+                    TenancySql.PermissionIsContained,
+                    TenancySql.PermissionIsContainedBody(catalogue),
+                    catalogue.ContainAccessManagingPermissions
+                        ? "the permissions a seat hands on only where it holds them are those that manage access, " + string.Join(", ", catalogue.AccessManagingPermissions)
+                        : "no permission is handed on only where a seat holds it, since ApplicationCatalogue.ContainAccessManagingPermissions is off"),
+                (TenancySql.PackPermissions, TenancySql.PackPermissionsBody(catalogue), "the packs are " + string.Join(", ", catalogue.Packs.Select(pack => pack.Key)) + ", with the permissions the catalogue gives them"),
+                (TenancySql.PermissionIsLive, TenancySql.PermissionIsLiveBody(catalogue), "the live permissions are " + string.Join(", ", catalogue.LivePermissions)),
             ];
 
             foreach (var (name, body, says) in fromTheCatalogue)
@@ -642,10 +642,10 @@ public static class TenancyPostgresChecks
                     cancellationToken).ConfigureAwait(false);
 
                 // Written with containment the other way round: said as such, which a mark left out is not.
-                if (name == TenancySql.KeyIsContained && written.Count == 1
-                    && written[0].Trim() == TenancySql.KeyIsContainedBody(catalogue, !catalogue.ContainAccessManagingKeys))
+                if (name == TenancySql.PermissionIsContained && written.Count == 1
+                    && written[0].Trim() == TenancySql.PermissionIsContainedBody(catalogue, !catalogue.ContainAccessManagingPermissions))
                 {
-                    throw ContainmentDisagrees(RowAccessModel.Schema(tenancy.Schema) + "." + TenancySql.KeyIsContained, catalogue.ContainAccessManagingKeys);
+                    throw ContainmentDisagrees(RowAccessModel.Schema(tenancy.Schema) + "." + TenancySql.PermissionIsContained, catalogue.ContainAccessManagingPermissions);
                 }
 
                 if (written.Count != 1 || written[0].Trim() != body)
@@ -654,7 +654,7 @@ public static class TenancyPostgresChecks
                         "The function " + RowAccessModel.Schema(tenancy.Schema) + "." + name + " in the database " + (written.Count == 1 ? "was written from another catalogue" : "is missing") +
                         ": " + says + ". Export the access files with the catalogue the application runs with, and apply them: the export writes them from the ApplicationCatalogue " +
                         "marked [TenancyCatalogue], the one handed to TenancyOptions.Catalogue, which is public and static where the project that runs the export sees it, " +
-                        "and from the modules' keys marked [TenancyPermissions].");
+                        "and from the permissions the modules declare in their [Permissions] classes.");
                 }
             }
 
@@ -691,18 +691,18 @@ public static class TenancyPostgresChecks
             (string[] Names, string What, string Why)[] asOwner =
             [
                 (
-                    [TenancyFunctionNames.TenantAdministrators, TenancyFunctionNames.RightsAMoveChanges, TenancyFunctionNames.SeatsHoldingAt, TenancySql.RewriteTenantRights],
+                    [TenancyFunctionNames.TenantAdministrators, TenancyFunctionNames.PermissionsAMoveChanges, TenancyFunctionNames.SeatsHoldingPermissionAt, TenancySql.RewriteTenantRights],
                     "answer about other seats' rights or write a tenant's rights again",
                     "The store and the questions ask the first three, since a seat reads only its own rights, and Tenancy's own system work runs the last."),
                 (
                     [
-                        TenancyFunctionNames.RoleKeysInUse, TenancyFunctionNames.TenantsToSweep, TenancyFunctionNames.SeatsOfIdentity,
+                        TenancyFunctionNames.RolePermissionsInUse, TenancyFunctionNames.TenantsToSweep, TenancyFunctionNames.SeatsOfIdentity,
                         .. tenancy.InvitationDigests is null ? Array.Empty<string>() : [TenancyFunctionNames.InvitationOfDigest],
                     ],
                     "read across tenants",
                     "System work asks them in no tenant, where the policies show it no row."),
                 (
-                    [TenancySql.SeatInTenant, TenancySql.SeatedInTenant, TenancySql.HoldsKeyInTenant, TenancySql.UnitsWhereIHoldInTenant, TenancySql.RolesWithKeyInTenant],
+                    [TenancySql.SeatInTenant, TenancySql.SeatedInTenant, TenancySql.HoldsPermissionInTenant, TenancySql.UnitsWhereIHoldInTenant, TenancySql.RolesWithPermissionInTenant],
                     "take the tenant as an argument",
                     "Policies ask them where the connection names no tenant, as on the path of a stored file."),
             ];
@@ -735,7 +735,7 @@ public static class TenancyPostgresChecks
             // policies decide them, and with nothing that keeps Postgres from folding it into the module's query.
             string[] read =
             [
-                TenancyFunctionNames.CallerRights, TenancyFunctionNames.TenantUnitPaths, TenancyFunctionNames.TenantUnits,
+                TenancyFunctionNames.CallerPermissions, TenancyFunctionNames.TenantUnitPaths, TenancyFunctionNames.TenantUnits,
                 TenancyFunctionNames.TenantRoles, TenancyFunctionNames.TenantPlacements, TenancyFunctionNames.TenantSeats,
             ];
             var unreadable = await ListAsync(
@@ -795,8 +795,8 @@ public static class TenancyPostgresChecks
     /// <summary>
     /// Registers the five checks above as start-up checks: the two that read the services with the checks of the
     /// services, first, and the three that ask the database with the checks of the database. Those three run before
-    /// <see cref="TenancyChecks.UnknownStoredKeysCheck"/>, whatever order Tenancy and this were registered in: it
-    /// reads the keys through a function the reads across tenants prove, and a function that is missing is better
+    /// <see cref="TenancyChecks.UnknownStoredPermissionsCheck"/>, whatever order Tenancy and this were registered in: it
+    /// reads the permissions through a function the reads across tenants prove, and a function that is missing is better
     /// said by them, with its fix.
     /// </summary>
     internal static void AddStartupChecks(IServiceCollection services)
@@ -813,10 +813,10 @@ public static class TenancyPostgresChecks
             return Task.CompletedTask;
         }));
 
-        string[] beforeTheStoredKeys = [TenancyChecks.UnknownStoredKeysCheck];
-        services.AddStartupCheck(new StartupCheck(SystemInRoleConfinedCheck, StartupCheckStage.Database, EnsureSystemInRoleIsConfinedAsync) { RunsBefore = beforeTheStoredKeys });
-        services.AddStartupCheck(new StartupCheck(SystemReadsAcrossTenantsCheck, StartupCheckStage.Database, EnsureSystemReadsAcrossTenantsAsync) { RunsBefore = beforeTheStoredKeys });
-        services.AddStartupCheck(new StartupCheck(PoliciesInPlaceCheck, StartupCheckStage.Database, EnsurePoliciesAreInPlaceAsync) { RunsBefore = beforeTheStoredKeys });
+        string[] beforeTheStoredPermissions = [TenancyChecks.UnknownStoredPermissionsCheck];
+        services.AddStartupCheck(new StartupCheck(SystemInRoleConfinedCheck, StartupCheckStage.Database, EnsureSystemInRoleIsConfinedAsync) { RunsBefore = beforeTheStoredPermissions });
+        services.AddStartupCheck(new StartupCheck(SystemReadsAcrossTenantsCheck, StartupCheckStage.Database, EnsureSystemReadsAcrossTenantsAsync) { RunsBefore = beforeTheStoredPermissions });
+        services.AddStartupCheck(new StartupCheck(PoliciesInPlaceCheck, StartupCheckStage.Database, EnsurePoliciesAreInPlaceAsync) { RunsBefore = beforeTheStoredPermissions });
     }
 
     /// <summary>
@@ -852,16 +852,16 @@ public static class TenancyPostgresChecks
 
     /// <summary>
     /// What the start-up check says when the database's access files were written with containment the other way
-    /// round from the catalogue the application runs with (<see cref="TenancyCatalogue.ContainAccessManagingKeys"/>):
+    /// round from the catalogue the application runs with (<see cref="TenancyCatalogue.ContainAccessManagingPermissions"/>):
     /// which way each one is, what the difference lets through or refuses, and how to put it right.
     /// </summary>
     /// <param name="function">
-    /// <c>key_is_contained</c> in Tenancy's schema, as SQL names it: <c>"tenancy".key_is_contained</c>.
+    /// <c>permission_is_contained</c> in Tenancy's schema, as SQL names it: <c>"tenancy".permission_is_contained</c>.
     /// </param>
     /// <param name="applicationContains">Whether the application runs with containment on.</param>
     private static InvalidOperationException ContainmentDisagrees(string function, bool applicationContains)
         => new(
-            "The access files in the database were written with ApplicationCatalogue.ContainAccessManagingKeys " + (applicationContains ? "off" : "on") +
+            "The access files in the database were written with ApplicationCatalogue.ContainAccessManagingPermissions " + (applicationContains ? "off" : "on") +
             ", and the application runs with it " + (applicationContains ? "on" : "off") + ", as the function " + function + " says. " +
             (applicationContains
                 ? "The database would let a seat give, take away or stop, by a query of its own, the roles that manage access it does not hold, which the use cases refuse. "
@@ -904,13 +904,13 @@ public static class TenancyPostgresChecks
     }
 
     /// <summary>
-    /// How many keys <see cref="TenancyFunctionNames.RoleKeysInUse"/> answers scoped system work in
+    /// How many permissions <see cref="TenancyFunctionNames.RolePermissionsInUse"/> answers scoped system work in
     /// <paramref name="scope"/>, in no tenant, and which role the connection ran as when it asked: on the
     /// connection of a context that maps Tenancy's tables, made in a scope of its own, outside any ambient
     /// transaction.
     /// </summary>
     /// <exception cref="InvalidOperationException">The database refused the role or the function to the connection.</exception>
-    private static async Task<(string Role, long Keys)> AskedInAsync(IServiceProvider services, string scope, CancellationToken cancellationToken)
+    private static async Task<(string Role, long Permissions)> AskedInAsync(IServiceProvider services, string scope, CancellationToken cancellationToken)
     {
         // The caller first and then the context, as the reads themselves take theirs.
         using (new TransactionScope(TransactionScopeOption.Suppress, TransactionScopeAsyncFlowOption.Enabled))
@@ -919,7 +919,7 @@ public static class TenancyPostgresChecks
         {
             await using var lifetime = services.GetRequiredService<IServiceScopeFactory>().CreateAsyncScope();
             var (context, tenancy) = TenancyContextOf(lifetime.ServiceProvider);
-            var function = RowAccessModel.Schema(tenancy.Schema) + "." + TenancyFunctionNames.RoleKeysInUse;
+            var function = RowAccessModel.Schema(tenancy.Schema) + "." + TenancyFunctionNames.RolePermissionsInUse;
 
             try
             {

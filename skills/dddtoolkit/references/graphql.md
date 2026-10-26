@@ -124,11 +124,11 @@ public static async Task<IReadOnlyDictionary<ProjectId, ProjectCrew>> GetCrewByP
   empty page, a cursor of a list with other keys fails inside the read, and a cursor's head is believed.
   Check it against the query's own keys before paging and refuse it with the list's code, as `ListCursors`
   in the Tenancy sample does (`Examples/Tenancy/Shared/Examples.Tenancy.Shared.Infrastructure/Paging`).
-- A field that needs a permission key carries HotChocolate's `[Authorize("<key>")]`. The module answers
-  who holds it with one `IFieldKeys<TParent>` per type, registered in its services and awaited through a
-  data loader, and the schema calls `AddDDDToolkitKeyAuthorization()`. The field has to be nullable. It
+- A field that needs a permission carries HotChocolate's `[Authorize("<permission>")]`. The module answers
+  who holds it with one `IFieldPermissions<TParent>` per type, registered in its services and awaited through a
+  data loader, and the schema calls `AddDDDToolkitPermissionAuthorization()`. The field has to be nullable. It
   stands beside the request's own access check, never in its place. When the value is part of a record a
-  query answers, hold the rule in the query (answer `null` without the key), or a REST route over the same
+  query answers, hold the rule in the query (answer `null` without the permission), or a REST route over the same
   record gives it away; the attribute then only declares the rule.
 - Enum values in one spelling for REST and GraphQL: `AddDDDToolkitEnumValues(EnumValueSpelling.LowerSnakeCase)`,
   once; `AddDDDToolkitErrors()` spells a refusal's `kind` extension the same way.
@@ -142,7 +142,7 @@ endpoint with the schemas it composes, `AddInMemoryFusionGateway("user", [...])`
 
 - **The host gives every source schema the same conventions**, in one method: `AddDDDToolkitTypes()`,
   the errors, the mutation conventions, the enum spelling, `AddDDDToolkitEntityNullability()` and
-  `AddDDDToolkitKeyAuthorization()`. Schemas that spell an enum differently do not compose.
+  `AddDDDToolkitPermissionAuthorization()`. Schemas that spell an enum differently do not compose.
 - **A module names another module's entity by its key and nothing else**: a record of the key with
   `[GraphQLName("Seat")]` and `[EntityKey("id")]`. The owner declares the same key and a lookup, marked
   `[Lookup]` and `[Internal]` unless a client needs it on its own. No resolver sends another module's

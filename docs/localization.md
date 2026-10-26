@@ -349,6 +349,22 @@ public static IServiceCollection AddShipping(this IServiceCollection services)
     => services.AddDDDToolkitLocalization(o => o.AddResource<ShippingFailures>());
 ```
 
+### What a permission lets somebody do
+
+A permission's text, the one an administrator reads where roles are made, is the `Description` of its level in the `[Permissions]`
+class it is declared in ([A module states its permissions once](tenancy.md#a-module-states-its-permissions-once)). That is the
+English, and the fallback. A translation is a resx entry under the permission's name, read with
+`IFailureLocalizer.Text`, which answers the entry in the current UI culture or the text it is handed:
+
+```csharp
+var description = localizer.Text(permission.Name, permission.Description);   // "orders.view": "De orders zien."
+```
+
+Keep the permissions' texts in a pair of their own beside the class, `OrderingPermissionTexts.resx` and its
+`.nl.resx`, and add it as a module adds its refusals' texts. The English file repeats the summaries, so a
+translator has every text in one file per language. The Tenancy sample's catalogue answers its permissions so, and
+a test holds each English file to the summaries.
+
 ## A package's texts under your own codes
 
 A package that ships its texts names each one once, in its own resx. When the codes are yours to choose,

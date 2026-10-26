@@ -9,7 +9,7 @@ namespace Examples.Tenancy.Tests.Tenants;
 /// <summary>
 /// The application's own rules on the package's classes: a unit's cost centre and a seat's job title. They run on
 /// every save, after the package's own rules and next to them, and refuse a save that breaks them as any rule of
-/// the toolkit does. And the application's own decision about the catalogue: which keys manage access.
+/// the toolkit does. And the application's own decision about the catalogue: which permissions manage access.
 /// </summary>
 /// <remarks>
 /// No route changes either field, so the tests change them as the application's own code would: as system work in
@@ -28,17 +28,17 @@ public sealed class ApplicationRuleScenarios(SampleHosts sample) : IClassFixture
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
     [Fact]
-    public async Task The_keys_that_manage_access_are_exactly_these()
+    public async Task The_permissions_that_manage_access_are_exactly_these()
     {
         await using var host = await sample.StartAsync();
 
-        // Written out, key by key, on purpose. Which keys manage access is an access decision: a role that holds
+        // Written out, permission by permission, on purpose. Which permissions manage access is an access decision: a role that holds
         // one is given only by a seat that holds it, never to oneself, and only an administrator changes such a
-        // role. Marking another key, or taking a mark away, changes who may give which role in every tenant. On a
+        // role. Marking another permission, or taking a mark away, changes who may give which role in every tenant. On a
         // database that checks rows it also changes the policies, so it needs the access file exported again, a
         // migration to apply it, and the export's check to pass. A change to this list is that decision, made
-        // where it can be seen; it is never a side effect of a key being added somewhere.
-        host.Services.GetRequiredService<TenancyCatalogue>().AccessManagingKeys.Should().BeEquivalentTo(
+        // where it can be seen; it is never a side effect of a permission being added somewhere.
+        host.Services.GetRequiredService<TenancyCatalogue>().AccessManagingPermissions.Should().BeEquivalentTo(
         [
             "tenancy.settings.manage",
             "tenancy.units.manage",
@@ -49,13 +49,13 @@ public sealed class ApplicationRuleScenarios(SampleHosts sample) : IClassFixture
             "projects.crew.manage",
         ]);
 
-        // And the administrators' pack that lists its keys holds every one of them, or the host would not start.
-        host.Services.GetRequiredService<TenancyCatalogue>().Packs.Single(pack => pack.Key == SampleCatalogue.AccessAdmin).Keys
-            .Should().Contain(host.Services.GetRequiredService<TenancyCatalogue>().AccessManagingKeys);
+        // And the administrators' pack that lists its permissions holds every one of them, or the host would not start.
+        host.Services.GetRequiredService<TenancyCatalogue>().Packs.Single(pack => pack.Key == SampleCatalogue.AccessAdmin).Permissions
+            .Should().Contain(host.Services.GetRequiredService<TenancyCatalogue>().AccessManagingPermissions);
 
-        // Those keys stay contained: the sample leaves the setting at its default, and its refusals that name the keys
+        // Those permissions stay contained: the sample leaves the setting at its default, and its refusals that name the permissions
         // a seat lacks, or its own seat, rest on it. Turning it off is a decision of the same kind as a mark.
-        host.Services.GetRequiredService<TenancyCatalogue>().ContainAccessManagingKeys.Should().BeTrue();
+        host.Services.GetRequiredService<TenancyCatalogue>().ContainAccessManagingPermissions.Should().BeTrue();
     }
 
     [Fact]

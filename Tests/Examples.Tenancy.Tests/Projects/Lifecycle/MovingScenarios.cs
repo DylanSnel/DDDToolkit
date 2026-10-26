@@ -80,7 +80,7 @@ public sealed class MovingScenarios(SampleHosts sample) : IClassFixture<SampleHo
         using (var south = await rhea.PutAsJsonAsync($"/projects/{pier.Id.Value}/unit", new { unitId = Harbor.UnitNamed("South Bay").Value }, Cancellation))
         {
             var refused = await south.ShouldBeRefusedAsync(HttpStatusCode.Forbidden, ProjectRefusals.NotPermitted);
-            refused.Argument("Key").Should().Be(ProjectKeys.Open);
+            refused.Argument("Permission").Should().Be(ProjectPermissionNames.Open);
         }
 
         using (var inland = await rhea.PutAsJsonAsync($"/projects/{pier.Id.Value}/unit", new { unitId = Harbor.UnitNamed("North Inland").Value }, Cancellation))

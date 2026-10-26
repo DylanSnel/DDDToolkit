@@ -9,29 +9,29 @@ namespace Examples.Tenancy.Tenants.Application.Seats.Queries;
 /// </summary>
 /// <remarks>
 /// Who may read another person's access is this application's choice, and this request is where it makes it: the
-/// package's overview of a seat asks no key, as no question of its directory does. This application lets whoever
-/// holds <see cref="RequiredKey"/> for the whole tenant read the roles a person holds in every unit, and whoever holds
+/// package's overview of a seat asks no permission, as no question of its directory does. This application lets whoever
+/// holds <see cref="RequiredPermission"/> for the whole tenant read the roles a person holds in every unit, and whoever holds
 /// it at a unit, or above it, read the roles held at that unit, <see cref="At"/>. Which of the two the request asks
 /// depends on its value, so it answers <see cref="IRequireAccess.RequiredAccess"/> itself rather than with an
 /// attribute: no attribute says one case or the other. On Postgres Tenancy's policies ask again, and give a seat
 /// another seat's grants only at the units where it manages grants, seats or units, and all of them to a seat that
 /// manages roles for the whole tenant; where no policy applies, on another database, this requirement is the only
-/// rule. A seat reads its own roles in its overview, <see cref="OverviewOfMine"/>, which needs no key.
+/// rule. A seat reads its own roles in its overview, <see cref="OverviewOfMine"/>, which needs no permission.
 /// </remarks>
 /// <param name="Seat">The seat whose roles are read.</param>
 /// <param name="At">
-/// A unit, to read the roles held there, for a caller who holds the key there; <see langword="null"/> for every unit,
-/// which takes the key for the whole tenant.
+/// A unit, to read the roles held there, for a caller who holds the permission there; <see langword="null"/> for every unit,
+/// which takes the permission for the whole tenant.
 /// </param>
 public sealed record SeatGrants(SeatId Seat, OrganizationUnitId? At = null) : IQuery<IReadOnlyList<SeatGrant>>, ITenantsRequest
 {
-    /// <summary>The key the caller holds, for the whole tenant or at the unit asked about: this application's choice.</summary>
-    public const string RequiredKey = TenancyKeys.SeatsManage;
+    /// <summary>The permission the caller holds, for the whole tenant or at the unit asked about: this application's choice.</summary>
+    public const string RequiredPermission = TenancyPermissions.SeatsManage;
 
-    /// <summary>The key at the unit asked about, there or above it; for the whole tenant where every unit is.</summary>
+    /// <summary>The permission at the unit asked about, there or above it; for the whole tenant where every unit is.</summary>
     AccessRequirement IRequireAccess.RequiredAccess => At is { } unit
-        ? TenancyAccess.AtUnit(RequiredKey, unit)
-        : TenancyAccess.ForTheWholeTenant(RequiredKey);
+        ? TenancyAccess.AtUnit(RequiredPermission, unit)
+        : TenancyAccess.AtTenant(RequiredPermission);
 }
 
 /// <summary>A role a seat holds at a unit, for a period: what <see cref="SeatGrants"/> answers, one per grant.</summary>

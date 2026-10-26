@@ -14,9 +14,9 @@ internal static class ProjectRolesMutations
 {
     /// <summary>Makes a project role of the tenant's own.</summary>
     [Mutation]
-    public static async Task<ProjectRoleListing?> ProjectRoleCreateAsync(string name, string? description, IReadOnlyList<string>? keys, [Service] ISender sender, CancellationToken cancellationToken)
+    public static async Task<ProjectRoleListing?> ProjectRoleCreateAsync(string name, string? description, IReadOnlyList<string>? permissions, [Service] ISender sender, CancellationToken cancellationToken)
     {
-        var id = await sender.Send(new MakeProjectRole(name, description, keys ?? []), cancellationToken);
+        var id = await sender.Send(new MakeProjectRole(name, description, permissions ?? []), cancellationToken);
         return await RoleNowAsync(sender, id, cancellationToken);
     }
 
@@ -28,11 +28,11 @@ internal static class ProjectRolesMutations
         return await RoleNowAsync(sender, id, cancellationToken);
     }
 
-    /// <summary>Has a project role give exactly these keys from now on.</summary>
+    /// <summary>Has a project role give exactly these permissions from now on.</summary>
     [Mutation]
-    public static async Task<ProjectRoleListing?> ProjectRoleKeysSetAsync(ProjectRoleId id, IReadOnlyList<string> keys, [Service] ISender sender, CancellationToken cancellationToken)
+    public static async Task<ProjectRoleListing?> ProjectRolePermissionsSetAsync(ProjectRoleId id, IReadOnlyList<string> permissions, [Service] ISender sender, CancellationToken cancellationToken)
     {
-        await sender.Send(new SetProjectRoleKeys(id, keys), cancellationToken);
+        await sender.Send(new SetProjectRolePermissions(id, permissions), cancellationToken);
         return await RoleNowAsync(sender, id, cancellationToken);
     }
 

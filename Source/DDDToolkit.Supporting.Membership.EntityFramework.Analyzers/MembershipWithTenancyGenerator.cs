@@ -41,7 +41,7 @@ namespace DDDToolkit.Supporting.Membership.EntityFramework.Analyzers;
 /// </para>
 /// <para>
 /// <b>Which roles.</b> A member that holds roles by the id of Tenancy's role class holds the tenant's own
-/// roles, and the written class answers which of them give a key and which there are. A member that holds
+/// roles, and the written class answers which of them give a permission and which there are. A member that holds
 /// roles by name, or by the id of a role class kept for the resource, holds roles Tenancy knows nothing of,
 /// and nothing is answered about roles.
 /// </para>
@@ -60,7 +60,7 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
     private const int Member = 0, MemberOwnId = 1, MemberId = 2, RoleId = 3, Resource = 5, IdOfResource = 6, TypeParameters = 8;
 
     private const string NamedRole = "global::DDDToolkit.Supporting.Membership.NamedRole";
-    private const string KeptRoleTemplate = "DDDToolkit.Supporting.Membership.KeptRoleAttribute`2";
+    private const string CustomRoleTemplate = "DDDToolkit.Supporting.Membership.CustomRoleAttribute`2";
 
     private const string Tenancy = "DDDToolkit.Supporting.Tenancy";
     private const string TenantTemplate = Tenancy + ".TenantAggregateAttribute`1";
@@ -132,7 +132,7 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
 
         // Only a project that cannot see Tenancy's role class has to tell the tenant's roles from kept ones another way:
         // by the role classes kept for a resource, wherever the project can see one.
-        var kept = seen ? null : IdsOf(KeptRoleTemplate, declared, compilation, cancellationToken, everywhere: true);
+        var kept = seen ? null : IdsOf(CustomRoleTemplate, declared, compilation, cancellationToken, everywhere: true);
 
         var joins = ImmutableArray.CreateBuilder<Join>();
         foreach (var wrapper in wrappers)
@@ -203,10 +203,10 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
             return ids;
         }
 
-        var key = attribute.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        var permission = attribute.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
         foreach (var definition in declared)
         {
-            if (definition.TemplateKey == key)
+            if (definition.TemplateKey == permission)
             {
                 ids.Add(definition.TemplateIdIsEntityId ? definition.IdType : null);
             }
@@ -314,7 +314,7 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
                 writer.Line("/// <typeparam name=\"" + parameter + "\">" + WhatItIs(parameter) + ", which this project sees no class of and so cannot be given.</typeparam>");
             }
 
-            writer.Line("/// <exception cref=\"global::System.ArgumentException\">The rules take a member from the caller itself, where a member is a seat.</exception>");
+            writer.Line("/// <exception cref=\"global::System.ArgumentException\">The rules take a member from the caller's token, where a member is a seat.</exception>");
             using (Declared(
                        writer,
                        [
@@ -329,13 +329,14 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
                 writer.Line();
 
                 // The one thing the resource's own registration cannot tell: a seat's id is over the same value as a
-                // user's, so rules that take the member from the caller would be accepted, and read a user for a seat.
-                using (writer.Block("if (rules.Members.Kind != " + Membership + ".Access.MemberSourceKind.Resolved)"))
+                // user's, so rules that take the member from the token would be accepted, and read a user for a seat.
+                // Who a member is follows from the member id where the rules say nothing: here, the caller's seat.
+                using (writer.Block("if (rules.Members.Kind is " + Membership + ".Access.MemberSourceKind.CallerId or " + Membership + ".Access.MemberSourceKind.Claim)"))
                 {
                     writer.Line("throw new global::System.ArgumentException(");
-                    writer.Line("    \"The rules '\" + rules.Name + \"' take a member from the caller itself (MemberSource.\" + rules.Members.Kind + \"), and "
+                    writer.Line("    \"The rules '\" + rules.Name + \"' take a member from the caller's token (MemberSource.\" + rules.Members.Kind + \"), and "
                                 + join.Registration + " registers " + join.ResourceName + " for members that are seats of a tenant, which no token carries. \"");
-                    writer.Line("    + \"Say members: MemberSource.Resolved(\\\"tenancy/caller_seat\\\") in the rules, or register " + join.ResourceName
+                    writer.Line("    + \"Leave members out of the rules, and a member is the caller's seat, or register " + join.ResourceName
                                 + " with " + join.Plain + " where its members are not seats.\",");
                     writer.Line("    nameof(rules));");
                 }
@@ -355,7 +356,7 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
         writer.Line();
         writer.Line("/// <summary>");
         writer.Line("/// What joins " + join.ResourceName + " to the organization: each of Membership's questions about it is forwarded to one of Tenancy's.");
-        writer.Line("/// A member is the caller's seat, somebody can be made a member while that seat is active, and a key the organization");
+        writer.Line("/// A member is the caller's seat, somebody can be made a member while that seat is active, and a permission the organization");
         writer.Line("/// gives at a unit counts for what sits there and below." + (join.TenantsRoles ? " The roles a member holds are the tenant's own." : string.Empty));
         writer.Line("/// </summary>");
         var answered = new List<string>
@@ -366,7 +367,7 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
         };
         if (join.TenantsRoles)
         {
-            answered.Add(Membership + ".EntityFramework.IRolesWithKey<" + join.IdOfResource + ", " + join.Role + ">");
+            answered.Add(Membership + ".EntityFramework.IRolesWithPermission<" + join.IdOfResource + ", " + join.Role + ">");
             answered.Add(Membership + ".UseCases.IMemberRoles<" + join.IdOfResource + ", " + join.Role + ">");
         }
 
@@ -381,11 +382,6 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
             writer.Line("private readonly global::System.IServiceProvider _services;");
             writer.Line("private readonly " + answers + " _tenancy;");
             writer.Line("private readonly " + catalogue + " _catalogue;");
-            if (join.TenantsRoles)
-            {
-                writer.Line("private readonly string _ownerRole;");
-            }
-
             writer.Line();
             writer.Line("/// <param name=\"services\">The services of the scope the questions are asked in.</param>");
             writer.Line("/// <param name=\"rules\">The rules the resource is registered with.</param>");
@@ -394,10 +390,6 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
                 writer.Line("_services = services;");
                 writer.Line("_tenancy = " + Services + ".ServiceProviderServiceExtensions.GetRequiredService<" + answers + ">(services);");
                 writer.Line("_catalogue = " + Services + ".ServiceProviderServiceExtensions.GetRequiredService<" + catalogue + ">(services);");
-                if (join.TenantsRoles)
-                {
-                    writer.Line("_ownerRole = rules.OwnerRole;");
-                }
             }
 
             writer.Line();
@@ -428,27 +420,27 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
 
             writer.Line();
             writer.Line("/// <summary>");
-            writer.Line("/// The units the caller's hold of <paramref name=\"key\"/> reaches: where it is held, and every unit below. A key the");
+            writer.Line("/// The units the caller's hold of <paramref name=\"permission\"/> reaches: where it is held, and every unit below. A permission the");
             writer.Line("/// catalogue does not know is one no role of the organization can hold, so it is held nowhere: Tenancy itself would");
             writer.Line("/// take the question for a typo.");
             writer.Line("/// </summary>");
-            using (writer.Block("public global::System.Linq.IQueryable<" + unit + "> PlacesReached(" + EntityFramework + ".DbContext context, " + Caller + " caller, string key)"))
+            using (writer.Block("public global::System.Linq.IQueryable<" + unit + "> PlacesReached(" + EntityFramework + ".DbContext context, " + Caller + " caller, string permission)"))
             {
                 writer.Line("var tenancy = " + Over + "(_tenancy, context);");
-                writer.Line("return _catalogue.Knows(key)");
-                writer.Line("    ? tenancy.UnitsWhereIHold(key)");
+                writer.Line("return _catalogue.Knows(permission)");
+                writer.Line("    ? tenancy.UnitsWhereIHold(permission)");
                 writer.Line("    : " + Queryable + ".Select(" + Queryable + ".Where(tenancy.Units(), unit => false), unit => unit.Id);");
             }
 
             if (join.TenantsRoles)
             {
                 writer.Line();
-                writer.Line("/// <summary>The tenant's roles in use that give <paramref name=\"key\"/>; none for a key the catalogue does not know.</summary>");
-                using (writer.Block("public global::System.Linq.IQueryable<" + join.Role + "> RolesWith(" + EntityFramework + ".DbContext context, " + Caller + " caller, string key)"))
+                writer.Line("/// <summary>The tenant's roles in use that give <paramref name=\"permission\"/>; none for a permission the catalogue does not know.</summary>");
+                using (writer.Block("public global::System.Linq.IQueryable<" + join.Role + "> RolesWith(" + EntityFramework + ".DbContext context, " + Caller + " caller, string permission)"))
                 {
                     writer.Line("var tenancy = " + Over + "(_tenancy, context);");
-                    writer.Line("return _catalogue.Knows(key)");
-                    writer.Line("    ? tenancy.RolesWithKey(key)");
+                    writer.Line("return _catalogue.Knows(permission)");
+                    writer.Line("    ? tenancy.RolesWithPermission(permission)");
                     writer.Line("    : " + Queryable + ".Select(" + Queryable + ".Where(tenancy.Roles(), role => false), role => role.Id);");
                 }
 
@@ -461,24 +453,6 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
                 writer.Line("            row => row.Id.Equals(role) && row.Status == global::" + Tenancy + ".RoleStatus.Active,");
                 writer.Line("            cancellationToken),");
                 writer.Line("        cancellationToken).ConfigureAwait(false);");
-
-                writer.Line();
-                writer.Line("/// <summary>");
-                writer.Line("/// The tenant's role in use that was made from the pack the rules name as the owner's role, or null when it has none.");
-                writer.Line("/// Where a tenant made several from that pack, the first of them by id.");
-                writer.Line("/// </summary>");
-                using (writer.Block("public async global::System.Threading.Tasks.ValueTask<" + join.Role + "?> FindOwnerRoleAsync(" + CancellationTokenType + " cancellationToken)"))
-                {
-                    writer.Line("var pack = _ownerRole;");
-                    writer.Line("return await AskAsync(");
-                    writer.Line("    tenancy =>");
-                    writer.Line("    {");
-                    writer.Line("        var fromThePack = " + Queryable + ".Where(tenancy.Roles(), row => row.FromPack == pack && row.Status == global::" + Tenancy + ".RoleStatus.Active);");
-                    writer.Line("        var ids = " + Queryable + ".Select(" + Queryable + ".OrderBy(fromThePack, row => row.Id), row => (" + join.Role + "?)row.Id);");
-                    writer.Line("        return " + Asynchronous + ".FirstOrDefaultAsync(ids, cancellationToken);");
-                    writer.Line("    },");
-                    writer.Line("    cancellationToken).ConfigureAwait(false);");
-                }
             }
 
             writer.Line();

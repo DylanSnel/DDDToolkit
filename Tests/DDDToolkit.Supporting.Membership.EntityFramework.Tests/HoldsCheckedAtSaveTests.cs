@@ -119,7 +119,7 @@ public sealed class HoldsCheckedAtSaveTests
         using var filing = await FilingAsync(holds: true, ownContexts: false);
         var data = filing.Scenario;
 
-        // Ada owns the minutes, and holds the key that shares there: the request checked the minutes, and its
+        // Ada owns the minutes, and holds the permission that shares there: the request checked the minutes, and its
         // handler, by mistake, shares the budget, which she only looks on.
         var refused = await FluentActions.Awaiting(() => filing.Services.AsAsync(TestCallers.User(data.Ada), async provider =>
             {
@@ -170,7 +170,7 @@ public sealed class HoldsCheckedAtSaveTests
         await filing.Services.AsAsync(TestCallers.User(data.Hal), async provider =>
         {
             var context = provider.GetRequiredService<FilingContext>();
-            context.Documents.Add(new Document(written, "Notes", data.Hal, DocumentMembership.Owner, data.Now));
+            context.Documents.Add(new Document(written, "Notes", data.Hal, data.Now));
             await context.SaveChangesAsync(Cancellation);
         });
 
@@ -379,7 +379,7 @@ public sealed class HoldsCheckedAtSaveTests
             {
                 document.Property(row => row.Id).ValueGeneratedNever();
                 document.Property(row => row.Title).HasMaxLength(200);
-                document.HasMembers(row => row.Shares, row => row.OwnerId);
+                document.HasMembers(row => row.Shares);
                 document.Property(row => row.Version).IsConcurrencyToken(false);
             });
         }

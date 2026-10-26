@@ -59,11 +59,11 @@ public sealed class PackageContributionsGeneratorTests
             where TEntry : class;
 
         [System.AttributeUsage(System.AttributeTargets.Property | System.AttributeTargets.Field)]
-        public sealed class LedgerKeysAttribute : System.Attribute;
+        public sealed class LedgerPermissionsAttribute : System.Attribute;
 
         public class LedgerRowAccess<TEntry>(
             [FromApplication(typeof(LedgerRulesAttribute<>))] LedgerRules rules,
-            [FromApplication(typeof(LedgerKeysAttribute), Every = true)] System.Collections.Generic.IEnumerable<System.Collections.Generic.IEnumerable<string>> keys)
+            [FromApplication(typeof(LedgerPermissionsAttribute), Every = true)] System.Collections.Generic.IEnumerable<System.Collections.Generic.IEnumerable<string>> permissions)
             : IRowAccessContribution
             where TEntry : class
         {
@@ -305,10 +305,10 @@ public sealed class PackageContributionsGeneratorTests
             [Shop.Ledgers.LedgerRules<Refund>]
             public static Shop.Ledgers.LedgerRules Refunds { get; } = new("refunds");
 
-            [Shop.Ledgers.LedgerKeys]
+            [Shop.Ledgers.LedgerPermissions]
             public static string[] Billing { get; } = ["ledger.read"];
 
-            [Shop.Ledgers.LedgerKeys]
+            [Shop.Ledgers.LedgerPermissions]
             public static System.Collections.Generic.List<string> Audit { get; } = ["ledger.audit"];
         }
         """;
@@ -327,7 +327,7 @@ public sealed class PackageContributionsGeneratorTests
                 {
                     private readonly global::DDDToolkit.EntityFramework.Postgres.IRowAccessContribution _contribution = new global::Shop.Ledgers.LedgerRowAccess<global::Shop.Host.Invoice>(
                         rules: global::Shop.Host.ShopLedgers.Invoices,
-                        keys: new global::System.Collections.Generic.IEnumerable<string>[]
+                        permissions: new global::System.Collections.Generic.IEnumerable<string>[]
                         {
                             global::Shop.Host.ShopLedgers.Audit,
                             global::Shop.Host.ShopLedgers.Billing,
@@ -494,7 +494,7 @@ public sealed class PackageContributionsGeneratorTests
             "RowAccessContributionsOfPackages",
             "new global::DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution(\n"
             + "            modules: global::System.Array.Empty<global::System.Collections.Generic.IEnumerable<global::DDDToolkit.Supporting.Tenancy.Catalogue.Permission>>());",
-            "no catalogue marked is new ApplicationCatalogue(), and no module's keys an empty list, as a host that sets neither runs with");
+            "no catalogue marked is new ApplicationCatalogue(), and no module's permissions an empty list, as a host that sets neither runs with");
         result.ShouldContain("RowAccessContributionsOfPackages", "/// <item><c>application</c>: nothing is marked <c>[TenancyCatalogue]</c>, so its default.</item>");
 
         // Membership on Postgres has nothing to be written from until the application marks a resource's rules.
@@ -614,9 +614,9 @@ public sealed class PackageContributionsGeneratorTests
     }
 
     [Fact]
-    public void A_package_with_a_mark_of_its_own_still_has_the_keys_it_marks_for_tenancy_in_the_catalogue()
+    public void A_package_with_a_mark_of_its_own_still_has_the_permissions_it_marks_for_tenancy_in_the_catalogue()
     {
-        // A supporting domain of a third party: a contribution made from a mark of its own, and keys of its own for
+        // A supporting domain of a third party: a contribution made from a mark of its own, and permissions of its own for
         // Tenancy's catalogue, which Tenancy's generator collects into the host as every module's.
         const string subscriptions = """
             using DDDToolkit.Abstractions.Attributes;
@@ -632,7 +632,7 @@ public sealed class PackageContributionsGeneratorTests
             [System.AttributeUsage(System.AttributeTargets.Property | System.AttributeTargets.Field)]
             public sealed class PlansAttribute : System.Attribute;
 
-            public static class SubscriptionKeys
+            public static class SubscriptionPermissions
             {
                 [TenancyPermissions]
                 public static System.Collections.Generic.IReadOnlyList<Permission> Permissions { get; } = [new("subscriptions.view", "Subscriptions", "Sees the subscriptions")];
@@ -662,15 +662,15 @@ public sealed class PackageContributionsGeneratorTests
 
         result.ShouldCompile();
         result.ReportedDiagnostics.Should().BeEmpty();
-        result.ShouldContain("TenancyPermissionsOfModules", "global::Acme.Subscriptions.SubscriptionKeys.Permissions", "the host registers the package's keys as a module's");
+        result.ShouldContain("TenancyPermissionsOfModules", "global::Acme.Subscriptions.SubscriptionPermissions.Permissions", "the host registers the package's permissions as a module's");
         result.ShouldContain(
             "RowAccessContributionsOfPackages",
             "new global::DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution(\n"
             + "            modules: new global::System.Collections.Generic.IEnumerable<global::DDDToolkit.Supporting.Tenancy.Catalogue.Permission>[]\n"
             + "            {\n"
-            + "                global::Acme.Subscriptions.SubscriptionKeys.Permissions,\n"
+            + "                global::Acme.Subscriptions.SubscriptionPermissions.Permissions,\n"
             + "            });",
-            "the export writes Tenancy's policies from the same keys, or the host's start-up check would find them written from another catalogue");
+            "the export writes Tenancy's policies from the same permissions, or the host's start-up check would find them written from another catalogue");
         result.ShouldContain(
             "RowAccessContributionsOfPackages",
             "new global::Acme.Subscriptions.SubscriptionRowAccess();",

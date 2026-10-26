@@ -163,7 +163,7 @@ public class TenancyWorkTests
 
         var clerks = await BySystemIn(harness, tenant, h => h.Roles.CreateAsync("Clerk", "Files widgets", [HostCatalogue.WidgetCreate], default));
         await BySystemIn(harness, tenant, h => h.Roles.RenameAsync(clerks, "Filing clerk", "Files widgets", default));
-        await BySystemIn(harness, tenant, h => h.Roles.SetKeysAsync(clerks, [HostCatalogue.WidgetCreate, HostCatalogue.WidgetRead], default));
+        await BySystemIn(harness, tenant, h => h.Roles.SetPermissionsAsync(clerks, [HostCatalogue.WidgetCreate, HostCatalogue.WidgetRead], default));
         await BySystemIn(harness, tenant, h => h.Seats.GrantAsync(grace, south, clerks, until: null, reason: null, default));
 
         // A person, as their seat: the directory and a command.

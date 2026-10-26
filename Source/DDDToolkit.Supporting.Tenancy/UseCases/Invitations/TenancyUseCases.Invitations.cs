@@ -15,11 +15,11 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
     /// one, which is what makes the seat.
     /// <para>
     /// An invitation offers what adding a seat, placing it and granting it a role would give, so issuing one takes
-    /// what those take: <see cref="TenancyKeys.SeatsManage"/> for the whole tenant, as adding a seat does, and
-    /// <see cref="TenancyKeys.GrantsManage"/> at the unit, with the rule for giving a role there. A role that
+    /// what those take: <see cref="TenancyPermissions.SeatsManage"/> for the whole tenant, as adding a seat does, and
+    /// <see cref="TenancyPermissions.GrantsManage"/> at the unit, with the rule for giving a role there. A role that
     /// manages no access is offered freely, and may outlast the issuer's own grants. A role that manages access is
-    /// offered only by a seat that holds each of its keys that do at the unit, until at least the end of the grant,
-    /// unless the application turns containment off (<see cref="ApplicationCatalogue.ContainAccessManagingKeys"/>),
+    /// offered only by a seat that holds each of its permissions that do at the unit, until at least the end of the grant,
+    /// unless the application turns containment off (<see cref="ApplicationCatalogue.ContainAccessManagingPermissions"/>),
     /// and then as freely as any other. Nobody invites themself into one: an identity that has a seat in the tenant
     /// cannot accept.
     /// </para>
@@ -38,7 +38,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
     /// <typeparam name="TInvitationId">The application's invitation id.</typeparam>
     /// <param name="store">Where seats, roles and the rest are loaded, and where the unit of work is saved.</param>
     /// <param name="invitations">Where invitations are loaded and kept, in that unit of work.</param>
-    /// <param name="catalogue">The keys asked for, and which roles manage access.</param>
+    /// <param name="catalogue">The permissions asked for, and which roles manage access.</param>
     /// <param name="options">Which signed-in users may hold a seat: whom an acceptance seats.</param>
     /// <param name="invitationOptions">How long an invitation stays open.</param>
     /// <param name="callers">Who is calling, as the toolkit says: the signed-in identity that accepts.</param>
@@ -78,11 +78,11 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         /// <param name="id">Its id, for imports and seeding; a new one otherwise.</param>
         /// <returns>The invitation's id, its token, which is shown this once, and when it ends.</returns>
         /// <exception cref="RefusalException">
-        /// <c>tenancy.not-permitted</c> without <see cref="TenancyKeys.SeatsManage"/> for the whole tenant or
-        /// <see cref="TenancyKeys.GrantsManage"/> at the unit, <c>tenancy.invitation-lifetime</c>,
+        /// <c>tenancy.not-permitted</c> without <see cref="TenancyPermissions.SeatsManage"/> for the whole tenant or
+        /// <see cref="TenancyPermissions.GrantsManage"/> at the unit, <c>tenancy.invitation-lifetime</c>,
         /// <c>tenancy.tenant-inactive</c>, <c>tenancy.role-not-found</c>, <c>tenancy.grant-exceeds-own</c> for a
         /// role that manages access the caller could not give there for that long, while containment is on
-        /// (<see cref="ApplicationCatalogue.ContainAccessManagingKeys"/>), <c>tenancy.unit-not-found</c>,
+        /// (<see cref="ApplicationCatalogue.ContainAccessManagingPermissions"/>), <c>tenancy.unit-not-found</c>,
         /// <c>tenancy.unit-not-active</c>, <c>tenancy.role-not-active</c>, <c>tenancy.address-invalid</c>,
         /// <c>tenancy.invitation-grant-ends-first</c>.
         /// </exception>
@@ -97,8 +97,8 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         {
             var gate = new Gate(store, catalogue, clock);
             var tenantId = gate.RequireTenant();
-            await gate.RequireTenantWideAsync(TenancyKeys.SeatsManage, cancellationToken).ConfigureAwait(false);
-            await gate.RequireAtAsync(TenancyKeys.GrantsManage, unit, cancellationToken).ConfigureAwait(false);
+            await gate.RequireAtTenantAsync(TenancyPermissions.SeatsManage, cancellationToken).ConfigureAwait(false);
+            await gate.RequireAtAsync(TenancyPermissions.GrantsManage, unit, cancellationToken).ConfigureAwait(false);
 
             var settings = invitationOptions.Checked();
             var open = lifetime ?? settings.DefaultLifetime;
@@ -146,7 +146,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
 
         /// <summary>
         /// The tenant's invitations that can still be accepted, the soonest to end first: for a seat, those into
-        /// the units where it holds <see cref="TenancyKeys.SeatsManage"/>, which may be none; for system work in
+        /// the units where it holds <see cref="TenancyPermissions.SeatsManage"/>, which may be none; for system work in
         /// the tenant, all of them.
         /// </summary>
         /// <param name="cancellationToken">Cancels the read.</param>
@@ -158,7 +158,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
             var open = await invitations.ListOpenAsync(tenantId, gate.Now, cancellationToken).ConfigureAwait(false);
             if (!gate.BySystem)
             {
-                var managed = (await store.Queries.ListAsync(gate.Questions.UnitsWhereIHold(TenancyKeys.SeatsManage), cancellationToken).ConfigureAwait(false)).ToHashSet();
+                var managed = (await store.Queries.ListAsync(gate.Questions.UnitsWhereIHold(TenancyPermissions.SeatsManage), cancellationToken).ConfigureAwait(false)).ToHashSet();
                 open = [.. open.Where(invitation => managed.Contains(invitation.UnitId))];
             }
 
@@ -181,7 +181,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
 
         /// <summary>
         /// Cancels an open invitation, so its token no longer works. A seat needs
-        /// <see cref="TenancyKeys.SeatsManage"/> at the invitation's unit, whoever issued it; an invitation into a
+        /// <see cref="TenancyPermissions.SeatsManage"/> at the invitation's unit, whoever issued it; an invitation into a
         /// unit where it does not manage seats is not found, as it is not among the ones it lists.
         /// </summary>
         /// <exception cref="RefusalException">
@@ -195,7 +195,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
 
             var cancelled = await invitations.FindAsync(invitation, cancellationToken).ConfigureAwait(false);
             if (cancelled is null
-                || (!gate.BySystem && !await gate.Questions.HoldsAtAsync(TenancyKeys.SeatsManage, cancelled.UnitId, cancellationToken).ConfigureAwait(false)))
+                || (!gate.BySystem && !await gate.Questions.HoldsAtAsync(TenancyPermissions.SeatsManage, cancelled.UnitId, cancellationToken).ConfigureAwait(false)))
             {
                 throw TenancyRefusals.Refuse(TenancyRefusals.InvitationNotFound);
             }
@@ -363,7 +363,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
 
         /// <summary>
         /// Whether the seat that issued <paramref name="invitation"/> could issue it again now: it is active, holds
-        /// <see cref="TenancyKeys.SeatsManage"/> for the whole tenant and <see cref="TenancyKeys.GrantsManage"/> at
+        /// <see cref="TenancyPermissions.SeatsManage"/> for the whole tenant and <see cref="TenancyPermissions.GrantsManage"/> at
         /// the unit, and may give <paramref name="role"/>, as the role is now, there until the grant's end. Asked
         /// as that seat, with the rule every grant is held to.
         /// </summary>
@@ -385,8 +385,8 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
                 var asIssuer = new Gate(store, catalogue, clock);
                 try
                 {
-                    await asIssuer.RequireTenantWideAsync(TenancyKeys.SeatsManage, cancellationToken).ConfigureAwait(false);
-                    await asIssuer.RequireAtAsync(TenancyKeys.GrantsManage, invitation.UnitId, cancellationToken).ConfigureAwait(false);
+                    await asIssuer.RequireAtTenantAsync(TenancyPermissions.SeatsManage, cancellationToken).ConfigureAwait(false);
+                    await asIssuer.RequireAtAsync(TenancyPermissions.GrantsManage, invitation.UnitId, cancellationToken).ConfigureAwait(false);
                     await asIssuer.RequireGrantableAsync(to: null, invitation.UnitId, role, invitation.GrantUntil, cancellationToken).ConfigureAwait(false);
                 }
                 catch (RefusalException refusal) when (refusal.Code is TenancyRefusals.NotPermitted or TenancyRefusals.GrantExceedsOwn)

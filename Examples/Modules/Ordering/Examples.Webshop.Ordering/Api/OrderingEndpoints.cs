@@ -122,8 +122,71 @@ public static class OrderingEndpoints
             return Results.Ok(Describe(order));
         });
 
+        // A customer sends their own order elsewhere, while it is placed. The one endpoint with a door: it asks the
+        // checks of Ordering's requests before anything else, in this method, which then does the work. What the
+        // request requires is its attributes', [OwnOnly] with [Own] on the order's id, and the order marks who placed
+        // it as its owner: the check reads that one column, as the caller, and lets only that customer through. A
+        // guest's order is nobody's, so it is 403 for everybody; another customer's is 403 too, or 404 where row
+        // level security keeps it from the caller, as it keeps it from the load below.
+        app.MapPost("/orders/{id}/ship-to", async (OrderId id, NewAddress body, AccessChecks<IOrderingRequest> checks, OrderingContext orders, CancellationToken cancellationToken) =>
+        {
+            var request = new ShipElsewhere(id, body.Street, body.City, body.PostalCode);
+            try
+            {
+                await checks.RequireAsync(request, cancellationToken);
+            }
+            catch (RefusalException refused)
+            {
+                return Refused(refused);
+            }
+
+            if (!new Address(request.Street, request.City, request.PostalCode).TryToValid(out var shipTo, out var addressErrors))
+            {
+                return Results.ValidationProblem(addressErrors.Prefixed("shipTo").ToErrorDictionary());
+            }
+
+            var order = await orders.Orders.SingleOrDefaultAsync(o => o.Id == request.Order, cancellationToken);
+            if (order is null)
+            {
+                return Results.NotFound();
+            }
+
+            // A refusal of the order's own: a confirmed order has its van booked. Decided before anything changed.
+            try
+            {
+                order.DeliverTo(shipTo!);
+                await orders.SaveChangesAsync(cancellationToken);
+            }
+            catch (RefusalException refused)
+            {
+                return Refused(refused);
+            }
+            catch (ConcurrencyConflictException conflict)
+            {
+                return Results.Conflict(conflict.Message);
+            }
+
+            return Results.Ok(Describe(order));
+        });
+
         return app;
     }
+
+    /// <summary>
+    /// A refusal as a problem, by its kind, with its code to branch on: the door's, <c>access.not-own</c> and
+    /// <c>access.not-found</c>, and the order's own, <c>ordering.no-longer-placed</c>.
+    /// </summary>
+    private static IResult Refused(RefusalException refused)
+        => Results.Problem(
+            title: refused.Message,
+            statusCode: refused.Kind switch
+            {
+                RefusalKind.NotFound => StatusCodes.Status404NotFound,
+                RefusalKind.NotPermitted => StatusCodes.Status403Forbidden,
+                RefusalKind.Conflict => StatusCodes.Status409Conflict,
+                _ => StatusCodes.Status400BadRequest,
+            },
+            extensions: new Dictionary<string, object?> { ["code"] = refused.Code });
 
     /// <summary>
     /// The check stage of the two, asked of the aggregate. The order has already been changed; this is
@@ -199,4 +262,6 @@ public static class OrderingEndpoints
     public sealed record OrderedLine(string Sku, int Quantity);
 
     public sealed record CancelOrder(string? Reason);
+
+    public sealed record NewAddress(string Street, string City, string PostalCode);
 }

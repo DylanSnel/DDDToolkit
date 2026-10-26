@@ -303,8 +303,8 @@ The same data both ways, and both give every person the same answer:
 
 ### Storage, and the list of my projects
 
-Measured on PostgreSQL 17 for two people: an area manager, who holds the key at one area and is on some
-crews as well, and sees 643 projects; and a surveyor, who holds no key in the organization and is on the
+Measured on PostgreSQL 17 for two people: an area manager, who holds the permission at one area and is on some
+crews as well, and sees 643 projects; and a surveyor, who holds no permission in the organization and is on the
 crew of 150 projects.
 
 | | Per-person table, per-row policies | Per-person table, set-shaped policy | Facts, set-shaped |
@@ -321,8 +321,8 @@ crew of 150 projects.
 Three things account for the difference:
 
 - **Storing outcomes is what costs the space.** The table of what every person may do on every project,
-  one row per person, key and project, is 256 MB on its own. The facts it is computed from, the crews and
-  the keys of each role, are 39 MB.
+  one row per person, permission and project, is 256 MB on its own. The facts it is computed from, the crews and
+  the permissions of each role, are 39 MB.
 - **A policy that runs per row reads the whole tenant.** Asked for a list, it runs its function once for
   each of the tenant's projects, whatever the person may see. Rewritten set-shaped, the policy computes
   the set of permitted projects once per statement, which fixes the list and breaks the other case: a
@@ -340,7 +340,7 @@ Three things account for the difference:
 The tree was measured on data of its own: the same tenants, units and projects, no seats or crews, and
 three people who hold `projects.edit`: an area manager at two areas, who sees 992 projects, an area manager
 at the root, and a crew lead at one unit below an area. On PostgreSQL, the median execution time of seven
-runs, per way to ask "which projects are under the units where I hold the key":
+runs, per way to ask "which projects are under the units where I hold the permission":
 
 | Who, and how many projects | `ltree` | Text path, a range | Closure table | Path copied on every project, per row |
 |---|---:|---:|---:|---:|

@@ -4,7 +4,7 @@ namespace DDDToolkit.Supporting.Tenancy.Tests;
 
 /// <summary>
 /// Following the packs is system work in one tenant: every active role made from a pack follows it, as the catalogue
-/// the application runs with now builds it, in one save, with one event for each role whose keys changed. A second
+/// the application runs with now builds it, in one save, with one event for each role whose permissions changed. A second
 /// run writes nothing. No seat runs it, and the last-administrator rule holds for it as for anyone.
 /// <para>
 /// Harbor is provisioned from the host's catalogue; the application then ships another, in which the watcher's pack
@@ -29,8 +29,8 @@ public class FollowPacksTests
         followed.KeptForAnAdministrator.Should().BeEmpty();
         followed.WithoutTheirPack.Should().BeEmpty();
         harness.Store.SaveCount.Should().Be(saves + 1, "every role of the tenant changes in one save");
-        harness.Store.Role(watcher).Keys.Should().Equal(HostCatalogue.WidgetCreate, HostCatalogue.WidgetRead);
-        harness.Store.Role(operatorRole).Keys.Should().Equal(HostCatalogue.WidgetChange, HostCatalogue.WidgetRead);
+        harness.Store.Role(watcher).Permissions.Should().Equal(HostCatalogue.WidgetCreate, HostCatalogue.WidgetRead);
+        harness.Store.Role(operatorRole).Permissions.Should().Equal(HostCatalogue.WidgetChange, HostCatalogue.WidgetRead);
 
         var events = harness.Store.SavedEvents.OfType<RoleFollowedItsPack<TenantId, RoleId, SeatId>>().ToArray();
         events.Select(followedPack => (followedPack.RoleId, followedPack.Pack, string.Join(",", followedPack.Added), string.Join(",", followedPack.Removed)))
@@ -39,10 +39,10 @@ public class FollowPacksTests
                 (operatorRole, HostCatalogue.OperatorPack, string.Empty, HostCatalogue.WidgetCreate),
             ]);
         events.Should().OnlyContain(followedPack => followedPack.TenantId == harness.Tenant && followedPack.By == TenancyActor<SeatId>.OfSystem(TenancyWork.SystemScope, null));
-        harness.Store.SavedRights.Where(right => right.RoleId == watcher).Select(right => right.Key).Should().BeEmpty("nobody holds the watcher's role");
+        harness.Store.SavedRights.Where(right => right.RoleId == watcher).Select(right => right.Permission).Should().BeEmpty("nobody holds the watcher's role");
 
         // Orchard's roles are Orchard's: system work in Harbor reaches none of them.
-        harness.Store.Role(orchard.RolesByPack[HostCatalogue.WatcherPack].Id).Keys.Should().Equal(HostCatalogue.WidgetRead);
+        harness.Store.Role(orchard.RolesByPack[HostCatalogue.WatcherPack].Id).Permissions.Should().Equal(HostCatalogue.WidgetRead);
 
         // A second run reads, and writes nothing.
         var again = await harness.BySystemWork(h => Roles(h, later).FollowPacksAsync(default));
@@ -56,12 +56,12 @@ public class FollowPacksTests
     {
         var harness = Harness.OfHarbor();
         var operatorRole = harness.RoleFromPack(HostCatalogue.OperatorPack);
-        await harness.As(harness.Administrator, h => h.Roles.SetKeysAsync(operatorRole, [HostCatalogue.WidgetChange], default));
+        await harness.As(harness.Administrator, h => h.Roles.SetPermissionsAsync(operatorRole, [HostCatalogue.WidgetChange], default));
 
         await harness.BySystemWork(h => Roles(h, Later()).FollowPacksAsync(default));
 
-        harness.Store.Role(operatorRole).Keys.Should().Equal([HostCatalogue.WidgetChange, HostCatalogue.WidgetRead], "the tenant had taken creating out already");
-        harness.Store.Role(operatorRole).KeysFromPack.Should().Equal(HostCatalogue.WidgetChange, HostCatalogue.WidgetRead);
+        harness.Store.Role(operatorRole).Permissions.Should().Equal([HostCatalogue.WidgetChange, HostCatalogue.WidgetRead], "the tenant had taken creating out already");
+        harness.Store.Role(operatorRole).PermissionsFromPack.Should().Equal(HostCatalogue.WidgetChange, HostCatalogue.WidgetRead);
         harness.Store.SavedEvents.OfType<RoleFollowedItsPack<TenantId, RoleId, SeatId>>().Should().NotContain(followed => followed.RoleId == operatorRole);
     }
 
@@ -75,16 +75,16 @@ public class FollowPacksTests
             .Should().ThrowAsync<InvalidOperationException>("system work outside any tenant only provisions"))
             .WithMessage("A tenant's roles are made to follow their packs by system work in that tenant. Begin TenancyUseCases.BeginSystemIn(tenant) for it, "
                 + "or TenancyWork.BeginSystemIn<TenantId, SeatId>(tenant) in a project that sees only the ids (TenancyUseCases is the class your use cases are named through).");
-        harness.Store.Role(harness.RoleFromPack(HostCatalogue.WatcherPack)).Keys.Should().Equal(HostCatalogue.WidgetRead);
+        harness.Store.Role(harness.RoleFromPack(HostCatalogue.WatcherPack)).Permissions.Should().Equal(HostCatalogue.WidgetRead);
     }
 
     [Fact]
-    public async Task A_role_whose_keys_were_stored_in_another_order_is_saved_in_order_and_no_change_is_told()
+    public async Task A_role_whose_permissions_were_stored_in_another_order_is_saved_in_order_and_no_change_is_told()
     {
-        // A seat's copy of a pack may hold the keys in any order: the same keys are not a change of the pack's.
+        // A seat's copy of a pack may hold the permissions in any order: the same permissions are not a change of the pack's.
         var harness = Harness.OfHarbor();
         var operatorRole = harness.RoleFromPack(HostCatalogue.OperatorPack);
-        typeof(RoleAggregate<RoleId, TenantId>).GetProperty(nameof(HostRole.Keys))!
+        typeof(RoleAggregate<RoleId, TenantId>).GetProperty(nameof(HostRole.Permissions))!
             .SetValue(harness.Store.Role(operatorRole), new[] { HostCatalogue.WidgetRead, HostCatalogue.WidgetCreate, HostCatalogue.WidgetChange });
         var saves = harness.Store.SaveCount;
 
@@ -92,30 +92,30 @@ public class FollowPacksTests
 
         followed.Changed.Should().BeEmpty();
         harness.Store.SavedEvents.OfType<RoleFollowedItsPack<TenantId, RoleId, SeatId>>().Should().BeEmpty();
-        harness.Store.SaveCount.Should().Be(saves + 1, "the keys are saved in the order a role keeps them");
-        harness.Store.Role(operatorRole).Keys.Should().Equal(HostCatalogue.WidgetChange, HostCatalogue.WidgetCreate, HostCatalogue.WidgetRead);
+        harness.Store.SaveCount.Should().Be(saves + 1, "the permissions are saved in the order a role keeps them");
+        harness.Store.Role(operatorRole).Permissions.Should().Equal(HostCatalogue.WidgetChange, HostCatalogue.WidgetCreate, HostCatalogue.WidgetRead);
     }
 
     [Fact]
-    public async Task A_key_that_manages_access_reaches_the_role_and_its_holders_without_an_administrator()
+    public async Task A_permission_that_manages_access_reaches_the_role_and_its_holders_without_an_administrator()
     {
         var harness = Harness.OfHarbor();
         var operatorRole = harness.RoleFromPack(HostCatalogue.OperatorPack);
         var holder = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.OperatorPack);
-        var later = Catalogue(packs => packs.Select(pack => pack.Key == HostCatalogue.OperatorPack ? pack with { Keys = [.. pack.Keys, TenancyKeys.UnitsManage] } : pack));
+        var later = Catalogue(packs => packs.Select(pack => pack.Key == HostCatalogue.OperatorPack ? pack with { Permissions = [.. pack.Permissions, TenancyPermissions.UnitsManage] } : pack));
 
         var followed = await harness.Run(harness.SystemCaller(harness.Administrator), h => Roles(h, later).FollowPacksAsync(default));
 
         followed.Changed.Should().Equal(operatorRole);
         var raised = harness.Store.SavedEvents.OfType<RoleFollowedItsPack<TenantId, RoleId, SeatId>>().Single();
-        raised.Added.Should().Equal(TenancyKeys.UnitsManage);
-        raised.ManagingAccess.Should().Equal(TenancyKeys.UnitsManage);
+        raised.Added.Should().Equal(TenancyPermissions.UnitsManage);
+        raised.ManagingAccess.Should().Equal(TenancyPermissions.UnitsManage);
         raised.By.Should().Be(TenancyActor<SeatId>.OfSystem(TenancyWork.SystemScope, harness.Administrator), "the event names the work and the seat it was done for");
-        harness.Store.SavedRights.Should().Contain(right => right.SeatId == holder && right.Key == TenancyKeys.UnitsManage && right.UnitId == harness.Harbor.North);
+        harness.Store.SavedRights.Should().Contain(right => right.SeatId == holder && right.Permission == TenancyPermissions.UnitsManage && right.UnitId == harness.Harbor.North);
     }
 
     [Fact]
-    public async Task Archived_and_hand_made_roles_are_passed_by_and_a_role_whose_pack_is_gone_keeps_its_keys()
+    public async Task Archived_and_hand_made_roles_are_passed_by_and_a_role_whose_pack_is_gone_keeps_its_permissions()
     {
         var harness = Harness.OfHarbor();
         var watcher = harness.RoleFromPack(HostCatalogue.WatcherPack);
@@ -124,23 +124,23 @@ public class FollowPacksTests
         await harness.BySystemWork(h => h.Roles.ArchiveAsync(watcher, default));
         var later = Catalogue(packs => packs
             .Where(pack => pack.Key != HostCatalogue.OperatorPack)
-            .Select(pack => pack.Key == HostCatalogue.WatcherPack ? pack with { Keys = [HostCatalogue.WidgetCreate] } : pack));
+            .Select(pack => pack.Key == HostCatalogue.WatcherPack ? pack with { Permissions = [HostCatalogue.WidgetCreate] } : pack));
 
         var followed = await harness.BySystemWork(h => Roles(h, later).FollowPacksAsync(default));
 
         followed.Changed.Should().BeEmpty();
         followed.WithoutTheirPack.Should().Equal(operatorRole);
-        harness.Store.Role(operatorRole).Keys.Should().Equal(HostCatalogue.WidgetChange, HostCatalogue.WidgetCreate, HostCatalogue.WidgetRead);
-        harness.Store.Role(watcher).Keys.Should().Equal([HostCatalogue.WidgetRead], "an archived role grants nothing, and follows nothing");
-        harness.Store.Role(desk).Keys.Should().Equal(HostCatalogue.WidgetRead);
+        harness.Store.Role(operatorRole).Permissions.Should().Equal(HostCatalogue.WidgetChange, HostCatalogue.WidgetCreate, HostCatalogue.WidgetRead);
+        harness.Store.Role(watcher).Permissions.Should().Equal([HostCatalogue.WidgetRead], "an archived role grants nothing, and follows nothing");
+        harness.Store.Role(desk).Permissions.Should().Equal(HostCatalogue.WidgetRead);
     }
 
     [Fact]
     public async Task A_role_whose_following_would_leave_no_administrator_waits_for_another()
     {
-        // Bert administers through the operator's role alone, whose pack held the administrator key; the
-        // application then takes that key out of the pack.
-        var earlier = Catalogue(packs => packs.Select(pack => pack.Key == HostCatalogue.OperatorPack ? pack with { Keys = [.. pack.Keys, TenancyKeys.RolesManage] } : pack));
+        // Bert administers through the operator's role alone, whose pack held the administrator permission; the
+        // application then takes that permission out of the pack.
+        var earlier = Catalogue(packs => packs.Select(pack => pack.Key == HostCatalogue.OperatorPack ? pack with { Permissions = [.. pack.Permissions, TenancyPermissions.RolesManage] } : pack));
         var harness = Harness.OfHarbor(earlier);
         var root = harness.Harbor.Root;
         var operatorRole = harness.RoleFromPack(HostCatalogue.OperatorPack);
@@ -153,14 +153,14 @@ public class FollowPacksTests
 
         held.KeptForAnAdministrator.Should().Equal(operatorRole);
         held.Changed.Should().BeEmpty();
-        harness.Store.Role(operatorRole).Holds(TenancyKeys.RolesManage).Should().BeTrue("Bert is the tenant's last administrator, through this role");
-        harness.Store.Role(operatorRole).KeysFromPack.Should().Contain(TenancyKeys.RolesManage, "the role is left as it was, record and all, to follow later");
+        harness.Store.Role(operatorRole).Holds(TenancyPermissions.RolesManage).Should().BeTrue("Bert is the tenant's last administrator, through this role");
+        harness.Store.Role(operatorRole).PermissionsFromPack.Should().Contain(TenancyPermissions.RolesManage, "the role is left as it was, record and all, to follow later");
 
         await harness.Grant(bert, root, HostCatalogue.AdministratorPack);
         var followed = await harness.BySystemWork(h => Roles(h, later).FollowPacksAsync(default));
 
         followed.Changed.Should().Equal(operatorRole);
-        harness.Store.Role(operatorRole).Holds(TenancyKeys.RolesManage).Should().BeFalse();
+        harness.Store.Role(operatorRole).Holds(TenancyPermissions.RolesManage).Should().BeFalse();
     }
 
     /// <summary>The role use cases over the harness's store, as the application runs them with <paramref name="catalogue"/>.</summary>
@@ -171,8 +171,8 @@ public class FollowPacksTests
     private static TenancyCatalogue Later()
         => Catalogue(packs => packs.Select(pack => pack.Key switch
         {
-            HostCatalogue.WatcherPack => pack with { Keys = [HostCatalogue.WidgetRead, HostCatalogue.WidgetCreate] },
-            HostCatalogue.OperatorPack => pack with { Keys = [HostCatalogue.WidgetChange] },
+            HostCatalogue.WatcherPack => pack with { Permissions = [HostCatalogue.WidgetRead, HostCatalogue.WidgetCreate] },
+            HostCatalogue.OperatorPack => pack with { Permissions = [HostCatalogue.WidgetChange] },
             _ => pack,
         }));
 

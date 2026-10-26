@@ -11,11 +11,11 @@ namespace DDDToolkit.Supporting.Membership.TestHost.Gardens;
 /// the plot it is a role of. The host adds whose it is, a garden's, and raises its own events from what the
 /// package's operations answer. Which garden's roles a request reads is the host's rule too, on its context.
 /// </summary>
-[KeptRole<PlotRoleId, Plot>]
+[CustomRole<PlotRoleId, Plot>]
 public sealed partial class PlotRole
 {
     /// <summary>Makes a role for a garden, from what a gardener entered or from a starter role.</summary>
-    public PlotRole(PlotRoleId id, GardenId garden, KeptRoleDraft draft) : base(id, draft, PlotMembership.Rules)
+    public PlotRole(PlotRoleId id, GardenId garden, CustomRoleDraft draft) : base(id, draft, PlotMembership.Rules)
     {
         GardenId = garden;
         RaiseDomainEvent(new PlotRoleMade(id, garden, MadeFrom));
@@ -33,13 +33,13 @@ public sealed partial class PlotRole
         }
     }
 
-    /// <summary>Has the role give these keys, and says which came in and which went out.</summary>
-    public void HaveItGive(params string[] keys)
+    /// <summary>Has the role give these permissions, and says which came in and which went out.</summary>
+    public void HaveItGive(params string[] permissions)
     {
-        var set = SetKeys(keys, PlotMembership.Rules);
+        var set = SetPermissions(permissions, PlotMembership.Rules);
         if (set.Changed)
         {
-            RaiseDomainEvent(new PlotRoleKeysChanged(Id, set.Added, set.Removed));
+            RaiseDomainEvent(new PlotRolePermissionsChanged(Id, set.Added, set.Removed));
         }
     }
 
@@ -57,8 +57,8 @@ public sealed record PlotRoleMade(PlotRoleId Role, GardenId Garden, string? Made
 /// <summary>A role of plots is called something else.</summary>
 public sealed record PlotRoleRenamed(PlotRoleId Role, string Name) : DomainEvent;
 
-/// <summary>A role of plots gives other keys.</summary>
-public sealed record PlotRoleKeysChanged(PlotRoleId Role, IReadOnlyList<string> Added, IReadOnlyList<string> Removed) : DomainEvent;
+/// <summary>A role of plots gives other permissions.</summary>
+public sealed record PlotRolePermissionsChanged(PlotRoleId Role, IReadOnlyList<string> Added, IReadOnlyList<string> Removed) : DomainEvent;
 
 /// <summary>A role of plots was put away.</summary>
 public sealed record PlotRolePutAway(PlotRoleId Role) : DomainEvent;

@@ -27,9 +27,9 @@ public sealed class ProjectGateTests(SampleHosts sample) : IClassFixture<SampleH
     public async Task The_gate_answers_what_the_commands_decide()
     {
         var (view, edit, outside) = await AsJunoAsync(async gate => (
-            await gate.AskAsync(PierSeven, ProjectKeys.View, Cancellation),
-            await gate.AskAsync(PierSeven, ProjectKeys.Edit, Cancellation),
-            await gate.AskAsync(BayBridge, ProjectKeys.View, Cancellation)));
+            await gate.AskAsync(PierSeven, ProjectPermissionNames.View, Cancellation),
+            await gate.AskAsync(PierSeven, ProjectPermissionNames.Edit, Cancellation),
+            await gate.AskAsync(BayBridge, ProjectPermissionNames.View, Cancellation)));
 
         view.Should().Be(new ProjectAnswer(Visible: true, Allowed: true, Closed: false));
         edit.Should().Be(new ProjectAnswer(Visible: true, Allowed: false, Closed: false), "a surveyor on the crew may look, and not rename");
@@ -54,12 +54,12 @@ public sealed class ProjectGateTests(SampleHosts sample) : IClassFixture<SampleH
         {
             await using var scope = host.Services.CreateAsyncScope();
             var gate = scope.ServiceProvider.GetRequiredService<IProjectGate>();
-            view = await gate.AskAsync(PierSeven, ProjectKeys.View, Cancellation);
-            record = await gate.AskAsync(PierSeven, InspectionKeys.Record, Cancellation);
+            view = await gate.AskAsync(PierSeven, ProjectPermissionNames.View, Cancellation);
+            record = await gate.AskAsync(PierSeven, InspectionPermissionNames.Record, Cancellation);
         }
 
         view.Should().Be(new ProjectAnswer(Visible: true, Allowed: true, Closed: false), "being on the crew is being let in on the project");
-        record.Should().Be(new ProjectAnswer(Visible: true, Allowed: false, Closed: false), "and every other key takes a role that grants it");
+        record.Should().Be(new ProjectAnswer(Visible: true, Allowed: false, Closed: false), "and every other permission takes a role that grants it");
     }
 
     [Fact]
@@ -69,13 +69,13 @@ public sealed class ProjectGateTests(SampleHosts sample) : IClassFixture<SampleH
         var depot = Harbor.ProjectNamed("Inland depot").Id;
 
         // Rhea owns Inland depot, the one planned project. Maud sees it and may not record on it: the plan is
-        // answered with the project, whatever the key. Juno does not see it, and is told nothing.
+        // answered with the project, whatever the permission. Juno does not see it, and is told nothing.
         async Task<ProjectAnswer> AskAsAsync(DemoPerson person)
         {
             using (SampleCallers.BeginSeatOf(person, Harbor))
             {
                 await using var scope = host.Services.CreateAsyncScope();
-                return await scope.ServiceProvider.GetRequiredService<IProjectGate>().AskAsync(depot, InspectionKeys.Record, Cancellation);
+                return await scope.ServiceProvider.GetRequiredService<IProjectGate>().AskAsync(depot, InspectionPermissionNames.Record, Cancellation);
             }
         }
 
@@ -88,7 +88,7 @@ public sealed class ProjectGateTests(SampleHosts sample) : IClassFixture<SampleH
     }
 
     [Fact]
-    public async Task An_unknown_key_is_refused_for_every_project()
+    public async Task An_unknown_permission_is_refused_for_every_project()
     {
         // A typo in the asking module's code fails for every project, not only for those the caller happens to see.
         var refused = await AsJunoAsync(async gate =>
@@ -123,7 +123,7 @@ public sealed class ProjectGateTests(SampleHosts sample) : IClassFixture<SampleH
             var gate = scope.ServiceProvider.GetRequiredService<IProjectGate>();
 
             counter.WatchThisFlow();
-            var answers = await gate.AskAsync(asked, InspectionKeys.Record, Cancellation);
+            var answers = await gate.AskAsync(asked, InspectionPermissionNames.Record, Cancellation);
 
             counter.Commands.Should().ContainSingle("the projects are asked about together, whatever their number");
             answers.Keys.Should().BeEquivalentTo(hers, "a project out of reach is left out, whatever the reason");
@@ -131,17 +131,17 @@ public sealed class ProjectGateTests(SampleHosts sample) : IClassFixture<SampleH
             // Each answer is the one the same question about that project alone gets.
             foreach (var project in hers)
             {
-                answers[project].Should().Be(await gate.AskAsync(project, InspectionKeys.Record, Cancellation));
+                answers[project].Should().Be(await gate.AskAsync(project, InspectionPermissionNames.Record, Cancellation));
             }
 
             answers[PierSeven].Should().Be(new ProjectAnswer(Visible: true, Allowed: true, Closed: false));
 
             // The mistakes of the asking module's code fail whatever the projects, even for none.
             var unknown = () => gate.AskAsync([], "projects.nothing", Cancellation);
-            var tooMany = () => gate.AskAsync([.. Enumerable.Range(0, IProjectGate.MostProjects + 1).Select(_ => new ProjectId(Guid.NewGuid()))], ProjectKeys.View, Cancellation);
+            var tooMany = () => gate.AskAsync([.. Enumerable.Range(0, IProjectGate.MostProjects + 1).Select(_ => new ProjectId(Guid.NewGuid()))], ProjectPermissionNames.View, Cancellation);
             await unknown.Should().ThrowAsync<ArgumentException>();
             await tooMany.Should().ThrowAsync<ArgumentException>();
-            (await gate.AskAsync([], ProjectKeys.View, Cancellation)).Should().BeEmpty();
+            (await gate.AskAsync([], ProjectPermissionNames.View, Cancellation)).Should().BeEmpty();
         }
     }
 

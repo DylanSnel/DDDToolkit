@@ -14,7 +14,7 @@ namespace Examples.Tenancy.Inspections.Application.Access;
 /// reach and a missing one alike.</description></item>
 /// <item><term>closed</term><description><c>projects.closed</c>, for a request that adds to the project: nothing more
 /// is recorded on it until it is reopened.</description></item>
-/// <item><term>not allowed</term><description><c>projects.not-permitted</c>, naming the key.</description></item>
+/// <item><term>not allowed</term><description><c>projects.not-permitted</c>, naming the permission.</description></item>
 /// </list>
 /// <para>
 /// The module never learns whether the caller reached the project through its crew or its unit, and keeps no
@@ -26,7 +26,7 @@ namespace Examples.Tenancy.Inspections.Application.Access;
 /// It keeps nothing for the handler. A request that passes is handled on the project it names, which is the one
 /// the gate answered for; what the handler needs of the project besides, the days it is planned for, it asks the
 /// gate itself, as it is when the inspection is recorded, and holds that answer to this check's rule
-/// (<see cref="Require"/>): the database writes an inspection for a seat that holds the key and knows nothing of a
+/// (<see cref="Require"/>): the database writes an inspection for a seat that holds the permission and knows nothing of a
 /// closed project, so the handler says that too.
 /// </para>
 /// <para>
@@ -68,8 +68,8 @@ public sealed class InspectionsAccessCheck(IProjectGate projects, SampleAnswers 
             {
                 answers.RequireTenant();
 
-                var answer = await projects.AskAsync(required.Project, required.Key, cancellationToken);
-                Require(answer, required.Key, open: false);
+                var answer = await projects.AskAsync(required.Project, required.Permission, cancellationToken);
+                Require(answer, required.Permission, open: false);
                 break;
             }
 
@@ -83,8 +83,8 @@ public sealed class InspectionsAccessCheck(IProjectGate projects, SampleAnswers 
                     _ = ActingSeat.From(scope);
                 }
 
-                var answer = await projects.AskAsync(required.Project, required.Key, cancellationToken);
-                Require(answer, required.Key, open: true);
+                var answer = await projects.AskAsync(required.Project, required.Permission, cancellationToken);
+                Require(answer, required.Permission, open: true);
                 break;
             }
 
@@ -102,7 +102,7 @@ public sealed class InspectionsAccessCheck(IProjectGate projects, SampleAnswers 
     }
 
     /// <summary>
-    /// Refuses unless the answer lets the caller do what <paramref name="key"/> stands for; on an open project only,
+    /// Refuses unless the answer lets the caller do what <paramref name="permission"/> stands for; on an open project only,
     /// when <paramref name="open"/> says the request adds to it.
     /// </summary>
     /// <remarks>
@@ -110,12 +110,12 @@ public sealed class InspectionsAccessCheck(IProjectGate projects, SampleAnswers 
     /// refuses what the check would have, and a project closed since the check takes nothing.
     /// </remarks>
     /// <param name="answer">The gate's answer about the caller and the project.</param>
-    /// <param name="key">The key the request requires on the project.</param>
+    /// <param name="permission">The permission the request requires on the project.</param>
     /// <param name="open">Whether the request adds to the project, which a closed project refuses.</param>
     /// <exception cref="Exceptions.RefusalException">
     /// <c>projects.not-found</c>, <c>projects.closed</c> or <c>projects.not-permitted</c>, in that order.
     /// </exception>
-    internal static void Require(ProjectAnswer answer, string key, bool open)
+    internal static void Require(ProjectAnswer answer, string permission, bool open)
     {
         if (!answer.Visible)
         {
@@ -130,7 +130,7 @@ public sealed class InspectionsAccessCheck(IProjectGate projects, SampleAnswers 
 
         if (!answer.Allowed)
         {
-            throw InspectionRefusals.Refuse(InspectionRefusals.ProjectNotPermitted, ("Key", key));
+            throw InspectionRefusals.Refuse(InspectionRefusals.ProjectNotPermitted, ("Permission", permission));
         }
     }
 }

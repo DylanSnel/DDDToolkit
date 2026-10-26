@@ -12,21 +12,21 @@ namespace Examples.Tenancy.Tenants.Api.Roles.GraphQL;
 /// </summary>
 internal static class RolesMutations
 {
-    /// <summary>Creates a role of the tenant's own, with the keys it brings.</summary>
+    /// <summary>Creates a role of the tenant's own, with the permissions it brings.</summary>
     [Mutation]
-    public static async Task<RoleListing?> RoleCreateAsync(string name, string? description, IReadOnlyList<string>? keys, [Service] ISender sender, CancellationToken cancellationToken)
+    public static async Task<RoleListing?> RoleCreateAsync(string name, string? description, IReadOnlyList<string>? permissions, [Service] ISender sender, CancellationToken cancellationToken)
     {
-        var id = await sender.Send(new CreateTenantRole(name, description ?? string.Empty, keys ?? []), cancellationToken);
+        var id = await sender.Send(new CreateTenantRole(name, description ?? string.Empty, permissions ?? []), cancellationToken);
         return await sender.RoleNowAsync(id, cancellationToken);
     }
 
     /// <summary>
-    /// Makes the role's keys exactly the list: an empty one takes every key off it, so the list is required.
+    /// Makes the role's permissions exactly the list: an empty one takes every permission off it, so the list is required.
     /// </summary>
     [Mutation]
-    public static async Task<RoleListing?> RoleKeysSetAsync(RoleId id, IReadOnlyList<string> keys, [Service] ISender sender, CancellationToken cancellationToken)
+    public static async Task<RoleListing?> RolePermissionsSetAsync(RoleId id, IReadOnlyList<string> permissions, [Service] ISender sender, CancellationToken cancellationToken)
     {
-        await sender.Send(new SetRoleKeys(id, keys), cancellationToken);
+        await sender.Send(new SetRolePermissions(id, permissions), cancellationToken);
         return await sender.RoleNowAsync(id, cancellationToken);
     }
 

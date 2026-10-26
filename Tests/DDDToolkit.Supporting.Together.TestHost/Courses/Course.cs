@@ -1,5 +1,6 @@
 using Campus.Tenants;
 using DDDToolkit.Abstractions.Attributes;
+using DDDToolkit.Access;
 using DDDToolkit.Invariants;
 using DDDToolkit.Supporting.Membership;
 using DDDToolkit.Supporting.Membership.Access;
@@ -28,32 +29,34 @@ public sealed partial class CourseTutor;
 /// <summary>
 /// A course, given at a faculty or an institute of a college: the usual resource of an application with an
 /// organization. Its members are seats; the roles they hold on it are roles of courses, which the application
-/// keeps for each college (<see cref="CourseRole"/>); and somebody who holds a key in the organization, at the
-/// unit the course is given at or above it, holds that key on the course without teaching on it.
+/// keeps for each college (<see cref="CourseRole"/>); and somebody who holds a permission in the organization, at the
+/// unit the course is given at or above it, holds that permission on the course without teaching on it.
 /// </summary>
 [AggregateRoot<CourseId>]
 public sealed partial class Course
 {
-    /// <summary>Sets up a course at a unit, with <paramref name="owner"/> on it from <paramref name="now"/> on, for good, in the college's role for owners.</summary>
-    public Course(CourseId id, TenantId tenant, OrganizationUnitId unit, string title, SeatId owner, CourseRoleId ownerRole, DateTimeOffset now) : base(id)
+    /// <summary>Sets up a course at a unit, with <paramref name="owner"/> on it from <paramref name="now"/> on, for good, holding no role.</summary>
+    public Course(CourseId id, TenantId tenant, OrganizationUnitId unit, string title, SeatId owner, DateTimeOffset now) : base(id)
     {
         TenantId = tenant;
         UnitId = unit;
         Title = title;
         OwnerSeatId = owner;
-        Members.Open(ownerRole, now);
+        Members.Open(now);
     }
 
     /// <summary>The college the course is of.</summary>
     public TenantId TenantId { get; private set; }
 
     /// <summary>The faculty or institute the course is given at: where it sits.</summary>
+    [At]
     public OrganizationUnitId UnitId { get; private set; }
 
     /// <summary>What the course is called.</summary>
     public string Title { get; private set; } = string.Empty;
 
     /// <summary>The seat that owns the course.</summary>
+    [Owner]
     public SeatId OwnerSeatId { get; private set; }
 
     /// <summary>Those who teach on the course.</summary>
@@ -98,59 +101,52 @@ public sealed partial class Course
     }
 }
 
-/// <summary>The keys a course is asked about.</summary>
-public static class CourseKeys
+/// <summary>
+/// The permissions asked on a course: its owner holds all four; a role the college makes gives all but the one that
+/// dissolves it; a permission held at the course's unit, or above it, reaches the course.
+/// </summary>
+[Permissions]
+public static class CoursePermissions
 {
-    /// <summary>See a course: what teaching on it gives, and what the organization gives to see it by.</summary>
+    /// <summary>See a course.</summary>
+    [On<Course>(EveryMember = true)]
     public const string See = "courses.see";
 
     /// <summary>Grade the work handed in for a course.</summary>
+    [On<Course>]
     public const string Grade = "courses.grade";
 
     /// <summary>Write a course's outline.</summary>
+    [On<Course>]
     public const string Outline = "courses.outline";
 
-    /// <summary>
-    /// Dissolve a course: its owner's alone. No role of courses may give it, and it is no key of the college's
-    /// catalogue, so no role of the organization holds it either.
-    /// </summary>
+    /// <summary>Dissolve a course: no role gives it.</summary>
+    [On<Course>(InRoles = false)]
     public const string Dissolve = "courses.dissolve";
 }
 
 /// <summary>
-/// The rules of access through a course's tutors, as an application with an organization usually says them:
-/// a member is the caller's seat, which Tenancy resolves; the roles are kept for the resource, rows of
-/// <see cref="CourseRole"/> that a college makes for itself; and a key held in the organization where the
-/// course is given, or above, reaches it. The three names are those of Tenancy's functions, for a database that
-/// answers the questions itself.
+/// The rules of access through a course's tutors: roles the college makes for itself, from two starter roles, and
+/// reach from above through Tenancy's grants. Who a tutor is follows from the seat id; the college's own work on a
+/// course runs in the module's scope, <c>campus</c>, and holds every permission there. A lab's rules let no work in a scope
+/// through, <c>systemScopes: []</c>.
 /// </summary>
 public static class CourseMembership
 {
-    /// <summary>The starter role that sees and grades.</summary>
+    /// <summary>The starter role that tutors.</summary>
     public const string Tutor = "tutor";
 
-    /// <summary>The starter role that sees a course and writes its outline.</summary>
+    /// <summary>The starter role that convenes.</summary>
     public const string Convenor = "convenor";
 
-    /// <summary>The scope the application's own work on its courses runs in.</summary>
+    /// <summary>The scope of the college's own work: the module's name, which the rules let through without saying it.</summary>
     public const string Scope = "campus";
 
-    /// <summary>The codes a course refuses with.</summary>
+    /// <summary>The codes a course refuses under.</summary>
     public static MembershipCodes Codes { get; } = MembershipCodes.Under("courses");
 
     /// <summary>The rules.</summary>
-    public static MembershipRules Rules { get; } = new(
-        "courses",
-        keys: [CourseKeys.See, CourseKeys.Grade, CourseKeys.Outline, CourseKeys.Dissolve],
-        roles: [new(Tutor, [CourseKeys.See, CourseKeys.Grade]), new(Convenor, [CourseKeys.See, CourseKeys.Outline])],
-        members: MemberSource.Resolved(TenancyFunctions.CallerSeat),
-        seeKey: CourseKeys.See,
-        memberKeys: MemberKeys.Only(CourseKeys.See, CourseKeys.Grade, CourseKeys.Outline),
-        codes: Codes,
-        above: new(TenancyFunctions.UnitsWhereIHold),
-        rolesKept: true,
-
-        // The application's own work on a course runs in this scope, and holds every key there. A lab's
-        // rules name no scope, so the same work holds nothing on a lab.
-        systemScopes: [Scope]);
+    public static MembershipRules Rules { get; } = MembershipRules.For<Course>(
+        Roles.Custom(starters: [new(Tutor, [CoursePermissions.See, CoursePermissions.Grade]), new(Convenor, [CoursePermissions.See, CoursePermissions.Outline])]),
+        reachFromAbove: true);
 }

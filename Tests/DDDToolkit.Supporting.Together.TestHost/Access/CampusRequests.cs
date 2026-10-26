@@ -20,12 +20,12 @@ namespace Campus.Access;
 [AccessRequests]
 public partial interface ICampusRequest : IRequireAccess;
 
-/// <summary>Requests of the campus whose requirements combine cases of both supporting domains, or the caller's own with a key.</summary>
+/// <summary>Requests of the campus whose requirements combine cases of both supporting domains, or the caller's own with a permission.</summary>
 public static class CampusRequests
 {
     /// <summary>
-    /// Gives a course at another unit: the grading key on the course, through its members or from above, and the same key
-    /// at the unit it moves to, both, the course's first. A key of Membership's and a key of Tenancy's in one requirement.
+    /// Gives a course at another unit: the grading permission on the course, through its members or from above, and the same permission
+    /// at the unit it moves to, both, the course's first. A permission of Membership's and a permission of Tenancy's in one requirement.
     /// </summary>
     /// <param name="Course">The course.</param>
     /// <param name="To">The unit it is given at from now on.</param>
@@ -33,17 +33,17 @@ public static class CampusRequests
     {
         /// <inheritdoc />
         AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.All(
-            MemberAccess.On(CourseKeys.Grade, Course),
-            TenancyAccess.AtUnit(CourseKeys.Grade, To));
+            MemberAccess.On(CoursePermissions.Grade, Course),
+            TenancyAccess.AtUnit(CoursePermissions.Grade, To));
     }
 
     /// <summary>
-    /// Takes a tutor off a course: oneself, or anybody with the key that writes the course's outline on it. Yours, or the
-    /// key on the resource.
+    /// Takes a tutor off a course: oneself, or anybody with the permission that writes the course's outline on it. Yours, or the
+    /// permission on the resource.
     /// </summary>
     /// <param name="Course">The course.</param>
     /// <param name="Seat">The seat that leaves it.</param>
-    [RequiresKey(CourseKeys.Outline)]
+    [RequiresPermission(CoursePermissions.Outline)]
     public sealed record LeaveCourse([OnResource] CourseId Course, [OrOwn] SeatId Seat) : ICampusRequest;
 
     /// <summary>The college's access history: one of the application's operators, or a seat that manages seats for the whole college.</summary>
@@ -52,6 +52,6 @@ public static class CampusRequests
         /// <inheritdoc />
         AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.Any(
             TenancyAccess.RequiresOperator(),
-            TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage));
+            TenancyAccess.AtTenant(TenancyPermissions.SeatsManage));
     }
 }

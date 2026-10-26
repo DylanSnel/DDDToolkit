@@ -13,7 +13,7 @@ global using Examples.Tenancy.Host.Storage;
 global using Examples.Tenancy.Catalogue;
 
 // What the host names of the modules in more than one place: each module's entry, from its API project, and the
-// ids every module shares. The commands and queries the seeder sends, and the keys and packs the catalogue is
+// ids every module shares. The commands and queries the seeder sends, and the permissions and packs the catalogue is
 // made of, are named where they are used, each with a using of the feature it comes from. The host references
 // the API projects alone, and names nothing of a module's infrastructure project: no context, no store. Tenancy's
 // use cases, which the seeder provisions with, are TenancyUseCases, the class the toolkit's generator wrote into the
@@ -24,7 +24,7 @@ global using Examples.Tenancy.Tenants.Api;
 global using Examples.Tenancy.Tenants.Contracts.ValueObjects;
 global using Examples.Tenancy.Tenants.Domain.Aggregates.Organizations.ValueObjects;
 global using Examples.Tenancy.Projects.Api;
-global using Examples.Tenancy.Projects.Contracts.Keys;
+global using Examples.Tenancy.Projects.Contracts.Permissions;
 global using Examples.Tenancy.Projects.Contracts.ValueObjects;
 global using Examples.Tenancy.Projects.Domain.Aggregates.ProjectRoles.ValueObjects;
 global using Examples.Tenancy.Inspections.Api;

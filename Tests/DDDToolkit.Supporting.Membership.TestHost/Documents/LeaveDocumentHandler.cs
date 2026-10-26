@@ -8,12 +8,12 @@ namespace DDDToolkit.Supporting.Membership.TestHost.Documents;
 
 /// <summary>
 /// Takes a user off a document. Who may was decided before it runs, at the door: the user itself, on a document it sees,
-/// or whoever holds the key that shares it. The handler loads the document its request names, at the version the caller
+/// or whoever holds the permission that shares it. The handler loads the document its request names, at the version the caller
 /// named, finds the member on it, takes it off and saves.
 /// </summary>
 /// <remarks>
-/// A document's rules name the key that changes its members, for a database that checks every row: there a member row
-/// is written only by a caller that holds that key, and a member who leaves on its own need not hold it. So the save of
+/// A document's rules name the permission that changes its members, for a database that checks every row: there a member row
+/// is written only by a caller that holds that permission, and a member who leaves on its own need not hold it. So the save of
 /// a member's own place is the application's own work, begun for that one save once the request is the one in hand,
 /// the one whose check let it through in this very handling. Any other save, of somebody else's place, runs as the
 /// caller, which the database judges as it judges every other.

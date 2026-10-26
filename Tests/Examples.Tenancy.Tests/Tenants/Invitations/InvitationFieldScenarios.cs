@@ -134,7 +134,7 @@ public sealed class InvitationFieldScenarios(SampleHosts sample) : IClassFixture
     }
 
     [Fact]
-    public async Task Inviting_without_the_key_is_a_refusal_in_the_payload_and_listing_without_it_an_empty_list()
+    public async Task Inviting_without_the_permission_is_a_refusal_in_the_payload_and_listing_without_it_an_empty_list()
     {
         // Hana gives roles everywhere and may add no seat: what the route answers with 403, and with an empty list.
         using var hana = await sample.ClientAsync("hana", Harbor.Slug);

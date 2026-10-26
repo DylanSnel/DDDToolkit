@@ -18,7 +18,7 @@ public sealed class InspectionRowRulesTests
             $"({{col:ProjectId}} = ANY (ARRAY(SELECT {{fn:{ProjectsISee.Name}}}())))");
 
     [Fact]
-    public void A_seat_records_in_its_own_name_where_it_holds_the_key_that_records()
+    public void A_seat_records_in_its_own_name_where_it_holds_the_permission_that_records()
         => SeatsRecordWhereTheyMay.RowAccessSql.Should().Be(
             $"(({{col:ProjectId}} = ANY (ARRAY(SELECT {{fn:{ProjectsWhereIHold.Name}}}('inspections.record')))) AND ({{col:RecordedBy}} = (SELECT {{fn:tenancy/caller_seat}}())))");
 }

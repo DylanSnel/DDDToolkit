@@ -5,11 +5,11 @@ namespace DDDToolkit.Supporting.Tenancy.UseCases;
 
 /// <summary>
 /// Tenancy's use cases, closed over the application's classes and ids. They are the one door to the rules
-/// that span aggregates: who may do what, where (the caller's keys at a unit); that a role that manages access
+/// that span aggregates: who may do what, where (the caller's permissions at a unit); that a role that manages access
 /// is given or taken away, and its seat suspended, deactivated or reactivated, only by someone who holds its
-/// keys that manage access, there and for at least as long, and never given by a seat to itself, while other
+/// permissions that manage access, there and for at least as long, and never given by a seat to itself, while other
 /// roles are given by whoever holds <c>tenancy.grants.manage</c> where the seat is placed; that a move gains the
-/// mover nothing, and gives or takes away from anyone else no key that manages access the mover could not; and
+/// mover nothing, and gives or takes away from anyone else no permission that manages access the mover could not; and
 /// that a tenant always keeps an administrator.
 /// <para>
 /// An application does not close the class itself. The toolkit's generator closes it over the classes a module
@@ -40,7 +40,7 @@ namespace DDDToolkit.Supporting.Tenancy.UseCases;
 /// <para>
 /// They are plain services, not handlers: each method checks the Tenancy caller, loads what it needs
 /// through <see cref="IStore"/>, calls the aggregates, and saves once. Every command starts by asking who is
-/// calling. Nobody is refused, a seat is asked for its keys, and system work in a tenant holds every key
+/// calling. Nobody is refused, a seat is asked for its permissions, and system work in a tenant holds every permission
 /// there. System work outside any tenant only provisions.
 /// </para>
 /// <para>
@@ -61,7 +61,7 @@ namespace DDDToolkit.Supporting.Tenancy.UseCases;
 /// <para>
 /// The rules that span aggregates hold for what goes through these use cases, and only for that. The
 /// aggregates' public methods check the aggregate's own state; code of the application that calls
-/// <c>Seat.Revoke</c> or <c>Role.Archive</c> itself skips the key checks, containment and self-appointment,
+/// <c>Seat.Revoke</c> or <c>Role.Archive</c> itself skips the permission checks, containment and self-appointment,
 /// and the last-administrator rule, and answers for them. A closed tenant is closed to its seats, because no seat
 /// is selected in it; system work begun in it is not stopped.
 /// </para>

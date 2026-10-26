@@ -58,7 +58,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         /// grants to the seats that may read them, as Tenancy's policies on Postgres do, loads it with the grants
         /// the caller may read: all of its own seat's, and another seat's at the units where the caller manages
         /// grants, seats or units, or every one when it manages roles for the whole tenant. Each command acts only on
-        /// grants at a unit where it asked one of those keys first, or for the whole tenant, so they are among them.
+        /// grants at a unit where it asked one of those permissions first, or for the whole tenant, so they are among them.
         /// </summary>
         Task<TSeat?> FindSeatAsync(TSeatId id, CancellationToken cancellationToken);
 
@@ -92,7 +92,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         /// keeps an administrator reads. It is about every seat's rights, which a storage may keep from a seat
         /// that reads <see cref="Reads"/>: the storage answers it from wherever it can, as far as the caller may
         /// read the grants at the root. That is whole for every command that asks: each one that could take an
-        /// administrator away asks a key at the root first, and one that acts below the root does not ask.
+        /// administrator away asks a permission at the root first, and one that acts below the root does not ask.
         /// </summary>
         /// <param name="tenant">The tenant, which is the current caller's.</param>
         /// <param name="now">The moment a right must apply at.</param>
@@ -102,21 +102,21 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         /// <summary>
         /// Every right that has not ended at <paramref name="now"/>, one still to start included, held at a unit at
         /// or above <paramref name="parent"/> or <paramref name="newParent"/>, of <paramref name="seat"/> or of a
-        /// key in <paramref name="managing"/>, once for each of the two it reaches. What the check of a move
+        /// permission in <paramref name="managing"/>, once for each of the two it reaches. What the check of a move
         /// reads. Another seat's right is answered only where it reaches one of the two and not the other, which is
         /// a right the move changes: one that reaches both reaches the unit wherever it hangs, so the check never
         /// weighs it, and a seat that manages only part of the tree learns nothing of the rights above that part that
         /// stay. Like <see cref="AdministratorsAsync"/>, it is about every seat's rights, and the storage answers
         /// it whole. The use case asks once it has found <paramref name="seat"/> to hold
-        /// <c>tenancy.units.manage</c> at both parents, so the seat's own rights for that key are always among the
+        /// <c>tenancy.units.manage</c> at both parents, so the seat's own rights for that permission are always among the
         /// rows: a storage that cannot tell so much has no answer, and fails rather than answer with less, which
         /// would read as a move that changes nothing.
         /// </summary>
         /// <param name="tenant">The tenant, which is the current caller's.</param>
-        /// <param name="seat">The seat that moves the unit, whose own rights count whatever their key.</param>
+        /// <param name="seat">The seat that moves the unit, whose own rights count whatever their permission.</param>
         /// <param name="parent">The unit the moved unit hangs under.</param>
         /// <param name="newParent">The unit it would hang under.</param>
-        /// <param name="managing">The keys that manage access, whose rights count whoever holds them.</param>
+        /// <param name="managing">The permissions that manage access, whose rights count whoever holds them.</param>
         /// <param name="now">The moment a right must not have ended at.</param>
         /// <param name="cancellationToken">Cancels the read.</param>
         Task<IReadOnlyList<MoveReach<TUnitId>>> RightsAMoveChangesAsync(
@@ -127,6 +127,29 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
             IReadOnlyCollection<string> managing,
             DateTimeOffset now,
             CancellationToken cancellationToken);
+
+        /// <summary>
+        /// The units among <paramref name="ids"/> that are <paramref name="tenant"/>'s, by name and path and nothing
+        /// more, whatever the calling seat reads of the organization: on a database that keeps its own policies, where
+        /// an application's restrictive rule may keep the seat out of the units, through Tenancy's function that runs
+        /// as its owner and answers those ids alone. <see langword="null"/> from a storage that keeps no policies of its
+        /// own, where the caller reads every unit of its tenant, so the use case reads them whole.
+        /// </summary>
+        /// <param name="tenant">The tenant, which is the calling seat's.</param>
+        /// <param name="ids">The units asked about, at least one.</param>
+        /// <param name="cancellationToken">Cancels the read.</param>
+        Task<IReadOnlyList<NamedUnit<TUnitId>>?> UnitsNamedAsync(TTenantId tenant, IReadOnlyCollection<TUnitId> ids, CancellationToken cancellationToken);
+
+        /// <summary>
+        /// What <paramref name="tenant"/>, the calling seat's, is called, whatever the seat reads of its organization: on
+        /// a database that keeps its own policies, where an application's restrictive rule may keep the seat out of the
+        /// organization, through Tenancy's function that runs as its owner and answers the tenants of the caller's
+        /// identity, as the tenant picker reads them. <see langword="null"/> from a storage that keeps no policies of
+        /// its own, where the caller reads the organization, and for a tenant without a name.
+        /// </summary>
+        /// <param name="tenant">The tenant, which is the calling seat's.</param>
+        /// <param name="cancellationToken">Cancels the read.</param>
+        Task<string?> TenantNameAsync(TTenantId tenant, CancellationToken cancellationToken);
 
         /// <summary>Adds a new tenant to the unit of work.</summary>
         void Add(TTenant tenant);

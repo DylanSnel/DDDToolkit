@@ -42,12 +42,12 @@ public class InvitationTests
 
     /// <summary>
     /// A seat that manages seats and grants for the whole tenant and nothing else: it may invite, and holds none of
-    /// the keys of the roles it offers, and not every key that manages access.
+    /// the permissions of the roles it offers, and not every permission that manages access.
     /// </summary>
     private static async Task<SeatId> PeopleOffice(Harness harness, DateTimeOffset? until = null)
     {
         var office = await harness.BySystemWork(use => use.Roles.CreateAsync(
-            "People office", "Adds people and gives them roles", [TenancyKeys.SeatsManage, TenancyKeys.GrantsManage], Cancellation));
+            "People office", "Adds people and gives them roles", [TenancyPermissions.SeatsManage, TenancyPermissions.GrantsManage], Cancellation));
         var seat = await harness.SeatAt("Hana", harness.Harbor.Root);
         await harness.BySystemWork(use => use.Seats.GrantAsync(seat, harness.Harbor.Root, office, until, reason: null, Cancellation));
         return seat;
@@ -90,18 +90,18 @@ public class InvitationTests
     {
         var harness = Harness.OfHarbor();
         var supervisor = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.SupervisorPack);
-        var seatsOnly = await harness.BySystemWork(use => use.Roles.CreateAsync("Seat desk", "Adds seats", [TenancyKeys.SeatsManage], Cancellation));
+        var seatsOnly = await harness.BySystemWork(use => use.Roles.CreateAsync("Seat desk", "Adds seats", [TenancyPermissions.SeatsManage], Cancellation));
         var seatDesk = await harness.SeatAt("Cy", harness.Harbor.Root);
         await harness.BySystemWork(use => use.Seats.GrantAsync(seatDesk, harness.Harbor.Root, seatsOnly, until: null, reason: null, Cancellation));
 
         // Whoever manages seats in one part of the tree adds no seat to the tenant, by an invitation either.
         var partial = await Refused.WithCodeAsync(TenancyRefusals.NotPermitted, () => Issue(harness, supervisor));
-        partial.Arguments["Key"].Should().Be(TenancyKeys.SeatsManage);
+        partial.Arguments["Permission"].Should().Be(TenancyPermissions.SeatsManage);
         partial.Arguments["Unit"].Should().BeNull("adding a seat is asked for the whole tenant");
 
         // And an invitation offers a role, so its issuer manages grants where it would be held.
         var noGrants = await Refused.WithCodeAsync(TenancyRefusals.NotPermitted, () => Issue(harness, seatDesk));
-        noGrants.Arguments["Key"].Should().Be(TenancyKeys.GrantsManage);
+        noGrants.Arguments["Permission"].Should().Be(TenancyPermissions.GrantsManage);
         noGrants.Arguments["Unit"].Should().Be(harness.Harbor.North);
 
         harness.Store.InvitationsOf(harness.Tenant).Should().BeEmpty();
@@ -109,29 +109,29 @@ public class InvitationTests
     }
 
     [Fact]
-    public async Task A_role_that_manages_no_access_is_offered_without_its_keys_and_may_outlast_the_issuers_own_grant()
+    public async Task A_role_that_manages_no_access_is_offered_without_its_permissions_and_may_outlast_the_issuers_own_grant()
     {
         var harness = Harness.OfHarbor();
         var hana = await PeopleOffice(harness, until: Now.AddDays(30));
 
-        // She holds neither widget key, and manages grants for a month: the operators' role goes for good.
+        // She holds neither widget permission, and manages grants for a month: the operators' role goes for good.
         var issued = await Issue(harness, hana, pack: HostCatalogue.OperatorPack, grantUntil: null);
 
         harness.Store.Invitation(issued.Id).IssuedBy.Should().Be(hana);
     }
 
     [Fact]
-    public async Task A_role_that_manages_access_is_offered_only_with_its_keys_that_do_for_at_least_as_long()
+    public async Task A_role_that_manages_access_is_offered_only_with_its_permissions_that_do_for_at_least_as_long()
     {
         var harness = Harness.OfHarbor();
         var hana = await PeopleOffice(harness);
 
         // The supervisors' role manages units too, which she does not hold.
         var beyond = await Refused.WithCodeAsync(TenancyRefusals.GrantExceedsOwn, () => Issue(harness, hana, pack: HostCatalogue.SupervisorPack));
-        beyond.Arguments["Missing"].Should().Be(TenancyKeys.UnitsManage);
+        beyond.Arguments["Missing"].Should().Be(TenancyPermissions.UnitsManage);
         beyond.Arguments["Role"].Should().Be(harness.RoleFromPack(HostCatalogue.SupervisorPack));
 
-        // An administrator for thirty days holds every key, and offers that role for no longer than that.
+        // An administrator for thirty days holds every permission, and offers that role for no longer than that.
         var temporary = await harness.SeatAt("Tess", harness.Harbor.Root);
         await harness.Grant(temporary, harness.Harbor.Root, HostCatalogue.AdministratorPack, until: Now.AddDays(30));
 
@@ -269,7 +269,7 @@ public class InvitationTests
         grant.EndsAt.Should().Be(Now.AddDays(90));
         grant.GrantedBy.Should().Be(ada);
         grant.Reason.Should().Be("invitation");
-        harness.Store.SavedRights.Should().Contain(right => right.SeatId == accepted.Seat && right.Key == HostCatalogue.WidgetRead && right.UnitId == harness.Harbor.North);
+        harness.Store.SavedRights.Should().Contain(right => right.SeatId == accepted.Seat && right.Permission == HostCatalogue.WidgetRead && right.UnitId == harness.Harbor.North);
 
         var invitation = harness.Store.Invitation(issued.Id);
         invitation.State.Should().Be(InvitationState.Accepted);
@@ -553,9 +553,9 @@ public class InvitationTests
                 await harness.BySystemWork(use => use.Seats.DeactivateAsync(hana, Cancellation));
                 break;
             case "the role came to manage access":
-                // The watchers' role is given a key that manages access, which the issuer does not hold.
-                await harness.BySystemWork(use => use.Roles.SetKeysAsync(
-                    harness.RoleFromPack(HostCatalogue.WatcherPack), [HostCatalogue.WidgetRead, TenancyKeys.UnitsManage], Cancellation));
+                // The watchers' role is given a permission that manages access, which the issuer does not hold.
+                await harness.BySystemWork(use => use.Roles.SetPermissionsAsync(
+                    harness.RoleFromPack(HostCatalogue.WatcherPack), [HostCatalogue.WidgetRead, TenancyPermissions.UnitsManage], Cancellation));
                 break;
             default:
                 // An administrator for good when it issued the supervisors' role for good, and for a month since.
@@ -566,7 +566,7 @@ public class InvitationTests
 
         var refusal = await Refused.WithCodeAsync(TenancyRefusals.InvitationUnbacked, () => harness.Accept(Wren, issued.Token));
 
-        // The person who accepts is no member: the answer names neither the issuer, nor its keys, nor the role.
+        // The person who accepts is no member: the answer names neither the issuer, nor its permissions, nor the role.
         refusal.Arguments.Should().BeEmpty();
         refusal.InnerException.Should().BeNull();
         harness.Store.Invitation(issued.Id).State.Should().Be(InvitationState.Open);

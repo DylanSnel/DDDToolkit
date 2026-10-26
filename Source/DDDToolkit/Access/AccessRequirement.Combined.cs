@@ -11,7 +11,7 @@ public abstract partial record AccessRequirement
     /// <remarks>
     /// Two combinations are equal when they are of one kind and hold equal cases in the same order, so a test pins a
     /// combined requirement as it pins any other. Written for a log, it names its cases in their order:
-    /// <c>AnyOf { Cases = [Operator { }, ForTheWholeTenant { Key = tenancy.seats.manage }] }</c>.
+    /// <c>AnyOf { Cases = [Operator { }, AtTenant { Permission = tenancy.seats.manage }] }</c>.
     /// </remarks>
     public abstract record Combined : AccessRequirement
     {

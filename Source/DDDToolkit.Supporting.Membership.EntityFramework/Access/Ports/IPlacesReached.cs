@@ -6,8 +6,8 @@ using Microsoft.EntityFrameworkCore;
 namespace DDDToolkit.Supporting.Membership.EntityFramework;
 
 /// <summary>
-/// Where a caller holds a key, for one kind of resource that is reached from above
-/// (<see cref="MembershipRules.Above"/>): the places a hold of the key reaches, which a resource that sits at
+/// Where a caller holds a permission, for one kind of resource that is reached from above
+/// (<see cref="MembershipRules.ReachFromAbove"/>): the places a hold of the permission reaches, which a resource that sits at
 /// one of them is then held on. An application implements it over whatever keeps who holds what where, the
 /// units of an organization say, and registers it with the resource.
 /// <para>
@@ -15,13 +15,13 @@ namespace DDDToolkit.Supporting.Membership.EntityFramework;
 /// subquery next to the resource's row, so what a caller holds stays one statement. It is therefore asked
 /// with the context that statement runs on, and answers over rows that context maps:
 /// <code>
-/// public IQueryable&lt;BayId&gt; PlacesReached(DbContext context, Caller caller, string key)
+/// public IQueryable&lt;BayId&gt; PlacesReached(DbContext context, Caller caller, string permission)
 /// {
 ///     var user = caller.UserId;
 ///     return from porter in context.Set&lt;Porter&gt;()
 ///            where porter.UserId == user &amp;&amp; porter.Active
 ///            join hold in context.Set&lt;BayHold&gt;() on porter.Id equals hold.PorterId
-///            where hold.Key == key
+///            where hold.Key == permission
 ///            join path in context.Set&lt;BayPath&gt;() on hold.BayId equals path.AboveId
 ///            select path.BayId;
 /// }
@@ -40,7 +40,7 @@ namespace DDDToolkit.Supporting.Membership.EntityFramework;
 /// </para>
 /// <para>
 /// What is above what is the application's to know: the package compares where a resource sits
-/// (<c>HasMembers(..., at: ...)</c>) with what this answers, and keeps no places and no tree of them. A key
+/// (the property its class marks <c>[At]</c>) with what this answers, and keeps no places and no tree of them. A permission
 /// answered here is held whatever the rules say a member's role gives: that list is about members.
 /// </para>
 /// </summary>
@@ -51,12 +51,12 @@ public interface IPlacesReached<TResourceId, TPlaceId>
     where TPlaceId : struct, IEntityId, IEquatable<TPlaceId>
 {
     /// <summary>
-    /// The places <paramref name="caller"/>'s hold of <paramref name="key"/> reaches now: each place the key
-    /// is held at, and every place below it. None for a caller that holds the key nowhere. Not run here: it
+    /// The places <paramref name="caller"/>'s hold of <paramref name="permission"/> reaches now: each place the permission
+    /// is held at, and every place below it. None for a caller that holds the permission nowhere. Not run here: it
     /// goes into the statement that asks.
     /// </summary>
     /// <param name="context">The context the statement runs on: the query is over rows of it.</param>
     /// <param name="caller">The caller the question is asked for: a signed-in user.</param>
-    /// <param name="key">A permission key.</param>
-    IQueryable<TPlaceId> PlacesReached(DbContext context, Caller caller, string key);
+    /// <param name="permission">A permission.</param>
+    IQueryable<TPlaceId> PlacesReached(DbContext context, Caller caller, string permission);
 }

@@ -288,7 +288,7 @@
   <data name="whoami.manages-access" xml:space="preserve">
     <value>Beheert toegang</value>
   </data>
-  <data name="whoami.keys" xml:space="preserve">
+  <data name="whoami.permissions" xml:space="preserve">
     <value>Rechten</value>
   </data>
   <data name="whoami.grants-manage" xml:space="preserve">
@@ -300,13 +300,13 @@
   <data name="whoami.units-manage" xml:space="preserve">
     <value>Wie &lt;code&gt;{0}&lt;/code&gt; heeft bij de bovenliggende eenheid van een eenheid en bij een andere eenheid, verplaatst de eenheid daarheen. Een verplaatsing geeft wie verplaatst geen recht dat daar niet al even lang gold, en geeft of ontneemt een recht dat toegang beheert, aan wie ook, alleen als wie verplaatst het bij de eenheid heeft voor minstens zo lang als de toekenning van die ander loopt.</value>
   </data>
-  <data name="whoami.keys-now" xml:space="preserve">
+  <data name="whoami.permissions-now" xml:space="preserve">
     <value>Rechten die nu gelden</value>
   </data>
-  <data name="whoami.keys-now.none" xml:space="preserve">
+  <data name="whoami.permissions-now.none" xml:space="preserve">
     <value>Geen. Een verlopen toekenning, een geschorste plaats of een gearchiveerde rol geeft geen recht.</value>
   </data>
-  <data name="whoami.key" xml:space="preserve">
+  <data name="whoami.permission" xml:space="preserve">
     <value>Recht</value>
   </data>
   <data name="whoami.granted-at" xml:space="preserve">
@@ -576,10 +576,10 @@
   <data name="try.action.open-project" xml:space="preserve">
     <value>Project openen</value>
   </data>
-  <data name="try.action.check-key" xml:space="preserve">
+  <data name="try.action.check-permission" xml:space="preserve">
     <value>Een recht op een project nagaan</value>
   </data>
-  <data name="try.action.units-with-key" xml:space="preserve">
+  <data name="try.action.units-with-permission" xml:space="preserve">
     <value>Eenheden waar ik een recht heb</value>
   </data>
   <data name="try.action.seat-name" xml:space="preserve">
@@ -636,7 +636,7 @@
   <data name="try.field.project" xml:space="preserve">
     <value>Project</value>
   </data>
-  <data name="try.field.key" xml:space="preserve">
+  <data name="try.field.permission" xml:space="preserve">
     <value>Recht</value>
   </data>
   <data name="try.field.name" xml:space="preserve">
@@ -876,7 +876,7 @@
   <data name="project-roles.made-by-tenant" xml:space="preserve">
     <value>door de tenant gemaakt</value>
   </data>
-  <data name="project-roles.keys" xml:space="preserve">
+  <data name="project-roles.permissions" xml:space="preserve">
     <value>Rechten</value>
   </data>
   <data name="project-roles.archive" xml:space="preserve">
@@ -903,7 +903,7 @@
   <data name="project-roles.rename" xml:space="preserve">
     <value>Hernoemen</value>
   </data>
-  <data name="project-roles.set-keys" xml:space="preserve">
+  <data name="project-roles.set-permissions" xml:space="preserve">
     <value>De rechten zetten</value>
   </data>
   <data name="project-roles.change.help" xml:space="preserve">

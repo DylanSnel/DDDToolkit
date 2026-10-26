@@ -24,10 +24,10 @@ internal static class TenancyNames
     public const int MaxRoleDescriptionLength = 1000;
 
     /// <summary>
-    /// The longest permission key. A stored right holds one key in a column of this length, so the catalogue
+    /// The longest permission. A stored right holds one permission in a column of this length, so the catalogue
     /// refuses a longer one when it is built rather than the database at the first grant.
     /// </summary>
-    public const int MaxPermissionKeyLength = 128;
+    public const int MaxPermissionLength = 128;
 
     /// <summary>The longest pack key, which a role made from the pack keeps in a column of this length.</summary>
     public const int MaxPackKeyLength = 64;

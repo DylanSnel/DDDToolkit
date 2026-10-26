@@ -7,7 +7,7 @@ namespace DDDToolkit.Supporting.Membership.Postgres.Tests;
 /// <summary>
 /// The start-up check: a host whose database does not have the functions of every resource, as the rules that
 /// resource is registered with say them, does not start, and is told which function of which resource is wrong
-/// and what to do. The same for the lock the rules name a key for, for the trigger that keeps the owner's role
+/// and what to do. The same for the lock the rules name a permission for, for the trigger that keeps the owner's role
 /// of kept roles in use, and for a table of kept roles that callers may write as they like. What the rules leave
 /// open is said, and refused by nobody.
 /// </summary>
@@ -22,7 +22,7 @@ public sealed class StartUpCheckTests(FilingPostgres postgres)
     {
         using var filing = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Secured, seed: false);
 
-        // The documents and the folders name both keys of the lock: there is nothing to remark on either.
+        // The documents and the folders name both permissions of the lock: there is nothing to remark on either.
         (await CheckAsync(filing)).Should().BeEmpty();
 
         // And for a host whose contexts run as the caller, whoever is calling when it starts: the check asks as the application itself.
@@ -62,7 +62,7 @@ public sealed class StartUpCheckTests(FilingPostgres postgres)
 
         refused.Which.Message.Should()
             .StartWith("The functions that answer the membership of Document in the database are not as its rules, 'documents', say them: ")
-            .And.Contain("\"filing\".documents_as_member (missing), \"filing\".documents_as_member_with (missing), \"filing\".documents_i_see (missing), \"filing\".documents_where_i_hold (missing)")
+            .And.Contain("\"filing\".documents_as_member (missing), \"filing\".documents_as_member_with (missing), \"filing\".documents_fellow_members (missing), \"filing\".documents_i_see (missing), \"filing\".documents_where_i_hold (missing)")
             .And.Contain("Mark the rules the resource is registered with [MembershipRules<DocumentShare>]")
             .And.Contain("where the project that runs the export sees them")
             .And.Contain("apply the access files");
@@ -81,7 +81,7 @@ public sealed class StartUpCheckTests(FilingPostgres postgres)
 
         refused.Which.Message.Should()
             .StartWith("The functions that answer the membership of Folder in the database are not as its rules, 'folders', say them: ")
-            .And.Contain("\"filing\".folder_ids_held (missing), \"filing\".folder_ids_seen (missing), \"filing\".folder_ids_staffed (missing), \"filing\".folder_ids_staffed_with (missing)")
+            .And.Contain("\"filing\".folders_as_member (missing), \"filing\".folders_as_member_with (missing), \"filing\".folders_fellow_members (missing), \"filing\".folders_i_see (missing), \"filing\".folders_where_i_hold (missing)")
             .And.Contain("[MembershipRules<FolderMember>]")
             .And.NotContain("documents_");
 
@@ -91,13 +91,13 @@ public sealed class StartUpCheckTests(FilingPostgres postgres)
     }
 
     [Theory]
-    [InlineData("a role gives another key")]
-    [InlineData("another key is what being a member gives")]
-    [InlineData("the resource has another key")]
-    [InlineData("another role may ask")]
+    [InlineData("a role gives another permission")]
+    [InlineData("another permission is what being a member gives")]
+    [InlineData("the resource has another permission")]
+    [InlineData("the owner holds another permission")]
     [InlineData("the members are known by another claim")]
-    [InlineData("another key changes the members")]
-    [InlineData("no key changes the owner")]
+    [InlineData("another permission changes the members")]
+    [InlineData("no permission changes the owner")]
     [InlineData("another scope is the host's own work")]
     public async Task Functions_written_from_other_rules_than_the_resource_is_registered_with_are_refused(string difference)
     {
@@ -107,32 +107,36 @@ public sealed class StartUpCheckTests(FilingPostgres postgres)
         var registered = FolderMembership.Rules;
         IReadOnlyList<DeclaredRole> roles =
         [
-            new("keeper", [FolderKeys.Read, FolderKeys.File, FolderKeys.Staff, FolderKeys.Shred]),
-            new("clerk", difference == "a role gives another key" ? [FolderKeys.Read, FolderKeys.File, FolderKeys.Staff] : [FolderKeys.Read, FolderKeys.File, FolderKeys.Shred]),
-            new("visitor", [FolderKeys.Read]),
+            new("keeper", [FolderPermissions.Read, FolderPermissions.File, FolderPermissions.Staff]),
+            new("clerk", difference == "a role gives another permission" ? [FolderPermissions.Read] : [FolderPermissions.Read, FolderPermissions.File]),
+            new("visitor", [FolderPermissions.Read]),
         ];
-        var exported = new MembershipRules(
+        IReadOnlyList<ResourcePermission> permissions =
+        [
+            new(FolderPermissions.Read, EveryMember: difference == "another permission is what being a member gives"),
+            new(FolderPermissions.File, LocksMembers: difference == "another permission changes the members"),
+            new(FolderPermissions.Staff, LocksMembers: difference != "another permission changes the members"),
+            new(FolderPermissions.Shred, Owner: difference != "the owner holds another permission", InRoles: false),
+            new(FolderPermissions.HandOver, InRoles: false, LocksOwner: difference != "no permission changes the owner"),
+            .. difference == "the resource has another permission" ? [new ResourcePermission("folders.audit")] : Array.Empty<ResourcePermission>(),
+        ];
+        var exported = MembershipRules.Declare(
+            typeof(Folder),
             registered.Name,
-            keys: difference == "the resource has another key" ? [.. registered.Keys, "folders.audit"] : registered.Keys,
-            roles,
+            permissions,
+            Roles.Fixed(roles),
             members: difference == "the members are known by another claim" ? MemberSource.Claim("app_metadata.badge") : registered.Members,
-            seeKey: difference == "another key is what being a member gives" ? FolderKeys.Read : null,
-            ownerRole: registered.OwnerRole,
-            memberKeys: registered.MemberKeys,
-            codes: registered.Codes,
-            functions: registered.Functions,
-            grantTo: difference == "another role may ask" ? [RowAccessRoles.User] : registered.GrantTo,
-            changeMembersKey: difference == "another key changes the members" ? FolderKeys.File : registered.ChangeMembersKey,
-            changeOwnerKey: difference == "no key changes the owner" ? null : registered.ChangeOwnerKey,
-            systemScopes: difference == "another scope is the host's own work" ? ["archive"] : registered.SystemScopes);
+            systemScopes: difference == "another scope is the host's own work" ? ["archive"] : registered.SystemScopes,
+            codes: registered.Codes);
         await filing.ExecuteAsync(FilingPostgres.AccessScript([new MembershipRowAccessContribution<DocumentShare>(DocumentMembership.Rules), new MembershipRowAccessContribution<FolderMember>(exported)], rules: []));
 
         var refused = await FluentActions.Awaiting(() => CheckAsync(filing)).Should().ThrowAsync<InvalidOperationException>();
 
         refused.Which.Message.Should()
             .StartWith("The functions that answer the membership of Folder in the database are not as its rules, 'folders', say them: ")
-            .And.Contain("\"filing\".folder_ids_held (it was written from other rules), \"filing\".folder_ids_seen (it was written from other rules), "
-                + "\"filing\".folder_ids_staffed (it was written from other rules), \"filing\".folder_ids_staffed_with (it was written from other rules)");
+            .And.Contain("\"filing\".folders_as_member (it was written from other rules), \"filing\".folders_as_member_with (it was written from other rules), "
+                + "\"filing\".folders_fellow_members (it was written from other rules), \"filing\".folders_i_see (it was written from other rules), "
+                + "\"filing\".folders_where_i_hold (it was written from other rules)");
     }
 
     [Fact]
@@ -142,20 +146,14 @@ public sealed class StartUpCheckTests(FilingPostgres postgres)
 
         // Declared again, entry for entry: what the functions are written from is what the rules say, not which object says it.
         var registered = FolderMembership.Rules;
-        var again = new MembershipRules(
+        var again = MembershipRules.Declare(
+            typeof(Folder),
             registered.Name,
-            [.. registered.Keys],
-            [.. registered.Roles],
-            registered.Members,
-            registered.SeeKey,
-            registered.OwnerRole,
-            registered.MemberKeys,
-            MembershipCodes.Under("elsewhere"),
-            registered.Functions,
-            registered.GrantTo,
-            changeMembersKey: registered.ChangeMembersKey,
-            changeOwnerKey: registered.ChangeOwnerKey,
-            systemScopes: [.. registered.SystemScopes]);
+            [.. registered.Permissions],
+            Roles.Fixed([.. registered.Roles.Declared]),
+            members: registered.Members,
+            systemScopes: [.. registered.SystemScopes],
+            codes: MembershipCodes.Under("elsewhere"));
         await filing.ExecuteAsync(FilingPostgres.AccessScript([new MembershipRowAccessContribution<DocumentShare>(DocumentMembership.Rules), new MembershipRowAccessContribution<FolderMember>(again)], rules: []));
 
         await CheckAsync(filing);
@@ -228,8 +226,9 @@ public sealed class StartUpCheckTests(FilingPostgres postgres)
         // The limit of the check, said here so nobody reads more into it: a body rewritten by hand that keeps
         // its first line is not found. The check holds a database to the rules and the version of the package
         // its files were written from, not against whoever may rewrite its functions.
-        var first = (await filing.ListAsync<string>("SELECT pg_catalog.split_part(p.prosrc, E'\\n', 2) FROM pg_catalog.pg_proc p WHERE p.proname = 'documents_as_member'")).Single();
-        first.Should().StartWith("-- Membership of documents, in form ");
+        var first = (await filing.ListAsync<string>(
+            "SELECT pg_catalog.split_part(p.prosrc, E'\\n', 2) || E'\\n' || pg_catalog.split_part(p.prosrc, E'\\n', 3) FROM pg_catalog.pg_proc p WHERE p.proname = 'documents_as_member'")).Single();
+        first.Should().StartWith("-- Membership of documents (Document), in form ").And.Contain("\n-- Executed by: authenticated");
         await filing.ExecuteAsync(
             $"""
             CREATE OR REPLACE FUNCTION filing.documents_as_member() RETURNS SETOF uuid LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $body$
@@ -258,28 +257,28 @@ public sealed class StartUpCheckTests(FilingPostgres postgres)
             GRANT EXECUTE ON FUNCTION "filing".documents_i_see() TO anon;
             """);
         (await FluentActions.Awaiting(() => CheckAsync(filing)).Should().ThrowAsync<InvalidOperationException>())
-            .Which.Message.Should().Contain("membership of Document").And.Contain("say them: \"filing\".documents_i_see (anon may execute it, which the rules do not name). ");
+            .Which.Message.Should().Contain("membership of Document").And.Contain("say them: \"filing\".documents_i_see (anon may execute it, which no row access rule of the resource is for). ");
 
         // Taken back from a role the folder's rules name: every policy that asks the function as that role would fail.
         await filing.ExecuteAsync(
             $"""
             REVOKE EXECUTE ON FUNCTION filing.documents_i_see() FROM anon;
-            REVOKE EXECUTE ON FUNCTION "filing".folder_ids_held(text) FROM {FilingPostgres.ArchivistRole};
+            REVOKE EXECUTE ON FUNCTION "filing".folders_where_i_hold(text) FROM {FilingPostgres.ArchivistRole};
             """);
         (await FluentActions.Awaiting(() => CheckAsync(filing)).Should().ThrowAsync<InvalidOperationException>())
-            .Which.Message.Should().Contain("membership of Folder").And.Contain($"say them: \"filing\".folder_ids_held ({FilingPostgres.ArchivistRole} may not execute it). ");
+            .Which.Message.Should().Contain("membership of Folder").And.Contain($"say them: \"filing\".folders_where_i_hold ({FilingPostgres.ArchivistRole} may not execute it). ");
 
         // From the signed-in user's role on a document's, and from both roles a folder's rules name.
         await filing.ExecuteAsync(
             """
-            REVOKE EXECUTE ON FUNCTION filing.folder_ids_held(text) FROM authenticated;
+            REVOKE EXECUTE ON FUNCTION filing.folders_where_i_hold(text) FROM authenticated;
             REVOKE EXECUTE ON FUNCTION "filing".documents_as_member_with(text) FROM authenticated;
             """);
         (await FluentActions.Awaiting(() => CheckAsync(filing)).Should().ThrowAsync<InvalidOperationException>())
             .Which.Message.Should().Contain("say them: \"filing\".documents_as_member_with (authenticated may not execute it). ");
         await filing.ExecuteAsync("GRANT EXECUTE ON FUNCTION filing.documents_as_member_with(text) TO authenticated");
         (await FluentActions.Awaiting(() => CheckAsync(filing)).Should().ThrowAsync<InvalidOperationException>())
-            .Which.Message.Should().Contain($"say them: \"filing\".folder_ids_held (authenticated, {FilingPostgres.ArchivistRole} may not execute it). ");
+            .Which.Message.Should().Contain($"say them: \"filing\".folders_where_i_hold (authenticated, {FilingPostgres.ArchivistRole} may not execute it). ");
 
         // The access file gives the grants back, as it gives everything else.
         await filing.ExecuteAsync(FilingPostgres.AccessScript());
@@ -291,23 +290,24 @@ public sealed class StartUpCheckTests(FilingPostgres postgres)
     {
         using var filing = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Secured, seed: false);
 
-        // The folder's functions are for signed-in users and the archivists. Given by hand to the role scoped
-        // system work runs as, and to callers that did not sign in: both are named, and neither is PUBLIC.
-        await filing.ExecuteAsync("GRANT EXECUTE ON FUNCTION filing.folder_ids_held(text) TO ddd_system_in, anon");
+        // The folders' functions are for signed-in users, the archivists and scoped system work. The documents' are for
+        // signed-in users alone: given by hand to the role scoped system work runs as, and to callers that did not sign
+        // in, both are named, and neither is PUBLIC.
+        await filing.ExecuteAsync("GRANT EXECUTE ON FUNCTION filing.documents_where_i_hold(text) TO ddd_system_in, anon");
 
         (await FluentActions.Awaiting(() => CheckAsync(filing)).Should().ThrowAsync<InvalidOperationException>())
             .Which.Message.Should()
-            .StartWith("The functions that answer the membership of Folder in the database are not as its rules, 'folders', say them: ")
-            .And.Contain("\"filing\".folder_ids_held (anon, ddd_system_in may execute it, which the rules do not name). ");
+            .StartWith("The functions that answer the membership of Document in the database are not as its rules, 'documents', say them: ")
+            .And.Contain("\"filing\".documents_where_i_hold (anon, ddd_system_in may execute it, which no row access rule of the resource is for). ");
 
-        // What the document's rules do not name, the folder's do: the archivists ask a folder's functions, and no document's.
+        // What no rule of the documents' is for, one of the folders' is: the archivists ask a folder's functions, and no document's.
         await filing.ExecuteAsync(
             $"""
-            REVOKE EXECUTE ON FUNCTION filing.folder_ids_held(text) FROM ddd_system_in, anon;
+            REVOKE EXECUTE ON FUNCTION filing.documents_where_i_hold(text) FROM ddd_system_in, anon;
             GRANT EXECUTE ON FUNCTION "filing".documents_where_i_hold(text) TO {FilingPostgres.ArchivistRole};
             """);
         (await FluentActions.Awaiting(() => CheckAsync(filing)).Should().ThrowAsync<InvalidOperationException>())
-            .Which.Message.Should().Contain($"say them: \"filing\".documents_where_i_hold ({FilingPostgres.ArchivistRole} may execute it, which the rules do not name). ");
+            .Which.Message.Should().Contain($"say them: \"filing\".documents_where_i_hold ({FilingPostgres.ArchivistRole} may execute it, which no row access rule of the resource is for). ");
 
         // The access file takes every such grant back.
         await filing.ExecuteAsync(FilingPostgres.AccessScript());
@@ -321,11 +321,11 @@ public sealed class StartUpCheckTests(FilingPostgres postgres)
         await CheckAsync(filing);
 
         // One policy of the lock dropped: signed-in users are held for adding and changing a share, and no longer for removing one.
-        await filing.ExecuteAsync("DROP POLICY \"Members change with the key (delete) for authenticated\" ON filing.\"DocumentShares\"");
+        await filing.ExecuteAsync("DROP POLICY \"Members change with the permission (delete) for authenticated\" ON filing.\"DocumentShares\"");
         var refused = await FluentActions.Awaiting(() => CheckAsync(filing)).Should().ThrowAsync<InvalidOperationException>();
         refused.Which.Message.Should()
-            .StartWith("The rules 'documents' of Document name the key a caller needs to change its members or its owner, and the database does not hold callers to it: ")
-            .And.Contain("\"filing\".\"DocumentShares\" (authenticated is not held to the key that changes the members). ")
+            .StartWith("A permission of Document locks its members or its owner, and the database does not hold callers to it: ")
+            .And.Contain("\"filing\".\"DocumentShares\" (authenticated is not held to the permission that locks the members). ")
             .And.Contain("Apply the access files the export writes");
 
         // Row security turned off on the roles' table: its policies are there, and hold nobody.
@@ -333,36 +333,36 @@ public sealed class StartUpCheckTests(FilingPostgres postgres)
         await CheckAsync(filing);
         await filing.ExecuteAsync($"ALTER TABLE filing.\"{FilingContext.FolderStaffRolesTable}\" DISABLE ROW LEVEL SECURITY");
         (await FluentActions.Awaiting(() => CheckAsync(filing)).Should().ThrowAsync<InvalidOperationException>())
-            .Which.Message.Should().StartWith("The rules 'folders' of Folder name the key").And.Contain(
-                $"\"filing\".\"{FilingContext.FolderStaffRolesTable}\" (authenticated, {FilingPostgres.ArchivistRole} is not held to the key that changes the members). ");
+            .Which.Message.Should().StartWith("A permission of Folder locks its members").And.Contain(
+                $"\"filing\".\"{FilingContext.FolderStaffRolesTable}\" (authenticated, ddd_system_in, {FilingPostgres.ArchivistRole} is not held to the permission that locks the members). ");
 
         // The trigger on the owner column disabled, and then dropped.
         await filing.ExecuteAsync(FilingPostgres.AccessScript());
         await CheckAsync(filing);
         await filing.ExecuteAsync("ALTER TABLE filing.\"Documents\" DISABLE TRIGGER documents_owner_stays");
         (await FluentActions.Awaiting(() => CheckAsync(filing)).Should().ThrowAsync<InvalidOperationException>())
-            .Which.Message.Should().Contain("hold callers to it: \"filing\".\"Documents\" (its owner column is not held to the key that changes the owner). ");
+            .Which.Message.Should().Contain("hold callers to it: \"filing\".\"Documents\" (its owner column is not held to the permission that locks the owner). ");
         await filing.ExecuteAsync("ALTER TABLE filing.\"Documents\" ENABLE TRIGGER documents_owner_stays; DROP TRIGGER folders_owner_stays ON filing.\"Folders\"");
         (await FluentActions.Awaiting(() => CheckAsync(filing)).Should().ThrowAsync<InvalidOperationException>())
-            .Which.Message.Should().Contain("hold callers to it: \"filing\".\"Folders\" (its owner column is not held to the key that changes the owner). ");
+            .Which.Message.Should().Contain("hold callers to it: \"filing\".\"Folders\" (its owner column is not held to the permission that locks the owner). ");
 
         await filing.ExecuteAsync(FilingPostgres.AccessScript());
         await CheckAsync(filing);
     }
 
     [Fact]
-    public async Task A_database_that_lets_a_caller_give_a_role_it_does_not_see_or_archive_the_owners_role_is_refused()
+    public async Task A_database_that_lets_a_caller_give_a_role_it_does_not_see_is_refused()
     {
         using var garden = await PostgresGarden.CreateAsync(postgres, seed: false);
         Task<IReadOnlyList<string>> CheckGardenAsync() => MembershipPostgresChecks.EnsureFunctionsAreInPlaceAsync(garden.Services.Provider, Cancellation);
         await CheckGardenAsync();
 
-        // The plots keep their roles and name the key that changes the gardeners: the policy that holds a role
+        // A customer makes the plots' roles, and a permission of a plot locks the gardeners: the policy that holds a role
         // given to one the caller sees, dropped for adding a row, is a lock that is not in place.
         await garden.ExecuteAsync("DROP POLICY \"Members hold roles the caller sees (insert) for authenticated\" ON gardens.\"PlotGardenerRoles\"");
         (await FluentActions.Awaiting(CheckGardenAsync).Should().ThrowAsync<InvalidOperationException>())
             .Which.Message.Should()
-            .StartWith("The rules 'plots' of Plot name the key a caller needs to change its members or its owner, and the database does not hold callers to it: ")
+            .StartWith("A permission of Plot locks its members or its owner, and the database does not hold callers to it: ")
             .And.Contain("\"gardens\".\"PlotGardenerRoles\" (authenticated is not held to the roles it sees). ");
 
         // The same, dropped for changing a row: a hold moved onto a role the caller does not see.
@@ -371,37 +371,19 @@ public sealed class StartUpCheckTests(FilingPostgres postgres)
         await garden.ExecuteAsync("DROP POLICY \"Members hold roles the caller sees (update) for authenticated\" ON gardens.\"PlotGardenerRoles\"");
         (await FluentActions.Awaiting(CheckGardenAsync).Should().ThrowAsync<InvalidOperationException>())
             .Which.Message.Should()
-            .StartWith("The rules 'plots' of Plot name the key a caller needs to change its members or its owner, and the database does not hold callers to it: ")
+            .StartWith("A permission of Plot locks its members or its owner, and the database does not hold callers to it: ")
             .And.Contain("\"gardens\".\"PlotGardenerRoles\" (authenticated is not held to the roles it sees). ");
 
-        // The trigger that keeps the owner's role in use, disabled: whoever may change a role could archive it.
+        // No trigger keeps any role in use: the owner holds none, and any role is archived alike.
         await garden.ExecuteAsync(PostgresGarden.AccessScript());
-        await CheckGardenAsync();
-        await garden.ExecuteAsync("ALTER TABLE gardens.\"PlotRoles\" DISABLE TRIGGER plots_owner_role_stays");
-        (await FluentActions.Awaiting(CheckGardenAsync).Should().ThrowAsync<InvalidOperationException>())
-            .Which.Message.Should().Be(
-                "The roles of Plot are kept in \"gardens\".\"PlotRoles\", and the database lets the owner's role, the one made from 'owner', be archived: the trigger that keeps it in use, "
-                + "plots_owner_role_stays, is missing, disabled, or written from other rules. Nobody could be made an owner after. Apply the access files the export writes with the "
-                + "rules the resource is registered with: the trigger comes with the functions.");
-
-        // Dropped, for the sheds; and its function rewritten by hand, so it names no rules.
-        await garden.ExecuteAsync("ALTER TABLE gardens.\"PlotRoles\" ENABLE TRIGGER plots_owner_role_stays; DROP TRIGGER sheds_owner_role_stays ON gardens.\"ShedRoles\"");
-        (await FluentActions.Awaiting(CheckGardenAsync).Should().ThrowAsync<InvalidOperationException>())
-            .Which.Message.Should().StartWith("The roles of Shed are kept in \"gardens\".\"ShedRoles\", and the database lets the owner's role, the one made from 'keeper', be archived");
-        await garden.ExecuteAsync(PostgresGarden.AccessScript());
-        await garden.ExecuteAsync("CREATE OR REPLACE FUNCTION gardens.plots_owner_role_stays() RETURNS trigger LANGUAGE plpgsql SET search_path = '' AS $body$ BEGIN RETURN NEW; END $body$");
-        (await FluentActions.Awaiting(CheckGardenAsync).Should().ThrowAsync<InvalidOperationException>())
-            .Which.Message.Should().StartWith("The roles of Plot are kept in \"gardens\".\"PlotRoles\"");
-
-        // The access file puts all of it back.
-        await garden.ExecuteAsync(PostgresGarden.AccessScript());
+        (await garden.ListAsync<long>("SELECT count(*) FROM pg_catalog.pg_trigger WHERE tgname LIKE '%owner_role_stays'")).Should().Equal(0L);
         await CheckGardenAsync();
     }
 
     [Fact]
-    public async Task Rules_that_name_no_key_for_the_lock_are_said_loudly_and_refused_by_nobody()
+    public async Task Rules_that_name_no_permission_for_the_lock_are_said_loudly_and_refused_by_nobody()
     {
-        // The plots name both keys. The sheds name neither: whoever the host's rules let change a shed writes
+        // The plots name both permissions. The sheds name neither: whoever the host's rules let change a shed writes
         // its hands and its owner. That is the host's to choose, so the check starts, and says it.
         var logged = new Logged();
         using var garden = await PostgresGarden.CreateAsync(postgres, seed: false, configure: services => services.AddLogging(logging => logging.AddProvider(logged)));
@@ -409,15 +391,20 @@ public sealed class StartUpCheckTests(FilingPostgres postgres)
         var remarks = await MembershipPostgresChecks.EnsureFunctionsAreInPlaceAsync(garden.Services.Provider, Cancellation);
 
         remarks.Should().ContainSingle().Which.Should()
-            .StartWith("The rules 'sheds' of Shed name no key that changes its members and none that changes its owner (changeMembersKey, changeOwnerKey), so the database leaves its member rows and its owner column to whoever the application's row access rules let change a Shed")
+            .StartWith("Shed has no permission that locks its members and none that locks its owner (LocksMembers, LocksOwner), so the database leaves its member rows and its owner column to whoever the application's row access rules let change a Shed")
             .And.Contain("without a command of the application's having asked anything")
-            .And.Contain("Name the keys the application's commands require for it in the rules");
+            .And.Contain("Mark the permissions the application's commands require for it [On<Shed>(LocksMembers = true)] and [On<Shed>(LocksOwner = true)]");
         logged.Lines.Should().Equal([(LogLevel.Warning, "DDDToolkit.Supporting.Membership.Postgres", remarks[0])], "what is remarked on is logged as a warning, where the host has a logger");
 
-        // Rules that name one of the two are told about the other.
-        static MembershipRules Sheds(string? membersKey, string? ownerKey)
-            => new("sheds", keys: [.. ShedMembership.Rules.Keys], roles: [.. ShedMembership.Rules.Roles], ownerRole: ShedMembership.Rules.OwnerRole,
-                memberKeys: ShedMembership.Rules.MemberKeys, codes: ShedMembership.Codes, rolesKept: true, changeMembersKey: membersKey, changeOwnerKey: ownerKey);
+        // Rules with one of the two are told about the other.
+        static MembershipRules Sheds(bool membersLocked, bool ownerLocked)
+            => MembershipRules.Declare(
+                typeof(Shed),
+                "sheds",
+                [new(ShedPermissions.Open), new(ShedPermissions.Stock, LocksMembers: membersLocked), new(ShedPermissions.Sell, InRoles: false, LocksOwner: ownerLocked)],
+                Roles.Custom(starters: ShedMembership.Rules.Roles.Declared, otherPermissions: OtherPermissions.All),
+                systemScopes: ShedMembership.Rules.SystemScopes,
+                codes: ShedMembership.Codes);
 
         async Task<IReadOnlyList<string>> RemarksForAsync(MembershipRules sheds)
         {
@@ -426,11 +413,11 @@ public sealed class StartUpCheckTests(FilingPostgres postgres)
             return await MembershipPostgresChecks.EnsureFunctionsAreInPlaceAsync(host.Services.Provider, Cancellation);
         }
 
-        (await RemarksForAsync(Sheds(ShedKeys.Stock, null))).Should().ContainSingle().Which.Should()
-            .StartWith("The rules 'sheds' of Shed name no key that changes its owner (changeOwnerKey), so the database leaves its owner column, and with it every key an owner holds, to whoever");
-        (await RemarksForAsync(Sheds(null, ShedKeys.Sell))).Should().ContainSingle().Which.Should()
-            .StartWith("The rules 'sheds' of Shed name no key that changes its members (changeMembersKey), so the database leaves its member rows to whoever");
-        (await RemarksForAsync(Sheds(ShedKeys.Stock, ShedKeys.Sell))).Should().BeEmpty();
+        (await RemarksForAsync(Sheds(membersLocked: true, ownerLocked: false))).Should().ContainSingle().Which.Should()
+            .StartWith("Shed has no permission that locks its owner (LocksOwner), so the database leaves its owner column, and with it every permission an owner holds, to whoever");
+        (await RemarksForAsync(Sheds(membersLocked: false, ownerLocked: true))).Should().ContainSingle().Which.Should()
+            .StartWith("Shed has no permission that locks its members (LocksMembers), so the database leaves its member rows to whoever");
+        (await RemarksForAsync(Sheds(membersLocked: true, ownerLocked: true))).Should().BeEmpty();
     }
 
     [Fact]
@@ -439,40 +426,27 @@ public sealed class StartUpCheckTests(FilingPostgres postgres)
         // The host's access file without its rules for the role classes: the tables of the roles have no row
         // security, and every caller's role may write them.
         using var garden = await PostgresGarden.CreateAsync(postgres, secured: false, seed: false);
-        await garden.ExecuteAsync(PostgresGarden.AccessScript(rules: [PostgresGarden.Rules[0]]));
+        await garden.ExecuteAsync(PostgresGarden.AccessScript(rules: [.. PostgresGarden.Rules.Where(rule => rule.AggregateTypeName is "DDDToolkit.Supporting.Membership.TestHost.Gardens.Plot" or "DDDToolkit.Supporting.Membership.TestHost.Gardens.Shed" && rule.Operations == RowOperations.Read)]));
 
         var refused = await FluentActions.Awaiting(() => MembershipPostgresChecks.EnsureFunctionsAreInPlaceAsync(garden.Services.Provider, Cancellation)).Should().ThrowAsync<InvalidOperationException>();
         refused.Which.Message.Should()
-            .StartWith("The roles of Plot are kept in \"gardens\".\"PlotRoles\", which has no row security, and authenticated may write it. ")
+            .StartWith("The roles of Plot are made in \"gardens\".\"PlotRoles\", which has no row security, and authenticated, ddd_system_in may write it. ")
             .And.Contain("A role's row says what everybody who holds the role may do")
             .And.Contain("Give PlotRole row access rules of its own, [RowAccess<PlotRole>]");
 
         // The privileges taken from the roles the rules name is the other way: nobody of them writes the table, guarded or not.
-        await garden.ExecuteAsync("REVOKE INSERT, UPDATE, DELETE ON gardens.\"PlotRoles\", gardens.\"ShedRoles\" FROM authenticated");
+        await garden.ExecuteAsync("REVOKE INSERT, UPDATE, DELETE ON gardens.\"PlotRoles\", gardens.\"ShedRoles\" FROM authenticated, ddd_system_in");
         await MembershipPostgresChecks.EnsureFunctionsAreInPlaceAsync(garden.Services.Provider, Cancellation);
 
-        // A privilege on one column writes a role's keys as well.
-        await garden.ExecuteAsync("GRANT UPDATE (\"Keys\") ON gardens.\"ShedRoles\" TO authenticated");
+        // A privilege on one column writes a role's permissions as well.
+        await garden.ExecuteAsync("GRANT UPDATE (\"Permissions\") ON gardens.\"ShedRoles\" TO authenticated");
         (await FluentActions.Awaiting(() => MembershipPostgresChecks.EnsureFunctionsAreInPlaceAsync(garden.Services.Provider, Cancellation)).Should().ThrowAsync<InvalidOperationException>())
-            .Which.Message.Should().StartWith("The roles of Shed are kept in \"gardens\".\"ShedRoles\", which has no row security, and authenticated may write it. ");
+            .Which.Message.Should().StartWith("The roles of Shed are made in \"gardens\".\"ShedRoles\", which has no row security, and authenticated may write it. ");
 
         // With the host's rules for both role classes, the tables check their rows, and it starts.
-        await garden.ExecuteAsync("GRANT INSERT, UPDATE, DELETE ON gardens.\"PlotRoles\", gardens.\"ShedRoles\" TO authenticated");
+        await garden.ExecuteAsync("GRANT INSERT, UPDATE, DELETE ON gardens.\"PlotRoles\", gardens.\"ShedRoles\" TO authenticated, ddd_system_in");
         await garden.ExecuteAsync(PostgresGarden.AccessScript());
         await MembershipPostgresChecks.EnsureFunctionsAreInPlaceAsync(garden.Services.Provider, Cancellation);
-    }
-
-    [Fact]
-    public async Task Rules_that_name_a_role_the_host_runs_no_caller_as_are_said()
-    {
-        // The folder's rules let a token role ask its functions, and this host mapped that token role to no database role.
-        using var filing = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Secured, seed: false, configure: services => services.AddPostgresRowLevelSecurity());
-
-        var refused = await FluentActions.Awaiting(() => CheckAsync(filing)).Should().ThrowAsync<InvalidOperationException>();
-
-        refused.Which.Message.Should()
-            .StartWith("The rules 'folders' of Folder let the role '@token:archivist' ask its functions, and the host runs no caller as it: ")
-            .And.Contain("PostgresRowLevelSecurityOptions.TokenRoles");
     }
 
     [Fact]

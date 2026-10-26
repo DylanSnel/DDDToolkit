@@ -7,11 +7,11 @@ namespace Examples.Tenancy.Tenants.Application.Seats.Commands;
 /// Deactivates a seat for good.
 /// </summary>
 /// <remarks>
-/// It requires <c>tenancy.seats.manage</c> for the whole tenant. The package's use case asks for that key again, and
+/// It requires <c>tenancy.seats.manage</c> for the whole tenant. The package's use case asks for that permission again, and
 /// for what taking each of the seat's roles away would need; and it keeps the tenant an administrator.
 /// </remarks>
 /// <param name="Seat">The seat.</param>
-[RequiresKey(TenancyKeys.SeatsManage)]
+[RequiresPermission(TenancyPermissions.SeatsManage)]
 public sealed record DeactivateTenantSeat(SeatId Seat) : ICommand, ITenantsRequest;
 
 /// <summary>Handles <see cref="DeactivateTenantSeat"/> with the Tenancy package's use case, which checks the caller, decides and saves.</summary>

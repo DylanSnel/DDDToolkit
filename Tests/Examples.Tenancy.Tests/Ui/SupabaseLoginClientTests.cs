@@ -107,9 +107,9 @@ public sealed class SupabaseLoginClientTests
         IHost Ui(params (string Key, string Value)[] settings)
         {
             var builder = UiHost.CreateBuilder();
-            foreach (var (key, value) in settings)
+            foreach (var (permission, value) in settings)
             {
-                builder.Configuration[key] = value;
+                builder.Configuration[permission] = value;
             }
 
             builder.AddServiceDefaults();

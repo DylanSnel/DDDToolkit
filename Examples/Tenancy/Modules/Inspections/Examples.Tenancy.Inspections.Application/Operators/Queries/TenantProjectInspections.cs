@@ -9,7 +9,7 @@ namespace Examples.Tenancy.Inspections.Application.Operators.Queries;
 /// Every inspection of one project of one tenant, newest first, for the application's own staff.
 /// </summary>
 /// <remarks>
-/// For operators only. An operator holds no seat and no key, so Projects' gate has nothing to answer about it:
+/// For operators only. An operator holds no seat and no permission, so Projects' gate has nothing to answer about it:
 /// the query names the tenant and the project, and reads the inspections kept under both. A project of another
 /// tenant, or one that does not exist, has none there, and is answered an empty list.
 /// </remarks>

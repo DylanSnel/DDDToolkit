@@ -138,11 +138,6 @@ namespace Examples.Tenancy.Tenants.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("EndsAt");
 
-                    b.Property<string>("Key")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("Key");
-
                     b.Property<bool>("OfCaller")
                         .HasColumnType("boolean")
                         .HasColumnName("OfCaller");
@@ -151,9 +146,39 @@ namespace Examples.Tenancy.Tenants.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("Parent");
 
+                    b.Property<string>("Permission")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("Permission");
+
                     b.Property<Guid>("UnitId")
                         .HasColumnType("uuid")
                         .HasColumnName("UnitId");
+
+                    b.ToTable((string)null);
+
+                    b.ToView(null, (string)null);
+                });
+
+            modelBuilder.Entity("DDDToolkit.Supporting.Tenancy.Access.NamedUnit<Examples.Tenancy.Tenants.Contracts.ValueObjects.OrganizationUnitId>", b =>
+                {
+                    b.Property<int>("Depth")
+                        .HasColumnType("integer")
+                        .HasColumnName("Depth");
+
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("Id");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("Name");
+
+                    b.Property<string>("Path")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("Path");
 
                     b.ToTable((string)null);
 
@@ -238,7 +263,7 @@ namespace Examples.Tenancy.Tenants.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
 
-                    b.PrimitiveCollection<string[]>("Keys")
+                    b.PrimitiveCollection<string[]>("Permissions")
                         .IsRequired()
                         .HasColumnType("text[]");
 
@@ -268,7 +293,7 @@ namespace Examples.Tenancy.Tenants.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("RoleId")
                         .HasColumnType("uuid");
 
-                    b.Property<string>("Key")
+                    b.Property<string>("Permission")
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
 
@@ -281,13 +306,13 @@ namespace Examples.Tenancy.Tenants.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");
 
-                    b.HasKey("SeatId", "UnitId", "RoleId", "Key");
+                    b.HasKey("SeatId", "UnitId", "RoleId", "Permission");
 
                     b.HasIndex("RoleId");
 
                     b.HasIndex("TenantId");
 
-                    b.HasIndex("SeatId", "Key");
+                    b.HasIndex("SeatId", "Permission");
 
                     b.ToTable("SeatRights", "tenancy");
 
@@ -396,6 +421,26 @@ namespace Examples.Tenancy.Tenants.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("SeatId")
                         .HasColumnType("uuid")
                         .HasColumnName("SeatId");
+
+                    b.ToTable((string)null);
+
+                    b.ToView(null, (string)null);
+                });
+
+            modelBuilder.Entity("DDDToolkit.Supporting.Tenancy.EntityFramework.TenantNameRow<Examples.Tenancy.Tenants.Contracts.ValueObjects.TenantId>", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("Id");
+
+                    b.Property<string>("Name")
+                        .HasColumnType("text")
+                        .HasColumnName("Name");
+
+                    b.Property<string>("Slug")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("Slug");
 
                     b.ToTable((string)null);
 
@@ -598,13 +643,6 @@ namespace Examples.Tenancy.Tenants.Infrastructure.Persistence.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
-                    b.PrimitiveCollection<string[]>("Keys")
-                        .IsRequired()
-                        .HasColumnType("text[]");
-
-                    b.PrimitiveCollection<string[]>("KeysFromPack")
-                        .HasColumnType("text[]");
-
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(120)
@@ -614,6 +652,13 @@ namespace Examples.Tenancy.Tenants.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(120)
                         .HasColumnType("character varying(120)");
+
+                    b.PrimitiveCollection<string[]>("Permissions")
+                        .IsRequired()
+                        .HasColumnType("text[]");
+
+                    b.PrimitiveCollection<string[]>("PermissionsFromPack")
+                        .HasColumnType("text[]");
 
                     b.Property<string>("Status")
                         .IsRequired()

@@ -28,7 +28,7 @@ else
                     <thead>
                         <tr>
                             <th>@T["common.name"]</th><th>@T["project-roles.description"]</th><th>@T["project-roles.made-from"]</th>
-                            <th>@T["common.status"]</th><th>@T["project-roles.keys"]</th><th></th>
+                            <th>@T["common.status"]</th><th>@T["project-roles.permissions"]</th><th></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -39,7 +39,7 @@ else
                                 <td class="small">@role.Description</td>
                                 <td class="small">@(role.MadeFrom is { } starter ? starter : T["project-roles.made-by-tenant"])</td>
                                 <td>@role.Status</td>
-                                <td class="small">@(role.Keys is { } keys ? string.Join(", ", keys) : "–")</td>
+                                <td class="small">@(role.Permissions is { } held ? string.Join(", ", held) : "–")</td>
                                 <td>
                                     <ActionButton Label="@T["project-roles.archive"]" Allowed="Manages && role.IsActive" ShowsAnswer="false" Send="() => Wrap(Api.ArchiveProjectRoleAsync(role.Id.ToString()))" Answered="ArchivedAsync" />
                                 </td>
@@ -60,8 +60,8 @@ else
             <label class="form-label small">@T["project-roles.make.label"]</label>
             <input class="form-control form-control-sm" placeholder="@T["common.name"]" @bind="_newName" />
             <input class="form-control form-control-sm" placeholder="@T["project-roles.description"]" @bind="_newDescription" />
-            <KeyPicker Keys="_keys" Picked="_newKeys" />
-            <ActionButton Label="@T["project-roles.make"]" Allowed="Manages" Send="() => Wrap(Api.MakeProjectRoleAsync(_newName, _newDescription, [.. _newKeys]))" Answered="MadeAsync" />
+            <PermissionPicker Permissions="_permissions" Picked="_newPermissions" />
+            <ActionButton Label="@T["project-roles.make"]" Allowed="Manages" Send="() => Wrap(Api.MakeProjectRoleAsync(_newName, _newDescription, [.. _newPermissions]))" Answered="MadeAsync" />
             <div class="form-text">@T["project-roles.make.help"]</div>
         </div>
 
@@ -77,8 +77,8 @@ else
             <input class="form-control form-control-sm" placeholder="@T["common.name"]" @bind="_name" />
             <input class="form-control form-control-sm" placeholder="@T["project-roles.description"]" @bind="_description" />
             <ActionButton Label="@T["project-roles.rename"]" Allowed="Manages" Send="() => Wrap(Api.RenameProjectRoleAsync(_picked ?? string.Empty, _name, _description))" Answered="ReloadOnSuccessAsync" />
-            <KeyPicker Keys="_keys" Picked="_pickedKeys" />
-            <ActionButton Label="@T["project-roles.set-keys"]" Allowed="Manages" Send="() => Wrap(Api.SetProjectRoleKeysAsync(_picked ?? string.Empty, [.. _pickedKeys]))" Answered="ReloadOnSuccessAsync" />
+            <PermissionPicker Permissions="_permissions" Picked="_pickedPermissions" />
+            <ActionButton Label="@T["project-roles.set-permissions"]" Allowed="Manages" Send="() => Wrap(Api.SetProjectRolePermissionsAsync(_picked ?? string.Empty, [.. _pickedPermissions]))" Answered="ReloadOnSuccessAsync" />
             <div class="form-text">@T["project-roles.change.help"]</div>
         </div>
     </CascadingValue>
@@ -90,37 +90,37 @@ else
 
     // The page shows the answer of its last action only: an older one is about the roles as they were.
     private readonly LatestAnswer _latest = new();
-    private IReadOnlyList<PermissionInfo> _keys = [];
+    private IReadOnlyList<PermissionInfo> _permissions = [];
     private string? _newName;
     private string? _newDescription;
-    private HashSet<string> _newKeys = new(StringComparer.Ordinal);
+    private HashSet<string> _newPermissions = new(StringComparer.Ordinal);
     private string? _picked;
     private string? _name;
     private string? _description;
-    private HashSet<string> _pickedKeys = new(StringComparer.Ordinal);
+    private HashSet<string> _pickedPermissions = new(StringComparer.Ordinal);
 
-    // The API answers a role's keys to whoever may make and change project roles, and to nobody else: so whether
+    // The API answers a role's permissions to whoever may make and change project roles, and to nobody else: so whether
     // it did is what the page goes by. Every button is there either way, and sends the call when clicked.
-    private bool Manages => _roles?.Value?.Any(role => role.Keys is not null) == true;
+    private bool Manages => _roles?.Value?.Any(role => role.Permissions is not null) == true;
 
     protected override async Task LoadAsync()
     {
-        // The keys to pick from first and the roles last, so that when they are refused, the refusal is the last
+        // The permissions to pick from first and the roles last, so that when they are refused, the refusal is the last
         // response.
-        var keys = (await Api.KeyCatalogueAsync()).Value?.Permissions.Where(permission => !permission.Retired).ToList() ?? [];
+        var permissions = (await Api.PermissionCatalogueAsync()).Value?.Permissions.Where(permission => !permission.Retired).ToList() ?? [];
         var roles = await Api.ProjectRolesAsync();
-        (_keys, _roles) = (keys, roles);
+        (_permissions, _roles) = (permissions, roles);
         Picked();
     }
 
-    // The role picked to change: its name, description and keys as they are, to change from. Nothing picked, or a
+    // The role picked to change: its name, description and permissions as they are, to change from. Nothing picked, or a
     // role no longer listed, leaves the fields as they were.
     private void Picked()
     {
         if (_roles?.Value?.FirstOrDefault(role => role.Id.ToString() == _picked) is { } role)
         {
             (_name, _description) = (role.Name, role.Description);
-            _pickedKeys = new HashSet<string>(role.KeysShown, StringComparer.Ordinal);
+            _pickedPermissions = new HashSet<string>(role.PermissionsShown, StringComparer.Ordinal);
         }
     }
 
@@ -129,7 +129,7 @@ else
         if (outcome.Succeeded)
         {
             (_newName, _newDescription) = (null, null);
-            _newKeys = new HashSet<string>(StringComparer.Ordinal);
+            _newPermissions = new HashSet<string>(StringComparer.Ordinal);
             await ReloadAsync();
         }
     }

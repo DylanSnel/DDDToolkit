@@ -14,9 +14,10 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 /// none answers what a seat, a unit or a role is called, which the directory answers by id.
 /// </para>
 /// <para>
-/// The next three answer a seat what it may learn of other seats' rights, and the three after them read across
-/// tenants, for system work that began in no tenant. These six run as their owner, and answer ids, keys and
-/// dates only. So does the last, which a database has where the context maps invitations: it reads across
+/// The next three answer a seat what it may learn of other seats' rights, the one after them what the units it asks
+/// about are called, the one after that what the tenants a person has a seat in are called, and the three after that
+/// read across tenants, for system work that began in no tenant. These run as their owner, and answer ids,
+/// permissions, dates and the names of the units and the tenants asked about only. So does the last, which a database has where the context maps invitations: it reads across
 /// tenants too, and answers which invitation a token's digest is for.
 /// </para>
 /// </summary>
@@ -24,10 +25,10 @@ public static class TenancyFunctionNames
 {
     /// <summary>
     /// The rights the caller may read, as rows of <see cref="Access.SeatRight{TTenantId, TSeatId, TUnitId, TRoleId}"/>:
-    /// <c>"TenantId"</c>, <c>"SeatId"</c>, <c>"UnitId"</c>, <c>"RoleId"</c>, <c>"Key"</c>, <c>"StartsAt"</c> and
+    /// <c>"TenantId"</c>, <c>"SeatId"</c>, <c>"UnitId"</c>, <c>"RoleId"</c>, <c>"Permission"</c>, <c>"StartsAt"</c> and
     /// <c>"EndsAt"</c>.
     /// </summary>
-    public const string CallerRights = "caller_rights";
+    public const string CallerPermissions = "caller_permissions";
 
     /// <summary>
     /// The closure of the organization's tree, as rows of <see cref="Access.OrganizationUnitPath{TTenantId, TUnitId}"/>:
@@ -43,10 +44,10 @@ public static class TenancyFunctionNames
 
     /// <summary>
     /// The roles, as rows of <see cref="Access.RoleRow{TTenantId, TRoleId}"/>: <c>"Id"</c>, <c>"TenantId"</c>,
-    /// <c>"FromPack"</c>, <c>"Status"</c> and <c>"Keys"</c>, an array of text however the roles' table stores
+    /// <c>"FromPack"</c>, <c>"Status"</c> and <c>"Permissions"</c>, an array of text however the roles' table stores
     /// them; never the name.
     /// </summary>
-    public const string TenantRoles = "tenant_roles";
+    public const string TenantRoles = "tenant_roles_with_permissions";
 
     /// <summary>
     /// Where seats are placed, as rows of <see cref="Access.PlacementRow{TSeatId, TUnitId}"/>: <c>"SeatId"</c>,
@@ -69,25 +70,42 @@ public static class TenancyFunctionNames
     public const string TenantAdministrators = "tenant_administrators";
 
     /// <summary>
-    /// The rights a move of a unit changes, as rows of <c>"UnitId"</c>, <c>"Key"</c>, <c>"EndsAt"</c>,
+    /// The rights a move of a unit changes, as rows of <c>"UnitId"</c>, <c>"Permission"</c>, <c>"EndsAt"</c>,
     /// <c>"Parent"</c> and <c>"OfCaller"</c>: its parameters are the unit's parent and the parent it would get.
     /// Answered to a seat that manages units at both: its own rights, and another seat's only where it reaches one
     /// parent and not the other, which is where the move changes it.
     /// </summary>
-    public const string RightsAMoveChanges = "rights_a_move_changes";
+    public const string PermissionsAMoveChanges = "permissions_a_move_changes";
 
     /// <summary>
-    /// The seats that hold a key at a unit, as rows of <c>"SeatId"</c>: its parameters are the key and the unit.
+    /// The seats that hold a permission at a unit, as rows of <c>"SeatId"</c>: its parameters are the permission and the unit.
     /// A seat is answered each holder whose grant there it may read: itself, and any other seat at a unit where it
     /// manages grants, seats or units, or anywhere when it manages roles for the whole tenant.
     /// </summary>
-    public const string SeatsHoldingAt = "seats_holding_at";
+    public const string SeatsHoldingPermissionAt = "seats_holding_permission_at";
 
     /// <summary>
-    /// The keys stored on the roles of every tenant, each once, as text: no parameters. One of the three reads
+    /// What units of the caller's tenant are called, as rows of <c>"Id"</c>, <c>"Name"</c>, <c>"Path"</c> and
+    /// <c>"Depth"</c>: its parameter is the array of the units asked about. The name and path of each of those that
+    /// is the tenant's, and nothing more of it, whatever the seat reads of the organization: a seat on a project at a
+    /// unit it is not placed under, or one an application's restrictive rule keeps out of the units, still reads what
+    /// that unit is called.
+    /// </summary>
+    public const string UnitsNamed = "units_named";
+
+    /// <summary>
+    /// What the tenants the caller's identity has a seat in are called, whatever the status of the seat or of the
+    /// tenant, as rows of <c>"Id"</c>, <c>"Slug"</c> and <c>"Name"</c>: no parameters. The tenant picker reads the
+    /// names through it, before a tenant is chosen, so it names every tenant by its organization's name whatever an
+    /// application's restrictive rule on the organization lets the caller read of it; it answers nothing more of one.
+    /// </summary>
+    public const string TenantNamesOfIdentity = "identity_tenant_names";
+
+    /// <summary>
+    /// The permissions stored on the roles of every tenant, each once, as text: no parameters. One of the three reads
     /// across tenants: answered to Tenancy's own system work, begun in no tenant, and to nobody else.
     /// </summary>
-    public const string RoleKeysInUse = "role_keys_in_use";
+    public const string RolePermissionsInUse = "role_permissions_in_use";
 
     /// <summary>
     /// The ids of the tenants a round of system work visits, the active and the suspended ones: no parameters.

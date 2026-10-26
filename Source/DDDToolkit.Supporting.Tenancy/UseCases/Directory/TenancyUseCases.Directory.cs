@@ -24,7 +24,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
     /// the same unit of work.
     /// </para>
     /// <para>
-    /// Whoever works in a tenant reads it: a seat of it, or system work in it. No key is asked, for a list, for a
+    /// Whoever works in a tenant reads it: a seat of it, or system work in it. No permission is asked, for a list, for a
     /// question by id or for a seat's overview, and a question by id answers any seat, role or unit of the caller's
     /// tenant; an id of another tenant, or of nothing, is left out of the answer without a word, so the answer never
     /// says which. A question by id takes at most <see cref="MostIds"/> ids. Who may ask is the application's to say,
@@ -49,12 +49,12 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         /// <summary>How many ids one question by id takes.</summary>
         public const int MostIds = 200;
 
-        /// <summary>Every permission key and role pack of the application.</summary>
+        /// <summary>Every permission and role pack of the application.</summary>
         public TenancyCatalogue Catalogue => catalogue;
 
         /// <summary>
         /// Who the calling seat is, and what it may do where: its own seat, whole, as the application's class, with
-        /// the tenant, the paths of the units it is placed at, the roles its grants name, and every live key it holds
+        /// the tenant, the paths of the units it is placed at, the roles its grants name, and every live permission it holds
         /// now with where it is granted and every unit it reaches (<see cref="SeatOverview"/>). A seat asks this about
         /// itself; any seat of the tenant, its own included, is <see cref="SeatOverviewAsync"/>.
         /// </summary>
@@ -80,7 +80,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         /// <summary>
         /// Any seat of the caller's tenant and what it may do where, as <see cref="WhoAmIAsync"/> answers the caller's
         /// own: the seat, whole, as the application's class, with the tenant, the paths of the units it is placed at,
-        /// the roles its grants name, and every key it holds now with where it is granted and every unit it reaches
+        /// the roles its grants name, and every permission it holds now with where it is granted and every unit it reaches
         /// (<see cref="SeatOverview"/>). Asked about the caller's own seat, it answers what <see cref="WhoAmIAsync"/>
         /// answers.
         /// </summary>
@@ -88,17 +88,17 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         /// It asks nothing of the caller beyond what every question of the directory asks, a seat of the tenant or
         /// system work in it. Who may see another person's access is the application's choice, so the request that
         /// asks this states it (<c>IRequireAccess.RequiredAccess</c>), as a request states it for everything else:
-        /// <c>TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage)</c> for a tenant's administration, say, or
+        /// <c>TenancyAccess.AtTenant(TenancyPermissions.SeatsManage)</c> for a tenant's administration, say, or
         /// <c>TenancyAccess.InTenant()</c> where the database's read rules are the rule.
         /// <para>
         /// What comes back is what the caller reads, through the store, as the lists read seats. On Postgres Tenancy's
         /// policies give a seat another seat's grants only where it may read them: at the units where it manages
         /// grants, seats or units and below them, or all of them when it manages roles for the whole tenant; and a
-        /// read rule of the application's on its seat class decides which seats it reads at all. The keys are worked
+        /// read rule of the application's on its seat class decides which seats it reads at all. The permissions are worked
         /// out from the grants that were read, by the rule the rights are written by, since a database that keeps the
-        /// rights shows a seat its own alone: a key is shown where the caller reads the grant that gives it, and a
+        /// rights shows a seat its own alone: a permission is shown where the caller reads the grant that gives it, and a
         /// seat that is not active holds none. Where no policy applies, on another database or in a context without
-        /// row level security, every seat comes with all its grants and keys, and the request's requirement is the
+        /// row level security, every seat comes with all its grants and permissions, and the request's requirement is the
         /// only rule: choose it as the rule you mean.
         /// </para>
         /// <para>
@@ -136,20 +136,22 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
             var seat = (await store.ListSeatsAsync(tenantId, [seatId], cancellationToken).ConfigureAwait(false)).FirstOrDefault()
                        ?? throw TenancyRefusals.Refuse(TenancyRefusals.SeatNotFound);
             var tenant = await gate.LoadTenantAsync(tenantId, cancellationToken).ConfigureAwait(false);
-            var organization = await gate.ReadOrganizationAsync(tenantId, cancellationToken).ConfigureAwait(false);
+            var organization = await gate.OrganizationTheCallerReadsAsync(tenantId, cancellationToken).ConfigureAwait(false);
             var roles = (await store.ListRolesAsync(tenantId, cancellationToken).ConfigureAwait(false)).ToDictionary(role => role.Id);
-            var units = await UnitMap.ReadAsync(store, organization, cancellationToken).ConfigureAwait(false);
+            var units = organization is null
+                ? await UnitsNamedOnlyAsync(tenantId, seat, cancellationToken).ConfigureAwait(false)
+                : UnitsOf(await UnitMap.ReadAsync(store, organization, cancellationToken).ConfigureAwait(false));
 
             // What a role grants, from the rows the access questions read: a filter of the application's own on its
             // role class hides a role's name, never what its grants give, as the rights the questions decide by are
             // written from these same rows. A tenant has few roles, so they are one statement.
             var facts = (await store.Queries.ListAsync(store.Reads.Roles.Where(role => role.TenantId.Equals(tenantId)), cancellationToken).ConfigureAwait(false))
-                .ToDictionary(role => role.Id, role => new RoleFacts(role.Status == RoleStatus.Active, role.Keys));
+                .ToDictionary(role => role.Id, role => new RoleFacts(role.Status == RoleStatus.Active, role.Permissions));
 
             // Only what is not on the seat: the paths of its placements' units and the roles its grants name. A role
             // the store does not answer, one a filter of the application's own hides, is left out rather than made
             // up, and SeatOverview.RoleOf answers null for it.
-            var placedAt = units.Refs(seat.Placements.Select(placement => placement.UnitId));
+            var placedAt = units.Refs([.. seat.Placements.Select(placement => placement.UnitId)]);
             var named = seat.Placements
                 .SelectMany(placement => placement.Grants.Select(grant => grant.RoleId))
                 .Distinct()
@@ -158,35 +160,66 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
                 .OrderBy(role => role.Name, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
 
-            // The keys the grants that were read give now, worked out as the rights are written: by an active seat,
-            // from an active role, and only the keys the catalogue keeps live, so a key retired since the rights were
+            // The permissions the grants that were read give now, worked out as the rights are written: by an active seat,
+            // from an active role, and only the permissions the catalogue keeps live, so a permission retired since the rights were
             // written holds nowhere. Not read from the rights themselves, which a database that keeps them shows a seat
-            // only of its own: worked out from the grants, a key of another seat's is shown exactly where the caller
+            // only of its own: worked out from the grants, a permission of another seat's is shown exactly where the caller
             // reads the grant that gives it.
             var held = TenancyProjection.RightsOf(tenantId, seat.Id, seat.Status, TenancyProjection.GrantsOf(seat), role => facts.GetValueOrDefault(role), catalogue)
                 .Where(right => right.StartsAt <= now && (right.EndsAt == null || right.EndsAt > now));
-            var keys = held
-                .GroupBy(right => right.Key, StringComparer.Ordinal)
+            var permissions = held
+                .GroupBy(right => right.Permission, StringComparer.Ordinal)
                 .OrderBy(group => group.Key, StringComparer.Ordinal)
                 .Select(group =>
                 {
                     var grantedAt = group.Select(right => right.UnitId).Distinct().ToArray();
-                    return new KeyReach(
+                    return new PermissionReach(
                         group.Key,
                         units.Root is { } root && grantedAt.Contains(root),
                         units.Refs(grantedAt),
-                        units.Refs(grantedAt.SelectMany(units.Subtree)));
+                        units.Refs([.. grantedAt.SelectMany(units.Subtree)]));
                 })
                 .ToArray();
 
+            // The organization names the tenant; for a seat a restrictive rule keeps out of it, Tenancy's function names
+            // it as it names the tenants in the picker.
+            var name = organization?.Name
+                       ?? await store.TenantNameAsync(tenantId, cancellationToken).ConfigureAwait(false)
+                       ?? tenant.Slug.Value;
+
             return new SeatOverview(
-                new TenantSummary(tenant.Id, tenant.Slug.Value, organization.Name, tenant.Shape, tenant.Status),
+                new TenantSummary(tenant.Id, tenant.Slug.Value, name, tenant.Shape, tenant.Status),
                 seat,
                 placedAt,
                 named,
-                keys,
+                permissions,
                 now);
         }
+
+        /// <summary>The units an overview names, from the organization the caller reads: every unit, with the tree.</summary>
+        private static OverviewUnits UnitsOf(UnitMap map) => new(map.Root, map.Refs, map.Subtree);
+
+        /// <summary>
+        /// The units an overview names, for a seat that a restrictive rule of the application's keeps out of the
+        /// organization: the units it is placed at, named through the storage as <see cref="UnitsByIdAsync"/> names
+        /// them, and nothing below them, which the seat does not read.
+        /// </summary>
+        private async Task<OverviewUnits> UnitsNamedOnlyAsync(TTenantId tenantId, TSeat seat, CancellationToken cancellationToken)
+        {
+            TUnitId[] placedAt = [.. seat.Placements.Select(placement => placement.UnitId).Distinct()];
+            var named = placedAt.Length == 0
+                ? []
+                : await store.UnitsNamedAsync(tenantId, placedAt, cancellationToken).ConfigureAwait(false) ?? [];
+            var paths = named.ToDictionary(unit => unit.Id, unit => unit.Path);
+
+            return new OverviewUnits(
+                named.FirstOrDefault(unit => unit.Depth == 1)?.Id,
+                ids => [.. ids.Distinct().Where(paths.ContainsKey).Select(id => new UnitRef(id, paths[id])).OrderBy(unit => unit.Path, StringComparer.OrdinalIgnoreCase)],
+                id => [id]);
+        }
+
+        /// <summary>What an overview needs of the units it names: the root, the path of each, and what is below one.</summary>
+        private sealed record OverviewUnits(TUnitId? Root, Func<IEnumerable<TUnitId>, IReadOnlyList<UnitRef>> Refs, Func<TUnitId, IEnumerable<TUnitId>> Subtree);
 
         /// <summary>
         /// The tenant's seats, the application's own class, each whole and in the order of their ids: a seat has
@@ -199,7 +232,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         /// the application added; tracked by nobody, so nothing done to a seat is saved. The identity is the
         /// application's to keep: what leaves is what it selects.
         /// <para>
-        /// No key is asked, and only a database's own read rules narrow what of another seat is read: on Postgres,
+        /// No permission is asked, and only a database's own read rules narrow what of another seat is read: on Postgres,
         /// Tenancy's policies answer another seat's grants only where the caller may read them, and elsewhere, or in a
         /// context without row level security, every seat comes with all its placements and grants. Where another
         /// seat's grants are shown, the request that asks says who may see them, as a request that answers from
@@ -300,7 +333,12 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
             var gate = new Gate(store, catalogue, clock);
             var tenantId = gate.RequireTenant();
 
-            var organization = await gate.ReadOrganizationAsync(tenantId, cancellationToken).ConfigureAwait(false);
+            // A seat a restrictive rule of the application's keeps out of the organization reads none of its units.
+            if (await gate.OrganizationTheCallerReadsAsync(tenantId, cancellationToken).ConfigureAwait(false) is not { } organization)
+            {
+                return [];
+            }
+
             var units = await UnitMap.ReadAsync(store, organization, cancellationToken).ConfigureAwait(false);
             IEnumerable<TUnitId> readable = gate.BySystem
                 ? units.Ids
@@ -310,10 +348,12 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         }
 
         /// <summary>
-        /// The units among <paramref name="ids"/> that are the caller's tenant's, as <see cref="ListUnitsAsync"/>
-        /// answers them, by path, whichever of them the caller is placed under: a seat that works on something at a
-        /// unit it is not placed under still reads what that unit is called. An id of another tenant, or of no unit,
-        /// is left out without a word.
+        /// What the units among <paramref name="ids"/> that are the caller's tenant's are called, by path, whichever of
+        /// them the caller is placed under: a seat that works on something at a unit it is not placed under still reads
+        /// what that unit is called, and so does one an application's restrictive rule keeps out of the organization.
+        /// So the answer is each unit's name, path and depth, and nothing more of it: on a database that keeps its own
+        /// policies it comes from Tenancy's function that runs as its owner and answers the ids asked alone. An id of
+        /// another tenant, or of no unit, is left out without a word.
         /// </summary>
         /// <param name="ids">The units asked about, at most <see cref="MostIds"/> different ones.</param>
         /// <param name="cancellationToken">Cancels the read.</param>
@@ -321,7 +361,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         /// The caller is nobody, with its own code; or <c>tenancy.too-many-ids</c>.
         /// </exception>
         /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>
-        public async Task<IReadOnlyList<UnitInTree>> UnitsByIdAsync(IReadOnlyCollection<TUnitId> ids, CancellationToken cancellationToken)
+        public async Task<IReadOnlyList<NamedUnit<TUnitId>>> UnitsByIdAsync(IReadOnlyCollection<TUnitId> ids, CancellationToken cancellationToken)
         {
             ArgumentNullException.ThrowIfNull(ids);
 
@@ -333,9 +373,16 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
                 return [];
             }
 
+            // A seat asks the storage, which answers the ids alone where the database keeps its own policies; system
+            // work in the tenant reads the organization whole, and no rule of the application's narrows it.
+            if (!gate.BySystem && await store.UnitsNamedAsync(tenantId, asked, cancellationToken).ConfigureAwait(false) is { } named)
+            {
+                return [.. named.OrderBy(unit => unit.Path, StringComparer.OrdinalIgnoreCase)];
+            }
+
             var organization = await gate.ReadOrganizationAsync(tenantId, cancellationToken).ConfigureAwait(false);
             var units = await UnitMap.ReadAsync(store, organization, cancellationToken).ConfigureAwait(false);
-            return units.InTree(asked);
+            return [.. units.InTree(asked).Select(found => new NamedUnit<TUnitId>(found.Unit.Id, found.Unit.Name, found.Path, found.Depth))];
         }
 
         /// <summary>
@@ -375,7 +422,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
                 .ThenBy(role => role.Name, StringComparer.OrdinalIgnoreCase)];
 
         private RoleSummary Summary(TRole role)
-            => new(role.Id, role.Name, role.FromPack, role.Status, role.Keys, catalogue.AccessManagingKeysOf(role.Facts).Count > 0);
+            => new(role.Id, role.Name, role.FromPack, role.Status, role.Permissions, catalogue.AccessManagingPermissionsOf(role.Facts).Count > 0);
     }
 
     /// <summary>

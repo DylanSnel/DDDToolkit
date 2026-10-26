@@ -4,7 +4,7 @@ using HotChocolate.Types;
 namespace Examples.Tenancy.Tenants.Api.Catalogue.GraphQL;
 
 /// <summary>
-/// A permission key of the catalogue, as the schema shows it: declared over the record the catalogue's query
+/// A permission of the catalogue, as the schema shows it: declared over the record the catalogue's query
 /// answers.
 /// </summary>
 [ObjectType<PermissionOverview>]

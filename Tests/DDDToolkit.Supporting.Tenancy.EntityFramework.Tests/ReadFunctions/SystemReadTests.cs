@@ -17,20 +17,20 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework.Tests;
 /// </summary>
 public sealed class SystemReadTests
 {
-    private const string PolishKey = "widget.polish";
+    private const string PolishPermission = "widget.polish";
 
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
     [Fact]
     public async Task A_system_read_inside_a_user_transaction_runs_on_its_own_connection()
     {
-        // In a file, where every context connects on its own, as on a server. Meadow's role holds a key a later
+        // In a file, where every context connects on its own, as on a server. Meadow's role holds a permission a later
         // version of the application removed from its code.
-        using var before = new TestServices(inFile: true, configure: services => services.AddTenancyPermissions([new Permission(PolishKey, "Widgets", "Polish widgets")]));
+        using var before = new TestServices(inFile: true, configure: services => services.AddTenancyPermissions([new Permission(PolishPermission, "Widgets", "Polish widgets")]));
         var harbor = await before.ProvisionAsync("harbor");
         var meadow = await before.ProvisionAsync("meadow");
         await before.BySystemIn(meadow.Tenant, services =>
-            services.Roles().CreateAsync("Polisher", "Polishes widgets", [PolishKey, HostCatalogue.WidgetRead], Cancellation));
+            services.Roles().CreateAsync("Polisher", "Polishes widgets", [PolishPermission, HostCatalogue.WidgetRead], Cancellation));
 
         using var after = new TestServices(database: before.Database);
 
@@ -40,15 +40,15 @@ public sealed class SystemReadTests
             var context = services.Tenancy();
             await using var transaction = await context.Database.BeginTransactionAsync(Cancellation);
             await context.Database.ExecuteSqlRawAsync(
-                "UPDATE \"Roles\" SET \"Keys\" = '[\"widget.buff\"]' WHERE \"TenantId\" = {0}", [harbor.Tenant.Value], Cancellation);
+                "UPDATE \"Roles\" SET \"Permissions\" = '[\"widget.buff\"]' WHERE \"TenantId\" = {0}", [harbor.Tenant.Value], Cancellation);
             var callers = context.Database.GetDbConnection();
             after.Commands.Reset();
 
-            var unknown = await TenancyChecks.UnknownStoredKeysAsync<HostRole, RoleId, TenantId>(
+            var unknown = await TenancyChecks.UnknownStoredPermissionsAsync<HostRole, RoleId, TenantId>(
                 context, services.GetRequiredService<TenancyCatalogue>(), Cancellation);
 
             // Across tenants, as the application; and not what the caller's open transaction holds.
-            unknown.Should().Equal([PolishKey], "meadow's key is read, and harbor's uncommitted change is not");
+            unknown.Should().Equal([PolishPermission], "meadow's permission is read, and harbor's uncommitted change is not");
 
             var read = after.Commands.Sent.Should().ContainSingle("the read is one query").Which;
             read.Caller.Should().BeSameAs(Caller.System, "the read runs as the application itself");
@@ -75,7 +75,7 @@ public sealed class SystemReadTests
             using var ambient = new TransactionScope(TransactionScopeAsyncFlowOption.Enabled);
             services.Commands.Reset();
 
-            var unknown = await TenancyChecks.UnknownStoredKeysAsync<HostRole, RoleId, TenantId>(
+            var unknown = await TenancyChecks.UnknownStoredPermissionsAsync<HostRole, RoleId, TenantId>(
                 scoped.Tenancy(), scoped.GetRequiredService<TenancyCatalogue>(), Cancellation);
 
             unknown.Should().BeEmpty();
@@ -130,13 +130,13 @@ public sealed class SystemReadTests
         await services.BySeat(harbor.Tenant, harbor.AdminSeat, async scoped =>
         {
             services.Commands.Reset();
-            await FluentActions.Awaiting(() => TenancyChecks.UnknownStoredKeysAsync<HostRole, RoleId, TenantId>(scoped.Tenancy(), scoped.GetRequiredService<TenancyCatalogue>(), Cancellation))
+            await FluentActions.Awaiting(() => TenancyChecks.UnknownStoredPermissionsAsync<HostRole, RoleId, TenantId>(scoped.Tenancy(), scoped.GetRequiredService<TenancyCatalogue>(), Cancellation))
                 .Should().ThrowAsync<DbException>();
             await FluentActions.Awaiting(() => TenancySystemReads.TenantsToSweepAsync<HostTenant, TenantId>(scoped.Tenancy(), "widgets", Cancellation))
                 .Should().ThrowAsync<DbException>();
 
             services.Commands.Sent.Select(command => (Text: command.Text.Trim(), Caller: command.Caller!.ToString())).Should().Equal(
-                ("SELECT f.v AS \"Value\" FROM \"" + TenancyFunctionNames.RoleKeysInUse + "\"() AS f(v)", "system in " + TenancyWork.SystemScope),
+                ("SELECT f.v AS \"Value\" FROM \"" + TenancyFunctionNames.RolePermissionsInUse + "\"() AS f(v)", "system in " + TenancyWork.SystemScope),
                 ("SELECT f.v AS \"TenantId\" FROM \"" + TenancyFunctionNames.TenantsToSweep + "\"() AS f(v)", "system in widgets"));
             services.Commands.Sent.Should().OnlyContain(
                 command => command.TenancyCaller == null && !ReferenceEquals(command.Context, scoped.Tenancy()) && !command.InAmbientTransaction,

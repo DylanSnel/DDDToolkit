@@ -11,11 +11,11 @@ namespace Examples.Tenancy.Projects.Application.ProjectRoles.Commands;
 /// <param name="Id">The role.</param>
 /// <param name="Name">Its name, as it is to be.</param>
 /// <param name="Description">What it is for, as it is to be; <see langword="null"/> clears it.</param>
-[RequiresKey(RequiredKey)]
+[RequiresPermission(RequiredPermission)]
 public sealed record RenameProjectRole(ProjectRoleId Id, string Name, string? Description) : ICommand, IProjectsRequest
 {
-    /// <summary>The key the caller holds for the whole tenant.</summary>
-    public const string RequiredKey = ProjectRoleListing.KeysKey;
+    /// <summary>The permission the caller holds for the whole tenant.</summary>
+    public const string RequiredPermission = ProjectRoleListing.ManageRolesPermission;
 }
 
 /// <summary>Handles <see cref="RenameProjectRole"/>: loads the role, renames it and saves.</summary>
@@ -32,7 +32,7 @@ public sealed class RenameProjectRoleHandler(IProjectStore store, ProjectMembers
 {
     /// <inheritdoc />
     /// <exception cref="Exceptions.RefusalException">
-    /// <c>tenancy.not-permitted</c>, naming the key, for a caller that does not hold it for the whole tenant;
+    /// <c>tenancy.not-permitted</c>, naming the permission, for a caller that does not hold it for the whole tenant;
     /// <c>projects.role-not-found</c>, for a role of another tenant too; <c>projects.role-archived</c>,
     /// <c>projects.role-name-invalid</c>, <c>projects.role-name-taken</c>.
     /// </exception>

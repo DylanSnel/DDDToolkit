@@ -50,7 +50,7 @@ public class OtherSeatsRightsTests
         var temporary = await harness.SeatAt("Bert", harness.Harbor.Root);
         await harness.Grant(temporary, harness.Harbor.Root, HostCatalogue.AdministratorPack, until: FixedClock.Start.AddDays(7));
         var di = await harness.SeatAt("Di", harness.Harbor.North, HostCatalogue.SupervisorPack);
-        var supervisors = string.Join(", ", TenancyKeys.GrantsManage, TenancyKeys.SeatsManage, TenancyKeys.UnitsManage);
+        var supervisors = string.Join(", ", TenancyPermissions.GrantsManage, TenancyPermissions.SeatsManage, TenancyPermissions.UnitsManage);
 
         // Away from North, North Coast would no longer be Di's to supervise, which she is for good, and Bert runs the
         // tenant for a week: Di's rights are not Bert's to read, and the move is refused for them all the same.
@@ -61,16 +61,16 @@ public class OtherSeatsRightsTests
         harness.Store.Calls.Should().Contain(nameof(InMemoryTenancyStore.RightsAMoveChangesAsync));
         harness.Store.Organization(harness.Tenant).FindUnit(harness.Harbor.NorthCoast)!.ParentId.Should().Be(harness.Harbor.North);
 
-        // The mover's own keys count as before: Di supervises South for a week, and a unit of South moved under North
+        // The mover's own permissions count as before: Di supervises South for a week, and a unit of South moved under North
         // would be hers for good.
         await harness.Place(di, harness.Harbor.South);
         await harness.Grant(di, harness.Harbor.South, HostCatalogue.SupervisorPack, until: FixedClock.Start.AddDays(7));
         var pier = await harness.As(di, h => h.Organization.AddUnitAsync(harness.Harbor.South, "South Pier", default));
         var longer = await Refused.WithCodeAsync(TenancyRefusals.GrantExceedsOwn, () => harness.As(di, h => h.Organization.MoveUnitAsync(pier, harness.Harbor.North, default)));
-        longer.Arguments["Missing"].As<string>().Should().Contain(TenancyKeys.UnitsManage);
+        longer.Arguments["Missing"].As<string>().Should().Contain(TenancyPermissions.UnitsManage);
         await harness.As(di, h => h.Organization.MoveUnitAsync(harness.Harbor.NorthCoast, harness.Harbor.South, default));
 
-        // An administrator holds every key for good, and moves it back.
+        // An administrator holds every permission for good, and moves it back.
         await harness.As(harness.Administrator, h => h.Organization.MoveUnitAsync(harness.Harbor.NorthCoast, harness.Harbor.North, default));
         harness.Store.Organization(harness.Tenant).FindUnit(harness.Harbor.NorthCoast)!.ParentId.Should().Be(harness.Harbor.North);
     }
@@ -92,23 +92,23 @@ public class OtherSeatsRightsTests
 
         await harness.Run(harness.SeatCaller(harness.Administrator), async h =>
         {
-            // An administrator holds the role key at the root, with no end, from now or earlier: one that ends, or
+            // An administrator holds the role permission at the root, with no end, from now or earlier: one that ends, or
             // is still to start, is none.
             var pairs = await h.Store.AdministratorsAsync(h.Tenant, FixedClock.Start, default);
             pairs.Should().BeEquivalentTo([(harness.Administrator, administrators), (second, administrators)]);
             (await h.Store.AdministratorsAsync(h.Tenant, FixedClock.Start.AddDays(2), default)).Should().HaveCount(3, "the one that was still to start has started");
 
-            // A move from under North to under South: the mover's own rights, whatever their key, at each parent and
-            // above it, once for each parent they reach; and another seat's of a key that manages access where it
+            // A move from under North to under South: the mover's own rights, whatever their permission, at each parent and
+            // above it, once for each parent they reach; and another seat's of a permission that manages access where it
             // reaches one parent and not the other, which is where the move changes it.
-            var reaches = await h.Store.RightsAMoveChangesAsync(h.Tenant, harness.Administrator, h.Harbor.North, h.Harbor.South, h.Catalogue.AccessManagingKeys, FixedClock.Start, default);
-            reaches.Where(reach => reach.OfCaller).Should().HaveCount(2 * h.Catalogue.LiveKeys.Count, "every key of the administrator, held at the root, reaches both");
+            var reaches = await h.Store.RightsAMoveChangesAsync(h.Tenant, harness.Administrator, h.Harbor.North, h.Harbor.South, h.Catalogue.AccessManagingPermissions, FixedClock.Start, default);
+            reaches.Where(reach => reach.OfCaller).Should().HaveCount(2 * h.Catalogue.LivePermissions.Count, "every permission of the administrator, held at the root, reaches both");
             reaches.Where(reach => !reach.OfCaller)
                 .Should().OnlyContain(
-                    reach => h.Catalogue.ManagesAccess(reach.Key) && reach.UnitId == h.Harbor.North && reach.Parent == h.Harbor.North,
-                    "the supervisors' keys that manage access, held at North, reach North alone, and the widget keys of their roles are nobody's business")
+                    reach => h.Catalogue.ManagesAccess(reach.Permission) && reach.UnitId == h.Harbor.North && reach.Parent == h.Harbor.North,
+                    "the supervisors' permissions that manage access, held at North, reach North alone, and the widget permissions of their roles are nobody's business")
                 .And.HaveCount(6, "Ed's three and Gus's three");
-            reaches.Should().NotContain(reach => reach.UnitId == h.Harbor.South, "an operator at South holds no key that manages access");
+            reaches.Should().NotContain(reach => reach.UnitId == h.Harbor.South, "an operator at South holds no permission that manages access");
             reaches.Should().NotContain(reach => !reach.OfCaller && reach.UnitId == h.Harbor.Root, "the other administrators' rights at the root reach both parents, wherever the unit hangs");
             reaches.Should().Contain(reach => reach.EndsAt == FixedClock.Start.AddDays(7), "Gus's, which end later, have not ended");
         });

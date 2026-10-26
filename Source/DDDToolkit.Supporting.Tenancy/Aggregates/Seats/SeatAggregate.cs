@@ -201,7 +201,7 @@ public abstract partial class SeatAggregate<TSeatId, TTenantId, TUnitId, TRoleId
 
     /// <summary>
     /// Grants the seat a role at a unit where it is placed. Whether the granting seat may give the role (its
-    /// keys that manage access, held there long enough, and never a role that manages access to itself) is the
+    /// permissions that manage access, held there long enough, and never a role that manages access to itself) is the
     /// use case's to check, because it needs the catalogue and another seat's rights. A host that calls
     /// <see cref="Grant"/> directly gets neither. A seat may be recorded as its own granter.
     /// </summary>
@@ -259,7 +259,7 @@ public abstract partial class SeatAggregate<TSeatId, TTenantId, TUnitId, TRoleId
     /// <summary>
     /// Whether this seat, as it is in memory, is an administrator of its tenant: it is active, placed at the
     /// root, and holds there, with no end date and applying now, an active role that grants
-    /// <see cref="TenancyKeys.AdministratorKey"/>. A grant with an end date does not count: counting it would
+    /// <see cref="TenancyPermissions.AdministratorPermission"/>. A grant with an end date does not count: counting it would
     /// let the tenant lose its last administrator on a date nobody picked for that.
     /// </summary>
     /// <param name="root">The organization's root.</param>
@@ -279,7 +279,7 @@ public abstract partial class SeatAggregate<TSeatId, TTenantId, TUnitId, TRoleId
             if (grant.EndsAt is null
                 && grant.AppliesAt(now)
                 && roles(grant.RoleId) is { IsActive: true } facts
-                && facts.Keys.Contains(TenancyKeys.AdministratorKey, StringComparer.Ordinal))
+                && facts.Permissions.Contains(TenancyPermissions.AdministratorPermission, StringComparer.Ordinal))
             {
                 return true;
             }

@@ -19,8 +19,8 @@ namespace DDDToolkit.Access;
 /// The checks are asked in the order they were given, and the first that decides a requirement is the one that
 /// holds the caller to it. <see cref="AccessRequirement.AllowAnonymous"/> is decided here, by asking nobody. The
 /// set dependency injection makes asks the core's <see cref="CallerAccessCheck"/> first, for
-/// <see cref="AccessRequirement.SignedIn"/> and <see cref="AccessRequirement.Own{TValue}"/>, and then the checks the
-/// module added.
+/// <see cref="AccessRequirement.SignedIn"/>, <see cref="AccessRequirement.Own{TValue}"/> and
+/// <see cref="AccessRequirement.OwnerOf{TId}"/>, and then the checks the module added.
 /// </para>
 /// <para>
 /// A requirement that combines cases, <see cref="AccessRequirement.All"/> or <see cref="AccessRequirement.Any"/>, is

@@ -8,9 +8,9 @@ namespace DDDToolkit.Supporting.Tenancy.Postgres.Tests;
 /// <summary>
 /// The policies on the grants table know which roles manage access, from the catalogue the application runs with,
 /// and hold a query of the application's own to the same rule the use cases keep: a role that manages access is
-/// given and taken away only by a seat that holds each of its keys that do at the grant's unit, and never given by
-/// a seat to itself; any other role goes by the grants key alone. Each query here runs as the caller, past the use
-/// cases. How long the caller holds the keys is the use cases' alone.
+/// given and taken away only by a seat that holds each of its permissions that do at the grant's unit, and never given by
+/// a seat to itself; any other role goes by the grants permission alone. Each query here runs as the caller, past the use
+/// cases. How long the caller holds the permissions is the use cases' alone.
 /// </summary>
 /// <remarks>
 /// Harbor's Grants desk role holds <c>tenancy.grants.manage</c> alone; Hiro has it at North. Seth is a Supervisor at
@@ -27,18 +27,18 @@ public abstract class RolesThatManageAccessTests(TenancyPostgres postgres, Tenan
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
     [Fact]
-    public async Task A_grants_manager_without_its_keys_cannot_give_a_role_that_manages_access_by_a_query_as_the_caller()
+    public async Task A_grants_manager_without_its_permissions_cannot_give_a_role_that_manages_access_by_a_query_as_the_caller()
     {
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
         await using var hiro = await AsCaller.PersonAsync(database, Hiro.Identity, Harbor, Cancellation);
 
-        // Hiro gives roles at North Pier, but holds none of the Supervisor's keys that manage access but the grants key.
+        // Hiro gives roles at North Pier, but holds none of the Supervisor's permissions that manage access but the grants permission.
         var giving = () => hiro.ExecuteAsync(Give, Cancellation, Oli.Seat.Value, NorthPier.Value, HarborRoles.Supervisor.Value, Hiro.Seat.Value);
         (await giving.Should().ThrowAsync<PostgresException>()).Which.SqlState.Should().Be(PostgresErrorCodes.InsufficientPrivilege);
     }
 
     [Fact]
-    public async Task A_holder_of_its_keys_gives_a_role_that_manages_access_by_a_query_as_the_caller()
+    public async Task A_holder_of_its_permissions_gives_a_role_that_manages_access_by_a_query_as_the_caller()
     {
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
         await using (var seth = await AsCaller.PersonAsync(database, Seth.Identity, Harbor, Cancellation))
@@ -57,35 +57,35 @@ public abstract class RolesThatManageAccessTests(TenancyPostgres postgres, Tenan
     }
 
     [Fact]
-    public async Task No_seat_gives_itself_a_role_that_manages_access_by_a_query_as_the_caller_even_holding_its_keys()
+    public async Task No_seat_gives_itself_a_role_that_manages_access_by_a_query_as_the_caller_even_holding_its_permissions()
     {
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
         await using var seth = await AsCaller.PersonAsync(database, Seth.Identity, Harbor, Cancellation);
 
-        // Seth holds every key of the Supervisor at North Pier, where Seth is placed too.
+        // Seth holds every permission of the Supervisor at North Pier, where Seth is placed too.
         var appointing = () => seth.ExecuteAsync(Give, Cancellation, Seth.Seat.Value, NorthPier.Value, HarborRoles.Supervisor.Value, Seth.Seat.Value);
         (await appointing.Should().ThrowAsync<PostgresException>()).Which.SqlState.Should().Be(PostgresErrorCodes.InsufficientPrivilege);
     }
 
     [Fact]
-    public async Task A_role_that_manages_no_access_goes_by_the_grants_key_alone_by_a_query_as_the_caller()
+    public async Task A_role_that_manages_no_access_goes_by_the_grants_permission_alone_by_a_query_as_the_caller()
     {
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
         await using var hiro = await AsCaller.PersonAsync(database, Hiro.Identity, Harbor, Cancellation);
 
-        // An Operator works with widgets, whose keys Hiro does not hold, to someone else and to Hiro.
+        // An Operator works with widgets, whose permissions Hiro does not hold, to someone else and to Hiro.
         (await hiro.ExecuteAsync(Give, Cancellation, Oli.Seat.Value, NorthPier.Value, HarborRoles.Watcher.Value, Hiro.Seat.Value)).Should().Be(1);
         (await hiro.ExecuteAsync(Give, Cancellation, Hiro.Seat.Value, North.Value, HarborRoles.Operator.Value, Hiro.Seat.Value)).Should().Be(1);
         await hiro.CommitAsync(Cancellation);
     }
 
     [Fact]
-    public async Task A_key_the_application_marks_makes_its_roles_contained_in_the_policies()
+    public async Task A_permission_the_application_marks_makes_its_roles_contained_in_the_policies()
     {
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
 
         // Marked by the application, widget.create manages access, and the Operator, who holds it, with it.
-        var marked = TenancyCatalogue.Build(HostCatalogue.Application with { AccessManagingKeys = [HostCatalogue.WidgetCreate] }, []);
+        var marked = TenancyCatalogue.Build(HostCatalogue.Application with { AccessManagingPermissions = [HostCatalogue.WidgetCreate] }, []);
         foreach (var script in TenancyPostgres.AccessScripts(marked, names: names))
         {
             await TenancyPostgres.ExecuteAsync(database.ConnectionString, script, Cancellation);
@@ -103,7 +103,7 @@ public abstract class RolesThatManageAccessTests(TenancyPostgres postgres, Tenan
     }
 
     [Fact]
-    public async Task Taking_away_a_role_that_manages_access_needs_its_keys_by_a_query_as_the_caller()
+    public async Task Taking_away_a_role_that_manages_access_needs_its_permissions_by_a_query_as_the_caller()
     {
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
 
@@ -135,13 +135,13 @@ public abstract class RolesThatManageAccessTests(TenancyPostgres postgres, Tenan
     }
 
     [Fact]
-    public async Task Withdrawing_a_placement_that_holds_a_role_that_manages_access_needs_its_keys_by_a_query_as_the_caller()
+    public async Task Withdrawing_a_placement_that_holds_a_role_that_manages_access_needs_its_permissions_by_a_query_as_the_caller()
     {
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
-        await HoldAtAsync(database, Eve, North, [TenancyKeys.SeatsManage], Cancellation);
+        await HoldAtAsync(database, Eve, North, [TenancyPermissions.SeatsManage], Cancellation);
         const string placement = "DELETE FROM tenancy.\"SeatPlacements\" WHERE \"SeatId\" = $1 AND \"UnitId\" = $2";
 
-        // Eve manages seats at North, and holds none of the Grants desk's keys: Hiro's placement there, which the
+        // Eve manages seats at North, and holds none of the Grants desk's permissions: Hiro's placement there, which the
         // database would take his grant away with, and his rights with the grant, is not hers to remove.
         await using (var eve = await AsCaller.PersonAsync(database, Eve.Identity, Harbor, Cancellation))
         {
@@ -161,7 +161,7 @@ public abstract class RolesThatManageAccessTests(TenancyPostgres postgres, Tenan
                 .Should().Be(1, "and so is the right it gives");
         }
 
-        // Seth holds the grants key at North, and so withdraws Hiro there, his grant first, as the use case does.
+        // Seth holds the grants permission at North, and so withdraws Hiro there, his grant first, as the use case does.
         await using var seth = await AsCaller.PersonAsync(database, Seth.Identity, Harbor, Cancellation);
         (await seth.ExecuteAsync("DELETE FROM tenancy.\"SeatRoleGrants\" WHERE \"SeatId\" = $1 AND \"UnitId\" = $2", Cancellation, Hiro.Seat.Value, North.Value)).Should().Be(1);
         (await seth.ExecuteAsync(placement, Cancellation, Hiro.Seat.Value, North.Value)).Should().Be(1);
@@ -189,7 +189,7 @@ public abstract class RolesThatManageAccessTests(TenancyPostgres postgres, Tenan
     }
 
     [Fact]
-    public async Task Archiving_a_role_that_manages_access_takes_the_role_key_for_the_whole_tenant_by_a_query_as_the_caller()
+    public async Task Archiving_a_role_that_manages_access_takes_the_role_permission_for_the_whole_tenant_by_a_query_as_the_caller()
     {
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
         const string archiving = "UPDATE tenancy.\"Roles\" SET \"Status\" = 'Archived' WHERE \"Id\" = $1";
@@ -213,18 +213,18 @@ public abstract class RolesThatManageAccessTests(TenancyPostgres postgres, Tenan
     }
 
     [Fact]
-    public async Task Changing_a_roles_keys_takes_the_role_key_for_the_whole_tenant_by_a_query_as_the_caller()
+    public async Task Changing_a_roles_permissions_takes_the_role_permission_for_the_whole_tenant_by_a_query_as_the_caller()
     {
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
-        const string adding = "UPDATE tenancy.\"Roles\" SET \"Keys\" = pg_catalog.array_append(\"Keys\", 'tenancy.roles.manage') WHERE \"Id\" = $1";
+        const string adding = "UPDATE tenancy.\"Roles\" SET \"Permissions\" = pg_catalog.array_append(\"Permissions\", 'tenancy.roles.manage') WHERE \"Id\" = $1";
 
-        // A Supervisor manages units, seats and grants, and no roles: the Operator's keys stay as they are.
+        // A Supervisor manages units, seats and grants, and no roles: the Operator's permissions stay as they are.
         await using (var seth = await AsCaller.PersonAsync(database, Seth.Identity, Harbor, Cancellation))
         {
             (await seth.ExecuteAsync(adding, Cancellation, HarborRoles.Operator.Value)).Should().Be(0);
         }
 
-        // The administrator changes them, and every seat that holds the role holds the key with it.
+        // The administrator changes them, and every seat that holds the role holds the permission with it.
         await using (var ada = await AsCaller.PersonAsync(database, Ada.Identity, Harbor, Cancellation))
         {
             (await ada.ExecuteAsync(adding, Cancellation, HarborRoles.Operator.Value)).Should().Be(1);
@@ -232,7 +232,7 @@ public abstract class RolesThatManageAccessTests(TenancyPostgres postgres, Tenan
         }
 
         await using var oli = await AsCaller.PersonAsync(database, Oli.Identity, Harbor, Cancellation);
-        (await oli.ScalarAsync<bool>("SELECT tenancy.holds_key('tenancy.roles.manage')", Cancellation)).Should().BeTrue();
+        (await oli.ScalarAsync<bool>("SELECT tenancy.holds_permission('tenancy.roles.manage')", Cancellation)).Should().BeTrue();
     }
 }
 

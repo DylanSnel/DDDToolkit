@@ -15,11 +15,11 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 
 /// <summary>
 /// Checks an application can run against its Tenancy storage: that a context is wired so its saves are
-/// checked, and which keys stored on roles the catalogue no longer knows.
+/// checked, and which permissions stored on roles the catalogue no longer knows.
 /// <para>
 /// <c>AddTenancy</c> registers them as start-up checks, by the names below, which a host runs with
 /// <c>services.RunStartupChecks()</c>: the catalogue builds, every registered context is wired as
-/// <see cref="EnsureWired"/> asks, and every key a role holds that the catalogue does not know is logged as a
+/// <see cref="EnsureWired"/> asks, and every permission a role holds that the catalogue does not know is logged as a
 /// warning. The methods stay for a host that runs them by hand.
 /// </para>
 /// </summary>
@@ -27,8 +27,8 @@ public static class TenancyChecks
 {
     /// <summary>
     /// The start-up check that the catalogue builds: asked for the first time at start-up, so a catalogue that does
-    /// not hold together, two modules that declare one key say, stops the start rather than the first request that
-    /// needs it. Every module has added its keys by then, whatever order they were registered in.
+    /// not hold together, two modules that declare one permission say, stops the start rather than the first request that
+    /// needs it. Every module has added its permissions by then, whatever order they were registered in.
     /// </summary>
     public const string CatalogueBuildsCheck = "tenancy.catalogue-builds";
 
@@ -40,12 +40,12 @@ public static class TenancyChecks
     public const string ContextsWiredCheck = "tenancy.contexts-wired";
 
     /// <summary>
-    /// The start-up check that logs, as a warning, every key a role holds that the catalogue does not know
-    /// (<see cref="UnknownStoredKeysAsync"/>): removed from the code rather than retired. Such a key gives nothing
+    /// The start-up check that logs, as a warning, every permission a role holds that the catalogue does not know
+    /// (<see cref="UnknownStoredPermissionsAsync"/>): removed from the code rather than retired. Such a permission gives nothing
     /// and does no harm, so it refuses no start. It reads what is stored, so it runs with the checks of the
     /// database, and after those of Tenancy's own that prove it may read it.
     /// </summary>
-    public const string UnknownStoredKeysCheck = "tenancy.unknown-stored-keys";
+    public const string UnknownStoredPermissionsCheck = "tenancy.unknown-stored-permissions";
 
     /// <summary>
     /// Throws when <paramref name="context"/> has entity types kept to a tenant, Tenancy's own or those of
@@ -129,10 +129,10 @@ public static class TenancyChecks
     }
 
     /// <summary>
-    /// The keys stored on roles, in every tenant, that <paramref name="catalogue"/> does not know: removed from
-    /// the code rather than retired. Such a key gives no rights, and may stay on its role; this names them, so
-    /// a start-up check can report them. The query reads the roles' keys and nothing else, past every filter:
-    /// a role an application's own filter hides still holds its keys.
+    /// The permissions stored on roles, in every tenant, that <paramref name="catalogue"/> does not know: removed from
+    /// the code rather than retired. Such a permission gives no rights, and may stay on its role; this names them, so
+    /// a start-up check can report them. The query reads the roles' permissions and nothing else, past every filter:
+    /// a role an application's own filter hides still holds its permissions.
     /// <para>
     /// It is one of the few reads across tenants Tenancy makes (<see cref="TenancySystemReads"/>): one query, on
     /// a context of its own made in a new scope of the application's services, as a caller begun around it
@@ -140,7 +140,7 @@ public static class TenancyChecks
     /// who it runs as. Where the database keeps the rights (<see cref="TenancyStoreOptions.DatabaseKeepsRights"/>,
     /// as on Postgres with row level security), that caller is Tenancy's scoped system work in no tenant, a role
     /// the policies hold, and the query asks the database's function
-    /// <see cref="TenancyFunctionNames.RoleKeysInUse"/>, which answers the keys and nothing else of any role.
+    /// <see cref="TenancyFunctionNames.RolePermissionsInUse"/>, which answers the permissions and nothing else of any role.
     /// Anywhere else it is the toolkit's <c>Caller.System</c>, the application itself, reading the roles' table.
     /// </para>
     /// </summary>
@@ -150,10 +150,10 @@ public static class TenancyChecks
     /// </param>
     /// <param name="catalogue">The catalogue the application runs with.</param>
     /// <param name="cancellationToken">Cancels the query.</param>
-    /// <returns>The unknown keys, each once, in ordinal order.</returns>
+    /// <returns>The unknown permissions, each once, in ordinal order.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="context"/> or <paramref name="catalogue"/> is null.</exception>
     /// <exception cref="InvalidOperationException"><paramref name="context"/> was not made by the application's services.</exception>
-    public static async Task<IReadOnlyList<string>> UnknownStoredKeysAsync<TRole, TRoleId, TTenantId>(
+    public static async Task<IReadOnlyList<string>> UnknownStoredPermissionsAsync<TRole, TRoleId, TTenantId>(
         DbContext context,
         TenancyCatalogue catalogue,
         CancellationToken cancellationToken)
@@ -164,8 +164,8 @@ public static class TenancyChecks
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(catalogue);
 
-        // Every tenant's roles, so past the filters, and only their keys, so no tenant's data leaves the query but
-        // key strings. Over the tables, the keys are flattened here rather than in SQL: a JSON column on one
+        // Every tenant's roles, so past the filters, and only their permissions, so no tenant's data leaves the query but
+        // permission strings. Over the tables, the permissions are flattened here rather than in SQL: a JSON column on one
         // provider is an array on another. The database's function answers them flat already, whichever it is.
         var stored = await TenancySystemReads.RunAsync<IReadOnlyList<string>>(
             context,
@@ -174,19 +174,19 @@ public static class TenancyChecks
             {
                 var held = await own.Set<TRole>()
                     .IgnoreQueryFilters()
-                    .Select(role => role.Keys)
+                    .Select(role => role.Permissions)
                     .ToListAsync(cancellation)
                     .ConfigureAwait(false);
-                return [.. held.SelectMany(keys => keys)];
+                return [.. held.SelectMany(permissions => permissions)];
             },
             throughFunctions: async (own, cancellation) => await own.Database
-                .SqlQueryRaw<string>(TenancyFunctionSql.SelectValues(own, schema: null, TenancyFunctionNames.RoleKeysInUse, parameters: 0, "Value"))
+                .SqlQueryRaw<string>(TenancyFunctionSql.SelectValues(own, schema: null, TenancyFunctionNames.RolePermissionsInUse, parameters: 0, "Value"))
                 .ToListAsync(cancellation)
                 .ConfigureAwait(false),
             cancellationToken).ConfigureAwait(false);
 
         return stored
-            .Where(key => !catalogue.Knows(key))
+            .Where(permission => !catalogue.Knows(permission))
             .Distinct(StringComparer.Ordinal)
             .Order(StringComparer.Ordinal)
             .ToList();
@@ -221,25 +221,25 @@ public static class TenancyChecks
             }
         }));
 
-        services.AddStartupCheck(new StartupCheck(UnknownStoredKeysCheck, StartupCheckStage.Database, static async (provider, cancellationToken) =>
+        services.AddStartupCheck(new StartupCheck(UnknownStoredPermissionsCheck, StartupCheckStage.Database, static async (provider, cancellationToken) =>
         {
             var catalogue = provider.GetRequiredService<TenancyCatalogue>();
             var scope = provider.CreateAsyncScope();
             await using (scope.ConfigureAwait(false))
             {
                 var tenancy = scope.ServiceProvider.GetRequiredService<TContext>();
-                var unknown = await UnknownStoredKeysAsync<TRole, TRoleId, TTenantId>(tenancy, catalogue, cancellationToken).ConfigureAwait(false);
+                var unknown = await UnknownStoredPermissionsAsync<TRole, TRoleId, TTenantId>(tenancy, catalogue, cancellationToken).ConfigureAwait(false);
                 if (unknown.Count == 0)
                 {
                     return;
                 }
 
                 var logger = provider.GetService<ILoggerFactory>()?.CreateLogger(typeof(TenancyChecks).FullName!) ?? NullLogger.Instance;
-                foreach (var key in unknown)
+                foreach (var permission in unknown)
                 {
                     logger.LogWarning(
-                        "A role holds the key {Key}, which the catalogue does not know. It gives no rights. Retire a key rather than removing it from the code, or take it off the roles that hold it.",
-                        key);
+                        "A role holds the permission {Permission}, which the catalogue does not know. It gives no rights. Retire a permission rather than removing it from the code, or take it off the roles that hold it.",
+                        permission);
                 }
             }
         }));

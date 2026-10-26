@@ -57,6 +57,39 @@ public abstract class SupabaseShopScenarios<TAppHost>(ShopFixture<TAppHost> shop
     }
 
     [Fact]
+    public async Task Only_the_customer_who_placed_an_order_sends_it_elsewhere()
+    {
+        _shop.SkipUnlessStarted();
+        var alice = await _customers.SignInAsync("alice", Cancellation);
+        var bob = await _customers.SignInAsync("bob", Cancellation);
+        var elsewhere = new { street = "Neude 11", city = "Utrecht", postalCode = "3512 AE" };
+
+        var hers = await PlaceAsync(alice);
+        using (var asBob = await SendAsync(HttpMethod.Post, $"/orders/{hers}/ship-to", bob, elsewhere))
+        {
+            asBob.StatusCode.Should().Be(HttpStatusCode.NotFound, "the door read who placed it as Bob, and the policy keeps Alice's order from him");
+        }
+
+        using (var asAlice = await SendAsync(HttpMethod.Post, $"/orders/{hers}/ship-to", alice, elsewhere))
+        {
+            // Through the door either way: sent elsewhere while it is placed, or refused by the order once Inventory
+            // and Payments have confirmed it, which they may have done by now.
+            asAlice.StatusCode.Should().BeOneOf([HttpStatusCode.OK, HttpStatusCode.Conflict], "Alice placed it");
+        }
+
+        var guests = await PlaceAsync(token: null);
+        using (var asAliceOnTheGuests = await SendAsync(HttpMethod.Post, $"/orders/{guests}/ship-to", alice, elsewhere))
+        {
+            asAliceOnTheGuests.StatusCode.Should().Be(HttpStatusCode.Forbidden, "a guest's order is nobody's, though Alice may see it");
+        }
+
+        using (var asGuest = await SendAsync(HttpMethod.Post, $"/orders/{guests}/ship-to", token: null, elsewhere))
+        {
+            asGuest.StatusCode.Should().Be(HttpStatusCode.Forbidden, "whoever has its id is no customer, and owns nothing");
+        }
+    }
+
+    [Fact]
     public async Task A_customers_order_goes_through_checkout_like_anyone_elses()
     {
         _shop.SkipUnlessStarted();
@@ -79,8 +112,8 @@ public abstract class SupabaseShopScenarios<TAppHost>(ShopFixture<TAppHost> shop
         status.Should().Be("Confirmed");
     }
 
-    /// <summary>Places a kilo of coffee as <paramref name="token"/>'s customer, asking again while Ordering has not heard Catalog's prices yet.</summary>
-    private async Task<string> PlaceAsync(string token)
+    /// <summary>Places a kilo of coffee as <paramref name="token"/>'s customer, or as a guest's without one, asking again while Ordering has not heard Catalog's prices yet.</summary>
+    private async Task<string> PlaceAsync(string? token)
     {
         var deadline = DateTime.UtcNow + Settles;
         var order = new { street = "Oudegracht 1", city = "Utrecht", postalCode = "3511 AA", lines = new[] { new { sku = "COFFEE-1KG", quantity = 1 } } };

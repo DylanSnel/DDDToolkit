@@ -64,7 +64,7 @@ public sealed class MembersThroughTheDatabaseTests
             SELECT (SELECT group_concat("{FilingContext.StaffColumn}", ',') FROM (SELECT "{FilingContext.StaffColumn}" FROM "{FilingContext.FolderStaffTable}" WHERE "FolderId" = 7 ORDER BY 1))
                    || ' / ' || (SELECT count(*) FROM "{FilingContext.FolderStaffRolesTable}" WHERE "FolderId" = 7)
             """;
-        command.ExecuteScalar().Should().Be("C-014,K-001,T-030,V-020 / 3");
+        command.ExecuteScalar().Should().Be("C-014,K-001,T-030,V-020 / 2");
     }
 
     [Fact]
@@ -94,7 +94,7 @@ public sealed class MembersThroughTheDatabaseTests
             .Should().BeEquivalentTo([(DocumentMembership.Onlooker, (DateTimeOffset?)null, (UserId?)data.Ada), (DocumentMembership.Contributor, now.AddDays(3), data.Ada)]);
 
         // Take one, and the member stays with the other.
-        var taken = await SavedAsync(document => document.TakeRole(data.Hal, DocumentMembership.Onlooker, DocumentMembership.Owner));
+        var taken = await SavedAsync(document => document.TakeRole(data.Hal, DocumentMembership.Onlooker));
         taken.Shares.Single(share => share.MemberId == data.Hal).Roles.Should().ContainSingle().Which.RoleId.Should().Be(DocumentMembership.Contributor);
 
         // Remove, with every role held.
@@ -134,28 +134,28 @@ public sealed class MembersThroughTheDatabaseTests
         var now = data.Now;
         var version = (await filing.Services.ReadAsync(data.Minutes)).Version;
 
-        // To Ben, a member already: he keeps his own role, gets the owner's, and Ada loses that one alone.
-        await filing.Services.ChangeAsync(data.Minutes, document => document.HandOver(data.Ben, DocumentMembership.Owner, now));
+        // To Ben, a member already: he holds by owning now, so his role goes; Ada stays on, an onlooker.
+        await filing.Services.ChangeAsync(data.Minutes, document => document.HandOver(data.Ben, FormerOwner.StaysAs(DocumentMembership.Onlooker), now));
         var handed = await filing.Services.ReadAsync(data.Minutes);
 
         handed.OwnerId.Should().Be(data.Ben);
         handed.Version.Should().Be(version + 1);
-        handed.Shares.Single(share => share.MemberId == data.Ben).Roles.Select(held => held.RoleId).Should().BeEquivalentTo([DocumentMembership.Contributor, DocumentMembership.Owner]);
-        handed.Shares.Single(share => share.MemberId == data.Ada).Roles.Should().BeEmpty("the owner before stays a member, without the owner's role");
+        handed.Shares.Single(share => share.MemberId == data.Ben).Roles.Should().BeEmpty("an owner holds no role");
+        handed.Shares.Single(share => share.MemberId == data.Ada).Roles.Select(held => held.RoleId).Should().Equal([DocumentMembership.Onlooker], "the owner before stays a member, in the role the hand-over said");
         handed.GetInvariantViolations().Should().BeEmpty();
 
         // To Hal, who was no member: added, for good, as the owner.
-        await filing.Services.ChangeAsync(data.Minutes, document => document.HandOver(data.Hal, DocumentMembership.Owner, now));
+        await filing.Services.ChangeAsync(data.Minutes, document => document.HandOver(data.Hal, FormerOwner.StaysAs(DocumentMembership.Onlooker), now));
         var again = await filing.Services.ReadAsync(data.Minutes);
 
         again.OwnerId.Should().Be(data.Hal);
-        again.Shares.Single(share => share.MemberId == data.Hal).Should().Match<DocumentShare>(share => share.StartsAt == now && share.EndsAt == null && share.HoldsAt(DocumentMembership.Owner, now));
+        again.Shares.Single(share => share.MemberId == data.Hal).Should().Match<DocumentShare>(share => share.StartsAt == now && share.EndsAt == null && share.Roles.Count == 0);
         again.GetInvariantViolations().Should().BeEmpty();
 
-        // And the access questions follow the row: every key of the document is Hal's now, and what Ada held as
+        // And the access questions follow the row: every permission of the document is Hal's now, and what Ada held as
         // its owner she holds no more.
-        (await filing.DocumentsAsync(TestCallers.User(data.Hal), access => access.HoldAsync(data.Minutes, DocumentKeys.Share, Cancellation)))!.Via.Should().Be(MemberVia.Members);
-        (await filing.DocumentsAsync(TestCallers.User(data.Ada), access => access.HoldAsync(data.Minutes, DocumentKeys.Share, Cancellation)))!.Via.Should().BeNull();
+        (await filing.DocumentsAsync(TestCallers.User(data.Hal), access => access.HoldAsync(data.Minutes, DocumentPermissions.Share, Cancellation)))!.Via.Should().Be(MemberVia.Members);
+        (await filing.DocumentsAsync(TestCallers.User(data.Ada), access => access.HoldAsync(data.Minutes, DocumentPermissions.Share, Cancellation)))!.Via.Should().BeNull();
     }
 
     [Fact]

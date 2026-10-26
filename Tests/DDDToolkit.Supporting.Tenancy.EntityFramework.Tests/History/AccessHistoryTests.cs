@@ -108,7 +108,7 @@ public abstract class AccessHistoryTests(TestDatabases databases) : IAsyncLifeti
         var polisher = await _services.BySeat(harbor.Tenant, ada, services =>
             services.Roles().CreateAsync("Polisher", "Polishes widgets", [HostCatalogue.WidgetRead], Cancellation));
         await AsAda(services => services.Roles().RenameAsync(polisher, "Buffer", "Buffs widgets", Cancellation));
-        await AsAda(services => services.Roles().SetKeysAsync(polisher, [HostCatalogue.WidgetCreate], Cancellation));
+        await AsAda(services => services.Roles().SetPermissionsAsync(polisher, [HostCatalogue.WidgetCreate], Cancellation));
         await AsAda(services => services.Roles().ArchiveAsync(polisher, Cancellation));
 
         await AsAda(services => services.Seats().PlaceAsync(ben, east, primary: false, Cancellation));
@@ -191,7 +191,7 @@ public abstract class AccessHistoryTests(TestDatabases databases) : IAsyncLifeti
     }
 
     [Fact]
-    public async Task The_log_holds_ids_and_keys_and_no_names()
+    public async Task The_log_holds_ids_and_permissions_and_no_names()
     {
         var harbor = await _services.ProvisionAsync("harbor", administratorName: "Ada Lovelace");
         var ada = harbor.AdminSeat;
@@ -199,7 +199,7 @@ public abstract class AccessHistoryTests(TestDatabases databases) : IAsyncLifeti
         var wharf = await _services.BySeat(harbor.Tenant, ada, services => services.Organization().AddUnitAsync(harbor.RootUnit, "Farthing Wharf", Cancellation));
         var lamplighter = await _services.BySeat(harbor.Tenant, ada, services =>
             services.Roles().CreateAsync("Lamplighter", "Tends the lamps", [HostCatalogue.WidgetRead], Cancellation));
-        await _services.BySeat(harbor.Tenant, ada, services => services.Roles().SetKeysAsync(lamplighter, [HostCatalogue.WidgetCreate], Cancellation));
+        await _services.BySeat(harbor.Tenant, ada, services => services.Roles().SetPermissionsAsync(lamplighter, [HostCatalogue.WidgetCreate], Cancellation));
         var ben = await _services.BySeat(harbor.Tenant, ada, services => services.Seats().AddSeatAsync(Guid.NewGuid(), Cancellation, configure: seat => seat.Rename("Benedict Quill")));
         await _services.BySeat(harbor.Tenant, ada, services => services.Seats().PlaceAsync(ben, wharf, primary: true, Cancellation));
         await _services.BySeat(harbor.Tenant, ada, services => services.Seats().GrantAsync(ben, wharf, lamplighter, until: null, reason: "covering for Grace", Cancellation));
@@ -231,11 +231,11 @@ public abstract class AccessHistoryTests(TestDatabases databases) : IAsyncLifeti
             by.GetProperty("Scope").ValueKind.Should().Be(JsonValueKind.Null);
         }
 
-        // A change of a role's keys is the keys that came in and the keys that went out.
-        using var changed = JsonDocument.Parse(kept.Single(row => row.EventName == "tenancy.role-keys-changed").Payload);
+        // A change of a role's permissions is the permissions that came in and the permissions that went out.
+        using var changed = JsonDocument.Parse(kept.Single(row => row.EventName == "tenancy.role-permissions-changed").Payload);
         changed.RootElement.GetProperty("RoleId").GetGuid().Should().Be(lamplighter.Value);
-        changed.RootElement.GetProperty("Added").EnumerateArray().Select(key => key.GetString()).Should().Equal(HostCatalogue.WidgetCreate);
-        changed.RootElement.GetProperty("Removed").EnumerateArray().Select(key => key.GetString()).Should().Equal(HostCatalogue.WidgetRead);
+        changed.RootElement.GetProperty("Added").EnumerateArray().Select(permission => permission.GetString()).Should().Equal(HostCatalogue.WidgetCreate);
+        changed.RootElement.GetProperty("Removed").EnumerateArray().Select(permission => permission.GetString()).Should().Equal(HostCatalogue.WidgetRead);
         changed.RootElement.GetProperty("By").GetProperty("Seat").GetGuid().Should().Be(ada.Value);
     }
 

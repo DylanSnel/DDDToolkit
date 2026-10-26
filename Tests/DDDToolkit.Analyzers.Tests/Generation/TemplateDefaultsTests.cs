@@ -417,6 +417,7 @@ public class TemplateDefaultsTests
                 UnitId = unit;
             }
 
+            [Owner]
             public SeatId OwnerSeatId { get; private set; }
 
             public OrganizationUnitId UnitId { get; private set; }

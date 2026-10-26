@@ -54,7 +54,7 @@ public sealed class PooledContextTests
         // The save that gave the role wrote the rights it gives, in Tenancy's own context.
         var rights = await services.StoredRightsAsync(grace);
         rights.Should().NotBeEmpty().And.OnlyContain(right => right.TenantId == harbor.Tenant && right.UnitId == north && right.RoleId == operators);
-        rights.Select(right => right.Key).Should().Contain([HostCatalogue.WidgetChange, HostCatalogue.WidgetCreate]);
+        rights.Select(right => right.Permission).Should().Contain([HostCatalogue.WidgetChange, HostCatalogue.WidgetCreate]);
 
         // And each save stored its events with what it changed.
         await using (var scope = services.Scope())

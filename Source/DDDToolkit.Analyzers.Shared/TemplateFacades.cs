@@ -27,7 +27,7 @@ namespace DDDToolkit.Analyzers.Common;
 /// <b>Why not a global alias.</b> An alias holds in the project that declares it and no further, so it would be
 /// written into every project, each one paying for the work on every edit. And a generator's output is seen by the
 /// compiler but not by the project's other generators: HotChocolate's, reading
-/// <c>[ObjectType&lt;TenancyUseCases.KeyReach&gt;]</c> in an API project, would find no such name and write code
+/// <c>[ObjectType&lt;TenancyUseCases.PermissionReach&gt;]</c> in an API project, would find no such name and write code
 /// that does not compile. The class is written once, in the project that declares the classes, and reaches every
 /// project above it through the reference, where the generators read it like any other type. A class of its own
 /// that wrapped the package's could not do this either: the records nested in the package's class are the package's,

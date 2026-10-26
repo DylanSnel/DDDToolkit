@@ -12,7 +12,7 @@ namespace DDDToolkit.Supporting.Membership;
 /// <para>
 /// The texts say "member" and "role", never what the resource or its members are called. A resource with words
 /// of its own, or a language the package does not ship, is a resx of the application's with that resource's
-/// codes as its keys: the application's own texts are asked before the package's.
+/// codes as its permissions: the application's own texts are asked before the package's.
 /// </para>
 /// <para>
 /// The Dutch texts never use a word for the reader, neither the familiar one nor the formal one: which of the

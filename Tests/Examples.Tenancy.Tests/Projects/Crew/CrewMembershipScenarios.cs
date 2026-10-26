@@ -62,21 +62,21 @@ public sealed class CrewMembershipScenarios(SampleHosts sample) : IClassFixture<
         member.Roles.Should().BeEmpty();
         member.AppliesNow.Should().BeTrue();
 
-        (await KeyHeldAsync(tove, ProjectKeys.View)).Should().Be((true, "crew"));
-        foreach (var key in new[] { ProjectKeys.Edit, ProjectKeys.Close, ProjectKeys.ManageCrew, InspectionKeys.Record })
+        (await PermissionHeldAsync(tove, ProjectPermissionNames.View)).Should().Be((true, "crew"));
+        foreach (var permission in new[] { ProjectPermissionNames.Edit, ProjectPermissionNames.Close, ProjectPermissionNames.ManageCrew, InspectionPermissionNames.Record })
         {
-            (await KeyHeldAsync(tove, key)).Should().Be((false, (string?)null), key);
+            (await PermissionHeldAsync(tove, permission)).Should().Be((false, (string?)null), permission);
         }
 
         // Inspections asks Projects' gate: she reads the project's inspections, and records none.
         var inspections = await tove.GetFromJsonAsync<JsonElement>($"/projects/{PierSeven.Id.Value}/inspections", Cancellation);
         inspections.GetProperty("canRecord").GetBoolean().Should().BeFalse();
         using var recorded = await tove.PostAsJsonAsync($"/projects/{PierSeven.Id.Value}/inspections", new { title = "Loose railing" }, Cancellation);
-        (await recorded.ShouldBeRefusedAsync(HttpStatusCode.Forbidden, InspectionRefusals.ProjectNotPermitted)).Argument("Key").Should().Be(InspectionKeys.Record);
+        (await recorded.ShouldBeRefusedAsync(HttpStatusCode.Forbidden, InspectionRefusals.ProjectNotPermitted)).Argument("Permission").Should().Be(InspectionPermissionNames.Record);
     }
 
     [Fact]
-    public async Task A_member_holds_the_keys_of_its_live_crew_roles_only()
+    public async Task A_member_holds_the_permissions_of_its_live_crew_roles_only()
     {
         await using var host = await sample.StartAsync();
         using var leo = await host.ClientAsync("leo", Harbor.Slug);
@@ -84,7 +84,7 @@ public sealed class CrewMembershipScenarios(SampleHosts sample) : IClassFixture<
         var vicSeat = Harbor.SeatOf(DemoPeople.Vic);
 
         // An observer looks. Given the surveyor's role next to it, Vic holds both, and records.
-        (await KeyHeldAsync(vic, InspectionKeys.Record)).Allowed.Should().BeFalse();
+        (await PermissionHeldAsync(vic, InspectionPermissionNames.Record)).Allowed.Should().BeFalse();
         using (var given = await leo.GiveCrewRoleAsync(PierSeven, vicSeat, Surveyor))
         {
             given.StatusCode.Should().Be(HttpStatusCode.NoContent);
@@ -92,16 +92,16 @@ public sealed class CrewMembershipScenarios(SampleHosts sample) : IClassFixture<
 
         var pier = await vic.ProjectDetailAsync(PierSeven);
         pier.GetProperty("myRoleIds").EnumerateArray().Select(role => role.GetGuid()).Should().BeEquivalentTo([Observer.Value, Surveyor.Value]);
-        (await KeyHeldAsync(vic, InspectionKeys.Record)).Should().Be((true, "crew"));
-        (await KeyHeldAsync(vic, ProjectKeys.Close)).Allowed.Should().BeFalse("neither role closes a project");
+        (await PermissionHeldAsync(vic, InspectionPermissionNames.Record)).Should().Be((true, "crew"));
+        (await PermissionHeldAsync(vic, ProjectPermissionNames.Close)).Allowed.Should().BeFalse("neither role closes a project");
 
-        // Taken away again, the role's keys go with it; the observer's stay, and so does he.
+        // Taken away again, the role's permissions go with it; the observer's stay, and so does he.
         using (var taken = await leo.TakeCrewRoleAsync(PierSeven, vicSeat, Surveyor))
         {
             taken.StatusCode.Should().Be(HttpStatusCode.NoContent);
         }
 
-        (await KeyHeldAsync(vic, InspectionKeys.Record)).Allowed.Should().BeFalse();
+        (await PermissionHeldAsync(vic, InspectionPermissionNames.Record)).Allowed.Should().BeFalse();
         (await vic.WithNamesAsync(await vic.ProjectDetailAsync(PierSeven))).MyRole.Should().Be("Observer");
 
         // With his last role gone he is on the crew still, and still sees the project.
@@ -188,7 +188,7 @@ public sealed class CrewMembershipScenarios(SampleHosts sample) : IClassFixture<
     }
 
     [Fact]
-    public async Task Naming_another_owner_takes_only_the_old_owners_lead_role()
+    public async Task Naming_another_owner_keeps_the_old_owner_on_the_crew_in_the_role_the_command_says()
     {
         await using var host = await sample.StartAsync();
         using var leo = await host.ClientAsync("leo", Harbor.Slug);
@@ -196,27 +196,24 @@ public sealed class CrewMembershipScenarios(SampleHosts sample) : IClassFixture<
         using var juno = await host.ClientAsync("juno", Harbor.Slug);
         var leoSeat = Harbor.SeatOf(DemoPeople.Leo);
 
-        // Leo owns Pier 7 and leads its crew. He is its surveyor too, by his own hand.
-        using (var given = await leo.GiveCrewRoleAsync(PierSeven, leoSeat, Surveyor))
-        {
-            given.StatusCode.Should().Be(HttpStatusCode.NoContent);
-        }
-
-        // Rhea, who names owners in North, names Juno.
-        using (var named = await rhea.PutAsJsonAsync($"/projects/{PierSeven.Id.Value}/owner", new { seatId = Harbor.SeatOf(DemoPeople.Juno).Value }, Cancellation))
+        // Leo owns Pier 7. Rhea, who names owners in North, names Juno, and says Leo stays on as its surveyor.
+        using (var named = await rhea.PutAsJsonAsync(
+                   $"/projects/{PierSeven.Id.Value}/owner",
+                   new { seatId = Harbor.SeatOf(DemoPeople.Juno).Value, formerOwnerRoleId = Surveyor.Value },
+                   Cancellation))
         {
             named.StatusCode.Should().Be(HttpStatusCode.NoContent);
         }
 
-        // Juno leads now, next to the surveyor's role she had. Leo lost the lead role and nothing else: he is on
-        // the crew still, as its surveyor, for as long as before.
+        // Juno owns it now, and the surveyor's role she had went: she holds what an owner does by owning. Leo is
+        // on the crew still, for as long as before, in the role Rhea said.
         var pier = await rhea.WithNamesAsync(await rhea.ProjectDetailAsync(PierSeven));
         pier.Crew.Select(member => (member.Name, member.Role, member.IsOwner, member.AppliesNow))
-            .Should().Equal(("Juno", "Crew lead, Surveyor", true, true), ("Leo", "Surveyor", false, true), ("Vic", "Observer", false, true));
+            .Should().Equal(("Juno", (string?)null, true, true), ("Leo", "Surveyor", false, true), ("Vic", "Observer", false, true));
 
-        (await KeyHeldAsync(leo, InspectionKeys.Record)).Should().Be((true, "crew"));
-        (await KeyHeldAsync(leo, ProjectKeys.ManageCrew)).Allowed.Should().BeFalse("managing the crew came with the lead role");
-        (await KeyHeldAsync(juno, ProjectKeys.ManageCrew)).Should().Be((true, "crew"));
+        (await PermissionHeldAsync(leo, InspectionPermissionNames.Record)).Should().Be((true, "crew"));
+        (await PermissionHeldAsync(leo, ProjectPermissionNames.ManageCrew)).Allowed.Should().BeFalse("managing the crew came with owning the project");
+        (await PermissionHeldAsync(juno, ProjectPermissionNames.ManageCrew)).Should().Be((true, "crew"));
 
         // And now he is a member like any other: the new owner takes his role, or takes him off the crew.
         using (var taken = await juno.TakeCrewRoleAsync(PierSeven, leoSeat, Surveyor))
@@ -225,43 +222,38 @@ public sealed class CrewMembershipScenarios(SampleHosts sample) : IClassFixture<
         }
 
         (await leo.VisibleProjectsAsync()).Names().Should().Equal(["Pier 7"], "on the crew with no role, he still sees it");
+
+        // Named without a role for the owner before, the owner before leaves the crew.
+        using (var again = await rhea.PutAsJsonAsync($"/projects/{PierSeven.Id.Value}/owner", new { seatId = Harbor.SeatOf(DemoPeople.Vic).Value }, Cancellation))
+        {
+            again.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        }
+
+        (await rhea.WithNamesAsync(await rhea.ProjectDetailAsync(PierSeven))).Crew.Select(member => (member.Name, member.Role, member.IsOwner))
+            .Should().Equal(("Vic", (string?)null, true), ("Leo", (string?)null, false));
     }
 
     [Fact]
-    public async Task The_owners_lead_role_cannot_be_taken()
+    public async Task The_owner_is_given_no_role_on_the_crew()
     {
         await using var host = await sample.StartAsync();
         using var leo = await host.ClientAsync("leo", Harbor.Slug);
         using var rhea = await host.ClientAsync("rhea", Harbor.Slug);
         var leoSeat = Harbor.SeatOf(DemoPeople.Leo);
 
-        // Not by himself, and not by the organization, which manages every crew in North.
+        // Not by himself, and not by the organization, which manages every crew in North: the owner holds what an
+        // owner does by owning the project, and a role would only add to it what the organization did not say.
         foreach (var asking in new[] { leo, rhea })
         {
-            using var taken = await asking.TakeCrewRoleAsync(PierSeven, leoSeat, CrewLead);
-            await taken.ShouldBeRefusedAsync(HttpStatusCode.Conflict, ProjectRefusals.OwnerProtected);
-        }
-
-        // Nor when he holds another role next to it: the lead role is the owner's until another owner is named.
-        using (var given = await leo.GiveCrewRoleAsync(PierSeven, leoSeat, Surveyor))
-        {
-            given.StatusCode.Should().Be(HttpStatusCode.NoContent);
-        }
-
-        using (var still = await leo.TakeCrewRoleAsync(PierSeven, leoSeat, CrewLead))
-        {
-            await still.ShouldBeRefusedAsync(HttpStatusCode.Conflict, ProjectRefusals.OwnerProtected);
-        }
-
-        // The other role is his to give up, as anyone's is.
-        using (var other = await leo.TakeCrewRoleAsync(PierSeven, leoSeat, Surveyor))
-        {
-            other.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            using var given = await asking.GiveCrewRoleAsync(PierSeven, leoSeat, Surveyor);
+            await given.ShouldBeRefusedAsync(HttpStatusCode.Conflict, ProjectRefusals.OwnerProtected);
         }
 
         var his = (await leo.WithNamesAsync(await leo.ProjectDetailAsync(PierSeven))).Member("Leo");
-        his.Role.Should().Be("Crew lead");
+        his.Role.Should().BeNull();
         his.IsOwner.Should().BeTrue();
+        (await PermissionHeldAsync(leo, ProjectPermissionNames.ManageCrew)).Should().Be((true, "crew"), "managing the crew is one of the permissions an owner holds");
+        (await PermissionHeldAsync(leo, InspectionPermissionNames.Record)).Allowed.Should().BeFalse("recording is the Inspections module's, which a role on the crew gives, and an owner holds Projects' own");
     }
 
     [Theory]
@@ -293,7 +285,7 @@ public sealed class CrewMembershipScenarios(SampleHosts sample) : IClassFixture<
         }
 
         (await leo.WithNamesAsync(await leo.ProjectDetailAsync(PierSeven))).Crew.Select(member => (member.Name, member.Role))
-            .Should().Equal(("Leo", "Crew lead"), ("Juno", "Surveyor"), ("Vic", "Observer"));
+            .Should().Equal(("Leo", (string?)null), ("Juno", "Surveyor"), ("Vic", "Observer"));
     }
 
     [Fact]
@@ -313,7 +305,7 @@ public sealed class CrewMembershipScenarios(SampleHosts sample) : IClassFixture<
 
         // Juno records on Pier 7 through the surveyor's role she holds on its crew, and through nothing else.
         using var juno = await host.ClientAsync("juno", Harbor.Slug);
-        (await KeyHeldAsync(juno, InspectionKeys.Record)).Should().Be((true, "crew"), "the surveyor's role gives it");
+        (await PermissionHeldAsync(juno, InspectionPermissionNames.Record)).Should().Be((true, "crew"), "the surveyor's role gives it");
 
         // An archived role is given nowhere. Whoever holds it on a crew keeps the grant, which now gives nothing,
         // and it can still be taken.
@@ -327,16 +319,16 @@ public sealed class CrewMembershipScenarios(SampleHosts sample) : IClassFixture<
             await given.ShouldBeRefusedAsync(HttpStatusCode.BadRequest, ProjectRefusals.RoleNotForMembers);
         }
 
-        (await KeyHeldAsync(juno, InspectionKeys.Record)).Allowed.Should().BeFalse("an archived role grants nothing");
-        (await KeyHeldAsync(juno, ProjectKeys.View)).Should().Be((true, "crew"), "she is on the crew still");
+        (await PermissionHeldAsync(juno, InspectionPermissionNames.Record)).Allowed.Should().BeFalse("an archived role grants nothing");
+        (await PermissionHeldAsync(juno, ProjectPermissionNames.View)).Should().Be((true, "crew"), "she is on the crew still");
         using var taken = await leo.TakeCrewRoleAsync(PierSeven, Harbor.SeatOf(DemoPeople.Juno), Surveyor);
         taken.StatusCode.Should().Be(HttpStatusCode.NoContent);
     }
 
-    /// <summary>Whether Pier 7 gives the client's caller <paramref name="key"/>, and through what, from <c>GET /access/projects/{id}?key=</c>.</summary>
-    private static async Task<(bool Allowed, string? Via)> KeyHeldAsync(HttpClient client, string key)
+    /// <summary>Whether Pier 7 gives the client's caller <paramref name="permission"/>, and through what, from <c>GET /access/projects/{id}?permission=</c>.</summary>
+    private static async Task<(bool Allowed, string? Via)> PermissionHeldAsync(HttpClient client, string permission)
     {
-        var answer = await client.GetFromJsonAsync<JsonElement>($"/access/projects/{PierSeven.Id.Value}?key={key}", Cancellation);
+        var answer = await client.GetFromJsonAsync<JsonElement>($"/access/projects/{PierSeven.Id.Value}?permission={permission}", Cancellation);
         return (answer.GetProperty("allowed").GetBoolean(), answer.Text("via"));
     }
 }

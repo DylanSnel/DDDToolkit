@@ -44,7 +44,7 @@ public sealed class MemberRole<TMemberId, TRoleId>
     /// <summary>The first moment it no longer counts, or <see langword="null"/> when it has no end.</summary>
     public DateTimeOffset? EndsAt { get; private set; }
 
-    /// <summary>The member that gave it, or <see langword="null"/> for system work and for an owner's role.</summary>
+    /// <summary>The member that gave it, or <see langword="null"/> for system work.</summary>
     public TMemberId? GivenBy { get; private set; }
 
     /// <summary>

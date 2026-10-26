@@ -20,7 +20,7 @@ namespace DDDToolkit.Supporting.Membership.EntityFramework;
 /// </summary>
 /// <remarks>
 /// <see cref="MemberAccessCheck{TResource, TResourceId}"/> keeps what it read of the resource a request requires
-/// a key on, its version included (<see cref="MemberHold{TResourceId}"/>), with the request in hand
+/// a permission on, its version included (<see cref="MemberHold{TResourceId}"/>), with the request in hand
 /// (<see cref="RequestInHand"/>): the request whose checks the flow of work asked last, which is the flow the
 /// handler runs in and its save with it. Before anything is written, this goes through every resource with
 /// members the save changes, a member or a role of one included, and finds that hold:
@@ -238,7 +238,7 @@ internal sealed class MemberHoldInterceptor : SaveChangesInterceptor
         var name = resource.Resource.Name;
         var what = $"{name} {resource.IdOf(entity)}";
         var how =
-            $"Under UseMemberHolds a resource with members is saved for the request whose access check read it (MemberAccess.On(key, {name.ToLowerInvariant()})), "
+            $"Under UseMemberHolds a resource with members is saved for the request whose access check read it (MemberAccess.On(permission, {name.ToLowerInvariant()})), "
             + "or as the application's own work that trusted code began (Callers.Begin(Caller.System)). Nothing was saved.";
 
         return RequestInHand.Current is not { } inHand
@@ -248,9 +248,9 @@ internal sealed class MemberHoldInterceptor : SaveChangesInterceptor
               + $"Send the request through its checks, and save inside its handling. {how}"
             : resource.ResourceInHand() is { } checkedOne
                 ? $"{what} was changed in the handling of {inHand.Request.GetType().Name}, whose access check read {name} {checkedOne}: "
-                  + $"a handler changes the {name} its request requires a key on, and no other. {how}"
+                  + $"a handler changes the {name} its request requires a permission on, and no other. {how}"
                 : $"{what} was changed in the handling of {inHand.Request.GetType().Name}, whose access check read no {name}: "
-                  + $"a handler changes the {name} its request requires a key on, and no other. {how}";
+                  + $"a handler changes the {name} its request requires a permission on, and no other. {how}";
     }
 
     /// <summary>The registered resource <paramref name="type"/> is, or derives from; <see langword="null"/> for anything else.</summary>

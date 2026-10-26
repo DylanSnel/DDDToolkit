@@ -57,7 +57,7 @@ public class SyncRolePacksTests
         log.Select(entry => (entry.Level, entry.Message)).Should().BeEquivalentTo([
             (LogLevel.Error, "The roles of tenant 7 could not follow their packs. The host's next start tries again."),
             (LogLevel.Warning, "1 roles were left as they are, because following their packs would leave their tenants without an administrator. They follow once those tenants have another."),
-            (LogLevel.Information, "The role packs are synced in 3 tenants: 2 roles followed their packs, and 0 were made from packs the catalogue no longer has and kept their keys."),
+            (LogLevel.Information, "The role packs are synced in 3 tenants: 2 roles followed their packs, and 0 were made from packs the catalogue no longer has and kept their permissions."),
         ]);
     }
 

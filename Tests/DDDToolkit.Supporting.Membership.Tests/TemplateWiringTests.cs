@@ -77,7 +77,7 @@ public sealed class TemplateWiringTests
 
         // And the written list is the one the host's own methods work through: the owner is on a new document.
         var owner = UserId.CreateUnique();
-        var document = new Document(DocumentId.CreateUnique(), "Minutes", owner, DocumentMembership.Owner, Now);
+        var document = new Document(DocumentId.CreateUnique(), "Minutes", owner, Now);
         document.Shares.Should().ContainSingle().Which.MemberId.Should().Be(owner);
         FluentActions.Invoking(() => document.ShareWith(owner, MemberPeriod.Open(Now), Now, by: owner))
             .Should().Throw<Exceptions.RefusalException>().Which.Code.Should().Be(DocumentRefusals.Membership[MembershipRefusals.AlreadyMember], "under the codes the document declares");
@@ -87,7 +87,7 @@ public sealed class TemplateWiringTests
     public void A_member_class_is_checked_with_the_aggregate_that_holds_it_by_the_parents_rule_and_its_own()
     {
         var keeper = new StaffCode("K-001");
-        var folder = new Folder(new FolderId(7), keeper, FolderMembership.Keeper, Now);
+        var folder = new Folder(new FolderId(7), keeper, Now);
         var clerk = folder.Admit(new StaffCode("C-014"), FolderMembership.Clerk, MemberPeriod.Open(Now), Now, by: keeper);
         folder.GetInvariantViolations().Should().BeEmpty();
 

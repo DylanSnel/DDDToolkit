@@ -49,8 +49,8 @@ public static class TenancyModelBuilderExtensions
     /// check, which <c>UseDDDToolkit</c> adds, reads the tenant of every row written to them.
     /// </para>
     /// <para>
-    /// The views of the read model carry access facts only, here as in a module's model: ids, keys, periods,
-    /// statuses, a unit's parent, and a role's pack and keys. What a seat, a unit or a role is called is read
+    /// The views of the read model carry access facts only, here as in a module's model: ids, permissions, periods,
+    /// statuses, a unit's parent, and a role's pack and permissions. What a seat, a unit or a role is called is read
     /// from the tables themselves, by the directory (<c>TenancyDirectory</c>), which answers names by id.
     /// </para>
     /// <para>
@@ -117,9 +117,13 @@ public static class TenancyModelBuilderExtensions
         // What the store asks a database that keeps the rights itself: rows of no table, read from its functions.
         modelBuilder.Entity<TenantAdministratorRow<TSeatId, TRoleId>>(TenancyMapping.TenantAdministrators);
         modelBuilder.Entity<MoveReach<TUnitId>>(TenancyMapping.MoveReaches);
+        modelBuilder.Entity<NamedUnit<TUnitId>>(TenancyMapping.NamedUnits);
 
         // And what system work that began in no tenant asks it: which tenants there are to visit.
         modelBuilder.Entity<TenantToSweepRow<TTenantId>>(TenancyMapping.TenantsToSweep);
+
+        // And what the tenant picker asks it, before a tenant is chosen: what the person's tenants are called.
+        modelBuilder.Entity<TenantNameRow<TTenantId>>(TenancyMapping.TenantNames);
 
         return modelBuilder;
     }
@@ -190,7 +194,7 @@ public static class TenancyModelBuilderExtensions
 
     /// <summary>
     /// Maps Tenancy's read model into a context that is not Tenancy's own, so its queries can ask Tenancy
-    /// inside them: <c>answers.Over(thisContext).UnitsWhereIHold(key)</c> becomes a subquery of the module's
+    /// inside them: <c>answers.Over(thisContext).UnitsWhereIHold(permission)</c> becomes a subquery of the module's
     /// own query, one statement and one round trip. The six rows the access questions read are keyless views
     /// over Tenancy's tables, their columns mapped exactly as <see cref="AddTenancy"/> maps them. Entity Framework
     /// creates no views, so this context's migrations never touch Tenancy's tables.
@@ -199,7 +203,7 @@ public static class TenancyModelBuilderExtensions
     /// modelBuilder.Entity&lt;Project&gt;().ScopeToTenant(project =&gt; project.TenantId);
     /// </code>
     /// <para>
-    /// The rows are access facts: ids, keys, periods, statuses, a unit's parent, and a role's pack and keys. None
+    /// The rows are access facts: ids, permissions, periods, statuses, a unit's parent, and a role's pack and permissions. None
     /// has a name, so a module that maps them cannot show what a seat, a unit or a role is called: it answers
     /// ids, and whoever shows them asks Tenancy's directory for the names, by id.
     /// <see cref="TenancyModel.ReadsBeyondAccessFacts"/> finds a module's model that maps more of Tenancy's than
@@ -397,7 +401,7 @@ public static class TenancyModelBuilderExtensions
         modelBuilder.Entity<PlacementRow<TSeatId, TUnitId>>(placement => TenancyMapping.PlacementRows<TTenantId, TSeatId, TUnitId>(placement, tables, read));
         modelBuilder.Entity<SeatRow<TTenantId, TSeatId>>(seat => TenancyMapping.SeatRows(seat, tables, read));
 
-        // Who holds a key at a unit, where the database answers that itself: a row of no table or view, read
+        // Who holds a permission at a unit, where the database answers that itself: a row of no table or view, read
         // from Tenancy's function of that name, in the schema the rest of the read model is in.
         modelBuilder.Entity<SeatHolderRow<TSeatId>>(holder => TenancyMapping.SeatHolders(holder, read));
     }

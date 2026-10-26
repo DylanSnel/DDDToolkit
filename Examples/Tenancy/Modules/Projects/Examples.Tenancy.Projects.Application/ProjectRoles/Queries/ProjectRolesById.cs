@@ -1,4 +1,3 @@
-using DDDToolkit.Supporting.Tenancy.Access;
 using Mediator;
 
 namespace Examples.Tenancy.Projects.Application.ProjectRoles.Queries;
@@ -8,11 +7,11 @@ namespace Examples.Tenancy.Projects.Application.ProjectRoles.Queries;
 /// shows what they stand for, such as a crew's roles.
 /// </summary>
 /// <remarks>
-/// Nobody is refused for an id: a role of another tenant, and one that does not exist, are left out of the answer
-/// alike. The keys of each are answered as <see cref="TenantProjectRoles"/> answers them.
+/// Whoever works in the tenant asks, the module's default. Nobody is refused for an id: a role of another tenant, and
+/// one that does not exist, are left out of the answer alike. The permissions of each are answered as
+/// <see cref="TenantProjectRoles"/> answers them.
 /// </remarks>
 /// <param name="Ids">The roles asked about, at most <see cref="MostRoles"/> different ones.</param>
-[InTenant]
 public sealed record ProjectRolesById(IReadOnlyList<ProjectRoleId> Ids) : IQuery<IReadOnlyList<ProjectRoleListing>>, IProjectsRequest
 {
     /// <summary>The most roles one question is about.</summary>
@@ -24,7 +23,7 @@ public sealed record ProjectRolesById(IReadOnlyList<ProjectRoleId> Ids) : IQuery
 /// of ids; none when no id is asked about.
 /// </summary>
 /// <param name="reads">Where project roles are read: a context per query.</param>
-/// <param name="access">Whether the caller holds the key the roles' keys are answered to.</param>
+/// <param name="access">Whether the caller holds the permission the roles' permissions are answered to.</param>
 public sealed class ProjectRolesByIdHandler(IProjectReads reads, ProjectAccess access) : IQueryHandler<ProjectRolesById, IReadOnlyList<ProjectRoleListing>>
 {
     /// <inheritdoc />
@@ -44,9 +43,9 @@ public sealed class ProjectRolesByIdHandler(IProjectReads reads, ProjectAccess a
             return [];
         }
 
-        // The roles, and whether the caller holds the key their keys are answered to, only when any is the tenant's.
+        // The roles, and whether the caller holds the permission their permissions are answered to, only when any is the tenant's.
         await using var reading = reads.Open();
         var roles = await reading.ProjectRolesAsync(ids, cancellationToken);
-        return ProjectRoleListings.Answered(roles, roles.Count > 0 && await access.Questions(reading).HoldsTenantWideAsync(ProjectRoleListing.KeysKey, cancellationToken));
+        return ProjectRoleListings.Answered(roles, roles.Count > 0 && await access.Questions(reading).HoldsAtTenantAsync(ProjectRoleListing.ManageRolesPermission, cancellationToken));
     }
 }

@@ -6,26 +6,28 @@ namespace DDDToolkit.Access;
 /// <remarks>
 /// A module declares one interface of its own that derives from this one, and every request of the module
 /// implements that. A request says what it requires with an attribute where the requirement reads no value of the
-/// request but a key and an id it carries, and answers <see cref="RequiredAccess"/> itself where it computes it:
+/// request but a permission and an id it carries, and answers <see cref="RequiredAccess"/> itself where it computes it:
 /// <code>
 /// [AccessRequests]
 /// public partial interface IBillingRequest : IRequireAccess;
 ///
-/// [RequiresKey(BillingKeys.Close)]
+/// [RequiresPermission(BillingPermissions.Close)]
 /// public sealed record CloseInvoice(string Number) : IBillingRequest;
 ///
 /// public sealed record ListInvoices(OrganizationUnitId? Unit) : IBillingRequest
 /// {
 ///     AccessRequirement IRequireAccess.RequiredAccess =&gt; Unit is { } unit
-///         ? TenancyAccess.AtUnit(BillingKeys.Read, unit)
-///         : TenancyAccess.ForTheWholeTenant(BillingKeys.Read);
+///         ? TenancyAccess.AtUnit(BillingPermissions.Read, unit)
+///         : TenancyAccess.AtTenant(BillingPermissions.Read);
 /// }
 /// </code>
 /// The toolkit's generator turns the attributes into plain C# at compile time: the module's interface, marked
 /// <c>[AccessRequests]</c> and declared <c>partial</c>, gets <see cref="RequiredAccess"/> implemented with one line per
 /// request that states its requirement with attributes, and a request that answers the property itself answers with
 /// its own. So every reader of the property, the module's checks, a handler that asks them again or a test, reads the
-/// same requirement either way.
+/// same requirement either way. A requirement attribute on the module's interface itself, <c>[AccessRequests, InTenant]</c>,
+/// is the default of the module: a request that states nothing of its own gets a line with it, and one that states its
+/// own keeps only that.
 /// <para>
 /// The module's interface is what its checks are registered for
 /// (<see cref="AccessCheckServiceCollectionExtensions.AddAccessCheck{TRequests, TCheck}"/>) and what

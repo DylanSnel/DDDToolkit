@@ -17,7 +17,7 @@ namespace Examples.Tenancy.Projects.Domain.Aggregates.Projects;
 /// <see cref="Project"/> carry the same code, so a client reads one code whether the command refused or the
 /// save's check caught code that went round the command.
 /// <para>
-/// An argument is a value, such as a key or an id, never a word, so a translation can be a sentence of its own.
+/// An argument is a value, such as a permission or an id, never a word, so a translation can be a sentence of its own.
 /// The translations are beside this class, in the two resource files of <see cref="ProjectFailures"/>: the same
 /// English, and Dutch.
 /// </para>
@@ -30,7 +30,7 @@ public static class ProjectRefusals
     /// </summary>
     public const string NotFound = "projects.not-found";
 
-    /// <summary>The caller may see the project but does not hold the key the command needs. Argument: <c>Key</c>.</summary>
+    /// <summary>The caller may see the project but does not hold the permission the command needs. Argument: <c>Permission</c>.</summary>
     public const string NotPermitted = "projects.not-permitted";
 
     /// <summary>The project is closed, and a closed project does not change until it is reopened.</summary>
@@ -43,19 +43,13 @@ public static class ProjectRefusals
     public const string NumberTaken = "projects.number-taken";
 
     /// <summary>
-    /// The tenant has no project role in use made from the crew lead's starter role, so a project cannot be given
-    /// an owner: the tenant was not set up. The package's rule <see cref="MembershipRefusals.NoOwnerRole"/>.
-    /// </summary>
-    public const string NoLeadRole = "projects.no-lead-role";
-
-    /// <summary>
     /// The role cannot go on a crew: it is not one of the tenant's project roles in use, so a role of the
     /// organization, an archived project role and one of another tenant alike. Argument: <c>Role</c>. The
     /// package's rule <see cref="MembershipRefusals.RoleNotForMembers"/>.
     /// </summary>
     public const string RoleNotForMembers = "projects.role-not-for-members";
 
-    /// <summary>The change would take the owner off the crew, or take the owner's lead role.</summary>
+    /// <summary>The change would take the owner off the crew, or give the owner a project role: the owner holds what an owner does by owning the project.</summary>
     public const string OwnerProtected = "projects.owner-protected";
 
     /// <summary>
@@ -126,33 +120,26 @@ public static class ProjectRefusals
     public const string RoleNameTaken = "projects.role-name-taken";
 
     /// <summary>
-    /// A project role was to give keys no crew role may give. Argument: <c>Keys</c>. The package's rule
-    /// <see cref="MembershipRefusals.KeyNotForMembers"/>.
+    /// A project role was to give permissions no crew role may give. Argument: <c>Permissions</c>. The package's rule
+    /// <see cref="MembershipRefusals.PermissionNotForMembers"/>.
     /// </summary>
-    public const string KeyNotForMembers = "projects.key-not-for-members";
+    public const string PermissionNotForMembers = "projects.permission-not-for-members";
 
     /// <summary>
-    /// The crew lead's role, which every owner holds, is not archived. The package's rule
-    /// <see cref="MembershipRefusals.OwnerRoleStays"/>.
+    /// A project role's permissions, as stored, are not each there once, not blank and in order: only code that went
+    /// round the role writes such a row. The package's rule <see cref="MembershipRefusals.RolePermissionsNotNormalized"/>.
     /// </summary>
-    public const string OwnerRoleStays = "projects.owner-role-stays";
-
-    /// <summary>
-    /// A project role's keys, as stored, are not each there once, not blank and in order: only code that went
-    /// round the role writes such a row. The package's rule <see cref="MembershipRefusals.RoleKeysNotNormalized"/>.
-    /// </summary>
-    public const string RoleKeysNotNormalized = "projects.role-keys-not-normalized";
+    public const string RolePermissionsNotNormalized = "projects.role-permissions-not-normalized";
 
     private static readonly Dictionary<string, (RefusalKind Kind, string Text)> Table = new(StringComparer.Ordinal)
     {
         [NotFound] = (RefusalKind.NotFound, "There is no such project, or it is not one you can see."),
-        [NotPermitted] = (RefusalKind.NotPermitted, "Doing this to the project needs the key {Key}."),
+        [NotPermitted] = (RefusalKind.NotPermitted, "Doing this to the project needs the permission {Permission}."),
         [Closed] = (RefusalKind.Conflict, "The project is closed; nothing about it changes until it is reopened."),
         [NotClosed] = (RefusalKind.Conflict, "The project is open; only a closed project can be reopened."),
         [NumberTaken] = (RefusalKind.Conflict, "Another project in this tenant already has the number {Number}."),
-        [NoLeadRole] = (RefusalKind.Conflict, "The tenant has no active crew lead role to give a project's owner."),
         [RoleNotForMembers] = (RefusalKind.Invalid, "That role is not one of this tenant's project roles in use, so it cannot go on a crew."),
-        [OwnerProtected] = (RefusalKind.Conflict, "The owner keeps the lead role on the crew until somebody else is named owner."),
+        [OwnerProtected] = (RefusalKind.Conflict, "The owner stays on the crew, holding no project role, until somebody else is named owner."),
         [AlreadyOnCrew] = (RefusalKind.Conflict, "That seat is on the crew already, or is due to join it. Give it a crew role instead."),
         [CrewRoleHeld] = (RefusalKind.Conflict, "That seat already has this role on the crew."),
         [CrewRoleNotFound] = (RefusalKind.NotFound, "That seat does not have this role on the crew."),
@@ -172,9 +159,8 @@ public static class ProjectRefusals
         [RoleArchived] = (RefusalKind.Conflict, "That project role is archived: it changes no more, and goes to nobody."),
         [RoleNameInvalid] = (RefusalKind.Invalid, "Enter {Min} to {Max} characters."),
         [RoleNameTaken] = (RefusalKind.Conflict, "Another project role of this tenant is called {Name} already."),
-        [KeyNotForMembers] = (RefusalKind.Invalid, "A project role cannot give these keys: {Keys}."),
-        [OwnerRoleStays] = (RefusalKind.Conflict, "The role every project's owner holds is not archived."),
-        [RoleKeysNotNormalized] = (RefusalKind.Conflict, "A project role's keys are each there once, none of them blank, in order."),
+        [PermissionNotForMembers] = (RefusalKind.Invalid, "A project role cannot give these permissions: {Permissions}."),
+        [RolePermissionsNotNormalized] = (RefusalKind.Conflict, "A project role's permissions are each there once, none of them blank, in order."),
     };
 
     /// <summary>
@@ -188,7 +174,6 @@ public static class ProjectRefusals
         .With(MembershipRefusals.RoleHeld, Suffix(CrewRoleHeld))
         .With(MembershipRefusals.RoleNotHeld, Suffix(CrewRoleNotFound))
         .With(MembershipRefusals.MemberNotActive, Suffix(SeatNotActive))
-        .With(MembershipRefusals.NoOwnerRole, Suffix(NoLeadRole))
         .WithMemberArgument("Seat");
 
     /// <summary>Every code above: what a test holds the resource files of <see cref="ProjectFailures"/> to.</summary>

@@ -14,7 +14,7 @@ internal static class SeatsQueries
 {
     /// <summary>
     /// Who the calling seat is, with the name this application keeps on it, where it is placed, which roles it holds
-    /// and every key it holds now: what the module selects from Tenancy's overview of its own seat. Where it names a
+    /// and every permission it holds now: what the module selects from Tenancy's overview of its own seat. Where it names a
     /// unit or a role it uses small types of its own (<c>UnitPath</c>, <c>RoleOfMine</c>), never a half-filled entity.
     /// </summary>
     [Query]

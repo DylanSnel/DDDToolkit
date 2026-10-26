@@ -248,7 +248,7 @@ public sealed partial class PostgresCompositionTests
     /// <summary>
     /// <paramref name="schema"/> without its double quotes where a statement names it: before a function or a table,
     /// in a string Postgres reads as a name too, <c>to_regprocedure('"ddd".f(xid)')</c>, or on its own after
-    /// <c>SCHEMA</c>. A setting's or a key's name in a string, <c>'tenancy.caller_tenant'</c>, is no schema: no
+    /// <c>SCHEMA</c>. A setting's or a permission's name in a string, <c>'tenancy.caller_tenant'</c>, is no schema: no
     /// function's parenthesis or table's quote follows it.
     /// </summary>
     private static Regex Unquoted(string schema)
@@ -332,7 +332,7 @@ public sealed partial class PostgresCompositionTests
     {
         var program = File.ReadAllText(Path.Combine(Path.GetDirectoryName(ExporterFile)!, "Program.cs"));
         ListedContribution().Matches(program).Select(match => match.Groups["type"].Value)
-            .Should().BeEquivalentTo([nameof(UnitChangesWithItsKeys), nameof(CrewSeatsOfTheProjectsTenant)], "a package's contribution listed again would be written twice");
+            .Should().BeEquivalentTo([nameof(UnitChangesWithItsPermissions), nameof(CrewSeatsOfTheProjectsTenant)], "a package's contribution listed again would be written twice");
 
         ExportedMarks.Marked(typeof(TenancyCatalogueAttribute)).Should().ContainSingle()
             .Which.GetValue(null).Should().BeSameAs(SampleCatalogue.Application, "the export writes Tenancy's policies from the part the host hands Tenancy's registration");
@@ -341,7 +341,7 @@ public sealed partial class PostgresCompositionTests
 
         var rules = ExportedMarks.Marked(typeof(MembershipRulesAttribute<>)).Should().ContainSingle("the projects are the one resource with members").Subject;
         rules.GetCustomAttributes().Select(attribute => attribute.GetType()).Should().Contain(typeof(MembershipRulesAttribute<CrewMember>), "Membership's contribution is closed over a crew's member class");
-        ((MembershipRules)rules.GetValue(null)!).Name.Should().Be(ProjectMembership.Name);
+        ((MembershipRules)rules.GetValue(null)!).Name.Should().Be("projects");
     }
 
     /// <summary>The names of the projects <paramref name="projectFile"/> references.</summary>

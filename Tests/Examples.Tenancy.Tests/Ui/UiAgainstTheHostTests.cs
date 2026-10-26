@@ -44,7 +44,7 @@ public sealed class UiAgainstTheHostTests(SampleHosts sample) : IClassFixture<Sa
         me.Placements.Should().ContainSingle().Which.Unit.Path.Should().Be("Harbor Works / North");
         me.Placements[0].Grants.Should().ContainSingle().Which.Should().Match<GrantInfo>(grant => grant.Role == "Area manager" && grant.AppliesNow && grant.EndsAt == null);
         me.Roles.Should().ContainSingle().Which.FromPack.Should().Be(SampleCatalogue.AreaManager);
-        me.Keys.Single(key => key.Key == ProjectKeys.View).Reaches.Select(unit => unit.Path)
+        me.Permissions.Single(permission => permission.Permission == ProjectPermissionNames.View).Reaches.Select(unit => unit.Path)
             .Should().BeEquivalentTo(new[] { "Harbor Works / North", "Harbor Works / North / North Coast", "Harbor Works / North / North Inland" });
 
         var projects = (await api.VisibleProjectsAsync(cancellationToken: Cancellation)).Value!.Items;
@@ -65,11 +65,11 @@ public sealed class UiAgainstTheHostTests(SampleHosts sample) : IClassFixture<Sa
             cancellationToken: Cancellation);
         session.LastAnswer!.Path.Should().StartWith("/projects", "the directory's answers are not the page's last answer");
         names.CrewByName(listed.Crew).Select(member => (names.OfSeat(member.SeatId), names.OfProjectRoles(member.RolesHeld.Select(held => held.RoleId)), member.IsOwner))
-            .Should().Equal(("Leo", "Crew lead", true), ("Juno", "Surveyor", false), ("Vic", "Observer", false));
+            .Should().Equal(("Leo", (string?)null, true), ("Juno", "Surveyor", false), ("Vic", "Observer", false));
         listed.Crew.SelectMany(member => member.RolesHeld).Should().OnlyContain(held => held.AppliesNow && held.EndsAt == null, "every seeded crew role is held for good");
         names.OfUnit(listed.UnitId).Should().Be("Harbor Works / North / North Coast");
         names.OfProjectRoles(listed.MyRoles).Should().BeNull("she is not on its crew");
-        names.OfProjectRoles(projects.Single(project => project.Name == "Inland depot").MyRoles).Should().Be("Crew lead");
+        names.OfProjectRoles(projects.Single(project => project.Name == "Inland depot").MyRoles).Should().BeNull("she owns it, and an owner holds no project role");
 
         var detail = (await api.ProjectDetailAsync(pierSeven, Cancellation)).Value!;
         detail.UnitId.Should().Be(Harbor.UnitNamed("North Coast").Value);
@@ -86,15 +86,15 @@ public sealed class UiAgainstTheHostTests(SampleHosts sample) : IClassFixture<Sa
         var projectRoles = (await api.ProjectRolesAsync(Cancellation)).Value!;
         projectRoles.Where(role => role.IsActive).Select(role => role.MadeFrom)
             .Should().BeEquivalentTo(new[] { SampleCatalogue.CrewLead, SampleCatalogue.Surveyor, SampleCatalogue.Observer }, "the crew's role pickers offer the tenant's project roles in use");
-        projectRoles.Should().OnlyContain(role => role.Keys == null, "she manages no roles, so what each gives is not hers to read");
+        projectRoles.Should().OnlyContain(role => role.Permissions == null, "she manages no roles, so what each gives is not hers to read");
 
-        // The directory by id reads into the same records the lists do.
+        // The directory by id reads into the same records the lists do, and names a unit.
         (await api.SeatsByIdAsync([Harbor.SeatOf(DemoPeople.Seth).Value], Cancellation)).Value!.Should().Equal(new SeatInfo(Harbor.SeatOf(DemoPeople.Seth).Value, "Seth", "suspended"));
         (await api.UnitsByIdAsync([Harbor.UnitNamed("South Bay").Value], Cancellation)).Value!.Should().ContainSingle()
-            .Which.Should().Match<UnitInfo>(unit => unit.Path == "Harbor Works / South / South Bay" && unit.Name == "South Bay" && unit.Depth == 3, "she is not placed under South, and reads what it is called");
+            .Which.Should().Match<UnitNameInfo>(unit => unit.Path == "Harbor Works / South / South Bay" && unit.Name == "South Bay" && unit.Depth == 3, "she is not placed under South, and reads what it is called");
         (await api.RolesByIdAsync([Harbor.Roles[SampleCatalogue.Observer].Value], Cancellation)).Value!.Should().ContainSingle()
             .Which.Should().Match<RoleInfo>(role => role.Name == "Observer" && role.IsActive && !role.ManagesAccess);
-        (await api.KeyCatalogueAsync(Cancellation)).Value!.Permissions.Should().Contain(permission => permission.Key == ProjectKeys.Close);
+        (await api.PermissionCatalogueAsync(Cancellation)).Value!.Permissions.Should().Contain(permission => permission.Name == ProjectPermissionNames.Close);
 
         session.IsSignedIn.Should().BeTrue();
     }
@@ -102,9 +102,10 @@ public sealed class UiAgainstTheHostTests(SampleHosts sample) : IClassFixture<Sa
     [Fact]
     public async Task The_project_page_plans_a_project_and_records_an_inspection_for_its_days()
     {
-        // It changes what it plans and records, so it has a host of its own.
+        // It changes what it plans and records, so it has a host of its own. Rhea manages North, where Pier 7 is,
+        // and so both plans it and records on it.
         await using var host = await sample.StartAsync();
-        var (api, _) = await SignInAsync(host, "leo");
+        var (api, _) = await SignInAsync(host, "rhea");
         var pierSeven = Harbor.ProjectNamed("Pier 7").Id.Value.ToString();
         var (first, last) = (new DateOnly(2026, 10, 5), new DateOnly(2026, 10, 30));
 
@@ -152,10 +153,10 @@ public sealed class UiAgainstTheHostTests(SampleHosts sample) : IClassFixture<Sa
             .Should().BeEquivalentTo(new[] { SampleCatalogue.AccessAdmin, SampleCatalogue.AreaManager, SampleCatalogue.CrewLead, SampleCatalogue.PeopleOffice });
         var me = (await api.WhoAmIAsync(Cancellation)).Value!;
         me.Roles.Should().ContainSingle().Which.Should().Match<RoleInfo>(role => role.FromPack == SampleCatalogue.PeopleOffice && role.ManagesAccess);
-        var keys = (await api.KeyCatalogueAsync(Cancellation)).Value!.Permissions;
-        keys.Single(permission => permission.Key == ProjectKeys.ChangeOwner).ManagesAccess.Should().BeTrue();
-        keys.Single(permission => permission.Key == ProjectKeys.ManageCrew).ManagesAccess.Should().BeTrue();
-        keys.Single(permission => permission.Key == ProjectKeys.Close).ManagesAccess.Should().BeFalse();
+        var permissions = (await api.PermissionCatalogueAsync(Cancellation)).Value!.Permissions;
+        permissions.Single(permission => permission.Name == ProjectPermissionNames.ChangeOwner).ManagesAccess.Should().BeTrue();
+        permissions.Single(permission => permission.Name == ProjectPermissionNames.ManageCrew).ManagesAccess.Should().BeTrue();
+        permissions.Single(permission => permission.Name == ProjectPermissionNames.Close).ManagesAccess.Should().BeFalse();
     }
 
     [Fact]
@@ -173,7 +174,7 @@ public sealed class UiAgainstTheHostTests(SampleHosts sample) : IClassFixture<Sa
         // And a project says who changed it last: the seeding opened Pier 7.
         (await api.ProjectDetailAsync(Harbor.ProjectNamed("Pier 7").Id.Value.ToString(), Cancellation)).Value!.ChangedBy.Should().Be(new ActorInfo("system", null));
 
-        // Without the key the page shows the API's refusal.
+        // Without the permission the page shows the API's refusal.
         var (asRhea, _) = await SignInAsync("rhea");
         var refused = await asRhea.AccessHistoryAsync(cancellationToken: Cancellation);
         refused.Status.Should().Be(403);
@@ -261,14 +262,14 @@ public sealed class UiAgainstTheHostTests(SampleHosts sample) : IClassFixture<Sa
     }
 
     [Fact]
-    public async Task Rhea_who_manages_seats_at_north_reads_that_inviting_takes_the_key_for_the_whole_tenant()
+    public async Task Rhea_who_manages_seats_at_north_reads_that_inviting_takes_the_permission_for_the_whole_tenant()
     {
         // Every call here is refused or only reads, so it runs on the shared host.
         var (api, _) = await SignInAsync("rhea");
 
-        // Who am I lists the key for her: held at North, and not for the whole tenant.
-        var held = (await api.WhoAmIAsync(Cancellation)).Value!.Keys.Single(key => key.Key == TenancyKeys.SeatsManage);
-        held.WholeTenant.Should().BeFalse();
+        // Who am I lists the permission for her: held at North, and not for the whole tenant.
+        var held = (await api.WhoAmIAsync(Cancellation)).Value!.Permissions.Single(permission => permission.Permission == TenancyPermissions.SeatsManage);
+        held.AtTenant.Should().BeFalse();
         held.GrantedAt.Select(unit => unit.Path).Should().Equal("Harbor Works / North");
 
         var refused = await api.InvitePersonAsync(
@@ -278,17 +279,17 @@ public sealed class UiAgainstTheHostTests(SampleHosts sample) : IClassFixture<Sa
             until: null,
             Cancellation);
 
-        // The refusal's text names the key she holds and not where it was needed; its arguments name no unit,
-        // and from that the page says the key is needed for the whole tenant.
+        // The refusal's text names the permission she holds and not where it was needed; its arguments name no unit,
+        // and from that the page says the permission is needed for the whole tenant.
         (refused.Status, refused.Problem!.Code).Should().Be((403, TenancyRefusals.NotPermitted));
         refused.Problem.Title.Should().Be("You lack the permission tenancy.seats.manage.");
-        refused.Problem.KeyNeededForTheWholeTenant.Should().BeTrue("the API answered {0}", refused.RawBody);
+        refused.Problem.PermissionNeededAtTenant.Should().BeTrue("the API answered {0}", refused.RawBody);
 
-        // So does the history page, whose key the sample's own check asks for.
+        // So does the history page, whose permission the sample's own check asks for.
         var history = await api.AccessHistoryAsync(size: 5, cancellationToken: Cancellation);
-        (history.Problem!.Code, history.Problem.KeyNeededForTheWholeTenant).Should().Be((TenancyRefusals.NotPermitted, true), "the API answered {0}", history.RawBody);
+        (history.Problem!.Code, history.Problem.PermissionNeededAtTenant).Should().Be((TenancyRefusals.NotPermitted, true), "the API answered {0}", history.RawBody);
 
-        // A key needed at a unit is refused with that unit, and the page says nothing of the whole tenant.
+        // A permission needed at a unit is refused with that unit, and the page says nothing of the whole tenant.
         var outside = await api.SendAsync<JsonElement?>(
             HttpMethod.Post,
             $"/tenancy/seats/{Harbor.SeatOf(DemoPeople.Tove).Value}/grants",
@@ -296,7 +297,7 @@ public sealed class UiAgainstTheHostTests(SampleHosts sample) : IClassFixture<Sa
             CallAs.Session,
             TenantChoice.Session,
             Cancellation);
-        (outside.Problem!.Code, outside.Problem.KeyNeededForTheWholeTenant).Should().Be((TenancyRefusals.NotPermitted, false), "the API answered {0}", outside.RawBody);
+        (outside.Problem!.Code, outside.Problem.PermissionNeededAtTenant).Should().Be((TenancyRefusals.NotPermitted, false), "the API answered {0}", outside.RawBody);
     }
 
     [Fact]
@@ -355,7 +356,7 @@ public sealed class UiAgainstTheHostTests(SampleHosts sample) : IClassFixture<Sa
         {
             Tenant = Harbor.Slug,
             Project = Harbor.ProjectNamed("Pier 7").Id.Value.ToString(),
-            Key = ProjectKeys.View,
+            Permission = ProjectPermissionNames.View,
             Name = "Pier Seven",
             Unit = Harbor.UnitNamed("North Inland").Value.ToString(),
             Title = "Railing loose",

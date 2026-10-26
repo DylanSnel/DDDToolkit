@@ -64,7 +64,7 @@ public sealed class Failing
                 [ToolkitRefusals.ReasonsArgument] = new[]
                 {
                     new RefusalReason("tenancy.operators-only"),
-                    new RefusalReason("tenancy.not-permitted", new Dictionary<string, object?> { ["Key"] = "tenancy.seats.manage" }),
+                    new RefusalReason("tenancy.not-permitted", new Dictionary<string, object?> { ["Permission"] = "tenancy.seats.manage" }),
                 },
             });
 

@@ -76,6 +76,35 @@ public sealed class RowAccessExport
     private readonly IReadOnlyList<IRowAccessContribution> _contributions = [];
 
     /// <summary>
+    /// The row access rules the script writes, which a contribution may read: a resource's functions are granted to
+    /// the roles its rules are for. A script fills it in with the rules of the context it writes where it is left
+    /// empty; the Supabase export with every rule it writes.
+    /// </summary>
+    /// <exception cref="ArgumentNullException">Set to null.</exception>
+    public IReadOnlyList<RowAccessRule> Rules
+    {
+        get => _rules;
+        init => _rules = value ?? throw new ArgumentNullException(nameof(value));
+    }
+
+    private readonly IReadOnlyList<RowAccessRule> _rules = [];
+
+    /// <summary>This export with <paramref name="rules"/> as its rules, where it has none of its own.</summary>
+    internal RowAccessExport WithRules(IReadOnlyList<RowAccessRule> rules)
+        => _rules.Count > 0
+            ? this
+            : new RowAccessExport
+            {
+                CallerFunctions = CallerFunctions,
+                Roles = Roles,
+                FunctionNames = FunctionNames,
+                Contributions = Contributions,
+                Rules = rules,
+                WriteGrants = WriteGrants,
+                ForceRowLevelSecurity = ForceRowLevelSecurity,
+            };
+
+    /// <summary>
     /// Whether a script also writes the privileges of the tables it writes policies for, so the policies and
     /// the privileges cannot drift apart: a privilege beyond the policies only turns a refusal into an empty
     /// answer, and a privilege short of them turns a rule that allows into an error. <see langword="false"/>

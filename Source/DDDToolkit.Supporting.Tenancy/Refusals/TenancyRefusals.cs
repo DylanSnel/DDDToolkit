@@ -10,7 +10,7 @@ namespace DDDToolkit.Supporting.Tenancy;
 /// Every way Tenancy refuses a command, as codes a caller branches on, and the one place their kind and
 /// English text are written down.
 /// <para>
-/// An argument a message shows is a value, such as a key or an id, never a word: the English and the Dutch
+/// An argument a message shows is a value, such as a permission or an id, never a word: the English and the Dutch
 /// texts are whole sentences of their own. Where a client wants to say more, it reads the stable tokens the
 /// arguments carry. A refusal of kind <see cref="RefusalKind.Invalid"/> that is about one input names it in
 /// the argument <see cref="RefusalException.FieldArgument"/>, in the word the use cases call that input by,
@@ -52,19 +52,19 @@ public static class TenancyRefusals
     public const string TenantInactive = "tenancy.tenant-inactive";
 
     /// <summary>
-    /// The caller does not hold the key the command needs where it needs it. Arguments: <c>Key</c> and <c>Unit</c>
-    /// (the unit asked about, or <see langword="null"/> for the whole tenant). The message names only the key: a
+    /// The caller does not hold the permission the command needs where it needs it. Arguments: <c>Permission</c> and <c>Unit</c>
+    /// (the unit asked about, or <see langword="null"/> for the whole tenant). The message names only the permission: a
     /// client that shows the unit finds it among the arguments.
     /// </summary>
     public const string NotPermitted = "tenancy.not-permitted";
 
     /// <summary>
     /// A seat would give or take away, at a unit, a role that manages access without holding there each of its
-    /// keys that do, for at least as long as the grant runs, or suspend, deactivate or reactivate a seat that
+    /// permissions that do, for at least as long as the grant runs, or suspend, deactivate or reactivate a seat that
     /// holds one; would give itself a role for longer than it holds <c>tenancy.grants.manage</c> there; would add
-    /// or take out a key that manages access, or archive a role that holds one, without being an administrator;
-    /// or would, by moving a unit, gain keys or hold one for longer, or give or take away from anyone a key that
-    /// manages access it lacks at the unit for that long. Arguments: <c>Missing</c>, the keys it lacks there or
+    /// or take out a permission that manages access, or archive a role that holds one, without being an administrator;
+    /// or would, by moving a unit, gain permissions or hold one for longer, or give or take away from anyone a permission that
+    /// manages access it lacks at the unit for that long. Arguments: <c>Missing</c>, the permissions it lacks there or
     /// lacks for long enough, and <c>Role</c>, the role refused, for all but a move.
     /// </summary>
     public const string GrantExceedsOwn = "tenancy.grant-exceeds-own";
@@ -209,7 +209,7 @@ public static class TenancyRefusals
 
     /// <summary>
     /// The seat that issued the invitation may no longer give what it offers: it is not active, or it lacks a
-    /// key it needed to issue it, or holds one for too short a time. It names neither the seat nor the keys: the
+    /// permission it needed to issue it, or holds one for too short a time. It names neither the seat nor the permissions: the
     /// person it is told to is no member of the tenant.
     /// </summary>
     public const string InvitationUnbacked = "tenancy.invitation-unbacked";
@@ -234,16 +234,16 @@ public static class TenancyRefusals
     public const string ReasonRequired = "tenancy.reason-required";
 
     /// <summary>
-    /// Keys that are new to a role are unknown to the catalogue, or retired. Arguments: <c>Keys</c>, the keys
-    /// refused, and <c>Field</c>, which is <c>keys</c>.
+    /// Permissions that are new to a role are unknown to the catalogue, or retired. Arguments: <c>Permissions</c>, the permissions
+    /// refused, and <c>Field</c>, which is <c>permissions</c>.
     /// </summary>
     public const string UnknownPermission = "tenancy.unknown-permission";
 
     /// <summary>A seat would have no verified identity. Argument: <c>Field</c>, which is <c>identity</c>.</summary>
     public const string IdentityRequired = "tenancy.identity-required";
 
-    /// <summary>A role's keys are not expanded, or hold duplicates, or are out of order. Argument: <c>Field</c>, which is <c>keys</c>.</summary>
-    public const string KeysNotNormalized = "tenancy.keys-not-normalized";
+    /// <summary>A role's permissions are not expanded, or hold duplicates, or are out of order. Argument: <c>Field</c>, which is <c>permissions</c>.</summary>
+    public const string PermissionsNotNormalized = "tenancy.permissions-not-normalized";
 
     /// <summary>
     /// A question by id asks about more ids than one question takes. Arguments: <c>Max</c>, and <c>Field</c>,
@@ -292,7 +292,7 @@ public static class TenancyRefusals
             [TenantRequired] = (RefusalKind.Invalid, "This request names no tenant."),
             [SeatSuspended] = (RefusalKind.NotPermitted, "Your seat in this tenant has been suspended."),
             [TenantInactive] = (RefusalKind.NotPermitted, "This tenant is not in use right now."),
-            [NotPermitted] = (RefusalKind.NotPermitted, "You lack the permission {Key}."),
+            [NotPermitted] = (RefusalKind.NotPermitted, "You lack the permission {Permission}."),
             [GrantExceedsOwn] = (RefusalKind.NotPermitted, "That reaches past what you hold yourself, there or for that long: {Missing}."),
             [SelfAssignment] = (RefusalKind.NotPermitted, "Someone else must place you."),
             [SelfAppointment] = (RefusalKind.NotPermitted, "Someone else must give you a role that manages access."),
@@ -340,9 +340,9 @@ public static class TenancyRefusals
             [InvalidSlug] = (RefusalKind.Invalid, "A slug has 2 to 63 characters, each a lowercase letter, a digit or a dash, and does not begin with a dash."),
             [InvalidPeriod] = (RefusalKind.Invalid, "A grant's end must come after its start."),
             [ReasonRequired] = (RefusalKind.Invalid, "Give a reason to suspend or close a tenant."),
-            [UnknownPermission] = (RefusalKind.Invalid, "These keys are unknown or retired: {Keys}."),
+            [UnknownPermission] = (RefusalKind.Invalid, "These permissions are unknown or retired: {Permissions}."),
             [IdentityRequired] = (RefusalKind.Invalid, "A seat needs the verified identity of the person it belongs to."),
-            [KeysNotNormalized] = (RefusalKind.Invalid, "A role's keys must be expanded, without duplicates, in ordinal order."),
+            [PermissionsNotNormalized] = (RefusalKind.Invalid, "A role's permissions must be expanded, without duplicates, in ordinal order."),
             [TooManyIds] = (RefusalKind.Invalid, "Ask for at most {Max} ids at a time."),
             [PageSizeInvalid] = (RefusalKind.Invalid, "A page holds 1 to {Max} tenants."),
             [CursorInvalid] = (RefusalKind.Invalid, "That page marker does not belong to this list. Start again from the first page."),
@@ -367,9 +367,9 @@ public static class TenancyRefusals
             [InvalidSlug] = "slug",
             [InvalidPeriod] = "until",
             [ReasonRequired] = "reason",
-            [UnknownPermission] = "keys",
+            [UnknownPermission] = "permissions",
             [IdentityRequired] = "identity",
-            [KeysNotNormalized] = "keys",
+            [PermissionsNotNormalized] = "permissions",
             [TooManyIds] = "ids",
             [PageSizeInvalid] = "size",
             [CursorInvalid] = "after",

@@ -11,7 +11,7 @@ namespace DDDToolkit.Supporting.Tenancy.Postgres.Tests;
 /// The directory answers what seats, roles and units are called, by id, through the use cases as the caller and
 /// under the policies: from Tenancy's own tables, since the functions a module reads through answer no name. A seat
 /// that manages nothing reads the names of its whole tenant, and no name of another, its own seat there included.
-/// The overview of another seat asks no key either, and holds what the policies let the caller read of that seat.
+/// The overview of another seat asks no permission either, and holds what the policies let the caller read of that seat.
 /// </summary>
 public abstract class DirectoryTests(TenancyPostgres postgres, TenancyNaming names)
 {
@@ -24,7 +24,7 @@ public abstract class DirectoryTests(TenancyPostgres postgres, TenancyNaming nam
         var recorder = new CommandRecorder();
         await using var services = new TenancyServices(database, contexts: options => options.AddInterceptors(recorder));
 
-        // Oli operates widgets at North Pier and manages nothing: no key is asked for a name.
+        // Oli operates widgets at North Pier and manages nothing: no permission is asked for a name.
         await services.BySeat(Oli.Identity, Harbor, Oli.Seat, async scoped =>
         {
             var directory = scoped.Directory();
@@ -44,11 +44,12 @@ public abstract class DirectoryTests(TenancyPostgres postgres, TenancyNaming nam
 
             // South is no unit Oli is placed under, and the root is above him: both are his tenant's, and named.
             recorder.Clear();
-            (await directory.UnitsByIdAsync([South, HarborRoot, NorthPier], Cancellation)).Select(unit => (unit.Unit.Id, unit.Unit.Name, unit.Path, unit.Depth)).Should().Equal(
+            (await directory.UnitsByIdAsync([South, HarborRoot, NorthPier], Cancellation)).Select(unit => (unit.Id, unit.Name, unit.Path, unit.Depth)).Should().Equal(
                 (HarborRoot, "Harbor", "Harbor", 1),
                 (NorthPier, "North Pier", "Harbor / North / North Pier", 3),
                 (South, "South", "Harbor / South", 2));
-            recorder.Sent.Should().HaveCount(2, "the organization with its units, and the closure that orders a path");
+            recorder.Sent.Should().ContainSingle("Tenancy's function names the units asked about, with their paths, in one statement")
+                .Which.Text.Should().Contain(TenancyFunctionNames.UnitsNamed);
 
             (await directory.ListUnitsAsync(Cancellation)).Select(unit => unit.Path).Should().Equal(["Harbor / North / North Pier"], "the list is still the units he is placed under");
             (await directory.ListSeatsAsync(Cancellation)).Select(seat => seat.DisplayName).Should().BeEquivalentTo(["Ada", "Eve", "Hiro", "Oli", "Seth", "Sue"]);
@@ -72,7 +73,7 @@ public abstract class DirectoryTests(TenancyPostgres postgres, TenancyNaming nam
             var directory = scoped.Directory();
             (await directory.SeatsByIdAsync([OliInOrchard, Odette.Seat, Quin.Seat, Oli.Seat], Cancellation)).Select(seat => seat.Id).Should().Equal(Oli.Seat);
             (await directory.RolesByIdAsync([OrchardRoles.Watcher, QuayRoles.Administrator, HarborRoles.Watcher], Cancellation)).Select(role => role.Id).Should().Equal(HarborRoles.Watcher);
-            (await directory.UnitsByIdAsync([OrchardRoot, QuayRoot, North], Cancellation)).Select(unit => unit.Unit.Id).Should().Equal(North);
+            (await directory.UnitsByIdAsync([OrchardRoot, QuayRoot, North], Cancellation)).Select(unit => unit.Id).Should().Equal(North);
 
             (await directory.SeatsByIdAsync([OliInOrchard, Odette.Seat], Cancellation)).Should().BeEmpty("nothing says whether an id is another tenant's or nobody's");
         });
@@ -119,13 +120,13 @@ public abstract class DirectoryTests(TenancyPostgres postgres, TenancyNaming nam
     }
 
     [Fact]
-    public async Task A_unit_managers_overview_of_another_seat_has_the_grants_he_may_read_and_the_keys_they_give()
+    public async Task A_unit_managers_overview_of_another_seat_has_the_grants_he_may_read_and_the_permissions_they_give()
     {
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
         await using var services = new TenancyServices(database);
 
         // Seth supervises North: he manages units, seats and grants there, and reads the grants at North and below it.
-        // The rights the database keeps it shows him his own alone, so another seat's keys are worked out from the
+        // The rights the database keeps it shows him his own alone, so another seat's permissions are worked out from the
         // grants he reads.
         var (oli, hiro, ada, othersRights) = await services.BySeat(Seth.Identity, Harbor, Seth.Seat, async scoped =>
         {
@@ -143,35 +144,35 @@ public abstract class DirectoryTests(TenancyPostgres postgres, TenancyNaming nam
         var own = await services.BySeat(Oli.Identity, Harbor, Oli.Seat, scoped => scoped.Directory().WhoAmIAsync(Cancellation));
         (oli.Seat.Id, oli.Seat.DisplayName).Should().Be((Oli.Seat, "Oli"));
         oli.Roles.Select(role => role.Name).Should().Equal("Operator");
-        oli.Keys.Select(key => (key.Key, Units: string.Join(", ", key.GrantedAt.Select(unit => unit.Path)))).Should().Equal(
+        oli.Permissions.Select(permission => (permission.Permission, Units: string.Join(", ", permission.GrantedAt.Select(unit => unit.Path)))).Should().Equal(
             ("widget.change", "Harbor / North / North Pier"), ("widget.create", "Harbor / North / North Pier"), ("widget.read", "Harbor / North / North Pier"));
-        oli.Keys.Should().BeEquivalentTo(own.Keys, options => options.WithStrictOrdering());
+        oli.Permissions.Should().BeEquivalentTo(own.Permissions, options => options.WithStrictOrdering());
 
         // Hiro's Grants desk is at North itself, where Seth manages.
-        var desk = hiro.Keys.Should().ContainSingle().Which;
-        (desk.Key, desk.WholeTenant).Should().Be((TenancyKeys.GrantsManage, false));
+        var desk = hiro.Permissions.Should().ContainSingle().Which;
+        (desk.Permission, desk.AtTenant).Should().Be((TenancyPermissions.GrantsManage, false));
         desk.Reaches.Select(unit => unit.Path).Should().Equal("Harbor / North", "Harbor / North / North Pier");
 
         // Ada administers the tenant from the root, above North: Seth reads her seat and where she is placed, which
-        // every member reads, and none of her grants, so no role and no key.
+        // every member reads, and none of her grants, so no role and no permission.
         (ada.Seat.Id, ada.Seat.DisplayName).Should().Be((Ada.Seat, "Ada"));
         ada.Units.Select(unit => unit.Path).Should().Equal("Harbor");
         ada.Seat.Placements.SelectMany(placement => placement.Grants).Should().BeEmpty("her grant is at the root, above where Seth manages");
         ada.Roles.Should().BeEmpty();
-        ada.Keys.Should().BeEmpty();
+        ada.Permissions.Should().BeEmpty();
 
-        // Oli manages nothing, and the directory asks him no key: he reads Seth's seat and where it is placed, and
+        // Oli manages nothing, and the directory asks him no permission: he reads Seth's seat and where it is placed, and
         // none of his grants. Who may ask is the request's to say; what comes back, the policies'.
         var seth = await services.BySeat(Oli.Identity, Harbor, Oli.Seat, scoped => scoped.Directory().SeatOverviewAsync(Seth.Seat, Cancellation));
         seth.Units.Select(unit => unit.Path).Should().Equal("Harbor / North", "Harbor / North / North Pier");
         seth.Seat.Placements.SelectMany(placement => placement.Grants).Should().BeEmpty();
         seth.Roles.Should().BeEmpty();
-        seth.Keys.Should().BeEmpty();
+        seth.Permissions.Should().BeEmpty();
 
-        // System work in the tenant reads every grant: Ada holds every live key for the whole tenant.
+        // System work in the tenant reads every grant: Ada holds every live permission for the whole tenant.
         var bySystem = await services.BySystemIn(Harbor, scoped => scoped.Directory().SeatOverviewAsync(Ada.Seat, Cancellation));
         bySystem.Roles.Select(role => role.Id).Should().Equal(HarborRoles.Administrator);
-        bySystem.Keys.Should().NotBeEmpty().And.OnlyContain(key => key.WholeTenant);
+        bySystem.Permissions.Should().NotBeEmpty().And.OnlyContain(permission => permission.AtTenant);
 
         // Oli's seat in Orchard is no seat of Harbor's: refused as a seat that does not exist is.
         await FluentActions.Awaiting(() => services.BySeat(Seth.Identity, Harbor, Seth.Seat, scoped => scoped.Directory().SeatOverviewAsync(OliInOrchard, Cancellation)))

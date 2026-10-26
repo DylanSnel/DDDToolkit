@@ -42,7 +42,7 @@ internal static class OperatorsEndpoints
             });
         });
 
-        // One tenant's access history, as a holder of the key that reads it sees it in that tenant.
+        // One tenant's access history, as a holder of the permission that reads it sees it in that tenant.
         group.MapGet("/operations/tenants/{tenant}/history", async (TenantId tenant, string? after, int? size, ISender sender, CancellationToken cancellationToken)
             => Results.Ok(HistoryPages.Describe(await sender.Send(new TenantAccessHistory(tenant, HistoryPages.Asked(after, size)), cancellationToken))));
 

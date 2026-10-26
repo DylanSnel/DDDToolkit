@@ -66,7 +66,7 @@ internal static class LifecycleEndpoints
             return Results.NoContent();
         });
 
-        // Whoever may close a project may reopen it: the same key.
+        // Whoever may close a project may reopen it: the same permission.
         group.MapPost("/projects/{id}/reopen", async (ProjectId id, HttpRequest request, ISender sender, CancellationToken cancellationToken) =>
         {
             await sender.Send(new ReopenProject(id, ProjectVersions.Expected(request)), cancellationToken);

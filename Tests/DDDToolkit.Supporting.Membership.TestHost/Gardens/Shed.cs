@@ -1,4 +1,5 @@
 using DDDToolkit.Abstractions.Attributes;
+using DDDToolkit.Access;
 using DDDToolkit.Invariants;
 
 namespace DDDToolkit.Supporting.Membership.TestHost.Gardens;
@@ -24,36 +25,37 @@ public sealed partial class ShedHand;
 /// is a role of. The host adds nothing to it: the sheds' roles are the whole application's, kept in no
 /// customer's name, so there is one set of them and no rule about whose a request reads.
 /// </summary>
-[KeptRole<ShedRoleId, Shed>]
+[CustomRole<ShedRoleId, Shed>]
 public sealed partial class ShedRole
 {
     /// <summary>Makes a role of sheds.</summary>
-    public ShedRole(ShedRoleId id, KeptRoleDraft draft) : base(id, draft, ShedMembership.Rules)
+    public ShedRole(ShedRoleId id, CustomRoleDraft draft) : base(id, draft, ShedMembership.Rules)
     {
     }
 }
 
 /// <summary>
 /// A shed, kept by hands: a second kind of resource whose roles are kept, in the same project and the same
-/// context as the plots. Its rules differ from a plot's in every way they can: no key comes with being a
-/// hand, the owner's role is a starter role the rules declare, and a role may give any key but one, a key of
+/// context as the plots. Its rules differ from a plot's in every way they can: no permission comes with being a
+/// hand, the only starter role is the keeper's, and a role may give any permission but one, a permission of
 /// another module among them.
 /// </summary>
 [AggregateRoot<ShedId>]
 public sealed partial class Shed
 {
-    /// <summary>Builds a shed, with <paramref name="owner"/> in it from <paramref name="now"/> on, for good, in the role for owners.</summary>
-    public Shed(ShedId id, string name, UserId owner, ShedRoleId ownerRole, DateTimeOffset now) : base(id)
+    /// <summary>Builds a shed, with <paramref name="owner"/> in it from <paramref name="now"/> on, for good, holding no role.</summary>
+    public Shed(ShedId id, string name, UserId owner, DateTimeOffset now) : base(id)
     {
         Name = name;
         OwnerId = owner;
-        Members.Open(ownerRole, now);
+        Members.Open(now);
     }
 
     /// <summary>What the shed is called.</summary>
     public string Name { get; private set; } = string.Empty;
 
     /// <summary>The user that owns the shed.</summary>
+    [Owner]
     public UserId OwnerId { get; private set; }
 
     /// <summary>The hands in the shed.</summary>
@@ -92,42 +94,40 @@ public sealed partial class Shed
     }
 }
 
-/// <summary>The keys a shed is asked about, and one that is not a shed's.</summary>
-public static class ShedKeys
+/// <summary>The permissions asked on a shed: its owner holds all three; no role gives the one that sells it.</summary>
+[Permissions]
+public static class ShedPermissions
 {
     /// <summary>Open a shed.</summary>
+    [On<Shed>]
     public const string Open = "sheds.open";
 
     /// <summary>Stock a shed.</summary>
+    [On<Shed>]
     public const string Stock = "sheds.stock";
 
-    /// <summary>Sell a shed: the one key no role of sheds may give, so the owner's alone.</summary>
+    /// <summary>Sell a shed: no role gives it, so the owner's alone.</summary>
+    [On<Shed>(InRoles = false)]
     public const string Sell = "sheds.sell";
+}
 
-    /// <summary>A key of another module's, which a role of sheds may give without the sheds naming it.</summary>
+/// <summary>Permissions of the garden's other modules that a shed's role may hold beside a shed's permissions.</summary>
+public static class ToolPermissions
+{
+    /// <summary>Lend the tools: another module's permission.</summary>
     public const string LendTools = "tools.lend";
 }
 
-/// <summary>
-/// The rules of access through a shed's hands. The roles are kept, as a plot's are, and everything else is
-/// said the other way: being a hand gives no key by itself, the owner's role is the starter role declared
-/// here, and a role may give every key it holds but selling.
-/// </summary>
+/// <summary>The rules of access through a shed's hands: roles a garden makes, which take permissions of other modules too.</summary>
 public static class ShedMembership
 {
-    /// <summary>The starter role every owner of a shed holds.</summary>
+    /// <summary>The starter role that keeps a shed.</summary>
     public const string Keeper = "keeper";
 
-    /// <summary>The codes a shed refuses with.</summary>
+    /// <summary>The codes a shed refuses under.</summary>
     public static MembershipCodes Codes { get; } = MembershipCodes.Under("sheds");
 
     /// <summary>The rules.</summary>
-    public static MembershipRules Rules { get; } = new(
-        "sheds",
-        keys: [ShedKeys.Open, ShedKeys.Stock, ShedKeys.Sell],
-        roles: [new(Keeper, [ShedKeys.Open, ShedKeys.Stock, ShedKeys.Sell])],
-        ownerRole: Keeper,
-        memberKeys: MemberKeys.AllBut(ShedKeys.Sell),
-        codes: Codes,
-        rolesKept: true);
+    public static MembershipRules Rules { get; } = MembershipRules.For<Shed>(
+        Roles.Custom(starters: [new(Keeper, [ShedPermissions.Open, ShedPermissions.Stock])], otherPermissions: OtherPermissions.All));
 }

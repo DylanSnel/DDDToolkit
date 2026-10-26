@@ -222,7 +222,7 @@ public sealed class GraphQLSeatGateScenarios(SampleHosts sample) : IClassFixture
         (await nowhere.GraphQLAsync("{ openInvitations { id } }")).SingleError().Code().Should().Be(TenancyRefusals.TenantRequired);
         sent.Names.Skip(before).Should().Equal(nameof(AcceptInvitation));
 
-        // Ada holds every key of harbor and is no operator: each of the operators' fields, of whichever module,
+        // Ada holds every permission of harbor and is no operator: each of the operators' fields, of whichever module,
         // refuses her before anything is sent.
         using var ada = await host.ClientAsync("ada", Harbor.Slug);
         var pier = await ada.ProjectNodeIdAsync(Harbor.ProjectNamed("Pier 7"));

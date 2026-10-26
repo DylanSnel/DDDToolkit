@@ -8,7 +8,7 @@ using Examples.Tenancy.Projects.Infrastructure.Access;
 // program references reference those packages, which write their SQL into it by themselves, from what the catalogue
 // and the Tenants module mark. The build writes the classes that make them into
 // DDDToolkit.RowAccessContributionsOfPackages.g.cs, among this project's generated files.
-[assembly: UseRowAccessContribution(typeof(UnitChangesWithItsKeys))]
+[assembly: UseRowAccessContribution(typeof(UnitChangesWithItsPermissions))]
 [assembly: UseRowAccessContribution(typeof(CrewSeatsOfTheProjectsTenant))]
 
 // There is nothing to run here. The project file turns the Supabase export on, and its build starts this program

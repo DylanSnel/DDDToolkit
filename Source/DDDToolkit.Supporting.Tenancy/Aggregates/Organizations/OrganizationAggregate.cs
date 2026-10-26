@@ -188,7 +188,7 @@ public abstract partial class OrganizationAggregate<TTenantId, TUnit, TUnitId>
     }
 
     /// <summary>
-    /// Moves a unit, and everything below it, under another active unit. What a key held above the unit
+    /// Moves a unit, and everything below it, under another active unit. What a permission held above the unit
     /// reaches changes with it, which is why the use case also guards the move against concurrent grants.
     /// </summary>
     /// <typeparam name="TSeatId">The application's seat id, which the actor is closed over: an organization does not know it by itself.</typeparam>

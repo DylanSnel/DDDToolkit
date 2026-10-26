@@ -12,8 +12,8 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 
 /// <summary>
 /// The reads Tenancy makes across tenants: the few whose answer is needed before any tenant is known, such as
-/// the keys stored on every tenant's roles at start-up, or which tenants a round of system work visits. Each is
-/// one query that answers ids or keys only, and every such read goes through here, so the list stays short and
+/// the permissions stored on every tenant's roles at start-up, or which tenants a round of system work visits. Each is
+/// one query that answers ids or permissions only, and every such read goes through here, so the list stays short and
 /// known.
 /// <para>
 /// Who a read runs as depends on who keeps the rights. Where the database does

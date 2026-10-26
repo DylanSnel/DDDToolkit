@@ -8,7 +8,7 @@ using HotChocolate.Types.Composite;
 namespace Examples.Tenancy.Tenants.Api.Roles.GraphQL;
 
 /// <summary>
-/// A role of the tenant as the schema shows it: its name, the keys it brings, and what the tenant uses it for.
+/// A role of the tenant as the schema shows it: its name, the permissions it brings, and what the tenant uses it for.
 /// </summary>
 /// <remarks>
 /// Declared over the application's own answer, <see cref="RoleListing"/>. Each field is said here, in the order
@@ -25,7 +25,7 @@ internal static partial class RoleType
 {
     static partial void Configure(IObjectTypeDescriptor<RoleListing> descriptor) => descriptor.Name("Role");
 
-    /// <summary>The key other modules name it by.</summary>
+    /// <summary>The permission other modules name it by.</summary>
     public static RoleId GetId([Parent] RoleListing listed) => listed.Id;
 
     /// <summary>Its name.</summary>
@@ -38,21 +38,21 @@ internal static partial class RoleType
     public static RoleStatus GetStatus([Parent] RoleListing listed) => listed.Status;
 
     /// <summary>
-    /// The permission keys it brings: for whoever manages the tenant's roles. Anybody who works in the tenant
+    /// The permissions it brings: for whoever manages the tenant's roles. Anybody who works in the tenant
     /// reads what a role is called; what it lets its holder do is for those who decide that. A caller without the
-    /// key gets <see langword="null"/> here, with the refusal at the field's path, and the role's other fields.
+    /// permission gets <see langword="null"/> here, with the refusal at the field's path, and the role's other fields.
     /// </summary>
     /// <remarks>
-    /// The rule is the query's: it left the keys out of what this role was read as, for the route as for this
+    /// The rule is the query's: it left the permissions out of what this role was read as, for the route as for this
     /// field. What the attribute adds is the rule where a client reads it, in the schema, and the refusal that
     /// says why the field is empty.
     /// </remarks>
-    [Authorize(RoleListing.KeysKey)]
-    public static IReadOnlyList<string>? GetKeys([Parent] RoleListing listed) => listed.Keys;
+    [Authorize(RoleListing.ManageRolesPermission)]
+    public static IReadOnlyList<string>? GetPermissions([Parent] RoleListing listed) => listed.Permissions;
 
     /// <summary>
-    /// Whether one of its keys manages access, and so, while containment is on, it is given only by a seat that
-    /// holds those keys.
+    /// Whether one of its permissions manages access, and so, while containment is on, it is given only by a seat that
+    /// holds those permissions.
     /// </summary>
     public static bool GetManagesAccess([Parent] RoleListing listed) => listed.ManagesAccess;
 }

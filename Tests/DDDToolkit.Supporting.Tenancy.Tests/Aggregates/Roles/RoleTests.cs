@@ -4,90 +4,90 @@ using DDDToolkit.Testing;
 namespace DDDToolkit.Supporting.Tenancy.Tests;
 
 /// <summary>
-/// A role's keys come from the catalogue, expanded, distinct and sorted. A key retired or removed later may
+/// A role's permissions come from the catalogue, expanded, distinct and sorted. A permission retired or removed later may
 /// stay where it is, and is never added anew.
 /// </summary>
 public class RoleTests
 {
     private const string Polish = "widget.polish";
 
-    /// <summary>The host's catalogue with one more key, <see cref="Polish"/>, live or retired.</summary>
+    /// <summary>The host's catalogue with one more permission, <see cref="Polish"/>, live or retired.</summary>
     private static TenancyCatalogue WithPolish(bool retired)
         => TenancyCatalogue.Build(HostCatalogue.Application, [new Permission(Polish, "Widgets", "Polish widgets", Retired: retired)]);
 
     [Fact]
-    public void Keys_come_from_the_catalogue_only()
+    public void Permissions_come_from_the_catalogue_only()
     {
         var catalogue = New.Catalogue();
 
         var refusal = Refused.With(TenancyRefusals.UnknownPermission, () => New.Role(catalogue, "Flyer", HostCatalogue.WidgetRead, "widget.fly", "nothing"));
-        refusal.Arguments["Keys"].Should().Be("widget.fly, nothing");
-        refusal.Message.Should().Be("These keys are unknown or retired: widget.fly, nothing.");
+        refusal.Arguments["Permissions"].Should().Be("widget.fly, nothing");
+        refusal.Message.Should().Be("These permissions are unknown or retired: widget.fly, nothing.");
 
         var role = New.Role(catalogue, "Watcher", HostCatalogue.WidgetRead);
-        role.AsScenario().WhenThrows<RefusalException>(candidate => candidate.SetKeys<SeatId>(["widget.fly"], catalogue))
+        role.AsScenario().WhenThrows<RefusalException>(candidate => candidate.SetPermissions<SeatId>(["widget.fly"], catalogue))
             .Code.Should().Be(TenancyRefusals.UnknownPermission);
-        role.Keys.Should().Equal(HostCatalogue.WidgetRead);
+        role.Permissions.Should().Equal(HostCatalogue.WidgetRead);
     }
 
     [Fact]
-    public void Implied_keys_are_expanded_sorted_and_distinct()
+    public void Implied_permissions_are_expanded_sorted_and_distinct()
     {
         var role = New.Role(New.Catalogue(), "Operator", HostCatalogue.WidgetCreate, " widget.change ", HostCatalogue.WidgetChange);
 
-        role.Keys.Should().Equal(HostCatalogue.WidgetChange, HostCatalogue.WidgetCreate, HostCatalogue.WidgetRead);
+        role.Permissions.Should().Equal(HostCatalogue.WidgetChange, HostCatalogue.WidgetCreate, HostCatalogue.WidgetRead);
         role.Holds(HostCatalogue.WidgetRead).Should().BeTrue("widget.change implies it");
-        role.Facts.Should().BeEquivalentTo(new RoleFacts(true, role.Keys));
+        role.Facts.Should().BeEquivalentTo(new RoleFacts(true, role.Permissions));
         role.GetInvariantViolations().Should().BeEmpty();
     }
 
     [Fact]
-    public void A_retired_key_cannot_be_added()
+    public void A_retired_permission_cannot_be_added()
     {
         var catalogue = WithPolish(retired: true);
 
-        Refused.With(TenancyRefusals.UnknownPermission, () => New.Role(catalogue, "Polisher", Polish)).Arguments["Keys"].Should().Be(Polish);
+        Refused.With(TenancyRefusals.UnknownPermission, () => New.Role(catalogue, "Polisher", Polish)).Arguments["Permissions"].Should().Be(Polish);
 
         var role = New.Role(catalogue, "Watcher", HostCatalogue.WidgetRead);
-        Refused.With(TenancyRefusals.UnknownPermission, () => role.SetKeys<SeatId>([HostCatalogue.WidgetRead, Polish], catalogue));
+        Refused.With(TenancyRefusals.UnknownPermission, () => role.SetPermissions<SeatId>([HostCatalogue.WidgetRead, Polish], catalogue));
     }
 
     [Fact]
-    public void A_role_keeping_a_retired_key_may_be_saved_again()
+    public void A_role_keeping_a_retired_permission_may_be_saved_again()
     {
         var role = New.Role(WithPolish(retired: false), "Polisher", Polish, HostCatalogue.WidgetRead);
         role.DrainEvents();
         var retired = WithPolish(retired: true);
 
-        role.AsScenario().When(candidate => candidate.SetKeys<SeatId>(role.Keys.ToArray(), retired)).RaisedNothing();
-        role.Keys.Should().Contain(Polish);
+        role.AsScenario().When(candidate => candidate.SetPermissions<SeatId>(role.Permissions.ToArray(), retired)).RaisedNothing();
+        role.Permissions.Should().Contain(Polish);
 
-        role.AsScenario().When(candidate => candidate.SetKeys<SeatId>([Polish, HostCatalogue.WidgetChange], retired))
-            .RaisedExactly<RoleKeysChanged<TenantId, RoleId, SeatId>>();
-        role.Keys.Should().Equal(HostCatalogue.WidgetChange, Polish, HostCatalogue.WidgetRead);
+        role.AsScenario().When(candidate => candidate.SetPermissions<SeatId>([Polish, HostCatalogue.WidgetChange], retired))
+            .RaisedExactly<RolePermissionsChanged<TenantId, RoleId, SeatId>>();
+        role.Permissions.Should().Equal(HostCatalogue.WidgetChange, Polish, HostCatalogue.WidgetRead);
         role.GetInvariantViolations().Should().BeEmpty();
 
-        role.SetKeys<SeatId>([HostCatalogue.WidgetRead], retired);
-        role.Keys.Should().Equal(HostCatalogue.WidgetRead);
-        Refused.With(TenancyRefusals.UnknownPermission, () => role.SetKeys<SeatId>([Polish], retired));
+        role.SetPermissions<SeatId>([HostCatalogue.WidgetRead], retired);
+        role.Permissions.Should().Equal(HostCatalogue.WidgetRead);
+        Refused.With(TenancyRefusals.UnknownPermission, () => role.SetPermissions<SeatId>([Polish], retired));
     }
 
     [Fact]
-    public void A_key_removed_from_the_catalogue_may_stay_on_its_role()
+    public void A_permission_removed_from_the_catalogue_may_stay_on_its_role()
     {
         var role = New.Role(WithPolish(retired: false), "Polisher", Polish);
         var removed = New.Catalogue();
         removed.Knows(Polish).Should().BeFalse();
 
-        role.SetKeys<SeatId>([Polish, HostCatalogue.WidgetRead], removed);
+        role.SetPermissions<SeatId>([Polish, HostCatalogue.WidgetRead], removed);
 
-        role.Keys.Should().Equal(Polish, HostCatalogue.WidgetRead);
-        role.Holds(Polish).Should().BeTrue("the role keeps the key; it grants nothing, because the catalogue has no such key");
+        role.Permissions.Should().Equal(Polish, HostCatalogue.WidgetRead);
+        role.Holds(Polish).Should().BeTrue("the role keeps the permission; it grants nothing, because the catalogue has no such permission");
         removed.IsLive(Polish).Should().BeFalse();
     }
 
     [Fact]
-    public void An_archived_role_refuses_new_keys_and_a_second_archive()
+    public void An_archived_role_refuses_new_permissions_and_a_second_archive()
     {
         var catalogue = New.Catalogue();
         var scenario = New.Role(catalogue, "Watcher", HostCatalogue.WidgetRead).AsScenario().IgnorePendingEvents();
@@ -97,7 +97,7 @@ public class RoleTests
         scenario.Subject.Status.Should().Be(RoleStatus.Archived);
         scenario.Subject.Facts.IsActive.Should().BeFalse();
 
-        scenario.WhenThrows<RefusalException>(role => role.SetKeys<SeatId>([HostCatalogue.WidgetChange], catalogue)).Code.Should().Be(TenancyRefusals.RoleArchived);
+        scenario.WhenThrows<RefusalException>(role => role.SetPermissions<SeatId>([HostCatalogue.WidgetChange], catalogue)).Code.Should().Be(TenancyRefusals.RoleArchived);
         scenario.WhenThrows<RefusalException>(role => role.Archive<SeatId>()).Code.Should().Be(TenancyRefusals.RoleArchived);
         scenario.WhenThrows<RefusalException>(role => role.Rename<SeatId>("Former watcher", "")).Code.Should().Be(TenancyRefusals.RoleArchived);
     }
@@ -134,14 +134,14 @@ public class RoleTests
         var pack = catalogue.Packs.Single(candidate => candidate.Key == HostCatalogue.WatcherPack);
 
         var role = TenancyInstances.NewRole<HostRole, RoleId, TenantId, SeatId>(
-            RoleId.CreateSequential(), new TenantId(1), new RoleDraft(pack.Name, pack.Description, pack.Keys, pack.Key), catalogue);
+            RoleId.CreateSequential(), new TenantId(1), new RoleDraft(pack.Name, pack.Description, pack.Permissions, pack.Key), catalogue);
 
         role.FromPack.Should().Be(HostCatalogue.WatcherPack);
         role.PendingEvents().RaisedExactly<RoleCreated<TenantId, RoleId, SeatId>>()
             .SingleEvent<RoleCreated<TenantId, RoleId, SeatId>>().FromPack.Should().Be(HostCatalogue.WatcherPack);
 
         role.Rename<SeatId>("Looker", "Looks");
-        role.SetKeys<SeatId>([HostCatalogue.WidgetChange], catalogue);
+        role.SetPermissions<SeatId>([HostCatalogue.WidgetChange], catalogue);
         role.FromPack.Should().Be(HostCatalogue.WatcherPack, "the copy is the tenant's own now, and still says where it came from");
         typeof(RoleAggregate<RoleId, TenantId>).GetProperty(nameof(role.FromPack))!.SetMethod!.IsPrivate.Should().BeTrue();
 
@@ -149,18 +149,18 @@ public class RoleTests
     }
 
     [Fact]
-    public void Setting_the_same_keys_raises_nothing()
+    public void Setting_the_same_permissions_raises_nothing()
     {
         var catalogue = New.Catalogue();
         var role = New.Role(catalogue, "Operator", HostCatalogue.WidgetChange);
         role.DrainEvents();
 
-        role.AsScenario().When(candidate => candidate.SetKeys<SeatId>([HostCatalogue.WidgetChange], catalogue))
+        role.AsScenario().When(candidate => candidate.SetPermissions<SeatId>([HostCatalogue.WidgetChange], catalogue))
             .RaisedNothing();
-        role.AsScenario().When(candidate => candidate.SetKeys<SeatId>([HostCatalogue.WidgetRead, HostCatalogue.WidgetChange, HostCatalogue.WidgetChange], catalogue))
+        role.AsScenario().When(candidate => candidate.SetPermissions<SeatId>([HostCatalogue.WidgetRead, HostCatalogue.WidgetChange, HostCatalogue.WidgetChange], catalogue))
             .RaisedNothing();
 
-        role.AsScenario().When(candidate => candidate.SetKeys<SeatId>([HostCatalogue.WidgetRead], catalogue))
-            .RaisedExactly<RoleKeysChanged<TenantId, RoleId, SeatId>>();
+        role.AsScenario().When(candidate => candidate.SetPermissions<SeatId>([HostCatalogue.WidgetRead], catalogue))
+            .RaisedExactly<RolePermissionsChanged<TenantId, RoleId, SeatId>>();
     }
 }

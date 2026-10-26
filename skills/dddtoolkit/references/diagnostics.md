@@ -169,7 +169,7 @@ it `{ get; }` (or `private set`, `init`); a primary key value never changes.
 ## DDD00030
 
 Error. `[KeyPart]` properties of one type spread over several files of a partial class, so the key's
-column order is undefined. Declare them all in one part of the class, in the order the key should have.
+column order is undefined. Declare them all in one part of the class, in the order the permission should have.
 
 ## DDD00031
 
@@ -232,13 +232,13 @@ Error. A `[RowAccess<TAggregate>]` rule has the wrong shape. Make the class `sta
 exactly one `public static bool Allows(TAggregate x, Caller caller)` whose body is one expression (after
 `=>`, or a single `return`). `Caller` is `DDDToolkit.Abstractions.Access.Caller`. The same shape holds for
 an `[AccessFunction]`, which may take `string`, `bool`, `int`, `long`, `Guid` or id parameters after the
-caller, and needs a one-column key with `Shape = AccessFunctionShape.Set`. A contract declares nothing, or
-one `static partial bool Allows(TKey key, ...)` or `static partial AccessSet<TKey> Ids(...)`. A
+caller, and needs a one-column permission with `Shape = AccessFunctionShape.Set`. A contract declares nothing, or
+one `static partial bool Allows(TKey permission, ...)` or `static partial AccessSet<TKey> Ids(...)`. A
 `[ResourceAccessContract<TKey>]` is keyed by the id of the resource's aggregate (`[EntityId<T>]`, the id
 `[AggregateRoot<Guid>]` has the toolkit write in the same project, or one a switch such as
 `[assembly: GenerateTenancyIds]` writes there), is declared in the module that owns that
 id, and declares nothing, or `static partial AccessSet<TKey> Ids()` for `ResourceAccessSet.Seen`,
-`Ids(string key)` for `HeldOn`. A question
+`Ids(string permission)` for `HeldOn`. A question
 is a `static partial` method without a body in a `static partial [AccessFunctions]` class: `[AccessSet]`
 returns `AccessSet<T>`, `[AccessScalar]` a value. A name is `schema.name`, `owner/name` or a relative
 `name`, letters, digits and underscores.
@@ -444,13 +444,14 @@ Warning, on the aggregate a `[Member<TId, TMemberId, TRoleId, TResource>]` class
 (`DDDToolkit.Supporting.Membership`). The package's generator writes a private `Members` property on that
 aggregate, a `MemberList<TMember, TId, TMemberId, TRoleId>`, and could not: the message lists what it could
 not tell. It needs exactly one of each on the aggregate: a get-only `partial` collection of the member class
-(`IReadOnlyList<T>`, `IReadOnlyCollection<T>` or `IEnumerable<T>`); a property of `TMemberId`, the owner; a
-static property or field of `MembershipCodes`; and `TId` must have a `Create()`, which the generator writes for an
+(`IReadOnlyList<T>`, `IReadOnlyCollection<T>` or `IEnumerable<T>`); the one property of `TMemberId` marked
+`[Owner]`; at most one static property or field of `MembershipCodes` (none: the generator writes `Codes` under the
+resource's name); and `TId` must have a `Create()`, which the generator writes for an
 `[EntityId<Guid>]` and an id over a `long` declares itself. A member id that
 another generator writes, the id of an `[AggregateRoot<Guid>]`, cannot be seen by it: declare that id with
 `[EntityId<Guid>]` yourself. Add what is missing,
-for example `public static MembershipCodes Codes { get; } = MembershipCodes.Under("documents");`. If the
-shape cannot be told (two properties of the member's id, codes kept elsewhere), write
+for example `[Owner] public UserId OwnerId { get; private set; }`. If the
+shape cannot be told (codes kept elsewhere), write
 the property by hand on the aggregate, which also silences the warning:
 `private MemberList<DocumentShare, DocumentShareId, UserId, NamedRole> Members => new(_shares, OwnerId, codes);`.
 Do not rename a hand-written list to dodge the warning: any member of that `MemberList` type counts.
@@ -489,19 +490,6 @@ protected inside another (make it a non-generic internal class), for an instance
 with no field, for two methods that are one field (two overloads, or `GetX` beside `GetXAsync`: rename one or give it
 a `[GraphQLName]`), and for a method whose name another has and that takes a parameter of a type another generator
 writes, such as a data loader's interface (give the method a name of its own).
-
-## DDD00063
-
-Error, on a property or field marked `[TenancyPermissions]` (`DDDToolkit.Supporting.Tenancy.Catalogue`) that the
-project composing the modules cannot read as `Type.Member`, so the module's keys would be missing from the
-catalogue. Make it `public static`, readable (a field or a property with a getter), declared in a class that is
-not generic (nor nested in one), not in an extension block or a file-local type, not a static virtual or abstract
-interface member, and of a type that is a sequence of `Permission`:
-`[TenancyPermissions] public static IReadOnlyList<Permission> Permissions { get; } = [...];`. Every library's list
-is public, whether the library declares a module or not; only an application (an `Exe`) may keep its own list
-internal, though not private or protected.
-Do not also pass the list to `services.AddTenancyPermissions(...)`: the host's generated
-`services.AddTenancyPermissionsOfModules()` adds it, and the catalogue refuses a list added twice.
 
 ## DDD00064
 
@@ -665,12 +653,15 @@ module in either.
 
 Error, on a request whose module's interface is `partial` (so the compiler no longer asks for the property) and
 that says nothing of what it requires. Put the requirement attribute on it that says who may send it: `[SignedIn]`,
-`[InTenant]`, `[RequiresKey(key)]` with `[AtUnit]` or `[OnResource]` on the member where the key is held,
-`[SeenWith<TResourceId>(key)]` on a list, `[RequiresOperator]` on an operator's query, `[AllowAnonymous]` only
-where anyone may send it, `[OrOwn]` on the member beside the key for the caller's own or the key, several stacked
+`[InTenant]`, `[RequiresPermission(permission)]` with `[AtUnit]` or `[OnResource]` on the member where the permission is held,
+`[SeenWith<TResourceId>(permission)]` on a list, `[RequiresOperator]` on an operator's query, `[AllowAnonymous]` only
+where anyone may send it, `[OrOwn]` on the member beside the permission for the caller's own or the permission, several stacked
 where all hold. Answer `RequiredAccess` instead only for a case of the module's own, a requirement computed from the
-request's values, or one caller or another and two keys (`AccessRequirement.Any`, `All`). A request of another project than its interface answers `RequiredAccess`. Never
-answer it with `[AllowAnonymous]` to make it build, and never with system work: there is no such requirement.
+request's values, or one caller or another and two permissions (`AccessRequirement.Any`, `All`). A request of another project than its interface answers `RequiredAccess`. Never
+answer it with `[AllowAnonymous]` to make it build, and never with system work: there is no such requirement. Do not
+add a module default (`[AccessRequests, InTenant]` on the interface) only to silence this: a default is the module's
+choice, made where nearly every request requires the same, and then a command that forgets its permission requires the
+default without a word. Where the module has one, a request that states nothing is not reported.
 
 ## DDD00078
 
@@ -683,24 +674,26 @@ or drop the attribute.
 ## DDD00079
 
 Error: `[AllowAnonymous]` beside another requirement attribute. Stacked attributes all hold
-(`AccessRequirement.All`, in the order written), so anyone beside a key contradicts it. Keep the one the request
+(`AccessRequirement.All`, in the order written), so anyone beside a permission contradicts it. Keep the one the request
 requires; a request anyone may send says `[AllowAnonymous]` alone. Two other requirement attributes are no diagnostic:
 they stack. A request holds to the attributes of the requests it derives from too, theirs first, so `[AllowAnonymous]`
 on one that derives from a request carrying a requirement is reported as well: do not derive it from that request.
 
 ## DDD00080
 
-Error, at a marker or the request. A marker says where the key of `[RequiresKey(key)]` is held. Read the message:
-a marker without `[RequiresKey]` (add the key, or take the marker off); two markers of where, or `[AtUnit]` with
+Error, at a marker or the request. A marker says where the permission of `[RequiresPermission(permission)]` is held. Read the message:
+a marker without `[RequiresPermission]` (add the permission, or take the marker off); two markers of where, or `[AtUnit]` with
 `[OnResource]` (keep one; compute it as `RequiredAccess` where it depends on the request); `[ExpectedVersion]` without
 `[OnResource]` (mark the resource, or take it off); a marker twice; a marker on a class's primary-constructor
 parameter (mark the property; a positional record parameter is fine); a marker on a private or protected property
-(give it a public or internal getter); `[RequiresKey]` without a marker where no referenced package says where such a
-key is held, as in a project with Membership and no Tenancy (mark `[OnResource]` on the resource). An abstract
+(give it a public or internal getter); `[RequiresPermission]` without a marker where no referenced package says where such a
+permission is held, as in a project with Membership and no Tenancy (mark `[OnResource]` on the resource). An abstract
 record that carries the unit is not reported; a request that derives from it and "inherits" a marker without
-`[RequiresKey]` is (add the key). A derived record's positional parameter may carry `[AtUnit]` even where its base
-declares the property. A request with a `[RequiresKey]` of its own that derives from one with a `[RequiresKey]`
-requires two keys: write `AccessRequirement.All` of the two as `RequiredAccess`.
+`[RequiresPermission]` is (add the permission). A derived record's positional parameter may carry `[AtUnit]` even where its base
+declares the property. A request with a `[RequiresPermission]` of its own that derives from one with a `[RequiresPermission]`
+requires two permissions: write `AccessRequirement.All` of the two as `RequiredAccess`. A module default of
+`[RequiresPermission(permission)]` on the interface reads no marker: it is held for the whole tenant, so it needs Tenancy, and a
+request's marker goes with the request's own `[RequiresPermission]`.
 
 ## DDD00081
 
@@ -708,15 +701,15 @@ Error, at the marker: it is on a member of the wrong type. `[AtUnit]` goes on th
 the class declared `[OrganizationUnit<TUnitId>]`), `[OnResource]` on the id of a resource with members (the aggregate
 root a `[Member<..., TResource>]` class names), `[ExpectedVersion]` on a `long?`. Move the marker to the member the
 message names, or fix the member's type. A unit or resource that may be null is computed:
-`RequiredAccess => Unit is { } unit ? TenancyAccess.AtUnit(key, unit) : TenancyAccess.ForTheWholeTenant(key)`.
+`RequiredAccess => Unit is { } unit ? TenancyAccess.AtUnit(permission, unit) : TenancyAccess.AtTenant(permission)`.
 
 ## DDD00082
 
 Error, on a message of the Mediator library that is no query (a command, `ICommand` or `IStreamCommand`, or a plain
 `IRequest` or `IStreamRequest`) and carries a requirement its package declares for queries only:
-`[SeenWith<TResourceId>(key)]` (refuses nobody, the query's statement filters) or `[RequiresOperator]`. Make it a query
-(`IQuery`, `IStreamQuery`) if it only reads. If it changes something: for `[SeenWith]`, require the key where it acts,
-`[RequiresKey(key)]` with `[OnResource]` on the resource; for `[RequiresOperator]`, never a key (an operator holds
+`[SeenWith<TResourceId>(permission)]` (refuses nobody, the query's statement filters) or `[RequiresOperator]`. Make it a query
+(`IQuery`, `IStreamQuery`) if it only reads. If it changes something: for `[SeenWith]`, require the permission where it acts,
+`[RequiresPermission(permission)]` with `[OnResource]` on the resource; for `[RequiresOperator]`, never a permission (an operator holds
 none), but trusted code that carries the operator's ask out as system work naming the operator,
 `TenancyUseCases.BeginOperatorIn(tenant, identity)`, behind a requirement of the module's own. The same requirement
 written as `RequiredAccess` on a command is not reported; do not write it so.
@@ -727,29 +720,34 @@ Error, on a request whose requirement attributes nothing turns into `RequiredAcc
 module's interface `partial` (`[AccessRequests] public partial interface IBillingRequest : IRequireAccess;`), implement
 the module's interface, move the request into the project that declares it, or, for a generic request, one nested
 private, or one that implements two partial module interfaces (C# takes neither's property, CS8705), answer
-`RequiredAccess` itself (or make the nested type internal, or implement one interface).
+`RequiredAccess` itself (or make the nested type internal, or implement one interface). At an interface: a requirement
+attribute there is a module default, read only on the module's interface, `[AccessRequests]` and `partial`; declare it
+partial, or, on another interface (one between the module's and its requests), move the attribute to each request or
+answer `RequiredAccess` in that interface.
 
 ## DDD00084
 
-Warning, at a stacked requirement attribute its neighbour already requires: `[InTenant]` beside `[RequiresKey]` (a key
+Warning, at a stacked requirement attribute its neighbour already requires: `[InTenant]` beside `[RequiresPermission]` (a permission
 of Tenancy's, with or without `[AtUnit]`, is held only by a seat in the tenant or system work there), `[SignedIn]`
 beside `[RequiresOperator]`, `[SignedIn]` beside `[OwnOnly]` with `[Own]` on a `Guid` (only a signed-in user has an
-identity), `[InTenant]` or `[SignedIn]` beside `[OwnOnly]` with `[Own]` on the seat id, `[InTenant]` beside a key of
+identity), `[InTenant]` or `[SignedIn]` beside `[OwnOnly]` with `[Own]` on the seat id, `[InTenant]` beside a permission of
 Tenancy's with `[OrOwn]` on the seat id (either way the caller is in the tenant), and an attribute a request the
-request derives from carries already. Take it off. Not reported: `[SignedIn]` beside `[RequiresKey]` (it keeps system
-work out), with or without `[OrOwn]`, and `[InTenant]` beside a key with `[OrOwn]` on a `Guid`. A package says what its
+request derives from carries already. Take it off. Not reported: `[SignedIn]` beside `[RequiresPermission]` (it keeps system
+work out), with or without `[OrOwn]`, and `[InTenant]` beside a permission with `[OrOwn]` on a `Guid`. A package says what its
 requirement implies with `Implies` on its mark, and what its caller's own implies with `Implies` on
-`[assembly: CallersOwn]`.
+`[assembly: CallersOwn]`. Also reported: a sealed request's own attributes that say exactly what its module's default
+says (`[InTenant]` on a request of an `[AccessRequests, InTenant]` module); take them off, the request takes the
+default. Not on a request another derives from, which holds to them beside its own.
 
 ## DDD00085
 
 Error, at the marker or the request: the caller's own out of place. `[OrOwn]` goes on the member that names the
-caller's own, beside `[RequiresKey]` (add the key, or use `[OwnOnly]` with `[Own]` for the caller's own alone); `[Own]`
+caller's own, beside `[RequiresPermission]` (add the permission, or use `[OwnOnly]` with `[Own]` for the caller's own alone); `[Own]`
 goes with `[OwnOnly]` on the request, and `[OwnOnly]` needs a member marked `[Own]`; one member is marked one way,
-once; `[OrOwn]` never beside `[AtUnit]` (the caller would send a unit where it holds the key for another subject):
-compute such a requirement as `RequiredAccess`. Beside `[OnResource]` it is fine: its `[KeyMarker]` names
+once; `[OrOwn]` never beside `[AtUnit]` (the caller would send a unit where it holds the permission for another subject):
+compute such a requirement as `RequiredAccess`. Beside `[OnResource]` it is fine: its `[PermissionMarker]` names
 `OwnAlternative = nameof(MemberAccess.Sees)`, so the caller's own way through still sees the resource, and the line is
-`Any(All(Own(member), MemberAccess.Sees(key, resource)), MemberAccess.On(key, resource))`. A marker on a class's
+`Any(All(Own(member), MemberAccess.Sees(permission, resource)), MemberAccess.On(permission, resource))`. A marker on a class's
 primary constructor parameter or a private property: mark a property with a public or internal getter.
 
 ## DDD00086
@@ -759,7 +757,119 @@ null. A `Guid` is the caller's verified identity (the core), the application's s
 For a type of the application's own, write a small `ICallersOwn<T>` beside the requests (`T? Find(Caller caller)`,
 public where another project declares it) and register it in the host, `services.AddCallersOwn<T, TCallersOwn>()`.
 A nullable member: compute the requirement as `RequiredAccess`. A `string`, a class or an enum never has an own (the
-case compares a struct that is `IEquatable` of itself): mark the member that names the caller's id instead.
+case compares a struct that is `IEquatable` of itself): mark the member that names the caller's id instead. The id of
+an aggregate root that marks its owner `[Owner]` is not reported: `[Own]`/`[OrOwn]` on it is about the owner, and
+the line is `AccessRequirement.OwnerOf(request.Board)`; for the id of one that marks none, mark the property that
+names its owner `[Owner]`, or write a handle of the id. A handle of the id itself wins over the owner.
+
+## DDD00087
+
+Error, at `[Owner]` or at the request: `[Owner]` goes on one instance property of an aggregate root itself. Not on an
+entity inside an aggregate (mark the root's property), not on a type that is no aggregate root, not on a static
+property, and once per aggregate (several owners are members: use Membership). At a request: an id that is the id of
+two aggregate roots that each mark an owner; give each aggregate an id of its own.
+
+## DDD00088
+
+Error, at `[Owner]` or at the request's `[Own]`/`[OrOwn]`: the owner's type has no own. At the property: a `string`,
+a class or an enum can never be compared; mark the property that names the owner's id (a `Guid`, the seat id, or an
+id of the application's own). At the request: nothing the requests' project sees says what the caller's own of the
+owner's type is; write a small `ICallersOwn<T>` beside the requests and register it,
+`services.AddCallersOwn<T, TCallersOwn>()`. A nullable owner is fine: a row whose owner is null is nobody's.
+
+## DDD00089
+
+Error, at a requirement attribute on a module's interface (`[AccessRequests, ...]`): it may not be the module's
+default, which every request that states nothing takes, a command that forgot its permission included. `[AllowAnonymous]`
+(a forgotten requirement would open the door): put it on each request anyone may send. `[RequiresOperator]`,
+`[SeenWith<TResourceId>(permission)]` or another queries-only one (a command would take it): put it on each query. `[OwnOnly]`
+(it reads a member marked `[Own]`): put it on each request about the caller's own. An attribute whose class's
+`AttributeUsage` leaves out `AttributeTargets.Interface` (CS0592 too): add `Interface` to the class, where it is the
+application's own and may be a default, or put it on each request. Defaults that work: `[SignedIn]`, `[InTenant]`,
+`[RequiresPermission(permission)]` (for the whole tenant), and an application's own `[StatesRequirement]` attribute that allows an
+interface; several are `All`, in the order written.
+
+## DDD00090
+
+Warning, from the build that runs the Supabase export: the names of resources with members differ from the ones the
+newest access file recorded. A resource is named after its class, made plural (`Board` is `boards`), and the name
+is what its codes start with (`boards.already-member`) and what its database functions are called
+(`boards_i_see`). A class renamed on purpose that should keep its name says `[Members("Boards")]` on the class; one
+that should take the new name needs nothing, and the warning is gone once the new access file is written. Do not
+rename the class back to dodge it.
+
+## DDD00091
+
+Error, at `[Members("...")]` on a resource class: the name cannot be converted to a code and a function name. Write
+it as a class's name (`People`, `CraneBoards`) or as it comes out (`crane-boards`): letters and digits, `-` or `_`
+between words, starting with a letter, ending with neither separator. It is not made plural.
+
+## DDD00092
+
+Error, on a `[Permissions]` class or its constants (`DDDToolkit.Access`): the class is not `static`; a public
+`const string` has no level; a level (`[AtTenant]`, `[AtUnit]`, `[On<TResource>]`) is on a field that is no public
+`const string`, or on a constant of a class not marked `[Permissions]`; or one permission is declared twice. Make the class
+`public static`, give each permission exactly the level where it is asked, and name a permission by its one
+constant.
+
+## DDD00093
+
+Error, on a constant marked `[On<TResource>]`: `TResource` is no resource with members (no
+`[Member<TId, TMemberId, TRoleId, TResource>]` class names it), or a second permission of that resource says
+`EveryMember`, `LocksMembers` or `LocksOwner`, or a permission is declared twice on it. Name the aggregate root whose members
+hold it, and keep one permission per setting.
+
+## DDD00094
+
+Error, at `MembershipRules.For<TResource>(...)`: no permission is declared `[On<TResource>]` in this project or the
+projects it references. Declare the permissions asked on the resource in a `[Permissions]` class:
+`[On<Board>(EveryMember = true)] public const string View = "boards.view";`.
+
+## DDD00095
+
+Error, on a property or field a project marks `[TenancyPermissions]` by hand. Declare each permission as a
+`public const string` of a `public static` class marked `[Permissions]`, with its level (`[AtTenant]`, `[AtUnit]`
+or `[On<TResource>]`) and `Description = "..."` on the level for its description; Tenancy's generator writes the module's
+`DeclaredPermissions.All` from it and marks that. Remove the hand-written list, and any
+`services.AddTenancyPermissions(...)` call for it.
+
+## DDD00096
+
+Warning, at `[OrOwn]` on the id of a resource with members beside `[OnResource]`: the permission the request requires is
+one the resource's owner holds by owning it (declared `[On<TResource>]` with `Owner = true`, the default), so the
+owner passes the permission already. Remove `[OrOwn]`. Keep it only for a permission declared `Owner = false`.
+
+## DDD00097
+
+Error, at `[At]` (`DDDToolkit.Abstractions.Attributes`): it goes on one instance property of an aggregate root, the
+place the root hangs at, never nullable. Not on an entity inside an aggregate, not on a static property, not twice
+on one aggregate, not on a property that may be empty.
+
+## DDD00098
+
+Error, at `MembershipRules.For<TResource>(..., reachFromAbove: ...)`: `TResource` marks no property `[At]`. Mark the
+property that holds where it hangs `[At]` (an `OrganizationUnitId` beside Tenancy, a place of your own otherwise),
+or leave `reachFromAbove` out.
+
+## DDD00099
+
+Warning, on a constant of a `[Permissions]` class whose levels say no `Description` and which has no `<summary>`:
+the screens that put permissions into roles show the description. Say it on the level,
+`[AtUnit(Description = "Open a board at a unit")]` (it wins over a summary), or give the constant a `<summary>`,
+which is read whether the project writes a documentation file or not. Not reported for `Retired = true`.
+
+## DDD00100
+
+Error, at `[RowAccess<T>(..., Restrictive = true)]` where `T` derives from Tenancy's `TenantAggregate` or
+`InvitationAggregate`: a restrictive rule narrows Tenancy's organization (its units and tree with it), seats (with
+placements and grants) and roles, and the application's own aggregates. Tenancy's own work and a person accepting an
+invitation read tenants and invitations. Move the rule to one of those, or leave `Restrictive` out.
+
+## DDD00101
+
+Error, at `TenancyRowAccess.CallerSeat<T>()` where `T` is not the class declared with `[SeatAggregate]`: the function
+answers a row of Tenancy's seats table. Name the seat class, `CallerSeat<Seat>().Kind`. For the seat's id alone, in a
+module whose context does not map the seats, use `TenancyRowAccess.CallerSeatId<SeatId>()`.
 
 ## Not a diagnostic: the owned type must carry the key part
 

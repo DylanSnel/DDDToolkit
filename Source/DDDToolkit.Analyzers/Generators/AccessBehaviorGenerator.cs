@@ -56,8 +56,8 @@ namespace DDDToolkit.Analyzers;
 /// </para>
 /// <para>
 /// <b>What a request requires, from its attributes.</b> A request says what it requires of its caller with an attribute
-/// where the requirement reads no value of the request but a key and an id it carries: <c>[SignedIn]</c>,
-/// <c>[InTenant]</c>, <c>[RequiresKey(key)]</c> with a marker of where the key is held, <c>[AtUnit]</c> on the unit.
+/// where the requirement reads no value of the request but a permission and an id it carries: <c>[SignedIn]</c>,
+/// <c>[InTenant]</c>, <c>[RequiresPermission(permission)]</c> with a marker of where the permission is held, <c>[AtUnit]</c> on the unit.
 /// Where the interface is declared <c>partial</c>, the file implements <c>IRequireAccess.RequiredAccess</c> in it, with one
 /// line per request of the project that states its requirement so, the call the attributes stand for written out, and
 /// <c>AccessRequirement.All</c> of the calls, in the order they are written, where several are stacked:
@@ -67,8 +67,8 @@ namespace DDDToolkit.Analyzers;
 ///     AccessRequirement IRequireAccess.RequiredAccess =&gt; this switch
 ///     {
 ///         OpenLedger request =&gt; TenancyAccess.AtUnit("billing.open-ledger", request.Unit),
-///         RenameLedger request =&gt; AccessRequirement.Any(AccessRequirement.Own(request.Owner), TenancyAccess.ForTheWholeTenant("billing.rename")),
-///         ExportLedger =&gt; AccessRequirement.All(BillingAccess.RequiresPlan(Plan.Pro), TenancyAccess.ForTheWholeTenant("billing.export")),
+///         RenameLedger request =&gt; AccessRequirement.Any(AccessRequirement.Own(request.Owner), TenancyAccess.AtTenant("billing.rename")),
+///         ExportLedger =&gt; AccessRequirement.All(BillingAccess.RequiresPlan(Plan.Pro), TenancyAccess.AtTenant("billing.export")),
 ///         MyInvoices =&gt; AccessRequirement.SignedIn(),
 ///         _ =&gt; throw new InvalidOperationException(...),
 ///     };
@@ -77,8 +77,15 @@ namespace DDDToolkit.Analyzers;
 /// A request that answers the property itself answers with its own, which C# takes over the interface's, so the line
 /// is read wherever the property is read: by the behavior below, by a handler that asks the checks again, by a test. It
 /// is written whether or not the project uses the library. What each attribute stands for is its package's to say
-/// (<c>[StatesRequirement]</c>, <c>[KeyMarker]</c>, <c>[KeyWithoutMarker]</c>, <c>[CallersOwn]</c>), and what is wrong
+/// (<c>[StatesRequirement]</c>, <c>[PermissionMarker]</c>, <c>[PermissionWithoutMarker]</c>, <c>[CallersOwn]</c>), and what is wrong
 /// with a request's attributes is DDD00077 to DDD00086 (<see cref="RequestRequirement"/>).
+/// </para>
+/// <para>
+/// <b>A module's default.</b> A requirement attribute on the interface itself, <c>[AccessRequests, InTenant]</c>, is the
+/// default of the module's requests: a request that states nothing of its own gets a line with the default's call,
+/// <c>ListUnits =&gt; TenancyAccess.InTenant()</c>, so the switch shows per request what it requires, and the last arm
+/// answers the default too, for a request of another project the switch cannot name. Without one, a request that
+/// states nothing is DDD00077 and the last arm throws. What may not be a default is DDD00089.
 /// </para>
 /// <para>
 /// The file also says what it wrote, in an assembly attribute,
@@ -111,6 +118,74 @@ public sealed class AccessBehaviorGenerator : IIncrementalGenerator
         // Collected, because two interfaces of one namespace may give their behaviors one name, and only all of
         // them together show it; and the lines of an interface come from every request that implements it.
         context.RegisterSourceOutput(interfaces.Collect().Combine(requests), static (productionContext, all) => Execute(productionContext, all.Left, all.Right));
+
+        // The aggregates whose owner the project asks about: in the lines written above, and wherever its own code calls
+        // AccessRequirement.OwnerOf, a request's RequiredAccess say. Said once for the assembly, for the start-up check
+        // that finds where each owner is kept before the first request asks for it.
+        var calledByHand = context.SyntaxProvider.CreateSyntaxProvider(
+                predicate: static (node, _) => node is InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax { Name.Identifier.ValueText: "OwnerOf" } or SimpleNameSyntax { Identifier.ValueText: "OwnerOf" } },
+                transform: static (syntaxContext, cancellationToken) => OwnerAsked(syntaxContext, cancellationToken))
+            .Where(static id => id is not null)
+            .Select(static (id, _) => id!)
+            .Collect();
+        var canSay = context.CompilationProvider.Select(static (compilation, _) => compilation.GetTypeByMetadataName(KnownTypes.AsksOwnerOfAttribute) is not null);
+        context.RegisterSourceOutput(requests.Combine(calledByHand).Combine(canSay), static (productionContext, all) => EmitOwnersAsked(productionContext, all.Left.Left, all.Left.Right, all.Right));
+    }
+
+    /// <summary>
+    /// The id, from <c>global::</c> on, of the aggregate a call of <c>AccessRequirement.OwnerOf</c> asks the owner of;
+    /// <see langword="null"/> for a call of any other method of that name.
+    /// </summary>
+    /// <remarks>
+    /// An id of the project's own gets the interfaces the method's constraints ask for from a generator this one does not
+    /// see, so the call may bind to no method here, only to a candidate: then the id is the type argument it is written
+    /// with, or the type of what it is handed.
+    /// </remarks>
+    private static string? OwnerAsked(GeneratorSyntaxContext context, CancellationToken cancellationToken)
+    {
+        var invocation = (InvocationExpressionSyntax)context.Node;
+        var bound = context.SemanticModel.GetSymbolInfo(invocation, cancellationToken);
+        if ((bound.Symbol ?? bound.CandidateSymbols.FirstOrDefault()) is not IMethodSymbol { Name: "OwnerOf", Arity: 1 } method
+            || EntityDeclarations.MetadataNameOf(method.ContainingType) != KnownTypes.AccessRequirement)
+        {
+            return null;
+        }
+
+        var written = invocation.Expression switch
+        {
+            MemberAccessExpressionSyntax { Name: GenericNameSyntax generic } => generic.TypeArgumentList.Arguments.FirstOrDefault(),
+            GenericNameSyntax generic => generic.TypeArgumentList.Arguments.FirstOrDefault(),
+            _ => null,
+        };
+        var id = method.TypeArguments[0] is { TypeKind: not TypeKind.TypeParameter and not TypeKind.Error } inferred ? inferred
+            : written is not null ? context.SemanticModel.GetTypeInfo(written, cancellationToken).Type
+            : invocation.ArgumentList.Arguments.FirstOrDefault() is { } argument ? context.SemanticModel.GetTypeInfo(argument.Expression, cancellationToken).Type
+            : null;
+
+        return id is { TypeKind: not TypeKind.Error and not TypeKind.TypeParameter } ? id.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) : null;
+    }
+
+    /// <summary>
+    /// <c>[assembly: AsksOwnerOf(typeof(...))]</c> for every aggregate whose owner the project asks about, once each, in
+    /// the order of their names; nothing where it asks about none, or cannot see the attribute.
+    /// </summary>
+    private static void EmitOwnersAsked(SourceProductionContext context, ImmutableArray<RequestRequirement> declared, ImmutableArray<string> calledByHand, bool canSay)
+    {
+        var asked = declared.SelectMany(static request => request.OwnersAsked).Concat(calledByHand).Distinct(StringComparer.Ordinal).OrderBy(static id => id, StringComparer.Ordinal).ToList();
+        if (!canSay || asked.Count == 0)
+        {
+            return;
+        }
+
+        var writer = new CodeWriter().Header();
+        writer.Line("// The aggregates whose owner this project's requests ask about, read by the start-up check that finds where each");
+        writer.Line("// owner is kept before the first request asks for it.");
+        foreach (var id in asked)
+        {
+            writer.Line("[assembly: global::" + KnownTypes.AsksOwnerOfAttribute + "(typeof(" + id + "))]");
+        }
+
+        context.AddSource("DDDToolkit.AsksOwnerOf.g.cs", SourceText.From(writer.ToString(), Encoding.UTF8));
     }
 
     /// <summary>The name the generated file gives <c>IRequireAccess</c>, one no module's own type or namespace has.</summary>
@@ -292,7 +367,9 @@ public sealed class AccessBehaviorGenerator : IIncrementalGenerator
 
     /// <summary>
     /// The interface's part that implements <c>IRequireAccess.RequiredAccess</c> from its requests' attributes: one line
-    /// per request, and for any other type a request that states nothing, which lets nobody through.
+    /// per request, and for any other type a request that states nothing, which lets nobody through. Where the interface
+    /// carries a default, a request of the module that states nothing gets a line with the default's call, and any other
+    /// type, a request of another project, the default in the last arm.
     /// </summary>
     private static void EmitRequirements(CodeWriter writer, AccessRequestsInterface requests, List<string> lines)
     {
@@ -301,6 +378,11 @@ public sealed class AccessBehaviorGenerator : IIncrementalGenerator
         writer.Line("// What the requests of " + requests.Name + " that state their requirement with attributes require of their caller: the");
         writer.Line("// call each attribute stands for, written out by DDDToolkit, one line per request. A request that answers");
         writer.Line("// RequiredAccess itself answers with its own, which C# takes over this one, so it is never asked here.");
+        if (requests.Default is not null)
+        {
+            writer.Line("// A request that states none takes the module's default, " + requests.DefaultNamed + " on the interface, on a line of its own.");
+        }
+
         using (writer.Block("partial interface " + requests.Name))
         {
             writer.Line("/// <inheritdoc cref=\"" + RequireAccess + ".RequiredAccess\"/>");
@@ -312,9 +394,19 @@ public sealed class AccessBehaviorGenerator : IIncrementalGenerator
                 writer.Line("    " + line + ",");
             }
 
-            writer.Line("    _ => throw new global::System.InvalidOperationException(");
-            writer.Line("        this.GetType().FullName + \" declares no access requirement: it carries no requirement attribute, and does not answer RequiredAccess itself. \"");
-            writer.Line("        + \"A request that declares nothing lets nobody through.\"),");
+            if (requests.Default is { } byDefault)
+            {
+                // What the module's default means: a request no line names, one of another project, requires it too.
+                writer.Line("    // A request this project cannot name, one of another project say, takes the module's default as well.");
+                writer.Line("    _ => " + byDefault + ",");
+            }
+            else
+            {
+                writer.Line("    _ => throw new global::System.InvalidOperationException(");
+                writer.Line("        this.GetType().FullName + \" declares no access requirement: it carries no requirement attribute, and does not answer RequiredAccess itself. \"");
+                writer.Line("        + \"A request that declares nothing lets nobody through.\"),");
+            }
+
             writer.Line("};");
         }
     }
@@ -483,6 +575,11 @@ public sealed class AccessBehaviorGenerator : IIncrementalGenerator
 /// <param name="CanRegister">Whether the project can see what the registration is written with.</param>
 /// <param name="CanDescribe">Whether the project can see the attribute that says what was written for the interface.</param>
 /// <param name="IsPartial">Whether the interface is declared <c>partial</c>, so its requests' attributes can be written into it.</param>
+/// <param name="Default">
+/// The call the requirement attributes on the interface stand for, the default of a request of the module that states
+/// none of its own; <see langword="null"/> where it carries none, or one that may not be a default.
+/// </param>
+/// <param name="DefaultNamed">Those attributes as a reader writes them, <c>[InTenant]</c>; empty where there is no default.</param>
 /// <param name="Location">Where the interface is named.</param>
 internal sealed record AccessRequestsInterface(
     string Name,
@@ -499,6 +596,8 @@ internal sealed record AccessRequestsInterface(
     bool CanRegister,
     bool CanDescribe,
     bool IsPartial,
+    string? Default,
+    string DefaultNamed,
     LocationInfo? Location)
 {
     public static AccessRequestsInterface Create(GeneratorAttributeSyntaxContext context, CancellationToken cancellationToken)
@@ -516,6 +615,7 @@ internal sealed record AccessRequestsInterface(
             ? (null, null)
             : PipelineShape.Read(compilation, KnownTypes.MediatorStreamPipelineBehavior, streams: true);
         var namedAfter = NamedAfter(symbol.Name);
+        var byDefault = RequestRequirement.DefaultOf(symbol, compilation);
 
         return new AccessRequestsInterface(
             Name: symbol.Name,
@@ -535,6 +635,8 @@ internal sealed record AccessRequestsInterface(
                 && registration.GetMembers("AddAccessChecks").Length > 0,
             CanDescribe: compilation.GetTypeByMetadataName(KnownTypes.AccessBehaviorAttribute) is not null,
             IsPartial: symbol.DeclaringSyntaxReferences.Any(reference => reference.GetSyntax(cancellationToken) is InterfaceDeclarationSyntax declaration && declaration.Modifiers.Any(SyntaxKind.PartialKeyword)),
+            Default: byDefault,
+            DefaultNamed: byDefault is null ? string.Empty : RequestRequirement.DefaultNamed(symbol),
             Location: LocationInfo.From(syntax.Identifier));
     }
 

@@ -34,7 +34,7 @@ public sealed class TenantSeparationScenarios(SampleHosts sample) : IClassFixtur
         harbors.Names().Should().Equal("Bay bridge");
         (await inHarbor.WithNamesAsync(harbors.Named("Bay bridge"))).MyRole.Should().Be("Surveyor");
         meadows.Names().Should().Equal("Garden shed");
-        (await inMeadow.WithNamesAsync(meadows.Named("Garden shed"))).MyRole.Should().Be("Crew lead");
+        (await inMeadow.WithNamesAsync(meadows.Named("Garden shed"))).Member("Tove").IsOwner.Should().BeTrue("she owns it there, holding no project role");
     }
 
     [Fact]

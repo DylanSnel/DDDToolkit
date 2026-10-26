@@ -7,7 +7,7 @@ namespace DDDToolkit.Supporting.Membership.Postgres.Tests.Infrastructure;
 
 /// <summary>
 /// The depot's own functions in the database, written by the depot and by nobody else: who the calling porter
-/// is, which of its roles give a key, and the bays a porter's hold of a key reaches. They are defined under the
+/// is, which of its roles give a permission, and the bays a porter's hold of a permission reaches. They are defined under the
 /// logical names the resources' rules name, which is all that joins the two: the package's functions ask these
 /// by those names, and the script that writes both finds them wherever the depot's context puts them.
 /// </summary>
@@ -25,7 +25,7 @@ public sealed class DepotOwnFunctions : IRowAccessContribution
         }
 
         var roles = context.Model.FindEntityType(typeof(DepotRole))!;
-        var roleKeys = context.Model.FindEntityType(typeof(DepotRoleKey))!;
+        var rolePermissions = context.Model.FindEntityType(typeof(DepotRolePermission))!;
         var paths = context.Model.FindEntityType(typeof(BayPath))!;
         var holds = context.Model.FindEntityType(typeof(BayHold))!;
 
@@ -33,27 +33,27 @@ public sealed class DepotOwnFunctions : IRowAccessContribution
         return new RowAccessContributionResult(
         [
             new ContributedFunction(
-                Name(DepotFunctions.CallerPorter),
+                DepotFunctions.CallerPorter.Name,
                 "",
                 "uuid",
                 $"SELECT p.{Column(porters, nameof(Porter.Id))} FROM {RowAccessModel.Table(porters)} p "
                 + $"WHERE p.{Column(porters, nameof(Porter.UserId))} = {{caller:uid}} AND p.{Column(porters, nameof(Porter.Active))}",
                 SecurityDefiner: true),
             new ContributedFunction(
-                Name(DepotFunctions.RolesWithKey),
+                DepotFunctions.RolesWithPermission.Name,
                 "text",
                 "SETOF uuid",
-                $"SELECT given.{Column(roleKeys, nameof(DepotRoleKey.RoleId))} FROM {RowAccessModel.Table(roleKeys)} given "
-                + $"JOIN {RowAccessModel.Table(roles)} kept ON kept.{Column(roles, nameof(DepotRole.Id))} = given.{Column(roleKeys, nameof(DepotRoleKey.RoleId))} "
-                + $"WHERE given.{Column(roleKeys, nameof(DepotRoleKey.Key))} = $1 AND kept.{Column(roles, nameof(DepotRole.InUse))}",
+                $"SELECT given.{Column(rolePermissions, nameof(DepotRolePermission.RoleId))} FROM {RowAccessModel.Table(rolePermissions)} given "
+                + $"JOIN {RowAccessModel.Table(roles)} kept ON kept.{Column(roles, nameof(DepotRole.Id))} = given.{Column(rolePermissions, nameof(DepotRolePermission.RoleId))} "
+                + $"WHERE given.{Column(rolePermissions, nameof(DepotRolePermission.Permission))} = $1 AND kept.{Column(roles, nameof(DepotRole.InUse))}",
                 SecurityDefiner: true),
             new ContributedFunction(
-                Name(DepotFunctions.BaysWhereIHold),
+                DepotFunctions.BaysWhereIHold.Name,
                 "text",
                 "SETOF uuid",
                 $"SELECT path.{Column(paths, nameof(BayPath.BayId))} FROM {RowAccessModel.Table(holds)} held "
                 + $"JOIN {RowAccessModel.Table(paths)} path ON path.{Column(paths, nameof(BayPath.AboveId))} = held.{Column(holds, nameof(BayHold.BayId))} "
-                + $"WHERE held.{Column(holds, nameof(BayHold.PorterId))} = (SELECT {{fn:{DepotFunctions.CallerPorter}}}()) AND held.{Column(holds, nameof(BayHold.Key))} = $1",
+                + $"WHERE held.{Column(holds, nameof(BayHold.PorterId))} = (SELECT {{fn:{DepotFunctions.CallerPorter}}}()) AND held.{Column(holds, nameof(BayHold.Permission))} = $1",
                 SecurityDefiner: true),
         ],
         [],

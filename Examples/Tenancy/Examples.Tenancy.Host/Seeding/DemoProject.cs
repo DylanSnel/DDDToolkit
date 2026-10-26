@@ -7,7 +7,7 @@ namespace Examples.Tenancy.Host.Seeding;
 /// <param name="Name">Its name.</param>
 /// <param name="Id">Its fixed id.</param>
 /// <param name="Unit">The unit it hangs at.</param>
-/// <param name="Owner">Who owns it, on the crew with the crew lead role.</param>
+/// <param name="Owner">Who owns it, on the crew holding no project role.</param>
 /// <param name="Crew">Everyone else on the crew.</param>
 /// <param name="PlannedDays">
 /// How many days before and after the day it is seeded its planned range runs, or <see langword="null"/> for a

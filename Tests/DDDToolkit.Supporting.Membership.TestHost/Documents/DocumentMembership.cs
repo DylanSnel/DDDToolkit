@@ -1,15 +1,25 @@
+using DDDToolkit.Access;
+
 namespace DDDToolkit.Supporting.Membership.TestHost.Documents;
 
-/// <summary>The keys a document is asked about.</summary>
-public static class DocumentKeys
+/// <summary>
+/// The permissions a document is asked about. The owner holds all three by owning it, every member sees it, and the
+/// one that decides who a document is shared with is also the one the database holds the shares and the owner to:
+/// a document's rows are checked there, and the rule that lets a caller change a document lets whoever edits one.
+/// </summary>
+[Permissions]
+public static class DocumentPermissions
 {
     /// <summary>See a document.</summary>
+    [On<Document>(EveryMember = true)]
     public const string View = "documents.view";
 
     /// <summary>Change a document.</summary>
+    [On<Document>]
     public const string Edit = "documents.edit";
 
-    /// <summary>Decide who a document is shared with: the key this host's commands that change the shares require.</summary>
+    /// <summary>Decide who a document is shared with: the permission this host's commands that change the shares require.</summary>
+    [On<Document>(LocksMembers = true, LocksOwner = true)]
     public const string Share = "documents.share";
 }
 
@@ -24,23 +34,22 @@ public static class DocumentRefusals
 }
 
 /// <summary>
-/// The rules of access through a document's members, with as little said as a resource can: its name, its
-/// keys, its roles, and what being a member gives. Who may share a document is not said here: the requests
-/// that do say which key they require. That key is named once more, for the database: a document's rows are
-/// checked there, and the rule that lets a caller change a document lets whoever edits one, so the database
-/// is told which key writes the shares and the owner.
+/// The rules of access through a document's members, with little said: its roles, and that no system work in a scope
+/// holds anything on a document, <c>systemScopes: []</c>, where the module's own would otherwise. Its name, its codes
+/// and its permissions come through its type. Who may share a document is not said here: the requests that do say
+/// which permission they require.
 /// </summary>
 public static class DocumentMembership
 {
     /// <summary>The rules.</summary>
-    public static MembershipRules Rules { get; } = new(
-        "documents",
-        keys: [DocumentKeys.View, DocumentKeys.Edit, DocumentKeys.Share],
-        roles: [new("contributor", [DocumentKeys.View, DocumentKeys.Edit]), new("onlooker", [DocumentKeys.View])],
-        seeKey: DocumentKeys.View,
-        codes: DocumentRefusals.Membership,
-        changeMembersKey: DocumentKeys.Share,
-        changeOwnerKey: DocumentKeys.Share);
+    public static MembershipRules Rules { get; } = MembershipRules.For<Document>(
+        Roles.Fixed(
+        [
+            new("contributor", [DocumentPermissions.View, DocumentPermissions.Edit]),
+            new("onlooker", [DocumentPermissions.View]),
+            new("manager", [DocumentPermissions.View, DocumentPermissions.Edit, DocumentPermissions.Share]),
+        ]),
+        systemScopes: []);
 
     /// <summary>The role that changes a document.</summary>
     public static NamedRole Contributor { get; } = new("contributor");
@@ -48,6 +57,6 @@ public static class DocumentMembership
     /// <summary>The role that only reads.</summary>
     public static NamedRole Onlooker { get; } = new("onlooker");
 
-    /// <summary>The owner's role, which the rules add, with every key of a document: nobody declared one.</summary>
-    public static NamedRole Owner { get; } = new(MembershipRules.DefaultOwnerRole);
+    /// <summary>The role that gives every permission on a document: what its owner holds by owning it, given to a member.</summary>
+    public static NamedRole Manager { get; } = new("manager");
 }

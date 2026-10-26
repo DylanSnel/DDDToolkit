@@ -41,22 +41,39 @@ namespace DDDToolkit.EntityFramework;
 /// which then holds for both.
 /// </para>
 /// <para>
+/// The provider's repository on Postgres comes with the toolkit's lock of the whole database, so the migrations of every
+/// context the toolkit wires on one database wait for each other: <see cref="DatabaseMigrationLock"/>. Options that leave
+/// it out hold <see cref="WithoutDatabaseLock"/> instead of <see cref="Instance"/>, which shares the internal services of
+/// the other: the repository is made per context, and reads which of the two its options hold. A repository of the host's
+/// own is made as it is, and decides its own lock.
+/// </para>
+/// <para>
 /// <c>DDDToolkit.EntityFramework.Postgres</c> grants the bookkeeping role the table the context's history repository
 /// records a migration in, whatever placed it there, so it needs nothing of this type.
 /// </para>
 /// </remarks>
 internal sealed class MigrationHistoryExtension : IDbContextOptionsExtension
 {
-    /// <summary>The one instance: it holds nothing, so every context's options can share it.</summary>
-    public static readonly MigrationHistoryExtension Instance = new();
+    /// <summary>The instance every context's options can share: the history in the default schema, and on Postgres the lock of the database.</summary>
+    public static readonly MigrationHistoryExtension Instance = new(locksTheDatabase: true);
+
+    /// <summary>The history in the default schema, and Entity Framework's lock alone: <c>WithoutDatabaseMigrationLock()</c>.</summary>
+    public static readonly MigrationHistoryExtension WithoutDatabaseLock = new(locksTheDatabase: false);
 
     /// <summary>Per provider's options extension, the history repository the provider registers, once found.</summary>
     private static readonly ConcurrentDictionary<Type, Type?> ProvidersRepositories = new();
 
-    private MigrationHistoryExtension() => Info = new ExtensionInfo(this);
+    private MigrationHistoryExtension(bool locksTheDatabase)
+    {
+        LocksTheDatabase = locksTheDatabase;
+        Info = new ExtensionInfo(this);
+    }
 
     /// <inheritdoc />
     public DbContextOptionsExtensionInfo Info { get; }
+
+    /// <summary>Whether the migrations of a context on Postgres take the lock of the whole database (<see cref="DatabaseMigrationLock"/>).</summary>
+    public bool LocksTheDatabase { get; }
 
     /// <inheritdoc />
     public void ApplyServices(IServiceCollection services)
@@ -122,7 +139,12 @@ internal sealed class MigrationHistoryExtension : IDbContextOptionsExtension
             dependencies = dependencies with { Options = options };
         }
 
-        return (IHistoryRepository)ActivatorUtilities.CreateInstance(services, repository, dependencies);
+        var made = (IHistoryRepository)ActivatorUtilities.CreateInstance(services, repository, dependencies);
+
+        // On Postgres, with the lock of the whole database, unless the options leave it out (DatabaseMigrationLock).
+        return services.GetRequiredService<IDbContextOptions>().FindExtension<MigrationHistoryExtension>() is { LocksTheDatabase: false }
+            ? made
+            : DatabaseLockedHistoryRepository.Around(made, dependencies, services);
     }
 
     /// <summary>
@@ -167,14 +189,22 @@ internal sealed class MigrationHistoryExtension : IDbContextOptionsExtension
     {
         public override bool IsDatabaseProvider => false;
 
-        public override string LogFragment => "MigrationHistoryInDefaultSchema ";
+        public override string LogFragment => Locks
+            ? "MigrationHistoryInDefaultSchema "
+            : "MigrationHistoryInDefaultSchema WithoutDatabaseMigrationLock ";
 
-        // It holds nothing, so every context that has it can share the internal services of another that has it.
+        // Every context that has it can share the internal services of another that has it, whether it leaves the lock
+        // out or not: the history repository is made per context, from the context's own options.
         public override int GetServiceProviderHashCode() => 0;
 
         public override bool ShouldUseSameServiceProvider(DbContextOptionsExtensionInfo other) => other is ExtensionInfo;
 
         public override void PopulateDebugInfo(IDictionary<string, string> debugInfo)
-            => debugInfo["DDDToolkit:MigrationHistoryInDefaultSchema"] = "1";
+        {
+            debugInfo["DDDToolkit:MigrationHistoryInDefaultSchema"] = "1";
+            debugInfo["DDDToolkit:DatabaseMigrationLock"] = Locks ? "1" : "0";
+        }
+
+        private bool Locks => ((MigrationHistoryExtension)Extension).LocksTheDatabase;
     }
 }

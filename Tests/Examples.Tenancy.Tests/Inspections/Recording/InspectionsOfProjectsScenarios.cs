@@ -66,7 +66,7 @@ public sealed class InspectionsOfProjectsScenarios(SampleHosts sample) : IClassF
             services.ConfigureDbContext<ProjectsContext>(options => options.AddInterceptors(projects));
             services.ConfigureDbContext<InspectionsContext>(options => options.AddInterceptors(inspections));
 
-            // The gate Inspections asks, with every question noted: the key, and how many projects it was about.
+            // The gate Inspections asks, with every question noted: the permission, and how many projects it was about.
             services.AddScoped<IProjectGate>(provider => new NotedGate(provider.GetRequiredService<ProjectAccess>(), questions));
         });
 
@@ -107,7 +107,7 @@ public sealed class InspectionsOfProjectsScenarios(SampleHosts sample) : IClassF
         Titles(listed[BayBridge.Number]).Should().Equal("Missing sign");
         Titles(listed[Harbor.ProjectNamed("HQ refit").Number]).Should().BeEmpty("a project she sees and nothing was recorded on has a page, an empty one");
 
-        questions.Should().Equal([(InspectionsOfProjects.RequiredKey, 4)], "Projects is asked once, about the four projects together");
+        questions.Should().Equal([(InspectionsOfProjects.RequiredPermission, 4)], "Projects is asked once, about the four projects together");
         inspections.Commands.Should().ContainSingle("the inspections of the four projects are one statement, and Inspections sent:\n{0}", Sent(inspections.Commands));
         projects.Commands.Should().HaveCount(
             alone + 1,
@@ -124,7 +124,7 @@ public sealed class InspectionsOfProjectsScenarios(SampleHosts sample) : IClassF
 
         counted[PierSeven.Number].GetProperty("totalCount").GetInt32().Should().Be(2);
         counted.Values.Should().OnlyContain(connection => connection.GetProperty("canRecord").GetBoolean(), "the administrator may record on every open project");
-        questions.Should().BeEquivalentTo([(InspectionsOfProjects.RequiredKey, 4), (ProjectsOpenToRecording.RequiredKey, 4)]);
+        questions.Should().BeEquivalentTo([(InspectionsOfProjects.RequiredPermission, 4), (ProjectsOpenToRecording.RequiredPermission, 4)]);
         inspections.Commands.Should().HaveCount(2, "the pages, and the totals, and Inspections sent:\n{0}", Sent(inspections.Commands));
         projects.Commands.Should().HaveCount(
             alone + 2,
@@ -149,7 +149,7 @@ public sealed class InspectionsOfProjectsScenarios(SampleHosts sample) : IClassF
             ["shed"] = await tove.ProjectNodeIdAsync(Meadow.ProjectNamed("Garden shed")),
         };
 
-        // Leo leads Pier 7's crew and sees no other project. Through the gateway he is given no project but his
+        // Leo owns Pier 7 and sees no other project. Through the gateway he is given no project but his
         // own, so he is asked for here the way the gateway asks once Projects answered a project: of Inspections'
         // own schema, by the project's id, as the request's caller. Whatever id reaches that schema, what it
         // answers is decided by its own access check.
@@ -181,7 +181,8 @@ public sealed class InspectionsOfProjectsScenarios(SampleHosts sample) : IClassF
         }
 
         Titles(data.GetProperty("mine").GetProperty("inspections")).Should().Equal("Loose railing");
-        data.GetProperty("mine").GetProperty("inspections").GetProperty("canRecord").GetBoolean().Should().BeTrue("the crew's lead may record");
+        data.GetProperty("mine").GetProperty("inspections").GetProperty("canRecord").GetBoolean().Should().BeFalse(
+            "its owner holds the permissions Projects declares on it, and recording is the Inspections module's");
 
         // The lookup answers the key it was given and nothing else; the field says nothing at all, though an
         // inspection was recorded on Bay bridge. A project of his own tenant he has no part in and one of another
@@ -285,16 +286,16 @@ public sealed class InspectionsOfProjectsScenarios(SampleHosts sample) : IClassF
     /// <summary>Projects' gate, with every question it is asked noted before it is passed on.</summary>
     private sealed class NotedGate(IProjectGate gate, ConcurrentQueue<(string Key, int Projects)> questions) : IProjectGate
     {
-        public Task<ProjectAnswer> AskAsync(ProjectId project, string key, CancellationToken cancellationToken)
+        public Task<ProjectAnswer> AskAsync(ProjectId project, string permission, CancellationToken cancellationToken)
         {
-            questions.Enqueue((key, 1));
-            return gate.AskAsync(project, key, cancellationToken);
+            questions.Enqueue((permission, 1));
+            return gate.AskAsync(project, permission, cancellationToken);
         }
 
-        public Task<IReadOnlyDictionary<ProjectId, ProjectAnswer>> AskAsync(IReadOnlyCollection<ProjectId> projects, string key, CancellationToken cancellationToken)
+        public Task<IReadOnlyDictionary<ProjectId, ProjectAnswer>> AskAsync(IReadOnlyCollection<ProjectId> projects, string permission, CancellationToken cancellationToken)
         {
-            questions.Enqueue((key, projects.Count));
-            return gate.AskAsync(projects, key, cancellationToken);
+            questions.Enqueue((permission, projects.Count));
+            return gate.AskAsync(projects, permission, cancellationToken);
         }
     }
 }

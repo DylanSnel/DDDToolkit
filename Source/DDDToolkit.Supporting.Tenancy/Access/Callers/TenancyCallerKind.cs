@@ -13,7 +13,7 @@ public enum TenancyCallerKind
     Seat,
 
     /// <summary>
-    /// System work inside one tenant, such as an import, seeding or an operator's command. Holds every key in
+    /// System work inside one tenant, such as an import, seeding or an operator's command. Holds every permission in
     /// that tenant and nothing in any other.
     /// </summary>
     SystemInTenant,

@@ -66,7 +66,7 @@ public sealed class TenantProjectsFieldScenarios(SampleHosts sample) : IClassFix
     [Fact]
     public async Task A_seat_is_no_operator_whatever_it_holds()
     {
-        // Harbor's first administrator, who holds every key there is in her tenant, asking about her own tenant.
+        // Harbor's first administrator, who holds every permission there is in her tenant, asking about her own tenant.
         using var ada = await sample.ClientAsync("ada", Harbor.Slug);
 
         var refused = (await ada.GraphQLAsync(Projects, new { tenant = Harbor.Id.Value })).SingleError();

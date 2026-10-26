@@ -28,13 +28,13 @@ internal static partial class ProjectRoleType
     public static string? GetMadeFrom([Parent] ProjectRoleListing role) => role.MadeFrom;
 
     /// <summary>Whether it can still be given.</summary>
-    public static KeptRoleStatus GetStatus([Parent] ProjectRoleListing role) => role.Status;
+    public static CustomRoleStatus GetStatus([Parent] ProjectRoleListing role) => role.Status;
 
     /// <summary>
-    /// The keys it gives on a crew. What a role lets its holders do is for whoever manages the tenant's roles: a
-    /// caller who does not hold the key for the whole tenant is answered nothing here, with the refusal a command
-    /// would give for the same key.
+    /// The permissions it gives on a crew. What a role lets its holders do is for whoever manages the tenant's roles: a
+    /// caller who does not hold the permission for the whole tenant is answered nothing here, with the refusal a command
+    /// would give for the same permission.
     /// </summary>
-    [Authorize(ProjectRoleListing.KeysKey)]
-    public static IReadOnlyList<string>? GetKeys([Parent] ProjectRoleListing role) => role.Keys;
+    [Authorize(ProjectRoleListing.ManageRolesPermission)]
+    public static IReadOnlyList<string>? GetPermissions([Parent] ProjectRoleListing role) => role.Permissions;
 }

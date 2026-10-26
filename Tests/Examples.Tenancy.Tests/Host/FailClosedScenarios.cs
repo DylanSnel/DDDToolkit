@@ -166,7 +166,6 @@ public sealed class FailClosedScenarios(SampleHosts sample) : IClassFixture<Samp
                     "Greenhouse",
                     Meadow.Root,
                     Meadow.Administrator.Id,
-                    Meadow.ProjectRoles[SampleCatalogue.CrewLead],
                     DateTimeOffset.UtcNow));
 
                 var save = () => projects.SaveChangesAsync(Cancellation);

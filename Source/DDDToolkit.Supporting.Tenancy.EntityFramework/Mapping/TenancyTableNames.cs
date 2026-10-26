@@ -21,7 +21,7 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 /// <param name="Seats">The seats.</param>
 /// <param name="Placements">Where each seat is placed.</param>
 /// <param name="Grants">The roles each placement grants.</param>
-/// <param name="Rights">The keys each seat holds where, written from the seats and the roles.</param>
+/// <param name="Rights">The permissions each seat holds where, written from the seats and the roles.</param>
 /// <param name="Roles">The roles.</param>
 /// <param name="AccessRevisions">One row per tenant that every change of rights takes first.</param>
 /// <param name="Invitations">The invitations, in a context that maps them with <c>AddTenancyInvitations</c>.</param>

@@ -24,4 +24,13 @@ public sealed record RowAccessContributionResult(
     IReadOnlyList<ContributedFunction> Functions,
     IReadOnlyList<ContributedPolicy> Policies,
     IReadOnlyList<string> Statements,
-    IReadOnlyList<IEntityType>? ExclusiveTables = null);
+    IReadOnlyList<IEntityType>? ExclusiveTables = null)
+{
+    /// <summary>
+    /// Tables whose rows go with an aggregate's although the model does not map them as its entities, by the table
+    /// and the aggregate root: the closure of an organization's tree goes with the organization. A restrictive
+    /// <c>[RowAccess]</c> rule on the aggregate narrows these tables as well as its own and its entities', with its
+    /// condition about the caller alone, since such a table has no row of the aggregate to ask about.
+    /// </summary>
+    public IReadOnlyDictionary<IEntityType, IEntityType>? Following { get; init; }
+}

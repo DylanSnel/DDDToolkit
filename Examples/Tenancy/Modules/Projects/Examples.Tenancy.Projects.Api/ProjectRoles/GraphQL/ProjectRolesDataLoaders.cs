@@ -15,7 +15,7 @@ namespace Examples.Tenancy.Projects.Api.ProjectRoles.GraphQL;
 internal static class ProjectRolesDataLoaders
 {
     /// <summary>The fields of a project role that are read from its row: all of them but its id.</summary>
-    private static readonly HashSet<string> ReadFromTheRow = new(StringComparer.Ordinal) { "name", "description", "madeFrom", "status", "keys" };
+    private static readonly HashSet<string> ReadFromTheRow = new(StringComparer.Ordinal) { "name", "description", "madeFrom", "status", "permissions" };
 
     /// <summary>
     /// The project roles a field names by id, such as a crew's, as that field answers them: read through
@@ -34,7 +34,7 @@ internal static class ProjectRolesDataLoaders
         CancellationToken cancellationToken)
         => context.IsSelected(ReadFromTheRow)
             ? [.. (await roles.LoadAsync(ids, cancellationToken)).OfType<ProjectRoleListing>()]
-            : [.. ids.Select(id => new ProjectRoleListing(id, string.Empty, string.Empty, MadeFrom: null, KeptRoleStatus.Active, Keys: null))];
+            : [.. ids.Select(id => new ProjectRoleListing(id, string.Empty, string.Empty, MadeFrom: null, CustomRoleStatus.Active, Permissions: null))];
 
     /// <summary>
     /// The project roles with these ids, of the caller's tenant, as <see cref="ProjectRolesById"/> answers them: in

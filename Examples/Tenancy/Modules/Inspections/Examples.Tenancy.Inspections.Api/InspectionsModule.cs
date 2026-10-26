@@ -36,8 +36,8 @@ public static class InspectionsModule
     public static string SourceSchema => InspectionsGraphQL.SourceSchemaName;
 
     /// <summary>
-    /// Registers Inspections: how it is stored and its use cases. Its key is not registered here: the host adds it
-    /// with every module's, from the list the module marks with <c>[TenancyPermissions]</c>. The host says where
+    /// Registers Inspections: how it is stored and its use cases. Its permission is not registered here: the host adds it
+    /// with every module's, from the <c>[Permissions]</c> class the module declares. The host says where
     /// its tables live and where what it publishes goes (see <see cref="ModuleHost"/>). Register it after Tenancy
     /// and Projects: Inspections asks Tenancy's answers and Projects' gate. Its context keeps rows to a tenant, so it
     /// cannot do without Tenancy's save check, which <c>AddTenancy</c> brings and <c>UseDDDToolkit</c> puts on it, in

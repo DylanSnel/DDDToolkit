@@ -8,7 +8,7 @@ namespace DDDToolkit.Supporting.Membership.TestHost.Persistence;
 
 /// <summary>
 /// The gardens' context: two kinds of resource whose roles are kept, each with its members mapped by
-/// <c>HasMembers</c> and its role class by <c>IsKeptRole</c>. Everything about whose a role of plots is, is
+/// <c>HasMembers</c> and its role class by <c>IsCustomRole</c>. Everything about whose a role of plots is, is
 /// the host's own and said here: the column, the two indexes over it, and the rule that a request reads the
 /// roles of the garden it is in. The roles of sheds are the whole application's, so nothing of the kind is
 /// said for them. The gardens have this context to themselves, so the documents, the folders and the depot
@@ -54,13 +54,13 @@ public sealed class GardenContext(DbContextOptions<GardenContext> options) : DbC
         {
             plot.Property(row => row.Id).ValueGeneratedNever();
             plot.Property(row => row.Name).HasMaxLength(100);
-            plot.HasMembers(row => row.Gardeners, row => row.OwnerId);
+            plot.HasMembers(row => row.Gardeners);
         });
 
         modelBuilder.Entity<PlotRole>(role =>
         {
-            // The package's part of a role: its name, what it is for, its keys, its status, and the starter role it came from.
-            role.IsKeptRole();
+            // The package's part of a role: its name, what it is for, its permissions, its status, and the starter role it came from.
+            role.IsCustomRole();
 
             // The host's part. A name is used once in a garden, and a garden has each starter role once: two
             // indexes over the host's own column, the first refusing in the host's own code.
@@ -75,12 +75,12 @@ public sealed class GardenContext(DbContextOptions<GardenContext> options) : DbC
         {
             shed.Property(row => row.Id).ValueGeneratedNever();
             shed.Property(row => row.Name).HasMaxLength(100);
-            shed.HasMembers(row => row.Hands, row => row.OwnerId);
+            shed.HasMembers(row => row.Hands);
         });
 
         modelBuilder.Entity<ShedRole>(role =>
         {
-            role.IsKeptRole();
+            role.IsCustomRole();
 
             // One set of roles for the whole application: a name once, and each starter role once, with no column in front.
             role.HasIndex(row => row.Name).IsUnique();

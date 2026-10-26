@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using DDDToolkit.Abstractions.Attributes;
@@ -22,10 +23,10 @@ namespace DDDToolkit.Supporting.Tenancy.Postgres;
 /// [TenancyOperators]
 /// public static IReadOnlyList&lt;string&gt; OperatorTokenRoles { get; } = ["operator"];
 /// </code>
-/// The catalogue is the one the application runs with, the application's part and every module's keys: its
-/// marks decide which roles manage access, its <see cref="ApplicationCatalogue.ContainAccessManagingKeys"/> whether
+/// The catalogue is the one the application runs with, the application's part and every module's permissions: its
+/// marks decide which roles manage access, its <see cref="ApplicationCatalogue.ContainAccessManagingPermissions"/> whether
 /// the policies contain the grants of those roles, and its packs which roles a settings manager may add. When any of
-/// them changes, a key added to a pack or to the administrators' pack included, the next export writes the access
+/// them changes, a permission added to a pack or to the administrators' pack included, the next export writes the access
 /// file again. The export makes the class before the application starts, so it builds the catalogue as the host's
 /// registration does, without the application's services: from the member marked
 /// <see cref="TenancyCatalogueAttribute"/>, or <c>new ApplicationCatalogue()</c> where none is, and the lists every
@@ -37,10 +38,10 @@ namespace DDDToolkit.Supporting.Tenancy.Postgres;
 /// <remarks>
 /// <para>
 /// For the context that maps Tenancy's tables, in its default schema: the functions <c>caller_seat</c>,
-/// <c>caller_tenant</c>, <c>system_tenant</c>, <c>units_where_i_hold</c>, <c>readable_units</c>,
-/// <c>seats_in_my_units</c>, <c>roles_with_key</c>, <c>holds_key</c>, <c>holds_tenant_wide</c>,
+/// <c>caller_tenant</c>, <c>system_tenant</c>, <c>units_where_i_hold_permission</c>, <c>readable_units</c>,
+/// <c>seats_in_my_units</c>, <c>roles_with_permission</c>, <c>holds_permission</c>, <c>holds_at_tenant</c>,
 /// <c>identity_tenants</c>, <c>unit_parent</c>,
-/// <c>manages_access</c>, <c>key_is_contained</c> and <c>pack_keys</c>, executable by signed-in users and by system
+/// <c>permission_manages_access</c>, <c>permission_is_contained</c> and <c>pack_permissions</c>, executable by signed-in users and by system
 /// work in a tenant; the
 /// policies on Tenancy's tables, which only this contribution writes; and the triggers that keep an administrator
 /// in every active or suspended tenant, every right backed by a grant, the closure of the tree exact, and fixed
@@ -59,31 +60,31 @@ namespace DDDToolkit.Supporting.Tenancy.Postgres;
 /// </para>
 /// <para>
 /// The database keeps the rights: a trigger on the grants, the seats and the roles writes each seat's rights as
-/// they change, from <c>key_is_live</c>, which says which keys the catalogue has live, and no caller writes one.
+/// they change, from <c>permission_is_live</c>, which says which permissions the catalogue has live, and no caller writes one.
 /// A seat reads its own rights and no other seat's; a grant is read by its seat, by the seats that manage grants,
 /// seats or units at its unit, held there or above it, and by the seats that manage roles for the whole tenant. What
 /// a seat may learn of other seats' rights, three functions answer, executable by signed-in users alone, as ids,
-/// keys and dates: <c>tenant_administrators</c> and <c>seats_holding_at</c> each right whose grant the seat may read,
-/// and <c>rights_a_move_changes</c> to a seat that manages units at both parents of the move, of another seat's
+/// permissions and dates: <c>tenant_administrators</c> and <c>seats_holding_permission_at</c> each right whose grant the seat may read,
+/// and <c>permissions_a_move_changes</c> to a seat that manages units at both parents of the move, of another seat's
 /// rights only those the move changes, which reach one parent and not the other. Tenancy's own
 /// system work in a tenant writes that tenant's rights again with <c>rewrite_tenant_rights</c>, after rows were
 /// written past the trigger.
 /// </para>
 /// <para>
 /// A module reads Tenancy through six more functions, one for each row of the read model, which its context maps
-/// with <c>AddTenancyReadFunctions</c>: <c>caller_rights</c>, <c>tenant_unit_paths</c>, <c>tenant_units</c>,
-/// <c>tenant_roles</c>, <c>tenant_placements</c> and <c>tenant_seats</c>. They are executable by signed-in users
+/// with <c>AddTenancyReadFunctions</c>: <c>caller_permissions</c>, <c>tenant_unit_paths</c>, <c>tenant_units</c>,
+/// <c>tenant_roles_with_permissions</c>, <c>tenant_placements</c> and <c>tenant_seats</c>. They are executable by signed-in users
 /// and by system work in a tenant, run as their caller, so the policies on Tenancy's tables decide their rows, and
 /// are written for Postgres to fold into the query that asks them: a module's question is planned over the
 /// tables, with their indexes. They answer under column names of their own and a status as the name of its enum
 /// member, whatever the application calls Tenancy's tables and columns and however it stores them. They answer
-/// access facts only: ids, keys, periods, statuses, a unit's parent, and a role's pack and keys, and never what a
+/// access facts only: ids, permissions, periods, statuses, a unit's parent, and a role's pack and permissions, and never what a
 /// seat, a unit or a role is called. A start-up check compares the columns each answers with the read model's
 /// (<see cref="TenancyPostgresChecks.EnsurePoliciesAreInPlaceAsync"/>).
 /// </para>
 /// <para>
 /// What has to be read before any tenant is known, three functions answer, to system work alone, which asks them
-/// in no tenant, where the policies show it no row: <c>role_keys_in_use</c>, the keys stored on every tenant's
+/// in no tenant, where the policies show it no row: <c>role_permissions_in_use</c>, the permissions stored on every tenant's
 /// roles, and <c>seats_of_identity</c>, the seats a person has in every tenant, to Tenancy's own work and to no
 /// other scope's; and <c>tenants_to_sweep</c>, the ids of the active and the suspended tenants, to the work of
 /// every module, which then visits each tenant under its own scope. So nothing of Tenancy's runs as the
@@ -92,8 +93,8 @@ namespace DDDToolkit.Supporting.Tenancy.Postgres;
 /// <para>
 /// Five questions take the tenant as an argument instead of reading it from the connection, for a policy that
 /// runs where the application's connection is not the one asking, on the path of a stored file or on a
-/// channel: <c>seat_in_tenant</c>, <c>seated_in_tenant</c>, <c>holds_key_in_tenant</c>,
-/// <c>units_where_i_hold_in_tenant</c> and <c>roles_with_key_in_tenant</c>, executable by signed-in users alone.
+/// channel: <c>seat_in_tenant</c>, <c>seated_in_tenant</c>, <c>holds_permission_in_tenant</c>,
+/// <c>units_where_i_hold_permission_in_tenant</c> and <c>roles_with_permission_in_tenant</c>, executable by signed-in users alone.
 /// Each answers for the seat the verified identity has in that tenant, while that seat and the tenant are
 /// active, and nothing to anyone else: naming a tenant says nothing of it to someone who has no seat there.
 /// </para>
@@ -154,18 +155,21 @@ namespace DDDToolkit.Supporting.Tenancy.Postgres;
 /// against SQL an attacker runs on its connection, which can switch roles and set anything.
 /// </para>
 /// </remarks>
-public class TenancyRowAccessContribution : IRowAccessContribution
+public class TenancyRowAccessContribution : IRowAccessContribution, ICallerFunctions
 {
+    /// <summary>The ids of the seat and the unit each model keeps, read once per model.</summary>
+    private static readonly ConditionalWeakTable<IModel, Ids> IdsOfModels = new();
+
     /// <summary>What was written for each model, per set of token roles the export maps.</summary>
     private readonly ConditionalWeakTable<IModel, ConcurrentDictionary<string, Answer>> _answers = new();
 
     /// <summary>
     /// The contribution as the Supabase export makes it, in the project that runs the export, from what the
     /// application marks: the catalogue built from <paramref name="application"/> and <paramref name="modules"/>, as
-    /// the host's registration builds it from <c>TenancyOptions.Catalogue</c> and the modules' keys it registers.
+    /// the host's registration builds it from <c>TenancyOptions.Catalogue</c> and the modules' permissions it registers.
     /// </summary>
     /// <param name="modules">
-    /// Every list of keys a module marks with <see cref="TenancyPermissionsAttribute"/>, as the host registers them
+    /// Every list of permissions a module marks with <see cref="TenancyPermissionsAttribute"/>, as the host registers them
     /// with <c>AddTenancyPermissionsOfModules()</c>: those of every project the exporting project references.
     /// </param>
     /// <param name="application">
@@ -189,7 +193,7 @@ public class TenancyRowAccessContribution : IRowAccessContribution
 
     /// <summary>A contribution for an application whose catalogue is <paramref name="catalogue"/>, as a script written by hand makes it.</summary>
     /// <param name="catalogue">
-    /// The catalogue the application runs with, built as its registration builds it: which keys are live, which
+    /// The catalogue the application runs with, built as its registration builds it: which permissions are live, which
     /// of them manage access, and whether those stay contained.
     /// </param>
     /// <param name="operatorTokenRoles">
@@ -218,11 +222,11 @@ public class TenancyRowAccessContribution : IRowAccessContribution
     /// <summary>The catalogue the functions are written from.</summary>
     public TenancyCatalogue Catalogue { get; }
 
-    /// <summary>The catalogue of <paramref name="application"/> and the modules' keys, one list after the other.</summary>
+    /// <summary>The catalogue of <paramref name="application"/> and the modules' permissions, one list after the other.</summary>
     private static TenancyCatalogue BuiltFrom(ApplicationCatalogue? application, IEnumerable<IEnumerable<Permission>> modules)
     {
         ArgumentNullException.ThrowIfNull(modules);
-        return TenancyCatalogue.Build(application ?? new ApplicationCatalogue(), [.. modules.SelectMany(keys => keys)]);
+        return TenancyCatalogue.Build(application ?? new ApplicationCatalogue(), [.. modules.SelectMany(permissions => permissions)]);
     }
 
     /// <summary>The token roles of the application's operators, each once, in ordinal order.</summary>
@@ -234,7 +238,7 @@ public class TenancyRowAccessContribution : IRowAccessContribution
     /// <inheritdoc />
     /// <exception cref="ArgumentNullException"><paramref name="context"/> or <paramref name="export"/> is null.</exception>
     /// <exception cref="InvalidOperationException">
-    /// The context maps some of Tenancy's tables but not all of them, stores a role's keys in neither an array nor
+    /// The context maps some of Tenancy's tables but not all of them, stores a role's permissions in neither an array nor
     /// a JSON array, keeps a type to a tenant in a table of its own apart from the type it derives from, or maps
     /// Tenancy's access history without Tenancy's tables; or an operator's token role is mapped to the role of a
     /// signed-in user, or to a role another token role shares.
@@ -313,6 +317,56 @@ public class TenancyRowAccessContribution : IRowAccessContribution
             roles.Resolve(RowAccessRoles.SystemIn),
             RemovesOldHistory: export.WriteGrants && roles.System is not null);
     }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <see cref="TenancyFunctions.CallerSeat"/> for the application's seat id, where the context maps Tenancy's
+    /// tables or its read model, which knows it: so a resource whose members are seats has its functions ask the
+    /// caller's seat without its rules naming one.
+    /// </remarks>
+    public DatabaseFunction? CallerAs(DbContext context, Type id)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(id);
+
+        return IdsOf(context.Model).Seat == id ? TenancyFunctions.CallerSeat : null;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <see cref="TenancyFunctions.UnitsWhereIHold"/> for the application's unit id, where the context maps Tenancy's
+    /// tables or its read model: so a resource that hangs at a unit is reached from above through Tenancy's grants
+    /// without its rules naming a function.
+    /// </remarks>
+    public DatabaseFunction? PlacesWhereCallerHolds(DbContext context, Type place)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(place);
+
+        return IdsOf(context.Model).Unit == place ? TenancyFunctions.UnitsWhereIHold : null;
+    }
+
+    /// <summary>The seat id and the unit id a model keeps, read off the rights it maps, Tenancy's own or its read model's.</summary>
+    private static Ids IdsOf(IModel model)
+        => IdsOfModels.GetValue(model, static built =>
+        {
+            foreach (var entityType in built.GetEntityTypes())
+            {
+                for (var type = entityType.ClrType; type is not null && type != typeof(object); type = type.BaseType)
+                {
+                    if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(SeatRight<,,,>))
+                    {
+                        var arguments = type.GetGenericArguments();
+                        return new Ids(arguments[1], arguments[2]);
+                    }
+                }
+            }
+
+            return new Ids(null, null);
+        });
+
+    /// <summary>The seat id and the unit id of a model, where it keeps them.</summary>
+    private sealed record Ids(Type? Seat, Type? Unit);
 
     /// <summary>What was written for one model, <see langword="null"/> included.</summary>
     private sealed record Answer(RowAccessContributionResult? Result);

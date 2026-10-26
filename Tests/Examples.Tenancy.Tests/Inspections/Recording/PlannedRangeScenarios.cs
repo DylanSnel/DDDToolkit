@@ -47,7 +47,7 @@ public sealed class PlannedRangeScenarios(SampleHosts sample) : IClassFixture<Sa
         refused.Code.Should().StartWith("inspections.", "the plan is Projects' answer, and the refusal is Inspections' own");
         (refused.Argument("From"), refused.Argument("Until")).Should().Be((Iso(planned.From), Iso(planned.Until)));
 
-        // Maud sees the project and may not record on it: she is refused for the key, and learns nothing from the days.
+        // Maud sees the project and may not record on it: she is refused for the permission, and learns nothing from the days.
         using var notHers = await maud.PostAsJsonAsync($"/projects/{InlandDepot.Id.Value}/inspections", body, Cancellation);
         await notHers.ShouldBeRefusedAsync(HttpStatusCode.Forbidden, ProjectRefusals.NotPermitted);
 

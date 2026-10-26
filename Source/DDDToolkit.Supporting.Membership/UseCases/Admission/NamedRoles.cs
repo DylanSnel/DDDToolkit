@@ -4,7 +4,7 @@ using DDDToolkit.Supporting.Membership.Access;
 namespace DDDToolkit.Supporting.Membership.UseCases;
 
 /// <summary>
-/// The roles a resource's rules declare, as the admission asks about them: for a resource whose members hold
+/// The fixed roles a resource's rules declare, as the admission asks about them: for a resource whose members hold
 /// <see cref="NamedRole"/>s. It reads nothing but the rules.
 /// </summary>
 /// <typeparam name="TResourceId">The id of the kind of resource the members are of.</typeparam>
@@ -16,11 +16,4 @@ public sealed class NamedRoles<TResourceId>(MembershipRules rules) : IMemberRole
 
     /// <inheritdoc />
     public ValueTask<bool> ExistsAsync(NamedRole role, CancellationToken cancellationToken) => ValueTask.FromResult(_rules.Knows(role));
-
-    /// <inheritdoc />
-    public ValueTask<NamedRole?> FindOwnerRoleAsync(CancellationToken cancellationToken)
-    {
-        var owners = new NamedRole(_rules.OwnerRole);
-        return ValueTask.FromResult<NamedRole?>(_rules.Knows(owners) ? owners : null);
-    }
 }

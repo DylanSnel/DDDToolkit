@@ -160,10 +160,10 @@ public sealed class PostgresDatabase(string connectionString, string serverConne
     public override string Provider => "PostgreSQL";
 
     /// <inheritdoc />
-    public override bool KeysAreAnArray => true;
+    public override bool PermissionsAreAnArray => true;
 
     /// <inheritdoc />
-    public override string KeysContain => "= ANY (";
+    public override string PermissionsContain => "= ANY (";
 
     /// <inheritdoc />
     public override string PrimaryFilter => "\"IsPrimary\"";

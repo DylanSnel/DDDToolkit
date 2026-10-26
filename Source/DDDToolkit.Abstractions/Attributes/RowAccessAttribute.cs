@@ -43,7 +43,7 @@ public sealed class RowAccessAttribute<TAggregate>(RowOperations operations) : A
     /// The properties of <typeparamref name="TAggregate"/> whose change the rule holds, which makes it a column
     /// rule: <c>Columns = [nameof(Project.State)]</c>. A row's own rules let a caller change a row, whichever of
     /// its columns the change is to; a column rule is one condition more, for a change of these columns alone,
-    /// where one of them takes a stricter key than the rest of the row. It goes with
+    /// where one of them takes a stricter permission than the rest of the row. It goes with
     /// <see cref="RowOperations.Change"/> and no other operation. A value object stored in the aggregate's row
     /// is every column it is stored in, and <c>"Planned.From"</c> is one of them. Left empty, the rule is about
     /// whole rows, as it always was.
@@ -60,6 +60,30 @@ public sealed class RowAccessAttribute<TAggregate>(RowOperations operations) : A
     /// <see cref="To"/>.
     /// </remarks>
     public string[] Columns { get; set; } = [];
+
+    /// <summary>
+    /// Whether the rule narrows what other rules and the packages allow, rather than allowing more: a
+    /// <c>RESTRICTIVE</c> policy, as Postgres and its tools call it. Left <see langword="false"/>, a rule is a
+    /// permissive policy, and permissive policies combine with OR: each says "this is also allowed", so a row one of
+    /// them allows is allowed. A restrictive rule combines with AND: it says "only if", and a row passes only where it
+    /// and a permissive policy both say yes. It never grants anything a permissive policy does not.
+    /// <code>
+    /// [RowAccess&lt;Organization&gt;(RowOperations.Read, Restrictive = true)]
+    /// public static partial class OnlyEmployeesReadTheOrganization
+    /// {
+    ///     public static bool Allows(Organization organization, Caller caller)
+    ///         =&gt; TenancyRowAccess.CallerSeat&lt;Seat&gt;().Kind == SeatKind.Employee;
+    /// }
+    /// </code>
+    /// So a rule written without it, about a table where a package's default already lets every member read, has no
+    /// effect: the default already says yes. A restrictive rule is written for each operation it names, on the
+    /// aggregate's table and the tables of its entities: <see cref="RowOperations.Read"/> narrows what a caller reads,
+    /// <see cref="RowOperations.Create"/>, <see cref="RowOperations.Change"/> and <see cref="RowOperations.Remove"/>
+    /// what it writes. It goes with no <see cref="Columns"/>, and it holds back the roles it is for, those of
+    /// <see cref="To"/>, and nobody else: a package's own work and its functions that run as their owner keep
+    /// working.
+    /// </summary>
+    public bool Restrictive { get; set; }
 }
 
 /// <summary>What a row access rule lets a caller do with the rows it allows.</summary>

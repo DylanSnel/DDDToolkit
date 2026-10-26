@@ -59,7 +59,7 @@ else
     protected override async Task LoadAsync()
     {
         // The rows first, then the names of the seats that acted: shown together, so a reload never shows ids
-        // for a moment. Without the key the answer is the API's refusal, and that is what the page shows.
+        // for a moment. Without the permission the answer is the API's refusal, and that is what the page shows.
         var history = await Api.AccessHistoryAsync(size: PageSize);
         var names = new DirectoryNames(Api);
         await NameAsync(names, history.Value?.Items);

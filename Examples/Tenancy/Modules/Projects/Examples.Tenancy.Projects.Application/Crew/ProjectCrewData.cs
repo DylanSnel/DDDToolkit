@@ -4,7 +4,7 @@ namespace Examples.Tenancy.Projects.Application.Crew;
 /// <param name="Project">The project.</param>
 /// <param name="OwnerSeatId">The seat that owns it.</param>
 /// <param name="CallerManagesCrew">
-/// Whether the caller holds the key that manages this crew, on this project, read in the statement that read the
+/// Whether the caller holds the permission that manages this crew, on this project, read in the statement that read the
 /// crew: what decides whether the members' roles are answered.
 /// </param>
 /// <param name="Crew">Its crew, in no particular order.</param>

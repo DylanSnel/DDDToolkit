@@ -7,7 +7,7 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// Answers what the current caller may do, over any read source. Registered once for the application; it
 /// keeps no state of its own, and reads the caller and the time each time it is asked.
 /// </summary>
-/// <param name="catalogue">The catalogue every key asked about is checked against.</param>
+/// <param name="catalogue">The catalogue every permission asked about is checked against.</param>
 /// <param name="clock">What "now" is, for whether a grant applies.</param>
 public sealed class TenancyAnswers<TTenantId, TSeatId, TUnitId, TRoleId>(TenancyCatalogue catalogue, TimeProvider clock)
     : ITenancyAnswers<TTenantId, TSeatId, TUnitId, TRoleId>

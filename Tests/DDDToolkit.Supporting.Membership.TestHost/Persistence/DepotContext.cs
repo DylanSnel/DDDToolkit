@@ -32,8 +32,8 @@ public sealed class DepotContext(DbContextOptions<DepotContext> options) : DbCon
     /// <summary>The roles the depot keeps.</summary>
     public DbSet<DepotRole> Roles => Set<DepotRole>();
 
-    /// <summary>The keys the depot's roles give.</summary>
-    public DbSet<DepotRoleKey> RoleKeys => Set<DepotRoleKey>();
+    /// <summary>The permissions the depot's roles give.</summary>
+    public DbSet<DepotRolePermission> RolePermissions => Set<DepotRolePermission>();
 
     /// <summary>The bays.</summary>
     public DbSet<Bay> Bays => Set<Bay>();
@@ -41,7 +41,7 @@ public sealed class DepotContext(DbContextOptions<DepotContext> options) : DbCon
     /// <summary>Every bay with each bay above it, and with itself.</summary>
     public DbSet<BayPath> BayPaths => Set<BayPath>();
 
-    /// <summary>The keys porters hold at bays.</summary>
+    /// <summary>The permissions porters hold at bays.</summary>
     public DbSet<BayHold> BayHolds => Set<BayHold>();
 
     /// <inheritdoc />
@@ -53,7 +53,7 @@ public sealed class DepotContext(DbContextOptions<DepotContext> options) : DbCon
         {
             pallet.Property(row => row.Id).ValueGeneratedNever();
             pallet.Property(row => row.Label).HasMaxLength(100);
-            pallet.HasMembers(row => row.Porters, row => row.OwnerId);
+            pallet.HasMembers(row => row.Porters);
         });
 
         modelBuilder.Entity<Crate>(crate =>
@@ -61,8 +61,8 @@ public sealed class DepotContext(DbContextOptions<DepotContext> options) : DbCon
             crate.Property(row => row.Id).ValueGeneratedNever();
             crate.Property(row => row.Label).HasMaxLength(100);
 
-            // Where a crate sits is said with its members: what a key held at a bay, or above it, is compared with.
-            crate.HasMembers(row => row.Porters, row => row.OwnerId, at: row => row.BayId);
+            // Where a crate sits is said with its members: what a permission held at a bay, or above it, is compared with.
+            crate.HasMembers(row => row.Porters);
         });
 
         modelBuilder.Entity<Porter>(porter =>
@@ -77,18 +77,18 @@ public sealed class DepotContext(DbContextOptions<DepotContext> options) : DbCon
             role.Property(row => row.Name).HasMaxLength(64);
         });
 
-        modelBuilder.Entity<DepotRoleKey>(given =>
+        modelBuilder.Entity<DepotRolePermission>(given =>
         {
-            given.HasKey(row => new { row.RoleId, row.Key });
-            given.Property(row => row.Key).HasMaxLength(100);
+            given.HasKey(row => new { row.RoleId, row.Permission });
+            given.Property(row => row.Permission).HasMaxLength(100);
         });
 
         modelBuilder.Entity<Bay>(bay => bay.Property(row => row.Id).ValueGeneratedNever());
         modelBuilder.Entity<BayPath>(path => path.HasKey(row => new { row.AboveId, row.BayId }));
         modelBuilder.Entity<BayHold>(hold =>
         {
-            hold.HasKey(row => new { row.PorterId, row.BayId, row.Key });
-            hold.Property(row => row.Key).HasMaxLength(100);
+            hold.HasKey(row => new { row.PorterId, row.BayId, row.Permission });
+            hold.Property(row => row.Permission).HasMaxLength(100);
         });
     }
 

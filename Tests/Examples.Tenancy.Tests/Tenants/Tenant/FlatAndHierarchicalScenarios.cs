@@ -71,21 +71,21 @@ public sealed class FlatAndHierarchicalScenarios(SampleHosts sample) : IClassFix
         var after = await tove.GetFromJsonAsync<JsonElement>("/tenancy/roles", Cancellation);
 
         // The area manager's pack and the access admin's are seeded for a hierarchical tenant only: a flat one has
-        // only its root to manage, and one administrator's role that holds every key.
+        // only its root to manage, and one administrator's role that holds every permission.
         before.EnumerateArray().Select(role => role.GetProperty("fromPack").GetString())
             .Should().BeEquivalentTo(SampleCatalogue.TenantAdmin, SampleCatalogue.CrewLead, SampleCatalogue.Surveyor, SampleCatalogue.Observer, SampleCatalogue.PeopleOffice);
         reshaped.StatusCode.Should().Be(HttpStatusCode.NoContent);
         var manager = after.EnumerateArray().Should().ContainSingle(role => role.GetProperty("fromPack").GetString() == SampleCatalogue.AreaManager).Which;
         manager.GetProperty("name").GetString().Should().Be("Area manager");
         manager.GetProperty("status").GetString().Should().Be("active");
-        manager.GetProperty("keys").EnumerateArray().Select(key => key.GetString()).Should().Contain([ProjectKeys.Open, ProjectKeys.ChangeOwner]);
+        manager.GetProperty("permissions").EnumerateArray().Select(permission => permission.GetString()).Should().Contain([ProjectPermissionNames.Open, ProjectPermissionNames.ChangeOwner]);
 
-        // The role of the administrators' pack seeded for the new shape is there too, with the keys that pack lists,
-        // and nobody holds it: Tove keeps the flat tenant's role, which holds every key, and gives the new one to
+        // The role of the administrators' pack seeded for the new shape is there too, with the permissions that pack lists,
+        // and nobody holds it: Tove keeps the flat tenant's role, which holds every permission, and gives the new one to
         // whom she chooses.
         var accessAdmin = after.EnumerateArray().Should().ContainSingle(role => role.GetProperty("fromPack").GetString() == SampleCatalogue.AccessAdmin).Which;
-        accessAdmin.GetProperty("keys").EnumerateArray().Select(key => key.GetString())
-            .Should().Contain([TenancyKeys.RolesManage, ProjectKeys.ManageCrew, ProjectKeys.View]).And.NotContain([ProjectKeys.Edit, ProjectKeys.Close]);
+        accessAdmin.GetProperty("permissions").EnumerateArray().Select(permission => permission.GetString())
+            .Should().Contain([TenancyPermissions.RolesManage, ProjectPermissionNames.ManageCrew, ProjectPermissionNames.View]).And.NotContain([ProjectPermissionNames.Edit, ProjectPermissionNames.Close]);
         var me = await tove.GetFromJsonAsync<JsonElement>("/me", Cancellation);
         me.GetProperty("placements").EnumerateArray().Single().GetProperty("grants").EnumerateArray().Select(grant => grant.GetProperty("roleId").GetGuid())
             .Should().Equal(Meadow.Roles[SampleCatalogue.TenantAdmin].Value);

@@ -8,7 +8,7 @@ using FluentAssertions;
 namespace Examples.Tenancy.Tests.Tenants.Access;
 
 /// <summary>
-/// A role that manages access goes only from someone who holds its keys that do, and never to themselves; other
+/// A role that manages access goes only from someone who holds its permissions that do, and never to themselves; other
 /// roles go from whoever manages grants where the seat is placed. A seat that holds such a role is suspended,
 /// deactivated or reactivated by the same rule, and a unit is moved away from it, or under it, by the same rule
 /// too. And a tenant always keeps an administrator: meadow has one, so every way of her stepping down is refused;
@@ -47,7 +47,7 @@ public sealed class ContainmentAndLastAdminScenarios(SampleHosts sample) : IClas
         var meadow = DemoData.Meadow;
         using var tove = await sample.ClientAsync("tove", meadow.Slug);
 
-        // A seat may suspend itself, and her own grant is her hold of its keys; the last-administrator rule is what
+        // A seat may suspend itself, and her own grant is her hold of its permissions; the last-administrator rule is what
         // refuses this.
         using var response = await tove.PostAsync($"/tenancy/seats/{meadow.Administrator.Id.Value}/suspend", content: null, Cancellation);
 
@@ -105,8 +105,8 @@ public sealed class ContainmentAndLastAdminScenarios(SampleHosts sample) : IClas
         }
 
         var me = await leo.GetFromJsonAsync<JsonElement>("/me", Cancellation);
-        me.GetProperty("keys").EnumerateArray().Select(key => key.GetProperty("key").GetString())
-            .Should().Contain(ProjectKeys.ManageCrew, "he now manages every crew at North Coast");
+        me.GetProperty("permissions").EnumerateArray().Select(permission => permission.GetProperty("permission").GetString())
+            .Should().Contain(ProjectPermissionNames.ManageCrew, "he now manages every crew at North Coast");
 
         // Hana manages grants there too, and holds no crew management.
         using var given = await hana.PostAsJsonAsync(
@@ -114,11 +114,11 @@ public sealed class ContainmentAndLastAdminScenarios(SampleHosts sample) : IClas
             new { unitId = NorthCoast.Value, roleId = crewLead },
             Cancellation);
         var refused = await given.ShouldBeRefusedAsync(HttpStatusCode.Forbidden, TenancyRefusals.GrantExceedsOwn);
-        refused.Argument("Missing").Should().Be(ProjectKeys.ManageCrew);
+        refused.Argument("Missing").Should().Be(ProjectPermissionNames.ManageCrew);
     }
 
     [Fact]
-    public async Task Rhea_granting_access_admin_is_refused_with_the_missing_keys()
+    public async Task Rhea_granting_access_admin_is_refused_with_the_missing_permissions()
     {
         using var rhea = await sample.ClientAsync("rhea", Harbor.Slug);
 
@@ -127,10 +127,10 @@ public sealed class ContainmentAndLastAdminScenarios(SampleHosts sample) : IClas
             new { unitId = NorthCoast.Value, roleId = Harbor.Roles[SampleCatalogue.AccessAdmin].Value },
             Cancellation);
 
-        // Access admin manages access. Of its keys that do, she holds at North Coast all but two; the keys that
+        // Access admin manages access. Of its permissions that do, she holds at North Coast all but two; the permissions that
         // manage no access, such as projects.view, are not counted.
         var refused = await response.ShouldBeRefusedAsync(HttpStatusCode.Forbidden, TenancyRefusals.GrantExceedsOwn);
-        refused.Argument("Missing").Should().Be(TenancyKeys.RolesManage + ", " + TenancyKeys.SettingsManage);
+        refused.Argument("Missing").Should().Be(TenancyPermissions.RolesManage + ", " + TenancyPermissions.SettingsManage);
     }
 
     [Fact]
@@ -141,7 +141,7 @@ public sealed class ContainmentAndLastAdminScenarios(SampleHosts sample) : IClas
         using var leo = await host.ClientAsync("leo", Harbor.Slug);
         using var juno = await host.ClientAsync("juno", Harbor.Slug);
 
-        // The People office manages access through its one key, which Rhea holds at North for good.
+        // The People office manages access through its one permission, which Rhea holds at North for good.
         using (var granted = await rhea.PostAsJsonAsync(
                    $"/tenancy/seats/{Harbor.SeatOf(DemoPeople.Leo).Value}/grants",
                    new { unitId = NorthCoast.Value, roleId = Harbor.Roles[SampleCatalogue.PeopleOffice].Value },
@@ -150,7 +150,7 @@ public sealed class ContainmentAndLastAdminScenarios(SampleHosts sample) : IClas
             granted.StatusCode.Should().Be(HttpStatusCode.NoContent);
         }
 
-        // Now Leo gives roles at North Coast: Observer, whose key he need not hold.
+        // Now Leo gives roles at North Coast: Observer, whose permission he need not hold.
         using (var given = await leo.PostAsJsonAsync(
                    $"/tenancy/seats/{Harbor.SeatOf(DemoPeople.Juno).Value}/grants",
                    new { unitId = NorthCoast.Value, roleId = Harbor.Roles[SampleCatalogue.Observer].Value },
@@ -166,7 +166,7 @@ public sealed class ContainmentAndLastAdminScenarios(SampleHosts sample) : IClas
     }
 
     [Fact]
-    public async Task Rhea_cannot_give_herself_the_people_office_though_she_holds_its_key()
+    public async Task Rhea_cannot_give_herself_the_people_office_though_she_holds_its_permission()
     {
         using var rhea = await sample.ClientAsync("rhea", Harbor.Slug);
 
@@ -190,7 +190,7 @@ public sealed class ContainmentAndLastAdminScenarios(SampleHosts sample) : IClas
             Cancellation);
 
         var refused = await response.ShouldBeRefusedAsync(HttpStatusCode.Forbidden, TenancyRefusals.NotPermitted);
-        refused.Argument("Key").Should().Be(TenancyKeys.GrantsManage);
+        refused.Argument("Permission").Should().Be(TenancyPermissions.GrantsManage);
     }
 
     [Fact]
@@ -224,7 +224,7 @@ public sealed class ContainmentAndLastAdminScenarios(SampleHosts sample) : IClas
         var toveSeat = Harbor.SeatOf(DemoPeople.Tove).Value;
         var south = Harbor.UnitNamed("South").Value;
 
-        // The access admin's role holds every key that manages access, so Ada can grant every other pack.
+        // The access admin's role holds every permission that manages access, so Ada can grant every other pack.
         using (var placed = await ada.PostAsJsonAsync($"/tenancy/seats/{toveSeat}/placements", new { unitId = south, primary = false }, Cancellation))
         {
             placed.StatusCode.Should().Be(HttpStatusCode.NoContent);
@@ -240,7 +240,7 @@ public sealed class ContainmentAndLastAdminScenarios(SampleHosts sample) : IClas
 
         // Tove now closes Bay bridge as South's manager, where she was only its surveyor.
         var bridge = await tove.GetFromJsonAsync<JsonElement>(
-            $"/access/projects/{Harbor.ProjectNamed("Bay bridge").Id.Value}?key={ProjectKeys.Close}",
+            $"/access/projects/{Harbor.ProjectNamed("Bay bridge").Id.Value}?permission={ProjectPermissionNames.Close}",
             Cancellation);
         bridge.GetProperty("allowed").GetBoolean().Should().BeTrue();
         bridge.GetProperty("via").GetString().Should().Be("organization");
@@ -262,10 +262,10 @@ public sealed class ContainmentAndLastAdminScenarios(SampleHosts sample) : IClas
             steppedDown.StatusCode.Should().Be(HttpStatusCode.NoContent);
         }
 
-        var adas = await ada.GetFromJsonAsync<JsonElement>($"/access/units?key={TenancyKeys.RolesManage}", Cancellation);
-        var mauds = await maud.GetFromJsonAsync<JsonElement>($"/access/units?key={TenancyKeys.RolesManage}", Cancellation);
-        adas.GetProperty("wholeTenant").GetBoolean().Should().BeFalse();
-        mauds.GetProperty("wholeTenant").GetBoolean().Should().BeTrue();
+        var adas = await ada.GetFromJsonAsync<JsonElement>($"/access/units?permission={TenancyPermissions.RolesManage}", Cancellation);
+        var mauds = await maud.GetFromJsonAsync<JsonElement>($"/access/units?permission={TenancyPermissions.RolesManage}", Cancellation);
+        adas.GetProperty("atTenant").GetBoolean().Should().BeFalse();
+        mauds.GetProperty("atTenant").GetBoolean().Should().BeTrue();
 
         // Now Maud is the last, and stays: neither giving up the role nor suspending her own seat gets through.
         using (var revoked = await maud.DeleteAsync($"/tenancy/seats/{maudSeat}/grants/{Harbor.Root.Value}/{accessAdmin}", Cancellation))
@@ -306,7 +306,7 @@ public sealed class ContainmentAndLastAdminScenarios(SampleHosts sample) : IClas
         using (var suspended = await rhea.PostAsync($"/tenancy/seats/{Harbor.SeatOf(DemoPeople.Hana).Value}/suspend", content: null, Cancellation))
         {
             var refused = await suspended.ShouldBeRefusedAsync(HttpStatusCode.Forbidden, TenancyRefusals.GrantExceedsOwn);
-            refused.Argument("Missing").Should().Be(TenancyKeys.GrantsManage);
+            refused.Argument("Missing").Should().Be(TenancyPermissions.GrantsManage);
         }
 
         // Juno holds no role at a unit, so suspending her takes nothing that manages access.
@@ -345,12 +345,12 @@ public sealed class ContainmentAndLastAdminScenarios(SampleHosts sample) : IClas
         }
 
         // Under South, North Coast would no longer be Rhea's to manage, which it is for good: the move would take
-        // her Area manager's keys that manage access there, which a week does not cover.
+        // her Area manager's permissions that manage access there, which a week does not cover.
         using (var moved = await leo.PutAsJsonAsync($"/tenancy/units/{NorthCoast.Value}/parent", south, Cancellation))
         {
             var refused = await moved.ShouldBeRefusedAsync(HttpStatusCode.Forbidden, TenancyRefusals.GrantExceedsOwn);
             refused.Argument("Missing").Should().Be(string.Join(", ",
-                ProjectKeys.ManageCrew, ProjectKeys.ChangeOwner, TenancyKeys.GrantsManage, TenancyKeys.SeatsManage, TenancyKeys.UnitsManage));
+                ProjectPermissionNames.ManageCrew, ProjectPermissionNames.ChangeOwner, TenancyPermissions.GrantsManage, TenancyPermissions.SeatsManage, TenancyPermissions.UnitsManage));
         }
 
         using (var moved = await ada.PutAsJsonAsync($"/tenancy/units/{NorthCoast.Value}/parent", south, Cancellation))
@@ -360,7 +360,7 @@ public sealed class ContainmentAndLastAdminScenarios(SampleHosts sample) : IClas
 
         var units = await ada.GetFromJsonAsync<JsonElement>("/tenancy/units", Cancellation);
         units.EnumerateArray().Select(unit => unit.GetProperty("path").GetString())
-            .Should().Contain("Harbor Works / South / North Coast", "Ada holds every key that manages access at the root for good");
+            .Should().Contain("Harbor Works / South / North Coast", "Ada holds every permission that manages access at the root for good");
     }
 
     private static DemoTenant Harbor => DemoData.Harbor;

@@ -15,8 +15,10 @@ namespace DDDToolkit.Access;
 /// request interface (<c>[AccessRequests]</c>, declared <c>partial</c>), so the request answers
 /// <see cref="IRequireAccess.RequiredAccess"/> with it wherever that is read. Stacked beside another requirement
 /// attribute both hold, <c>AccessRequirement.All(...)</c>; beside one that already lets only a signed-in user through,
-/// <c>[RequiresOperator]</c> say, it says nothing more, and the generator warns of it (DDD00084).
+/// <c>[RequiresOperator]</c> say, it says nothing more, and the generator warns of it (DDD00084). On the module's
+/// interface, <c>[AccessRequests, SignedIn]</c>, it is the module's default: a request of it that states nothing of its
+/// own requires a signed-in user.
 /// </remarks>
 [StatesRequirement(typeof(AccessRequirement), nameof(AccessRequirement.SignedIn))]
-[AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, Inherited = false)]
+[AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct | AttributeTargets.Interface, Inherited = false)]
 public sealed class SignedInAttribute : Attribute;

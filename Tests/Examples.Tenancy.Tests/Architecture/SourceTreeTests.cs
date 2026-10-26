@@ -156,7 +156,7 @@ public sealed partial class SourceTreeTests
         {
             entities.Should().Contain(typeof(CrewMember));
             events.Should().Contain(typeof(CrewRoleGiven));
-            invariants.Should().Contain(typeof(Project.OwnerStaysOnTheCrewWithARole));
+            invariants.Should().Contain(typeof(Project.OwnerStaysOnTheCrew));
             values.Should().Contain(typeof(ProjectState));
         }
     }
@@ -408,7 +408,7 @@ public sealed partial class SourceTreeTests
             .Should().Contain(
                 [
                     "Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Application/Seats/Commands/SuspendTenantSeat.cs",
-                    "Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Api/Seats/GraphQL/KeyOfMineType.cs",
+                    "Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Api/Seats/GraphQL/PermissionOfMineType.cs",
                     "Examples/Tenancy/Examples.Tenancy.Host/Seeding/DemoSeeder.cs",
                     $"Tests/{TheseTests}/Infrastructure/SampleTenants.cs",
                 ],

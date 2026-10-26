@@ -83,7 +83,7 @@ public class AccessChecksTests
         public List<string> Entries { get; } = [];
     }
 
-    /// <summary>Decides the billing cases: lets a caller through for the keys it holds, and keeps the invoice for the handler.</summary>
+    /// <summary>Decides the billing cases: lets a caller through for the permissions it holds, and keeps the invoice for the handler.</summary>
     public sealed class BillingAccessCheck(Asked asked, Checked<int> checkedInvoice) : IAccessCheck
     {
         public bool Decides(AccessRequirement requirement) => requirement is BillingAccess;
@@ -98,7 +98,7 @@ public class AccessChecksTests
                     return ValueTask.CompletedTask;
 
                 case BillingAccess.OnInvoice required:
-                    throw new RefusalException("billing.not-permitted", RefusalKind.NotPermitted, $"The key '{required.Key}' is not held.");
+                    throw new RefusalException("billing.not-permitted", RefusalKind.NotPermitted, $"The permission '{required.Key}' is not held.");
 
                 default:
                     return ValueTask.CompletedTask;

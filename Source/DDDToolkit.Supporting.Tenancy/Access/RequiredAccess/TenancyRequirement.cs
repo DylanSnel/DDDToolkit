@@ -3,13 +3,13 @@ using DDDToolkit.Access;
 namespace DDDToolkit.Supporting.Tenancy.Access;
 
 /// <summary>
-/// What a request requires of its caller where Tenancy is the one that knows: a seat in the tenant, a key for the
+/// What a request requires of its caller where Tenancy is the one that knows: a seat in the tenant, a permission for the
 /// whole of it or at one of its units, or an operator. A request says which case through
 /// <see cref="IRequireAccess"/>, spelled with <see cref="TenancyAccess"/>:
 /// <code>
 /// public sealed record CloseTheBooks(int Year) : IBillingRequest
 /// {
-///     AccessRequirement IRequireAccess.RequiredAccess =&gt; TenancyAccess.ForTheWholeTenant(BillingKeys.CloseTheBooks);
+///     AccessRequirement IRequireAccess.RequiredAccess =&gt; TenancyAccess.AtTenant(BillingPermissions.CloseTheBooks);
 /// }
 /// </code>
 /// and the check the storage package registers for the module's request interface, with

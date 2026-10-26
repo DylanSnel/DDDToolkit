@@ -46,10 +46,10 @@ internal static class ProjectsGraphQL
             return null;
         }
 
-        // Who answers a rule on a field of a crew member, and of a project role: asked by the key authorization the
+        // Who answers a rule on a field of a crew member, and of a project role: asked by the permission authorization the
         // host's conventions add.
-        services.AddScoped<IFieldKeys<CrewOverview>, CrewFieldKeys>();
-        services.AddScoped<IFieldKeys<ProjectRoleListing>, ProjectRoleFieldKeys>();
+        services.AddScoped<IFieldPermissions<CrewOverview>, CrewFieldPermissions>();
+        services.AddScoped<IFieldPermissions<ProjectRoleListing>, ProjectRoleFieldPermissions>();
 
         var schema = services
             .AddGraphQLServer(SourceSchemaName)
@@ -67,7 +67,7 @@ internal static class ProjectsGraphQL
             .AddObjectType<ReferencedSeat>()
             .AddObjectType<ReferencedOrganizationUnit>()
             // The package's status of a role, under this schema's word for what it is the status of.
-            .AddEnumType<KeptRoleStatus>(status => status.Name("ProjectRoleStatus"));
+            .AddEnumType<CustomRoleStatus>(status => status.Name("ProjectRoleStatus"));
 
         // What the host gives every module's schema: typed errors, one spelling for enum values, a scope per
         // field, and the check that the caller has a seat.

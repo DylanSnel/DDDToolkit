@@ -7,8 +7,8 @@ using FluentAssertions;
 namespace Examples.Tenancy.Tests.Projects.Lifecycle;
 
 /// <summary>
-/// Closing a project and reopening it, both with one key, <c>projects.close</c>, held through the crew or the
-/// organization. Leo owns Pier 7 and leads its crew, Vic observes it, and Rhea manages North, where it is.
+/// Closing a project and reopening it, both with one permission, <c>projects.close</c>, held through the crew or the
+/// organization. Leo owns Pier 7, Vic observes it, and Rhea manages North, where it is.
 /// </summary>
 /// <remarks>
 /// Every scenario closes a project, so each makes a host of its own.
@@ -66,16 +66,16 @@ public sealed class ClosingAndReopeningScenarios(SampleHosts sample) : IClassFix
             closed.StatusCode.Should().Be(HttpStatusCode.NoContent);
         }
 
-        // Vic still sees the closed project through its crew; his observer's role does not hold the key.
+        // Vic still sees the closed project through its crew; his observer's role does not hold the permission.
         using (var refused = await vic.PostAsync($"/projects/{PierSeven.Id.Value}/reopen", content: null, Cancellation))
         {
-            (await refused.ShouldBeRefusedAsync(HttpStatusCode.Forbidden, ProjectRefusals.NotPermitted)).Argument("Key").Should().Be(ProjectKeys.Close);
+            (await refused.ShouldBeRefusedAsync(HttpStatusCode.Forbidden, ProjectRefusals.NotPermitted)).Argument("Permission").Should().Be(ProjectPermissionNames.Close);
         }
 
         (await vic.ProjectDetailAsync(PierSeven)).GetProperty("can").GetProperty("reopen").GetBoolean().Should().BeFalse();
 
         // Rhea holds it at North, above the project, and reopens it through the organization.
-        var access = await rhea.GetFromJsonAsync<JsonElement>($"/access/projects/{PierSeven.Id.Value}?key={ProjectKeys.Close}", Cancellation);
+        var access = await rhea.GetFromJsonAsync<JsonElement>($"/access/projects/{PierSeven.Id.Value}?permission={ProjectPermissionNames.Close}", Cancellation);
         access.GetProperty("allowed").GetBoolean().Should().BeTrue();
         access.Text("via").Should().Be("organization");
         (await rhea.ProjectDetailAsync(PierSeven)).GetProperty("can").GetProperty("reopen").GetBoolean().Should().BeTrue();
@@ -95,7 +95,7 @@ public sealed class ClosingAndReopeningScenarios(SampleHosts sample) : IClassFix
         using var rhea = await host.ClientAsync("rhea", Harbor.Slug);
         using var leo = await host.ClientAsync("leo", Harbor.Slug);
 
-        // She is not on its crew: her role at North, above the project, holds the key.
+        // She is not on its crew: her role at North, above the project, holds the permission.
         using (var closed = await rhea.PostAsync($"/projects/{PierSeven.Id.Value}/close", content: null, Cancellation))
         {
             closed.StatusCode.Should().Be(HttpStatusCode.NoContent);
@@ -121,7 +121,6 @@ public sealed class ClosingAndReopeningScenarios(SampleHosts sample) : IClassFix
             "Harbor wall",
             Harbor.Root,
             Harbor.Administrator.Id,
-            Harbor.ProjectRoles[SampleCatalogue.CrewLead],
             DateTimeOffset.UtcNow);
 
         var reopenOpen = () => project.Reopen();

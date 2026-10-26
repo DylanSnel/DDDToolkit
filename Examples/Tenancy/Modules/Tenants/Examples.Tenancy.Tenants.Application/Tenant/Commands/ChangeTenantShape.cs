@@ -11,7 +11,7 @@ namespace Examples.Tenancy.Tenants.Application.Tenant.Commands;
 /// It requires <c>tenancy.settings.manage</c> for the whole tenant, which the package's use case asks for again.
 /// </remarks>
 /// <param name="Shape">The new shape.</param>
-[RequiresKey(TenancyKeys.SettingsManage)]
+[RequiresPermission(TenancyPermissions.SettingsManage)]
 public sealed record ChangeTenantShape(TenantShape Shape) : ICommand, ITenantsRequest;
 
 /// <summary>Handles <see cref="ChangeTenantShape"/> with the Tenancy package's use case, which checks the caller, decides and saves.</summary>

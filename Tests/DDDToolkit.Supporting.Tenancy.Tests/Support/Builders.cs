@@ -9,17 +9,17 @@ public static class New
     public static TenancyCatalogue Catalogue(params Permission[] contributed)
         => TenancyCatalogue.Build(HostCatalogue.Application, contributed);
 
-    /// <summary>Hand widgets to people: the one key of the application that <see cref="ListingCatalogue"/> marks as managing access.</summary>
+    /// <summary>Hand widgets to people: the one permission of the application that <see cref="ListingCatalogue"/> marks as managing access.</summary>
     public const string WidgetAssign = "widget.assign";
 
     /// <summary>The pack of the role that hands widgets to people, in <see cref="ListingCatalogue"/>.</summary>
     public const string KeeperPack = "keeper";
 
     /// <summary>
-    /// The host's catalogue with an administrators' pack that lists its keys: Tenancy's own and
-    /// <see cref="WidgetAssign"/>, which is every key that manages access, and none of the keys to work with
-    /// widgets. <see cref="KeeperPack"/> is the pack that holds the marked key, so there is a role besides the
-    /// supervisor's and the administrators' own that only a holder of its key gives.
+    /// The host's catalogue with an administrators' pack that lists its permissions: Tenancy's own and
+    /// <see cref="WidgetAssign"/>, which is every permission that manages access, and none of the permissions to work with
+    /// widgets. <see cref="KeeperPack"/> is the pack that holds the marked permission, so there is a role besides the
+    /// supervisor's and the administrators' own that only a holder of its permission gives.
     /// </summary>
     public static TenancyCatalogue ListingCatalogue()
         => TenancyCatalogue.Build(
@@ -28,7 +28,7 @@ public static class New
                 Packs =
                 [
                     .. HostCatalogue.Application.Packs.Select(pack => pack.Administers
-                        ? pack with { Keys = [.. TenancyKeys.Permissions.Select(permission => permission.Key), WidgetAssign] }
+                        ? pack with { Permissions = [.. TenancyPermissions.All.Select(permission => permission.Name), WidgetAssign] }
                         : pack),
                     new RolePack(KeeperPack, "Keeper", "Hands widgets to people", [WidgetAssign, HostCatalogue.WidgetRead], Order: 50),
                 ],
@@ -51,11 +51,11 @@ public static class New
             SeatId.CreateSequential(), new TenantId(tenant), identity ?? Guid.NewGuid());
 
     /// <summary>An active role made by hand.</summary>
-    public static HostRole Role(TenancyCatalogue catalogue, string name, params string[] keys)
-        => TenancyInstances.NewRole<HostRole, RoleId, TenantId, SeatId>(RoleId.CreateSequential(), new TenantId(1), new RoleDraft(name, string.Empty, keys), catalogue);
+    public static HostRole Role(TenancyCatalogue catalogue, string name, params string[] permissions)
+        => TenancyInstances.NewRole<HostRole, RoleId, TenantId, SeatId>(RoleId.CreateSequential(), new TenantId(1), new RoleDraft(name, string.Empty, permissions), catalogue);
 
     /// <summary>What a seat is told about an active role.</summary>
-    public static RoleFacts ActiveRole(params string[] keys) => new(true, keys);
+    public static RoleFacts ActiveRole(params string[] permissions) => new(true, permissions);
 }
 
 /// <summary>
@@ -108,7 +108,7 @@ public sealed class HarborBuilder
         var roles = catalogue.PacksFor(tenant.Shape).ToDictionary(
             pack => pack.Key,
             pack => TenancyInstances.NewRole<HostRole, RoleId, TenantId, SeatId>(
-                RoleId.CreateSequential(), tenant.Id, new RoleDraft(pack.Name, pack.Description, pack.Keys, pack.Key), catalogue));
+                RoleId.CreateSequential(), tenant.Id, new RoleDraft(pack.Name, pack.Description, pack.Permissions, pack.Key), catalogue));
 
         var administratorRole = roles[catalogue.AdministratorPackFor(tenant.Shape).Key];
         var administrator = New.Seat(tenant.Id.Value);

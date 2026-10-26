@@ -36,9 +36,11 @@ public sealed class AreaManagerScenarios(SampleHosts sample) : IClassFixture<Sam
         pier.UnitPath.Should().Be("Harbor Works / North / North Coast");
         pier.MyRole.Should().BeNull("she is not on its crew");
 
-        // She owns Inland depot, so she is on its crew as its lead, which is how she is shown to see it.
+        // She owns Inland depot, so she is on its crew, holding no project role, which is how she is shown to see it.
         projects.Named("Inland depot").Text("via").Should().Be("crew");
-        (await rhea.WithNamesAsync(projects.Named("Inland depot"))).MyRole.Should().Be("Crew lead");
+        var depot = await rhea.WithNamesAsync(projects.Named("Inland depot"));
+        depot.MyRole.Should().BeNull("an owner holds what an owner does by owning the project");
+        depot.Member("Rhea").IsOwner.Should().BeTrue();
     }
 
     [Fact]
@@ -59,14 +61,14 @@ public sealed class AreaManagerScenarios(SampleHosts sample) : IClassFixture<Sam
     {
         using var rhea = await sample.ClientAsync("rhea", Harbor.Slug);
 
-        var units = await rhea.GetFromJsonAsync<JsonElement>($"/access/units?key={ProjectKeys.View}", Cancellation);
-        var onPier = await rhea.GetFromJsonAsync<JsonElement>($"/access/projects/{Harbor.ProjectNamed("Pier 7").Id.Value}?key={ProjectKeys.Close}", Cancellation);
-        using var onBridge = await rhea.GetAsync($"/access/projects/{Harbor.ProjectNamed("Bay bridge").Id.Value}?key={ProjectKeys.View}", Cancellation);
+        var units = await rhea.GetFromJsonAsync<JsonElement>($"/access/units?permission={ProjectPermissionNames.View}", Cancellation);
+        var onPier = await rhea.GetFromJsonAsync<JsonElement>($"/access/projects/{Harbor.ProjectNamed("Pier 7").Id.Value}?permission={ProjectPermissionNames.Close}", Cancellation);
+        using var onBridge = await rhea.GetAsync($"/access/projects/{Harbor.ProjectNamed("Bay bridge").Id.Value}?permission={ProjectPermissionNames.View}", Cancellation);
 
-        // The answer is ids: North, where she holds the key, and the two units below it.
+        // The answer is ids: North, where she holds the permission, and the two units below it.
         units.GetProperty("unitsWhereIHold").EnumerateArray().Select(unit => unit.GetGuid())
             .Should().BeEquivalentTo([Harbor.UnitNamed("North").Value, Harbor.UnitNamed("North Coast").Value, Harbor.UnitNamed("North Inland").Value]);
-        units.GetProperty("wholeTenant").GetBoolean().Should().BeFalse();
+        units.GetProperty("atTenant").GetBoolean().Should().BeFalse();
 
         onPier.GetProperty("allowed").GetBoolean().Should().BeTrue("an area manager may close a project in her area");
         onPier.Text("via").Should().Be("organization");

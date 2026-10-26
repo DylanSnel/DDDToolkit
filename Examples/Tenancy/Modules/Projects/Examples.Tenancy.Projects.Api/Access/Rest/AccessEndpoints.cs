@@ -8,7 +8,7 @@ using Microsoft.AspNetCore.Routing;
 namespace Examples.Tenancy.Projects.Api.Access.Rest;
 
 /// <summary>
-/// What the caller holds, over HTTP: a probe for one key on one project, and the key sets a client fills its
+/// What the caller holds, over HTTP: a probe for one permission on one project, and the permission sets a client fills its
 /// navigation and its buttons from. Each route sends one query of the application project's <c>Access</c> feature.
 /// </summary>
 /// <remarks>
@@ -19,45 +19,45 @@ namespace Examples.Tenancy.Projects.Api.Access.Rest;
 internal static class AccessEndpoints
 {
     /// <summary>
-    /// Maps <c>GET /access/projects/{id}?key=</c>, <c>GET /access/keys?keys=</c> and
-    /// <c>POST /access/projects/keys</c>.
+    /// Maps <c>GET /access/projects/{id}?permission=</c>, <c>GET /access/permissions?permissions=</c> and
+    /// <c>POST /access/projects/permissions</c>.
     /// </summary>
     public static IEndpointRouteBuilder MapAccessEndpoints(this IEndpointRouteBuilder group)
     {
         ArgumentNullException.ThrowIfNull(group);
 
-        // Whether the caller holds a key on a project, and through what. The key comes from outside, so the
+        // Whether the caller holds a permission on a project, and through what. The permission comes from outside, so the
         // query checks it against the catalogue first; a project the caller cannot see is not found, as
         // everywhere.
-        group.MapGet("/access/projects/{id}", async (ProjectId id, string key, ISender sender, CancellationToken cancellationToken) =>
+        group.MapGet("/access/projects/{id}", async (ProjectId id, string permission, ISender sender, CancellationToken cancellationToken) =>
         {
-            var held = await sender.Send(new KeyOnProject(id, key), cancellationToken);
+            var held = await sender.Send(new PermissionOnProject(id, permission), cancellationToken);
             return Results.Ok(new { allowed = held.Allowed, via = held.Via });
         });
 
-        // Which of the keys named, separated by commas, the caller holds for the whole tenant: what a client shows
-        // or hides its navigation by. A key the catalogue does not know is refused; one that is not held is left out.
-        group.MapGet("/access/keys", async (string? keys, ISender sender, CancellationToken cancellationToken) =>
+        // Which of the permissions named, separated by commas, the caller holds for the whole tenant: what a client shows
+        // or hides its navigation by. A permission the catalogue does not know is refused; one that is not held is left out.
+        group.MapGet("/access/permissions", async (string? permissions, ISender sender, CancellationToken cancellationToken) =>
         {
-            var asked = (keys ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-            return Results.Ok(new { heldAtRoot = await sender.Send(new KeysHeldAtRoot(asked), cancellationToken) });
+            var asked = (permissions ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            return Results.Ok(new { heldAtRoot = await sender.Send(new PermissionsHeldAtRoot(asked), cancellationToken) });
         });
 
-        // Which of the keys the caller holds on each of the projects, for a page of them at once. It reads and
+        // Which of the permissions the caller holds on each of the projects, for a page of them at once. It reads and
         // changes nothing: it is a POST only because the ids travel in the body. A project the caller does not see,
-        // or holds none of the keys on, is not in the answer.
-        group.MapPost("/access/projects/keys", async (KeysAsked body, ISender sender, CancellationToken cancellationToken) =>
+        // or holds none of the permissions on, is not in the answer.
+        group.MapPost("/access/projects/permissions", async (PermissionsAsked body, ISender sender, CancellationToken cancellationToken) =>
         {
             var sets = await sender.Send(
-                new KeysOnProjects(
+                new PermissionsOnProjects(
                     body.Projects ?? throw new BadHttpRequestException("The body's \"projects\" is null: give the projects to ask about as a list."),
-                    body.Keys ?? throw new BadHttpRequestException("The body's \"keys\" is null: give the keys to ask about as a list.")),
+                    body.Permissions ?? throw new BadHttpRequestException("The body's \"permissions\" is null: give the permissions to ask about as a list.")),
                 cancellationToken);
 
             return Results.Ok(new
             {
                 sets.HeldAtRoot,
-                onProjects = sets.OnProjects.ToDictionary(held => held.Project.Value.ToString(), held => held.Keys),
+                onProjects = sets.OnProjects.ToDictionary(held => held.Project.Value.ToString(), held => held.Permissions),
             });
         });
 
@@ -65,10 +65,10 @@ internal static class AccessEndpoints
     }
 
     /// <summary>
-    /// The projects and the keys asked about. Both are required: left out, the question would read as one about
+    /// The projects and the permissions asked about. Both are required: left out, the question would read as one about
     /// nothing and be answered with nothing, where a 400 invalid-request says what is wrong.
     /// </summary>
-    public sealed record KeysAsked(
+    public sealed record PermissionsAsked(
         [property: JsonRequired] IReadOnlyList<ProjectId>? Projects,
-        [property: JsonRequired] IReadOnlyList<string>? Keys);
+        [property: JsonRequired] IReadOnlyList<string>? Permissions);
 }

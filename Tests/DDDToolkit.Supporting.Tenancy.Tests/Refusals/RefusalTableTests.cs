@@ -175,7 +175,7 @@ public partial class RefusalTableTests
     public void A_refusal_is_phrased_in_the_language_named_whatever_the_current_culture()
     {
         var localizer = Localizer();
-        var refusal = TenancyRefusals.Refuse(TenancyRefusals.NotPermitted, ("Key", TenancyKeys.SeatsManage), ("Unit", null));
+        var refusal = TenancyRefusals.Refuse(TenancyRefusals.NotPermitted, ("Permission", TenancyPermissions.SeatsManage), ("Unit", null));
 
         using (CultureScope.Use("en-GB"))
         {
@@ -225,7 +225,7 @@ public partial class RefusalTableTests
             (TenancyRefusals.NameInvalid, "reason", await Refusing(TenancyRefusals.NameInvalid, h => h.Tenants.SuspendAsync(tooLong, default))),
             (TenancyRefusals.InvalidPeriod, "until", await Refusing(TenancyRefusals.InvalidPeriod, h => h.Seats.GrantAsync(ada, root, watcher, until: h.Clock.Now, reason: null, default))),
             (TenancyRefusals.ReasonRequired, "reason", await Refusing(TenancyRefusals.ReasonRequired, h => h.Tenants.CloseAsync(" ", default))),
-            (TenancyRefusals.UnknownPermission, "keys", await Refusing(TenancyRefusals.UnknownPermission, h => h.Roles.CreateAsync("Clerk", "Files widgets", ["widget.polish"], default))),
+            (TenancyRefusals.UnknownPermission, "permissions", await Refusing(TenancyRefusals.UnknownPermission, h => h.Roles.CreateAsync("Clerk", "Files widgets", ["widget.polish"], default))),
             (TenancyRefusals.IdentityRequired, "identity", await Refusing(TenancyRefusals.IdentityRequired, h => h.Seats.AddSeatAsync(Guid.Empty, default))),
             (TenancyRefusals.TooManyIds, "ids", await Refusing(TenancyRefusals.TooManyIds, h => h.Directory.SeatsByIdAsync(tooMany, default))),
             (TenancyRefusals.PageSizeInvalid, "size", await RefusingAnOperator(TenancyRefusals.PageSizeInvalid, h => h.TenantDirectory.ListAsync(after: null, size: 0, default))),
@@ -242,11 +242,11 @@ public partial class RefusalTableTests
         slug.Code.Should().Be(TenancyRefusals.InvalidSlug);
         thrown.Add((TenancyRefusals.InvalidSlug, "slug", slug.Arguments));
 
-        // A role's keys are set from the catalogue's own expansion, so only the rule under it reports them.
+        // A role's permissions are set from the catalogue's own expansion, so only the rule under it reports them.
         var role = New.Role(harness.Catalogue, "Clerk", HostCatalogue.WidgetRead);
-        Break(role, nameof(HostRole.Keys), (IReadOnlyList<string>)[HostCatalogue.WidgetRead, HostCatalogue.WidgetChange]);
-        thrown.Add((TenancyRefusals.KeysNotNormalized, "keys",
-            role.GetInvariantViolations().Should().ContainSingle(violation => violation.Code == TenancyRefusals.KeysNotNormalized).Which.Arguments));
+        Break(role, nameof(HostRole.Permissions), (IReadOnlyList<string>)[HostCatalogue.WidgetRead, HostCatalogue.WidgetChange]);
+        thrown.Add((TenancyRefusals.PermissionsNotNormalized, "permissions",
+            role.GetInvariantViolations().Should().ContainSingle(violation => violation.Code == TenancyRefusals.PermissionsNotNormalized).Which.Arguments));
 
         var invalid = TenancyRefusals.Codes.Where(code => TenancyRefusals.KindOf(code) == RefusalKind.Invalid).ToArray();
         thrown.Select(refused => refused.Code).Distinct().Concat(AboutNoOneInput).Should().BeEquivalentTo(

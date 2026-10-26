@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="projects.view" xml:space="preserve">
+    <value>Een project en zijn crew zien.</value>
+  </data>
+  <data name="projects.open" xml:space="preserve">
+    <value>Een project openen bij een eenheid.</value>
+  </data>
+  <data name="projects.edit" xml:space="preserve">
+    <value>Een project hernoemen of verplaatsen.</value>
+  </data>
+  <data name="projects.close" xml:space="preserve">
+    <value>Een project sluiten of heropenen.</value>
+  </data>
+  <data name="projects.crew.manage" xml:space="preserve">
+    <value>Crewleden toevoegen en verwijderen, en hun projectrollen geven en afnemen.</value>
+  </data>
+  <data name="projects.owner.change" xml:space="preserve">
+    <value>De eigenaar van een project aanwijzen.</value>
+  </data>
+</root>

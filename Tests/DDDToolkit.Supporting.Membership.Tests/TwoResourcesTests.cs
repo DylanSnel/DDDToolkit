@@ -20,8 +20,8 @@ public sealed class TwoResourcesTests
     [Fact]
     public void Each_resource_keeps_the_same_rules_under_its_own_codes()
     {
-        var document = new Document(DocumentId.CreateSequential(), "Minutes", Author, DocumentMembership.Owner, Now);
-        var folder = new Folder(new FolderId(7), Keeper, FolderMembership.Keeper, Now);
+        var document = new Document(DocumentId.CreateSequential(), "Minutes", Author, Now);
+        var folder = new Folder(new FolderId(7), Keeper, Now);
         var reader = UserId.CreateSequential();
         document.ShareWith(reader, MemberPeriod.Open(Now), Now, by: Author);
         folder.Admit(Clerk, FolderMembership.Clerk, MemberPeriod.Open(Now), Now, by: Keeper);
@@ -46,8 +46,8 @@ public sealed class TwoResourcesTests
     [Fact]
     public async Task Each_resource_carries_a_member_under_its_own_word_for_it_whoever_refuses()
     {
-        var document = new Document(DocumentId.CreateSequential(), "Minutes", Author, DocumentMembership.Owner, Now);
-        var folder = new Folder(new FolderId(7), Keeper, FolderMembership.Keeper, Now);
+        var document = new Document(DocumentId.CreateSequential(), "Minutes", Author, Now);
+        var folder = new Folder(new FolderId(7), Keeper, Now);
         var reader = UserId.CreateSequential();
         var stranger = new StaffCode("X-999");
         document.ShareWith(reader, DocumentMembership.Onlooker, MemberPeriod.Open(Now), Now, by: Author);
@@ -58,14 +58,14 @@ public sealed class TwoResourcesTests
         [
             Refused.With(FolderRefusals.Membership, MembershipRefusals.AlreadyMember, () => folder.Admit(Clerk, FolderMembership.Visitor, MemberPeriod.Open(Now), Now, by: Keeper)),
             Refused.With(FolderRefusals.Membership, MembershipRefusals.RoleHeld, () => folder.GiveRole(Clerk, FolderMembership.Clerk, MemberPeriod.Open(Now), Now, by: Keeper)),
-            Refused.With(FolderRefusals.Membership, MembershipRefusals.RoleNotHeld, () => folder.TakeRole(Clerk, FolderMembership.Visitor, FolderMembership.Keeper)),
+            Refused.With(FolderRefusals.Membership, MembershipRefusals.RoleNotHeld, () => folder.TakeRole(Clerk, FolderMembership.Visitor)),
         ];
         onFolder.Should().OnlyContain(refusal => Equals(refusal.Arguments["Staff"], Clerk) && !refusal.Arguments.ContainsKey("Member"));
         onFolder[1].Arguments.Should().Contain("Role", FolderMembership.Clerk, "only the member has a word of the folder's own");
 
         Refused.With(FolderRefusals.Membership, MembershipRefusals.MemberNotFound, () => folder.Dismiss(stranger)).Arguments.Keys.Should().Equal("Staff");
         Refused.With(FolderRefusals.Membership, MembershipRefusals.MemberNotFound, () => folder.GiveRole(stranger, FolderMembership.Clerk, MemberPeriod.Open(Now), Now, by: Keeper)).Arguments.Keys.Should().Equal("Staff");
-        Refused.With(FolderRefusals.Membership, MembershipRefusals.MemberNotFound, () => folder.TakeRole(stranger, FolderMembership.Clerk, FolderMembership.Keeper)).Arguments.Keys.Should().Equal("Staff");
+        Refused.With(FolderRefusals.Membership, MembershipRefusals.MemberNotFound, () => folder.TakeRole(stranger, FolderMembership.Clerk)).Arguments.Keys.Should().Equal("Staff");
 
         // The admission of folders, which refuses under the same codes, says it the same way.
         var admission = new MemberAdmission<FolderId, StaffCode, NamedRole>(FolderMembership.Rules, new NamedRoles<FolderId>(FolderMembership.Rules), new NobodyIsActive());
@@ -73,7 +73,7 @@ public sealed class TwoResourcesTests
         inactive.Arguments.Should().Contain("Staff", stranger).And.NotContainKey("Member");
 
         // And so does the rule about the whole list, when it is broken behind the member list.
-        Break.ListOf<FolderMember>(folder, "_staff").Add(new Folder(new FolderId(8), Clerk, FolderMembership.Keeper, Now).Staff.Single());
+        Break.ListOf<FolderMember>(folder, "_staff").Add(new Folder(new FolderId(8), Clerk, Now).Staff.Single());
         var twice = folder.GetInvariantViolations().Should().ContainSingle().Which;
         twice.Arguments.Should().Contain("Staff", Clerk).And.NotContainKey("Member");
 
@@ -87,9 +87,9 @@ public sealed class TwoResourcesTests
     public void The_rule_a_member_checks_itself_names_the_member_in_the_packages_word_on_every_resource()
     {
         // A member does not know whose it is, so neither the code nor the argument is the folder's.
-        var folder = new Folder(new FolderId(7), Keeper, FolderMembership.Keeper, Now);
+        var folder = new Folder(new FolderId(7), Keeper, Now);
         var clerk = folder.Admit(Clerk, FolderMembership.Clerk, MemberPeriod.Open(Now), Now, by: Keeper);
-        var second = new Folder(new FolderId(8), Keeper, FolderMembership.Keeper, Now).Admit(Clerk, FolderMembership.Clerk, MemberPeriod.Open(Now), Now, by: Keeper).Roles.Single();
+        var second = new Folder(new FolderId(8), Keeper, Now).Admit(Clerk, FolderMembership.Clerk, MemberPeriod.Open(Now), Now, by: Keeper).Roles.Single();
         Break.ListOf<MemberRole<StaffCode, NamedRole>>(clerk, "_roles").Add(second);
 
         var violation = folder.GetInvariantViolations().Should().ContainSingle().Which;
@@ -101,21 +101,21 @@ public sealed class TwoResourcesTests
     [Fact]
     public void Each_resource_has_members_roles_and_an_owner_of_its_own()
     {
-        var document = new Document(DocumentId.CreateSequential(), "Minutes", Author, DocumentMembership.Owner, Now);
-        var folder = new Folder(new FolderId(7), Keeper, FolderMembership.Keeper, Now);
+        var document = new Document(DocumentId.CreateSequential(), "Minutes", Author, Now);
+        var folder = new Folder(new FolderId(7), Keeper, Now);
 
-        // A document's owner holds the role its rules added; a folder's keeper the one its rules declare.
-        document.Shares.Single().Roles.Single().RoleId.Should().Be(new NamedRole("owner"));
-        folder.Staff.Single().Roles.Single().RoleId.Should().Be(new NamedRole("keeper"));
+        // Either's owner holds no role: what it holds by owning, each resource's permissions say.
+        document.Shares.Single().Roles.Should().BeEmpty();
+        folder.Staff.Single().Roles.Should().BeEmpty();
         document.Shares.Single().MemberId.Should().BeOfType<UserId>();
         folder.Staff.Single().MemberId.Should().BeOfType<StaffCode>().Which.Value.Should().Be("K-001");
 
         folder.Admit(Clerk, FolderMembership.Clerk, MemberPeriod.Between(Now, Now.AddDays(30)), Now, by: Keeper);
-        folder.HandOver(Clerk, FolderMembership.Keeper, Now.AddDays(1));
+        folder.HandOver(Clerk, FormerOwner.StaysAs(FolderMembership.Visitor), Now.AddDays(1));
 
         folder.Keeper.Should().Be(Clerk);
         folder.Staff.Single(member => member.MemberId == Clerk).EndsAt.Should().BeNull("a keeper's place does not run out");
-        folder.Staff.Single(member => member.MemberId == Keeper).Roles.Should().BeEmpty("the old keeper lost the keeper's role, and held no other");
+        folder.Staff.Single(member => member.MemberId == Keeper).Roles.Select(held => held.RoleId).Should().Equal([FolderMembership.Visitor], "the old keeper stays on, in the role the hand-over said");
         document.OwnerId.Should().Be(Author, "what happens on a folder says nothing about a document");
         folder.GetInvariantViolations().Should().BeEmpty();
         document.GetInvariantViolations().Should().BeEmpty();
@@ -124,8 +124,8 @@ public sealed class TwoResourcesTests
     [Fact]
     public void Each_resource_puts_its_own_guard_in_front_of_its_member_list()
     {
-        var document = new Document(DocumentId.CreateSequential(), "Minutes", Author, DocumentMembership.Owner, Now);
-        var folder = new Folder(new FolderId(7), Keeper, FolderMembership.Keeper, Now);
+        var document = new Document(DocumentId.CreateSequential(), "Minutes", Author, Now);
+        var folder = new Folder(new FolderId(7), Keeper, Now);
         folder.Lock();
 
         // A locked folder admits nobody, under the folder's own code; a document knows no lock.
@@ -140,8 +140,8 @@ public sealed class TwoResourcesTests
     [Fact]
     public void A_rule_broken_behind_the_member_list_is_reported_under_the_code_of_the_resource_it_is_broken_on()
     {
-        var folder = new Folder(new FolderId(7), Keeper, FolderMembership.Keeper, Now);
-        var other = new Folder(new FolderId(8), Keeper, FolderMembership.Keeper, Now);
+        var folder = new Folder(new FolderId(7), Keeper, Now);
+        var other = new Folder(new FolderId(8), Keeper, Now);
         Break.ListOf<FolderMember>(folder, "_staff").Add(other.Staff.Single());
 
         folder.GetInvariantViolations().Should().ContainSingle().Which.Code.Should().Be("folders.already-on-folder");
@@ -177,15 +177,15 @@ public sealed class TwoResourcesTests
         var documents = DocumentMembership.Rules;
         var folders = FolderMembership.Rules;
 
-        documents.MembersHold(DocumentKeys.Edit).Should().BeTrue();
-        documents.MembersHold(FolderKeys.File).Should().BeFalse("a document's roles give a document's keys");
-        documents.RolesWith(FolderKeys.Read).Should().BeEmpty();
+        documents.MembersHold(DocumentPermissions.Edit).Should().BeTrue();
+        documents.MembersHold(FolderPermissions.File).Should().BeFalse("a document's roles give a document's permissions");
+        documents.RolesWith(FolderPermissions.Read).Should().BeEmpty();
         documents.Knows(FolderMembership.Clerk).Should().BeFalse();
         folders.Knows(DocumentMembership.Contributor).Should().BeFalse();
-        folders.RolesWith(DocumentKeys.View).Should().BeEmpty();
+        folders.RolesWith(DocumentPermissions.View).Should().BeEmpty();
 
-        (documents.Members.Kind, folders.Members.Kind).Should().Be((MemberSourceKind.CallerId, MemberSourceKind.Claim));
-        (documents.OwnerRole, folders.OwnerRole).Should().Be(("owner", "keeper"));
+        (documents.Members.Kind, folders.Members.Kind).Should().Be((MemberSourceKind.Inferred, MemberSourceKind.Claim));
+        (documents.OwnerLockPermission, folders.OwnerLockPermission).Should().Be((DocumentPermissions.Share, FolderPermissions.HandOver));
         documents.Functions.Should().NotBe(folders.Functions);
     }
 }

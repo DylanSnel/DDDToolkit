@@ -1,7 +1,6 @@
 using DDDToolkit.Access;
 using DDDToolkit.Exceptions;
 using DDDToolkit.Supporting.Membership.UseCases;
-using DDDToolkit.Supporting.Tenancy.Access;
 using Mediator;
 
 namespace Examples.Tenancy.Projects.Application.ProjectRoles.Commands;
@@ -17,21 +16,20 @@ namespace Examples.Tenancy.Projects.Application.ProjectRoles.Commands;
 /// make no role twice: the unique index over the tenant and what a role was made from refuses the second save,
 /// which then fails as a whole, and sending it again makes nothing. The roles are made in one save, so a starter
 /// role whose name the tenant already gave a role of its own refuses the set-up, <c>projects.role-name-taken</c>,
-/// and makes none of them until that role is renamed. A tenant without the crew lead's role cannot open a
-/// project: there is no role to give its owner (<c>projects.no-lead-role</c>).
+/// and makes none of them until that role is renamed. A tenant opens projects without any: a project's owner holds
+/// no role.
 /// <para>
-/// Who may send it is a caller in the tenant, <c>[InTenant]</c>, the one requirement that lets the system work that
-/// sends it through: nothing requires system work at the door, since system work is a scope the sender begins around
-/// the send, <c>TenancyUseCases.BeginSystemIn(tenant)</c>, as the seeding does. What the work then may do is the
-/// handler's to say, and it says only system work in the tenant sets a tenant up: a seat that sends it gets past the
-/// door and is refused there, <c>access.system-only</c>.
+/// Who may send it is a caller in the tenant, <c>[InTenant]</c>, the module's default, which it takes by saying nothing
+/// of its own: the one requirement that lets the system work that sends it through. Nothing requires system work at
+/// the door, since system work is a scope the sender begins around the send, <c>TenancyUseCases.BeginSystemIn(tenant)</c>,
+/// as the seeding does. What the work then may do is the handler's to say, and it says only system work in the tenant
+/// sets a tenant up: a seat that sends it gets past the door and is refused there, <c>access.system-only</c>.
 /// </para>
 /// </remarks>
 /// <param name="Ids">
-/// The ids of the roles to make, by the key of the starter role each is made from, for seeding and imports whose
+/// The ids of the roles to make, by the permission of the starter role each is made from, for seeding and imports whose
 /// ids are known beforehand; the rest get new ones.
 /// </param>
-[InTenant]
 public sealed record SetUpProjectRoles(IReadOnlyDictionary<string, ProjectRoleId>? Ids = null) : ICommand, IProjectsRequest;
 
 /// <summary>Handles <see cref="SetUpProjectRoles"/>: reads the tenant's roles, makes the starter roles it lacks and saves.</summary>

@@ -50,10 +50,10 @@ public sealed class MembershipCodes
     /// The rules that are reported under the package's own name, whichever resource they are about: the one a
     /// member checks by itself, and the two a role kept for a resource checks by itself.
     /// </summary>
-    private static readonly string[] OwnNames = [MembershipRefusals.RoleHeld, MembershipRefusals.RoleNameInvalid, MembershipRefusals.RoleKeysNotNormalized];
+    private static readonly string[] OwnNames = [MembershipRefusals.RoleHeld, MembershipRefusals.RoleNameInvalid, MembershipRefusals.RolePermissionsNotNormalized];
 
     /// <summary>The names of the other arguments a refusal of Membership carries, which the member's cannot take.</summary>
-    private static readonly string[] OtherArguments = ["Role", "Key", "Keys", "Min", "Max", RefusalException.FieldArgument];
+    private static readonly string[] OtherArguments = ["Role", "Permission", "Permissions", "Min", "Max", RefusalException.FieldArgument];
 
     private readonly IReadOnlyDictionary<string, string> _codes;
 

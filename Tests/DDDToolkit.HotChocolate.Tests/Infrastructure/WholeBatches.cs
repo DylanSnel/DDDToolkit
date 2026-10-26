@@ -8,17 +8,17 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 namespace DDDToolkit.HotChocolate.Tests.Infrastructure;
 
 /// <summary>
-/// Sends a data loader's batch when it is whole: when it holds as many keys as the test says the answer has
+/// Sends a data loader's batch when it is whole: when it holds as many permissions as the test says the answer has
 /// parents, the items of a list or the rows of a page for one. For a test that counts what a batch costs.
 /// </summary>
 /// <remarks>
-/// HotChocolate's own dispatcher goes by the clock: a batch leaves once no key was added to it for a moment. On a
-/// busy machine the fields of one list are resolved further apart than that, and their keys leave as two batches.
+/// HotChocolate's own dispatcher goes by the clock: a batch leaves once no permission was added to it for a moment. On a
+/// busy machine the fields of one list are resolved further apart than that, and their permissions leave as two batches.
 /// The answers are the same and the cost is not, so a test that counts questions or statements under that
-/// dispatcher counts how busy the machine was. Here time decides nothing: a batch waits for its keys, however long
+/// dispatcher counts how busy the machine was. Here time decides nothing: a batch waits for its permissions, however long
 /// they take.
 /// <para>
-/// What a test proves with it is what a loader promises: the keys of one batch cost one question. That
+/// What a test proves with it is what a loader promises: the permissions of one batch cost one question. That
 /// HotChocolate gathers a list into one batch is its own business, and usually so.
 /// </para>
 /// <para>
@@ -48,18 +48,18 @@ public sealed class WholeBatches : IBatchDispatcher
     private volatile int _keys = 1;
 
     /// <summary>
-    /// Every batch sent so far, as the number of keys it held when it was sent on its way, in the order they
+    /// Every batch sent so far, as the number of permissions it held when it was sent on its way, in the order they
     /// went. A test that finds its own numbers here knows its batches went through this dispatcher, and whole.
     /// </summary>
     /// <remarks>
-    /// A batch that was whole has that number. One that was sent before all its keys had come, with the first of
-    /// them where no number was named, may have left with a key more than is noted: a loader closes a batch a
+    /// A batch that was whole has that number. One that was sent before all its permissions had come, with the first of
+    /// them where no number was named, may have left with a permission more than is noted: a loader closes a batch a
     /// moment after it is sent on its way.
     /// </remarks>
     public IReadOnlyList<int> Sent => [.. _sent.Select(batch => batch.Keys)];
 
     /// <summary>
-    /// What <see cref="Sent"/> says of the batches whose keys are <typeparamref name="TKey"/> alone: for an
+    /// What <see cref="Sent"/> says of the batches whose permissions are <typeparamref name="TKey"/> alone: for an
     /// answer several loaders work on, where a test knows the numbers of its own and not of the others.
     /// </summary>
     public IReadOnlyList<int> SentOf<TKey>()
@@ -67,29 +67,29 @@ public sealed class WholeBatches : IBatchDispatcher
         => [.. _sent.Where(batch => batch.Kind == typeof(TKey)).Select(batch => batch.Keys)];
 
     /// <summary>
-    /// From now on a batch is whole, and sent, when it holds <paramref name="keys"/> keys. Until a test says
-    /// otherwise that is one: a batch leaves with its first key.
+    /// From now on a batch is whole, and sent, when it holds <paramref name="permissions"/> permissions. Until a test says
+    /// otherwise that is one: a batch leaves with its first permission.
     /// </summary>
-    public void WholeAt(int keys)
+    public void WholeAt(int permissions)
     {
-        ArgumentOutOfRangeException.ThrowIfLessThan(keys, 1);
-        _keys = keys;
+        ArgumentOutOfRangeException.ThrowIfLessThan(permissions, 1);
+        _keys = permissions;
     }
 
     /// <summary>
-    /// From now on a batch of a loader whose keys are <typeparamref name="TKey"/> is whole when it holds
-    /// <paramref name="keys"/> keys, whatever <see cref="WholeAt(int)"/> says for the others: for an answer whose
+    /// From now on a batch of a loader whose permissions are <typeparamref name="TKey"/> is whole when it holds
+    /// <paramref name="permissions"/> permissions, whatever <see cref="WholeAt(int)"/> says for the others: for an answer whose
     /// loaders are each asked about another number of things, the seats and the roles of a list of crews for one.
     /// </summary>
     /// <remarks>
-    /// A batch says nothing of its loader but the type of its keys, so two loaders with keys of one type share the
+    /// A batch says nothing of its loader but the type of its permissions, so two loaders with permissions of one type share the
     /// number.
     /// </remarks>
-    public void WholeAt<TKey>(int keys)
+    public void WholeAt<TKey>(int permissions)
         where TKey : notnull
     {
-        ArgumentOutOfRangeException.ThrowIfLessThan(keys, 1);
-        _keysByKind[typeof(TKey)] = keys;
+        ArgumentOutOfRangeException.ThrowIfLessThan(permissions, 1);
+        _keysByKind[typeof(TKey)] = permissions;
     }
 
     /// <summary>
@@ -130,7 +130,7 @@ public sealed class WholeBatches : IBatchDispatcher
     private async Task SendWhenWholeAsync(Batch batch)
     {
         var waited = Stopwatch.StartNew();
-        while (batch.Size < KeysToBeWhole(batch) && waited.Elapsed < Patience)
+        while (batch.Size < PermissionsToBeWhole(batch) && waited.Elapsed < Patience)
         {
             await Task.Delay(1);
         }
@@ -144,16 +144,16 @@ public sealed class WholeBatches : IBatchDispatcher
         }
         catch (Exception)
         {
-            // What a fetch throws is its keys' answer, which the loader hands to whoever asked.
+            // What a fetch throws is its permissions' answer, which the loader hands to whoever asked.
         }
     }
 
-    /// <summary>The number of keys <paramref name="batch"/> is whole at: the one named for its kind of key, or the one for every batch.</summary>
-    private int KeysToBeWhole(Batch batch)
-        => KindOf(batch) is { } kind && _keysByKind.TryGetValue(kind, out var keys) ? keys : _keys;
+    /// <summary>The number of permissions <paramref name="batch"/> is whole at: the one named for its kind of permission, or the one for every batch.</summary>
+    private int PermissionsToBeWhole(Batch batch)
+        => KindOf(batch) is { } kind && _keysByKind.TryGetValue(kind, out var permissions) ? permissions : _keys;
 
     /// <summary>
-    /// The type of the keys of <paramref name="batch"/>: all a batch says of its loader. GreenDonut's batch is
+    /// The type of the permissions of <paramref name="batch"/>: all a batch says of its loader. GreenDonut's batch is
     /// generic in it and not public, so it is read from the type's own argument.
     /// </summary>
     private static Type? KindOf(Batch batch)

@@ -42,7 +42,7 @@ internal static class WrittenTypeNames
     /// <summary>
     /// A requirement by the types it is made of, for a log line that names nothing of its values: a case is its type
     /// (<see cref="Of"/>), and a combination names its cases in their order,
-    /// <c>AccessRequirement.Any(TenancyRequirement.Operator, TenancyRequirement.ForTheWholeTenant)</c>.
+    /// <c>AccessRequirement.Any(TenancyRequirement.Operator, TenancyRequirement.AtTenant)</c>.
     /// </summary>
     /// <param name="requirement">The requirement to name.</param>
     public static string OfRequirement(AccessRequirement requirement) => requirement switch

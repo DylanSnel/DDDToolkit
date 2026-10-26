@@ -24,6 +24,7 @@ using EfValueObjectGenerator = DDDToolkit.EntityFramework.Analyzers.ValueObjectG
 using FvValueObjectGenerator = DDDToolkit.FluentValidation.Analyzers.ValueObjectGenerator;
 using HcSingleValueObjectConverterGenerator = DDDToolkit.HotChocolate.Analyzers.SingleValueObjectConverterGenerator;
 using MemberListGenerator = DDDToolkit.Supporting.Membership.Analyzers.MemberListGenerator;
+using MembershipPermissionsGenerator = DDDToolkit.Supporting.Membership.Analyzers.MembershipPermissionsGenerator;
 using MembershipWithTenancyGenerator = DDDToolkit.Supporting.Membership.EntityFramework.Analyzers.MembershipWithTenancyGenerator;
 using SupabaseDesignTimeFactoryGenerator = DDDToolkit.EntityFramework.Supabase.Analyzers.SupabaseDesignTimeFactoryGenerator;
 using SupabaseMigrationsGenerator = DDDToolkit.EntityFramework.Supabase.Analyzers.SupabaseMigrationsGenerator;
@@ -100,6 +101,7 @@ public sealed class GeneratorTestHost
     private string _assemblyName = DefaultAssemblyName;
     private OutputKind _outputKind = OutputKind.DynamicallyLinkedLibrary;
     private bool _withoutTheToolkit;
+    private DocumentationMode _documentationMode = DocumentationMode.Parse;
 
     private GeneratorTestHost()
     {
@@ -144,8 +146,11 @@ public sealed class GeneratorTestHost
     /// <summary>The generators in DDDToolkit.EntityFramework.Supabase.Analyzers: the list and the export, and the design-time factories.</summary>
     public static IIncrementalGenerator[] SupabaseGenerators() => [new SupabaseMigrationsGenerator(), new SupabaseDesignTimeFactoryGenerator()];
 
-    /// <summary>The generator in DDDToolkit.Supporting.Membership.Analyzers, which a project that declares a member class runs.</summary>
-    public static IIncrementalGenerator[] MemberListGenerators() => [new MemberListGenerator()];
+    /// <summary>
+    /// The generators in DDDToolkit.Supporting.Membership.Analyzers, which a project that declares a member class runs: the
+    /// member list and what the resource says of itself, and the declaration of the permissions on a resource.
+    /// </summary>
+    public static IIncrementalGenerator[] MemberListGenerators() => [new MemberListGenerator(), new MembershipPermissionsGenerator()];
 
     /// <summary>The generator in DDDToolkit.Supporting.Membership.EntityFramework.Analyzers.</summary>
     public static IIncrementalGenerator[] MembershipGenerators() => [new MembershipWithTenancyGenerator()];
@@ -195,6 +200,17 @@ public sealed class GeneratorTestHost
     public GeneratorTestHost WithNoWarn(params string[] diagnosticIds)
     {
         _noWarn.AddRange(diagnosticIds);
+        return this;
+    }
+
+    /// <summary>
+    /// Parses the sources as a project with the given documentation mode does: <see cref="DocumentationMode.None"/> for
+    /// one that writes no documentation file, where <c>///</c> lines are plain comments, and
+    /// <see cref="DocumentationMode.Diagnose"/> for one that writes it. <see cref="DocumentationMode.Parse"/> unless said.
+    /// </summary>
+    public GeneratorTestHost WithDocumentationMode(DocumentationMode mode)
+    {
+        _documentationMode = mode;
         return this;
     }
 
@@ -557,7 +573,7 @@ public sealed class GeneratorTestHost
     public static bool ParsesExtensionBlocks { get; } = Enum.IsDefined(typeof(LanguageVersion), 1400);
 
     public CSharpParseOptions CreateParseOptions()
-        => new CSharpParseOptions(LanguageVersion.Latest).WithPreprocessorSymbols(PreprocessorSymbols);
+        => new CSharpParseOptions(LanguageVersion.Latest, _documentationMode).WithPreprocessorSymbols(PreprocessorSymbols);
 
     /// <summary>Every reference the snippet compiles against.</summary>
     public IReadOnlyList<PortableExecutableReference> References

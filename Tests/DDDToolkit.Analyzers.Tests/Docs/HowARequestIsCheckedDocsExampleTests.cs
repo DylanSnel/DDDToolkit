@@ -52,9 +52,9 @@ public partial class HowARequestIsCheckedDocsExampleTests
 
     /// <summary>
     /// What the sample declares elsewhere and the page's requests name: the ids, a listing and a kind of unit, the
-    /// projects' keys, and the module interfaces in the sample's namespaces. And what a test adds to run the
+    /// projects' permissions, and the module interfaces in the sample's namespaces. And what a test adds to run the
     /// requirement of the module's own: a plan it answers, stand-ins for Tenancy's answers about the caller and for
-    /// its check of the key, and counts of how often each is asked.
+    /// its check of the permission, and counts of how often each is asked.
     /// </summary>
     private const string TestOnly =
         """
@@ -87,12 +87,12 @@ public partial class HowARequestIsCheckedDocsExampleTests
 
             public sealed record Page<T>(IReadOnlyList<T> Items);
 
-            public static class ProjectKeys
+            public static class ProjectPermissionNames
             {
                 public const string ManageCrew = "projects.crew.manage";
             }
 
-            public static class BoardKeys
+            public static class BoardPermissions
             {
                 public const string Export = "boards.export";
             }
@@ -135,21 +135,21 @@ public partial class HowARequestIsCheckedDocsExampleTests
                     => throw new NotSupportedException("The page's check asks RequireTenant alone.");
             }
 
-            public sealed class KeyOfTheTest
+            public sealed class PermissionOfTheTest
             {
                 public bool Held { get; set; }
 
                 public int Asked { get; set; }
             }
 
-            public sealed class KeyCheckOfTheTest(KeyOfTheTest key) : IAccessCheck
+            public sealed class PermissionCheckOfTheTest(PermissionOfTheTest permission) : IAccessCheck
             {
                 public bool Decides(AccessRequirement requirement) => requirement is TenancyRequirement;
 
                 public ValueTask RequireAsync(AccessRequirement requirement, IRequireAccess request, CancellationToken cancellationToken)
                 {
-                    key.Asked++;
-                    return key.Held
+                    permission.Asked++;
+                    return permission.Held
                         ? ValueTask.CompletedTask
                         : ValueTask.FromException(new RefusalException("tenancy.not-permitted", RefusalKind.NotPermitted, "You lack the permission."));
                 }
@@ -163,7 +163,8 @@ public partial class HowARequestIsCheckedDocsExampleTests
 
         namespace Examples.Tenancy.Projects.Application.Access
         {
-            [AccessRequests] public partial interface IProjectsRequest : IRequireAccess;
+            // As the sample's: the module's default is a caller in the tenant.
+            [AccessRequests, InTenant] public partial interface IProjectsRequest : IRequireAccess;
         }
         """;
 
@@ -217,6 +218,21 @@ public partial class HowARequestIsCheckedDocsExampleTests
         }
     }
 
+    [Fact]
+    public void The_module_interfaces_the_test_stands_in_carry_the_sample_s_defaults()
+    {
+        // The page says which last arm each module's switch has: Tenants' stops a request it has no line for, and
+        // Projects' answers the module's default. So the stand-ins carry the sample's default, or none, as the sample does.
+        foreach (var (name, declared) in new[] { ("ITenantsRequest", "[AccessRequests]"), ("IProjectsRequest", "[AccessRequests, InTenant]") })
+        {
+            File.ReadAllLines(SampleFileOf(name)).Select(line => line.Trim()).Should().Contain(declared, "the sample declares {0} so", name);
+            TestOnly.Should().Contain(declared + " public partial interface " + name + " : IRequireAccess;");
+        }
+
+        Run().Source("ProjectsAccessBehavior.").Should().Contain("_ => global::DDDToolkit.Supporting.Tenancy.Access.TenancyAccess.InTenant(),", "the page says Projects' last arm answers the default");
+        DocsExamples.Titled(Page, "ProjectsAccessBehavior.g.cs for this page's requests, the interface's part, shortened").Should().Contain("a last arm that answers the module's default, TenancyAccess.InTenant()");
+    }
+
     [Theory]
     [InlineData("TenantsAccessBehavior.g.cs for this page's requests, the interface's part, shortened", "TenantsAccessBehavior.")]
     [InlineData("ProjectsAccessBehavior.g.cs for this page's requests, the interface's part, shortened", "ProjectsAccessBehavior.")]
@@ -260,7 +276,7 @@ public partial class HowARequestIsCheckedDocsExampleTests
 
         // The audit log says it as the property alone, and C# takes its own over the interface's default.
         Required(emitted.New("Examples.Tenancy.TenantAuditLog", emitted.New("Examples.Tenancy.TenantId", Guid.NewGuid()), emitted.New("Examples.Tenancy.PagingArguments", null, null)))
-            .Should().Be(AccessRequirement.Any(TenancyAccess.RequiresOperator(), TenancyAccess.ForTheWholeTenant("tenancy.seats.manage")));
+            .Should().Be(AccessRequirement.Any(TenancyAccess.RequiresOperator(), TenancyAccess.AtTenant("tenancy.seats.manage")));
     }
 
     [Fact]
@@ -277,38 +293,38 @@ public partial class HowARequestIsCheckedDocsExampleTests
             .Should().Contain("projects.crew.manage").And.Contain("7", "the version the caller read, which the check compares once the caller may act");
         Required(emitted.New("Examples.Tenancy.AddOrganizationUnit", unit, "Kade 3", null)).GetType().Name.Should().Be("AtUnit`1");
         Required(emitted.New("Examples.Tenancy.RenameSeat", seat, "Ada L."))
-            .Should().BeOfType<AccessRequirement.AnyOf>("yours, or the key: [OrOwn] beside [RequiresKey]");
+            .Should().BeOfType<AccessRequirement.AnyOf>("yours, or the permission: [OrOwn] beside [RequiresPermission]");
     }
 
     [Fact]
-    public void A_requirement_of_the_modules_own_is_asked_first_and_the_key_after_it_as_the_attributes_are_written()
+    public void A_requirement_of_the_modules_own_is_asked_first_and_the_permission_after_it_as_the_attributes_are_written()
     {
         var emitted = Run().Emit();
         var plan = emitted.New("Examples.Tenancy.PlanOfTheTest")!;
-        var key = emitted.New("Examples.Tenancy.KeyOfTheTest")!;
+        var permission = emitted.New("Examples.Tenancy.PermissionOfTheTest")!;
         var answers = emitted.New("Examples.Tenancy.AnswersOfTheTest")!;
-        using var provider = Services(emitted, plan, key, answers, withPlanCheck: true);
+        using var provider = Services(emitted, plan, permission, answers, withPlanCheck: true);
         var export = emitted.New("Examples.Tenancy.ExportBoard", emitted.New("Examples.Tenancy.BoardId", Guid.NewGuid()))!;
 
         Required(export).Should().Be(
-            AccessRequirement.All((AccessRequirement)emitted.CallStatic("Examples.Tenancy.PlanAtLeast", "RequiresPlan", PlanOf(emitted, "Pro"))!, TenancyAccess.ForTheWholeTenant("boards.export")),
+            AccessRequirement.All((AccessRequirement)emitted.CallStatic("Examples.Tenancy.PlanAtLeast", "RequiresPlan", PlanOf(emitted, "Pro"))!, TenancyAccess.AtTenant("boards.export")),
             "stacked attributes are All of their calls, in the order they are written");
 
         // A tenant on the Free plan is refused with the module's code, and Tenancy is asked nothing.
         Set(emitted, plan, "Plan", PlanOf(emitted, "Free"));
-        Set(emitted, key, "Held", true);
+        Set(emitted, permission, "Held", true);
         Refusal(provider, emitted, export).Code.Should().Be("boards.plan-too-low");
-        emitted.Property(key, "Asked").Should().Be(0, "the first case refused, so the second is not asked");
+        emitted.Property(permission, "Asked").Should().Be(0, "the first case refused, so the second is not asked");
         emitted.Property(plan, "AskedFor").Should().Be(emitted.Property(answers, "Tenant"), "the plan read is the one of the tenant the caller works in");
 
-        // On the Pro plan the key is asked next, and its refusal is its own.
+        // On the Pro plan the permission is asked next, and its refusal is its own.
         Set(emitted, plan, "Plan", PlanOf(emitted, "Pro"));
-        Set(emitted, key, "Held", false);
+        Set(emitted, permission, "Held", false);
         Refusal(provider, emitted, export).Code.Should().Be("tenancy.not-permitted");
 
-        Set(emitted, key, "Held", true);
+        Set(emitted, permission, "Held", true);
         FluentActions.Invoking(() => Require(provider, emitted, export)).Should().NotThrow();
-        emitted.Property(key, "Asked").Should().Be(2);
+        emitted.Property(permission, "Asked").Should().Be(2);
     }
 
     [Fact]
@@ -316,9 +332,9 @@ public partial class HowARequestIsCheckedDocsExampleTests
     {
         var emitted = Run().Emit();
         var plan = emitted.New("Examples.Tenancy.PlanOfTheTest")!;
-        var key = emitted.New("Examples.Tenancy.KeyOfTheTest")!;
+        var permission = emitted.New("Examples.Tenancy.PermissionOfTheTest")!;
         var answers = emitted.New("Examples.Tenancy.AnswersOfTheTest")!;
-        using var provider = Services(emitted, plan, key, answers, withPlanCheck: true);
+        using var provider = Services(emitted, plan, permission, answers, withPlanCheck: true);
         var export = emitted.New("Examples.Tenancy.ExportBoard", emitted.New("Examples.Tenancy.BoardId", Guid.NewGuid()))!;
 
         // The new sign-in, an operator or an anonymous caller: nobody in the tenant, so no tenant's plan to learn.
@@ -326,14 +342,14 @@ public partial class HowARequestIsCheckedDocsExampleTests
         Set(emitted, plan, "Plan", PlanOf(emitted, "Free"));
         Refusal(provider, emitted, export).Code.Should().Be("tenancy.not-seated", "the caller's own reason comes before anything is read");
         emitted.Property(plan, "Asked").Should().Be(0, "a caller who is nobody in the tenant learns nothing of its plan");
-        emitted.Property(key, "Asked").Should().Be(0, "the first case refused, so the second is not asked");
+        emitted.Property(permission, "Asked").Should().Be(0, "the first case refused, so the second is not asked");
     }
 
     [Fact]
     public void A_module_that_forgets_its_check_has_the_request_stopped_with_the_registration_named()
     {
         var emitted = Run().Emit();
-        using var provider = Services(emitted, emitted.New("Examples.Tenancy.PlanOfTheTest")!, emitted.New("Examples.Tenancy.KeyOfTheTest")!, emitted.New("Examples.Tenancy.AnswersOfTheTest")!, withPlanCheck: false);
+        using var provider = Services(emitted, emitted.New("Examples.Tenancy.PlanOfTheTest")!, emitted.New("Examples.Tenancy.PermissionOfTheTest")!, emitted.New("Examples.Tenancy.AnswersOfTheTest")!, withPlanCheck: false);
         var export = emitted.New("Examples.Tenancy.ExportBoard", emitted.New("Examples.Tenancy.BoardId", Guid.NewGuid()))!;
 
         FluentActions.Invoking(() => Require(provider, emitted, export))
@@ -514,7 +530,7 @@ public partial class HowARequestIsCheckedDocsExampleTests
     }
 
     /// <summary>The module of the boards with its check, or without it, beside the test's stand-ins for Tenancy's answers and check.</summary>
-    private static ServiceProvider Services(EmittedAssembly emitted, object plan, object key, object answers, bool withPlanCheck)
+    private static ServiceProvider Services(EmittedAssembly emitted, object plan, object permission, object answers, bool withPlanCheck)
     {
         var services = new ServiceCollection();
         if (withPlanCheck)
@@ -523,10 +539,10 @@ public partial class HowARequestIsCheckedDocsExampleTests
         }
 
         services.AddSingleton(emitted.Type("Examples.Tenancy.ITenantPlans"), plan);
-        services.AddSingleton(emitted.Type("Examples.Tenancy.KeyOfTheTest"), key);
+        services.AddSingleton(emitted.Type("Examples.Tenancy.PermissionOfTheTest"), permission);
         services.AddSingleton(answers.GetType().GetInterfaces().Single(each => each.Name.StartsWith("ITenancyAnswers", StringComparison.Ordinal)), answers);
         typeof(AccessCheckServiceCollectionExtensions).GetMethod(nameof(AccessCheckServiceCollectionExtensions.AddAccessCheck))!
-            .MakeGenericMethod(emitted.Type("Examples.Tenancy.IBoardsRequest"), emitted.Type("Examples.Tenancy.KeyCheckOfTheTest"))
+            .MakeGenericMethod(emitted.Type("Examples.Tenancy.IBoardsRequest"), emitted.Type("Examples.Tenancy.PermissionCheckOfTheTest"))
             .Invoke(null, [services]);
 
         return services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });

@@ -62,15 +62,15 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
     /// text; or what the application resolves for the caller (<see cref="MemberSource.Resolved"/>), which
     /// needs an <see cref="ICallerMember{TResourceId, TMemberId}"/>.</item>
     /// <item><b>Where the roles come from.</b> The rules declare them, and a member holds them as
-    /// <see cref="NamedRole"/>; or they are kept for the resource (<see cref="MembershipRules.RolesKept"/>), as
+    /// <see cref="NamedRole"/>; or a customer makes them (<see cref="Roles.Custom"/>), as
     /// rows of the application's role class, which needs nothing registered: the context maps that class
-    /// with <c>IsKeptRole</c>, and the roles are read from there; or they are kept elsewhere
-    /// (<see cref="MembershipRules.RolesKeptElsewhere"/>), which needs an
-    /// <see cref="IRolesWithKey{TResourceId, TRoleId}"/> for which roles give a key and an
+    /// with <c>IsCustomRole</c>, and the roles are read from there; or they are kept elsewhere
+    /// (<see cref="Roles.External"/>), which needs an
+    /// <see cref="IRolesWithPermission{TResourceId, TRoleId}"/> for which roles give a permission and an
     /// <see cref="IMemberRoles{TResourceId, TRoleId}"/> for which roles there are.</item>
-    /// <item><b>Whether a resource is reached from above</b> (<see cref="MembershipRules.Above"/>), which needs
-    /// an <see cref="IPlacesReached{TResourceId, TPlaceId}"/> for where a caller holds a key, and the resource
-    /// mapped with where it sits (<c>HasMembers(..., at: ...)</c>).</item>
+    /// <item><b>Whether a resource is reached from above</b> (<see cref="MembershipRules.ReachFromAbove"/>), which needs
+    /// an <see cref="IPlacesReached{TResourceId, TPlaceId}"/> for where a caller holds a permission, and the resource
+    /// marking where it hangs <c>[At]</c>.</item>
     /// </list>
     /// <para>
     /// The application registers what it answers before it registers the resource, or hands the class that
@@ -91,7 +91,7 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
     /// </para>
     /// <para>
     /// The ambient caller answers <see cref="Caller.System"/> where nobody began one, and the application
-    /// itself holds every key on every resource. An application whose requests each have a caller says so,
+    /// itself holds every permission on every resource. An application whose requests each have a caller says so,
     /// with <c>services.RequireExplicitCallers()</c>, and a request that reaches the questions with no caller
     /// then fails rather than passes as the application. Work in a scope
     /// (<see cref="Caller.SystemIn"/>) holds nothing on a resource unless the rules name that scope
@@ -181,13 +181,13 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
         // since a second resource would be handed the first one's.
         services.AddScoped<IMemberQuestions<TResourceId>>(provider =>
             new EfMemberQuestions<TContext, TResource, TResourceId, TMember, TId, TMemberId, TRoleId>(registration, asMember, provider));
-        if (rules.RolesKept)
+        if (rules.Roles.Kind == RolesKind.Custom)
         {
             // The rows of the application's role class, read on the request's own context. One the
             // application registered before stays, as every answer of its own does.
-            services.TryAddScoped<IMemberRoles<TResourceId, TRoleId>>(provider => new KeptMemberRoles<TContext, TResource, TResourceId, TRoleId>(registration, provider));
+            services.TryAddScoped<IMemberRoles<TResourceId, TRoleId>>(provider => new CustomMemberRoles<TContext, TResource, TResourceId, TRoleId>(registration, provider));
         }
-        else if (rules.RolesKeptElsewhere is null)
+        else if (rules.Roles.Kind == RolesKind.Fixed)
         {
             services.TryAddSingleton(_ => (IMemberRoles<TResourceId, TRoleId>)(object)new NamedRoles<TResourceId>(rules));
         }
@@ -214,10 +214,10 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
     /// <list type="bullet">
     /// <item><see cref="ICallerMember{TResourceId, TMemberId}"/>: who the caller is as a member, for rules with
     /// <see cref="MemberSource.Resolved"/>.</item>
-    /// <item><see cref="IRolesWithKey{TResourceId, TRoleId}"/> and
-    /// <see cref="IMemberRoles{TResourceId, TRoleId}"/>: which roles give a key, and which roles there are, for
+    /// <item><see cref="IRolesWithPermission{TResourceId, TRoleId}"/> and
+    /// <see cref="IMemberRoles{TResourceId, TRoleId}"/>: which roles give a permission, and which roles there are, for
     /// rules whose roles are kept elsewhere.</item>
-    /// <item><see cref="IPlacesReached{TResourceId, TPlaceId}"/>: where the caller holds a key, for rules that
+    /// <item><see cref="IPlacesReached{TResourceId, TPlaceId}"/>: where the caller holds a permission, for rules that
     /// let a resource be reached from above.</item>
     /// <item><see cref="IMemberDirectory{TResourceId, TMemberId}"/> and
     /// <see cref="IMemberRolePolicy{TResourceId, TRoleId}"/>, which no rules need: who can be made a member,
@@ -277,7 +277,7 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
             .. new[]
             {
                 typeof(ICallerMember<TResourceId, TMemberId>),
-                typeof(IRolesWithKey<TResourceId, TRoleId>),
+                typeof(IRolesWithPermission<TResourceId, TRoleId>),
                 typeof(IMemberRoles<TResourceId, TRoleId>),
                 typeof(IMemberDirectory<TResourceId, TMemberId>),
                 typeof(IMemberRolePolicy<TResourceId, TRoleId>),
@@ -289,7 +289,7 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
         {
             throw new ArgumentException(
                 typeof(TPorts).Name + " answers nothing of " + typeof(TResource).Name + ": it implements none of ICallerMember<" + typeof(TResourceId).Name + ", "
-                + typeof(TMemberId).Name + ">, IRolesWithKey<" + typeof(TResourceId).Name + ", " + typeof(TRoleId).Name + ">, IMemberRoles<" + typeof(TResourceId).Name + ", "
+                + typeof(TMemberId).Name + ">, IRolesWithPermission<" + typeof(TResourceId).Name + ", " + typeof(TRoleId).Name + ">, IMemberRoles<" + typeof(TResourceId).Name + ", "
                 + typeof(TRoleId).Name + ">, IPlacesReached<" + typeof(TResourceId).Name + ", TPlaceId>, IMemberDirectory<" + typeof(TResourceId).Name + ", " + typeof(TMemberId).Name
                 + "> and IMemberRolePolicy<" + typeof(TResourceId).Name + ", " + typeof(TRoleId).Name + ">. Hand over the class that does, or register the resource without one.",
                 nameof(TPorts));
@@ -410,13 +410,32 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
     {
         switch (rules.Members.Kind)
         {
+            case MemberSourceKind.Inferred when IsRegistered(services, typeof(ICallerMember<TResourceId, TMemberId>)):
+                // Something answers who the caller is as a member of this kind, an organization package's join for a seat among them:
+                // it is asked, about each caller.
+                return null;
+
+            case MemberSourceKind.Inferred:
+            {
+                var known = FromValue<TMemberId, Guid>()
+                    ?? throw new ArgumentException(
+                        "Who a caller is as a member of " + typeof(TResource).Name + " follows from what a member is known by, " + typeof(TMemberId).Name
+                        + ", and that is no id over a Guid, the caller's user id, and nothing answers it: no ICallerMember<" + typeof(TResourceId).Name + ", " + typeof(TMemberId).Name
+                        + "> is registered. Register the resource with the join the package that keeps the seats writes, where its members are an organization's seats; "
+                        + "say members: MemberSource.Claim(path) for an id over a text a token carries; or "
+                        + HowToAnswer<TResource>("ICallerMember<" + typeof(TResourceId).Name + ", " + typeof(TMemberId).Name + ">"),
+                        nameof(rules));
+
+                return caller => caller.UserId is { } user ? known(user) : null;
+            }
+
             case MemberSourceKind.CallerId:
             {
                 var known = FromValue<TMemberId, Guid>()
                     ?? throw new ArgumentException(
                         "The rules '" + rules.Name + "' take the caller's member id from MemberSource.CallerId, the caller's user id, and the members of " + typeof(TResource).Name
                         + " are known by " + typeof(TMemberId).Name + ", which is not an id over a Guid. Declare it with [EntityId<Guid>], take the members from "
-                        + "MemberSource.Claim(path) for an id over a text, or have the application resolve who its caller is: MemberSource.Resolved().",
+                        + "MemberSource.Claim(path) for an id over a text, or leave members out and register what answers who the caller is.",
                         nameof(rules));
 
                 return caller => caller.UserId is { } user ? known(user) : null;
@@ -456,15 +475,15 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
         where TResourceId : struct, IEntityId, IEquatable<TResourceId>
         where TRoleId : struct, IEntityId, IEquatable<TRoleId>
     {
-        if (rules.RolesKept)
+        if (rules.Roles.Kind == RolesKind.Custom)
         {
             // Which class the roles are of is the model's to say, so that is held when the resource is first
             // asked about. What can be told here: a role that is a row is not held by a name.
             if (typeof(TRoleId) == typeof(NamedRole))
             {
                 throw new ArgumentException(
-                    "The rules '" + rules.Name + "' say the roles of " + typeof(TResource).Name + " are kept, as rows of a role class, and its members hold roles by name. "
-                    + "Declare a role class for it, [KeptRole<" + typeof(TResource).Name + "RoleId, " + typeof(TResource).Name + ">], and the member class with that class's id as its role: "
+                    "The rules '" + rules.Name + "' say a customer makes the roles of " + typeof(TResource).Name + ", as rows of a role class, and its members hold roles by name. "
+                    + "Declare a role class for it, [CustomRole<" + typeof(TResource).Name + "RoleId, " + typeof(TResource).Name + ">], and the member class with that class's id as its role: "
                     + "[Member<" + typeof(TId).Name + ", " + typeof(TMemberId).Name + ", " + typeof(TResource).Name + "RoleId, " + typeof(TResource).Name + ">].",
                     nameof(rules));
             }
@@ -472,25 +491,25 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
             return;
         }
 
-        if (rules.RolesKeptElsewhere is null)
+        if (rules.Roles.Kind == RolesKind.Fixed)
         {
             if (typeof(TRoleId) != typeof(NamedRole))
             {
                 throw new ArgumentException(
-                    "The members of " + typeof(TResource).Name + " hold roles known by " + typeof(TRoleId).Name + ", and the rules '" + rules.Name + "' declare the roles, which a member "
+                    "The members of " + typeof(TResource).Name + " hold roles known by " + typeof(TRoleId).Name + ", and the rules '" + rules.Name + "' have fixed roles, which a member "
                     + "holds by name. Declare the member class with NamedRole as its role, [Member<" + typeof(TId).Name + ", " + typeof(TMemberId).Name + ", NamedRole, "
-                    + typeof(TResource).Name + ">]; or say in the rules where the roles are rows: rolesKept: true for a role class of this resource, rolesKeptElsewhere: new() for roles kept elsewhere.",
+                    + typeof(TResource).Name + ">]; or say in the rules where the roles are rows: Roles.Custom() for a role class of this resource, Roles.External() for roles kept elsewhere.",
                     nameof(rules));
             }
 
             return;
         }
 
-        var giving = "IRolesWithKey<" + typeof(TResourceId).Name + ", " + typeof(TRoleId).Name + ">";
-        if (!IsRegistered(services, typeof(IRolesWithKey<TResourceId, TRoleId>)))
+        var giving = "IRolesWithPermission<" + typeof(TResourceId).Name + ", " + typeof(TRoleId).Name + ">";
+        if (!IsRegistered(services, typeof(IRolesWithPermission<TResourceId, TRoleId>)))
         {
             throw new ArgumentException(
-                "The rules '" + rules.Name + "' say the roles of " + typeof(TResource).Name + " are kept elsewhere, and nothing answers which of them give a key: no "
+                "The rules '" + rules.Name + "' say the roles of " + typeof(TResource).Name + " are kept elsewhere, Roles.External, and nothing answers which of them give a permission: no "
                 + giving + " is registered. " + HowToAnswer<TResource>(giving),
                 nameof(rules));
         }
@@ -499,22 +518,22 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
         if (!IsRegistered(services, typeof(IMemberRoles<TResourceId, TRoleId>)))
         {
             throw new ArgumentException(
-                "The rules '" + rules.Name + "' say the roles of " + typeof(TResource).Name + " are kept elsewhere, and nothing answers which roles there are and which is the owner's: no "
+                "The rules '" + rules.Name + "' say the roles of " + typeof(TResource).Name + " are kept elsewhere, Roles.External, and nothing answers which roles there are: no "
                 + known + " is registered. " + HowToAnswer<TResource>(known),
                 nameof(rules));
         }
     }
 
-    /// <summary>Holds rules that reach a resource from above to an application that answers where a caller holds a key.</summary>
+    /// <summary>Holds rules that reach a resource from above to an application that answers where a caller holds a permission.</summary>
     /// <exception cref="ArgumentException">The application registered nothing that answers.</exception>
     private static void RequirePlacesReached<TResource, TResourceId>(IServiceCollection services, MembershipRules rules)
         where TResourceId : struct, IEntityId, IEquatable<TResourceId>
     {
-        if (rules.Above is not null && !services.Any(descriptor => !descriptor.IsKeyedService && IsPlacesReached<TResourceId>(descriptor.ServiceType)))
+        if (rules.ReachFromAbove is not null && !services.Any(descriptor => !descriptor.IsKeyedService && IsPlacesReached<TResourceId>(descriptor.ServiceType)))
         {
             var above = "IPlacesReached<" + typeof(TResourceId).Name + ", TPlaceId>";
             throw new ArgumentException(
-                "The rules '" + rules.Name + "' let " + typeof(TResource).Name + " be reached from above, and nothing answers where a caller holds a key: no "
+                "The rules '" + rules.Name + "' let " + typeof(TResource).Name + " be reached from above, and nothing answers where a caller holds a permission: no "
                 + above + " is registered, for what the place a " + typeof(TResource).Name + " sits at is known by. " + HowToAnswer<TResource>(above),
                 nameof(rules));
         }

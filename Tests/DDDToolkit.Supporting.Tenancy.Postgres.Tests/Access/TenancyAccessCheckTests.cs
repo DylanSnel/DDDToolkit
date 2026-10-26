@@ -10,14 +10,14 @@ using static DDDToolkit.Supporting.Tenancy.Postgres.Tests.Infrastructure.Tenancy
 namespace DDDToolkit.Supporting.Tenancy.Postgres.Tests;
 
 /// <summary>
-/// Tenancy's access check where the database keeps tenants apart and answers about the rights itself: a key for
+/// Tenancy's access check where the database keeps tenants apart and answers about the rights itself: a permission for
 /// the whole tenant is asked as the caller, under the policies, in one statement. Over Tenancy's own context that
 /// reads Tenancy's tables; over a module's own context it asks Tenancy's functions and names none of its tables.
 /// What the other cases let through reads nothing, and is proven with the Entity Framework layer.
 /// </summary>
 public abstract class TenancyAccessCheckTests(TenancyPostgres postgres, TenancyNaming names)
 {
-    private static readonly TenancyRequirement.ForTheWholeTenant ManagesSeats = TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage);
+    private static readonly TenancyRequirement.AtTenant ManagesSeats = TenancyAccess.AtTenant(TenancyPermissions.SeatsManage);
 
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
@@ -37,23 +37,23 @@ public abstract class TenancyAccessCheckTests(TenancyPostgres postgres, TenancyN
     }
 
     [Fact]
-    public async Task A_key_for_the_whole_tenant_is_asked_as_the_caller_under_the_policies()
+    public async Task A_permission_for_the_whole_tenant_is_asked_as_the_caller_under_the_policies()
     {
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
         var recorder = new CommandRecorder();
         await using var services = new TenancyServices(database, contexts: options => options.AddInterceptors(recorder));
         var request = new Declaring(ManagesSeats);
 
-        // Ada administers Harbor: every key, at its root.
+        // Ada administers Harbor: every permission, at its root.
         recorder.Clear();
         await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => RequireAsync<IHostRequest>(scoped, request));
-        var asked = recorder.Sent.Should().ContainSingle("the key is asked in one statement").Which;
+        var asked = recorder.Sent.Should().ContainSingle("the permission is asked in one statement").Which;
         asked.Caller!.UserId.Should().Be(Ada.Identity, "the statement runs as the person, under the policies");
         asked.TenancyCaller.Should().Be(HostCaller.InSeat(Harbor, Ada.Seat));
 
         // Seth manages seats at North, which is not the whole tenant.
         var refusal = await RefusedWithAsync(TenancyRefusals.NotPermitted, () => services.BySeat(Seth.Identity, Harbor, Seth.Seat, scoped => RequireAsync<IHostRequest>(scoped, request)));
-        refusal.Arguments["Key"].Should().Be(TenancyKeys.SeatsManage);
+        refusal.Arguments["Permission"].Should().Be(TenancyPermissions.SeatsManage);
 
         // Oli has a seat in Orchard too, and administers neither: his seat there says nothing about Harbor.
         await RefusedWithAsync(TenancyRefusals.NotPermitted, () => services.BySeat(Oli.Identity, Harbor, Oli.Seat, scoped => RequireAsync<IHostRequest>(scoped, request)));
@@ -61,14 +61,14 @@ public abstract class TenancyAccessCheckTests(TenancyPostgres postgres, TenancyN
         // Odette administers Orchard, and passes there.
         await services.BySeat(Odette.Identity, Orchard, Odette.Seat, scoped => RequireAsync<IHostRequest>(scoped, request));
 
-        // System work in the tenant holds every key there.
+        // System work in the tenant holds every permission there.
         await services.BySystemIn(Harbor, scoped => RequireAsync<IHostRequest>(scoped, request));
     }
 
     [Fact]
-    public async Task A_key_stated_with_an_attribute_is_asked_under_the_policies_as_the_property_is()
+    public async Task A_permission_stated_with_an_attribute_is_asked_under_the_policies_as_the_property_is()
     {
-        // The requests say the key with [RequiresKey], for the whole tenant and with [AtUnit] at a unit: the line the
+        // The requests say the permission with [RequiresPermission], for the whole tenant and with [AtUnit] at a unit: the line the
         // generator wrote is the same case, so the database answers it the same, for the same people.
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
         var recorder = new CommandRecorder();
@@ -76,17 +76,17 @@ public abstract class TenancyAccessCheckTests(TenancyPostgres postgres, TenancyN
 
         recorder.Clear();
         await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => RequireAsync<IHostRequest>(scoped, new StatedRequests.ManageEverySeat()));
-        recorder.Sent.Should().ContainSingle("the key is asked in one statement").Which.Caller!.UserId.Should().Be(Ada.Identity);
+        recorder.Sent.Should().ContainSingle("the permission is asked in one statement").Which.Caller!.UserId.Should().Be(Ada.Identity);
         (await RefusedWithAsync(TenancyRefusals.NotPermitted, () => services.BySeat(Seth.Identity, Harbor, Seth.Seat, scoped => RequireAsync<IHostRequest>(scoped, new StatedRequests.ManageEverySeat()))))
-            .Arguments["Key"].Should().Be(TenancyKeys.SeatsManage);
+            .Arguments["Permission"].Should().Be(TenancyPermissions.SeatsManage);
 
-        // Seth manages seats at North: there and below the key is his, at the root it is not.
+        // Seth manages seats at North: there and below the permission is his, at the root it is not.
         await services.BySeat(Seth.Identity, Harbor, Seth.Seat, scoped => RequireAsync<IHostRequest>(scoped, new StatedRequests.ManageSeatsAt(North)));
         await services.BySeat(Seth.Identity, Harbor, Seth.Seat, scoped => RequireAsync<IHostRequest>(scoped, new StatedRequests.ManageSeatsAt(NorthPier)));
         (await RefusedWithAsync(TenancyRefusals.NotPermitted, () => services.BySeat(Seth.Identity, Harbor, Seth.Seat, scoped => RequireAsync<IHostRequest>(scoped, new StatedRequests.ManageSeatsAt(HarborRoot)))))
             .Arguments["Unit"].Should().Be(HarborRoot);
 
-        // System work in the tenant, begun around the send, holds every key there.
+        // System work in the tenant, begun around the send, holds every permission there.
         await services.BySystemIn(Harbor, scoped => RequireAsync<IHostRequest>(scoped, new StatedRequests.ManageSeatsAt(South)));
     }
 
@@ -106,17 +106,17 @@ public abstract class TenancyAccessCheckTests(TenancyPostgres postgres, TenancyN
         recorder.Clear();
         await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => RequireAsync<IWidgetRequest>(scoped, request));
 
-        var statement = recorder.Sent.Should().ContainSingle("the key is asked in one statement").Which.Text;
-        statement.Should().Contain("tenancy." + TenancyFunctionNames.CallerRights + "(", "a module reads the caller's rights from the function that answers them");
+        var statement = recorder.Sent.Should().ContainSingle("the permission is asked in one statement").Which.Text;
+        statement.Should().Contain("tenancy." + TenancyFunctionNames.CallerPermissions + "(", "a module reads the caller's rights from the function that answers them");
         statement.Should().NotContain(names.Of("SeatRights"), "and names no table of Tenancy's");
 
         var refusal = await RefusedWithAsync(TenancyRefusals.NotPermitted, () => services.BySeat(Seth.Identity, Harbor, Seth.Seat, scoped => RequireAsync<IWidgetRequest>(scoped, request)));
-        refusal.Arguments["Key"].Should().Be(TenancyKeys.SeatsManage);
+        refusal.Arguments["Permission"].Should().Be(TenancyPermissions.SeatsManage);
         await services.BySystemIn(Harbor, scoped => RequireAsync<IWidgetRequest>(scoped, request));
     }
 
     [Fact]
-    public async Task With_a_pool_the_key_is_asked_on_a_context_of_its_own_as_the_same_caller()
+    public async Task With_a_pool_the_permission_is_asked_on_a_context_of_its_own_as_the_same_caller()
     {
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
         var recorder = new CommandRecorder();

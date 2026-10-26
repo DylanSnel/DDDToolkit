@@ -27,7 +27,7 @@ public enum TenancyTable
     /// <summary>The roles each placement grants.</summary>
     Grant,
 
-    /// <summary>The keys each seat holds where, written from the seats and the roles.</summary>
+    /// <summary>The permissions each seat holds where, written from the seats and the roles.</summary>
     Right,
 
     /// <summary>The roles.</summary>

@@ -1,4 +1,5 @@
 using DDDToolkit.Abstractions.Attributes;
+using DDDToolkit.Access;
 using DDDToolkit.Invariants;
 
 namespace DDDToolkit.Supporting.Membership.TestHost.Binders;
@@ -20,18 +21,18 @@ public readonly partial record struct BinderBorrowerId;
 public sealed partial class BinderBorrower;
 
 /// <summary>
-/// A binder, known by the shelf it stands on and its own id: a resource whose key has a part in front of the
+/// A binder, known by the shelf it stands on and its own id: a resource whose permission has a part in front of the
 /// id, which its member tables carry as well. Nothing else about it differs from a document.
 /// </summary>
 [AggregateRoot<BinderId>]
 public sealed partial class Binder
 {
-    /// <summary>Puts a binder on a shelf, with <paramref name="owner"/> a member from <paramref name="now"/> on, for good, in the owner's role.</summary>
-    public Binder(ShelfId shelf, BinderId id, UserId owner, NamedRole ownerRole, DateTimeOffset now) : base(id)
+    /// <summary>Puts a binder on a shelf, with <paramref name="owner"/> a member from <paramref name="now"/> on, for good, holding no role.</summary>
+    public Binder(ShelfId shelf, BinderId id, UserId owner, DateTimeOffset now) : base(id)
     {
         ShelfId = shelf;
         OwnerId = owner;
-        Members.Open(ownerRole, now);
+        Members.Open(now);
     }
 
     /// <summary>The shelf the binder stands on: the first part of its key.</summary>
@@ -39,6 +40,7 @@ public sealed partial class Binder
     public ShelfId ShelfId { get; }
 
     /// <summary>The user that owns the binder.</summary>
+    [Owner]
     public UserId OwnerId { get; private set; }
 
     /// <summary>Those the binder is lent to.</summary>
@@ -69,18 +71,22 @@ public sealed partial class Binder
     }
 }
 
+/// <summary>The permission asked on a binder: every borrower holds it, and so does its owner.</summary>
+[Permissions]
+public static class BinderPermissions
+{
+    /// <summary>Read what is in a binder.</summary>
+    [On<Binder>(EveryMember = true)]
+    public const string Read = "binders.read";
+}
+
 /// <summary>The rules of access through those a binder is lent to: as little as a resource can say.</summary>
 public static class BinderMembership
 {
-    /// <summary>Read what is in a binder.</summary>
-    public const string Read = "binders.read";
 
     /// <summary>The rules.</summary>
-    public static MembershipRules Rules { get; } = new("binders", keys: [Read], roles: [new("reader", [Read])], seeKey: Read);
+    public static MembershipRules Rules { get; } = MembershipRules.For<Binder>(Roles.Fixed([new("reader", [BinderPermissions.Read])]));
 
     /// <summary>The role that reads.</summary>
     public static NamedRole Borrower { get; } = new("reader");
-
-    /// <summary>The owner's role, which the rules add.</summary>
-    public static NamedRole Owner { get; } = new(MembershipRules.DefaultOwnerRole);
 }

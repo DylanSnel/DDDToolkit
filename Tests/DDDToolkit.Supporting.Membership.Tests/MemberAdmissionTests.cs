@@ -58,7 +58,13 @@ public sealed class MemberAdmissionTests
         var admission = Documents();
 
         await admission.RequireRoleAsync(DocumentMembership.Contributor, TestContext.Current.CancellationToken);
-        await admission.RequireRoleAsync(DocumentMembership.Owner, TestContext.Current.CancellationToken);
+        await admission.RequireRoleAsync(DocumentMembership.Onlooker, TestContext.Current.CancellationToken);
+
+        // The owner holds no role, so none is added for it: a role called so is one the rules do not declare.
+        await Refused.WithCodeAsync(
+            DocumentRefusals.Membership,
+            MembershipRefusals.RoleNotForMembers,
+            () => admission.RequireRoleAsync(new NamedRole("owner"), TestContext.Current.CancellationToken).AsTask());
 
         var unknown = new NamedRole("auditor");
         var refusal = await Refused.WithCodeAsync(
@@ -93,41 +99,6 @@ public sealed class MemberAdmissionTests
             MembershipRefusals.RoleNotForMembers,
             () => admission.RequireRoleAsync(new NamedRole("auditor"), TestContext.Current.CancellationToken).AsTask());
         policy.Asked.Should().Equal(DocumentMembership.Onlooker, DocumentMembership.Contributor);
-    }
-
-    // ---------------------------------------------------------------- the owner's role
-
-    [Fact]
-    public async Task The_owners_role_is_the_one_the_rules_name()
-    {
-        (await Documents().OwnerRoleAsync(TestContext.Current.CancellationToken)).Should().Be(new NamedRole("owner"), "the rules added it");
-        (await Folders().OwnerRoleAsync(TestContext.Current.CancellationToken)).Should().Be(new NamedRole("keeper"), "the rules declare it");
-        (await Folders().FindOwnerRoleAsync(TestContext.Current.CancellationToken)).Should().Be(new NamedRole("keeper"));
-    }
-
-    [Fact]
-    public async Task The_owners_role_is_not_asked_of_the_applications_own_rule()
-    {
-        // An owner holds the owner's role whatever else that role is for.
-        var policy = new Policy(allowed: DocumentMembership.Onlooker);
-
-        (await Documents(policy: policy).OwnerRoleAsync(TestContext.Current.CancellationToken)).Should().Be(DocumentMembership.Owner);
-        policy.Asked.Should().BeEmpty();
-    }
-
-    [Fact]
-    public async Task With_no_owners_role_in_use_an_owner_cannot_be_named_and_a_use_case_that_can_do_without_goes_on()
-    {
-        var admission = new MemberAdmission<DocumentId, UserId, NamedRole>(DocumentMembership.Rules, new NoOwnersRole());
-
-        var refusal = await Refused.WithCodeAsync(
-            DocumentRefusals.Membership,
-            MembershipRefusals.NoOwnerRole,
-            () => admission.OwnerRoleAsync(TestContext.Current.CancellationToken).AsTask());
-        refusal.Code.Should().Be("documents.no-owner-role");
-        refusal.Kind.Should().Be(RefusalKind.Conflict);
-
-        (await admission.FindOwnerRoleAsync(TestContext.Current.CancellationToken)).Should().BeNull("taking a role from the owner goes on without one");
     }
 
     // ---------------------------------------------------------------- one admission per resource
@@ -185,13 +156,5 @@ public sealed class MemberAdmissionTests
             Asked.Add(role);
             return ValueTask.FromResult(allowed.Contains(role));
         }
-    }
-
-    /// <summary>Roles kept somewhere that has no role for owners in use.</summary>
-    private sealed class NoOwnersRole : IMemberRoles<DocumentId, NamedRole>
-    {
-        public ValueTask<bool> ExistsAsync(NamedRole role, CancellationToken cancellationToken) => ValueTask.FromResult(true);
-
-        public ValueTask<NamedRole?> FindOwnerRoleAsync(CancellationToken cancellationToken) => ValueTask.FromResult<NamedRole?>(null);
     }
 }

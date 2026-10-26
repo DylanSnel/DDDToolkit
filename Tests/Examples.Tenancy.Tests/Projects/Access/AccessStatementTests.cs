@@ -24,7 +24,7 @@ namespace Examples.Tenancy.Tests.Projects.Access;
 /// outbox pollers or another test sends meanwhile on flows of their own.
 /// <para>
 /// The statements are the ones Postgres is sent. A module reads no table of Tenancy's there: what a seat holds
-/// in the organization is what Tenancy's function answers (<see cref="CallerRights"/>), named inside the
+/// in the organization is what Tenancy's function answers (<see cref="CallerPermissions"/>), named inside the
 /// module's own statement like a table, and the units, seats and roles are functions of Tenancy's likewise.
 /// Tenancy's own context reads its own tables. What row level security sets on a connection before a statement
 /// runs is not a statement of the context's, and is not counted.
@@ -38,7 +38,7 @@ public sealed class AccessStatementTests(SampleHosts hosts) : IClassFixture<Samp
     /// Where a module's statement reads what the caller's seat holds in the organization: the function Tenancy
     /// gives another module to ask, in place of its table of rights.
     /// </summary>
-    private const string CallerRights = TenantsContext.Schema + ".caller_rights()";
+    private const string CallerPermissions = TenantsContext.Schema + ".caller_permissions()";
 
     /// <summary>
     /// How a statement names a table of Tenancy's own, any of them: the schema and the quote a table's name
@@ -80,20 +80,20 @@ public sealed class AccessStatementTests(SampleHosts hosts) : IClassFixture<Samp
             var reads = scope.ServiceProvider.GetRequiredService<IProjectReads>();
             var access = scope.ServiceProvider.GetRequiredService<ProjectAccess>();
 
-            // What the application does: it asks the projects' rules for the reach of the key, which says what is to
+            // What the application does: it asks the projects' rules for the reach of the permission, which says what is to
             // be asked and asks nothing yet, and hands that to the port.
             counter.WatchThisFlow();
             await using var reading = reads.Open();
-            var reach = access.ReachFor(ProjectKeys.View);
+            var reach = access.ReachFor(ProjectPermissionNames.View);
             counter.Commands.Should().BeEmpty("a reach is made of questions that have not been asked of the database yet");
 
             var mine = await reading.PageAsync(reach, ProjectListFilter.None, new PagingArguments(first: VisibleProjects.LargestPage), Cancellation);
 
-            // One statement: the units where she holds the key, from Tenancy's rights, and the crews she is on,
+            // One statement: the units where she holds the permission, from Tenancy's rights, and the crews she is on,
             // are subqueries of the project statement. Of a crew it asks only whether she is on it: a list reads
             // no crew until somebody asks for one.
             var statement = counter.Commands.Should().ContainSingle("both ways in are asked inside the project statement").Which;
-            statement.Should().Contain(CallerRights, "UnitsWhereIHold reads Tenancy's rights in the same statement");
+            statement.Should().Contain(CallerPermissions, "UnitsWhereIHold reads Tenancy's rights in the same statement");
             statement.Should().NotContain(AnyTableOfTenancy, "and reads them from Tenancy's function: no table of Tenancy's is named");
             statement.Should().Contain(CrewTable, "whether she is on the crew is asked in the same statement");
             statement.Should().NotContain(CrewRolesTable, "seeing a project takes no role, and no crew is read with the list");
@@ -108,7 +108,7 @@ public sealed class AccessStatementTests(SampleHosts hosts) : IClassFixture<Samp
         var counter = new CommandCounter();
         await using var sample = await CountedAsync(counter);
 
-        // A seat. Ada administers the tenant from its root, and owns Bay bridge and HQ refit, so she leads their
+        // A seat. Ada administers the tenant from its root, and owns Bay bridge and HQ refit, so she is on their
         // crews: how she reaches each project comes back with it, the crew first.
         using (AsSeatOf(DemoPeople.Ada))
         {
@@ -134,14 +134,14 @@ public sealed class AccessStatementTests(SampleHosts hosts) : IClassFixture<Samp
             projects.Should().ContainSingle().Which.Should().Match<ProjectOverview>(project => project.Name == "Pier 7" && project.Via == ProjectVia.Crew);
         }
 
-        // System work in the tenant reaches all of it, by neither way: the filter is left out of the statement,
-        // and the tenant filter keeps it to that tenant.
-        using (TenancyUseCases.BeginSystemIn(Harbor.Id))
+        // The projects' own system work in the tenant reaches all of it, by neither way: the filter is left out of
+        // the statement, and the tenant filter keeps it to that tenant.
+        using (TenancyUseCases.BeginSystemIn(Harbor.Id, scope: ProjectMembership.Scope))
         {
             var (reach, projects) = await ListedAsync(sample, counter);
 
             var statement = counter.Commands.Should().ContainSingle().Which;
-            statement.Should().NotContain(CallerRights, "system work is asked for no key");
+            statement.Should().NotContain(CallerPermissions, "system work is asked for no permission");
             reach.Everything.Should().BeTrue();
             projects.Select(project => project.Id).Should().BeEquivalentTo(Harbor.Projects.Select(project => project.Id));
             projects.Should().OnlyContain(project => project.Via == ProjectVia.System);
@@ -149,25 +149,25 @@ public sealed class AccessStatementTests(SampleHosts hosts) : IClassFixture<Samp
     }
 
     [Fact]
-    public async Task A_key_on_a_project_is_checked_in_one_statement()
+    public async Task A_permission_on_a_project_is_checked_in_one_statement()
     {
         var counter = new CommandCounter();
         await using var sample = await CountedAsync(counter);
         var depot = Harbor.ProjectNamed("Inland depot").Id;
         var bridge = Harbor.ProjectNamed("Bay bridge").Id;
 
-        // A key a crew gives. Rhea leads Inland depot's crew, and holds nothing at its unit that lets her edit.
+        // A permission a crew gives. Rhea owns Inland depot, and holds nothing at its unit that lets her edit.
         using (AsSeatOf(DemoPeople.Rhea))
         {
             await using var scope = sample.Services.CreateAsyncScope();
             counter.WatchThisFlow();
 
-            var hold = await scope.ServiceProvider.GetRequiredService<IMemberQuestions<ProjectId>>().RequireAsync(depot, ProjectKeys.Edit, Cancellation);
+            var hold = await scope.ServiceProvider.GetRequiredService<IMemberQuestions<ProjectId>>().RequireAsync(depot, ProjectPermissionNames.Edit, Cancellation);
 
-            // Whether she sees it, how she holds the key on it, and its version, in the one statement: her
-            // membership, and in it a role that gives the key.
+            // Whether she sees it, how she holds the permission on it, and its version, in the one statement: her
+            // membership, and in it a role that gives the permission.
             var statement = counter.Commands.Should().ContainSingle("the check a command passes is one statement").Which;
-            statement.Should().Contain(CallerRights).And.Contain(CrewTable).And.Contain(CrewRolesTable);
+            statement.Should().Contain(CallerPermissions).And.Contain(CrewTable).And.Contain(CrewRolesTable);
             hold.Should().Match<MemberHold<ProjectId>>(held => held.Via == MemberVia.Members && held.Version > 0);
 
             // And the role's own period is compared where the statement runs, as the membership's is: the columns of
@@ -176,13 +176,13 @@ public sealed class AccessStatementTests(SampleHosts hosts) : IClassFixture<Samp
                 $$"""FROM {{ProjectsContext.Schema}}\."{{ProjectsContext.CrewRolesTable}}" AS (?<role>\w+)[\s\S]*?\k<role>\."StartsAt" <= @\w+ AND \(\k<role>\."EndsAt" IS NULL OR \k<role>\."EndsAt" > @\w+\)""");
         }
 
-        // A key no crew gives. Ada leads Bay bridge's crew, and still holds the owner's key through the organization alone.
+        // A permission no crew gives. Ada leads Bay bridge's crew, and still holds the owner's permission through the organization alone.
         using (AsSeatOf(DemoPeople.Ada))
         {
             await using var scope = sample.Services.CreateAsyncScope();
             counter.WatchThisFlow();
 
-            var hold = await scope.ServiceProvider.GetRequiredService<IMemberQuestions<ProjectId>>().RequireAsync(bridge, ProjectKeys.ChangeOwner, Cancellation);
+            var hold = await scope.ServiceProvider.GetRequiredService<IMemberQuestions<ProjectId>>().RequireAsync(bridge, ProjectPermissionNames.ChangeOwner, Cancellation);
 
             counter.Commands.Should().ContainSingle();
             hold.Via.Should().Be(MemberVia.Above, "naming an owner never comes through a crew");
@@ -196,24 +196,24 @@ public sealed class AccessStatementTests(SampleHosts hosts) : IClassFixture<Samp
 
             // Seeing a project asks whether she is on its crew, not what she holds there: no role is read.
             counter.WatchThisFlow();
-            (await gate.AskAsync(bridge, ProjectKeys.View, Cancellation)).Visible.Should().BeFalse();
+            (await gate.AskAsync(bridge, ProjectPermissionNames.View, Cancellation)).Visible.Should().BeFalse();
             counter.Commands.Should().ContainSingle()
                 .Which.Should().Contain(CrewTable).And.NotContain(CrewRolesTable);
 
             counter.WatchThisFlow();
-            (await gate.AskAsync(Harbor.ProjectNamed("Pier 7").Id, ProjectKeys.Edit, Cancellation)).Should().Be(new ProjectAnswer(Visible: true, Allowed: false, Closed: false));
+            (await gate.AskAsync(Harbor.ProjectNamed("Pier 7").Id, ProjectPermissionNames.Edit, Cancellation)).Should().Be(new ProjectAnswer(Visible: true, Allowed: false, Closed: false));
             counter.Commands.Should().ContainSingle();
         }
 
-        // System work in the tenant: one statement too, and it holds every key by neither way.
-        using (TenancyUseCases.BeginSystemIn(Harbor.Id))
+        // The projects' own system work in the tenant: one statement too, and it holds every permission by neither way.
+        using (TenancyUseCases.BeginSystemIn(Harbor.Id, scope: ProjectMembership.Scope))
         {
             await using var scope = sample.Services.CreateAsyncScope();
             counter.WatchThisFlow();
 
-            var hold = await scope.ServiceProvider.GetRequiredService<IMemberQuestions<ProjectId>>().RequireAsync(depot, ProjectKeys.ChangeOwner, Cancellation);
+            var hold = await scope.ServiceProvider.GetRequiredService<IMemberQuestions<ProjectId>>().RequireAsync(depot, ProjectPermissionNames.ChangeOwner, Cancellation);
 
-            counter.Commands.Should().ContainSingle().Which.Should().NotContain(CallerRights);
+            counter.Commands.Should().ContainSingle().Which.Should().NotContain(CallerPermissions);
             hold.Via.Should().Be(MemberVia.System);
         }
     }
@@ -225,8 +225,7 @@ public sealed class AccessStatementTests(SampleHosts hosts) : IClassFixture<Samp
         await using var sample = await CountedAsync(counter);
 
         // Ada opens a project at the root and names Leo as its owner, which is the most a command of Projects asks
-        // before it changes anything: the owner's key at the unit, the unit, the seat and the lead role, which is a
-        // project role, a row of the module's own.
+        // before it changes anything: the owner's permission at the unit, the unit and the seat.
         using (AsSeatOf(DemoPeople.Ada))
         {
             await using var scope = sample.Services.CreateAsyncScope();
@@ -237,8 +236,8 @@ public sealed class AccessStatementTests(SampleHosts hosts) : IClassFixture<Samp
                 new OpenProject("P-900", "Quay wall", Harbor.Root, Harbor.SeatOf(DemoPeople.Leo)),
                 Cancellation);
 
-            // Four contexts: a reading for each case the access check asks, the key to open and, as Leo is not Ada,
-            // the owner's key; one reading for everything the handler asks of Tenancy; and the request's own, the unit
+            // Four contexts: a reading for each case the access check asks, the permission to open and, as Leo is not Ada,
+            // the owner's permission; one reading for everything the handler asks of Tenancy; and the request's own, the unit
             // of work, for the number and the save. Each is taken from the pool, so they are counted by rental: a
             // later reading may well be handed the instance an earlier one gave back.
             counter.Rentals.Should().HaveCount(4, "the check reads on a context per case it asks, the handler asks on one more, and the command saves on the request's");
@@ -246,11 +245,10 @@ public sealed class AccessStatementTests(SampleHosts hosts) : IClassFixture<Samp
             counter.Rentals.Take(3).Should().NotContain(ofTheScope.ContextId, "and nothing of Tenancy is read on it");
             counter.Commands.Take(4).Should().AllSatisfy(
                 statement => statement.Should().StartWith("SELECT").And.Contain($"FROM {TenantsContext.Schema}.").And.NotContain(AnyTableOfTenancy).And.NotContain($"FROM {ProjectsTable}"),
-                "the four questions of Tenancy's come first, each asked of a function of Tenancy's: the key to open, the owner's key, the unit and the seat");
-            counter.Commands[4].Should().Contain($"FROM {ProjectRolesTable}").And.NotContain($"{TenantsContext.Schema}.", "then the lead role, of the module's own table");
-            counter.Commands.Skip(5).Should().AllSatisfy(
-                statement => statement.Should().Contain(ProjectsTable).And.NotContain($"{TenantsContext.Schema}."),
-                "and then the module's own: whether the number is free, and the save");
+                "the four questions of Tenancy's come first, each asked of a function of Tenancy's: the permission to open, the owner's permission, the unit and the seat");
+            counter.Commands.Skip(4).Should().AllSatisfy(
+                statement => statement.Should().Contain(ProjectsTable).And.NotContain($"{TenantsContext.Schema}.").And.NotContain(ProjectRolesTable),
+                "and then the module's own: whether the number is free, and the save; the owner is given no project role, so none is read");
         }
     }
 
@@ -285,7 +283,7 @@ public sealed class AccessStatementTests(SampleHosts hosts) : IClassFixture<Samp
             projects.Rentals[^1].Should().Be(ofTheScope.ContextId);
             projects.Commands.Should().ContainSingle(
                     statement => statement.Contains($"FROM {ProjectRolesTable}", StringComparison.Ordinal) && !statement.Contains(CrewTable, StringComparison.Ordinal),
-                    "the role is asked about once, in the module's own table, beside the check that read the keys of the crew's roles")
+                    "the role is asked about once, in the module's own table, beside the check that read the permissions of the crew's roles")
                 .Which.Should().NotContain(AnyTableOfTenancy, "and nothing of Tenancy's: no table of the Tenants module is named, whichever context asks");
             projects.Commands.Should().ContainSingle(statement => statement.StartsWith($"INSERT INTO {CrewRolesTable}", StringComparison.Ordinal), "the role is one row of its own");
         }
@@ -298,7 +296,7 @@ public sealed class AccessStatementTests(SampleHosts hosts) : IClassFixture<Samp
         await using var sample = await CountedAsync(counter);
 
         // The page with how each project is reached, and nothing after it: the crews and what the caller may do
-        // are queries of their own, sent by whoever shows them. The declared key is the statement's filter, so no
+        // are queries of their own, sent by whoever shows them. The declared permission is the statement's filter, so no
         // check reads before the handler either.
         foreach (var (person, sees) in new[] { (DemoPeople.Ada, Harbor.Projects.Count), (DemoPeople.Juno, 1) })
         {
@@ -324,7 +322,7 @@ public sealed class AccessStatementTests(SampleHosts hosts) : IClassFixture<Samp
         ProjectId[] all = [.. Harbor.Projects.Select(project => project.Id)];
         var pier = Harbor.ProjectNamed("Pier 7").Id;
 
-        // Leo leads Pier 7's crew and sees nothing else of harbor; Ada administers the tenant. Asked about every
+        // Leo owns Pier 7 and sees nothing else of harbor; Ada administers the tenant. Asked about every
         // project of harbor, each is answered about the ones it sees, in one statement, whatever their number.
         foreach (var (person, sees) in new[] { (DemoPeople.Leo, 1), (DemoPeople.Ada, all.Length) })
         {
@@ -337,15 +335,15 @@ public sealed class AccessStatementTests(SampleHosts hosts) : IClassFixture<Samp
                 var crews = await sender.Send(new CrewsOfProjects(all), Cancellation);
 
                 var statement = counter.Commands.Should().ContainSingle("{0} is answered the crews by the statement that decides which projects she sees", person.Name).Which;
-                statement.Should().Contain(CallerRights).And.Contain(CrewTable).And.Contain(CrewRolesTable);
+                statement.Should().Contain(CallerPermissions).And.Contain(CrewTable).And.Contain(CrewRolesTable);
                 crews.Should().HaveCount(sees).And.ContainKey(pier);
                 crews[pier].Members.Select(member => member.SeatId).Should().Equal(
                     [Harbor.SeatOf(DemoPeople.Leo), Harbor.SeatOf(DemoPeople.Juno), Harbor.SeatOf(DemoPeople.Vic)],
                     "the owner first, then by when each was put on the crew");
                 crews[pier].Members.Should().OnlyContain(member => member.ProjectId == pier, "a member says whose crew it is on");
-                crews[pier].MyRoleIds.Should().Equal(person == DemoPeople.Leo ? [Harbor.ProjectRoles[SampleCatalogue.CrewLead]] : [], "the caller's own roles on the crew come with it");
+                crews[pier].MyRoleIds.Should().BeEmpty("the caller's own roles on the crew come with it, and neither holds one there: Leo owns it");
 
-                // Every key an ability stands for, each project's state and whether there is anywhere to move one
+                // Every permission an ability stands for, each project's state and whether there is anywhere to move one
                 // to: one statement. Leo may not open a project anywhere, so he may not move one.
                 counter.WatchThisFlow();
                 var abilities = await sender.Send(new AbilitiesOnProjects(all), Cancellation);
@@ -365,7 +363,7 @@ public sealed class AccessStatementTests(SampleHosts hosts) : IClassFixture<Samp
             }
         }
 
-        // Vic only looks at Pier 7: he holds no key an ability stands for, and is answered about it all the same.
+        // Vic only looks at Pier 7: he holds no permission an ability stands for, and is answered about it all the same.
         using (AsSeatOf(DemoPeople.Vic))
         {
             await using var scope = sample.Services.CreateAsyncScope();
@@ -400,7 +398,7 @@ public sealed class AccessStatementTests(SampleHosts hosts) : IClassFixture<Samp
         await using var sample = await CountedAsync(counter);
         var pier = Harbor.ProjectNamed("Pier 7");
 
-        // The query declares the key it is seen with, so nothing is read before its handler: the one statement is
+        // The query declares the permission it is seen with, so nothing is read before its handler: the one statement is
         // the project within the caller's reach, with its crew and each member's roles. Juno is on the crew, Rhea
         // reaches it through her area, and Hana reaches no project at all.
         foreach (var person in new[] { DemoPeople.Juno, DemoPeople.Rhea })
@@ -413,7 +411,7 @@ public sealed class AccessStatementTests(SampleHosts hosts) : IClassFixture<Samp
                 var crew = await scope.ServiceProvider.GetRequiredService<ISender>().Send(new AllCrewMembers(pier.Id), Cancellation);
 
                 var statement = counter.Commands.Should().ContainSingle("{0} is answered the crew by the statement that decides whether she sees the project", person.Name).Which;
-                statement.Should().Contain(CallerRights).And.Contain(CrewTable).And.Contain(CrewRolesTable);
+                statement.Should().Contain(CallerPermissions).And.Contain(CrewTable).And.Contain(CrewRolesTable);
                 counter.Rentals.Should().ContainSingle("the query reads on one context, and no check read before it");
                 crew.Select(member => member.SeatId).Should().Equal(
                     [Harbor.SeatOf(DemoPeople.Leo), Harbor.SeatOf(DemoPeople.Juno), Harbor.SeatOf(DemoPeople.Vic)],
@@ -487,7 +485,7 @@ public sealed class AccessStatementTests(SampleHosts hosts) : IClassFixture<Samp
                 // inside it: once for the access check, which asks whether she sees the project, and once for the
                 // button, which asks whether she may record on it.
                 statements.Take(2).Should().AllSatisfy(statement => statement.Should()
-                    .Contain(ProjectsTable).And.Contain(CallerRights).And.Contain(CrewTable));
+                    .Contain(ProjectsTable).And.Contain(CallerPermissions).And.Contain(CrewTable));
 
                 // The list is one statement that reads inspections and nothing of Tenancy's or Projects'.
                 statements[2].Should().Contain($"{InspectionsContext.Schema}.\"{InspectionsContext.InspectionsTable}\"")
@@ -522,19 +520,18 @@ public sealed class AccessStatementTests(SampleHosts hosts) : IClassFixture<Samp
                     .Which.Should().Contain($"{AnyTableOfTenancy}Seats\"").And.Contain("\"DisplayName\"", "the name is read from the seats' own table");
 
                 // The roles: two statements, the tenant's roles, from which the ones asked for are picked, and
-                // whether the caller holds the key a role's keys are answered to.
+                // whether the caller holds the permission a role's permissions are answered to.
                 RoleId[] roles = [.. Harbor.Roles.Values, .. Enumerable.Range(0, padding).Select(_ => RoleId.CreateSequential())];
                 counter.WatchThisFlow();
                 (await sender.Send(new RolesById(roles), Cancellation)).Should().HaveCount(Harbor.Roles.Count);
                 counter.Commands.Should().HaveCount(2, "{0} roles asked about", roles.Length);
 
-                // The units: two statements, the organization with its units and the closure that orders a path. The
-                // kind, the application's own field, comes with the units the directory read: no statement more.
+                // The units: one statement, Tenancy's function that names the units asked about, each with its path.
                 OrganizationUnitId[] units = [Harbor.Root, .. Harbor.Units.Select(unit => unit.Id), .. Enumerable.Range(0, padding).Select(_ => OrganizationUnitId.CreateSequential())];
                 counter.WatchThisFlow();
                 (await sender.Send(new OrganizationUnitsById(units), Cancellation)).Should().HaveCount(Harbor.Units.Count + 1)
-                    .And.OnlyContain(unit => unit.Kind != null, "every unit of the demonstration tenant is seeded with its kind");
-                counter.Commands.Should().HaveCount(2, "{0} units asked about", units.Length);
+                    .And.OnlyContain(unit => unit.Path.StartsWith("Harbor Works", StringComparison.Ordinal), "every unit is named by its path from the root");
+                counter.Commands.Should().ContainSingle("{0} units asked about", units.Length);
 
                 // And no ids at all cost nothing.
                 counter.WatchThisFlow();
@@ -546,7 +543,7 @@ public sealed class AccessStatementTests(SampleHosts hosts) : IClassFixture<Samp
         }
     }
 
-    /// <summary>The projects the current caller reaches with <see cref="ProjectKeys.View"/>, read through the port, counted.</summary>
+    /// <summary>The projects the current caller reaches with <see cref="ProjectPermissionNames.View"/>, read through the port, counted.</summary>
     private static async Task<(MemberReach<ProjectId> Reach, IReadOnlyList<ProjectOverview> Projects)> ListedAsync(SampleFactory sample, CommandCounter counter)
     {
         await using var scope = sample.Services.CreateAsyncScope();
@@ -554,19 +551,19 @@ public sealed class AccessStatementTests(SampleHosts hosts) : IClassFixture<Samp
 
         counter.WatchThisFlow();
         await using var reading = scope.ServiceProvider.GetRequiredService<IProjectReads>().Open();
-        var reach = access.ReachFor(ProjectKeys.View);
+        var reach = access.ReachFor(ProjectPermissionNames.View);
         return (reach, [.. (await reading.PageAsync(reach, ProjectListFilter.None, new PagingArguments(first: VisibleProjects.LargestPage), Cancellation)).Items]);
     }
 
     [Fact]
-    public async Task Where_a_seat_holds_a_key_is_one_statement_through_the_read_port()
+    public async Task Where_a_seat_holds_a_permission_is_one_statement_through_the_read_port()
     {
         var counter = new CommandCounter();
         await using var sample = await hosts.StartAsync(services => services.ConfigureDbContext<TenantsContext>(options => options.AddInterceptors(counter)));
 
         // Rhea manages the units of her area, North, and so of the two units below it; not the whole tenant.
         using var rhea = await sample.ClientAsync("rhea", Harbor.Slug);
-        var answered = await rhea.GetFromJsonAsync<JsonElement>("/access/units?key=" + TenancyKeys.UnitsManage, Cancellation);
+        var answered = await rhea.GetFromJsonAsync<JsonElement>("/access/units?permission=" + TenancyPermissions.UnitsManage, Cancellation);
 
         using (AsSeatOf(DemoPeople.Rhea))
         {
@@ -574,23 +571,23 @@ public sealed class AccessStatementTests(SampleHosts hosts) : IClassFixture<Samp
             var sender = scope.ServiceProvider.GetRequiredService<ISender>();
 
             counter.WatchThisFlow();
-            var held = await sender.Send(new UnitsWhereIHold(TenancyKeys.UnitsManage), Cancellation);
+            var held = await sender.Send(new UnitsWhereIHold(TenancyPermissions.UnitsManage), Cancellation);
 
-            // One statement, on a context the query took from the factory: the units where she holds the key, from
+            // One statement, on a context the query took from the factory: the units where she holds the permission, from
             // Tenancy's rights, are a subquery of the query that reads the tenant's units. This is Tenancy's own
             // context, so both are its own tables.
-            var statement = counter.Commands.Should().ContainSingle("where the key is held is asked inside the query that reads the units").Which;
+            var statement = counter.Commands.Should().ContainSingle("where the permission is held is asked inside the query that reads the units").Which;
             statement.Should().Contain($"{AnyTableOfTenancy}SeatRights\"", "UnitsWhereIHold reads Tenancy's rights in the same statement");
             statement.Should().Contain($"{AnyTableOfTenancy}OrganizationUnits\"", "the units are read in the same statement");
 
-            held.WholeTenant.Should().BeFalse();
+            held.AtTenant.Should().BeFalse();
             statement.Should().NotContain("\"Name\"", "no name is read: the answer is ids");
             held.Units.Should().BeEquivalentTo([Harbor.UnitNamed("North"), Harbor.UnitNamed("North Coast"), Harbor.UnitNamed("North Inland")]);
             held.Units.Select(unit => unit.Value).Should().BeInAscendingOrder("the ids come ordered by their value, so the answer is the same every time");
             held.Units.Select(unit => unit.Value).Should().Equal(
                 answered.GetProperty("unitsWhereIHold").EnumerateArray().Select(unit => unit.GetGuid()),
                 "the route answers with this query's answer");
-            answered.GetProperty("wholeTenant").GetBoolean().Should().BeFalse();
+            answered.GetProperty("atTenant").GetBoolean().Should().BeFalse();
         }
 
         // Ada administers the tenant from its root: every unit, and the whole tenant, in the one statement too.
@@ -599,10 +596,10 @@ public sealed class AccessStatementTests(SampleHosts hosts) : IClassFixture<Samp
             await using var scope = sample.Services.CreateAsyncScope();
 
             counter.WatchThisFlow();
-            var held = await scope.ServiceProvider.GetRequiredService<ISender>().Send(new UnitsWhereIHold(TenancyKeys.UnitsManage), Cancellation);
+            var held = await scope.ServiceProvider.GetRequiredService<ISender>().Send(new UnitsWhereIHold(TenancyPermissions.UnitsManage), Cancellation);
 
             counter.Commands.Should().ContainSingle();
-            held.WholeTenant.Should().BeTrue("she holds the key at the root");
+            held.AtTenant.Should().BeTrue("she holds the permission at the root");
             held.Units.Should().HaveCount(Harbor.Units.Count + 1, "the root and every unit below it");
         }
     }

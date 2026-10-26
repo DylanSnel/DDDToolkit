@@ -12,7 +12,7 @@ namespace DDDToolkit.Supporting.Tenancy.Postgres.Tests.Infrastructure;
 /// <list type="table">
 /// <item><term>Harbor (1)</term><description>
 /// A tree: the root, North and South below it, and North Pier below North. Ada administers it. Hiro holds the
-/// Grants desk role at North (only <c>tenancy.grants.manage</c>, a key that manages access). Seth is a Supervisor at
+/// Grants desk role at North (only <c>tenancy.grants.manage</c>, a permission that manages access). Seth is a Supervisor at
 /// North (units, seats and grants managed there, and widgets), placed at North and North Pier. Oli is an Operator at
 /// North Pier. Sue is an Operator at South, and suspended. Eve is placed at South with a Watcher grant that ended
 /// yesterday and an Operator grant that starts the day after tomorrow. Widgets at North, North Pier (with a part) and
@@ -89,7 +89,7 @@ public static class TenancySeed
         });
         await services.BySystemIn(Harbor, scoped => scoped.Organization().AddUnitAsync(HarborRoot, "South", cancellationToken, South));
         await services.BySystemIn(Harbor, scoped => scoped.Organization().AddUnitAsync(North, "North Pier", cancellationToken, NorthPier));
-        await services.BySystemIn(Harbor, scoped => scoped.Roles().CreateAsync("Grants desk", "Gives roles", [TenancyKeys.GrantsManage], cancellationToken, GrantsDesk));
+        await services.BySystemIn(Harbor, scoped => scoped.Roles().CreateAsync("Grants desk", "Gives roles", [TenancyPermissions.GrantsManage], cancellationToken, GrantsDesk));
 
         await SeatPersonAsync(services, Harbor, Hiro, North, [(North, GrantsDesk, null, null)], cancellationToken);
         await SeatPersonAsync(services, Harbor, Seth, North, [(North, HarborRoles.Supervisor, null, null)], cancellationToken);
@@ -140,15 +140,15 @@ public static class TenancySeed
 
     /// <summary>
     /// Gives <paramref name="person"/> a role in Harbor at <paramref name="unit"/>, placing them there first where they are
-    /// not: Harbor's Administrator, every key there and below, or with <paramref name="keys"/> a role of its own holding
+    /// not: Harbor's Administrator, every permission there and below, or with <paramref name="permissions"/> a role of its own holding
     /// those alone. System work through the use cases, committed.
     /// </summary>
-    public static async Task HoldAtAsync(TestDatabase database, Person person, OrganizationUnitId unit, IReadOnlyCollection<string>? keys, CancellationToken cancellationToken)
+    public static async Task HoldAtAsync(TestDatabase database, Person person, OrganizationUnitId unit, IReadOnlyCollection<string>? permissions, CancellationToken cancellationToken)
     {
         await using var services = new TenancyServices(database);
-        var role = keys is null
+        var role = permissions is null
             ? HarborRoles.Administrator
-            : await services.BySystemIn(Harbor, scoped => scoped.Roles().CreateAsync("Desk for " + string.Join(" and ", keys), "Holds what a test needs", keys, cancellationToken));
+            : await services.BySystemIn(Harbor, scoped => scoped.Roles().CreateAsync("Desk for " + string.Join(" and ", permissions), "Holds what a test needs", permissions, cancellationToken));
 
         await services.BySystemIn(Harbor, async scoped =>
         {

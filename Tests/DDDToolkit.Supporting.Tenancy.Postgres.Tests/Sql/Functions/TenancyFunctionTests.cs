@@ -9,7 +9,7 @@ namespace DDDToolkit.Supporting.Tenancy.Postgres.Tests;
 
 /// <summary>
 /// Tenancy's SQL functions answer as its C# questions do, for every seeded person in every tenant they might pick and
-/// for every key of the catalogue: the policies and the use cases decide on the same facts. The C# side resolves the
+/// for every permission of the catalogue: the policies and the use cases decide on the same facts. The C# side resolves the
 /// caller as the application does, from the verified identity and the tenant picked, and asks over Entity Framework as
 /// the tables' owner, at the moment the database's <c>now()</c> said just before; the SQL side asks as that person,
 /// with that tenant in the setting.
@@ -37,25 +37,25 @@ public abstract class TenancyFunctionTests(TenancyPostgres postgres, TenancyNami
 
     [Theory]
     [MemberData(nameof(Seats))]
-    public async Task Every_function_answers_as_the_csharp_question_for_every_seat_key_and_unit(string who)
+    public async Task Every_function_answers_as_the_csharp_question_for_every_seat_permission_and_unit(string who)
     {
         var (identity, tenant, slug) = Callers[who];
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
         var now = await TenancySeed.DatabaseNowAsync(database.ConnectionString, Cancellation);
-        var keys = TenancyPostgres.Catalogue.LiveKeys;
+        var permissions = TenancyPostgres.Catalogue.LivePermissions;
 
-        var csharp = await CSharpAnswersAsync(database, identity, slug, now, keys);
-        var sql = await SqlAnswersAsync(database, identity, tenant, keys);
+        var csharp = await CSharpAnswersAsync(database, identity, slug, now, permissions);
+        var sql = await SqlAnswersAsync(database, identity, tenant, permissions);
 
         sql.Seat.Should().Be(csharp.Seat, "caller_seat() is the seat the application selects");
         sql.Tenant.Should().Be(csharp.Tenant, "caller_tenant() is that seat's tenant");
         sql.Readable.Should().BeEquivalentTo(csharp.Readable, "readable_units() is ReadableUnits()");
-        foreach (var key in keys)
+        foreach (var permission in permissions)
         {
-            sql.Held[key].Should().BeEquivalentTo(csharp.Held[key], "units_where_i_hold('{0}') is UnitsWhereIHold", key);
-            sql.Roles[key].Should().BeEquivalentTo(csharp.Roles[key], "roles_with_key('{0}') is RolesWithKey", key);
-            sql.HoldsKey[key].Should().Be(csharp.Held[key].Count > 0, "holds_key('{0}') is a unit where the key is held", key);
-            sql.AtTheRoot[key].Should().Be(csharp.AtTheRoot[key], "holds_tenant_wide('{0}') is HoldsTenantWideAsync", key);
+            sql.Held[permission].Should().BeEquivalentTo(csharp.Held[permission], "units_where_i_hold_permission('{0}') is UnitsWhereIHold", permission);
+            sql.Roles[permission].Should().BeEquivalentTo(csharp.Roles[permission], "roles_with_permission('{0}') is RolesWithPermission", permission);
+            sql.HoldsPermission[permission].Should().Be(csharp.Held[permission].Count > 0, "holds_permission('{0}') is a unit where the permission is held", permission);
+            sql.AtTheRoot[permission].Should().Be(csharp.AtTheRoot[permission], "holds_at_tenant('{0}') is HoldsAtTenantAsync", permission);
         }
     }
 
@@ -64,17 +64,17 @@ public abstract class TenancyFunctionTests(TenancyPostgres postgres, TenancyNami
     {
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
 
-        // Sue holds an Operator grant at South, and Quin every key of Quay; neither answers for anything now.
+        // Sue holds an Operator grant at South, and Quin every permission of Quay; neither answers for anything now.
         foreach (var (identity, tenant, placed) in new[] { (Sue.Identity, Harbor, South), (Quin.Identity, Quay, QuayRoot) })
         {
             await using var caller = await AsCaller.PersonAsync(database, identity, tenant, Cancellation);
             (await caller.ScalarAsync<Guid?>("SELECT tenancy.caller_seat()", Cancellation)).Should().BeNull();
             (await caller.ScalarAsync<long?>("SELECT tenancy.caller_tenant()", Cancellation)).Should().BeNull();
             (await caller.ListAsync<Guid>("SELECT tenancy.readable_units()", Cancellation)).Should().BeEmpty("the seat is still placed at {0}, and answers for no unit", placed);
-            (await caller.ListAsync<Guid>("SELECT tenancy.units_where_i_hold('widget.read')", Cancellation)).Should().BeEmpty();
-            (await caller.ListAsync<Guid>("SELECT tenancy.roles_with_key('widget.read')", Cancellation)).Should().BeEmpty();
-            (await caller.ScalarAsync<bool>("SELECT tenancy.holds_key('tenancy.roles.manage')", Cancellation)).Should().BeFalse();
-            (await caller.ScalarAsync<bool>("SELECT tenancy.holds_tenant_wide('tenancy.roles.manage')", Cancellation)).Should().BeFalse();
+            (await caller.ListAsync<Guid>("SELECT tenancy.units_where_i_hold_permission('widget.read')", Cancellation)).Should().BeEmpty();
+            (await caller.ListAsync<Guid>("SELECT tenancy.roles_with_permission('widget.read')", Cancellation)).Should().BeEmpty();
+            (await caller.ScalarAsync<bool>("SELECT tenancy.holds_permission('tenancy.roles.manage')", Cancellation)).Should().BeFalse();
+            (await caller.ScalarAsync<bool>("SELECT tenancy.holds_at_tenant('tenancy.roles.manage')", Cancellation)).Should().BeFalse();
             (await caller.ScalarAsync<long>("SELECT count(*) FROM tenancy.\"OrganizationUnits\"", Cancellation)).Should().Be(0, "and reads no row of the tenant");
         }
 
@@ -93,10 +93,10 @@ public abstract class TenancyFunctionTests(TenancyPostgres postgres, TenancyNami
         await using var eve = await AsCaller.PersonAsync(database, Eve.Identity, Harbor, Cancellation);
         (await eve.ScalarAsync<Guid?>("SELECT tenancy.caller_seat()", Cancellation)).Should().Be(Eve.Seat.Value, "Eve is seated");
         (await eve.ListAsync<Guid>("SELECT tenancy.readable_units()", Cancellation)).Should().Equal([South.Value], "and placed at South");
-        foreach (var key in new[] { "widget.read", "widget.change", "widget.create" })
+        foreach (var permission in new[] { "widget.read", "widget.change", "widget.create" })
         {
-            (await eve.ListAsync<Guid>("SELECT tenancy.units_where_i_hold($1)", Cancellation, key)).Should().BeEmpty("no grant of hers applies now");
-            (await eve.ScalarAsync<bool>("SELECT tenancy.holds_key($1)", Cancellation, key)).Should().BeFalse();
+            (await eve.ListAsync<Guid>("SELECT tenancy.units_where_i_hold_permission($1)", Cancellation, permission)).Should().BeEmpty("no grant of hers applies now");
+            (await eve.ScalarAsync<bool>("SELECT tenancy.holds_permission($1)", Cancellation, permission)).Should().BeFalse();
         }
 
         // The rights rows are there, with the grants' periods.
@@ -104,7 +104,7 @@ public abstract class TenancyFunctionTests(TenancyPostgres postgres, TenancyNami
                 "SELECT count(*) FROM tenancy.\"SeatRights\" WHERE \"SeatId\" = $1 AND (\"EndsAt\" <= now() OR \"StartsAt\" > now())",
                 Cancellation,
                 Eve.Seat.Value))
-            .Should().Be(4, "one for the Watcher's key, three for the Operator's");
+            .Should().Be(4, "one for the Watcher's permission, three for the Operator's");
     }
 
     [Fact]
@@ -130,7 +130,7 @@ public abstract class TenancyFunctionTests(TenancyPostgres postgres, TenancyNami
 
             if (seat is null)
             {
-                (await caller.ScalarAsync<bool>("SELECT tenancy.holds_key('tenancy.roles.manage')", Cancellation)).Should().BeFalse();
+                (await caller.ScalarAsync<bool>("SELECT tenancy.holds_permission('tenancy.roles.manage')", Cancellation)).Should().BeFalse();
                 (await caller.ScalarAsync<long>("SELECT count(*) FROM tenancy.\"SeatRights\"", Cancellation)).Should().Be(0);
             }
         }
@@ -185,7 +185,7 @@ public abstract class TenancyFunctionTests(TenancyPostgres postgres, TenancyNami
     }
 
     /// <summary>What the C# questions answer for the person, who picked <paramref name="slug"/>.</summary>
-    private static async Task<Answers> CSharpAnswersAsync(TestDatabase database, Guid identity, string slug, DateTimeOffset now, IReadOnlyList<string> keys)
+    private static async Task<Answers> CSharpAnswersAsync(TestDatabase database, Guid identity, string slug, DateTimeOffset now, IReadOnlyList<string> permissions)
     {
         await using var services = new TenancyServices(
             database,
@@ -204,11 +204,11 @@ public abstract class TenancyFunctionTests(TenancyPostgres postgres, TenancyNami
                 caller.Kind == TenancyCallerKind.Seat ? caller.Tenant?.Value : null,
                 [.. (await questions.ReadableUnits().ToListAsync(Cancellation)).Select(unit => unit.Value)]);
 
-            foreach (var key in keys)
+            foreach (var permission in permissions)
             {
-                answers.Held[key] = [.. (await questions.UnitsWhereIHold(key).ToListAsync(Cancellation)).Select(unit => unit.Value)];
-                answers.Roles[key] = [.. (await questions.RolesWithKey(key).ToListAsync(Cancellation)).Select(role => role.Value)];
-                answers.AtTheRoot[key] = await questions.HoldsTenantWideAsync(key, Cancellation);
+                answers.Held[permission] = [.. (await questions.UnitsWhereIHold(permission).ToListAsync(Cancellation)).Select(unit => unit.Value)];
+                answers.Roles[permission] = [.. (await questions.RolesWithPermission(permission).ToListAsync(Cancellation)).Select(role => role.Value)];
+                answers.AtTheRoot[permission] = await questions.HoldsAtTenantAsync(permission, Cancellation);
             }
 
             return answers;
@@ -216,7 +216,7 @@ public abstract class TenancyFunctionTests(TenancyPostgres postgres, TenancyNami
     }
 
     /// <summary>What the SQL functions answer for the person, with <paramref name="tenant"/> in the setting.</summary>
-    private static async Task<Answers> SqlAnswersAsync(TestDatabase database, Guid identity, TenantId tenant, IReadOnlyList<string> keys)
+    private static async Task<Answers> SqlAnswersAsync(TestDatabase database, Guid identity, TenantId tenant, IReadOnlyList<string> permissions)
     {
         await using var caller = await AsCaller.PersonAsync(database, identity, tenant, Cancellation);
         var answers = new Answers(
@@ -224,25 +224,25 @@ public abstract class TenancyFunctionTests(TenancyPostgres postgres, TenancyNami
             await caller.ScalarAsync<long?>("SELECT tenancy.caller_tenant()", Cancellation),
             await caller.ListAsync<Guid>("SELECT tenancy.readable_units()", Cancellation));
 
-        foreach (var key in keys)
+        foreach (var permission in permissions)
         {
-            answers.Held[key] = await caller.ListAsync<Guid>("SELECT tenancy.units_where_i_hold($1)", Cancellation, key);
-            answers.Roles[key] = await caller.ListAsync<Guid>("SELECT tenancy.roles_with_key($1)", Cancellation, key);
-            answers.HoldsKey[key] = await caller.ScalarAsync<bool>("SELECT tenancy.holds_key($1)", Cancellation, key);
-            answers.AtTheRoot[key] = await caller.ScalarAsync<bool>("SELECT tenancy.holds_tenant_wide($1)", Cancellation, key);
+            answers.Held[permission] = await caller.ListAsync<Guid>("SELECT tenancy.units_where_i_hold_permission($1)", Cancellation, permission);
+            answers.Roles[permission] = await caller.ListAsync<Guid>("SELECT tenancy.roles_with_permission($1)", Cancellation, permission);
+            answers.HoldsPermission[permission] = await caller.ScalarAsync<bool>("SELECT tenancy.holds_permission($1)", Cancellation, permission);
+            answers.AtTheRoot[permission] = await caller.ScalarAsync<bool>("SELECT tenancy.holds_at_tenant($1)", Cancellation, permission);
         }
 
         return answers;
     }
 
-    /// <summary>What one side answered, by key where a question takes one.</summary>
+    /// <summary>What one side answered, by permission where a question takes one.</summary>
     private sealed record Answers(Guid? Seat, long? Tenant, List<Guid> Readable)
     {
         public Dictionary<string, List<Guid>> Held { get; } = new(StringComparer.Ordinal);
 
         public Dictionary<string, List<Guid>> Roles { get; } = new(StringComparer.Ordinal);
 
-        public Dictionary<string, bool> HoldsKey { get; } = new(StringComparer.Ordinal);
+        public Dictionary<string, bool> HoldsPermission { get; } = new(StringComparer.Ordinal);
 
         public Dictionary<string, bool> AtTheRoot { get; } = new(StringComparer.Ordinal);
     }

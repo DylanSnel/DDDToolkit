@@ -42,13 +42,13 @@ public sealed class FilingContext(DbContextOptions<FilingContext> options) : DbC
             document.Property(row => row.Title).HasMaxLength(200);
 
             // Every type argument is inferred: the member class from the collection, the member's id from the owner.
-            document.HasMembers(row => row.Shares, row => row.OwnerId);
+            document.HasMembers(row => row.Shares);
         });
 
         modelBuilder.Entity<Folder>(folder =>
         {
             folder.Property(row => row.Id).ValueGeneratedNever();
-            folder.HasMembers(row => row.Staff, row => row.Keeper, new MemberTableNames(FolderStaffTable, FolderStaffRolesTable, StaffColumn));
+            folder.HasMembers(row => row.Staff, new MemberTableNames(FolderStaffTable, FolderStaffRolesTable, StaffColumn));
         });
     }
 

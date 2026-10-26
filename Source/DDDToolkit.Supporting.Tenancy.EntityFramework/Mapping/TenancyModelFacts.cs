@@ -30,11 +30,11 @@ internal sealed class TenancyModelFacts
 
     /// <summary>
     /// The rows Tenancy's database functions answer, which the store reads from SQL that asks the function: ids,
-    /// keys and dates, held to their own properties as the read rows are.
+    /// permissions and dates, held to their own properties as the read rows are.
     /// </summary>
     private static readonly HashSet<Type> FunctionRows =
     [
-        typeof(SeatHolderRow<>), typeof(TenantAdministratorRow<,>), typeof(TenantToSweepRow<>), typeof(MoveReach<>),
+        typeof(SeatHolderRow<>), typeof(TenantAdministratorRow<,>), typeof(TenantToSweepRow<>), typeof(MoveReach<>), typeof(NamedUnit<>), typeof(TenantNameRow<>),
         typeof(InvitationOfDigestRow<,,>),
     ];
 
@@ -179,7 +179,7 @@ internal sealed class TenancyModelFacts
             {
                 findings.Add(
                     $"{entityType.DisplayName()} has the property {property.Name}, which is no part of Tenancy's read model. The rows carry access facts only: "
-                    + "ids, keys, periods and statuses, and never a name. Ask the directory for names, by id.");
+                    + "ids, permissions, periods and statuses, and never a name. Ask the directory for names, by id.");
             }
 
             foreach (var navigation in entityType.GetNavigations().Cast<IReadOnlyNavigationBase>().Concat(entityType.GetSkipNavigations()))

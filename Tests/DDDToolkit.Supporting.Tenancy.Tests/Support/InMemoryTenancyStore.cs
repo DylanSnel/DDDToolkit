@@ -295,11 +295,25 @@ public sealed class InMemoryTenancyStore
         IReadOnlyList<(SeatId Seat, RoleId Role)> pairs =
         [
             .. _whole.SeatRights.AsEnumerable()
-                .Where(right => right.TenantId == tenant && roots.Contains(right.UnitId) && right.Key == TenancyKeys.AdministratorKey
+                .Where(right => right.TenantId == tenant && roots.Contains(right.UnitId) && right.Permission == TenancyPermissions.AdministratorPermission
                                 && right.EndsAt is null && right.StartsAt <= now)
                 .Select(right => (right.SeatId, right.RoleId)),
         ];
         return Task.FromResult(pairs);
+    }
+
+    /// <summary>No policies of its own: the use case reads the organization whole.</summary>
+    public Task<IReadOnlyList<NamedUnit<OrganizationUnitId>>?> UnitsNamedAsync(TenantId tenant, IReadOnlyCollection<OrganizationUnitId> ids, CancellationToken cancellationToken)
+    {
+        Record(nameof(UnitsNamedAsync));
+        return Task.FromResult<IReadOnlyList<NamedUnit<OrganizationUnitId>>?>(null);
+    }
+
+    /// <summary>No policies of its own: the overview reads the organization.</summary>
+    public Task<string?> TenantNameAsync(TenantId tenant, CancellationToken cancellationToken)
+    {
+        Record(nameof(TenantNameAsync));
+        return Task.FromResult<string?>(null);
     }
 
     public Task<IReadOnlyList<MoveReach<OrganizationUnitId>>> RightsAMoveChangesAsync(
@@ -321,10 +335,10 @@ public sealed class InMemoryTenancyStore
         [
             .. from right in _whole.SeatRights.AsEnumerable()
                where right.TenantId == tenant && (right.EndsAt is null || right.EndsAt > now)
-                     && (right.SeatId == seat || (managing.Contains(right.Key) && !ReachesBoth(right.UnitId)))
+                     && (right.SeatId == seat || (managing.Contains(right.Permission) && !ReachesBoth(right.UnitId)))
                from path in paths
                where path.AncestorId == right.UnitId
-               select new MoveReach<OrganizationUnitId>(right.UnitId, right.Key, right.EndsAt, path.DescendantId, right.SeatId == seat),
+               select new MoveReach<OrganizationUnitId>(right.UnitId, right.Permission, right.EndsAt, path.DescendantId, right.SeatId == seat),
         ];
         return Task.FromResult(reaches);
     }
@@ -416,7 +430,7 @@ public sealed class InMemoryTenancyStore
         {
             if (Saved(aggregate))
             {
-                throw new InvalidOperationException("A " + aggregate.GetType().Name + " with the same key is already saved.");
+                throw new InvalidOperationException("A " + aggregate.GetType().Name + " with the same permission is already saved.");
             }
         }
 
@@ -612,7 +626,7 @@ public sealed class InMemoryTenancyStore
                     TenantId = role.TenantId,
                     FromPack = role.FromPack,
                     Status = role.Status,
-                    Keys = role.Keys,
+                    Permissions = role.Permissions,
                 }),
                 row => row.TenantId).AsQueryable();
 

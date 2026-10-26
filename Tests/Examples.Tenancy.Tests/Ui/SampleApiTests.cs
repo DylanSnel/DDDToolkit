@@ -35,7 +35,7 @@ public sealed class SampleApiTests
     {
         const string body = """
             {"type":"https://tools.ietf.org/html/rfc9110#section-15.5.4","title":"You may not do this to the project.","status":403,
-             "detail":"More words.","code":"projects.not-permitted","arguments":{"Key":"projects.close","Max":200},"traceId":"00-1"}
+             "detail":"More words.","code":"projects.not-permitted","arguments":{"Permission":"projects.close","Max":200},"traceId":"00-1"}
             """;
         using var stub = StubApi.Answering(HttpStatusCode.Forbidden, body, "application/problem+json");
         var session = SignedIn();
@@ -56,8 +56,8 @@ public sealed class SampleApiTests
         outcome.Problem!.Code.Should().Be("projects.not-permitted");
         outcome.Problem.Title.Should().Be("You may not do this to the project.");
         outcome.Problem.Detail.Should().Be("More words.");
-        outcome.Problem.Arguments.Keys.Should().BeEquivalentTo(new[] { "Key", "Max" });
-        outcome.Problem.Arguments["Key"].GetString().Should().Be("projects.close");
+        outcome.Problem.Arguments.Keys.Should().BeEquivalentTo(new[] { "Permission", "Max" });
+        outcome.Problem.Arguments["Permission"].GetString().Should().Be("projects.close");
         outcome.Problem.Arguments["Max"].GetInt32().Should().Be(200);
 
         session.LastAnswer.Should().BeSameAs(outcome, "the layout's strip shows every answer");
@@ -166,15 +166,15 @@ public sealed class SampleApiTests
     {
         using var stub = new StubApi(request => request.PathAndQuery == "/tenancy/roles"
             ? StubApi.Response(HttpStatusCode.OK, """
-                [{"id":"e0000000-0000-4000-8000-000000000106","name":"People office","fromPack":"people-office","status":"active","keys":["tenancy.grants.manage"],"managesAccess":true},
-                 {"id":"e0000000-0000-4000-8000-000000000105","name":"Observer","fromPack":"observer","status":"active","keys":["projects.view"]},
-                 {"id":"e0000000-0000-4000-8000-000000000103","name":"Crew lead","fromPack":"crew-lead","status":"archived","keys":[]}]
+                [{"id":"e0000000-0000-4000-8000-000000000106","name":"People office","fromPack":"people-office","status":"active","permissions":["tenancy.grants.manage"],"managesAccess":true},
+                 {"id":"e0000000-0000-4000-8000-000000000105","name":"Observer","fromPack":"observer","status":"active","permissions":["projects.view"]},
+                 {"id":"e0000000-0000-4000-8000-000000000103","name":"Crew lead","fromPack":"crew-lead","status":"archived","permissions":[]}]
                 """)
-            : StubApi.Response(HttpStatusCode.OK, """{"permissions":[{"key":"projects.owner.change","module":"Projects","description":"Name a project's owner","retired":false,"managesAccess":true}]}"""));
+            : StubApi.Response(HttpStatusCode.OK, """{"permissions":[{"permission":"projects.owner.change","module":"Projects","description":"Name a project's owner","retired":false,"managesAccess":true}]}"""));
         var api = new SampleApi(stub.Client(), SignedIn());
 
         var roles = (await api.TenantRolesAsync(Cancellation)).Value!;
-        var catalogue = (await api.KeyCatalogueAsync(Cancellation)).Value!;
+        var catalogue = (await api.PermissionCatalogueAsync(Cancellation)).Value!;
 
         roles.Select(role => (role.Name, role.ManagesAccess, role.IsActive)).Should().Equal(
             [("People office", true, true), ("Observer", false, true), ("Crew lead", false, false)], "an answer that does not say reads as managing none");
@@ -182,20 +182,20 @@ public sealed class SampleApiTests
     }
 
     [Fact]
-    public async Task A_project_role_reads_its_keys_only_where_they_were_answered()
+    public async Task A_project_role_reads_its_permissions_only_where_they_were_answered()
     {
         using var stub = StubApi.Answering(HttpStatusCode.OK, """
-            [{"id":"90000000-0000-4000-8000-000000000103","name":"Crew lead","description":"Leads a project crew","madeFrom":"crew-lead","status":"active","keys":["projects.view","projects.edit"]},
-             {"id":"90000000-0000-4000-8000-000000000106","name":"Diver","description":"","madeFrom":null,"status":"archived","keys":null}]
+            [{"id":"90000000-0000-4000-8000-000000000103","name":"Crew lead","description":"Leads a project crew","madeFrom":"crew-lead","status":"active","permissions":["projects.view","projects.edit"]},
+             {"id":"90000000-0000-4000-8000-000000000106","name":"Diver","description":"","madeFrom":null,"status":"archived","permissions":null}]
             """);
         var api = new SampleApi(stub.Client(), SignedIn());
 
         var roles = (await api.ProjectRolesAsync(Cancellation)).Value!;
 
         stub.Requests.Should().ContainSingle().Which.Should().Match<StubRequest>(request => request.Method == "GET" && request.PathAndQuery == "/project-roles");
-        roles.Select(role => (role.Name, role.MadeFrom, role.IsActive, role.Keys is null, role.KeysShown.Count)).Should().Equal(
+        roles.Select(role => (role.Name, role.MadeFrom, role.IsActive, role.Permissions is null, role.PermissionsShown.Count)).Should().Equal(
             [("Crew lead", "crew-lead", true, false, 2), ("Diver", null, false, true, 0)],
-            "keys the answer left out read as none to show, and not as a role that gives none");
+            "permissions the answer left out read as none to show, and not as a role that gives none");
     }
 
     [Fact]
@@ -228,13 +228,13 @@ public sealed class SampleApiTests
 
         await api.MakeProjectRoleAsync("Rigger", " ", ["projects.view"], Cancellation);
         await api.RenameProjectRoleAsync(role, "Rigger", "Rigs the hoists", Cancellation);
-        await api.SetProjectRoleKeysAsync(role, [], Cancellation);
+        await api.SetProjectRolePermissionsAsync(role, [], Cancellation);
         await api.ArchiveProjectRoleAsync(role, Cancellation);
 
         stub.Requests.Select(request => (request.Method, request.PathAndQuery, request.Body)).Should().Equal(
-            ("POST", "/project-roles", """{"name":"Rigger","description":null,"keys":["projects.view"]}"""),
+            ("POST", "/project-roles", """{"name":"Rigger","description":null,"permissions":["projects.view"]}"""),
             ("PUT", $"/project-roles/{role}", """{"name":"Rigger","description":"Rigs the hoists"}"""),
-            ("PUT", $"/project-roles/{role}/keys", """{"keys":[]}"""),
+            ("PUT", $"/project-roles/{role}/permissions", """{"permissions":[]}"""),
             ("POST", $"/project-roles/{role}/archive", null));
     }
 
@@ -321,39 +321,39 @@ public sealed class SampleApiTests
     }
 
     [Fact]
-    public async Task A_refusal_for_a_key_that_names_no_unit_reads_as_one_for_the_whole_tenant()
+    public async Task A_refusal_for_a_permission_that_names_no_unit_reads_as_one_for_the_whole_tenant()
     {
         static HttpResponseMessage Refused(string code, string arguments)
             => StubApi.Response(HttpStatusCode.Forbidden, $$"""{"title":"You lack a permission.","status":403,"code":"{{code}}","arguments":{{arguments}}}""", "application/problem+json");
 
         using var stub = new StubApi(request => request.PathAndQuery switch
         {
-            // As Tenancy's own check writes it for the whole tenant, and as the sample's check for a tenant-wide key does.
-            "/whole-tenant" => Refused("tenancy.not-permitted", """{"Key":"tenancy.seats.manage","Unit":null}"""),
-            "/names-no-unit" => Refused("tenancy.not-permitted", """{"Key":"tenancy.history.view"}"""),
-            "/at-a-unit" => Refused("tenancy.not-permitted", """{"Key":"tenancy.grants.manage","Unit":"c0000000-0000-4000-8000-000000000004"}"""),
+            // As Tenancy's own check writes it for the whole tenant, and as the sample's check for a tenant-wide permission does.
+            "/whole-tenant" => Refused("tenancy.not-permitted", """{"Permission":"tenancy.seats.manage","Unit":null}"""),
+            "/names-no-unit" => Refused("tenancy.not-permitted", """{"Permission":"tenancy.history.view"}"""),
+            "/at-a-unit" => Refused("tenancy.not-permitted", """{"Permission":"tenancy.grants.manage","Unit":"c0000000-0000-4000-8000-000000000004"}"""),
             "/another-rule" => Refused("tenancy.grant-exceeds-own", """{"Missing":"tenancy.seats.manage"}"""),
 
-            // A request a seat sends for itself or with the key: neither way met, the key's refusal among the reasons.
-            "/yours-or-the-key" => Refused("access.refused", """{"Reasons":[{"code":"access.not-own","arguments":{}},{"code":"tenancy.not-permitted","arguments":{"Key":"tenancy.seats.manage"}}]}"""),
-            "/one-or-another-at-a-unit" => Refused("access.refused", """{"Reasons":[{"code":"tenancy.operators-only","arguments":{}},{"code":"tenancy.not-permitted","arguments":{"Key":"tenancy.seats.manage","Unit":"c0000000-0000-4000-8000-000000000004"}}]}"""),
-            _ => Refused("projects.not-permitted", """{"Key":"projects.close"}"""),
+            // A request a seat sends for itself or with the permission: neither way met, the permission's refusal among the reasons.
+            "/yours-or-the-permission" => Refused("access.refused", """{"Reasons":[{"code":"access.not-own","arguments":{}},{"code":"tenancy.not-permitted","arguments":{"Permission":"tenancy.seats.manage"}}]}"""),
+            "/one-or-another-at-a-unit" => Refused("access.refused", """{"Reasons":[{"code":"tenancy.operators-only","arguments":{}},{"code":"tenancy.not-permitted","arguments":{"Permission":"tenancy.seats.manage","Unit":"c0000000-0000-4000-8000-000000000004"}}]}"""),
+            _ => Refused("projects.not-permitted", """{"Permission":"projects.close"}"""),
         });
         var api = new SampleApi(stub.Client(), SignedIn());
 
-        async Task<bool> WholeTenantAsync(string path)
-            => (await api.SendAsync<JsonElement?>(HttpMethod.Get, path, null, CallAs.Session, TenantChoice.Session, Cancellation)).Problem!.KeyNeededForTheWholeTenant;
+        async Task<bool> AtTenantAsync(string path)
+            => (await api.SendAsync<JsonElement?>(HttpMethod.Get, path, null, CallAs.Session, TenantChoice.Session, Cancellation)).Problem!.PermissionNeededAtTenant;
 
-        // The refusal's text names the key and not where it was needed, so a seat that holds the key at a unit
+        // The refusal's text names the permission and not where it was needed, so a seat that holds the permission at a unit
         // would read only that it lacks it. The arguments say where: no unit is the whole tenant.
-        (await WholeTenantAsync("/whole-tenant")).Should().BeTrue();
-        (await WholeTenantAsync("/names-no-unit")).Should().BeTrue();
-        (await WholeTenantAsync("/at-a-unit")).Should().BeFalse("the key was needed at that unit, which the arguments show by name");
-        (await WholeTenantAsync("/another-rule")).Should().BeFalse("only the refusal for a key that is not held says where the key was needed");
-        (await WholeTenantAsync("/a-project")).Should().BeFalse("a project's refusal is about the project, and names no unit either");
-        (await WholeTenantAsync("/yours-or-the-key")).Should().BeTrue("one of the ways the request may be sent was the key for the whole tenant");
-        (await WholeTenantAsync("/one-or-another-at-a-unit")).Should().BeFalse("the key of that way was needed at a unit");
-        ApiProblem.WithoutArguments(null, "Unauthorized").KeyNeededForTheWholeTenant.Should().BeFalse();
+        (await AtTenantAsync("/whole-tenant")).Should().BeTrue();
+        (await AtTenantAsync("/names-no-unit")).Should().BeTrue();
+        (await AtTenantAsync("/at-a-unit")).Should().BeFalse("the permission was needed at that unit, which the arguments show by name");
+        (await AtTenantAsync("/another-rule")).Should().BeFalse("only the refusal for a permission that is not held says where the permission was needed");
+        (await AtTenantAsync("/a-project")).Should().BeFalse("a project's refusal is about the project, and names no unit either");
+        (await AtTenantAsync("/yours-or-the-permission")).Should().BeTrue("one of the ways the request may be sent was the permission for the whole tenant");
+        (await AtTenantAsync("/one-or-another-at-a-unit")).Should().BeFalse("the permission of that way was needed at a unit");
+        ApiProblem.WithoutArguments(null, "Unauthorized").PermissionNeededAtTenant.Should().BeFalse();
     }
 
     [Fact]

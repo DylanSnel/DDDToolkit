@@ -8,6 +8,6 @@ namespace Examples.Tenancy.Projects.Api.GraphQL;
 /// gateway asks Tenancy for them when a client asks for more than the id.
 /// </summary>
 /// <param name="Id">The unit.</param>
-[GraphQLName("OrganizationUnit")]
+[GraphQLName("OrganizationUnitName")]
 [EntityKey("id")]
 internal sealed record ReferencedOrganizationUnit(OrganizationUnitId Id);

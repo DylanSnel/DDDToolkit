@@ -136,7 +136,7 @@
     <value>Done.</value>
   </data>
   <data name="answer.whole-tenant" xml:space="preserve">
-    <value>The key is needed for the whole tenant: holding it at a unit is not enough.</value>
+    <value>The permission is needed for the whole tenant: holding it at a unit is not enough.</value>
   </data>
   <data name="answer.raw" xml:space="preserve">
     <value>Raw JSON</value>
@@ -241,7 +241,7 @@
     <value>Supabase Auth did not answer. Is it running, and does {0} point at it?</value>
   </data>
   <data name="whoami.intro" xml:space="preserve">
-    <value>&lt;code&gt;GET /me&lt;/code&gt;, as {0} in {1}: the seat the API resolved from your token and the &lt;code&gt;Tenant&lt;/code&gt; header, where it is placed, the roles it holds there for which period, and every key it holds now with the units each one reaches.</value>
+    <value>&lt;code&gt;GET /me&lt;/code&gt;, as {0} in {1}: the seat the API resolved from your token and the &lt;code&gt;Tenant&lt;/code&gt; header, where it is placed, the roles it holds there for which period, and every permission it holds now with the units each one reaches.</value>
   </data>
   <data name="whoami.no-answer" xml:space="preserve">
     <value>The API did not say who you are in this tenant. This is its answer:</value>
@@ -288,26 +288,26 @@
   <data name="whoami.manages-access" xml:space="preserve">
     <value>Manages access</value>
   </data>
-  <data name="whoami.keys" xml:space="preserve">
-    <value>Keys</value>
+  <data name="whoami.permissions" xml:space="preserve">
+    <value>Permissions</value>
   </data>
   <data name="whoami.grants-manage" xml:space="preserve">
-    <value>Where you hold &lt;code&gt;{0}&lt;/code&gt; you give any role that manages no access to anyone placed there or below, yourself included, without holding its keys: to others for as long as you choose, to yourself for no longer than you hold &lt;code&gt;{0}&lt;/code&gt;. A role that manages access needs each of its keys that manage access, held by you there for at least as long, and is never yours to give yourself.</value>
+    <value>Where you hold &lt;code&gt;{0}&lt;/code&gt; you give any role that manages no access to anyone placed there or below, yourself included, without holding its permissions: to others for as long as you choose, to yourself for no longer than you hold &lt;code&gt;{0}&lt;/code&gt;. A role that manages access needs each of its permissions that manage access, held by you there for at least as long, and is never yours to give yourself.</value>
   </data>
   <data name="whoami.seats-manage" xml:space="preserve">
-    <value>Holding &lt;code&gt;{0}&lt;/code&gt; for the whole tenant you suspend, reactivate and deactivate seats, and may suspend or deactivate your own. A seat whose grants include a role that manages access needs, for each of those grants, the role's keys that manage access, held by you at that grant's unit until at least its end: stopping or restarting the seat takes the role away or gives it back.</value>
+    <value>Holding &lt;code&gt;{0}&lt;/code&gt; for the whole tenant you suspend, reactivate and deactivate seats, and may suspend or deactivate your own. A seat whose grants include a role that manages access needs, for each of those grants, the role's permissions that manage access, held by you at that grant's unit until at least its end: stopping or restarting the seat takes the role away or gives it back.</value>
   </data>
   <data name="whoami.units-manage" xml:space="preserve">
-    <value>Where you hold &lt;code&gt;{0}&lt;/code&gt; at a unit's parent and at another unit, you move the unit there. A move gives you no key you do not hold at the unit already, for as long, and gives or takes away a key that manages access, from anyone, only when you hold it at the unit for at least as long as their grant runs.</value>
+    <value>Where you hold &lt;code&gt;{0}&lt;/code&gt; at a unit's parent and at another unit, you move the unit there. A move gives you no permission you do not hold at the unit already, for as long, and gives or takes away a permission that manages access, from anyone, only when you hold it at the unit for at least as long as their grant runs.</value>
   </data>
-  <data name="whoami.keys-now" xml:space="preserve">
-    <value>Keys held now</value>
+  <data name="whoami.permissions-now" xml:space="preserve">
+    <value>Permissions held now</value>
   </data>
-  <data name="whoami.keys-now.none" xml:space="preserve">
-    <value>None. A grant that has expired, a suspended seat or an archived role gives no key.</value>
+  <data name="whoami.permissions-now.none" xml:space="preserve">
+    <value>None. A grant that has expired, a suspended seat or an archived role gives no permission.</value>
   </data>
-  <data name="whoami.key" xml:space="preserve">
-    <value>Key</value>
+  <data name="whoami.permission" xml:space="preserve">
+    <value>Permission</value>
   </data>
   <data name="whoami.granted-at" xml:space="preserve">
     <value>Granted at</value>
@@ -496,7 +496,7 @@
     <value>Give the role</value>
   </data>
   <data name="project.give.help" xml:space="preserve">
-    <value>Next to the roles the member holds, until the day picked or for good; take one away in the crew table. You need not hold the role's keys yourself, and may give one to yourself. On a crew a role gives only what acts on this project; opening projects and naming the owner come from the organization. The list holds the tenant's project roles in use: a role of the organization is refused on a crew, which the try-it page shows.</value>
+    <value>Next to the roles the member holds, until the day picked or for good; take one away in the crew table. You need not hold the role's permissions yourself, and may give one to yourself. On a crew a role gives only what acts on this project; opening projects and naming the owner come from the organization. The list holds the tenant's project roles in use: a role of the organization is refused on a crew, which the try-it page shows.</value>
   </data>
   <data name="project.move.label" xml:space="preserve">
     <value>Move to</value>
@@ -576,11 +576,11 @@
   <data name="try.action.open-project" xml:space="preserve">
     <value>Open project</value>
   </data>
-  <data name="try.action.check-key" xml:space="preserve">
-    <value>Check a key on a project</value>
+  <data name="try.action.check-permission" xml:space="preserve">
+    <value>Check a permission on a project</value>
   </data>
-  <data name="try.action.units-with-key" xml:space="preserve">
-    <value>Units where I hold a key</value>
+  <data name="try.action.units-with-permission" xml:space="preserve">
+    <value>Units where I hold a permission</value>
   </data>
   <data name="try.action.seat-name" xml:space="preserve">
     <value>Name of a seat</value>
@@ -636,8 +636,8 @@
   <data name="try.field.project" xml:space="preserve">
     <value>Project</value>
   </data>
-  <data name="try.field.key" xml:space="preserve">
-    <value>Key</value>
+  <data name="try.field.permission" xml:space="preserve">
+    <value>Permission</value>
   </data>
   <data name="try.field.name" xml:space="preserve">
     <value>Name</value>
@@ -709,7 +709,7 @@
     <value>Access history</value>
   </data>
   <data name="history.intro" xml:space="preserve">
-    <value>&lt;code&gt;GET /tenancy/history&lt;/code&gt;: every change to who may do what in {0}, newest first, each with who made it. Reading it takes the key &lt;code&gt;tenancy.history.view&lt;/code&gt; for the whole tenant; without it the API refuses, and the refusal is shown here. A row names seats, units and roles by their ids, and never says why a role was given; the name shown for who acted comes from the directory. The list comes a page at a time: &lt;em&gt;More&lt;/em&gt; asks the next page with the marker the last one gave.</value>
+    <value>&lt;code&gt;GET /tenancy/history&lt;/code&gt;: every change to who may do what in {0}, newest first, each with who made it. Reading it takes the permission &lt;code&gt;tenancy.history.view&lt;/code&gt; for the whole tenant; without it the API refuses, and the refusal is shown here. A row names seats, units and roles by their ids, and never says why a role was given; the name shown for who acted comes from the directory. The list comes a page at a time: &lt;em&gt;More&lt;/em&gt; asks the next page with the marker the last one gave.</value>
   </data>
   <data name="history.none" xml:space="preserve">
     <value>Nothing has changed anyone's access yet.</value>
@@ -745,7 +745,7 @@
     <value>Accept an invitation</value>
   </data>
   <data name="invitations.intro" xml:space="preserve">
-    <value>&lt;code&gt;GET /tenancy/invitations&lt;/code&gt;: the invitations into {0} that can still be accepted, for whoever manages seats at their unit. Inviting takes the keys &lt;code&gt;tenancy.seats.manage&lt;/code&gt; for the whole tenant and &lt;code&gt;tenancy.grants.manage&lt;/code&gt; at the unit, and the role is held to the rule every grant is held to; without them the API refuses, and the refusal is shown here. No seat is made until the person accepts.</value>
+    <value>&lt;code&gt;GET /tenancy/invitations&lt;/code&gt;: the invitations into {0} that can still be accepted, for whoever manages seats at their unit. Inviting takes the permissions &lt;code&gt;tenancy.seats.manage&lt;/code&gt; for the whole tenant and &lt;code&gt;tenancy.grants.manage&lt;/code&gt; at the unit, and the role is held to the rule every grant is held to; without them the API refuses, and the refusal is shown here. No seat is made until the person accepts.</value>
   </data>
   <data name="invitations.none" xml:space="preserve">
     <value>No invitation is open.</value>
@@ -862,7 +862,7 @@
     <value>Crew role</value>
   </data>
   <data name="project-roles.intro" xml:space="preserve">
-    <value>&lt;code&gt;GET /project-roles&lt;/code&gt;: the roles {0} keeps for its crews, archived ones too. A crew member holds one on one project, and it gives only what acts on that project. The starter roles were made when the tenant was set up; the tenant renames, re-keys and archives them, and makes its own. Anybody who works in the tenant reads their names. Their keys, and making and changing a role, are for whoever holds &lt;code&gt;tenancy.roles.manage&lt;/code&gt; for the whole tenant; the API refuses anybody else, and the refusal is shown here.</value>
+    <value>&lt;code&gt;GET /project-roles&lt;/code&gt;: the roles {0} keeps for its crews, archived ones too. A crew member holds one on one project, and it gives only what acts on that project. The starter roles were made when the tenant was set up; the tenant renames them, gives them other permissions, archives them, and makes its own. Anybody who works in the tenant reads their names. Their permissions, and making and changing a role, are for whoever holds &lt;code&gt;tenancy.roles.manage&lt;/code&gt; for the whole tenant; the API refuses anybody else, and the refusal is shown here.</value>
   </data>
   <data name="project-roles.none" xml:space="preserve">
     <value>The tenant has no crew roles.</value>
@@ -876,8 +876,8 @@
   <data name="project-roles.made-by-tenant" xml:space="preserve">
     <value>made by the tenant</value>
   </data>
-  <data name="project-roles.keys" xml:space="preserve">
-    <value>Keys</value>
+  <data name="project-roles.permissions" xml:space="preserve">
+    <value>Permissions</value>
   </data>
   <data name="project-roles.archive" xml:space="preserve">
     <value>Archive</value>
@@ -886,13 +886,13 @@
     <value>Make a crew role</value>
   </data>
   <data name="project-roles.make.label" xml:space="preserve">
-    <value>A name, what it is for, and the keys it gives on a crew</value>
+    <value>A name, what it is for, and the permissions it gives on a crew</value>
   </data>
   <data name="project-roles.make" xml:space="preserve">
     <value>Make the role</value>
   </data>
   <data name="project-roles.make.help" xml:space="preserve">
-    <value>Only keys that act on a project go on a crew role: a key of the organization is refused, which shows here.</value>
+    <value>Only permissions that act on a project go on a crew role: a permission of the organization is refused, which shows here.</value>
   </data>
   <data name="project-roles.change.title" xml:space="preserve">
     <value>Change a crew role</value>
@@ -903,10 +903,10 @@
   <data name="project-roles.rename" xml:space="preserve">
     <value>Rename</value>
   </data>
-  <data name="project-roles.set-keys" xml:space="preserve">
-    <value>Set the keys</value>
+  <data name="project-roles.set-permissions" xml:space="preserve">
+    <value>Set the permissions</value>
   </data>
   <data name="project-roles.change.help" xml:space="preserve">
-    <value>Renaming sets the name and what it is for together: a description left empty is cleared. The keys become exactly the ones picked, none taking them all off. An archived role changes no more, and the crew lead's role is not archived: every project's owner holds it.</value>
+    <value>Renaming sets the name and what it is for together: a description left empty is cleared. The permissions become exactly the ones picked, none taking them all off. An archived role changes no more, and the crew lead's role is not archived: every project's owner holds it.</value>
   </data>
 </root>

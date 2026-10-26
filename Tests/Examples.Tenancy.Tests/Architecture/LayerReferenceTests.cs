@@ -403,7 +403,7 @@ public sealed class LayerReferenceTests
     /// the paging arguments when it loads a page of each key, so no port and no context either. A method whose
     /// query answers one key takes that one key, and the generator writes a loader that remembers each answer.
     /// <para>
-    /// Who answers a field's permission key (<c>IFieldKeys&lt;T&gt;</c>) is registered as well, since the handler
+    /// Who answers a field's permission key (<c>IFieldPermissions&lt;T&gt;</c>) is registered as well, since the handler
     /// behind <c>[Authorize]</c> asks the container for it. It is held to the same: it takes nothing when it is
     /// made, and asks through a data loader of the resolver's context.
     /// </para>
@@ -414,14 +414,14 @@ public sealed class LayerReferenceTests
     {
         var entry = SampleLayout.EntryOf(module);
         var loaders = TypeScan.TypesOf(entry.Assembly).Where(type => typeof(IDataLoader).IsAssignableFrom(type)).ToHashSet();
-        var fieldKeys = TypeScan.TypesOf(entry.Assembly).Where(type => type.GetInterfaces().Any(IsFieldKeys)).ToHashSet();
+        var fieldPermissions = TypeScan.TypesOf(entry.Assembly).Where(type => type.GetInterfaces().Any(IsFieldPermissions)).ToHashSet();
         var named = ScanOf(entry.Assembly).Uses.Where(use => use.By != entry && !SampleLayout.IsWrittenByAGraphQLGenerator(use.By)).ToList();
 
         HostRegistrations.Services.Should().Contain(HostRegistrations.Requests.Select(request => request.Handler), "the host registers the handlers, so a route that took one would be found");
         named.Select(use => use.Type).Should().Contain(typeof(ISender), "the scan sees the routes' and the resolvers' parameters, or it proves nothing");
         named.Where(use => TypeScan.Outermost(use.By).Namespace?.EndsWith("." + SampleLayout.GraphQL, StringComparison.Ordinal) == true).Select(use => use.Type)
             .Should().Contain(typeof(ISender), "and the resolvers are among what it reads");
-        named.Where(use => (HostRegistrations.Services.Contains(use.Type) && !loaders.Contains(use.Type) && !fieldKeys.Contains(use.Type) && use.Type != typeof(IFieldKeys<>)) || SampleLayout.IsPort(use.Type))
+        named.Where(use => (HostRegistrations.Services.Contains(use.Type) && !loaders.Contains(use.Type) && !fieldPermissions.Contains(use.Type) && use.Type != typeof(IFieldPermissions<>)) || SampleLayout.IsPort(use.Type))
             .Select(use => use.ToString())
             .Should().BeEmpty("{0}'s routes and resolvers only send: what a request may do is decided on its way to its handler, and one that took a service would go round that", module);
 
@@ -454,7 +454,7 @@ public sealed class LayerReferenceTests
             taken.Skip(paged ? 2 : 1).Should().Equal([typeof(ISender), typeof(CancellationToken)], "{0} sends a query as a resolver does; it reads nothing itself", method.Name);
         }
 
-        foreach (var answers in fieldKeys)
+        foreach (var answers in fieldPermissions)
         {
             HostRegistrations.Services.Should().Contain(answers, "the module registers {0}, which is why it needs this exception", answers.Name);
             answers.GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance).SelectMany(constructor => constructor.GetParameters())
@@ -775,7 +775,7 @@ public sealed class LayerReferenceTests
             && type.Name.Contains("Handler`", StringComparison.Ordinal);
 
     /// <summary>Whether <paramref name="type"/> is the toolkit's interface for answering a field's permission key, for some parent type.</summary>
-    private static bool IsFieldKeys(Type type) => type.IsGenericType && type.GetGenericTypeDefinition() == typeof(IFieldKeys<>);
+    private static bool IsFieldPermissions(Type type) => type.IsGenericType && type.GetGenericTypeDefinition() == typeof(IFieldPermissions<>);
 
     /// <summary>Whether the mediator's generator wrote <paramref name="type"/>, or the type it is nested in.</summary>
     private static bool IsWrittenByTheMediator(Type type)

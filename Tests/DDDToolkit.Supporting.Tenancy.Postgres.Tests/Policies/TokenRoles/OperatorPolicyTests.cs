@@ -87,7 +87,7 @@ public sealed class OperatorPolicyTests(TenancyPostgres postgres)
                 (await asOperator.ScalarAsync<long>($"SELECT count(*) FROM {table}", Cancellation)).Should().Be(read, $"an operator reads every row of {table}, in every tenant");
                 (await asOperator.AttemptAsync($"DELETE FROM {table}", Cancellation)).Should().Be(0, $"and removes none of {table}");
 
-                // A row the table holds already, added again: the operators' policy refuses it before any key or trigger is asked.
+                // A row the table holds already, added again: the operators' policy refuses it before any permission or trigger is asked.
                 count.Should().BePositive($"{table} has a row to try with");
                 var held = table == Digests ? $"pg_catalog.json_populate_record(NULL::{Digests}, '{digest}')" : table + " LIMIT 1";
                 await RefusedAsync(asOperator, $"INSERT INTO {table} SELECT * FROM {held}");
@@ -115,7 +115,7 @@ public sealed class OperatorPolicyTests(TenancyPostgres postgres)
 
             // The questions a seat asks are not an operator's to ask: it has no seat for them to be about.
             await RefusedAsync(asOperator, "SELECT tenancy.caller_seat()");
-            await RefusedAsync(asOperator, "SELECT tenancy.holds_key('tenancy.seats.manage')");
+            await RefusedAsync(asOperator, "SELECT tenancy.holds_permission('tenancy.seats.manage')");
         }
 
         // In the application: no seat is chosen for an operator, whatever tenant the request names, and the

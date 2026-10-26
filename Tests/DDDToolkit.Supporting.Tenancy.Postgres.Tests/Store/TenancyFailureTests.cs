@@ -220,7 +220,7 @@ public abstract class TenancyFailureTests(TenancyPostgres postgres, TenancyNamin
                     SeatId = Oli.Seat,
                     UnitId = NorthPier,
                     RoleId = HarborRoles.Watcher,
-                    Key = TestHost.HostCatalogue.WidgetRead,
+                    Permission = TestHost.HostCatalogue.WidgetRead,
                     StartsAt = DateTimeOffset.UtcNow,
                 });
                 await scoped.GetRequiredService<HostTenancy.IStore>().SaveAsync(Cancellation);

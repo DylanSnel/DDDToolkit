@@ -29,7 +29,7 @@ internal static class TourModules
             .AddSourceSchemaDefaults()
             .AddGalleryTypes()
             .AddHostConventions()
-            .AddDDDToolkitKeyAuthorization();
+            .AddDDDToolkitPermissionAuthorization();
 
         return entityNullability ? schema.AddDDDToolkitEntityNullability() : schema;
     }
@@ -40,7 +40,7 @@ internal static class TourModules
             .AddGraphQLServer(Tours)
             .AddSourceSchemaDefaults()
             .AddHostConventions()
-            .AddDDDToolkitKeyAuthorization()
+            .AddDDDToolkitPermissionAuthorization()
             .AddDDDToolkitEntityNullability()
             .AddQueryType()
             .AddTypeExtension<TourQueries>();

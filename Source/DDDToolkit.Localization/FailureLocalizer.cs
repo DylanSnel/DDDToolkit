@@ -71,6 +71,16 @@ public sealed class FailureLocalizer : IFailureLocalizer
     public static FailureLocalizer Default { get; } = new(Array.Empty<IStringLocalizer>());
 
     /// <inheritdoc />
+    /// <remarks>Your sources are asked in order, then the toolkit's own messages, as a failure's code is.</remarks>
+    public string Text(string key, string fallback)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        ArgumentNullException.ThrowIfNull(fallback);
+
+        return Find(key) ?? fallback;
+    }
+
+    /// <inheritdoc />
     public string Localize(ValidationError error)
     {
         ArgumentNullException.ThrowIfNull(error);

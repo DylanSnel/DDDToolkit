@@ -10,7 +10,7 @@ namespace DDDToolkit.HotChocolate.Fusion.InMemory.Tests;
 
 /// <summary>
 /// What a client of the gateway sees of a module that declares its GraphQL types over its own records, with
-/// <c>AddDDDToolkitEntityNullability()</c> and <c>AddDDDToolkitKeyAuthorization()</c> on its source schema: a
+/// <c>AddDDDToolkitEntityNullability()</c> and <c>AddDDDToolkitPermissionAuthorization()</c> on its source schema: a
 /// reference its owner answers nothing for, and a field under a rule. Asked over real HTTP.
 /// </summary>
 public sealed class EntityConventionTests
@@ -85,7 +85,7 @@ public sealed class EntityConventionTests
         });
 
         // The caller holds the key on the first and the third exhibit.
-        var desk = museum.Services.GetRequiredService<GalleryDesk>().Hold(GalleryKeys.ViewValuations, 1, 3);
+        var desk = museum.Services.GetRequiredService<GalleryDesk>().Hold(GalleryPermissions.ViewValuations, 1, 3);
 
         var body = await museum.PostAsync("{ exhibits { id title valuation } }");
 
@@ -103,12 +103,12 @@ public sealed class EntityConventionTests
         var extensions = error.GetProperty("extensions");
         extensions.GetProperty("code").GetString().Should().Be(GalleryRefusals.NotPermitted);
         extensions.GetProperty("kind").GetString().Should().Be("not_permitted");
-        extensions.GetProperty("arguments").GetProperty("Key").GetString().Should().Be(GalleryKeys.ViewValuations);
+        extensions.GetProperty("arguments").GetProperty("Permission").GetString().Should().Be(GalleryPermissions.ViewValuations);
         extensions.GetProperty("arguments").GetProperty("Exhibit").GetInt32().Should().Be(2);
 
         // Three exhibits under the rule, one batch, one question, and the refused exhibit's resolver never ran.
         batches.Sent.Should().Equal([3], "the rules of the three exhibits waited on one batch, sent whole");
-        desk.KeyQuestions.Should().ContainSingle().Which.Should().BeEquivalentTo([1, 2, 3]);
+        desk.PermissionQuestions.Should().ContainSingle().Which.Should().BeEquivalentTo([1, 2, 3]);
         desk.ValuationsRead.Should().Be(2);
     }
 

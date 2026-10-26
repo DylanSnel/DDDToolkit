@@ -42,17 +42,17 @@ internal sealed class EfProjectReads(IDbContextFactory<ProjectsContext> contexts
     /// </summary>
     /// <remarks>
     /// A reach is put into a query with the Membership package's own extensions (<c>Within</c>, <c>Reached</c>,
-    /// <c>KeysOn</c>), which add its conditions as subqueries over the crews, the project roles and Tenancy's rows.
+    /// <c>PermissionsOn</c>), which add its conditions as subqueries over the crews, the project roles and Tenancy's rows.
     /// This context is one made for the reading, not the request's, so each is handed it: the rows of the project
     /// roles and what Tenancy answers are queries of the context the statement runs on.
     /// </remarks>
     /// <param name="db">A context of the reading's own, from the factory.</param>
     private sealed class Reading(ProjectsContext db) : IProjectReading
     {
-        /// <summary>The mark of the row that says a project is seen, in the place of a key. No key starts with it.</summary>
+        /// <summary>The mark of the row that says a project is seen, in the place of a permission. No permission starts with it.</summary>
         private const string SeenMark = "#seen";
 
-        /// <summary>The mark of the row that says the caller holds the key asked at a unit somewhere, in the place of a key.</summary>
+        /// <summary>The mark of the row that says the caller holds the permission asked at a unit somewhere, in the place of a permission.</summary>
         private const string UnitMark = "#at-a-unit";
 
         /// <inheritdoc />
@@ -118,7 +118,7 @@ internal sealed class EfProjectReads(IDbContextFactory<ProjectsContext> contexts
         /// <remarks>
         /// One statement on purpose: a crew's roles hang under its members, so the rows read are one per role and
         /// not members times roles, and what is read is of one moment. Whether the caller manages a crew is read
-        /// with it, as the access check reads how a key is held: the projects seen are the filter, and how
+        /// with it, as the access check reads how a permission is held: the projects seen are the filter, and how
         /// <paramref name="manage"/> reaches each of them is what is read with it.
         /// </remarks>
         public async Task<IReadOnlyList<ProjectCrewData>> CrewsOfAsync(IReadOnlyCollection<ProjectId> projects, MemberReach<ProjectId> reach, MemberReach<ProjectId> manage, CancellationToken cancellationToken)
@@ -148,14 +148,14 @@ internal sealed class EfProjectReads(IDbContextFactory<ProjectsContext> contexts
 
         /// <inheritdoc />
         /// <remarks>
-        /// The statement of <see cref="KeysOnAsync"/>, with two parts more: a row for every project seen, so one
+        /// The statement of <see cref="PermissionsOnAsync"/>, with two parts more: a row for every project seen, so one
         /// the caller holds nothing on is answered too, and a row for each when <paramref name="units"/> is not
-        /// empty. Both carry a mark in the place of a key, which no key can be; the project's state is read with
+        /// empty. Both carry a mark in the place of a permission, which no permission can be; the project's state is read with
         /// every row.
         /// </remarks>
         public async Task<IReadOnlyDictionary<ProjectId, ProjectStanding>> StandingOnAsync(
             IReadOnlyCollection<ProjectId> projects,
-            MemberKeyReach<ProjectId> reach,
+            MemberPermissionReach<ProjectId> reach,
             IQueryable<OrganizationUnitId> units,
             CancellationToken cancellationToken)
         {
@@ -169,20 +169,20 @@ internal sealed class EfProjectReads(IDbContextFactory<ProjectsContext> contexts
 
             if (reach.See.Everything)
             {
-                // The application's own work in the tenant holds every key on every project of it, so only which
+                // The application's own work in the tenant holds every permission on every project of it, so only which
                 // exist is read.
                 var all = await seen.Select(project => new { project.Id, project.State, AtAUnit = units.Any() }).ToListAsync(cancellationToken);
-                return all.ToDictionary(project => project.Id, project => new ProjectStanding(project.State, reach.Keys.ToHashSet(StringComparer.Ordinal), project.AtAUnit));
+                return all.ToDictionary(project => project.Id, project => new ProjectStanding(project.State, reach.Permissions.ToHashSet(StringComparer.Ordinal), project.AtAUnit));
             }
 
             var isSeen = SeenMark;
             var atAUnit = UnitMark;
-            var marked = asked.KeysOn(reach, db)
-                .Concat(seen.Select(project => new MemberKeyOn<ProjectId> { Resource = project.Id, Key = isSeen }))
-                .Concat(seen.Where(project => units.Any()).Select(project => new MemberKeyOn<ProjectId> { Resource = project.Id, Key = atAUnit }));
+            var marked = asked.PermissionsOn(reach, db)
+                .Concat(seen.Select(project => new MemberPermissionOn<ProjectId> { Resource = project.Id, Permission = isSeen }))
+                .Concat(seen.Where(project => units.Any()).Select(project => new MemberPermissionOn<ProjectId> { Resource = project.Id, Permission = atAUnit }));
             var rows = await (from row in marked
                               join project in Projects on row.Resource equals project.Id
-                              select new { row.Resource, project.State, row.Key })
+                              select new { row.Resource, project.State, row.Permission })
                 .ToListAsync(cancellationToken);
 
             return rows
@@ -191,19 +191,19 @@ internal sealed class EfProjectReads(IDbContextFactory<ProjectsContext> contexts
                     held => held.Key,
                     held => new ProjectStanding(
                         held.First().State,
-                        held.Select(row => row.Key).Where(key => key != SeenMark && key != UnitMark).ToHashSet(StringComparer.Ordinal),
-                        held.Any(row => row.Key == UnitMark)));
+                        held.Select(row => row.Permission).Where(permission => permission != SeenMark && permission != UnitMark).ToHashSet(StringComparer.Ordinal),
+                        held.Any(row => row.Permission == UnitMark)));
         }
 
         /// <inheritdoc />
         /// <remarks>
-        /// One statement of a part for each key asked about, each over the projects asked about that the caller
-        /// sees: the package's, which reads the key held as a member, by owning the project and at its unit. The
+        /// One statement of a part for each permission asked about, each over the projects asked about that the caller
+        /// sees: the package's, which reads the permission held as a member, by owning the project and at its unit. The
         /// parts are put together where the statement runs and grouped here.
         /// </remarks>
-        public async Task<IReadOnlyDictionary<ProjectId, IReadOnlySet<string>>> KeysOnAsync(
+        public async Task<IReadOnlyDictionary<ProjectId, IReadOnlySet<string>>> PermissionsOnAsync(
             IReadOnlyCollection<ProjectId> projects,
-            MemberKeyReach<ProjectId> reach,
+            MemberPermissionReach<ProjectId> reach,
             CancellationToken cancellationToken)
         {
             ArgumentNullException.ThrowIfNull(projects);
@@ -214,15 +214,15 @@ internal sealed class EfProjectReads(IDbContextFactory<ProjectsContext> contexts
 
             if (reach.See.Everything)
             {
-                // The application's own work in the tenant holds every key on every project of it, so only which
+                // The application's own work in the tenant holds every permission on every project of it, so only which
                 // exist is read.
                 var all = await asked.Select(project => project.Id).ToListAsync(cancellationToken);
-                return all.ToDictionary(project => project, _ => (IReadOnlySet<string>)reach.Keys.ToHashSet(StringComparer.Ordinal));
+                return all.ToDictionary(project => project, _ => (IReadOnlySet<string>)reach.Permissions.ToHashSet(StringComparer.Ordinal));
             }
 
-            return (await asked.KeysOn(reach, db).ToListAsync(cancellationToken))
+            return (await asked.PermissionsOn(reach, db).ToListAsync(cancellationToken))
                 .GroupBy(pair => pair.Resource)
-                .ToDictionary(pairs => pairs.Key, pairs => (IReadOnlySet<string>)pairs.Select(pair => pair.Key).ToHashSet(StringComparer.Ordinal));
+                .ToDictionary(pairs => pairs.Key, pairs => (IReadOnlySet<string>)pairs.Select(pair => pair.Permission).ToHashSet(StringComparer.Ordinal));
         }
 
         /// <inheritdoc />
@@ -235,7 +235,7 @@ internal sealed class EfProjectReads(IDbContextFactory<ProjectsContext> contexts
             ArgumentNullException.ThrowIfNull(ids);
             ArgumentNullException.ThrowIfNull(act);
 
-            // Whether it is there for the caller is the filter; how the caller holds the key on it is what is read.
+            // Whether it is there for the caller is the filter; how the caller holds the permission on it is what is read.
             var asked = ids.ToList();
             var answered = await Projects.Where(project => asked.Contains(project.Id))
                 .Within(see, db)
@@ -289,7 +289,7 @@ internal sealed class EfProjectReads(IDbContextFactory<ProjectsContext> contexts
             return await roles
                 .OrderBy(role => role.Name)
                 .ThenBy(role => role.Id)
-                .Select(role => new ProjectRoleListing(role.Id, role.Name, role.Description, role.MadeFrom, role.Status, role.Keys))
+                .Select(role => new ProjectRoleListing(role.Id, role.Name, role.Description, role.MadeFrom, role.Status, role.Permissions))
                 .ToListAsync(cancellationToken);
         }
 

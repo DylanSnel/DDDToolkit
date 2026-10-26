@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.ExceptionServices;
+using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.Abstractions.Interfaces;
 using DDDToolkit.EntityFramework.Conventions;
 using DDDToolkit.EntityFramework.Storage;
@@ -11,7 +12,7 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace DDDToolkit.Supporting.Membership.EntityFramework;
 
-/// <summary>Maps the members of a resource, and the roles kept for one, into the model of the application's own context.</summary>
+/// <summary>Maps the members of a resource, and the roles a customer makes for one, into the model of the application's own context.</summary>
 public static class MembershipEntityTypeBuilderExtensions
 {
     /// <summary>The longest name of a status, with room to spare: how wide the column of a role's status is.</summary>
@@ -30,16 +31,24 @@ public static class MembershipEntityTypeBuilderExtensions
     /// Maps the members of a resource: the members in a table of their own, owned by the resource, and the
     /// roles they hold in a second one, owned by the member. Call it where the context maps the resource:
     /// <code>
-    /// modelBuilder.Entity&lt;Document&gt;().HasMembers(document =&gt; document.Shares, document =&gt; document.OwnerId);
+    /// modelBuilder.Entity&lt;Document&gt;().HasMembers(document =&gt; document.Shares);
     /// </code>
     /// The resource stays the application's aggregate, mapped as it always was; this adds its members to it,
     /// so they are loaded and saved with it, under its one version. Nothing is written by hand for the member
     /// class: the member, its periods and its roles are the package's, and what the application added to its
     /// class is mapped by the conventions, as on any entity.
     /// <para>
-    /// The type arguments are all inferred: the member class from the collection, and what a member is known
-    /// by from the owner. The member class's own id and what its roles are known by are read from the class
-    /// when the model is built.
+    /// What the resource says of itself in the domain is read off its class: its owner, the property it marks
+    /// <c>[Owner]</c>, of what a member is known by, and where it hangs, the property it marks <c>[At]</c>, where it has
+    /// one. Both become columns of the resource whatever else the application says about them. Where it hangs is what
+    /// a permission held from above is compared with: a resource whose rules let it be reached from above
+    /// (<see cref="Access.MembershipRules.ReachFromAbove"/>) is held by a caller that holds the permission at that place, or
+    /// above it, as the application answers where that is (<see cref="IPlacesReached{TResourceId, TPlaceId}"/>). The
+    /// package keeps no places: it reads that column, and nothing of what is above it.
+    /// </para>
+    /// <para>
+    /// The type arguments are inferred from the collection. The member class's own id, what a member is known by and
+    /// what its roles are known by are read from the class when the model is built.
     /// </para>
     /// <para>
     /// What it maps:
@@ -75,45 +84,57 @@ public static class MembershipEntityTypeBuilderExtensions
     /// </summary>
     /// <param name="resource">The builder of the resource's entity type.</param>
     /// <param name="members">The resource's collection of members.</param>
-    /// <param name="owner">The resource's property that holds its owner, as a member is known.</param>
     /// <param name="names">The names of the two tables and of the member's column; named after the resource and the member class when left out.</param>
     /// <typeparam name="TResource">The resource's aggregate.</typeparam>
     /// <typeparam name="TMember">The application's member class, declared with the member template.</typeparam>
-    /// <typeparam name="TMemberId">What a member is known by.</typeparam>
-    /// <exception cref="ArgumentNullException"><paramref name="resource"/>, <paramref name="members"/> or <paramref name="owner"/> is null.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="resource"/> or <paramref name="members"/> is null.</exception>
     /// <exception cref="ArgumentException">
-    /// <typeparamref name="TMember"/> was not declared with the member template; the owner is not known by what
-    /// the members are known by; or <paramref name="members"/> or <paramref name="owner"/> is not a property of
-    /// the resource.
+    /// <typeparamref name="TMember"/> was not declared with the member template; the resource marks no property
+    /// <c>[Owner]</c>, or one that is not of what the members are known by; it marks two properties <c>[At]</c>, or a
+    /// nullable one; or <paramref name="members"/> is not a property of the resource.
     /// </exception>
     /// <exception cref="InvalidOperationException">The resource has members already: it has one member list.</exception>
-    public static EntityTypeBuilder<TResource> HasMembers<TResource, TMember, TMemberId>(
+    public static EntityTypeBuilder<TResource> HasMembers<TResource, TMember>(
         this EntityTypeBuilder<TResource> resource,
         Expression<Func<TResource, IEnumerable<TMember>?>> members,
-        Expression<Func<TResource, TMemberId>> owner,
         MemberTableNames? names = null)
         where TResource : class
         where TMember : class
-        where TMemberId : struct, IEntityId, IEquatable<TMemberId>
     {
         ArgumentNullException.ThrowIfNull(resource);
         ArgumentNullException.ThrowIfNull(members);
-        ArgumentNullException.ThrowIfNull(owner);
 
         var parent = ParentOf(typeof(TMember))
             ?? throw new ArgumentException(
-                typeof(TMember).Name + " is not a member class. Declare it with the member template, [Member<" + typeof(TMember).Name + "Id, "
-                + typeof(TMemberId).Name + ", NamedRole, " + typeof(TResource).Name + ">] public sealed partial class " + typeof(TMember).Name
-                + ";, and the generator derives it from the package's member.",
+                typeof(TMember).Name + " is not a member class. Declare it with the member template, [Member<" + typeof(TMember).Name + "Id, UserId, NamedRole, "
+                + typeof(TResource).Name + ">] public sealed partial class " + typeof(TMember).Name + ";, and the generator derives it from the package's member.",
                 nameof(members));
 
         var arguments = parent.GetGenericArguments();
-        if (arguments[1] != typeof(TMemberId))
+        var owner = Marked<OwnerAttribute>(typeof(TResource), "Owner");
+        if (owner is null)
         {
             throw new ArgumentException(
-                "The owner of " + typeof(TResource).Name + " is a " + typeof(TMemberId).Name + ", and its members are known by a " + arguments[1].Name
+                typeof(TResource).Name + " marks no property [Owner]. A resource with members has one owner, a member: mark the property of " + arguments[1].Name
+                + " that holds it, [Owner] public " + arguments[1].Name + " OwnerId { get; private set; }.",
+                nameof(resource));
+        }
+
+        if (owner.PropertyType != arguments[1])
+        {
+            throw new ArgumentException(
+                "The owner of " + typeof(TResource).Name + ", " + owner.Name + ", is a " + owner.PropertyType.Name + ", and its members are known by a " + arguments[1].Name
                 + ". An owner is one of the members: keep it as what a member is known by.",
-                nameof(owner));
+                nameof(resource));
+        }
+
+        var at = Marked<AtAttribute>(typeof(TResource), "At");
+        if (at is not null && Nullable.GetUnderlyingType(at.PropertyType) is not null)
+        {
+            throw new ArgumentException(
+                typeof(TResource).Name + "." + at.Name + " is marked [At] and may be empty: a resource that hangs nowhere is reached from above by nobody. "
+                + "Mark the property of where it always hangs.",
+                nameof(resource));
         }
 
         if (resource.Metadata.FindAnnotation(MembershipModel.MembersAnnotation) is not null)
@@ -124,11 +145,10 @@ public static class MembershipEntityTypeBuilderExtensions
         }
 
         var navigation = PropertyOf(members, nameof(members));
-        var ownerProperty = PropertyOf(owner, nameof(owner));
 
         try
         {
-            MapMethod.MakeGenericMethod(typeof(TResource), typeof(TMember), arguments[0], typeof(TMemberId), arguments[2])
+            MapMethod.MakeGenericMethod(typeof(TResource), typeof(TMember), arguments[0], arguments[1], arguments[2])
                 .Invoke(null, [resource, members, names ?? new MemberTableNames(), navigation]);
         }
         catch (TargetInvocationException failed) when (failed.InnerException is { } inner)
@@ -137,77 +157,44 @@ public static class MembershipEntityTypeBuilderExtensions
             ExceptionDispatchInfo.Capture(inner).Throw();
         }
 
-        // The owner is a column of the resource, whatever else the application says about it.
-        resource.Property(owner);
+        // The owner is a column of the resource, whatever else the application says about it; so is where it hangs.
+        resource.Property(owner.PropertyType, owner.Name);
         resource.HasAnnotation(MembershipModel.MembersAnnotation, navigation);
-        resource.HasAnnotation(MembershipModel.OwnerAnnotation, ownerProperty);
+        resource.HasAnnotation(MembershipModel.OwnerAnnotation, owner.Name);
+        if (at is not null)
+        {
+            resource.Property(at.PropertyType, at.Name);
+            resource.HasAnnotation(MembershipModel.AtAnnotation, at.Name);
+        }
 
         return resource;
     }
 
     /// <summary>
-    /// Maps the members of a resource that sits somewhere: as
-    /// <see cref="HasMembers{TResource, TMember, TMemberId}(EntityTypeBuilder{TResource}, Expression{Func{TResource, IEnumerable{TMember}}}, Expression{Func{TResource, TMemberId}}, MemberTableNames)"/>
-    /// does, and says where the resource sits:
-    /// <code>
-    /// modelBuilder.Entity&lt;Crate&gt;().HasMembers(crate =&gt; crate.Hands, crate =&gt; crate.OwnerId, at: crate =&gt; crate.BayId);
-    /// </code>
-    /// <para>
-    /// The place is a property of the resource the application keeps as it likes, the department a case file
-    /// belongs to, say. It is what a key held from above is compared with: a resource whose rules
-    /// let it be reached from above (<see cref="Access.MembershipRules.Above"/>) is held by a caller that
-    /// holds the key at that place, or above it, as the application answers where that is
-    /// (<see cref="IPlacesReached{TResourceId, TPlaceId}"/>). The package keeps no places: it reads this
-    /// column, and nothing of what is above it. Rules that reach from above and a resource mapped without a
-    /// place are refused when the resource is first asked about.
-    /// </para>
+    /// The one property of <paramref name="type"/>, or of a class it derives from, marked with
+    /// <typeparamref name="TAttribute"/>, or <see langword="null"/> where none is.
     /// </summary>
-    /// <param name="resource">The builder of the resource's entity type.</param>
-    /// <param name="members">The resource's collection of members.</param>
-    /// <param name="owner">The resource's property that holds its owner, as a member is known.</param>
-    /// <param name="at">The resource's property that holds where it sits.</param>
-    /// <param name="names">The names of the two tables and of the member's column; named after the resource and the member class when left out.</param>
-    /// <typeparam name="TResource">The resource's aggregate.</typeparam>
-    /// <typeparam name="TMember">The application's member class, declared with the member template.</typeparam>
-    /// <typeparam name="TMemberId">What a member is known by.</typeparam>
-    /// <typeparam name="TPlaceId">What a place is known by.</typeparam>
-    /// <exception cref="ArgumentNullException"><paramref name="resource"/>, <paramref name="members"/>, <paramref name="owner"/> or <paramref name="at"/> is null.</exception>
-    /// <exception cref="ArgumentException">
-    /// <typeparamref name="TMember"/> was not declared with the member template; the owner is not known by what
-    /// the members are known by; or <paramref name="members"/>, <paramref name="owner"/> or
-    /// <paramref name="at"/> is not a property of the resource.
-    /// </exception>
-    /// <exception cref="InvalidOperationException">The resource has members already: it has one member list.</exception>
-    public static EntityTypeBuilder<TResource> HasMembers<TResource, TMember, TMemberId, TPlaceId>(
-        this EntityTypeBuilder<TResource> resource,
-        Expression<Func<TResource, IEnumerable<TMember>?>> members,
-        Expression<Func<TResource, TMemberId>> owner,
-        Expression<Func<TResource, TPlaceId>> at,
-        MemberTableNames? names = null)
-        where TResource : class
-        where TMember : class
-        where TMemberId : struct, IEntityId, IEquatable<TMemberId>
-        where TPlaceId : struct, IEntityId, IEquatable<TPlaceId>
+    /// <exception cref="ArgumentException">Two are.</exception>
+    private static PropertyInfo? Marked<TAttribute>(Type type, string what)
+        where TAttribute : Attribute
     {
-        ArgumentNullException.ThrowIfNull(at);
-
-        var place = PropertyOf(at, nameof(at));
-        resource.HasMembers(members, owner, names);
-
-        // Where it sits is a column of the resource, whatever else the application says about it.
-        resource.Property(at);
-        resource.HasAnnotation(MembershipModel.AtAnnotation, place);
-
-        return resource;
+        var marked = type.GetProperties(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+            .Where(property => property.GetCustomAttribute<TAttribute>(inherit: true) is not null)
+            .ToList();
+        return marked.Count <= 1
+            ? marked.FirstOrDefault()
+            : throw new ArgumentException(
+                type.Name + " marks two properties [" + what + "], " + marked[0].Name + " and " + marked[1].Name + ". It has one; mark the one.",
+                "resource");
     }
 
     /// <summary>
-    /// Maps the role class of a resource whose roles are kept: the application's class declared with the role
+    /// Maps the role class of a resource whose roles a customer makes: the application's class declared with the role
     /// template, in a table of its own. Call it where the context maps that class:
     /// <code>
     /// modelBuilder.Entity&lt;PlotRole&gt;(role =&gt;
     /// {
-    ///     role.IsKeptRole();
+    ///     role.IsCustomRole();
     ///
     ///     // The application's own: whose a role is, that a name is used once there, and that a starter role is made once there
     ///     role.HasIndex(row =&gt; new { row.GardenId, row.Name }).IsUnique().RefusesAs("plots.role-name-taken", "Another role is called {Name} already.");
@@ -219,10 +206,10 @@ public static class MembershipEntityTypeBuilderExtensions
     /// <para>
     /// What it maps is the package's part of a role: the id, which the application makes; the name, the
     /// description and the starter role it was made from, each no longer than the role allows; the status as
-    /// its name; and the keys as a collection of texts in one column, which is what the access questions and
+    /// its name; and the permissions as a collection of texts in one column, which is what the access questions and
     /// the database's functions read. The id is stored by the application's generated converter, like the ids
     /// of its other entities. The starter role a role was made from is fixed once the row is there
-    /// (<c>IsFixedAfterInsert</c>): the owner's role is found by it, so a save that changed it is refused, and
+    /// (<c>IsFixedAfterInsert</c>): the starter roles a customer lacks are found by it, so a save that changed it is refused, and
     /// the privileges a Postgres export writes leave the column out of what a caller may update.
     /// </para>
     /// <para>
@@ -238,7 +225,7 @@ public static class MembershipEntityTypeBuilderExtensions
     /// <typeparam name="TRole">The application's role class, declared with the role template.</typeparam>
     /// <exception cref="ArgumentNullException"><paramref name="role"/> is null.</exception>
     /// <exception cref="ArgumentException"><typeparamref name="TRole"/> was not declared with the role template.</exception>
-    public static EntityTypeBuilder<TRole> IsKeptRole<TRole>(this EntityTypeBuilder<TRole> role)
+    public static EntityTypeBuilder<TRole> IsCustomRole<TRole>(this EntityTypeBuilder<TRole> role)
         where TRole : class
     {
         ArgumentNullException.ThrowIfNull(role);
@@ -246,12 +233,12 @@ public static class MembershipEntityTypeBuilderExtensions
         var parent = RoleParentOf(typeof(TRole));
         var resource = typeof(TRole).GetCustomAttributes(inherit: false)
             .Select(attribute => attribute.GetType())
-            .FirstOrDefault(attribute => attribute.IsGenericType && attribute.GetGenericTypeDefinition() == typeof(KeptRoleAttribute<,>))
+            .FirstOrDefault(attribute => attribute.IsGenericType && attribute.GetGenericTypeDefinition() == typeof(CustomRoleAttribute<,>))
             ?.GenericTypeArguments[1];
         if (parent is null || resource is null)
         {
             throw new ArgumentException(
-                typeof(TRole).Name + " is not a role class. Declare it with the role template, naming the resource its roles are of, [KeptRole<"
+                typeof(TRole).Name + " is not a role class. Declare it with the role template, naming the resource its roles are of, [CustomRole<"
                 + typeof(TRole).Name + "Id, Document>] public sealed partial class " + typeof(TRole).Name + " for the roles of a Document, and the generator derives it from the package's role.",
                 nameof(role));
         }
@@ -273,15 +260,15 @@ public static class MembershipEntityTypeBuilderExtensions
 
     /// <summary>The package's part of a role, with the role's id known.</summary>
     private static void MapRoleClass<TRole, TRoleId>(EntityTypeBuilder<TRole> role)
-        where TRole : KeptRoleAggregate<TRoleId>
+        where TRole : CustomRoleAggregate<TRoleId>
         where TRoleId : struct, IEntityId, IEquatable<TRoleId>
     {
         role.Property(row => row.Id).ValueGeneratedNever();
-        role.Property(row => row.Name).HasMaxLength(KeptRoleAggregate<TRoleId>.MaxNameLength);
-        role.Property(row => row.Description).HasMaxLength(KeptRoleAggregate<TRoleId>.MaxDescriptionLength);
+        role.Property(row => row.Name).HasMaxLength(CustomRoleAggregate<TRoleId>.MaxNameLength);
+        role.Property(row => row.Description).HasMaxLength(CustomRoleAggregate<TRoleId>.MaxDescriptionLength);
 
         // A starter role is one of the roles the rules declare, and those are named as a role is held by name.
-        // Where a role came from is how the owner's role is found, so it is said once, when the row is added:
+        // Where a role came from is how the starter roles still to make are found, so it is said once, when the row is added:
         // a save that changed it is refused, and the privileges the Postgres export writes leave it out of what
         // a caller may update.
         role.Property(row => row.MadeFrom).HasMaxLength(NamedRole.MaxLength).IsFixedAfterInsert();
@@ -290,8 +277,8 @@ public static class MembershipEntityTypeBuilderExtensions
         role.Property(row => row.Status).HasConversion<string>().HasMaxLength(StatusLength);
 
         // One column: an array where the database has arrays, a JSON text where it has none. Read inside a
-        // statement either way, which is what lets "the roles that give this key" stay a subquery.
-        role.PrimitiveCollection(row => row.Keys);
+        // statement either way, which is what lets "the roles that give this permission" stay a subquery.
+        role.PrimitiveCollection(row => row.Permissions);
     }
 
     /// <summary>The package's role, closed over the id <paramref name="roleClass"/> was declared with, or <see langword="null"/>.</summary>
@@ -299,7 +286,7 @@ public static class MembershipEntityTypeBuilderExtensions
     {
         for (var type = roleClass.BaseType; type is not null; type = type.BaseType)
         {
-            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(KeptRoleAggregate<>))
+            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(CustomRoleAggregate<>))
             {
                 return type;
             }

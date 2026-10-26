@@ -16,6 +16,6 @@
     <value>Administrator</value>
   </data>
   <data name="administrator.description" xml:space="preserve">
-    <value>Holds every key: runs the organization, its people and their access</value>
+    <value>Holds every permission: runs the organization, its people and their access</value>
   </data>
 </root>

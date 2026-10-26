@@ -38,27 +38,27 @@ The page goes in the order you need it:
 | **Tenant** | Its slug, its status and its shape | Status moves in one direction, and closed is final. The shape only goes from flat to hierarchical. |
 | **Organization** | The tree of **OrganizationUnits** | One root, no cycles, a depth of at most 32. A unit is archived, never deleted. |
 | **Seat** | A person in a tenant: their **Placements** in units, and the **RoleGrants** at each | One placement per unit and one primary. Only active roles are granted. The person a seat belongs to never changes. |
-| **Role** | A name and the **Permission** keys it grants | Only keys from the catalogue, with the keys they imply expanded. |
-| **Catalogue** | The permission keys and the **RolePacks** | One administrators' pack seeded for each shape, Tenancy's own when you declare none. A key is retired, never deleted. Keys that manage access are marked, Tenancy's own among them. |
+| **Role** | A name and the **Permission** permissions it grants | Only permissions from the catalogue, with the permissions they imply expanded. |
+| **Catalogue** | The permissions and the **RolePacks** | One administrators' pack seeded for each shape, Tenancy's own when you declare none. A permission is retired, never deleted. Permissions that manage access are marked, Tenancy's own among them. |
 
 Tenant, Organization, Seat and Role are aggregates, and they refer to each other by id. The catalogue is
-data, not a class you declare: Tenancy's keys, the keys your modules contribute, and what your application
+data, not a class you declare: Tenancy's permissions, the permissions your modules contribute, and what your application
 adds, which may be nothing ([What the catalogue is for](#what-the-catalogue-is-for)). A unit has no kind:
 whether it is a region or a site is yours to keep, on your own unit class
 ([The kind of a unit](#the-kind-of-a-unit)). Two rules span more than one aggregate, and so
 live in the use cases, guarded against concurrent changes. The last administrator of a tenant cannot be
-removed. And a role that manages access is given or taken away only by someone who holds its keys that
+removed. And a role that manages access is given or taken away only by someone who holds its permissions that
 manage access, there and for at least as long, and never by a seat to itself; a seat that holds one is
 suspended, deactivated or reactivated by the same rule, and a unit moved away from it or under it too. Other
 roles are given by whoever holds `tenancy.grants.manage` where the seat is placed.
 [Who may give a role](#who-may-give-a-role) has the details.
 
-A tenant's roles start as copies of the catalogue's packs, and are the tenant's own to rename and re-key from
+A tenant's roles start as copies of the catalogue's packs, and are the tenant's own to rename and to give other permissions from
 then on. A role made from a pack still follows that pack when your application changes it, once the host syncs
 the packs, and what the tenant changed itself stays ([Packs after provisioning](#packs-after-provisioning)).
-Whoever holds `tenancy.roles.manage` for the whole tenant may put any key of the catalogue into any role, so that
-key is what makes an administrator: an active seat, placed at the root, that holds it there through a grant
-with no end. A key that manages access is added to a role, or taken out, by an administrator alone
+Whoever holds `tenancy.roles.manage` for the whole tenant may put any permission of the catalogue into any role, so that
+permission is what makes an administrator: an active seat, placed at the root, that holds it there through a grant
+with no end. A permission that manages access is added to a role, or taken out, by an administrator alone
 ([who may give a role](#who-may-give-a-role)).
 
 Tenancy raises domain events. Integration events are the application's to write, from those, the way any
@@ -66,21 +66,21 @@ module writes its own.
 
 ### The administrators' pack
 
-A tenant's first seat is given the role of the administrators' pack, at the root. That role holds the keys
+A tenant's first seat is given the role of the administrators' pack, at the root. That role holds the permissions
 that manage access, so whoever holds it can give the next role: a tenant cannot start without one. You need
 not declare it. When your catalogue declares no administrators' pack at all, `TenancyCatalogue.Build` adds
 Tenancy's own, `TenancyPacks.DefaultAdministrators`: key `administrator`, named Administrator, for every
-shape, seeded when a tenant is provisioned. It lists no keys, so it holds every live key, one a module adds
-later included, and a tenant that has the role already gets that key at the next sync of the packs
-([Packs after provisioning](#packs-after-provisioning)). So the smallest application declares no catalogue at all: its modules mark their keys, the
-host adds them with one generated call ([A module states its keys once](#a-module-states-its-keys-once)), and
+shape, seeded when a tenant is provisioned. It lists no permissions, so it holds every live permission, one a module adds
+later included, and a tenant that has the role already gets that permission at the next sync of the packs
+([Packs after provisioning](#packs-after-provisioning)). So the smallest application declares no catalogue at all: its modules mark their permissions, the
+host adds them with one generated call ([A module states its permissions once](#a-module-states-its-permissions-once)), and
 `options.Catalogue` stays unset. Packs that administer nothing, such as a viewer's, sit next to the default
 one.
 
 A pack says which tenants are given a copy with `SeededFor`. Left out, every tenant is; set to a shape, only a
 tenant of that shape, provisioned so or changed to it later. It is about which tenants get the role, not about
 the role: a role has no shape, and the tenant's copy is its own. Declare your own administrators' pack once the
-role should have another name or list its keys, and then declare one for every shape: a single one with no
+role should have another name or list its permissions, and then declare one for every shape: a single one with no
 `SeededFor`, or one seeded for each shape. The default is added only when you declare none, so a catalogue with
 an administrators' pack seeded for a flat tenant and none for a hierarchical one is refused, with a problem that
 names the `SeededFor` to write. One declared with `SeedOnProvision: false` is seeded into no tenant and counts
@@ -94,13 +94,13 @@ administrators' pack. `HasDefaultAdministrators` on the built catalogue says whi
 A tenant provisioned in Dutch gets the default role as Beheerder: the package names its own pack in the two
 languages it ships, and your `IRolePackTexts` is asked first, by the key `administrator`
 ([Roles in the tenant's language](#roles-in-the-tenants-language)). On Postgres the access file is written
-from the same catalogue, so `pack_keys('administrator')` answers every live key, and the start-up check that
+from the same catalogue, so `pack_permissions('administrator')` answers every live permission, and the start-up check that
 compares the database's functions with the catalogue the application runs with passes.
 
 ```mermaid
 flowchart TD
     Declares{"does a pack<br/>administer?"}
-    Declares -- no --> Taken{"one with the<br/>default's key<br/>or name?"}
+    Declares -- no --> Taken{"one with the<br/>default's permission<br/>or name?"}
     Declares -- yes --> PerShape{"one seeded<br/>for each shape?"}
     Taken -- no --> Default(["Tenancy's own<br/>is added"])
     Taken -- yes --> Refused["refused, with<br/>the fix"]
@@ -109,15 +109,15 @@ flowchart TD
 ```
 
 <details>
-<summary>Show the code: an application without a catalogue, one with keys of its own and no packs, and one with an administrators' pack for each shape</summary>
+<summary>Show the code: an application without a catalogue, one with permissions of its own and no packs, and one with an administrators' pack for each shape</summary>
 
 ```csharp
-// No catalogue: the keys are Tenancy's and the modules', and every tenant starts with the default
+// No catalogue: the permissions are Tenancy's and the modules', and every tenant starts with the default
 // administrators' role, given to its first seat
 services.AddTenancy<ShopTenancyContext>();
 
-// Keys the application owns itself, and still no pack: the default administrators' role holds them too
-public static ApplicationCatalogue Application { get; } = new(Permissions: ShopKeys.All);
+// Permissions the application owns itself, and still no pack: the default administrators' role holds them too
+public static ApplicationCatalogue Application { get; } = new(Permissions: ShopPermissions.All);
 
 // A provisioned tenant names the role by the pack's key
 var administrators = provisioned.RolesByPack[TenancyPacks.DefaultAdministratorsKey];
@@ -128,33 +128,33 @@ public static ApplicationCatalogue Application { get; } = new(
     [
         new("owner", "Owner", "Runs the shop", [], SeededFor: TenantShape.Flat, Administers: true),
         new("head-office", "Head office", "Runs every branch", [], SeededFor: TenantShape.Hierarchical, Administers: true),
-        new("viewer", "Viewer", "Looks at the orders", [ShopKeys.OrdersView]),   // no SeededFor: every tenant
+        new("viewer", "Viewer", "Looks at the orders", [ShopPermissions.OrdersView]),   // no SeededFor: every tenant
     ],
-    Permissions: ShopKeys.All);
+    Permissions: ShopPermissions.All);
 ```
 
 </details>
 
 Switching an application that runs already from a pack of its own to the default changes no tenant it has.
-Each keeps the role its old pack gave it, with that role's keys, and the seats that hold it keep it. Nothing
+Each keeps the role its old pack gave it, with that role's permissions, and the seats that hold it keep it. Nothing
 copies the default into those tenants until a change of shape, which copies every pack seeded for the new shape
 that the tenant has no copy of, the default among them. A tenant that still has a role named like the default,
 as an old pack called Administrator gave it, refuses that copy with `tenancy.role-name-taken`, and the change of
 shape with it. Rename that role in those tenants first, or keep declaring your own pack.
 
-An administrators' pack that lists no keys holds every key of the catalogue, the modules' included. One that
-lists keys holds those and no others, for administrators who run access without holding the keys to the
-modules' work. Its list has to hold every one of Tenancy's keys and every key that manages access, itself or
-through a key that implies it; `TenancyCatalogue.Build` refuses a pack that leaves one out and names each key,
-so marking another key stops the application at start-up until the pack lists it. Either way an administrator
+An administrators' pack that lists no permissions holds every permission of the catalogue, the modules' included. One that
+lists permissions holds those and no others, for administrators who run access without holding the permissions to the
+modules' work. Its list has to hold every one of Tenancy's permissions and every permission that manages access, itself or
+through a permission that implies it; `TenancyCatalogue.Build` refuses a pack that leaves one out and names each permission,
+so marking another permission stops the application at start-up until the pack lists it. Either way an administrator
 can give every role, and appointing an area manager needs no system work. The list is what the administrators'
-role starts with, not a wall around the seat: an administrator still puts any key into a role, and gives
+role starts with, not a wall around the seat: an administrator still puts any permission into a role, and gives
 itself a role that manages no access, as every seat that manages grants may.
 
 ### Packs after provisioning
 
 A tenant's roles are copies of the packs it was given, and the tenant changes them as it likes. Your packs change
-too: a module you add brings keys that an administrators' pack listing none now holds, and you add a key to a pack,
+too: a module you add brings permissions that an administrators' pack listing none now holds, and you add a permission to a pack,
 or take one out. A tenant provisioned before that still has the role the old pack made. One call of the host's,
 `SyncRolePacks()`, brings those roles up to their packs once the host has started, in every tenant, without
 undoing what a tenant changed itself.
@@ -170,33 +170,33 @@ flowchart LR
     Removed --> Event
 ```
 
-Every role made from a pack remembers what the pack gave it, `KeysFromPack`: as the pack was when the role was
+Every role made from a pack remembers what the pack gave it, `PermissionsFromPack`: as the pack was when the role was
 made, and since then as it was when the role last followed it. The sync compares that with the pack as your
-catalogue builds it now. A key the pack gained is added to the role, and a key it lost is taken out. A key the
-tenant took out of the role stays out while the pack still holds it, and a key the tenant added stays while the
+catalogue builds it now. A permission the pack gained is added to the role, and a permission it lost is taken out. A permission the
+tenant took out of the role stays out while the pack still holds it, and a permission the tenant added stays while the
 pack never held it: neither is a change of the pack. Say a tenant took closing boards out of its Project lead, and
 you later add archiving boards to that pack: at the next start the role gets archiving, and closing stays out. A
-tenant whose Administrator came from the default administrators' pack gets the keys of a module you add, and
+tenant whose Administrator came from the default administrators' pack gets the permissions of a module you add, and
 nobody makes a role for them by hand.
 
 What the comparison cannot tell apart is settled this way:
 
 | Case | What the sync does |
 |---|---|
-| A key the tenant added by hand, which the pack gains later and loses again | Once the pack holds it, it is the pack's: it goes when the pack loses it, and the event says so |
-| A key the tenant took out, which the pack loses and later gains again | It comes back as a key the pack gained: once the pack lost it, the role no longer remembers it. The event names it, among the keys that manage access when it manages access |
-| A key that is no longer live, retired or removed from your code | It stays on the role. It grants nothing, and retiring a key changes no role |
-| A key that a key the role keeps implies | It stays, or comes with that key, as everywhere a role's keys are set |
+| A permission the tenant added by hand, which the pack gains later and loses again | Once the pack holds it, it is the pack's: it goes when the pack loses it, and the event says so |
+| A permission the tenant took out, which the pack loses and later gains again | It comes back as a permission the pack gained: once the pack lost it, the role no longer remembers it. The event names it, among the permissions that manage access when it manages access |
+| A permission that is no longer live, retired or removed from your code | It stays on the role. It grants nothing, and retiring a permission changes no role |
+| A permission that a permission the role keeps implies | It stays, or comes with that permission, as everywhere a role's permissions are set |
 | An archived role | Left as it is: it grants nothing, and changes no more |
-| A role an import or a seeding made from a pack with keys of its own | It remembers the pack's keys, not its own, so what it holds beyond the pack, or lacks, is the tenant's and stays |
+| A role an import or a seeding made from a pack with permissions of its own | It remembers the pack's permissions, not its own, so what it holds beyond the pack, or lacks, is the tenant's and stays |
 | A role whose pack your catalogue no longer has | It keeps its keys and what it remembers, and follows the pack again if you declare it again under the same key |
-| A role made before roles remembered their pack, whose column is empty, or made from a pack your catalogue did not have then | It follows as if the pack had given it nothing yet: it gets every key of the pack it lacks, and loses none |
-| A role whose keys are stored in another order | The same keys are no change: they are saved in order, and no event is raised |
-| A role whose following would take the administrator key from the tenant's last administrators | Left as it is, and named in the answer. It follows once the tenant has an administrator through another role |
+| A role made before roles remembered their pack, whose column is empty, or made from a pack your catalogue did not have then | It follows as if the pack had given it nothing yet: it gets every permission of the pack it lacks, and loses none |
+| A role whose permissions are stored in another order | The same permissions are no change: they are saved in order, and no event is raised |
+| A role whose following would take the administrator permission from the tenant's last administrators | Left as it is, and named in the answer. It follows once the tenant has an administrator through another role |
 
-A key that manages access follows the same rule. An administrator alone adds one to a role or takes one out
-([who may give a role](#who-may-give-a-role)), but only your code puts a key in a pack, so the sync, which is your
-application's work, follows the pack in those keys too. The event names them apart, so whoever tells the tenant
+A permission that manages access follows the same rule. An administrator alone adds one to a role or takes one out
+([who may give a role](#who-may-give-a-role)), but only your code puts a permission in a pack, so the sync, which is your
+application's work, follows the pack in those permissions too. The event names them apart, so whoever tells the tenant
 can say that the change gives or takes away power over other people's access.
 
 **Turning it on** is one call, next to the start-up checks and not among them: a check reads and changes nothing,
@@ -242,7 +242,7 @@ using (TenancyWork.BeginOperatorIn<TenantId, SeatId>(tenant, operatorIdentity))
 </details>
 
 **Telling the tenant.** Each role that changes raises `RoleFollowedItsPack`: the tenant, the role, the pack, the
-keys that came in, `Added`, and went out, `Removed`, those of them that manage access, `ManagingAccess`, and who
+permissions that came in, `Added`, and went out, `Removed`, those of them that manage access, `ManagingAccess`, and who
 made the change, `By`, the system. The package sends no message itself. `AddTenancyEventLog` keeps the event in the
 [access history](#access-history), where the tenant's administrators read it, and that is all the sample does. To
 mail them, publish the event as a contract of your own and handle that where your application sends mail.
@@ -268,7 +268,7 @@ public sealed class TellTheAdministrators(IShopAdministrators administrators, IM
 {
     public async Task HandleAsync(RoleFollowedItsPackV1 followed, IntegrationEventMessage message, CancellationToken cancellationToken)
     {
-        // A role may only gain keys, or only lose them: a line is written for what happened, and none for what did not
+        // A role may only gain permissions, or only lose them: a line is written for what happened, and none for what did not
         string?[] lines =
         [
             $"The role made from the pack {followed.Pack} changed with the application.",
@@ -292,11 +292,11 @@ says what it runs as.
 
 </details>
 
-The roles' table has one column more, `KeysFromPack`, on every database, which a migration of yours adds like any
+The roles' table has one column more, `PermissionsFromPack`, on every database, which a migration of yours adds like any
 change of the model: nullable, so the rows stored before it have none, and follow as the table above says. On
 Postgres the export writes two triggers and a stricter policy for it as well. A seat that changes a role does not
 change the column: a trigger refuses that, as a policy refuses, and another keeps the pack a role was made from. A
-role a seat adds names no pack, or is an exact copy of one, remembering exactly the pack's keys
+role a seat adds names no pack, or is an exact copy of one, remembering exactly the pack's permissions
 ([What the policies check](#what-the-policies-check)).
 
 ## Adopting it, step by step
@@ -325,10 +325,10 @@ Tenancy becomes a module of your application, like any other. In the order you w
    a migration of your own, and `services.AddTenancy<TContext>()`, with your catalogue when you have one
    ([Your tenancy module](#your-tenancy-module)); each id makes its own new ones
    ([How a new id is made](#how-a-new-id-is-made)).
-4. **Write your catalogue, when you need one.** Each module states its own keys once, on a list it marks with
-   `[TenancyPermissions]`, and the host adds every module's with one generated call
-   ([A module states its keys once](#a-module-states-its-keys-once)). Your part adds the role
-   packs a tenant starts with, keys no module owns, and a mark on every key that manages access
+4. **Write your catalogue, when you need one.** Each module declares its own permissions once, in a class it
+   marks `[Permissions]`, and the host adds every module's with one generated call
+   ([A module states its permissions once](#a-module-states-its-permissions-once)). Your part adds the role
+   packs a tenant starts with, permissions no module owns, and a mark on every permission that manages access
    ([What the catalogue is for](#what-the-catalogue-is-for)). Declare no administrators' pack, and every tenant
    starts with Tenancy's own ([The administrators' pack](#the-administrators-pack)); need none of the rest, and
    leave the catalogue out. `SyncRolePacks()` in the host brings a pack you change later to the roles tenants
@@ -344,7 +344,7 @@ Tenancy becomes a module of your application, like any other. In the order you w
 7. **Keep your own tables to a tenant.** `ScopeToTenant` on an entity; `UseDDDToolkit` on its context gives it
    Tenancy's save check, which `AddTenancy` brought
    ([Keeping tenants apart](#keeping-tenants-apart-the-filter-and-the-save-check)).
-8. **Ask in your modules.** A module maps the read model and asks where the caller holds a key, inside its
+8. **Ask in your modules.** A module maps the read model and asks where the caller holds a permission, inside its
    own query ([Who may do what](#who-may-do-what)). A request says what it requires of its caller, and a
    check holds the caller to it before the handler runs
    ([What a request requires of its caller](#what-a-request-requires-of-its-caller)). A module answers ids,
@@ -359,6 +359,40 @@ Tenancy becomes a module of your application, like any other. In the order you w
     ([Setting it up](#setting-it-up)).
 
 The [sample](#who-may-do-what-in-the-sample) is a small application built this way.
+
+### Upgrading from key to permission
+
+Up to 3.2.0-preview.4 a permission was called a key in the names of the packages and in the database: the columns
+`"Key"`, `"Keys"` and `"KeysFromPack"`, the functions `holds_key`, `units_where_i_hold` and their kin, and the
+refusals' argument `Key`. From 3.2.0-preview.5 each is a permission. Nothing is dropped on the way: the columns
+are renamed, and every row keeps its value. An application that used the earlier names does three things:
+
+1. **Rebuild**, and follow the compiler: `[RequiresKey]` is `[RequiresPermission]`, `TenancyKeys` is
+   `TenancyPermissions`, a role's `Keys` are its `Permissions`, and so on. The
+   [changelog](../CHANGELOG.md) lists each name, was and now.
+2. **Add one migration** to the context that maps Tenancy's tables, and to each context with a custom role class.
+   Entity Framework writes it as renames, never as a drop and an add:
+
+   ```csharp
+   migrationBuilder.RenameColumn(name: "Key", schema: "tenancy", table: "SeatRights", newName: "Permission");
+   migrationBuilder.RenameIndex(name: "IX_SeatRights_SeatId_Key", schema: "tenancy", table: "SeatRights",
+       newName: "IX_SeatRights_SeatId_Permission");
+   migrationBuilder.RenameColumn(name: "KeysFromPack", schema: "tenancy", table: "Roles", newName: "PermissionsFromPack");
+   migrationBuilder.RenameColumn(name: "Keys", schema: "tenancy", table: "Roles", newName: "Permissions");
+   ```
+
+   The event a role's permissions changing raises is stored under its new name, `tenancy.role-permissions-changed`.
+   Add the rows written under the old one to the same migration, so the access history still reads them:
+
+   ```csharp
+   migrationBuilder.Sql("""UPDATE "tenancy"."TenancyEventLog" SET "EventName" = 'tenancy.role-permissions-changed' WHERE "EventName" = 'tenancy.role-keys-changed';""");
+   migrationBuilder.Sql("""UPDATE "tenancy"."TenancyOutboxMessages" SET "EventName" = 'tenancy.role-permissions-changed' WHERE "EventName" = 'tenancy.role-keys-changed';""");
+   ```
+
+   Use your own schema and table names where you named them otherwise. The sample's migration is
+   `PermissionsRenamed`, in each module that has these tables.
+3. **On Postgres, let the export write the new access file** after that migration. It writes the functions under
+   their new names, and drops the old ones; until it is applied, the start-up checks refuse the database.
 
 ## Your tenancy module
 
@@ -392,7 +426,7 @@ published with `[ModuleContract]`. An organization shares its tenant's id, so th
 are public, in the project's root namespace, so every folder of it sees them without a using, and each says in
 its documentation that the switch wrote it and how to declare it yourself. The invitation is not written: it is
 the one class you may leave out, and declaring it is what turns [invitations](#invitations) on. A written class
-is the package's whole: the role remembers what its pack gave it, `KeysFromPack`, which your migration maps like
+is the package's whole: the role remembers what its pack gave it, `PermissionsFromPack`, which your migration maps like
 every column, and follows the pack when the host syncs ([Packs after provisioning](#packs-after-provisioning)).
 
 Nothing is generated without the switch, and nothing you declare is replaced. A class of a template that the
@@ -426,7 +460,7 @@ Two things see them only from the next project up:
   `[ObjectType<Role>]` over a written `Role` does not compile in that project. Nor does a toolkit generator that
   reads a written class by its symbol, a row access rule that names it, say. A module split by layer has those in
   the projects above, where all is well. A module of one project that needs one declares that class or id itself,
-  one line, and it wins. A written id as the key of a
+  one line, and it wins. A written id as the permission of a
   [resource access contract](row-level-security.md#a-resources-access-asked-by-its-id) needs neither: the
   contract beside `[assembly: GenerateTenancyIds]`, and a rule of the same project that asks it, are written over
   the id the switch writes.
@@ -622,7 +656,7 @@ required: the start-up checks refuse a database without it
 ([The index on a tenant's root](#the-index-on-a-tenants-root)).
 
 The tables are called `Tenants`, `Seats`, `SeatRoleGrants` and so on, and those two indexes after their
-tables, unless you pass `AddTenancy` a `TenancyTableNames` of your own. Their columns, keys and other
+tables, unless you pass `AddTenancy` a `TenancyTableNames` of your own. Their columns, permissions and other
 indexes are named as your context names everything else. [Your own naming](#your-own-naming) keeps a
 database in snake_case.
 
@@ -638,7 +672,7 @@ Tenancy from there:
 public static IServiceCollection AddShopTenancy(this IServiceCollection services, string connectionString)
     => services
         .AddTenancy<ShopTenancyContext>(options =>
-            options.Catalogue = ShopCatalogue.Application)   // when you have one: packs, keys of your own, marks
+            options.Catalogue = ShopCatalogue.Application)   // when you have one: packs, permissions of your own, marks
         .AddDbContext<ShopTenancyContext>((serviceProvider, options) => options
             .UseNpgsql(connectionString)
             .UseDDDToolkit(serviceProvider));
@@ -654,66 +688,104 @@ explains how the calls without your classes come about.
 ### What the catalogue is for
 
 Tenancy asks the application only what it needs to decide something, and its catalogue is what it decides
-access with: which keys exist, which of them manage access and whether those stay contained, and which roles a
+access with: which permissions exist, which of them manage access and whether those stay contained, and which roles a
 new tenant starts with. Tenancy
-brings its own keys, and every module states its keys next to the code that asks for them, once
-([A module states its keys once](#a-module-states-its-keys-once)). What is left for your
+brings its own permissions, and every module states its permissions next to the code that asks for them, once
+([A module states its permissions once](#a-module-states-its-permissions-once)). What is left for your
 `ApplicationCatalogue` is what neither can say:
 
 | Part | What it decides | Without it |
 |---|---|---|
 | `Packs` | The roles a new tenant starts with, which shape of tenant gets each (`SeededFor`), and what its first administrator holds | Every tenant starts with Tenancy's administrators' role alone ([The administrators' pack](#the-administrators-pack)) |
-| `Permissions` | Keys that belong to no module | Only Tenancy's keys and the modules' contributions |
-| `AccessManagingKeys` | A key a module declares that should manage access in your application | A key manages access only where it is declared so ([Which keys manage access](#who-may-give-a-role)) |
-| `ContainAccessManagingKeys` | Whether a seat hands on a key that manages access only where it holds it itself | On: containment holds ([Containment, on or off](#containment-on-or-off)) |
+| `Permissions` | Permissions that belong to no module | Only Tenancy's permissions and the modules' contributions |
+| `AccessManagingPermissions` | A permission a module declares that should manage access in your application | A permission manages access only where it is declared so ([Which permissions manage access](#who-may-give-a-role)) |
+| `ContainAccessManagingPermissions` | Whether a seat hands on a permission that manages access only where it holds it itself | On: containment holds ([Containment, on or off](#containment-on-or-off)) |
 
 Every part is optional, and so is the catalogue: leave `options.Catalogue` unset and Tenancy builds it from
-`new ApplicationCatalogue()`, its own keys and the modules'. The export on Postgres, which builds the
+`new ApplicationCatalogue()`, its own permissions and the modules'. The export on Postgres, which builds the
 catalogue without the registration, does the same: it writes the policies from the part you mark
 `[TenancyCatalogue]`, and from `new ApplicationCatalogue()` where you mark none
 ([Setting it up](#setting-it-up)). Nothing else is asked for: what kind of unit a unit is decides nothing, so
 it is [yours to keep](#the-kind-of-a-unit), on your own unit class.
 
-### A module states its keys once
+### A module states its permissions once
 
-A module's keys are needed by two programs that cannot ask each other: the host, which builds its catalogue
+A module declares its permissions once, next to the code that asks for them: the constants of a static class it
+marks `[Permissions]`, each with its **level**, the attribute that says where it is asked, and its `Description`,
+what it lets somebody do.
+
+```csharp
+// Ordering.Application, a project of the module Ordering
+[Permissions]
+public static class OrderingPermissions
+{
+    [AtTenant(Description = "See the orders")]
+    public const string View = "orders.view";
+
+    [AtUnit(Implies = [View], Description = "Refund an order")]
+    public const string Refund = "orders.refund";
+}
+```
+
+| The level | Asked | Held by |
+|---|---|---|
+| `[AtTenant]` | for the whole tenant, as `TenancyAccess.AtTenant` asks it, and as `[RequiresPermission]` with no marker requires it | a role of the organization granted at its root |
+| `[AtUnit]` | at a unit, as `TenancyAccess.AtUnit` and a request's `[AtUnit]` member ask it | a role granted at that unit or above it |
+| `[On<TResource>]`, [Membership's](membership.md#the-settings-of-a-permission) | on one resource with members | its owner, its members through their roles, and, where its rules say so, a role granted where it hangs |
+
+A permission asked both for the whole tenant and at a unit carries both levels. Whatever the level, the permission is in
+Tenancy's catalogue under the module, so a role of the organization can hold it, with its description: the text a
+screen that puts permissions into roles shows beside it. That is the English text; a translation of the
+application's, under the permission's name in a resx its [failure localizer](localization.md) reads, says it in
+another language, as a refusal's text is said. `Implies` names what holding it brings with it, as a pack's
+permissions do, and `Retired = true` keeps a permission that grants nothing any more, so no stored right breaks. A
+class marked `[Permissions]` that is not static, a constant without a level and a permission declared twice are
+[DDD00092](diagnostics.md#ddd00092).
+
+> **The summary instead.** Where no level says a `Description`, the constant's `/// <summary>` is the description,
+> read from the comment above it whether the project writes a documentation file or not. A `Description` said
+> beside it wins. A permission with neither is [DDD00099](diagnostics.md#ddd00099), a warning: a screen would show
+> it as a bare name.
+
+A module's permissions are needed by two programs that cannot ask each other: the host, which builds its catalogue
 from its services, and the program that exports the database's policies, which builds the same catalogue
-without any. Both compose the modules, so both see every module's assembly, and read the keys there: the host
-through Tenancy's generator, which comes with the package, and the export through the Supabase package's, which
-finds the same marked lists for Tenancy's contribution ([Setting it up](#setting-it-up)).
+without any. Both compose the modules, so both see every module's assembly, and read the permissions there: Tenancy's
+generator writes the module's list into the module's project, and collects every module's into the host, and
+the Supabase package's generator finds the same lists for Tenancy's contribution ([Setting it up](#setting-it-up)).
 
 ```mermaid
 flowchart TB
-    Ordering["Ordering.Application<br/>OrderingKeys.Permissions<br/>[TenancyPermissions]"]
-    Billing["Billing.Application<br/>BillingKeys.Permissions<br/>[TenancyPermissions]"]
+    Ordering["Ordering.Application<br/>[Permissions] OrderingPermissions"]
+    Billing["Billing.Application<br/>[Permissions] BillingPermissions"]
+    Declared{{"Tenancy's generator,<br/>in each module's project:<br/>DeclaredPermissions.All"}}
     Generator{{"Tenancy's generator,<br/>in each project that<br/>declares no module"}}
     Supabase{{"the Supabase export's<br/>generator, where the<br/>export runs"}}
     Host["the host<br/>AddTenancyPermissionsOfModules()"]
-    Export["Tenancy's contribution<br/>modules: every marked list"]
+    Export["Tenancy's contribution<br/>modules: every module's list"]
     Running(["the catalogue<br/>the host runs with"])
     Written(["the catalogue the<br/>policies are written from"])
     Check{"start-up check<br/>on Postgres:<br/>the same?"}
-    Ordering --> Generator
-    Billing --> Generator
-    Ordering --> Supabase
-    Billing --> Supabase
+    Ordering --> Declared
+    Billing --> Declared
+    Declared --> Generator
+    Declared --> Supabase
     Generator --> Host --> Running --> Check
     Supabase --> Export --> Written --> Check
 ```
 
 <details>
-<summary>Show the code: a module's keys, the host's one call, and what the generators write</summary>
+<summary>Show the code: the host's one call, and what the generators write</summary>
 
 ```csharp
-// Ordering.Application: the keys, stated once
-public static class OrderingKeys
+// What Tenancy's generator writes into Ordering.Application, in the namespace of its assembly
+public static class DeclaredPermissions
 {
     [TenancyPermissions]
-    public static IReadOnlyList<Permission> Permissions { get; } =
-    [
-        new("orders.view", "Ordering", "See the orders"),
-        new("orders.refund", "Ordering", "Refund an order", ManagesAccess: true),
-    ];
+    public static IReadOnlyList<Permission> All { get; } = new Permission[]
+    {
+        new("orders.view", "Ordering", "See the orders.", Implies: null, Retired: false, Order: 10),
+        new("orders.refund", "Ordering", "Refund an order.", Implies: new string[] { "orders.view" }, Retired: false, Order: 20),
+    };
 }
 
 // The host's Program.cs: the host references every module, and the class is in the namespace of its assembly
@@ -721,12 +793,12 @@ using Shop.Host;
 
 builder.Services.AddTenancyPermissionsOfModules();
 
-// What Tenancy's generator writes into each of those projects, in the namespace of its assembly
+// What Tenancy's generator writes into the host, in the namespace of its assembly
 internal static class TenancyPermissionsOfModules
 {
     public static IReadOnlyList<Permission> All { get; } = Join(
-        global::Shop.Billing.BillingKeys.Permissions,
-        global::Shop.Ordering.OrderingKeys.Permissions);
+        global::Shop.Billing.Application.DeclaredPermissions.All,
+        global::Shop.Ordering.Application.DeclaredPermissions.All);
 
     public static IServiceCollection AddTenancyPermissionsOfModules(this IServiceCollection services)
         => TenancyServiceCollectionExtensions.AddTenancyPermissions(services, All);
@@ -737,22 +809,26 @@ internal static class TenancyPermissionsOfModules
 private readonly IRowAccessContribution _contribution = new global::DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution(
     modules: new IEnumerable<Permission>[]
     {
-        global::Shop.Billing.BillingKeys.Permissions,
-        global::Shop.Ordering.OrderingKeys.Permissions,
+        global::Shop.Billing.Application.DeclaredPermissions.All,
+        global::Shop.Ordering.Application.DeclaredPermissions.All,
     },
     application: global::Shop.ShopCatalogue.Application);
 ```
 
 </details>
 
-A module states its keys on the static list where it declares them, and marks that list with
-`[TenancyPermissions]`. That is the only place: its registration adds nothing, and no other project lists them.
+The module writes no list: Tenancy's generator writes `DeclaredPermissions.All` into each project that declares a
+`[Permissions]` class, under the module the project declares, and marks it `[TenancyPermissions]`, the mark the
+projects that compose the modules collect. That is the only place: the module's registration adds nothing, and no
+other project lists its permissions. A list a module marks `[TenancyPermissions]` by hand would say the permissions a second time,
+and is [DDD00095](diagnostics.md#ddd00095).
+
 In every application that references Tenancy, the program the modules are composed in, and in every library
 that references it and declares no module, the generator writes `TenancyPermissionsOfModules`, an internal class
-with the project's own marked lists and those of every project it references. Its namespace is named after the
+with every module's list it finds in the project and in those it references. Its namespace is named after the
 project's assembly, `Shop.Host` for `Shop.Host.dll`, whatever the project's `RootNamespace` says:
 
-- **`TenancyPermissionsOfModules.All`**: every module's keys, one list after the other, in the order of the
+- **`TenancyPermissionsOfModules.All`**: every module's permissions, one list after the other, in the order of the
   lists' names. A program of your own that builds the catalogue without the host's services builds it with
   `TenancyCatalogue.Build(application, TenancyPermissionsOfModules.All)`, or
   `TenancyCatalogue.Build(TenancyPermissionsOfModules.All)` without a part of your own. The Supabase export
@@ -760,38 +836,29 @@ project's assembly, `Shop.Host` for `Shop.Host.dll`, whatever the project's `Roo
 - **`services.AddTenancyPermissionsOfModules()`**: adds `All` to the catalogue, as one contribution. The host
   calls it once. A top-level `Program.cs` is in no namespace, so it needs `using Shop.Host;` for the call.
 
-Neither call names a module, so a module that is added, or a key a module adds, reaches both programs with the
-next build, and nothing in the host changes. While no module marks a list, before the first one does or after
-the last one is taken out, `All` is empty, and both calls compile all the same.
+Neither call names a module, so a module that is added, or a permission a module adds, reaches both programs with
+the next build, and nothing in the host changes. While no module declares a permission, before the first one does
+or after the last one is taken out, `All` is empty, and both calls compile all the same.
 
 Declaring a module means `DDD_Module`, set in the project file or for a folder of projects
-([A module named by its folder](modules.md#a-module-named-by-its-folder)), or `[assembly: Module]`. A module's
-own libraries get no class: a module states its own keys and composes no other module's. A module project that
-is not declared one yet gets one as well, and leaves it alone: the host's call is the one that counts. An
-application gets the class whether it declares a module or not, because nothing composes the modules from it:
-an application in one project that sets `DDD_Module` to name its code, as
-[Getting started](getting-started.md) does, is a module and the host at once, and registers its own keys with the
-same call. A library that the host and an export share, to compose the modules in one place, sets no `DDD_Module`,
-or it is a module and gets no class.
+([A module named by its folder](modules.md#a-module-named-by-its-folder)), or `[assembly: Module]`; a project
+that declares none lists its permissions under its assembly's name. A module's own libraries get no
+`TenancyPermissionsOfModules`: a module states its own permissions and composes no other module's. An application gets
+the class whether it declares a module or not, because nothing composes the modules from it: an application in
+one project that sets `DDD_Module` to name its code, as [Getting started](getting-started.md) does, is a module
+and the host at once, and registers its own permissions with the same call. A library that the host and an export share,
+to compose the modules in one place, sets no `DDD_Module`, or it is a module and gets no class.
 
-The list is a static property or field, readable, declared in a class that is not generic (nor nested in one),
-whose type is a sequence of `Permission`: `IReadOnlyList<Permission>`, `IEnumerable<Permission>` or an array.
-In a library it is public as well, in public types, because the project that composes the modules reads it from
-outside, whether the library declares a module or not. A list that cannot be read that way is the error
-[DDD00063](diagnostics.md#ddd00063) where it is declared, because the module's keys would otherwise be missing
-from the catalogue with nothing to say so. Only an application, the program itself, may keep a list of its own
-internal: it collects that list itself, and no other project composes the modules from it.
-
-`AddTenancyPermissions` stays, for keys you add by hand. A module that marks its list does not call it as well:
-the same list added twice stops the catalogue at start-up, with one problem that names its keys and says which
+`AddTenancyPermissions` stays, for permissions you add by hand. A module's permissions are not added with it as well:
+the same list added twice stops the catalogue at start-up, with one problem that names its permissions and says which
 call to take out.
 
-A host that leaves `AddTenancyPermissionsOfModules()` out runs without any module's keys. A pack that names one
+A host that leaves `AddTenancyPermissionsOfModules()` out runs without any module's permissions. A pack that names one
 of them stops the catalogue at start-up; with no such pack, as with Tenancy's default administrators' pack, the
-first question about one of them throws. Both messages say how a module's keys reach the catalogue: the list
-marked `[TenancyPermissions]`, and the host's call.
+first question about one of them throws. Both messages say how a module's permissions reach the catalogue: its
+`[Permissions]` classes, and the host's call.
 
-The two programs build the same catalogue as long as they reference the same modules, and add no keys by hand
+The two programs build the same catalogue as long as they reference the same modules, and add no permissions by hand
 that the other does not. The export can be the host itself, and then there is one list. Where it is a program
 of its own, as in the sample, it references the modules the host does, and the start-up check on Postgres
 stays the guard: it compares the functions the export wrote with the catalogue the host runs with, and refuses
@@ -812,7 +879,7 @@ flowchart LR
     Classes["Shop.Tenants<br/>your five classes"] --> Generator{{"the toolkit's<br/>generator"}}
     Generator --> Name(["TenancyUseCases,<br/>written there"])
     Name --> Application["application project<br/>TenancyUseCases.SeatCommands"]
-    Name --> Api["API project<br/>TenancyUseCases.KeyReach,<br/>in GraphQL types too"]
+    Name --> Api["API project<br/>TenancyUseCases.PermissionReach,<br/>in GraphQL types too"]
     Name --> Host["host and tests<br/>TenancyUseCases.TenantCommands"]
 ```
 
@@ -870,7 +937,7 @@ shows. The invitation use cases take your invitation class and its id as well:
 - **Why a class, and not an alias.** A global `using` alias holds in the project that declares it and no
   further, so every project would declare its own. A class is written once and reaches every project that
   references it, and the generators there read it as any type: HotChocolate's, reading
-  `[ObjectType<TenancyUseCases.KeyReach>]` in an API project, sees the package's record. A generator's alias
+  `[ObjectType<TenancyUseCases.PermissionReach>]` in an API project, sees the package's record. A generator's alias
   would be the compiler's to see and not theirs.
 - **Named as the package's class is.** The name is the one this page and the package's documentation use,
   whatever your module is called, so a module called Tenancy reads as well as one called Tenants. It does not
@@ -1011,8 +1078,8 @@ project, Billing or Projects, sees none of your classes, and nothing it sees say
 the toolkit never takes an id for the tenant's by its name. So it writes them where it calls Tenancy and they are
 no arguments, `AddTenancyAccess<TenantId, SeatId, OrganizationUnitId, RoleId, IBillingRequest, BillingContext>()`
 and `AddTenancyReadFunctions<TenantId, SeatId, OrganizationUnitId, RoleId>()`, and C# infers them where they are:
-system work for a seat, `TenancyWork.BeginSystemIn(tenant, seat, "billing")`, and a key at a unit,
-`TenancyAccess.AtUnit(key, unit)`.
+system work for a seat, `TenancyWork.BeginSystemIn(tenant, seat, "billing")`, and a permission at a unit,
+`TenancyAccess.AtUnit(permission, unit)`.
 
 **Types keep their ids.** `ITenancyAnswers<...>` and `ITenancyQuestions<...>`, which a handler takes in its
 constructor, and records such as `SeatOfCaller<TenantId, SeatId>` name your ids wherever they are named. A class
@@ -1153,16 +1220,16 @@ services.AddDDDToolkitEntityFramework(options => options.UseOutbox<ShopTenancyCo
 ### The kind of a unit
 
 Tenancy keeps no kind of unit. Whether a unit is a region, an area or a site decides nothing about access: a
-key held at a unit reaches every unit below it, whatever either is called. So the package neither asks for a
+permission held at a unit reaches every unit below it, whatever either is called. So the package neither asks for a
 kind nor checks one, and an application that tells its units apart adds a field of its own to its unit class,
 an enum say, shown and stored like any field of its own. It sets the field in the callback of the use case
 that makes the unit:
 
 ```mermaid
 flowchart TB
-    Ask["AddUnitAsync<br/>(parent, name,<br/>configure)"] --> Key{"tenancy.units.manage<br/>at the parent?"}
-    Key -- no --> Refused(["refused,<br/>nothing saved"])
-    Key -- yes --> Tree{"the tree<br/>takes it?"}
+    Ask["AddUnitAsync<br/>(parent, name,<br/>configure)"] --> Permission{"tenancy.units.manage<br/>at the parent?"}
+    Permission -- no --> Refused(["refused,<br/>nothing saved"])
+    Permission -- yes --> Tree{"the tree<br/>takes it?"}
     Tree -- "flat, archived parent,<br/>too deep, bad name" --> Refused
     Tree -- yes --> Configure["configure(unit):<br/>your fields"]
     Configure -- throws --> Nothing(["not added,<br/>nothing saved"])
@@ -1215,12 +1282,13 @@ as the unit and a rule of your class judges it there. A callback that throws lea
 the unit is not added, and not even a later save in the same scope writes it. The root works the same way,
 through `ConfigureRoot` when the tenant is provisioned.
 
-To show the kind, select it. `ListUnitsAsync` and `UnitsByIdAsync` answer your own units, whole, each as a
-`UnitInTree`: the unit, with its path from the root and its depth beside it, the two things a unit does not carry
-itself. So a field your unit class adds is shown with a plain `Select` over the units the directory read, with no
-read more, and nothing you do to one is saved. The sample does all of it: a `UnitKind` enum on its unit, set by
-its command and by its seeding, and a `UnitListing` its queries select, the unit's own fields with the path beside
-them.
+To show the kind, select it. `ListUnitsAsync` answers your own units, whole, each as a `UnitInTree`: the unit,
+with its path from the root and its depth beside it, the two things a unit does not carry itself. So a field your
+unit class adds is shown with a plain `Select` over the units the directory read, with no read more, and nothing
+you do to one is saved. The sample does all of it: a `UnitKind` enum on its unit, set by its command and by its
+seeding, and a `UnitListing` its queries select, the unit's own fields with the path beside them. A unit asked for
+by id, `UnitsByIdAsync`, is named alone, a `NamedUnit` of its name, path and depth: what another module's answer
+needs, for a seat that may not read the rest of the unit.
 
 ## Who may do what
 
@@ -1228,24 +1296,24 @@ Tenancy answers questions about the organization, and nothing else:
 
 | Question | Answer |
 |---|---|
-| `UnitsWhereIHold(key)` | The units where the current seat holds the key: the units it was granted it at, and every unit below them |
+| `UnitsWhereIHold(permission)` | The units where the current seat holds the permission: the units it was granted it at, and every unit below them |
 | `ReadableUnits()` | The units the current seat is placed in, and every unit below them: where it belongs, not what it may open |
-| `HoldsTenantWideAsync(key)` | Whether it holds the key at the root, so for the whole tenant |
-| `HoldsAtAsync(key, unit)` | Whether it holds the key at that unit, granted there or above it |
-| `KeysIHoldAt(unit)` | Every key it holds that reaches that unit |
-| `RolesWithKey(key)` | The active roles that grant the key |
-| `SeatsHoldingAt(key, unit)` | The active seats that hold the key at that unit now, granted there or above it. A seat learns about another seat where it may read that seat's grant ([who reads which grants](#who-reads-which-grants)): one that manages grants, seats or units at North learns who holds the key from North or below it, and not who holds it from the root. System work in the tenant learns every holder; a seat that manages nothing learns only whether it holds the key there itself |
-| `WhereIHold(keys)` | Every pair of a unit and one of the keys the seat holds there: `UnitsWhereIHold` for several keys in one query |
-| `RoleKeys(keys)` | Every pair of an active role and one of the keys it grants: `RolesWithKey` for several keys in one query |
+| `HoldsAtTenantAsync(permission)` | Whether it holds the permission at the root, so for the whole tenant |
+| `HoldsAtAsync(permission, unit)` | Whether it holds the permission at that unit, granted there or above it |
+| `PermissionsIHoldAt(unit)` | Every permission it holds that reaches that unit |
+| `RolesWithPermission(permission)` | The active roles that grant the permission |
+| `SeatsHoldingPermissionAt(permission, unit)` | The active seats that hold the permission at that unit now, granted there or above it. A seat learns about another seat where it may read that seat's grant ([who reads which grants](#who-reads-which-grants)): one that manages grants, seats or units at North learns who holds the permission from North or below it, and not who holds it from the root. System work in the tenant learns every holder; a seat that manages nothing learns only whether it holds the permission there itself |
+| `WhereIHold(permissions)` | Every pair of a unit and one of the permissions the seat holds there: `UnitsWhereIHold` for several permissions in one query |
+| `RolePermissions(permissions)` | Every pair of an active role and one of the permissions it grants: `RolesWithPermission` for several permissions in one query |
 | `UnitsUnder(unit)` | The unit and every unit below it, in the caller's tenant |
 | The current tenant and seat | Who is asking |
 
 A grant counts from its start until its end, and that is compared when the question is asked, so a grant
 that ended yesterday gives nothing today without anything being written. A suspended seat, an archived
-role and a key the catalogue has retired give nothing either.
+role and a permission the catalogue has retired give nothing either.
 
 It does not decide who may open a project. The module that owns the project does: it knows what a project
-is, who is on its team and in which role, and it combines that with Tenancy's answer. A key held at a unit
+is, who is on its team and in which role, and it combines that with Tenancy's answer. A permission held at a unit
 holds for everything below it.
 
 ```mermaid
@@ -1258,7 +1326,7 @@ flowchart LR
     end
     Package["DDDToolkit.Supporting.Tenancy<br/>rules, use cases, the access questions"]
     Tenancy -- "generated base classes" --> Package
-    Projects -- "units where I hold a key,<br/>roles with a key" --> Package
+    Projects -- "units where I hold a permission,<br/>roles with a permission" --> Package
     Inspections -- "may I open this project?" --> Projects
 ```
 
@@ -1280,11 +1348,11 @@ Both shortened, by hand, for the projects the caller may edit:
 await using var reading = reads.Open();                          // a context for this one query
 var tenancy = answers.Over(reading.Tenancy, reading.Queries);
 var reach = new ProjectReach(
-    wholeTenant: false,
+    atTenant: false,
     units: tenancy.UnitsWhereIHold("projects.edit"),             // a query, not a list
     seat,
     membershipIsEnough: false,                                   // true for "projects.view" alone
-    crewRoles: tenancy.RolesWithKey("projects.edit"),            // a query too
+    crewRoles: tenancy.RolesWithPermission("projects.edit"),            // a query too
     now);
 var mine = await reading.PageAsync(reach, filter, paging, cancellationToken);       // data: no entity leaves the port
 
@@ -1302,7 +1370,7 @@ return await db.Projects.AsNoTracking()
     .ToPageAsync(paging, cancellationToken);   // one statement: GreenDonut's paging, by the number
 ```
 
-A crew member holds a key on a project through a role that gives it, held now, in a membership that applies
+A crew member holds a permission on a project through a role that gives it, held now, in a membership that applies
 now. Seeing the project is the one exception: for `projects.view` the membership alone is enough, so that
 reach says `membershipIsEnough` and the reading leaves the roles out.
 
@@ -1327,8 +1395,8 @@ modelBuilder.Entity<Project>().ScopeToTenant(project => project.TenantId);
 
 ```sql
 -- Postgres: the same shape as a policy, two set-shaped questions that each run once per statement
-"Id" = ANY (ARRAY(SELECT "projects".crew_project_ids('projects.edit')))
-OR "UnitId" = ANY (ARRAY(SELECT "tenancy".units_where_i_hold('projects.edit')))
+"Id" = ANY (ARRAY(SELECT "projects".projects_as_member_with('projects.edit')))
+OR "UnitId" = ANY (ARRAY(SELECT "tenancy".units_where_i_hold_permission('projects.edit')))
 ```
 
 </details>
@@ -1340,35 +1408,35 @@ in as a list. `AddTenancyReadModel` maps the rows as views over those tables. On
 [reads Tenancy through its functions](#modules-read-through-functions); the questions are asked the same way
 over either.
 
-### Key sets for navigation, abilities for actions
+### Permission sets for navigation, abilities for actions
 
-A list that shows what the caller may do with each row, a button here and none there, needs several keys for
-many rows. Asking `UnitsWhereIHold` once per key, or `HoldsAtAsync` once per row, is a query per answer.
-`WhereIHold(keys)` answers every pair of a unit and a key in one query, and like the other questions it is a
+A list that shows what the caller may do with each row, a button here and none there, needs several permissions for
+many rows. Asking `UnitsWhereIHold` once per permission, or `HoldsAtAsync` once per row, is a query per answer.
+`WhereIHold(permissions)` answers every pair of a unit and a permission in one query, and like the other questions it is a
 part of the module's own statement:
 
 ```csharp
 var tenancy = answers.Over(db);
 var held = tenancy.WhereIHold(["projects.edit", "projects.close"]);
 
-// Each project with the keys held where it hangs: one statement
+// Each project with the permissions held where it hangs: one statement
 var abilities = await (
     from project in db.Projects
     join pair in held on project.UnitId equals pair.Unit
-    select new { project.Id, pair.Key }).ToListAsync(cancellationToken);
+    select new { project.Id, pair.Permission }).ToListAsync(cancellationToken);
 
 // The projects under one unit, whatever the caller holds there
 var under = tenancy.UnitsUnder(unit);
 var below = await db.Projects.Where(project => under.Contains(project.UnitId)).ToListAsync(cancellationToken);
 ```
 
-`RoleKeys(keys)` does the same for roles, for a module whose rows are reached through a role as well, as a
-project's crew is. Every key is checked against the catalogue first, so a typo throws, and a retired key is
+`RolePermissions(permissions)` does the same for roles, for a module whose rows are reached through a role as well, as a
+project's crew is. Every permission is checked against the catalogue first, so a typo throws, and a retired permission is
 held nowhere.
 
-A key set is for showing what a caller can do. It decides nothing: by the time a button is pressed, a grant
+A permission set is for showing what a caller can do. It decides nothing: by the time a button is pressed, a grant
 may have ended. Whether a command may run is asked when it runs, by the use case that runs it, with
-`HoldsAtAsync` or the module's own rule. Read the keys to draw the screen, and ask again to act.
+`HoldsAtAsync` or the module's own rule. Read the permissions to draw the screen, and ask again to act.
 
 ### What a request requires of its caller
 
@@ -1376,24 +1444,24 @@ Every command and query says what it requires, and a check holds the caller to i
 The types for it are the toolkit's own, in `DDDToolkit.Access`: [Access requirements](access-requirements.md)
 has how a request declares what it requires, how the checks are asked and fail closed, and the pipeline
 behavior that is written for you with Mediator. Tenancy ships the cases it is the one to decide, and an attribute
-for each, which a request carries where the requirement reads no value of it but the key and a unit it names; the
+for each, which a request carries where the requirement reads no value of it but the permission and a unit it names; the
 toolkit's generator turns the attribute into the call beside it, in the module's interface, declared `partial`:
 
 ```csharp
 [AccessRequests]
 public partial interface IBillingRequest : IRequireAccess;      // one interface per module
 
-[RequiresKey(BillingKeys.CloseTheBooks)]                        // TenancyAccess.ForTheWholeTenant(BillingKeys.CloseTheBooks)
+[RequiresPermission(BillingPermissions.CloseTheBooks)]                        // TenancyAccess.AtTenant(BillingPermissions.CloseTheBooks)
 public sealed record CloseTheBooks(int Year) : IBillingRequest;
 ```
 
 | A request requires | Its attribute | Or, computed, `RequiredAccess =>` | Lets through | Refuses with |
 |---|---|---|---|---|
 | a caller who works in the tenant | `[InTenant]` | `TenancyAccess.InTenant()` | a seat in the tenant the request was sent for, and system work there | what the caller is nobody for, such as `tenancy.not-seated` |
-| a key for the whole tenant | `[RequiresKey(key)]`, with no marker | `TenancyAccess.ForTheWholeTenant(key)` | whoever holds the key at the tenant's root now, and system work in the tenant | `tenancy.not-permitted`, naming the key |
-| a key at a unit | `[RequiresKey(key)]`, with `[AtUnit]` on the unit | `TenancyAccess.AtUnit(key, unit)` | whoever holds the key at that unit now, there or above it, and system work in the tenant at a unit of its own | `tenancy.not-permitted`, with the key and the unit |
+| a permission for the whole tenant | `[RequiresPermission(permission)]`, with no marker | `TenancyAccess.AtTenant(permission)` | whoever holds the permission at the tenant's root now, and system work in the tenant | `tenancy.not-permitted`, naming the permission |
+| a permission at a unit | `[RequiresPermission(permission)]`, with `[AtUnit]` on the unit | `TenancyAccess.AtUnit(permission, unit)` | whoever holds the permission at that unit now, there or above it, and system work in the tenant at a unit of its own | `tenancy.not-permitted`, with the permission and the unit |
 | one of the application's operators, on a query | `[RequiresOperator]` | `TenancyAccess.RequiresOperator()` | an [operator](#operators) | `tenancy.operators-only`, for a seat and for system work too |
-| the caller's own seat, or a key | `[RequiresKey(key)]`, with `[OrOwn]` on the seat | `AccessRequirement.Any(TenancyAccess.Own(seat), ...)` | the seat the request names, where it is the caller's own seat in the tenant; else whoever holds the key | one `access.refused`, with `access.not-own` and the key's reason |
+| the caller's own seat, or a permission | `[RequiresPermission(permission)]`, with `[OrOwn]` on the seat | `AccessRequirement.Any(TenancyAccess.Own(seat), ...)` | the seat the request names, where it is the caller's own seat in the tenant; else whoever holds the permission | one `access.refused`, with `access.not-own` and the permission's reason |
 | the caller's own seat alone | `[OwnOnly]`, with `[Own]` on the seat | `TenancyAccess.Own(seat)` | the seat itself, and nobody else: not system work, which has no seat of its own | `access.not-own` |
 
 Beside them a request of a module with Tenancy uses the toolkit's own, which are about who is calling and
@@ -1401,35 +1469,41 @@ nothing else: `[AllowAnonymous]` for anyone and `[SignedIn]` for a signed-in use
 accepting an invitation or picking a tenant. They are [the vocabulary](access-requirements.md#the-vocabulary) a request
 picks from, and attributes stacked on one request all hold. None of them is system work: what only the application does is a scope its trusted code
 begins around the work ([System work](#system-work)), and a request it sends says who may send it like any other,
-`[InTenant]` for system work in a tenant. `[InTenant]` beside a key of Tenancy's says nothing more, since only a seat in
+`[InTenant]` for system work in a tenant. `[InTenant]` beside a permission of Tenancy's says nothing more, since only a seat in
 the tenant or system work there holds one, and the generator warns of it, [DDD00084](diagnostics.md#ddd00084).
+
+**Said once for a module.** Where nearly every request of a module reads the tenant's data, `[InTenant]` on the
+module's interface says it once, `[AccessRequests, InTenant]`: a request of the module that states nothing of its own
+requires a caller in the tenant, and one that states its own, a permission say, keeps only its own. `[RequiresPermission(permission)]` may be
+the default as well, held for the whole tenant; `[RequiresOperator]` may not, since a command that says nothing would
+take it ([A module's default](access-requirements.md#a-modules-default)). The sample's Projects module says it so.
 
 **A seat of the caller's own.** `TenancyAccess.Own(seat)`, and `[OrOwn]` or `[Own]` on a member of your seat id, compare
 the seat the request names with the caller's seat in the tenant of the request, at the door, with nothing read:
 `AddTenancy` registers what says so, an `ICallersOwn<TSeatId>` over Tenancy's caller, which is found from the verified
 identity and the tenant the request names, never from the request. The sample's `RenameSeat` lets a seat rename itself
 and anybody with `tenancy.seats.manage` for the whole tenant rename any seat that way. `[OrOwn]` does not go beside
-`[AtUnit]`, [DDD00085](diagnostics.md#ddd00085): the unit is where the key is checked, and a caller would send a unit
-where it holds the key for somebody else's seat ([Yours, or the key](access-requirements.md#yours-or-the-key)). Only a
+`[AtUnit]`, [DDD00085](diagnostics.md#ddd00085): the unit is where the permission is checked, and a caller would send a unit
+where it holds the permission for somebody else's seat ([Yours, or the permission](access-requirements.md#yours-or-the-permission)). Only a
 seat in the tenant has a seat of its own there, so Tenancy says with `Implies` on its `[assembly: CallersOwn]` that the
 caller's own seat requires `[InTenant]` and `[SignedIn]` already: beside `[OwnOnly]` with `[Own]` on the seat id either
-is [DDD00084](diagnostics.md#ddd00084), a warning, and so is `[InTenant]` beside a key of Tenancy's with `[OrOwn]` on
+is [DDD00084](diagnostics.md#ddd00084), a warning, and so is `[InTenant]` beside a permission of Tenancy's with `[OrOwn]` on
 the seat.
 
 **Combined with other cases.** Tenancy's cases combine with the core's, a module's own and Membership's, in
 `AccessRequirement.All` and `Any` ([Requirements that combine](access-requirements.md#requirements-that-combine)):
-moving a seat between two units takes the key at both, `All(TenancyAccess.AtUnit(key, From), TenancyAccess.AtUnit(key, To))`,
+moving a seat between two units takes the permission at both, `All(TenancyAccess.AtUnit(permission, From), TenancyAccess.AtUnit(permission, To))`,
 and its handler moves it from `From` and no other unit; a tenant's audit log for operators or for a seat that
-manages seats is `Any(TenancyAccess.RequiresOperator(), TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage))`,
+manages seats is `Any(TenancyAccess.RequiresOperator(), TenancyAccess.AtTenant(TenancyPermissions.SeatsManage))`,
 with a row rule for each way in ([The door and the rows](access-requirements.md#the-door-and-the-rows)).
 
 `[AtUnit]` is for a command that acts at a unit the request names: one the package's use case decides, such as
 placing a seat or giving a role there, and one that makes something at a unit, where nothing exists yet that a
-key could be held on, such as opening a project there. It marks the request's member that is the unit, on a
+permission could be held on, such as opening a project there. It marks the request's member that is the unit, on a
 positional parameter as it is, or on a property:
 
 ```csharp
-[RequiresKey(BillingKeys.OpenLedger)]                           // TenancyAccess.AtUnit(BillingKeys.OpenLedger, request.Unit)
+[RequiresPermission(BillingPermissions.OpenLedger)]                           // TenancyAccess.AtUnit(BillingPermissions.OpenLedger, request.Unit)
 public sealed record OpenLedger(string Name, [AtUnit] OrganizationUnitId Unit) : IBillingRequest;
 ```
 
@@ -1445,8 +1519,8 @@ which the request answers itself, as the sample's `SeatGrants` does:
 public sealed record ListLedgers(OrganizationUnitId? Unit) : IBillingRequest
 {
     AccessRequirement IRequireAccess.RequiredAccess => Unit is { } unit
-        ? TenancyAccess.AtUnit(BillingKeys.Read, unit)
-        : TenancyAccess.ForTheWholeTenant(BillingKeys.Read);
+        ? TenancyAccess.AtUnit(BillingPermissions.Read, unit)
+        : TenancyAccess.AtTenant(BillingPermissions.Read);
 }
 ```
 
@@ -1455,15 +1529,15 @@ What is held on one thing a module keeps at a unit is that module's own case, wi
 [Membership](membership.md) ships such cases for a resource with members.
 
 **A request handed to a use case of the package says what that use case asks first.** No requirement leaves
-a request to the package. A command that gives a role declares `[RequiresKey(TenancyKeys.GrantsManage)]` with
-`[AtUnit]` on its unit, one that makes a role `[RequiresKey(TenancyKeys.RolesManage)]`, and a query the
+a request to the package. A command that gives a role declares `[RequiresPermission(TenancyPermissions.GrantsManage)]` with
+`[AtUnit]` on its unit, one that makes a role `[RequiresPermission(TenancyPermissions.RolesManage)]`, and a query the
 package's directory answers `[InTenant]`. Where the first thing the use case asks needs
 something read, the request declares what it can name and the use case asks the rest: archiving a unit takes
 `tenancy.units.manage` at the unit's parent, which only the use case reads, so its request declares
 `[InTenant]`. The use case asks again past the check, whoever calls it, and then for what only it
 can read: who may give a role that manages access, whether a move gives away what the caller could not,
 whether the tenant keeps an administrator. Those rules are the package's, and no request spells them. A caller
-the use case would refuse first is refused at the door already, with the same code and the same key. Under it
+the use case would refuse first is refused at the door already, with the same code and the same permission. Under it
 all, on Postgres, [the second lock](#on-postgres-the-second-lock) holds every row the use case saves to the
 seat it runs as.
 
@@ -1471,7 +1545,7 @@ seat it runs as.
 flowchart TB
     Request["MakeGrant"] --> Door["its requirement:<br/>tenancy.grants.manage at the unit"]
     Door -- "not held" --> NotPermitted["tenancy.not-permitted"]
-    Door -- "held" --> UseCase["the use case: the key again,<br/>and what only it can read"]
+    Door -- "held" --> UseCase["the use case: the permission again,<br/>and what only it can read"]
     UseCase -- "a role it may not give" --> Exceeds["tenancy.grant-exceeds-own"]
     UseCase -- "saves, as the seat" --> Policies[("Tenancy's policies,<br/>on Postgres")]
 ```
@@ -1481,14 +1555,14 @@ flowchart TB
 
 ```csharp
 // What the use case asks first, and the request names: the check refuses a caller without it.
-[RequiresKey(TenancyKeys.GrantsManage)]
+[RequiresPermission(TenancyPermissions.GrantsManage)]
 public sealed record MakeGrant(SeatId Seat, [AtUnit] OrganizationUnitId Unit, RoleId Role, DateTimeOffset? Until, string? Reason) : ICommand, ITenantsRequest;
 
 public sealed class MakeGrantHandler(TenancyUseCases.SeatCommands seats) : ICommandHandler<MakeGrant>
 {
     public async ValueTask<Unit> Handle(MakeGrant command, CancellationToken cancellationToken)
     {
-        // The use case asks for the key again, whoever calls it, and then for the rules only it can read.
+        // The use case asks for the permission again, whoever calls it, and then for the rules only it can read.
         await seats.GrantAsync(command.Seat, command.Unit, command.Role, command.Until, command.Reason, cancellationToken);
         return Unit.Value;
     }
@@ -1606,7 +1680,7 @@ services.AddTenancyAccess<ITenantsRequest, ShopTenancyContext>();
 services.AddTenancyAccess<TenantId, SeatId, OrganizationUnitId, RoleId, IBillingRequest, BillingContext>();
 ```
 
-Only `ForTheWholeTenant` and `AtUnit` read: one statement each, over that context, which is Tenancy's own or
+Only `AtTenant` and `AtUnit` read: one statement each, over that context, which is Tenancy's own or
 one that maps the [read model](#what-a-module-reads-of-tenancy), so no module is checked over another module's
 context. A request of a module that never added the check is stopped, and the message names
 `AddTenancyAccess` as the call that adds it. It runs
@@ -1620,23 +1694,23 @@ marked `[AccessRequests]`.
 
 ### What a module reads of Tenancy
 
-The read model is six rows, and they carry what an access rule reads: ids, keys, periods, statuses, a unit's
-parent, and a role's pack and keys. That is all a module's model can map of Tenancy's, as a view or as a
+The read model is six rows, and they carry what an access rule reads: ids, permissions, periods, statuses, a unit's
+parent, and a role's pack and permissions. That is all a module's model can map of Tenancy's, as a view or as a
 function:
 
 | Row | Carries | Does not carry |
 |---|---|---|
-| `SeatRight` | the tenant, the seat, the unit, the role, the key, and the grant's start and end | |
+| `SeatRight` | the tenant, the seat, the unit, the role, the permission, and the grant's start and end | |
 | `OrganizationUnitPath` | the tenant, the unit above, the unit at or below it, and how many levels apart they are | |
 | `OrganizationUnitRow` | the unit's id, its tenant, its parent and its status | its name, and every field your unit class adds |
-| `RoleRow` | the role's id, its tenant, the pack it was copied from, its status and its keys | its name |
+| `RoleRow` | the role's id, its tenant, the pack it was copied from, its status and its permissions | its name |
 | `PlacementRow` | the seat, the unit, and whether the placement is the primary one | |
 | `SeatRow` | the seat's id, its tenant and its status | its identity, and every field your seat class adds, such as a name |
 
 No row has a text that is shown to people. So a module cannot lean on Tenancy for what it shows: a query of
 its own has no seat's name to select, whatever it joins. It answers ids, and [names](#names) are asked of
 Tenancy. A rule never needs one: "the unit is active", "the role is a copy of the lead's pack" and "the seat
-holds the key here" are all in the rows.
+holds the permission here" are all in the rows.
 
 `TenancyModel.ReadsBeyondAccessFacts(model)` says what a module's model maps of Tenancy's beyond these rows,
 one sentence per finding: a type of the module's own on one of Tenancy's tables, views or functions, or a
@@ -1664,25 +1738,25 @@ kinds from Tenancy's own seats, roles and units, and answers seats and units as 
 
 | Question | Answers |
 |---|---|
-| `WhoAmIAsync()` | the calling seat's `SeatOverview`: your seat, whole, with its placements and grants, and beside it the tenant, the path of each unit it is placed at, the roles its grants name, and every key it holds now with the units it reaches |
+| `WhoAmIAsync()` | the calling seat's `SeatOverview`: your seat, whole, with its placements and grants, and beside it the tenant, the path of each unit it is placed at, the roles its grants name, and every permission it holds now with the units it reaches |
 | `SeatOverviewAsync(seat)` | the same `SeatOverview` of any seat of the tenant, as the caller reads it: the request that asks says who may ([Another seat's overview](#another-seats-overview)) |
 | `ListSeatsAsync()` | every seat of the tenant the caller reads, your own class, whole, in the order of their ids: by default every seat of the tenant, and on Postgres a [read rule of yours](#who-reads-the-seats-a-default-you-may-replace) may narrow that |
 | `ListRolesAsync()` | every role of the tenant, the active ones first, with whether each manages access |
 | `ListUnitsAsync()` | the units the caller is placed under, your own class, whole, each with its path from the root and its depth (`UnitInTree`) |
 | `SeatsByIdAsync(ids)` | the seats among the ids, as `ListSeatsAsync` answers them |
 | `RolesByIdAsync(ids)` | the roles among the ids, as `ListRolesAsync` answers them |
-| `UnitsByIdAsync(ids)` | the units among the ids, as `ListUnitsAsync` answers them, whichever of them the caller is placed under |
+| `UnitsByIdAsync(ids)` | what the units among the ids are called, whichever of them the caller is placed under: each one's name, path and depth (`NamedUnit`), and nothing more, also for a seat a [restrictive rule](#rules-that-narrow-the-organization) keeps out of the organization |
 
-A seat and a unit come whole, with every field your class adds, so a screen shows a seat by the name you keep
+A seat and a listed unit come whole, with every field your class adds, so a screen shows a seat by the name you keep
 for it, and a unit with the kind your unit class keeps, with a plain `Select`. What Tenancy puts beside them is
 only what is not on your class: a unit's path and depth, which come from the units above it, and in an overview
-the tenant, the paths, the role names and the keys.
+the tenant, the paths, the role names and the permissions.
 
 The lists fill a picker. The three questions by id are for a screen that was answered ids by another module:
 a project names its unit and the seats of its crew by id, and the screen asks what those are called. The
 roles a crew holds are the project's module's own, which it names itself (`GET /project-roles` in the sample).
 
-Whoever works in a tenant reads its names: a seat of it, or system work in it. No key is asked, for a list, for
+Whoever works in a tenant reads its names: a seat of it, or system work in it. No permission is asked, for a list, for
 a question by id or for a seat's overview, and a question by id answers any seat, role or unit of the caller's
 tenant, of the seats those the caller reads, which is every seat unless a
 [read rule of yours](#who-reads-the-seats-a-default-you-may-replace) says otherwise. That is wider than
@@ -1792,7 +1866,7 @@ and the lookup of a person's own seats in every tenant for a tenant picker, `Ten
 Each decides which seats the caller is answered and reads them in one statement, so every screen shows what you
 chose with a plain `Select` and no read more. Beside a seat comes only what is not on it: in the overview
 `WhoAmIAsync` and `SeatOverviewAsync(seat)` answer (`SeatOverview`), the tenant, the path of each unit it is placed
-at, the roles its grants name and the keys it holds; in the picker (`SeatInTenant`), the tenant:
+at, the roles its grants name and the permissions it holds; in the picker (`SeatInTenant`), the tenant:
 
 ```mermaid
 flowchart LR
@@ -1902,18 +1976,18 @@ carry it.
 The sample keeps a name per tenant on its `Seat`, with its rule (`tenants.seat.display-name`, in English and
 Dutch): its demo seeder names each seat in the callbacks, `POST /invitations/accept` takes the name the person
 gives, `PUT /tenancy/seats/{seatId}/name` and the mutation `seatRename` are its own command `RenameSeat`, which a
-seat sends for itself and a seat with `tenancy.seats.manage` for the whole tenant for anybody, `[RequiresKey]` with
+seat sends for itself and a seat with `tenancy.seats.manage` for the whole tenant for anybody, `[RequiresPermission]` with
 `[OrOwn]` on the seat, and
 `SeatListing` is what every answer about a seat shows, in REST, in GraphQL and in the access history, the tenant
 picker's `GET /me/seats` and `seatsOfMine` and the overview's `GET /me` and `overviewOfMine` included: each query
 selects it from the seats the package answered. In the database its
-column rule `NameChangesByTheSeatOrWithTheSeatsKey` holds the name to the rule of `RenameSeat`.
+column rule `NameChangesByTheSeatOrWithTheSeatsPermission` holds the name to the rule of `RenameSeat`.
 
 ### Another seat's overview
 
 `WhoAmIAsync` answers the calling seat's overview. `SeatOverviewAsync(seat)` answers the same record for any seat
 of the tenant: the seat, whole, with its placements and grants, and beside it the tenant, the path of each unit it
-is placed at, the roles its grants name, every key it holds now with the units it reaches, and the moment that
+is placed at, the roles its grants name, every permission it holds now with the units it reaches, and the moment that
 holds for. A page about one person, the one an administration opens before it changes someone's roles say, asks
 it and shows that person the way a seat's own page shows the seat. Asked about the caller's own seat, it answers
 what `WhoAmIAsync` answers.
@@ -1924,47 +1998,47 @@ Two rules decide what happens, and neither is the directory's own:
   a seat of the tenant, or system work in it. Who may see another person's access is your application's choice,
   so the request that sends the question states it, as a request states it for everything else. The sample's
   administration lets only a seat that manages seats for the whole tenant read another person's roles in every unit,
-  `TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage)`, and a seat that manages them at a unit the roles held
-  there, `TenancyAccess.AtUnit(TenancyKeys.SeatsManage, unit)`. An application that lets the managers of a unit see
+  `TenancyAccess.AtTenant(TenancyPermissions.SeatsManage)`, and a seat that manages them at a unit the roles held
+  there, `TenancyAccess.AtUnit(TenancyPermissions.SeatsManage, unit)`. An application that lets the managers of a unit see
   the people of their units asks `[InTenant]` and leaves the rest to the read rules.
 - **The read rules decide what comes back.** The seat is read through Tenancy's store, as the caller, the way the
   lists read seats. On Postgres the policies decide: every member reads a seat and where it is placed (unless a
   [read rule of yours](#who-reads-the-seats-a-default-you-may-replace) says otherwise), and its grants only where
   the caller [may read them](#who-reads-which-grants): at the units where it manages grants, seats or units and
-  below them, or all of them for a seat that manages roles for the whole tenant. The roles and the keys are those
+  below them, or all of them for a seat that manages roles for the whole tenant. The roles and the permissions are those
   of the grants that were read.
 
 In the sample's harbor, Rhea manages seats, grants and units at North. Maud administers the tenant from the root
-and holds every key of Tenancy there. Rhea's request for a person's roles in every unit is refused at the door,
-since the sample asks the seats key for the whole tenant for that; asked at North Inland, below North, it passes,
+and holds every permission of Tenancy there. Rhea's request for a person's roles in every unit is refused at the door,
+since the sample asks the seats permission for the whole tenant for that; asked at North Inland, below North, it passes,
 and at the root or at South it is refused too. Were the door open, the overview of Maud that Rhea reads would hold
-where Maud is placed and none of her grants, so no role and no key: her grant is above North. The overview of Vic,
+where Maud is placed and none of her grants, so no role and no permission: her grant is above North. The overview of Vic,
 at North Inland, holds his grant there. System work in harbor reads every grant of every seat.
 
 ```mermaid
 flowchart TB
     Request["your request:<br/>RequiredAccess"] --> Ask{"may the<br/>caller ask?"}
     Ask -- no --> Refused(["refused at the door"])
-    Ask -- yes --> Overview["SeatOverviewAsync(seat):<br/>no key of its own"]
+    Ask -- yes --> Overview["SeatOverviewAsync(seat):<br/>no permission of its own"]
     Overview --> Read{"the seat, read<br/>as the caller"}
     Read -- "not read" --> NotFound(["tenancy.seat-not-found"])
-    Read -- "Postgres policies" --> Some(["the grants it may read,<br/>and their roles and keys"])
-    Read -- "no policy" --> All(["every grant,<br/>role and key"])
+    Read -- "Postgres policies" --> Some(["the grants it may read,<br/>and their roles and permissions"])
+    Read -- "no policy" --> All(["every grant,<br/>role and permission"])
 ```
 
 A seat the caller does not read is refused with `tenancy.seat-not-found`, a 404: one of another tenant, one that
 does not exist, or one your read rule on the seat class leaves out, and the refusal does not say which.
 
 **Where no policy applies, your request is the only rule.** On another database, SQLite or SQL Server say, or in
-a context that runs without row level security, every seat comes with all its grants and keys to whoever the
+a context that runs without row level security, every seat comes with all its grants and permissions to whoever the
 request lets ask. That is your choice to make, so choose the requirement as the rule you mean: a request that
 asks `[InTenant]` there shows every member everybody's access.
 
-The keys are worked out from the grants that were read, by the rule the rights are written by: an active seat, an
-active role, a key the catalogue keeps live, a grant that applies at `AsOf`. They are not read from the rights,
-since a database that keeps the rights shows a seat its own alone. So a key is shown where the caller reads the
+The permissions are worked out from the grants that were read, by the rule the rights are written by: an active seat, an
+active role, a permission the catalogue keeps live, a grant that applies at `AsOf`. They are not read from the rights,
+since a database that keeps the rights shows a seat its own alone. So a permission is shown where the caller reads the
 grant that gives it, a suspended seat holds none, and a role that a filter of yours on the role class hides still
-gives its keys, as it does to the access questions; `RoleOf` answers `null` for it. The overview reads what
+gives its permissions, as it does to the access questions; `RoleOf` answers `null` for it. The overview reads what
 `WhoAmIAsync` reads, in as many statements, and tracks nothing: what you do to the seat it answers is never saved.
 
 <details>
@@ -1976,8 +2050,8 @@ gives its keys, as it does to the access questions; `RoleOf` answers `null` for 
 public sealed record SeatGrants(SeatId Seat, OrganizationUnitId? At = null) : IQuery<IReadOnlyList<SeatGrant>>, ITenantsRequest
 {
     AccessRequirement IRequireAccess.RequiredAccess => At is { } unit
-        ? TenancyAccess.AtUnit(TenancyKeys.SeatsManage, unit)
-        : TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage);
+        ? TenancyAccess.AtUnit(TenancyPermissions.SeatsManage, unit)
+        : TenancyAccess.AtTenant(TenancyPermissions.SeatsManage);
 }
 
 public sealed class SeatGrantsHandler(ITenancyReads reads) : IQueryHandler<SeatGrants, IReadOnlyList<SeatGrant>>
@@ -2025,20 +2099,20 @@ has the first as `seatGrants(seatId:)`.
 
 Holding `tenancy.grants.manage` at a unit is enough to give roles there. Its holder gives any active role
 of the tenant that manages no access to a seat placed there or below, and takes it away again, without holding
-the role's keys. Someone in HR gives a developer the developer's role without being a developer.
+the role's permissions. Someone in HR gives a developer the developer's role without being a developer.
 
-A role manages access when it holds a key that gives power over other people's access. Such a role stays
+A role manages access when it holds a permission that gives power over other people's access. Such a role stays
 contained:
 
-- It is given, and taken away, only by a seat that holds each of its keys that manage access at that unit,
+- It is given, and taken away, only by a seat that holds each of its permissions that manage access at that unit,
   granted there or above it, for at least as long as the grant runs: until the grant's end, or for good when it
   has none, so a seat that manages seats for a week does not give a role that manages seats for good. The
-  refusal is `tenancy.grant-exceeds-own`, and its `Missing` argument names the keys that manage access the
-  seat lacks there, or lacks for long enough. The role's other keys are not counted.
+  refusal is `tenancy.grant-exceeds-own`, and its `Missing` argument names the permissions that manage access the
+  seat lacks there, or lacks for long enough. The role's other permissions are not counted.
 - Nobody gives themselves one, whatever they hold: `tenancy.self-appointment`, decided before any of the
-  role's keys is counted.
+  role's permissions is counted.
 
-This is containment, and everything this section says about roles and keys that manage access is part of it. It
+This is containment, and everything this section says about roles and permissions that manage access is part of it. It
 is on unless you turn it off, which [Containment, on or off](#containment-on-or-off) weighs: then a role that
 manages access goes as one that manages none, down the flowchart's branch for those below, and what this
 section says of those holds for every role.
@@ -2055,9 +2129,9 @@ flowchart TD
     OwnLong -- no --> Exceeds["tenancy.grant-exceeds-own"]
     Manages -- yes --> ToSelf{"to yourself?"}
     ToSelf -- yes --> Appointment["tenancy.self-appointment"]
-    ToSelf -- no --> KeysLong{"each of its keys that manage access<br/>held there for at least as long?"}
-    KeysLong -- yes --> Given
-    KeysLong -- no --> Exceeds
+    ToSelf -- no --> PermissionsLong{"each of its permissions that manage access<br/>held there for at least as long?"}
+    PermissionsLong -- yes --> Given
+    PermissionsLong -- no --> Exceeds
 ```
 
 <details>
@@ -2081,45 +2155,45 @@ try
 }
 catch (RefusalException refusal) when (refusal.Code == TenancyRefusals.GrantExceedsOwn)
 {
-    // The keys that manage access the caller lacks there, or lacks for long enough
+    // The permissions that manage access the caller lacks there, or lacks for long enough
     var missing = refusal.Arguments["Missing"];
 }
 ```
 
 </details>
 
-The rest holds for every role: the key is asked for at the unit and reaches everything below it, the last
+The rest holds for every role: the permission is asked for at the unit and reaches everything below it, the last
 administrator stays, nothing is given at an archived unit, only active roles of the same tenant are given, and
 a grant a seat makes starts now. System work in a tenant is held to none of this.
 
-**Which keys manage access.** Tenancy's keys all do, but the one that reads the
+**Which permissions manage access.** Tenancy's permissions all do, but the one that reads the
 [access history](#access-history). Mark your own where you declare them, and any
-key, a module's included, in your part of the catalogue. The sample's host marks two keys its Projects module
+permission, a module's included, in your part of the catalogue. The sample's host marks two permissions its Projects module
 declares:
 
 ```csharp
 public static ApplicationCatalogue Application { get; } = new(
     Packs: [/* ... */],
-    AccessManagingKeys: [ProjectKeys.ChangeOwner, ProjectKeys.ManageCrew]);
+    AccessManagingPermissions: [ProjectPermissionNames.ChangeOwner, ProjectPermissionNames.ManageCrew]);
 
-// A key of your own, marked where it is declared
+// A permission of your own, marked where it is declared
 new Permission("widgets.assign", "Widgets", "Hand widgets to people", ManagesAccess: true);
 ```
 
-Mark a key when it should be given only by someone who holds it. Go through your keys with this list, and
-mark every key that:
+Mark a permission when it should be given only by someone who holds it. Go through your permissions with this list, and
+mark every permission that:
 
 - gives power over roles, grants, placements, seats or the tree;
 - decides who works on what, such as managing a project's crew, or names an owner;
 - reaches credentials, or lets support staff into a tenant.
 
-A key whose power reaches no further than the keys of roles that manage no access may stay unmarked. The built
-catalogue lists the marks in `AccessManagingKeys`, and shows each one on its key in `Permissions`. A key that
+A permission whose power reaches no further than the permissions of roles that manage no access may stay unmarked. The built
+catalogue lists the marks in `AccessManagingPermissions`, and shows each one on its permission in `Permissions`. A permission that
 manages no access may not imply one that does, so what a role is labelled with is what it holds.
 
-Then pin the set with a test: one that holds the built catalogue's `AccessManagingKeys` to the keys written
+Then pin the set with a test: one that holds the built catalogue's `AccessManagingPermissions` to the permissions written
 out, one by one. A mark added or dropped then fails a test until somebody decides it, and never goes in as the
-side effect of a key being added somewhere.
+side effect of a permission being added somewhere.
 
 <details>
 <summary>Show the code: the sample's test of its marks</summary>
@@ -2127,11 +2201,11 @@ side effect of a key being added somewhere.
 ```csharp
 // ApplicationRuleScenarios.cs in the sample's tests
 [Fact]
-public async Task The_keys_that_manage_access_are_exactly_these()
+public async Task The_permissions_that_manage_access_are_exactly_these()
 {
     await using var host = await sample.StartAsync();   // a host from the class's fixture, on Supabase's Postgres image
 
-    host.Services.GetRequiredService<TenancyCatalogue>().AccessManagingKeys.Should().BeEquivalentTo(
+    host.Services.GetRequiredService<TenancyCatalogue>().AccessManagingPermissions.Should().BeEquivalentTo(
     [
         "tenancy.settings.manage",
         "tenancy.units.manage",
@@ -2146,19 +2220,19 @@ public async Task The_keys_that_manage_access_are_exactly_these()
 
 </details>
 
-Marking is opt-in, so a forgotten mark fails open: a key nobody marks is given by every grants manager, to
-anyone placed where they hold `tenancy.grants.manage`, themselves included. An application that marks none of its keys
-hands every role but those holding one of Tenancy's keys that manage access to its grants managers, so go
-through your keys and mark the ones that give power over access before anyone manages grants. The marks rule
+Marking is opt-in, so a forgotten mark fails open: a permission nobody marks is given by every grants manager, to
+anyone placed where they hold `tenancy.grants.manage`, themselves included. An application that marks none of its permissions
+hands every role but those holding one of Tenancy's permissions that manage access to its grants managers, so go
+through your permissions and mark the ones that give power over access before anyone manages grants. The marks rule
 the organization's grants,
-which Tenancy gives. A module that gives keys through grants of its own, as a crew role gives its keys on one
-project, answers for a marked key it gives that way: give it no further than the giver reaches with it, or
+which Tenancy gives. A module that gives permissions through grants of its own, as a crew role gives its permissions on one
+project, answers for a marked permission it gives that way: give it no further than the giver reaches with it, or
 contain it the same way. The sample's crews give `projects.crew.manage` on one project only, and only from
 whoever manages that project's crew already.
 
 Marks are read when a role is given or taken away, and nothing checks the grants that exist when a mark
 changes. Change marks with every instance of the application restarted before anyone grants again. Taking
-a marked key out of retirement marks it anew.
+a marked permission out of retirement marks it anew.
 
 **Giving yourself a role.** A seat gives itself a role that manages no access, for no longer than it holds
 `tenancy.grants.manage` there, so a seat that manages grants for a week does not give itself a role for good.
@@ -2166,18 +2240,18 @@ Grants to anyone else run for as long as the giver says. Nobody places themselve
 so a seat gives itself roles only where someone else placed it.
 
 **Taking a role away.** Taking away follows giving: a role that manages no access goes with
-`tenancy.grants.manage` alone, and one that manages access needs its keys that do, until at least the end of
-that grant. A seat's own grant that applies now is its own hold of those keys, so a seat may take away its
-current roles; one that has ended, or is still to start, holds nothing, and taking it away needs the keys like
+`tenancy.grants.manage` alone, and one that manages access needs its permissions that do, until at least the end of
+that grant. A seat's own grant that applies now is its own hold of those permissions, so a seat may take away its
+current roles; one that has ended, or is still to start, holds nothing, and taking it away needs the permissions like
 anyone else's. An archived role manages nothing. Withdrawing a placement takes its grants with it, so the
 caller needs `tenancy.seats.manage` and, when the placement has grants, `tenancy.grants.manage`, and each
 grant is checked against its own end. The last administrator stays in every case.
 
 **Suspending, deactivating and reactivating a seat.** A seat's status decides whether its grants count, so
 these take away, or give back, every grant of the seat that has not ended. Besides `tenancy.seats.manage` for
-the whole tenant, each grant of a role that manages access needs its keys that do, held by the caller at that
+the whole tenant, each grant of a role that manages access needs its permissions that do, held by the caller at that
 grant's unit until at least its end, as taking the role away would: `tenancy.grant-exceeds-own`, naming the
-keys the caller lacks. A grant that has ended gives nothing either way, and is not counted; one still to start
+permissions the caller lacks. A grant that has ended gives nothing either way, and is not counted; one still to start
 is. A seat may suspend or deactivate itself: its own grants that apply now are its own hold. It
 never reactivates itself, because a suspended seat acts as nobody. The last administrator stays.
 
@@ -2187,26 +2261,26 @@ the old one start to. Besides `tenancy.units.manage` at both parents, the mover 
 and taking away over what the move changes, each grant that has not ended counted at the unit that moves,
 against its own end, one still to start included:
 
-- The move gives the mover nothing: every key its own grants on the new side would give it there, it holds at
+- The move gives the mover nothing: every permission its own grants on the new side would give it there, it holds at
   the unit already, for at least as long.
-- It gives or takes away a key that manages access, from anyone, only when the mover holds that key at the
+- It gives or takes away a permission that manages access, from anyone, only when the mover holds that permission at the
   unit until at least the end of the grant it comes from, or for good for a grant with no end.
 
-The refusal is `tenancy.grant-exceeds-own`, with no `Role`, and `Missing` naming the keys. Keys that manage no
+The refusal is `tenancy.grant-exceeds-own`, with no `Role`, and `Missing` naming the permissions. Permissions that manage no
 access follow a move freely for everyone but the mover, as a role holding only them is given freely. An
-administrator whose role holds every key moves any unit. One whose pack lists its keys holds every key that
+administrator whose role holds every permission moves any unit. One whose pack lists its permissions holds every permission that
 manages access at the root, so no move is refused it over what it gives or takes away from someone else; a
-grant of its own below the root still counts, and a move that would give it a key from there that its role at
+grant of its own below the root still counts, and a move that would give it a permission from there that its role at
 the root lacks is refused like any other seat's.
 
-**Changing a role that manages access.** Adding a key that manages access to a role, taking one out, or
+**Changing a role that manages access.** Adding a permission that manages access to a role, taking one out, or
 archiving a role that holds one takes an administrator: a seat that holds `tenancy.roles.manage` at the root
 with no end; anyone else is refused with `tenancy.grant-exceeds-own`, naming `tenancy.roles.manage`. An added
-key reaches every seat that holds the role, seats that gave themselves the role included, so look at who holds
-a role before you add one. A key taken out, or a role archived, goes from every holder at once, which an
+permission reaches every seat that holds the role, seats that gave themselves the role included, so look at who holds
+a role before you add one. A permission taken out, or a role archived, goes from every holder at once, which an
 administrator for a week could not do grant by grant. Each grant records who gave it, in `RoleGrant.GrantedBy`
-and in the `OrganizationRoleGranted` event, and a change of a role's keys names the keys that came in and
-went out, in the `RoleKeysChanged` event.
+and in the `OrganizationRoleGranted` event, and a change of a role's permissions names the permissions that came in and
+went out, in the `RolePermissionsChanged` event.
 
 What that means for a tenant:
 
@@ -2219,73 +2293,73 @@ What that means for a tenant:
   allows them anyway.
 - A role holding only `tenancy.grants.manage` manages access, so grants managers give it to one another, and
   never to themselves.
-- A move gains the mover nothing, and gives or takes away from nobody a key that manages access that the
+- A move gains the mover nothing, and gives or takes away from nobody a permission that manages access that the
   mover could not give or take away at the unit. A seat that manages a region for a week neither keeps its
   units for good by moving them under a region it manages for good, nor moves a unit away from, or under,
   someone who holds a role that manages access there for good.
 
 ## Containment, on or off
 
-Containment is the rule of [the section above](#who-may-give-a-role) for keys that manage access: a seat hands
+Containment is the rule of [the section above](#who-may-give-a-role) for permissions that manage access: a seat hands
 one on only where it holds it itself. Tenancy keeps it unless you turn it off. Who may give your users what is
 a choice about your product, and this rule is part of the access model rather than something that keeps your
-data sound, so it is a setting of your catalogue: `ContainAccessManagingKeys`, on by default.
+data sound, so it is a setting of your catalogue: `ContainAccessManagingPermissions`, on by default.
 
 **What it does.** Ben holds `tenancy.grants.manage` at Pier 7, a unit of Harbor Works, for good, through a role
-that holds that key alone. He gives anyone placed at Pier 7 a role that manages no access, a surveyor's say,
-himself included. He gives nobody a role that holds a key that manages access he does not hold there: not an area
+that holds that permission alone. He gives anyone placed at Pier 7 a role that manages no access, a surveyor's say,
+himself included. He gives nobody a role that holds a permission that manages access he does not hold there: not an area
 manager's, which holds `tenancy.units.manage` and `tenancy.seats.manage`, and not the administrators', which holds
 `tenancy.roles.manage`. And he gives himself no role that manages access at all. So Ben cannot give himself
-`tenancy.roles.manage` at the root, or anywhere: what he hands on is the grants key, and no more. The same rule
-holds for every other way a key that manages access changes hands:
+`tenancy.roles.manage` at the root, or anywhere: what he hands on is the grants permission, and no more. The same rule
+holds for every other way a permission that manages access changes hands:
 
 - taking a role away, and withdrawing a placement that has one;
 - suspending, deactivating or reactivating a seat that holds one;
-- putting such a key into a role, taking one out of it, or archiving a role that holds one, which only an
+- putting such a permission into a role, taking one out of it, or archiving a role that holds one, which only an
   administrator does;
-- moving a unit, which gives or takes away such a key from nobody where the mover does not hold it.
+- moving a unit, which gives or takes away such a permission from nobody where the mover does not hold it.
 
-**What turning it off means.** A role or a key that manages access then goes as one that manages none, and the
+**What turning it off means.** A role or a permission that manages access then goes as one that manages none, and the
 rules above are asked of a seat no more. Ben gives himself the administrators' role at Pier 7, and from then on
-manages everything at and below it: its units, its seats, its grants and every key of every module. A seat with
-the grants key at the root gives itself the administrators' role there, and a seat that manages roles for the
-whole tenant puts every key into every role, its own included. Anyone who holds a key that manages access can
-hand out every key, so in practice is an administrator of everything that key reaches. Turn it off when that is
+manages everything at and below it: its units, its seats, its grants and every permission of every module. A seat with
+the grants permission at the root gives itself the administrators' role there, and a seat that manages roles for the
+whole tenant puts every permission into every role, its own included. Anyone who holds a permission that manages access can
+hand out every permission, so in practice is an administrator of everything that permission reaches. Turn it off when that is
 what you want, or when your own handlers decide who may give what, by rules of your product.
 
 **What it does not touch.** Turning it off changes nothing else:
 
 - Roles that manage no access go as they always do, with `tenancy.grants.manage` at the unit, and every role now
   goes that way. So a seat still gives itself a role, any role now, for no longer than it holds
-  `tenancy.grants.manage` there: had Ben the grants key for a week, he would give himself the administrators'
+  `tenancy.grants.manage` there: had Ben the grants permission for a week, he would give himself the administrators'
   role for that week, and not for good. And a move still gives the mover nothing.
-- Each command still asks its key where it acts. Ben gives no role outside Pier 7 and the units below it, since
-  he holds the grants key there alone; that he gives none at the root is this, and not containment.
+- Each command still asks its permission where it acts. Ben gives no role outside Pier 7 and the units below it, since
+  he holds the grants permission there alone; that he gives none at the root is this, and not containment.
 - A tenant keeps an administrator: the last one is never taken away, in C# or in the database.
 - A seat keeps its identity and its tenant, whoever asks ([What the database guards on a seat](#what-the-database-guards-on-a-seat)).
-- Which keys manage access stays as you marked them: `AccessManagingKeys` and `ManagesAccess` answer the same.
+- Which permissions manage access stays as you marked them: `AccessManagingPermissions` and `ManagesAccess` answer the same.
 
 **The one question that decides it.** Can your database be reached without your handlers, for instance through
 Supabase's Data API? Then leave it on. Your handlers are the only place a product rule of your own can say who
 may give what, and a client that talks to the database directly goes past them. With containment on, the
-database still refuses that client a role that manages access at a unit where it lacks that role's keys, any
+database still refuses that client a role that manages access at a unit where it lacks that role's permissions, any
 such role to itself, such an invitation, and stopping a seat whose such grants it could not take away; how long
-a grant runs, a change of such a key in a role, and moves are asked by the use cases alone
+a grant runs, a change of such a permission in a role, and moves are asked by the use cases alone
 ([What stays in C#](#what-stays-in-c)). With it off, a grants manager there hands out every role.
 
 ```mermaid
 flowchart TB
-    Seat(["a seat hands on<br/>a key that<br/>manages access"]) --> Setting{"Contain<br/>AccessManagingKeys"}
+    Seat(["a seat hands on<br/>a permission that<br/>manages access"]) --> Setting{"Contain<br/>AccessManagingPermissions"}
     Setting -- "on, the default" --> Holds{"holds it there,<br/>for as long,<br/>not to itself?"}
     Holds -- no --> Refused["tenancy.grant-exceeds-own<br/>tenancy.self-appointment"]
     Holds -- yes --> Given(["given"])
-    Setting -- off --> Ordinary["as a key that<br/>manages no access"]
+    Setting -- off --> Ordinary["as a permission that<br/>manages no access"]
     Ordinary --> Given
     Work(["system work in the tenant,<br/>a quiz handler say"]) --> Given
 ```
 
-Containment is about a seat handing keys on, never about your application. System work in a tenant holds every
-key there and is not held to it, on or off. So an application that lets a manager earn a role that manages
+Containment is about a seat handing permissions on, never about your application. System work in a tenant holds every
+permission there and is not held to it, on or off. So an application that lets a manager earn a role that manages
 access, by passing a quiz say, keeps containment on: its own handler checks the quiz, which Tenancy knows nothing
 of, and then gives the role inside `TenancyUseCases.BeginSystemIn(tenant, seat)`, for the seat that passed. The grant records no
 seat as its giver, and its event records the system, acting for that seat.
@@ -2300,7 +2374,7 @@ The setting is one line of your part of the catalogue, and leaving the line out 
 from `TenancyOptions.Catalogue`, and the export from the same part, which you mark `[TenancyCatalogue]`
 ([Setting it up](#setting-it-up)), so the two cannot disagree. The export writes it into the access files with the
 rest of the catalogue: on Postgres the policies on the grants and the
-invitations, and the trigger on a seat's status, ask `key_is_contained(key)`, which answers the keys that manage
+invitations, and the trigger on a seat's status, ask `permission_is_contained(permission)`, which answers the permissions that manage
 access while containment is on and none once it is off. The start-up check `tenancy.policies-in-place` compares
 that function with the catalogue the host runs with, and refuses a database written with containment the other
 way round, saying which way each one is. So after changing the setting, export the access files and apply them
@@ -2318,8 +2392,8 @@ public static class ShopCatalogue
     [TenancyCatalogue]
     public static ApplicationCatalogue Application { get; } = new(
         Packs: [/* ... */],
-        AccessManagingKeys: [ProjectKeys.ChangeOwner, ProjectKeys.ManageCrew],
-        ContainAccessManagingKeys: false);
+        AccessManagingPermissions: [ProjectPermissionNames.ChangeOwner, ProjectPermissionNames.ManageCrew],
+        ContainAccessManagingPermissions: false);
 }
 ```
 
@@ -2440,13 +2514,13 @@ app.MapPost("/invitations/accept", async (
 **Who may issue one.** An invitation offers what adding a seat, placing it and giving it a role would give, so
 issuing takes what those take: `tenancy.seats.manage` for the whole tenant, `tenancy.grants.manage` at the
 unit, and the rule of [who may give a role](#who-may-give-a-role). A role that manages no access is offered
-freely. A role that manages access is offered only by a seat that holds each of its keys that manage access
+freely. A role that manages access is offered only by a seat that holds each of its permissions that manage access
 at the unit, until at least the end of the grant. System work in the tenant issues one too, and is held to no
 seat. An invitation is listed for, and cancelled by, the seats that hold `tenancy.seats.manage` at its unit,
 whoever issued it; to any other seat it is not found.
 
 **It never gives more than its issuer could give when it is used.** Accepting asks the issuer's rights again,
-as they are at that moment and with the role as it is then. An issuer who was suspended since, lost a key, or
+as they are at that moment and with the role as it is then. An issuer who was suspended since, lost a permission, or
 could no longer give what the role has become leaves the invitation unusable: `tenancy.invitation-unbacked`,
 one answer that tells the person who accepts nothing about the issuer's keys. The unit and the role have to be
 active still, and the tenant too.
@@ -2544,7 +2618,7 @@ needed: "Hiervoor is het recht tenancy.seats.manage nodig." An application that 
 calls a tenant an organization, adds a resx of its own with the keys it says differently, before
 `TenancyFailures` and in every language it supports. The localizer asks its sources in the order they were
 added, and each falls back to its own neutral file first, so a key in your neutral resx alone would give
-Dutch readers your English text. A third language is the same recipe with every `tenancy.*` key.
+Dutch readers your English text. A third language is the same recipe with every `tenancy.*` permission.
 
 A refusal of the kind "invalid" that is about one input names it in its `Field` argument, in the word the
 use cases call that input by, so a form puts the text under it:
@@ -2555,7 +2629,7 @@ use cases call that input by, so a form puts the text under it:
 | `tenancy.invalid-slug` | `slug`. A slug is a value object, so this one arrives as a validation failure with the same code and argument |
 | `tenancy.invalid-period` | `until` |
 | `tenancy.reason-required` | `reason` |
-| `tenancy.unknown-permission`, `tenancy.keys-not-normalized` | `keys` |
+| `tenancy.unknown-permission`, `tenancy.permissions-not-normalized` | `permissions` |
 | `tenancy.identity-required` | `identity` |
 | `tenancy.too-many-ids` | `ids` |
 | `tenancy.page-size-invalid` | `size` |
@@ -2602,7 +2676,7 @@ The use cases ask it whenever they make a role from a pack, in the language you 
 Without a language, without registered texts, or where `For` answers `null`, a role gets the catalogue's
 texts. The texts are chosen once. Afterwards the role is the tenant's own, renamed like any role, and a
 tenant that changes its language later keeps its roles' names. A role that [follows its pack](#packs-after-provisioning)
-follows it in its keys alone: its name and description stay the tenant's. A translated name is checked like any role's
+follows it in its permissions alone: its name and description stay the tenant's. A translated name is checked like any role's
 name: blank or too long is `tenancy.name-invalid`, and a name another role of the tenant has, ignoring case,
 is `tenancy.role-name-taken`. A tenant holds a copy of every pack seeded for its shape, and a flat tenant that
 turns hierarchical is given the packs seeded for a hierarchical one next to them, so give every pack a name of
@@ -2658,7 +2732,7 @@ base alone, it names `UseTenancy`. Tenancy's store checks its own context before
 `TenancyChecks.EnsureWired(context)` checks any other, the order included: the save check before the toolkit's
 interceptors is refused too. `AddTenancy` registers it as the [start-up check](startup-checks.md)
 `tenancy.contexts-wired`, over every context the host registers, with `tenancy.catalogue-builds` and
-`tenancy.unknown-stored-keys`; a host runs them with `services.RunStartupChecks()`. It holds a context configured
+`tenancy.unknown-stored-permissions`; a host runs them with `services.RunStartupChecks()`. It holds a context configured
 with `UseDDDToolkitCore` to the same: such a context takes the save check with `UseTenancy`, after it.
 
 ```mermaid
@@ -2724,7 +2798,7 @@ your use cases are named through, and names neither ([Your ids, named once](#you
 | | Tenancy's caller | The toolkit's caller |
 |---|---|---|
 | `TenancyUseCases.BeginSystem()` | system work outside any tenant, which provisions tenants, and reads and writes no tenant's rows | `Caller.SystemIn("tenancy")` |
-| `TenancyUseCases.BeginSystemIn(tenant, actingSeat, scope)` | system work in that tenant, holding every key there and nothing anywhere else | `Caller.SystemIn(scope)`, `"tenancy"` unless you pass another |
+| `TenancyUseCases.BeginSystemIn(tenant, actingSeat, scope)` | system work in that tenant, holding every permission there and nothing anywhere else | `Caller.SystemIn(scope)`, `"tenancy"` unless you pass another |
 | `TenancyUseCases.BeginOperator(identity)` | as `BeginSystem`, recorded as the operator a tenant is provisioned for | `Caller.SystemIn("tenancy")` |
 | `TenancyUseCases.BeginOperatorIn(tenant, identity, scope)` | as `BeginSystemIn`, recorded as the operator the work is carried out for | `Caller.SystemIn(scope)` |
 | `TenancyUseCases.BeginTokenIn(tenant, seat, scope)` | as `BeginSystemIn`, recorded as a link's token and the seat it stands for | `Caller.SystemIn(scope)`, the module's name |
@@ -2740,7 +2814,9 @@ otherwise, as `ddd_system`, which reaches the toolkit's bookkeeping and no modul
 caller runs as a role that cannot bypass the policies, and they decide what it reaches. The scope says
 whose work it is. Work that calls
 Tenancy's use cases keeps Tenancy's own; a module's own work in a tenant that only reads Tenancy's rows
-next to its own passes its module's name.
+next to its own passes its module's name. So does a module's work on its resources with members: their rules let
+the module's own scope through, and Tenancy's holds nothing on them ([Who holds a permission](membership.md#who-holds-a-permission)).
+The sample seeds a tenant's organization as Tenancy's work, and its projects as the Projects module's.
 
 Everything about system work is named after the toolkit's caller of the application itself, `Caller.System`,
 so one word says it wherever it comes up:
@@ -2776,10 +2852,10 @@ one of them with `tenancy.other-tenant`. So provisioning, once it knows the new 
 that the slug is free and the save as system work in that new tenant, and writes that tenant's rows and
 nothing else.
 
-A few answers are needed before any tenant is known: the keys stored on every tenant's roles, which
-`TenancyChecks.UnknownStoredKeysAsync` reports at start-up, and the tenants there are to visit, which
+A few answers are needed before any tenant is known: the permissions stored on every tenant's roles, which
+`TenancyChecks.UnknownStoredPermissionsAsync` reports at start-up, and the tenants there are to visit, which
 `TenancySystemReads.TenantsToSweepAsync` lists for a round of system work of any module. Each is one query
-that answers ids or keys only, as a caller Tenancy begins around that query and nothing more. It runs on a
+that answers ids or permissions only, as a caller Tenancy begins around that query and nothing more. It runs on a
 context of its own, which connects separately unless your contexts share one connection, and outside any
 transaction the caller began, so a transaction the caller holds open neither narrows it nor carries the
 read's reach into the caller's work. That caller is `Caller.System`, the application itself, where nothing
@@ -2993,7 +3069,7 @@ options.UseOutbox<ShopTenancyContext>(outbox => outbox
 | A unit | `tenancy.organization-unit-added`, `tenancy.organization-unit-moved`, `tenancy.organization-unit-archived` |
 | A seat | `tenancy.seat-added`, `tenancy.seat-suspended`, `tenancy.seat-reactivated`, `tenancy.seat-deactivated`, `tenancy.seat-placed`, `tenancy.seat-withdrawn`, `tenancy.primary-placement-changed` |
 | A seat's roles | `tenancy.organization-role-granted`, `tenancy.organization-role-revoked` |
-| A role | `tenancy.role-created`, `tenancy.role-keys-changed`, `tenancy.role-archived`, `tenancy.role-followed-its-pack` |
+| A role | `tenancy.role-created`, `tenancy.role-permissions-changed`, `tenancy.role-archived`, `tenancy.role-followed-its-pack` |
 
 A rename changes nobody's access, so the three events that say the organization, a unit or a role is called
 something else are left out: `tenancy.organization-renamed`, `tenancy.organization-unit-renamed` and
@@ -3005,8 +3081,8 @@ keeps every event of the context.
 **Every event says who made the change.** Each domain event of Tenancy's ends with `By`: the
 [actor](#who-changed-a-row) of the caller whose command raised it, a seat, an operator by its verified
 identity, the system with its scope, or a token. So an event about a tenant, a unit or a role is closed over
-the seat id as well (`TenantSuspended<TenantId, SeatId>`), and `RoleKeysChanged` also names the keys that came
-in, `Added`, and went out, `Removed`, implied keys included, as `RoleFollowedItsPack` does for a role that
+the seat id as well (`TenantSuspended<TenantId, SeatId>`), and `RolePermissionsChanged` also names the permissions that came
+in, `Added`, and went out, `Removed`, implied permissions included, as `RoleFollowedItsPack` does for a role that
 [followed its pack](#packs-after-provisioning). The use cases pass their caller's actor. A method
 of an aggregate that you call yourself takes it as its last argument, `by`; a tenant, an organization and a
 role do not know the seat id's type, so with nobody to name you name the type: `tenant.Activate<SeatId>()`.
@@ -3015,13 +3091,13 @@ Every kept event gets a row in the save that raised it, so a change that rolls b
 which tenant the event is about, taken from the event, and who acted, as [above](#who-changed-a-row): the
 caller of the save, which is the actor a use case puts on its events. An event of your own in that context
 that names no tenant gets the tenant the save runs in. The payload is the event as the outbox stores it: ids,
-keys and dates, who made the change, and the little else an event says, such as the slug a tenant was
+permissions and dates, who made the change, and the little else an event says, such as the slug a tenant was
 provisioned under, the pack a role was copied from and the reason a tenant was suspended or closed for. It never holds what a tenant, a unit, a seat or a role is called, or why a role was given.
 
-Reading it takes a key of Tenancy's own, **`tenancy.history.view`**, asked for the whole tenant. It manages
-no access, so a role that holds it is given like any other. An administrators' pack that lists its keys holds
-it, as it holds every key of Tenancy's. The rows are not kept to a tenant by the query filter, because the
-toolkit's retention reads the table whole: code that reads the history asks the key and names the tenant.
+Reading it takes a permission of Tenancy's own, **`tenancy.history.view`**, asked for the whole tenant. It manages
+no access, so a role that holds it is given like any other. An administrators' pack that lists its permissions holds
+it, as it holds every permission of Tenancy's. The rows are not kept to a tenant by the query filter, because the
+toolkit's retention reads the table whole: code that reads the history asks the permission and names the tenant.
 
 **On Postgres** the contribution keeps the table to itself, like Tenancy's own. It writes the table's
 policies with those of Tenancy's tables, so map the history in the context that calls `AddTenancy`: the export
@@ -3044,7 +3120,7 @@ suspends or deactivates itself is still recorded, though it is no calling seat o
 person's seat counts as well in the transaction that wrote it, and in no later one.
 
 The [sample](#who-may-do-what-in-the-sample) keeps its history this way, and reads
-it [as a list](#an-operator-who-changed-a-row-and-the-history-as-a-list): a route for whoever holds the key
+it [as a list](#an-operator-who-changed-a-row-and-the-history-as-a-list): a route for whoever holds the permission
 and one for an operator, each with a field in the GraphQL schema.
 
 ## Who may do what, in the sample
@@ -3092,7 +3168,7 @@ flowchart TB
         Infrastructure["Projects.Infrastructure<br/>context, migrations,<br/>EfProjectStore, EfProjectReads,<br/>registration"]
         Application["Projects.Application<br/>commands, queries, access,<br/>the ports IProjectStore<br/>and IProjectReads"]
         Domain["Projects.Domain<br/>Project and its crew"]
-        Contracts["Projects.Contracts<br/>ProjectId, keys, IProjectGate"]
+        Contracts["Projects.Contracts<br/>ProjectId, permissions, IProjectGate"]
         Api --> Application
         Api --> Infrastructure
         Infrastructure --> Application
@@ -3136,10 +3212,10 @@ services.AddScoped<IProjectStore, EfProjectStore>();
 services.AddScoped<IProjectReads, EfProjectReads>();
 services.AddTenancyAccess<TenantId, SeatId, OrganizationUnitId, RoleId, IProjectsRequest, ProjectsContext>();   // Tenancy's check, for this module's requests
 services.AddProjectMembershipWithTenancy<ProjectsContext, TenantId, OrganizationUnitId, RoleId>(membership.Rules);   // the crews, by the Membership package
-services.AddProjectMemberAccess<IProjectsRequest>();                         // its check, for a key on a project
+services.AddProjectMemberAccess<IProjectsRequest>();                         // its check, for a permission on a project
 
-// Projects.Application: the rules, the check for a key at a unit, and the generated behavior. No keys: the module
-// marks their list, ProjectCatalogue.Permissions, with [TenancyPermissions], and the host adds every module's
+// Projects.Application: the rules, the check for a permission at a unit, and the generated behavior. No permissions: the module
+// declares them in ProjectPermissions, a [Permissions] class, and the host adds every module's
 services.AddSingleton(membership);
 services.AddScoped<ProjectAccess>();
 services.AddAccessCheck<IProjectsRequest, ProjectsAccessCheck>();
@@ -3162,7 +3238,7 @@ A command loads, changes and saves through `IProjectStore`, on the request's con
 query reads through `IProjectReads`, on a context of its own: the queries of one request may run side by
 side, and a context runs one at a time. The access check before any request reads
 that way too, on a reading for each case it asks (two for `OpenProject` naming another seat as the owner: the
-key to open, and the owner's key), and so does a command for what it asks of Tenancy before it changes anything,
+permission to open, and the owner's permission), and so does a command for what it asks of Tenancy before it changes anything,
 on one reading for all of it. A reading takes Tenancy's answers as sets, so the projects a seat may see are still one statement
 ([Who may do what](#who-may-do-what)), and answers with data, never with an entity. The roles a crew holds are
 not Tenancy's: they are project roles, the module's own, kept with the
@@ -3178,7 +3254,7 @@ is where it is.
 
 A route decides nothing: it makes a command or a query of its arguments and sends it. On its way to its
 handler the request passes tracing, then its module's access behavior, which holds it to what the request
-itself declares: a key, and the project or the unit the key is held on, taken from the request. The behavior
+itself declares: a permission, and the project or the unit the permission is held on, taken from the request. The behavior
 is the one the toolkit's generator writes for the module's request interface
 ([What a request requires of its caller](#what-a-request-requires-of-its-caller)); it asks the checks the
 module registered, and the one that decides the case answers. Here leo closes Pier 7:
@@ -3192,7 +3268,7 @@ sequenceDiagram
     participant Store as IProjectStore
 
     Route->>Behavior: Send(CloseProject),<br/>in one activity
-    Behavior->>Check: a key on a project
+    Behavior->>Check: a permission on a project
     Check->>Check: IMemberQuestions:<br/>projects.close<br/>on Pier 7? held<br/>through the crew,<br/>at version 7
     Check-->>Behavior: met
     Behavior->>Handler: checked
@@ -3216,11 +3292,11 @@ group.MapPost("/projects/{id}/close", async (ProjectId id, HttpRequest request, 
 });
 
 // Lifecycle/Commands/CloseProject.cs in Projects.Application: the command says what it requires of its caller,
-// a key on the project, the Membership package's case: MemberAccess.On(RequiredKey, request.Id, request.ExpectedVersion)
-[RequiresKey(RequiredKey)]
+// a permission on the project, the Membership package's case: MemberAccess.On(RequiredPermission, request.Id, request.ExpectedVersion)
+[RequiresPermission(RequiredPermission)]
 public sealed record CloseProject([OnResource] ProjectId Id, [ExpectedVersion] long? ExpectedVersion = null) : ICommand, IProjectsRequest
 {
-    public const string RequiredKey = ProjectKeys.Close;
+    public const string RequiredPermission = ProjectPermissionNames.Close;
 }
 
 // Access/IProjectsRequest.cs: the one line ProjectsAccessBehavior<TMessage, TResponse> is written from, partial
@@ -3229,12 +3305,12 @@ public sealed record CloseProject([OnResource] ProjectId Id, [ExpectedVersion] l
 public partial interface IProjectsRequest : IRequireAccess;
 
 // MemberAccessCheck, the Membership package's, which AddProjectMemberAccess<IProjectsRequest>() adds: the check
-// for a key on a project. What it read it keeps with the request, for the expert hold; the handler takes none of it.
+// for a permission on a project. What it read it keeps with the request, for the expert hold; the handler takes none of it.
 case MemberAccess<ProjectId>.On required:
 {
-    var hold = await access.RequireAsync(required.Resource, required.Key, cancellationToken);
+    var hold = await access.RequireAsync(required.Resource, required.Permission, cancellationToken);
 
-    // Only now, with the project seen and the key held, is the version the caller read compared
+    // Only now, with the project seen and the permission held, is the version the caller read compared
     if (required.ExpectedVersion is { } expected && expected != hold.Version)
     {
         throw new ConcurrencyConflictException(typeof(Project), required.Resource);
@@ -3272,9 +3348,10 @@ handler called in code instead of sent is [DDD00061](diagnostics.md#ddd00061), a
 written ([When nothing asks the checks](access-requirements.md#when-nothing-asks-the-checks)).
 
 No module writes a behavior. Each writes its request interface, marked `[AccessRequests]`, and a check only
-for the cases that are its own: Projects for a key at a unit, Inspections for what takes Projects' gate,
-Tenants none. A key on a project is the Membership package's case, and its check is added to Projects' set.
-That the caller works in a tenant, holds a key for the whole of it or at a unit, or is an operator are the
+for the cases that are its own: Projects for a permission at a unit, Inspections for what takes Projects' gate,
+Tenants none. Projects' interface carries the module's [default](access-requirements.md#a-modules-default) as well,
+`[AccessRequests, InTenant]`, so its requests any seat may send state nothing, and every other one states its own. A permission on a project is the Membership package's case, and its check is added to Projects' set.
+That the caller works in a tenant, holds a permission for the whole of it or at a unit, or is an operator are the
 Tenancy package's cases, and its check is added to each module's set. That the caller signed in, or is the
 application itself, the toolkit decides in every set. A case no check of the module decides stops the request
 where it is sent, and a test holds every case the requests declare to having a check.
@@ -3284,7 +3361,7 @@ project its command names, which is the one that was checked, and holds it to th
 with `If-Match`: a project changed in between, by a crew change as much as by a rename, answers 409
 `concurrency-conflict`, as a save that came second does. A command that names no version changes the project
 as it is. Who may was the check's to decide; what holds the write after it is the version the save compares,
-the project's own rules, and the database, which checks every row as the caller: a caller that lost every key
+the project's own rules, and the database, which checks every row as the caller: a caller that lost every permission
 that writes the project by then is refused, 403 `access.refused`, and one it is hidden from by then finds none
 to load. [From the check to the save](membership.md#from-the-check-to-the-save) has the whole of it, and
 [the expert hold](membership.md#the-expert-hold) what a host adds with one line to tie the save to the version
@@ -3295,12 +3372,12 @@ can say beforehand:
 
 | Projects | Declares | The handler adds |
 |---|---|---|
-| `VisibleProjects` (query) | seen with `projects.view`: the key filters the list inside its statement, and nobody is refused for seeing nothing | |
-| `ProjectDetail` (query) | `projects.view` on the project | what the caller may do, asked with each command's own key |
-| `KeyOnProject` (query) | seen with `projects.view` | an unknown key is `tenancy.unknown-permission`; then a project out of sight is `projects.not-found` |
-| `AllCrewMembers` (query) | seen with `projects.view`: the key filters the query's one statement | a project out of sight is `projects.not-found` |
-| `ProjectsById`, `CrewsOfProjects`, `AbilitiesOnProjects`, `KeysOnProjects` (queries about several projects) | seen with `projects.view` | a project out of sight is left out of the answer |
-| `KeysHeldAtRoot` (query) | a caller that works in a tenant | |
+| `VisibleProjects` (query) | seen with `projects.view`: the permission filters the list inside its statement, and nobody is refused for seeing nothing | |
+| `ProjectDetail` (query) | `projects.view` on the project | what the caller may do, asked with each command's own permission |
+| `PermissionOnProject` (query) | seen with `projects.view` | an unknown permission is `tenancy.unknown-permission`; then a project out of sight is `projects.not-found` |
+| `AllCrewMembers` (query) | seen with `projects.view`: the permission filters the query's one statement | a project out of sight is `projects.not-found` |
+| `ProjectsById`, `CrewsOfProjects`, `AbilitiesOnProjects`, `PermissionsOnProjects` (queries about several projects) | seen with `projects.view` | a project out of sight is left out of the answer |
+| `PermissionsHeldAtRoot` (query) | a caller that works in a tenant, the module's default | |
 | `TenantProjects` (query) | an operator, and nobody else | |
 | `OpenProject` | `projects.open` at the unit; naming an owner, also the owner is the caller's own seat or `projects.owner.change` is held at the unit, computed from whether it names one (`AccessRequirement.All`, `Any` and `Own`) | that the unit is active, and that the owner may be on a crew |
 | `ChangeProjectName` | `projects.edit` on the project | |
@@ -3312,20 +3389,20 @@ can say beforehand:
 | `TakeCrewRole` | `projects.crew.manage` on the project | which project role is the crew lead's, when the seat is the owner's |
 | `RemoveCrewMember` | `projects.crew.manage` on the project | |
 | `ChangeProjectOwner` | `projects.owner.change` on the project | an active seat; the new owner gets the crew lead's project role, and the old owner loses it and stays on the crew |
-| `TenantProjectRoles`, `ProjectRolesById` (queries) | a caller that works in a tenant | the keys of each role only for a caller that holds `tenancy.roles.manage` for the whole tenant |
-| `MakeProjectRole`, `RenameProjectRole`, `SetProjectRoleKeys`, `ArchiveProjectRole` | `tenancy.roles.manage` for the whole tenant | the same again: no use case of a package stands between the command and the role |
-| `SetUpProjectRoles` | a caller that works in a tenant (`[InTenant]`); no route sends it, whatever sets a tenant up sends it as system work in the tenant, begun around the send | the same again, and narrower: only system work in the tenant it sets up, everyone else `access.system-only` |
+| `TenantProjectRoles`, `ProjectRolesById` (queries) | a caller that works in a tenant, the module's default | the permissions of each role only for a caller that holds `tenancy.roles.manage` for the whole tenant |
+| `MakeProjectRole`, `RenameProjectRole`, `SetProjectRolePermissions`, `ArchiveProjectRole` | `tenancy.roles.manage` for the whole tenant | the same again: no use case of a package stands between the command and the role |
+| `SetUpProjectRoles` | a caller that works in a tenant (`[InTenant]`, the module's default); no route sends it, whatever sets a tenant up sends it as system work in the tenant, begun around the send | the same again, and narrower: only system work in the tenant it sets up, everyone else `access.system-only` |
 
 | Inspections | Declares | The handler adds |
 |---|---|---|
-| `ProjectInspections`, `InspectionDetail` (queries) | `projects.view` on the project | for the list, whether the caller may record, asked with `RecordInspection`'s key |
+| `ProjectInspections`, `InspectionDetail` (queries) | `projects.view` on the project | for the list, whether the caller may record, asked with `RecordInspection`'s permission |
 | `InspectionsOfProjects` (query) | `projects.view` on each of the projects: one out of reach is left out, and nobody is refused | which of them the caller sees, asked of Projects' gate once for all of them |
 | `ProjectsOpenToRecording` (query) | `inspections.record` on each of the projects, the same way | which of them the caller may record on and are open, asked of Projects' gate once for all of them |
 | `RecordInspection` | `inspections.record` on the project, which must be open, recorded by a seat | the title and the days, which the inspection checks itself; days outside the project's planned range, which the handler asks the gate for, are `inspections.outside-planned-range` |
 | `TenantProjectInspections` (query) | an operator, and nobody else | |
 
-Inspections cannot answer any of the keys itself. Its check asks Projects' gate, `IProjectGate`, and maps the answer: a
-project out of sight is `projects.not-found`, a closed one `projects.closed`, a key not held
+Inspections cannot answer any of the permissions itself. Its check asks Projects' gate, `IProjectGate`, and maps the answer: a
+project out of sight is `projects.not-found`, a closed one `projects.closed`, a permission not held
 `projects.not-permitted`. Its handlers act on the project their request names, which is the one the gate
 answered for, and ask the gate themselves for what they need of it: the planned range an inspection is held
 to, or which of a list of projects the caller sees, asked once for all of them. The check of a list asks
@@ -3340,20 +3417,20 @@ nothing about a project, as a query that declares `MemberAccess.SeenWith` is fil
 | `MoveOrganizationUnit`, `ArchiveOrganizationUnit` | a caller that works in a tenant | `tenancy.units.manage` at the parent the unit hangs under now, which only the use case reads, and for a move at the new parent too, and that the move gives or takes away nothing the caller could not |
 | `ChangeTenantShape` | `tenancy.settings.manage` for the whole tenant | |
 | `MakePlacement`, `WithdrawPlacement` | `tenancy.seats.manage` at the unit | that a seat does not place itself; for a withdrawal, what taking each role away would need |
-| `MakeGrant`, `RevokeGrant` | `tenancy.grants.manage` at the unit | for a role that manages access, that the caller holds its keys that do, there and for long enough, and never gives it to itself; that the tenant keeps an administrator |
+| `MakeGrant`, `RevokeGrant` | `tenancy.grants.manage` at the unit | for a role that manages access, that the caller holds its permissions that do, there and for long enough, and never gives it to itself; that the tenant keeps an administrator |
 | `SuspendTenantSeat`, `ReactivateTenantSeat`, `DeactivateTenantSeat` | `tenancy.seats.manage` for the whole tenant | what taking or giving each of the seat's roles would need; that the tenant keeps an administrator |
 | `SeatGrants` (query) | computed from the request: `tenancy.seats.manage` for the whole tenant, or at the unit asked about (`?unit=`) | the seat's roles in every unit, or at that unit alone |
-| `RenameSeat` | yours, or the key: the caller's own seat, or `tenancy.seats.manage` for the whole tenant, `[RequiresKey]` with `[OrOwn]` on the seat | no use case of the package: the name is the sample's own field, and the rule is the sample's own, that a seat renames itself and another seat takes `tenancy.seats.manage` for the whole tenant ([How a seat is shown](#how-a-seat-is-shown)), and a column rule of the sample's holds the name to the same rule in the database ([What the database guards on a seat](#what-the-database-guards-on-a-seat)) |
-| `CreateTenantRole`, `SetRoleKeys`, `ArchiveTenantRole` | `tenancy.roles.manage` for the whole tenant | that only an administrator adds, takes out or archives what manages access |
+| `RenameSeat` | yours, or the permission: the caller's own seat, or `tenancy.seats.manage` for the whole tenant, `[RequiresPermission]` with `[OrOwn]` on the seat | no use case of the package: the name is the sample's own field, and the rule is the sample's own, that a seat renames itself and another seat takes `tenancy.seats.manage` for the whole tenant ([How a seat is shown](#how-a-seat-is-shown)), and a column rule of the sample's holds the name to the same rule in the database ([What the database guards on a seat](#what-the-database-guards-on-a-seat)) |
+| `CreateTenantRole`, `SetRolePermissions`, `ArchiveTenantRole` | `tenancy.roles.manage` for the whole tenant | that only an administrator adds, takes out or archives what manages access |
 | `InvitePerson` | `tenancy.seats.manage` for the whole tenant | `tenancy.grants.manage` at the unit, and the rule every grant is held to |
 | `CancelInvitation` | a caller that works in a tenant | `tenancy.seats.manage` at the invitation's unit, which only the use case reads; anyone else is told there is no such invitation |
-| `AcceptInvitation` | a signed-in user: there is no seat yet to hold a key | a verified identity that may hold a seat, and the token of an open invitation; then the work is done as system work in the invitation's tenant, begun by the package, and the seat is named in its callback by the sample's rule |
+| `AcceptInvitation` | a signed-in user: there is no seat yet to hold a permission | a verified identity that may hold a seat, and the token of an open invitation; then the work is done as system work in the invitation's tenant, begun by the package, and the seat is named in its callback by the sample's rule |
 | `MarkTenantAsDemo` | a caller that works in a tenant (`[InTenant]`); no route sends it, the seeding sends it as system work in the tenant, begun around the send | no use case of the package stands between it and the tenant, so its handler decides, and narrower: only system work in the tenant it marks, everyone else `access.system-only` |
 | `AccessHistory` (query) | `tenancy.history.view` for the whole tenant | |
 | `AllTenants`, `TenantAccessHistory` (queries) | an operator, and nobody else | |
 
 Every request of the package's says the first thing its use case asks, so a caller the use case would refuse
-first is refused at the door already, with the same code and the same key; the use case asks again past it,
+first is refused at the door already, with the same code and the same permission; the use case asks again past it,
 and then what the third column says. A request that declared nothing would reach its handler unchecked, so the
 sample's tests fail for one that declares nothing, find no request anyone may send, and hold every request to
 the tables above (`AccessDeclarationTests`). That the door and the use case refuse alike is held by
@@ -3436,8 +3513,8 @@ it answers rhea, shortened to the first of her two projects:
 
 The name and the number are the project's own. The crew comes the owner first, then by when each membership
 starts, and a member's roles by when each starts: the module has no names to order by. `myRoleIds` are the
-roles the caller holds on the crew now: none for rhea, who reaches Pier 7 through the organization, and the
-Crew lead role for leo. `changedBy` is [who changed the project last](#an-operator-who-changed-a-row-and-the-history-as-a-list):
+roles the caller holds on the crew now: none for rhea, who reaches Pier 7 through the organization, and none
+for leo, who owns it and holds what an owner does by owning it. `changedBy` is [who changed the project last](#an-operator-who-changed-a-row-and-the-history-as-a-list):
 the seeding here, which is system work. A client that shows the ids asks [Tenancy for the names](#names) of
 the unit and the seats, and Projects for those of the roles, `GET /project-roles`.
 
@@ -3455,13 +3532,13 @@ nord". The route costs the same statements however many
 projects a page holds: the page, with who may see what inside it; the crews of its projects; and what the caller may do to each, which is where a
 row's `can` comes from. Each is a query of its own (`VisibleProjects`, `CrewsOfProjects`,
 `AbilitiesOnProjects`), so the [GraphQL list](#graphql-in-the-sample) sends the same three and leaves out the
-two a client did not ask for. The key sets are a route of their own, `POST /access/projects/keys`, for a client
-that fills its own buttons, next to `GET /access/keys` for the keys held at the tenant's root.
+two a client did not ask for. The permission sets are a route of their own, `POST /access/projects/permissions`, for a client
+that fills its own buttons, next to `GET /access/permissions` for the permissions held at the tenant's root.
 
 A project carries its `version`, and `GET /projects/{id}` sends it as `ETag`. A change that names the version
 its caller read, `If-Match: "3"`, is refused with 409 `concurrency-conflict` when the project changed since:
 the same answer as a save that came second, because the client does the same for both, read again and decide
-again. The version is compared only after the caller is known to see the project and to hold the key, so a
+again. The version is compared only after the caller is known to see the project and to hold the permission, so a
 caller without access learns nothing from it.
 
 Enum values are written and read by name in lower snake case (`open`, `hierarchical`): the host's choice,
@@ -3475,7 +3552,7 @@ What the ids are called:
 |---|---|---|
 | `POST /tenancy/directory/seats` | `{ "ids": [ ... ] }` | `[ { id, displayName, status } ]`, by name |
 | `POST /tenancy/directory/units` | `{ "ids": [ ... ] }` | `[ { id, parentId, name, kind, status, path, depth } ]`, by path; `kind` is the sample's own field, `null` for a unit added without one |
-| `POST /tenancy/directory/roles` | `{ "ids": [ ... ] }` | `[ { id, name, fromPack, status, keys, managesAccess } ]`, the active ones first, by name |
+| `POST /tenancy/directory/roles` | `{ "ids": [ ... ] }` | `[ { id, name, fromPack, status, permissions, managesAccess } ]`, the active ones first, by name |
 
 Each is a `POST` that only asks and changes nothing. Anyone seated in the tenant may send it, and is answered
 200 with what the ids are called in that tenant; an id of another tenant is left out. A body without the list
@@ -3484,22 +3561,22 @@ among them: they are project roles, and `GET /project-roles` answers all of the 
 
 A seat reaches a project in two ways, and Projects asks both inside one query:
 
-- **Through the organization.** A role granted at a unit gives its keys on every project at that unit and
+- **Through the organization.** A role granted at a unit gives its permissions on every project at that unit and
   below it.
 - **Through the crew.** A seat on a project's crew sees that project for as long as its membership lasts,
-  whatever it holds there. Every other key comes from a project role it holds on the crew, below: it gives its
-  keys on that project alone, for a period of its own and only while the membership lasts, and only the keys
+  whatever it holds there. Every other permission comes from a project role it holds on the crew, below: it gives its
+  permissions on that project alone, for a period of its own and only while the membership lasts, and only the permissions
   that act on a project. Opening projects (`projects.open`), naming an owner (`projects.owner.change`) and
-  Tenancy's own keys, which manage the organization, are the organization's: a crew role that holds them gives
+  Tenancy's own permissions, which manage the organization, are the organization's: a crew role that holds them gives
   nothing with them.
 
 The application's catalogue has seven packs, and each tenant's roles start as copies of the packs seeded for
 its shape:
 
-| Pack | Keys | Manages access | Seeded for | Usually granted |
+| Pack | Permissions | Manages access | Seeded for | Usually granted |
 |---|---|---|---|---|
-| Tenant admin | every key: the administrators' pack of a flat tenant, which lists none | yes | flat | at the root of a flat tenant, to its first administrator |
-| Access admin | Tenancy's six keys, `projects.owner.change`, `projects.crew.manage`, `projects.view`: the administrators' pack of a hierarchical tenant, which lists its keys | yes | hierarchical | at the root of a hierarchical tenant, to its first administrator |
+| Tenant admin | every permission: the administrators' pack of a flat tenant, which lists none | yes | flat | at the root of a flat tenant, to its first administrator |
+| Access admin | Tenancy's six permissions, `projects.owner.change`, `projects.crew.manage`, `projects.view`: the administrators' pack of a hierarchical tenant, which lists its permissions | yes | hierarchical | at the root of a hierarchical tenant, to its first administrator |
 | Area manager | `projects.view`, `projects.open`, `projects.edit`, `projects.close`, `projects.crew.manage`, `projects.owner.change`, `inspections.record`, `tenancy.units.manage`, `tenancy.seats.manage`, `tenancy.grants.manage` | yes | hierarchical | at a unit |
 | Crew lead | `projects.view`, `projects.edit`, `projects.close`, `projects.crew.manage`, `inspections.record` | yes | every shape | at a unit, to lead every crew there |
 | Surveyor | `projects.view`, `inspections.record` | no | every shape | at a unit, to record on every project there |
@@ -3508,20 +3585,20 @@ its shape:
 
 Each shape of tenant has an administrators' pack of its own, seeded for it with `SeededFor`, and a flat tenant
 that turns hierarchical is given Access admin and Area manager then. A flat tenant has one unit and a handful of
-people, so its administrator does everything: Tenant admin lists no keys and holds them all. A hierarchical
-tenant keeps running access apart from doing the work. Access admin lists its keys, so whoever holds it gives
+people, so its administrator does everything: Tenant admin lists no permissions and holds them all. A hierarchical
+tenant keeps running access apart from doing the work. Access admin lists its permissions, so whoever holds it gives
 every role, names owners, manages every crew and sees every project, and renames, closes and records on none
 of them: maud's rename of Pier 7 is refused with `projects.not-permitted`, naming `projects.edit`. An
-administrators' pack that lists its keys has to hold every key that manages access, so marking another key
+administrators' pack that lists its permissions has to hold every permission that manages access, so marking another permission
 stops the host at start-up until Access admin lists it. An access admin who is to do the work gets a role for
 it like anyone else. Managing crews is hers, so maud may put herself on Pier 7's crew as Crew lead, and then
 she renames it.
 
-Tenancy's keys manage access, all but `tenancy.history.view`, which only reads, and so do two keys that
+Tenancy's permissions manage access, all but `tenancy.history.view`, which only reads, and so do two permissions that
 Projects declares and the host marks:
 `projects.owner.change`, because the owner leads the crew until the organization names another, and
 `projects.crew.manage`, because whoever holds it at a unit may put anyone on every crew there, in any role,
-themselves included. So Crew lead and Area manager, given at a unit, go only from someone who holds those keys
+themselves included. So Crew lead and Area manager, given at a unit, go only from someone who holds those permissions
 there for at least as long, and never to oneself. Whoever manages grants and holds neither gives Surveyor and
 Observer.
 
@@ -3572,7 +3649,7 @@ Each answers 204, and each declares `projects.crew.manage` on the project. `GET 
 the crew to whoever sees the project, and each member's roles and their dates only to a caller who holds
 `projects.crew.manage` on it: for anybody else `roles` is `null`, in this answer and wherever a project is
 answered with its crew. The query holds that, in the statement that reads the crew
-(`CrewOverview.RolesKey`).
+(`CrewOverview.RolesPermission`).
 
 ```csharp
 // Aggregates/Projects/Entities/CrewMember.cs in Projects.Domain: the Membership package's member template, which
@@ -3596,59 +3673,60 @@ worked example: three starter roles, made once when the tenant is set up, and wh
 itself. Setting a tenant up is `SetUpProjectRoles`, system work in the tenant, which the seeding sends for every
 tenant it provisions and whatever makes a tenant while the application runs sends the same; a starter role is
 told by what it was made from, so one the tenant renamed or archived is not made again. Whoever holds
-`tenancy.roles.manage` for the whole tenant makes, renames, re-keys and archives them: `GET` and `POST
-/project-roles`, `PUT /project-roles/{id}`, `PUT /project-roles/{id}/keys` and `POST
+`tenancy.roles.manage` for the whole tenant makes, renames and archives them, and changes their permissions: `GET` and `POST
+/project-roles`, `PUT /project-roles/{id}`, `PUT /project-roles/{id}/permissions` and `POST
 /project-roles/{id}/archive`, the `projectRoles` field with its four mutations, and the UI's Crew roles page.
-Anybody who works in the tenant reads what they are called; their keys are answered to that holder alone.
+Anybody who works in the tenant reads what they are called; their permissions are answered to that holder alone.
 
-| Starter role | Keys |
+| Starter role | Permissions |
 |---|---|
-| Crew lead | `projects.view`, `projects.edit`, `projects.close`, `projects.crew.manage`, `inspections.record`: every key a crew can give. Every project's owner holds it, so it is not archived (`projects.owner-role-stays`) |
+| Crew lead | `projects.view`, `projects.edit`, `projects.close`, `projects.crew.manage`, `inspections.record`: every permission a crew can give. The role a former owner usually stays on the crew in |
 | Surveyor | `projects.view`, `inspections.record` |
 | Observer | `projects.view` |
 
-A project role gives only the keys that act on a project: one with a key of the organization's or of
-Tenancy's is not made, nor re-keyed to one (400 `projects.key-not-for-members`). A role of the organization
+A project role gives only the permissions that act on a project: one with a permission of the organization's or of
+Tenancy's is not made, nor given one later (400 `projects.permission-not-for-members`). A role of the organization
 goes on no crew, and neither does an archived project role or another tenant's: 400
 `projects.role-not-for-members`. An archived role stays on whoever holds it, gives nothing, and can still be
 taken away. The database holds a statement that goes round the application to part of it: a seat that writes a
 crew's roles itself gives none of another tenant's, since the Membership package's lock asks the project
-roles' table as that seat, and the crew lead's role is archived by no statement, whoever sends it. One of its
-own tenant's archived roles such a seat can still write onto a crew, and that role gives nothing.
+roles' table as that seat. One of its own tenant's archived roles such a seat can still write onto a crew, and
+that role gives nothing.
 
-A project has one owner, who is on its crew with no end and holds the crew lead's project role there, with no
-end either. That role holds every key a crew can give, so the owner may do everything that acts on the
-project: rename it, close it and reopen it, manage its crew and record inspections. Moving it needs
-`projects.open` at the unit it goes to, and naming another owner needs `projects.owner.change` at the
-project's unit or above it, so the owner does neither through the crew. Until the organization names another
-owner, the owner is not taken off the crew and does not lose the Crew lead role (`projects.owner-protected`),
-whoever asks. Naming another owner puts the new owner on the crew, when not on it yet, and gives them the
-role. The old owner loses that role and nothing else: the seat stays on the crew with whatever other roles it
-holds there, or with none, still seeing the project. A second crew lead holds as much as the owner, but is not
-the owner, and cannot take the owner off the crew.
+A project has one owner, who is on its crew with no end and holds no project role there. The owner holds what
+the permissions Projects declares on a project give an owner, by owning it: it sees the project, renames it,
+closes and reopens it, and manages its crew ([`ProjectPermissions`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Access/ProjectPermissions.cs)).
+Recording an inspection is the Inspections module's, which a role on the crew gives, so an owner who records
+holds a role at the unit, or leaves it to the crew. Moving a project needs `projects.open` at the unit it goes
+to, and naming another owner needs `projects.owner.change` at the project's unit or above it, a permission
+declared with `Owner = false`, so the owner does neither by owning it. Until the organization names another
+owner, the owner is not taken off the crew and is given no role there (`projects.owner-protected`), whoever
+asks. Naming another owner puts the new owner on the crew, when not on it yet, and its roles there go: it holds
+by owning now. The command says what the owner before becomes: a member in the project role it names,
+`formerOwnerRoleId`, or, left out, nobody on the crew. A crew lead holds more on the crew than the owner, the
+permission that records among it, but is not the owner, and cannot take the owner off the crew.
 
-The owner's role is the tenant's project role in use made from the crew lead's starter role, whatever the
-tenant has called it since. What it gives is the tenant's to decide: take `projects.edit` out of it, and no
-owner renames through the crew. Changing a project role's keys takes `tenancy.roles.manage` for the whole
-tenant. A tenant with no such role in use opens no project and names no owner (`projects.no-lead-role`).
+What the project roles give is the tenant's to decide, and none of them is the owner's: a tenant archives the
+crew lead's role as any other, and opens projects without any project role. Changing a project role's permissions
+takes `tenancy.roles.manage` for the whole tenant.
 
 Giving a crew role is positional: whoever manages the crew gives any of the tenant's project roles in use, to
-anyone on the crew, themselves included, without holding the role's keys, and puts any active seat of the
+anyone on the crew, themselves included, without holding the role's permissions, and puts any active seat of the
 tenant on it. The marks rule the organization's grants, not the crew's. On a crew a role reaches that project alone, and no role
 gives more there than the crew lead's, so a lead gives away nothing a lead cannot do. It does make
 `projects.crew.manage` a lead's position wherever it is held: whoever holds it on a project, on the crew or
 at the project's unit or above it, can make themselves the crew's lead. A crew membership and a crew role end
 when whoever gives them says, not when the giver's own grant ends, so an area manager granted a region for a
 week can lead a crew there for good, and so can whoever holds a role of the tenant's own with
-`projects.crew.manage` in it. That is why the host marks the key: managing grants alone does not make anyone a
+`projects.crew.manage` in it. That is why the host marks the permission: managing grants alone does not make anyone a
 lead, since a role at a unit that holds it goes only from someone who holds it there, and never to oneself
 ([who may give a role](#who-may-give-a-role)). Grant it only to someone who may lead the crews it reaches.
 
 Two variations the sample does not build, each a small change to Projects:
 
-- **A key of its own for adding members.** Declare a second key, say `projects.crew.add`, have `AddCrewMember`
+- **A permission of its own for adding members.** Declare a second permission, say `projects.crew.add`, have `AddCrewMember`
   declare it in place of `projects.crew.manage`, and refuse a role named with it unless the caller holds
-  `projects.crew.manage` too. Whoever holds only the new key then puts people on a crew, who see the project,
+  `projects.crew.manage` too. Whoever holds only the new permission then puts people on a crew, who see the project,
   and whoever manages the crew decides what they may do there.
 - **A role every new member gets.** Have `AddCrewMember`'s handler give a role the tenant picked when the
   request names none: keep which role that is with the tenant's settings, ask for it on the reading the handler
@@ -3656,7 +3734,7 @@ Two variations the sample does not build, each a small change to Projects:
   in use (`admission.RequireRoleAsync`), like any other.
 
 Harbor Works (`harbor`) is hierarchical: its root has two regions, North and South, and three areas below
-them. An area manager granted at North holds her keys at North and at everything below it, and nowhere
+them. An area manager granted at North holds her permissions at North and at everything below it, and nowhere
 else:
 
 ```mermaid
@@ -3680,10 +3758,10 @@ flowchart LR
 ```
 
 <details>
-<summary>Show the code: asking where a key reaches</summary>
+<summary>Show the code: asking where a permission reaches</summary>
 
 ```http
-GET /access/units?key=projects.edit
+GET /access/units?permission=projects.edit
 Authorization: Bearer <rhea's token>
 Tenant: harbor
 ```
@@ -3695,7 +3773,7 @@ Tenant: harbor
     "b0000000-0000-4000-8000-000000000103",
     "b0000000-0000-4000-8000-000000000104"
   ],
-  "wholeTenant": false
+  "atTenant": false
 }
 ```
 
@@ -3711,12 +3789,12 @@ for it: a request may send several queries side by side, and a context runs one 
 await using var reading = reads.Open();                             // ITenancyReads: a context for this query alone
 var questions = answers.Over(reading.Rows, reading.Queries);
 
-var held = questions.UnitsWhereIHold(query.Key);                    // a set, not a list: it becomes a subquery
+var held = questions.UnitsWhereIHold(query.Permission);                    // a set, not a list: it becomes a subquery
 var units = await reading.Queries.ListAsync(
     questions.Units().Select(unit => new UnitRead(unit.Id, unit.ParentId, held.Contains(unit.Id))),
     cancellationToken);
 
-var wholeTenant = units.Any(unit => unit.ParentId is null && unit.Held);   // held at the root
+var atTenant = units.Any(unit => unit.ParentId is null && unit.Held);   // held at the root
 var ids = units.Where(unit => unit.Held).Select(unit => unit.Id).OrderBy(unit => unit.Value);
 ```
 
@@ -3728,14 +3806,14 @@ Meadow Gardens (`meadow`) is flat: its root is its only unit, and it refuses a u
 | Person | Seat | Shows |
 |---|---|---|
 | ada | harbor, at the root, Access admin and Area manager | harbor's first administrator, who also runs its work: everything in harbor is hers to do. maud administers too, so either of them may step down, and not both |
-| rhea | harbor, North, Area manager | sees Pier 7 and Inland depot, and not Bay bridge (`projects.not-found`); grants Observer and Crew lead at North Coast, and is refused Access admin there (`tenancy.grant-exceeds-own`, with the keys that manage access she lacks) and anything at South Bay (`tenancy.not-permitted`) |
-| leo | harbor, North Coast, no organization role | the owner of Pier 7 and its crew lead: renames it, closes and reopens it, puts seats on its crew and gives and takes their project roles, his own included; names no other owner (`projects.not-permitted`), gives the crew no role of the organization (`projects.role-not-for-members`), and keeps the Crew lead role on the crew until someone else owns it (`projects.owner-protected`) |
+| rhea | harbor, North, Area manager | sees Pier 7 and Inland depot, and not Bay bridge (`projects.not-found`); grants Observer and Crew lead at North Coast, and is refused Access admin there (`tenancy.grant-exceeds-own`, with the permissions that manage access she lacks) and anything at South Bay (`tenancy.not-permitted`) |
+| leo | harbor, North Coast, no organization role | the owner of Pier 7, holding no role on its crew: renames it, closes and reopens it, puts seats on its crew and gives and takes their project roles; records no inspection on it, since recording is the Inspections module's and comes with a role on the crew (`projects.not-permitted`), names no other owner (`projects.not-permitted`), gives the crew no role of the organization (`projects.role-not-for-members`), and is given no role and stays on the crew until someone else owns it (`projects.owner-protected`) |
 | juno | harbor, North Coast | a surveyor on Pier 7's crew: records an inspection, is refused a rename |
 | vic | harbor, North Inland, Observer until yesterday | sees Pier 7 through its crew, and not Inland depot, which only his expired grant reached |
 | seth | harbor, South Bay, suspended | every call in harbor is `tenancy.seat-suspended`, though `/me/seats` still lists the seat |
 | tove | harbor, South Bay; meadow, Tenant admin, its only administrator | one person in two tenants, switching with the `Tenant` header; in meadow she may neither revoke her own grant, suspend herself nor withdraw her placement (`tenancy.last-admin`) |
 | hana | harbor, at the root, People office | gives roles without holding them: Surveyor to leo at North Coast, and to herself at the root; is refused Crew lead, Area manager and Access admin for anyone else (`tenancy.grant-exceeds-own`), and any role that manages access for herself (`tenancy.self-appointment`) |
-| maud | harbor, at the root, Access admin | runs access and does none of the work: gives every role, names owners, manages every crew and sees every project; her rename of Pier 7 is refused (`projects.not-permitted`, key `projects.edit`) until she is on its crew as Crew lead, where she may put herself |
+| maud | harbor, at the root, Access admin | runs access and does none of the work: gives every role, names owners, manages every crew and sees every project; her rename of Pier 7 is refused (`projects.not-permitted`, permission `projects.edit`) until she is on its crew as Crew lead, where she may put herself |
 
 ### An operator, who changed a row, and the history as a list
 
@@ -3758,7 +3836,7 @@ Each route has a field in the GraphQL schema, which sends the same query
 An operator works in no tenant, so the tenant is in the path and the query names it past the tenant filter
 (`IgnoreQueryFilters([TenancyQueryFilter.Name])`). The policy is a courtesy, as the seat's is: every one of
 these queries declares `[RequiresOperator]`, and the package's check, added to each module's set,
-refuses anyone else with `tenancy.operators-only`, a seat that holds every key and system work included. In the
+refuses anyone else with `tenancy.operators-only`, a seat that holds every permission and system work included. In the
 database the query runs as the operators' own role, which reads a module's table only where a rule of that module
 admits it:
 
@@ -3819,7 +3897,7 @@ public static async Task<PageConnection<AccessHistoryEntry>> GetAccessHistoryAsy
 ```
 
 A size outside 1 to 200 is `tenants.history.page-size-invalid`. The UI has a page for it, **Access history**,
-and the try-it presets read it once with the key and once without.
+and the try-it presets read it once with the permission and once without.
 
 #### A marker that is not the list's cursor
 
@@ -3839,7 +3917,7 @@ The refusal is the list's own: 400 `projects.cursor-invalid`, `inspections.curso
 `Shared/Examples.Tenancy.Shared.Infrastructure`. The lists are read in three infrastructure projects, and a
 module does not reference another's; how a query is ordered and how the library writes a cursor is storage's
 to know, so what all three need of it has a project of its own, which only infrastructure projects reference.
-It reads the marker with the keys of the query that is about to be paged, the way the library will: Base64,
+It reads the marker with the permissions of the query that is about to be paged, the way the library will: Base64,
 the head the library writes, one value for every key, each of its key's type. Nothing is sent to the database
 to find that out.
 
@@ -3891,7 +3969,7 @@ return issued;
 The host says who answers the port (`Host/Auth/SampleIdentityAccounts.cs`). With `Supabase:SecretKey` set, as
 the AppHost sets it, it is Supabase Auth, through its admin client: an address without an account gets one,
 and Auth mails the person a link that lets them in, which is how anyone gets in where nobody signs up. A host
-that has no key for Auth and the dev login on, such as one started by hand on the stack the Supabase CLI
+that has no permission for Auth and the dev login on, such as one started by hand on the stack the Supabase CLI
 starts, gets `DevIdentityAccounts`, to which the demonstration people are the accounts there are. Whoever invites is
 answered the same for an address that had an account and for one that had none, and the account is given
 nothing: there is no seat until the person accepts. When the provider cannot be asked, the invitation is
@@ -4043,7 +4121,7 @@ internal sealed record ReferencedSeat(SeatId Id);
 // Tenants.Api/Seats/GraphQL/SeatType.cs: the same type where it is owned, declared over the record the
 // module's queries select from the seats the directory answers, with the name the module keeps on its seat class.
 // Nothing is copied, and nothing is said per field: the host's conventions make every field of a type with a
-// key nullable but the key, so a seat the caller may not read arrives as its id with nothing else, and without
+// permission nullable but the permission, so a seat the caller may not read arrives as its id with nothing else, and without
 // an error.
 [ObjectType<SeatListing>]
 [EntityKey("id")]
@@ -4120,12 +4198,12 @@ the project Projects answers. There is no root field that takes a project's id: 
 
 This costs Inspections one question and one statement for each batch of projects, not one of each per project.
 The field loads through a data loader, which sends one query about every project of a batch; that query's
-access check asks Projects' gate once about all of them (`IProjectGate.AskAsync(projects, key)`, one statement),
+access check asks Projects' gate once about all of them (`IProjectGate.AskAsync(projects, permission)`, one statement),
 and the read pages every project's inspections in one statement (`ToBatchPageAsync`). `canRecord` and
 `totalCount` cost one more each, and only when a client selects them. A project the caller may not see
 answers `null` here: whatever id reaches Inspections' schema, its own access check decides.
 
-A batch is what HotChocolate has gathered when it sends: it waits a moment for more keys. So a page of
+A batch is what HotChocolate has gathered when it sends: it waits a moment for more permissions. So a page of
 projects is one batch as a rule, and two on a server too busy to resolve the page's fields within that
 moment. The answer is the same either way; what is promised is the cost of a batch, not the number of batches.
 
@@ -4169,14 +4247,14 @@ public static async Task<IReadOnlyDictionary<ProjectId, Page<InspectionOverview>
     return pages;
 }
 
-// RecordingQueries.cs: the gateway's way in, and no field of the schema a client is offered. It answers the key
+// RecordingQueries.cs: the gateway's way in, and no field of the schema a client is offered. It answers the permission
 // it was given: what the caller may see is decided where the inspections are read.
 [Query]
 [Lookup]
 [Internal]
 public static ReferencedProject? GetProjectById([ID("Project")] ProjectId id) => new(id);
 
-// Inspections.Infrastructure/Persistence/EfInspectionReads.cs: newest first, the id as the second key. The
+// Inspections.Infrastructure/Persistence/EfInspectionReads.cs: newest first, the id as the second permission. The
 // rows are tracked by the context of this one read, which is where who changed a row is taken from.
 return await db.Inspections.Where(inspection => asked.Contains(inspection.ProjectId))
     .OrderByDescending(inspection => inspection.RecordedAt).ThenBy(inspection => inspection.Id)
@@ -4204,7 +4282,7 @@ sequenceDiagram
     Gateway->>Projects: projects { nodes { name<br/>unit { id } owner { id } } }
     Note over Projects: the seat gate, then<br/>Send(VisibleProjects):<br/>its access check, and<br/>the page in one statement
     Projects-->>Gateway: names, and the ids<br/>of units and seats
-    Gateway->>Tenants: organizationUnit(id)<br/>and seat(id), for<br/>every id at once
+    Gateway->>Tenants: organizationUnitName(id)<br/>and seat(id), for<br/>every id at once
     Note over Tenants: the seat gate, then<br/>one loader per kind:<br/>Send(OrganizationUnitsById),<br/>Send(SeatsById)
     Tenants-->>Gateway: paths and display names
     Gateway-->>Client: one answer
@@ -4246,7 +4324,7 @@ Every module declares its schema the way HotChocolate 16 offers, and writes none
 that comes to is listed below the code. Projects', which has all of it:
 
 <details>
-<summary>Show the code: a type over the application's record, a loader, a paged field and a key on a field</summary>
+<summary>Show the code: a type over the application's record, a loader, a paged field and a permission on a field</summary>
 
 ```csharp
 // Projects.Api/Overview/GraphQL/ProjectType.cs: the type Project, over what the application answers. The
@@ -4282,18 +4360,18 @@ public static async Task<PageConnection<ProjectOverview>> GetProjectsAsync(Pagin
     => new(await sender.Send(new VisibleProjects(paging, state, unit, text), cancellationToken));
 
 // Projects.Api/Crew/GraphQL/CrewMemberType.cs: who holds which role on a crew is for whoever manages it.
-// The schema shows the rule: @authorize(policy: "projects.crew.manage"). Tenants' Role.keys has one too.
-// The key is the constant the query asks about, which left the roles out for a caller without it.
-[Authorize(CrewOverview.RolesKey)]
+// The schema shows the rule: @authorize(policy: "projects.crew.manage"). Tenants' Role.permissions has one too.
+// The permission is the constant the query asks about, which left the roles out for a caller without it.
+[Authorize(CrewOverview.RolesPermission)]
 public static IReadOnlyList<CrewRoleOverview>? GetRoles([Parent] CrewOverview member) => member.Roles;
 
-// Projects.Api/Crew/GraphQL/CrewFieldKeys.cs: who answers that key, for every member of a page at once.
-internal sealed class CrewFieldKeys : IFieldKeys<CrewOverview>
+// Projects.Api/Crew/GraphQL/CrewFieldPermissions.cs: who answers that permission, for every member of a page at once.
+internal sealed class CrewFieldPermissions : IFieldPermissions<CrewOverview>
 {
-    public async ValueTask<RefusalException?> RefusedAsync(CrewOverview parent, string key, IResolverContext context, CancellationToken cancellationToken)
-        => await context.DataLoader<IHeldKeysByProjectIdDataLoader>().LoadAsync(parent.ProjectId, cancellationToken) is { } held && held.Keys.Contains(key, StringComparer.Ordinal)
+    public async ValueTask<RefusalException?> RefusedAsync(CrewOverview parent, string permission, IResolverContext context, CancellationToken cancellationToken)
+        => await context.DataLoader<IHeldPermissionsByProjectIdDataLoader>().LoadAsync(parent.ProjectId, cancellationToken) is { } held && held.Permissions.Contains(permission, StringComparer.Ordinal)
             ? null
-            : ProjectRefusals.Refuse(ProjectRefusals.NotPermitted, ("Key", key));
+            : ProjectRefusals.Refuse(ProjectRefusals.NotPermitted, ("Permission", permission));
 }
 ```
 
@@ -4305,7 +4383,7 @@ internal sealed class CrewFieldKeys : IFieldKeys<CrewOverview>
 - **Nothing to read is nothing, not an error.** `project(id:)` and `node(id:)` answer `null` for a project
   that is not there or not the caller's to see, and the two read the same. A reference whose owner answers
   nothing, a seat of another tenant say, is its id with every other field `null`, and `errors` stays empty:
-  every field but the key of `Seat`, `OrganizationUnit`, `Role` and `Project` may be null for that reason.
+  every field but the permission of `Seat`, `OrganizationUnit`, `Role` and `Project` may be null for that reason.
 - **A type is the application's own record**, in every module. `Project`, its crew and `Inspection`, and
   Tenants' `Seat`, `OrganizationUnit`, `Role`, the catalogue, the calling seat's overview, an invitation, a
   row of the access history and a tenant of the operators' list, are each declared over the record a query
@@ -4325,9 +4403,9 @@ internal sealed class CrewFieldKeys : IFieldKeys<CrewOverview>
   `crew`, `myRoles` and `can` are resolvers behind loaders: asked for, they cost one statement each for a
   batch of projects, which is the whole page as a rule: three in all. A project role a crew or `myRoles` names
   by id is read only when anything of it but its id is asked, once for the request.
-- **A field can ask for a permission key.** `Role.keys` and `ProjectRole.keys` carry
-  [`[Authorize("tenancy.roles.manage")]`](graphql.md#a-permission-key-on-a-field), and `CrewMember.roles`
-  `[Authorize("projects.crew.manage")]`. A seat that does not hold the key gets every role, or every member
+- **A field can ask for a permission.** `Role.permissions` and `ProjectRole.permissions` carry
+  [`[Authorize("tenancy.roles.manage")]`](graphql.md#a-permission-on-a-field), and `CrewMember.roles`
+  `[Authorize("projects.crew.manage")]`. A seat that does not hold the permission gets every role, or every member
   of a crew it sees, with that field `null` and one coded error at each refused field,
   `tenancy.not-permitted` or `projects.not-permitted`. It is a rule a client can read in the schema, beside
   the access check of every request and not in its place.
@@ -4335,14 +4413,14 @@ internal sealed class CrewFieldKeys : IFieldKeys<CrewOverview>
   its one statement, whether the caller holds `projects.crew.manage` on each project, and answers the members
   of a crew the caller does not manage without their roles (`CrewOverview.Roles` is `null`); the queries that
   list roles ask whether the caller holds `tenancy.roles.manage` for the whole tenant, and answer a role
-  without its keys otherwise (`RoleListing.Keys`). So the routes say what the fields say:
+  without its permissions otherwise (`RoleListing.Permissions`). So the routes say what the fields say:
   `GET /projects/{id}/crew`, a project and the list of projects answer `"roles": null` to a seat that only
-  sees the crew, and `GET /tenancy/roles` and `POST /tenancy/directory/roles` answer `"keys": null` to a seat
+  sees the crew, and `GET /tenancy/roles` and `POST /tenancy/directory/roles` answer `"permissions": null` to a seat
   that does not manage roles. `null`, not an empty list: an empty one would say the member holds no role, or
-  the role brings no key. The attribute on the field names the same constant the query asks about, and adds
+  the role brings no permission. The attribute on the field names the same constant the query asks about, and adds
   what a field can: the rule in the schema, and the refusal that says why the field is empty. What a seat
   holds itself it always reads: its own roles on a crew (`myRoles`, `myRoleIds`), and the roles of its own
-  overview with their keys.
+  overview with their permissions.
 - **Tenants' lists are lists.** `seats`, `organizationUnits`, `roles` and `openInvitations` answer a tenant's
   rows whole: the package has no paged form for them. What it does page, the operators' `tenants`, keeps the
   package's page and marker and is no connection.
@@ -4384,7 +4462,7 @@ internal sealed class CrewFieldKeys : IFieldKeys<CrewOverview>
 - **A field runs as its caller in the database too.** A resolver only sends, so what it reads goes through
   its module's contexts like a route's: on the host's connections for requests, under the caller's role and
   claims, where the policies check it a second time.
-- **What stays REST:** the dev login and its attempts, the probe route `GET /access/projects/{id}?key=`, the
+- **What stays REST:** the dev login and its attempts, the probe route `GET /access/projects/{id}?permission=`, the
   health endpoints, and `POST /tenancy/directory/*`, whose GraphQL form is the references themselves.
 - **The project list, a project's inspections and the access history are connections.**
   `projects(first:, after:)` and `projects(last:, before:)` answer `nodes`, `edges`, `pageInfo` and, when
@@ -4431,7 +4509,7 @@ internal sealed class CrewFieldKeys : IFieldKeys<CrewOverview>
   `DirectoryQueries`, are marked for both. The host composes each in a gateway of its own with Projects and
   Inspections ([Several gateways](graphql.md#several-gateways), `SampleGateways`), bounds both alike, and maps the
   administration's at an endpoint that requires a seat, as the routes inside a tenant do. Maud, an access admin,
-  reads Rhea's roles there; Leo, who holds no key, is refused with `tenancy.not-permitted`; a seat of another tenant
+  reads Rhea's roles there; Leo, who holds no permission, is refused with `tenancy.not-permitted`; a seat of another tenant
   is not found there, `tenancy.seat-not-found`; and `/graphql` refuses the field to everybody when it reads the
   document. The schema decides who is offered a field, the request who may read what it answers. The operators'
   fields are offered at both endpoints, as everything of the three modules is; since `/admin/graphql` admits seats
@@ -4475,7 +4553,7 @@ header, exactly as any other client would:
   sees. The picker in the top bar switches tenant, a suspended seat included. Logging out forgets the
   answers of the session.
 - **Who am I** shows the tenant, the seat, each placement with its grants, their periods and whether they
-  apply now, the roles with whether each manages access, and every key held now with the units it reaches.
+  apply now, the roles with whether each manages access, and every permission held now with the units it reaches.
 - **My projects** lists the projects the seat may see, with its roles on each and whether it reaches the
   project through the crew or the organization. A project's page shows its crew, for whoever manages the crew
   each member with the roles it holds and their dates, its inspections and its actions: filled when the seat may, outlined as "not
@@ -4486,7 +4564,7 @@ header, exactly as any other client would:
   for roles, and only for what the page's pickers did not list already; the project roles, which are few, in
   one `GET /project-roles`. An id the directory does not answer is shown as the start of the
   id.
-- **Crew roles** lists the tenant's project roles, and makes, renames, re-keys and archives them, each
+- **Crew roles** lists the tenant's project roles, and makes, renames and archives them, and changes their permissions, each
   button filled for whoever manages the tenant's roles and outlined for anybody else.
 - **Try it** sends any call by hand, as the signed-in person, as nobody or in another tenant, with ids typed
   or picked. The two actions on org roles mark the roles that manage access in their picker, and the crew's
@@ -4502,7 +4580,7 @@ header, exactly as any other client would:
 Every call takes the same way through the API: the bearer finds the person, the `Tenant` header and the
 person's own seats decide the seat, the request's requirement lets through who may send it, and the use case
 refuses what the seat may not do, with a code. Here
-rhea grants leo a role that manages access with keys she does not hold:
+rhea grants leo a role that manages access with permissions she does not hold:
 
 ```mermaid
 sequenceDiagram
@@ -4517,9 +4595,9 @@ sequenceDiagram
     Bearer->>Bearer: the token's sub,<br/>her seat in harbor
     Bearer->>Requirement: runs as that seat
     Requirement->>UseCase: tenancy.grants.manage<br/>at the unit: held
-    UseCase->>UseCase: the role manages<br/>access, with keys<br/>she lacks there
+    UseCase->>UseCase: the role manages<br/>access, with permissions<br/>she lacks there
     UseCase-->>UI: refused, 403 problem+json,<br/>tenancy.grant-exceeds-own
-    UI->>UI: shows the status, the code,<br/>the missing keys
+    UI->>UI: shows the status, the code,<br/>the missing permissions
 ```
 
 <details>
@@ -4539,7 +4617,7 @@ builder.Services.AddRequestTracing();                                           
 builder.Services.AddTenantsModule(host, SampleCatalogue.Application);              // each module's entry, from its API project
 builder.Services.AddProjectsModule(host, SampleCatalogue.ProjectRoles);            // with the starter project roles
 builder.Services.AddInspectionsModule(host);
-builder.Services.AddTenancyPermissionsOfModules();                                      // every module's keys, written by Tenancy's generator
+builder.Services.AddTenancyPermissionsOfModules();                                      // every module's permissions, written by Tenancy's generator
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<RefusalProblems>();                             // refusals as problem+json
 
@@ -4566,8 +4644,8 @@ operators.MapInspectionsOperations();
 `POST .../grants` sends `MakeGrant`, which passes tracing and then the Tenants module's access behavior, as
 [every request does](#who-may-do-what-in-the-sample). `MakeGrant` requires `tenancy.grants.manage` at the unit,
 which rhea holds there, so the package's check lets her through, and the handler hands the request to the
-package's use case. That asks for the key again, and then for what only it can read: the role manages access,
-and rhea does not hold its keys that do, so it refuses as above. The queries
+package's use case. That asks for the permission again, and then for what only it can read: the role manages access,
+and rhea does not hold its permissions that do, so it refuses as above. The queries
 that list the tenant's units, seats and roles, name them by id and describe the caller's own seat are answered
 by the package's directory, each in a scope of its own, whose context is taken from the module's pool, so two
 of them sent side by side never share a context.
@@ -4604,13 +4682,13 @@ again.
 | rhea names meadow in the header | 403 | `tenancy.not-seated` |
 | rhea opens Bay bridge, outside her region | 404 | `projects.not-found` |
 | vic opens Inland depot, reached only through his expired grant | 404 | `projects.not-found` |
-| vic closes Pier 7, which he only observes | 403 | `projects.not-permitted`, key `projects.close` |
-| maud, an access admin, renames Pier 7 | 403 | `projects.not-permitted`, key `projects.edit` |
-| juno gives vic Crew lead on Pier 7 | 403 | `projects.not-permitted`, key `projects.crew.manage` |
+| vic closes Pier 7, which he only observes | 403 | `projects.not-permitted`, permission `projects.close` |
+| maud, an access admin, renames Pier 7 | 403 | `projects.not-permitted`, permission `projects.edit` |
+| juno gives vic Crew lead on Pier 7 | 403 | `projects.not-permitted`, permission `projects.crew.manage` |
 | leo gives vic Area manager on Pier 7, a role of the organization | 400 | `projects.role-not-for-members` |
 | leo gives juno Surveyor on Pier 7, which she holds there already | 409 | `projects.crew-role-held` |
 | rhea records an inspection on Inland depot for days outside its planned range | 409 | `inspections.outside-planned-range` |
-| leo, Pier 7's owner and crew lead, names juno its owner | 403 | `projects.not-permitted`, key `projects.owner.change` |
+| leo, Pier 7's owner and crew lead, names juno its owner | 403 | `projects.not-permitted`, permission `projects.owner.change` |
 | rhea grants Access admin to leo at North Coast | 403 | `tenancy.grant-exceeds-own` |
 | rhea grants Observer to tove at South Bay | 403 | `tenancy.not-permitted` |
 | hana gives leo Area manager at North Coast | 403 | `tenancy.grant-exceeds-own` |
@@ -4618,14 +4696,14 @@ again.
 | hana gives leo Crew lead at North Coast, without `projects.crew.manage` | 403 | `tenancy.grant-exceeds-own` |
 | hana takes away rhea's Area manager at North | 403 | `tenancy.grant-exceeds-own` |
 | hana gives herself Area manager at Harbor Works | 403 | `tenancy.self-appointment` |
-| rhea gives herself People office at North, whose one key she holds | 403 | `tenancy.self-appointment` |
+| rhea gives herself People office at North, whose one permission she holds | 403 | `tenancy.self-appointment` |
 | tove, in meadow, revokes her own Tenant admin grant | 409 | `tenancy.last-admin` |
 | tove, in meadow, suspends her own seat | 409 | `tenancy.last-admin` |
 | tove, in meadow, withdraws her root placement | 409 | `tenancy.last-admin` |
 | leo removes himself, the owner, from Pier 7's crew | 409 | `projects.owner-protected` |
-| leo, the owner, takes his own Crew lead role on Pier 7 | 409 | `projects.owner-protected` |
+| leo, the owner, gives himself the Surveyor role on Pier 7 | 409 | `projects.owner-protected` |
 | maud, an access admin, reads the access history | 200 | |
-| rhea reads the access history, without `tenancy.history.view` | 403 | `tenancy.not-permitted`, key `tenancy.history.view` |
+| rhea reads the access history, without `tenancy.history.view` | 403 | `tenancy.not-permitted`, permission `tenancy.history.view` |
 | hana, who gives roles and adds no seat, invites a person | 403 | `tenancy.not-permitted` |
 | leo accepts an invitation with a token nobody was given | 404 | `tenancy.invitation-not-found` |
 | seth asks who he is, with his suspended seat | 403 | `tenancy.seat-suspended` |
@@ -4672,19 +4750,19 @@ tables say where, group by group. Where one of the three is not there, the row s
 
 | The choice | Where to see it |
 |---|---|
-| Every request says who may send it, in one attribute on the request, and none leaves it to a package; the generator writes the call the attribute stands for into the module's interface, and a request answers the property itself only where it computes the requirement. A request handed to a use case of Tenancy's says what that use case asks first; the use case asks again, and keeps the rules only it can read | **Code:** [`AccessRequirement.cs`](../Source/DDDToolkit/Access/AccessRequirement.cs), [`RequiresKeyAttribute.cs`](../Source/DDDToolkit/Access/RequiresKeyAttribute.cs), [`AtUnitAttribute.cs`](../Source/DDDToolkit.Supporting.Tenancy/Access/RequiredAccess/AtUnitAttribute.cs), [`MakeGrant.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Application/Grants/Commands/MakeGrant.cs), [`SeatGrants.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Application/Seats/Queries/SeatGrants.cs)<br/>**Try it:** Preset `grant-outside-your-region`, which the request's requirement refuses, and `give-a-role-that-manages-access`, which it lets through and the use case refuses<br/>**Test:** `AccessDeclarationTests`, `RequestPipelineTests`, `CallerRequirementTests` |
-| A project's owner may do everything that acts on the project, and a crew role reaches no further than the crew lead's | **Code:** [`Project.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Domain/Aggregates/Projects/Project.cs), [`ProjectCatalogue.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Access/ProjectCatalogue.cs)<br/>**Try it:** Sign in as leo and open Pier 7. Presets `owner-change-from-the-crew`, `remove-the-owner` and `take-the-owners-lead-role`<br/>**Test:** `OwnerScenarios`, `CrewRoleScenarios` |
+| Every request says who may send it, in one attribute on the request, and none leaves it to a package; the generator writes the call the attribute stands for into the module's interface, and a request answers the property itself only where it computes the requirement. A request handed to a use case of Tenancy's says what that use case asks first; the use case asks again, and keeps the rules only it can read | **Code:** [`AccessRequirement.cs`](../Source/DDDToolkit/Access/AccessRequirement.cs), [`RequiresPermissionAttribute.cs`](../Source/DDDToolkit/Access/RequiresPermissionAttribute.cs), [`AtUnitAttribute.cs`](../Source/DDDToolkit.Supporting.Tenancy/Access/RequiredAccess/AtUnitAttribute.cs), [`MakeGrant.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Application/Grants/Commands/MakeGrant.cs), [`SeatGrants.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Application/Seats/Queries/SeatGrants.cs)<br/>**Try it:** Preset `grant-outside-your-region`, which the request's requirement refuses, and `give-a-role-that-manages-access`, which it lets through and the use case refuses<br/>**Test:** `AccessDeclarationTests`, `RequestPipelineTests`, `CallerRequirementTests` |
+| A project's owner holds the permissions Projects declares for an owner, by owning it and with no role, and a crew role reaches no further than what a crew can give | **Code:** [`Project.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Domain/Aggregates/Projects/Project.cs), [`ProjectPermissions.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Access/ProjectPermissions.cs), [`ProjectMembership.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Access/ProjectMembership.cs)<br/>**Try it:** Sign in as leo and open Pier 7. Presets `owner-change-from-the-crew`, `remove-the-owner` and `give-the-owner-a-role`<br/>**Test:** `OwnerScenarios`, `CrewRoleScenarios`, `ProjectMembershipTests` |
 | Whoever may close a project may reopen it | **Code:** [`ReopenProject.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Lifecycle/Commands/ReopenProject.cs)<br/>**Try it:** The Reopen button on a closed project's page; leo's close and reopen in the `.http` file<br/>**Test:** `ClosingAndReopeningScenarios` |
-| Whoever manages a crew gives any of the tenant's project roles in use, to anyone on it, themselves included, without holding the role's keys | **Code:** [`GiveCrewRole.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Crew/Commands/GiveCrewRole.cs)<br/>**Try it:** leo gives vic the surveyor's role, in the `.http` file. Preset `crew-role-without-crew-management`<br/>**Test:** `CrewRoleScenarios` |
-| A role of the organization is given by whoever manages grants where the seat is placed. A role that manages access is given only by a seat that holds its keys that do, there and for at least as long, and never to itself | **Code:** [`TenancyUseCases.Gate.cs`](../Source/DDDToolkit.Supporting.Tenancy/UseCases/TenancyUseCases.Gate.cs), [`SampleCatalogue.cs`](../Examples/Tenancy/Examples.Tenancy.Catalogue/SampleCatalogue.cs)<br/>**Try it:** Sign in as hana. Presets `give-a-role-that-manages-access`, `appoint-yourself` and `appoint-yourself-holding-its-key`<br/>**Test:** `PeopleOfficeScenarios`, `SeatCommandsTests` |
-| A seat's status and a unit's move are held to the same rule as giving and taking a role | **Code:** [`TenancyUseCases.Seats.cs`](../Source/DDDToolkit.Supporting.Tenancy/UseCases/Seats/TenancyUseCases.Seats.cs), [`TenancyUseCases.Organization.cs`](../Source/DDDToolkit.Supporting.Tenancy/UseCases/Organizations/TenancyUseCases.Organization.cs)<br/>**Try it:** Nothing in the demonstration shows it: whoever manages seats or units for the whole tenant there holds every key that manages access<br/>**Test:** `SeatCommandsTests`, `OrganizationCommandsTests`, `ContainmentAndLastAdminScenarios` |
-| Another seat's overview asks no key of its own: the request that asks it says who may, and the read rules what comes back. The sample's administration asks `tenancy.seats.manage` for the whole tenant, or at the unit asked about, its own choice, and on Postgres the policies give a caller another seat's grants only where it may read them | **Code:** [`TenancyUseCases.Directory.cs`](../Source/DDDToolkit.Supporting.Tenancy/UseCases/Directory/TenancyUseCases.Directory.cs), [`SeatGrants.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Application/Seats/Queries/SeatGrants.cs)<br/>**Try it:** maud's `GET /tenancy/seats/{seatId}/grants` for juno, and maud's and leo's `seatGrants` at `/admin/graphql`, in the `.http` file<br/>**Test:** `DirectoryTests`, in Tenancy's tests and on Postgres, `ReadRulesTests`, `AdministrationSchemaScenarios` |
+| Whoever manages a crew gives any of the tenant's project roles in use, to anyone on it, themselves included, without holding the role's permissions | **Code:** [`GiveCrewRole.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Crew/Commands/GiveCrewRole.cs)<br/>**Try it:** leo gives vic the surveyor's role, in the `.http` file. Preset `crew-role-without-crew-management`<br/>**Test:** `CrewRoleScenarios` |
+| A role of the organization is given by whoever manages grants where the seat is placed. A role that manages access is given only by a seat that holds its permissions that do, there and for at least as long, and never to itself | **Code:** [`TenancyUseCases.Gate.cs`](../Source/DDDToolkit.Supporting.Tenancy/UseCases/TenancyUseCases.Gate.cs), [`SampleCatalogue.cs`](../Examples/Tenancy/Examples.Tenancy.Catalogue/SampleCatalogue.cs)<br/>**Try it:** Sign in as hana. Presets `give-a-role-that-manages-access`, `appoint-yourself` and `appoint-yourself-holding-its-permission`<br/>**Test:** `PeopleOfficeScenarios`, `SeatCommandsTests` |
+| A seat's status and a unit's move are held to the same rule as giving and taking a role | **Code:** [`TenancyUseCases.Seats.cs`](../Source/DDDToolkit.Supporting.Tenancy/UseCases/Seats/TenancyUseCases.Seats.cs), [`TenancyUseCases.Organization.cs`](../Source/DDDToolkit.Supporting.Tenancy/UseCases/Organizations/TenancyUseCases.Organization.cs)<br/>**Try it:** Nothing in the demonstration shows it: whoever manages seats or units for the whole tenant there holds every permission that manages access<br/>**Test:** `SeatCommandsTests`, `OrganizationCommandsTests`, `ContainmentAndLastAdminScenarios` |
+| Another seat's overview asks no permission of its own: the request that asks it says who may, and the read rules what comes back. The sample's administration asks `tenancy.seats.manage` for the whole tenant, or at the unit asked about, its own choice, and on Postgres the policies give a caller another seat's grants only where it may read them | **Code:** [`TenancyUseCases.Directory.cs`](../Source/DDDToolkit.Supporting.Tenancy/UseCases/Directory/TenancyUseCases.Directory.cs), [`SeatGrants.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Application/Seats/Queries/SeatGrants.cs)<br/>**Try it:** maud's `GET /tenancy/seats/{seatId}/grants` for juno, and maud's and leo's `seatGrants` at `/admin/graphql`, in the `.http` file<br/>**Test:** `DirectoryTests`, in Tenancy's tests and on Postgres, `ReadRulesTests`, `AdministrationSchemaScenarios` |
 | Containment is a setting of the catalogue, on unless the application turns it off, and the sample keeps it on: the database and the use cases follow the same setting, and system work gives what a handler of the application's own decided | **Code:** [`ApplicationCatalogue.cs`](../Source/DDDToolkit.Supporting.Tenancy/Catalogue/ApplicationCatalogue.cs), [`SampleCatalogue.cs`](../Examples/Tenancy/Examples.Tenancy.Catalogue/SampleCatalogue.cs)<br/>**Try it:** Nothing in the demonstration turns it off; every refusal of `tenancy.grant-exceeds-own` and `tenancy.self-appointment` there is containment<br/>**Test:** `ContainmentTests`, in Tenancy's tests and on Postgres, `StartUpCheckTests`, `ApplicationRuleScenarios`, and `TenancyChoicesExportTests`, which runs the exporter's build step with it off and finds the function that answers it the one change |
-| The database knows which keys manage access: its functions are written from the catalogue the host runs with | **Code:** [`TenancyRowAccessContribution.cs`](../Source/DDDToolkit.Supporting.Tenancy.Postgres/Policies/TenancyRowAccessContribution.cs), [`SampleCatalogue.cs`](../Examples/Tenancy/Examples.Tenancy.Catalogue/SampleCatalogue.cs), which marks the catalogue `[TenancyCatalogue]`, `Examples/Tenancy/supabase/migrations/*_access.tenants.ddd.sql`<br/>**Try it:** Start the sample: the host starts only when the database and the catalogue agree ([On Postgres](../Examples/README.md#on-postgres))<br/>**Test:** `ContributionTests`, `StartupTests`, `SampleOnPostgresTests` |
-| An administrators' pack may list its keys, for administrators who run access and do none of the work | **Code:** [`TenancyCatalogue.cs`](../Source/DDDToolkit.Supporting.Tenancy/Catalogue/TenancyCatalogue.cs), [`SampleCatalogue.cs`](../Examples/Tenancy/Examples.Tenancy.Catalogue/SampleCatalogue.cs)<br/>**Try it:** Sign in as maud. Preset `rename-as-access-admin`<br/>**Test:** `CatalogueTests`, `AccessAdminScenarios` |
-| A catalogue that declares no administrators' pack gets Tenancy's own, holding every live key, for every shape; one that declares an administrators' pack declares one for every shape | **Code:** [`TenancyPacks.cs`](../Source/DDDToolkit.Supporting.Tenancy/Catalogue/TenancyPacks.cs), [`TenancyCatalogue.cs`](../Source/DDDToolkit.Supporting.Tenancy/Catalogue/TenancyCatalogue.cs)<br/>**Try it:** Not in the sample: it declares an administrators' pack for each shape. The publishing house the package check builds against the packed packages declares none ([`Tenants.cs`](../build/package-consumers/SupportingDomains/Domain/Tenants.cs)), and the check finds the default in the access file its export writes<br/>**Test:** `CatalogueTests`, `TenantCommandsTests`, `ProvisioningTests`, and the package check, build/verify-package-consumption.sh |
-| A role made from a pack follows its pack once the host syncs the packs: what the pack gained is added and what it lost is taken out, what the tenant changed itself stays, and the tenant's administrators read it in the history. The host turns it on with a call of its own, not among its start-up checks | **Code:** [`RoleAggregate.cs`](../Source/DDDToolkit.Supporting.Tenancy/Aggregates/Roles/RoleAggregate.cs), [`TenancyUseCases.Roles.cs`](../Source/DDDToolkit.Supporting.Tenancy/UseCases/Roles/TenancyUseCases.Roles.cs), [`EfRolePackSync.cs`](../Source/DDDToolkit.Supporting.Tenancy.EntityFramework/RolePacks/EfRolePackSync.cs), [`Program.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Program.cs)<br/>**Try it:** On [the stack the Supabase CLI starts](../Examples/README.md#on-the-stack-the-supabase-cli-starts), whose database stays: start the host once and stop it, add a key to a pack in [`SampleCatalogue.cs`](../Examples/Tenancy/Examples.Tenancy.Catalogue/SampleCatalogue.cs), build `Examples.Tenancy.Exporter`, which writes a new `*_access.tenants.ddd.sql`, run `supabase migration up`, and start the host again: the role has the key, and maud reads `tenancy.role-followed-its-pack` on the History page. Under the AppHost the database is new every run, so provisioning gives the key and the sync has nothing to follow<br/>**Test:** `RoleFollowsItsPackTests`, `FollowPacksTests`, `RolePackSyncTests`, `RolePackSyncScenarios` |
-| A crew member holds several roles, each with dates of its own. The roles are the tenant's project roles, kept by the Projects module with the Membership package: made from starter roles when a tenant is set up, and the tenant's own to make, rename, re-key and archive | **Code:** [`CrewMember.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Domain/Aggregates/Projects/Entities/CrewMember.cs), [`ProjectRole.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Domain/Aggregates/ProjectRoles/ProjectRole.cs), [`ProjectMembership.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Access/ProjectMembership.cs), [`SetUpProjectRoles.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/ProjectRoles/Commands/SetUpProjectRoles.cs)<br/>**Try it:** The crew table on a project's page, and the Crew roles page. Presets `organization-role-on-a-crew` and `crew-role-held-twice`<br/>**Test:** `CrewMembershipScenarios`, `ProjectRoleScenarios`, `ProjectCrewTests` |
+| The database knows which permissions manage access: its functions are written from the catalogue the host runs with | **Code:** [`TenancyRowAccessContribution.cs`](../Source/DDDToolkit.Supporting.Tenancy.Postgres/Policies/TenancyRowAccessContribution.cs), [`SampleCatalogue.cs`](../Examples/Tenancy/Examples.Tenancy.Catalogue/SampleCatalogue.cs), which marks the catalogue `[TenancyCatalogue]`, `Examples/Tenancy/supabase/migrations/*_access.tenants.ddd.sql`<br/>**Try it:** Start the sample: the host starts only when the database and the catalogue agree ([On Postgres](../Examples/README.md#on-postgres))<br/>**Test:** `ContributionTests`, `StartupTests`, `SampleOnPostgresTests` |
+| An administrators' pack may list its permissions, for administrators who run access and do none of the work | **Code:** [`TenancyCatalogue.cs`](../Source/DDDToolkit.Supporting.Tenancy/Catalogue/TenancyCatalogue.cs), [`SampleCatalogue.cs`](../Examples/Tenancy/Examples.Tenancy.Catalogue/SampleCatalogue.cs)<br/>**Try it:** Sign in as maud. Preset `rename-as-access-admin`<br/>**Test:** `CatalogueTests`, `AccessAdminScenarios` |
+| A catalogue that declares no administrators' pack gets Tenancy's own, holding every live permission, for every shape; one that declares an administrators' pack declares one for every shape | **Code:** [`TenancyPacks.cs`](../Source/DDDToolkit.Supporting.Tenancy/Catalogue/TenancyPacks.cs), [`TenancyCatalogue.cs`](../Source/DDDToolkit.Supporting.Tenancy/Catalogue/TenancyCatalogue.cs)<br/>**Try it:** Not in the sample: it declares an administrators' pack for each shape. The publishing house the package check builds against the packed packages declares none ([`Tenants.cs`](../build/package-consumers/SupportingDomains/Domain/Tenants.cs)), and the check finds the default in the access file its export writes<br/>**Test:** `CatalogueTests`, `TenantCommandsTests`, `ProvisioningTests`, and the package check, build/verify-package-consumption.sh |
+| A role made from a pack follows its pack once the host syncs the packs: what the pack gained is added and what it lost is taken out, what the tenant changed itself stays, and the tenant's administrators read it in the history. The host turns it on with a call of its own, not among its start-up checks | **Code:** [`RoleAggregate.cs`](../Source/DDDToolkit.Supporting.Tenancy/Aggregates/Roles/RoleAggregate.cs), [`TenancyUseCases.Roles.cs`](../Source/DDDToolkit.Supporting.Tenancy/UseCases/Roles/TenancyUseCases.Roles.cs), [`EfRolePackSync.cs`](../Source/DDDToolkit.Supporting.Tenancy.EntityFramework/RolePacks/EfRolePackSync.cs), [`Program.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Program.cs)<br/>**Try it:** On [the stack the Supabase CLI starts](../Examples/README.md#on-the-stack-the-supabase-cli-starts), whose database stays: start the host once and stop it, add a permission to a pack in [`SampleCatalogue.cs`](../Examples/Tenancy/Examples.Tenancy.Catalogue/SampleCatalogue.cs), build `Examples.Tenancy.Exporter`, which writes a new `*_access.tenants.ddd.sql`, run `supabase migration up`, and start the host again: the role has the permission, and maud reads `tenancy.role-followed-its-pack` on the History page. Under the AppHost the database is new every run, so provisioning gives the permission and the sync has nothing to follow<br/>**Test:** `RoleFollowsItsPackTests`, `FollowPacksTests`, `RolePackSyncTests`, `RolePackSyncScenarios` |
+| A crew member holds several roles, each with dates of its own. The roles are the tenant's project roles, kept by the Projects module with the Membership package: made from starter roles when a tenant is set up, and the tenant's own to make, rename, archive and give other permissions | **Code:** [`CrewMember.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Domain/Aggregates/Projects/Entities/CrewMember.cs), [`ProjectRole.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Domain/Aggregates/ProjectRoles/ProjectRole.cs), [`ProjectMembership.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Access/ProjectMembership.cs), [`SetUpProjectRoles.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/ProjectRoles/Commands/SetUpProjectRoles.cs)<br/>**Try it:** The crew table on a project's page, and the Crew roles page. Presets `organization-role-on-a-crew` and `crew-role-held-twice`<br/>**Test:** `CrewMembershipScenarios`, `ProjectRoleScenarios`, `ProjectCrewTests` |
 | A seat that gives up its own place on a crew is saved as the application's work for that seat, because a database that checks rows judges each statement by the rows as they are then. Only for the command whose check let it through, the request in hand: a handler reached around its check saves as the caller, and the database judges it. That save writes the one project it changed and refuses when the unit of work holds anything else. It is the sample's answer; the toolkit has no general one | **Code:** [`OwnPlaceOnTheCrew.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Crew/OwnPlaceOnTheCrew.cs), [`EfProjectStore.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Persistence/EfProjectStore.cs)<br/>**Try it:** No preset. In the UI, leo gives vic Crew lead on Pier 7, and vic takes that role from himself<br/>**Test:** `CrewRoleScenarios`, `AccessHoldScenarios` |
 
 ### Structure
@@ -4692,8 +4770,8 @@ tables say where, group by group. Where one of the three is not there, the row s
 | The choice | Where to see it |
 |---|---|
 | A module is a project per layer, with ports between the application and its storage. Its entry is in its API project, and the host references that project alone | **Code:** [`Modules`](../Examples/Tenancy/Modules), [`ProjectsModule.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Api/ProjectsModule.cs), [`IProjectStore.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/StoredProjects/IProjectStore.cs)<br/>**Try it:** `dotnet run --project Examples/Tenancy/Examples.Tenancy.AppHost`<br/>**Test:** `LayerReferenceTests` |
-| A module states its permission keys once, on the list it marks with `[TenancyPermissions]`. The host gets every module's list from Tenancy's generator and registers the keys with one call; the program that exports finds the same marked lists itself and builds Tenancy's policies from them and the part of the catalogue marked `[TenancyCatalogue]` | **Code:** [`ProjectCatalogue.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Access/ProjectCatalogue.cs), [`Program.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Program.cs), [`SampleCatalogue.cs`](../Examples/Tenancy/Examples.Tenancy.Catalogue/SampleCatalogue.cs), [`TenancyPermissionsGenerator.cs`](../Source/DDDToolkit.Supporting.Tenancy.Analyzers/TenancyPermissionsGenerator.cs)<br/>**Try it:** Nothing to run: build the host and the exporter with `-p:EmitCompilerGeneratedFiles=true`: `TenancyPermissionsOfModules.g.cs` is under the host's `obj` folder, `DDDToolkit.RowAccessContributionsOfPackages.g.cs` under the exporter's<br/>**Test:** `ModuleKeysTests`, `TenancyPermissionsGeneratorTests`, `PackageContributionsGeneratorTests`, `StartupTests` |
-| No project writes Tenancy's nine types: the use cases are named through a class the toolkit's generator writes where the module's classes are declared, `TenancyUseCases` after the package's own class, which every project above sees, the generators there included; a second module with the classes names its own in one line | **Code:** [`TemplateFacades.cs`](../Source/DDDToolkit.Analyzers.Shared/TemplateFacades.cs), [`AssemblyInfo.cs`](../Source/DDDToolkit.Supporting.Tenancy/AssemblyInfo.cs), [`KeyOfMineType.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Api/Seats/GraphQL/KeyOfMineType.cs)<br/>**Try it:** Nothing to run: build with `-p:EmitCompilerGeneratedFiles=true`, and `TenancyUseCases.TemplateFacade.g.cs` is under the obj folder of the Tenants domain project<br/>**Test:** `TemplateFacadeTests`, `SourceTreeTests` |
+| A module declares its permissions once, as the constants of a `[Permissions]` class with their levels. Tenancy's generator writes each module's list from it, the host gets every module's list from the same generator and registers the permissions with one call; the program that exports finds the same lists itself and builds Tenancy's policies from them and the part of the catalogue marked `[TenancyCatalogue]` | **Code:** [`ProjectPermissions.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Access/ProjectPermissions.cs), [`InspectionPermissions.cs`](../Examples/Tenancy/Modules/Inspections/Examples.Tenancy.Inspections.Application/Access/InspectionPermissions.cs), [`Program.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Program.cs), [`SampleCatalogue.cs`](../Examples/Tenancy/Examples.Tenancy.Catalogue/SampleCatalogue.cs), [`TenancyPermissionsGenerator.cs`](../Source/DDDToolkit.Supporting.Tenancy.Analyzers/TenancyPermissionsGenerator.cs)<br/>**Try it:** Nothing to run: build the host and the exporter with `-p:EmitCompilerGeneratedFiles=true`: `DeclaredPermissions.g.cs` is under each module's application project's `obj` folder, `TenancyPermissionsOfModules.g.cs` under the host's, `DDDToolkit.RowAccessContributionsOfPackages.g.cs` under the exporter's<br/>**Test:** `ModulePermissionsTests`, `TenancyPermissionsGeneratorTests`, `PackageContributionsGeneratorTests`, `StartupTests` |
+| No project writes Tenancy's nine types: the use cases are named through a class the toolkit's generator writes where the module's classes are declared, `TenancyUseCases` after the package's own class, which every project above sees, the generators there included; a second module with the classes names its own in one line | **Code:** [`TemplateFacades.cs`](../Source/DDDToolkit.Analyzers.Shared/TemplateFacades.cs), [`AssemblyInfo.cs`](../Source/DDDToolkit.Supporting.Tenancy/AssemblyInfo.cs), [`PermissionOfMineType.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Api/Seats/GraphQL/PermissionOfMineType.cs)<br/>**Try it:** Nothing to run: build with `-p:EmitCompilerGeneratedFiles=true`, and `TenancyUseCases.TemplateFacade.g.cs` is under the obj folder of the Tenants domain project<br/>**Test:** `TemplateFacadeTests`, `SourceTreeTests` |
 | No project that sees the Tenants module's classes names Tenancy's ids to begin system work, ask the current caller, register Tenancy or select the tenant: the first two are static members of the class the use cases are named through, the registrations are generated like `AddTenancy` into the module's own projects, and tenant selection is asked without its id types. Types generic over the ids keep them. Projects and Inspections see the ids alone, and write them where they register | **Code:** [`TenancyUseCases.Callers.cs`](../Source/DDDToolkit.Supporting.Tenancy/UseCases/TenancyUseCases.Callers.cs), [`ITenantSelection.cs`](../Source/DDDToolkit.Supporting.Tenancy/Access/Selection/ITenantSelection.cs), [`DemoSeeder.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Seeding/DemoSeeder.cs), [`TenantHeader.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Access/TenantHeader.cs), [`TenantsInfrastructure.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Infrastructure/TenantsInfrastructure.cs), [`ProjectsInfrastructure.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/ProjectsInfrastructure.cs)<br/>**Try it:** Nothing to run: the seeding begins its system work this way each time the sample starts with its demonstration<br/>**Test:** `SourceTreeTests`, `TenancyClosedOverTheIdsTests`, `ClosedOverTheIdsTests` |
 | No class the application adds nothing to is written by hand: Tenancy's switch in the Tenants domain project has the generator write the organization and the role as the package ships them, and the tenant, the unit, the seat and the invitation are declared, because each adds something, and win. The ids are the contracts project's own, printed with their prefixes, and the switch takes them | **Code:** [`Module.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Domain/Module.cs), [`GenerateTenancyClassesAttribute.cs`](../Source/DDDToolkit.Supporting.Tenancy/Aggregates/GenerateTenancyClassesAttribute.cs), [`TemplateDefaults.cs`](../Source/DDDToolkit.Analyzers.Shared/TemplateDefaults.cs)<br/>**Try it:** Nothing to run: build with `-p:EmitCompilerGeneratedFiles=true`, and `Organization.TemplateDefault.*.g.cs` and `Role.TemplateDefault.*.g.cs` are under the obj folder of the Tenants domain project<br/>**Test:** `SourceTreeTests`, `MigrationTests`, `TemplateDefaultsTests`, `ProvisioningTests` |
 | A use case is one command or query, sent through the mediator, and what it requires of its caller is checked on its way to its handler, by a behavior the toolkit generates from the module's request interface | **Code:** [`CloseProject.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Lifecycle/Commands/CloseProject.cs), [`IProjectsRequest.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Access/IProjectsRequest.cs), [`MemberAccessCheck.cs`](../Source/DDDToolkit.Supporting.Membership/Access/RequiredAccess/MemberAccessCheck.cs)<br/>**Try it:** Any route. Preset `close-as-observer` is refused by the check<br/>**Test:** `AccessDeclarationTests`, `RequestPipelineTests` |
@@ -4712,7 +4790,7 @@ tables say where, group by group. Where one of the three is not there, the row s
 | The choice | Where to see it |
 |---|---|
 | No module reads Tenancy's tables. It maps the read model, as Tenancy's functions | **Code:** [`ProjectsContext.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Persistence/ProjectsContext.cs), [`TenancyModelBuilderExtensions.cs`](../Source/DDDToolkit.Supporting.Tenancy.EntityFramework/Mapping/TenancyModelBuilderExtensions.cs)<br/>**Try it:** Nothing to see from outside: any list of projects asks Tenancy's functions inside its own statement ([On Postgres](../Examples/README.md#on-postgres))<br/>**Test:** `ModuleModelTests`, `ReadFunctionTests`, `MigrationTests`, `AccessStatementTests` |
-| Key sets draw a screen, and a command asks again when it runs | **Code:** [`KeysOnProjects.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Access/Queries/KeysOnProjects.cs), [`ProjectAbilities.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Overview/ProjectAbilities.cs), [`ITenancyQuestions.cs`](../Source/DDDToolkit.Supporting.Tenancy/Access/Questions/ITenancyQuestions.cs)<br/>**Try it:** rhea's two requests under `/access`, in the `.http` file; the actions on a project's page, filled or outlined<br/>**Test:** `KeySetScenarios`, `KeySetQuestionTests` |
+| Permission sets draw a screen, and a command asks again when it runs | **Code:** [`PermissionsOnProjects.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Access/Queries/PermissionsOnProjects.cs), [`ProjectAbilities.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Overview/ProjectAbilities.cs), [`ITenancyQuestions.cs`](../Source/DDDToolkit.Supporting.Tenancy/Access/Questions/ITenancyQuestions.cs)<br/>**Try it:** rhea's two requests under `/access`, in the `.http` file; the actions on a project's page, filled or outlined<br/>**Test:** `PermissionSetScenarios`, `PermissionSetQuestionTests` |
 | A unit's kind is the application's: an enum on its own unit class, set by the callback of the use case that makes the unit, and shown by a plain select over the units the directory answers whole | **Code:** [`OrganizationUnit.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Domain/Aggregates/Organizations/Entities/OrganizationUnit.cs), [`AddOrganizationUnit.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Application/Organization/Commands/AddOrganizationUnit.cs), [`UnitListing.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Application/Organization/UnitListing.cs)<br/>**Try it:** `GET /tenancy/units`, each unit with its `kind`; `organizationUnits { name kind }` in GraphQL<br/>**Test:** `FlatAndHierarchicalScenarios`, `GraphQLMutationScenarios`, `OrganizationCommandsTests`, `DirectoryTests`, `AccessStatementTests`, `MigrationTests` |
 | A seat's name is the application's, kept per tenant on its own seat class with a rule of its own: set in the callbacks of the use cases that make a seat, shown by a plain select over the seats the directory answers whole, and renamed by a command of the sample's own. Tenancy keeps no name and decides nothing with one | **Code:** [`Seat.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Domain/Aggregates/Seats/Seat.cs), [`SeatListing.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Application/Seats/SeatListing.cs), [`RenameSeat.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Application/Seats/Commands/RenameSeat.cs), [`AcceptInvitation.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Application/Invitations/Commands/AcceptInvitation.cs), [`DemoSeeder.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Seeding/DemoSeeder.cs)<br/>**Try it:** juno accepts with her name and renames her seat, in the `.http` file; `seats { displayName }` and `seatRename` in GraphQL; the name on the page Who am I<br/>**Test:** `SeatNameScenarios`, `InvitationScenarios`, `SeatCommandsTests`, `DirectoryTests`, `MigrationTests` |
 | The read model carries access facts and no name. What a seat, a unit or a role is called is asked of the directory, by id | **Code:** [`ReadModel`](../Source/DDDToolkit.Supporting.Tenancy/Access/ReadModel), [`DirectoryEndpoints.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Api/Directory/Rest/DirectoryEndpoints.cs), [`DirectoryNames.cs`](../Examples/Tenancy/Examples.Tenancy.Ui/Api/DirectoryNames.cs)<br/>**Try it:** Name of a seat, Path of a unit and Name of a role, on the Try it page<br/>**Test:** `StrictAnswersTests`, `DirectoryScenarios`, `DirectoryNamesTests`, `ReadModelTests` |
@@ -4730,10 +4808,10 @@ tables say where, group by group. Where one of the three is not there, the row s
 | A token's role reaches the database only as a role the host mapped it to. A mapped role is closed out of every tenant unless it is an operator's, which reads and never writes | **Code:** [`SampleStorage.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Storage/SampleStorage.cs), [`TenancyPostgresChecks.cs`](../Source/DDDToolkit.Supporting.Tenancy.Postgres/Checks/TenancyPostgresChecks.cs)<br/>**Try it:** orla's requests in the `.http` file<br/>**Test:** `TokenRoleTests`, `OperatorPolicyTests`, `TokenRolePostgresTests` |
 | The host logs in as a role that owns nothing, every table forces its policies, the privileges are written from the policies, and the event log only grows | **Code:** `Examples/Tenancy/supabase/migrations/*_login_role.tenancy_api.ddd.sql`, which the exporter writes from its `SupabaseLoginRole`, [`Examples.Tenancy.Exporter.csproj`](../Examples/Tenancy/Examples.Tenancy.Exporter/Examples.Tenancy.Exporter.csproj), [`Program.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Program.cs), which runs the start-up checks the registrations bring<br/>**Try it:** [On the stack the Supabase CLI starts](../Examples/README.md#on-the-stack-the-supabase-cli-starts)<br/>**Test:** `SampleOnPostgresTests`, `SampleWithoutDatabaseTests`, `LoginRoleFileTests`, `LoginThatOwnsNothingTests`, `ForcedRowLevelSecurityTests`, `EventLogGuardTests` |
 | On Postgres the unique index on a tenant's root is required: the policies hold a seat, the index holds every role | **Code:** [`TenancyPostgresChecks.cs`](../Source/DDDToolkit.Supporting.Tenancy.Postgres/Checks/TenancyPostgresChecks.cs), [`TenantsContext.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Infrastructure/Persistence/TenantsContext.cs)<br/>**Try it:** The host starts only when the check passes<br/>**Test:** `RootIndexCheckTests` |
-| The policy for changing a project is coarser than the application on purpose. The unit a project is at, the seat that owns it and its crew decide who reaches it, so in the database those change only with the keys their commands ask: the unit with a trigger of the module's own, the owner and the crew with the lock the Membership package writes from the projects' rules. Its name, its planned days and its state change only with the keys renaming, planning and closing ask, by column rules. A save one of them refuses, from a handler whose caller lost a key after its check, is refused with `access.refused`, a 403, as a policy's refusal is | **Code:** [`UnitChangesWithItsKeys.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Access/UnitChangesWithItsKeys.cs), [`NameAndPlanChangeWithTheEditKey.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Access/NameAndPlanChangeWithTheEditKey.cs), [`StateChangesWithTheCloseKey.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Access/StateChangesWithTheCloseKey.cs), [`SampleCatalogue.cs`](../Examples/Tenancy/Examples.Tenancy.Catalogue/SampleCatalogue.cs), which marks the projects' rules `[MembershipRules<CrewMember>]`, [`SeatsChangeTheProjectsTheyWorkOn.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Access/SeatsChangeTheProjectsTheyWorkOn.cs), [`Program.cs`](../Examples/Tenancy/Examples.Tenancy.Exporter/Program.cs)<br/>**Try it:** Nothing to try through the application: the rule is about statements that go around it. [What stays in C#](#what-stays-in-c) says what the policy still lets through<br/>**Test:** `SampleOnPostgresTests`, `MovingScenarios`, `OwnerScenarios` |
+| The policy for changing a project is coarser than the application on purpose. The unit a project is at, the seat that owns it and its crew decide who reaches it, so in the database those change only with the permissions their commands ask: the unit with a trigger of the module's own, the owner and the crew with the lock the Membership package writes from the projects' rules. Its name, its planned days and its state change only with the permissions renaming, planning and closing ask, by column rules. A save one of them refuses, from a handler whose caller lost a permission after its check, is refused with `access.refused`, a 403, as a policy's refusal is | **Code:** [`UnitChangesWithItsPermissions.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Access/UnitChangesWithItsPermissions.cs), [`NameAndPlanChangeWithTheEditPermission.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Access/NameAndPlanChangeWithTheEditPermission.cs), [`StateChangesWithTheClosePermission.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Access/StateChangesWithTheClosePermission.cs), [`SampleCatalogue.cs`](../Examples/Tenancy/Examples.Tenancy.Catalogue/SampleCatalogue.cs), which marks the projects' rules `[MembershipRules<CrewMember>]`, [`SeatsChangeTheProjectsTheyWorkOn.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Access/SeatsChangeTheProjectsTheyWorkOn.cs), [`Program.cs`](../Examples/Tenancy/Examples.Tenancy.Exporter/Program.cs)<br/>**Try it:** Nothing to try through the application: the rule is about statements that go around it. [What stays in C#](#what-stays-in-c) says what the policy still lets through<br/>**Test:** `SampleOnPostgresTests`, `MovingScenarios`, `OwnerScenarios` |
 | What a member reads of the other seats, and who besides the seats managers reads an invitation, are defaults: a read rule on the application's own class takes the place of one, held to the tenant, beside what Tenancy's own work reads, which stays. The sample keeps both defaults | **Code:** [`TenancySql.cs`](../Source/DDDToolkit.Supporting.Tenancy.Postgres/Sql/TenancySql.cs), [`ContributedDefault.cs`](../Source/DDDToolkit.EntityFramework.Postgres/ContributedDefault.cs), [`TenancyRowAccess.cs`](../Source/DDDToolkit.Supporting.Tenancy/Access/RowAccess/TenancyRowAccess.cs)<br/>**Try it:** Nothing in the sample: it keeps the defaults ([Who reads the seats](#who-reads-the-seats-a-default-you-may-replace) says why)<br/>**Test:** `ReadRulesTests`, `RowAccessContributionTests`, `TenancyReadRuleGeneratorTests`, and `TenancyChoicesExportTests`, which runs the exporter's build step with a read rule on the sample's seat class and finds the default's policy the one that goes |
-| Tenancy guards only its own columns of a seat: no seat changes its id, identity or tenant, whatever it manages, and its status changes only as the use cases change it. The columns the application adds are its own to guard: the sample holds a seat's name to the rule of its command with a column rule, and leaves the job title as writable as the row | **Code:** [`TenancySql.cs`](../Source/DDDToolkit.Supporting.Tenancy.Postgres/Sql/TenancySql.cs), [`NameChangesByTheSeatOrWithTheSeatsKey.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Infrastructure/Access/NameChangesByTheSeatOrWithTheSeatsKey.cs), [`RenameSeat.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Application/Seats/Commands/RenameSeat.cs)<br/>**Try it:** Nothing to try through the application: the rules are about statements that go around it ([What the database guards on a seat](#what-the-database-guards-on-a-seat))<br/>**Test:** `SeatColumnsTests`, `TenancyTriggerTests`, `SampleOnPostgresTests` |
-| A module's rule asks another module's projects by the project's id, through a contract of one line that Projects publishes, and names no SQL function: the export writes the policy with the function the Membership package says answers that set. Projects' own rules ask the same contracts. The functions keep the names the sample's database had, said in one place | **Code:** [`ProjectsISee.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Contracts/RowAccess/ProjectsISee.cs), [`ProjectsWhereIHold.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Contracts/RowAccess/ProjectsWhereIHold.cs), [`SeatsRecordWhereTheyMay.cs`](../Examples/Tenancy/Modules/Inspections/Examples.Tenancy.Inspections.Infrastructure/Access/SeatsRecordWhereTheyMay.cs), [`ProjectMembership.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Access/ProjectMembership.cs), whose `Functions` keeps the names<br/>**Try it:** Read the newest `Examples/Tenancy/supabase/migrations/*_access.inspections.ddd.sql`: its policies ask `"projects".project_ids_where_i_hold`, a name no rule of Inspections writes. [A resource's access, asked by its id](row-level-security.md#a-resources-access-asked-by-its-id) has the mechanism<br/>**Test:** `ProjectRowRulesTests`, `InspectionRowRulesTests`, `SampleOnPostgresTests` |
+| Tenancy guards only its own columns of a seat: no seat changes its id, identity or tenant, whatever it manages, and its status changes only as the use cases change it. The columns the application adds are its own to guard: the sample holds a seat's name to the rule of its command with a column rule, and leaves the job title as writable as the row | **Code:** [`TenancySql.cs`](../Source/DDDToolkit.Supporting.Tenancy.Postgres/Sql/TenancySql.cs), [`NameChangesByTheSeatOrWithTheSeatsPermission.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Infrastructure/Access/NameChangesByTheSeatOrWithTheSeatsPermission.cs), [`RenameSeat.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Application/Seats/Commands/RenameSeat.cs)<br/>**Try it:** Nothing to try through the application: the rules are about statements that go around it ([What the database guards on a seat](#what-the-database-guards-on-a-seat))<br/>**Test:** `SeatColumnsTests`, `TenancyTriggerTests`, `SampleOnPostgresTests` |
+| A module's rule asks another module's projects by the project's id, through a contract of one line that Projects publishes, and names no SQL function: the export writes the policy with the function the Membership package says answers that set. Projects' own rules ask the same contracts. The functions are named after the projects, from the class's name | **Code:** [`ProjectsISee.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Contracts/RowAccess/ProjectsISee.cs), [`ProjectsWhereIHold.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Contracts/RowAccess/ProjectsWhereIHold.cs), [`SeatsRecordWhereTheyMay.cs`](../Examples/Tenancy/Modules/Inspections/Examples.Tenancy.Inspections.Infrastructure/Access/SeatsRecordWhereTheyMay.cs), [`ProjectMembership.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Access/ProjectMembership.cs)<br/>**Try it:** Read the newest `Examples/Tenancy/supabase/migrations/*_access.inspections.ddd.sql`: its policies ask `"projects".projects_where_i_hold`, a name no rule of Inspections writes. [A resource's access, asked by its id](row-level-security.md#a-resources-access-asked-by-its-id) has the mechanism<br/>**Test:** `ProjectRowRulesTests`, `InspectionRowRulesTests`, `SampleOnPostgresTests` |
 | Every context is wired by one call. `UseDDDToolkit` adds the toolkit's interceptors, then what the host's registrations brought: the caller on every connection, which row level security brings, and Tenancy's save check, last. A module added later is wired by the same call, and a context that keeps rows to a tenant without the save check is refused at its first save | **Code:** [`ProjectsInfrastructure.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/ProjectsInfrastructure.cs), [`SampleStorage.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Storage/SampleStorage.cs), [`DependencyInjection.cs`](../Source/DDDToolkit.EntityFramework/DependencyInjection.cs)<br/>**Try it:** Start the sample: the host's log names each context once, with what it was given<br/>**Test:** `StartupTests`, `UseDDDToolkitTests`, `OneCallTests`, `RequiredSaveCheckTests` |
 | Connections are budgeted per purpose: one pool for requests and one for background work | **Code:** [`PostgresPools.cs`](../Examples/Shared/Examples.Hosting/PostgresPools.cs), [`ContextsByPurpose.cs`](../Examples/Shared/Examples.Hosting/ContextsByPurpose.cs)<br/>**Try it:** `Sample:Pools:Requests` and `Sample:Pools:Background`, in the host's settings<br/>**Test:** `SampleOnPostgresTests` |
 | The application's clock and the database's are expected to be in step. The policies have no tolerance for a difference | **Code:** [The functions](#the-functions) says so; nothing in the packages<br/>**Try it:** Nothing to try: it is a property of the machines' clocks<br/>**Test:** `DatabaseClock`, the clock the Postgres tests of the package run with |
@@ -4762,7 +4840,7 @@ tables say where, group by group. Where one of the three is not there, the row s
 | An operation is a static method marked `[Query]` or `[Mutation]`, with its services marked `[Service]`, registered by HotChocolate's own generator | **Code:** [`LifecycleMutations.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Api/Lifecycle/GraphQL/LifecycleMutations.cs), [`Module.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Api/Module.cs)<br/>**Try it:** The rename, in the GraphQL part of the `.http` file<br/>**Test:** `OperationDeclarationTests` |
 | A list is paged by HotChocolate's own paging, under the route as under the field. A page is asked for from one end, in a size of the list's own: one check for the three lists | **Code:** [`OverviewPagedQueries.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Api/Overview/GraphQL/OverviewPagedQueries.cs), [`EfInspectionReads.cs`](../Examples/Tenancy/Modules/Inspections/Examples.Tenancy.Inspections.Infrastructure/Persistence/EfInspectionReads.cs), [`PageSizes.cs`](../Examples/Tenancy/Shared/Examples.Tenancy.Shared.Application/Paging/PageSizes.cs)<br/>**Try it:** `projects(first: 2)` with `pageInfo` and `totalCount`, and `projects(first: 2, last: 2)`, which is refused, in the `.http` file<br/>**Test:** `GraphQLProjectScenarios`, `InspectionListScenarios`, `ProjectListScenarios`, `PageSizesTests`, `IdsAsPagingKeysTests` |
 | A type is declared over the application's own record, and what takes a read of its own is a resolver behind a data loader that HotChocolate's generator writes | **Code:** [`ProjectType.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Api/Overview/GraphQL/ProjectType.cs), [`OverviewDataLoaders.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Api/Overview/GraphQL/OverviewDataLoaders.cs), [`AccessHistoryEntryType.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Api/History/GraphQL/AccessHistoryEntryType.cs)<br/>**Try it:** "A project with names", in the `.http` file: the crews of the answer are one read<br/>**Test:** `GraphQLDeclarationTests`, `GraphQLProjectScenarios` |
-| A field can ask for a permission key, beside the access check of every request and never in its place. The rule itself is held where the data is read, so a route answers what the field answers; the field declares it | **Code:** [`CrewOverviews.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Crew/CrewOverviews.cs), [`RoleListing.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Application/Roles/RoleListing.cs), [`CrewMemberType.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Api/Crew/GraphQL/CrewMemberType.cs), [`CrewFieldKeys.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Api/Crew/GraphQL/CrewFieldKeys.cs), [`KeyAuthorizationHandler.cs`](../Source/DDDToolkit.HotChocolate/Authorization/KeyAuthorizationHandler.cs)<br/>**Try it:** In the `.http` file: juno's `GET /projects/{id}/crew` and vic's query answer every member with `roles` null, and leo's `{ roles { name keys } }` every role with `keys` null. Pier 7's page as juno says who manages the crew reads the roles<br/>**Test:** `CrewRoleScenarios`, `RoleKeysScenarios`, `GraphQLProjectScenarios`, `KeyAuthorizationTests` |
+| A field can ask for a permission, beside the access check of every request and never in its place. The rule itself is held where the data is read, so a route answers what the field answers; the field declares it | **Code:** [`CrewOverviews.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Crew/CrewOverviews.cs), [`RoleListing.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Application/Roles/RoleListing.cs), [`CrewMemberType.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Api/Crew/GraphQL/CrewMemberType.cs), [`CrewFieldPermissions.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Api/Crew/GraphQL/CrewFieldPermissions.cs), [`PermissionAuthorizationHandler.cs`](../Source/DDDToolkit.HotChocolate/Authorization/PermissionAuthorizationHandler.cs)<br/>**Try it:** In the `.http` file: juno's `GET /projects/{id}/crew` and vic's query answer every member with `roles` null, and leo's `{ roles { name permissions } }` every role with `permissions` null. Pier 7's page as juno says who manages the crew reads the roles<br/>**Test:** `CrewRoleScenarios`, `RolePermissionsScenarios`, `GraphQLProjectScenarios`, `PermissionAuthorizationTests` |
 | Across modules a relation is the gateway's: a reference by key, and a module adding fields to a type another owns. A batch of projects, as a rule a page, costs the other module one question and one statement | **Code:** [`ProjectType.cs`](../Examples/Tenancy/Modules/Inspections/Examples.Tenancy.Inspections.Api/Recording/GraphQL/ProjectType.cs), [`RecordingDataLoaders.cs`](../Examples/Tenancy/Modules/Inspections/Examples.Tenancy.Inspections.Api/Recording/GraphQL/RecordingDataLoaders.cs), [`IProjectGate.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Contracts/Gate/IProjectGate.cs)<br/>**Try it:** juno's projects with their inspections, in the `.http` file<br/>**Test:** `InspectionsOfProjectsScenarios`, `InspectionsSchemaTests` |
 | The tenant's administration has a gateway of its own at `/admin/graphql`: everything `/graphql` offers, and another person's roles, which `/graphql` offers nobody. The class of that field is marked for Tenancy's administration schema, each gateway lists the schemas it composes, and the request still says who may read it | **Code:** [`SeatsAdminQueries.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Api/Seats/GraphQL/SeatsAdminQueries.cs), [`TenantsGraphQL.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Api/GraphQL/TenantsGraphQL.cs), [`SampleGateways.cs`](../Examples/Tenancy/Examples.Tenancy.Host/GraphQL/SampleGateways.cs), [`Program.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Program.cs), [`admin.graphql`](../Examples/Tenancy/Examples.Tenancy.Host/admin.graphql)<br/>**Try it:** maud's and leo's `seatGrants` at `/admin/graphql`, in the `.http` file<br/>**Test:** `AdministrationSchemaScenarios`, `GraphQLSchemaTests`, `OneSchemaPerClassTests` |
 | A gateway is an endpoint and requires what the routes require; a tool reads a schema with the key at `GraphQL:SchemaKey`, and in Development without one | **Code:** [`Program.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Program.cs), [`SampleGateways.cs`](../Examples/Tenancy/Examples.Tenancy.Host/GraphQL/SampleGateways.cs)<br/>**Try it:** "The schema, as a tool reads it", in the `.http` file<br/>**Test:** `GraphQLSchemaKeyTests`, `GraphQLSeatGateScenarios`, `SchemaKeyTests` |
@@ -4776,14 +4854,14 @@ tables say where, group by group. Where one of the three is not there, the row s
 |---|---|
 | An operator only reads: across tenants, through a database role of its own, with no seat. What it asks for is carried out by system work that names it | **Code:** [`TenancyUseCases.TenantDirectory.cs`](../Source/DDDToolkit.Supporting.Tenancy/UseCases/Tenants/TenancyUseCases.TenantDirectory.cs), [`AllTenants.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Application/Operators/Queries/AllTenants.cs), [`OperatorRequirement.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Access/OperatorRequirement.cs), [`OperatorsSeeEveryProject.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Access/OperatorsSeeEveryProject.cs), [`OperatorsQueries.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Api/Operators/GraphQL/OperatorsQueries.cs)<br/>**Try it:** orla's requests in the `.http` file, by route and by field. The UI has no page for an operator<br/>**Test:** `OperatorScenarios`, `OperatorFieldScenarios`, `OperatorTests`, `OperatorPolicyTests` |
 | Who acted is one answer everywhere: a seat, an operator by its verified identity, the system, or a link's token. It is never put into the toolkit's caller | **Code:** [`TenancyActor.cs`](../Source/DDDToolkit.Supporting.Tenancy/Access/ActedBy/TenancyActor.cs), [`TenancyAttribution.cs`](../Source/DDDToolkit.Supporting.Tenancy.EntityFramework/Attribution/TenancyAttribution.cs), [`ChangedBy.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Contracts/ValueObjects/ChangedBy.cs)<br/>**Try it:** "Last changed by" on a project's page; leo reads Pier 7 after his rename, in the `.http` file<br/>**Test:** `WhoChangedScenarios`, `ActorTests`, `AttributionTests`, `AttributionTriggerTests` |
-| The access history is the event log with each event's tenant on its row. It only grows, and reading it takes a key of its own | **Code:** [`TenancyEventLogExtensions.cs`](../Source/DDDToolkit.Supporting.Tenancy.EntityFramework/History/TenancyEventLogExtensions.cs), [`AccessHistory.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Application/History/Queries/AccessHistory.cs), [`HistoryEndpoints.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Api/History/Rest/HistoryEndpoints.cs), [`HistoryPagedQueries.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Api/History/GraphQL/HistoryPagedQueries.cs)<br/>**Try it:** The Access history page. Presets `history-with-the-key` and `history-without-the-key`. maud's `accessHistory`, in the GraphQL part of the `.http` file<br/>**Test:** `AccessHistoryScenarios`, `AccessHistoryFieldScenarios`, `AccessHistoryTests`, `AccessHistoryPolicyTests` |
+| The access history is the event log with each event's tenant on its row. It only grows, and reading it takes a permission of its own | **Code:** [`TenancyEventLogExtensions.cs`](../Source/DDDToolkit.Supporting.Tenancy.EntityFramework/History/TenancyEventLogExtensions.cs), [`AccessHistory.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Application/History/Queries/AccessHistory.cs), [`HistoryEndpoints.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Api/History/Rest/HistoryEndpoints.cs), [`HistoryPagedQueries.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Api/History/GraphQL/HistoryPagedQueries.cs)<br/>**Try it:** The Access history page. Presets `history-with-the-permission` and `history-without-the-permission`. maud's `accessHistory`, in the GraphQL part of the `.http` file<br/>**Test:** `AccessHistoryScenarios`, `AccessHistoryFieldScenarios`, `AccessHistoryTests`, `AccessHistoryPolicyTests` |
 
 ### Invitations
 
 | The choice | Where to see it |
 |---|---|
 | A seat is made when an invitation is accepted. Issuing makes the invitation and nothing else; accepting makes the seat, its placement and its grant in one save | **Code:** [`InvitationAggregate.cs`](../Source/DDDToolkit.Supporting.Tenancy/Aggregates/Invitations/InvitationAggregate.cs), [`TenancyUseCases.Invitations.cs`](../Source/DDDToolkit.Supporting.Tenancy/UseCases/Invitations/TenancyUseCases.Invitations.cs), [`InvitePerson.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Application/Invitations/Commands/InvitePerson.cs), [`InvitationsMutations.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Api/Invitations/GraphQL/InvitationsMutations.cs)<br/>**Try it:** The pages Invitations and Accept an invitation; tove's requests in the `.http` file, by route and through the schema<br/>**Test:** `InvitationScenarios`, `InvitationFieldScenarios`, `InvitationTests`, `InvitationStoreTests` |
-| An invitation never gives more than its issuer could give at the moment it is used | **Code:** [`TenancyUseCases.Invitations.cs`](../Source/DDDToolkit.Supporting.Tenancy/UseCases/Invitations/TenancyUseCases.Invitations.cs)<br/>**Try it:** Preset `invite-without-seat-management` shows the issuing half. Nothing in the demonstration takes a key from an issuer before the invitation is accepted<br/>**Test:** `InvitationTests`, `InvitationPolicyTests` |
+| An invitation never gives more than its issuer could give at the moment it is used | **Code:** [`TenancyUseCases.Invitations.cs`](../Source/DDDToolkit.Supporting.Tenancy/UseCases/Invitations/TenancyUseCases.Invitations.cs)<br/>**Try it:** Preset `invite-without-seat-management` shows the issuing half. Nothing in the demonstration takes a permission from an issuer before the invitation is accepted<br/>**Test:** `InvitationTests`, `InvitationPolicyTests` |
 | Accepting takes the token and a verified identity, read from the caller. Nobody is found by an address; an address the host passes as verified only narrows | **Code:** [`AcceptInvitation.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Application/Invitations/Commands/AcceptInvitation.cs)<br/>**Try it:** Preset `accept-an-invitation-nobody-sent`; leo's refused acceptance in the `.http` file<br/>**Test:** `InvitationScenarios`, `InvitationTests` |
 | A token is a bearer credential: shown once, and kept as a digest in a table that on Postgres no caller's role reads | **Code:** [`BearerTokens.cs`](../Source/DDDToolkit/Security/BearerTokens.cs), [`TenancyInvitationDigest.cs`](../Source/DDDToolkit.Supporting.Tenancy.EntityFramework/Invitations/TenancyInvitationDigest.cs)<br/>**Try it:** The Invitations page shows the token once, as a link<br/>**Test:** `BearerTokensTests`, `InvitationPolicyTests` |
 | An invitation offers one role, for one address, which is forgotten once it is accepted or cancelled | **Code:** [`InvitationAggregate.cs`](../Source/DDDToolkit.Supporting.Tenancy/Aggregates/Invitations/InvitationAggregate.cs)<br/>**Try it:** The form on the Invitations page; `GET /tenancy/invitations` in the `.http` file<br/>**Test:** `InvitationTests`, `ModelTests` |
@@ -4801,7 +4879,7 @@ tables say where, group by group. Where one of the three is not there, the row s
 |---|---|
 | The package's Dutch has no word for the reader. An application that wants another tone puts a resource file of its own in front of the package's | **Code:** [`TenancyFailures.nl.resx`](../Source/DDDToolkit.Supporting.Tenancy/Resources/TenancyFailures.nl.resx), [`ProjectFailures.nl.resx`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Domain/Aggregates/Projects/ProjectFailures.nl.resx)<br/>**Try it:** The `en` and `nl` switch in the UI's top bar; rhea's request with `Accept-Language: nl` in the `.http` file<br/>**Test:** `RefusalTableTests`, `TranslationTests` |
 | A request is answered in the language it asks for, and code that phrases a text outside a request names its reader's language | **Code:** [`CultureScope.cs`](../Source/DDDToolkit/Localization/CultureScope.cs), [`RequestLanguages.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Languages/RequestLanguages.cs), [`RefusalProblems.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Requests/RefusalProblems.cs)<br/>**Try it:** The same switch: any refusal on a page reads Dutch after it<br/>**Test:** `CultureScopeTests`, `LanguageScenarios` |
-| The input a refusal is about stays an argument, `Field`, in the word the use cases call it by. The sample's own codes do not carry it yet, and no form of the UI uses it | **Code:** [`TenancyRefusals.cs`](../Source/DDDToolkit.Supporting.Tenancy/Refusals/TenancyRefusals.cs), [`TenancyNames.cs`](../Source/DDDToolkit.Supporting.Tenancy/Services/TenancyNames.cs)<br/>**Try it:** rhea asks about a key the catalogue does not know, in the `.http` file: the answer's `Field` is `keys`<br/>**Test:** `RefusalTableTests` |
+| The input a refusal is about stays an argument, `Field`, in the word the use cases call it by. The sample's own codes do not carry it yet, and no form of the UI uses it | **Code:** [`TenancyRefusals.cs`](../Source/DDDToolkit.Supporting.Tenancy/Refusals/TenancyRefusals.cs), [`TenancyNames.cs`](../Source/DDDToolkit.Supporting.Tenancy/Services/TenancyNames.cs)<br/>**Try it:** rhea asks about a permission the catalogue does not know, in the `.http` file: the answer's `Field` is `permissions`<br/>**Test:** `RefusalTableTests` |
 | A role made from a pack is named once, in the language the application passes, and is the tenant's own afterwards | **Code:** [`IRolePackTexts.cs`](../Source/DDDToolkit.Supporting.Tenancy/Catalogue/IRolePackTexts.cs)<br/>**Try it:** Not in the sample: it passes no language, so its roles have the catalogue's names<br/>**Test:** `RolePackTextsTests`, `ProvisioningHooksTests` |
 | The package names its own administrators' pack in English and Dutch, after the application's texts | **Code:** [`TenancyPackTexts.nl.resx`](../Source/DDDToolkit.Supporting.Tenancy/Resources/TenancyPackTexts.nl.resx), [`TenancyUseCases.Tenants.cs`](../Source/DDDToolkit.Supporting.Tenancy/UseCases/Tenants/TenancyUseCases.Tenants.cs)<br/>**Try it:** Not in the sample: it declares its own packs<br/>**Test:** `RolePackTextsTests` |
 
@@ -4829,7 +4907,7 @@ services.AddTenancyPostgres();
 services.RunStartupChecks();
 
 // Your part of the catalogue, the one you hand TenancyOptions.Catalogue: the export writes the policies from it,
-// and from the keys your modules mark with [TenancyPermissions]. Mark nothing, and they are written from
+// and from the permissions your modules declare in [Permissions] classes. Mark nothing, and they are written from
 // new ApplicationCatalogue(), as a host that leaves TenancyOptions.Catalogue unset runs with.
 public static class ShopCatalogue
 {
@@ -4847,10 +4925,11 @@ public static class ShopCatalogue
   With row level security registered, `UseDDDToolkit` runs your contexts as their caller and gives them
   Tenancy's save check, with nothing more to write.
 - **The contribution** is a [row access contribution](row-level-security.md#policies-a-package-ships) the
-  package declares, so referencing the package writes it. Which keys manage access is yours to say, so its SQL
+  package declares, so referencing the package writes it. Which permissions manage access is yours to say, so its SQL
   is written from your catalogue, built as your registration builds it: the part you mark with
-  `[TenancyCatalogue]`, a static property or field of type `ApplicationCatalogue`, and every list your modules
-  mark with `[TenancyPermissions]` ([A module states its keys once](#a-module-states-its-keys-once)), found in
+  `[TenancyCatalogue]`, a static property or field of type `ApplicationCatalogue`, and every module's list of
+  permissions, which Tenancy's generator writes from its `[Permissions]` classes and marks `[TenancyPermissions]`
+  ([A module states its permissions once](#a-module-states-its-permissions-once)), found in
   the projects the exporting project references. The build makes it in that project, in a class it writes into
   `DDDToolkit.RowAccessContributionsOfPackages.g.cs`, whose comment names what it was made from. Two members
   marked `[TenancyCatalogue]`, or one of another type, the catalogue built already say, stop the build
@@ -4880,8 +4959,8 @@ public static class ShopCatalogue
   their functions, to the scoped system role and to nobody else
   ([below](#the-scoped-system-role-grants-and-reads-across-tenants)). The last,
   that row level security is on for Tenancy's tables, that the units' table has
-  [the unique index on a tenant's root](#the-index-on-a-tenants-root), that `manages_access`,
-  `key_is_contained`, `pack_keys` and `key_is_live`
+  [the unique index on a tenant's root](#the-index-on-a-tenants-root), that `permission_manages_access`,
+  `permission_is_contained`, `pack_permissions` and `permission_is_live`
   in the database were written from the catalogue the host runs with, with [containment](#containment-on-or-off)
   the same way round, and that the database keeps the
   rights as the store expects: the trigger that writes them is on the grants, the seats and the roles, the
@@ -4920,8 +4999,8 @@ database without it.
 modelBuilder.AddTenancy(database: Database);   // maps the index; your migration makes it
 ```
 
-A key held at a unit without a parent is held for the whole tenant: `holds_tenant_wide(key)` counts every
-such unit, whichever it is. So a second root would make whoever holds a key there a holder for all of the
+A permission held at a unit without a parent is held for the whole tenant: `holds_at_tenant(permission)` counts every
+such unit, whichever it is. So a second root would make whoever holds a permission there a holder for all of the
 tenant. The policies keep a seat from that: a seat adds a unit only below one it manages, and never leaves a
 unit that had a parent without one. They do not hold everyone:
 
@@ -5071,13 +5150,13 @@ else is asked of a function:
   them all. Nobody reads another seat's rights ([Who reads which grants](#who-reads-which-grants)). Which other
   seats a member reads is a default, which a read rule on your seat class replaces
   ([Who reads the seats](#who-reads-the-seats-a-default-you-may-replace)).
-- **What a use case has to know of other seats' rights**, three functions answer, as ids, keys and dates:
-  who administers the tenant, what a move of a unit changes, and who holds a key at a unit.
+- **What a use case has to know of other seats' rights**, three functions answer, as ids, permissions and dates:
+  who administers the tenant, what a move of a unit changes, and who holds a permission at a unit.
 - **A module** reads none of the tables. Its context maps six functions that answer the rows the questions
   read, and they run as their caller, so the same policies decide what a module's query sees
   ([Modules read through functions](#modules-read-through-functions)).
 - **System work in a tenant** reads every row of that tenant. **System work in no tenant** reads no row,
-  and asks three functions for ids and keys, and a fourth where the context maps invitations
+  and asks three functions for ids and permissions, and a fourth where the context maps invitations
   ([reads across tenants](#the-scoped-system-role-grants-and-reads-across-tenants)).
 - **A policy that runs where your connection is not the one asking**, on a stored file or a channel, asks
   five functions that take the tenant as an argument
@@ -5087,7 +5166,7 @@ else is asked of a function:
 - **An anonymous caller** reads no table and runs no function.
 
 In the picture a solid line is a read as the caller, which the policies narrow. A dotted line is a function
-that runs as its owner and reads past them: its own SQL says whom it answers, and it answers ids, keys and
+that runs as its owner and reads past them: its own SQL says whom it answers, and it answers ids, permissions and
 dates, never a name.
 
 ```mermaid
@@ -5110,13 +5189,13 @@ flowchart LR
 
     Seat -- "its tenant's tree, seats, placements and roles,<br/>its own grants and rights,<br/>and the grants where it manages grants, seats or units" --> Tables
     Work -- "every row of its tenant" --> Tables
-    Seat -- "who administers the tenant, what a move changes,<br/>who holds a key at a unit" --> Others
+    Seat -- "who administers the tenant, what a move changes,<br/>who holds a permission at a unit" --> Others
     Module -- "the rows the questions read" --> Read
     Read -- "what the policies show the caller" --> Tables
-    Nowhere -- "the keys in use, a person's seats,<br/>the tenants to visit, the invitation of a digest" --> Across
-    Elsewhere -- "the caller's seat, keys and units<br/>in the tenant named" --> Named
-    Others -. "ids, keys and dates" .-> Tables
-    Across -. "ids and keys" .-> Tables
+    Nowhere -- "the permissions in use, a person's seats,<br/>the tenants to visit, the invitation of a digest" --> Across
+    Elsewhere -- "the caller's seat, permissions and units<br/>in the tenant named" --> Named
+    Others -. "ids, permissions and dates" .-> Tables
+    Across -. "ids and permissions" .-> Tables
     Named -. "about the caller alone" .-> Tables
 ```
 
@@ -5137,7 +5216,7 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
 public async Task<List<string>> VisibleProjectsAsync(CancellationToken cancellationToken)
 {
     await using var db = await contexts.CreateDbContextAsync(cancellationToken);   // IDbContextFactory<ProjectsContext>
-    var held = answers.Over(db).UnitsWhereIHold(ProjectKeys.Read);
+    var held = answers.Over(db).UnitsWhereIHold(ProjectPermissionNames.Read);
     return await db.Projects.Where(project => held.Contains(project.UnitId)).Select(project => project.Name).ToListAsync(cancellationToken);   // the project's own name
 }
 ```
@@ -5145,9 +5224,9 @@ public async Task<List<string>> VisibleProjectsAsync(CancellationToken cancellat
 ```sql
 -- A read function, as the contribution writes it: no condition and no setting of its own, so Postgres folds
 -- it into the module's query, and the policies on the table decide the rows
-CREATE OR REPLACE FUNCTION "tenancy".caller_rights() RETURNS TABLE ("TenantId" bigint, "SeatId" uuid, "UnitId" uuid, "RoleId" uuid, "Key" text, "StartsAt" timestamp with time zone, "EndsAt" timestamp with time zone)
+CREATE OR REPLACE FUNCTION "tenancy".caller_permissions() RETURNS TABLE ("TenantId" bigint, "SeatId" uuid, "UnitId" uuid, "RoleId" uuid, "Permission" text, "StartsAt" timestamp with time zone, "EndsAt" timestamp with time zone)
     LANGUAGE sql STABLE AS $function$
-SELECT t."TenantId", t."SeatId", t."UnitId", t."RoleId", t."Key"::pg_catalog.text, t."StartsAt", t."EndsAt"
+SELECT t."TenantId", t."SeatId", t."UnitId", t."RoleId", t."Permission"::pg_catalog.text, t."StartsAt", t."EndsAt"
 FROM "tenancy"."SeatRights" t
 $function$;
 
@@ -5157,10 +5236,10 @@ CREATE OR REPLACE FUNCTION "tenancy".tenant_administrators() RETURNS TABLE ("Sea
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
 SELECT r."SeatId", r."RoleId" FROM "tenancy"."SeatRights" r
 JOIN "tenancy"."OrganizationUnits" u ON u."Id" = r."UnitId" AND u."TenantId" = r."TenantId"
-WHERE r."TenantId" = (SELECT "tenancy".caller_tenant()) AND r."Key" = 'tenancy.roles.manage'
+WHERE r."TenantId" = (SELECT "tenancy".caller_tenant()) AND r."Permission" = 'tenancy.roles.manage'
   AND ... -- held at the root, with no end
   AND (r."SeatId" = (SELECT "tenancy".caller_seat())
-       OR r."UnitId" = ANY (ARRAY(SELECT "tenancy".units_where_i_hold('tenancy.grants.manage')))
+       OR r."UnitId" = ANY (ARRAY(SELECT "tenancy".units_where_i_hold_permission('tenancy.grants.manage')))
        OR ...) -- or seats or units managed at the right's unit, or roles for the whole tenant
 $function$;
 ```
@@ -5180,8 +5259,11 @@ export writes your rule where the default was.
 | Seats | the tenant's seats, and the person's own in every tenant | your seat class | a person's own seats, in every tenant; and every seat of the tenant to a seat that manages seats, grants or units anywhere, or roles for the whole tenant |
 | Invitations, where the context maps them | those at a unit where the seat manages seats | your invitation class | the same: listing and cancelling one load it, so your rule can only add readers |
 | Tenants, Organizations | the tenant, and the tenants the person has a seat in | no default | what the tenant picker needs; within a tenant there is nothing wider to give and nothing narrower to keep |
-| Roles | the tenant's | no default | Tenancy's questions read the roles as their caller, `RolesWithKey` and which keys of a grant's role manage access, so a narrower read would change their answers |
+| Roles | the tenant's | no default | Tenancy's questions read the roles as their caller, `RolesWithPermission` and which permissions of a grant's role manage access, so a narrower read would change their answers |
 | Units, the tree, placements, grants, rights, the revision, the history | as [What the policies check](#what-the-policies-check) says | no default | a rule is about an aggregate's own table, and these are the rows of an organization or a seat, or rows Tenancy writes itself |
+
+What any of them allows a rule of yours may also narrow, on the organization, the seats and the roles:
+[Rules that narrow the organization](#rules-that-narrow-the-organization).
 
 ```mermaid
 flowchart LR
@@ -5199,7 +5281,7 @@ the default's place, and keeps two things of Tenancy's:
 - **What Tenancy's own work reads stays.** A person reads their own seats in every tenant, which the tenant picker
   lists and the history's policy finds the person by. A seat that manages seats, grants or units anywhere, or roles
   for the whole tenant, reads every seat of the tenant: the use cases load the seats it acts on, and the policies on
-  the placements and the grants read the seats as the caller, by the same keys that
+  the placements and the grants read the seats as the caller, by the same permissions that
   [read the grants](#who-reads-which-grants). So a rule stricter than the default breaks none of Tenancy's own use
   cases. The package's tests run every one of them under a rule that lets a member read itself alone.
 
@@ -5220,10 +5302,10 @@ stays closed to anonymous callers. What else your rule changes, and what it does
   project's tenant, does the same. So a member puts on a list only the people it reads; a seat that manages
   seats, grants or units anywhere, or roles for the whole tenant, reads every seat, and puts on whoever the list
   takes.
-- **Not Tenancy's questions about the caller and about rights.** `caller_seat`, `units_where_i_hold`,
-  `seats_in_my_units`, `seats_holding_at`, `tenant_administrators`, `rights_a_move_changes` and the others run as
+- **Not Tenancy's questions about the caller and about rights.** `caller_seat`, `units_where_i_hold_permission`,
+  `seats_in_my_units`, `seats_holding_permission_at`, `tenant_administrators`, `permissions_a_move_changes` and the others run as
   their owner and read no table as the caller: they answer what they answered, whatever your rule says.
-  `ITenancyQuestions.SeatsHoldingAt` asks the function on Postgres.
+  `ITenancyQuestions.SeatsHoldingPermissionAt` asks the function on Postgres.
 - **Not a seat's placements and grants.** A rule on your seat class is about the seats' own table. The placements
   and the grants keep Tenancy's policies: what a seat holds is read where it applies, and the policy that lets a
   placement be withdrawn reads its grants. So your rule hides a seat's row, with its identity and every field of
@@ -5235,7 +5317,8 @@ stays closed to anonymous callers. What else your rule changes, and what it does
   a field of yours, as before.
 - **Not system work, nor operators.** Their policies are Tenancy's, and read as before.
 
-A read rule on your tenant, organization or role class is refused, naming the table: their reads are no default.
+A read rule on your tenant, organization or role class is refused, naming the table: their reads are no default. A
+[restrictive one](#rules-that-narrow-the-organization) on the organization or the roles is not: it only narrows.
 
 <details>
 <summary>Show the code: a rule on the seat class, the building blocks, and what the export writes</summary>
@@ -5258,7 +5341,7 @@ And a seat that gives roles at an invitation's unit reads it too, beside the sea
 public static partial class GrantsManagersReadTheInvitationsAtTheirUnits
 {
     public static bool Allows(Invitation invitation, Caller caller)
-        => TenancyRowAccess.UnitsWhereIHold<OrganizationUnitId>(TenancyKeys.GrantsManage).Contains(invitation.UnitId);
+        => TenancyRowAccess.UnitsWhereIHold<OrganizationUnitId>(TenancyPermissions.GrantsManage).Contains(invitation.UnitId);
 }
 ```
 
@@ -5268,12 +5351,14 @@ question is asked once per statement, never once per row:
 | You mean | Your rule says | The policy asks |
 |---|---|---|
 | in the caller's tenant | `seat.TenantId == TenancyRowAccess.CallerTenant<TenantId>()` | `"TenantId" = (SELECT "tenancy".caller_tenant())` |
-| the caller itself | `seat.Id == TenancyRowAccess.CallerSeat<SeatId>()` | `"Id" = (SELECT "tenancy".caller_seat())` |
+| the caller itself | `seat.Id == TenancyRowAccess.CallerSeatId<SeatId>()` | `"Id" = (SELECT "tenancy".caller_seat())` |
+| a field of the caller's own seat | `TenancyRowAccess.CallerSeat<Seat>().Kind == SeatKind.Employee` | `(SELECT q1."Kind" FROM "tenancy".caller_seat_row() q1) = 0` |
+| the people on the projects the caller is on | `PeopleOnMyProjects.Ids().Contains(seat.Id)` | `"Id" = ANY (ARRAY(SELECT "projects".projects_fellow_members()))` |
 | the person's own seats, in every tenant | `seat.Identity == caller.UserId` | `"Identity" IS NOT DISTINCT FROM (SELECT auth.uid())` |
 | the seats placed at or below a unit the caller is placed at; to a seat placed at the root, as every seat of a flat tenant is, every placed seat | `TenancyRowAccess.SeatsInMyUnits<SeatId>().Contains(seat.Id)` | `"Id" = ANY (ARRAY(SELECT "tenancy".seats_in_my_units()))` |
-| where the caller holds a key | `TenancyRowAccess.UnitsWhereIHold<OrganizationUnitId>(key).Contains(invitation.UnitId)` | `"UnitId" = ANY (ARRAY(SELECT "tenancy".units_where_i_hold('...')))` |
-| a key held anywhere | `TenancyRowAccess.HoldsKey(key)` | `(SELECT "tenancy".holds_key('...'))` |
-| a key held for the whole tenant | `TenancyRowAccess.HoldsTenantWide(key)` | `(SELECT "tenancy".holds_tenant_wide('...'))` |
+| where the caller holds a permission | `TenancyRowAccess.UnitsWhereIHold<OrganizationUnitId>(permission).Contains(invitation.UnitId)` | `"UnitId" = ANY (ARRAY(SELECT "tenancy".units_where_i_hold_permission('...')))` |
+| a permission held anywhere | `TenancyRowAccess.HoldsPermission(permission)` | `(SELECT "tenancy".holds_permission('...'))` |
+| a permission held for the whole tenant | `TenancyRowAccess.HoldsAtTenant(permission)` | `(SELECT "tenancy".holds_at_tenant('...'))` |
 
 Tenancy's own default is written with the same blocks, and so is what it keeps:
 
@@ -5284,8 +5369,8 @@ seat.TenantId == TenancyRowAccess.CallerTenant<TenantId>() || seat.Identity == c
 // What stays beside a rule of yours
 seat.Identity == caller.UserId
     || (seat.TenantId == TenancyRowAccess.CallerTenant<TenantId>()
-        && (TenancyRowAccess.HoldsKey(TenancyKeys.SeatsManage) || TenancyRowAccess.HoldsKey(TenancyKeys.GrantsManage)
-            || TenancyRowAccess.HoldsKey(TenancyKeys.UnitsManage) || TenancyRowAccess.HoldsTenantWide(TenancyKeys.RolesManage)))
+        && (TenancyRowAccess.HoldsPermission(TenancyPermissions.SeatsManage) || TenancyRowAccess.HoldsPermission(TenancyPermissions.GrantsManage)
+            || TenancyRowAccess.HoldsPermission(TenancyPermissions.UnitsManage) || TenancyRowAccess.HoldsAtTenant(TenancyPermissions.RolesManage)))
 ```
 
 What the export writes for the first rule, under the sample's names, with the comment that says what it did:
@@ -5298,8 +5383,8 @@ What the export writes for the first rule, under the sample's names, with the co
 CREATE POLICY "Seats (select) for authenticated" ON "tenancy"."Seats" FOR SELECT TO authenticated
     USING (("Identity" = (SELECT auth.uid())
             OR (("TenantId" = (SELECT "tenancy".caller_tenant()))
-                AND ((SELECT "tenancy".holds_key('tenancy.seats.manage')) OR (SELECT "tenancy".holds_key('tenancy.grants.manage'))
-                     OR (SELECT "tenancy".holds_key('tenancy.units.manage')) OR (SELECT "tenancy".holds_tenant_wide('tenancy.roles.manage')))))
+                AND ((SELECT "tenancy".holds_permission('tenancy.seats.manage')) OR (SELECT "tenancy".holds_permission('tenancy.grants.manage'))
+                     OR (SELECT "tenancy".holds_permission('tenancy.units.manage')) OR (SELECT "tenancy".holds_at_tenant('tenancy.roles.manage')))))
            OR (("TenantId" = (SELECT "tenancy".caller_tenant())) AND ("Id" = ANY (ARRAY(SELECT "tenancy".seats_in_my_units())))));
 ```
 
@@ -5311,11 +5396,114 @@ default; issuing and cancelling invitations is a seats manager's work there, whi
 whose members should see only the people of their own part of the tree writes the rule above, and pins it with a
 test that reads the seats as a member, as the package's `ReadRulesTests` do.
 
+### Rules that narrow the organization
+
+The defaults above say what a seat of the tenant reads, and a rule of yours that allows can only add to what they
+allow. To take something away, write a restrictive rule: `Restrictive = true` on a rule about your organization,
+seat or role class. Its policy is AND-ed with Tenancy's ([Rules that only narrow](row-level-security.md#rules-that-only-narrow-restrictive)):
+a row passes only where Tenancy's policy allows it and your rule says so as well, so it never allows more than
+Tenancy does.
+
+Say your tenants have employees and external people, who work on a project of the tenant and have no business in
+the rest of its organization. Your seat class says which a seat is, with a field of your own, and a restrictive
+rule lets only an employee's seat read the organization:
+
+| A signed-in user | Tenancy's policy: the tenant's organization | Your rule: an employee's seat | Reads the units |
+|---|---|---|---|
+| an employee of the tenant | yes | yes | yes |
+| an external seat of the tenant | yes | no | no |
+| a seat of another tenant | no | yes | no: your rule grants nothing |
+
+```csharp
+public enum SeatKind { Employee, External }
+
+[SeatAggregate<SeatId>]
+public sealed partial class Seat
+{
+    public SeatKind Kind { get; private set; }
+
+    public void MarkExternal() => Kind = SeatKind.External;
+}
+
+[RowAccess<Organization>(RowOperations.Read, Restrictive = true)]
+public static partial class OnlyEmployeesReadTheOrganization
+{
+    public static bool Allows(Organization organization, Caller caller)
+        => TenancyRowAccess.CallerSeat<Seat>().Kind == SeatKind.Employee;
+}
+```
+
+The export writes the rule on the organizations, on the units, which are the organization's, and on the closure
+of the tree, which Tenancy says follows the organization:
+
+```sql
+CREATE POLICY "Only employees read the organization (select) for authenticated" ON "tenancy"."Organizations" AS RESTRICTIVE FOR SELECT TO authenticated
+    USING ((SELECT q1."Kind" FROM "tenancy".caller_seat_row() q1) = 0);
+-- and the same on "tenancy"."OrganizationUnits" and on "tenancy"."OrganizationUnitPaths"
+```
+
+- **Where it reaches.** On your organization class it narrows the organization, its units and the closure of its
+  tree; on your seat class the seats with their placements and grants; on your role class the roles. A tenant and
+  an invitation are read by Tenancy's own work and by a person who has no seat yet, so a restrictive rule there is
+  [DDD00100](diagnostics.md#ddd00100).
+- **It narrows what is kept for Tenancy's own work, too.** A restrictive rule is AND-ed with every policy, what
+  Tenancy keeps beside a read rule of yours included. On the seats, that is a person's own seats, which the tenant
+  picker and the seat a request acts as are found from: keep them in the rule, `seat.Identity == caller.UserId || ...`,
+  or the seat it keeps out cannot work in its tenant at all.
+- **A field of the caller's own seat.** `TenancyRowAccess.CallerSeat<Seat>()` is the calling seat's row, read by
+  `caller_seat_row()`, which runs as its owner: a rule reads it whatever your read rule on the seats says, and a rule
+  on the seats reads it without asking itself. No seat, no row: every field is null, and the rule lets nothing
+  through. Another class than your seat class is [DDD00101](diagnostics.md#ddd00101). For the seat's id alone, in
+  a module whose context does not map the seats, ask `TenancyRowAccess.CallerSeatId<SeatId>()`.
+- **Tenancy's own work keeps working.** System work is not narrowed, and the functions that run as their owner read
+  past every policy, so the questions about the caller and about rights answer as before. The package's tests run
+  every use case under the rule above.
+- **What a seat it keeps out still reads.** `TenancyDirectory.UnitsByIdAsync` answers through `units_named()`, which
+  runs as its owner, for the ids asked alone, and for units of the caller's tenant: each one's name, path and depth,
+  and nothing more. So an external seat on a project still reads what the project's unit is called. `ListUnitsAsync`
+  answers it no units, and its own overview, `WhoAmIAsync`, names the units it is placed at as `UnitsByIdAsync` does,
+  nothing below them, and the tenant by its name, through `identity_tenant_names()` as the tenant picker does.
+- **The seat a request acts as is found as before, and the tenant picker names every tenant.** Both read what a
+  tenant is called through `identity_tenant_names()`, which runs as its owner and answers the id, the slug and the
+  organization's name of each tenant the person has a seat in, and nothing more. So the picker shows the names to
+  the employee and to the external seat alike, before a tenant is chosen, where a rule that asks the caller's seat
+  has no seat to ask about, while the organizations themselves stay closed to the seat your rule keeps out.
+- **A rule without `Restrictive`** on your organization or role class is refused: OR-ed with Tenancy's policy, which
+  lets every seat of the tenant read them already, it would change nothing.
+
+Put together with a [read rule on your seat class](#who-reads-the-seats-a-default-you-may-replace): an external
+seat, one the application marks as not an employee, reads the name and path of the unit of the project it is on
+through the project's own query, and the names of the people it may see through the seat read rule, but not the
+rest of the organization. Employees read every seat of the tenant; an external seat reads the people on the
+projects it is on, which the projects' module publishes, as a contract, from the
+[Membership package's](membership.md#on-postgres-the-second-lock) members of the resources the caller is a member of:
+
+```csharp
+// Projects.Contracts: the people on the projects the caller is on, by the seats they are
+[ResourceAccessContract<ProjectId>(ResourceAccessSet.FellowMembers)]
+public static partial class PeopleOnMyProjects
+{
+    public static partial AccessSet<SeatId> Ids();
+}
+
+// Tenants.Infrastructure: a read rule on the seats, in the default's place
+[RowAccess<Seat>(RowOperations.Read)]
+public static partial class EmployeesReadEveryoneExternalsTheirProjects
+{
+    public static bool Allows(Seat seat, Caller caller)
+        => TenancyRowAccess.CallerSeat<Seat>().Kind == SeatKind.Employee || PeopleOnMyProjects.Ids().Contains(seat.Id);
+}
+```
+
+The projects' functions ask Tenancy's, who the calling seat is, and Tenancy's file runs first. The export writes
+the seat rule all the same, through a function of Tenancy's own that asks the projects' one when it runs
+([A rule that asks a module that asks back](row-level-security.md#a-resources-access-asked-by-its-id)).
+
 ### The functions
 
 The contribution writes the questions as functions, with your table names and the column types of your ids.
 They are `LANGUAGE sql`, run with an empty `search_path`, and may be run by signed-in users and by the scoped
-system role, never by `anon`. All but `system_tenant`, `manages_access`, `key_is_contained` and `pack_keys` run as their owner, so
+system role, never by `anon`. All but `system_tenant`, `permission_manages_access`, `permission_is_contained` and `pack_permissions` run as their owner, so
 they read Tenancy's tables whatever the caller's policies allow. "Live" is a grant or right whose period holds
 now, by the database's `now()`. A grant's start is stamped by the application's clock, so keep the two clocks
 in step, as servers that synchronize theirs are: while the database's runs behind, a grant made a moment ago is
@@ -5326,18 +5514,21 @@ nothing, and the policies keep system work to its tenant with `system_tenant` in
 |---|---|---|
 | `caller_seat()` | the seat of the caller's identity in the tenant the setting names, when it and that tenant are both active; else null | the seat `TenantSelection` picks |
 | `caller_tenant()` | that seat's tenant; else null | the seat's tenant |
+| `caller_seat_row()` | that seat's own row, every column your seat class maps; no row without a seat | `TenancyRowAccess.CallerSeat<Seat>()`, for a [rule that reads a field of it](#rules-that-narrow-the-organization) |
 | `system_tenant()` | the tenant the setting names: the scoped system role's tenant, and the one a signed-in user's access revision is taken in and its [access history](#access-history) is added to | `TenancyWork.BeginSystemIn`'s tenant |
-| `units_where_i_hold(key)` | the units where the seat holds the key live, and every unit below them | `UnitsWhereIHold` |
+| `units_where_i_hold_permission(permission)` | the units where the seat holds the permission live, and every unit below them | `UnitsWhereIHold` |
 | `readable_units()` | the units of the seat's tenant where it is placed, and every unit below them | `ReadableUnits` |
 | `seats_in_my_units()` | the seats placed at one of those units, whatever their status: the people of the seat's own part of the tree, every placed seat to a seat placed at the root; for a [read rule on your seat class](#who-reads-the-seats-a-default-you-may-replace) | |
-| `roles_with_key(key)` | the active roles of the seat's tenant that hold the key | `RolesWithKey` |
-| `holds_key(key)` | whether the seat holds the key live at any unit | |
-| `holds_tenant_wide(key)` | whether the seat holds the key live at the root | `HoldsTenantWideAsync` |
+| `roles_with_permission(permission)` | the active roles of the seat's tenant that hold the permission | `RolesWithPermission` |
+| `holds_permission(permission)` | whether the seat holds the permission live at any unit | |
+| `holds_at_tenant(permission)` | whether the seat holds the permission live at the root | `HoldsAtTenantAsync` |
 | `identity_tenants()` | every tenant where the caller's identity has a seat, whatever its status | the seat directory |
+| `identity_tenant_names()` | those tenants' ids, slugs and organizations' names, and nothing more; for a signed-in user alone | the tenant picker, the seat a request acts as, and a seat's overview where it does not read its organization |
 | `unit_parent(unit)` | the parent a unit of the seat's tenant has, as it was before the statement that asks | |
-| `manages_access(key)` | whether your catalogue marks the key as managing access | `TenancyCatalogue.ManagesAccess` |
-| `key_is_contained(key)` | whether a seat hands the key on only where it holds it: a key that manages access while [containment](#containment-on-or-off) is on, and no key once it is off | `TenancyCatalogue.ContainAccessManagingKeys` |
-| `pack_keys(pack)` | the keys a role made from that pack of your catalogue holds, implied ones included; null for a pack it does not have | `TenancyCatalogue.Packs` |
+| `permission_manages_access(permission)` | whether your catalogue marks the permission as managing access | `TenancyCatalogue.ManagesAccess` |
+| `permission_is_contained(permission)` | whether a seat hands the permission on only where it holds it: a permission that manages access while [containment](#containment-on-or-off) is on, and no permission once it is off | `TenancyCatalogue.ContainAccessManagingPermissions` |
+| `pack_permissions(pack)` | the permissions a role made from that pack of your catalogue holds, implied ones included; null for a pack it does not have | `TenancyCatalogue.Packs` |
+| `units_named(ids)` | the units among the ids that are the seat's tenant's, each with its name, its path from the root and its depth, and nothing more of it; for a seat alone | `TenancyDirectory.UnitsByIdAsync` |
 
 Your modules' rules ask them through `TenancyRowAccess`, in `DDDToolkit.Supporting.Tenancy`, so a module
 needs no reference to the Postgres package. A rule that asks one is for signed-in users, since the functions
@@ -5345,14 +5536,14 @@ are not `anon`'s:
 
 ```csharp
 [RowAccess<Project>(RowOperations.Read, To = [RowAccessRoles.User])]
-public static partial class ProjectsAreReadWhereTheKeyIsHeld
+public static partial class ProjectsAreReadWhereThePermissionIsHeld
 {
     public static bool Allows(Project project, Caller caller)
-        => TenancyRowAccess.UnitsWhereIHold<OrganizationUnitId>(ProjectKeys.Read).Contains(project.UnitId);
+        => TenancyRowAccess.UnitsWhereIHold<OrganizationUnitId>(ProjectPermissionNames.Read).Contains(project.UnitId);
 }
 ```
 
-The rule becomes `"UnitId" = ANY (ARRAY(SELECT "tenancy".units_where_i_hold('projects.read')))`. `EXPLAIN`
+The rule becomes `"UnitId" = ANY (ARRAY(SELECT "tenancy".units_where_i_hold_permission('projects.read')))`. `EXPLAIN`
 shows the question as an init plan, asked once per statement, whose answer the scan compares with, by an index
 where the table is large enough for one; a row never calls the function itself. The
 [set-shaped questions](row-level-security.md#set-shaped-questions) say why.
@@ -5365,10 +5556,10 @@ another database `AddTenancyReadModel` maps views over the tables:
 
 | Function | Answers | Its columns |
 |---|---|---|
-| `caller_rights()` | the rights the caller may read: a seat's own, and for system work in a tenant, that tenant's | `"TenantId"`, `"SeatId"`, `"UnitId"`, `"RoleId"`, `"Key"`, `"StartsAt"`, `"EndsAt"` |
+| `caller_permissions()` | the rights the caller may read: a seat's own, and for system work in a tenant, that tenant's | `"TenantId"`, `"SeatId"`, `"UnitId"`, `"RoleId"`, `"Permission"`, `"StartsAt"`, `"EndsAt"` |
 | `tenant_unit_paths()` | the closure of the tenant's tree | `"TenantId"`, `"AncestorId"`, `"DescendantId"`, `"Distance"` |
 | `tenant_units()` | the tenant's units, without their names | `"Id"`, `"TenantId"`, `"ParentId"`, `"Status"` |
-| `tenant_roles()` | the tenant's roles, without their names, with their keys as an array of text | `"Id"`, `"TenantId"`, `"FromPack"`, `"Status"`, `"Keys"` |
+| `tenant_roles_with_permissions()` | the tenant's roles, without their names, with their permissions as an array of text | `"Id"`, `"TenantId"`, `"FromPack"`, `"Status"`, `"Permissions"` |
 | `tenant_placements()` | where the tenant's seats are placed | `"SeatId"`, `"UnitId"`, `"IsPrimary"`, `"TenantId"` |
 | `tenant_seats()` | the tenant's seats the caller reads, every seat by default and those a [read rule of yours](#who-reads-the-seats-a-default-you-may-replace) lets it read where you write one; never their identity, nor a field your seat class adds such as a name | `"Id"`, `"TenantId"`, `"Status"` |
 
@@ -5378,7 +5569,7 @@ the columns each function answers with the read model's at start-up, and names t
 database whose functions were written for another version of the read model fails there: Postgres replaces no
 function by one that answers other columns, so drop the functions it names, then apply the access files.
 
-Nothing changes in how a module asks: `answers.Over(db).UnitsWhereIHold(key)` is still a subquery of the
+Nothing changes in how a module asks: `answers.Over(db).UnitsWhereIHold(permission)` is still a subquery of the
 module's own query, one statement. The functions run as their caller, so the [policies](#what-the-policies-check)
 on Tenancy's tables decide their rows, and they are written for Postgres to fold into the query that asks them
 ([functions folded into the query](row-level-security.md#policies-a-package-ships)): the plan reads Tenancy's
@@ -5387,7 +5578,7 @@ system role, never by `anon`.
 
 What a module's model names is then what Tenancy offers it, and nothing of how Tenancy stores it. The functions
 answer under the names of the read rows' properties and give a status as the name of its enum member, whatever
-you call Tenancy's tables and columns and however you store its statuses or a role's keys
+you call Tenancy's tables and columns and however you store its statuses or a role's permissions
 ([Your own naming](#your-own-naming)).
 
 With `AddTenancyPostgres()`, asking over a module's context that still maps the views is refused, naming
@@ -5417,22 +5608,22 @@ argument and read no setting:
 |---|---|---|
 | `seat_in_tenant(tenant)` | the seat the caller's identity has in that tenant, when it and the tenant are both active; else null | `SeatInTenant` |
 | `seated_in_tenant(tenant)` | whether there is such a seat | `SeatedInTenant` |
-| `holds_key_in_tenant(tenant, key)` | whether that seat holds the key live at any unit | `HoldsKeyInTenant` |
-| `units_where_i_hold_in_tenant(tenant, key)` | the units where that seat holds the key live, and every unit below them | `UnitsWhereIHoldInTenant` |
-| `roles_with_key_in_tenant(tenant, key)` | the active roles of that tenant that hold the key, to a caller with such a seat | `RolesWithKeyInTenant` |
+| `holds_permission_in_tenant(tenant, permission)` | whether that seat holds the permission live at any unit | `HoldsPermissionInTenant` |
+| `units_where_i_hold_permission_in_tenant(tenant, permission)` | the units where that seat holds the permission live, and every unit below them | `UnitsWhereIHoldInTenant` |
+| `roles_with_permission_in_tenant(tenant, permission)` | the active roles of that tenant that hold the permission, to a caller with such a seat | `RolesWithPermissionInTenant` |
 
 They run as their owner and may be run by signed-in users alone. Each answers for the caller's own seat in the
 tenant asked about, as the question that reads the setting answers for the calling seat. So naming a tenant
 tells a caller nothing of it: a suspended seat, a suspended or closed tenant, a tenant the caller has no seat
 in and someone without a seat anywhere are all answered nothing, the tenant's roles included.
 
-A policy on files kept by their path, `tenant/unit/name`, asks where the reader holds the key in the tenant
+A policy on files kept by their path, `tenant/unit/name`, asks where the reader holds the permission in the tenant
 the path names. A reader with seats in two tenants reads the files of both in one statement:
 
 ```sql
-CREATE POLICY "Read where the key is held in the tenant of the path" ON files FOR SELECT TO authenticated
+CREATE POLICY "Read where the permission is held in the tenant of the path" ON files FOR SELECT TO authenticated
     USING (split_part(path, '/', 2)::uuid = ANY (ARRAY(
-        SELECT tenancy.units_where_i_hold_in_tenant(split_part(path, '/', 1)::bigint, 'projects.read'))));
+        SELECT tenancy.units_where_i_hold_permission_in_tenant(split_part(path, '/', 1)::bigint, 'projects.read'))));
 ```
 
 A cast raises on a path of another shape, and an error in a policy fails the whole statement, for every
@@ -5452,7 +5643,7 @@ public static partial class ProjectIsReadableInTenant
 {
     public static bool Allows(Project project, Caller caller, TenantId tenant)
         => project.TenantId == tenant
-           && TenancyRowAccess.UnitsWhereIHoldInTenant<OrganizationUnitId, TenantId>(tenant, ProjectKeys.Read).Contains(project.UnitId);
+           && TenancyRowAccess.UnitsWhereIHoldInTenant<OrganizationUnitId, TenantId>(tenant, ProjectPermissionNames.Read).Contains(project.UnitId);
 }
 ```
 
@@ -5464,18 +5655,18 @@ function too.
 ### What the policies check
 
 Every command stays in the caller's tenant. Beyond that, a signed-in user reads what every member of the
-tenant reads through the use cases, and writes where the use case asks the key:
+tenant reads through the use cases, and writes where the use case asks the permission:
 
 | Table | Reads | Writes |
 |---|---|---|
 | Tenants, Organizations | the tenant; and the tenants where the person has a seat, which the tenant picker lists | the tenant with `tenancy.settings.manage` for the whole tenant, and never its status; the organization with that, or with `tenancy.units.manage` held |
-| OrganizationUnits | the tenant's | with `tenancy.units.manage` at the parent to add, at the unit or at its parent to rename or move, and at the new parent for a move; a unit that has a parent is never left without one, since a key held at a root is held for the whole tenant |
+| OrganizationUnits | the tenant's | with `tenancy.units.manage` at the parent to add, at the unit or at its parent to rename or move, and at the new parent for a move; a unit that has a parent is never left without one, since a permission held at a root is held for the whole tenant |
 | OrganizationUnitPaths | the tenant's | with `tenancy.units.manage` held; the trigger checks the rest |
 | Seats | the tenant's, and the person's own in any tenant: a default, which a read rule on your seat class replaces ([Who reads the seats](#who-reads-the-seats-a-default-you-may-replace)) | added with `tenancy.seats.manage` for the whole tenant; changed with `tenancy.seats.manage` or `tenancy.grants.manage` held anywhere, or by the seat itself, since every save of a seat writes its version; its id, identity and tenant by no seat, and its status only with `tenancy.seats.manage` for the whole tenant, by a seat that holds what the seat's roles that manage access give (triggers, below); your own columns as your column rules say ([What the database guards on a seat](#what-the-database-guards-on-a-seat)) |
 | SeatPlacements | the tenant's | placed with `tenancy.seats.manage` at the unit, for a seat of the tenant; withdrawn with it there, or by the seat itself, once the placement holds no grant; changed with it held, and made primary only where it is held at the unit, since making one primary demotes the old one wherever that is |
 | SeatRoleGrants | the seat's own; another seat's where the caller manages grants, seats or units at the grant's unit or above it, or roles for the whole tenant ([who reads which grants](#who-reads-which-grants)) | with `tenancy.grants.manage` at the grant's unit, naming a role of the tenant that is active, given in the caller's own name; taken away there, or by the seat itself |
 | SeatRights | the seat's own | by no caller: the database writes them |
-| Roles | the tenant's | with `tenancy.roles.manage` for the whole tenant, which adds a role made by hand, naming no pack; a copy of one of your catalogue's packs, remembering exactly its keys, is added with that or with `tenancy.settings.manage`. What a role's pack gave it no seat changes (a trigger, below) |
+| Roles | the tenant's | with `tenancy.roles.manage` for the whole tenant, which adds a role made by hand, naming no pack; a copy of one of your catalogue's packs, remembering exactly its permissions, is added with that or with `tenancy.settings.manage`. What a role's pack gave it no seat changes (a trigger, below) |
 | TenancyAccessRevisions | the tenant's, for a person with a seat there of any status | by the same person: it is a counter every change of access takes, a seat's change of its own included |
 | The access history, where the context maps one | the tenant's, with `tenancy.history.view` for the whole tenant | added about the person's own seat, in the tenant the connection names; changed and removed by no caller ([Access history](#access-history)) |
 | Invitations and the digests of their tokens, where the context maps them | an invitation with `tenancy.seats.manage` at its unit, and by whoever a read rule on your invitation class adds; a digest by no caller | added by a seat that could add the seat and make the grant itself, and changed to cancelled and nothing else ([Invitations](#invitations)) |
@@ -5488,48 +5679,48 @@ rights and no other seat's, whatever it manages, and its own grants. Another sea
 it manages grants, seats or units, or everywhere when it manages roles for the whole tenant
 ([Who reads which grants](#who-reads-which-grants)).
 
-A seat takes away its own grants and placements without the keys the use cases ask for: taking away
-its own access never gives it any, and the same save removes its keys before the rows that would need them.
+A seat takes away its own grants and placements without the permissions the use cases ask for: taking away
+its own access never gives it any, and the same save removes its permissions before the rows that would need them.
 A placement and a grant keep what they are about, and a seat what it is: the triggers below refuse a change of a
 placement's seat, unit or tenant, of a grant's seat, unit, role or giver, and, to every caller but Tenancy's
 system work in the seat's tenant, of a seat's id, identity or tenant. The use cases never change these, and each such change would move a row past
 the checks its policy makes of a new one, or hand a seat to another account.
 
-**Roles that manage access.** `manages_access(key)` is written from your catalogue, Tenancy's five keys that
-manage access and the ones you mark. A grant of a role that holds a key that manages access is given, changed and taken away
-only by a seat that holds each such key at the grant's unit, and never given by a seat to itself, however
+**Roles that manage access.** `permission_manages_access(permission)` is written from your catalogue, Tenancy's five permissions that
+manage access and the ones you mark. A grant of a role that holds a permission that manages access is given, changed and taken away
+only by a seat that holds each such permission at the grant's unit, and never given by a seat to itself, however
 much it holds. The same goes for withdrawing a placement: the database would take its grants with it, so a
 placement goes only once its grants are gone. That is [containment](#containment-on-or-off), and the policies
-ask it of `key_is_contained(key)`, which the export writes from your catalogue's setting: the keys that manage
-access while it is on, none once you turn it off, and then a grant of any role takes the grants key at its unit
-alone, as one of a role that manages no access does. Every change of a role, of its keys and archiving it included,
+ask it of `permission_is_contained(permission)`, which the export writes from your catalogue's setting: the permissions that manage
+access while it is on, none once you turn it off, and then a grant of any role takes the grants permission at its unit
+alone, as one of a role that manages no access does. Every change of a role, of its permissions and archiving it included,
 takes `tenancy.roles.manage` for the whole tenant. A settings manager adds a role only as a copy of a pack,
-as the use case that changes a tenant's shape does: it names the pack, holds exactly the keys `pack_keys` says, and
+as the use case that changes a tenant's shape does: it names the pack, holds exactly the permissions `pack_permissions` says, and
 remembers exactly those as what the pack gave it, which the next sync of the packs compares the pack with. A role
-manager adds such a copy too, or a role made by hand that names no pack and remembers none. When you mark another key, or change a pack, the next build writes these functions again, and the
-access file it writes is the migration: nobody writes it by hand. An administrators' pack that lists no keys
-holds every key, Tenancy's default one included, so adding a key writes them again as well.
+manager adds such a copy too, or a role made by hand that names no pack and remembers none. When you mark another permission, or change a pack, the next build writes these functions again, and the
+access file it writes is the migration: nobody writes it by hand. An administrators' pack that lists no permissions
+holds every permission, Tenancy's default one included, so adding a permission writes them again as well.
 
 **The database keeps the rights.** A trigger on the grants, the seats and the roles writes the rights each
 change reaches, in the same statement, so they are never behind, inside a transaction either, and whoever
-wrote the row: a use case, a query of your own or an import. It writes one right for each key of an active
-role granted to an active seat that `key_is_live` says your catalogue has live, and only the rows that
+wrote the row: a use case, a query of your own or an import. It writes one right for each permission of an active
+role granted to an active seat that `permission_is_live` says your catalogue has live, and only the rows that
 differ. No policy lets a caller add, change or remove a right, system work included, so the save writes
 none. Two transactions past the use cases that write at once do not see each other's rows; the use cases
 never get there, since each command of a tenant waits for the one before it.
 
-What a seat may still learn of other seats' rights, three functions answer, as ids, keys and dates. Only
+What a seat may still learn of other seats' rights, three functions answer, as ids, permissions and dates. Only
 signed-in users may run them, they run as their owner, and each answers nothing to a seat its guard keeps
 out:
 
 | Function | Answers | To |
 |---|---|---|
 | `tenant_administrators()` | the seats that administer the tenant, each with the role that makes it one | a seat that may read the grants at the root: one that manages grants, seats or units there, or roles for the whole tenant |
-| `rights_a_move_changes(parent, new_parent)` | the rights a move of a unit from under one to under the other would change: the caller's own, and anyone's for a key that manages access that reaches one parent and not the other | a seat that holds `tenancy.units.manage` at both |
-| `seats_holding_at(key, unit)` | the active seats that hold the key live at the unit or above it | each holder whose grant there the caller may read: itself, and the others where it manages grants, seats or units, or all of them when it manages roles for the whole tenant |
+| `permissions_a_move_changes(parent, new_parent)` | the rights a move of a unit from under one to under the other would change: the caller's own, and anyone's for a permission that manages access that reaches one parent and not the other | a seat that holds `tenancy.units.manage` at both |
+| `seats_holding_permission_at(permission, unit)` | the active seats that hold the permission live at the unit or above it | each holder whose grant there the caller may read: itself, and the others where it manages grants, seats or units, or all of them when it manages roles for the whole tenant |
 
 The use cases ask the first two through the store, for the rule that a tenant keeps an administrator and for
-the check of a move, and `ITenancyQuestions.SeatsHoldingAt` asks the third, which composes into a query of
+the check of a move, and `ITenancyQuestions.SeatsHoldingPermissionAt` asks the third, which composes into a query of
 your own like every other question. A move is checked by the application's clock first and answered by the
 database's: when a grant of the mover's starts or ends between the two, the database answers a seat it does
 see nothing, and the move is a `ConcurrencyConflictException`, to read again, as any lost race is.
@@ -5565,7 +5756,7 @@ one of Tenancy's classes; it cannot hold an entity's table, whose rows follow th
 
 **The triggers** that check, next to the one that writes the rights, fire for every role, the tables' owner
 included. A use case trips the first only in a race with another that takes away an administrator, and the one
-on a seat's status only when the calling seat loses a key between the use case's check and its save; the others,
+on a seat's status only when the calling seat loses a permission between the use case's check and its save; the others,
 the ones on what a seat is and on what a role's pack gave it included, it never trips. The first three check at
 commit what the transaction wrote, the last four as the row changes:
 
@@ -5574,7 +5765,7 @@ commit what the transaction wrote, the last four as the row changes:
   none is refused nothing. It checks one transaction of a tenant at a time, so two transactions that each
   take away a different administrator cannot both commit. That holds at read committed, which Postgres and
   Entity Framework use unless you choose another isolation level;
-- every right a seat holds comes from a grant of an active role of its tenant that holds the key, for the
+- every right a seat holds comes from a grant of an active role of its tenant that holds the permission, for the
   grant's period;
 - the paths of a unit are exactly the units above it and itself, in its tenant;
 - a placement keeps its seat, unit and tenant, a grant its seat, unit, role and the seat that gave it, and a role
@@ -5586,8 +5777,8 @@ commit what the transaction wrote, the last four as the row changes:
 - a seat's status changes only by a seat that could give and take away what the status gives and takes
   away. The rights follow the status: a seat made active again gets every grant back, and one suspended or
   deactivated loses them. So the calling seat holds `tenancy.seats.manage` for the whole tenant, as the use
-  cases ask, and holds, at the unit of each grant of the seat that has not ended, every key that manages
-  access of that grant's role, while containment is on (`key_is_contained`). Its own grants that apply now are
+  cases ask, and holds, at the unit of each grant of the seat that has not ended, every permission that manages
+  access of that grant's role, while containment is on (`permission_is_contained`). Its own grants that apply now are
   its own hold, so a seat that manages seats suspends itself. System work and the tables' owner are no seat and
   are not held to it; the policies, and the administrator a tenant keeps, hold those;
 - what a role's pack gave it, which the [sync of the packs](#packs-after-provisioning) compares the pack with, is
@@ -5601,15 +5792,15 @@ own refusal. The last three are access guards: they hold who may, and refuse as 
 toolkit's hint.
 
 A save a policy or one of those three triggers denies is refused with `access.refused`, a refusal of the kind "not
-permitted": an insert or an update whose new row a policy refuses, a status the calling seat lost a key for
+permitted": an insert or an update whose new row a policy refuses, a status the calling seat lost a permission for
 between the use case's check and its save, a seat's identity changed behind the aggregate's back, and an update
 or a delete of a row a policy hides from the statement.
 That last one changes no row, exactly as a lost race does, so the row is read again first; a row somebody else
 changed or removed stays a concurrency conflict. See [When the database refuses](row-level-security.md#when-the-database-refuses).
 It is logged after asking the request's access check again
 ([When the policies refuse what C# allowed](row-level-security.md#when-the-policies-refuse-what-c-allowed)). A
-request that requires a key, `ForTheWholeTenant` or `AtUnit`, is refused by that check as well once the seat lost
-the key, and an information line says that the seat's rights changed between the check and the save. What a use
+request that requires a permission, `AtTenant` or `AtUnit`, is refused by that check as well once the seat lost
+the permission, and an information line says that the seat's rights changed between the check and the save. What a use
 case of Tenancy's checks past what its request declares, behind `InTenant()` say, is not asked again: a save of
 such a request that the database denies stays a warning, which names the requirement it asked.
 
@@ -5623,8 +5814,8 @@ seats lets the row be changed by every caller one of those use cases admits: a s
 anywhere in the tenant, and the seat itself, which takes away what is its own and may be renamed by its own
 command.
 
-It asks those keys anywhere, and not at the seat's units, on purpose. The seats key places any seat of the tenant
-at the caller's unit, so anywhere is what that use case asks. The grants key could be asked at the units the seat
+It asks those permissions anywhere, and not at the seat's units, on purpose. The seats permission places any seat of the tenant
+at the caller's unit, so anywhere is what that use case asks. The grants permission could be asked at the units the seat
 is placed at, which is all a grant needs, but the policy is also all that lets your own commands write the row:
 you cannot widen it, since Tenancy keeps the table to itself, and you narrow it column by column with column
 rules. Holding it to the units would decide for you which of your fields a grants manager writes. Beside the
@@ -5636,7 +5827,7 @@ flowchart TB
     Policy -- no --> Skipped(["the statement<br/>skips the row"])
     Policy -- "yes: itself, or seats<br/>or grants managed<br/>anywhere" --> Column{"which column<br/>changes?"}
     Column -- "id, identity,<br/>tenant" --> System{"Tenancy's system<br/>work in its tenant?"}
-    Column -- status --> Status{"seats key for the<br/>tenant, and the keys<br/>of its grants?"}
+    Column -- status --> Status{"seats permission for the<br/>tenant, and the permissions<br/>of its grants?"}
     Column -- "a column<br/>of yours" --> Yours{"your column<br/>rule allows it,<br/>or you have none?"}
     Column -- version --> Written(["written"])
     System -- yes --> Written
@@ -5649,7 +5840,7 @@ flowchart TB
 
 - **What a seat is, no seat changes.** The id, the identity and the tenant stay what the seat was made with, for
   every seat, whatever it manages, its own row included. The identity links the seat to a person's account, so a
-  seat that wrote another one into it would hand the seat, and every key it holds, to that account; a seat moved
+  seat that wrote another one into it would hand the seat, and every permission it holds, to that account; a seat moved
   to another tenant would leave its placements, grants and rights in the first; and a seat given another id would
   leave every row that names it naming none. A trigger refuses each as a policy refuses, `42501` with the
   toolkit's hint, so a save that tries is `access.refused`. No use case of Tenancy changes them once the seat is
@@ -5660,11 +5851,11 @@ flowchart TB
   keep that work to Tenancy's scope and to its tenant, so it moves no seat to another tenant. Anything else changes
   none of them: background work under `Caller.System`, and a migration or the SQL editor running as the tables'
   owner, which the trigger refuses as it refuses a seat. Where the export
-  [writes the privileges](row-level-security.md#privileges-from-the-policies), the id, a key, and the tenant, as on
+  [writes the privileges](row-level-security.md#privileges-from-the-policies), the id, a permission, and the tenant, as on
   every table kept to a tenant, are no column a caller may update at all, and Postgres refuses those before the
   trigger is asked, as a privilege missing.
 - **The status changes as the use cases change it**, only by a seat that holds `tenancy.seats.manage` for the
-  whole tenant and the keys that manage access of the seat's grants ([What the policies check](#what-the-policies-check)).
+  whole tenant and the permissions that manage access of the seat's grants ([What the policies check](#what-the-policies-check)).
 - **The version is the row's.** Every save of the seat writes it, a save of your own commands included, so whoever
   may change the row writes it, and nothing more holds it. A seat that gives roles at one unit may so write the
   version of a seat it gives nothing to: that changes nothing the seat holds, and makes a save of that seat at the
@@ -5681,23 +5872,23 @@ flowchart TB
   callers, Tenancy keeps it to itself, and no column rule holds it ([DDD00038](diagnostics.md#ddd00038)). Data
   that needs a narrower rule belongs in a table of your own with a rule of your own, or is held by a trigger in a
   [contribution](row-level-security.md#policies-a-package-ships) of yours, which refuses with the toolkit's hint
-  as every access guard does, as the sample's `UnitChangesWithItsKeys` holds a project's unit.
+  as every access guard does, as the sample's `UnitChangesWithItsPermissions` holds a project's unit.
 
 <details>
 <summary>Show the code: the sample's column rule on a seat's name, the trigger that keeps what a seat is, and a one-off that links a seat to another identity</summary>
 
 The sample keeps a name per tenant on its seat, and renames it with its own command, `RenameSeat`: a seat renames
 itself, and another seat takes `tenancy.seats.manage` for the whole tenant, which the request says at the door with
-`[RequiresKey(RequiredKey)]` and `[OrOwn]` on the seat. Its column rule says the same two branches to the database,
+`[RequiresPermission(RequiredPermission)]` and `[OrOwn]` on the seat. Its column rule says the same two branches to the database,
 for each row. The job title has no command, and no rule: it is as writable as the row.
 
 ```csharp
-// Examples.Tenancy.Tenants.Infrastructure/Access/NameChangesByTheSeatOrWithTheSeatsKey.cs
+// Examples.Tenancy.Tenants.Infrastructure/Access/NameChangesByTheSeatOrWithTheSeatsPermission.cs
 [RowAccess<Seat>(RowOperations.Change, To = [RowAccessRoles.User], Columns = [nameof(Seat.DisplayName)])]
-public static partial class NameChangesByTheSeatOrWithTheSeatsKey
+public static partial class NameChangesByTheSeatOrWithTheSeatsPermission
 {
     public static bool Allows(Seat seat, Caller caller)
-        => seat.Id == TenancyRowAccess.CallerSeat<SeatId>() || TenancyRowAccess.HoldsTenantWide(RenameSeat.RequiredKey);
+        => seat.Id == TenancyRowAccess.CallerSeatId<SeatId>() || TenancyRowAccess.HoldsAtTenant(RenameSeat.RequiredPermission);
 }
 ```
 
@@ -5742,84 +5933,84 @@ another account (`SampleOnPostgresTests`).
 
 ### Who reads which grants
 
-Three keys read other seats' grants, `tenancy.grants.manage`, `tenancy.seats.manage` and `tenancy.units.manage`,
+Three permissions read other seats' grants, `tenancy.grants.manage`, `tenancy.seats.manage` and `tenancy.units.manage`,
 and each reads only where it applies, as it acts only there. Held at a unit, it reaches that unit and every unit
-below it, which is what `units_where_i_hold(key)` answers, and the grants there; never one above it or beside it.
+below it, which is what `units_where_i_hold_permission(permission)` answers, and the grants there; never one above it or beside it.
 A fourth, `tenancy.roles.manage`, reads them all when it is held for the whole tenant. In the sample's harbor:
 
 | The calling seat holds | It reads the grants | In harbor |
 |---|---|---|
-| none of the keys below, whatever else it holds: `tenancy.settings.manage` and your catalogue's keys that manage access read no other seat's grants | its own | leo, juno and vic read their own |
+| none of the permissions below, whatever else it holds: `tenancy.settings.manage` and your catalogue's permissions that manage access read no other seat's grants | its own | leo, juno and vic read their own |
 | `tenancy.grants.manage`, `tenancy.seats.manage` or `tenancy.units.manage` at a unit | its own, and every grant at that unit and below it | rhea, Area manager at North: those at North, North Coast and North Inland; not ada's, maud's or hana's at the root, nor any at South Bay |
 | one of those three at the root | every grant of the tenant, the root being the whole tenant | hana, People office at the root |
 | `tenancy.roles.manage` for the whole tenant | every grant of the tenant: a change of a role reaches every seat that holds it | ada and maud, Access admins |
 | `tenancy.roles.manage` below the root | its own: held there, it changes no role | |
 
 The use cases need nothing more. Tenancy's store loads a seat with the grants its caller may read, and every
-command acts on grants it may read: one that gives, takes away or withdraws at a unit asks its key at that unit,
+command acts on grants it may read: one that gives, takes away or withdraws at a unit asks its permission at that unit,
 and one that changes a seat's status, which reaches every grant of the seat, asks `tenancy.seats.manage` for the
 whole tenant, as does the administration's overview of another person's roles in the sample. The directory's
-overview of another seat, `SeatOverviewAsync`, reads through this policy too: its grants, roles and keys are those
-this table gives the caller ([Another seat's overview](#another-seats-overview)). The seats key at a
+overview of another seat, `SeatOverviewAsync`, reads through this policy too: its grants, roles and permissions are those
+this table gives the caller ([Another seat's overview](#another-seats-overview)). The seats permission at a
 unit reads the grants there too, because withdrawing a placement takes its grants with it: the use case reads
 them to ask for `tenancy.grants.manage` as well, and the policy on the placements reads them, as the caller, to
-keep a placement that still has any. Were they hidden from it, a seats manager without the grants key could
+keep a placement that still has any. Were they hidden from it, a seats manager without the grants permission could
 withdraw a placement, and the database would take its grants with it.
 
-`tenant_administrators()` and `seats_holding_at(key, unit)` are written from the same definition as the policy,
+`tenant_administrators()` and `seats_holding_permission_at(permission, unit)` are written from the same definition as the policy,
 and answer a right only where the caller may read the grant that gives it. So rhea is answered no administrator,
 whose grant is at the root, and asked who holds `projects.view` at North Coast, she learns about the seats whose
 grants are at North and below it, and not about ada. Every command that could take an administrator away asks a
-key at the root first, so the rule that a tenant keeps one reads all of them whenever it is asked.
+permission at the root first, so the rule that a tenant keeps one reads all of them whenever it is asked.
 
-`rights_a_move_changes(parent, new_parent)` is the one function that answers past this line, because the check
+`permissions_a_move_changes(parent, new_parent)` is the one function that answers past this line, because the check
 of a move has to weigh what it takes away and what it gives, wherever that is held. It answers another seat's
-right only where it reaches one parent and not the other, as a unit, a key and an end, never whose. A seat that
-manages units at North Coast and at South Bay, moving a unit from under the one to under the other, learns that keys
+right only where it reaches one parent and not the other, as a unit, a permission and an end, never whose. A seat that
+manages units at North Coast and at South Bay, moving a unit from under the one to under the other, learns that permissions
 that manage access are held at North, which the unit would leave. It learns nothing of what is held at the root,
 which reaches the unit wherever it hangs, and a move within North tells rhea nothing held above North.
 
 ### What stays in C#
 
-The policies check the keys where each use case asks them. The use cases decide the rest, and the second lock
+The policies check the permissions where each use case asks them. The use cases decide the rest, and the second lock
 does not repeat it:
 
-- how long a grant of a role that manages access may run against the giver's own hold of its keys, and a
+- how long a grant of a role that manages access may run against the giver's own hold of its permissions, and a
   seat's grant to itself against its own `tenancy.grants.manage`;
 - that changing a role that manages access takes an administrator with no end, where the policy asks
   `tenancy.roles.manage` at the root however long it runs;
-- how long the caller holds each key that manages access against the end of each grant of a seat it
-  suspends, deactivates or reactivates, where the trigger asks only that it holds the key now;
-- what a move may give or take away, the mover's own keys and anyone's keys that manage access;
-- the key at the old parent of a unit that moves, where the policy asks the units key at the unit itself;
+- how long the caller holds each permission that manages access against the end of each grant of a seat it
+  suspends, deactivates or reactivates, where the trigger asks only that it holds the permission now;
+- what a move may give or take away, the mover's own permissions and anyone's permissions that manage access;
+- the permission at the old parent of a unit that moves, where the policy asks the units permission at the unit itself;
 - every change of state a policy cannot tell from another change of the row, such as archiving a unit;
-- the keys a seat needs to take away its own grants and placements, and which packs a tenant's shape
+- the permissions a seat needs to take away its own grants and placements, and which packs a tenant's shape
   asks for.
 
 Some of the first four are containment, and go when you turn it [off](#containment-on-or-off): how long a grant
-of a role that manages access may run, the administrator who changes such a key in a role, the hold against
-each grant of a seat whose status changes, and the keys that manage access a move gives or takes away, from
-anyone. A seat's grant to itself against its own `tenancy.grants.manage`, every key a move would give the mover,
-and the key at the old parent stay, on or off.
+of a role that manages access may run, the administrator who changes such a permission in a role, the hold against
+each grant of a seat whose status changes, and the permissions that manage access a move gives or takes away, from
+anyone. A seat's grant to itself against its own `tenancy.grants.manage`, every permission a move would give the mover,
+and the permission at the old parent stay, on or off.
 
 The columns you add to Tenancy's classes are neither: Tenancy checks nothing about them, in C# or in SQL. Your
 own command's rule holds them in C#, and a column rule of yours in the database, where without one they are as
 writable as the row ([What the database guards on a seat](#what-the-database-guards-on-a-seat)).
 
-A key you retire stops answering in C# at once. In SQL it stops once the access file that writes
-`key_is_live` again is applied: it gets no new right, and every question about the caller or the roles asks
-`key_is_live` too, the ones that [take the tenant](#where-the-connection-names-no-tenant) included, so none
+A permission you retire stops answering in C# at once. In SQL it stops once the access file that writes
+`permission_is_live` again is applied: it gets no new right, and every question about the caller or the roles asks
+`permission_is_live` too, the ones that [take the tenant](#where-the-connection-names-no-tenant) included, so none
 answers for it, in a policy on a stored file or a channel either. The rights already written for it, and the
-key in a role's own list, stay as rows until the holders' rights are written again: when a seat, a grant or
+permission in a role's own list, stay as rows until the holders' rights are written again: when a seat, a grant or
 the role changes, or when `rewrite_tenant_rights()` runs.
 
 **A module's own rule can be coarser still, and then says what it lets through.** The sample's Projects
-module is the example. In C# every command asks its own key: renaming, planning and moving a project ask
+module is the example. In C# every command asks its own permission: renaming, planning and moving a project ask
 `projects.edit`, closing and reopening `projects.close`, its crew `projects.crew.manage`, naming its owner
 `projects.owner.change`, and opening one `projects.open` at the unit. A row knows no command, so the policy
-(`SeatsChangeTheProjectsTheyWorkOn`) lets a seat write a project when it holds any of those keys: at the
+(`SeatsChangeTheProjectsTheyWorkOn`) lets a seat write a project when it holds any of those permissions: at the
 project's unit, or, for the three a crew gives, on its crew. What decides who reaches a project at all is held
-closer. A trigger of the module's own (`UnitChangesWithItsKeys`, beside the module's Postgres migrations)
+closer. A trigger of the module's own (`UnitChangesWithItsPermissions`, beside the module's Postgres migrations)
 changes the unit only to a unit of the project's tenant, for a seat that may edit the project where it was and
 may open projects where it goes. The lock the Membership package writes from the projects' rules
 (`SampleCatalogue.ProjectRules`, marked `[MembershipRules<CrewMember>]`) changes the owner only for a seat that
@@ -5827,25 +6018,25 @@ holds `projects.owner.change` on the project, and writes the rows of its crew on
 `projects.owner.change` there. The rule that opens a project (`SeatsOpenProjectsWhereTheyMay`) names the seat
 itself its owner unless the seat may name owners at the unit, and a policy of the module's own
 (`CrewSeatsOfTheProjectsTenant`) puts only seats of the project's tenant on a crew. And the columns whose
-commands ask a stricter key than any of them have [column rules](row-level-security.md#column-rules): the
+commands ask a stricter permission than any of them have [column rules](row-level-security.md#column-rules): the
 project's name and its planned days change only for a seat that holds `projects.edit` on it
-(`NameAndPlanChangeWithTheEditKey`), and whether it is open only for one that holds `projects.close`
-(`StateChangesWithTheCloseKey`). What a statement that goes round the application can still do, as a seat that
-holds any one of those keys on a project:
+(`NameAndPlanChangeWithTheEditPermission`), and whether it is open only for one that holds `projects.close`
+(`StateChangesWithTheClosePermission`). What a statement that goes round the application can still do, as a seat that
+holds any one of those permissions on a project:
 
 - with any of them, `projects.open` at the project's unit included, which in C# opens new projects there and
   changes none, write the row with nothing changed but its version and the columns that say who changed it
-  last, which the policy alone leaves to every key that changes a project: a save that adds a crew member bumps
+  last, which the policy alone leaves to every permission that changes a project: a save that adds a crew member bumps
   the project's version;
 - with `projects.crew.manage` or `projects.owner.change`, write every row of the project's crew, as the
   commands would, but without their rules: put a seat on it twice, or give one of the tenant's archived
   project roles, which gives nothing;
-- leave the project without what only the aggregate keeps: an owner who is on the crew with the lead role, and,
+- leave the project without what only the aggregate keeps: an owner who is on the crew holding no role, and,
   with `projects.edit`, a name and planned days that are valid.
 
-It never crosses a tenant, reaches none of Tenancy's tables or keys, gives nobody a role on a crew without the
-key that manages it or the one that names the owner, names no owner without the key that does, renames, plans,
-closes and reopens nothing without the key its command asks, and changes neither a project's number nor who wrote
+It never crosses a tenant, reaches none of Tenancy's tables or permissions, gives nobody a role on a crew without the
+permission that manages it or the one that names the owner, names no owner without the permission that does, renames, plans,
+closes and reopens nothing without the permission its command asks, and changes neither a project's number nor who wrote
 its row first.
 
 ### What the second lock stops, and what it does not
@@ -5901,16 +6092,16 @@ rows only, and the scoped system role reads and adds inbox rows, as for any modu
 
 A few answers are needed before any tenant is known. Nothing of Tenancy's runs past the policies for them.
 Each such read runs as the scoped system role in no tenant, where the policies show it no row, and asks a
-function that runs as its owner and answers ids or keys only:
+function that runs as its owner and answers ids or permissions only:
 
 | Function | Answers | To |
 |---|---|---|
-| `role_keys_in_use()` | the keys stored on the roles of every tenant, each once | Tenancy's own system work |
+| `role_permissions_in_use()` | the permissions stored on the roles of every tenant, each once | Tenancy's own system work |
 | `seats_of_identity(identity)` | the tenant and the seat of every seat a person has, whatever its status | Tenancy's own system work |
 | `tenants_to_sweep()` | the ids of the active and the suspended tenants | system work of any scope |
 | `invitation_of_digest(digest)`, where the context maps invitations | the tenant, the invitation and the seat that issued it, for the digest of a token | Tenancy's own system work |
 
-`TenancyChecks.UnknownStoredKeysAsync` asks the first and `TenancySystemReads.TenantsToSweepAsync` the third;
+`TenancyChecks.UnknownStoredPermissionsAsync` asks the first and `TenancySystemReads.TenantsToSweepAsync` the third;
 accepting an [invitation](#invitations) asks the fourth, which is written only for a context that maps them.
 Tenancy begins `Caller.SystemIn` around that one query, on a context of its own and outside any transaction
 the caller holds, with no tenant, whatever seat the work around it acts as. The first two and the fourth
@@ -5990,8 +6181,8 @@ Three choices keep the access data small and the questions fast:
 
 - **Facts, not outcomes.** Tenancy stores who is placed where and holds which role. It does not store what
   that adds up to per person per project, and neither does Projects: rights on a project are worked out
-  when they are asked for, from the team and the keys of each role. For the organization it also keeps
-  the keys a seat holds at each unit, one row per seat, unit, key and the role that grants it, with that
+  when they are asked for, from the team and the permissions of each role. For the organization it also keeps
+  the permissions a seat holds at each unit, one row per seat, unit, permission and the role that grants it, with that
   grant's period, written by the very transaction that makes the change. The rows grow with the grants,
   never with the number of projects.
 - **Start from the person.** A question starts from what the current seat holds and works outward, so its
@@ -6007,7 +6198,7 @@ choices.
 
 - It does not decide access to your resources. The module that owns a resource does, with Tenancy's answers.
   For a resource with members, [Membership](membership.md#with-tenancy) asks them for you: a member is a seat,
-  and a key given at a unit counts for what sits there and below.
+  and a permission given at a unit counts for what sits there and below.
 - It gives a module no names. The read model carries access facts; what a seat, a unit or a role is called is
   asked of the directory, by id.
 - It does not publish integration events or create tables. Those are your module's.

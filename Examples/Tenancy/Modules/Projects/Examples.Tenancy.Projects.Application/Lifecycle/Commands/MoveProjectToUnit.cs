@@ -7,12 +7,12 @@ namespace Examples.Tenancy.Projects.Application.Lifecycle.Commands;
 /// caller needs to be allowed to open a project there as well as to edit this one.
 /// </summary>
 /// <remarks>
-/// Two keys in two places, and both hold: <see cref="RequiredKey"/> on the project, a case of the Membership
-/// package's, and <see cref="DestinationKey"/> at the unit it moves to, the module's own case of a key at a unit,
+/// Two permissions in two places, and both hold: <see cref="RequiredPermission"/> on the project, a case of the Membership
+/// package's, and <see cref="DestinationPermission"/> at the unit it moves to, the module's own case of a permission at a unit,
 /// combined with <c>AccessRequirement.All</c> and checked at the door before the handler, in that order. A refusal is
 /// the first failing case's own, <c>projects.not-found</c> or <c>projects.not-permitted</c> for the project and
-/// <c>projects.not-permitted</c> with the key and the unit for the destination. No attribute says two keys, so the
-/// request answers the property itself. The unit the key is checked at is the one the command names, so the handler
+/// <c>projects.not-permitted</c> with the permission and the unit for the destination. No attribute says two permissions, so the
+/// request answers the property itself. The unit the permission is checked at is the one the command names, so the handler
 /// moves the project to <see cref="UnitId"/> and to no other.
 /// </remarks>
 /// <param name="Id">The project.</param>
@@ -23,16 +23,16 @@ namespace Examples.Tenancy.Projects.Application.Lifecycle.Commands;
 /// </param>
 public sealed record MoveProjectToUnit(ProjectId Id, OrganizationUnitId UnitId, long? ExpectedVersion = null) : ICommand, IProjectsRequest
 {
-    /// <summary>The key the caller holds on the project.</summary>
-    public const string RequiredKey = ProjectKeys.Edit;
+    /// <summary>The permission the caller holds on the project.</summary>
+    public const string RequiredPermission = ProjectPermissionNames.Edit;
 
-    /// <summary>The key the caller holds at the unit the project moves to: the one opening a project there needs.</summary>
-    public const string DestinationKey = OpenProject.RequiredKey;
+    /// <summary>The permission the caller holds at the unit the project moves to: the one opening a project there needs.</summary>
+    public const string DestinationPermission = OpenProject.RequiredPermission;
 
-    /// <summary>Both keys, the project's first: the one on the project, through its crew or the organization, and the one at the destination.</summary>
+    /// <summary>Both permissions, the project's first: the one on the project, through its crew or the organization, and the one at the destination.</summary>
     AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.All(
-        MemberAccess.On(RequiredKey, Id, ExpectedVersion),
-        new ProjectsRequirement.AtUnit(DestinationKey, UnitId));
+        MemberAccess.On(RequiredPermission, Id, ExpectedVersion),
+        new ProjectsRequirement.AtUnit(DestinationPermission, UnitId));
 }
 
 /// <summary>
@@ -58,7 +58,7 @@ public sealed class MoveProjectToUnitHandler(
         var project = await store.LoadAsync(command.Id, command.ExpectedVersion, cancellationToken)
             ?? throw ProjectRefusals.Refuse(ProjectRefusals.NotFound);
 
-        // The keys were checked at the door, at the unit this command names: whether that unit takes anything new is
+        // The permissions were checked at the door, at the unit this command names: whether that unit takes anything new is
         // the tenant's state, not the caller's right, so it is asked here.
         await using var reading = reads.Open();
         await tenancy.RequireActiveUnitAsync(reading, command.UnitId, cancellationToken);

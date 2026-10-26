@@ -16,16 +16,13 @@
     <value>That was not found, or it is not one you can see.</value>
   </data>
   <data name="membership.not-permitted" xml:space="preserve">
-    <value>Doing this needs the key {Key}.</value>
+    <value>Doing this needs the permission {Permission}.</value>
   </data>
   <data name="membership.member-not-active" xml:space="preserve">
     <value>That one cannot be a member: not active, or not known here.</value>
   </data>
   <data name="membership.role-not-for-members" xml:space="preserve">
     <value>That role cannot be given to a member here.</value>
-  </data>
-  <data name="membership.no-owner-role" xml:space="preserve">
-    <value>There is no role in use to give an owner.</value>
   </data>
   <data name="membership.already-member" xml:space="preserve">
     <value>That one is a member already, or is due to become one. Give the member a role instead.</value>
@@ -40,7 +37,7 @@
     <value>That member does not have this role.</value>
   </data>
   <data name="membership.owner-protected" xml:space="preserve">
-    <value>The owner stays a member, in the owner's role, until somebody else is named owner.</value>
+    <value>The owner stays a member, holding no role, until somebody else is named owner.</value>
   </data>
   <data name="membership.already-owner" xml:space="preserve">
     <value>That member is the owner already.</value>
@@ -54,13 +51,10 @@
   <data name="membership.role-name-invalid" xml:space="preserve">
     <value>Enter {Min} to {Max} characters.</value>
   </data>
-  <data name="membership.key-not-for-members" xml:space="preserve">
-    <value>A role cannot give these keys here: {Keys}.</value>
+  <data name="membership.permission-not-for-members" xml:space="preserve">
+    <value>A role cannot give these permissions here: {Permissions}.</value>
   </data>
-  <data name="membership.owner-role-stays" xml:space="preserve">
-    <value>The role every owner holds cannot be archived.</value>
-  </data>
-  <data name="membership.role-keys-not-normalized" xml:space="preserve">
-    <value>A role's keys must be distinct, not blank and in ordinal order.</value>
+  <data name="membership.role-permissions-not-normalized" xml:space="preserve">
+    <value>A role's permissions must be distinct, not blank and in ordinal order.</value>
   </data>
 </root>

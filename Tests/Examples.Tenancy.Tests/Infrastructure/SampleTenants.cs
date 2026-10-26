@@ -1,4 +1,5 @@
 using DDDToolkit.Supporting.Tenancy;
+using Examples.Tenancy.Projects.Application.Access;
 using Mediator;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -38,11 +39,14 @@ public static class SampleTenants
         }
     }
 
-    /// <summary>Sends <paramref name="command"/> as system work in <paramref name="tenant"/>, in a scope of its own.</summary>
+    /// <summary>
+    /// Sends <paramref name="command"/> as the Projects module's system work in <paramref name="tenant"/>, in that
+    /// module's own scope, which the projects' rules let through; in a service scope of its own.
+    /// </summary>
     public static async Task<TResponse> SendAsSystemAsync<TResponse>(SampleFactory host, TenantId tenant, ICommand<TResponse> command)
     {
         ArgumentNullException.ThrowIfNull(host);
-        using (TenancyUseCases.BeginSystemIn(tenant))
+        using (TenancyUseCases.BeginSystemIn(tenant, scope: ProjectMembership.Scope))
         {
             await using var scope = host.Services.CreateAsyncScope();
             return await scope.ServiceProvider.GetRequiredService<ISender>().Send(command, Cancellation);
@@ -53,18 +57,18 @@ public static class SampleTenants
     public static async Task SendAsSystemAsync(SampleFactory host, TenantId tenant, ICommand command)
     {
         ArgumentNullException.ThrowIfNull(host);
-        using (TenancyUseCases.BeginSystemIn(tenant))
+        using (TenancyUseCases.BeginSystemIn(tenant, scope: ProjectMembership.Scope))
         {
             await using var scope = host.Services.CreateAsyncScope();
             await scope.ServiceProvider.GetRequiredService<ISender>().Send(command, Cancellation);
         }
     }
 
-    /// <summary>Asks <paramref name="query"/> as system work in <paramref name="tenant"/>, in a scope of its own.</summary>
+    /// <summary>Asks <paramref name="query"/> as the Projects module's system work in <paramref name="tenant"/>, in a service scope of its own.</summary>
     public static async Task<TResponse> AskAsSystemAsync<TResponse>(SampleFactory host, TenantId tenant, IQuery<TResponse> query)
     {
         ArgumentNullException.ThrowIfNull(host);
-        using (TenancyUseCases.BeginSystemIn(tenant))
+        using (TenancyUseCases.BeginSystemIn(tenant, scope: ProjectMembership.Scope))
         {
             await using var scope = host.Services.CreateAsyncScope();
             return await scope.ServiceProvider.GetRequiredService<ISender>().Send(query, Cancellation);

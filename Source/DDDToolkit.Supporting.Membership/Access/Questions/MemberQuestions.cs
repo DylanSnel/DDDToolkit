@@ -9,8 +9,8 @@ namespace DDDToolkit.Supporting.Membership.Access;
 /// <para>
 /// The order is the same for every question: the caller's own refusal when it is nobody the questions can be
 /// asked about; then <c>not-found</c> for a resource it may not see, exactly as for one that does not exist,
-/// so nobody learns a resource is there; then <c>not-permitted</c>, naming the key, for a resource it sees
-/// without holding the key. All under the codes of the resource asked about.
+/// so nobody learns a resource is there; then <c>not-permitted</c>, naming the permission, for a resource it sees
+/// without holding the permission. All under the codes of the resource asked about.
 /// </para>
 /// </summary>
 public static class MemberQuestions
@@ -19,49 +19,49 @@ public static class MemberQuestions
     public const int MostResources = 200;
 
     /// <summary>
-    /// Requires the caller to hold <paramref name="key"/> on a resource: what a command or a query about one
+    /// Requires the caller to hold <paramref name="permission"/> on a resource: what a command or a query about one
     /// resource passes before its handler. One statement.
     /// </summary>
     /// <param name="access">The access questions of the resource's kind.</param>
     /// <param name="resource">The resource.</param>
-    /// <param name="key">The key the request needs on it.</param>
+    /// <param name="permission">The permission the request needs on it.</param>
     /// <param name="cancellationToken">Cancels the query.</param>
-    /// <returns>What was read of the resource, with the version it was checked at and how the key is held.</returns>
+    /// <returns>What was read of the resource, with the version it was checked at and how the permission is held.</returns>
     /// <exception cref="Exceptions.RefusalException">
     /// The caller's own refusal when it is nobody; <c>not-found</c> when it may not see the resource, for a
-    /// missing one too; <c>not-permitted</c>, with the <c>Key</c>, when it sees the resource but does not hold
-    /// the key on it.
+    /// missing one too; <c>not-permitted</c>, with the <c>Permission</c>, when it sees the resource but does not hold
+    /// the permission on it.
     /// </exception>
     public static async Task<MemberHold<TResourceId>> RequireAsync<TResourceId>(
         this IMemberQuestions<TResourceId> access,
         TResourceId resource,
-        string key,
+        string permission,
         CancellationToken cancellationToken)
         where TResourceId : struct, IEntityId, IEquatable<TResourceId>
     {
         ArgumentNullException.ThrowIfNull(access);
-        ArgumentException.ThrowIfNullOrWhiteSpace(key);
+        ArgumentException.ThrowIfNullOrWhiteSpace(permission);
 
         // The caller before anything is read: nobody is refused as nobody, without a statement made for it.
         access.RequireCaller();
 
         var codes = access.Rules.Codes;
-        var hold = await access.HoldAsync(resource, key, cancellationToken).ConfigureAwait(false)
+        var hold = await access.HoldAsync(resource, permission, cancellationToken).ConfigureAwait(false)
                    ?? throw codes.Refuse(MembershipRefusals.NotFound);
 
         return hold.Via is null
-            ? throw codes.Refuse(MembershipRefusals.NotPermitted, ("Key", key))
+            ? throw codes.Refuse(MembershipRefusals.NotPermitted, ("Permission", permission))
             : hold;
     }
 
     /// <summary>
-    /// How the caller holds <paramref name="key"/> on a resource it may see, or <see langword="null"/> when it
-    /// does not hold it: for a query that answers with what its caller may do, where not holding the key is an
+    /// How the caller holds <paramref name="permission"/> on a resource it may see, or <see langword="null"/> when it
+    /// does not hold it: for a query that answers with what its caller may do, where not holding the permission is an
     /// answer and not a refusal. One statement.
     /// </summary>
     /// <param name="access">The access questions of the resource's kind.</param>
     /// <param name="resource">The resource.</param>
-    /// <param name="key">A permission key.</param>
+    /// <param name="permission">A permission.</param>
     /// <param name="cancellationToken">Cancels the query.</param>
     /// <exception cref="Exceptions.RefusalException">
     /// The caller's own refusal when it is nobody; <c>not-found</c> when the caller may not see the resource.
@@ -69,18 +69,18 @@ public static class MemberQuestions
     public static async Task<MemberVia?> ViaAsync<TResourceId>(
         this IMemberQuestions<TResourceId> access,
         TResourceId resource,
-        string key,
+        string permission,
         CancellationToken cancellationToken)
         where TResourceId : struct, IEntityId, IEquatable<TResourceId>
     {
         ArgumentNullException.ThrowIfNull(access);
-        ArgumentException.ThrowIfNullOrWhiteSpace(key);
+        ArgumentException.ThrowIfNullOrWhiteSpace(permission);
 
         // The same first step as every question: nobody is told a resource is not found, as if it had been
         // looked for, when the questions cannot be asked about that caller at all.
         access.RequireCaller();
 
-        var hold = await access.HoldAsync(resource, key, cancellationToken).ConfigureAwait(false)
+        var hold = await access.HoldAsync(resource, permission, cancellationToken).ConfigureAwait(false)
                    ?? throw access.Rules.Codes.Refuse(MembershipRefusals.NotFound);
 
         return hold.Via;

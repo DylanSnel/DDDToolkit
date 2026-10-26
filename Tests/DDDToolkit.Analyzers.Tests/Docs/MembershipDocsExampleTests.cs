@@ -47,7 +47,7 @@ public class MembershipDocsExampleTests
     private static GeneratorRunOutcome Run()
     {
         var examples = DocsExamples.Of(Page, Heading);
-        examples.Should().HaveCount(4, "the domain, the rules, the wiring, and a request with its handler");
+        examples.Should().HaveCount(5, "the domain, the permissions, the rules, the wiring, and a request with its handler");
 
         var host = GeneratorTestHost.Create(Header + examples[0], "Example0.cs");
         for (var index = 1; index < examples.Count; index++)
@@ -57,7 +57,7 @@ public class MembershipDocsExampleTests
 
         return host
             .WithAssemblyName("Filing")
-            .WithModule("Filing")
+            .WithModuleFromTheBuild("Filing")
             .WithMembership()
             .RunCoreAnd([.. GeneratorTestHost.EntityFrameworkGenerators(), .. GeneratorTestHost.MemberListGenerators()]);
     }
@@ -93,16 +93,19 @@ public class MembershipDocsExampleTests
         var owner = emitted.CallStatic("Filing.UserId", "CreateUnique");
         var reader = emitted.CallStatic("Filing.UserId", "CreateUnique");
 
-        // The owner's role is the one the rules added, as the handler finds it.
+        // The rules read the document's name, codes and permissions off its type: what the generators wrote for it.
         var rules = (MembershipRules)emitted.StaticProperty("Filing.DocumentMembership", "Rules")!;
-        rules.OwnerRole.Should().Be(MembershipRules.DefaultOwnerRole);
-        rules.Codes.Should().BeSameAs(emitted.StaticProperty("Filing.Document", "Codes"), "the rules refuse under the codes the document declares");
+        rules.Name.Should().Be("documents", "the class's name, made plural");
+        rules.Codes.Should().BeSameAs(emitted.StaticProperty("Filing.Document", "Codes"), "the rules refuse under the codes written on the document");
+        rules.OwnerPermissions.Should().Equal("documents.view", "documents.edit", "documents.share");
+        rules.SystemScopes.Should().Equal(["filing"], "the scope of the document's module");
 
-        var document = emitted.New("Filing.Document", emitted.CallStatic("Filing.DocumentId", "CreateSequential"), owner, new NamedRole(rules.OwnerRole), now);
+        // The owner holds no role: it opens the document with nothing else to say.
+        var document = emitted.New("Filing.Document", emitted.CallStatic("Filing.DocumentId", "CreateSequential"), owner, now);
         emitted.Call(document, "ShareWith", reader, new NamedRole("contributor"), MemberPeriod.Open(now), now, owner);
 
         ((System.Collections.IEnumerable)emitted.Property(document, "Shares")!).Cast<object>().Should().HaveCount(2);
-        rules.KeysOf(new NamedRole("contributor")).Should().Equal("documents.view", "documents.edit");
+        rules.PermissionsOf(new NamedRole("contributor")).Should().Equal("documents.view", "documents.edit");
 
         var twice = FluentActions.Invoking(() => emitted.Call(document, "ShareWith", reader, new NamedRole("onlooker"), MemberPeriod.Open(now), now, owner))
             .Should().Throw<TargetInvocationException>().WithInnerException<RefusalException>().Which;
@@ -110,13 +113,13 @@ public class MembershipDocsExampleTests
     }
 
     [Fact]
-    public void The_first_examples_rules_name_the_keys_the_database_lock_is_written_from()
+    public void The_first_examples_permissions_say_which_the_database_lock_is_written_from()
     {
         // A reader who follows the first example on Postgres gets the lock on the member tables and the owner column,
         // and no warning at start-up that the rules leave them to whoever may change a document.
         var rules = (MembershipRules)Run().Emit().StaticProperty("Filing.DocumentMembership", "Rules")!;
 
-        (rules.ChangeMembersKey, rules.ChangeOwnerKey).Should().Be(("documents.share", "documents.share"), "the key the example's command that shares requires");
+        (rules.MembersLockPermission, rules.OwnerLockPermission).Should().Be(("documents.share", "documents.share"), "the permission the example's command that shares requires");
     }
 
     [Fact]

@@ -1,4 +1,5 @@
 using DDDToolkit.Abstractions.Attributes;
+using DDDToolkit.Access;
 using DDDToolkit.Invariants;
 using DDDToolkit.Supporting.Membership.TestHost.Depot;
 
@@ -22,27 +23,29 @@ public sealed partial class CratePorter;
 /// <summary>
 /// A crate, standing in a bay of the depot: the host's fourth kind of resource with members, and the one that
 /// stands beside the organization in every way. Its members are porters, its roles are the depot's, and a
-/// porter who holds a key at the crate's bay, or above it, holds that key on the crate without being on it.
+/// porter who holds a permission at the crate's bay, or above it, holds that permission on the crate without being on it.
 /// </summary>
 [AggregateRoot<CrateId>]
 public sealed partial class Crate
 {
-    /// <summary>Packs a crate in a bay, with <paramref name="owner"/> on it from <paramref name="now"/> on, for good, in the owner's role.</summary>
-    public Crate(CrateId id, string label, BayId bay, PorterId owner, DepotRoleId ownerRole, DateTimeOffset now) : base(id)
+    /// <summary>Packs a crate in a bay, with <paramref name="owner"/> on it from <paramref name="now"/> on, for good, holding no role.</summary>
+    public Crate(CrateId id, string label, BayId bay, PorterId owner, DateTimeOffset now) : base(id)
     {
         Label = label;
         BayId = bay;
         OwnerId = owner;
-        Members.Open(ownerRole, now);
+        Members.Open(now);
     }
 
     /// <summary>What is written on the crate.</summary>
     public string Label { get; private set; } = string.Empty;
 
     /// <summary>The bay the crate stands in: where it sits.</summary>
+    [At]
     public BayId BayId { get; private set; }
 
     /// <summary>The porter that owns the crate.</summary>
+    [Owner]
     public PorterId OwnerId { get; private set; }
 
     /// <summary>The porters on the crate.</summary>
@@ -76,7 +79,7 @@ public sealed partial class Crate
         public InvariantFailure? Check(Crate entity) => entity.Members.OneMembershipPerMember();
     }
 
-    /// <summary>The owner stays on the crate, with a role that does not run out.</summary>
+    /// <summary>The owner stays on the crate, for good.</summary>
     public sealed class OwnerKeepsAPlace : IInvariant<Crate>
     {
         /// <inheritdoc />
@@ -87,53 +90,56 @@ public sealed partial class Crate
     }
 }
 
-/// <summary>The keys a crate is asked about, and two that are not a crate's.</summary>
-public static class CrateKeys
+/// <summary>
+/// The permissions asked on a crate. Its owner holds the ones that pack, weigh and scrap it; every porter on it sees
+/// it; a depot role gives those, and permissions of other modules besides; one is held from above alone.
+/// </summary>
+[Permissions]
+public static class CratePermissions
 {
-    /// <summary>See a crate: what being on it gives.</summary>
+    /// <summary>See a crate: held by every porter on it, and from above by a hold of it at the crate's bay.</summary>
+    [On<Crate>(EveryMember = true, Owner = false)]
     public const string See = "crates.see";
 
-    /// <summary>Pack a crate.</summary>
+    /// <summary>Pack a crate: its owner's, and given by a depot role.</summary>
+    [On<Crate>]
     public const string Pack = "crates.pack";
 
-    /// <summary>Weigh a crate.</summary>
+    /// <summary>Weigh a crate: its owner's, and given by a depot role.</summary>
+    [On<Crate>]
     public const string Weigh = "crates.weigh";
 
-    /// <summary>Move a crate to another bay: held at a bay or not at all, never through a role on a crate.</summary>
+    /// <summary>Move a crate: no role on a crate gives it, so it is held from above alone.</summary>
+    [On<Crate>(Owner = false, InRoles = false)]
     public const string Move = "crates.move";
 
-    /// <summary>Scrap a crate: the owner's, by owning it, whatever the depot's roles give.</summary>
+    /// <summary>Scrap a crate: its owner's by owning it, a depot role's, or held from above.</summary>
+    [On<Crate>]
     public const string Scrap = "crates.scrap";
+}
 
-    /// <summary>A key of another module's, which a role of the depot's may give on a crate without the crates naming it.</summary>
+/// <summary>Permissions of the depot's other modules that a depot role holds beside a crate's permissions.</summary>
+public static class DepotPermissions
+{
+    /// <summary>Print labels: another module's permission, which a depot role on a crate gives on it as well.</summary>
     public const string PrintLabels = "labels.print";
 
-    /// <summary>A key of the depot's own, which no role gives on a crate, whatever it holds in the depot.</summary>
+    /// <summary>Run the depot: the depot's own permission, which no role on a crate gives.</summary>
     public const string ManageDepot = "depot.manage";
 }
 
 /// <summary>
-/// The rules of access through a crate's porters, with each of the three things rules say said the other
-/// way than a document's: who a member is, is what the depot resolves; the roles are kept by the depot; and a
-/// key held at the crate's bay, or above it, reaches the crate.
+/// The rules of access through a crate's porters, with the depot's own functions: porters known by the depot, roles
+/// it keeps, and its bays, from which a permission held at a crate's bay or above it reaches the crate.
 /// </summary>
 public static class CrateMembership
 {
-    /// <summary>What the depot's role for owners is found by: its name.</summary>
-    public const string OwnerRole = "crate-lead";
-
-    /// <summary>The codes a crate refuses with.</summary>
+    /// <summary>The codes a crate refuses under.</summary>
     public static MembershipCodes Codes { get; } = MembershipCodes.Under("crates");
 
     /// <summary>The rules.</summary>
-    public static MembershipRules Rules { get; } = new(
-        "crates",
-        keys: [CrateKeys.Scrap],
+    public static MembershipRules Rules { get; } = MembershipRules.For<Crate>(
+        Roles.External(DepotFunctions.RolesWithPermission, otherPermissions: OtherPermissions.AllBut(DepotPermissions.ManageDepot)),
         members: MemberSource.Resolved(DepotFunctions.CallerPorter),
-        seeKey: CrateKeys.See,
-        ownerRole: OwnerRole,
-        memberKeys: MemberKeys.AllBut(CrateKeys.Move, CrateKeys.ManageDepot),
-        codes: Codes,
-        rolesKeptElsewhere: new(DepotFunctions.RolesWithKey),
-        above: new(DepotFunctions.BaysWhereIHold));
+        reachFromAbove: DepotFunctions.BaysWhereIHold);
 }

@@ -102,7 +102,7 @@ public abstract class ConcurrencyTests(TestDatabases databases) : IAsyncLifetime
     [InlineData("suspend")]
     [InlineData("reactivate")]
     [InlineData("deactivate")]
-    [InlineData("set-keys")]
+    [InlineData("set-permissions")]
     [InlineData("archive-role")]
     [InlineData("move")]
     [InlineData("place")]
@@ -124,7 +124,7 @@ public abstract class ConcurrencyTests(TestDatabases databases) : IAsyncLifetime
             "suspend" => services.Seats().SuspendAsync(_lin, TestContext.Current.CancellationToken),
             "reactivate" => services.Seats().ReactivateAsync(_lin, TestContext.Current.CancellationToken),
             "deactivate" => services.Seats().DeactivateAsync(_lin, TestContext.Current.CancellationToken),
-            "set-keys" => services.Roles().SetKeysAsync(Operator, [HostCatalogue.WidgetChange], TestContext.Current.CancellationToken),
+            "set-permissions" => services.Roles().SetPermissionsAsync(Operator, [HostCatalogue.WidgetChange], TestContext.Current.CancellationToken),
             "archive-role" => services.Roles().ArchiveAsync(Operator, TestContext.Current.CancellationToken),
             "move" => services.Organization().MoveUnitAsync(_coast, _south, TestContext.Current.CancellationToken),
             "place" => services.Seats().PlaceAsync(_lin, _south, primary: false, TestContext.Current.CancellationToken),
@@ -132,7 +132,7 @@ public abstract class ConcurrencyTests(TestDatabases databases) : IAsyncLifetime
             _ => throw new ArgumentOutOfRangeException(nameof(command), command, null),
         });
 
-        _services.Commands.Commands[0].Should().Contain("FROM " + Revisions, "the revision is read before the key checks and the loads");
+        _services.Commands.Commands[0].Should().Contain("FROM " + Revisions, "the revision is read before the permission checks and the loads");
         _services.Commands.Commands.Should().Contain(sent => sent.StartsWith("UPDATE " + Revisions) || sent.Contains("\nUPDATE " + Revisions), "and bumped by the save");
     }
 
@@ -159,10 +159,10 @@ public abstract class ConcurrencyTests(TestDatabases databases) : IAsyncLifetime
     {
         await BuildHarborAsync();
 
-        // The role gains a key Grace does not hold while she grants it.
+        // The role gains a permission Grace does not hold while she grants it.
         var conflict = await RaceAsync(
             interrupted: services => services.Seats().GrantAsync(_lin, _north, Operator, until: null, reason: null, TestContext.Current.CancellationToken),
-            interrupting: services => services.Roles().SetKeysAsync(Operator, [HostCatalogue.WidgetChange, HostCatalogue.WidgetCreate, TenancyKeys.RolesManage], TestContext.Current.CancellationToken),
+            interrupting: services => services.Roles().SetPermissionsAsync(Operator, [HostCatalogue.WidgetChange, HostCatalogue.WidgetCreate, TenancyPermissions.RolesManage], TestContext.Current.CancellationToken),
             interruptedSeat: _grace);
 
         conflict.AggregateType.Should().Be<TenancyAccessRevision<TenantId>>();
@@ -170,7 +170,7 @@ public abstract class ConcurrencyTests(TestDatabases databases) : IAsyncLifetime
 
         var refusal = await Refused.WithCodeAsync(TenancyRefusals.GrantExceedsOwn, () => _services.BySeat(_harbor.Tenant, _grace, services =>
             services.Seats().GrantAsync(_lin, _north, Operator, until: null, reason: null, TestContext.Current.CancellationToken)));
-        refusal.Arguments["Missing"].Should().Be(TenancyKeys.RolesManage);
+        refusal.Arguments["Missing"].Should().Be(TenancyPermissions.RolesManage);
     }
 
     [Fact]
@@ -178,7 +178,7 @@ public abstract class ConcurrencyTests(TestDatabases databases) : IAsyncLifetime
     {
         await BuildHarborAsync();
 
-        // Coast moves out from under North, where Grace's keys are, while she grants there.
+        // Coast moves out from under North, where Grace's permissions are, while she grants there.
         var conflict = await RaceAsync(
             interrupted: services => services.Seats().GrantAsync(_lin, _coast, Operator, until: null, reason: null, TestContext.Current.CancellationToken),
             interrupting: services => services.Organization().MoveUnitAsync(_coast, _south, TestContext.Current.CancellationToken),
@@ -273,10 +273,10 @@ public abstract class ConcurrencyTests(TestDatabases databases) : IAsyncLifetime
         await _services.BySystemIn(_harbor.Tenant, services => services.Seats().PlaceAsync(_lin, _coast, primary: false, TestContext.Current.CancellationToken));
     }
 
-    /// <summary>The seats holding the administrator key at the root, from the stored rights.</summary>
+    /// <summary>The seats holding the administrator permission at the root, from the stored rights.</summary>
     private async Task<List<SeatId>> AdministratorsAsync()
         => [.. (await _services.StoredRightsAsync())
-            .Where(right => right.UnitId == _harbor.RootUnit && right.Key == TenancyKeys.AdministratorKey)
+            .Where(right => right.UnitId == _harbor.RootUnit && right.Permission == TenancyPermissions.AdministratorPermission)
             .Select(right => right.SeatId)
             .Distinct()];
 

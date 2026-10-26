@@ -48,7 +48,7 @@ public static class AccessBehaviorChecks
     /// adds it, or closed over that message, as the Mediator library registers what a host lists in its options, once
     /// for each message that meets the behavior's constraints. So a module without a stream query needs nothing in the
     /// pipeline of streams, and one closed registration speaks for its own message only. A behavior registered as
-    /// anything else, itself say, with a factory, or under a key, is none the pipeline asks for, and does not count.
+    /// anything else, itself say, with a factory, or under a permission, is none the pipeline asks for, and does not count.
     /// </para>
     /// </summary>
     /// <param name="services">The host's services, as registered.</param>

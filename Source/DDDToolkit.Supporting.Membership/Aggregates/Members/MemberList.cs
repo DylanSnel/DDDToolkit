@@ -12,9 +12,7 @@ namespace DDDToolkit.Supporting.Membership;
 /// [AggregateRoot&lt;DocumentId&gt;]
 /// public sealed partial class Document
 /// {
-///     public static MembershipCodes Codes { get; } = MembershipCodes.Under("documents");
-///
-///     public UserId OwnerId { get; private set; }
+///     [Owner] public UserId OwnerId { get; private set; }
 ///
 ///     public partial IReadOnlyList&lt;DocumentShare&gt; Shares { get; }
 ///
@@ -27,11 +25,11 @@ namespace DDDToolkit.Supporting.Membership;
 /// </code>
 /// <para>
 /// The package's generator writes <c>Members</c> on the resource a member class names, from the one collection
-/// of the member class, the one property of the member's id, which is the owner, and the one static
-/// <see cref="MembershipCodes"/> the resource declares. A new member row's id is made by the id itself, with
-/// its <c>Create()</c>, which the generator writes for an <c>[EntityId&lt;Guid&gt;]</c> and an id over anything
-/// else declares. A resource the generator cannot tell these of declares the property itself, which the generator
-/// then leaves alone:
+/// of the member class, the property marked <c>[Owner]</c>, and the codes it writes on the resource, or the one
+/// static <see cref="MembershipCodes"/> the resource declares itself. A new member row's id is made by the id
+/// itself, with its <c>Create()</c>, which the generator writes for an <c>[EntityId&lt;Guid&gt;]</c> and an id over
+/// anything else declares. A resource the generator cannot tell these of declares the property itself, which the
+/// generator then leaves alone:
 /// <code>
 /// private MemberList&lt;DocumentShare, DocumentShareId, UserId, NamedRole&gt; Members
 ///     =&gt; new(_shares, OwnerId, DocumentRefusals.Membership);
@@ -54,9 +52,10 @@ namespace DDDToolkit.Supporting.Membership;
 /// the member's one membership: a second is refused, whenever it would start.</item>
 /// <item>A member holds each role at most once, each for a period of its own. A role counts only while the
 /// membership does, so none is given to a member whose membership has ended.</item>
-/// <item>There is one owner, always a member, with no end, holding the owner's role with no end either. The
-/// owner cannot be removed, nor lose that role, until somebody else is named owner; the owner before then
-/// loses the owner's role, and that role alone, and stays a member with no end.</item>
+/// <item>There is one owner, always a member, with no end, and holding no role: the owner holds what it holds by
+/// owning the resource, the permissions marked <c>Owner</c>. The owner cannot be removed, nor be given a role,
+/// until somebody else is named owner; the owner before then becomes what the call says, a member in a role or
+/// nobody on the list (<see cref="FormerOwner"/>).</item>
 /// </list>
 /// <para>
 /// Two of the rules are about the whole list, which only the aggregate has, so they are checks here
@@ -64,8 +63,7 @@ namespace DDDToolkit.Supporting.Membership;
 /// call, under the aggregate's own codes. The third, one hold per role, a member checks by itself.
 /// </para>
 /// <para>
-/// Which role is the owner's, and whether a member or a role may go on the list at all, cannot be told from
-/// the list: the use case asks (<see cref="UseCases.MemberAdmission{TResourceId, TMemberId, TRoleId}"/>) and
+/// Whether a member or a role may go on the list at all cannot be told from the list: the use case asks (<see cref="UseCases.MemberAdmission{TResourceId, TMemberId, TRoleId}"/>) and
 /// passes the answer in. Neither can who may change the list, which no part of the package decides: the
 /// application's command requires what its caller needs before any of these methods is reached.
 /// </para>
@@ -99,14 +97,14 @@ public sealed class MemberList<TMember, TId, TMemberId, TRoleId>
     }
 
     /// <summary>
-    /// Opens the list of a new resource: puts its owner on it, holding <paramref name="ownerRole"/>, both from
-    /// <paramref name="now"/> on and with no end. Called once, where the aggregate is constructed.
+    /// Opens the list of a new resource: puts its owner on it, from <paramref name="now"/> on and with no end,
+    /// holding no role, since the owner holds what it holds by owning the resource. Called once, where the aggregate
+    /// is constructed.
     /// </summary>
-    /// <param name="ownerRole">The owner's role, which the use case found.</param>
     /// <param name="now">When the resource is opened.</param>
     /// <returns>The owner's membership.</returns>
     /// <exception cref="InvalidOperationException">The list has members already: a resource is opened once.</exception>
-    public TMember Open(TRoleId ownerRole, DateTimeOffset now)
+    public TMember Open(DateTimeOffset now)
     {
         if (_collection.Count > 0)
         {
@@ -114,9 +112,7 @@ public sealed class MemberList<TMember, TId, TMemberId, TRoleId>
                 "This member list has members already. Open puts the owner on the list of a new resource, once, where its aggregate is constructed.");
         }
 
-        var member = NewMember(_owner, MemberPeriod.Open(now), addedBy: null);
-        member.StayAsOwner(ownerRole, now);
-        return member;
+        return NewMember(_owner, MemberPeriod.Open(now), addedBy: null);
     }
 
     /// <summary>
@@ -189,10 +185,19 @@ public sealed class MemberList<TMember, TId, TMemberId, TRoleId>
     /// </param>
     /// <param name="by">Who gives it, or <see langword="null"/> for system work.</param>
     /// <returns>The role as the member holds it now.</returns>
-    /// <exception cref="RefusalException"><c>invalid-period</c>, <c>member-not-found</c>, <c>role-held</c>, under the resource's codes.</exception>
+    /// <exception cref="RefusalException">
+    /// <c>invalid-period</c>, <c>member-not-found</c>, <c>role-held</c>, and <c>owner-protected</c> for the owner, who
+    /// holds no role, under the resource's codes.
+    /// </exception>
     public MemberRole<TMemberId, TRoleId> GiveRole(TMemberId member, TRoleId role, MemberPeriod period, DateTimeOffset now, TMemberId? by = null)
     {
         RequireNotEmpty(period);
+        if (member.Equals(_owner))
+        {
+            // The owner holds what it holds by owning; a role would give it more, or nothing.
+            throw _codes.Refuse(MembershipRefusals.OwnerProtected);
+        }
+
         var found = Find(member) is { } on && !on.EndedBy(now)
             ? on
             : throw _codes.Refuse(MembershipRefusals.MemberNotFound, (MembershipCodes.DefaultMemberArgument, member));
@@ -206,29 +211,18 @@ public sealed class MemberList<TMember, TId, TMemberId, TRoleId>
 
     /// <summary>
     /// Takes a role from a member, who stays a member with whatever else it holds. Any role can be taken, one
-    /// that is no longer in use too: what was given once can always be taken back. The owner keeps the owner's
-    /// role, and never ends up without any role that has no end, until somebody else is named owner.
+    /// that is no longer in use too: what was given once can always be taken back.
     /// </summary>
     /// <param name="member">The member.</param>
     /// <param name="role">The role to take.</param>
-    /// <param name="ownerRole">
-    /// The owner's role, as the use case found it, or <see langword="null"/> when there is none in use. Read
-    /// for the owner only, so a use case asks for it only when <paramref name="member"/> is the owner.
-    /// </param>
     /// <returns>The role as the member held it.</returns>
-    /// <exception cref="RefusalException"><c>member-not-found</c>, <c>role-not-held</c>, <c>owner-protected</c>, under the resource's codes.</exception>
-    public MemberRole<TMemberId, TRoleId> TakeRole(TMemberId member, TRoleId role, TRoleId? ownerRole)
+    /// <exception cref="RefusalException"><c>member-not-found</c>, <c>role-not-held</c>, under the resource's codes.</exception>
+    public MemberRole<TMemberId, TRoleId> TakeRole(TMemberId member, TRoleId role)
     {
         var found = Find(member) ?? throw _codes.Refuse(MembershipRefusals.MemberNotFound, (MembershipCodes.DefaultMemberArgument, member));
         if (found.Find(role) is null)
         {
             throw _codes.Refuse(MembershipRefusals.RoleNotHeld, (MembershipCodes.DefaultMemberArgument, member), ("Role", role));
-        }
-
-        if (member.Equals(_owner)
-            && ((ownerRole is { } owners && role.Equals(owners)) || !found.Roles.Any(other => !other.RoleId.Equals(role) && other.EndsAt is null)))
-        {
-            throw _codes.Refuse(MembershipRefusals.OwnerProtected);
         }
 
         return found.Take(role)!;
@@ -251,29 +245,31 @@ public sealed class MemberList<TMember, TId, TMemberId, TRoleId>
     }
 
     /// <summary>
-    /// Names another owner: a member from now on and with no end, added when not a member yet, holding
-    /// <paramref name="ownerRole"/> with no end. A member whose membership had ended begins anew, as the owner
-    /// and nothing else: the roles of the ended membership do not come back. A member whose membership was
-    /// still to end loses that end, and the roles held in it stop where it would have: a role with no end of
-    /// its own gets the end the membership had. One whose membership was still to start is a member from now
-    /// on, and its roles count no sooner than they were to. The owner before loses the owner's role and
-    /// nothing else: it stays a member, with no end, with every other role it holds.
+    /// Names another owner: a member from now on and with no end, added when not a member yet, holding no role. The
+    /// roles it held go, since the owner holds what it holds by owning; a membership that had ended begins anew, and
+    /// one that was still to start or to end loses that start or end. The owner before becomes what
+    /// <paramref name="formerOwner"/> says: a member with no end in the role it names, or nobody on the list. There is
+    /// no default, since the owner held no role to fall back to.
     /// <para>
     /// The list does not keep who the owner is: the aggregate does, and keeps the answer's
     /// <see cref="OwnerNamed{TMemberId, TRoleId}.Owner"/> as its owner right after this call. The answer says
-    /// everything that changed about the new owner's membership, so the aggregate can raise an event for each
-    /// change, and can keep the end that was lifted (<see cref="OwnerNamed{TMemberId, TRoleId}.EndLifted"/>)
-    /// if somebody who was on the resource for a while is to leave it at that moment after all: nothing here
-    /// ends a membership again, short of <see cref="Remove"/>.
+    /// everything that changed, so the aggregate can raise an event for each change, and can keep the end that was
+    /// lifted (<see cref="OwnerNamed{TMemberId, TRoleId}.EndLifted"/>) if somebody who was on the resource for a
+    /// while is to leave it at that moment after all: nothing here ends a membership again, short of
+    /// <see cref="Remove"/>.
     /// </para>
     /// </summary>
     /// <param name="member">The member that is to own the resource; the use case has checked it may be one.</param>
-    /// <param name="ownerRole">The owner's role, as the use case found it.</param>
+    /// <param name="formerOwner">
+    /// What the owner before becomes: <see cref="FormerOwner.StaysAs{TRoleId}"/> a role, which the use case has checked
+    /// may go to a member, or <see cref="FormerOwner.Leaves"/>.
+    /// </param>
     /// <param name="now">When the owner is named.</param>
     /// <returns>What happened, for the aggregate to keep its owner by and raise its events from.</returns>
     /// <exception cref="RefusalException"><c>already-owner</c>, under the resource's codes.</exception>
-    public OwnerNamed<TMemberId, TRoleId> NameOwner(TMemberId member, TRoleId ownerRole, DateTimeOffset now)
+    public OwnerNamed<TMemberId, TRoleId> NameOwner(TMemberId member, FormerOwner<TRoleId> formerOwner, DateTimeOffset now)
     {
+        ArgumentNullException.ThrowIfNull(formerOwner);
         if (member.Equals(_owner))
         {
             throw _codes.Refuse(MembershipRefusals.AlreadyOwner);
@@ -282,11 +278,22 @@ public sealed class MemberList<TMember, TId, TMemberId, TRoleId>
         var named = Find(member);
         var added = named is null;
         named ??= NewMember(member, MemberPeriod.Open(now), addedBy: null);
+        var place = named.StayAsOwner(now);
 
-        var place = named.StayAsOwner(ownerRole, now);
-        var taken = Find(_owner)?.Take(ownerRole) is not null;
+        var previous = Find(_owner);
+        if (formerOwner.Role is { } role)
+        {
+            // The owner held no role and no end; it stays on, as the member it now is.
+            previous ??= NewMember(_owner, MemberPeriod.Open(now), addedBy: null);
+            previous.Give(role, MemberPeriod.Open(now), givenBy: null);
+        }
+        else if (previous is not null)
+        {
+            _collection.Remove(previous);
+        }
 
-        return new OwnerNamed<TMemberId, TRoleId>(_owner, member, added, place.RoleGiven, taken, place.BeganAnew, place.RolesDropped, place.EndLifted, place.StartMoved);
+        return new OwnerNamed<TMemberId, TRoleId>(
+            _owner, member, added, place.BeganAnew, place.RolesDropped, place.EndLifted, place.StartMoved, formerOwner.Role, formerOwner.Role is null);
     }
 
     /// <summary>
@@ -308,15 +315,12 @@ public sealed class MemberList<TMember, TId, TMemberId, TRoleId>
             : null;
 
     /// <summary>
-    /// The rule that the owner is a member with no end, and holds a role with no end, checked after the fact:
-    /// for an invariant of the aggregate to call, under the aggregate's own code for
-    /// <see cref="MembershipRefusals.OwnerProtected"/>. Which role is the owner's cannot be told from the list,
-    /// so the use cases see to that; what can be told is that the owner's place and a role of theirs do not run
-    /// out.
+    /// The rule that the owner is a member with no end, holding no role, checked after the fact: for an invariant of
+    /// the aggregate to call, under the aggregate's own code for <see cref="MembershipRefusals.OwnerProtected"/>.
     /// </summary>
     /// <returns><see langword="null"/> when the rule holds; otherwise what is wrong.</returns>
     public InvariantFailure? OwnerStays()
-        => _collection.Any(member => member.MemberId.Equals(_owner) && member.EndsAt is null && member.Roles.Any(held => held.EndsAt is null))
+        => _collection.Any(member => member.MemberId.Equals(_owner) && member.EndsAt is null && member.Roles.Count == 0)
             ? null
             : _codes.FailureOf(MembershipRefusals.OwnerProtected);
 

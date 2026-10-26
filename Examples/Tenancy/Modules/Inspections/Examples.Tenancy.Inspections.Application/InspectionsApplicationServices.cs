@@ -10,10 +10,9 @@ namespace Examples.Tenancy.Inspections.Application;
 /// registration, which registers the ports, so the host still makes one call per module.
 /// </summary>
 /// <remarks>
-/// Inspections' key is not registered here: the module states it once, on the list it marks with
-/// <c>[TenancyPermissions]</c> (<see cref="InspectionCatalogue.Permissions"/>), and the host adds every module's
-/// list with the one call Tenancy's generator writes into it. A second registration here would add the key twice,
-/// which the catalogue refuses.
+/// Inspections' permission is not registered here: the module states it once, in its <c>[Permissions]</c> class
+/// (<see cref="InspectionPermissions"/>), and the host adds every module's permissions with the one call Tenancy's
+/// generator writes into it. A second registration here would add the permission twice, which the catalogue refuses.
 /// </remarks>
 public static class InspectionsApplicationServices
 {
@@ -57,7 +56,7 @@ public static class InspectionsApplicationServices
         services.AddInspectionsAccessBehavior();
 
         // What Inspections itself refuses with, in English and Dutch, for the edge to phrase in its reader's language.
-        services.AddDDDToolkitLocalization(texts => texts.AddResource<InspectionFailures>());
+        services.AddDDDToolkitLocalization(texts => texts.AddResource<InspectionFailures>().AddResource<InspectionPermissionTexts>());
 
         return services;
     }

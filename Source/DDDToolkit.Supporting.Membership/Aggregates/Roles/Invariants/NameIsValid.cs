@@ -3,7 +3,7 @@ using DDDToolkit.Invariants;
 
 namespace DDDToolkit.Supporting.Membership;
 
-public abstract partial class KeptRoleAggregate<TRoleId>
+public abstract partial class CustomRoleAggregate<TRoleId>
 {
     /// <summary>
     /// A role has a name of 1 to <see cref="MaxNameLength"/> characters with no white space around it, and a
@@ -14,13 +14,13 @@ public abstract partial class KeptRoleAggregate<TRoleId>
     /// not a code of the resource: a role does not know whose it is.
     /// </para>
     /// </summary>
-    public sealed class NameIsValid : IInvariant<KeptRoleAggregate<TRoleId>>
+    public sealed class NameIsValid : IInvariant<CustomRoleAggregate<TRoleId>>
     {
         /// <inheritdoc />
         public string Code => MembershipRefusals.RoleNameInvalid;
 
         /// <inheritdoc />
-        public InvariantFailure? Check(KeptRoleAggregate<TRoleId> entity)
+        public InvariantFailure? Check(CustomRoleAggregate<TRoleId> entity)
         {
             if (string.IsNullOrWhiteSpace(entity.Name) || entity.Name.Length > MaxNameLength || entity.Name != entity.Name.Trim())
             {

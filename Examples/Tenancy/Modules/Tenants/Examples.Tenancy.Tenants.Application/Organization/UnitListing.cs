@@ -8,8 +8,8 @@ namespace Examples.Tenancy.Tenants.Application.Organization;
 /// <remarks>
 /// The kind is the application's own field on its unit class. The package's directory answers that class whole, with
 /// the unit's path and depth beside it, which are not on the unit; so the queries that list units select this from
-/// what the directory read, with no read more. Every way a unit is answered, a route, a GraphQL field or the answer
-/// of a mutation, carries the kind and the path.
+/// what the directory read, with no read more. Every list of units, a route or a GraphQL field, and the answer of a
+/// mutation carry the kind and the path. A unit asked for by id is named alone (<see cref="Directory.UnitName"/>).
 /// </remarks>
 /// <param name="Id">The unit.</param>
 /// <param name="ParentId">The unit it hangs under, or <see langword="null"/> for the root.</param>

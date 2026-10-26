@@ -14,7 +14,7 @@ public class SeatTests
     private static readonly OrganizationUnitId Root = OrganizationUnitId.CreateSequential();
     private static readonly OrganizationUnitId North = OrganizationUnitId.CreateSequential();
 
-    private static readonly RoleFacts Administrator = New.ActiveRole(TenancyKeys.RolesManage, TenancyKeys.SeatsManage);
+    private static readonly RoleFacts Administrator = New.ActiveRole(TenancyPermissions.RolesManage, TenancyPermissions.SeatsManage);
     private static readonly RoleFacts Watcher = New.ActiveRole(HostCatalogue.WidgetRead);
 
     private static HostSeat PlacedSeat()
@@ -267,7 +267,7 @@ public class SeatTests
     }
 
     [Fact]
-    public void IsAdministratorAt_counts_only_open_ended_applying_root_grants_of_active_roles_with_the_admin_key()
+    public void IsAdministratorAt_counts_only_open_ended_applying_root_grants_of_active_roles_with_the_admin_permission()
     {
         var administrator = RoleId.CreateSequential();
         var archived = RoleId.CreateSequential();
@@ -300,7 +300,7 @@ public class SeatTests
         Holds(Root, administrator, GrantPeriod.Between(Now.AddHours(-1), Now.AddYears(1))).Should().BeFalse("a grant with an end date does not count");
         Holds(Root, administrator, GrantPeriod.Open(Now.AddHours(1))).Should().BeFalse("a grant that has not started does not apply");
         Holds(Root, archived, GrantPeriod.Open(Now.AddHours(-1))).Should().BeFalse("an archived role grants nothing");
-        Holds(Root, watcher, GrantPeriod.Open(Now.AddHours(-1))).Should().BeFalse("the role does not hold the administrator key");
+        Holds(Root, watcher, GrantPeriod.Open(Now.AddHours(-1))).Should().BeFalse("the role does not hold the administrator permission");
         Holds(Root, unknown, GrantPeriod.Open(Now.AddHours(-1))).Should().BeFalse("a role nobody can find grants nothing");
         Holds(North, administrator, GrantPeriod.Open(Now.AddHours(-1))).Should().BeFalse("only a grant at the root counts");
         Holds(Root, administrator, GrantPeriod.Open(Now.AddHours(-1)), suspend: true).Should().BeFalse("a suspended seat is no administrator");

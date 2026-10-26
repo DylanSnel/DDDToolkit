@@ -32,7 +32,7 @@ public sealed class AccessHistoryScenarios(SampleHosts sample) : IClassFixture<S
     private static DemoTenant Meadow => DemoData.Meadow;
 
     [Fact]
-    public async Task Who_holds_the_key_reads_who_changed_whose_access_newest_first()
+    public async Task Who_holds_the_permission_reads_who_changed_whose_access_newest_first()
     {
         await using var host = await sample.StartAsync();
         using var hana = await host.ClientAsync("hana", Harbor.Slug);
@@ -95,7 +95,7 @@ public sealed class AccessHistoryScenarios(SampleHosts sample) : IClassFixture<S
     [Theory]
     [InlineData("rhea")]
     [InlineData("hana")]
-    public async Task Without_the_key_the_history_is_refused(string person)
+    public async Task Without_the_permission_the_history_is_refused(string person)
     {
         // An area manager runs a region, and the people office gives roles: neither holds the key that reads the
         // history, which counts only when held for the whole tenant.
@@ -103,7 +103,7 @@ public sealed class AccessHistoryScenarios(SampleHosts sample) : IClassFixture<S
 
         using var response = await client.GetAsync("/tenancy/history", Cancellation);
 
-        (await response.ShouldBeRefusedAsync(HttpStatusCode.Forbidden, TenancyRefusals.NotPermitted)).Argument("Key").Should().Be(TenancyKeys.HistoryView);
+        (await response.ShouldBeRefusedAsync(HttpStatusCode.Forbidden, TenancyRefusals.NotPermitted)).Argument("Permission").Should().Be(TenancyPermissions.HistoryView);
     }
 
     [Fact]

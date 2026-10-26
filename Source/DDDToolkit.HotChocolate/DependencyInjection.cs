@@ -217,15 +217,15 @@ public static class DependencyInjection
 
     /// <summary>
     /// Reads the policy of HotChocolate's <c>[Authorize]</c> as a permission key: registers HotChocolate's
-    /// authorization with the <see cref="KeyAuthorizationHandler"/>, which asks the
-    /// <see cref="IFieldKeys{TParent}"/> of the object a field belongs to.
+    /// authorization with the <see cref="PermissionAuthorizationHandler"/>, which asks the
+    /// <see cref="IFieldPermissions{TParent}"/> of the object a field belongs to.
     /// <code>
-    /// services.AddScoped&lt;IFieldKeys&lt;Shelf&gt;, ShelfFieldKeys&gt;();
+    /// services.AddScoped&lt;IFieldPermissions&lt;Shelf&gt;, ShelfFieldPermissions&gt;();
     ///
     /// services
     ///     .AddGraphQLServer()
     ///     .AddDDDToolkitErrors()                // shapes the refusal of a refused field
-    ///     .AddDDDToolkitKeyAuthorization();
+    ///     .AddDDDToolkitPermissionAuthorization();
     /// </code>
     /// <code>
     /// [Authorize("library.shelves.manage")]
@@ -244,11 +244,11 @@ public static class DependencyInjection
     /// </summary>
     /// <param name="builder">The request executor builder to configure.</param>
     /// <returns>The same builder, so calls can be chained.</returns>
-    public static IRequestExecutorBuilder AddDDDToolkitKeyAuthorization(this IRequestExecutorBuilder builder)
+    public static IRequestExecutorBuilder AddDDDToolkitPermissionAuthorization(this IRequestExecutorBuilder builder)
     {
         ArgumentNullException.ThrowIfNull(builder);
 
-        return builder.AddAuthorizationHandler<KeyAuthorizationHandler>();
+        return builder.AddAuthorizationHandler<PermissionAuthorizationHandler>();
     }
 
     /// <summary>

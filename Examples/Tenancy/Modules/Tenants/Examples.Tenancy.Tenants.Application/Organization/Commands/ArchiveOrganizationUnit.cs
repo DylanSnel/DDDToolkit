@@ -6,7 +6,7 @@ namespace Examples.Tenancy.Tenants.Application.Organization.Commands;
 /// Archives a unit: nothing new is placed or granted there, and what is there keeps working.
 /// </summary>
 /// <remarks>
-/// It requires a caller who works in the tenant. The key is for the package's use case to ask, since only it reads
+/// It requires a caller who works in the tenant. The permission is for the package's use case to ask, since only it reads
 /// where the unit hangs: <c>tenancy.units.manage</c> at the unit's parent.
 /// </remarks>
 /// <param name="Unit">The unit to archive.</param>

@@ -14,7 +14,7 @@ namespace DDDToolkit.Supporting.Tenancy.Postgres.Tests;
 /// Provisioning uses no power over other tenants: once it has the new tenant's id it reads and writes as system work in
 /// that tenant, under the policies, so it writes that tenant's rows and nothing else; and a slug another tenant took,
 /// which it cannot see from there, is refused by the unique index, with nothing of the new tenant left behind. An
-/// administrators' pack that lists its keys gives the first administrator those keys and no others, and the database
+/// administrators' pack that lists its permissions gives the first administrator those permissions and no others, and the database
 /// says the same of the pack as the catalogue does, which is what lets a settings manager add its role when a tenant
 /// changes shape. Under what name a role is made from a pack is not the database's to say: a tenant provisioned in a
 /// language gets its roles named in it, and a settings manager adds a pack's role under its translated name.
@@ -27,16 +27,16 @@ public abstract class ProvisioningTests(TenancyPostgres postgres, TenancyNaming 
     private const string TreeAdministrators = "tree-admin";
 
     /// <summary>
-    /// What that pack lists: Tenancy's own keys, which are every key that manages access in the TestHost's catalogue,
-    /// and no key to work with widgets.
+    /// What that pack lists: Tenancy's own permissions, which are every permission that manages access in the TestHost's catalogue,
+    /// and no permission to work with widgets.
     /// </summary>
-    private static readonly string[] Listed = [.. TenancyKeys.Permissions.Select(permission => permission.Key).Order(StringComparer.Ordinal)];
+    private static readonly string[] Listed = [.. TenancyPermissions.All.Select(permission => permission.Name).Order(StringComparer.Ordinal)];
 
     private static readonly string[] Widgets = [HostCatalogue.WidgetChange, HostCatalogue.WidgetCreate, HostCatalogue.WidgetRead];
 
     /// <summary>
     /// The TestHost's catalogue with an administrators' pack for each shape: a flat tenant's lists nothing and holds
-    /// every live key, as the TestHost's does, and a hierarchical tenant's lists <see cref="Listed"/>.
+    /// every live permission, as the TestHost's does, and a hierarchical tenant's lists <see cref="Listed"/>.
     /// </summary>
     private static ApplicationCatalogue ListingAdministrators { get; } = HostCatalogue.Application with
     {
@@ -78,7 +78,7 @@ public abstract class ProvisioningTests(TenancyPostgres postgres, TenancyNaming 
         // It wrote the new tenant's rows, and no other tenant's.
         var after = await RowsByTenantAsync(database);
         after.Where(row => row.Key.Tenant != Estuary.Value).Should().BeEquivalentTo(before, "no other tenant's rows changed in number");
-        after.Keys.Where(key => key.Tenant == Estuary.Value).Select(key => key.Table)
+        after.Keys.Where(permission => permission.Tenant == Estuary.Value).Select(permission => permission.Table)
             .Should().BeEquivalentTo(["Tenants", "Organizations", "OrganizationUnits", "OrganizationUnitPaths", "Seats", "SeatPlacements", "SeatRights", "Roles", "TenancyAccessRevisions"]);
     }
 
@@ -114,7 +114,7 @@ public abstract class ProvisioningTests(TenancyPostgres postgres, TenancyNaming 
     }
 
     [Fact]
-    public async Task Provisioning_an_administrators_pack_that_lists_its_keys_gives_those_keys_and_no_others()
+    public async Task Provisioning_an_administrators_pack_that_lists_its_permissions_gives_those_permissions_and_no_others()
     {
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
         await using var services = await ListingServicesAsync(database);
@@ -123,22 +123,22 @@ public abstract class ProvisioningTests(TenancyPostgres postgres, TenancyNaming 
         var provisioned = await ProvisionEstuaryAsync(services, TenantShape.Hierarchical, dan);
 
         // The role is a copy of its pack, and the database wrote the first administrator's rights from the role: the
-        // keys the pack lists, at the root, and no key to work with widgets, though each of those is live.
+        // permissions the pack lists, at the root, and no permission to work with widgets, though each of those is live.
         provisioned.AdministratorRole.Should().Be(provisioned.RolesByPack[TreeAdministrators]);
         await using (var owner = await AsCaller.OwnerAsync(database, Cancellation))
         {
-            (await owner.ListAsync<string>("SELECT pg_catalog.unnest(\"Keys\") FROM tenancy.\"Roles\" WHERE \"Id\" = $1", Cancellation, provisioned.AdministratorRole.Value))
+            (await owner.ListAsync<string>("SELECT pg_catalog.unnest(\"Permissions\") FROM tenancy.\"Roles\" WHERE \"Id\" = $1", Cancellation, provisioned.AdministratorRole.Value))
                 .Should().BeEquivalentTo(Listed);
-            (await owner.ListAsync<string>("SELECT \"Key\" FROM tenancy.\"SeatRights\" WHERE \"SeatId\" = $1", Cancellation, provisioned.AdminSeat.Value))
-                .Should().BeEquivalentTo(Listed, "each key once, at the root");
-            foreach (var key in Widgets)
+            (await owner.ListAsync<string>("SELECT \"Permission\" FROM tenancy.\"SeatRights\" WHERE \"SeatId\" = $1", Cancellation, provisioned.AdminSeat.Value))
+                .Should().BeEquivalentTo(Listed, "each permission once, at the root");
+            foreach (var permission in Widgets)
             {
-                (await owner.ScalarAsync<bool>("SELECT tenancy.key_is_live($1)", Cancellation, key)).Should().BeTrue();
+                (await owner.ScalarAsync<bool>("SELECT tenancy.permission_is_live($1)", Cancellation, permission)).Should().BeTrue();
             }
         }
 
         // It is an administrator all the same, under the policies as in the use cases: it gives a role that manages
-        // access, whose keys that do it holds, and a role to work with widgets, none of whose keys it holds.
+        // access, whose permissions that do it holds, and a role to work with widgets, none of whose permissions it holds.
         var fay = await services.BySeat(dan, Estuary, provisioned.AdminSeat, scoped => scoped.Seats().AddSeatAsync(Guid.NewGuid(), Cancellation, configure: seat => seat.Rename("Fay")));
         await services.BySeat(dan, Estuary, provisioned.AdminSeat, scoped => scoped.Seats().PlaceAsync(fay, provisioned.RootUnit, primary: true, Cancellation));
         foreach (var pack in new[] { HostCatalogue.SupervisorPack, HostCatalogue.OperatorPack })
@@ -150,21 +150,21 @@ public abstract class ProvisioningTests(TenancyPostgres postgres, TenancyNaming 
         // What the database answers the administrator is what the pack lists.
         await using (var asDan = await AsCaller.PersonAsync(database, dan, Estuary, Cancellation))
         {
-            foreach (var key in Listed)
+            foreach (var permission in Listed)
             {
-                (await asDan.ScalarAsync<bool>("SELECT tenancy.holds_tenant_wide($1)", Cancellation, key)).Should().BeTrue("the pack lists {0}", key);
+                (await asDan.ScalarAsync<bool>("SELECT tenancy.holds_at_tenant($1)", Cancellation, permission)).Should().BeTrue("the pack lists {0}", permission);
             }
 
-            foreach (var key in Widgets)
+            foreach (var permission in Widgets)
             {
-                (await asDan.ScalarAsync<bool>("SELECT tenancy.holds_key($1)", Cancellation, key)).Should().BeFalse("the pack does not list {0}", key);
+                (await asDan.ScalarAsync<bool>("SELECT tenancy.holds_permission($1)", Cancellation, permission)).Should().BeFalse("the pack does not list {0}", permission);
             }
         }
 
-        string[] given = [TenancyKeys.GrantsManage, TenancyKeys.SeatsManage, TenancyKeys.UnitsManage, .. Widgets];
+        string[] given = [TenancyPermissions.GrantsManage, TenancyPermissions.SeatsManage, TenancyPermissions.UnitsManage, .. Widgets];
         await using var after = await AsCaller.OwnerAsync(database, Cancellation);
-        (await after.ListAsync<string>("SELECT DISTINCT \"Key\" FROM tenancy.\"SeatRights\" WHERE \"SeatId\" = $1", Cancellation, fay.Value))
-            .Should().BeEquivalentTo(given, "the two roles' keys reached the seat they were given to");
+        (await after.ListAsync<string>("SELECT DISTINCT \"Permission\" FROM tenancy.\"SeatRights\" WHERE \"SeatId\" = $1", Cancellation, fay.Value))
+            .Should().BeEquivalentTo(given, "the two roles' permissions reached the seat they were given to");
     }
 
     [Fact]
@@ -181,9 +181,9 @@ public abstract class ProvisioningTests(TenancyPostgres postgres, TenancyNaming 
 
         await using (var owner = await AsCaller.OwnerAsync(database, Cancellation))
         {
-            (await owner.ScalarAsync<string[]>("SELECT tenancy.pack_keys($1)", Cancellation, TenancyPacks.DefaultAdministratorsKey))
-                .Should().Equal(catalogue.LiveKeys, "the default administrators' pack holds every live key, as one that lists none does");
-            (await owner.ScalarAsync<bool>("SELECT tenancy.pack_keys($1) IS NULL", Cancellation, HostCatalogue.AdministratorPack))
+            (await owner.ScalarAsync<string[]>("SELECT tenancy.pack_permissions($1)", Cancellation, TenancyPacks.DefaultAdministratorsKey))
+                .Should().Equal(catalogue.LivePermissions, "the default administrators' pack holds every live permission, as one that lists none does");
+            (await owner.ScalarAsync<bool>("SELECT tenancy.pack_permissions($1) IS NULL", Cancellation, HostCatalogue.AdministratorPack))
                 .Should().BeTrue("the TestHost's own packs are not in this catalogue");
         }
 
@@ -191,28 +191,28 @@ public abstract class ProvisioningTests(TenancyPostgres postgres, TenancyNaming 
         var provisioned = await ProvisionEstuaryAsync(services, TenantShape.Flat, dan);
 
         // The tenant's one role is a copy of the default pack, and the database wrote the first seat's rights from it:
-        // every live key, at the root.
+        // every live permission, at the root.
         provisioned.RolesByPack.Keys.Should().Equal(TenancyPacks.DefaultAdministratorsKey);
         await using (var owner = await AsCaller.OwnerAsync(database, Cancellation))
         {
             (await owner.ListAsync<string>("SELECT \"Name\" || ' ' || \"FromPack\" FROM tenancy.\"Roles\" WHERE \"TenantId\" = $1", Cancellation, Estuary.Value))
                 .Should().Equal("Administrator administrator");
-            (await owner.ListAsync<string>("SELECT \"Key\" FROM tenancy.\"SeatRights\" WHERE \"SeatId\" = $1", Cancellation, provisioned.AdminSeat.Value))
-                .Should().BeEquivalentTo(catalogue.LiveKeys, "each key once, at the root");
+            (await owner.ListAsync<string>("SELECT \"Permission\" FROM tenancy.\"SeatRights\" WHERE \"SeatId\" = $1", Cancellation, provisioned.AdminSeat.Value))
+                .Should().BeEquivalentTo(catalogue.LivePermissions, "each permission once, at the root");
         }
 
-        // Under the policies the first seat is an administrator: it holds every key for the whole tenant, and gives a
+        // Under the policies the first seat is an administrator: it holds every permission for the whole tenant, and gives a
         // role that manages access.
         await using (var asDan = await AsCaller.PersonAsync(database, dan, Estuary, Cancellation))
         {
-            foreach (var key in catalogue.LiveKeys)
+            foreach (var permission in catalogue.LivePermissions)
             {
-                (await asDan.ScalarAsync<bool>("SELECT tenancy.holds_tenant_wide($1)", Cancellation, key)).Should().BeTrue("the default pack holds {0}", key);
+                (await asDan.ScalarAsync<bool>("SELECT tenancy.holds_at_tenant($1)", Cancellation, permission)).Should().BeTrue("the default pack holds {0}", permission);
             }
         }
 
         var desk = await services.BySeat(dan, Estuary, provisioned.AdminSeat,
-            scoped => scoped.Roles().CreateAsync("Settings desk", "Keeps the settings", [TenancyKeys.SettingsManage], Cancellation));
+            scoped => scoped.Roles().CreateAsync("Settings desk", "Keeps the settings", [TenancyPermissions.SettingsManage], Cancellation));
         var fay = await services.BySeat(dan, Estuary, provisioned.AdminSeat, scoped => scoped.Seats().AddSeatAsync(Guid.NewGuid(), Cancellation, configure: seat => seat.Rename("Fay")));
         await services.BySeat(dan, Estuary, provisioned.AdminSeat, scoped => scoped.Seats().PlaceAsync(fay, provisioned.RootUnit, primary: true, Cancellation));
         await services.BySeat(dan, Estuary, provisioned.AdminSeat,
@@ -228,9 +228,9 @@ public abstract class ProvisioningTests(TenancyPostgres postgres, TenancyNaming 
         // What a copy of each administrators' pack holds, the database says as the catalogue does.
         await using (var owner = await AsCaller.OwnerAsync(database, Cancellation))
         {
-            (await owner.ScalarAsync<string[]>("SELECT tenancy.pack_keys($1)", Cancellation, TreeAdministrators)).Should().Equal(Listed);
-            (await owner.ScalarAsync<string[]>("SELECT tenancy.pack_keys($1)", Cancellation, HostCatalogue.AdministratorPack))
-                .Should().Equal(TenancyPostgres.Catalogue.LiveKeys, "a pack that lists nothing holds every live key");
+            (await owner.ScalarAsync<string[]>("SELECT tenancy.pack_permissions($1)", Cancellation, TreeAdministrators)).Should().Equal(Listed);
+            (await owner.ScalarAsync<string[]>("SELECT tenancy.pack_permissions($1)", Cancellation, HostCatalogue.AdministratorPack))
+                .Should().Equal(TenancyPostgres.Catalogue.LivePermissions, "a pack that lists nothing holds every live permission");
         }
 
         // A flat tenant, whose administrator makes a settings desk: a seat that changes the tenant's settings and
@@ -240,37 +240,37 @@ public abstract class ProvisioningTests(TenancyPostgres postgres, TenancyNaming 
         var provisioned = await ProvisionEstuaryAsync(services, TenantShape.Flat, dan);
         provisioned.RolesByPack.Keys.Should().NotContain(TreeAdministrators, "that pack is for a hierarchical tenant");
         var settingsDesk = await services.BySeat(dan, Estuary, provisioned.AdminSeat,
-            scoped => scoped.Roles().CreateAsync("Settings desk", "Keeps the settings", [TenancyKeys.SettingsManage], Cancellation));
+            scoped => scoped.Roles().CreateAsync("Settings desk", "Keeps the settings", [TenancyPermissions.SettingsManage], Cancellation));
         var fay = await services.BySeat(dan, Estuary, provisioned.AdminSeat, scoped => scoped.Seats().AddSeatAsync(fayIdentity, Cancellation, configure: seat => seat.Rename("Fay")));
         await services.BySeat(dan, Estuary, provisioned.AdminSeat, scoped => scoped.Seats().PlaceAsync(fay, provisioned.RootUnit, primary: true, Cancellation));
         await services.BySeat(dan, Estuary, provisioned.AdminSeat,
             scoped => scoped.Seats().GrantAsync(fay, provisioned.RootUnit, settingsDesk, until: null, reason: null, Cancellation));
 
-        // Without the roles key the policy lets her add a role only as a copy of a pack, holding exactly the keys the
-        // database says the pack holds. The use case copies the hierarchical administrators' pack with the keys it
+        // Without the roles permission the policy lets her add a role only as a copy of a pack, holding exactly the permissions the
+        // database says the pack holds. The use case copies the hierarchical administrators' pack with the permissions it
         // lists, so the two agree.
         await services.BySeat(fayIdentity, Estuary, fay, scoped => scoped.Tenants().ChangeShapeAsync(TenantShape.Hierarchical, roleIds: null, language: null, Cancellation));
 
-        // A role holding every live key under that pack's name is no copy of it, and is refused her.
+        // A role holding every live permission under that pack's name is no copy of it, and is refused her.
         await using (var asFay = await AsCaller.PersonAsync(database, fayIdentity, Estuary, Cancellation))
         {
-            var everyLiveKey = () => asFay.AttemptAsync(
+            var everyLivePermission = () => asFay.AttemptAsync(
                 """
-                INSERT INTO tenancy."Roles" ("Id", "NormalizedName", "Version", "TenantId", "Name", "Description", "FromPack", "Status", "Keys")
+                INSERT INTO tenancy."Roles" ("Id", "NormalizedName", "Version", "TenantId", "Name", "Description", "FromPack", "Status", "Permissions")
                 VALUES (gen_random_uuid(), 'SECOND TREE ADMINISTRATOR', 0, $1, 'Second tree administrator', '', $2, 'Active', $3)
                 """,
                 Cancellation,
                 Estuary.Value,
                 TreeAdministrators,
-                TenancyPostgres.Catalogue.LiveKeys.ToArray());
-            (await everyLiveKey.Should().ThrowAsync<PostgresException>()).Which.SqlState.Should().Be(PostgresErrorCodes.InsufficientPrivilege);
+                TenancyPostgres.Catalogue.LivePermissions.ToArray());
+            (await everyLivePermission.Should().ThrowAsync<PostgresException>()).Which.SqlState.Should().Be(PostgresErrorCodes.InsufficientPrivilege);
         }
 
-        // The tenant has the role now, with the keys its pack lists. No grant changed: the first administrator keeps
-        // the flat tenant's role, with every live key, and the new role is nobody's until someone gives it.
+        // The tenant has the role now, with the permissions its pack lists. No grant changed: the first administrator keeps
+        // the flat tenant's role, with every live permission, and the new role is nobody's until someone gives it.
         await using var after = await AsCaller.OwnerAsync(database, Cancellation);
         (await after.ListAsync<string>(
-                "SELECT pg_catalog.unnest(\"Keys\") FROM tenancy.\"Roles\" WHERE \"TenantId\" = $1 AND \"FromPack\" = $2", Cancellation, Estuary.Value, TreeAdministrators))
+                "SELECT pg_catalog.unnest(\"Permissions\") FROM tenancy.\"Roles\" WHERE \"TenantId\" = $1 AND \"FromPack\" = $2", Cancellation, Estuary.Value, TreeAdministrators))
             .Should().BeEquivalentTo(Listed);
         (await after.ScalarAsync<long>(
                 "SELECT count(*) FROM tenancy.\"SeatRoleGrants\" g JOIN tenancy.\"Roles\" r ON r.\"Id\" = g.\"RoleId\" WHERE r.\"TenantId\" = $1 AND r.\"FromPack\" = $2",
@@ -278,8 +278,8 @@ public abstract class ProvisioningTests(TenancyPostgres postgres, TenancyNaming 
                 Estuary.Value,
                 TreeAdministrators))
             .Should().Be(0);
-        (await after.ListAsync<string>("SELECT \"Key\" FROM tenancy.\"SeatRights\" WHERE \"SeatId\" = $1", Cancellation, provisioned.AdminSeat.Value))
-            .Should().BeEquivalentTo(TenancyPostgres.Catalogue.LiveKeys);
+        (await after.ListAsync<string>("SELECT \"Permission\" FROM tenancy.\"SeatRights\" WHERE \"SeatId\" = $1", Cancellation, provisioned.AdminSeat.Value))
+            .Should().BeEquivalentTo(TenancyPostgres.Catalogue.LivePermissions);
     }
 
     [Fact]
@@ -317,9 +317,9 @@ public abstract class ProvisioningTests(TenancyPostgres postgres, TenancyNaming 
         });
 
         // A seat that manages the settings and no roles: the policy lets it add a role only as a copy of a pack, by the
-        // pack's keys. The name is the tenant's, so the copy goes in under the pack's Dutch name.
+        // pack's permissions. The name is the tenant's, so the copy goes in under the pack's Dutch name.
         var settingsDesk = await services.BySeat(dan, Estuary, provisioned.AdminSeat,
-            scoped => scoped.Roles().CreateAsync("Settings desk", "Keeps the settings", [TenancyKeys.SettingsManage], Cancellation));
+            scoped => scoped.Roles().CreateAsync("Settings desk", "Keeps the settings", [TenancyPermissions.SettingsManage], Cancellation));
         var fay = await services.BySeat(dan, Estuary, provisioned.AdminSeat, scoped => scoped.Seats().AddSeatAsync(fayIdentity, Cancellation, configure: seat => seat.Rename("Fay")));
         await services.BySeat(dan, Estuary, provisioned.AdminSeat, scoped => scoped.Seats().PlaceAsync(fay, provisioned.RootUnit, primary: true, Cancellation));
         await services.BySeat(dan, Estuary, provisioned.AdminSeat,
@@ -330,7 +330,7 @@ public abstract class ProvisioningTests(TenancyPostgres postgres, TenancyNaming 
         var supervisor = (await services.BySeat(fayIdentity, Estuary, fay, scoped => scoped.Directory().ListRolesAsync(Cancellation)))
             .Should().ContainSingle(role => role.FromPack == HostCatalogue.SupervisorPack).Which;
         supervisor.Name.Should().Be("Afdelingshoofd");
-        supervisor.Keys.Should().Equal(TenancyPostgres.Catalogue.Packs.Single(pack => pack.Key == HostCatalogue.SupervisorPack).Keys);
+        supervisor.Permissions.Should().Equal(TenancyPostgres.Catalogue.Packs.Single(pack => pack.Key == HostCatalogue.SupervisorPack).Permissions);
 
         // A unit the administrator adds, under the policy a seat inserts a unit by, carries the application's own
         // column as its callback set it.

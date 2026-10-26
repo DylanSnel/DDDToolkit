@@ -22,7 +22,7 @@ public static class GalleryModule
     public const string SchemaName = "gallery";
 
     /// <summary>
-    /// The gallery's services: its queries, and who answers for a key on an exhibit. A test that wants to say what
+    /// The gallery's services: its queries, and who answers for a permission on an exhibit. A test that wants to say what
     /// the caller holds registers its own <see cref="GalleryDesk"/> first.
     /// </summary>
     public static IServiceCollection AddGalleryServices(this IServiceCollection services, bool answersForExhibits = true)
@@ -31,7 +31,7 @@ public static class GalleryModule
 
         if (answersForExhibits)
         {
-            services.AddScoped<IFieldKeys<ExhibitOverview>, ExhibitFieldKeys>();
+            services.AddScoped<IFieldPermissions<ExhibitOverview>, ExhibitFieldPermissions>();
         }
 
         return services;
@@ -55,22 +55,22 @@ public static partial class ExhibitType
     /// <summary>A resolver that answers a list which is never null, of items that never are.</summary>
     public static IReadOnlyList<LoanOverview> GetLoans([Parent] ExhibitOverview exhibit, [Service] GalleryDesk desk) => desk.LoansOf(exhibit.Id);
 
-    /// <summary>What it is insured for: only for a caller that holds the key on this exhibit.</summary>
-    [Authorize(GalleryKeys.ViewValuations)]
+    /// <summary>What it is insured for: only for a caller that holds the permission on this exhibit.</summary>
+    [Authorize(GalleryPermissions.ViewValuations)]
     public static int GetValuation([Parent] ExhibitOverview exhibit, [Service] GalleryDesk desk) => desk.ValuationOf(exhibit.Id);
 }
 
-/// <summary>A loan. No key, so it is no entity, and its fields stay what the record says.</summary>
+/// <summary>A loan. No permission, so it is no entity, and its fields stay what the record says.</summary>
 [ObjectType<LoanOverview>]
 public static partial class LoanType
 {
     static partial void Configure(IObjectTypeDescriptor<LoanOverview> descriptor) => descriptor.Name("Loan");
 
-    /// <summary>A resolver of a type without a key.</summary>
+    /// <summary>A resolver of a type without a permission.</summary>
     public static int GetWeeks([Parent] LoanOverview loan) => loan.Days / 7;
 }
 
-/// <summary>A curator as the gallery knows one: by the key alone.</summary>
+/// <summary>A curator as the gallery knows one: by the permission alone.</summary>
 public sealed record ReferencedCurator(int Id);
 
 /// <summary>The type of that reference: an entity of which this schema has only the key.</summary>
@@ -98,20 +98,20 @@ public static class GalleryQueries
 /// <summary>The gallery's data loaders, written by HotChocolate's generator from these methods.</summary>
 public static class GalleryDataLoaders
 {
-    /// <summary>The keys the caller holds on each exhibit of a request: one question, however many exhibits ask.</summary>
+    /// <summary>The permissions the caller holds on each exhibit of a request: one question, however many exhibits ask.</summary>
     [DataLoader]
-    public static Task<IReadOnlyDictionary<int, IReadOnlySet<string>>> GetHeldKeysByExhibitIdAsync(
+    public static Task<IReadOnlyDictionary<int, IReadOnlySet<string>>> GetHeldPermissionsByExhibitIdAsync(
         IReadOnlyList<int> exhibits,
         GalleryDesk desk,
         CancellationToken cancellationToken)
-        => Task.FromResult(desk.HeldKeysOn(exhibits));
+        => Task.FromResult(desk.HeldPermissionsOn(exhibits));
 }
 
-/// <summary>Who answers for a key on an exhibit: the loader, so the exhibits of a list are asked together.</summary>
-public sealed class ExhibitFieldKeys : IFieldKeys<ExhibitOverview>
+/// <summary>Who answers for a permission on an exhibit: the loader, so the exhibits of a list are asked together.</summary>
+public sealed class ExhibitFieldPermissions : IFieldPermissions<ExhibitOverview>
 {
-    public async ValueTask<RefusalException?> RefusedAsync(ExhibitOverview parent, string key, IResolverContext context, CancellationToken cancellationToken)
-        => await context.Service<IHeldKeysByExhibitIdDataLoader>().LoadAsync(parent.Id, cancellationToken) is { } held && held.Contains(key)
+    public async ValueTask<RefusalException?> RefusedAsync(ExhibitOverview parent, string permission, IResolverContext context, CancellationToken cancellationToken)
+        => await context.Service<IHeldPermissionsByExhibitIdDataLoader>().LoadAsync(parent.Id, cancellationToken) is { } held && held.Contains(permission)
             ? null
-            : GalleryRefusals.NotPermittedFor(key, parent.Id);
+            : GalleryRefusals.NotPermittedFor(permission, parent.Id);
 }

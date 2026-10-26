@@ -42,7 +42,7 @@ public abstract class ModelTests(TestDatabases databases) : IAsyncLifetime
     }
 
     [Fact]
-    public void AddTenancy_maps_every_table_key_and_index_as_documented()
+    public void AddTenancy_maps_every_table_permission_and_index_as_documented()
     {
         var model = Tenancy.Model;
 
@@ -91,8 +91,8 @@ public abstract class ModelTests(TestDatabases databases) : IAsyncLifetime
         Column(grant, "Reason").GetMaxLength().Should().Be(500);
         FieldAccess(placement, "Grants", "_grants");
 
-        var right = Table<SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId>>(model, "SeatRights", key: ["SeatId", "UnitId", "RoleId", "Key"], indexes: ["RoleId", "SeatId,Key", "TenantId"]);
-        Column(right, "Key").GetMaxLength().Should().Be(128);
+        var right = Table<SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId>>(model, "SeatRights", key: ["SeatId", "UnitId", "RoleId", "Permission"], indexes: ["RoleId", "SeatId,Permission", "TenantId"]);
+        Column(right, "Permission").GetMaxLength().Should().Be(128);
         Utc(Column(right, "StartsAt"), nullable: false);
         Utc(Column(right, "EndsAt"), nullable: true);
         Filtered(right, "TenantId");
@@ -105,7 +105,7 @@ public abstract class ModelTests(TestDatabases databases) : IAsyncLifetime
         Column(role, "Description").GetMaxLength().Should().Be(1000);
         Column(role, "FromPack").GetMaxLength().Should().Be(64);
         Named(Column(role, "Status"));
-        Column(role, "Keys").IsPrimitiveCollection.Should().BeTrue("a role's keys are one column: JSON on SQLite, a text array on Postgres");
+        Column(role, "Permissions").IsPrimitiveCollection.Should().BeTrue("a role's permissions are one column: JSON on SQLite, a text array on Postgres");
         Column(role, "Version").IsConcurrencyToken.Should().BeTrue();
         Filtered(role, "TenantId");
 

@@ -15,12 +15,12 @@ type Query {
     last: Int
   ): AccessHistoryEntryConnection! @cost(weight: "10")
   catalogue: Catalogue! @cost(weight: "10")
-  keySets(keys: [String!]!, projects: [ID!]!): ProjectKeySets!
-    @cost(weight: "10")
   node(id: ID!): Node
   openInvitations: [Invitation!]! @cost(weight: "10")
   organizationUnits: [OrganizationUnit!]! @cost(weight: "10")
   overviewOfMine: SeatOverview! @cost(weight: "10")
+  permissionSets(permissions: [String!]!, projects: [ID!]!): ProjectPermissionSets!
+    @cost(weight: "10")
   project(id: ID!): Project
   projectRoles: [ProjectRole!]! @cost(weight: "10")
   projects(
@@ -54,7 +54,7 @@ type Query {
     @cost(weight: "10")
   tenantProjects(tenant: UUID!): [TenantProject!]! @cost(weight: "10")
   tenants(after: String, size: Int): TenantDirectoryPage! @cost(weight: "10")
-  unitsWhereIHold(key: String!): HeldUnits! @cost(weight: "10")
+  unitsWhereIHold(permission: String!): HeldUnits! @cost(weight: "10")
 }
 
 type Mutation {
@@ -98,14 +98,15 @@ type Mutation {
     @cost(weight: "10")
   projectRoleCreate(input: ProjectRoleCreateInput!): ProjectRoleCreatePayload!
     @cost(weight: "10")
-  projectRoleKeysSet(input: ProjectRoleKeysSetInput!): ProjectRoleKeysSetPayload!
+  projectRolePermissionsSet(input: ProjectRolePermissionsSetInput!): ProjectRolePermissionsSetPayload!
     @cost(weight: "10")
   projectRoleRename(input: ProjectRoleRenameInput!): ProjectRoleRenamePayload!
     @cost(weight: "10")
   roleArchive(input: RoleArchiveInput!): RoleArchivePayload! @cost(weight: "10")
   roleCreate(input: RoleCreateInput!): RoleCreatePayload! @cost(weight: "10")
   roleGrant(input: RoleGrantInput!): RoleGrantPayload! @cost(weight: "10")
-  roleKeysSet(input: RoleKeysSetInput!): RoleKeysSetPayload! @cost(weight: "10")
+  rolePermissionsSet(input: RolePermissionsSetInput!): RolePermissionsSetPayload!
+    @cost(weight: "10")
   roleRevoke(input: RoleRevokeInput!): RoleRevokePayload! @cost(weight: "10")
   seatDeactivate(input: SeatDeactivateInput!): SeatDeactivatePayload!
     @cost(weight: "10")
@@ -237,8 +238,8 @@ type GrantOfMine {
 }
 
 type HeldUnits {
+  atTenant: Boolean!
   units: [UUID!]!
-  wholeTenant: Boolean!
 }
 
 type Inspection {
@@ -294,7 +295,7 @@ type Invitation {
   issuedAt: DateTime!
   issuedBy: Seat
   role: Role
-  unit: OrganizationUnit
+  unit: OrganizationUnitName
   until: DateTime
 }
 
@@ -314,21 +315,14 @@ type IssuedInvitation {
   token: String!
 }
 
-type KeyOfMine {
-  grantedAt: [UnitPath!]!
-  key: String!
-  reaches: [UnitPath!]!
-  wholeTenant: Boolean!
-}
-
 type OrganizationUnit {
-  depth: Int
+  depth: Int!
   id: UUID!
   kind: UnitKind
-  name: String
+  name: String!
   parentId: UUID
-  path: String
-  status: UnitStatus
+  path: String!
+  status: UnitStatus!
 }
 
 type OrganizationUnitAddPayload {
@@ -344,6 +338,13 @@ type OrganizationUnitArchivePayload {
 type OrganizationUnitMovePayload {
   errors: [OrganizationUnitMoveError!]
   organizationUnit: OrganizationUnit
+}
+
+type OrganizationUnitName {
+  depth: Int
+  id: UUID!
+  name: String
+  path: String
 }
 
 "A cursor that points to a specific page."
@@ -373,10 +374,17 @@ type PageInfo {
 type Permission {
   description: String!
   implies: [String!]!
-  key: String!
   managesAccess: Boolean!
   module: String!
+  name: String!
   retired: Boolean!
+}
+
+type PermissionOfMine {
+  atTenant: Boolean!
+  grantedAt: [UnitPath!]!
+  permission: String!
+  reaches: [UnitPath!]!
 }
 
 type PersonInvitePayload {
@@ -416,7 +424,7 @@ type Project implements Node {
   owner: Seat
   planned: DateRange
   state: ProjectState
-  unit: OrganizationUnit
+  unit: OrganizationUnitName
   version: Long
   via: ProjectVia
 }
@@ -455,16 +463,6 @@ type ProjectEdge {
   node: Project!
 }
 
-type ProjectKeySet {
-  keys: [String!]!
-  project: ID!
-}
-
-type ProjectKeySets {
-  heldAtRoot: [String!]!
-  onProjects: [ProjectKeySet!]!
-}
-
 type ProjectMovePayload {
   errors: [ProjectMoveError!]
   project: Project
@@ -478,6 +476,16 @@ type ProjectOpenAtUnitPayload {
 type ProjectOwnerChangePayload {
   errors: [ProjectOwnerChangeError!]
   project: Project
+}
+
+type ProjectPermissionSet {
+  permissions: [String!]!
+  project: ID!
+}
+
+type ProjectPermissionSets {
+  heldAtRoot: [String!]!
+  onProjects: [ProjectPermissionSet!]!
 }
 
 type ProjectPlanPayload {
@@ -498,9 +506,9 @@ type ProjectReopenPayload {
 type ProjectRole {
   description: String!
   id: UUID!
-  keys: [String!] @authorize(policy: "tenancy.roles.manage")
   madeFrom: String
   name: String!
+  permissions: [String!] @authorize(policy: "tenancy.roles.manage")
   status: ProjectRoleStatus!
 }
 
@@ -514,8 +522,8 @@ type ProjectRoleCreatePayload {
   projectRole: ProjectRole
 }
 
-type ProjectRoleKeysSetPayload {
-  errors: [ProjectRoleKeysSetError!]
+type ProjectRolePermissionsSetPayload {
+  errors: [ProjectRolePermissionsSetError!]
   projectRole: ProjectRole
 }
 
@@ -541,9 +549,9 @@ type RefusalError implements CodedError {
 type Role {
   fromPack: String
   id: UUID!
-  keys: [String!] @authorize(policy: "tenancy.roles.manage")
   managesAccess: Boolean
   name: String
+  permissions: [String!] @authorize(policy: "tenancy.roles.manage")
   status: RoleStatus
 }
 
@@ -562,17 +570,12 @@ type RoleGrantPayload {
   seat: Seat
 }
 
-type RoleKeysSetPayload {
-  errors: [RoleKeysSetError!]
-  role: Role
-}
-
 type RoleOfMine {
   fromPack: String
   id: UUID!
-  keys: [String!]!
   managesAccess: Boolean!
   name: String!
+  permissions: [String!]!
   status: RoleStatus!
 }
 
@@ -580,9 +583,14 @@ type RolePack {
   administers: Boolean!
   description: String!
   key: String!
-  keys: [String!]!
   name: String!
+  permissions: [String!]!
   seededFor: TenantShape
+}
+
+type RolePermissionsSetPayload {
+  errors: [RolePermissionsSetError!]
+  role: Role
 }
 
 type RoleRevokePayload {
@@ -621,7 +629,7 @@ type SeatOfMine {
 }
 
 type SeatOverview {
-  keys: [KeyOfMine!]!
+  permissions: [PermissionOfMine!]!
   placements: [PlacementOfMine!]!
   roles: [RoleOfMine!]!
   seat: Seat!
@@ -850,7 +858,7 @@ union ProjectRoleCreateError =
   | BrokenRulesError
   | ConcurrencyConflictError
 
-union ProjectRoleKeysSetError =
+union ProjectRolePermissionsSetError =
   | RefusalError
   | InvalidValuesError
   | BrokenRulesError
@@ -880,7 +888,7 @@ union RoleGrantError =
   | BrokenRulesError
   | ConcurrencyConflictError
 
-union RoleKeysSetError =
+union RolePermissionsSetError =
   | RefusalError
   | InvalidValuesError
   | BrokenRulesError
@@ -1025,6 +1033,7 @@ input ProjectOpenAtUnitInput {
 
 input ProjectOwnerChangeInput {
   expectedVersion: Long
+  formerOwnerRoleId: UUID
   id: ID!
   seatId: UUID!
 }
@@ -1052,13 +1061,13 @@ input ProjectRoleArchiveInput {
 
 input ProjectRoleCreateInput {
   description: String
-  keys: [String!]
   name: String!
+  permissions: [String!]
 }
 
-input ProjectRoleKeysSetInput {
+input ProjectRolePermissionsSetInput {
   id: UUID!
-  keys: [String!]!
+  permissions: [String!]!
 }
 
 input ProjectRoleRenameInput {
@@ -1073,8 +1082,8 @@ input RoleArchiveInput {
 
 input RoleCreateInput {
   description: String
-  keys: [String!]
   name: String!
+  permissions: [String!]
 }
 
 input RoleGrantInput {
@@ -1085,9 +1094,9 @@ input RoleGrantInput {
   until: DateTime
 }
 
-input RoleKeysSetInput {
+input RolePermissionsSetInput {
   id: UUID!
-  keys: [String!]!
+  permissions: [String!]!
 }
 
 input RoleRevokeInput {

@@ -245,10 +245,11 @@ public static partial class PostgresRowAccess
             .ToList();
 
         var names = NamesAcross(prepared, export.FunctionNames);
+        var late = LateAsked(prepared, names);
         var knowledge = Know(prepared, names);
 
-        return [.. InDependencyOrder(prepared, names)
-            .Select(each => (each.Context, DropStatement(each.Context) + Emit(each, OwnFirst(each, names), knowledge, export)))];
+        return [.. InDependencyOrder(prepared, names, late)
+            .Select(each => (each.Context, DropStatement(each.Context) + Emit(each, AskingLate(OwnFirst(each, names), late[each]), knowledge, export, late[each])))];
     }
 
     /// <summary>
@@ -825,12 +826,12 @@ public static partial class PostgresRowAccess
     /// The statements <see cref="CreateStatements(DbContext, IReadOnlyList{RowAccessRule}, IReadOnlyList{RowAccessFunction}?, RowAccessExport)"/>
     /// writes for <paramref name="prepared"/>, knowing where every function lives and who asks it.
     /// </summary>
-    private static string Emit(Prepared prepared, IReadOnlyDictionary<string, string> names, Knowledge knowledge, RowAccessExport export)
+    private static string Emit(Prepared prepared, IReadOnlyDictionary<string, string> names, Knowledge knowledge, RowAccessExport export, IReadOnlyList<LateFunction>? late = null)
     {
         var context = prepared.Context;
         var sql = context.GetService<ISqlGenerationHelper>();
         var writing = new Writing(export.CallerFunctions, names, sql, export.Roles, export.ForceRowLevelSecurity);
-        var definitions = InDependencyOrder(context, Definitions(prepared, writing, knowledge));
+        var definitions = InDependencyOrder(context, [.. Definitions(prepared, writing, knowledge), .. LateDefinitions(prepared, late ?? [])]);
         var policies = ContributedPolicies(prepared, writing);
 
         // The column rules' triggers, worked out before anything is written, so their functions are kept.
@@ -867,7 +868,7 @@ public static partial class PostgresRowAccess
 
         // A column rule is no policy: its trigger is written after them.
         var aggregates = prepared.Rules
-            .Where(rule => !rule.IsColumnRule)
+            .Where(rule => !rule.IsColumnRule && !rule.Restrictive)
             .GroupBy(rule => rule.AggregateTypeName, StringComparer.Ordinal)
             .OrderBy(group => group.Key, StringComparer.Ordinal)
             .Select(group => new AggregateRules(RootOf(context, group.Key), [.. group.Distinct().OrderBy(rule => rule.Name, StringComparer.Ordinal)]));
@@ -901,6 +902,9 @@ public static partial class PostgresRowAccess
         }
 
         statements.Append(ContributedPolicyStatements(prepared, policies, permissive, secured, writing, policyNames, privileges));
+
+        // The rules that narrow, after everything they narrow, on tables that have row level security by now.
+        statements.Append(RestrictiveRuleStatements(prepared, writing, secured, policyNames));
 
         // Only for a context with column rules, so a script of a context without is as it was.
         statements.Append(ColumnTriggerStatements(columnTriggers, writing));
@@ -1523,6 +1527,11 @@ public static partial class PostgresRowAccess
             {
                 names.Add(name);
             }
+            else if (parts is ["row", var row, "0", _, _])
+            {
+                // A row question named by its logical name; one named with its schema is the host's own.
+                names.Add(row);
+            }
 
             i = end;
         }
@@ -1971,14 +1980,23 @@ public static partial class PostgresRowAccess
     /// </remarks>
     private sealed class Filler(string what, IEntityType root, StoreObjectIdentifier table, Writing writing, string? rootAlias, int argumentOffset = -1, int arguments = 0)
     {
-        /// <summary>The entities an <c>{exists}</c> is looking at, by their alias.</summary>
+        /// <summary>The entities an <c>{exists}</c> is looking at, and the answers of row questions, by their alias.</summary>
         private readonly Dictionary<string, (IEntityType Entity, StoreObjectIdentifier Table)> _aliases = new(StringComparer.Ordinal);
+
+        /// <summary>The row questions opened and not closed yet, innermost last: what each <c>{/row}</c> closes with.</summary>
+        private readonly Stack<string> _rows = new();
 
         /// <summary>
         /// Whether what was filled in so far reads a column of the row besides its key: a rule that reads only the
         /// key, or nothing of the row, answers the same of a row before and after a change that keeps the key.
         /// </summary>
         public bool ReadsBeyondTheKey { get; private set; }
+
+        /// <summary>
+        /// Whether what was filled in so far reads anything of the row itself, its key included: a condition that does
+        /// not is about the caller alone, and means the same on any table.
+        /// </summary>
+        public bool ReadsTheRow { get; private set; }
 
         public string Fill(string template)
         {
@@ -2023,6 +2041,7 @@ public static partial class PostgresRowAccess
             {
                 case "col" when parts.Length == 2:
                     ReadsBeyondTheKey |= !PropertyOf(root, table, parts[1]).IsPrimaryKey();
+                    ReadsTheRow = true;
                     return Qualified(rootAlias, ColumnOf(root, table, parts[1]));
                 case "col" when parts.Length == 3:
                     var (entity, entityTable) = Alias(parts[1], token);
@@ -2035,21 +2054,31 @@ public static partial class PostgresRowAccess
                 case "caller" when parts.Length >= 2:
                     return AboutTheCaller(parts, writing) ?? throw Unknown(token);
                 case "exists" when parts.Length == 3:
+                    ReadsTheRow = true;
                     return Exists(parts[1], parts[2]);
                 case "exists" when parts.Length == 4:
                     return ExistsWithin(parts[1], parts[2], parts[3], token);
                 case "/exists" when parts.Length == 1:
                     return "))";
                 case "call" when parts.Length == 2:
+                    ReadsTheRow = true;
                     return Function(parts[1]) + "(" + string.Join(", ", Key()) + ")";
                 case "fn" when parts.Length == 2:
                     // Asked by a key the rule holds, whose argument the template writes itself.
                     return Function(parts[1]);
                 case "key" when parts.Length == 1:
                     // The row's key, as a rule that passes an access function more than the row writes it.
+                    ReadsTheRow = true;
                     return string.Join(", ", Key());
                 case "arg" when parts.Length == 2:
                     return Argument(parts[1], token);
+                case "row" when parts.Length == 5:
+                    return Row(parts[1], parts[2] == "1", parts[3], parts[4]);
+                case "/row" when parts.Length == 1 && _rows.Count > 0:
+                    return _rows.Pop();
+                case "rowval" when parts.Length == 4:
+                    var (answered, answeredTable) = Mapped(parts[1]);
+                    return Stored(PropertyOf(answered, answeredTable, parts[2]), parts[3]);
                 default:
                     throw Unknown(token);
             }
@@ -2137,6 +2166,27 @@ public static partial class PostgresRowAccess
                 (principal, dependent) => $"{Qualified(alias, dependent.GetColumnName(entityTable)!)} = {Qualified(ownerAlias, principal.GetColumnName(ownerTable)!)}");
 
             return $"EXISTS (SELECT 1 FROM {QualifiedTable(entityTable, writing.Sql)} {alias} WHERE {string.Join(" AND ", belongs)} AND (";
+        }
+
+        /// <summary>
+        /// <c>(SELECT</c>, opening what a row question answers, <paramref name="alias"/>: the row of the type named
+        /// <paramref name="type"/> that the function named <paramref name="name"/> answers with, whose properties are
+        /// asked by the alias until <c>{/row}</c> closes it with <c>FROM schema.name() alias)</c>.
+        /// </summary>
+        private string Row(string name, bool plain, string type, string alias)
+        {
+            _aliases[alias] = Mapped(type);
+            _rows.Push(" FROM " + (plain ? name : Function(name)) + "() " + alias + ")");
+            return "(SELECT ";
+        }
+
+        /// <summary>The entity type the model maps the CLR type <paramref name="type"/> to, as its full name spells it, and its table.</summary>
+        private (IEntityType Entity, StoreObjectIdentifier Table) Mapped(string type)
+        {
+            var entity = root.Model.GetEntityTypes().FirstOrDefault(each => !each.IsOwned() && each.GetTableName() is not null && string.Equals(each.ClrType.FullName, type, StringComparison.Ordinal))
+                ?? throw new InvalidOperationException(
+                    $"{Capitalized(what)} reads a row of {type}, which the model of the context the policy is written for does not map to a table. Write the rule in a context that maps it, as the context that maps Tenancy's tables maps the seats.");
+            return (entity, TableOf(entity));
         }
 
         private (IEntityType Entity, StoreObjectIdentifier Table) Alias(string alias, string token)

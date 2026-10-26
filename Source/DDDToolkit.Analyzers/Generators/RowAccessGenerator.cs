@@ -27,6 +27,11 @@ namespace DDDToolkit.Analyzers;
 /// depends on the database, so it is <c>{caller:uid}</c>, <c>{caller:signedin}</c>, <c>{caller:role}</c> or
 /// <c>{caller:claim:path}</c>. Braces in a string constant are doubled.
 /// <para>
+/// A restrictive rule, one with <c>Restrictive = true</c>, is translated as every rule is, and its SQL starts with
+/// <c>{restrictive}</c>, for the same reason a column rule's starts with <c>{columns}</c>: an export that does not know
+/// it stops there, rather than write a rule meant to narrow as one that allows more.
+/// </para>
+/// <para>
 /// A column rule, one with <c>Columns</c>, is translated as every rule is, and its SQL starts with
 /// <c>{columns}</c>: an export that knows no column rules stops at the placeholder it does not know, rather than
 /// write the rule as a policy for the whole row, which would let whoever it allows change every column.
@@ -113,6 +118,11 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
             predicate: static (node, _) => node is MethodDeclarationSyntax,
             transform: static (syntaxContext, _) => Outside(syntaxContext));
 
+        var rowsOutside = context.SyntaxProvider.ForAttributeWithMetadataName(
+            KnownTypes.AccessRowAttribute,
+            predicate: static (node, _) => node is MethodDeclarationSyntax,
+            transform: static (syntaxContext, _) => Outside(syntaxContext));
+
         // The ids a package's switch writes into this project, [assembly: GenerateTenancyIds] say: no type yet to this
         // generator, so a resource access contract keyed by one, and a rule that asks it, wait for the switch's plan.
         var writtenIds = context.TemplateDefaultsPlan().Select(static (plan, _) => WrittenIdsOf(plan));
@@ -124,6 +134,7 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
         context.RegisterSourceOutput(questions, static (production, declared) => Produce(production, declared, ".AccessFunctions"));
         context.RegisterSourceOutput(setsOutside, static (production, diagnostics) => diagnostics.ReportAll(production));
         context.RegisterSourceOutput(scalarsOutside, static (production, diagnostics) => diagnostics.ReportAll(production));
+        context.RegisterSourceOutput(rowsOutside, static (production, diagnostics) => diagnostics.ReportAll(production));
     }
 
     private static void Produce(SourceProductionContext production, RowAccessDefinition definition, string suffix)
@@ -203,6 +214,7 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
         FunctionName? name = null;
         var shape = isFunction ? ShapeOf(attribute) : Shape.Row;
         var columnRule = false;
+        var restrictive = false;
         if (isFunction)
         {
             var written = NameOf(FunctionNameOf(attribute), OwnerOf(symbol));
@@ -212,6 +224,15 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
         else
         {
             columnRule = ReportColumns(attribute, aggregate, symbol.Name, LocationInfo.From(syntax.Identifier), diagnostics, cancellationToken);
+            restrictive = attribute.NamedArguments.Any(static argument => argument.Key == "Restrictive" && argument.Value.Value is true);
+            if (restrictive && columnRule)
+            {
+                diagnostics.Add(DiagnosticInfo.Create(
+                    DiagnosticDescriptors.RowAccessRuleShape,
+                    LocationInfo.From(syntax.Identifier),
+                    symbol.Name,
+                    "Restrictive or Columns, not both: a restrictive rule narrows what a caller does with whole rows, and a column rule is one condition more on a change of some columns, which narrows already"));
+            }
         }
 
         var allows = symbol.GetMembers("Allows").OfType<IMethodSymbol>().ToList();
@@ -283,8 +304,8 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
         }
 
         // A column rule's SQL says so first, so an export that knows no column rules stops at it rather than write it
-        // as a policy for the whole row.
-        List<string> members = [SqlConstant(columnRule ? KnownTypes.ColumnRuleSqlMarker + sql : sql)];
+        // as a policy for the whole row; a restrictive rule's, so one that knows none does not write it as one that allows.
+        List<string> members = [SqlConstant(columnRule ? KnownTypes.ColumnRuleSqlMarker + sql : restrictive ? KnownTypes.RestrictiveRuleSqlMarker + sql : sql)];
         if (isFunction && name is { Logical: { } logical } resolved)
         {
             members.Add(NameConstant(logical, contract: false));
@@ -498,13 +519,16 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
     /// resources seen, 1 for those held on; null for a number the enum does not have.
     /// </summary>
     private static int? ResourceAccessSetOf(AttributeData attribute)
-        => attribute.ConstructorArguments.Length == 1 && attribute.ConstructorArguments[0].Value is int set && set is ResourceSeen or ResourceHeldOn ? set : null;
+        => attribute.ConstructorArguments.Length == 1 && attribute.ConstructorArguments[0].Value is int set && set is ResourceSeen or ResourceHeldOn or ResourceFellowMembers ? set : null;
 
     /// <summary>What <c>ResourceAccessSet.Seen</c> is: the resources the caller sees.</summary>
     private const int ResourceSeen = 0;
 
-    /// <summary>What <c>ResourceAccessSet.HeldOn</c> is: the resources the caller holds a key on, asked with the key.</summary>
+    /// <summary>What <c>ResourceAccessSet.HeldOn</c> is: the resources the caller holds a permission on, asked with the permission.</summary>
     private const int ResourceHeldOn = 1;
+
+    /// <summary>What <c>ResourceAccessSet.FellowMembers</c> is: the members of the resources the caller is a member of.</summary>
+    private const int ResourceFellowMembers = 2;
 
     /// <summary>
     /// The name a rule asks a resource access set by: <c>@</c>, the full name of the resource's id as the runtime
@@ -514,7 +538,7 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
     /// spells the same name from the id's type: a test keeps the two together.
     /// </summary>
     private static string ResourceAccessName(ResourceKey key, int set)
-        => "@" + key.RuntimeName + "/" + (set == ResourceHeldOn ? "held_on" : "seen");
+        => "@" + key.RuntimeName + "/" + (set switch { ResourceHeldOn => "held_on", ResourceFellowMembers => "fellow_members", _ => "seen" });
 
     /// <summary>
     /// The id a resource access contract is keyed by: its full name as the runtime spells it, which the set's name
@@ -1008,7 +1032,7 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
     /// A <c>[ResourceAccessContract&lt;TKey&gt;]</c>: one set the access to a resource answers, published by the
     /// resource's id. The generator writes its <c>Name</c>, which the export resolves to the function a contribution
     /// says answers that set for the resource, and its <c>Ids</c>: <c>Ids()</c> for the resources seen,
-    /// <c>Ids(string key)</c> for those a key is held on. A contract that declares its <c>Ids</c> itself, to document
+    /// <c>Ids(string permission)</c> for those a permission is held on. A contract that declares its <c>Ids</c> itself, to document
     /// it, gets that one implemented.
     /// </summary>
     private static RowAccessDefinition DeclareResourceAccess(GeneratorAttributeSyntaxContext attributed)
@@ -1060,13 +1084,16 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
         var set = ResourceAccessSetOf(attribute);
         if (set is null)
         {
-            diagnostics.Add(DiagnosticInfo.Create(DiagnosticDescriptors.RowAccessRuleShape, location, symbol.Name, "ResourceAccessSet.Seen or ResourceAccessSet.HeldOn as the set it publishes"));
+            diagnostics.Add(DiagnosticInfo.Create(DiagnosticDescriptors.RowAccessRuleShape, location, symbol.Name, "ResourceAccessSet.Seen, ResourceAccessSet.HeldOn or ResourceAccessSet.FellowMembers as the set it publishes"));
         }
 
         var heldOn = set == ResourceHeldOn;
+        var fellows = set == ResourceFellowMembers;
         var expected = heldOn
-            ? $"nothing, or 'static partial AccessSet<{key.Name}> Ids(string key)' without a body for the generator to implement: the resources a key is held on are asked with the key"
-            : $"nothing, or 'static partial AccessSet<{key.Name}> Ids()' without a body for the generator to implement: the resources seen are asked without arguments";
+            ? $"nothing, or 'static partial AccessSet<{key.Name}> Ids(string permission)' without a body for the generator to implement: the resources a permission is held on are asked with the permission"
+            : fellows
+                ? "'static partial AccessSet<TMemberId> Ids()' without a body for the generator to implement, with the id the members are known by, such as SeatId: the set holds the members' ids, which the resource's id does not say, and is asked without arguments"
+                : $"nothing, or 'static partial AccessSet<{key.Name}> Ids()' without a body for the generator to implement: the resources seen are asked without arguments";
 
         IMethodSymbol? declared = null;
         foreach (var member in symbol.GetMembers().OfType<IMethodSymbol>().Where(static method => method.MethodKind == MethodKind.Ordinary))
@@ -1078,7 +1105,7 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
                 && member.PartialImplementationPart is null
                 && !member.IsGenericMethod
                 && IsAccessSet(member.ReturnType)
-                && IsTheKey(((INamedTypeSymbol)member.ReturnType).TypeArguments[0], key)
+                && (fellows || IsTheKey(((INamedTypeSymbol)member.ReturnType).TypeArguments[0], key))
                 && member.Parameters.Length == (heldOn ? 1 : 0)
                 && member.Parameters.All(static parameter => parameter.RefKind == RefKind.None && !parameter.IsParams && parameter.Type.SpecialType == SpecialType.System_String);
             if (fits)
@@ -1091,19 +1118,34 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
             }
         }
 
+        // The members' ids are no resource's: only the contract can say what they are.
+        if (fellows && declared is null)
+        {
+            diagnostics.Add(DiagnosticInfo.Create(DiagnosticDescriptors.RowAccessRuleShape, location, symbol.Name, expected));
+        }
+
         if (diagnostics.HasErrorsIn() || set is not { } published || resource is null)
         {
             return RowAccessDefinition.Failed(type, diagnostics) with { Pending = pending };
         }
 
         var name = ResourceAccessName(resource, published);
-        var keyName = declared?.Parameters.FirstOrDefault()?.Name ?? "key";
+        var keyName = declared?.Parameters.FirstOrDefault()?.Name ?? "permission";
         List<string> parameters = heldOn ? ["string " + Identifier(keyName)] : [];
         List<string> names = heldOn ? [keyName] : [];
+        var element = fellows ? ((INamedTypeSymbol)declared!.ReturnType).TypeArguments[0] : null;
         List<string> members =
         [
-            ResourceAccessNameConstant(name, key.Name, heldOn),
-            ResourceAccessIdsMethod(name, resource.TypeName, key.Name, parameters, names, heldOn, declared is null ? "public" : Accessibility(declared), partial: declared is not null),
+            ResourceAccessNameConstant(name, key.Name, published),
+            ResourceAccessIdsMethod(
+                name,
+                element?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ?? resource.TypeName,
+                element?.Name ?? key.Name,
+                parameters,
+                names,
+                published,
+                declared is null ? "public" : Accessibility(declared),
+                partial: declared is not null),
         ];
 
         return new RowAccessDefinition(type, new EquatableArray<DiagnosticInfo>(diagnostics), new EquatableArray<string>(members)) { Pending = pending };
@@ -1121,31 +1163,39 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
             $"an id the generator can find as its key: {key} is no type it sees, nor the id the toolkit writes beside one aggregate root of this project declared with a value, such as [AggregateRoot<Guid>], nor one a package's switch writes into this project, such as [assembly: GenerateTenancyIds]. Declare the id itself: [EntityId<Guid>] public readonly partial record struct {key};");
 
     /// <summary>A resource access contract's <c>Name</c>: what a rule asks the set by, and SQL a contribution writes too.</summary>
-    private static string ResourceAccessNameConstant(string name, string key, bool heldOn)
+    private static string ResourceAccessNameConstant(string name, string key, int set)
         => "/// <summary>\n"
-           + "/// The name rules ask this set by: the resources " + (heldOn ? "the caller holds a key on" : "the caller sees") + ", by their id,\n"
+           + "/// The name rules ask this set by: " + (set switch
+           {
+               ResourceHeldOn => "the resources the caller holds a permission on, by their id,",
+               ResourceFellowMembers => "the members of the resources the caller is a member of, by the resources' id,",
+               _ => "the resources the caller sees, by their id,",
+           }) + "\n"
            + "/// <c>" + key + "</c>. The export writes it as the function that answers the set for that resource, whatever the\n"
            + "/// package that keeps the resource's access calls it; SQL a contribution writes asks it as <c>{fn:...}</c> too.\n"
            + "/// </summary>\n"
            + "public const string Name = " + SymbolDisplay.FormatLiteral(name, quote: true) + ";";
 
-    /// <summary><c>Ids()</c> or <c>Ids(string key)</c>: the ids of the resources in a resource access set, which only the database answers.</summary>
-    private static string ResourceAccessIdsMethod(string name, string keyType, string key, IReadOnlyList<string> parameters, IReadOnlyList<string> names, bool heldOn, string accessibility, bool partial)
+    /// <summary><c>Ids()</c> or <c>Ids(string permission)</c>: the ids of the resources in a resource access set, which only the database answers.</summary>
+    private static string ResourceAccessIdsMethod(string name, string keyType, string key, IReadOnlyList<string> parameters, IReadOnlyList<string> names, int set, string accessibility, bool partial)
         => "/// <summary>\n"
-           + (heldOn
-               ? "/// The ids, each a <c>" + key + "</c>, of the resources the caller holds <paramref name=\"" + names[0] + "\"/> on, which a row access\n"
-               : "/// The ids, each a <c>" + key + "</c>, of the resources the caller sees, which a row access\n")
+           + (set switch
+           {
+               ResourceHeldOn => "/// The ids, each a <c>" + key + "</c>, of the resources the caller holds <paramref name=\"" + names[0] + "\"/> on, which a row access\n",
+               ResourceFellowMembers => "/// The ids, each a <c>" + key + "</c>, of the members of every resource the caller is a member of now, which a row access\n",
+               _ => "/// The ids, each a <c>" + key + "</c>, of the resources the caller sees, which a row access\n",
+           })
            + "/// rule asks with <c>Contains</c>: <c>(id = ANY (ARRAY(SELECT ...)))</c> in its policy, once per statement, with\n"
            + "/// the function that answers the set for the resource. Only the database can answer it, so called in C# it throws.\n"
            + "/// </summary>\n"
-           + (heldOn ? "/// <param name=\"" + names[0] + "\">A permission key.</param>\n" : "")
+           + (set == ResourceHeldOn ? "/// <param name=\"" + names[0] + "\">A permission.</param>\n" : "")
            + "/// <exception cref=\"" + DatabaseOnlyException + "\">Always: the question is the database's.</exception>\n"
            + accessibility + " static " + (partial ? "partial " : "") + AccessSetType + "<" + keyType + "> Ids(" + string.Join(", ", parameters) + ") => throw new " + DatabaseOnlyException
            + "(" + SymbolDisplay.FormatLiteral(name + "(" + string.Join(", ", names) + ")", quote: true) + ");";
 
     /// <summary>
-    /// An <c>[AccessFunctions]</c> class: each of its <c>[AccessSet]</c> and <c>[AccessScalar]</c> methods
-    /// gets a body that throws, because only the SQL function of its name answers it.
+    /// An <c>[AccessFunctions]</c> class: each of its <c>[AccessSet]</c>, <c>[AccessScalar]</c> and <c>[AccessRow]</c>
+    /// methods gets a body that throws, because only the SQL function of its name answers it.
     /// </summary>
     private static RowAccessDefinition DeclareQuestions(GeneratorAttributeSyntaxContext attributed)
     {
@@ -1156,8 +1206,8 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
         var members = new List<string>();
 
         var questions = symbol.GetMembers().OfType<IMethodSymbol>()
-            .Select(method => (Method: method, Set: AttributeOf(method, KnownTypes.AccessSetAttribute), Scalar: AttributeOf(method, KnownTypes.AccessScalarAttribute)))
-            .Where(static question => question.Set is not null || question.Scalar is not null)
+            .Select(method => (Method: method, Set: AttributeOf(method, KnownTypes.AccessSetAttribute), Scalar: AttributeOf(method, KnownTypes.AccessScalarAttribute), Row: AttributeOf(method, KnownTypes.AccessRowAttribute)))
+            .Where(static question => question.Set is not null || question.Scalar is not null || question.Row is not null)
             .ToList();
 
         if (questions.Count > 0 && (!symbol.IsStatic || !syntax.Modifiers.Any(SyntaxKind.PartialKeyword)))
@@ -1167,21 +1217,25 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
         }
 
         var owner = OwnerOf(symbol);
-        foreach (var (method, set, scalar) in questions)
+        foreach (var (method, set, scalar, row) in questions)
         {
             var location = LocationInfo.From(method);
-            if (set is not null && scalar is not null)
+            if ((set is null ? 0 : 1) + (scalar is null ? 0 : 1) + (row is null ? 0 : 1) > 1)
             {
-                diagnostics.Add(DiagnosticInfo.Create(DiagnosticDescriptors.RowAccessRuleShape, location, method.Name, "one of [AccessSet] and [AccessScalar], not both"));
+                diagnostics.Add(DiagnosticInfo.Create(DiagnosticDescriptors.RowAccessRuleShape, location, method.Name, "one of [AccessSet], [AccessScalar] and [AccessRow], not more"));
                 continue;
             }
 
             var isSet = set is not null;
-            var name = NameOf(FunctionNameOf((set ?? scalar)!), owner);
+            var name = NameOf(FunctionNameOf((set ?? scalar ?? row)!), owner);
             ReportName(name, method.Name, location, diagnostics);
 
             var reason = !method.IsStatic || !method.IsPartialDefinition || method.PartialImplementationPart is not null
                 ? "to be a static partial method without a body, which the generator writes"
+                : row is not null && !IsRowType(method.ReturnType)
+                    ? "to return the class a table is mapped to, or a type parameter constrained to class, whose row its function answers with"
+                : row is not null && method.Parameters.Length > 0
+                    ? "no parameters: a row question is asked about the caller, once per statement"
                 : isSet && !IsAccessSet(method.ReturnType)
                     ? "to return AccessSet<T>, the set its function answers with"
                     : !isSet && (method.ReturnsVoid || IsAccessSet(method.ReturnType))
@@ -1198,7 +1252,7 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
 
             if (name.Logical is { } logical)
             {
-                members.Add(QuestionBody(method, logical, isSet));
+                members.Add(QuestionBody(method, logical, isSet, isRow: row is not null));
             }
         }
 
@@ -1208,14 +1262,14 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
     }
 
     /// <summary>The body of a question, which throws: the implementing part of its partial method.</summary>
-    private static string QuestionBody(IMethodSymbol method, string function, bool isSet)
+    private static string QuestionBody(IMethodSymbol method, string function, bool isSet, bool isRow = false)
     {
         var typeParameters = method.TypeParameters.Length == 0 ? "" : "<" + string.Join(", ", method.TypeParameters.Select(static parameter => parameter.Name)) + ">";
         var parameters = string.Join(", ", method.Parameters.Select(parameter => parameter.Type.ToDisplayString(TypeFormat) + " " + Identifier(parameter.Name)));
 
         return "/// <summary>\n"
                + "/// Answered by the SQL function <c>" + function + "</c>, "
-               + (isSet ? "a set a row access rule asks with <c>Contains</c>,\n/// once per statement" : "one value a row access rule compares,\n/// once per statement when no argument reads the row")
+               + (isSet ? "a set a row access rule asks with <c>Contains</c>,\n/// once per statement" : isRow ? "one row whose properties a row access rule reads,\n/// once per statement" : "one value a row access rule compares,\n/// once per statement when no argument reads the row")
                + ". Only the database can answer it, so called in C# it throws.\n"
                + "/// </summary>\n"
                + "/// <exception cref=\"" + DatabaseOnlyException + "\">Always: the question is the database's.</exception>\n"
@@ -1265,8 +1319,16 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
     }
 
     /// <summary>
-    /// An <c>[AccessSet]</c> or <c>[AccessScalar]</c> method outside an <c>[AccessFunctions]</c> class, which
-    /// nothing writes a body for: DDD00038 on it.
+    /// What a row question may answer with: a class, which a table is mapped to, or a type parameter constrained to
+    /// one, which the rule names.
+    /// </summary>
+    private static bool IsRowType(ITypeSymbol type)
+        => type is INamedTypeSymbol { TypeKind: TypeKind.Class, IsStatic: false } named && named.SpecialType != SpecialType.System_String
+           || type is ITypeParameterSymbol { HasReferenceTypeConstraint: true };
+
+    /// <summary>
+    /// An <c>[AccessSet]</c>, <c>[AccessScalar]</c> or <c>[AccessRow]</c> method outside an <c>[AccessFunctions]</c>
+    /// class, which nothing writes a body for: DDD00038 on it.
     /// </summary>
     private static EquatableArray<DiagnosticInfo> Outside(GeneratorAttributeSyntaxContext attributed)
     {
@@ -1340,6 +1402,9 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
         /// <summary>The entity an <c>Any</c> is looking at, by the lambda parameter that names it: its alias in the SQL.</summary>
         private readonly Dictionary<ISymbol, string> _aliases = new(SymbolEqualityComparer.Default);
 
+        /// <summary>How many answers of row questions the rule has read so far: each one's alias is <c>q</c> and its number.</summary>
+        private int _rows;
+
         /// <summary>
         /// The lambda parameters whose type the compiler cannot give, as for the entities of a collection a
         /// template class inherits: what <c>.Value</c> on one of their members means cannot be known, so a rule
@@ -1361,6 +1426,7 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
             LiteralExpressionSyntax literal => Literal(literal),
             InvocationExpressionSyntax invocation => Invocation(invocation),
             _ when IsNow(expression) => "now()",
+            _ when RowColumnOf(expression) is { } rowColumn => rowColumn,
             _ when ColumnOf(expression) is { } column => "{col:" + column + "}",
             _ when CallerOf(expression) is { } known => known,
             _ when ArgumentOf(expression) is { } argument => argument,
@@ -1424,7 +1490,7 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
         /// inside it, whose answer is null for a caller the question does not know.
         /// </summary>
         private bool AsksAScalar(ExpressionSyntax expression)
-            => expression.DescendantNodesAndSelf().OfType<InvocationExpressionSyntax>().Any(invocation => ScalarOf(invocation) is not null);
+            => expression.DescendantNodesAndSelf().OfType<InvocationExpressionSyntax>().Any(invocation => ScalarOf(invocation) is not null || RowOf(invocation) is not null);
 
         /// <summary>
         /// Whether the C# type of <paramref name="expression"/> is a value type that is not nullable, so its
@@ -1441,7 +1507,69 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
         private string Operand(ExpressionSyntax side, ExpressionSyntax other)
             => EnumValueOf(side) is { } number && ColumnOf(other) is { } column
                 ? "{val:" + column + ":" + number + "}"
-                : Translate(side);
+                : EnumValueOf(side) is { } rowNumber && RowPathOf(other) is { } row
+                    ? "{rowval:" + row.Type + ":" + row.Path + ":" + rowNumber + "}"
+                    : Translate(side);
+
+        /// <summary>
+        /// A property of what an <c>[AccessRow]</c> question answers, <c>TenancyRowAccess.CallerSeat&lt;Seat&gt;().Kind</c>:
+        /// <c>{row:name:plain:Type:q1}{col:q1:Kind}{/row}</c>, which the export writes as
+        /// <c>(SELECT q1."Kind" FROM schema.name() q1)</c>, the column the model maps the property to on the type's table.
+        /// Null where the expression is no such property.
+        /// </summary>
+        private string? RowColumnOf(ExpressionSyntax expression)
+        {
+            if (RowPathOf(expression) is not { } row)
+            {
+                return null;
+            }
+
+            var alias = "q" + (++_rows).ToString(CultureInfo.InvariantCulture);
+            return "{row:" + row.Question.Name + ":" + (row.Question.Plain ? "1" : "0") + ":" + row.Type + ":" + alias + "}{col:" + alias + ":" + row.Path + "}{/row}";
+        }
+
+        /// <summary>
+        /// The row question, the runtime name of the type it answers with and the property path an expression reads of
+        /// its answer; null where the expression reads no property of such an answer.
+        /// </summary>
+        private (Question Question, string Type, string Path)? RowPathOf(ExpressionSyntax expression)
+        {
+            var path = new List<string>();
+            var current = expression;
+            while (true)
+            {
+                switch (current)
+                {
+                    case MemberAccessExpressionSyntax member:
+                        if (!IsWrappedValue(member))
+                        {
+                            path.Insert(0, member.Name.Identifier.ValueText);
+                        }
+
+                        current = member.Expression;
+                        continue;
+                    case ConditionalAccessExpressionSyntax { WhenNotNull: MemberBindingExpressionSyntax { Name.Identifier.ValueText: "Value" } } conditional:
+                        current = conditional.Expression;
+                        continue;
+                    case ParenthesizedExpressionSyntax parenthesized:
+                        current = parenthesized.Expression;
+                        continue;
+                    case PostfixUnaryExpressionSyntax { RawKind: (int)SyntaxKind.SuppressNullableWarningExpression } suppressed:
+                        current = suppressed.Operand;
+                        continue;
+                }
+
+                break;
+            }
+
+            return path.Count > 0
+                   && current is InvocationExpressionSyntax invocation
+                   && RowOf(invocation) is { } question
+                   && TypeOf(invocation) is { } answered
+                   && RuntimeName(answered) is { } type
+                ? (question, type, string.Join(".", path))
+                : null;
+        }
 
         private string Invocation(InvocationExpressionSyntax invocation)
         {
@@ -1578,6 +1706,14 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
                 ? QuestionOf(method, scalar, invocation)
                 : null;
 
+        /// <summary>The <c>[AccessRow]</c> question an invocation asks, or null when it asks none.</summary>
+        private Question? RowOf(ExpressionSyntax? expression)
+            => expression is InvocationExpressionSyntax invocation
+               && MethodOf(invocation) is { } method
+               && AttributeOf(method.OriginalDefinition, KnownTypes.AccessRowAttribute) is { } row
+                ? QuestionOf(method, row, invocation)
+                : null;
+
         /// <summary>
         /// A question of an <c>[AccessFunctions]</c> class. One named with its schema is a function the host
         /// creates itself, called as it is, like <c>Sql.Call</c>; one named relative to its owner is asked by its
@@ -1639,7 +1775,9 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
                 }
 
                 var token = sql.Substring(i + 1, end - i - 1);
-                if (token.StartsWith("col:", System.StringComparison.Ordinal)
+
+                // A property of a row question's answer, {col:q1:...}, is no column of the row a rule is about.
+                if ((token.StartsWith("col:", System.StringComparison.Ordinal) && !token.StartsWith("col:q", System.StringComparison.Ordinal))
                     || token.StartsWith("exists:", System.StringComparison.Ordinal)
                     || token.StartsWith("call:", System.StringComparison.Ordinal)
                     || token == "key")
