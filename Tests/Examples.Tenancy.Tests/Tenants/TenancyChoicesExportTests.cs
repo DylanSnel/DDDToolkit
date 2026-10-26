@@ -20,7 +20,7 @@ namespace Examples.Tenancy.Tests.Tenants;
 public sealed class TenancyChoicesExportTests
 {
     /// <summary>The Tenants module's access file the sample's build wrote last.</summary>
-    private const string TenantsAccessFile = "20261026203138_access.tenants.ddd.sql";
+    private const string TenantsAccessFile = "20261026210726_access.tenants.ddd.sql";
 
     /// <summary>
     /// A read rule on the sample's seat the sample does not have, as the generator writes one:

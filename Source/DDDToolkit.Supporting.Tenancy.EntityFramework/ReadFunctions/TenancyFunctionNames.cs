@@ -15,8 +15,9 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 /// </para>
 /// <para>
 /// The next three answer a seat what it may learn of other seats' rights, the one after them what the units it asks
-/// about are called, and the three after that read across tenants, for system work that began in no tenant. These
-/// seven run as their owner, and answer ids, permissions, dates and the names of the units asked about only. So does the last, which a database has where the context maps invitations: it reads across
+/// about are called, the one after that what the tenants a person has a seat in are called, and the three after that
+/// read across tenants, for system work that began in no tenant. These run as their owner, and answer ids,
+/// permissions, dates and the names of the units and the tenants asked about only. So does the last, which a database has where the context maps invitations: it reads across
 /// tenants too, and answers which invitation a token's digest is for.
 /// </para>
 /// </summary>
@@ -91,6 +92,14 @@ public static class TenancyFunctionNames
     /// that unit is called.
     /// </summary>
     public const string UnitsNamed = "units_named";
+
+    /// <summary>
+    /// What the tenants the caller's identity has a seat in are called, whatever the status of the seat or of the
+    /// tenant, as rows of <c>"Id"</c>, <c>"Slug"</c> and <c>"Name"</c>: no parameters. The tenant picker reads the
+    /// names through it, before a tenant is chosen, so it names every tenant by its organization's name whatever an
+    /// application's restrictive rule on the organization lets the caller read of it; it answers nothing more of one.
+    /// </summary>
+    public const string TenantNamesOfIdentity = "identity_tenant_names";
 
     /// <summary>
     /// The permissions stored on the roles of every tenant, each once, as text: no parameters. One of the three reads

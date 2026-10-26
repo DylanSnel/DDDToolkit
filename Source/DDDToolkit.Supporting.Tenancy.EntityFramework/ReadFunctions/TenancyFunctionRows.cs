@@ -42,6 +42,20 @@ internal sealed class InvitationOfDigestRow<TTenantId, TInvitationId, TSeatId>
     public TSeatId? IssuedBy { get; set; }
 }
 
+/// <summary>What one tenant of the caller's identity is called, as <see cref="TenancyFunctionNames.TenantNamesOfIdentity"/> answers it.</summary>
+internal sealed class TenantNameRow<TTenantId>
+    where TTenantId : struct, IEntityId, IEquatable<TTenantId>
+{
+    /// <summary>The tenant.</summary>
+    public TTenantId Id { get; set; }
+
+    /// <summary>The tenant's slug, as it is stored.</summary>
+    public string Slug { get; set; } = string.Empty;
+
+    /// <summary>Its organization's name, or <see langword="null"/> where it has none.</summary>
+    public string? Name { get; set; }
+}
+
 /// <summary>One tenant a round of system work visits, as <see cref="TenancyFunctionNames.TenantsToSweep"/> answers it.</summary>
 internal sealed class TenantToSweepRow<TTenantId>
     where TTenantId : struct, IEntityId, IEquatable<TTenantId>

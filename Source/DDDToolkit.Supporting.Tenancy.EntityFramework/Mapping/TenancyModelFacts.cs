@@ -34,7 +34,7 @@ internal sealed class TenancyModelFacts
     /// </summary>
     private static readonly HashSet<Type> FunctionRows =
     [
-        typeof(SeatHolderRow<>), typeof(TenantAdministratorRow<,>), typeof(TenantToSweepRow<>), typeof(MoveReach<>), typeof(NamedUnit<>),
+        typeof(SeatHolderRow<>), typeof(TenantAdministratorRow<,>), typeof(TenantToSweepRow<>), typeof(MoveReach<>), typeof(NamedUnit<>), typeof(TenantNameRow<>),
         typeof(InvitationOfDigestRow<,,>),
     ];
 

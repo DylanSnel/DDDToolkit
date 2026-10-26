@@ -165,12 +165,23 @@ public sealed class RestrictiveRulesTests(TenancyPostgres postgres)
             }
         }
 
-        // The tenant picker lists every seat of the person's. Before a tenant is chosen the rule has no seat to ask
-        // about and lets no organization through, so it names each tenant by its slug.
-        using (Callers.Begin(Caller.User(Oli.Identity)))
+        // The tenant picker lists every seat of the person's, each tenant by its name, which Tenancy's function that
+        // runs as its owner answers: before a tenant is chosen the rule has no seat to ask about, and lets no
+        // organization through, to the employee as to the external seat.
+        foreach (var (person, expected) in new[] { (Oli, new[] { ("harbor", "Harbor Works"), ("orchard", "Orchard Works") }), (Ada, new[] { ("harbor", "Harbor Works") }) })
         {
-            var mine = await services.InScopeAsync(scoped => scoped.GetRequiredService<TenantSelection<TenantId, SeatId>>().SeatsOfAsync<HostSeat>(Caller.User(Oli.Identity), Cancellation));
-            mine.Select(found => (found.Slug, found.OrganizationName)).Should().BeEquivalentTo([("harbor", "harbor"), ("orchard", "orchard")]);
+            using (Callers.Begin(Caller.User(person.Identity)))
+            {
+                var mine = await services.InScopeAsync(scoped => scoped.GetRequiredService<TenantSelection<TenantId, SeatId>>().SeatsOfAsync<HostSeat>(Caller.User(person.Identity), Cancellation));
+                mine.Select(found => (found.Slug, found.OrganizationName)).Should().BeEquivalentTo(expected, "{0} sees the tenants by name", person.Name);
+            }
+        }
+
+        // While the organizations themselves stay closed to the external seat, before a tenant is chosen and in it.
+        foreach (var tenant in new TenantId?[] { null, Harbor })
+        {
+            await using var oli = await AsCaller.PersonAsync(database, Oli.Identity, tenant, Cancellation);
+            (await oli.ScalarAsync<long>("SELECT count(*) FROM tenancy.\"Organizations\" WHERE \"Id\" = 1", Cancellation)).Should().Be(0);
         }
     }
 

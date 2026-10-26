@@ -427,6 +427,26 @@ namespace Examples.Tenancy.Tenants.Infrastructure.Persistence.Migrations
                     b.ToView(null, (string)null);
                 });
 
+            modelBuilder.Entity("DDDToolkit.Supporting.Tenancy.EntityFramework.TenantNameRow<Examples.Tenancy.Tenants.Contracts.ValueObjects.TenantId>", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("Id");
+
+                    b.Property<string>("Name")
+                        .HasColumnType("text")
+                        .HasColumnName("Name");
+
+                    b.Property<string>("Slug")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("Slug");
+
+                    b.ToTable((string)null);
+
+                    b.ToView(null, (string)null);
+                });
+
             modelBuilder.Entity("DDDToolkit.Supporting.Tenancy.EntityFramework.TenantToSweepRow<Examples.Tenancy.Tenants.Contracts.ValueObjects.TenantId>", b =>
                 {
                     b.Property<Guid>("TenantId")

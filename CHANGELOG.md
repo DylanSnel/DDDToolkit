@@ -2758,10 +2758,13 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     work keeps working under such a rule, every use case of it, and a seat it keeps out of the organization still
     reads what a unit is called: `TenancyDirectory.UnitsByIdAsync` answers through the new `units_named()`, which runs
     as its owner, for the ids asked alone, a name, a path and a depth; `ListUnitsAsync` answers such a seat no units,
-    and its overview names the units it is placed at, and the tenant by its slug. The seat a request acts as is
-    found past the organization, which only names the tenant: a tenant whose organization the caller does not read,
-    as before a tenant is chosen under a rule that asks the caller's seat, is named by its slug, in the tenant
-    picker too. See [Rules that narrow the organization](docs/tenancy.md#rules-that-narrow-the-organization).
+    and its overview names the units it is placed at, and the tenant by its slug. The tenant picker, and the seat a
+    request acts as, read what each of the person's tenants is called through the new `identity_tenant_names()`,
+    which runs as its owner and answers a tenant's id, slug and organization's name, and nothing more: the picker
+    names every tenant, to an employee and to a seat the rule keeps out alike, before a tenant is chosen, where a rule
+    that asks the caller's seat has no seat to ask about, while the organizations themselves stay closed to that seat.
+    On a provider without policies the names are read from the organizations, as before. See
+    [Rules that narrow the organization](docs/tenancy.md#rules-that-narrow-the-organization).
 - **The people the caller works with: `ResourceAccessSet.FellowMembers`.** Decided for 3.2.0-preview.5. A
   `[ResourceAccessContract<ProjectId>(ResourceAccessSet.FellowMembers)]` declares `static partial AccessSet<SeatId> Ids();`
   and answers the members now of every resource the caller is a member of now, the caller among them, which
@@ -3636,8 +3639,9 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     mutations of the tree answer, and its fields are no longer nullable. A mutation of the tree answers the unit from
     the list of the units the caller reads, which a seat that manages units reads.
   - **Upgrading.** Rebuild, and on Postgres let the export write the new access files: Tenancy's has
-    `caller_seat_row()` and `units_named()`, and each resource with members `<name>_fellow_members()`. No table
-    changes; the next migration you add names Tenancy's new row, `NamedUnit`, in its snapshot.
+    `caller_seat_row()`, `units_named()` and `identity_tenant_names()`, and each resource with members
+    `<name>_fellow_members()`. No table changes; the next migration you add names Tenancy's new rows, `NamedUnit` and
+    the tenant names the picker reads, in its snapshot.
 
 ### Fixed
 

@@ -122,6 +122,9 @@ public static class TenancyModelBuilderExtensions
         // And what system work that began in no tenant asks it: which tenants there are to visit.
         modelBuilder.Entity<TenantToSweepRow<TTenantId>>(TenancyMapping.TenantsToSweep);
 
+        // And what the tenant picker asks it, before a tenant is chosen: what the person's tenants are called.
+        modelBuilder.Entity<TenantNameRow<TTenantId>>(TenancyMapping.TenantNames);
+
         return modelBuilder;
     }
 

@@ -458,6 +458,19 @@ internal static class TenancyMapping
     }
 
     /// <summary>
+    /// What the caller's tenants are called, as <see cref="TenancyFunctionNames.TenantNamesOfIdentity"/> answers it:
+    /// mapped to nothing, and read from the SQL that asks the function, under the column names the function gives.
+    /// </summary>
+    internal static void TenantNames<TTenantId>(EntityTypeBuilder<TenantNameRow<TTenantId>> tenant)
+        where TTenantId : struct, IEntityId, IEquatable<TTenantId>
+    {
+        ToNothing(tenant);
+        tenant.Property(row => row.Id).HasColumnName(nameof(TenantNameRow<TTenantId>.Id));
+        tenant.Property(row => row.Slug).HasColumnName(nameof(TenantNameRow<TTenantId>.Slug));
+        tenant.Property(row => row.Name).HasColumnName(nameof(TenantNameRow<TTenantId>.Name));
+    }
+
+    /// <summary>
     /// The tenants a round of system work visits, as <see cref="TenancyFunctionNames.TenantsToSweep"/> answers
     /// them: mapped to nothing, and read from the SQL that asks the function, which names its one column.
     /// </summary>

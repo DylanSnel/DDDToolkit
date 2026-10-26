@@ -5463,10 +5463,11 @@ CREATE POLICY "Only employees read the organization (select) for authenticated" 
   and nothing more. So an external seat on a project still reads what the project's unit is called. `ListUnitsAsync`
   answers it no units, and its own overview, `WhoAmIAsync`, names the units it is placed at as `UnitsByIdAsync` does,
   nothing below them, and the tenant by its slug, since the organization's name is the organization's.
-- **The seat a request acts as is found as before.** The organization only names a tenant there. A tenant whose
-  organization the caller does not read is named by its slug, in the tenant picker too, and before a tenant is
-  chosen a rule that asks the caller's seat has no seat to ask about: under the rule above the picker names every
-  tenant by its slug.
+- **The seat a request acts as is found as before, and the tenant picker names every tenant.** Both read what a
+  tenant is called through `identity_tenant_names()`, which runs as its owner and answers the id, the slug and the
+  organization's name of each tenant the person has a seat in, and nothing more. So the picker shows the names to
+  the employee and to the external seat alike, before a tenant is chosen, where a rule that asks the caller's seat
+  has no seat to ask about, while the organizations themselves stay closed to the seat your rule keeps out.
 - **A rule without `Restrictive`** on your organization or role class is refused: OR-ed with Tenancy's policy, which
   lets every seat of the tenant read them already, it would change nothing.
 
@@ -5522,6 +5523,7 @@ nothing, and the policies keep system work to its tenant with `system_tenant` in
 | `holds_permission(permission)` | whether the seat holds the permission live at any unit | |
 | `holds_at_tenant(permission)` | whether the seat holds the permission live at the root | `HoldsAtTenantAsync` |
 | `identity_tenants()` | every tenant where the caller's identity has a seat, whatever its status | the seat directory |
+| `identity_tenant_names()` | those tenants' ids, slugs and organizations' names, and nothing more; for a signed-in user alone | the tenant picker, and the seat a request acts as |
 | `unit_parent(unit)` | the parent a unit of the seat's tenant has, as it was before the statement that asks | |
 | `permission_manages_access(permission)` | whether your catalogue marks the permission as managing access | `TenancyCatalogue.ManagesAccess` |
 | `permission_is_contained(permission)` | whether a seat hands the permission on only where it holds it: a permission that manages access while [containment](#containment-on-or-off) is on, and no permission once it is off | `TenancyCatalogue.ContainAccessManagingPermissions` |

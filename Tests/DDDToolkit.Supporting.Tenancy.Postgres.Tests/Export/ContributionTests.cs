@@ -82,6 +82,7 @@ public sealed class ContributionTests(TenancyPostgres postgres)
             "holds_at_tenant true search_path=\"\" true true false",
             "holds_permission true search_path=\"\" true true false",
             "holds_permission_in_tenant true search_path=\"\" true false false",
+            "identity_tenant_names true search_path=\"\" true false false",
             "identity_tenants true search_path=\"\" true true false",
             "invitation_of_digest true search_path=\"\" false true false",
             "invitation_terms_are_fixed false search_path=\"\" false false false",

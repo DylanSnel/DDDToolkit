@@ -49,7 +49,7 @@ public sealed partial class TenancyNamingTests(TenancyPostgres postgres)
 
         // What the functions answer under does not follow the naming: it is the same text in both.
         FunctionResults().Matches(snake).Select(match => match.Value).Should().Equal(FunctionResults().Matches(plain).Select(match => match.Value))
-            .And.HaveCount(12, "the six rows a module reads, and the six answers the store reads");
+            .And.HaveCount(13, "the six rows a module reads, the six answers the store reads, and the names the tenant picker reads");
     }
 
     [Fact]

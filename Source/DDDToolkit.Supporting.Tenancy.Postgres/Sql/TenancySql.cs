@@ -520,6 +520,23 @@ internal static class TenancySql
             SecurityDefiner: true,
             GrantTo: callers);
 
+        // What those tenants are called: each one's slug and its organization's name, and nothing more of either. The
+        // tenant picker reads the names through it, before a tenant is chosen, so it names each tenant whatever a
+        // restrictive rule of the application's on the organization lets the person read of it.
+        var organizations = tenancy.Organizations;
+        yield return new ContributedFunction(
+            TenancyFunctionNames.TenantNamesOfIdentity,
+            "",
+            $"TABLE (\"Id\" {tenantType}, \"Slug\" text, \"Name\" text)",
+            $"""
+            SELECT t.{C(tenants, "Id")}, t.{C(tenants, "Slug")}::pg_catalog.text, o.{C(organizations, "Name")}::pg_catalog.text
+            FROM {Q(tenants)} t
+            LEFT JOIN {Q(organizations)} o ON o.{C(organizations, "Id")} = t.{C(tenants, "Id")}
+            WHERE t.{C(tenants, "Id")} IN (SELECT s.{C(seats, "TenantId")} FROM {Q(seats)} s WHERE s.{C(seats, "Identity")} = {Uid})
+            """,
+            SecurityDefiner: true,
+            GrantTo: [User]);
+
         // From the catalogue the application runs with: when it marks another permission, the next export writes this
         // function again, and the access file that does is the migration.
         yield return new ContributedFunction(
