@@ -1,4 +1,3 @@
-using DDDToolkit.Supporting.Tenancy.Access;
 using Mediator;
 
 namespace Examples.Tenancy.Projects.Application.ProjectRoles.Queries;
@@ -8,11 +7,11 @@ namespace Examples.Tenancy.Projects.Application.ProjectRoles.Queries;
 /// shows what they stand for, such as a crew's roles.
 /// </summary>
 /// <remarks>
-/// Nobody is refused for an id: a role of another tenant, and one that does not exist, are left out of the answer
-/// alike. The keys of each are answered as <see cref="TenantProjectRoles"/> answers them.
+/// Whoever works in the tenant asks, the module's default. Nobody is refused for an id: a role of another tenant, and
+/// one that does not exist, are left out of the answer alike. The keys of each are answered as
+/// <see cref="TenantProjectRoles"/> answers them.
 /// </remarks>
 /// <param name="Ids">The roles asked about, at most <see cref="MostRoles"/> different ones.</param>
-[InTenant]
 public sealed record ProjectRolesById(IReadOnlyList<ProjectRoleId> Ids) : IQuery<IReadOnlyList<ProjectRoleListing>>, IProjectsRequest
 {
     /// <summary>The most roles one question is about.</summary>

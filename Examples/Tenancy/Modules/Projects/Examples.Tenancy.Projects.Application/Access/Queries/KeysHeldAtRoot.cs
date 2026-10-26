@@ -1,5 +1,4 @@
 using DDDToolkit.Supporting.Tenancy;
-using DDDToolkit.Supporting.Tenancy.Access;
 using DDDToolkit.Supporting.Tenancy.Catalogue;
 using Mediator;
 
@@ -10,12 +9,11 @@ namespace Examples.Tenancy.Projects.Application.Access.Queries;
 /// from, such as whether to show "open a project" at all.
 /// </summary>
 /// <remarks>
-/// It asks about the caller only, so it requires nothing but a caller that works in a tenant, and refuses nobody
-/// for a key: holding none is the answer. A key held at a unit below the root is not in it: where a key is held
-/// is another question, and a key on a project another one still (<see cref="KeysOnProjects"/>).
+/// It asks about the caller only, so it requires nothing but a caller that works in a tenant, the module's default,
+/// and refuses nobody for a key: holding none is the answer. A key held at a unit below the root is not in it: where a
+/// key is held is another question, and a key on a project another one still (<see cref="KeysOnProjects"/>).
 /// </remarks>
 /// <param name="Keys">Permission keys, as the request names them.</param>
-[InTenant]
 public sealed record KeysHeldAtRoot(IReadOnlyCollection<string> Keys) : IQuery<IReadOnlyList<string>>, IProjectsRequest
 {
     /// <summary>

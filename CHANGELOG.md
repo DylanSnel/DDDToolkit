@@ -355,6 +355,26 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   say the caller's own of, at the property for a `string`, a class or an enum, and at the request where the requests'
   project can tell that nothing says it of the owner's type. Several owners are still members, Membership's. See
   [The owner of an aggregate](docs/access-requirements.md#the-owner-of-an-aggregate).
+- **A module's default: a requirement said once, on its interface.** A requirement attribute on the module's interface,
+  `[AccessRequests, InTenant] public partial interface IProjectsRequest : IRequireAccess;`, is the default of its
+  requests: a request of the module that states nothing of its own, by attribute, by answering `RequiredAccess` or
+  through a request it derives from, requires it, on a line of its own with the default's call,
+  `TenantProjectRoles => TenancyAccess.InTenant()`, so the generated switch shows per request what it got. A request
+  that states its own keeps only its own: the default replaces nothing and stacks onto nothing. Several attributes on
+  the interface are `All` of their calls, in the order written. The interface's last arm answers the default for a
+  request no line names, one of another project or one with type parameters, where it throws without a default.
+  `[SignedIn]`, `[InTenant]` and `[RequiresKey(key)]` now allow `AttributeTargets.Interface`; a key as the default is
+  held for the whole tenant, since a default reads no member of a request. An attribute of the application's own is a
+  default where its class allows an interface. DDD00077 no longer reports a request of a module with a default, which
+  is the price the module pays on purpose: a command that forgets its `[RequiresKey]` requires what the default says,
+  and the build says nothing of it; the generated switch shows it, and a test that pins what each request requires
+  finds it. DDD00089, new, refuses what may not be a default: `[AllowAnonymous]`, since a forgotten requirement never
+  opens a door; a requirement for queries only, `[RequiresOperator]` or `[SeenWith<TResourceId>(key)]`, which a command
+  that says nothing would take; `[OwnOnly]`, which reads a member; and an attribute whose class leaves out interfaces,
+  beside the compiler's CS0592. DDD00083 reports a default on an interface that is not `partial` or is not the module's,
+  DDD00080 a key as the default where no package says where a key without a marker is held, and DDD00084 a sealed
+  request's own attributes that say what the default says, call for call, and an attribute of the default that another
+  there requires already. See [A module's default](docs/access-requirements.md#a-modules-default).
 - **An access behavior, written where the Mediator library is used.** Mark a module's request interface,
   `[AccessRequests] public partial interface IBillingRequest : IRequireAccess;`, and in a project that references
   [Mediator](https://github.com/martinothamar/Mediator) (`Mediator.Abstractions`) the generator writes
@@ -2056,6 +2076,11 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   customer who placed an order sends it elsewhere, and only while it is placed: `Order.DeliverTo` refuses a confirmed
   or cancelled one with `ordering.no-longer-placed`. A guest's order is nobody's, so it is 403 for everybody; on
   Supabase another customer's is 404, since the policy keeps it from the caller the owner is read as.
+- **The Tenancy sample's Projects module says `[InTenant]` once.** `IProjectsRequest` is `[AccessRequests, InTenant]`,
+  and `KeysHeldAtRoot`, `TenantProjectRoles`, `ProjectRolesById` and `SetUpProjectRoles` carry no attribute any more:
+  they take the module's default. Every other request of the module states its own and keeps only that.
+  `AccessDeclarationTests` names the four that take it, beside its table of what each request requires, so a command
+  that forgot its key fails a test where the build says nothing.
 - **The samples write no design-time factory for Supabase, and register its check once.** The Tenancy sample's
   three contexts and the webshop's five are marked `[SupabaseMigrations]`, and their hand-written Postgres factories,
   `TenantsContextFactory.cs`, `ProjectsContextFactory.cs`, `InspectionsContextFactory.cs` and the webshop's five
@@ -2610,6 +2635,10 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 #### Docs
 
+- **Docs: a module's default.** [A module's default](docs/access-requirements.md#a-modules-default) says what an
+  attribute on the module's interface does, with a diagram of which requirement a request gets, what may be a default
+  and what it costs; its example is read from the page by a docs test and compiled as it stands. What goes together,
+  Holding it with a test, Tenancy's requirements, How a request is checked and the diagnostics say it where they meet it.
 - **Docs: your ids, named once.** [Your ids, named once](docs/tenancy.md#your-ids-named-once) has which call of
   Tenancy's is closed over your ids where, with a diagram, and why another module writes them; the System work,
   Operators, Access history and tenant selection sections show the closed calls, and

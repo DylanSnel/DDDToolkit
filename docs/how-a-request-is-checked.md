@@ -196,7 +196,9 @@ A request that answers the property itself gets no line. C# takes a class's own 
 interface's default, so `TenantAuditLog` answers with its own, and every reader of the property reads the same
 requirement either way: the checks, a handler that asks them again, a test. A request the switch does not know, one
 of another project that states nothing, is the last arm, and is stopped: a requirement somebody forgot never opens
-a door.
+a door. A module that says a [default](access-requirements.md#a-modules-default) on its interface, as the sample's
+Projects module says `[InTenant]`, gets a line with the default for each request that states nothing, and a last arm
+that answers the default too.
 
 The two blocks below are what the generator writes for this page's requests. The registration is among them, as a
 request of `ITenantsRequest`, so its line is one the sample's own file does not have.
@@ -231,7 +233,7 @@ partial interface IProjectsRequest
     AccessRequirement DDDToolkit_Generated_IRequireAccess.RequiredAccess => this switch
     {
         AddCrewMember request => MemberAccess.On("projects.crew.manage", request.Project, request.ExpectedVersion),
-        // ... the module's other lines, and the same last arm
+        // ... the module's other lines, and a last arm that answers the module's default, TenancyAccess.InTenant()
     };
 }
 ```

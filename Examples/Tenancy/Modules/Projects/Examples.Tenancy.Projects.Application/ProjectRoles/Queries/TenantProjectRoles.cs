@@ -1,4 +1,3 @@
-using DDDToolkit.Supporting.Tenancy.Access;
 using Mediator;
 
 namespace Examples.Tenancy.Projects.Application.ProjectRoles.Queries;
@@ -8,10 +7,9 @@ namespace Examples.Tenancy.Projects.Application.ProjectRoles.Queries;
 /// crew's roles by, and manages the roles from.
 /// </summary>
 /// <remarks>
-/// Whoever works in the tenant reads them, and the keys of each for a caller who holds
+/// Whoever works in the tenant reads them, the module's default, and the keys of each for a caller who holds
 /// <see cref="ProjectRoleListing.KeysKey"/> for the whole tenant (<see cref="ProjectRoleListing"/>).
 /// </remarks>
-[InTenant]
 public sealed record TenantProjectRoles : IQuery<IReadOnlyList<ProjectRoleListing>>, IProjectsRequest;
 
 /// <summary>Answers <see cref="TenantProjectRoles"/> in two statements, on a reading of this query's own.</summary>

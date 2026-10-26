@@ -294,7 +294,10 @@ database guards on a seat".
   Membership's `[OnResource]` on the resource and `[ExpectedVersion]` on the version read, and Membership's
   `[SeenWith<TResourceId>(key)]` for a query that shows the resources the key is held on, and the core's `[OrOwn]`
   on a seat beside `[RequiresKey]` for the caller's own seat or the key (`RenameSeat`; not beside `[AtUnit]`), and
-  `[OwnOnly]` with `[Own]` for the seat alone. A request answers `RequiredAccess` itself only for a case of the
+  `[OwnOnly]` with `[Own]` for the seat alone. Where nearly every request of a module requires a caller in the
+  tenant, the interface says it once, `[AccessRequests, InTenant]` (the sample's Projects module): a request that
+  states nothing takes it, on a generated line of its own, and one that states its own keeps only its own; a
+  command that forgets its key then requires a seat, so give every command its key. A request answers `RequiredAccess` itself only for a case of the
   module's own, a requirement computed from its values (`SeatGrants`, `OpenProject`), or one that combines what no
   stack of attributes says: two keys, `AccessRequirement.All(MemberAccess.On(...), new ProjectsRequirement.AtUnit(...))`
   (`MoveProjectToUnit`), or one caller or another, `AccessRequirement.Any(TenancyAccess.RequiresOperator(),

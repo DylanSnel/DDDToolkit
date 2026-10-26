@@ -1404,6 +1404,12 @@ begins around the work ([System work](#system-work)), and a request it sends say
 `[InTenant]` for system work in a tenant. `[InTenant]` beside a key of Tenancy's says nothing more, since only a seat in
 the tenant or system work there holds one, and the generator warns of it, [DDD00084](diagnostics.md#ddd00084).
 
+**Said once for a module.** Where nearly every request of a module reads the tenant's data, `[InTenant]` on the
+module's interface says it once, `[AccessRequests, InTenant]`: a request of the module that states nothing of its own
+requires a caller in the tenant, and one that states its own, a key say, keeps only its own. `[RequiresKey(key)]` may be
+the default as well, held for the whole tenant; `[RequiresOperator]` may not, since a command that says nothing would
+take it ([A module's default](access-requirements.md#a-modules-default)). The sample's Projects module says it so.
+
 **A seat of the caller's own.** `TenancyAccess.Own(seat)`, and `[OrOwn]` or `[Own]` on a member of your seat id, compare
 the seat the request names with the caller's seat in the tenant of the request, at the door, with nothing read:
 `AddTenancy` registers what says so, an `ICallersOwn<TSeatId>` over Tenancy's caller, which is found from the verified
@@ -3273,7 +3279,8 @@ written ([When nothing asks the checks](access-requirements.md#when-nothing-asks
 
 No module writes a behavior. Each writes its request interface, marked `[AccessRequests]`, and a check only
 for the cases that are its own: Projects for a key at a unit, Inspections for what takes Projects' gate,
-Tenants none. A key on a project is the Membership package's case, and its check is added to Projects' set.
+Tenants none. Projects' interface carries the module's [default](access-requirements.md#a-modules-default) as well,
+`[AccessRequests, InTenant]`, so its requests any seat may send state nothing, and every other one states its own. A key on a project is the Membership package's case, and its check is added to Projects' set.
 That the caller works in a tenant, holds a key for the whole of it or at a unit, or is an operator are the
 Tenancy package's cases, and its check is added to each module's set. That the caller signed in, or is the
 application itself, the toolkit decides in every set. A case no check of the module decides stops the request
@@ -3300,7 +3307,7 @@ can say beforehand:
 | `KeyOnProject` (query) | seen with `projects.view` | an unknown key is `tenancy.unknown-permission`; then a project out of sight is `projects.not-found` |
 | `AllCrewMembers` (query) | seen with `projects.view`: the key filters the query's one statement | a project out of sight is `projects.not-found` |
 | `ProjectsById`, `CrewsOfProjects`, `AbilitiesOnProjects`, `KeysOnProjects` (queries about several projects) | seen with `projects.view` | a project out of sight is left out of the answer |
-| `KeysHeldAtRoot` (query) | a caller that works in a tenant | |
+| `KeysHeldAtRoot` (query) | a caller that works in a tenant, the module's default | |
 | `TenantProjects` (query) | an operator, and nobody else | |
 | `OpenProject` | `projects.open` at the unit; naming an owner, also the owner is the caller's own seat or `projects.owner.change` is held at the unit, computed from whether it names one (`AccessRequirement.All`, `Any` and `Own`) | that the unit is active, and that the owner may be on a crew |
 | `ChangeProjectName` | `projects.edit` on the project | |
@@ -3312,9 +3319,9 @@ can say beforehand:
 | `TakeCrewRole` | `projects.crew.manage` on the project | which project role is the crew lead's, when the seat is the owner's |
 | `RemoveCrewMember` | `projects.crew.manage` on the project | |
 | `ChangeProjectOwner` | `projects.owner.change` on the project | an active seat; the new owner gets the crew lead's project role, and the old owner loses it and stays on the crew |
-| `TenantProjectRoles`, `ProjectRolesById` (queries) | a caller that works in a tenant | the keys of each role only for a caller that holds `tenancy.roles.manage` for the whole tenant |
+| `TenantProjectRoles`, `ProjectRolesById` (queries) | a caller that works in a tenant, the module's default | the keys of each role only for a caller that holds `tenancy.roles.manage` for the whole tenant |
 | `MakeProjectRole`, `RenameProjectRole`, `SetProjectRoleKeys`, `ArchiveProjectRole` | `tenancy.roles.manage` for the whole tenant | the same again: no use case of a package stands between the command and the role |
-| `SetUpProjectRoles` | a caller that works in a tenant (`[InTenant]`); no route sends it, whatever sets a tenant up sends it as system work in the tenant, begun around the send | the same again, and narrower: only system work in the tenant it sets up, everyone else `access.system-only` |
+| `SetUpProjectRoles` | a caller that works in a tenant (`[InTenant]`, the module's default); no route sends it, whatever sets a tenant up sends it as system work in the tenant, begun around the send | the same again, and narrower: only system work in the tenant it sets up, everyone else `access.system-only` |
 
 | Inspections | Declares | The handler adds |
 |---|---|---|

@@ -163,7 +163,8 @@ public partial class HowARequestIsCheckedDocsExampleTests
 
         namespace Examples.Tenancy.Projects.Application.Access
         {
-            [AccessRequests] public partial interface IProjectsRequest : IRequireAccess;
+            // As the sample's: the module's default is a caller in the tenant.
+            [AccessRequests, InTenant] public partial interface IProjectsRequest : IRequireAccess;
         }
         """;
 
@@ -215,6 +216,21 @@ public partial class HowARequestIsCheckedDocsExampleTests
                 lines.Should().Contain(line, "the page shows {0} as {1} writes it", name, Path.GetFileName(file));
             }
         }
+    }
+
+    [Fact]
+    public void The_module_interfaces_the_test_stands_in_carry_the_sample_s_defaults()
+    {
+        // The page says which last arm each module's switch has: Tenants' stops a request it has no line for, and
+        // Projects' answers the module's default. So the stand-ins carry the sample's default, or none, as the sample does.
+        foreach (var (name, declared) in new[] { ("ITenantsRequest", "[AccessRequests]"), ("IProjectsRequest", "[AccessRequests, InTenant]") })
+        {
+            File.ReadAllLines(SampleFileOf(name)).Select(line => line.Trim()).Should().Contain(declared, "the sample declares {0} so", name);
+            TestOnly.Should().Contain(declared + " public partial interface " + name + " : IRequireAccess;");
+        }
+
+        Run().Source("ProjectsAccessBehavior.").Should().Contain("_ => global::DDDToolkit.Supporting.Tenancy.Access.TenancyAccess.InTenant(),", "the page says Projects' last arm answers the default");
+        DocsExamples.Titled(Page, "ProjectsAccessBehavior.g.cs for this page's requests, the interface's part, shortened").Should().Contain("a last arm that answers the module's default, TenancyAccess.InTenant()");
     }
 
     [Theory]

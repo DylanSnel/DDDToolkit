@@ -240,6 +240,40 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
     }
 
     [Fact]
+    public void A_module_s_default_is_said_once_and_taken_only_by_a_request_that_states_nothing()
+    {
+        // Projects says [InTenant] once, on its interface, and a request of it that states nothing of its own takes it;
+        // the other two modules say no default, so a request of theirs that states nothing does not build. A default is
+        // the module's choice, and its price: a command that forgot its key would take it, and nothing says so when it
+        // builds. So the requests that take it are written out here, and the table above pins what every other requires.
+        SampleLayout.OnTheMediator.ToDictionary(module => module.Key, module => module.Value.Request.GetCustomAttributes(inherit: false).Select(attribute => attribute.GetType()).Where(IsARequirement).ToList())
+            .Should().BeEquivalentTo(new Dictionary<string, List<Type>> { ["Projects"] = [typeof(InTenantAttribute)], ["Tenants"] = [], ["Inspections"] = [] });
+
+        var takingIt = Requests
+            .Where(request => !request.Type.GetCustomAttributes(inherit: true).Any(attribute => IsARequirement(attribute.GetType())))
+            .Where(request => request.Type.GetInterfaceMap(typeof(IRequireAccess)).TargetMethods.Single().DeclaringType!.IsInterface)
+            .Select(request => request.Type)
+            .ToList();
+
+        takingIt.Should().BeEquivalentTo(
+            [typeof(KeysHeldAtRoot), typeof(TenantProjectRoles), typeof(ProjectRolesById), typeof(SetUpProjectRoles)],
+            "the queries any seat may send and the set-up system work sends, each a request of Projects that states nothing of its own");
+        foreach (var type in takingIt)
+        {
+            DeclaredBy(Declared.Single(row => row.Request.GetType() == type).Request).Should().Be(TenancyAccess.InTenant(), "{0} takes its module's default", type.Name);
+        }
+
+        // And a request of Projects that states its own keeps only that: no case of the default stacked onto it.
+        Declared.Where(row => ModuleOf(row.Request) == "Projects" && !takingIt.Contains(row.Request.GetType()))
+            .Where(row => row.Declares is AccessRequirement.AllOf all && all.Cases.Contains(TenancyAccess.InTenant()))
+            .Select(row => row.Request.GetType().Name)
+            .Should().BeEmpty();
+
+        static bool IsARequirement(Type attribute)
+            => attribute.IsDefined(typeof(StatesRequirementAttribute), inherit: false) || attribute == typeof(RequiresKeyAttribute) || attribute == typeof(OwnOnlyAttribute);
+    }
+
+    [Fact]
     public void A_request_says_what_it_requires_with_an_attribute_unless_it_computes_it_or_it_is_its_module_s_own()
     {
         // A requirement that reads no value of the request but a key and an id it carries is an attribute on it, and

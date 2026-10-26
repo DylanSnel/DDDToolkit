@@ -1534,7 +1534,7 @@
         "    AccessRequirement DDDToolkit_Generated_IRequireAccess.RequiredAccess => this switch",
         "    {",
         "        AddCrewMember request => MemberAccess.On(\"projects.crew.manage\", request.Project, request.ExpectedVersion),",
-        "        // ... the module's other lines, and the same last arm",
+        "        // ... the module's other lines, and a last arm that answers the module's default, TenancyAccess.InTenant()",
         "    };",
         "}"
       ]
