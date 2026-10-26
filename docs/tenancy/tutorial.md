@@ -27,32 +27,37 @@ needs.
 
 ### The idea: a module in layers
 
-**Why a module.** A **module** is a part of your application with its own data and its own rules
-([Modules](../modules.md)). Tenancy is one, so that the rest of Harbor can only use it in the ways it allows: a
-Boards module later asks Tenancy who may do what, and cannot change a seat or a role behind Tenancy's back.
+**Why a module.** A module has its own data and rules ([Modules](../modules.md)). Other modules use Tenancy only the
+way it allows: they ask who may do what, and cannot change a seat or a role themselves.
 
-**Why layers.** Each layer has one job and may only use the layer below it:
+**Why layers.** Each layer has one job, and uses only the layer below it:
 
-- the **domain** holds the classes and their rules, and knows nothing of databases or HTTP, so its rules are plain
-  C# that you can test without either;
-- the **application** holds the requests and their handlers: what a caller can ask, and what happens then;
-- the **infrastructure** is the only place that knows the database;
-- the **API** holds the routes, and is the only project the host references, so the host cannot reach past it.
+- **domain**: the classes and their rules. No database, no HTTP, so you test the rules as plain C#.
+- **application**: the requests and their handlers.
+- **infrastructure**: the database. The only layer that knows it.
+- **API**: the routes. The only project the host references.
 
-**Why a contracts project.** Other modules will need Tenancy's ids. A board in a Boards module has to store which
-tenant it belongs to and which seat owns it, so it needs `TenantId` and `SeatId`. If Boards referenced Tenancy's
-domain project to get them, it could also reach `Seat` and `Role` and change them past Tenancy's rules, and Tenancy
-could never change those classes again without breaking Boards. So the ids go in a small project of their own, the
-**contracts** project: the one part of a module that other modules may reference. The toolkit's analyzer warns when a
-module uses anything of another module outside its contracts ([Module contracts](../module-contracts.md)).
+**Why a contracts project.**
 
-**Why Postgres, on Supabase.** Tenancy runs on any database Entity Framework supports, and every check it makes
-runs in C#, in front of your handlers. On Postgres it adds a **second lock**: row level security. The database then
-refuses a row the caller may not see or change by itself, also for a query that never goes through your handlers,
-such as Supabase's Data API, a reporting tool, or a query with a bug in it. This tutorial uses Postgres on Supabase
-to show that second lock: how the toolkit writes the policies, and how a request runs as its caller in the
-database. Supabase also gives the sign-in (Supabase Auth) and a local stack for development. On another database you
-leave out the Postgres package and the Supabase steps, and the C# checks stay the same.
+- Other modules store Tenancy's ids: a board keeps its `TenantId` and its owner's `SeatId`.
+- Referencing Tenancy's domain project for them would also hand out `Seat` and `Role`, to change past Tenancy's rules.
+- So the ids get a small project of their own, the only one other modules may reference. The analyzer warns when a
+  module uses more ([Module contracts](../module-contracts.md)).
+
+**Why Postgres, on Supabase.**
+
+- Tenancy works on any Entity Framework database. Its checks run in C#, before your handler.
+- On Postgres it adds **row level security (RLS)**: a policy on each table that Postgres applies to every query, as
+  the caller. Even a query that skips your handlers gets only the caller's rows:
+
+  ```sql
+  -- Leo, a seat of Harbor Works, from any tool:
+  select * from tenancy."Seats";
+  -- only Harbor Works' seats come back
+  ```
+
+- Supabase is Postgres with sign-in (Supabase Auth) and a local stack, so this tutorial can show RLS end to end.
+- On another database you leave out the Postgres package and the Supabase steps. The C# checks stay the same.
 
 Harbor's Tenancy module therefore has five projects, one per layer:
 
@@ -81,10 +86,9 @@ src/
 
 ### What you write
 
-**`Directory.Build.props`**, at the root. **Why:** the toolkit has to know which module each project belongs to,
-because it checks what one module uses of another and names generated code after the module. Saying it here, once,
-from the folder a project is in, means no project has to say it itself, and a new module needs nothing but its
-folder. The highlighted part does that.
+**`Directory.Build.props`**, at the root. **Why:** the toolkit must know each project's module, to check what one
+module uses of another and to name generated code. The highlighted part derives it once, from the folder, so a new
+module needs nothing but its folder.
 
 ```xml {8-11,13-16}
 <Project>
@@ -110,9 +114,8 @@ folder. The highlighted part does that.
   from it, so no project needs a file to say so.
 - `DDD_ModuleContracts` marks the contracts project as what other modules may use.
 
-**`Directory.Packages.props`**, at the root. **Why:** the toolkit's packages must all be at the same version, and
-with every version in this one file, a project names a package and never its version, so two projects cannot drift
-apart. The toolkit is a prerelease, so its version is written in full.
+**`Directory.Packages.props`**, at the root. **Why:** every version in one file, so the toolkit's packages cannot drift
+apart. A prerelease version is written in full.
 
 ```xml {7-10}
 <Project>
@@ -224,16 +227,13 @@ that is what keeps the database out of the domain. The comment at the top of eac
 
 ### What it does
 
-- `Temp.DDDToolkit.Supporting.Tenancy` in the domain project brings Tenancy's classes and rules, and the generator
-  that writes your classes from them (step 2). There is no database in it.
-- `Temp.DDDToolkit.Supporting.Tenancy.Postgres` in the infrastructure project brings the Entity Framework mapping,
-  through `Supporting.Tenancy.EntityFramework`, which it depends on, and the second lock: the SQL functions and row
-  level security policies for Postgres. On another database you reference `Supporting.Tenancy.EntityFramework`
-  instead.
-- `Temp.DDDToolkit.EntityFramework.Supabase` writes the migrations and the policies as SQL files for Supabase, and
-  checks at start-up that the database has them (step 3).
+- `Supporting.Tenancy` (domain): the templates, their rules and the generator. No database.
+- `Supporting.Tenancy.Postgres` (infrastructure): the Entity Framework mapping, which it brings along, plus the RLS
+  policies. On another database, reference `Supporting.Tenancy.EntityFramework` instead.
+- `EntityFramework.Supabase` (infrastructure): writes migrations and policies as SQL files for Supabase, and checks
+  them at start-up.
 
-Build the solution. It builds with nothing in it yet: the next step adds the classes.
+Build the solution. It builds empty; step 2 adds the classes.
 
 ```powershell
 dotnet build Harbor.slnx
@@ -251,30 +251,25 @@ the contracts project. And the seat gets one field of Harbor's own: a job title.
 
 ### The idea: Tenancy's classes are templates, and yours are the real ones
 
-Tenancy does not give you finished classes. It gives you **templates**: an abstract parent class for each, with all
-of its rules, such as "a seat is placed at a unit of its own tenant" or "the last administrator cannot be removed".
-The class your application uses is **yours**: it lives in your domain project, it is called what you call it, and it
-derives from the template. So it can carry fields and methods of your own, and your database stores your class.
+- Tenancy ships a **template** for each class: an abstract parent with all its rules, such as "the last
+  administrator cannot be removed".
+- The class your application uses is **yours**: in your domain project, derived from the template. So it can carry
+  fields of your own, and your database stores it.
+- You declare a class yourself, or let **the switch** write it. This one line has the generator write every class you
+  did not declare:
 
-You can declare each class yourself, or let the generator write it. One line in the domain project, **the switch**,
-has the generator write every class you did not declare:
+  ```csharp
+  [assembly: GenerateTenancyClasses]
+  ```
 
-```csharp
-[assembly: GenerateTenancyClasses]
-```
-
-A class you declare yourself always wins over the one the switch would write. Harbor declares only the seat itself,
-because it adds a job title, and lets the switch write the other four.
-
-The ids go in the contracts project, because other modules store them: a board of another module keeps its tenant's
-`TenantId` and its owner's `SeatId`. An organization has no id of its own: it shares its tenant's.
+- A class you declare always wins. Harbor declares only `Seat`, for a job title.
+- An organization has no id of its own: it shares its tenant's.
 
 ### What you write
 
-**The four ids**, in the contracts project, because other modules store them (step 1). **Why an id type of its own
-and not a plain `Guid`:** a `SeatId` cannot be passed where a `TenantId` is expected, so mixing the two up is a compile
-error instead of a bug in production. Each is one line; `[EntityId<Guid>]` has the toolkit write the rest: equality,
-parsing, `Create()` for a new one, and how it is stored.
+**The four ids**, in the contracts project, because other modules store them. **Why not a plain `Guid`:** a `SeatId`
+passed as a `TenantId` is a compile error, not a bug. `[EntityId<Guid>]` writes the rest: equality, parsing,
+`Create()`, storage.
 
 **`Harbor.Tenancy.Contracts/ValueObjects/TenantId.cs`**
 
@@ -289,8 +284,7 @@ public readonly partial record struct TenantId;
 
 `SeatId.cs`, `OrganizationUnitId.cs` and `RoleId.cs` are the same file with another name.
 
-**The switch**, in the domain project, because the classes it writes belong there. A file of one line, in the
-project's root folder.
+**The switch**, in the domain project, where the classes belong.
 
 **`Harbor.Tenancy.Domain/Module.cs`**
 
@@ -300,8 +294,8 @@ using DDDToolkit.Supporting.Tenancy;
 [assembly: GenerateTenancyClasses]
 ```
 
-**The seat**, in the domain project. **Why we declare it ourselves:** Harbor wants a job title on a seat, and a field
-of your own needs a class of your own. The attribute says which template the class is made from, and with which id.
+**The seat**, in the domain project. **Why declare it:** a field of your own (the job title) needs a class of your own.
+The attribute names the template and the id.
 
 **`Harbor.Tenancy.Domain/Aggregates/Seats/Seat.cs`**
 
@@ -322,18 +316,13 @@ public sealed partial class Seat
 
 ### What it does
 
-- `[SeatAggregate<SeatId>]` makes `Seat` a seat: the generator writes the other part of this `partial` class, which
-  derives from Tenancy's seat template. Your `Seat` has everything a seat has, its tenant, its identity, its
-  placements and grants, plus `JobTitle`.
-- The switch writes `Tenant`, `Organization`, `OrganizationUnit` and `Role` into the domain project, public, in its
-  root namespace. It writes no `Seat`, because you declared one.
-- It finds the ids in the contracts project, which the domain project references, and takes them instead of writing
-  its own.
-- It also writes `TenancyUseCases`: Tenancy's use cases closed over your classes, such as
-  `TenancyUseCases.TenantCommands` to create a tenant. Every request of the coming steps names a use case through it.
+- `[SeatAggregate<SeatId>]`: the generator writes the other half of the `partial` class, derived from the template.
+  `Seat` has everything a seat has, plus `JobTitle`.
+- The switch writes `Tenant`, `Organization`, `OrganizationUnit` and `Role`, and no `Seat`: you declared one.
+- It takes the ids from the contracts project instead of writing its own.
+- It also writes `TenancyUseCases`: Tenancy's use cases closed over your classes. Every later request uses it.
 
-Build again. To see what the generator wrote, open the domain project's **Dependencies → Analyzers** in your editor:
-`Tenant`, `Organization`, `OrganizationUnit`, `Role`, the generated part of `Seat`, and `TenancyUseCases`.
+Build again, and look in the domain project's **Dependencies → Analyzers** to see what was written.
 
 > **Going further.** A class of your own with rules: [How your classes add behaviour](../tenancy.md#how-your-classes-add-behaviour).
 > How an id makes a new one: [How a new id is made](../tenancy.md#how-a-new-id-is-made).
@@ -349,13 +338,11 @@ migration.
 
 ### The idea: Tenancy's tables are mapped by one call, in your context
 
-Tenancy brings no database of its own. Its classes are stored in **your** context, next to whatever else the module
-stores. One call in `OnModelCreating`, `modelBuilder.AddTenancy(...)`, maps all of them: the tables, their keys and
-indexes, and the organization's tree. The generator writes that call for your classes, so it needs no type
-arguments.
-
-The context is marked `[SupabaseMigrations]`. The build then writes the migrations as SQL files for Supabase, and the
-host checks at start-up that the database has them all.
+- Tenancy has no database of its own. Its classes live in **your** context, beside the module's other data.
+- One call, `modelBuilder.AddTenancy(...)`, maps them all: tables, keys, indexes and the organization's tree. The
+  generator writes it for your classes, so it takes no type arguments.
+- `[SupabaseMigrations]` on the context: the migrations become SQL files for Supabase, and the host checks at start-up
+  that the database has them.
 
 ### What you write
 
@@ -396,31 +383,27 @@ public sealed class TenancyContext(DbContextOptions<TenancyContext> options) : D
 
 ### What it does
 
-- `[SupabaseMigrations]`: the build writes a design-time factory beside the context, which `dotnet ef` uses to make
-  it. In step 4 the host's build exports each migration of a marked context as a `.sql` file into
-  `supabase/migrations`, and checks at start-up that the database has them.
-- `Schema = "tenancy"` and `HasDefaultSchema`: Tenancy's tables live in their own schema, apart from other modules'.
-- `AddTenancy(database: Database)`: maps the five classes, generated for yours. `database` tells it which database
-  it is on, so it can add the indexes that only some databases have.
-- `AddDomainEventOutbox`: Tenancy raises a domain event for each change, such as a role given. The outbox stores them
-  with the change that raised them, in the same save.
-- `AddDDDToolkitConventions` and `AddTenancyConverters`: how the ids are stored. Entity Framework does not know your
-  id types, so each needs a converter to and from its `Guid`; they are generated for the module's ids, and named after
-  the module.
-- `StoreDateTimeOffsetsAsUtc`: a grant starts and ends at a moment, and Tenancy asks "which grants apply now" inside
-  the query. Stored as UTC, those moments compare in SQL on every database.
+- `[SupabaseMigrations]`: the build writes the design-time factory `dotnet ef` needs. From step 4 the host exports
+  each migration as a `.sql` file into `supabase/migrations`.
+- `Schema = "tenancy"`: Tenancy's tables in a schema of their own, apart from other modules'.
+- `AddTenancy(database: Database)`: maps the five classes. `database` says which database, for its own indexes.
+- `AddDomainEventOutbox`: Tenancy raises a domain event per change; the outbox saves them in the same transaction.
+- `AddDDDToolkitConventions`, `AddTenancyConverters`: Entity Framework does not know your id types; these store each
+  as its `Guid`.
+- `StoreDateTimeOffsetsAsUtc`: "which grants apply now" is asked in SQL. Moments stored as UTC compare on every
+  database.
 
-Now make the first migration. The infrastructure project is its own startup project, through the factory the build
-wrote:
+Make the first migration. The infrastructure project is its own startup project, through that factory:
 
 ```powershell
 dotnet ef migrations add Tenancy --project src/Modules/Tenancy/Harbor.Tenancy.Infrastructure --startup-project src/Modules/Tenancy/Harbor.Tenancy.Infrastructure --output-dir Persistence/Migrations
 ```
 
-The migration creates the schema `tenancy` with, among others, a table for each class (`Tenants`, `Organizations`,
-`OrganizationUnits`, `Seats`, `Roles`), one for the placements and one for the grants (`SeatPlacements`,
-`SeatRoleGrants`), and `OrganizationUnitPaths`: every unit with every unit above it, so "everything below North" is
-one query.
+It creates the schema `tenancy` with, among others:
+
+- a table per class: `Tenants`, `Organizations`, `OrganizationUnits`, `Seats`, `Roles`;
+- `SeatPlacements` and `SeatRoleGrants`;
+- `OrganizationUnitPaths`: each unit with every unit above it, so "everything below North" is one query.
 
 > **Going further.** Everything `AddTenancy` maps, and naming the tables yourself:
 > [The context and the registration](../tenancy.md#the-context-and-the-registration).
