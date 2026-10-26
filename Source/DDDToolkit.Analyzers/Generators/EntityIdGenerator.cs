@@ -18,6 +18,20 @@ namespace DDDToolkit.Analyzers;
 /// shared provider yields alongside the declared ones. Those take the struct form and go through the
 /// same emitter, so an implicit id has exactly the surface an explicit one has.
 /// </para>
+/// <para>
+/// Every id, and a record id's twin, implements <c>ISingleValue&lt;TSelf, TValue&gt;</c> when the project can see it,
+/// its <c>FromValue</c> explicitly, so a project that does not declare the id can store it through one generic
+/// converter.
+/// </para>
+/// <para>
+/// An id over a <see cref="System.Guid"/> gets <c>Create()</c>, which makes a time-ordered one as
+/// <c>CreateSequential()</c> does, and implements <c>ICreatableEntityId&lt;TSelf&gt;</c> with it where the project
+/// can see that interface: code that is generic over ids, a supporting domain's use cases, makes a new one with
+/// <c>TId.Create()</c>, in code and before the save. A <c>Create()</c> the author declares in the id's partial
+/// declaration wins: the generator writes none and implements the interface with the author's, which is how an id
+/// over a <see cref="long"/> or a <see cref="string"/> gets one at all. Anything else the author calls
+/// <c>Create</c> without parameters keeps the generator's out, and the interface with it.
+/// </para>
 /// </summary>
 [Generator(LanguageNames.CSharp)]
 public sealed class EntityIdGenerator : IIncrementalGenerator
@@ -54,8 +68,12 @@ public sealed class EntityIdGenerator : IIncrementalGenerator
 
         using (writer.TypeScope(type))
         {
+            var singleValue = definition.SingleValueAvailable
+                ? ", " + Emit.SingleValueInterface(name, value.FullyQualifiedName)
+                : string.Empty;
+            var creatable = definition.ImplementsCreatable ? ", " + CreatableInterface(name) : string.Empty;
             using (writer.Block(type.PartialHeader + " : " + KnownTypes.BaseTypesNamespace + ".EntityId<" + value.FullyQualifiedName + ">, "
-                + KnownTypes.ValidationNamespace + ".IValidatable<" + validName + ">"))
+                + KnownTypes.ValidationNamespace + ".IValidatable<" + validName + ">" + singleValue + creatable))
             {
                 writer.Line(PrefixDocComment(value.CanParse));
                 writer.Line("public const string IdPrefix = \"" + Escape(definition.Prefix) + "\";");
@@ -81,7 +99,7 @@ public sealed class EntityIdGenerator : IIncrementalGenerator
                 if (value.IsGuid)
                 {
                     writer.Line();
-                    EmitGuidFactories(writer, name);
+                    EmitGuidFactories(writer, name, definition.WritesCreate);
                 }
 
                 if (value.CanParse)
@@ -93,11 +111,20 @@ public sealed class EntityIdGenerator : IIncrementalGenerator
                 writer.Line();
                 writer.Line("/// <summary>The always-valid twin. Throws when the id is invalid; call TryToValid() to be handed the failures instead.</summary>");
                 writer.Line("public " + validName + " ToValid() => new(this);");
+
+                if (definition.SingleValueAvailable)
+                {
+                    writer.Line();
+                    Emit.SingleValueFromValue(writer, name, value.FullyQualifiedName);
+                }
             }
 
             writer.Line();
 
-            using (writer.Block(type.Accessibility + " partial record " + validName + " : " + name + ", " + KnownTypes.InterfacesNamespace + ".IAlwaysValid"))
+            var twinSingleValue = definition.SingleValueAvailable
+                ? ", " + Emit.SingleValueInterface(validName, value.FullyQualifiedName)
+                : string.Empty;
+            using (writer.Block(type.Accessibility + " partial record " + validName + " : " + name + ", " + KnownTypes.InterfacesNamespace + ".IAlwaysValid" + twinSingleValue))
             {
                 // The record's copy constructor, not a property-by-property copy. It copies every field,
                 // protected, private and get-only ones included; a copy of the settable properties alone
@@ -116,6 +143,12 @@ public sealed class EntityIdGenerator : IIncrementalGenerator
 
                 writer.Line();
                 Emit.SingleValueEqualityMembers(writer, validName, value.FullyQualifiedName, value.IsValueType);
+
+                if (definition.SingleValueAvailable)
+                {
+                    writer.Line();
+                    Emit.SingleValueFromValue(writer, validName, value.FullyQualifiedName);
+                }
             }
         }
 
@@ -150,6 +183,16 @@ public sealed class EntityIdGenerator : IIncrementalGenerator
                 interfaces.Add("global::System.IParsable<" + name + ">");
             }
 
+            if (definition.SingleValueAvailable)
+            {
+                interfaces.Add(Emit.SingleValueInterface(name, value.FullyQualifiedName));
+            }
+
+            if (definition.ImplementsCreatable)
+            {
+                interfaces.Add(CreatableInterface(name));
+            }
+
             using (writer.Block(type.PartialHeader + " : " + string.Join(", ", interfaces)))
             {
                 writer.Line(PrefixDocComment(value.CanParse));
@@ -173,7 +216,7 @@ public sealed class EntityIdGenerator : IIncrementalGenerator
                 if (value.IsGuid)
                 {
                     writer.Line();
-                    EmitGuidFactories(writer, name);
+                    EmitGuidFactories(writer, name, definition.WritesCreate);
                 }
 
                 writer.Line();
@@ -184,6 +227,12 @@ public sealed class EntityIdGenerator : IIncrementalGenerator
                 writer.Line("public static explicit operator " + value.FullyQualifiedName + "(" + name + " id) => id.Value;");
                 writer.Line();
                 writer.Line("public static explicit operator " + name + "(" + value.FullyQualifiedName + " value) => new(value);");
+
+                if (definition.SingleValueAvailable)
+                {
+                    writer.Line();
+                    Emit.SingleValueFromValue(writer, name, value.FullyQualifiedName);
+                }
 
                 if (value.CanParse)
                 {
@@ -248,7 +297,12 @@ public sealed class EntityIdGenerator : IIncrementalGenerator
         writer.Line("        : string.Create(global::System.Globalization.CultureInfo.InvariantCulture, $\"{IdPrefix}_{Value}\");");
     }
 
-    private static void EmitGuidFactories(CodeWriter writer, string name)
+    /// <summary>
+    /// <c>CreateUnique()</c>, <c>CreateSequential()</c> where <see cref="System.Guid"/> has version 7 ids, and beside it
+    /// <c>Create()</c> unless the author declared one. The interface <c>Create()</c> implements is in the .NET 10 build
+    /// of the abstractions alone, so wherever the id implements it, <c>CreateSequential()</c> is there too.
+    /// </summary>
+    private static void EmitGuidFactories(CodeWriter writer, string name, bool writesCreate)
     {
         writer.Line("/// <summary>A new random id.</summary>");
         writer.Line("public static " + name + " CreateUnique() => new(global::System.Guid.NewGuid());");
@@ -256,8 +310,24 @@ public sealed class EntityIdGenerator : IIncrementalGenerator
         writer.Line();
         writer.Line("/// <summary>A new time-ordered (version 7) id; friendlier to database indexes than a random one.</summary>");
         writer.Line("public static " + name + " CreateSequential() => new(global::System.Guid.CreateVersion7());");
+
+        if (writesCreate)
+        {
+            writer.Line();
+            writer.Line("/// <summary>");
+            writer.Line("/// A new id, made in code before the save: a time-ordered one, as <see cref=\"CreateSequential\"/> makes. What code that is");
+            writer.Line("/// generic over ids asks for, <c>TId.Create()</c>; declare a <c>Create()</c> of your own in this id's partial declaration");
+            writer.Line("/// to make another kind, and this one is not written.");
+            writer.Line("/// </summary>");
+            writer.Line("public static " + name + " Create() => CreateSequential();");
+        }
+
         writer.Directive("#endif");
     }
+
+    /// <summary>The interface of an id that makes a new one of itself, closed over the id.</summary>
+    private static string CreatableInterface(string name)
+        => "global::" + KnownTypes.CreatableEntityIdInterface.Substring(0, KnownTypes.CreatableEntityIdInterface.Length - "`1".Length) + "<" + name + ">";
 
     private static void EmitParse(CodeWriter writer, EntityIdDefinition definition, bool isStruct)
     {

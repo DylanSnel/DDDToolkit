@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    An application of one project that writes Tenancy's switch and nothing more of Tenancy's classes and ids:
+    [assembly: GenerateTenancyClasses], a plain context and the registration. The toolkit's generators write the
+    rest while this project builds, the way they do in any application, so the tests here prove the shortest start
+    compiles and provisions a tenant through the package's use cases, on a database.
+
+    Its root namespace is the application's, Shop, which is where the classes and ids are written, beside the class
+    the use cases are named through, TenancyUseCases. DDD_Module names the registrations; a test project declares no
+    module.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>Shop</RootNamespace>
+    <DDD_Module>Shop</DDD_Module>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="coverlet.collector">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="FluentAssertions" />
+    <!-- SQLite in memory: no Docker, and a real database the context creates its tables in. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Source\DDDToolkit.Supporting.Tenancy.EntityFramework\DDDToolkit.Supporting.Tenancy.EntityFramework.csproj" />
+  </ItemGroup>
+
+  <!-- Generators. A NuGet consumer gets these through the packages above; inside this repository they are wired by hand. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\Source\DDDToolkit.Analyzers\DDDToolkit.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\Source\DDDToolkit.EntityFramework.Analyzers\DDDToolkit.EntityFramework.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+</Project>

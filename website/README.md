@@ -31,13 +31,29 @@ sample.
 
 In the docs, a code block with a title is generated code: ```` ```csharp title="Order.g.cs, shortened" ````
 renders with a "Generated" label (`src/css/custom.css`). Give a title to generated files only, and copy
-their content from a real build rather than writing it by hand.
+their content from a real build rather than writing it by hand. Any other code shortened to its point, the
+packages' own say, names itself in a first-line comment and says `shortened` after the language,
+```` ```csharp shortened ````: it renders as any block, and the docs' tests read it rather than compile it.
 
 Diagrams are Mermaid, in ```` ```mermaid ```` blocks: GitHub draws them in `docs/` and the site draws them
-through `@docusaurus/theme-mermaid`, in its colours (`src/css/custom.css`). A diagram gets a
+through `@docusaurus/theme-mermaid`, in its colours (`src/css/custom.css`). The theme's component is swizzled
+in `src/theme/Mermaid` so a diagram drawn again when the colour mode settles is not left blank in light mode;
+check that file again when the theme's version changes. A diagram gets a
 `<details><summary>Show the code: ...</summary>` directly under it with the registration or setup it
 shows; leave a blank line after `<summary>` and before `</details>`, or the Markdown inside is not read.
 Keep Mermaid labels free of `;`, which ends a statement.
+
+A page that needs more than Markdown on the site, such as the walk-through of
+[How a request is checked](../docs/how-a-request-is-checked.md), stays a `.md` page and marks the place with a
+`<div data-interactive="RequestWalkthrough">` on a line of its own, blank lines inside, and what GitHub and the
+Markdown for language models show there instead, closed by `</div>`. `src/remark/interactive.js` puts the
+component in its place on the site, from `src/theme/MDXComponents.js`, and fails the build for a name it does not
+have; `src/plugins/llms.js` drops the two lines and keeps what they hold. So the page needs no MDX, which would read
+the C# generics in its text as JSX, and the DocsExamples tests read it like any other. `MDXComponents.js` names a
+component through a wrapper that imports it lazily: every docs page loads that file, and a static import would put
+the component and its data in every page's download. The component's data is
+`src/components/RequestWalkthrough/walkthrough.json`, whose code lines a docs test holds to lines of the page, and
+each answer to its row of the page's tables: the component never shows what the page does not.
 
 An aside that should stand out is a GitHub alert: a blockquote whose first line is `[!NOTE]`, `[!TIP]`,
 `[!IMPORTANT]`, `[!WARNING]` or `[!CAUTION]`. GitHub draws it as a banner, and `src/remark/githubAlerts.js`

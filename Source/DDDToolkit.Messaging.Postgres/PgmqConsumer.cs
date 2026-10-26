@@ -64,9 +64,11 @@ public sealed class PgmqConsumerOptions
     public bool BindTopics { get; set; }
 
     /// <summary>
-    /// Checks at start-up, once per database, that the pgmq extension is installed, and with
-    /// <see cref="BindTopics"/> that it is 1.11 or later, before any consumer starts. On by default; applies
-    /// to a consumer registered with <c>AddPgmqConsumer</c>. See <see cref="PgmqSinkOptions.CheckExtensionOnStart"/>.
+    /// Whether the start-up check <see cref="PgmqQueue.ExtensionInstalledCheck"/> reads this consumer's database:
+    /// that the pgmq extension is installed, and with <see cref="BindTopics"/> that it is 1.11 or later, before any
+    /// consumer starts. The check runs once the host asks for its checks with <c>RunStartupChecks()</c>. On by
+    /// default; applies to a consumer registered with <c>AddPgmqConsumer</c>. See
+    /// <see cref="PgmqSinkOptions.CheckExtensionOnStart"/>.
     /// </summary>
     public bool CheckExtensionOnStart { get; set; } = true;
 

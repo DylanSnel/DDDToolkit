@@ -54,3 +54,21 @@ public sealed class PostgresContainerTests(PostgresFixture fixture) : ProviderCo
     /// <inheritdoc />
     protected override string ExpectedImage => ContainerImages.Postgres;
 }
+
+/// <summary>What a unique index refuses with, against PostgreSQL.</summary>
+[Collection(PostgresCollection.Name)]
+[Trait(ProviderTraits.Key, ProviderTraits.Postgres)]
+public sealed class PostgresRefusalTests(PostgresFixture fixture) : ProviderRefusalTests(fixture)
+{
+    /// <inheritdoc />
+    protected override string DefaultSchema => "public";
+}
+
+/// <summary>Where two modules keep their migration histories, against PostgreSQL.</summary>
+[Collection(PostgresCollection.Name)]
+[Trait(ProviderTraits.Key, ProviderTraits.Postgres)]
+public sealed class PostgresMigrationHistoryTests(PostgresFixture fixture) : ProviderMigrationHistoryTests(fixture)
+{
+    /// <inheritdoc />
+    protected override string ProvidersDefaultSchema => "public";
+}

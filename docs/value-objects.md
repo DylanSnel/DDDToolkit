@@ -448,6 +448,13 @@ public static Result<ValidEmailAddress> ToResult(this EmailAddress email)
         : Result.Fail(errors.Select(e => e.Message));
 ```
 
+The same goes for a command that is refused rather than a value that is invalid. An aggregate method or
+a use case that will not do what it was asked throws `RefusalException`: a stable `Code`, a `Kind` (the
+request is invalid, not permitted, names something that is not found, or conflicts with the state it
+met) and the `Arguments` its message was built from. It is not an invariant violation, because nothing
+changed; it is the answer "no, and here is why", which an edge maps to a status from `Kind` and
+translates by `Code`, and which a `Result<T>` can wrap in one `catch` if that is what you use.
+
 ### What this does not do
 
 - There is no `Result<T>`, on purpose. See above.

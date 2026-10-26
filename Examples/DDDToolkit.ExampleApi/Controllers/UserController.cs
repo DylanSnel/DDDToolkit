@@ -23,15 +23,15 @@ public class UserController(ExampleContext context) : ControllerBase
     [HttpPost(Name = "CreateUser")]
     public async Task<IActionResult> Post(CancellationToken cancellationToken)
     {
-        var product = new Product(ProductId.CreateUnique())
+        var product = new Product(ProductId.Create())
         {
             Name = "Test",
             Price = 10,
         };
         context.Products.Add(product);
 
-        var user = new User(UserId.CreateUnique(), new PersonName("John", "Doe"), EmailAddress.Create("johndoe@gmail.com"));
-        user.AddOrder(new Order(OrderId.CreateUnique(), [product.Id, ProductId.CreateUnique()]));
+        var user = new User(UserId.Create(), new PersonName("John", "Doe"), EmailAddress.Create("johndoe@gmail.com"));
+        user.AddOrder(new Order(OrderId.Create(), [product.Id, ProductId.Create()]));
         context.Users.Add(user);
 
         await context.SaveChangesAsync(cancellationToken);
@@ -82,7 +82,7 @@ public class UserController(ExampleContext context) : ControllerBase
             return NotFound();
         }
 
-        user.AddOrder(new Order(OrderId.CreateUnique(), [ProductId.CreateUnique()]));
+        user.AddOrder(new Order(OrderId.Create(), [ProductId.Create()]));
 
         try
         {

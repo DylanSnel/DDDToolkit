@@ -1,0 +1,76 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>Examples.Tenancy.Host</RootNamespace>
+    <!--
+      No <DDD_Module> and no [assembly: Module]. The host is the composition root, not a module: it wires the
+      modules together, signs people in and seeds the demonstration data, and the boundary analyzer stays
+      silent about an assembly that never claimed to be a module.
+    -->
+    <!-- A command or query no handler handles is a mistake of the build, not a failure of the first request that sends it. -->
+    <WarningsAsErrors>$(WarningsAsErrors);MSG0005</WarningsAsErrors>
+  </PropertyGroup>
+
+  <!--
+    No Entity Framework here, not even its design-time package: the host knows no module's storage. A module's
+    infrastructure project holds its migrations and is its own startup project for dotnet ef, through its
+    design-time factory. No export either: the files under Examples/Tenancy/supabase are written by the build of
+    Examples.Tenancy.Exporter, a program of its own.
+  -->
+
+  <!--
+    The mediator. Its generator writes the mediator, the registration of every handler and AddMediator into the
+    project it runs in, from the handlers it finds in the assemblies that project references: so it belongs in the
+    composition root and nowhere else, and the modules' application projects reference the abstractions alone.
+    The abstractions are named here too, because Program.cs registers a step of the pipeline.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Mediator.Abstractions" />
+    <PackageReference Include="Mediator.SourceGenerator">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      Each module by its API project, and by nothing else of it: that project holds the module's entry, which
+      registers the module and maps its routes.
+    -->
+    <ProjectReference Include="..\Modules\Tenants\Examples.Tenancy.Tenants.Api\Examples.Tenancy.Tenants.Api.csproj" />
+    <ProjectReference Include="..\Modules\Projects\Examples.Tenancy.Projects.Api\Examples.Tenancy.Projects.Api.csproj" />
+    <ProjectReference Include="..\Modules\Inspections\Examples.Tenancy.Inspections.Api\Examples.Tenancy.Inspections.Api.csproj" />
+    <!-- The application's permission catalogue, which the program that exports the database's policies shares. -->
+    <ProjectReference Include="..\Examples.Tenancy.Catalogue\Examples.Tenancy.Catalogue.csproj" />
+    <ProjectReference Include="..\..\Shared\Examples.Hosting\Examples.Hosting.csproj" />
+    <ProjectReference Include="..\..\Shared\Examples.ServiceDefaults\Examples.ServiceDefaults.csproj" />
+    <!-- The texts of the host's own codes in English and Dutch, and the localizer the modules add theirs to. -->
+    <ProjectReference Include="..\..\..\Source\DDDToolkit.Localization\DDDToolkit.Localization.csproj" />
+    <!--
+      GraphQL: every module registers a source schema of its own from its API project, and two gateways compose
+      them in the process, the user's at /graphql and the tenant's administration's at /admin/graphql. The first
+      is for what the host gives each schema.
+    -->
+    <ProjectReference Include="..\..\..\Source\DDDToolkit.HotChocolate\DDDToolkit.HotChocolate.csproj" />
+    <ProjectReference Include="..\..\..\Source\DDDToolkit.HotChocolate.Fusion.InMemory\DDDToolkit.HotChocolate.Fusion.InMemory.csproj" />
+    <!-- Supabase Auth's access tokens: the bearer every route but /dev, /health and the dev login checks. -->
+    <ProjectReference Include="..\..\..\Source\DDDToolkit.Auth.Supabase.AspNetCore\DDDToolkit.Auth.Supabase.AspNetCore.csproj" />
+  </ItemGroup>
+
+  <!--
+    Tenancy's generator, which a NuGet consumer gets with the Tenancy package and this repository wires by hand. The
+    host declares no module and references every one, so the generator writes the modules' keys into it, with the
+    call that registers them: AddTenancyPermissionsOfModules, in Program.cs. The Supabase package's generator, the
+    same way: the host is an application, so it writes the list of every context marked [SupabaseMigrations] into it,
+    with the call that registers them for the start-up check, AddSupabaseMigrations. No export: this project sets
+    none of the export's properties and imports no build step, so nothing of the export is written here.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Source\DDDToolkit.Supporting.Tenancy.Analyzers\DDDToolkit.Supporting.Tenancy.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\..\Source\DDDToolkit.EntityFramework.Supabase.Analyzers\DDDToolkit.EntityFramework.Supabase.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+</Project>

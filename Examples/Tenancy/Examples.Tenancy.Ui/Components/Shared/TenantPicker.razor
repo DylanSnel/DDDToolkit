@@ -1,0 +1,75 @@
+@implements IDisposable
+@inject UiSession Session
+@inject SampleApi Api
+
+@*
+    The signed-in person's seats, one per tenant, from GET /me/seats. The pick becomes the Tenant header of every
+    call. A seat that is not active is greyed out but can still be picked: the API then refuses everything in that
+    tenant, and seeing that refusal is the point.
+*@
+<label class="tenant-picker">
+    <span class="small text-body-secondary">@T["common.tenant"]</span>
+    <select class="form-select form-select-sm @(SelectedIsActive ? null : "seat-inactive")" value="@(Session.Tenant ?? string.Empty)" @onchange="Pick">
+        @if (Session.Tenant is null)
+        {
+            <option value="">@T["tenant-picker.none"]</option>
+        }
+        @foreach (var mine in _seats)
+        {
+            <option value="@mine.Tenant.Slug" class="@(mine.Seat.IsActive ? null : "seat-inactive")">
+                @mine.Tenant.Slug · @mine.Tenant.Name@(mine.Seat.IsActive ? string.Empty : T["tenant-picker.seat-status", mine.Seat.Status.ToLowerInvariant()])
+            </option>
+        }
+        @if (Session.Tenant is { } picked && _seats.All(mine => mine.Tenant.Slug != picked))
+        {
+            @* Until the seats have come, the tenant is shown as it is: "no seat here" would be a guess. *@
+            <option value="@picked">@picked@(SeatsLoaded ? T["tenant-picker.no-seat"] : string.Empty)</option>
+        }
+    </select>
+</label>
+
+@code {
+    private IReadOnlyList<SeatOfMine> _seats = [];
+    private string? _loadedFor;
+    private int _loadedAfter;
+    private string? _seatsOf;
+
+    // Whether _seats are the signed-in person's: set when their answer has come, not when it was asked for.
+    private bool SeatsLoaded => _seatsOf is not null && _seatsOf == Session.AccessToken;
+
+    private bool SelectedIsActive
+        => Session.Tenant is not { } slug || _seats.FirstOrDefault(mine => mine.Tenant.Slug == slug) is not { } seat || seat.Seat.IsActive;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Session.Changed += OnSessionChanged;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        // The seats are the person's, in every tenant: they change when somebody else signs in, or when the person
+        // accepts an invitation, not with the tenant.
+        if (!Session.IsSignedIn || (_loadedFor == Session.AccessToken && _loadedAfter == Session.SeatsAdded))
+        {
+            return;
+        }
+
+        var token = Session.AccessToken;
+        (_loadedFor, _loadedAfter) = (token, Session.SeatsAdded);
+        var answer = await Api.SeatsOfMineAsync();
+        _seats = answer.Value?.OrderBy(mine => mine.Tenant.Slug, StringComparer.Ordinal).ToList() ?? [];
+        _seatsOf = token;
+    }
+
+    private void Pick(ChangeEventArgs change) => Session.SelectTenant(change.Value?.ToString());
+
+    private void OnSessionChanged()
+        => _ = InvokeAsync(async () =>
+        {
+            await LoadAsync();
+            StateHasChanged();
+        });
+
+    public void Dispose() => Session.Changed -= OnSessionChanged;
+}

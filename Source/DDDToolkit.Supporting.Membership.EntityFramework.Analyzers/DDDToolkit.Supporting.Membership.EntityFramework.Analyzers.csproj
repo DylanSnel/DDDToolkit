@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The source generator of DDDToolkit.Supporting.Membership.EntityFramework: in an application that has an
+    organization from the Tenancy packages as well, it writes the class that answers what a resource's rules
+    ask of that organization, and a registration named after the resource. It ships inside the
+    DDDToolkit.Supporting.Membership.EntityFramework package, in analyzers/dotnet/cs, and is not a package of
+    its own.
+  -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <IsRoslynComponent>true</IsRoslynComponent>
+    <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!--
+    The one place where the two supporting domains meet, and it references neither: it knows the other
+    package's types by their names, as text, and what it writes is compiled in the application, which
+    references both. Without the other package in a project it writes nothing.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" PrivateAssets="all" />
+  </ItemGroup>
+
+  <Import Project="..\DDDToolkit.Analyzers.Shared\DDDToolkit.Analyzers.Shared.props" />
+
+  <ItemGroup>
+    <AdditionalFiles Include="AnalyzerReleases.Shipped.md" />
+    <AdditionalFiles Include="AnalyzerReleases.Unshipped.md" />
+  </ItemGroup>
+
+</Project>

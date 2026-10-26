@@ -62,14 +62,22 @@ public sealed class EventNamesGenerator : IIncrementalGenerator
 
         var module = context.CompilationProvider.Select(static (compilation, _) => ModuleBoundary.ModuleOf(compilation.Assembly));
 
+        // Whether DDD_ModuleContracts makes this project its module's contracts. The attribute the toolkit writes from it
+        // is in no compilation a generator is handed, so the property is read here too: the class is then marked as it
+        // is under an [assembly: ModuleContracts] the project declares itself.
+        var contractsByTheBuild = context.CompilationProvider
+            .Combine(context.AnalyzerConfigOptionsProvider)
+            .Select(static (pair, _) => ModuleBoundary.IsContractsByTheBuild(pair.Left, pair.Right.GlobalOptions));
+
         var input = events
             .Combine(module)
+            .Combine(contractsByTheBuild)
             .Combine(context.GetDDDOptions())
             .Combine(context.AssemblyName());
 
         context.RegisterSourceOutput(input, static (production, data) =>
         {
-            var (((found, moduleName), options), assemblyName) = data;
+            var ((((found, moduleName), contracts), options), assemblyName) = data;
             if (found.IsDefaultOrEmpty)
             {
                 return;
@@ -91,7 +99,7 @@ public sealed class EventNamesGenerator : IIncrementalGenerator
             ReportTakenNames(production, types.Where(static type => type.IsDomainEvent), static type => type.StoredName!);
             ReportTakenNames(production, types.Where(static type => type.IsContract), static type => type.PublishedName!);
 
-            if (Write(production, types, moduleName, options.ResolveModuleName(assemblyName), assemblyName) is { } source)
+            if (Write(production, types, moduleName, contracts, options.ResolveModuleName(assemblyName), assemblyName) is { } source)
             {
                 production.AddSource("EventNames.g.cs", SourceText.From(source, Encoding.UTF8));
             }
@@ -189,6 +197,7 @@ public sealed class EventNamesGenerator : IIncrementalGenerator
             IsContract: published is not null,
             SuggestedName: namePinned ? null : SuggestedNameFor(type, suffix.Name),
             IsPublished: ModuleBoundary.IsPublished(type),
+            IsPublic: ModuleBoundary.IsPublic(type),
             Location: location,
             Diagnostics: diagnostics.ToEquatableArray());
     }
@@ -258,7 +267,8 @@ public sealed class EventNamesGenerator : IIncrementalGenerator
         }
     }
 
-    private static string? Write(SourceProductionContext production, List<FoundEvent> types, string? module, string fallbackModule, string? assemblyName)
+    /// <param name="contractsByTheBuild">Whether DDD_ModuleContracts makes the project its module's contracts, so every public type of it is published.</param>
+    private static string? Write(SourceProductionContext production, List<FoundEvent> types, string? module, bool contractsByTheBuild, string fallbackModule, string? assemblyName)
     {
         // Every name, with the types stored or published under it: a domain event and the contract it is
         // published as usually share one, and so does every version of one event.
@@ -320,8 +330,9 @@ public sealed class EventNamesGenerator : IIncrementalGenerator
         writer.Line("/// </summary>");
 
         // Published when everything it names is: a contracts assembly's names are there for other modules
-        // to bind to, a domain assembly's are the module's own business.
-        if (module is not null && constants.All(static constant => constant.Types.All(static type => type.IsPublished)))
+        // to bind to, a domain assembly's are the module's own business. A public type of a project its build makes
+        // its module's contracts is published too, as it is under an [assembly: ModuleContracts] of the project's own.
+        if (module is not null && constants.All(constant => constant.Types.All(type => type.IsPublished || (contractsByTheBuild && type.IsPublic))))
         {
             writer.Line("[global::DDDToolkit.Abstractions.Attributes.ModuleContract]");
         }
@@ -391,7 +402,8 @@ public sealed class EventNamesGenerator : IIncrementalGenerator
     /// <param name="StoredName">The name the outbox stores it under, for a domain event or a type with <c>[DomainEventName]</c>.</param>
     /// <param name="PublishedName">The name it is published under, for a type with <c>[IntegrationEvent]</c>.</param>
     /// <param name="SuggestedName">The name a DDD00036 fix pins, or null when the type already pins one.</param>
-    /// <param name="IsPublished">Whether the type is part of its module's published contract.</param>
+    /// <param name="IsPublished">Whether the type is part of its module's published contract, as the project's source says.</param>
+    /// <param name="IsPublic">Whether the type is public all the way out, which a project its build makes its module's contracts publishes.</param>
     private sealed record FoundEvent(
         string Type,
         string DisplayName,
@@ -402,6 +414,7 @@ public sealed class EventNamesGenerator : IIncrementalGenerator
         bool IsContract,
         string? SuggestedName,
         bool IsPublished,
+        bool IsPublic,
         LocationInfo? Location,
         EquatableArray<DiagnosticInfo> Diagnostics);
 }

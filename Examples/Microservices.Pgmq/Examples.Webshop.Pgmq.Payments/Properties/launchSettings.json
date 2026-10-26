@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "Examples.Webshop.Pgmq.Payments": {
+      "commandName": "Project",
+      "launchBrowser": false,
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "applicationUrl": "https://localhost:65127;http://localhost:65128"
+    }
+  }
+}

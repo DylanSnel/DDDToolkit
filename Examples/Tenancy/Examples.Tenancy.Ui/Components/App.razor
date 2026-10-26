@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <base href="/" />
+    <ResourcePreloader />
+    <link rel="stylesheet" href="@Assets["lib/bootstrap/dist/css/bootstrap.min.css"]" />
+    <link rel="stylesheet" href="@Assets["app.css"]" />
+    <link rel="stylesheet" href="@Assets["Examples.Tenancy.Ui.styles.css"]" />
+    <link rel="icon" href="data:," />
+    <ImportMap />
+    @*
+        Interactive from the start and never prerendered: the session is restored from the tab's storage, which
+        needs the browser, before any page asks the API anything. A prerendered page would call the API signed out.
+    *@
+    <HeadOutlet @rendermode="new InteractiveServerRenderMode(prerender: false)" />
+</head>
+
+<body>
+    <Routes @rendermode="new InteractiveServerRenderMode(prerender: false)" />
+    <script src="@Assets["_framework/blazor.web.js"]"></script>
+</body>
+
+</html>

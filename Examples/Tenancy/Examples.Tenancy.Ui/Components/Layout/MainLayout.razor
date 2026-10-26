@@ -1,0 +1,140 @@
+@inherits LayoutComponentBase
+@implements IDisposable
+@inject UiSession Session
+@inject SessionStore Store
+@inject NavigationManager Navigation
+@inject IJSRuntime Browser
+
+@* Keyed by the language: a switch builds the page again, so every component reads its texts, and asks the API, anew. *@
+<div class="page" @key="Session.Language">
+    <div class="sidebar">
+        <NavMenu />
+    </div>
+
+    <main>
+        <div class="top-row px-4">
+            @if (Session.IsSignedIn)
+            {
+                <span class="me-auto">@T.Html("layout.signed-in-as", Session.PersonName)</span>
+                <TenantPicker />
+                <LanguagePicker />
+                <button type="button" class="btn btn-link" @onclick="LogOut">@T["layout.log-out"]</button>
+            }
+            else
+            {
+                <span class="me-auto text-body-secondary">@T["layout.not-signed-in"]</span>
+                <LanguagePicker />
+            }
+        </div>
+
+        @if (Session.LastAnswer is { } last)
+        {
+            @* The API's latest answer to anything on this page, so every status and code can be seen as it happens. *@
+            <details class="last-response px-4">
+                <summary>
+                    <span class="small text-body-secondary">@T["layout.last-response"]</span>
+                    <StatusBadge Status="last.Status" />
+                    @if (last.Problem?.Code is { } refusalCode)
+                    {
+                        <code class="refusal-code">@refusalCode</code>
+                    }
+                    <code class="small text-body-secondary">@last.Method @last.Path</code>
+                </summary>
+                <ApiOutcomeView Answer="last" />
+            </details>
+        }
+
+        <article class="content px-4">
+            @if (!Store.Restored)
+            {
+                <p><em>@T["common.loading"]</em></p>
+            }
+            else if (Session.IsSignedIn || OnOpenPage)
+            {
+                @Body
+            }
+        </article>
+    </main>
+</div>
+
+<div id="blazor-error-ui" data-nosnippet>
+    @T["layout.error"]
+    <a href="." class="reload">@T["layout.reload"]</a>
+    <span class="dismiss">&times;</span>
+</div>
+
+@code {
+    // The pages that open signed out: the login, and the page a mail's link leads to, which signs its person in itself.
+    private bool OnOpenPage
+        => Navigation.ToBaseRelativePath(Navigation.Uri) is var page
+            && (page.StartsWith("login", StringComparison.OrdinalIgnoreCase) || page.StartsWith("invitations/accept", StringComparison.OrdinalIgnoreCase));
+
+    protected override async Task OnInitializedAsync()
+    {
+        Session.Changed += OnSessionChanged;
+        Session.Answered += OnAnswered;
+        Navigation.LocationChanged += OnLocationChanged;
+
+        // A reload starts a new circuit: sign back in from the tab's storage before any page asks the API anything.
+        await Store.RestoreAsync();
+        SendToLoginIfSignedOut();
+    }
+
+    // The document says which language its texts are in, for a screen reader and for a browser that offers to
+    // translate: the page is served in English and read in the session's language, which only the circuit knows.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_documentLanguage == Session.Language)
+        {
+            return;
+        }
+
+        _documentLanguage = Session.Language;
+        try
+        {
+            await Browser.InvokeVoidAsync("document.documentElement.setAttribute", "lang", Session.Language);
+        }
+        catch (Exception gone) when (gone is JSException or JSDisconnectedException or OperationCanceledException)
+        {
+            // The tab went away, or its document would not take it: the texts are in the right language all the same.
+        }
+    }
+
+    private string? _documentLanguage;
+
+    private void LogOut() => Session.SignOut();
+
+    // Who is signed in, which tenant or which language changed: keep the copy for a reload up to date, and send
+    // somebody who is no longer signed in, by logging out or by a 401 on their own token, to the login page.
+    private void OnSessionChanged()
+        => _ = InvokeAsync(async () =>
+        {
+            await Store.SaveAsync();
+            SendToLoginIfSignedOut();
+            StateHasChanged();
+        });
+
+    private void OnAnswered() => _ = InvokeAsync(StateHasChanged);
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs change)
+        => _ = InvokeAsync(() =>
+        {
+            SendToLoginIfSignedOut();
+            StateHasChanged();
+        });
+
+    private void SendToLoginIfSignedOut()
+    {
+        if (Store.Restored && !Session.IsSignedIn && !OnOpenPage)
+        {
+            Navigation.NavigateTo("login");
+        }
+    }
+
+    public void Dispose()
+    {
+        Session.Changed -= OnSessionChanged;
+        Session.Answered -= OnAnswered;
+        Navigation.LocationChanged -= OnLocationChanged;
+    }
+}

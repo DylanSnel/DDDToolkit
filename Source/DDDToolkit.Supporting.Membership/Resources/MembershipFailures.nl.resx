@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="membership.not-found" xml:space="preserve">
+    <value>Dit bestaat niet of is hier niet zichtbaar.</value>
+  </data>
+  <data name="membership.not-permitted" xml:space="preserve">
+    <value>Hiervoor is het recht {Key} nodig.</value>
+  </data>
+  <data name="membership.member-not-active" xml:space="preserve">
+    <value>Dit kan geen lid zijn: niet actief, of hier niet bekend.</value>
+  </data>
+  <data name="membership.role-not-for-members" xml:space="preserve">
+    <value>Die rol kan hier niet aan een lid worden gegeven.</value>
+  </data>
+  <data name="membership.no-owner-role" xml:space="preserve">
+    <value>Er is geen rol in gebruik om aan een eigenaar te geven.</value>
+  </data>
+  <data name="membership.already-member" xml:space="preserve">
+    <value>Dit is al een lid, of wordt het nog. Geef het lid een rol.</value>
+  </data>
+  <data name="membership.member-not-found" xml:space="preserve">
+    <value>Dit is geen lid, of het lidmaatschap is afgelopen.</value>
+  </data>
+  <data name="membership.role-held" xml:space="preserve">
+    <value>Dat lid heeft deze rol al.</value>
+  </data>
+  <data name="membership.role-not-held" xml:space="preserve">
+    <value>Dat lid heeft deze rol niet.</value>
+  </data>
+  <data name="membership.owner-protected" xml:space="preserve">
+    <value>De eigenaar blijft lid, in de rol van eigenaar, tot iemand anders eigenaar is.</value>
+  </data>
+  <data name="membership.already-owner" xml:space="preserve">
+    <value>Dat lid is al de eigenaar.</value>
+  </data>
+  <data name="membership.invalid-period" xml:space="preserve">
+    <value>Het einde van een periode moet na het begin komen.</value>
+  </data>
+  <data name="membership.role-archived" xml:space="preserve">
+    <value>Die rol is gearchiveerd.</value>
+  </data>
+  <data name="membership.role-name-invalid" xml:space="preserve">
+    <value>Vul {Min} tot {Max} tekens in.</value>
+  </data>
+  <data name="membership.key-not-for-members" xml:space="preserve">
+    <value>Deze rechten kan een rol hier niet geven: {Keys}.</value>
+  </data>
+  <data name="membership.owner-role-stays" xml:space="preserve">
+    <value>De rol die elke eigenaar heeft, kan niet worden gearchiveerd.</value>
+  </data>
+  <data name="membership.role-keys-not-normalized" xml:space="preserve">
+    <value>De rechten van een rol moeten uniek zijn, niet leeg, en in ordinale volgorde staan.</value>
+  </data>
+</root>

@@ -8,8 +8,8 @@ using HotChocolate.Execution;
 namespace DDDToolkit.HotChocolate.Errors;
 
 /// <summary>
-/// Turns the toolkit's two failure exceptions into GraphQL errors a client can read: one error per
-/// failure, each with the failure's code, in the reader's language.
+/// Turns the toolkit's failure exceptions into GraphQL errors a client can read: one error per failure,
+/// each with the failure's code, in the reader's language.
 /// <list type="bullet">
 /// <item>
 /// <see cref="InvalidValueObjectException"/> becomes one error per <see cref="ValidationError"/>, with
@@ -18,6 +18,12 @@ namespace DDDToolkit.HotChocolate.Errors;
 /// <item>
 /// <see cref="InvariantViolationException"/> becomes one error per <see cref="InvariantViolation"/>, with
 /// <c>entity</c> and <c>entityId</c> set to whoever reported it, so a violation in a child says which one.
+/// </item>
+/// <item>
+/// <see cref="RefusalException"/> becomes one error with its code, and <c>kind</c> set to its
+/// <see cref="RefusalKind"/>, so a client can tell "not allowed" from "not found" without a status code. A
+/// refusal that names the input it is about, with <see cref="RefusalException.FieldArgument"/>, has
+/// <c>field</c> set to it as well, so a form puts the message where it puts a validation failure's.
 /// </item>
 /// </list>
 /// <para>
@@ -32,10 +38,41 @@ namespace DDDToolkit.HotChocolate.Errors;
 /// </para>
 /// <para>Any other error passes through untouched.</para>
 /// </summary>
-/// <param name="localizer">Phrases the failures, or <see langword="null"/> to keep the domain's own messages.</param>
-public sealed class FailureErrorFilter(IFailureLocalizer? localizer = null) : IErrorFilter
+public sealed class FailureErrorFilter : IErrorFilter
 {
-    /// <summary>The extension naming the property a validation failure belongs to.</summary>
+    private readonly IFailureLocalizer? _localizer;
+    private readonly EnumValueSpelling _kindSpelling;
+
+    /// <summary>
+    /// Creates the filter for a schema that spells its enum values as HotChocolate does: a refusal's <c>kind</c>
+    /// is <c>NOT_PERMITTED</c>. <see cref="DependencyInjection.AddDDDToolkitErrors"/> builds it with the schema's
+    /// own spelling instead, where the schema has one.
+    /// </summary>
+    /// <param name="localizer">Phrases the failures, or <see langword="null"/> to keep the domain's own messages.</param>
+    public FailureErrorFilter(IFailureLocalizer? localizer = null)
+        : this(localizer, EnumValueSpelling.UpperSnakeCase)
+    {
+    }
+
+    /// <summary>
+    /// Creates the filter for a schema whose enum values are spelled <paramref name="kindSpelling"/>: a refusal's
+    /// <c>kind</c> is spelled the same way, <c>not_permitted</c> or <c>NOT_PERMITTED</c>, so a client reads one
+    /// spelling of <see cref="RefusalKind"/> whether it arrives in an error's extensions or in a mutation's
+    /// payload. For a schema with naming conventions of its own, which registers the filter itself.
+    /// </summary>
+    /// <param name="localizer">Phrases the failures, or <see langword="null"/> to keep the domain's own messages.</param>
+    /// <param name="kindSpelling">How a refusal's <c>kind</c> is spelled.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="kindSpelling"/> is not one of the two spellings.</exception>
+    public FailureErrorFilter(IFailureLocalizer? localizer, EnumValueSpelling kindSpelling)
+    {
+        _localizer = localizer;
+        _kindSpelling = EnumValueSpellings.Checked(kindSpelling, nameof(kindSpelling));
+    }
+
+    /// <summary>
+    /// The extension naming the property a validation failure belongs to, and the input a refusal is about when
+    /// it names one (<see cref="RefusalException.FieldArgument"/>).
+    /// </summary>
     public const string FieldExtension = "field";
 
     /// <summary>The extension naming the entity type that reported a violation.</summary>
@@ -47,6 +84,9 @@ public sealed class FailureErrorFilter(IFailureLocalizer? localizer = null) : IE
     /// <summary>The extension holding the values the message was built from.</summary>
     public const string ArgumentsExtension = "arguments";
 
+    /// <summary>The extension naming a refusal's <see cref="RefusalKind"/>.</summary>
+    public const string KindExtension = "kind";
+
     /// <inheritdoc />
     public IError OnError(IError error)
     {
@@ -54,34 +94,19 @@ public sealed class FailureErrorFilter(IFailureLocalizer? localizer = null) : IE
 
         return error.Exception switch
         {
-            InvalidValueObjectException invalid => Split(error, Failures(invalid).Select(failure => FromValidation(error, failure))),
-            InvariantViolationException broken => Split(error, Violations(broken).Select(violation => FromViolation(error, violation))),
+            InvalidValueObjectException invalid => Split(error, FailureValues.Failures(invalid).Select(failure => FromValidation(error, failure))),
+            InvariantViolationException broken => Split(error, FailureValues.Violations(broken).Select(violation => FromViolation(error, violation))),
+            RefusalException refusal => FromRefusal(error, refusal),
             _ => error,
         };
     }
 
-    /// <summary>
-    /// The failures behind the exception. One constructed without detail still gets the toolkit's own
-    /// "is not valid" failure, so the client is never handed an error with no code.
-    /// </summary>
-    private static IEnumerable<ValidationError> Failures(InvalidValueObjectException invalid)
-        => invalid.Errors.Count > 0
-            ? invalid.Errors
-            : [new ValidationError(invalid.Message, code: ValidationError.UnspecifiedCode)
-                .With(ValidationError.ValueObjectArgument, invalid.ObjectType.Name)];
-
-    /// <summary>The violations behind the exception, or one carrying its message when it was built from a message alone.</summary>
-    private static IEnumerable<InvariantViolation> Violations(InvariantViolationException broken)
-        => broken.InvariantViolations.Count > 0
-            ? broken.InvariantViolations
-            : [new InvariantViolation(InvariantViolation.SeamCode, broken.Message, broken.AggregateType, broken.AggregateId)];
-
     private IError FromValidation(IError error, ValidationError failure)
     {
         var builder = ErrorBuilder.FromError(error)
-            .SetMessage(localizer?.Localize(failure) ?? failure.Message)
+            .SetMessage(_localizer?.Localize(failure) ?? failure.Message)
             .SetCode(failure.Code ?? ValidationError.UnspecifiedCode)
-            .SetExtension(ArgumentsExtension, Arguments(failure.Arguments));
+            .SetExtension(ArgumentsExtension, FailureValues.AsExtension(failure.Arguments));
 
         if (!string.IsNullOrEmpty(failure.PropertyName))
         {
@@ -94,9 +119,9 @@ public sealed class FailureErrorFilter(IFailureLocalizer? localizer = null) : IE
     private IError FromViolation(IError error, InvariantViolation violation)
     {
         var builder = ErrorBuilder.FromError(error)
-            .SetMessage(localizer?.Localize(violation) ?? violation.Message)
+            .SetMessage(_localizer?.Localize(violation) ?? violation.Message)
             .SetCode(violation.Code)
-            .SetExtension(ArgumentsExtension, Arguments(violation.Arguments));
+            .SetExtension(ArgumentsExtension, FailureValues.AsExtension(violation.Arguments));
 
         if (violation.EntityType is not null)
         {
@@ -106,6 +131,24 @@ public sealed class FailureErrorFilter(IFailureLocalizer? localizer = null) : IE
         if (violation.EntityId is not null)
         {
             builder.SetExtension(EntityIdExtension, violation.EntityId.ToString());
+        }
+
+        return builder.Build();
+    }
+
+    private IError FromRefusal(IError error, RefusalException refusal)
+    {
+        var builder = ErrorBuilder.FromError(error)
+            .SetMessage(_localizer?.Localize(refusal) ?? refusal.Message)
+            .SetCode(refusal.Code)
+            .SetExtension(KindExtension, Kind(refusal.Kind))
+            .SetExtension(ArgumentsExtension, FailureValues.AsExtension(refusal.Arguments));
+
+        // The input the refusal is about, where it names one: what RefusalError.field answers in a mutation's
+        // payload, and where a validation failure names its property, so a client reads one place either way.
+        if (FailureValues.TextOf(refusal.Arguments, RefusalException.FieldArgument) is { Length: > 0 } field)
+        {
+            builder.SetExtension(FieldExtension, field);
         }
 
         return builder.Build();
@@ -123,24 +166,6 @@ public sealed class FailureErrorFilter(IFailureLocalizer? localizer = null) : IE
         };
     }
 
-    /// <summary>
-    /// The arguments as values any GraphQL serializer can write: strings, booleans and numbers as they
-    /// are, anything else (an id, a type, a value object) as its text.
-    /// </summary>
-    private static Dictionary<string, object?> Arguments(IReadOnlyDictionary<string, object?> arguments)
-    {
-        var result = new Dictionary<string, object?>(arguments.Count, StringComparer.Ordinal);
-        foreach (var (name, value) in arguments)
-        {
-            result[name] = value switch
-            {
-                null or string or bool => value,
-                byte or sbyte or short or ushort or int or uint or long or ulong or float or double or decimal => value,
-                Type type => type.Name,
-                _ => value.ToString(),
-            };
-        }
-
-        return result;
-    }
+    /// <summary>The kind as the schema spells its enum values.</summary>
+    private string Kind(RefusalKind kind) => EnumValueSpellings.Spell(kind.ToString(), _kindSpelling);
 }

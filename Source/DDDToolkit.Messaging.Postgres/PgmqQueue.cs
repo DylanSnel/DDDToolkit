@@ -27,6 +27,14 @@ public static class PgmqQueue
     public const string Schema = "pgmq";
 
     /// <summary>
+    /// The start-up check <c>AddPgmqSink</c> and <c>AddPgmqConsumer</c> bring, by the name a host turns it off with
+    /// (<c>services.SkipStartupCheck(...)</c>): every database a sink or a consumer uses has the extension, in a
+    /// version with topic routing where one routes by topic. It runs, as every start-up check does, once the host
+    /// asks for its checks with <c>RunStartupChecks()</c>.
+    /// </summary>
+    public const string ExtensionInstalledCheck = "pgmq.extension-installed";
+
+    /// <summary>
     /// The first pgmq with topic routing (<c>pgmq.send_topic</c>, <c>pgmq.bind_topic</c>), which
     /// <see cref="PgmqSinkOptions.UseTopics"/> and <see cref="PgmqConsumerOptions.BindTopics"/> need.
     /// </summary>

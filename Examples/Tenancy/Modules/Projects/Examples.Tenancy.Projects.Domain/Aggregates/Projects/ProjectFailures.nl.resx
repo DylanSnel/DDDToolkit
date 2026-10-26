@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="projects.not-found" xml:space="preserve">
+    <value>Dit project bestaat niet of is hier niet zichtbaar.</value>
+  </data>
+  <data name="projects.not-permitted" xml:space="preserve">
+    <value>Hiervoor is op dit project het recht {Key} nodig.</value>
+  </data>
+  <data name="projects.closed" xml:space="preserve">
+    <value>Het project is gesloten; er verandert niets aan tot het weer geopend is.</value>
+  </data>
+  <data name="projects.not-closed" xml:space="preserve">
+    <value>Het project is open; alleen een gesloten project gaat weer open.</value>
+  </data>
+  <data name="projects.number-taken" xml:space="preserve">
+    <value>Een ander project in deze tenant heeft al nummer {Number}.</value>
+  </data>
+  <data name="projects.no-lead-role" xml:space="preserve">
+    <value>De tenant heeft geen actieve rol voor ploegleiders om aan een eigenaar te geven.</value>
+  </data>
+  <data name="projects.owner-protected" xml:space="preserve">
+    <value>De eigenaar houdt de leidende rol in de ploeg tot iemand anders eigenaar is.</value>
+  </data>
+  <data name="projects.already-on-crew" xml:space="preserve">
+    <value>Die plaats zit al in de ploeg, of komt er nog in. Geef de plaats daar een ploegrol.</value>
+  </data>
+  <data name="projects.crew-role-held" xml:space="preserve">
+    <value>Die plaats heeft deze rol in de ploeg al.</value>
+  </data>
+  <data name="projects.crew-role-not-found" xml:space="preserve">
+    <value>Die plaats heeft deze rol niet in de ploeg.</value>
+  </data>
+  <data name="projects.already-owner" xml:space="preserve">
+    <value>Die plaats is al eigenaar van het project.</value>
+  </data>
+  <data name="projects.member-not-found" xml:space="preserve">
+    <value>Die plaats zit niet in de ploeg van het project, of de tijd in de ploeg is voorbij.</value>
+  </data>
+  <data name="projects.seat-not-active" xml:space="preserve">
+    <value>Die plaats is geschorst of gedeactiveerd, of hoort niet bij deze tenant.</value>
+  </data>
+  <data name="projects.unit-not-active" xml:space="preserve">
+    <value>Die eenheid is gearchiveerd, of hoort niet bij deze tenant.</value>
+  </data>
+  <data name="projects.name-invalid" xml:space="preserve">
+    <value>De naam van een project telt 1 tot {Max} tekens.</value>
+  </data>
+  <data name="projects.number-invalid" xml:space="preserve">
+    <value>Het nummer van een project telt 1 tot {Max} tekens.</value>
+  </data>
+  <data name="projects.planned-range-invalid" xml:space="preserve">
+    <value>De planning van een project heeft een eerste en een laatste dag, en de laatste ligt niet voor de eerste.</value>
+  </data>
+  <data name="projects.cursor-invalid" xml:space="preserve">
+    <value>Die paginamarkering hoort niet bij deze lijst. Begin opnieuw bij de eerste pagina.</value>
+  </data>
+  <data name="projects.page-size-invalid" xml:space="preserve">
+    <value>Een pagina bevat 1 tot {Max} projecten.</value>
+  </data>
+  <data name="projects.page-from-both-ends" xml:space="preserve">
+    <value>Een pagina is het begin van een lijst of het einde ervan. Vraag met first of met last, niet met allebei.</value>
+  </data>
+  <data name="projects.too-many-ids" xml:space="preserve">
+    <value>Vraag naar hooguit {Max} projecten tegelijk.</value>
+  </data>
+  <data name="projects.role-not-for-members" xml:space="preserve">
+    <value>Die rol is geen projectrol van deze tenant die in gebruik is, en gaat dus niet naar een ploeg.</value>
+  </data>
+  <data name="projects.invalid-period" xml:space="preserve">
+    <value>Een tijd in de ploeg eindigt na het begin.</value>
+  </data>
+  <data name="projects.role-not-found" xml:space="preserve">
+    <value>Deze tenant heeft zo geen projectrol.</value>
+  </data>
+  <data name="projects.role-archived" xml:space="preserve">
+    <value>Die projectrol is gearchiveerd: er verandert niets meer aan, en niemand krijgt hem nog.</value>
+  </data>
+  <data name="projects.role-name-invalid" xml:space="preserve">
+    <value>Vul {Min} tot {Max} tekens in.</value>
+  </data>
+  <data name="projects.role-name-taken" xml:space="preserve">
+    <value>Een andere projectrol van deze tenant heet al {Name}.</value>
+  </data>
+  <data name="projects.key-not-for-members" xml:space="preserve">
+    <value>Deze rechten kan een projectrol niet geven: {Keys}.</value>
+  </data>
+  <data name="projects.owner-role-stays" xml:space="preserve">
+    <value>De rol die de eigenaar van elk project heeft, wordt niet gearchiveerd.</value>
+  </data>
+  <data name="projects.role-keys-not-normalized" xml:space="preserve">
+    <value>De rechten van een projectrol staan er elk een keer, geen ervan leeg, op volgorde.</value>
+  </data>
+</root>

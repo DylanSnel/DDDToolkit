@@ -1,0 +1,229 @@
+using Microsoft.CodeAnalysis;
+
+namespace DDDToolkit.Analyzers.Common;
+
+/// <summary>
+/// The ways a class says it is an entity or an aggregate root, answered in one place so every generator
+/// and analyzer agrees. There are three:
+/// <list type="bullet">
+/// <item><c>[AggregateRoot&lt;TId&gt;]</c> and <c>[Entity&lt;TId&gt;]</c>, the toolkit's own;</item>
+/// <item><c>[AggregateRootBase]</c> and <c>[EntityBase]</c> on an abstract generic parent a package ships;</item>
+/// <item>an attribute a package declares and marks <c>[AggregateRootTemplate]</c> or <c>[EntityTemplate]</c>,
+/// such as <c>[TenantAggregate&lt;TenantId&gt;]</c>, which declares a class deriving from that package's parent.</item>
+/// </list>
+/// <para>
+/// The attributes are the only signal there is. The base class that would prove what a type is comes from
+/// the entity generator, and a generator cannot see another generator's output, nor its own. They survive
+/// the trip through metadata, so a type from a referenced assembly is recognised too.
+/// </para>
+/// </summary>
+internal static class EntityDeclarations
+{
+    /// <summary>Whether the type is declared an aggregate root, in any of the three ways.</summary>
+    public static bool IsAggregateRoot(INamedTypeSymbol type) => DeclaredAs(type) == Declared.AggregateRoot;
+
+    /// <summary>Whether the type is declared a child entity, in any of the three ways.</summary>
+    public static bool IsEntity(INamedTypeSymbol type) => DeclaredAs(type) == Declared.Entity;
+
+    /// <summary>Whether the type is declared an entity or an aggregate root, in any of the three ways.</summary>
+    public static bool IsEntityOrAggregateRoot(INamedTypeSymbol type) => DeclaredAs(type) != Declared.None;
+
+    /// <summary>Whether the type is an abstract parent a package ships, <c>[AggregateRootBase]</c> or <c>[EntityBase]</c>.</summary>
+    public static bool IsBase(INamedTypeSymbol type)
+        => DefinitionFactory.HasAttribute(type.OriginalDefinition, KnownTypes.AggregateRootBaseAttribute)
+           || DefinitionFactory.HasAttribute(type.OriginalDefinition, KnownTypes.EntityBaseAttribute);
+
+    /// <summary>
+    /// The type argument that names the id: of <c>[AggregateRoot&lt;TId&gt;]</c>, <c>[Entity&lt;TId&gt;]</c> or a
+    /// template attribute, or the first type argument of a parent. Null for a type declared in none of the
+    /// ways, or whose attribute the compiler could not bind.
+    /// </summary>
+    public static ITypeSymbol? IdArgumentOf(INamedTypeSymbol type)
+    {
+        foreach (var attribute in type.OriginalDefinition.GetAttributes())
+        {
+            if (attribute.AttributeClass is not { } attributeClass)
+            {
+                continue;
+            }
+
+            if (Is(attributeClass, KnownTypes.AggregateRootAttribute)
+                || Is(attributeClass, KnownTypes.EntityAttribute)
+                || TemplateOf(attributeClass) is not null)
+            {
+                return attributeClass.TypeArguments.Length > 0 && attributeClass.TypeArguments[0] is { TypeKind: not TypeKind.Error } argument ? argument : null;
+            }
+
+            if (Is(attributeClass, KnownTypes.AggregateRootBaseAttribute) || Is(attributeClass, KnownTypes.EntityBaseAttribute))
+            {
+                return type.TypeArguments.Length > 0 ? type.TypeArguments[0] : null;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// A type argument of the template attribute <paramref name="templateKey"/> as <paramref name="type"/> is
+    /// declared with it: 0 is the id, and a later one is whatever the application wrote there, which a
+    /// registration takes with <c>[TemplateType(..., Argument = n)]</c>. Null for a type not declared with that
+    /// template, a position the attribute does not have, or an argument the compiler could not bind.
+    /// </summary>
+    /// <param name="type">The class declared with the template.</param>
+    /// <param name="templateKey">The template attribute's open definition, fully qualified.</param>
+    /// <param name="position">The zero-based type argument.</param>
+    public static ITypeSymbol? TemplateArgumentOf(INamedTypeSymbol type, string templateKey, int position)
+    {
+        foreach (var attribute in type.OriginalDefinition.GetAttributes())
+        {
+            if (attribute.AttributeClass is { } attributeClass
+                && attributeClass.OriginalDefinition.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) == templateKey)
+            {
+                return position >= 0 && position < attributeClass.TypeArguments.Length && attributeClass.TypeArguments[position] is { TypeKind: not TypeKind.Error } argument
+                    ? argument
+                    : null;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// The open parent a class declared with a template derives from, or null for any other class. The
+    /// compilation a generator sees does not show that base class yet, because the generator writes it,
+    /// so anything that asks about a template class's inherited members asks the parent instead.
+    /// </summary>
+    public static INamedTypeSymbol? TemplateParentOf(INamedTypeSymbol type)
+    {
+        foreach (var attribute in type.OriginalDefinition.GetAttributes())
+        {
+            if (attribute.AttributeClass is { } attributeClass && TemplateOf(attributeClass) is { Parent: { } parent })
+            {
+                return parent;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// The name <c>Compilation.GetTypeByMetadataName</c> finds a type by: its namespace, the names of the
+    /// types it is nested in joined with <c>+</c>, and the arity suffix of every generic one.
+    /// </summary>
+    public static string MetadataNameOf(INamedTypeSymbol type)
+    {
+        var definition = type.OriginalDefinition;
+        if (definition.ContainingType is { } outer)
+        {
+            return MetadataNameOf(outer) + "+" + definition.MetadataName;
+        }
+
+        return definition.ContainingNamespace is { IsGlobalNamespace: false } scope
+            ? scope.ToDisplayString() + "." + definition.MetadataName
+            : definition.MetadataName;
+    }
+
+    /// <summary>
+    /// What a template attribute declares, when <paramref name="attributeClass"/> is one: the parent a class
+    /// declared with it derives from, and whether that class is an aggregate root or a child entity. Null
+    /// for any other attribute. The parent is null when the marker names nothing the compiler could bind.
+    /// </summary>
+    public static TemplateMarker? TemplateOf(INamedTypeSymbol attributeClass)
+    {
+        var definition = attributeClass.OriginalDefinition;
+        foreach (var marker in definition.GetAttributes())
+        {
+            if (marker.AttributeClass is not { } markerClass)
+            {
+                continue;
+            }
+
+            var isAggregateRoot = Is(markerClass, KnownTypes.AggregateRootTemplateAttribute);
+            if (!isAggregateRoot && !Is(markerClass, KnownTypes.EntityTemplateAttribute))
+            {
+                continue;
+            }
+
+            var parent = marker.ConstructorArguments.Length == 1
+                         && marker.ConstructorArguments[0] is { Kind: TypedConstantKind.Type, Value: INamedTypeSymbol named }
+                         && named.TypeKind != TypeKind.Error
+                ? named.OriginalDefinition
+                : null;
+
+            var allowSeveral = false;
+            var createsIds = false;
+            foreach (var argument in marker.NamedArguments)
+            {
+                allowSeveral |= argument.Key == "AllowSeveral" && argument.Value.Value is true;
+                createsIds |= argument.Key == "CreatesIds" && argument.Value.Value is true;
+            }
+
+            return new TemplateMarker(definition, parent, isAggregateRoot, allowSeveral, createsIds);
+        }
+
+        return null;
+    }
+
+    /// <summary>Whether the attribute class is the one with this metadata name, matched by name and namespace.</summary>
+    public static bool Is(INamedTypeSymbol attributeClass, string metadataName)
+    {
+        var dot = metadataName.LastIndexOf('.');
+        var name = metadataName.Substring(dot + 1);
+        var arity = name.IndexOf('`');
+        if (arity >= 0)
+        {
+            name = name.Substring(0, arity);
+        }
+
+        return attributeClass.Name == name && attributeClass.ContainingNamespace.ToDisplayString() == metadataName.Substring(0, dot);
+    }
+
+    private enum Declared
+    {
+        None,
+        Entity,
+        AggregateRoot,
+    }
+
+    private static Declared DeclaredAs(INamedTypeSymbol type)
+    {
+        foreach (var attribute in type.OriginalDefinition.GetAttributes())
+        {
+            if (attribute.AttributeClass is not { } attributeClass)
+            {
+                continue;
+            }
+
+            if (Is(attributeClass, KnownTypes.AggregateRootAttribute) || Is(attributeClass, KnownTypes.AggregateRootBaseAttribute))
+            {
+                return Declared.AggregateRoot;
+            }
+
+            if (Is(attributeClass, KnownTypes.EntityAttribute) || Is(attributeClass, KnownTypes.EntityBaseAttribute))
+            {
+                return Declared.Entity;
+            }
+
+            if (TemplateOf(attributeClass) is { } template)
+            {
+                return template.IsAggregateRoot ? Declared.AggregateRoot : Declared.Entity;
+            }
+        }
+
+        return Declared.None;
+    }
+}
+
+/// <summary>What a template attribute's marker says.</summary>
+/// <param name="Attribute">The template attribute's open definition.</param>
+/// <param name="Parent">The open parent a class declared with it derives from, or null when the marker names nothing usable.</param>
+/// <param name="IsAggregateRoot">True for <c>[AggregateRootTemplate]</c>, false for <c>[EntityTemplate]</c>.</param>
+/// <param name="AllowSeveral">
+/// True when the marker says an application may declare several classes with the template: a registration
+/// that takes its types from it is then written once per class, rather than refused for there being two.
+/// </param>
+/// <param name="CreatesIds">
+/// True when the marker says the package makes the id of a new class of the template itself, with <c>TId.Create()</c>:
+/// the id a class is declared with then has a <c>Create()</c>, and DDD00067 says so where it has none.
+/// </param>
+internal readonly record struct TemplateMarker(INamedTypeSymbol Attribute, INamedTypeSymbol? Parent, bool IsAggregateRoot, bool AllowSeveral = false, bool CreatesIds = false);

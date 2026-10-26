@@ -23,6 +23,10 @@
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" />
     <PackageReference Include="Basic.Reference.Assemblies.Net100" />
+    <!-- The library the core generator writes an access behavior against when a project can see it. Its abstractions only: no generator of its runs here. -->
+    <PackageReference Include="Mediator.Abstractions" />
+    <!-- UseNpgsql, which the design-time factory the Supabase package's generator writes for a marked context builds it on. -->
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
   </ItemGroup>
 
   <!-- The generators under test, referenced as ordinary assemblies so tests can drive them with CSharpGeneratorDriver. -->
@@ -33,6 +37,9 @@
     <ProjectReference Include="..\..\Source\DDDToolkit.HotChocolate.Analyzers\DDDToolkit.HotChocolate.Analyzers.csproj" />
     <ProjectReference Include="..\..\Source\DDDToolkit.Analyzers.CodeFixes\DDDToolkit.Analyzers.CodeFixes.csproj" />
     <ProjectReference Include="..\..\Source\DDDToolkit.EntityFramework.Supabase.Analyzers\DDDToolkit.EntityFramework.Supabase.Analyzers.csproj" />
+    <ProjectReference Include="..\..\Source\DDDToolkit.Supporting.Membership.Analyzers\DDDToolkit.Supporting.Membership.Analyzers.csproj" />
+    <ProjectReference Include="..\..\Source\DDDToolkit.Supporting.Membership.EntityFramework.Analyzers\DDDToolkit.Supporting.Membership.EntityFramework.Analyzers.csproj" />
+    <ProjectReference Include="..\..\Source\DDDToolkit.Supporting.Tenancy.Analyzers\DDDToolkit.Supporting.Tenancy.Analyzers.csproj" />
   </ItemGroup>
 
   <!-- Runtime assemblies the generated code compiles against inside the tests. -->
@@ -42,6 +49,15 @@
     <ProjectReference Include="..\..\Source\DDDToolkit.FluentValidation\DDDToolkit.FluentValidation.csproj" />
     <ProjectReference Include="..\..\Source\DDDToolkit.HotChocolate\DDDToolkit.HotChocolate.csproj" />
     <ProjectReference Include="..\..\Source\DDDToolkit.EntityFramework.Supabase\DDDToolkit.EntityFramework.Supabase.csproj" />
+    <!-- A real supporting domain, for the tests of what its templates ask of an application. -->
+    <ProjectReference Include="..\..\Source\DDDToolkit.Supporting.Tenancy\DDDToolkit.Supporting.Tenancy.csproj" />
+    <!-- And a second one, whose registration is named after what its template names: the member's resource. -->
+    <ProjectReference Include="..\..\Source\DDDToolkit.Supporting.Membership.EntityFramework\DDDToolkit.Supporting.Membership.EntityFramework.csproj" />
+    <!-- And the first one's Entity Framework package, which what Membership's generator writes for an application with both is compiled against. -->
+    <ProjectReference Include="..\..\Source\DDDToolkit.Supporting.Tenancy.EntityFramework\DDDToolkit.Supporting.Tenancy.EntityFramework.csproj" />
+    <!-- Both on Postgres: packages that declare themselves contributors, which the Supabase export of an application makes from what it marks. -->
+    <ProjectReference Include="..\..\Source\DDDToolkit.Supporting.Tenancy.Postgres\DDDToolkit.Supporting.Tenancy.Postgres.csproj" />
+    <ProjectReference Include="..\..\Source\DDDToolkit.Supporting.Membership.Postgres\DDDToolkit.Supporting.Membership.Postgres.csproj" />
   </ItemGroup>
 
 </Project>

@@ -7,7 +7,7 @@ using DDDToolkit.Interfaces;
 namespace DDDToolkit.EntityFramework.Outbox;
 
 /// <summary>
-/// Maps the stable name of a domain event (<see cref="DomainEventName.Of(Type)"/>, i.e. the
+/// Maps the stable name of a domain event (<see cref="DomainEventName.For(Type)"/>, i.e. the
 /// <c>[DomainEventName]</c> or the conventional name) back to its CLR type, so outbox payloads can be
 /// deserialized after the class has been renamed or moved.
 /// <para>
@@ -71,7 +71,7 @@ public sealed class DomainEventTypeRegistry
             throw new ArgumentException($"'{eventType}' is not a concrete type implementing {nameof(IDomainEvent)}.", nameof(eventType));
         }
 
-        var name = DomainEventName.Of(eventType);
+        var name = DomainEventName.For(eventType);
 
         if (Attribute.GetCustomAttribute(eventType, typeof(IntegrationEventAttribute), inherit: false) is IntegrationEventAttribute { Name: { } publishedName }
             && !string.Equals(publishedName, name, StringComparison.Ordinal))

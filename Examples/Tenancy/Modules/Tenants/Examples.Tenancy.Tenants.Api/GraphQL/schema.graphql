@@ -1,0 +1,858 @@
+schema {
+  query: Query
+  mutation: Mutation
+}
+
+type Query {
+  accessHistory(
+    "Returns the first _n_ elements from the list."
+    first: Int
+    "Returns the elements in the list that come after the specified cursor."
+    after: String
+    "Returns the last _n_ elements from the list."
+    last: Int
+    "Returns the elements in the list that come before the specified cursor."
+    before: String
+  ): AccessHistoryEntryConnection!
+    @listSize(
+      assumedSize: 50
+      slicingArguments: ["first", "last"]
+      slicingArgumentDefaultValue: 10
+      sizedFields: ["edges", "nodes"]
+      requireOneSlicingArgument: false
+    )
+    @cost(weight: "10")
+  tenantAccessHistory(
+    "Returns the first _n_ elements from the list."
+    first: Int
+    "Returns the elements in the list that come after the specified cursor."
+    after: String
+    "Returns the last _n_ elements from the list."
+    last: Int
+    "Returns the elements in the list that come before the specified cursor."
+    before: String
+    tenant: UUID!
+  ): AccessHistoryEntryConnection!
+    @listSize(
+      assumedSize: 50
+      slicingArguments: ["first", "last"]
+      slicingArgumentDefaultValue: 10
+      sizedFields: ["edges", "nodes"]
+      requireOneSlicingArgument: false
+    )
+    @cost(weight: "10")
+  seat(id: UUID!): Seat @lookup @internal
+  organizationUnit(id: UUID!): OrganizationUnit @lookup @internal
+  role(id: UUID!): Role @lookup @internal
+  unitsWhereIHold(key: String!): HeldUnits! @cost(weight: "10")
+  catalogue: Catalogue! @cost(weight: "10")
+  openInvitations: [Invitation!]! @cost(weight: "10")
+  tenants(after: String, size: Int): TenantDirectoryPage! @cost(weight: "10")
+  organizationUnits: [OrganizationUnit!]! @cost(weight: "10")
+  roles: [Role!]! @cost(weight: "10")
+  overviewOfMine: SeatOverview! @cost(weight: "10")
+  seatsOfMine: [SeatOfMine!]! @cost(weight: "10")
+  seats: [Seat!]! @cost(weight: "10")
+}
+
+type Mutation {
+  roleGrant(input: RoleGrantInput!): RoleGrantPayload! @cost(weight: "10")
+  roleRevoke(input: RoleRevokeInput!): RoleRevokePayload! @cost(weight: "10")
+  personInvite(input: PersonInviteInput!): PersonInvitePayload!
+    @cost(weight: "10")
+  invitationCancel(input: InvitationCancelInput!): InvitationCancelPayload!
+    @cost(weight: "10")
+  invitationAccept(input: InvitationAcceptInput!): InvitationAcceptPayload!
+    @cost(weight: "10")
+  organizationUnitAdd(input: OrganizationUnitAddInput!): OrganizationUnitAddPayload!
+    @cost(weight: "10")
+  organizationUnitMove(input: OrganizationUnitMoveInput!): OrganizationUnitMovePayload!
+    @cost(weight: "10")
+  organizationUnitArchive(input: OrganizationUnitArchiveInput!): OrganizationUnitArchivePayload!
+    @cost(weight: "10")
+  seatPlace(input: SeatPlaceInput!): SeatPlacePayload! @cost(weight: "10")
+  placementWithdraw(input: PlacementWithdrawInput!): PlacementWithdrawPayload!
+    @cost(weight: "10")
+  roleCreate(input: RoleCreateInput!): RoleCreatePayload! @cost(weight: "10")
+  roleKeysSet(input: RoleKeysSetInput!): RoleKeysSetPayload! @cost(weight: "10")
+  roleArchive(input: RoleArchiveInput!): RoleArchivePayload! @cost(weight: "10")
+  seatRename(input: SeatRenameInput!): SeatRenamePayload! @cost(weight: "10")
+  seatSuspend(input: SeatSuspendInput!): SeatSuspendPayload! @cost(weight: "10")
+  seatReactivate(input: SeatReactivateInput!): SeatReactivatePayload!
+    @cost(weight: "10")
+  seatDeactivate(input: SeatDeactivateInput!): SeatDeactivatePayload!
+    @cost(weight: "10")
+  tenantShapeChange(input: TenantShapeChangeInput!): TenantShapeChangePayload!
+    @cost(weight: "10")
+}
+
+type AccessHistoryEntry {
+  bySeatId: UUID
+  bySeat: Seat
+  id: UUID!
+  event: String!
+  occurredAt: DateTime!
+  byKind: String!
+  details: String!
+}
+
+"A connection to a list of items."
+type AccessHistoryEntryConnection @shareable {
+  "A list of edges."
+  edges: [AccessHistoryEntryEdge!]
+  "A flattened list of the nodes"
+  nodes: [AccessHistoryEntry!]
+  "Information to aid in pagination."
+  pageInfo: PageInfo!
+  "Identifies the total count of items in the connection."
+  totalCount: Int! @cost(weight: "10")
+}
+
+type AccessHistoryEntryEdge @shareable {
+  "The item at the end of the edge."
+  node: AccessHistoryEntry!
+  "A cursor for use in pagination."
+  cursor: String!
+}
+
+"An aggregate that would have broken its own rules: one error for the command, with every rule that was broken in its violations. Its code, message and arguments are those of the first."
+type BrokenRulesError implements CodedError @shareable {
+  "The first rule that was broken, in the reader's language when the server has a translation for it, and in the domain's own words otherwise."
+  message: String! @cost(weight: "10")
+  "The code of the first rule that was broken."
+  code: String!
+  "The values the first violation's message was built from."
+  arguments: [FailureArgument!]!
+  "Every rule that was broken, in the order the aggregate reported them, never empty."
+  violations: [RuleViolation!]!
+}
+
+type Catalogue {
+  permissions: [Permission!]!
+  packs: [RolePack!]!
+}
+
+"A change that lost a race: somebody else changed the same thing after the caller read it, or the version the caller expected is not the one that is stored. Read again, and decide again."
+type ConcurrencyConflictError implements CodedError @shareable {
+  "What went wrong, in the reader's language when the server has a translation for it, and in the domain's own words otherwise."
+  message: String! @cost(weight: "10")
+  "Always \"concurrency-conflict\"."
+  code: String!
+  "Always empty."
+  arguments: [FailureArgument!]!
+}
+
+"One of the values a message was built from, such as MaxLength and 40: its name, and its value as text."
+type FailureArgument @shareable {
+  "The value's name, as a translation's template spells it between braces."
+  name: String!
+  "The value as text: a string as it is, true or false, a number as JSON writes it, and anything else, such as an id, as its own text. Null when there was none."
+  value: String
+}
+
+type GrantOfMine {
+  roleId: UUID!
+  role: String!
+  startsAt: DateTime!
+  endsAt: DateTime
+  appliesNow: Boolean!
+}
+
+type HeldUnits {
+  units: [UUID!]!
+  wholeTenant: Boolean!
+}
+
+"A value that broke its own rules: one error for the command, with every reason in its failures. The value that was rejected is not sent back."
+type InvalidValuesError implements CodedError @shareable {
+  "What went wrong, in the reader's language when the server has a translation for it, and in the domain's own words otherwise."
+  message: String! @cost(weight: "10")
+  "Always \"invalid-value\". Each of the failures has the code of its own rule."
+  code: String!
+  "Always empty: the values are those of each failure."
+  arguments: [FailureArgument!]!
+  "Every reason the value was refused, never empty."
+  failures: [ValueFailure!]!
+}
+
+type Invitation {
+  unit: OrganizationUnit
+  role: Role
+  issuedBy: Seat
+  until: DateTime
+  id: UUID!
+  address: String!
+  issuedAt: DateTime!
+  expiresAt: DateTime!
+}
+
+type InvitationAcceptPayload {
+  seatId: UUID
+  errors: [InvitationAcceptError!]
+}
+
+type InvitationCancelPayload {
+  invitationId: UUID
+  errors: [InvitationCancelError!]
+}
+
+type IssuedInvitation {
+  id: UUID!
+  token: String!
+  expiresAt: DateTime!
+}
+
+type KeyOfMine {
+  key: String!
+  wholeTenant: Boolean!
+  grantedAt: [UnitPath!]!
+  reaches: [UnitPath!]!
+}
+
+type OrganizationUnit @key(fields: "id") {
+  id: UUID!
+  parentId: UUID
+  name: String
+  kind: UnitKind
+  status: UnitStatus
+  path: String
+  depth: Int
+}
+
+type OrganizationUnitAddPayload {
+  organizationUnit: OrganizationUnit
+  errors: [OrganizationUnitAddError!]
+}
+
+type OrganizationUnitArchivePayload {
+  organizationUnit: OrganizationUnit
+  errors: [OrganizationUnitArchiveError!]
+}
+
+type OrganizationUnitMovePayload {
+  organizationUnit: OrganizationUnit
+  errors: [OrganizationUnitMoveError!]
+}
+
+"A cursor that points to a specific page."
+type PageCursor @shareable {
+  "The page number."
+  page: Int!
+  "The cursor."
+  cursor: String!
+}
+
+"Information about pagination in a connection."
+type PageInfo @shareable {
+  "Indicates whether more edges exist following the set defined by the clients arguments."
+  hasNextPage: Boolean!
+  "Indicates whether more edges exist prior the set defined by the clients arguments."
+  hasPreviousPage: Boolean!
+  "When paginating backwards, the cursor to continue."
+  startCursor: String
+  "When paginating forwards, the cursor to continue."
+  endCursor: String
+  "A list of cursors to continue paginating forwards."
+  forwardCursors: [PageCursor!]!
+  "A list of cursors to continue paginating backwards."
+  backwardCursors: [PageCursor!]!
+}
+
+type Permission {
+  key: String!
+  module: String!
+  description: String!
+  implies: [String!]!
+  retired: Boolean!
+  managesAccess: Boolean!
+}
+
+type PersonInvitePayload {
+  issuedInvitation: IssuedInvitation
+  errors: [PersonInviteError!]
+}
+
+type PlacementOfMine {
+  unit: UnitPath!
+  isPrimary: Boolean!
+  grants: [GrantOfMine!]!
+}
+
+type PlacementWithdrawPayload {
+  seat: Seat
+  errors: [PlacementWithdrawError!]
+}
+
+"A command that was refused before anything changed: the refusal's code, its kind, its message and the values the message was built from."
+type RefusalError implements CodedError @shareable {
+  "What went wrong, in the reader's language when the server has a translation for it, and in the domain's own words otherwise."
+  message: String! @cost(weight: "10")
+  "The rule that refused, stable across releases and languages: what a client branches on."
+  code: String!
+  "Which of the four answers it is, so a client tells \"not allowed\" from \"not found\" without a status code."
+  kind: RefusalKind!
+  "The input the refusal is about, where a form puts the message. Null for a refusal about the command as a whole."
+  field: String
+  "The values the message was built from, by name, so a client can phrase it itself."
+  arguments: [FailureArgument!]!
+}
+
+type Role @key(fields: "id") {
+  id: UUID!
+  name: String
+  fromPack: String
+  status: RoleStatus
+  keys: [String!] @authorize(policy: "tenancy.roles.manage")
+  managesAccess: Boolean
+}
+
+type RoleArchivePayload {
+  role: Role
+  errors: [RoleArchiveError!]
+}
+
+type RoleCreatePayload {
+  role: Role
+  errors: [RoleCreateError!]
+}
+
+type RoleGrantPayload {
+  seat: Seat
+  errors: [RoleGrantError!]
+}
+
+type RoleKeysSetPayload {
+  role: Role
+  errors: [RoleKeysSetError!]
+}
+
+type RoleOfMine {
+  id: UUID!
+  name: String!
+  fromPack: String
+  status: RoleStatus!
+  keys: [String!]!
+  managesAccess: Boolean!
+}
+
+type RolePack {
+  key: String!
+  keys: [String!]!
+  name: String!
+  description: String!
+  seededFor: TenantShape
+  administers: Boolean!
+}
+
+type RoleRevokePayload {
+  seat: Seat
+  errors: [RoleRevokeError!]
+}
+
+"One broken rule, in a BrokenRulesError. A violation in a child entity says which child it was."
+type RuleViolation @shareable {
+  "What went wrong, in the reader's language when the server has a translation for it, and in the domain's own words otherwise."
+  message: String! @cost(weight: "10")
+  "The rule's code."
+  code: String!
+  "The type of the entity that reported the violation, when it said so."
+  entity: String
+  "The id of the entity that reported the violation, as text, so a violation in a child says which one."
+  entityId: String
+  "The values the message was built from, by name, so a client can phrase it itself."
+  arguments: [FailureArgument!]!
+}
+
+type Seat @key(fields: "id") {
+  id: UUID!
+  displayName: String
+  status: SeatStatus
+}
+
+type SeatDeactivatePayload {
+  seat: Seat
+  errors: [SeatDeactivateError!]
+}
+
+type SeatOfMine {
+  tenant: TenantOfSeat!
+  seat: Seat!
+}
+
+type SeatOverview {
+  tenant: TenantOfMine!
+  seat: Seat!
+  placements: [PlacementOfMine!]!
+  roles: [RoleOfMine!]!
+  keys: [KeyOfMine!]!
+}
+
+type SeatPlacePayload {
+  seat: Seat
+  errors: [SeatPlaceError!]
+}
+
+type SeatReactivatePayload {
+  seat: Seat
+  errors: [SeatReactivateError!]
+}
+
+type SeatRenamePayload {
+  seat: Seat
+  errors: [SeatRenameError!]
+}
+
+type SeatSuspendPayload {
+  seat: Seat
+  errors: [SeatSuspendError!]
+}
+
+type TenantDirectoryPage {
+  items: [TenantListing!]!
+  next: String
+}
+
+type TenantListing {
+  id: UUID!
+  slug: String!
+  name: String!
+  status: TenantStatus!
+  activeSeats: Int!
+}
+
+type TenantOfMine {
+  id: UUID!
+  slug: String!
+  name: String!
+  shape: TenantShape!
+  status: TenantStatus!
+}
+
+type TenantOfSeat {
+  id: UUID!
+  slug: String!
+  name: String!
+  status: TenantStatus!
+}
+
+type TenantShapeChangePayload {
+  shape: TenantShape
+  errors: [TenantShapeChangeError!]
+}
+
+type UnitPath {
+  id: UUID!
+  path: String!
+}
+
+"One reason a value was refused, in an InvalidValuesError."
+type ValueFailure @shareable {
+  "What went wrong, in the reader's language when the server has a translation for it, and in the domain's own words otherwise."
+  message: String! @cost(weight: "10")
+  "The rule's code, or \"Unspecified\" when the rule gave none."
+  code: String!
+  "The property the failure belongs to, or null when it is about the whole value."
+  field: String
+  "The values the message was built from, by name, so a client can phrase it itself."
+  arguments: [FailureArgument!]!
+}
+
+"What every error in a mutation's payload has in common: a code to branch on, a message to show, and the values the message was built from."
+interface CodedError {
+  "What went wrong, in the reader's language when the server has a translation for it, and in the domain's own words otherwise."
+  message: String!
+  "The rule that said no, stable across releases and languages: what a client branches on."
+  code: String!
+  "The values the message was built from, by name, so a client can phrase it itself."
+  arguments: [FailureArgument!]!
+}
+
+"Something that happened in the domain."
+interface DomainEvent {
+  "Unique, stable identifier of this occurrence. Use it for idempotent handling."
+  eventId: UUID!
+  "When the event occurred (UTC)."
+  occurredAt: DateTime!
+  "The runtime type name of the event."
+  eventType: String!
+}
+
+union InvitationAcceptError =
+  | RefusalError
+  | InvalidValuesError
+  | BrokenRulesError
+  | ConcurrencyConflictError
+
+union InvitationCancelError =
+  | RefusalError
+  | InvalidValuesError
+  | BrokenRulesError
+  | ConcurrencyConflictError
+
+union OrganizationUnitAddError =
+  | RefusalError
+  | InvalidValuesError
+  | BrokenRulesError
+  | ConcurrencyConflictError
+
+union OrganizationUnitArchiveError =
+  | RefusalError
+  | InvalidValuesError
+  | BrokenRulesError
+  | ConcurrencyConflictError
+
+union OrganizationUnitMoveError =
+  | RefusalError
+  | InvalidValuesError
+  | BrokenRulesError
+  | ConcurrencyConflictError
+
+union PersonInviteError =
+  | RefusalError
+  | InvalidValuesError
+  | BrokenRulesError
+  | ConcurrencyConflictError
+
+union PlacementWithdrawError =
+  | RefusalError
+  | InvalidValuesError
+  | BrokenRulesError
+  | ConcurrencyConflictError
+
+union RoleArchiveError =
+  | RefusalError
+  | InvalidValuesError
+  | BrokenRulesError
+  | ConcurrencyConflictError
+
+union RoleCreateError =
+  | RefusalError
+  | InvalidValuesError
+  | BrokenRulesError
+  | ConcurrencyConflictError
+
+union RoleGrantError =
+  | RefusalError
+  | InvalidValuesError
+  | BrokenRulesError
+  | ConcurrencyConflictError
+
+union RoleKeysSetError =
+  | RefusalError
+  | InvalidValuesError
+  | BrokenRulesError
+  | ConcurrencyConflictError
+
+union RoleRevokeError =
+  | RefusalError
+  | InvalidValuesError
+  | BrokenRulesError
+  | ConcurrencyConflictError
+
+union SeatDeactivateError =
+  | RefusalError
+  | InvalidValuesError
+  | BrokenRulesError
+  | ConcurrencyConflictError
+
+union SeatPlaceError =
+  | RefusalError
+  | InvalidValuesError
+  | BrokenRulesError
+  | ConcurrencyConflictError
+
+union SeatReactivateError =
+  | RefusalError
+  | InvalidValuesError
+  | BrokenRulesError
+  | ConcurrencyConflictError
+
+union SeatRenameError =
+  | RefusalError
+  | InvalidValuesError
+  | BrokenRulesError
+  | ConcurrencyConflictError
+
+union SeatSuspendError =
+  | RefusalError
+  | InvalidValuesError
+  | BrokenRulesError
+  | ConcurrencyConflictError
+
+union TenantShapeChangeError =
+  | RefusalError
+  | InvalidValuesError
+  | BrokenRulesError
+  | ConcurrencyConflictError
+
+input InvitationAcceptInput {
+  token: String!
+  displayName: String!
+}
+
+input InvitationCancelInput {
+  id: UUID!
+}
+
+input OrganizationUnitAddInput {
+  parentId: UUID!
+  name: String!
+  kind: UnitKind
+}
+
+input OrganizationUnitArchiveInput {
+  id: UUID!
+}
+
+input OrganizationUnitMoveInput {
+  id: UUID!
+  parentId: UUID!
+}
+
+input PersonInviteInput {
+  address: String!
+  unitId: UUID!
+  roleId: UUID!
+  until: DateTime
+}
+
+input PlacementWithdrawInput {
+  seatId: UUID!
+  unitId: UUID!
+}
+
+input RoleArchiveInput {
+  id: UUID!
+}
+
+input RoleCreateInput {
+  name: String!
+  description: String
+  keys: [String!]
+}
+
+input RoleGrantInput {
+  seatId: UUID!
+  unitId: UUID!
+  roleId: UUID!
+  until: DateTime
+  reason: String
+}
+
+input RoleKeysSetInput {
+  id: UUID!
+  keys: [String!]!
+}
+
+input RoleRevokeInput {
+  seatId: UUID!
+  unitId: UUID!
+  roleId: UUID!
+}
+
+input SeatDeactivateInput {
+  seatId: UUID!
+}
+
+input SeatPlaceInput {
+  seatId: UUID!
+  unitId: UUID!
+  primary: Boolean!
+}
+
+input SeatReactivateInput {
+  seatId: UUID!
+}
+
+input SeatRenameInput {
+  seatId: UUID!
+  displayName: String!
+}
+
+input SeatSuspendInput {
+  seatId: UUID!
+}
+
+input TenantShapeChangeInput {
+  shape: TenantShape!
+}
+
+"Defines when a policy shall be executed."
+enum ApplyPolicy {
+  "Before the resolver was executed."
+  BEFORE_RESOLVER
+  "After the resolver was executed."
+  AFTER_RESOLVER
+  "The policy is applied in the validation step before the execution."
+  VALIDATION
+}
+
+"Why a command was refused, in the four answers an edge maps to a response: the request was not acceptable, the caller may not do it, what it names does not exist, or the state it met does not allow it."
+enum RefusalKind {
+  "The request itself is not acceptable: a name too long, a key nobody declared. Usually a 400."
+  invalid
+  "The caller may not do this. Usually a 403."
+  not_permitted
+  "Something the request names does not exist, or is not the caller's to see. Usually a 404."
+  not_found
+  "The state the command met does not allow it: already archived, the last one of its kind. Usually a 409."
+  conflict
+}
+
+"""
+Whether a role is in use. An archived role grants nothing, wherever it is still granted, and is not
+granted again.
+"""
+enum RoleStatus {
+  "In use."
+  active
+  "No longer in use. It stays, so the grants that name it still name something."
+  archived
+}
+
+enum ScalarSerializationType {
+  STRING
+  BOOLEAN
+  INT
+  FLOAT
+  OBJECT
+  LIST
+}
+
+"""
+Whether a seat's grants count. Only an active seat holds rights; a suspended one can be reactivated,
+and a deactivated one is final.
+"""
+enum SeatStatus {
+  "In use: its grants give it rights."
+  active
+  "Stopped for now. Its placements and grants stay, and give it nothing until it is reactivated."
+  suspended
+  "Stopped for good."
+  deactivated
+}
+
+"""
+Whether a tenant's organization is a tree or only its root. A tenant starts flat or hierarchical, and a
+flat one can become hierarchical; the way back is closed, because units below the root would have to go.
+"""
+enum TenantShape {
+  "The organization is its root alone, and every seat is placed there."
+  flat
+  "The organization is a tree of units below the root."
+  hierarchical
+}
+
+"""
+Where a tenant is in its life. It moves one way: provisioned, then active, suspended and active again as
+often as needed, and closed once, for good.
+"""
+enum TenantStatus {
+  "Being set up; nobody works in it yet."
+  provisioning
+  "In use."
+  active
+  "Stopped for now, with a reason, and able to be reactivated."
+  suspended
+  "Stopped for good, with a reason. Nothing changes a closed tenant."
+  closed
+}
+
+enum UnitKind {
+  company
+  region
+  area
+  site
+}
+
+"""
+Whether a unit is in use. A unit is archived, never deleted, so what still points at it keeps a unit to
+point at.
+"""
+enum UnitStatus {
+  "In use: units can be added below it and seats placed in it."
+  active
+  "No longer in use. What already hangs at it keeps working; nothing new is added to it."
+  archived
+}
+
+"The `DateTime` scalar type represents a date and time with time zone offset information."
+scalar DateTime
+  @serializeAs(
+    type: STRING
+    pattern: "^\\d{4}-\\d{2}-\\d{2}[Tt]\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,9})?(?:[Zz]|[+-]\\d{2}:\\d{2})$"
+  )
+  @specifiedBy(url: "https://scalars.graphql.org/chillicream/date-time.html")
+
+scalar FieldSelectionSet
+
+"The `UUID` scalar type represents a Universally Unique Identifier (UUID) as defined by RFC 9562."
+scalar UUID
+  @serializeAs(
+    type: STRING
+    pattern: "^[\\da-fA-F]{8}-[\\da-fA-F]{4}-[\\da-fA-F]{4}-[\\da-fA-F]{4}-[\\da-fA-F]{12}$"
+  )
+  @specifiedBy(url: "https://scalars.graphql.org/chillicream/uuid.html")
+
+"The authorize directive."
+directive @authorize(
+  "The name of the authorization policy that determines access to the annotated resource."
+  policy: String
+  "Roles that are allowed to access the annotated resource."
+  roles: [String!]
+  "Defines when the authorize directive shall be applied. By default the authorize directive is applied before the resolver is executed."
+  apply: ApplyPolicy! = BEFORE_RESOLVER
+) repeatable on OBJECT | FIELD_DEFINITION
+
+"The purpose of the `cost` directive is to define a `weight` for GraphQL types, fields, and arguments. Static analysis can use these weights when calculating the overall cost of a query or response."
+directive @cost(
+  "The `weight` argument defines what value to add to the overall cost for every appearance, or possible appearance, of a type, field, argument, etc."
+  weight: String!
+) on
+  | SCALAR
+  | OBJECT
+  | FIELD_DEFINITION
+  | ARGUMENT_DEFINITION
+  | ENUM
+  | INPUT_FIELD_DEFINITION
+
+directive @internal on OBJECT | FIELD_DEFINITION
+
+"""
+The @key directive is used to designate an entity's unique key,
+which identifies how to uniquely reference an instance of
+an entity across different source schemas.
+"""
+directive @key("The field selection set syntax." fields: FieldSelectionSet!) repeatable on
+  | OBJECT
+  | INTERFACE
+
+"The purpose of the `@listSize` directive is to either inform the static analysis about the size of returned lists (if that information is statically available), or to point the analysis to where to find that information."
+directive @listSize(
+  "The `assumedSize` argument can be used to statically define the maximum length of a list returned by a field."
+  assumedSize: Int
+  "The `slicingArguments` argument can be used to define which of the field's arguments with numeric type are slicing arguments, so that their value determines the size of the list returned by that field. It may specify a list of multiple slicing arguments."
+  slicingArguments: [String!]
+  "The `slicingArgumentDefaultValue` argument can be used to define a default value for a slicing argument, which is used if the argument is not present in a query."
+  slicingArgumentDefaultValue: Int
+  "The `sizedFields` argument can be used to define that the value of the `assumedSize` argument or of a slicing argument does not affect the size of a list returned by a field itself, but that of a list returned by one of its sub-fields."
+  sizedFields: [String!]
+  "The `requireOneSlicingArgument` argument can be used to inform the static analysis that it should expect that exactly one of the defined slicing arguments is present in a query. If that is not the case (i.e., if none or multiple slicing arguments are present), the static analysis may throw an error."
+  requireOneSlicingArgument: Boolean = true
+) on FIELD_DEFINITION
+
+"""
+The @lookup directive is used within a source schema to specify output fields
+that can be used by the distributed GraphQL executor to resolve an entity by
+a stable key.
+"""
+directive @lookup on FIELD_DEFINITION
+
+directive @serializeAs(
+  "The primitive type a scalar is serialized to."
+  type: [ScalarSerializationType!]!
+  "The ECMA-262 regex pattern that the serialized scalar value conforms to."
+  pattern: String
+) on SCALAR
+
+directive @shareable repeatable on OBJECT | FIELD_DEFINITION

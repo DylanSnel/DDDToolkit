@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="coverlet.collector">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="FluentAssertions" />
+    <!-- Everything runs against SQLite in memory, with no Docker. The same questions are asked on Postgres in the Postgres suite. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+  </ItemGroup>
+
+  <!--
+    Membership is stored through the application's own classes, context and registration in the TestHost, two
+    kinds of resource in one project, and tested through the packages' public API only: there is no
+    InternalsVisibleTo.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\DDDToolkit.Supporting.Membership.TestHost\DDDToolkit.Supporting.Membership.TestHost.csproj" />
+    <ProjectReference Include="..\..\Source\DDDToolkit.Supporting.Membership.EntityFramework\DDDToolkit.Supporting.Membership.EntityFramework.csproj" />
+    <!-- What an application that phrases its failures in the reader's language adds: the texts a registration offers are read through it. -->
+    <ProjectReference Include="..\..\Source\DDDToolkit.Localization\DDDToolkit.Localization.csproj" />
+  </ItemGroup>
+
+  <!--
+    One way of asserting a refusal under a resource's own code, and one of putting a row in a state its own
+    methods never would, for every suite of the package.
+  -->
+  <ItemGroup>
+    <Compile Include="..\DDDToolkit.Supporting.Membership.Tests\Support\Refused.cs" LinkBase="Support" />
+    <Compile Include="..\DDDToolkit.Supporting.Membership.Tests\Support\Break.cs" LinkBase="Support" />
+  </ItemGroup>
+
+</Project>

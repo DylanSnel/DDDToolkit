@@ -3,6 +3,7 @@ using DDDToolkit.EntityFramework.Options;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using DDDToolkit.Startup;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -33,7 +34,8 @@ public static class DependencyInjection
     /// <typeparamref name="TContext"/> and therefore inside whatever transaction that context has.
     /// <para>
     /// Also registers a start-up check that the context's database has the pgmq extension, and a version
-    /// with topic routing when the sink uses it; <see cref="PgmqSinkOptions.CheckExtensionOnStart"/> turns it off.
+    /// with topic routing when the sink uses it, which runs once the host asks for its checks with
+    /// <c>RunStartupChecks()</c>; <see cref="PgmqSinkOptions.CheckExtensionOnStart"/> leaves this sink out of it.
     /// </para>
     /// </summary>
     /// <param name="services">The service collection.</param>
@@ -164,9 +166,10 @@ public static class DependencyInjection
     /// (<see cref="PgmqSinkOptions.UseQueues"/>), a queue does what a broker's topic would.
     /// </para>
     /// <para>
-    /// Before any consumer starts, a start-up check makes sure the database has the pgmq extension, and a
-    /// version with topic routing when <see cref="PgmqConsumerOptions.BindTopics"/> is on;
-    /// <see cref="PgmqConsumerOptions.CheckExtensionOnStart"/> turns it off.
+    /// Before any consumer starts, in a host that runs its start-up checks (<c>RunStartupChecks()</c>), a
+    /// start-up check makes sure the database has the pgmq extension, and a version with topic routing when
+    /// <see cref="PgmqConsumerOptions.BindTopics"/> is on; <see cref="PgmqConsumerOptions.CheckExtensionOnStart"/>
+    /// leaves this consumer out of it.
     /// </para>
     /// </summary>
     /// <exception cref="ArgumentNullException"><paramref name="services"/> or <paramref name="dataSource"/> is null.</exception>
@@ -221,11 +224,12 @@ public static class DependencyInjection
 
     /// <summary>
     /// Adds what one registration needs to the start-up check, and the check itself the first time. One
-    /// check for the process, so a sink and a consumer on the same database cost one query between them.
+    /// check for the process, so a sink and a consumer on the same database cost one query between them. It runs
+    /// once the host asks for its start-up checks.
     /// </summary>
     private static void AddPgmqStartupCheck(this IServiceCollection services, PgmqRequirement requirement)
     {
         services.AddSingleton(requirement);
-        services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, PgmqStartupCheck>());
+        services.AddStartupCheck(PgmqStartupCheck.Check);
     }
 }

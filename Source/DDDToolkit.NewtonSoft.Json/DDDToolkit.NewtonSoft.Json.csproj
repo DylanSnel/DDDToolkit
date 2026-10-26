@@ -6,6 +6,12 @@
     <Title>Domain Driven Design Toolkit - Newtonsoft.Json</Title>
     <PackageTags>ddd;domain;driven;design;toolkit;json;newtonsoft</PackageTags>
     <Description>Newtonsoft.Json integration for the DDDToolkit: converters for strongly typed ids and value objects, and a contract resolver that honours [Internal].</Description>
+    <!--
+      The overrides of BlockAlwaysValidSerialization have no comment yet. They are left without one rather
+      than given one that only repeats their name, and everything documented ships all the same (see
+      Directory.Build.props). Remove this once they have a comment of their own.
+    -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

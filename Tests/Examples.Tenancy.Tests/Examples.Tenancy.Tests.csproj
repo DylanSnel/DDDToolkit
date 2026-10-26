@@ -1,0 +1,74 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="coverlet.collector">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="FluentAssertions" />
+    <!-- The sample's host runs in this process: on a database of the test's own, or on none for the tests that read what the host is. -->
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <!--
+      Supabase's own images in throw-away containers, for the tests that carry the Tenancy.Supabase trait and for
+      nothing else here. The containers are Supabase's builds, started as they are, so this takes the general
+      container builder that the PostgreSQL module brings with it, not the module's own builder: that one starts
+      Postgres with a command of its own, which would leave Supabase's settings file out.
+    -->
+    <PackageReference Include="Testcontainers.PostgreSql" />
+    <PackageReference Include="Npgsql" />
+    <!-- What dotnet ef runs to find a context and its design-time factory, for the test that the build's factory is the one it takes. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" />
+  </ItemGroup>
+
+  <!--
+    The Tenancy sample's tests, in two kinds. A test that needs the host with a database takes it from a fixture
+    (SampleHosts, or the stack itself), which runs it on Supabase's own Postgres image: those classes need Docker
+    and carry the samples' traits, Category=Samples and Sample=Tenancy.Supabase, so the run that asks for the
+    sample runs them and the main build and the Floor build leave them out. Everything else runs in every build,
+    without a trait and without Docker: the domain's rules, the models and the migrations, and what the host
+    registers and serves, read from a host that has no database. ContainerTraitTests keeps the two apart. The
+    modules are the same assemblies the host runs; nothing here is a stand-in.
+  -->
+  <ItemGroup>
+    <!-- Each module's storage, named by the tests of its model and its migrations: those read the context its design-time factory builds. -->
+    <ProjectReference Include="..\..\Examples\Tenancy\Modules\Tenants\Examples.Tenancy.Tenants.Infrastructure\Examples.Tenancy.Tenants.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\Examples\Tenancy\Modules\Projects\Examples.Tenancy.Projects.Infrastructure\Examples.Tenancy.Projects.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\Examples\Tenancy\Modules\Inspections\Examples.Tenancy.Inspections.Infrastructure\Examples.Tenancy.Inspections.Infrastructure.csproj" />
+    <!-- The host, run in this process by SampleFactory: its Program is public for exactly that. -->
+    <ProjectReference Include="..\..\Examples\Tenancy\Examples.Tenancy.Host\Examples.Tenancy.Host.csproj" />
+    <!--
+      The UI, for its client: the Ui tests drive SampleApi over a stub handler, and against the host above. Its Program
+      is internal, so the host's stays the only Program these tests see.
+    -->
+    <ProjectReference Include="..\..\Examples\Tenancy\Examples.Tenancy.Ui\Examples.Tenancy.Ui.csproj" />
+  </ItemGroup>
+
+  <!--
+    One definition of DDDTOOLKIT_REQUIRE_CONTAINERS for every suite that starts a container, one batch dispatcher
+    for every suite that counts what a data loader's batch costs, one reading of which HotChocolate a run has
+    beside it and what was compiled against it, and one list of Supabase's images for the sample's AppHost and
+    its tests.
+  -->
+  <ItemGroup>
+    <Compile Include="..\DDDToolkit.EntityFramework.Tests\Infrastructure\RequiredContainers.cs" LinkBase="Infrastructure" />
+    <Compile Include="..\DDDToolkit.HotChocolate.Tests\Infrastructure\WholeBatches.cs" LinkBase="Infrastructure" />
+    <Compile Include="..\DDDToolkit.HotChocolate.Tests\Infrastructure\HotChocolateOfTheRun.cs" LinkBase="Infrastructure" />
+    <Compile Include="..\..\Examples\Tenancy\Examples.Tenancy.AppHost\SupabaseImages.cs" LinkBase="Infrastructure" />
+    <Compile Include="..\..\Examples\Tenancy\Examples.Tenancy.AppHost\AuthSigningKeys.cs" LinkBase="Infrastructure" />
+  </ItemGroup>
+
+</Project>

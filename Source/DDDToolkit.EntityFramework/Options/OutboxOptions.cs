@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Text.Json;
+using DDDToolkit.EntityFramework.EventLog;
 using DDDToolkit.EntityFramework.Integration;
 using DDDToolkit.EntityFramework.Outbox;
 using DDDToolkit.Interfaces;
@@ -20,7 +21,7 @@ public sealed class OutboxOptions
 {
     /// <summary>
     /// Serializer options for event payloads. The defaults are case-insensitive and include the
-    /// toolkit's <see cref="SingleValueObjectConverterFactory"/>, so class ids and single value objects
+    /// toolkit's <see cref="DDDToolkit.Serialization.Converters.SingleValueObjectConverterFactory"/>, so class ids and single value objects
     /// are stored as their raw value. Replace or extend as needed; the same options are used to read
     /// the payload back, so change them with care once messages exist.
     /// </summary>
@@ -180,8 +181,54 @@ public sealed class OutboxOptions
     /// back the consumers that already succeeded, and they run again on the retry. Leave this off when
     /// you want per-consumer progress.
     /// </para>
+    /// <para>
+    /// Where the host requires explicit callers and the outbox's context has row level security, the
+    /// transaction is begun as <c>Caller.System</c>, the processor's bookkeeping, and runs as that one
+    /// caller: an in-process handler that begins a caller of its own works on a context of its own, since a
+    /// caller that changes inside the transaction is refused. A transaction the host began on the context
+    /// before it called the processor is joined, so it has to be begun as the system too.
+    /// </para>
     /// </summary>
     public bool DeliverInTransaction { get; set; }
+
+    /// <summary>
+    /// Which events this outbox's contexts also keep in their event log, or <see langword="null"/> when they
+    /// keep none; see <see cref="KeepEventLog"/>.
+    /// </summary>
+    public EventLogOptions? EventLog { get; private set; }
+
+    /// <summary>
+    /// Keeps the events a context saves in its event log as well: one <see cref="EventLogEntry"/> per kept
+    /// event, added to the saving context next to the event's outbox row, so the aggregate, the outbox row and
+    /// the log row are written by one transaction: all three, or none of them.
+    /// <code>
+    /// options.UseOutbox&lt;OrderingContext&gt;(outbox =&gt; outbox
+    ///     .RegisterEventsFromAssemblyContaining&lt;Order&gt;()
+    ///     .KeepEventLog(log =&gt; log.Keep&lt;OrderPlaced&gt;().Keep&lt;OrderCancelled&gt;()));
+    /// </code>
+    /// <para>
+    /// Without <paramref name="configure"/>, or with one that chooses nothing, every event is kept. The
+    /// context's model must include the table: call <c>modelBuilder.AddEventLog(Database)</c> in
+    /// <c>OnModelCreating</c>. Calling this again configures the same log further.
+    /// </para>
+    /// <para>
+    /// Each row says who acted, from the <c>IActedByAccessor</c> the application registered, and carries the
+    /// columns every registered <see cref="IEventLogFields"/> fills. Both are singletons asked once per save,
+    /// so the log is written from every context, one rented from a pool without a scope included.
+    /// </para>
+    /// <para>
+    /// The outbox and the log part ways after the save. The processor marks and retries outbox rows and
+    /// retention deletes them once delivered; nothing ever updates a log row, and retention only deletes one
+    /// under a window of its own, <c>DomainEventRetentionOptions.KeepEventLogFor</c>.
+    /// </para>
+    /// </summary>
+    /// <param name="configure">Chooses the events to keep; every event when left out.</param>
+    public OutboxOptions KeepEventLog(Action<EventLogOptions>? configure = null)
+    {
+        EventLog ??= new EventLogOptions();
+        configure?.Invoke(EventLog);
+        return this;
+    }
 
     /// <summary>
     /// Publishes <typeparamref name="TDomainEvent"/> as <typeparamref name="TContract"/>. Shorthand for

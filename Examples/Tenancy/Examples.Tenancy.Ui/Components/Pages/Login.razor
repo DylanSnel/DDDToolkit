@@ -1,0 +1,86 @@
+@page "/login"
+@inject ILoginClient LoginClient
+@inject SampleApi Api
+@inject UiSession Session
+@inject NavigationManager Navigation
+
+<PageTitle>@T["login.title"] · Tenancy sample</PageTitle>
+
+<h1>@T["login.title"]</h1>
+
+<div class="alert alert-warning" role="note">@T.Html("login.dev-only")</div>
+
+@if (Session.SignedOutBecause is { } why)
+{
+    <div class="alert alert-info" role="status">@why</div>
+}
+
+@* Supabase Auth's own sign-in, with a password, where the UI knows an Auth server; nothing otherwise. *@
+<PasswordLogin />
+
+@if (_people is null)
+{
+    <p><em>@T["login.asking"]</em></p>
+}
+else if (_people.Value is not { } people)
+{
+    <p>@T.Html("login.none")</p>
+    <ApiOutcomeView Answer="_people" />
+}
+else
+{
+    <div class="people">
+        @foreach (var person in people)
+        {
+            <div class="card person">
+                <div class="card-body">
+                    <h2 class="card-title h5">@person.Name</h2>
+                    <div class="card-subtitle small text-body-secondary mb-2">@person.Email</div>
+                    <p class="card-text small">@person.About</p>
+                    <button type="button" class="btn btn-primary btn-sm" disabled="@(_signingIn is not null)" @onclick="() => SignInAsync(person)">
+                        @(_signingIn == person.Key ? T["login.signing-in"] : T["login.sign-in-as", person.Name])
+                    </button>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@if (_failed is not null)
+{
+    <h2 class="h5 mt-4">@T["login.failed"]</h2>
+    <ApiOutcomeView Answer="_failed" />
+}
+
+@code {
+    private ApiOutcome<IReadOnlyList<PersonCard>>? _people;
+    private ApiOutcome? _failed;
+    private string? _signingIn;
+
+    protected override async Task OnInitializedAsync() => _people = await LoginClient.PeopleAsync();
+
+    // A token first, then the person's own seats with it, so the session starts in a tenant: the first one by slug
+    // where the seat is active.
+    private async Task SignInAsync(PersonCard person)
+    {
+        _signingIn = person.Key;
+        _failed = null;
+        try
+        {
+            var token = await LoginClient.SignInAsync(person.Key);
+            if (token.Value is not { } answer)
+            {
+                _failed = token;
+                return;
+            }
+
+            var seats = await Api.SeatsOfMineAsync(CallAs.Person(person.Key, answer.AccessToken));
+            Session.SignIn(person.Key, person.Name, answer.AccessToken, answer.Expires, UiSession.TenantToStartIn(seats.Value ?? []));
+            Navigation.NavigateTo("");
+        }
+        finally
+        {
+            _signingIn = null;
+        }
+    }
+}

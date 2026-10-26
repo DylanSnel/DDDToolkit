@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The source generator of DDDToolkit.Supporting.Membership: on the resource a member class names it writes
+    the member list, from the collection, the owner and the codes the resource declares. It ships inside the
+    DDDToolkit.Supporting.Membership package, in analyzers/dotnet/cs, and is not a package of its own.
+  -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <IsRoslynComponent>true</IsRoslynComponent>
+    <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!--
+    It runs wherever a member class is declared, which is a domain project: one that references the
+    Membership package and no storage. So it ships with that package, apart from the generator of the
+    Entity Framework package, and knows the package's types by their names, as text.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" PrivateAssets="all" />
+  </ItemGroup>
+
+  <Import Project="..\DDDToolkit.Analyzers.Shared\DDDToolkit.Analyzers.Shared.props" />
+
+  <ItemGroup>
+    <AdditionalFiles Include="AnalyzerReleases.Shipped.md" />
+    <AdditionalFiles Include="AnalyzerReleases.Unshipped.md" />
+  </ItemGroup>
+
+</Project>

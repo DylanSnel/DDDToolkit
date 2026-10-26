@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    A module's API project as an application writes one with HotChocolate's own generator: GraphQL types declared
+    over the records its application layer answers, [ObjectType<T>] static partial classes with resolver fields,
+    [Query] methods and a [DataLoader]. The tests need it as a project of its own for two reasons. HotChocolate's
+    generator registers everything it finds in an assembly as one module, so the gallery's types would arrive with
+    every type of the test project. And the generator writes HotChocolate's names without "global::", which inside
+    a namespace that starts with DDDToolkit binds to DDDToolkit.HotChocolate: the root namespace here is Gallery.
+    It is compiled by HotChocolate's generator, so what the conventions do is checked on a type class that
+    generator wrote.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>Gallery</RootNamespace>
+  </PropertyGroup>
+
+  <!-- HotChocolate's generator arrives with the package, as it does for a NuGet consumer. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\Source\DDDToolkit.HotChocolate\DDDToolkit.HotChocolate.csproj" />
+  </ItemGroup>
+
+</Project>

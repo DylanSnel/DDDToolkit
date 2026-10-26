@@ -11,7 +11,7 @@ namespace DDDToolkit.Analyzers.Common;
 /// finds the attributes and the module to hand it.
 /// <list type="bullet">
 ///   <item><description>A domain event is stored under <c>[DomainEventName]</c>, otherwise the conventional name
-///   (<c>DomainEventName.Of</c>).</description></item>
+///   (<c>DomainEventName.For</c>).</description></item>
 ///   <item><description>A contract is published under <c>[IntegrationEvent("name")]</c>, otherwise
 ///   <c>[DomainEventName]</c>, otherwise the conventional name (<c>IntegrationEventContract.NameOf</c>).</description></item>
 ///   <item><description>Either one's version is <c>[IntegrationEvent(Version = n)]</c>, otherwise its class name's

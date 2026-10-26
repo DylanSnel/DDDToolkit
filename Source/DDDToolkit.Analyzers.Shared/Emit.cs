@@ -86,6 +86,25 @@ internal static class Emit
         }
     }
 
+    /// <summary>
+    /// <c>ISingleValue&lt;TSelf, TValue&gt;</c> closed over a type and its value, for the type's base list: what lets a
+    /// project that does not declare the type store it as its value, through one generic converter.
+    /// </summary>
+    public static string SingleValueInterface(string typeName, string valueType)
+        => KnownTypes.SingleValueInterfaceUsage + "<" + typeName + ", " + valueType + ">";
+
+    /// <summary>
+    /// The explicit <c>FromValue</c> of <see cref="SingleValueInterface"/>. It does exactly what the converter the
+    /// Entity Framework generator nests in the type does, <c>new(value)</c>: for the plain type the constructor
+    /// that does not check, for the always-valid twin its public constructor that validates. Explicit, so it adds
+    /// nothing to the members a caller sees on the type.
+    /// </summary>
+    public static void SingleValueFromValue(CodeWriter writer, string typeName, string valueType)
+    {
+        writer.Line("/// <summary>The value read back from storage by code that does not know this type. Not a factory: see ISingleValue.</summary>");
+        writer.Line("static " + typeName + " " + SingleValueInterface(typeName, valueType) + ".FromValue(" + valueType + " value) => new(value);");
+    }
+
     /// <summary>The generated record-equality members used by the value object family (mirrors the historical output).</summary>
     public static void RecordEqualityMembers(CodeWriter writer, string typeName, bool hashCodeFromComponents)
     {

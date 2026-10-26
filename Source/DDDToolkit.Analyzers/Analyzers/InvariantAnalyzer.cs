@@ -71,6 +71,5 @@ public sealed class InvariantAnalyzer : DiagnosticAnalyzer
     }
 
     private static bool IsEntity(INamedTypeSymbol type)
-        => DefinitionFactory.HasAttribute(type, KnownTypes.EntityAttribute)
-           || DefinitionFactory.HasAttribute(type, KnownTypes.AggregateRootAttribute);
+        => EntityDeclarations.IsEntityOrAggregateRoot(type);
 }

@@ -1,0 +1,57 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="coverlet.collector">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="FluentAssertions" />
+    <!--
+      Everything runs against SQLite in memory, with no Docker. The Entity Framework layer's own tests run on
+      Postgres as well, in a container started the first time one of them asks for a database, in the main build
+      and in the Floor build alike.
+    -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="Testcontainers.PostgreSql" />
+    <!-- Only to build the model for this provider, with no connection: the filtered indexes are in its SQL. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+  </ItemGroup>
+
+  <!-- One definition of DDDTOOLKIT_REQUIRE_CONTAINERS for every suite that starts a container. -->
+  <ItemGroup>
+    <Compile Include="..\DDDToolkit.EntityFramework.Tests\Infrastructure\RequiredContainers.cs" LinkBase="Infrastructure" />
+  </ItemGroup>
+
+  <!-- The clock a test sets and the assertion of a refusal by its code: the core suite's own, not copies of them. -->
+  <ItemGroup>
+    <Compile Include="..\DDDToolkit.Supporting.Tenancy.Tests\Support\FixedClock.cs" LinkBase="Infrastructure" />
+    <Compile Include="..\DDDToolkit.Supporting.Tenancy.Tests\Support\Refused.cs" LinkBase="Infrastructure" />
+  </ItemGroup>
+
+  <!--
+    Tenancy is stored through the application's own classes, context and registration in the TestHost, and
+    tested through the packages' public API only: there is no InternalsVisibleTo.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\DDDToolkit.Supporting.Tenancy.TestHost\DDDToolkit.Supporting.Tenancy.TestHost.csproj" />
+    <ProjectReference Include="..\..\Source\DDDToolkit.Supporting.Tenancy.EntityFramework\DDDToolkit.Supporting.Tenancy.EntityFramework.csproj" />
+    <ProjectReference Include="..\..\Source\DDDToolkit.Testing\DDDToolkit.Testing.csproj" />
+  </ItemGroup>
+
+</Project>

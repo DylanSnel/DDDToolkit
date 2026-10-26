@@ -10,7 +10,9 @@ namespace DDDToolkit.Auth.Supabase.AzureFunctions;
 /// the request's <c>Authorization</c> header, and runs the function inside
 /// <see cref="Callers.Begin"/>, so every query it makes runs as that user, or as <c>anon</c>
 /// without a valid token. Other triggers pass through untouched and run as the system, unless the
-/// function begins a caller itself, say from claims a queued message carries.
+/// function begins a caller itself, say from claims a queued message carries; where the host requires
+/// explicit callers (<see cref="CallerServiceCollectionExtensions.RequireExplicitCallers"/>) they run as
+/// nobody until it does.
 /// </summary>
 /// <remarks>
 /// Register it with <c>builder.UseSupabaseAuth()</c>. The token is read from the invocation's trigger

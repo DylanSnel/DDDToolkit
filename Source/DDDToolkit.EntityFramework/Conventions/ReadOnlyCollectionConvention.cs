@@ -12,7 +12,7 @@ namespace DDDToolkit.EntityFramework.Conventions;
 /// <summary>
 /// Maps the read-only collection properties the DDDToolkit generator emits for
 /// <c>partial IReadOnlyList&lt;T&gt; Items { get; }</c> as EF Core primitive collections when
-/// <typeparamref name="T"/> is a primitive or value-converted type (struct ids, single value objects,
+/// <c>T</c> is a primitive or value-converted type (struct ids, single value objects,
 /// strings, numbers).
 /// <para>
 /// EF Core only discovers primitive properties that have a setter; get-only properties are silently

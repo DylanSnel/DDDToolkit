@@ -30,7 +30,7 @@ The generator writes the other half of the type while the project compiles. For 
 
 ```csharp title="OrderId.g.cs, shortened"
 [JsonConverter(typeof(OrderId.SystemTextJsonConverter))]
-readonly partial record struct OrderId : IEntityId<Guid>, IComparable<OrderId>, IParsable<OrderId>
+readonly partial record struct OrderId : IEntityId<Guid>, IComparable<OrderId>, IParsable<OrderId>, ICreatableEntityId<OrderId>
 {
     public const string IdPrefix = "ORD";
 
@@ -49,6 +49,8 @@ readonly partial record struct OrderId : IEntityId<Guid>, IComparable<OrderId>, 
 #if NET9_0_OR_GREATER
 
     public static OrderId CreateSequential() => new(Guid.CreateVersion7());
+
+    public static OrderId Create() => CreateSequential();
 #endif
 
     public override string ToString()
@@ -75,7 +77,8 @@ readonly partial record struct OrderId : IEntityId<Guid>, IComparable<OrderId>, 
 Your half carries the accessibility and the attribute; the generated half carries the members. That is
 why `public` appears once, on the declaration you write, and why that declaration stays one line.
 
-The type implements `IEntityId<Guid>`, `IComparable<OrderId>` and `IParsable<OrderId>`, and carries a
+The type implements `IEntityId<Guid>`, `IComparable<OrderId>`, `IParsable<OrderId>` and
+`ICreatableEntityId<OrderId>` ([Creating identifiers](#creating-identifiers)), and carries a
 `[JsonConverter]` pointing at a generated nested converter, so `System.Text.Json` writes it as the
 bare value and reads it back; see [JSON and GraphQL](#json-and-graphql). Record struct equality comes
 from the language.
@@ -89,14 +92,35 @@ your own project.
 ## Creating identifiers
 
 ```csharp
+var id = OrderId.Create();            // a new one, the way this id makes them: CreateSequential() for a Guid
 var id = OrderId.CreateUnique();      // Guid.NewGuid()
 var id = OrderId.CreateSequential();  // Guid.CreateVersion7(), .NET 9 and later
 ```
 
-Prefer `CreateSequential` for anything you store. Version 7 identifiers embed a timestamp and sort
-roughly in creation order, which keeps database indexes from fragmenting the way random identifiers
-do. Both are generated only for `Guid`; for other value types you construct the id yourself, with the
-public constructor.
+An id is made in code, before the save, and never by the database, so a change and every event of it know the
+id from the start (Entity Framework stores it as it is given:
+[Ids the database never makes](entity-framework.md#ids-the-database-never-makes)). `Create()` is how: for a
+`Guid` the generator writes it, and it makes what `CreateSequential` makes. Version 7 identifiers embed a
+timestamp and sort roughly in creation order, which keeps database indexes from fragmenting the way random
+identifiers do. `CreateUnique` makes a random one where that matters.
+
+`Create()` also implements `ICreatableEntityId<TSelf>`, whose static member lets code that is generic over ids
+make one, `TId.Create()`: a supporting domain such as [Tenancy](tenancy.md#how-a-new-id-is-made) makes the ids of
+the tenants, seats and roles it creates that way. An id over anything else than a `Guid` has no `Create()` until
+it says how a new one is made, in its partial declaration, and the generator then implements the interface with
+it; a `Create()` of your own wins over the generator's for a `Guid` too:
+
+```csharp
+[EntityId<long>]
+public readonly partial record struct TicketNumber
+{
+    public static TicketNumber Create() => new(TicketNumbers.Next());   // a snowflake, or a number of a HiLo block
+}
+```
+
+Only a package that makes ids of a type asks for its `Create()` ([DDD00067](diagnostics.md#ddd00067)); an id
+over a `long` you make yourself, with the public constructor, needs none. The interface is in the .NET 10 build
+of DDDToolkit.Abstractions.
 
 ## Prefixes
 
@@ -201,7 +225,7 @@ partial class Order : AggregateRoot<OrderId>
 
 ```csharp title="OrderId.g.cs, shortened"
 [JsonConverter(typeof(OrderId.SystemTextJsonConverter))]
-public readonly partial record struct OrderId : IEntityId<Guid>, IComparable<OrderId>, IParsable<OrderId>
+public readonly partial record struct OrderId : IEntityId<Guid>, IComparable<OrderId>, IParsable<OrderId>, ICreatableEntityId<OrderId>
 {
     public const string IdPrefix = "ORD";
 
@@ -314,10 +338,10 @@ public partial record CustomerId
 ```
 
 This derives from `EntityId<Guid>`, which supplies `Value` and the prefixed `ToString`. The generator
-adds the constructors, equality over `Value`, `Parse`/`TryParse`, `CreateUnique` and
-`CreateSequential` for `Guid`, and a `ValidCustomerId` twin reachable through `ToValid()`. The twin is
-the same one every value object gets; [Value objects](value-objects.md#the-always-valid-twin) explains
-what it is for.
+adds the constructors, equality over `Value`, `Parse`/`TryParse`, `CreateUnique`, `CreateSequential` and
+`Create()` for `Guid`, an overload beside the `Create(Guid)` above, and a `ValidCustomerId` twin reachable
+through `ToValid()`. The twin is the same one every value object gets;
+[Value objects](value-objects.md#the-always-valid-twin) explains what it is for.
 
 ```csharp title="CustomerId.g.cs, shortened"
 partial record CustomerId : EntityId<Guid>, IValidatable<ValidCustomerId>
@@ -342,7 +366,7 @@ partial record CustomerId : EntityId<Guid>, IValidatable<ValidCustomerId>
 
     public override int GetHashCode() => EqualityComparer<Guid>.Default.GetHashCode(Value);
 
-    // CreateUnique, CreateSequential, Parse and TryParse, as on the struct form
+    // CreateUnique, CreateSequential, Create, Parse and TryParse, as on the struct form
 
     public ValidCustomerId ToValid() => new(this);
 }
@@ -403,6 +427,46 @@ same provider column, and both round trip at the same speed: the database work i
 larger than the difference between them. The struct form saves one object per row, which disappears
 into what materialising a row costs anyway. See
 [Performance](performance.md#the-entity-framework-round-trip).
+
+### Stored by a project that does not declare it
+
+The nested converter is written into the project that declares the identifier, and only when that project
+references Entity Framework. A module split into projects by layer declares its identifiers in a domain or
+contracts project that does not, so the project that holds the context stores them instead. Every
+identifier, single value object and always-valid twin implements `ISingleValue<TSelf, TValue>`, from
+`DDDToolkit.Interfaces`, which names the value and the way back from it:
+
+```csharp title="OrderId.g.cs, shortened"
+readonly partial record struct OrderId : IEntityId<Guid>, ..., ISingleValue<OrderId, Guid>
+{
+    public Guid Value { get; }
+
+    static OrderId ISingleValue<OrderId, Guid>.FromValue(Guid value) => new(value);
+}
+```
+
+and `DDDToolkit.EntityFramework` has one converter for all of them, `SingleValueConverter<T, TValue>`. The
+generated `Add{Module}Converters()` of the project that holds the context registers it for every identifier
+of its module's other projects that has no converter of its own, and for the published ones of other modules
+(`[ModuleContract]`, or every public one of a [contracts project](modules.md#a-contracts-project)), so the context
+still calls one method for all of them:
+
+```csharp title="ConverterExtensions.g.cs of Ordering.Infrastructure, shortened"
+modelConfigurationBuilder.Properties<OrderId>().HaveConversion<SingleValueConverter<OrderId, Guid>>();
+modelConfigurationBuilder.DefaultTypeMapping<OrderId>().HasConversion<SingleValueConverter<OrderId, Guid>>();
+```
+
+Which projects are of the module is what `[assembly: Module]` says; see [Modules](modules.md#a-module-in-layers).
+A project that references Entity Framework itself keeps its nested converters and its own registration,
+which the registration of a project of the same module that references it calls, without registering
+again what that one registered. A published identifier of another module whose project references Entity
+Framework is registered all the same, with its own nested converter: the other module's registration has
+another name, and the one call of your context covers every identifier it may store.
+
+`FromValue` is implemented explicitly, so it adds nothing to the members a caller sees, and it is for
+reading back what was stored, nothing else. A generic constraint makes it callable by anyone, which is
+harmless by design: for the plain type it builds a value that is not yet checked, as reading a column
+always did, and for the always-valid twin it goes through the twin's public constructor, which validates.
 
 ### Column length
 

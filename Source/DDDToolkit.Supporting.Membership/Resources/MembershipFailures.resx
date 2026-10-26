@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="membership.not-found" xml:space="preserve">
+    <value>That was not found, or it is not one you can see.</value>
+  </data>
+  <data name="membership.not-permitted" xml:space="preserve">
+    <value>Doing this needs the key {Key}.</value>
+  </data>
+  <data name="membership.member-not-active" xml:space="preserve">
+    <value>That one cannot be a member: not active, or not known here.</value>
+  </data>
+  <data name="membership.role-not-for-members" xml:space="preserve">
+    <value>That role cannot be given to a member here.</value>
+  </data>
+  <data name="membership.no-owner-role" xml:space="preserve">
+    <value>There is no role in use to give an owner.</value>
+  </data>
+  <data name="membership.already-member" xml:space="preserve">
+    <value>That one is a member already, or is due to become one. Give the member a role instead.</value>
+  </data>
+  <data name="membership.member-not-found" xml:space="preserve">
+    <value>That one is not a member, or the membership has ended.</value>
+  </data>
+  <data name="membership.role-held" xml:space="preserve">
+    <value>That member already has this role.</value>
+  </data>
+  <data name="membership.role-not-held" xml:space="preserve">
+    <value>That member does not have this role.</value>
+  </data>
+  <data name="membership.owner-protected" xml:space="preserve">
+    <value>The owner stays a member, in the owner's role, until somebody else is named owner.</value>
+  </data>
+  <data name="membership.already-owner" xml:space="preserve">
+    <value>That member is the owner already.</value>
+  </data>
+  <data name="membership.invalid-period" xml:space="preserve">
+    <value>A period's end must come after its start.</value>
+  </data>
+  <data name="membership.role-archived" xml:space="preserve">
+    <value>That role is archived.</value>
+  </data>
+  <data name="membership.role-name-invalid" xml:space="preserve">
+    <value>Enter {Min} to {Max} characters.</value>
+  </data>
+  <data name="membership.key-not-for-members" xml:space="preserve">
+    <value>A role cannot give these keys here: {Keys}.</value>
+  </data>
+  <data name="membership.owner-role-stays" xml:space="preserve">
+    <value>The role every owner holds cannot be archived.</value>
+  </data>
+  <data name="membership.role-keys-not-normalized" xml:space="preserve">
+    <value>A role's keys must be distinct, not blank and in ordinal order.</value>
+  </data>
+</root>

@@ -47,6 +47,31 @@ public class ImplicitEntityIdTests
     }
 
     [Fact]
+    public void The_generated_id_implements_ISingleValue_explicitly_and_round_trips()
+    {
+        // What a project that does not declare the id stores it through: the value, and the way back from it.
+        var result = Aggregate();
+        result.ShouldContain(
+            Hint.Of("Sample.OrderId"),
+            "static OrderId global::DDDToolkit.Interfaces.ISingleValue<OrderId, global::System.Guid>.FromValue(global::System.Guid value) => new(value);");
+
+        var emitted = result.Emit();
+        var idType = emitted.Type("Sample.OrderId");
+        typeof(DDDToolkit.Interfaces.ISingleValue<,>).MakeGenericType(idType, typeof(Guid)).IsAssignableFrom(idType).Should().BeTrue();
+        idType.GetMethod("FromValue", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static).Should().BeNull("it is implemented explicitly");
+
+        var value = Guid.NewGuid();
+        var read = typeof(ImplicitEntityIdTests).GetMethod(nameof(Read), System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
+            .MakeGenericMethod(idType, typeof(Guid))
+            .Invoke(null, [value]);
+        read.Should().Be(emitted.New("Sample.OrderId", value));
+    }
+
+    private static T Read<T, TValue>(TValue value)
+        where T : DDDToolkit.Interfaces.ISingleValue<T, TValue>
+        => T.FromValue(value);
+
+    [Fact]
     public void The_aggregate_carries_the_generated_id_as_its_identity()
     {
         var emitted = Aggregate().Emit();

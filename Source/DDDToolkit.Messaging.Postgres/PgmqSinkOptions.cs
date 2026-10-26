@@ -122,13 +122,15 @@ public sealed class PgmqSinkOptions
     public bool CreateQueueIfMissing { get; set; } = true;
 
     /// <summary>
-    /// Checks at start-up, once per database, that the pgmq extension is installed, and with
-    /// <see cref="UseTopics"/> that it is 1.11 or later, so a database that cannot take the messages fails
-    /// the start by name instead of the first send. On by default; applies to a sink registered with
-    /// <c>AddPgmqSink</c>.
+    /// Whether the start-up check <see cref="PgmqQueue.ExtensionInstalledCheck"/> reads this sink's database: that
+    /// the pgmq extension is installed, and with <see cref="UseTopics"/> that it is 1.11 or later, so a database
+    /// that cannot take the messages fails the start by name instead of the first send. The check runs once the
+    /// host asks for its checks with <c>RunStartupChecks()</c>, and once per database however many sinks and
+    /// consumers share it. On by default; applies to a sink registered with <c>AddPgmqSink</c>.
     /// <para>
-    /// The check needs the database at start-up. Turn it off when the application has to start without it,
-    /// or when something in the application itself installs the extension later in its start.
+    /// The check needs the database at start-up. Leave this sink's database out of it when the application has to
+    /// start without that database, or when something in the application itself installs the extension later in
+    /// its start. The host turns the whole check off by its name.
     /// </para>
     /// </summary>
     public bool CheckExtensionOnStart { get; set; } = true;

@@ -2,10 +2,13 @@
 
   <!--
     A contracts project: the attributes and the generators, without the DDDToolkit package and its base
-    types. The generators run here, so DDD_Module has to reach them from the generators' own package.
+    types. The generators run here, so DDD_Module has to reach them from the generators' own package, and
+    DDD_ModuleContracts with it, from which the toolkit's generator writes [assembly: ModuleContracts]: every
+    public type here is published to the other modules.
   -->
   <PropertyGroup>
     <DDD_Module>Billing</DDD_Module>
+    <DDD_ModuleContracts>true</DDD_ModuleContracts>
   </PropertyGroup>
 
   <ItemGroup>
@@ -19,6 +22,15 @@
   -->
   <ItemGroup Condition="'$(WithoutToolkitBuildAssets)' == 'true'">
     <PackageReference Update="$(DDDPackageIdPrefix)DDDToolkit.Analyzers" ExcludeAssets="build;buildTransitive" />
+  </ItemGroup>
+
+  <!--
+    What DDD00014 suggests for that case: list the property by hand. The name reaches the generators, and the
+    build step that declares the module, left behind with the props file, does not run. The script builds this
+    once to see DDD00064 say so.
+  -->
+  <ItemGroup Condition="'$(ListModulePropertyByHand)' == 'true'">
+    <CompilerVisibleProperty Include="DDD_Module" />
   </ItemGroup>
 
 </Project>

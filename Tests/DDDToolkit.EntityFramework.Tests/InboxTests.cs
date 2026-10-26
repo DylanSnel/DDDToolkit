@@ -1,6 +1,9 @@
 using System.Data.Common;
+using DDDToolkit.Abstractions.Access;
+using DDDToolkit.Access;
 using DDDToolkit.BaseTypes;
 using DDDToolkit.EntityFramework.Inbox;
+using DDDToolkit.EntityFramework.Integration;
 using DDDToolkit.EntityFramework.Options;
 using DDDToolkit.EntityFramework.Outbox;
 using DDDToolkit.EntityFramework.Tests.Domain;
@@ -20,7 +23,7 @@ namespace DDDToolkit.EntityFramework.Tests;
 /// The receiving half: running a handler once for a message and consumer, with the effect and the
 /// "already applied" marker in one transaction.
 /// </summary>
-public sealed class InboxTests : IDisposable
+public sealed class InboxTests(ExplicitCallersPostgres postgres) : IDisposable
 {
     private const string Consumer = "billing.person-projector";
 
@@ -45,6 +48,33 @@ public sealed class InboxTests : IDisposable
             });
 
     private static Person NewPerson(string first) => new(MemberId.CreateUnique(), new PersonName(first, "Lovelace"), null, new ValidDateOfBirth(new DateOnly(1815, 12, 10)));
+
+    /// <summary>
+    /// A transport's delivery, twice, in a host that requires explicit callers, on Postgres with row level
+    /// security: the receiver's own work needs no caller of anybody's, and the inbox's read, the handler and the
+    /// inbox row run as the module's scoped system caller, so the second delivery finds the row it wrote.
+    /// </summary>
+    [Fact]
+    public async Task The_inbox_receives_with_explicit_callers_required()
+    {
+        var cancellation = TestContext.Current.CancellationToken;
+        await using var work = await ToolkitWork.StartAsync(
+            await postgres.CreateDatabaseAsync(cancellation),
+            module => module
+                .Around((_, _, _) => Callers.Begin(Caller.SystemIn(ToolkitWork.ReceivingScope)))
+                .Handle<ShelfOpenedV3, ReceiptLog>());
+        var receiver = work.Services.GetRequiredService<IntegrationEventReceiver>();
+        var message = ToolkitWork.Opened("Fiction");
+
+        await receiver.ReceiveAsync(message, cancellation);
+        await receiver.ReceiveAsync(message, cancellation);
+
+        work.Seen.Callers.Should().ContainSingle("the second delivery found the inbox row the first one wrote")
+            .Which!.ToString().Should().Be($"system in {ToolkitWork.ReceivingScope}");
+        var claims = $$"""{"role":"{{ExplicitCallersPostgres.SystemInRole}}","scope":"{{ToolkitWork.ReceivingScope}}"}""";
+        (await work.InboxAsync()).Should().Equal(new Written("callers.receipt-log", ExplicitCallersPostgres.SystemInRole, claims));
+        (await work.ReceiptsAsync()).Should().Equal(new Written("Fiction", ExplicitCallersPostgres.SystemInRole, claims));
+    }
 
     /// <summary>Runs the inbox in a fresh scope, the way a consumer of one delivery would.</summary>
     private Task<bool> DeliverAsync(TestHost host, Guid messageId, Func<LibraryContext, CancellationToken, Task> handler, string consumer = Consumer)

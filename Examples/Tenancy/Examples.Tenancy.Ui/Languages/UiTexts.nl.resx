@@ -1,0 +1,912 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="common.loading" xml:space="preserve">
+    <value>Laden…</value>
+  </data>
+  <data name="common.yes" xml:space="preserve">
+    <value>ja</value>
+  </data>
+  <data name="common.no" xml:space="preserve">
+    <value>nee</value>
+  </data>
+  <data name="common.open-ended" xml:space="preserve">
+    <value>zonder einde</value>
+  </data>
+  <data name="common.no-tenant" xml:space="preserve">
+    <value>geen tenant</value>
+  </data>
+  <data name="common.days" xml:space="preserve">
+    <value>{0} tot en met {1}</value>
+  </data>
+  <data name="common.as" xml:space="preserve">
+    <value>als {0}</value>
+  </data>
+  <data name="common.in" xml:space="preserve">
+    <value>in {0}</value>
+  </data>
+  <data name="common.no-header" xml:space="preserve">
+    <value>geen header</value>
+  </data>
+  <data name="common.no-token" xml:space="preserve">
+    <value>geen token</value>
+  </data>
+  <data name="common.tenant" xml:space="preserve">
+    <value>Tenant</value>
+  </data>
+  <data name="common.status" xml:space="preserve">
+    <value>Status</value>
+  </data>
+  <data name="common.role" xml:space="preserve">
+    <value>Rol</value>
+  </data>
+  <data name="common.name" xml:space="preserve">
+    <value>Naam</value>
+  </data>
+  <data name="common.from" xml:space="preserve">
+    <value>Van</value>
+  </data>
+  <data name="common.until" xml:space="preserve">
+    <value>Tot</value>
+  </data>
+  <data name="common.answer" xml:space="preserve">
+    <value>Antwoord</value>
+  </data>
+  <data name="common.verdict" xml:space="preserve">
+    <value>Oordeel</value>
+  </data>
+  <data name="common.manages-access" xml:space="preserve">
+    <value>beheert toegang</value>
+  </data>
+  <data name="common.more" xml:space="preserve">
+    <value>Meer</value>
+  </data>
+  <data name="via.crew" xml:space="preserve">
+    <value>ploeg</value>
+  </data>
+  <data name="via.organization" xml:space="preserve">
+    <value>organisatie</value>
+  </data>
+  <data name="layout.signed-in-as" xml:space="preserve">
+    <value>Aangemeld als &lt;strong&gt;{0}&lt;/strong&gt;</value>
+  </data>
+  <data name="layout.log-out" xml:space="preserve">
+    <value>Afmelden</value>
+  </data>
+  <data name="layout.not-signed-in" xml:space="preserve">
+    <value>Niet aangemeld</value>
+  </data>
+  <data name="layout.last-response" xml:space="preserve">
+    <value>Laatste antwoord</value>
+  </data>
+  <data name="layout.error" xml:space="preserve">
+    <value>Er is een onverwachte fout opgetreden.</value>
+  </data>
+  <data name="layout.reload" xml:space="preserve">
+    <value>Opnieuw laden</value>
+  </data>
+  <data name="layout.language" xml:space="preserve">
+    <value>Taal</value>
+  </data>
+  <data name="nav.menu" xml:space="preserve">
+    <value>Navigatiemenu</value>
+  </data>
+  <data name="nav.who-am-i" xml:space="preserve">
+    <value>Wie ben ik</value>
+  </data>
+  <data name="nav.projects" xml:space="preserve">
+    <value>Mijn projecten</value>
+  </data>
+  <data name="nav.try" xml:space="preserve">
+    <value>Uitproberen</value>
+  </data>
+  <data name="not-found.title" xml:space="preserve">
+    <value>Niet gevonden</value>
+  </data>
+  <data name="not-found.text" xml:space="preserve">
+    <value>Hier is geen pagina. &lt;a href=""&gt;Wie ben ik&lt;/a&gt; is de plek om te beginnen.</value>
+  </data>
+  <data name="api.token-refused" xml:space="preserve">
+    <value>De API accepteert het token niet meer (401). Opnieuw aanmelden is nodig.</value>
+  </data>
+  <data name="api.no-answer" xml:space="preserve">
+    <value>De API gaf geen antwoord. Draait de API, en wijst Api:BaseUrl (of service discovery) ernaar?</value>
+  </data>
+  <data name="api.unreadable" xml:space="preserve">
+    <value>Het antwoord kon niet worden gelezen.</value>
+  </data>
+  <data name="answer.no-tenant-header" xml:space="preserve">
+    <value>geen Tenant-header</value>
+  </data>
+  <data name="answer.tenant" xml:space="preserve">
+    <value>Tenant: {0}</value>
+  </data>
+  <data name="answer.done" xml:space="preserve">
+    <value>Gedaan.</value>
+  </data>
+  <data name="answer.whole-tenant" xml:space="preserve">
+    <value>Het recht is nodig voor de hele tenant: het recht bij een eenheid is niet genoeg.</value>
+  </data>
+  <data name="answer.raw" xml:space="preserve">
+    <value>Ruwe JSON</value>
+  </data>
+  <data name="status.no-answer" xml:space="preserve">
+    <value>geen antwoord</value>
+  </data>
+  <data name="status.no-answer.title" xml:space="preserve">
+    <value>De API gaf geen antwoord</value>
+  </data>
+  <data name="verdict.expected" xml:space="preserve">
+    <value>zoals verwacht</value>
+  </data>
+  <data name="verdict.unexpected" xml:space="preserve">
+    <value>onverwacht</value>
+  </data>
+  <data name="allowed.yes" xml:space="preserve">
+    <value>Toegestaan</value>
+  </data>
+  <data name="allowed.no" xml:space="preserve">
+    <value>Niet toegestaan</value>
+  </data>
+  <data name="action.try-anyway" xml:space="preserve">
+    <value> · niet toegestaan, toch proberen</value>
+  </data>
+  <data name="picker.nothing" xml:space="preserve">
+    <value>(niets in de lijst: typ een id)</value>
+  </data>
+  <data name="picker.pick" xml:space="preserve">
+    <value>(kies, of typ hieronder)</value>
+  </data>
+  <data name="picker.id" xml:space="preserve">
+    <value>Id van {0}</value>
+  </data>
+  <data name="tenant-picker.none" xml:space="preserve">
+    <value>(geen)</value>
+  </data>
+  <data name="tenant-picker.seat-status" xml:space="preserve">
+    <value> (plaats: {0})</value>
+  </data>
+  <data name="tenant-picker.no-seat" xml:space="preserve">
+    <value> (geen plaats hier)</value>
+  </data>
+  <data name="login.title" xml:space="preserve">
+    <value>Aanmelden</value>
+  </data>
+  <data name="login.dev-only" xml:space="preserve">
+    <value>&lt;strong&gt;Alleen voor ontwikkeling.&lt;/strong&gt; De dev-login van de Host meldt iemand aan als een van de demonstratiepersonen, zonder wachtwoord. Die geeft hetzelfde soort toegangstoken uit als Supabase Auth, en de API controleert het precies zoals een echt token: wat elke persoon hieronder mag zien en doen, is wat een echte aanmelding zou krijgen.</value>
+  </data>
+  <data name="login.asking" xml:space="preserve">
+    <value>De API wordt gevraagd wie zich kan aanmelden…</value>
+  </data>
+  <data name="login.none" xml:space="preserve">
+    <value>De API biedt geen dev-login aan. Die bestaat alleen als de Host in Development draait met &lt;code&gt;DevLogin:Enabled&lt;/code&gt; aan.</value>
+  </data>
+  <data name="login.signing-in" xml:space="preserve">
+    <value>Bezig met aanmelden…</value>
+  </data>
+  <data name="login.sign-in-as" xml:space="preserve">
+    <value>Aanmelden als {0}</value>
+  </data>
+  <data name="login.failed" xml:space="preserve">
+    <value>Het aanmelden is niet gelukt</value>
+  </data>
+  <data name="login.password.title" xml:space="preserve">
+    <value>Met een wachtwoord, bij Supabase Auth</value>
+  </data>
+  <data name="login.password.intro" xml:space="preserve">
+    <value>De demonstratiepersonen zijn daar gebruiker, onder de adressen op hun kaarten (&lt;code&gt;rhea@example.test&lt;/code&gt;), allemaal met één wachtwoord: de parameter &lt;code&gt;demo-password&lt;/code&gt; van de AppHost, te zien in het dashboard ervan, of &lt;code&gt;Sample:DemoPassword&lt;/code&gt; wanneer de Host met de hand is gestart.</value>
+  </data>
+  <data name="login.password.email" xml:space="preserve">
+    <value>E-mailadres</value>
+  </data>
+  <data name="login.password.password" xml:space="preserve">
+    <value>Wachtwoord</value>
+  </data>
+  <data name="login.password.sign-in" xml:space="preserve">
+    <value>Aanmelden</value>
+  </data>
+  <data name="login.password.token-refused" xml:space="preserve">
+    <value>Supabase Auth heeft de aanmelding aanvaard, en de API nam het token niet aan:</value>
+  </data>
+  <data name="login.password.or-dev-login" xml:space="preserve">
+    <value>Of als een van de demonstratiepersonen, met de dev-login</value>
+  </data>
+  <data name="login.password.not-offered" xml:space="preserve">
+    <value>Deze UI weet niet waar Supabase Auth is.</value>
+  </data>
+  <data name="login.password.incomplete" xml:space="preserve">
+    <value>Een e-mailadres en een wachtwoord zijn nodig.</value>
+  </data>
+  <data name="login.password.refused" xml:space="preserve">
+    <value>Met dat e-mailadres en wachtwoord wordt niemand aangemeld.</value>
+  </data>
+  <data name="login.password.answered" xml:space="preserve">
+    <value>Supabase Auth antwoordde {0}.</value>
+  </data>
+  <data name="login.password.no-token" xml:space="preserve">
+    <value>Supabase Auth antwoordde zonder token.</value>
+  </data>
+  <data name="login.password.no-answer" xml:space="preserve">
+    <value>Supabase Auth gaf geen antwoord. Draait het, en wijst {0} ernaar?</value>
+  </data>
+  <data name="whoami.intro" xml:space="preserve">
+    <value>&lt;code&gt;GET /me&lt;/code&gt;, als {0} in {1}: de plaats die de API afleidde uit het token en de header &lt;code&gt;Tenant&lt;/code&gt;, waar die geplaatst is, welke rollen de plaats daar heeft en voor welke periode, en elk recht dat de plaats nu heeft met de eenheden die het bereikt.</value>
+  </data>
+  <data name="whoami.no-answer" xml:space="preserve">
+    <value>De API zei niet wie dit in deze tenant is. Dit is het antwoord:</value>
+  </data>
+  <data name="whoami.shape-status" xml:space="preserve">
+    <value>Vorm: {0} · Status: {1}</value>
+  </data>
+  <data name="whoami.seat" xml:space="preserve">
+    <value>Plaats</value>
+  </data>
+  <data name="whoami.seat-status" xml:space="preserve">
+    <value>Status: {0}</value>
+  </data>
+  <data name="whoami.placements" xml:space="preserve">
+    <value>Plaatsingen en de rollen die daar gelden</value>
+  </data>
+  <data name="whoami.placed-at" xml:space="preserve">
+    <value>Geplaatst bij</value>
+  </data>
+  <data name="whoami.applies-now" xml:space="preserve">
+    <value>Geldt nu</value>
+  </data>
+  <data name="whoami.no-role-here" xml:space="preserve">
+    <value>geen organisatierol hier</value>
+  </data>
+  <data name="whoami.primary" xml:space="preserve">
+    <value>primair</value>
+  </data>
+  <data name="whoami.ended" xml:space="preserve">
+    <value>nee, de toekenning is afgelopen</value>
+  </data>
+  <data name="whoami.not-started" xml:space="preserve">
+    <value>nee, de toekenning is nog niet begonnen</value>
+  </data>
+  <data name="whoami.roles" xml:space="preserve">
+    <value>Rollen</value>
+  </data>
+  <data name="whoami.roles.none" xml:space="preserve">
+    <value>Geen organisatierollen. Ploegrollen op projecten staan bij elk project.</value>
+  </data>
+  <data name="whoami.from-pack" xml:space="preserve">
+    <value>Uit pakket</value>
+  </data>
+  <data name="whoami.manages-access" xml:space="preserve">
+    <value>Beheert toegang</value>
+  </data>
+  <data name="whoami.keys" xml:space="preserve">
+    <value>Rechten</value>
+  </data>
+  <data name="whoami.grants-manage" xml:space="preserve">
+    <value>Wie &lt;code&gt;{0}&lt;/code&gt; bij een eenheid heeft, geeft daar elke rol die geen toegang beheert aan iedereen die daar of daaronder geplaatst is, ook aan de eigen plaats, zonder de rechten van die rol te hebben: aan anderen voor zo lang als gewenst, aan de eigen plaats niet langer dan &lt;code&gt;{0}&lt;/code&gt; er zelf geldt. Een rol die toegang beheert, vraagt elk van zijn rechten die toegang beheren, daar minstens even lang zelf gehouden, en gaat nooit naar de eigen plaats.</value>
+  </data>
+  <data name="whoami.seats-manage" xml:space="preserve">
+    <value>Wie &lt;code&gt;{0}&lt;/code&gt; voor de hele tenant heeft, schorst, heractiveert en deactiveert plaatsen, en mag de eigen plaats schorsen of deactiveren. Een plaats met een toekenning van een rol die toegang beheert, vraagt voor elk van die toekenningen de rechten van de rol die toegang beheren, zelf gehouden bij de eenheid van die toekenning tot minstens het einde ervan: een plaats stoppen of herstarten neemt de rol af of geeft die terug.</value>
+  </data>
+  <data name="whoami.units-manage" xml:space="preserve">
+    <value>Wie &lt;code&gt;{0}&lt;/code&gt; heeft bij de bovenliggende eenheid van een eenheid en bij een andere eenheid, verplaatst de eenheid daarheen. Een verplaatsing geeft wie verplaatst geen recht dat daar niet al even lang gold, en geeft of ontneemt een recht dat toegang beheert, aan wie ook, alleen als wie verplaatst het bij de eenheid heeft voor minstens zo lang als de toekenning van die ander loopt.</value>
+  </data>
+  <data name="whoami.keys-now" xml:space="preserve">
+    <value>Rechten die nu gelden</value>
+  </data>
+  <data name="whoami.keys-now.none" xml:space="preserve">
+    <value>Geen. Een verlopen toekenning, een geschorste plaats of een gearchiveerde rol geeft geen recht.</value>
+  </data>
+  <data name="whoami.key" xml:space="preserve">
+    <value>Recht</value>
+  </data>
+  <data name="whoami.granted-at" xml:space="preserve">
+    <value>Toegekend bij</value>
+  </data>
+  <data name="whoami.reaches" xml:space="preserve">
+    <value>Bereikt</value>
+  </data>
+  <data name="whoami.whole-tenant" xml:space="preserve">
+    <value>hele tenant</value>
+  </data>
+  <data name="projects.intro" xml:space="preserve">
+    <value>&lt;code&gt;GET /projects&lt;/code&gt;: elk project dat in {0} zichtbaar is voor de aangemelde plaats, en waardoor. &lt;em&gt;Ploeg&lt;/em&gt; betekent dat de plaats in de ploeg zit, met of zonder rol, en staat er ook als een rol het project eveneens bereikt; &lt;em&gt;organisatie&lt;/em&gt; betekent door een rol bij de eenheid van het project of daarboven. Een project dat niet zichtbaar is, staat er niet bij, in deze tenant niet en in geen andere. Het antwoord noemt eenheden, plaatsen en projectrollen bij hun id; de namen hier komen uit de directory, &lt;code&gt;POST /tenancy/directory/&amp;hellip;&lt;/code&gt;, gevraagd met die ids, en uit &lt;code&gt;GET /project-roles&lt;/code&gt;. De lijst komt per pagina, op nummer: &lt;em&gt;Meer&lt;/em&gt; vraagt de volgende pagina met de markering die de vorige gaf.</value>
+  </data>
+  <data name="projects.filter.any-state" xml:space="preserve">
+    <value>open en gesloten</value>
+  </data>
+  <data name="projects.filter.open" xml:space="preserve">
+    <value>open</value>
+  </data>
+  <data name="projects.filter.closed" xml:space="preserve">
+    <value>gesloten</value>
+  </data>
+  <data name="projects.filter.text" xml:space="preserve">
+    <value>Nummer begint met, of naam bevat</value>
+  </data>
+  <data name="projects.filter" xml:space="preserve">
+    <value>Filteren</value>
+  </data>
+  <data name="projects.none" xml:space="preserve">
+    <value>Hier is geen project zichtbaar.</value>
+  </data>
+  <data name="projects.number" xml:space="preserve">
+    <value>Nummer</value>
+  </data>
+  <data name="projects.unit" xml:space="preserve">
+    <value>Eenheid</value>
+  </data>
+  <data name="projects.state" xml:space="preserve">
+    <value>Staat</value>
+  </data>
+  <data name="projects.my-roles" xml:space="preserve">
+    <value>Mijn ploegrollen</value>
+  </data>
+  <data name="projects.via" xml:space="preserve">
+    <value>Via</value>
+  </data>
+  <data name="projects.crew" xml:space="preserve">
+    <value>Ploeg</value>
+  </data>
+  <data name="projects.no-role" xml:space="preserve">
+    <value>geen rol</value>
+  </data>
+  <data name="projects.owner" xml:space="preserve">
+    <value>eigenaar</value>
+  </data>
+  <data name="project.back" xml:space="preserve">
+    <value>← Mijn projecten</value>
+  </data>
+  <data name="project.title" xml:space="preserve">
+    <value>Project</value>
+  </data>
+  <data name="project.not-shown" xml:space="preserve">
+    <value>De API liet dit project niet zien. Een project in een andere tenant, of een dat niet zichtbaar is, wordt niet gevonden, precies zoals een project dat niet bestaat.</value>
+  </data>
+  <data name="project.at" xml:space="preserve">
+    <value>bij &lt;strong&gt;{0}&lt;/strong&gt;.</value>
+  </data>
+  <data name="project.seen-via" xml:space="preserve">
+    <value>Zichtbaar via &lt;strong&gt;{0}&lt;/strong&gt;</value>
+  </data>
+  <data name="project.seen-as" xml:space="preserve">
+    <value>, als {0} in de ploeg</value>
+  </data>
+  <data name="project.seen-no-role" xml:space="preserve">
+    <value>, in de ploeg zonder rol</value>
+  </data>
+  <data name="project.planned" xml:space="preserve">
+    <value>Gepland voor &lt;strong&gt;{0}&lt;/strong&gt;.</value>
+  </data>
+  <data name="project.not-planned" xml:space="preserve">
+    <value>Nog voor geen dagen gepland.</value>
+  </data>
+  <data name="project.can" xml:space="preserve">
+    <value>Wat volgens de API mag:</value>
+  </data>
+  <data name="project.can.rename" xml:space="preserve">
+    <value>hernoemen</value>
+  </data>
+  <data name="project.can.plan" xml:space="preserve">
+    <value>plannen</value>
+  </data>
+  <data name="project.can.move" xml:space="preserve">
+    <value>verplaatsen</value>
+  </data>
+  <data name="project.can.reopen" xml:space="preserve">
+    <value>heropenen</value>
+  </data>
+  <data name="project.can.close" xml:space="preserve">
+    <value>sluiten</value>
+  </data>
+  <data name="project.can.crew" xml:space="preserve">
+    <value>de ploeg beheren</value>
+  </data>
+  <data name="project.can.owner" xml:space="preserve">
+    <value>de eigenaar wijzigen</value>
+  </data>
+  <data name="project.can.inspect" xml:space="preserve">
+    <value>een inspectie vastleggen</value>
+  </data>
+  <data name="project.crew.intro" xml:space="preserve">
+    <value>In de ploeg zitten en er een rol hebben zijn twee dingen, elk met eigen data. Een plaats in de ploeg ziet het project. Wat de plaats verder mag, komt uit de rollen die de plaats daar heeft, elk voor een eigen periode, en alleen zolang de plaats in de ploeg zit.</value>
+  </data>
+  <data name="project.crew.roles-not-shown" xml:space="preserve">
+    <value>Welke rollen iemand in de ploeg heeft, en tot wanneer, ziet alleen wie de ploeg beheert.</value>
+  </data>
+  <data name="project.crew.as" xml:space="preserve">
+    <value>In de ploeg, en als</value>
+  </data>
+  <data name="project.crew.counts" xml:space="preserve">
+    <value>Telt nu</value>
+  </data>
+  <data name="project.crew.no-role" xml:space="preserve">
+    <value>in de ploeg, zonder rol</value>
+  </data>
+  <data name="project.crew.member" xml:space="preserve">
+    <value>in de ploeg</value>
+  </data>
+  <data name="project.crew.remove" xml:space="preserve">
+    <value>Verwijderen</value>
+  </data>
+  <data name="project.crew.take" xml:space="preserve">
+    <value>Afnemen</value>
+  </data>
+  <data name="project.actions" xml:space="preserve">
+    <value>Acties</value>
+  </data>
+  <data name="project.rename.label" xml:space="preserve">
+    <value>Hernoemen naar</value>
+  </data>
+  <data name="project.rename" xml:space="preserve">
+    <value>Hernoemen</value>
+  </data>
+  <data name="project.plan.label" xml:space="preserve">
+    <value>Plannen voor</value>
+  </data>
+  <data name="project.plan.first" xml:space="preserve">
+    <value>De eerste dag</value>
+  </data>
+  <data name="project.plan.last" xml:space="preserve">
+    <value>De laatste dag</value>
+  </data>
+  <data name="project.plan" xml:space="preserve">
+    <value>Plannen</value>
+  </data>
+  <data name="project.plan.help" xml:space="preserve">
+    <value>De dagen waarvoor het werk gepland is, de eerste en de laatste; beide leeg haalt de planning weg. Een inspectie gaat daarna over dagen daarbinnen.</value>
+  </data>
+  <data name="project.add.label" xml:space="preserve">
+    <value>Een plaats in de ploeg zetten</value>
+  </data>
+  <data name="project.pick-seat" xml:space="preserve">
+    <value>(kies een plaats)</value>
+  </data>
+  <data name="project.add.no-role" xml:space="preserve">
+    <value>(geen rol: ziet het project, meer niet)</value>
+  </data>
+  <data name="project.until" xml:space="preserve">
+    <value>Tot; leeg is voorgoed</value>
+  </data>
+  <data name="project.add" xml:space="preserve">
+    <value>Aan de ploeg toevoegen</value>
+  </data>
+  <data name="project.add.help" xml:space="preserve">
+    <value>Elke actieve plaats van de tenant, ook de eigen plaats, tot de gekozen dag of voorgoed. Een hier gekozen rol geldt voor dezelfde periode.</value>
+  </data>
+  <data name="project.give.label" xml:space="preserve">
+    <value>Een ploegrol geven</value>
+  </data>
+  <data name="project.pick-member" xml:space="preserve">
+    <value>(kies een ploeglid)</value>
+  </data>
+  <data name="project.pick-role" xml:space="preserve">
+    <value>(kies een rol)</value>
+  </data>
+  <data name="project.give" xml:space="preserve">
+    <value>De rol geven</value>
+  </data>
+  <data name="project.give.help" xml:space="preserve">
+    <value>Naast de rollen die het ploeglid al heeft, tot de gekozen dag of voorgoed; een rol afnemen kan in de ploegtabel. De rechten van de rol zelf hebben is niet nodig, en de rol mag naar de eigen plaats. In een ploeg geeft een rol alleen wat op dit project werkt; projecten openen en de eigenaar aanwijzen komen uit de organisatie. De lijst bevat de projectrollen van de tenant die in gebruik zijn: een rol van de organisatie wordt in een ploeg geweigerd, wat de uitprobeerpagina laat zien.</value>
+  </data>
+  <data name="project.move.label" xml:space="preserve">
+    <value>Verplaatsen naar</value>
+  </data>
+  <data name="project.pick-unit" xml:space="preserve">
+    <value>(kies een eenheid)</value>
+  </data>
+  <data name="project.move" xml:space="preserve">
+    <value>Verplaatsen</value>
+  </data>
+  <data name="project.owner.label" xml:space="preserve">
+    <value>De eigenaar wijzigen in</value>
+  </data>
+  <data name="project.owner" xml:space="preserve">
+    <value>Eigenaar wijzigen</value>
+  </data>
+  <data name="project.reopen.label" xml:space="preserve">
+    <value>Het project heropenen</value>
+  </data>
+  <data name="project.reopen" xml:space="preserve">
+    <value>Heropenen</value>
+  </data>
+  <data name="project.reopen.help" xml:space="preserve">
+    <value>Wie een project mag sluiten, mag het heropenen.</value>
+  </data>
+  <data name="project.close.label" xml:space="preserve">
+    <value>Het project sluiten</value>
+  </data>
+  <data name="project.close" xml:space="preserve">
+    <value>Sluiten</value>
+  </data>
+  <data name="project.inspections" xml:space="preserve">
+    <value>Inspecties</value>
+  </data>
+  <data name="project.inspections.none" xml:space="preserve">
+    <value>Nog geen vastgelegd.</value>
+  </data>
+  <data name="project.inspections.title" xml:space="preserve">
+    <value>Titel</value>
+  </data>
+  <data name="project.inspections.days" xml:space="preserve">
+    <value>Dagen</value>
+  </data>
+  <data name="project.inspections.by" xml:space="preserve">
+    <value>Vastgelegd door</value>
+  </data>
+  <data name="project.inspections.at" xml:space="preserve">
+    <value>Op</value>
+  </data>
+  <data name="project.inspect.label" xml:space="preserve">
+    <value>Een inspectie toevoegen</value>
+  </data>
+  <data name="project.inspect.what" xml:space="preserve">
+    <value>Wat er gevonden is</value>
+  </data>
+  <data name="project.inspect.first" xml:space="preserve">
+    <value>De eerste dag waarover het gaat</value>
+  </data>
+  <data name="project.inspect.last" xml:space="preserve">
+    <value>De laatste dag waarover het gaat</value>
+  </data>
+  <data name="project.inspect" xml:space="preserve">
+    <value>Vastleggen</value>
+  </data>
+  <data name="project.inspect.help" xml:space="preserve">
+    <value>De dagen waarover het gaat, de eerste en de laatste; beide leeg is de dag van vastleggen volgens de klok in UTC, wat oostelijk of westelijk daarvan een andere dag dan vandaag kan zijn. Bij een gepland project liggen ze binnen de geplande dagen, anders weigert de API.</value>
+  </data>
+  <data name="try.intro" xml:space="preserve">
+    <value>Stuur elke aanroep die de API kent, als de aangemelde persoon, als niemand, of in een willekeurige tenant, en zie wat de API beslist: de status en, bij een weigering, de code. De voorbeelden hieronder doen met opzet wat hun persoon niet mag.</value>
+  </data>
+  <data name="try.free" xml:space="preserve">
+    <value>Vrije invoer</value>
+  </data>
+  <data name="try.action" xml:space="preserve">
+    <value>Actie</value>
+  </data>
+  <data name="try.action.open-project" xml:space="preserve">
+    <value>Project openen</value>
+  </data>
+  <data name="try.action.check-key" xml:space="preserve">
+    <value>Een recht op een project nagaan</value>
+  </data>
+  <data name="try.action.units-with-key" xml:space="preserve">
+    <value>Eenheden waar ik een recht heb</value>
+  </data>
+  <data name="try.action.seat-name" xml:space="preserve">
+    <value>Naam van een plaats</value>
+  </data>
+  <data name="try.action.unit-path" xml:space="preserve">
+    <value>Pad van een eenheid</value>
+  </data>
+  <data name="try.action.role-name" xml:space="preserve">
+    <value>Naam van een rol</value>
+  </data>
+  <data name="try.action.rename-project" xml:space="preserve">
+    <value>Project hernoemen</value>
+  </data>
+  <data name="try.action.move-project" xml:space="preserve">
+    <value>Project verplaatsen</value>
+  </data>
+  <data name="try.action.close-project" xml:space="preserve">
+    <value>Project sluiten</value>
+  </data>
+  <data name="try.action.reopen-project" xml:space="preserve">
+    <value>Project heropenen</value>
+  </data>
+  <data name="try.action.record-inspection" xml:space="preserve">
+    <value>Een inspectie vastleggen</value>
+  </data>
+  <data name="try.action.add-to-crew" xml:space="preserve">
+    <value>Aan de ploeg toevoegen</value>
+  </data>
+  <data name="try.action.give-crew-role" xml:space="preserve">
+    <value>Een ploegrol geven</value>
+  </data>
+  <data name="try.action.take-crew-role" xml:space="preserve">
+    <value>Een ploegrol afnemen</value>
+  </data>
+  <data name="try.action.remove-from-crew" xml:space="preserve">
+    <value>Uit de ploeg verwijderen</value>
+  </data>
+  <data name="try.action.change-owner" xml:space="preserve">
+    <value>Eigenaar wijzigen</value>
+  </data>
+  <data name="try.action.grant-org-role" xml:space="preserve">
+    <value>Een organisatierol toekennen</value>
+  </data>
+  <data name="try.action.revoke-org-role" xml:space="preserve">
+    <value>Een organisatierol intrekken</value>
+  </data>
+  <data name="try.action.suspend-seat" xml:space="preserve">
+    <value>Een plaats schorsen</value>
+  </data>
+  <data name="try.action.withdraw-placement" xml:space="preserve">
+    <value>Een plaatsing intrekken</value>
+  </data>
+  <data name="try.field.project" xml:space="preserve">
+    <value>Project</value>
+  </data>
+  <data name="try.field.key" xml:space="preserve">
+    <value>Recht</value>
+  </data>
+  <data name="try.field.name" xml:space="preserve">
+    <value>Naam</value>
+  </data>
+  <data name="try.field.unit" xml:space="preserve">
+    <value>Eenheid</value>
+  </data>
+  <data name="try.field.title" xml:space="preserve">
+    <value>Titel</value>
+  </data>
+  <data name="try.field.seat" xml:space="preserve">
+    <value>Plaats</value>
+  </data>
+  <data name="try.field.role" xml:space="preserve">
+    <value>Rol</value>
+  </data>
+  <data name="try.field.until" xml:space="preserve">
+    <value>Tot</value>
+  </data>
+  <data name="try.field.reason" xml:space="preserve">
+    <value>Reden</value>
+  </data>
+  <data name="try.tenant.blank" xml:space="preserve">
+    <value>leeg: geen Tenant-header</value>
+  </data>
+  <data name="try.no-token" xml:space="preserve">
+    <value>Geen token: anoniem aanroepen (meldt nooit af)</value>
+  </data>
+  <data name="try.send" xml:space="preserve">
+    <value>Versturen</value>
+  </data>
+  <data name="try.presets" xml:space="preserve">
+    <value>Voorbeelden</value>
+  </data>
+  <data name="try.presets.intro" xml:space="preserve">
+    <value>Elk voorbeeld draait als zijn persoon, met het token van die persoon uit de dev-login, en laat de eigen aanmelding met rust. Elk is een weigering in de demonstratie zoals die gevuld is, of een leesvraag die mag naast dezelfde die geweigerd wordt, dus ze uitvoeren verandert niets. Een rol die eerst vanuit deze UI gegeven is, kan er een laten slagen.</value>
+  </data>
+  <data name="try.run-all" xml:space="preserve">
+    <value>Alles uitvoeren</value>
+  </data>
+  <data name="try.run" xml:space="preserve">
+    <value>Uitvoeren</value>
+  </data>
+  <data name="try.attempt" xml:space="preserve">
+    <value>Poging</value>
+  </data>
+  <data name="try.as" xml:space="preserve">
+    <value>Als</value>
+  </data>
+  <data name="try.expected" xml:space="preserve">
+    <value>Verwacht</value>
+  </data>
+  <data name="try.history" xml:space="preserve">
+    <value>Geschiedenis</value>
+  </data>
+  <data name="try.history.none" xml:space="preserve">
+    <value>In deze sessie is nog niets verstuurd.</value>
+  </data>
+  <data name="try.history.at" xml:space="preserve">
+    <value>Om</value>
+  </data>
+  <data name="try.history.what" xml:space="preserve">
+    <value>Wat</value>
+  </data>
+  <data name="try.history.request" xml:space="preserve">
+    <value>Verzoek</value>
+  </data>
+  <data name="nav.history" xml:space="preserve">
+    <value>Toegangsgeschiedenis</value>
+  </data>
+  <data name="history.intro" xml:space="preserve">
+    <value>&lt;code&gt;GET /tenancy/history&lt;/code&gt;: elke wijziging in wie wat mag in {0}, de nieuwste eerst, elk met wie haar deed. Lezen vraagt het recht &lt;code&gt;tenancy.history.view&lt;/code&gt; voor de hele tenant; zonder dat recht weigert de API, en staat de weigering hier. Een regel noemt plaatsen, eenheden en rollen bij hun id, en zegt nooit waarom een rol gegeven is; de naam van wie handelde komt uit de directory. De lijst komt per pagina: &lt;em&gt;Meer&lt;/em&gt; vraagt de volgende pagina met de markering die de vorige gaf.</value>
+  </data>
+  <data name="history.none" xml:space="preserve">
+    <value>Er is nog niets gewijzigd aan iemands toegang.</value>
+  </data>
+  <data name="history.when" xml:space="preserve">
+    <value>Wanneer</value>
+  </data>
+  <data name="history.what" xml:space="preserve">
+    <value>Wat</value>
+  </data>
+  <data name="history.by" xml:space="preserve">
+    <value>Door</value>
+  </data>
+  <data name="history.details" xml:space="preserve">
+    <value>Details</value>
+  </data>
+  <data name="actor.system" xml:space="preserve">
+    <value>de applicatie</value>
+  </data>
+  <data name="actor.operator" xml:space="preserve">
+    <value>een operator</value>
+  </data>
+  <data name="actor.token" xml:space="preserve">
+    <value>een token uit een link</value>
+  </data>
+  <data name="project.changed-by" xml:space="preserve">
+    <value>Laatst gewijzigd door</value>
+  </data>
+  <data name="nav.invitations" xml:space="preserve">
+    <value>Uitnodigingen</value>
+  </data>
+  <data name="nav.accept" xml:space="preserve">
+    <value>Uitnodiging accepteren</value>
+  </data>
+  <data name="invitations.intro" xml:space="preserve">
+    <value>&lt;code&gt;GET /tenancy/invitations&lt;/code&gt;: de uitnodigingen voor {0} die nog geaccepteerd kunnen worden, voor wie plaatsen beheert bij de eenheid ervan. Uitnodigen vraagt de rechten &lt;code&gt;tenancy.seats.manage&lt;/code&gt; voor de hele tenant en &lt;code&gt;tenancy.grants.manage&lt;/code&gt; bij de eenheid, en voor de rol geldt de regel die voor elke toekenning geldt; zonder die rechten weigert de API, en staat de weigering hier. Er ontstaat geen plaats voordat de persoon accepteert.</value>
+  </data>
+  <data name="invitations.none" xml:space="preserve">
+    <value>Er staat geen uitnodiging open.</value>
+  </data>
+  <data name="invitations.address" xml:space="preserve">
+    <value>Adres</value>
+  </data>
+  <data name="invitations.unit" xml:space="preserve">
+    <value>Eenheid</value>
+  </data>
+  <data name="invitations.role-until" xml:space="preserve">
+    <value>tot {0}</value>
+  </data>
+  <data name="invitations.open-until" xml:space="preserve">
+    <value>Open tot</value>
+  </data>
+  <data name="invitations.by" xml:space="preserve">
+    <value>Uitgenodigd door</value>
+  </data>
+  <data name="invitations.revoke" xml:space="preserve">
+    <value>Intrekken</value>
+  </data>
+  <data name="invitations.invite.title" xml:space="preserve">
+    <value>Iemand uitnodigen</value>
+  </data>
+  <data name="invitations.invite.label" xml:space="preserve">
+    <value>Een plaats in een eenheid, met een rol daar, voor de persoon op een adres</value>
+  </data>
+  <data name="invitations.invite.address" xml:space="preserve">
+    <value>E-mailadres</value>
+  </data>
+  <data name="invitations.invite" xml:space="preserve">
+    <value>Uitnodigen</value>
+  </data>
+  <data name="invitations.invite.help" xml:space="preserve">
+    <value>De uitnodiging blijft een week open. Een rol met een einde moet na die week eindigen. Het antwoord zegt niets over de vraag of het adres al een account heeft.</value>
+  </data>
+  <data name="invitations.issued.title" xml:space="preserve">
+    <value>Uitgenodigd. Wat volgt is alleen nu te zien.</value>
+  </data>
+  <data name="invitations.issued.text" xml:space="preserve">
+    <value>Deze link is voor de persoon, tenzij een mail van Supabase Auth hem brengt: een nieuw account krijgt hem per mail waar de Host het adres van deze UI kent. Hij bevat het token van de uitnodiging, waarvan de API alleen een digest bewaart, zodat niemand het opnieuw kan tonen. De link werkt tot {0}, voor het account met het uitgenodigde adres, na het aanmelden.</value>
+  </data>
+  <data name="invitations.issued.token" xml:space="preserve">
+    <value>Of alleen het token, om te plakken op de pagina "Uitnodiging accepteren":</value>
+  </data>
+  <data name="accept.intro" xml:space="preserve">
+    <value>&lt;code&gt;POST /invitations/accept&lt;/code&gt;: {0} accepteert de uitnodiging waar een token voor is, en heeft vanaf die ene aanroep een plaats, de plaatsing en de rol. De aanroep noemt geen tenant: het token zegt welke. De API weigert een token dat is ingetrokken, dat iemand anders gebruikte of waarvan de week voorbij is, en een token dat naar een ander adres ging dan dat van dit account.</value>
+  </data>
+  <data name="accept.token" xml:space="preserve">
+    <value>Het token van de uitnodiging</value>
+  </data>
+  <data name="accept.name" xml:space="preserve">
+    <value>Naam voor de plaats, zoals de anderen in de tenant die zien</value>
+  </data>
+  <data name="accept.send" xml:space="preserve">
+    <value>Accepteren</value>
+  </data>
+  <data name="accept.help" xml:space="preserve">
+    <value>Een link naar deze pagina bevat het token na het #. Open de link na het aanmelden, of plak het token hier.</value>
+  </data>
+  <data name="accept.done" xml:space="preserve">
+    <value>Geaccepteerd: een plaats in &lt;strong&gt;{0}&lt;/strong&gt;, waar deze sessie nu werkt.</value>
+  </data>
+  <data name="accept.sign-in-first" xml:space="preserve">
+    <value>Accepteren vraagt een aanmelding met het uitgenodigde adres: &lt;a href="login"&gt;aanmelden&lt;/a&gt;, en daarna de link opnieuw openen of het token hier plakken. De link in een mail van Supabase Auth meldt de persoon zelf aan.</value>
+  </data>
+  <data name="accept.link.refused" xml:space="preserve">
+    <value>Supabase Auth nam de link uit de mail niet aan: die werkt één keer, en een beperkte tijd. Wie er een wachtwoord mee koos, meldt zich aan op de aanmeldpagina; anders is een nieuwe uitnodiging nodig.</value>
+  </data>
+  <data name="accept.link.asks" xml:space="preserve">
+    <value>Deze link meldt &lt;strong&gt;{0}&lt;/strong&gt; aan, en dit tabblad is aangemeld als &lt;strong&gt;{1}&lt;/strong&gt;. Er is niets veranderd. Volg de link alleen als die uit een mail komt die aan de aangemelde persoon zelf is gestuurd: iedereen kan een link maken die een eigen account aanmeldt.</value>
+  </data>
+  <data name="accept.link.keep" xml:space="preserve">
+    <value>Aangemeld blijven als {0}</value>
+  </data>
+  <data name="accept.link.take" xml:space="preserve">
+    <value>Aanmelden als {0}</value>
+  </data>
+  <data name="accept.password.title" xml:space="preserve">
+    <value>Een wachtwoord kiezen</value>
+  </data>
+  <data name="accept.password.intro" xml:space="preserve">
+    <value>De link in de mail meldde {0} aan, deze ene keer. Met een wachtwoord is de volgende aanmelding op de aanmeldpagina. Het gaat naar Supabase Auth (&lt;code&gt;PUT user&lt;/code&gt;) en wordt hier nergens bewaard. Daarna volgt de uitnodiging.</value>
+  </data>
+  <data name="accept.password.label" xml:space="preserve">
+    <value>Nieuw wachtwoord</value>
+  </data>
+  <data name="accept.password.again" xml:space="preserve">
+    <value>Hetzelfde wachtwoord nogmaals</value>
+  </data>
+  <data name="accept.password.set" xml:space="preserve">
+    <value>Wachtwoord instellen</value>
+  </data>
+  <data name="accept.password.differ" xml:space="preserve">
+    <value>De twee wachtwoorden verschillen.</value>
+  </data>
+  <data name="accept.password.done" xml:space="preserve">
+    <value>Het wachtwoord is ingesteld: de volgende aanmelding is op de aanmeldpagina, met het adres en dat wachtwoord.</value>
+  </data>
+  <data name="login.link.refused" xml:space="preserve">
+    <value>Supabase Auth kent de aanmelding niet die deze link meebrengt.</value>
+  </data>
+  <data name="login.password.not-taken" xml:space="preserve">
+    <value>Supabase Auth nam dat wachtwoord niet aan: het vraagt een langer of een minder gangbaar wachtwoord.</value>
+  </data>
+  <data name="login.password.session-over" xml:space="preserve">
+    <value>De aanmelding die de link gaf is voorbij, dus er is geen wachtwoord ingesteld.</value>
+  </data>
+  <data name="nav.project-roles" xml:space="preserve">
+    <value>Ploegrollen</value>
+  </data>
+  <data name="try.field.project-role" xml:space="preserve">
+    <value>Ploegrol</value>
+  </data>
+  <data name="project-roles.intro" xml:space="preserve">
+    <value>&lt;code&gt;GET /project-roles&lt;/code&gt;: de rollen die {0} voor zijn ploegen heeft, ook de gearchiveerde. Een ploeglid heeft er een op één project, en die geeft alleen wat op dat project werkt. De startrollen zijn gemaakt toen de tenant werd ingericht; de tenant hernoemt ze, geeft ze andere rechten en archiveert ze, en maakt eigen rollen. Iedereen die in de tenant werkt, leest hun namen. Hun rechten, en een rol maken en wijzigen, zijn voor wie &lt;code&gt;tenancy.roles.manage&lt;/code&gt; voor de hele tenant heeft; iemand anders weigert de API, en de weigering staat hier.</value>
+  </data>
+  <data name="project-roles.none" xml:space="preserve">
+    <value>De tenant heeft geen ploegrollen.</value>
+  </data>
+  <data name="project-roles.description" xml:space="preserve">
+    <value>Omschrijving</value>
+  </data>
+  <data name="project-roles.made-from" xml:space="preserve">
+    <value>Gemaakt van</value>
+  </data>
+  <data name="project-roles.made-by-tenant" xml:space="preserve">
+    <value>door de tenant gemaakt</value>
+  </data>
+  <data name="project-roles.keys" xml:space="preserve">
+    <value>Rechten</value>
+  </data>
+  <data name="project-roles.archive" xml:space="preserve">
+    <value>Archiveren</value>
+  </data>
+  <data name="project-roles.make.title" xml:space="preserve">
+    <value>Een ploegrol maken</value>
+  </data>
+  <data name="project-roles.make.label" xml:space="preserve">
+    <value>Een naam, waarvoor de rol is, en de rechten die de rol in een ploeg geeft</value>
+  </data>
+  <data name="project-roles.make" xml:space="preserve">
+    <value>De rol maken</value>
+  </data>
+  <data name="project-roles.make.help" xml:space="preserve">
+    <value>Alleen rechten die op een project werken, horen bij een ploegrol: een recht van de organisatie wordt geweigerd, wat hier te zien is.</value>
+  </data>
+  <data name="project-roles.change.title" xml:space="preserve">
+    <value>Een ploegrol wijzigen</value>
+  </data>
+  <data name="project-roles.pick" xml:space="preserve">
+    <value>(kies een ploegrol)</value>
+  </data>
+  <data name="project-roles.rename" xml:space="preserve">
+    <value>Hernoemen</value>
+  </data>
+  <data name="project-roles.set-keys" xml:space="preserve">
+    <value>De rechten zetten</value>
+  </data>
+  <data name="project-roles.change.help" xml:space="preserve">
+    <value>Hernoemen zet de naam en waarvoor de rol is samen: een lege omschrijving wordt gewist. De rechten worden precies de aangevinkte, geen enkele haalt ze allemaal weg. Een gearchiveerde rol verandert niet meer, en de rol van de ploegleider wordt niet gearchiveerd: elke eigenaar van een project heeft die.</value>
+  </data>
+</root>

@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>Examples.Tenancy.Ui</RootNamespace>
+    <!--
+      The components' scoped styles are bundled as $(PackageId).styles.css. Directory.Build.props gives every project
+      the temporary package prefix, which would rename the bundle App.razor links to; this project is never packed,
+      so its id is simply its name.
+    -->
+    <PackageId>$(MSBuildProjectName)</PackageId>
+    <!-- As the Blazor Web App template sets it: a navigation during static rendering returns rather than throws. -->
+    <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+  </PropertyGroup>
+
+  <!--
+    ServiceDefaults only: no toolkit project, no analyzers and no module contracts. The UI is a plain HTTP client
+    of the Host and knows the API by its JSON alone, so what it shows is what any client, in any language, would
+    see: the status, the problem's code and its arguments.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\Shared\Examples.ServiceDefaults\Examples.ServiceDefaults.csproj" />
+  </ItemGroup>
+
+</Project>

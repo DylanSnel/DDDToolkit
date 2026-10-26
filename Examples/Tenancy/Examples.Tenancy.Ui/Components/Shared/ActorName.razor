@@ -1,0 +1,22 @@
+@* Who acted, as an answer names it: a seat by the name the directory gives it, anyone else by what kind of actor it was. *@
+@Shown
+
+@code {
+    /// <summary>Who acted, or <see langword="null"/> when the answer did not say.</summary>
+    [Parameter, EditorRequired]
+    public ActorInfo? Actor { get; set; }
+
+    /// <summary>The names the page asked the directory for.</summary>
+    [Parameter]
+    public DirectoryNames? Names { get; set; }
+
+    private string Shown => Actor switch
+    {
+        null => "–",
+        { Kind: "seat", SeatId: { } seat } => Names?.OfSeat(seat) ?? seat.ToString(),
+        { Kind: "system" } => T["actor.system"],
+        { Kind: "operator" } => T["actor.operator"],
+        { Kind: "token" } => T["actor.token"],
+        _ => Actor.Kind,
+    };
+}

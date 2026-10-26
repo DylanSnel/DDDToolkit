@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="coverlet.collector">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="FluentAssertions" />
+    <!-- The resx-backed localizer, to read the package's refusal texts the way an application does. -->
+    <PackageReference Include="Microsoft.Extensions.Localization" />
+    <!-- A service provider, to resolve the checks an application registers for its requests. -->
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+  </ItemGroup>
+
+  <!--
+    Everything is tested through the application's own classes in the TestHost, two kinds of resource with
+    members and different rules, and through the package's public API only: there is no InternalsVisibleTo.
+    The generator runs there, on the host's ids, its two aggregates and its two member classes.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\DDDToolkit.Supporting.Membership.TestHost\DDDToolkit.Supporting.Membership.TestHost.csproj" />
+    <ProjectReference Include="..\..\Source\DDDToolkit.Supporting.Membership\DDDToolkit.Supporting.Membership.csproj" />
+    <ProjectReference Include="..\..\Source\DDDToolkit.Localization\DDDToolkit.Localization.csproj" />
+  </ItemGroup>
+
+</Project>

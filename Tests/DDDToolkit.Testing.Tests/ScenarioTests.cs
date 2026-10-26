@@ -15,7 +15,7 @@ public class ScenarioTests
     private static Order Confirmed()
     {
         var order = Draft();
-        order.AddLine(Sku.Of("SKU-1"), 2);
+        order.AddLine(Sku.From("SKU-1"), 2);
         order.Confirm();
         return order;
     }
@@ -28,7 +28,7 @@ public class ScenarioTests
         var order = Draft();   // the constructor already raised OrderPlaced
 
         AggregateScenario.Given(order)
-            .When(o => o.AddLine(Sku.Of("SKU-1"), 3))
+            .When(o => o.AddLine(Sku.From("SKU-1"), 3))
             .RaisedExactly<LineAdded>();
     }
 
@@ -38,8 +38,8 @@ public class ScenarioTests
         var order = Draft();
 
         AggregateScenario.Given(order)
-            .When(o => o.AddLine(Sku.Of("SKU-1"), 3))
-            .Raised(new LineAdded(order.Id, Sku.Of("SKU-1"), 3));
+            .When(o => o.AddLine(Sku.From("SKU-1"), 3))
+            .Raised(new LineAdded(order.Id, Sku.From("SKU-1"), 3));
     }
 
     [Fact]
@@ -48,7 +48,7 @@ public class ScenarioTests
         var order = Draft();
 
         AggregateScenario.Given(order)
-            .When(o => o.AddLine(Sku.Of("SKU-1"), 3))
+            .When(o => o.AddLine(Sku.From("SKU-1"), 3))
             .Raised<LineAdded>(added => added.Quantity == 3);
     }
 
@@ -58,10 +58,10 @@ public class ScenarioTests
         var order = Draft();
 
         var added = AggregateScenario.Given(order)
-            .When(o => o.AddLine(Sku.Of("SKU-1"), 3))
+            .When(o => o.AddLine(Sku.From("SKU-1"), 3))
             .SingleEvent<LineAdded>();
 
-        added.Sku.Should().Be(Sku.Of("SKU-1"));
+        added.Sku.Should().Be(Sku.From("SKU-1"));
         added.OccurredAt.Should().NotBe(default);
     }
 
@@ -73,12 +73,12 @@ public class ScenarioTests
         var added = AggregateScenario.Given(order)
             .When(o =>
             {
-                o.AddLine(Sku.Of("SKU-1"), 1);
-                o.AddLine(Sku.Of("SKU-2"), 2);
+                o.AddLine(Sku.From("SKU-1"), 1);
+                o.AddLine(Sku.From("SKU-2"), 2);
             })
             .EventsOf<LineAdded>();
 
-        added.Select(line => line.Sku).Should().Equal(Sku.Of("SKU-1"), Sku.Of("SKU-2"));
+        added.Select(line => line.Sku).Should().Equal(Sku.From("SKU-1"), Sku.From("SKU-2"));
     }
 
     [Fact]
@@ -89,7 +89,7 @@ public class ScenarioTests
         AggregateScenario.Given(order)
             .When(o =>
             {
-                o.AddLine(Sku.Of("SKU-1"), 1);
+                o.AddLine(Sku.From("SKU-1"), 1);
                 o.Confirm();
                 o.Ship("TRACK-1");
             })
@@ -104,11 +104,11 @@ public class ScenarioTests
         AggregateScenario.Given(order)
             .When(o =>
             {
-                o.AddLine(Sku.Of("SKU-1"), 1);
+                o.AddLine(Sku.From("SKU-1"), 1);
                 o.Confirm();
             })
             .RaisedExactlyThese(
-                new LineAdded(order.Id, Sku.Of("SKU-1"), 1),
+                new LineAdded(order.Id, Sku.From("SKU-1"), 1),
                 new OrderConfirmed(order.Id, 1));
     }
 
@@ -130,7 +130,7 @@ public class ScenarioTests
         var order = Draft();
 
         AggregateScenario.Given(order)
-            .When(o => o.AddLine(Sku.Of("SKU-1"), 1))
+            .When(o => o.AddLine(Sku.From("SKU-1"), 1))
             .Raised<LineAdded>()
             .RaisedNo<OrderConfirmed>();
     }
@@ -156,7 +156,7 @@ public class ScenarioTests
         var order = Draft();
 
         AggregateScenario.Given(order)
-            .WhenThrows<ArgumentOutOfRangeException>(o => o.AddLine(Sku.Of("SKU-1"), 0));
+            .WhenThrows<ArgumentOutOfRangeException>(o => o.AddLine(Sku.From("SKU-1"), 0));
 
         order.Lines.Should().BeEmpty();
     }
@@ -182,7 +182,7 @@ public class ScenarioTests
 
         scenario.PendingEvents.RaisedExactly<OrderPlaced>();
 
-        scenario.When(o => o.AddLine(Sku.Of("SKU-1"), 2)).RaisedExactly<LineAdded>();
+        scenario.When(o => o.AddLine(Sku.From("SKU-1"), 2)).RaisedExactly<LineAdded>();
         scenario.When(o => o.Confirm()).RaisedExactly<OrderConfirmed>();
         scenario.When(o => o.Ship("TRACK-1")).RaisedExactly<OrderShipped>();
 
@@ -199,7 +199,7 @@ public class ScenarioTests
 
         scenario.Drain().RaisedExactly<OrderPlaced>();
 
-        scenario.When(o => o.AddLine(Sku.Of("SKU-1"), 2)).RaisedExactly<LineAdded>();
+        scenario.When(o => o.AddLine(Sku.From("SKU-1"), 2)).RaisedExactly<LineAdded>();
         // Only the LineAdded is left: the OrderPlaced went out with the drain.
         scenario.PendingEvents.RaisedExactly<LineAdded>();
     }
@@ -272,7 +272,7 @@ public class ScenarioTests
             .WhenAsync(async o =>
             {
                 await Task.Yield();
-                o.AddLine(Sku.Of("SKU-1"), 1);
+                o.AddLine(Sku.From("SKU-1"), 1);
             });
 
         raised.RaisedExactly<LineAdded>();

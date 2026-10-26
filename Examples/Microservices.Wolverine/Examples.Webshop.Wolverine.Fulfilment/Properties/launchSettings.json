@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "Examples.Webshop.Wolverine.Fulfilment": {
+      "commandName": "Project",
+      "launchBrowser": false,
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "applicationUrl": "https://localhost:65129;http://localhost:65130"
+    }
+  }
+}

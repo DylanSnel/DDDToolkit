@@ -8,6 +8,16 @@ name: Sample Tests
 # pull and start, and that is the wrong price for every push. Separate from Provider Tests because it
 # answers a different question: not "does the toolkit map to SQL Server" but "does the example still
 # work end to end, however it is hosted".
+#
+# Four entries are not the shop. Tenancy.Supabase runs every test of the Tenancy sample that needs its host on
+# a database: they start Supabase's own images, its Postgres, its Auth server and a mail catcher. They are
+# tests of the sample's own test project and carry the same traits, so the main build and the release, which
+# filter that category out, leave them to this one. Tenancy.Supabase.Floor runs the same tests against the
+# oldest dependency versions the packages allow, which the floors job of Build and Test leaves out with them.
+# Tenancy.SupabaseCli runs the one class of that project that works on the stack the Supabase CLI starts from
+# Examples/Tenancy, as the sample's README has a person start it: the job starts the stack, the tests do not.
+# Tenancy.AppHost starts the Tenancy sample's own AppHost on those images, the API and the UI as processes, and
+# is the one entry that proves the sample across its containers and both processes.
 on:
   push:
     branches: [main]
@@ -22,6 +32,9 @@ jobs:
     # One job per sample, so a red check names the sample that is red.
     name: ${{ matrix.sample }}
     runs-on: ubuntu-latest
+    # A run takes a few minutes beside the pulls. One that hangs on a container is stopped here, not after
+    # the six hours a job may take.
+    timeout-minutes: 30
 
     strategy:
       fail-fast: false
@@ -33,11 +46,42 @@ jobs:
           - Microservices.Pgmq
           - Microservices.Wolverine
           - Microservices.MassTransit
+        # The project the sample's tests are in, and how many of them there are at least; the shop's samples
+        # share one project and play at least five scenarios each. A minimum is the number the entry ran when it
+        # was set, rounded down to a ten where there are hundreds: a trait or a filter that stopped matching
+        # would leave the run green with fewer tests, or with none.
+        include:
+          - sample: Tenancy.Supabase
+            project: Tests/Examples.Tenancy.Tests/Examples.Tenancy.Tests.csproj
+            minimum: 730
+          # The same tests, picked by the same trait, restored, built and run at the dependency floors.
+          - sample: Tenancy.Supabase.Floor
+            project: Tests/Examples.Tenancy.Tests/Examples.Tenancy.Tests.csproj
+            minimum: 730
+            filter: Tenancy.Supabase
+            floor: true
+          # The directory the CLI's stack is started from, which is what makes this entry start one.
+          - sample: Tenancy.SupabaseCli
+            project: Tests/Examples.Tenancy.Tests/Examples.Tenancy.Tests.csproj
+            minimum: 5
+            supabase-cli: Examples/Tenancy
+          # In the project the shop's samples share, with two scenarios of its own: a person signs in at the
+          # Auth server, and the mail of an invitation leads to the page that accepts it.
+          - sample: Tenancy.AppHost
+            minimum: 2
 
     env:
       # Without this the scenarios skip themselves when Docker is missing, which would report green
       # having started nothing.
       DDDTOOLKIT_REQUIRE_CONTAINERS: "1"
+      # The same for the tests that work on a stack the Supabase CLI started: without it they skip themselves
+      # when no stack answers.
+      DDDTOOLKIT_REQUIRE_SUPABASE_CLI: "1"
+      TEST_PROJECT: ${{ matrix.project || 'Tests/Examples.AppHost.Tests/Examples.AppHost.Tests.csproj' }}
+      MINIMUM_TESTS: ${{ matrix.minimum || 5 }}
+      # Empty but for an entry at the dependency floors (see Directory.Packages.props): restore, build and test
+      # each take it, as the floors job of Build and Test passes it.
+      DEPENDENCY_VERSIONS: ${{ matrix.floor && '-p:DDDDependencyVersions=Floor' || '' }}
 
     steps:
       - uses: actions/checkout@v5
@@ -48,21 +92,35 @@ jobs:
           global-json-file: global.json
 
       - name: Restore dependencies
-        run: dotnet restore Tests/DDDToolkit.Examples.AppHost.Tests/DDDToolkit.Examples.AppHost.Tests.csproj
+        run: dotnet restore "$TEST_PROJECT" $DEPENDENCY_VERSIONS
 
       - name: Build
-        run: dotnet build Tests/DDDToolkit.Examples.AppHost.Tests/DDDToolkit.Examples.AppHost.Tests.csproj --no-restore --configuration Release
+        run: dotnet build "$TEST_PROJECT" --no-restore --configuration Release $DEPENDENCY_VERSIONS
 
       - name: Check Docker is available
         run: docker version
 
+      # The release the README's steps were run with. It starts its stack from the sample's own config.toml
+      # and applies the sample's migrations itself, which is the part no other entry covers.
+      - name: Setup the Supabase CLI
+        if: matrix.supabase-cli
+        uses: supabase/setup-cli@v1
+        with:
+          version: 2.119.0
+
+      - name: Start the Supabase CLI's stack
+        if: matrix.supabase-cli
+        working-directory: ${{ matrix.supabase-cli }}
+        run: supabase start
+
       # The Sample trait picks one sample's scenarios, and xunit only starts the class fixture of a class
-      # that has something to run, so each job starts one sample's containers.
+      # that has something to run, so each job starts one sample's containers. An entry that runs another
+      # entry's tests a second way names that entry's trait as its filter.
       - name: Test
         run: >
-          dotnet test Tests/DDDToolkit.Examples.AppHost.Tests/DDDToolkit.Examples.AppHost.Tests.csproj
-          --no-build --configuration Release --verbosity normal
-          --filter "Sample=${{ matrix.sample }}"
+          dotnet test "$TEST_PROJECT"
+          --no-build --configuration Release --verbosity normal $DEPENDENCY_VERSIONS
+          --filter "Sample=${{ matrix.filter || matrix.sample }}"
           --logger "trx;LogFileName=sample-tests.trx"
           --results-directory TestResults
 
@@ -78,8 +136,8 @@ jobs:
           executed=$(grep -o 'executed="[0-9]*"' "$trx" | head -1 | grep -o '[0-9]*')
           passed=$(grep -o 'passed="[0-9]*"' "$trx" | head -1 | grep -o '[0-9]*')
           echo "### ${{ matrix.sample }}: $passed of $executed scenarios passed" >> "$GITHUB_STEP_SUMMARY"
-          if [ "${executed:-0}" -lt 5 ]; then
-            echo "::error::Only ${executed:-0} scenarios ran for ${{ matrix.sample }}."
+          if [ "${executed:-0}" -lt "$MINIMUM_TESTS" ]; then
+            echo "::error::Only ${executed:-0} scenarios ran for ${{ matrix.sample }}, where at least $MINIMUM_TESTS were expected."
             exit 1
           fi
 

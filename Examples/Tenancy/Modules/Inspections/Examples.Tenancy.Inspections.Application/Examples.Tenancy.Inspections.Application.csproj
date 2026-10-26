@@ -1,0 +1,57 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!--
+    Inspections' use cases: a command that records an inspection and the queries that list a project's, or many
+    projects' at a time, each with its own handler; the check every request passes first, which asks Projects'
+    gate; and the module's key. It declares the two ports it needs, IInspectionStore for what its command records
+    and IInspectionReads for what its queries read, and the infrastructure project implements them, so this
+    project references neither Entity Framework nor ASP.NET Core. The Tenancy package brings the caller's tenant
+    and seat and the catalogue its key goes into; Projects' contracts bring the gate and the keys it answers for.
+    Neither knows how anything is stored.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\Examples.Tenancy.Inspections.Domain\Examples.Tenancy.Inspections.Domain.csproj" />
+    <!-- What every module's paged query checks before it reads: that its page is asked for from one end, in a size of the list's own. -->
+    <ProjectReference Include="..\..\..\Shared\Examples.Tenancy.Shared.Application\Examples.Tenancy.Shared.Application.csproj" />
+    <!-- The gate Inspections asks before it records, and the keys it asks with. Contracts only. -->
+    <ProjectReference Include="..\..\Projects\Examples.Tenancy.Projects.Contracts\Examples.Tenancy.Projects.Contracts.csproj" />
+    <!-- The caller's tenant and seat, and the catalogue; not the Tenants module. -->
+    <ProjectReference Include="..\..\..\..\..\Source\DDDToolkit.Supporting.Tenancy\DDDToolkit.Supporting.Tenancy.csproj" />
+    <!-- The module adds the texts of its refusals, English and Dutch, to the toolkit's localizer. No ASP.NET Core comes with it. -->
+    <ProjectReference Include="..\..\..\..\..\Source\DDDToolkit.Localization\DDDToolkit.Localization.csproj" />
+  </ItemGroup>
+
+  <!--
+    The request and handler interfaces and the pipeline, and nothing that runs them: the mediator itself is
+    generated into the host, which is the one project that references Mediator.SourceGenerator.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Mediator.Abstractions" />
+  </ItemGroup>
+
+  <!--
+    What a paged query takes and answers, PagingArguments and Page<T>: the primitives of the paging the
+    infrastructure project reads with and the API project serves. The package depends on nothing, so no
+    HotChocolate and no Entity Framework comes with it.
+  -->
+  <ItemGroup>
+    <PackageReference Include="GreenDonut.Data.Primitives" />
+  </ItemGroup>
+
+  <!--
+    The generators. A NuGet consumer gets them through the packages above; inside this repository they are wired by
+    hand. Tenancy's holds the list of keys this module marks with [TenancyPermissions] to what the project that
+    composes the modules can read, and writes nothing here: a module composes no other module's keys.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\..\Source\DDDToolkit.Analyzers\DDDToolkit.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\..\..\..\Source\DDDToolkit.Supporting.Tenancy.Analyzers\DDDToolkit.Supporting.Tenancy.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+</Project>

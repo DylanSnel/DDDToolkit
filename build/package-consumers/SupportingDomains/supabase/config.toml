@@ -1,0 +1,3 @@
+# The Supabase project the host's export writes into. The export finds it the way the Supabase CLI does, from
+# the host's folder upwards, and writes supabase/migrations beside this file. Nothing else reads it here.
+project_id = "acme-press"

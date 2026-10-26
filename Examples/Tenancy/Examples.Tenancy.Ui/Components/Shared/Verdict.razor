@@ -1,0 +1,8 @@
+@* Whether a preset got the answer it expects. *@
+<span class="badge @(AsExpected ? "text-bg-success" : "text-bg-danger")">@(AsExpected ? T["verdict.expected"] : T["verdict.unexpected"])</span>
+
+@code {
+    /// <summary>Whether the status and the code were the expected ones.</summary>
+    [Parameter]
+    public bool AsExpected { get; set; }
+}

@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!--
+    The application's tenancy classes: the six classes the Tenancy package's templates are closed over. The four that
+    add fields and rules of the application's are declared under Aggregates; the organization and the role add
+    nothing, and Tenancy's switch in Module.cs has the generator write them. The package brings the rules; this
+    project brings nothing that stores them. It references neither Entity Framework nor ASP.NET Core: the context and
+    its migrations are the infrastructure project's, which gets modelBuilder.AddTenancy() closed over these classes,
+    written or declared, because it declares the same module.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\Examples.Tenancy.Tenants.Contracts\Examples.Tenancy.Tenants.Contracts.csproj" />
+    <ProjectReference Include="..\..\..\..\..\Source\DDDToolkit\DDDToolkit.csproj" />
+    <ProjectReference Include="..\..\..\..\..\Source\DDDToolkit.Supporting.Tenancy\DDDToolkit.Supporting.Tenancy.csproj" />
+  </ItemGroup>
+
+  <!-- The generator. A NuGet consumer gets it through the packages above; inside this repository it is wired by hand. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\..\Source\DDDToolkit.Analyzers\DDDToolkit.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+</Project>

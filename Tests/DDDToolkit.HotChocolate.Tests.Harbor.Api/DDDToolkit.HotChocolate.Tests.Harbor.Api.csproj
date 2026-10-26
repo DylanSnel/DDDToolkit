@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The same module's API project: it builds the module's GraphQL schema, references HotChocolate, and declares no
+    id of its own. The HotChocolate generator runs here, so this is where the ids of the domain project next to it
+    are bound to their scalars: its generated AddHarborGraphQlRuntimeBindings() is all of that.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DDDToolkit.HotChocolate.Tests.Harbor.Domain\DDDToolkit.HotChocolate.Tests.Harbor.Domain.csproj" />
+    <ProjectReference Include="..\..\Source\DDDToolkit.HotChocolate\DDDToolkit.HotChocolate.csproj" />
+  </ItemGroup>
+
+  <!-- Generators. A NuGet consumer gets these through the packages above; inside this repository they are wired by hand. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\Source\DDDToolkit.Analyzers\DDDToolkit.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\Source\DDDToolkit.HotChocolate.Analyzers\DDDToolkit.HotChocolate.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+</Project>

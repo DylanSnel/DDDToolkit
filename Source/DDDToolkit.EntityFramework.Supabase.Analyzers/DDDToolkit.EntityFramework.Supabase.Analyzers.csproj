@@ -11,7 +11,7 @@
     <IncludeSymbols>false</IncludeSymbols>
     <Title>Domain Driven Design Toolkit - Supabase Analyzers</Title>
     <PackageTags>ddd;domain;driven;design;toolkit;entity;framework;efcore;migrations;supabase</PackageTags>
-    <Description>Source generator for DDDToolkit.EntityFramework.Supabase: finds the [SupabaseMigrations] factories a project references, so the build can export their migrations.</Description>
+    <Description>Source generators for DDDToolkit.EntityFramework.Supabase: write the design-time factory of every context marked [SupabaseMigrations], and find the marked contexts a project references, so the build can export their migrations and the host register them all with one AddSupabaseMigrations().</Description>
   </PropertyGroup>
 
   <ItemGroup>

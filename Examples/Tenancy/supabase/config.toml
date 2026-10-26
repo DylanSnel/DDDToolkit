@@ -1,0 +1,77 @@
+# The Supabase project of the Tenancy sample, as the Supabase CLI reads it. The files under migrations/ are
+# written by the build of Examples.Tenancy.Exporter, one hand-written file apart, and applied by the
+# CLI (or by branching) as the role that owns the database: the host applies none, and logs in as a role that
+# owns nothing.
+# https://supabase.com/docs/guides/local-development/cli/config
+project_id = "examples-tenancy"
+
+[api]
+enabled = true
+# The port the dev login's issuer and the sample's development settings assume, so one local stack runs at a time.
+port = 54321
+# The modules' schemas are not exposed: the sample's own API is the way in, and the Data API reaches none of them.
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+# The same major version as the hosted project's.
+major_version = 17
+
+[db.pooler]
+enabled = false
+port = 54329
+pool_mode = "transaction"
+default_pool_size = 20
+max_client_conn = 100
+
+[db.migrations]
+enabled = true
+
+[db.seed]
+# The host seeds its own demonstration data, through its use cases.
+enabled = false
+
+[realtime]
+enabled = true
+
+[studio]
+enabled = true
+port = 54323
+api_url = "http://127.0.0.1"
+
+# Mail the local stack would have sent is caught here.
+[local_smtp]
+enabled = true
+port = 54324
+
+[storage]
+enabled = true
+file_size_limit = "50MiB"
+
+# The sample reads no logs from the stack, and on Windows the log collector only starts with the Docker daemon
+# exposed over TCP: without that it restarts for as long as the stack runs.
+[analytics]
+enabled = false
+
+[auth]
+enabled = true
+# The sample's UI, where it listens when it is run by hand. Auth sends a browser on only to an address of its
+# site, and tells the site by host name alone, so the page that accepts an invitation
+# (Sample:Invitations:AcceptPage, http://localhost:5091/invitations/accept) is allowed by this line. To Auth
+# 127.0.0.1 is another host than localhost.
+site_url = "http://localhost:5091"
+# Nobody signs up: a person gets in because the application made them a seat.
+enable_signup = false
+# Written out, not left to the default: an anonymous user is nobody to the sample.
+enable_anonymous_sign_ins = false
+
+[auth.email]
+# On, though nobody signs up: in the local stack this one setting is what turns signing in with an e-mail
+# address and a password on, and enable_signup above is what closes signing up. With it off, Auth answers a
+# person who has an account "Email logins are disabled".
+enable_signup = true
+# An address is proven before its owner signs in.
+enable_confirmations = true

@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!--
+    Projects as a host sees it: the module's entry, and its HTTP routes. The entry, ProjectsModule, registers
+    the module and maps its routes, so the host references this project and nothing else of the module, and every
+    host that runs the module serves the same API. Each route makes a command or a query of its arguments and sends
+    it, and knows nothing of how it is handled or how projects are stored: a route takes the sender, never a
+    handler or a port.
+  -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Examples.Tenancy.Projects.Application\Examples.Tenancy.Projects.Application.csproj" />
+    <!--
+      For composition only: the entry calls the infrastructure project's registration, and is the one type here
+      that names anything of it. No route does, and this project's assembly references no Entity Framework.
+    -->
+    <ProjectReference Include="..\Examples.Tenancy.Projects.Infrastructure\Examples.Tenancy.Projects.Infrastructure.csproj" />
+    <!-- The module's GraphQL source schema, in each feature's GraphQL folder: typed errors, enum spelling, and the ids as scalars. -->
+    <ProjectReference Include="..\..\..\..\..\Source\DDDToolkit.HotChocolate\DDDToolkit.HotChocolate.csproj" />
+  </ItemGroup>
+
+  <!--
+    The generators: the boundary analyzer, and the one that binds the module's ids, and the published ids of the
+    modules it names, to GraphQL scalars. Inside this repository they are wired by hand.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\..\Source\DDDToolkit.Analyzers\DDDToolkit.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\..\..\..\Source\DDDToolkit.HotChocolate.Analyzers\DDDToolkit.HotChocolate.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+</Project>

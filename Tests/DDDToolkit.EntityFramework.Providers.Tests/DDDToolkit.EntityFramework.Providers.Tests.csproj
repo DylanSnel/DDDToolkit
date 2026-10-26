@@ -64,4 +64,13 @@
     <Compile Include="..\DDDToolkit.EntityFramework.Tests\Infrastructure\RequiredContainers.cs" LinkBase="Infrastructure" />
   </ItemGroup>
 
+  <!--
+    The two modules whose migration histories the SQLite suite scripts are the ones migrated here, against the
+    providers with schemas: one copy of their contexts and migrations, compiled into each assembly, where Entity
+    Framework looks for a context's migrations.
+  -->
+  <ItemGroup>
+    <Compile Include="..\DDDToolkit.EntityFramework.Tests\Infrastructure\HistoryContexts.cs" LinkBase="Infrastructure" />
+  </ItemGroup>
+
 </Project>

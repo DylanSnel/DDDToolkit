@@ -1,0 +1,87 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>Examples.Tenancy.Exporter</RootNamespace>
+  </PropertyGroup>
+
+  <!--
+    The program that writes Examples/Tenancy/supabase/migrations, and nothing else. It is not the host: the host
+    serves requests as a role that owns nothing, and has no reason to carry a build step that writes files or the
+    export's settings. So the export lives here, in a program without routes, which references what it writes from:
+    each module's infrastructure project, which holds its migrations, its context marked [SupabaseMigrations] with
+    the design-time factory the build writes beside it, and its row access rules, and the application's catalogue.
+    Nothing references this project.
+
+    Tenancy's and Membership's SQL is written because the modules that store them on Postgres reference their
+    Postgres packages, and this project references those modules: each package declares itself a contributor, and
+    the build makes its class here from what the application marks, the catalogue and the projects' rules in the
+    catalogue's project and the operators' token roles in the Tenants module. The access files name each package's
+    class and assembly above what it writes, without a version, so this program keeps no version of its own: a
+    release of the toolkit that writes the same SQL leaves the files as they are.
+
+    Every build writes the file of any migration that has none, and the access files when the rules, the
+    catalogue or the model changed; in CI the build only compares, and fails when a file is missing or stale.
+  -->
+  <PropertyGroup>
+    <SupabaseMigrationsExport>Write</SupabaseMigrationsExport>
+    <SupabaseMigrationsExport Condition="'$(ContinuousIntegrationBuild)' == 'true'">Check</SupabaseMigrationsExport>
+
+    <!--
+      The database roles the policies are written for. A signed-in user, an anonymous caller, system work in a
+      tenant and the toolkit's own bookkeeping run as the defaults, authenticated, anon, ddd_system_in and
+      ddd_system, so nothing says them. What the sample adds is the token role of the application's operators,
+      which runs as a role of its own, spelled as the tokens spell it. The export runs before any configuration is
+      read, so it is said here. The host is a project of its own and maps the same token role in code; every access
+      file records the roles it was written for, and the host stops at start-up where its own differ
+      (supabase.roles-match-access-files).
+    -->
+    <SupabaseRowAccessRoles>token:tenancy_operator=tenancy_operator</SupabaseRowAccessRoles>
+
+    <!--
+      Nothing asks for the privileges or for forced policies, because the export writes both unless a project turns
+      them off: every table gets the privileges its policies allow, so nothing is granted by hand and nothing drifts,
+      and the tables' owner is held to the policies too, so the only way past them is a role that may bypass them.
+    -->
+
+    <!--
+      The role the host logs in as, which owns nothing and may only switch to the roles above: the export writes the
+      migration that makes it, and a new one when those roles change, so a token role added there reaches the login
+      role with the next build. Its login and its password are the deployment's, turned on once and never in a file.
+
+      The role was first made by a migration written by hand, *_tenancy_login_role.sql, which stays: a database that
+      applied it, a developer's own local stack for one, has it in its history, and the Supabase CLI refuses to apply
+      a directory that no longer has every version the database applied. The two say the same, and both run again
+      without harm, so a new database applies one after the other.
+    -->
+    <SupabaseLoginRole>tenancy_api</SupabaseLoginRole>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      Each module's infrastructure project: its migrations, with the [SupabaseMigrations] context the export builds
+      through the design-time factory beside it, and its row access rules, each of which becomes a policy, a function
+      or a trigger. Tenants' brings Tenancy on Postgres, and Projects' Membership on Postgres, whose SQL comes with
+      them.
+    -->
+    <ProjectReference Include="..\Modules\Tenants\Examples.Tenancy.Tenants.Infrastructure\Examples.Tenancy.Tenants.Infrastructure.csproj" />
+    <ProjectReference Include="..\Modules\Projects\Examples.Tenancy.Projects.Infrastructure\Examples.Tenancy.Projects.Infrastructure.csproj" />
+    <ProjectReference Include="..\Modules\Inspections\Examples.Tenancy.Inspections.Infrastructure\Examples.Tenancy.Inspections.Infrastructure.csproj" />
+    <!-- The catalogue Tenancy's policies are written from, and the projects' rules Membership's functions are written from. -->
+    <ProjectReference Include="..\Examples.Tenancy.Catalogue\Examples.Tenancy.Catalogue.csproj" />
+    <ProjectReference Include="..\..\..\Source\DDDToolkit.EntityFramework.Supabase\DDDToolkit.EntityFramework.Supabase.csproj" />
+  </ItemGroup>
+
+  <!--
+    What the DDDToolkit.EntityFramework.Supabase package brings a consumer by itself, the generator and the build
+    step, spelled out because this repository references the package as a project.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Source\DDDToolkit.EntityFramework.Supabase.Analyzers\DDDToolkit.EntityFramework.Supabase.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+  <Import Project="..\..\..\Source\DDDToolkit.EntityFramework.Supabase\buildTransitive\DDDToolkit.EntityFramework.Supabase.targets" />
+
+</Project>

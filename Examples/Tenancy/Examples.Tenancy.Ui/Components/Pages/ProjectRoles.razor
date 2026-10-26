@@ -1,0 +1,154 @@
+@page "/project-roles"
+@inherits SessionPage
+
+<PageTitle>@T["nav.project-roles"] · Tenancy sample</PageTitle>
+
+<h1>@T["nav.project-roles"]</h1>
+<p class="text-body-secondary">@T.Html("project-roles.intro", Session.Tenant ?? T["common.no-tenant"])</p>
+
+@if (_roles is null)
+{
+    <p><em>@T["common.loading"]</em></p>
+}
+else
+{
+    <CascadingValue Value="_latest" IsFixed="true">
+        @if (_roles.Value is not { } roles)
+        {
+            <ApiOutcomeView Answer="_roles" />
+        }
+        else if (roles.Count == 0)
+        {
+            <p>@T["project-roles.none"]</p>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table table-sm align-middle">
+                    <thead>
+                        <tr>
+                            <th>@T["common.name"]</th><th>@T["project-roles.description"]</th><th>@T["project-roles.made-from"]</th>
+                            <th>@T["common.status"]</th><th>@T["project-roles.keys"]</th><th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var role in roles)
+                        {
+                            <tr class="@(role.IsActive ? null : "not-applying")">
+                                <td>@role.Name</td>
+                                <td class="small">@role.Description</td>
+                                <td class="small">@(role.MadeFrom is { } starter ? starter : T["project-roles.made-by-tenant"])</td>
+                                <td>@role.Status</td>
+                                <td class="small">@(role.Keys is { } keys ? string.Join(", ", keys) : "–")</td>
+                                <td>
+                                    <ActionButton Label="@T["project-roles.archive"]" Allowed="Manages && role.IsActive" ShowsAnswer="false" Send="() => Wrap(Api.ArchiveProjectRoleAsync(role.Id.ToString()))" Answered="ArchivedAsync" />
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+
+        @if (_archived is not null && _latest.IsOf(this))
+        {
+            <ApiOutcomeView Answer="_archived" />
+        }
+
+        <h2 class="h5 mt-4">@T["project-roles.make.title"]</h2>
+        <div class="action">
+            <label class="form-label small">@T["project-roles.make.label"]</label>
+            <input class="form-control form-control-sm" placeholder="@T["common.name"]" @bind="_newName" />
+            <input class="form-control form-control-sm" placeholder="@T["project-roles.description"]" @bind="_newDescription" />
+            <KeyPicker Keys="_keys" Picked="_newKeys" />
+            <ActionButton Label="@T["project-roles.make"]" Allowed="Manages" Send="() => Wrap(Api.MakeProjectRoleAsync(_newName, _newDescription, [.. _newKeys]))" Answered="MadeAsync" />
+            <div class="form-text">@T["project-roles.make.help"]</div>
+        </div>
+
+        <h2 class="h5 mt-4">@T["project-roles.change.title"]</h2>
+        <div class="action">
+            <select class="form-select form-select-sm" @bind="_picked" @bind:after="Picked">
+                <option value="">@T["project-roles.pick"]</option>
+                @foreach (var role in _roles.Value ?? [])
+                {
+                    <option value="@role.Id">@role.Name@(role.IsActive ? null : " (" + role.Status + ")")</option>
+                }
+            </select>
+            <input class="form-control form-control-sm" placeholder="@T["common.name"]" @bind="_name" />
+            <input class="form-control form-control-sm" placeholder="@T["project-roles.description"]" @bind="_description" />
+            <ActionButton Label="@T["project-roles.rename"]" Allowed="Manages" Send="() => Wrap(Api.RenameProjectRoleAsync(_picked ?? string.Empty, _name, _description))" Answered="ReloadOnSuccessAsync" />
+            <KeyPicker Keys="_keys" Picked="_pickedKeys" />
+            <ActionButton Label="@T["project-roles.set-keys"]" Allowed="Manages" Send="() => Wrap(Api.SetProjectRoleKeysAsync(_picked ?? string.Empty, [.. _pickedKeys]))" Answered="ReloadOnSuccessAsync" />
+            <div class="form-text">@T["project-roles.change.help"]</div>
+        </div>
+    </CascadingValue>
+}
+
+@code {
+    private ApiOutcome<IReadOnlyList<ProjectRoleInfo>>? _roles;
+    private ApiOutcome? _archived;
+
+    // The page shows the answer of its last action only: an older one is about the roles as they were.
+    private readonly LatestAnswer _latest = new();
+    private IReadOnlyList<PermissionInfo> _keys = [];
+    private string? _newName;
+    private string? _newDescription;
+    private HashSet<string> _newKeys = new(StringComparer.Ordinal);
+    private string? _picked;
+    private string? _name;
+    private string? _description;
+    private HashSet<string> _pickedKeys = new(StringComparer.Ordinal);
+
+    // The API answers a role's keys to whoever may make and change project roles, and to nobody else: so whether
+    // it did is what the page goes by. Every button is there either way, and sends the call when clicked.
+    private bool Manages => _roles?.Value?.Any(role => role.Keys is not null) == true;
+
+    protected override async Task LoadAsync()
+    {
+        // The keys to pick from first and the roles last, so that when they are refused, the refusal is the last
+        // response.
+        var keys = (await Api.KeyCatalogueAsync()).Value?.Permissions.Where(permission => !permission.Retired).ToList() ?? [];
+        var roles = await Api.ProjectRolesAsync();
+        (_keys, _roles) = (keys, roles);
+        Picked();
+    }
+
+    // The role picked to change: its name, description and keys as they are, to change from. Nothing picked, or a
+    // role no longer listed, leaves the fields as they were.
+    private void Picked()
+    {
+        if (_roles?.Value?.FirstOrDefault(role => role.Id.ToString() == _picked) is { } role)
+        {
+            (_name, _description) = (role.Name, role.Description);
+            _pickedKeys = new HashSet<string>(role.KeysShown, StringComparer.Ordinal);
+        }
+    }
+
+    private async Task MadeAsync(ApiOutcome outcome)
+    {
+        if (outcome.Succeeded)
+        {
+            (_newName, _newDescription) = (null, null);
+            _newKeys = new HashSet<string>(StringComparer.Ordinal);
+            await ReloadAsync();
+        }
+    }
+
+    private async Task ArchivedAsync(ApiOutcome outcome)
+    {
+        // A button in the table leaves its answer to the page, so the page is where the latest answer is.
+        _archived = outcome;
+        _latest.IsFrom(this);
+        await ReloadOnSuccessAsync(outcome);
+    }
+
+    private async Task ReloadOnSuccessAsync(ApiOutcome outcome)
+    {
+        if (outcome.Succeeded)
+        {
+            await ReloadAsync();
+        }
+    }
+
+    private static async Task<ApiOutcome> Wrap<T>(Task<ApiOutcome<T>> call) => await call;
+}

@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "Examples.Webshop.MassTransit.Fulfilment": {
+      "commandName": "Project",
+      "launchBrowser": false,
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "applicationUrl": "https://localhost:65135;http://localhost:65136"
+    }
+  }
+}

@@ -68,22 +68,22 @@ public class PayloadComparisonTests
     public void CollectionsAreComparedElementByElement()
     {
         var id = OrderId.CreateUnique();
-        var raised = new BatchShipped(id, [Sku.Of("SKU-1"), Sku.Of("SKU-2")]);
+        var raised = new BatchShipped(id, [Sku.From("SKU-1"), Sku.From("SKU-2")]);
 
         Probe().AsScenario()
             .When(o => o.Raise(raised))
-            .Raised(new BatchShipped(id, new List<Sku> { Sku.Of("SKU-1"), Sku.Of("SKU-2") }));
+            .Raised(new BatchShipped(id, new List<Sku> { Sku.From("SKU-1"), Sku.From("SKU-2") }));
     }
 
     [Fact]
     public void ADifferentCollectionIsADifferentPayload()
     {
         var id = OrderId.CreateUnique();
-        var raised = new BatchShipped(id, [Sku.Of("SKU-1"), Sku.Of("SKU-2")]);
+        var raised = new BatchShipped(id, [Sku.From("SKU-1"), Sku.From("SKU-2")]);
 
         var act = () => Probe().AsScenario()
             .When(o => o.Raise(raised))
-            .Raised(new BatchShipped(id, [Sku.Of("SKU-1")]));
+            .Raised(new BatchShipped(id, [Sku.From("SKU-1")]));
 
         act.Should().Throw<AggregateAssertionException>()
             .WithMessage("*Skus was [SKU_SKU-1, SKU_SKU-2], expected [SKU_SKU-1]*");

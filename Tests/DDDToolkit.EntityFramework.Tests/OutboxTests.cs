@@ -1,5 +1,8 @@
 using System.Text.Json;
+using DDDToolkit.Abstractions.Access;
+using DDDToolkit.Access;
 using DDDToolkit.BaseTypes;
+using DDDToolkit.EntityFramework.Integration;
 using DDDToolkit.EntityFramework.Outbox;
 using DDDToolkit.EntityFramework.Tests.Domain;
 using DDDToolkit.EntityFramework.Tests.Domain.Events;
@@ -11,12 +14,13 @@ using DDDToolkit.Interfaces;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
 
 namespace DDDToolkit.EntityFramework.Tests;
 
 /// <summary>Transactional delivery through the outbox table and its processor.</summary>
-public sealed class OutboxTests : IDisposable
+public sealed class OutboxTests(ExplicitCallersPostgres postgres) : IDisposable
 {
     private readonly SqliteDatabase _db = new();
     private readonly ManualClock _clock = new(new DateTimeOffset(2026, 9, 13, 12, 0, 0, TimeSpan.Zero));
@@ -40,6 +44,35 @@ public sealed class OutboxTests : IDisposable
             services => services.AddOutboxProcessor<LibraryContext>());
 
     private static Shelf NewShelf(string name = "Fiction") => new(ShelfId.CreateUnique(), name, UserId.CreateUnique(), CatId.CreateUnique(), null);
+
+    /// <summary>
+    /// On Postgres with row level security, in a host that requires explicit callers: the background service
+    /// reads, delivers and marks the rows as the system, although nothing around it began a caller, and the
+    /// module's handlers run as its scope says.
+    /// </summary>
+    [Fact]
+    public async Task The_outbox_drains_with_explicit_callers_required()
+    {
+        var cancellation = TestContext.Current.CancellationToken;
+        await using var work = await ToolkitWork.StartAsync(
+            await postgres.CreateDatabaseAsync(cancellation),
+            module => module.Around(IntegrationEventScopes.System).Handle<ShelfOpenedV3, ReceiptWatch>(),
+            services: services => services.AddOutboxBackgroundService<CallerOutboxContext>(TimeSpan.FromMinutes(1)));
+        await work.QueueAsync("Fiction");
+        await work.QueueAsync("Poetry");
+
+        await using (var scope = work.Services.CreateAsyncScope())
+        {
+            var read = () => scope.ServiceProvider.GetRequiredService<CallerOutboxContext>().Outbox.CountAsync(cancellation);
+            await read.Should().ThrowAsync<NoCallerException>("nothing said who a read of the outbox runs as");
+        }
+
+        var poller = work.Services.GetServices<IHostedService>().OfType<OutboxBackgroundService<CallerOutboxContext>>().Single();
+        await poller.DrainAsync(cancellation);
+
+        (await work.OutboxAsync()).Should().HaveCount(2).And.OnlyContain(row => row.ProcessedAt != null && row.LastError == null);
+        work.Seen.Callers.Should().Equal([Caller.System, Caller.System], "the module said its handlers run as the system, and only then do they");
+    }
 
     [Fact]
     public async Task Save_writes_one_row_per_event_and_dispatches_nothing()

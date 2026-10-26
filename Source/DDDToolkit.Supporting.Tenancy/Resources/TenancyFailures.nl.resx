@@ -1,0 +1,189 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="tenancy.not-seated" xml:space="preserve">
+    <value>Geen plaats in de gevraagde tenant.</value>
+  </data>
+  <data name="tenancy.tenant-required" xml:space="preserve">
+    <value>Dit verzoek noemt geen tenant.</value>
+  </data>
+  <data name="tenancy.seat-suspended" xml:space="preserve">
+    <value>Deze plaats in de tenant is geschorst.</value>
+  </data>
+  <data name="tenancy.tenant-inactive" xml:space="preserve">
+    <value>Deze tenant is op dit moment niet in gebruik.</value>
+  </data>
+  <data name="tenancy.not-permitted" xml:space="preserve">
+    <value>Hiervoor is het recht {Key} nodig.</value>
+  </data>
+  <data name="tenancy.grant-exceeds-own" xml:space="preserve">
+    <value>Dat gaat verder dan de eigen rechten, daar of voor zo lang: {Missing}.</value>
+  </data>
+  <data name="tenancy.self-assignment" xml:space="preserve">
+    <value>Deze plaatsing moet iemand anders doen.</value>
+  </data>
+  <data name="tenancy.self-appointment" xml:space="preserve">
+    <value>Een rol die toegang beheert, moet door iemand anders worden gegeven.</value>
+  </data>
+  <data name="tenancy.other-tenant" xml:space="preserve">
+    <value>Die rij hoort bij een andere tenant dan die van dit verzoek.</value>
+  </data>
+  <data name="tenancy.start-system-only" xml:space="preserve">
+    <value>Een toekenning gaat nu in; alleen systeemwerk kiest een ander begin.</value>
+  </data>
+  <data name="tenancy.unit-not-found" xml:space="preserve">
+    <value>De eenheid is niet gevonden in deze tenant.</value>
+  </data>
+  <data name="tenancy.seat-not-found" xml:space="preserve">
+    <value>De plaats is niet gevonden in deze tenant.</value>
+  </data>
+  <data name="tenancy.role-not-found" xml:space="preserve">
+    <value>De rol is niet gevonden in deze tenant.</value>
+  </data>
+  <data name="tenancy.placement-not-found" xml:space="preserve">
+    <value>De plaats is niet bij die eenheid geplaatst.</value>
+  </data>
+  <data name="tenancy.grant-not-found" xml:space="preserve">
+    <value>De plaats heeft die rol niet bij die eenheid.</value>
+  </data>
+  <data name="tenancy.last-admin" xml:space="preserve">
+    <value>De tenant moet minstens één beheerder houden.</value>
+  </data>
+  <data name="tenancy.slug-taken" xml:space="preserve">
+    <value>Een andere tenant heeft de slug {Slug} al.</value>
+  </data>
+  <data name="tenancy.identity-has-seat" xml:space="preserve">
+    <value>Deze persoon heeft al een plaats in de tenant.</value>
+  </data>
+  <data name="tenancy.role-name-taken" xml:space="preserve">
+    <value>De tenant heeft al een rol met de naam {Name}.</value>
+  </data>
+  <data name="tenancy.tenant-state" xml:space="preserve">
+    <value>De huidige status van de tenant staat dit niet toe.</value>
+  </data>
+  <data name="tenancy.seat-state" xml:space="preserve">
+    <value>De huidige status van de plaats staat dit niet toe.</value>
+  </data>
+  <data name="tenancy.unit-not-active" xml:space="preserve">
+    <value>Eenheid {Unit} is gearchiveerd: er komt niets nieuws bij.</value>
+  </data>
+  <data name="tenancy.root-immovable" xml:space="preserve">
+    <value>De hoofdeenheid hangt nergens onder en verhuist dus niet.</value>
+  </data>
+  <data name="tenancy.root-not-archivable" xml:space="preserve">
+    <value>De hoofdeenheid wordt nooit gearchiveerd.</value>
+  </data>
+  <data name="tenancy.one-root" xml:space="preserve">
+    <value>De boom heeft één hoofdeenheid, niet meer en niet minder.</value>
+  </data>
+  <data name="tenancy.cycle" xml:space="preserve">
+    <value>Een eenheid kan niet onder zichzelf hangen.</value>
+  </data>
+  <data name="tenancy.same-parent" xml:space="preserve">
+    <value>De eenheid hangt daar al.</value>
+  </data>
+  <data name="tenancy.depth-exceeded" xml:space="preserve">
+    <value>De boom mag hooguit {Max} niveaus hebben.</value>
+  </data>
+  <data name="tenancy.unit-has-active-children" xml:space="preserve">
+    <value>Archiveer eerst de actieve eenheden eronder.</value>
+  </data>
+  <data name="tenancy.unit-archived" xml:space="preserve">
+    <value>Die eenheid is gearchiveerd.</value>
+  </data>
+  <data name="tenancy.flat-tenant" xml:space="preserve">
+    <value>Een platte tenant heeft alleen zijn hoofdeenheid; maak hem eerst hiërarchisch.</value>
+  </data>
+  <data name="tenancy.shape-change" xml:space="preserve">
+    <value>Een tenant gaat alleen van plat naar hiërarchisch.</value>
+  </data>
+  <data name="tenancy.duplicate-placement" xml:space="preserve">
+    <value>Die plaats is al bij deze eenheid geplaatst.</value>
+  </data>
+  <data name="tenancy.second-primary" xml:space="preserve">
+    <value>Een plaats heeft hooguit één primaire plaatsing.</value>
+  </data>
+  <data name="tenancy.duplicate-grant" xml:space="preserve">
+    <value>Die rol is bij deze plaatsing al toegekend.</value>
+  </data>
+  <data name="tenancy.role-not-active" xml:space="preserve">
+    <value>Een gearchiveerde rol kan niet worden toegekend.</value>
+  </data>
+  <data name="tenancy.role-archived" xml:space="preserve">
+    <value>Die rol is gearchiveerd.</value>
+  </data>
+  <data name="tenancy.name-invalid" xml:space="preserve">
+    <value>Vul {Min} tot {Max} tekens in.</value>
+  </data>
+  <data name="tenancy.invalid-slug" xml:space="preserve">
+    <value>Een slug telt 2 tot 63 tekens, elk een kleine letter, een cijfer of een streepje, en begint niet met een streepje.</value>
+  </data>
+  <data name="tenancy.invalid-period" xml:space="preserve">
+    <value>Het einde van een toekenning moet na het begin komen.</value>
+  </data>
+  <data name="tenancy.reason-required" xml:space="preserve">
+    <value>Geef een reden om een tenant te schorsen of te sluiten.</value>
+  </data>
+  <data name="tenancy.unknown-permission" xml:space="preserve">
+    <value>Deze sleutels zijn onbekend of buiten gebruik: {Keys}.</value>
+  </data>
+  <data name="tenancy.identity-required" xml:space="preserve">
+    <value>Een plaats heeft de geverifieerde identiteit nodig van de persoon van wie hij is.</value>
+  </data>
+  <data name="tenancy.keys-not-normalized" xml:space="preserve">
+    <value>De sleutellijst van een rol moet uitgebreid zijn, zonder dubbele, in ordinale volgorde.</value>
+  </data>
+  <data name="tenancy.too-many-ids" xml:space="preserve">
+    <value>Vraag hooguit {Max} id's tegelijk op.</value>
+  </data>
+  <data name="tenancy.operators-only" xml:space="preserve">
+    <value>Dit kan alleen een operator.</value>
+  </data>
+  <data name="tenancy.page-size-invalid" xml:space="preserve">
+    <value>Een pagina bevat 1 tot {Max} tenants.</value>
+  </data>
+  <data name="tenancy.cursor-invalid" xml:space="preserve">
+    <value>Die paginamarkering hoort niet bij deze lijst. Begin opnieuw bij de eerste pagina.</value>
+  </data>
+  <data name="tenancy.invitation-not-found" xml:space="preserve">
+    <value>Bij deze link is geen uitnodiging gevonden.</value>
+  </data>
+  <data name="tenancy.invitation-lapsed" xml:space="preserve">
+    <value>Deze uitnodiging is verlopen. Vraag een nieuwe aan.</value>
+  </data>
+  <data name="tenancy.invitation-used" xml:space="preserve">
+    <value>Iemand anders heeft deze uitnodiging al aangenomen.</value>
+  </data>
+  <data name="tenancy.invitation-cancelled" xml:space="preserve">
+    <value>Deze uitnodiging is ingetrokken.</value>
+  </data>
+  <data name="tenancy.invitation-state" xml:space="preserve">
+    <value>De huidige staat van de uitnodiging laat dit niet toe.</value>
+  </data>
+  <data name="tenancy.invitation-unbacked" xml:space="preserve">
+    <value>Wie deze uitnodiging stuurde, mag niet meer geven wat erin wordt aangeboden. Vraag een nieuwe aan.</value>
+  </data>
+  <data name="tenancy.address-mismatch" xml:space="preserve">
+    <value>Deze uitnodiging is naar een ander adres gestuurd dan dat van dit account.</value>
+  </data>
+  <data name="tenancy.address-invalid" xml:space="preserve">
+    <value>Vul één e-mailadres in van hooguit {Max} tekens.</value>
+  </data>
+  <data name="tenancy.invitation-lifetime" xml:space="preserve">
+    <value>Een uitnodiging blijft {Min} tot {Max} minuten open.</value>
+  </data>
+  <data name="tenancy.invitation-grant-ends-first" xml:space="preserve">
+    <value>De rol zou eindigen voordat de uitnodiging afloopt. Kies een later einde voor de rol.</value>
+  </data>
+</root>

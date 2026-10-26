@@ -1,0 +1,94 @@
+@*
+    One answer of the API in full: what was sent, the status, the refusal's code, title and arguments, and the raw
+    JSON. An argument that is the id of a seat, a role or a unit the page knows by name shows that name, and the id
+    stays in the raw JSON; so does an argument the refusal leaves empty, which is not listed. A refusal for a key
+    that names no unit is one for the whole tenant, which its text does not say, so a line under it does.
+*@
+<div class="api-outcome @(Answer.Succeeded ? "succeeded" : "refused")">
+    <div class="request-line">
+        <code>@Answer.Method @Answer.Path</code>
+        <span class="text-body-secondary small">
+            @T["common.as", Answer.Caller] · @(Answer.Tenant is null ? T["answer.no-tenant-header"] : T["answer.tenant", Answer.Tenant]) · @Math.Round(Answer.Elapsed.TotalMilliseconds) ms
+        </span>
+    </div>
+    <div class="answer">
+        <StatusBadge Status="Answer.Status" />
+        @if (Answer.Problem?.Code is { } refusalCode)
+        {
+            <code class="refusal-code">@refusalCode</code>
+        }
+        @if (Answer.Problem?.Title is { } title)
+        {
+            <span>@title</span>
+        }
+        else if (Answer.Succeeded)
+        {
+            <span>@T["answer.done"]</span>
+        }
+    </div>
+    @if (Answer.Problem?.Detail is { } detail)
+    {
+        <div class="small text-body-secondary">@detail</div>
+    }
+    @if (Answer.Problem?.KeyNeededForTheWholeTenant == true)
+    {
+        <div class="small text-body-secondary">@T["answer.whole-tenant"]</div>
+    }
+    @if (Answer.Problem?.Arguments is { Count: > 0 } arguments)
+    {
+        <dl class="arguments small">
+            @foreach (var (name, value) in arguments.Where(argument => argument.Value.ValueKind != JsonValueKind.Null))
+            {
+                <dt>@name</dt>
+                <dd>
+                    @if (Named(value) is { } called)
+                    {
+                        @called
+                    }
+                    else
+                    {
+                        <code>@Show(value)</code>
+                    }
+                </dd>
+            }
+        </dl>
+    }
+    @if (!string.IsNullOrWhiteSpace(Answer.RawBody))
+    {
+        <details class="raw small">
+            <summary>@T["answer.raw"]</summary>
+            <pre>@Pretty(Answer.RawBody)</pre>
+        </details>
+    }
+</div>
+
+@code {
+    private static readonly JsonSerializerOptions Indented = new() { WriteIndented = true };
+
+    /// <summary>The answer to show.</summary>
+    [Parameter, EditorRequired]
+    public ApiOutcome Answer { get; set; } = default!;
+
+    /// <summary>The names the page around this answer knows, when it hands them down; none elsewhere.</summary>
+    [CascadingParameter]
+    public DirectoryNames? Names { get; set; }
+
+    private string? Named(JsonElement value)
+        => Names is not null && value.ValueKind == JsonValueKind.String && Guid.TryParse(value.GetString(), out var id) ? Names.NameOf(id) : null;
+
+    private static string Show(JsonElement value)
+        => value.ValueKind == JsonValueKind.String ? value.GetString() ?? string.Empty : value.GetRawText();
+
+    private static string Pretty(string raw)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(raw);
+            return JsonSerializer.Serialize(document.RootElement, Indented);
+        }
+        catch (JsonException)
+        {
+            return raw;
+        }
+    }
+}

@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!--
+    The application's permission catalogue, and the starter project roles of its tenants' crews, in a project of
+    its own because two programs need them: the host, which runs with them, and the program that exports the
+    database's policies, which are written from them. It is no module and declares none: its packs name the
+    modules' keys, which their contracts and application projects publish, and it knows nothing of how any module
+    is stored. The keys themselves it does not list: each module marks its own list with [TenancyPermissions].
+
+    What the policies are written from is marked here, and nothing more is written for them: the catalogue with
+    [TenancyCatalogue], and the projects' rules with [MembershipRules<CrewMember>]. Tenancy's and Membership's
+    Postgres packages write their SQL into the exported files because the modules that store them on Postgres
+    reference them, so this project references neither.
+  -->
+  <ItemGroup>
+    <!-- The keys the packs name, the projects' rules and their crew members, and each module's own part of the catalogue. -->
+    <ProjectReference Include="..\Modules\Projects\Examples.Tenancy.Projects.Application\Examples.Tenancy.Projects.Application.csproj" />
+    <ProjectReference Include="..\Modules\Inspections\Examples.Tenancy.Inspections.Application\Examples.Tenancy.Inspections.Application.csproj" />
+    <ProjectReference Include="..\..\..\Source\DDDToolkit.Supporting.Tenancy\DDDToolkit.Supporting.Tenancy.csproj" />
+  </ItemGroup>
+
+  <!--
+    The toolkit's analyzer, which a NuGet consumer gets with the packages above and this repository wires by hand. It
+    holds the two marks here to what the program that exports can read: that program references this library and
+    sees nothing of it that is not public, so a mark made internal would be missed there without a word (DDD00070).
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Source\DDDToolkit.Analyzers\DDDToolkit.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+</Project>

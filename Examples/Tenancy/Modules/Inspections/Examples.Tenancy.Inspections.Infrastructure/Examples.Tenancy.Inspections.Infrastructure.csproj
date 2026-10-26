@@ -1,0 +1,56 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <!-- dotnet ef runs this project as its own startup project, through the design-time factory the build writes beside its context. -->
+    <GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
+  </PropertyGroup>
+
+  <!--
+    Where Inspections is stored, on Postgres: the context, marked [SupabaseMigrations], with its migrations (the
+    build writes the design-time factory dotnet ef and the Supabase export make it with beside it), the two adapters
+    that implement the application project's ports, the store over the request's context and the reads on a context
+    of their own, the row access rules the export writes as policies (Access), and AddInspectionsInfrastructure,
+    which registers the rest. It declares no id and no domain event, and gets their converter and their registration
+    under their names anyway, generated from what the domain project declares, because it declares the same module;
+    the published ids of Projects and Tenancy an inspection stores are registered with them. Unlike Projects'
+    context, this one maps nothing of Tenancy's: whether the caller may see a project is Projects' answer. Only the
+    module's entry, in the API project, calls its registration; the host does not reference this project.
+  -->
+
+  <ItemGroup>
+    <!-- The provider the migrations here are written for: the sample runs on Postgres, as Supabase runs it, and on nothing else. -->
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <!-- ToPageAsync, which reads a page of a list over Entity Framework. The paging library alone: this project knows no GraphQL. -->
+    <PackageReference Include="GreenDonut.Data.EntityFramework" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- For the ports its adapters implement. The application project's own registration is the entry's to call. -->
+    <ProjectReference Include="..\Examples.Tenancy.Inspections.Application\Examples.Tenancy.Inspections.Application.csproj" />
+    <!-- The connections a module's context is registered on are the host's, handed over as a ModuleHost. -->
+    <ProjectReference Include="..\..\..\..\Shared\Examples.Hosting\Examples.Hosting.csproj" />
+    <!-- What every module's paged read checks before it pages: that the marker is a cursor of its own list. -->
+    <ProjectReference Include="..\..\..\Shared\Examples.Tenancy.Shared.Infrastructure\Examples.Tenancy.Shared.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\..\..\..\Source\DDDToolkit.EntityFramework\DDDToolkit.EntityFramework.csproj" />
+    <!-- [SupabaseMigrations] on the context, which is how the project that exports and the host find it, and the check a host makes at start-up that every migration here was applied. -->
+    <ProjectReference Include="..\..\..\..\..\Source\DDDToolkit.EntityFramework.Supabase\DDDToolkit.EntityFramework.Supabase.csproj" />
+    <!-- The tenant filter and the save check; not the Tenants module. -->
+    <ProjectReference Include="..\..\..\..\..\Source\DDDToolkit.Supporting.Tenancy.EntityFramework\DDDToolkit.Supporting.Tenancy.EntityFramework.csproj" />
+  </ItemGroup>
+
+  <!-- Generators. A NuGet consumer gets these through the packages above; inside this repository they are wired by hand. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\..\Source\DDDToolkit.Analyzers\DDDToolkit.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\..\..\..\Source\DDDToolkit.EntityFramework.Analyzers\DDDToolkit.EntityFramework.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <!-- The Supabase package's: it writes the design-time factory of the context marked [SupabaseMigrations]. -->
+    <ProjectReference Include="..\..\..\..\..\Source\DDDToolkit.EntityFramework.Supabase.Analyzers\DDDToolkit.EntityFramework.Supabase.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+</Project>

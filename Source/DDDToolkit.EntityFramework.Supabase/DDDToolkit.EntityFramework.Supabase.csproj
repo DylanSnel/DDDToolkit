@@ -25,7 +25,7 @@
     <ProjectReference Include="..\DDDToolkit.EntityFramework.Postgres\DDDToolkit.EntityFramework.Postgres.csproj" />
   </ItemGroup>
 
-  <!-- The generator that finds [SupabaseMigrations] factories, shipped the way the other integrations ship theirs. -->
+  <!-- The generators that write the design-time factories of [SupabaseMigrations] contexts and find them for the export and AddSupabaseMigrations(), shipped the way the other integrations ship theirs. -->
   <ItemGroup>
     <ProjectReference Include="..\DDDToolkit.EntityFramework.Supabase.Analyzers\DDDToolkit.EntityFramework.Supabase.Analyzers.csproj" PrivateAssets="contentfiles;build" />
   </ItemGroup>

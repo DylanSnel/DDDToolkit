@@ -1,0 +1,9 @@
+/* The theme's own styles for the container, copied with its component (see index.js). */
+
+.container {
+  max-width: 100%;
+}
+
+.container > svg {
+  max-width: 100%;
+}

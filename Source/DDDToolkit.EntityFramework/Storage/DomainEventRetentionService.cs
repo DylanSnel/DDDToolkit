@@ -11,6 +11,10 @@ namespace DDDToolkit.EntityFramework.Storage;
 /// <see cref="DomainEventRetentionOptions{TContext}.Interval"/>, each run in a service scope of its own.
 /// Failures are logged and the next tick tries again. Register with
 /// <c>services.AddDomainEventRetention&lt;TContext&gt;(...)</c>.
+/// <para>
+/// Deleting old rows is the toolkit's own bookkeeping, the event log's included: where the host requires
+/// explicit callers, each run begins <c>Caller.System</c>. Without it nothing is begun.
+/// </para>
 /// </summary>
 public sealed class DomainEventRetentionService<TContext> : BackgroundService where TContext : DbContext
 {
@@ -43,7 +47,7 @@ public sealed class DomainEventRetentionService<TContext> : BackgroundService wh
             }
             catch (Exception exception)
             {
-                _logger.LogError(exception, "Deleting expired outbox and inbox rows of {Context} failed; retrying after {Interval}.", typeof(TContext).Name, _options.Interval);
+                _logger.LogError(exception, "Deleting expired outbox, inbox and event log rows of {Context} failed; retrying after {Interval}.", typeof(TContext).Name, _options.Interval);
             }
         }
         while (await WaitForNextTickAsync(timer, stoppingToken).ConfigureAwait(false));
@@ -53,15 +57,17 @@ public sealed class DomainEventRetentionService<TContext> : BackgroundService wh
     public async Task<DomainEventRetentionResult> DeleteExpiredAsync(CancellationToken cancellationToken)
     {
         using var scope = _scopeFactory.CreateScope();
+        using var bookkeeping = ToolkitCallers.BeginBookkeeping(ToolkitCallers.Required(scope.ServiceProvider));
         var retention = scope.ServiceProvider.GetRequiredService<DomainEventRetention<TContext>>();
         var result = await retention.DeleteExpiredAsync(cancellationToken).ConfigureAwait(false);
 
-        if (result.OutboxMessages > 0 || result.InboxMessages > 0)
+        if (result.OutboxMessages > 0 || result.InboxMessages > 0 || result.EventLogEntries > 0)
         {
             _logger.LogInformation(
-                "Deleted {OutboxMessages} delivered outbox rows and {InboxMessages} inbox rows of {Context}.",
+                "Deleted {OutboxMessages} delivered outbox rows, {InboxMessages} inbox rows and {EventLogEntries} event log rows of {Context}.",
                 result.OutboxMessages,
                 result.InboxMessages,
+                result.EventLogEntries,
                 typeof(TContext).Name);
         }
 

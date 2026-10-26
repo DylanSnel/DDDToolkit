@@ -1,3 +1,4 @@
+using DDDToolkit.Access;
 using DDDToolkit.EntityFramework.Inbox;
 using DDDToolkit.EntityFramework.Outbox;
 using DDDToolkit.EntityFramework.Storage;
@@ -12,7 +13,7 @@ namespace DDDToolkit.EntityFramework.Tests;
 /// Keeping the outbox and the inbox from growing forever: a row goes once it is older than the window
 /// for its table, and nothing else does.
 /// </summary>
-public sealed class RetentionTests : IDisposable
+public sealed class RetentionTests(ExplicitCallersPostgres postgres) : IDisposable
 {
     private readonly SqliteDatabase _db = new();
     private readonly ManualClock _clock = new(new DateTimeOffset(2026, 9, 13, 12, 0, 0, TimeSpan.Zero));
@@ -32,6 +33,32 @@ public sealed class RetentionTests : IDisposable
 
     private static Task<DomainEventRetentionResult> DeleteExpiredAsync(TestHost host)
         => host.InScopeAsync((_, services) => services.GetRequiredService<DomainEventRetention<LibraryContext>>().DeleteExpiredAsync(Cancellation));
+
+    /// <summary>
+    /// On Postgres with row level security, in a host that requires explicit callers: the retention service
+    /// deletes as the system, although nothing around it began a caller.
+    /// </summary>
+    [Fact]
+    public async Task Retention_runs_with_explicit_callers_required()
+    {
+        await using var work = await ToolkitWork.StartAsync(
+            await postgres.CreateDatabaseAsync(Cancellation),
+            services: services => services.AddDomainEventRetention<CallerOutboxContext>(retention => retention.KeepOutboxFor = TimeSpan.FromDays(7)));
+        await work.QueueAsync("Fiction", processedAt: DateTimeOffset.UtcNow.AddDays(-30));
+        await work.QueueAsync("Poetry", processedAt: DateTimeOffset.UtcNow);
+
+        await using (var scope = work.Services.CreateAsyncScope())
+        {
+            var delete = () => scope.ServiceProvider.GetRequiredService<DomainEventRetention<CallerOutboxContext>>().DeleteExpiredAsync(Cancellation);
+            await delete.Should().ThrowAsync<NoCallerException>("called by hand, retention is the host's work, and the host said nothing");
+        }
+
+        var service = work.Services.GetServices<IHostedService>().OfType<DomainEventRetentionService<CallerOutboxContext>>().Single();
+        var result = await service.DeleteExpiredAsync(Cancellation);
+
+        result.OutboxMessages.Should().Be(1);
+        (await work.OutboxAsync()).Should().ContainSingle().Which.ProcessedAt.Should().BeAfter(DateTimeOffset.UtcNow.AddDays(-1));
+    }
 
     private void Seed(params object[] rows)
     {

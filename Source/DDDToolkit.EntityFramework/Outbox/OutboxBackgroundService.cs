@@ -22,6 +22,14 @@ public sealed class OutboxBackgroundServiceOptions<TContext> where TContext : Db
 /// while messages keep being delivered. Each batch runs in its own service scope, so the processor
 /// and the handlers get a fresh <typeparamref name="TContext"/>. Failures are logged and the next
 /// tick tries again. Register with <c>services.AddOutboxBackgroundService&lt;TContext&gt;(interval)</c>.
+/// <para>
+/// Where the host requires explicit callers, the system is the caller from before the scope hands out its
+/// processor, and with it its <typeparamref name="TContext"/>, until the batch is done. So whatever makes
+/// that context, a factory that chooses a data source by who is calling for example, sees the poller's
+/// context being taken as the system, as it sees the retention service's and the receiver's. The system is
+/// the caller of the poller's own bookkeeping only: an in-process handler of a row still runs with no
+/// caller, as <see cref="OutboxProcessor{TContext}"/> describes.
+/// </para>
 /// </summary>
 public sealed class OutboxBackgroundService<TContext> : BackgroundService where TContext : DbContext
 {
@@ -72,6 +80,10 @@ public sealed class OutboxBackgroundService<TContext> : BackgroundService where 
         do
         {
             using var scope = _scopeFactory.CreateScope();
+
+            // Begun before the processor is resolved, not only inside it: resolving it takes the context,
+            // and the context is taken as the system too.
+            using var bookkeeping = ToolkitCallers.BeginBookkeeping(ToolkitCallers.Required(scope.ServiceProvider));
             var processor = scope.ServiceProvider.GetRequiredService<OutboxProcessor<TContext>>();
             delivered = await processor.ProcessPendingAsync(_options.BatchSize, cancellationToken).ConfigureAwait(false);
         }

@@ -1,3 +1,4 @@
+using DDDToolkit.Access;
 using DDDToolkit.BaseTypes;
 using DDDToolkit.EntityFramework.Inbox;
 using Microsoft.EntityFrameworkCore;
@@ -21,6 +22,13 @@ namespace DDDToolkit.EntityFramework.Integration;
 /// every message to every consuming module, and each module runs only its own handlers, under its own
 /// inbox, in its own context. A second consuming module therefore changes nothing for the first, and the
 /// producing module never names either of them.
+/// </para>
+/// <para>
+/// <b>Who the handlers run as.</b> <see cref="Around"/> begins what each delivery runs under, before the
+/// inbox reads anything and until it committed. Where the host requires explicit callers
+/// (<see cref="CallerServiceCollectionExtensions.RequireExplicitCallers"/>) a module without one does not
+/// run its handlers at all: the delivery fails with <see cref="NoCallerException"/>, and the outbox or the
+/// transport tries it again.
 /// </para>
 /// </summary>
 /// <typeparam name="TContext">The consuming module's context: its inbox records which handler applied which message.</typeparam>
@@ -96,6 +104,27 @@ public sealed class ModuleIntegrationEvents<TContext> where TContext : DbContext
     }
 
     /// <summary>
+    /// Begins <paramref name="scope"/> around each delivery to this module's handlers: before the inbox is
+    /// asked whether the message was applied, and until its transaction committed or the handler failed. A
+    /// caller begun there is the caller of the inbox's read, the handler's work, the save and the inbox row.
+    /// <code>
+    /// module.Around((services, message, contract) => Callers.Begin(Caller.SystemIn("shipping")));
+    /// module.Around(IntegrationEventScopes.System);   // as the application itself, on purpose
+    /// </code>
+    /// May be called more than once, here or in another call for the same context: the scopes nest in the
+    /// order they were added, the first outermost, and end in the opposite order. Each handler of the module
+    /// gets a scope of its own.
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="scope"/> is null.</exception>
+    public ModuleIntegrationEvents<TContext> Around(IntegrationEventScope scope)
+    {
+        ArgumentNullException.ThrowIfNull(scope);
+
+        _registration.AddScope(scope);
+        return this;
+    }
+
+    /// <summary>
     /// Hands every message published as <typeparamref name="TContract"/> to <paramref name="handler"/>, an
     /// instance you already own. Tests usually want this one.
     /// </summary>
@@ -125,12 +154,18 @@ internal sealed record ModuleHandler(
     Func<object, bool> Accepts,
     Func<IServiceProvider, object, IntegrationEventMessage, CancellationToken, Task> Invoke);
 
-/// <summary>The handlers one consuming module registered, gathered over every call for that context.</summary>
+/// <summary>The handlers one consuming module registered, and the scopes around them, gathered over every call for that context.</summary>
 internal sealed class ModuleConsumerRegistration<TContext> where TContext : DbContext
 {
     private readonly List<ModuleHandler> _handlers = [];
+    private readonly List<IntegrationEventScope> _scopes = [];
 
     public IReadOnlyList<ModuleHandler> Handlers => _handlers;
+
+    /// <summary>What each delivery to a handler runs under, outermost first.</summary>
+    public IReadOnlyList<IntegrationEventScope> Scopes => _scopes;
+
+    public void AddScope(IntegrationEventScope scope) => _scopes.Add(scope);
 
     public void Add(ModuleHandler handler)
     {
@@ -173,6 +208,11 @@ internal sealed class ModuleIntegrationEventConsumer<TContext>(
         List<(string, Exception)>? failures = null;
         DomainEventInbox<TContext>? inbox = null;
 
+        // Where every flow of work has to say who it runs as, the handlers do not inherit the system caller
+        // the outbox or the transport did its bookkeeping as: they run as what the module's scopes begin.
+        var required = ToolkitCallers.Required(services);
+        using var none = ToolkitCallers.BeginHandler(required);
+
         foreach (var handler in registration.Handlers)
         {
             if (!handler.Accepts(contract))
@@ -181,10 +221,32 @@ internal sealed class ModuleIntegrationEventConsumer<TContext>(
             }
 
             cancellationToken.ThrowIfCancellationRequested();
+
+            if (required && registration.Scopes.Count == 0)
+            {
+                // Refused before the inbox is asked anything, and recorded like any failing handler, so the
+                // message is tried again once the module says what its handlers run as.
+                var refusal = new NoCallerException(NoScope(handler.Consumer));
+                _logger.LogError(refusal, "Consumer {Consumer} in {Module} did not run message {MessageId} ({Name}): the module says nothing about who its handlers run as.", handler.Consumer, Module, message.MessageId, message.Name);
+                (failures ??= []).Add((handler.Consumer, refusal));
+                continue;
+            }
+
             inbox ??= services.GetRequiredService<DomainEventInbox<TContext>>();
+            List<IDisposable>? begun = null;
 
             try
             {
+                // Begun before the inbox's read and ended after its commit, so the read, the handler's work,
+                // the save and the inbox row all run as one caller.
+                foreach (var scope in registration.Scopes)
+                {
+                    if (scope(services, message, contract) is { } entered)
+                    {
+                        (begun ??= new List<IDisposable>(registration.Scopes.Count)).Add(entered);
+                    }
+                }
+
                 // Each handler owns its inbox row, so a failure here does not undo the handlers that ran
                 // before it and does not make them run again on the retry.
                 var applied = await inbox.ExecuteOnceAsync(
@@ -203,8 +265,31 @@ internal sealed class ModuleIntegrationEventConsumer<TContext>(
                 _logger.LogError(exception, "Consumer {Consumer} in {Module} failed on message {MessageId} ({Name}).", handler.Consumer, Module, message.MessageId, message.Name);
                 (failures ??= []).Add((handler.Consumer, exception));
             }
+            finally
+            {
+                End(begun);
+            }
         }
 
         return failures ?? [];
     }
+
+    /// <summary>Ends the scopes begun for one handler, innermost first.</summary>
+    private static void End(List<IDisposable>? begun)
+    {
+        if (begun is null)
+        {
+            return;
+        }
+
+        for (var i = begun.Count - 1; i >= 0; i--)
+        {
+            begun[i].Dispose();
+        }
+    }
+
+    private string NoScope(string consumer)
+        => $"The handlers of {Module} have no caller, and this host requires one (RequireExplicitCallers), so {consumer} did not run. " +
+           "Say what they run as where the module registers them: module.Around((services, message, contract) => Callers.Begin(Caller.SystemIn(\"<module>\"))) " +
+           "for a scoped system caller the policies hold, or module.Around(IntegrationEventScopes.System) to run them as the application itself.";
 }

@@ -15,6 +15,11 @@ namespace DDDToolkit.Abstractions.Attributes;
 /// Publishing a nested type publishes nothing else, but a type nested inside a published type is
 /// published with it.
 /// </para>
+/// <para>
+/// A project that holds nothing but what its module publishes, its contracts project, says so once with
+/// <c>[assembly: ModuleContracts]</c> or <c>DDD_ModuleContracts</c>, and every public type of it is published
+/// without this attribute.
+/// </para>
 /// </summary>
 /// <remarks>
 /// Publishing a type is not the same as making it safe to hold. An entity or aggregate root of another

@@ -1,0 +1,17 @@
+@inject UiSession Session
+
+@*
+    The language the pages are shown in, and the one every call asks the API to answer in, through its
+    Accept-Language header. A language is named in its own letters, the same in both.
+*@
+<span class="btn-group btn-group-sm ms-2" role="group" aria-label="@T["layout.language"]">
+    @foreach (var language in UiSession.Languages)
+    {
+        <button type="button"
+                class="btn @(language == Session.Language ? "btn-secondary" : "btn-outline-secondary")"
+                aria-pressed="@(language == Session.Language ? "true" : "false")"
+                @onclick="() => Session.SelectLanguage(language)">
+            @language
+        </button>
+    }
+</span>

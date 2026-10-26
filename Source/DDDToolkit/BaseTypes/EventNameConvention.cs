@@ -11,7 +11,7 @@ namespace DDDToolkit.BaseTypes;
 /// <c>ordering.order-placed</c> at version 2, so every version of one event shares one name.
 /// <para>
 /// This file is compiled twice, into the runtime and into every analyzer assembly, because the name the
-/// generated registration writes out and the name <c>DomainEventName.Of</c> reads by reflection have
+/// generated registration writes out and the name <c>DomainEventName.For</c> reads by reflection have
 /// to be the same name. One source for both is what makes that true by construction instead of by care.
 /// It targets what both compilers accept: no APIs newer than netstandard2.0.
 /// </para>

@@ -4,13 +4,16 @@
 //   llms-full.txt    every page in that order, in one file
 //   docs/<page>.md   each page as Markdown, at the page's own URL with .md appended
 //
-// The pages are docs/ as written, with one change: a relative link is made absolute, to the Markdown of
+// The pages are docs/ as written, with two changes: a relative link is made absolute, to the Markdown of
 // another page or to the file on GitHub, because a model reading one file has nothing to resolve a
-// relative link against. A page's description in llms.txt is its row in the README's documentation
-// table, so the two indexes cannot drift apart: a page in the sidebar without a row fails the build.
+// relative link against; and the marker of a part the site draws as a component is left out, with what it
+// holds for a reader without the site kept (src/remark/interactive.js). A page's description in llms.txt
+// is its row in the README's documentation table, so the two indexes cannot drift apart: a page in the
+// sidebar without a row fails the build.
 const fs = require('fs');
 const path = require('path');
 const { githubUrl } = require('../remark/githubLinks');
+const { withoutMarkers } = require('../remark/interactive');
 
 function read(file) {
   return fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n');
@@ -77,7 +80,7 @@ module.exports = function llms(context, { docsDir, repoRoot, routeBasePath, side
   function page(id) {
     const file = path.join(docsDir, `${id}.md`);
     let fenced = false;
-    const markdown = read(file)
+    const markdown = withoutMarkers(read(file))
       .split('\n')
       .map((line) => {
         if (/^\s*(```|~~~)/.test(line)) {

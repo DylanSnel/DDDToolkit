@@ -487,7 +487,8 @@ events are delivered, which is a separate matter; see
 |---|---|---|
 | 1 | `PublishDomainEventsInterceptor` | Handlers run before the save and may change tracked aggregates. |
 | 2 | `InvariantInterceptor` | So it sees whatever those handlers changed. |
-| 3 | `AggregateVersionInterceptor` | Last, so a save the invariants reject leaves no version bumped. |
+| 3 | `AggregateVersionInterceptor` | After both, so a save the invariants reject leaves no version bumped. |
+| 4 | `DatabaseRefusalInterceptor` | Only answers a save the database refused, so it has no say before one. |
 
 Two things it deliberately does not do. It does not check an entity that is being deleted: a row on
 its way out has no state left to be consistent about. And it does not check an aggregate that this

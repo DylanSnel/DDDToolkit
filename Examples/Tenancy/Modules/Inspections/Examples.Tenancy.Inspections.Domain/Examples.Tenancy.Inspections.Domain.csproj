@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!--
+    Inspections' domain: an inspection, its id, its domain event and its refusals. It references neither Entity
+    Framework nor ASP.NET Core. The infrastructure project maps the inspection, stores its id through the converter
+    generated there, and registers the domain event under its name, because it declares the same module. Like
+    Projects' domain it needs no Tenancy package, and unlike it no Membership package either: an inspection stores
+    a tenant, a project and a seat, and those are ids the other modules publish, nothing more.
+  -->
+  <ItemGroup>
+    <!-- What the modules share and none owns: the range of days an inspection covers. -->
+    <ProjectReference Include="..\..\..\Shared\Examples.Tenancy.Shared.Domain\Examples.Tenancy.Shared.Domain.csproj" />
+    <!-- A project's id: an inspection is about one. Contracts only. -->
+    <ProjectReference Include="..\..\Projects\Examples.Tenancy.Projects.Contracts\Examples.Tenancy.Projects.Contracts.csproj" />
+    <!-- Tenancy's ids: an inspection belongs to a tenant and is recorded by a seat. Contracts only. -->
+    <ProjectReference Include="..\..\Tenants\Examples.Tenancy.Tenants.Contracts\Examples.Tenancy.Tenants.Contracts.csproj" />
+    <ProjectReference Include="..\..\..\..\..\Source\DDDToolkit\DDDToolkit.csproj" />
+  </ItemGroup>
+
+  <!-- The generator. A NuGet consumer gets it through the package above; inside this repository it is wired by hand. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\..\Source\DDDToolkit.Analyzers\DDDToolkit.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+</Project>

@@ -18,6 +18,11 @@ namespace DDDToolkit.EntityFramework.Integration;
 /// Each call gets a scope of its own, and with it a context per module, as a message handled by the
 /// outbox processor does.
 /// </para>
+/// <para>
+/// Where the host requires explicit callers, receiving is the toolkit's own bookkeeping and runs as
+/// <c>Caller.System</c>, and each module's handlers run as that module's scopes say
+/// (<see cref="ModuleIntegrationEvents{TContext}.Around"/>). Without it nothing is begun.
+/// </para>
 /// <code>
 /// // in a transport's consumer
 /// await receiver.ReceiveAsync(IntegrationEventHeaders.ToMessage(headers, body), cancellationToken);
@@ -36,6 +41,7 @@ public sealed class IntegrationEventReceiver(IServiceScopeFactory scopes)
         ArgumentNullException.ThrowIfNull(message);
 
         await using var scope = scopes.CreateAsyncScope();
+        using var bookkeeping = ToolkitCallers.BeginBookkeeping(ToolkitCallers.Required(scope.ServiceProvider));
         var modules = scope.ServiceProvider.GetRequiredService<ModuleIntegrationEventSink>();
 
         await modules.SendAsync(message, cancellationToken).ConfigureAwait(false);

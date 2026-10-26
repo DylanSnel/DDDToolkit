@@ -30,6 +30,17 @@ internal static class Check
     /// <summary>DDDToolkit.Analyzers: the identifier generated from [AggregateRoot&lt;Guid&gt;("ORD")].</summary>
     public static OrderId ImplicitIdentifier() => OrderId.CreateSequential();
 
+    /// <summary>
+    /// DDDToolkit.Analyzers and the .NET 10 build of DDDToolkit.Abstractions: an id over a Guid makes a new one of
+    /// itself, for code that is generic over ids.
+    /// </summary>
+    public static TId NewIdentifier<TId>()
+        where TId : DDDToolkit.Abstractions.Interfaces.ICreatableEntityId<TId>
+        => TId.Create();
+
+    /// <summary>The same, closed over the generated id and a declared one.</summary>
+    public static (OrderId, CustomerId) NewIdentifiers() => (NewIdentifier<OrderId>(), NewIdentifier<CustomerId>());
+
     /// <summary>DDDToolkit.Analyzers: the value object twin, and the toolkit's own failure path.</summary>
     public static bool ValueObjects()
     {

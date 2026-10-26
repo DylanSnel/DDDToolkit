@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <DDD_Module>ExampleTests</DDD_Module>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="coverlet.collector">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="FluentAssertions" />
+  </ItemGroup>
+
+  <!--
+    The testing kit against code that was not written for it. The two module projects are the same
+    assemblies the host runs; nothing here is a stand-in.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\Examples\Modules\Catalog\Examples.Webshop.Catalog\Examples.Webshop.Catalog.csproj" />
+    <ProjectReference Include="..\..\Examples\Modules\Ordering\Examples.Webshop.Ordering\Examples.Webshop.Ordering.csproj" />
+    <ProjectReference Include="..\..\Examples\Modules\Inventory\Examples.Webshop.Inventory\Examples.Webshop.Inventory.csproj" />
+    <ProjectReference Include="..\..\Examples\Modules\Payments\Examples.Webshop.Payments\Examples.Webshop.Payments.csproj" />
+    <ProjectReference Include="..\..\Examples\Modules\SharedKernel\Examples.Webshop.SharedKernel\Examples.Webshop.SharedKernel.csproj" />
+    <ProjectReference Include="..\..\Examples\Modules\Shipping\Examples.Webshop.Shipping\Examples.Webshop.Shipping.csproj" />
+    <ProjectReference Include="..\..\Source\DDDToolkit.Testing\DDDToolkit.Testing.csproj" />
+    <!-- SupabaseMigrations, to hold the example's supabase/migrations to its Entity Framework migrations. -->
+    <ProjectReference Include="..\..\Source\DDDToolkit.EntityFramework.Supabase\DDDToolkit.EntityFramework.Supabase.csproj" />
+  </ItemGroup>
+
+</Project>

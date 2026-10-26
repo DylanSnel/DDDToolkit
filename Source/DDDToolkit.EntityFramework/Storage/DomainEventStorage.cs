@@ -1,8 +1,8 @@
 namespace DDDToolkit.EntityFramework.Storage;
 
 /// <summary>
-/// Names and sizes shared by the outbox and the inbox, so the model builder extensions and the
-/// hand-written migration helpers cannot drift apart.
+/// Names and sizes shared by the outbox, the inbox and the event log, so the model builder extensions and
+/// the hand-written migration helpers cannot drift apart.
 /// </summary>
 public static class DomainEventStorage
 {
@@ -25,6 +25,9 @@ public static class DomainEventStorage
     /// <summary>The default inbox table name.</summary>
     public const string DefaultInboxTableName = "InboxMessages";
 
+    /// <summary>The default event log table name.</summary>
+    public const string DefaultEventLogTableName = "EventLog";
+
     /// <summary>Longest error text kept on an outbox row; longer text is truncated.</summary>
     public const int MaxErrorLength = 4000;
 
@@ -39,6 +42,12 @@ public static class DomainEventStorage
 
     /// <summary>Longest aggregate key text kept on an outbox row.</summary>
     public const int MaxAggregateIdLength = 256;
+
+    /// <summary>Longest kind of actor kept on an event log row.</summary>
+    public const int MaxActedByKindLength = 64;
+
+    /// <summary>Longest id of an actor kept on an event log row.</summary>
+    public const int MaxActedByIdLength = 256;
 
     /// <summary>The provider name the SQLite provider reports; it has no schemas.</summary>
     internal const string SqliteProvider = "Microsoft.EntityFrameworkCore.Sqlite";
