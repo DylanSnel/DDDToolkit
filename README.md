@@ -68,7 +68,9 @@ public partial class Order { }
 | [How a request is checked](docs/how-a-request-is-checked.md) | One request followed from the attribute on it to the rows it touches: the generated requirement, the module's checks, the statement at the door, the caller on the connection and the policies, with a walk-through to click through |
 | [Integration events](docs/integration-events.md) | Contracts between modules, the outbox and the inbox, versioning |
 | [Transports](docs/transports.md) | Carrying integration events out of the process: pgmq, Wolverine, MassTransit, or a sink of your own |
-| [Tenancy](docs/tenancy.md) | The first supporting domain: tenants, the organization tree, seats and roles, and who may do what where |
+| [Tenancy](docs/tenancy/overview.md) | The first supporting domain: what it is for, what it does and does not do, and how its pieces connect |
+| [Tenancy: the tutorial](docs/tenancy/tutorial.md) | Tenancy built into an application step by step: why each step, the whole files, and what they do |
+| [Tenancy reference](docs/tenancy.md) | Every detail of Tenancy: tenants, the organization tree, seats and roles, and who may do what where |
 | [Membership](docs/membership.md) | The second supporting domain: access to a resource through its members, their roles and its owner, for as many kinds of resource as an application has |
 | [Writing your own supporting domain](docs/writing-a-supporting-domain.md) | Shipping a domain as a package that applications extend with their own ids and classes, without losing its rules |
 | [GraphQL](docs/graphql.md) | `AddDDDToolkitTypes()`, the generated scalar bindings, errors with codes, Relay node ids, one schema over the modules |

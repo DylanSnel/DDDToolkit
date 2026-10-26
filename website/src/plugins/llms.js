@@ -19,7 +19,23 @@ function read(file) {
   return fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n');
 }
 
-/** The sidebar as sections of doc ids: one per category, and one for the pages before the first. */
+/** The doc ids of a category's items, in order: a doc id, a doc with a label of its own, or a category inside it. */
+function idsOf(items) {
+  return items.flatMap((item) => {
+    if (typeof item === 'string') {
+      return [item];
+    }
+    if (item.type === 'doc') {
+      return [item.id];
+    }
+    if (item.type === 'category') {
+      return idsOf(item.items);
+    }
+    throw new Error(`llms.txt understands doc ids, docs and categories of them, not ${JSON.stringify(item)}.`);
+  });
+}
+
+/** The sidebar as sections of doc ids: one per top-level category, and one for the pages before the first. */
 function sections(sidebar) {
   const result = [];
   let loose = null;
@@ -30,9 +46,9 @@ function sections(sidebar) {
         result.push(loose);
       }
       loose.ids.push(item);
-    } else if (item.type === 'category' && item.items.every((child) => typeof child === 'string')) {
+    } else if (item.type === 'category') {
       loose = null;
-      result.push({ label: item.label, ids: item.items });
+      result.push({ label: item.label, ids: idsOf(item.items) });
     } else {
       throw new Error(`llms.txt understands doc ids and categories of doc ids, not ${JSON.stringify(item)}.`);
     }
@@ -43,7 +59,7 @@ function sections(sidebar) {
 /** What the README's documentation table says each page covers, by doc id. */
 function descriptions(readme) {
   const result = new Map();
-  for (const [, id, description] of readme.matchAll(/^\| \[[^\]]+\]\(docs\/([\w-]+)\.md\) \| (.+?) \|$/gm)) {
+  for (const [, id, description] of readme.matchAll(/^\| \[[^\]]+\]\(docs\/([\w/-]+)\.md\) \| (.+?) \|$/gm)) {
     result.set(id, description);
   }
   return result;
@@ -64,7 +80,7 @@ module.exports = function llms(context, { docsDir, repoRoot, routeBasePath, side
       return url;
     }
     if (url.startsWith('#')) {
-      return markdownUrl(path.basename(file, '.md')) + url;
+      return markdownUrl(path.relative(docsDir, file).split(path.sep).join('/').replace(/\.md$/, '')) + url;
     }
 
     const [target, hash] = url.split('#');
@@ -124,7 +140,9 @@ module.exports = function llms(context, { docsDir, repoRoot, routeBasePath, side
 
       fs.mkdirSync(path.join(outDir, routeBasePath), { recursive: true });
       for (const { id, markdown } of pages) {
-        fs.writeFileSync(path.join(outDir, routeBasePath, `${id}.md`), markdown);
+        const target = path.join(outDir, routeBasePath, `${id}.md`);
+        fs.mkdirSync(path.dirname(target), { recursive: true });
+        fs.writeFileSync(target, markdown);
       }
       fs.writeFileSync(path.join(outDir, 'llms.txt'), `${index.join('\n\n')}\n`);
       fs.writeFileSync(path.join(outDir, 'llms-full.txt'), `${[...header, ...pages.map(({ markdown }) => markdown.trim())].join('\n\n')}\n`);

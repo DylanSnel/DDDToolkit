@@ -41,7 +41,7 @@
   --ddd-muted: #5b5b72;
   --ddd-code-inline-bg: #f1eefc;
   --ddd-code-inline-fg: #4c22b3;
-  --docusaurus-highlighted-code-line-bg: rgba(109, 46, 211, 0.08);
+  --docusaurus-highlighted-code-line-bg: rgba(109, 46, 211, 0.14);
 }
 
 html[data-theme='dark'] {
@@ -64,7 +64,7 @@ html[data-theme='dark'] {
   --ddd-muted: #9a9ab5;
   --ddd-code-inline-bg: #1c1a33;
   --ddd-code-inline-fg: #c9b6ff;
-  --docusaurus-highlighted-code-line-bg: rgba(169, 139, 255, 0.12);
+  --docusaurus-highlighted-code-line-bg: rgba(169, 139, 255, 0.22);
 }
 
 body {
@@ -184,6 +184,12 @@ html[data-theme='dark'] .theme-code-block {
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
+}
+
+/* A line a step adds or changes, highlighted with {n-m} after the language: a stronger tint than Infima's, and a
+   bar at the left, so it stands out on the dark code background as well. */
+.theme-code-block-highlighted-line {
+  box-shadow: inset 3px 0 0 var(--ifm-color-primary);
 }
 
 /* tables */

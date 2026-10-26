@@ -33,7 +33,21 @@ const sidebars = {
       type: 'category',
       label: 'Supporting domains',
       collapsed: false,
-      items: ['tenancy', 'membership', 'writing-a-supporting-domain'],
+      items: [
+        {
+          type: 'category',
+          label: 'Tenancy',
+          collapsed: false,
+          link: { type: 'doc', id: 'tenancy/overview' },
+          items: [
+            { type: 'doc', id: 'tenancy/overview', label: 'Overview' },
+            { type: 'doc', id: 'tenancy/tutorial', label: 'Tutorial' },
+            { type: 'doc', id: 'tenancy', label: 'Reference' },
+          ],
+        },
+        'membership',
+        'writing-a-supporting-domain',
+      ],
     },
     {
       type: 'category',
