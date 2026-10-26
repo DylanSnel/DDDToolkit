@@ -417,10 +417,11 @@ there.
 `BookShipment` in Shipping is the same class it is in the monolith; it cannot tell that
 `OrderConfirmedV1` came through `pgmq.q_fulfilment` rather than from the module next door.
 
-The three services migrate that one database as they start, each its own modules, and one at a time:
-`ModuleDatabase.Postgres` holds a Postgres advisory lock while a module's migrations run. Entity Framework's own
-lock is the module's history table, which keeps two hosts from migrating one module at once but not two modules
-side by side, and the first migrations of Ordering and Shipping both make the schema `ddd`.
+The three services migrate that one database as they start, each its own modules, and one at a time: on Postgres,
+`UseDDDToolkit` brings [the toolkit's migration lock](../docs/entity-framework.md#several-services-on-one-database),
+one advisory lock for the whole database. Entity Framework's own lock on Postgres is the module's history table,
+which keeps two hosts from migrating one module at once but not two modules side by side, and the first migrations
+of Ordering and Shipping both make the schema `ddd`.
 
 ```bash
 dotnet run --project Examples/Microservices.Pgmq/Examples.Webshop.Pgmq.AppHost

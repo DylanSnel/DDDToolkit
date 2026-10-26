@@ -3780,9 +3780,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   Entity Framework's lock, the module's own history table, keeps neither from running beside the other. Now and
   then the second asked for `ddd` while the first had made it and not committed, made it too and failed on
   `pg_namespace`'s unique index (23505): that service stopped, the gateway did not start, and all seven scenarios
-  of `MicroservicesOverPgmq` failed. `ModuleDatabase.Postgres` now migrates under a Postgres advisory lock, on a
-  connection of its own, so the hosts on one database migrate one at a time; a host on another database does not
-  wait for it.
+  of `MicroservicesOverPgmq` failed. The services now migrate one at a time, with the toolkit's lock of the whole
+  database that `UseDDDToolkit` brings on Postgres (see Added); a service on another database does not wait for it.
 
 ## [3.1.0] - 2026-10-01
 
