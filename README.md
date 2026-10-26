@@ -70,6 +70,14 @@ public partial class Order { }
 | [Transports](docs/transports.md) | Carrying integration events out of the process: pgmq, Wolverine, MassTransit, or a sink of your own |
 | [Tenancy](docs/tenancy/overview.md) | The first supporting domain: what it is for, what it does and does not do, and how its pieces connect |
 | [Tenancy: the tutorial](docs/tenancy/tutorial.md) | Tenancy built into an application step by step: why each step, the whole files, and what they do |
+| [Tenancy API: aggregates and entities](docs/tenancy/reference/aggregates.md) | Generated from the code: the templates of tenant, organization, unit, seat, role and invitation, with their value objects, invariants and events |
+| [Tenancy API: use cases](docs/tenancy/reference/use-cases.md) | Generated from the code: `TenancyUseCases` and every command, directory and record nested in it, and the registration a host calls |
+| [Tenancy API: catalogue and role packs](docs/tenancy/reference/catalogue.md) | Generated from the code: permissions, the catalogue, role packs and their sync |
+| [Tenancy API: callers and requirements](docs/tenancy/reference/callers.md) | Generated from the code: the Tenancy caller, actors, tenant selection and the requirement attributes |
+| [Tenancy API: questions and row access](docs/tenancy/reference/questions.md) | Generated from the code: the access questions, the read model, the projection and the row access rules |
+| [Tenancy API: refusals](docs/tenancy/reference/refusals.md) | Generated from the code: every refusal code and what it means |
+| [Tenancy API: Entity Framework](docs/tenancy/reference/entity-framework.md) | Generated from the code: the public API of the Entity Framework package |
+| [Tenancy API: Postgres](docs/tenancy/reference/postgres.md) | Generated from the code: the public API of the Postgres package |
 | [Tenancy reference](docs/tenancy.md) | Every detail of Tenancy: tenants, the organization tree, seats and roles, and who may do what where |
 | [Membership](docs/membership.md) | The second supporting domain: access to a resource through its members, their roles and its owner, for as many kinds of resource as an application has |
 | [Writing your own supporting domain](docs/writing-a-supporting-domain.md) | Shipping a domain as a package that applications extend with their own ids and classes, without losing its rules |

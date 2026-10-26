@@ -144,4 +144,5 @@ Each has a default, so the smallest application decides none of them.
 
 - **Build it:** the [tutorial](tutorial.md), step by step.
 - **Look something up:** the [reference](../tenancy.md), with every detail of every part.
+- **Every class and method:** the [API reference](reference/aggregates.md).
 - **Access to one thing**, such as a board with its own members: [Membership](../membership.md).
