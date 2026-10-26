@@ -1,13 +1,13 @@
 namespace DDDToolkit.Analyzers.Tests.Docs;
 
 /// <summary>
-/// The shortest start of docs/tenancy.md is one line, read from the page and compiled as it stands in a project of
-/// its own, with Tenancy: it has to be all there is to write, and what the page shows the switch writing has to be
-/// what it writes.
+/// The shortest start of docs/tenancy/your-module.md is one line, read from the page and compiled as it stands in a
+/// project of its own, with Tenancy: it has to be all there is to write, and what the page shows the switch writing
+/// has to be what it writes.
 /// </summary>
 public class TenancySwitchDocsExampleTests
 {
-    private const string Page = "tenancy.md";
+    private const string Page = "tenancy/your-module.md";
 
     private const string Heading = "The shortest start: the switch";
 

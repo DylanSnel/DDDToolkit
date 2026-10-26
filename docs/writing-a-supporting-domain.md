@@ -3,7 +3,7 @@
 Your core domain is what the application is for, and the [building blocks](entities-and-aggregates.md)
 are how you write it. Around it sit domains that many applications need and none is set apart by:
 subscriptions, tenants, audit. A **supporting domain** is one of those written once, as a package, and
-used by many applications. The toolkit ships its own under `DDDToolkit.Supporting.*`, [Tenancy](tenancy.md)
+used by many applications. The toolkit ships its own under `DDDToolkit.Supporting.*`, [Tenancy](tenancy/overview.md)
 and [Membership](membership.md), and you can write one the same way.
 
 A supporting domain is not a building block. It is written with the building blocks, the way your own
@@ -374,7 +374,7 @@ What other modules read of the package's data, it gives them as functions too, a
 answers rows under column names of its own, and the package ships the mapping that reads them into a module's
 context. A module's model then names what the package offers and nothing of how it is stored, so the
 application names the package's tables and columns as it likes, and the policies on those tables still decide
-what each caller is answered ([Tenancy's read functions](tenancy.md#modules-read-through-functions)).
+what each caller is answered ([Tenancy's read functions](tenancy/postgres.md#modules-read-through-functions)).
 
 Keep what a module can read that way to what a rule needs. A read model of ids, permissions, periods and statuses
 lets a module ask "is this subscription active" inside its own query, and gives it nothing to show: no plan's
@@ -384,14 +384,14 @@ them, and leaves out an id that is not theirs to ask about. A module's answers t
 shows them asks the package for the names. Ship a check next to the mapping that says what a module's model
 maps of the package's beyond the read model, a type of its own on one of the package's tables or a property
 added to a row, so a test of the application holds every module to it
-([what a module reads of Tenancy](tenancy.md#what-a-module-reads-of-tenancy), and [its names](tenancy.md#names)).
+([what a module reads of Tenancy](tenancy/who-may-do-what.md#what-a-module-reads-of-tenancy), and [its names](tenancy/names-and-languages.md#names)).
 
 What such a contribution writes follows from what the package owns. Policies on its own tables, which it keeps
 to itself in `ExclusiveTables`, so no rule of the application's adds one next to them. Where who reads a table of
 the application's class is the application's choice, who reads the subscriptions say, the package marks its read a
 [default](row-level-security.md#policies-a-package-ships), with what its own work reads kept beside a rule of the
 application's and what that rule is held to, and the application replaces it with a read rule on its class, as
-[Tenancy's seats](tenancy.md#who-reads-the-seats-a-default-you-may-replace) do. Restrictive policies on
+[Tenancy's seats](tenancy/postgres.md#who-reads-the-seats-a-default-you-may-replace) do. Restrictive policies on
 the application's tables that depend on it, a table kept to a subscription say, since a restrictive policy is
 never merged with the rules' and no rule can widen it. As statements, the triggers that keep what no policy can
 see, such as a rule about rows other than the one written, checked at commit. A contribution the application
@@ -401,7 +401,7 @@ with: a function written from the
 catalogue of subscription plans the application is configured with, say, answers as that catalogue does. Its
 registration for Postgres registers that check with `services.AddStartupCheck(...)`, in the stage of the
 database, so a host that runs its [start-up checks](startup-checks.md#a-check-of-your-own) gets it without
-naming it. [Tenancy's](tenancy.md#on-postgres-the-second-lock) does all four.
+naming it. [Tenancy's](tenancy/postgres.md) does all four.
 
 A package that keeps rows a customer makes, in a class of the application's, knows no customer: whose a row
 is, is a column the application adds and a rule the application writes. Its functions run as their owner and
@@ -923,7 +923,7 @@ public abstract class SubscriptionUseCases : global::Acme.Subscriptions.Subscrip
   since the application's class leaves none open. One that is not is passed over without a word, so prove it in
   the package's own tests, with a project that names the class.
 
-[Tenancy](tenancy.md#calling-a-use-case) is written this way: its use cases are `TenancyUseCases<...>`, and an
+[Tenancy](tenancy/your-module.md#calling-a-use-case) is written this way: its use cases are `TenancyUseCases<...>`, and an
 application, the sample among them, names them `TenancyUseCases.SeatCommands`. [Membership](membership.md)'s are
 small classes generic over the ids alone, which read where they are taken, so it asks for none, and no other
 package of the toolkit asks for one either.
@@ -960,7 +960,7 @@ first. So a package asks for what it needs, and does not name who answers:
   and generator tests for an application with both, with one, with types that do not fit, and with several
   classes in a project.
 
-[Membership](membership.md#with-tenancy) is written this way beside [Tenancy](tenancy.md): it works for
+[Membership](membership.md#with-tenancy) is written this way beside [Tenancy](tenancy/overview.md): it works for
 plain users, and where an application has an organization, a member is a seat.
 
 ## What the application should not have to write
@@ -992,7 +992,7 @@ the package's docs has to have explained. These can be the package's to write:
   through. A second
   attribute with `IdsOnly = true` writes the ids alone, for a module's contracts project. Leave out a class whose
   declaration switches something on, as Tenancy leaves out the invitation
-  ([The shortest start: the switch](tenancy.md#the-shortest-start-the-switch)); what a switch cannot write is
+  ([The shortest start: the switch](tenancy/your-module.md#the-shortest-start-the-switch)); what a switch cannot write is
   said on it, [DDD00066](diagnostics.md#ddd00066).
 
 - **A registration for each thing, beside the main one.** A registration can take only the later type
@@ -1087,7 +1087,7 @@ the package's docs has to have explained. These can be the package's to write:
   list of permissions from the `[Permissions]` classes the module declares, and reads every module's list in the
   assemblies a project references, and writes them into each project that declares no module, with `DDD_Module`
   or `[assembly: Module]`, the host among them, with the call that registers them
-  ([A module states its permissions once](tenancy.md#a-module-states-its-permissions-once)). So a module says a thing once that
+  ([A module states its permissions once](tenancy/roles-and-permissions.md#a-module-states-its-permissions-once)). So a module says a thing once that
   two programs need, and no project lists the modules. A list a module writes by hand would say its permissions twice,
   and is an error where it is declared: [DDD00095](diagnostics.md#ddd00095).
 

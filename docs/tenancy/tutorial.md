@@ -324,8 +324,8 @@ public sealed partial class Seat
 
 Build again, and look in the domain project's **Dependencies → Analyzers** to see what was written.
 
-> **Going further.** A class of your own with rules: [How your classes add behaviour](../tenancy.md#how-your-classes-add-behaviour).
-> How an id makes a new one: [How a new id is made](../tenancy.md#how-a-new-id-is-made).
+> **Going further.** A class of your own with rules: [How your classes add behaviour](your-module.md#how-your-classes-add-behaviour).
+> How an id makes a new one: [How a new id is made](your-module.md#how-a-new-id-is-made).
 
 ## Step 3: where it is stored
 
@@ -406,7 +406,7 @@ It creates the schema `tenancy` with, among others:
 - `OrganizationUnitPaths`: each unit with every unit above it, so "everything below North" is one query.
 
 > **Going further.** Everything `AddTenancy` maps, and naming the tables yourself:
-> [The context and the registration](../tenancy.md#the-context-and-the-registration).
+> [The context and the registration](your-module.md#the-context-and-the-registration).
 
 ## Step 4: the module's registration
 

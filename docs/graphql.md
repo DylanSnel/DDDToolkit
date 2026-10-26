@@ -10,7 +10,7 @@ This page starts with ids, which every schema needs first, then the conventions 
 errors, in the response and in a mutation's payload, a permission on a field, Relay, and paging by an
 id. After that come the parts for larger systems: a field for one schema only, one schema over several
 modules, and pushing events to subscribed clients. How the generated bindings work is at the end. For a
-whole schema to read beside this page, the [Tenancy sample](tenancy.md#graphql-in-the-sample) is the
+whole schema to read beside this page, the [Tenancy sample](tenancy/the-sample.md#graphql-in-the-sample) is the
 reference for GraphQL; the shop sample's schema is older, and still writes by hand what HotChocolate now
 generates.
 
@@ -783,7 +783,7 @@ A caller that holds the permission on the first product and not on the second ge
   it, answers the value without asking. Then hold the rule where the data is read: the query leaves the value
   out, as `null`, for a caller who does not hold the permission, and the attribute declares the rule and gives the
   refusal. The Tenancy sample does so for a crew member's roles and a role's permissions
-  ([GraphQL in the sample](tenancy.md#graphql-in-the-sample)).
+  ([GraphQL in the sample](tenancy/the-sample.md#graphql-in-the-sample)).
 - **What nobody can answer is refused, never allowed.** A parent whose type has no `IFieldPermissions`
   registered, a field without a parent (a `[Query]` method), a rule that names roles, and a rule applied
   after the resolver or during validation each answer an error that says what is missing, with
@@ -1057,7 +1057,7 @@ SingleValueCursorKeySerializer<OrderId, Guid>.Register();
   key's type; and a cursor of this list with a head written into it, which says how many pages to skip and
   what the list's total is, is believed. Check the marker against the query's own keys before paging, and
   refuse it with a code of your own, as the Tenancy sample does for all three:
-  [A marker that is not the list's cursor](tenancy.md#a-marker-that-is-not-the-lists-cursor).
+  [A marker that is not the list's cursor](tenancy/the-sample.md#a-marker-that-is-not-the-lists-cursor).
 
 `ToPageAsync` is HotChocolate's, in `GreenDonut.Data.EntityFramework`, which the project that holds the
 context references, on its own or through `HotChocolate.Data.EntityFramework`. This package does not: the
@@ -1236,7 +1236,7 @@ host: there is no other method to call, and none to forget.
 
 With [one schema over a modular monolith](#one-schema-over-a-modular-monolith), the two are gateways: the attribute
 says which schema a class belongs to, and a gateway which schemas form one endpoint. The
-[Tenancy sample](tenancy.md#graphql-in-the-sample) serves its administration that way:
+[Tenancy sample](tenancy/the-sample.md#graphql-in-the-sample) serves its administration that way:
 [Several gateways](#several-gateways).
 
 ## One schema over a modular monolith
@@ -1824,7 +1824,7 @@ builder.Services.AddInMemoryFusionGateway("public", ["catalog"], options => opti
 
 </details>
 
-The [Tenancy sample](tenancy.md#graphql-in-the-sample) maps both of its gateways with `RequireAuthorization`;
+The [Tenancy sample](tenancy/the-sample.md#graphql-in-the-sample) maps both of its gateways with `RequireAuthorization`;
 `GraphQLSchemaKeyTests` runs its host in Production and downloads each gateway's schema with the key, the way a build
 server would, and is refused without it.
 

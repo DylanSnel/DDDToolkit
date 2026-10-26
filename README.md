@@ -70,7 +70,16 @@ public partial class Order { }
 | [Transports](docs/transports.md) | Carrying integration events out of the process: pgmq, Wolverine, MassTransit, or a sink of your own |
 | [Tenancy](docs/tenancy/overview.md) | The first supporting domain: what it is for, what it does and does not do, and how its pieces connect |
 | [Tenancy: the tutorial](docs/tenancy/tutorial.md) | Tenancy built into an application step by step: why each step, the whole files, and what they do |
-| [Tenancy reference](docs/tenancy.md) | Every detail of Tenancy: tenants, the organization tree, seats and roles, and who may do what where |
+| [Tenancy: your module](docs/tenancy/your-module.md) | The module that holds Tenancy: its packages, the model, your own classes and ids, the context and the registration, and calling its use cases |
+| [Tenancy: roles and permissions](docs/tenancy/roles-and-permissions.md) | The permission catalogue, the starter roles (packs) a new tenant gets and how they follow your changes, who may give a role, and containment |
+| [Tenancy: who may do what](docs/tenancy/who-may-do-what.md) | The questions a module asks Tenancy about its caller, what a request requires of its caller, and what a module reads of Tenancy |
+| [Tenancy: keeping tenants apart](docs/tenancy/keeping-tenants-apart.md) | The query filter and the save check that keep every read and save in the caller's tenant, and system work |
+| [Tenancy: names and languages](docs/tenancy/names-and-languages.md) | Turning the ids a module answers into names, how a seat is shown, and refusals and role names in the reader's language |
+| [Tenancy: invitations](docs/tenancy/invitations.md) | Inviting a person without an account yet into a tenant, with a unit and a role waiting |
+| [Tenancy: operators and history](docs/tenancy/operators-and-history.md) | The application's operators across tenants, who wrote and changed each row, and the access history |
+| [Tenancy on Postgres](docs/tenancy/postgres.md) | The second lock: Tenancy's rules as row level security policies and functions in Postgres, how to set them up, and what they stop |
+| [Tenancy: the sample](docs/tenancy/the-sample.md) | The Tenancy sample: who may do what in it, its GraphQL, how to try it, and each design choice with where to see it |
+| [Tenancy: design and limits](docs/tenancy/design.md) | Why Tenancy is shaped the way it is, what it does not do, and upgrading from key to permission |
 | [Membership](docs/membership.md) | The second supporting domain: access to a resource through its members, their roles and its owner, for as many kinds of resource as an application has |
 | [Writing your own supporting domain](docs/writing-a-supporting-domain.md) | Shipping a domain as a package that applications extend with their own ids and classes, without losing its rules |
 | [GraphQL](docs/graphql.md) | `AddDDDToolkitTypes()`, the generated scalar bindings, errors with codes, Relay node ids, one schema over the modules |
@@ -142,7 +151,7 @@ of another fails restore with NU1605, a package downgrade, or fails at run time 
 | `DDDToolkit.HotChocolate` | GraphQL scalar bindings and converters for typed identifiers, failures as coded errors and as typed errors in mutation payloads, plus a subscription sink. Needs HotChocolate 16.6.9 or later. |
 | `DDDToolkit.HotChocolate.Fusion.InMemory` | One GraphQL schema over a modular monolith: each module a source schema, composed by a Fusion gateway in the process. Needs HotChocolate Fusion 16.6.9 or later. |
 | `DDDToolkit.NewtonSoft.Json` | Newtonsoft converters and a contract resolver that honours `[Internal]`. |
-| `DDDToolkit.Supporting.Tenancy` | [Tenancy](docs/tenancy.md), a supporting domain: tenants, their organization tree, seats and roles over a permission catalogue, and the access questions. No database in it. |
+| `DDDToolkit.Supporting.Tenancy` | [Tenancy](docs/tenancy/overview.md), a supporting domain: tenants, their organization tree, seats and roles over a permission catalogue, and the access questions. No database in it. |
 | `DDDToolkit.Supporting.Tenancy.EntityFramework` | Tenancy in a context of your own, with the access questions as Entity Framework queries, on every provider. |
 | `DDDToolkit.Supporting.Tenancy.Postgres` | Tenancy's questions as SQL functions, its row level security policies, and the start-up checks. |
 | `DDDToolkit.Supporting.Membership` | [Membership](docs/membership.md), a supporting domain: access to a resource through its members, the roles they hold for a period, and roles a customer makes. No database in it. Its generator writes the member list on your aggregate. |

@@ -955,7 +955,7 @@ CREATE POLICY "Only employees read the organization (select) for authenticated" 
   the table there is nothing to narrow, and the script refuses the rule, naming it.
 - **Not what runs past the policies.** Functions that run as their owner read whatever they read, and the scoped
   system role is narrowed only where the rule names it in `To`. So a package's own work keeps working:
-  [Tenancy's](tenancy.md#rules-that-narrow-the-organization), with every use case, under a rule that keeps a seat
+  [Tenancy's](tenancy/postgres.md#rules-that-narrow-the-organization), with every use case, under a rule that keeps a seat
   out of the organization.
 - **Not with `Columns`.** A column rule is a trigger, not a policy: a rule with both is refused.
 
@@ -1549,7 +1549,7 @@ resource's aggregate: one declared with `[EntityId<Guid>]`, as a module's contra
 project that declares the aggregate, the id the toolkit writes beside an aggregate root declared with a value,
 `BoardId` for `[AggregateRoot<Guid>] public partial class Board`, or an id a package's switch writes into the
 project, `OrganizationUnitId` beside `[assembly: GenerateTenancyIds]` in a contracts project
-([The shortest start: the switch](tenancy.md#the-shortest-start-the-switch)). A contract of another shape is
+([The shortest start: the switch](tenancy/your-module.md#the-shortest-start-the-switch)). A contract of another shape is
 [DDD00038](diagnostics.md#ddd00038).
 
 <details>
@@ -1746,7 +1746,7 @@ everywhere, rather than write such a policy.
   table is one the package [keeps to itself](#policies-a-package-ships), where a rule that would add a policy is
   refused; a column rule adds none, so it is taken there like anywhere else. A read rule is taken there too where
   the package made the read a [default](#policies-a-package-ships), as Tenancy did for who reads the seats
-  ([Who reads the seats](tenancy.md#who-reads-the-seats-a-default-you-may-replace)).
+  ([Who reads the seats](tenancy/postgres.md#who-reads-the-seats-a-default-you-may-replace)).
 
 The policy on Tenancy's seats lets a seat change its own row, and a seat that manages seats or grants anywhere in
 the tenant change any seat's row, since every save of a seat writes its version. A job title you add to your seat
@@ -1764,7 +1764,7 @@ public static partial class JobTitlesChangeWithTheSeatsPermission
 A seat that gives roles at one unit may then still write every seat's row, and none of their job titles. The sample
 holds a seat's name the same way, to the rule of its own command that renames one, the seat itself or a seat that
 manages seats for the whole tenant, and leaves its job title as writable as the row. See
-[What the database guards on a seat](tenancy.md#what-the-database-guards-on-a-seat).
+[What the database guards on a seat](tenancy/postgres.md#what-the-database-guards-on-a-seat).
 
 [DDD00038](diagnostics.md#ddd00038) reports a column rule for another operation than `Change`, which are about
 whole rows; a name in `Columns` that is no property of the aggregate or of a value object it holds, or is a
@@ -1788,7 +1788,7 @@ a class the script asks, for every context, what it writes there.
 A package declares itself a contributor with `[assembly: RowAccessContribution]`, and from then on
 referencing the package is your consent: its SQL goes into the migrations of every application that
 references it, directly or through a module, and you write no line and no class for it. A package such as
-[Tenancy on Postgres](tenancy.md#on-postgres-the-second-lock) does not work without its policies in the database, so there
+[Tenancy on Postgres](tenancy/postgres.md) does not work without its policies in the database, so there
 is nothing to choose.
 
 ```csharp
@@ -2043,7 +2043,7 @@ COMMENT ON POLICY "Entries are read by who wrote them (select) for authenticated
   it in its usual form and a role the table is closed to stays closed. It replaces the read of the aggregate's own
   table alone; the tables of its entities keep the policies of the contribution that keeps them, and a rule whose
   aggregate has an entity table no contribution keeps is refused, naming it. Tenancy's seats are the example
-  ([Who reads the seats](tenancy.md#who-reads-the-seats-a-default-you-may-replace)).
+  ([Who reads the seats](tenancy/postgres.md#who-reads-the-seats-a-default-you-may-replace)).
 - **Statements** come last, one statement each, and can run again: triggers and the functions they run.
   A statement's function gets no grants from the script, so only a trigger's may be `SECURITY DEFINER`,
   since nobody can call a trigger function on its own, and it says `SET search_path = ''`, since the

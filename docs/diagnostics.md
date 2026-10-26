@@ -144,7 +144,7 @@ it is a code clients read or a function that changes with a class's name; and [D
 nothing, or rules that read a place nobody said.
 [DDD00074](#ddd00074) is about [the migration history](entity-framework.md#the-migration-history), where it is a
 `dotnet ef database update` or an exported file that records the migrations in a table the application never reads.
-[DDD00075](#ddd00075) is about [two modules with Tenancy's classes](tenancy.md#two-modules-with-the-classes), where it is a name that
+[DDD00075](#ddd00075) is about [two modules with Tenancy's classes](tenancy/your-module.md#two-modules-with-the-classes), where it is a name that
 compiles in each module and is two classes in the host, and [DDD00076](#ddd00076) about the same class, where it is a
 naming line that reads as if it named it and changes nothing.
 
@@ -2291,7 +2291,7 @@ public static class TenancyUseCases;   // DDD00065, on this type: the class woul
 
 Tenancy's use cases are named through a class the toolkit's generator writes into the project that declares
 your classes, named as the package's class is: `TenancyUseCases.SeatCommands`
-([Calling a use case](tenancy.md#calling-a-use-case)). Each of its type parameters is one of your classes or
+([Calling a use case](tenancy/your-module.md#calling-a-use-case)). Each of its type parameters is one of your classes or
 ids, so it is written when every template it takes from has one class, in that project or in a project of the
 same module it references. When it is not, the projects above that name a use case only hear that the name does
 not exist, CS0246; the project that registers Tenancy, which would say more, references the application project
@@ -2331,7 +2331,7 @@ public sealed class Role;
 ```
 
 A package's switch, such as Tenancy's `[assembly: GenerateTenancyClasses]`
-([The shortest start: the switch](tenancy.md#the-shortest-start-the-switch)), has the generator write the
+([The shortest start: the switch](tenancy/your-module.md#the-shortest-start-the-switch)), has the generator write the
 package's classes your project leaves out, as the package ships them, and their ids: `Tenant`, `TenantId` and
 the rest, public, in the project's root namespace. It writes nothing that would take the place of something you
 have, and where it cannot write a class or an id it says so on the switch:
@@ -2653,7 +2653,7 @@ Partners. Give one of them a name of its own, with [assembly: TemplateFacadeName
 
 Tenancy's use cases are named through a class the toolkit's generator writes into the project that declares your
 Tenancy classes, `TenancyUseCases`, after the package's own class
-([Two modules with the classes](tenancy.md#two-modules-with-the-classes)). An application with two modules that
+([Two modules with the classes](tenancy/your-module.md#two-modules-with-the-classes)). An application with two modules that
 each declare Tenancy's classes gets two classes of that name, one in each module's domain project. While neither
 module references the other, neither sees the other's, so neither is told; they meet in every project that
 references both, the host and your tests first, where the first line that names `TenancyUseCases` would be the
@@ -2882,7 +2882,7 @@ to do instead:
 |---|---|
 | only reads | make it a query, `IQuery` or `IStreamQuery` |
 | changes something, `[SeenWith]` on it | require the permission where it acts, `[RequiresPermission(permission)]` with `[OnResource]` on the resource |
-| carries out what an operator asks, `[RequiresOperator]` on it | let trusted code carry it out as system work that names the operator, `TenancyUseCases.BeginOperatorIn(tenant, identity)`, behind a requirement of the module's own ([Operators](tenancy.md#operators)) |
+| carries out what an operator asks, `[RequiresOperator]` on it | let trusted code carry it out as system work that names the operator, `TenancyUseCases.BeginOperatorIn(tenant, identity)`, behind a requirement of the module's own ([Operators](tenancy/operators-and-history.md#operators)) |
 
 A request of another dispatcher, which the generator cannot tell for a command or a query, is not reported, and
 neither is the same requirement answered as `RequiredAccess` on a command: a test holds both
@@ -3191,7 +3191,7 @@ A module declares its permissions in a static class marked `[Permissions]`: ever
 permission, which a request names in `[RequiresPermission]` and a role gives, and each carries its **level**, the
 attribute that says where it is asked: Tenancy's `[AtTenant]` or `[AtUnit]`, or Membership's `[On<TResource>]`
 ([The settings of a permission](membership.md#the-settings-of-a-permission),
-[A module states its permissions once](tenancy.md#a-module-states-its-permissions-once)). The packages' generators read the class
+[A module states its permissions once](tenancy/roles-and-permissions.md#a-module-states-its-permissions-once)). The packages' generators read the class
 and nothing else, so each of these would be read as something it is not, or not at all:
 
 | Reported | Because |
@@ -3257,7 +3257,7 @@ A module declares its permissions once, as the constants of a static class marke
 level and, in its `Description` or its summary, what it lets somebody do. Tenancy's generator writes the module's
 list for the catalogue from that class, under the module `DDD_Module` or `[assembly: Module]` names, marks it
 `[TenancyPermissions]`, and the project that composes the modules collects every such list
-([A module states its permissions once](tenancy.md#a-module-states-its-permissions-once)). A list a module marks with it by hand
+([A module states its permissions once](tenancy/roles-and-permissions.md#a-module-states-its-permissions-once)). A list a module marks with it by hand
 says the same permissions a second time, apart from the constants a request requires, and is refused. Declare each permission as
 a constant instead:
 
@@ -3355,7 +3355,7 @@ well; where no level says one, the constant's `<summary>` is the description, re
 the project writes a documentation file or not. A permission with neither would show as a bare name, so it is a
 warning, on the constant. A description of white space alone is none, and a retired permission, which no screen
 offers, needs none. A translation under the permission's name, in a resx your failure localizer reads, is read on
-top of whichever said it ([A module states its permissions once](tenancy.md#a-module-states-its-permissions-once)).
+top of whichever said it ([A module states its permissions once](tenancy/roles-and-permissions.md#a-module-states-its-permissions-once)).
 
 ## DDD00100
 
@@ -3374,7 +3374,7 @@ narrows what they allow. On Tenancy's tables it reaches the organization with it
 tree, the seats with their placements and grants, and the roles: what an application narrows to keep a seat that is
 not an employee out of the organization. A tenant and an invitation are read by Tenancy's own work and by a person
 accepting an invitation, who has no seat yet, so a rule there is refused. Put it on one of the others, or leave
-`Restrictive` out ([Rules that narrow the organization](tenancy.md#rules-that-narrow-the-organization)).
+`Restrictive` out ([Rules that narrow the organization](tenancy/postgres.md#rules-that-narrow-the-organization)).
 
 ## DDD00101
 
