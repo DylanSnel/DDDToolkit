@@ -244,12 +244,12 @@ stands for, and what a request that computes its requirement writes:
 |---|---|---|---|---|
 | anyone, a caller who did not sign in too | `[AllowAnonymous]` | `AccessRequirement.AllowAnonymous()` | everyone: nobody is asked | |
 | a signed-in user, who need not hold anything yet | `[SignedIn]` | `AccessRequirement.SignedIn()` | a user who signed in, an anonymous sign-in of the identity provider too | `access.not-signed-in` |
-| a caller who works in the tenant | `[InTenant]`, of [Tenancy](tenancy.md#what-a-request-requires-of-its-caller) | `TenancyAccess.InTenant()` | a seat in the tenant the request was sent for, and system work there | the caller's own reason, such as `tenancy.not-seated` |
+| a caller who works in the tenant | `[InTenant]`, of [Tenancy](tenancy/who-may-do-what.md#what-a-request-requires-of-its-caller) | `TenancyAccess.InTenant()` | a seat in the tenant the request was sent for, and system work there | the caller's own reason, such as `tenancy.not-seated` |
 | a permission for the whole tenant | `[RequiresPermission(permission)]` | `TenancyAccess.AtTenant(permission)` | whoever holds the permission at the tenant's root now | `tenancy.not-permitted`, naming the permission |
 | a permission at a unit | `[RequiresPermission(permission)]`, `[AtUnit]` on the unit | `TenancyAccess.AtUnit(permission, unit)` | whoever holds the permission at that unit now, there or above it | `tenancy.not-permitted`, with the permission and the unit |
 | a permission on a resource | `[RequiresPermission(permission)]`, `[OnResource]` on the resource, `[ExpectedVersion]` on the version read, of [Membership](membership.md#a-document-and-the-people-it-is-shared-with) | `MemberAccess.On(permission, resource, expectedVersion)` | whoever holds the permission on it, through its members or from above | the resource's `not-found` or `not-permitted` |
 | a query that shows the resources a permission is held on | `[SeenWith<TResourceId>(permission)]`, of [Membership](membership.md#inside-your-own-statements) | `MemberAccess.SeenWith<TResourceId>(permission)` | every caller who signed in, and system work: the query's own statement leaves out what the caller does not hold the permission on | the caller's own reason where it is nobody; the resource's `not-permitted`, naming the permission, for a caller who did not sign in |
-| one of the application's operators, on a query | `[RequiresOperator]` | `TenancyAccess.RequiresOperator()` | a signed-in user with an [operator's token role](tenancy.md#operators) | `tenancy.operators-only` |
+| one of the application's operators, on a query | `[RequiresOperator]` | `TenancyAccess.RequiresOperator()` | a signed-in user with an [operator's token role](tenancy/operators-and-history.md#operators) | `tenancy.operators-only` |
 | the caller's own, or a permission | `[RequiresPermission(permission)]`, `[OrOwn]` on the member that names it | `AccessRequirement.Any(AccessRequirement.Own(seat), ...)` | the caller the member names, and whoever holds the permission | one `access.refused`, with `access.not-own` and the permission's reason |
 | the caller's own alone | `[OwnOnly]`, `[Own]` on the member that names it | `AccessRequirement.Own(seat)` | the caller the member names | `access.not-own` |
 | the owner of an aggregate, or a permission | `[RequiresPermission(permission)]`, `[OrOwn]` on the aggregate's id, whose owner the aggregate marks `[Owner]` | `AccessRequirement.Any(AccessRequirement.OwnerOf(board), ...)` | the aggregate's owner, and whoever holds the permission | one `access.refused`, with `access.not-own` or `access.not-found` and the permission's reason |
@@ -268,7 +268,7 @@ caller, and one of `[AllowAnonymous]` included.
 - **`[SignedIn]`** asks whether the caller's token names a user. An anonymous sign-in, such as Supabase Auth
   makes for a visitor without an account, names one too, marked with the `is_anonymous` claim. A handler that
   should take only an account with a verified identity refuses that claim itself, as the registration that
-  [provisions a tenant](tenancy.md#who-may-ask-and-what-the-work-runs-as) does, and as Tenancy's acceptance of
+  [provisions a tenant](tenancy/who-may-do-what.md#who-may-ask-and-what-the-work-runs-as) does, and as Tenancy's acceptance of
   an invitation does. The application's own work is nobody's sign-in, and is refused.
 - **There is no requirement for the application's own work.** System work is a scope, not a door:
   [System work is a scope](#system-work-is-a-scope) says how a request sent by it, or a handler that needs it,
@@ -936,7 +936,7 @@ it is current again.
   calls the use case inside it, sending no request at all, as the sample's seeding provisions its tenants, or sends
   a request inside it, as the same seeding sends `MarkTenantAsDemo` in each tenant. A handler begins it itself for
   the one thing its caller could not do, as the registration that
-  [provisions a tenant](tenancy.md#who-may-ask-and-what-the-work-runs-as) does.
+  [provisions a tenant](tenancy/who-may-do-what.md#who-may-ask-and-what-the-work-runs-as) does.
 - **The request says who may send it, as any other does.** A request system work sends in a tenant is sent by a
   caller in that tenant, `[InTenant]`, which lets the system work there through; a development route that
   provisions is `[AllowAnonymous]`, a registration a signed-in person sends `[SignedIn]`. System work is
@@ -1024,7 +1024,7 @@ with the `IAccessCheck` that does:
 | the caller's own | `[OrOwn]`, `[OwnOnly]` with `[Own]`, `AccessRequirement.Own(value)`, of the core | nothing for a `Guid` or Tenancy's seat id; `services.AddCallersOwn<TValue, TCallersOwn>()` for a kind of your own |
 | the owner of an aggregate | `[OrOwn]`, `[OwnOnly]` with `[Own]` on the id of an aggregate that marks its owner `[Owner]`, `AccessRequirement.OwnerOf(id)`, of the core | nothing more on Entity Framework, whose `AddDDDToolkitEntityFramework` registers what reads the owner; the caller's own of the owner's type as in the row above |
 | several cases at once, or one of several | stacked attributes, `AccessRequirement.All(...)` and `Any(...)`, of the core | nothing: the set asks each case of the check that decides it |
-| a tenant: a seat in it, a permission for the whole of it or at a unit, operators | `[InTenant]`, `[RequiresPermission(permission)]` with `[AtUnit]` or without a marker, `[RequiresOperator]`: `TenancyAccess.InTenant()` and the rest of `TenancyRequirement`'s cases, of [Tenancy](tenancy.md#what-a-request-requires-of-its-caller) | `services.AddTenancyAccess<...>()`, for each module |
+| a tenant: a seat in it, a permission for the whole of it or at a unit, operators | `[InTenant]`, `[RequiresPermission(permission)]` with `[AtUnit]` or without a marker, `[RequiresOperator]`: `TenancyAccess.InTenant()` and the rest of `TenancyRequirement`'s cases, of [Tenancy](tenancy/who-may-do-what.md#what-a-request-requires-of-its-caller) | `services.AddTenancyAccess<...>()`, for each module |
 | a resource with members: a permission held on it | `[RequiresPermission(permission)]` with `[OnResource]`, `[SeenWith<TResourceId>(permission)]`: `MemberAccess.On(permission, resource)` and `SeenWith`, of [Membership](membership.md#a-document-and-the-people-it-is-shared-with) | `services.AddDocumentMemberAccess<IFilingRequest>()`, generated for each resource |
 | something only your module knows | a record of your own | `services.AddAccessCheck<IBillingRequest, BillingAccessCheck>()` |
 

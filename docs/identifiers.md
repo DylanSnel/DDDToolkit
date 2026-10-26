@@ -105,7 +105,7 @@ timestamp and sort roughly in creation order, which keeps database indexes from 
 identifiers do. `CreateUnique` makes a random one where that matters.
 
 `Create()` also implements `ICreatableEntityId<TSelf>`, whose static member lets code that is generic over ids
-make one, `TId.Create()`: a supporting domain such as [Tenancy](tenancy.md#how-a-new-id-is-made) makes the ids of
+make one, `TId.Create()`: a supporting domain such as [Tenancy](tenancy/your-module.md#how-a-new-id-is-made) makes the ids of
 the tenants, seats and roles it creates that way. An id over anything else than a `Guid` has no `Create()` until
 it says how a new one is made, in its partial declaration, and the generator then implements the interface with
 it; a `Create()` of your own wins over the generator's for a `Guid` too:

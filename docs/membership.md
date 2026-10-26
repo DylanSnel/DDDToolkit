@@ -19,7 +19,7 @@ It comes in three packages:
 | `DDDToolkit.Supporting.Membership.EntityFramework` | `HasMembers()` and `IsCustomRole()` for your context, two registrations per resource named after it, `AddDocumentMembership()` and `AddDocumentMemberAccess()`, and the access questions answered inside your own statements. Works on every provider. Its generator writes what joins a resource to [Tenancy](#with-tenancy), in an application that has both. |
 | `DDDToolkit.Supporting.Membership.Postgres` | The same questions as four SQL functions per resource, for your [row access rules](row-level-security.md#row-access-rules-written-in-c) to ask, and a start-up check. |
 
-It needs nothing else: no dispatcher, and no [Tenancy](tenancy.md). Members are your users, unless you say
+It needs nothing else: no dispatcher, and no [Tenancy](tenancy/overview.md). Members are your users, unless you say
 [who else they are](#beside-an-organization). In an application that has Tenancy as well, a member can be a
 seat, and [what joins the two](#with-tenancy) is written for you.
 
@@ -32,7 +32,7 @@ The [Tenancy sample](../Examples/README.md#the-tenancy-sample) is the worked exa
 Tenancy. Its Projects module keeps a project's crew as members, who are seats, and the project roles each
 tenant keeps for its crews, made from three starter roles when a tenant is set up and the tenant's own to
 change from then on; the database's functions and lock are written from the same rules.
-[Who may do what, in the sample](tenancy.md#who-may-do-what-in-the-sample) walks through it.
+[Who may do what, in the sample](tenancy/the-sample.md#who-may-do-what-in-the-sample) walks through it.
 
 ## A document and the people it is shared with
 
@@ -308,7 +308,7 @@ questions only as the caller your host began.
 | `IFilingRequest` | What tells your module's requests from another's: the [checks are registered for it](access-requirements.md#what-a-request-declares). |
 | `[RequiresPermission]`, `[OnResource]` and `[ExpectedVersion]` | Which permission a command takes is yours to say, and on which of the request's ids it is held; the generator writes the call, so it is no field of the request. The version is the one the caller read, for a command that sends it: it is compared after the permission, so a caller without access learns nothing from it. |
 | `partial` on `IFilingRequest` | The generator writes `RequiredAccess` into it from its requests' attributes, one line per request. |
-| `MemberAdmission<DocumentId, UserId, NamedRole>` in the constructor | Membership's use cases are small classes generic over your ids alone, three at most, so they read where they are taken, and a module with several kinds of resource names each one's by its own ids. None is nested in one class over your classes, as Tenancy's use cases are, so there is no class such as Tenancy's `TenancyUseCases` to name them through, and no alias to write ([Calling a use case](tenancy.md#calling-a-use-case)). |
+| `MemberAdmission<DocumentId, UserId, NamedRole>` in the constructor | Membership's use cases are small classes generic over your ids alone, three at most, so they read where they are taken, and a module with several kinds of resource names each one's by its own ids. None is nested in one class over your classes, as Tenancy's use cases are, so there is no class such as Tenancy's `TenancyUseCases` to name them through, and no alias to write ([Calling a use case](tenancy/your-module.md#calling-a-use-case)). |
 | `RequireRoleAsync` in the handler | The member list takes any role: it cannot know which roles there are. `MemberAdmission` asks the rules, and, where you registered them, whether the one to be made a member is known (`RequireMemberAsync` and an `IMemberDirectory`) and whether a role goes to a member at all (`IMemberRolePolicy`). |
 | `ExpectVersion` after the load | The check and the load are two statements. The version the caller named is held again where the handler loads, so a change in between is a lost race; a caller that named none asked for the document as it is. The rest is there already ([from the check to the save](#from-the-check-to-the-save)). |
 
@@ -726,7 +726,7 @@ with `AddScopedFromPool`), since the questions of one request may be asked side 
 the request's context. Where the resource, or the role class of [roles a customer makes](#roles-a-customer-makes),
 has a query filter that reads a member of your context, they read on the request's own context instead: a
 rule you keep on that context is one a context made for one reading knows nothing of. A filter that reads
-what is around the work, as [Tenancy's](tenancy.md) does, holds on every context.
+what is around the work, as [Tenancy's](tenancy/overview.md) does, holds on every context.
 
 A reach is data: it goes into a query on whichever context you run it. One kind is told which context that
 is, a reach that puts a query of its own into yours: the rows of [roles a customer makes](#roles-a-customer-makes),
@@ -857,7 +857,7 @@ services.RunStartupChecks();
 - **The people the caller works with.** `ResourceAccessSet.FellowMembers` answers the members now of every resource
   the caller is a member of now, the caller among them: an owner who is on no list finds nobody by owning. Its ids
   are the members', not the resources', so the contract declares its `Ids` with the id its members are known by. A
-  read rule on another table asks it, such as one on [Tenancy's seats](tenancy.md#rules-that-narrow-the-organization)
+  read rule on another table asks it, such as one on [Tenancy's seats](tenancy/postgres.md#rules-that-narrow-the-organization)
   that lets a seat read the people on its projects: that rule is written into Tenancy's access file, which runs
   before the one of the module whose functions ask Tenancy's in turn, and the export writes it all the same
   ([A rule that asks a module that asks back](row-level-security.md#a-resources-access-asked-by-its-id)).
@@ -1186,7 +1186,7 @@ public sealed class DepotRowAccess : IRowAccessContribution
   `Roles.External()`. Rules that reach from above say `reachFromAbove: true` then, and the place's function
   follows from its type, which only a package that keeps the places answers.
 
-Where the organization is [Tenancy](tenancy.md), a member is a seat, the roles can be the tenant's, and
+Where the organization is [Tenancy](tenancy/overview.md), a member is a seat, the roles can be the tenant's, and
 the place is an organization unit. The class is then [written for you](#with-tenancy), and the functions are
 Tenancy's own, `TenancyFunctions.CallerSeat`, `TenancyFunctions.RolesWithPermission` and
 `TenancyFunctions.UnitsWhereIHold`, of which the rules name the roles' alone. Neither package references the
@@ -1371,7 +1371,7 @@ which may ask the resource's functions may write is refused.
 
 ## With Tenancy
 
-Where the organization is [Tenancy](tenancy.md), the class [beside an organization](#beside-an-organization)
+Where the organization is [Tenancy](tenancy/overview.md), the class [beside an organization](#beside-an-organization)
 has you write is written for you. Neither package references the other. In a project that references both,
 Membership's generator notices Tenancy and writes, for each member class whose members are seats, the class
 that joins the two and a registration named after the resource.
@@ -1514,12 +1514,12 @@ What the written class answers:
   the rows that name it still apply, and reach nothing.
 - **Somebody is made a member while their seat is active,** in the tenant the caller acts in:
   `MemberAdmission` asks Tenancy. A seat of another tenant is no seat there. Tenancy answers from the seats the
-  caller reads, every seat of the tenant unless a [read rule on your seat class](tenancy.md#who-reads-the-seats-a-default-you-may-replace)
+  caller reads, every seat of the tenant unless a [read rule on your seat class](tenancy/postgres.md#who-reads-the-seats-a-default-you-may-replace)
   narrows that on Postgres; a seat the caller does not read is then refused as one that does not exist is.
 - **A permission held in the organization reaches the resource from above:** held at the unit the resource sits at,
   or at one above it. `Via` says `Above`. Only a permission of Tenancy's catalogue can be held there, and the
   permissions of the module's `[Permissions]` classes are in it already: Tenancy's generator lists them, and
-  the host adds every module's list ([A module states its permissions once](tenancy.md#a-module-states-its-permissions-once)).
+  the host adds every module's list ([A module states its permissions once](tenancy/roles-and-permissions.md#a-module-states-its-permissions-once)).
   A permission marked `FromAbove = false` is held by nobody from above, and asking about it is no mistake. A role given in the
   organization for a while reaches the resource until the moment it ends. The hold does not name that
   moment, as [beside any organization](#beside-an-organization), so a rule of yours that reads the hold's
@@ -1564,7 +1564,7 @@ package. And only for seats:
   are named, `Roles.External(TenancyFunctions.RolesWithPermission)`, since roles can be kept in other ways.
 - **Your context and your class.** The context maps Tenancy's read model beside the resource,
   `AddTenancyReadModel`, or `AddTenancyReadFunctions` on a database that
-  [keeps the rights itself](tenancy.md#modules-read-through-functions). Where a resource sits is a fact of its
+  [keeps the rights itself](tenancy/postgres.md#modules-read-through-functions). Where a resource sits is a fact of its
   class, `[At]` on its unit.
 - **The tenant on your rows.** Membership knows no tenant. The resource and your role class are kept to
   their tenant by Tenancy's own rule, `ScopeToTenant`, like every row of a tenant, and a tenant's starter

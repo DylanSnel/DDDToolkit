@@ -3,9 +3,9 @@ using System.Text.RegularExpressions;
 namespace DDDToolkit.Analyzers.Tests.Docs;
 
 /// <summary>
-/// The section "Design choices and where to see them" of docs/tenancy.md points a reader at code, at something
-/// to try and at a test for every choice. A pointer that names nothing sends the reader looking for a file that
-/// was moved or a test that was renamed, so each one is followed here: a path has to exist, a test class has to
+/// The section "Design choices and where to see them" of docs/tenancy/the-sample.md points a reader at code, at
+/// something to try and at a test for every choice. A pointer that names nothing sends the reader looking for a file
+/// that was moved or a test that was renamed, so each one is followed here: a path has to exist, a test class has to
 /// be declared under Tests/, and a preset has to be one the sample's try-it page lists.
 /// </summary>
 public partial class TenancyDesignChoicesTests
@@ -25,7 +25,7 @@ public partial class TenancyDesignChoicesTests
         var linked = Links().Matches(section)
             .Select(match => match.Groups["target"].Value)
             .Where(target => !target.StartsWith('#') && !target.Contains("://", StringComparison.Ordinal))
-            .Select(target => Path.Combine("docs", target.Split('#')[0]));
+            .Select(target => Path.Combine("docs", "tenancy", target.Split('#')[0]));
         var written = CodeSpans(section).Where(span => RootFolders.Any(folder => span.StartsWith(folder, StringComparison.Ordinal)));
         var paths = linked.Concat(written).Distinct(StringComparer.Ordinal).ToList();
 
@@ -73,9 +73,9 @@ public partial class TenancyDesignChoicesTests
     /// <summary>The section's text, from its heading to the next heading of the same level.</summary>
     private static string Section()
     {
-        var lines = File.ReadAllLines(Path.Combine(Root, "docs", "tenancy.md"));
+        var lines = File.ReadAllLines(Path.Combine(Root, "docs", "tenancy", "the-sample.md"));
         var start = Array.IndexOf(lines, Heading);
-        start.Should().BeGreaterThan(-1, $"docs/tenancy.md has the heading '{Heading}'");
+        start.Should().BeGreaterThan(-1, $"docs/tenancy/the-sample.md has the heading '{Heading}'");
 
         return string.Join('\n', lines.Skip(start + 1).TakeWhile(line => !line.StartsWith("## ", StringComparison.Ordinal)));
     }

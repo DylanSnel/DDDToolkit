@@ -285,7 +285,7 @@ reaches inside one will not port.
 
 ## Tenancy: the shape of the access data
 
-The [Tenancy](tenancy.md) supporting domain stores who holds what as facts, starts every question from the
+The [Tenancy](tenancy/overview.md) supporting domain stores who holds what as facts, starts every question from the
 person asking, and keeps the organization as a closure table. These are the measurements those choices
 rest on. They compare it with the shape a permission model tends to grow into: a table of what every
 person may do on every project, kept up to date by triggers, a copy of the organization path on every

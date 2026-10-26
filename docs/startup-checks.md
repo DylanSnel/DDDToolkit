@@ -93,12 +93,12 @@ made otherwise. They read the catalogs of the database and change nothing.
 | `postgres.definer-owners-bypass` | `PostgresRowAccessChecks.DefinerOwnersBypassCheck` | the same | Database | Every function that runs as its owner is owned by a role the forced policies let through |
 | `supabase.migrations-applied` | `SupabaseMigrations.AppliedCheck` | `AddSupabaseMigrations` | Migrations | Every registered context has every migration applied ([Checking at start-up](supabase.md#checking-at-start-up)) |
 | `tenancy.catalogue-builds` | `TenancyChecks.CatalogueBuildsCheck` | `AddTenancy` | Services | The catalogue holds together |
-| `tenancy.contexts-wired` | `TenancyChecks.ContextsWiredCheck` | `AddTenancy` | Services | Every context that keeps rows to a tenant checks its saves, after the toolkit's interceptors (one without the save check is told what `entity-framework.toolkit-wired` tells it), and one that keeps the access history says who acted as Tenancy knows the caller ([Keeping tenants apart](tenancy.md#keeping-tenants-apart-the-filter-and-the-save-check)) |
+| `tenancy.contexts-wired` | `TenancyChecks.ContextsWiredCheck` | `AddTenancy` | Services | Every context that keeps rows to a tenant checks its saves, after the toolkit's interceptors (one without the save check is told what `entity-framework.toolkit-wired` tells it), and one that keeps the access history says who acted as Tenancy knows the caller ([Keeping tenants apart](tenancy/keeping-tenants-apart.md)) |
 | `tenancy.explicit-callers` | `TenancyPostgresChecks.ExplicitCallersCheck` | `AddTenancyPostgres` | Services | The host still requires explicit callers |
 | `tenancy.seated-token-roles` | `TenancyPostgresChecks.SeatedTokenRolesCheck` | `AddTenancyPostgres` | Services | Every token role Tenancy seats reaches the database as a signed-in user |
 | `tenancy.system-in-role-confined` | `TenancyPostgresChecks.SystemInRoleConfinedCheck` | `AddTenancyPostgres` | Database | System work in a tenant cannot leave it |
 | `tenancy.system-reads-across-tenants` | `TenancyPostgresChecks.SystemReadsAcrossTenantsCheck` | `AddTenancyPostgres` | Database | The few reads across tenants answer, with nothing past the policies |
-| `tenancy.policies-in-place` | `TenancyPostgresChecks.PoliciesInPlaceCheck` | `AddTenancyPostgres` | Database | The policies, functions and the index on a tenant's root are the ones the catalogue writes ([Setting it up](tenancy.md#setting-it-up)) |
+| `tenancy.policies-in-place` | `TenancyPostgresChecks.PoliciesInPlaceCheck` | `AddTenancyPostgres` | Database | The policies, functions and the index on a tenant's root are the ones the catalogue writes ([Setting it up](tenancy/postgres.md#setting-it-up)) |
 | `tenancy.unknown-stored-permissions` | `TenancyChecks.UnknownStoredPermissionsCheck` | `AddTenancy` | Database | Logs a permission a role holds that the catalogue has lost, and refuses nothing |
 | `membership.functions-in-place` | `MembershipPostgresChecks.FunctionsInPlaceCheck` | `AddMembershipPostgres` | Database | The functions and the lock of every resource's membership are written from its rules ([On Postgres](membership.md#on-postgres-the-second-lock)) |
 | `pgmq.extension-installed` | `PgmqQueue.ExtensionInstalledCheck` | `AddPgmqSink`, `AddPgmqConsumer` | Database | Every database a sink or a consumer uses has pgmq, with topics where they are used ([Transports](transports.md#queues-creation-and-the-missing-extension)) |
@@ -241,12 +241,12 @@ It runs, as every check does, once the host calls `RunStartupChecks()`.
 
 A check reads and changes nothing. Work that changes data at start-up is not a check, and has a call of its own
 beside `RunStartupChecks()`: Tenancy's `SyncRolePacks()`, which brings every tenant's roles up to the packs they
-were made from once the host has started, is one ([Packs after provisioning](tenancy.md#packs-after-provisioning)).
+were made from once the host has started, is one ([Packs after provisioning](tenancy/roles-and-permissions.md#packs-after-provisioning)).
 
 ## Where to look next
 
 - [Access requirements](access-requirements.md#when-nothing-asks-the-checks), for the check of the access behaviors.
 - [Row level security](row-level-security.md#a-login-that-owns-nothing), for what the login role's checks ask.
 - [Supabase](supabase.md#checking-at-start-up), for the migrations' check and the login role the build writes.
-- [Tenancy](tenancy.md#setting-it-up) and [Membership](membership.md#on-postgres-the-second-lock), for what their
+- [Tenancy](tenancy/postgres.md#setting-it-up) and [Membership](membership.md#on-postgres-the-second-lock), for what their
   checks of the database hold you to.

@@ -3,7 +3,8 @@
 A supporting domain is a package that ships aggregates an application extends: the package states the
 rules every application shares, and the application declares the classes, with its own ids, fields and
 rules. Tenancy is the toolkit's first: who a person is in a tenant, and what they may do where in its
-organization. Full pages: `https://dylansnel.github.io/DDDToolkit/docs/tenancy.md` and
+organization. Full pages: `https://dylansnel.github.io/DDDToolkit/docs/tenancy/overview.md`, the topic pages
+beside it under `docs/tenancy/` (listed on the overview and in `llms.txt`), and
 `writing-a-supporting-domain.md`. The Tenancy packages are published as prereleases, under `Temp.` ids like
 every 3.x package, and their names can change until a release that is not one; read the project's references
 before writing against them.
@@ -277,8 +278,8 @@ To take away what Tenancy allows, write a restrictive rule, `[RowAccess<Organiza
 AND-ed with Tenancy's policies, it narrows and never grants (`CallerSeat<Seat>().Kind == SeatKind.Employee` keeps an
 external seat out of the organization, its units and its tree). It goes on the organization, seat or role class;
 a tenant or invitation is DDD00100. Tenancy's own work and its owner-run functions keep working.
-See `tenancy.md`, "On Postgres: the second lock", "Who reads the seats", "Rules that narrow the organization", "Who
-reads which grants" and "What the database guards on a seat".
+See `tenancy/postgres.md` ("On Postgres: the second lock"): "Who reads the seats", "Rules that narrow the
+organization", "Who reads which grants" and "What the database guards on a seat".
 
 ## A module on Tenancy, as the sample lays it out
 
@@ -349,5 +350,5 @@ reads which grants" and "What the database guards on a seat".
   `Commands` or `Queries`, every namespace its folder, every request declaring its access. Add to them
   when the layout gains a rule.
 
-`tenancy.md`, "Design choices and where to see them", lists each choice with its code, something to try and
-its test.
+`tenancy/the-sample.md`, "Design choices and where to see them", lists each choice with its code, something to
+try and its test.
