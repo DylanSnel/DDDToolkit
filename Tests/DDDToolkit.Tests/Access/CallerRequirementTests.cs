@@ -133,7 +133,7 @@ public class CallerRequirementTests
     public void There_is_one_way_to_spell_each_case()
     {
         // A request writes [SignedIn] or AccessRequirement.SignedIn(), never a constructor: nothing else makes one.
-        foreach (var each in new[] { typeof(AccessRequirement.Anyone), typeof(AccessRequirement.SignedInUser), typeof(AccessRequirement.Owned<Guid>), typeof(AccessRequirement.AllOf), typeof(AccessRequirement.AnyOf) })
+        foreach (var each in new[] { typeof(AccessRequirement.Anyone), typeof(AccessRequirement.SignedInUser), typeof(AccessRequirement.Owned<Guid>), typeof(AccessRequirement.OwnedAggregate<OwnedBoardId>), typeof(AccessRequirement.AllOf), typeof(AccessRequirement.AnyOf) })
         {
             each.IsSealed.Should().BeTrue();
             each.GetConstructors(BindingFlags.Instance | BindingFlags.Public).Should().BeEmpty("{0} is made by its method alone", each.Name);
@@ -145,13 +145,14 @@ public class CallerRequirementTests
         AccessRequirement.AllowAnonymous().Should().BeOfType<AccessRequirement.Anyone>();
         AccessRequirement.SignedIn().Should().BeOfType<AccessRequirement.SignedInUser>();
         AccessRequirement.Own(Guid.NewGuid()).Should().BeOfType<AccessRequirement.Owned<Guid>>();
+        AccessRequirement.OwnerOf(OwnedBoardId.Create()).Should().BeOfType<AccessRequirement.OwnedAggregate<OwnedBoardId>>();
         AccessRequirement.All(AccessRequirement.SignedIn()).Should().BeOfType<AccessRequirement.AllOf>();
         AccessRequirement.Any(AccessRequirement.SignedIn()).Should().BeOfType<AccessRequirement.AnyOf>();
         typeof(AccessRequirement).GetNestedTypes().Select(each => each.Name).Should().BeEquivalentTo(
-            ["Anyone", "SignedInUser", "Owned`1", "Combined", "AllOf", "AnyOf"],
-            "the core's cases are about who may send a request, or combine other cases; there is no case that says nothing, and system work is no case but a scope");
+            ["Anyone", "SignedInUser", "Owned`1", "OwnedAggregate`1", "Combined", "AllOf", "AnyOf"],
+            "the core's cases are about who may send a request, the owner of what it names among them, or combine other cases; there is no case that says nothing, and system work is no case but a scope");
         typeof(AccessRequirement).GetMethods(BindingFlags.Public | BindingFlags.Static).Where(method => !method.IsSpecialName).Select(method => method.Name)
-            .Should().BeEquivalentTo(["AllowAnonymous", "SignedIn", "Own", "All", "Any"], "the record's operators aside, a spelling for each case and none for system work");
+            .Should().BeEquivalentTo(["AllowAnonymous", "SignedIn", "Own", "OwnerOf", "All", "Any"], "the record's operators aside, a spelling for each case and none for system work");
     }
 
     [Fact]

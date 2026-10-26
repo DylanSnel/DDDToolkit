@@ -61,7 +61,7 @@ public class RequirementAttributeGenerationTests
         """;
 
     /// <summary>The module's domain, in a project of its own as an application has it: Tenancy's classes, and a document with members.</summary>
-    private const string Domain =
+    internal const string Domain =
         """
         using System;
         using System.Collections.Generic;

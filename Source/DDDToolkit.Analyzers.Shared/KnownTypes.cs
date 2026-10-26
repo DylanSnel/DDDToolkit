@@ -30,6 +30,8 @@ internal static class KnownTypes
     public const string InternalAttribute = AttributesNamespace + ".InternalAttribute";
     public const string DontCompareAttribute = AttributesNamespace + ".DontCompareAttribute";
     public const string KeyPartAttribute = AttributesNamespace + ".KeyPartAttribute";
+    /// <summary>The property of an aggregate root that names its owner: <c>[Owner]</c>.</summary>
+    public const string OwnerAttribute = AttributesNamespace + ".OwnerAttribute";
 
     /// <summary>An abstract generic parent a package ships for aggregate roots declared elsewhere: <c>[AggregateRootBase]</c>.</summary>
     public const string AggregateRootBaseAttribute = AttributesNamespace + ".AggregateRootBaseAttribute";

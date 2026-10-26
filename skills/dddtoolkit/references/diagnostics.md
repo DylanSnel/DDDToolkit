@@ -759,7 +759,25 @@ null. A `Guid` is the caller's verified identity (the core), the application's s
 For a type of the application's own, write a small `ICallersOwn<T>` beside the requests (`T? Find(Caller caller)`,
 public where another project declares it) and register it in the host, `services.AddCallersOwn<T, TCallersOwn>()`.
 A nullable member: compute the requirement as `RequiredAccess`. A `string`, a class or an enum never has an own (the
-case compares a struct that is `IEquatable` of itself): mark the member that names the caller's id instead.
+case compares a struct that is `IEquatable` of itself): mark the member that names the caller's id instead. The id of
+an aggregate root that marks its owner `[Owner]` is not reported: `[Own]`/`[OrOwn]` on it is about the owner, and
+the line is `AccessRequirement.OwnerOf(request.Board)`; for the id of one that marks none, mark the property that
+names its owner `[Owner]`, or write a handle of the id. A handle of the id itself wins over the owner.
+
+## DDD00087
+
+Error, at `[Owner]` or at the request: `[Owner]` goes on one instance property of an aggregate root itself. Not on an
+entity inside an aggregate (mark the root's property), not on a type that is no aggregate root, not on a static
+property, and once per aggregate (several owners are members: use Membership). At a request: an id that is the id of
+two aggregate roots that each mark an owner; give each aggregate an id of its own.
+
+## DDD00088
+
+Error, at `[Owner]` or at the request's `[Own]`/`[OrOwn]`: the owner's type has no own. At the property: a `string`,
+a class or an enum can never be compared; mark the property that names the owner's id (a `Guid`, the seat id, or an
+id of the application's own). At the request: nothing the requests' project sees says what the caller's own of the
+owner's type is; write a small `ICallersOwn<T>` beside the requests and register it,
+`services.AddCallersOwn<T, TCallersOwn>()`. A nullable owner is fine: a row whose owner is null is nobody's.
 
 ## Not a diagnostic: the owned type must carry the key part
 

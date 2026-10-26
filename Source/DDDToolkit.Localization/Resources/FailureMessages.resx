@@ -32,6 +32,10 @@
     <value>Only whoever this is about can do this.</value>
     <comment>ToolkitRefusals.NotOwn: a request is about the caller's own, a seat or a user, and names one that is not the caller's. No arguments.</comment>
   </data>
+  <data name="access.not-found" xml:space="preserve">
+    <value>That was not found, or it is not one you can see.</value>
+    <comment>ToolkitRefusals.NotFound: a request is about the owner of an aggregate, and names one there is no row of for the caller, whether it does not exist or row level security keeps it from the caller. No arguments.</comment>
+  </data>
   <data name="Unspecified" xml:space="preserve">
     <value>{ValueObject} is not valid.</value>
     <comment>ValidationError.UnspecifiedCode: a Validate() override refused without saying why. {ValueObject} is the type name.</comment>

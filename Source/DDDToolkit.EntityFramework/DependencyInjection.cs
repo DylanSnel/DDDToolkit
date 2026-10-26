@@ -4,6 +4,7 @@ using DDDToolkit.EntityFramework.Integration;
 using DDDToolkit.EntityFramework.Interceptors;
 using DDDToolkit.EntityFramework.Options;
 using DDDToolkit.EntityFramework.Outbox;
+using DDDToolkit.EntityFramework.Owners;
 using DDDToolkit.EntityFramework.Storage;
 using DDDToolkit.Interfaces;
 using DDDToolkit.Startup;
@@ -54,6 +55,13 @@ public static class DependencyInjection
     /// <c>services.RunStartupChecks()</c>: every registered context that maps the toolkit's classes is wired
     /// through <see cref="UseDDDToolkit"/>.
     /// </para>
+    /// <para>
+    /// It also registers what reads the owner of an aggregate, <see cref="IAggregateOwners{TId}"/> for every id, for a
+    /// request about the owner's own: <c>[Own]</c> or <c>[OrOwn]</c> on the id of an aggregate that marks its owner
+    /// <c>[Owner]</c>. The context that maps the aggregate is found among the registered ones the first time such a
+    /// request is checked, and the owner's one column read as the caller, so a host writes nothing for it. One the host
+    /// registers for an id is asked instead.
+    /// </para>
     /// </summary>
     public static IServiceCollection AddDDDToolkitEntityFramework(this IServiceCollection services, Action<DDDEntityFrameworkOptions>? configure = null)
     {
@@ -81,6 +89,12 @@ public static class DependencyInjection
 
             // Which contexts UseDDDToolkit gave the parts the packages bring, so each is named once in the log.
             services.TryAddSingleton<ContextParts>();
+
+            // Who owns the aggregate a request about the owner's own names, for the core's check of [Own] and [OrOwn]
+            // on its id: the column its [Owner] property maps, read as the caller from the context that maps it, found
+            // once for the host. For every id, so a host writes nothing for it; one it registers for an id comes first.
+            services.TryAddSingleton<OwnerColumns>();
+            services.TryAdd(ServiceDescriptor.Scoped(typeof(IAggregateOwners<>), typeof(EfAggregateOwners<>)));
 
             // Every context saves through the interceptors above, or the host does not start, once it runs its checks.
             services.AddStartupCheck(EntityFrameworkChecks.ToolkitWired);

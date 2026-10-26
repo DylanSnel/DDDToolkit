@@ -721,6 +721,24 @@ internal static class DiagnosticDescriptors
         isEnabledByDefault: true,
         description: "The check compares the value a request names with the caller's own of the same type, at the door, so the request need not know who sends it. What the caller's own is, whoever knows says, with an ICallersOwn<TValue>: the core for a Guid, the caller's verified identity, which is the id its token names; Tenancy for the application's seat id, the caller's seat in the tenant of the request; and an application for a kind of its own, its own user id say, with a small implementation beside its requests, which the host registers with services.AddCallersOwn<UserId, CallersUser>(). On a member of a type nothing says that for, the request would be stopped every time it is sent, so it is reported where the project can tell: a package says its types with [assembly: CallersOwn], and an application's ICallersOwn is found in the requests' project or one it references. A member that may be null, SeatId?, names no value where it is left out: a requirement computed from whether it is given is written as RequiredAccess. And the caller's own is a value compared with the caller's, a struct that is IEquatable of itself, so a member that is a string, a class or an enum is reported whatever the project sees.");
 
+    public static readonly DiagnosticDescriptor OwnerOutOfPlace = Create(
+        id: "DDD00087",
+        title: "[Owner] marks the one owner of an aggregate root",
+        messageFormat: "'{0}' {1}",
+        category: Access,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "[Owner] marks the property of an aggregate root that names its owner, a fact about what the aggregate is: [Owner] public UserId Owner { get; private set; }. A request about the owner's own names the aggregate by its id, [Own] BoardId Board with [OwnOnly], or [OrOwn] BoardId Board beside [RequiresKey(key)], and the check reads that one column of the one row the id names, as the caller. So it goes on an instance property of the aggregate root itself: an entity inside an aggregate is no row a request names by its own id, and a type that is no aggregate root has none either. And it goes on one property: an aggregate has one owner, and several owners are members, a resource with members, which Membership keeps. An id the project sees as the id of two aggregate roots that each mark an owner cannot tell which one a request is about, and is reported at the request.");
+
+    public static readonly DiagnosticDescriptor OwnerOfATypeWithoutOwn = Create(
+        id: "DDD00088",
+        title: "[Owner] marks a property of a type the caller has an own of",
+        messageFormat: "'{0}' {1}",
+        category: Access,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "The check of a request about the owner's own compares the owner the row holds with the caller's own of the same type, so the property marked [Owner] is of a type something says the caller's own of: a Guid, the caller's verified identity; Tenancy's seat id, the caller's seat in the tenant of the request; or a kind of the application's own, with an ICallersOwn<TValue> the host registers with services.AddCallersOwn<UserId, CallersUser>(). It may be nullable, and a row whose owner is null is nobody's. The caller's own is a value compared with the caller's, a struct that is IEquatable of itself, so an owner that is a string, a class or an enum can never be compared, and is reported where the property is declared. Whether something says the caller's own of the owner's type is told where the requests are, since an application's ICallersOwn is declared beside them: there a request that names the aggregate is reported where the project can tell that nothing does, and the request would be stopped every time it is sent.");
+
     public static readonly DiagnosticDescriptor KeyMarkerOutOfPlace = Create(
         id: "DDD00080",
         title: "A marker on a request says where the key of its [RequiresKey] is held",

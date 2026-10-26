@@ -294,6 +294,18 @@ internal static class Providers
             .Where(static diagnostic => diagnostic is not null)
             .Select(static (diagnostic, _) => diagnostic!);
 
+    /// <summary>
+    /// DDD00087 and DDD00088 for every property marked <c>[Owner]</c> that is not the one owner of an aggregate root, or
+    /// is of a type nothing could say the caller's own of; nothing for one that is.
+    /// </summary>
+    public static IncrementalValuesProvider<DiagnosticInfo> MisplacedOwners(this IncrementalGeneratorInitializationContext context)
+        => context.SyntaxProvider.ForAttributeWithMetadataName(
+                KnownTypes.OwnerAttribute,
+                predicate: static (node, _) => node is PropertyDeclarationSyntax,
+                transform: static (syntaxContext, _) => OwnerDeclarations.Check(syntaxContext))
+            .Where(static diagnostic => diagnostic is not null)
+            .Select(static (diagnostic, _) => diagnostic!);
+
     /// <summary>The compilation's assembly name, as a cacheable value.</summary>
     public static IncrementalValueProvider<string?> AssemblyName(this IncrementalGeneratorInitializationContext context)
         => context.CompilationProvider.Select(static (compilation, _) => compilation.AssemblyName);

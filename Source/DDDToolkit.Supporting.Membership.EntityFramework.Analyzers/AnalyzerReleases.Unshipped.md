@@ -85,3 +85,5 @@ DDD00083 | DDDToolkit.Access | Error | A request's requirement attributes are re
 DDD00084 | DDDToolkit.Access | Warning | A requirement attribute beside another adds what that one does not require already
 DDD00085 | DDDToolkit.Access | Error | [OrOwn] goes beside [RequiresKey], and [Own] with [OwnOnly]
 DDD00086 | DDDToolkit.Access | Error | [OrOwn] and [Own] mark a member of a type something says the caller's own of
+DDD00087 | DDDToolkit.Access | Error | [Owner] marks the one owner of an aggregate root
+DDD00088 | DDDToolkit.Access | Error | [Owner] marks a property of a type the caller has an own of

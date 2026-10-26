@@ -606,30 +606,10 @@ internal sealed record RequestRequirement(
     }
 
     /// <summary>
-    /// Whether no handle could ever say the caller's own of <paramref name="type"/>, whatever the project sees: the case
-    /// compares a value that equals itself, a struct that is <c>IEquatable</c> of itself, and a class, a string, an
-    /// interface or an enum is none. A struct declared in parts in the project may get its equality from a generator this
-    /// one does not see, so only one it can read whole is told.
+    /// Whether no handle could ever say the caller's own of <paramref name="type"/>, whatever the project sees
+    /// (<see cref="OwnerDeclarations.CannotHaveOwn"/>).
     /// </summary>
-    private static bool CannotHaveOwn(ITypeSymbol type)
-    {
-        if (type.TypeKind is TypeKind.Error or TypeKind.TypeParameter)
-        {
-            return false;
-        }
-
-        if (!type.IsValueType || type.TypeKind == TypeKind.Enum)
-        {
-            return true;
-        }
-
-        var equatable = type.AllInterfaces.Any(each => each is { Name: "IEquatable", TypeArguments.Length: 1 }
-            && each.ContainingNamespace?.ToDisplayString() == "System"
-            && SymbolEqualityComparer.Default.Equals(each.TypeArguments[0], type));
-        var inParts = type.DeclaringSyntaxReferences.Any(reference => reference.GetSyntax() is TypeDeclarationSyntax declaration
-            && declaration.Modifiers.Any(SyntaxKind.PartialKeyword));
-        return !equatable && !inParts;
-    }
+    private static bool CannotHaveOwn(ITypeSymbol type) => OwnerDeclarations.CannotHaveOwn(type);
 
     /// <summary>
     /// The requirement attributes the caller's own of <paramref name="type"/> already requires, as its package says with
@@ -753,6 +733,12 @@ internal sealed record RequestRequirement(
         CancellationToken cancellationToken)
     {
         private readonly List<DiagnosticInfo> _diagnostics = [];
+
+        /// <summary>
+        /// The members marked <c>[Own]</c> or <c>[OrOwn]</c> that name the id of an aggregate whose owner it marks
+        /// <c>[Owner]</c>, by name, each with that aggregate: the owner of the aggregate is the caller's own of the line.
+        /// </summary>
+        private readonly Dictionary<string, OwnedAggregate> _ownerOf = new(StringComparer.Ordinal);
         private readonly LocationInfo? _location = LocationInfo.From(identifier);
         private readonly string _name = Written(type);
         private int _errors;
@@ -1090,16 +1076,94 @@ internal sealed record RequestRequirement(
                     return;
                 }
 
-                if (marker.Type.TypeKind != TypeKind.Error && HasOwn(marker.Type, compilation, cancellationToken) == false)
+                var hasOwn = marker.Type.TypeKind == TypeKind.Error ? null : HasOwn(marker.Type, compilation, cancellationToken);
+                if (ReadAsAnOwner(marker, hasOwn) is { } read)
+                {
+                    if (!read)
+                    {
+                        return;
+                    }
+
+                    continue;
+                }
+
+                if (hasOwn == false)
                 {
                     var written = Written(marker.Type);
+                    var aggregate = DefinitionFactory.IsEntityId(marker.Type) ? OwnerDeclarations.AggregatesWithId(marker.Type, compilation).FirstOrDefault() : null;
                     Report(DiagnosticDescriptors.OwnOnATypeWithoutOwn, marker.Location ?? _location, _name, marker.Name, Bracketed(marker.Class).Trim('[', ']'),
                         "which is a '" + written + "': nothing says what the caller's own " + written + " is. A Guid is the caller's verified identity and Tenancy's seat id the caller's seat; for a kind of the application's own, "
-                        + "declare a small ICallersOwn<" + written + "> beside the requests and register it with services.AddCallersOwn<" + written + ", ...>()");
+                        + "declare a small ICallersOwn<" + written + "> beside the requests and register it with services.AddCallersOwn<" + written + ", ...>()"
+                        + (aggregate is null ? string.Empty : "; for the id of '" + aggregate.Aggregate.Name + "', a request about its owner, mark the property of '" + aggregate.Aggregate.Name + "' that names its owner [Owner]"));
                     return;
                 }
             }
         }
+
+        /// <summary>
+        /// Reads <paramref name="marker"/> as the id of an aggregate whose owner it marks <c>[Owner]</c>, where nothing says the
+        /// caller's own of the id itself: the line is then <c>AccessRequirement.OwnerOf</c> of the member, and the owner's own
+        /// is the caller's own the request is about. <see langword="null"/> where the member is no such id, so it is read as
+        /// a value of the caller's own; <see langword="true"/> where it is one and is read so; <see langword="false"/> where
+        /// it is one and is reported (DDD00087, DDD00088), and nothing is written.
+        /// </summary>
+        /// <remarks>
+        /// The caller's own of the id wins where something says it, an <c>ICallersOwn</c> of the id's own, or a package's
+        /// template the aggregate is declared with, as Tenancy's seat: that one reads nothing, and is what the id says first.
+        /// </remarks>
+        /// <param name="marker">The member marked <c>[Own]</c> or <c>[OrOwn]</c>.</param>
+        /// <param name="hasOwn">Whether something says the caller's own of the member's type, where the project can tell.</param>
+        private bool? ReadAsAnOwner(Marker marker, bool? hasOwn)
+        {
+            if (hasOwn == true || marker.Type.TypeKind == TypeKind.Error || !DefinitionFactory.IsEntityId(marker.Type))
+            {
+                return null;
+            }
+
+            var owned = OwnerDeclarations.AggregatesWithId(marker.Type, compilation).Where(static each => each.Owner is not null).ToList();
+            var templates = OwnTypesIn(compilation, cancellationToken).Templates;
+            if (owned.Count == 0 || owned.Any(each => templates.Any(template => DeclaredWith(each.Aggregate, template.Template))))
+            {
+                return null;
+            }
+
+            var marked = "marks '" + marker.Name + "' " + Bracketed(marker.Class);
+            if (owned.Count > 1)
+            {
+                Report(DiagnosticDescriptors.OwnerOutOfPlace, marker.Location ?? _location, _name,
+                    marked + ", the id of " + Listed(owned.Select(static each => "'" + each.Aggregate.Name + "'")) + ", which each mark an [Owner]: which aggregate's owner the request is about cannot be told, so give each aggregate an id of its own");
+                return false;
+            }
+
+            var aggregate = owned[0];
+            var owner = aggregate.Owner!;
+            var ownerType = OwnerDeclarations.Unwrapped(owner.Type);
+            var written = Written(ownerType);
+            if (ownerType.TypeKind != TypeKind.Error && (CannotHaveOwn(ownerType) || HasOwn(ownerType, compilation, cancellationToken) == false))
+            {
+                Report(DiagnosticDescriptors.OwnerOfATypeWithoutOwn, marker.Location ?? _location, _name,
+                    marked + ", the id of '" + aggregate.Aggregate.Name + "', whose [Owner] '" + owner.Name + "' is a '" + written + "': " + (CannotHaveOwn(ownerType)
+                        ? "the owner is compared with the caller's own of its type, a struct that is IEquatable of itself, so nothing can say the caller's own " + written
+                        : "nothing says what the caller's own " + written + " is. A Guid is the caller's verified identity and Tenancy's seat id the caller's seat; for a kind of the application's own, "
+                          + "declare a small ICallersOwn<" + written + "> beside the requests and register it with services.AddCallersOwn<" + written + ", ...>()"));
+                return false;
+            }
+
+            _ownerOf[marker.Name] = aggregate;
+            return true;
+        }
+
+        /// <summary>Whether <paramref name="aggregate"/> is declared with the template attribute <paramref name="template"/>.</summary>
+        private static bool DeclaredWith(INamedTypeSymbol aggregate, INamedTypeSymbol template)
+            => aggregate.OriginalDefinition.GetAttributes().Any(attribute => attribute.AttributeClass is { } attributeClass
+                && SymbolEqualityComparer.Default.Equals(attributeClass.OriginalDefinition, template.OriginalDefinition));
+
+        /// <summary>
+        /// The type whose caller's own the member names: its own, or, for the id of an aggregate whose owner it marks, the
+        /// owner's (<see cref="ReadAsAnOwner"/>).
+        /// </summary>
+        private ITypeSymbol OwnTypeOf(Marker marker)
+            => _ownerOf.TryGetValue(marker.Name, out var aggregate) ? OwnerDeclarations.Unwrapped(aggregate.Owner!.Type) : marker.Type;
 
         /// <summary>
         /// Reports the first of <paramref name="marked"/> the line cannot read: a parameter of a class's primary
@@ -1185,7 +1249,7 @@ internal sealed record RequestRequirement(
                         break;
 
                     case StatedKind.OwnOnly when markers.FirstOrDefault(static marker => marker.Kind == MarkerKind.Own) is { } own:
-                        implied.AddRange(ImpliedByOwn(own.Type, compilation, cancellationToken).Select(implies => (implies, each.Named + " with [Own] '" + own.Name + "'")));
+                        implied.AddRange(ImpliedByOwn(OwnTypeOf(own), compilation, cancellationToken).Select(implies => (implies, each.Named + " with [Own] '" + own.Name + "'")));
                         break;
 
                     case StatedKind.Key:
@@ -1202,7 +1266,7 @@ internal sealed record RequestRequirement(
                         if (markers.FirstOrDefault(static marker => marker.Kind == MarkerKind.OrOwn) is { } orOwn)
                         {
                             // Either way through lets the caller in, so only what both require is required.
-                            var byOwn = ImpliedByOwn(orOwn.Type, compilation, cancellationToken);
+                            var byOwn = ImpliedByOwn(OwnTypeOf(orOwn), compilation, cancellationToken);
                             byKey = byKey
                                 .Where(pair => byOwn.Any(implies => SymbolEqualityComparer.Default.Equals(implies.OriginalDefinition, pair.Implied.OriginalDefinition)))
                                 .Select(pair => (pair.Implied, pair.By + " and [OrOwn] '" + orOwn.Name + "'"))
@@ -1356,8 +1420,12 @@ internal sealed record RequestRequirement(
             }
         }
 
-        /// <summary>The core's case of the caller's own, of the member <paramref name="marker"/> marks.</summary>
-        private static string Own(Marker marker) => KnownTypes.AccessRequirementUsage + ".Own(" + Designation + "." + Identifier(marker.Property!.Name) + ")";
+        /// <summary>
+        /// The core's case of the caller's own, of the member <paramref name="marker"/> marks: the value itself, or, for the id
+        /// of an aggregate whose owner it marks, the owner of that aggregate.
+        /// </summary>
+        private string Own(Marker marker)
+            => KnownTypes.AccessRequirementUsage + (_ownerOf.ContainsKey(marker.Name) ? ".OwnerOf(" : ".Own(") + Designation + "." + Identifier(marker.Property!.Name) + ")";
 
         private void Report(DiagnosticDescriptor descriptor, LocationInfo? location, params string[] arguments)
         {

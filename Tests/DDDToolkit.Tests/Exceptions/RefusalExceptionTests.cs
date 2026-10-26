@@ -13,7 +13,7 @@ public class RefusalExceptionTests
     [Fact]
     public void The_toolkits_own_refusals_have_a_code_a_kind_and_a_text()
     {
-        ToolkitRefusals.Codes.Should().Equal(ToolkitRefusals.Refused, ToolkitRefusals.RoleNotAllowed, ToolkitRefusals.NotSignedIn, ToolkitRefusals.SystemOnly, ToolkitRefusals.NotOwn);
+        ToolkitRefusals.Codes.Should().Equal(ToolkitRefusals.Refused, ToolkitRefusals.RoleNotAllowed, ToolkitRefusals.NotSignedIn, ToolkitRefusals.SystemOnly, ToolkitRefusals.NotOwn, ToolkitRefusals.NotFound);
         ToolkitRefusals.Refused.Should().Be("access.refused");
         ToolkitRefusals.KindOf(ToolkitRefusals.Refused).Should().Be(RefusalKind.NotPermitted, "the caller may not do this, and a retry gives the same answer");
         ToolkitRefusals.TemplateOf(ToolkitRefusals.Refused).Should().Be("Access to this was refused.");
@@ -52,6 +52,15 @@ public class RefusalExceptionTests
         ToolkitRefusals.KindOf(ToolkitRefusals.NotOwn).Should().Be(RefusalKind.NotPermitted, "the same request from the same caller gets the same answer");
         ToolkitRefusals.TemplateOf(ToolkitRefusals.NotOwn).Should().Be("Only whoever this is about can do this.");
         ToolkitRefusals.ReasonsArgument.Should().Be("Reasons", "what a client reads the reasons of one refusal of several ways under");
+    }
+
+    [Fact]
+    public void A_request_about_the_owner_of_an_aggregate_the_caller_does_not_see_is_not_found_and_says_nothing_of_why()
+    {
+        ToolkitRefusals.NotFound.Should().Be("access.not-found");
+        ToolkitRefusals.KindOf(ToolkitRefusals.NotFound).Should().Be(RefusalKind.NotFound, "one the caller may not see reads as one that does not exist");
+        ToolkitRefusals.TemplateOf(ToolkitRefusals.NotFound).Should().Be("That was not found, or it is not one you can see.");
+        ToolkitRefusals.Refuse(ToolkitRefusals.NotFound).Arguments.Should().BeEmpty("the id is the request's");
     }
 
     [Fact]

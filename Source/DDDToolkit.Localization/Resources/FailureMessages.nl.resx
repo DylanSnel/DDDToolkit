@@ -27,6 +27,9 @@
   <data name="access.not-own" xml:space="preserve">
     <value>Dit kan alleen degene om wie het gaat.</value>
   </data>
+  <data name="access.not-found" xml:space="preserve">
+    <value>Dit bestaat niet of is hier niet zichtbaar.</value>
+  </data>
   <data name="Unspecified" xml:space="preserve">
     <value>{ValueObject} is niet geldig.</value>
   </data>

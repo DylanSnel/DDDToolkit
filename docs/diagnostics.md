@@ -85,6 +85,8 @@ type looks annotated and behaves like a plain class. Every misuse below reports 
 | [DDD00084](#ddd00084) | Warning | A requirement attribute beside another adds what that one does not require already |
 | [DDD00085](#ddd00085) | Error | [OrOwn] goes beside [RequiresKey], and [Own] with [OwnOnly] |
 | [DDD00086](#ddd00086) | Error | [OrOwn] and [Own] mark a member of a type something says the caller's own of |
+| [DDD00087](#ddd00087) | Error | [Owner] marks the one owner of an aggregate root |
+| [DDD00088](#ddd00088) | Error | [Owner] marks a property of a type the caller has an own of |
 
 Most of these say the generator could not do what you asked. The rest are a different kind: they are
 rules about the model rather than about the declaration, and each of them names code that compiles,
@@ -117,6 +119,8 @@ enforces differently from the C# that states it, asks more often than it has to,
 is a message that reaches its handler with nothing having asked what it requires, and [DDD00077](#ddd00077) to
 [DDD00086](#ddd00086) about [what a request declares](access-requirements.md#what-a-request-declares), where it is a
 request that says nothing, reads as if it said one thing with its attributes and says another, or says a thing twice.
+[DDD00087](#ddd00087) and [DDD00088](#ddd00088) are about [the owner an aggregate marks](access-requirements.md#the-owner-of-an-aggregate),
+where it is a request about the owner's own that no row could ever let through.
 [DDD00059](#ddd00059) and [DDD00060](#ddd00060) are about the
 [member list of a resource](membership.md#the-member-list-is-written-for-you), and say what the generator of
 the Membership package could not tell, and which member class names the wrong resource.
@@ -3030,6 +3034,76 @@ requirement computed from whether it is given is written as `RequiredAccess`. An
 compared with the caller's, a struct that is `IEquatable` of itself, such as a `Guid` or an id declared with
 `[EntityId]`: a member that is a `string`, a class or an enum has no own whatever the project sees, and is reported
 always, `[OrOwn] string Name` say.
+
+The id of an aggregate root that marks its owner `[Owner]` is no case of it, though nothing says the caller's own of
+the id: `[Own] BoardId Board` there is about the board's owner, and the line is `AccessRequirement.OwnerOf(request.Board)`
+([The owner of an aggregate](access-requirements.md#the-owner-of-an-aggregate)). The id of an aggregate that marks
+none is reported as above, and the message says where the owner would be marked. Where something does say the
+caller's own of the id itself, its own handle wins, and the owner is not read.
+
+## DDD00087
+
+**`[Owner]` marks the one owner of an aggregate root.**
+
+```csharp
+[Entity<ColumnId>]
+public sealed partial class Column
+{
+    [Owner] public UserId Keeper { get; private set; }                       // DDD00087: an entity inside an aggregate
+}
+
+[AggregateRoot<BoardId>]
+public sealed partial class Board
+{
+    [Owner] public UserId Owner { get; private set; }
+
+    [Owner] public UserId CoOwner { get; private set; }                      // DDD00087: an aggregate has one owner
+}
+```
+
+The aggregate says who owns it, a fact about what it is, and a request about the owner's own names it by its id: the
+check reads the owner's column of the one row the id names, as the caller
+([The owner of an aggregate](access-requirements.md#the-owner-of-an-aggregate)). So `[Owner]` goes on an instance
+property of the aggregate root itself, once. Reported where the property is declared:
+
+| It is on | Because |
+|---|---|
+| an entity inside an aggregate | a request names the root by the root's id, and the check reads the root's row |
+| a type that is no aggregate root | no request names it by an id whose row the check reads |
+| a static property | the owner is a column of each row |
+| a second property of one aggregate | an aggregate has one owner; several owners are members, a resource with members, which [Membership](membership.md) keeps |
+
+The first of two in the order they are written is the one, and the second is reported. And at a request: an id the
+project sees as the id of two aggregate roots that each mark an owner cannot say which aggregate the request is about,
+so give each aggregate an id of its own.
+
+## DDD00088
+
+**`[Owner]` marks a property of a type the caller has an own of.**
+
+```csharp
+[AggregateRoot<BoardId>]
+public sealed partial class Board
+{
+    [Owner] public string Owner { get; private set; }                        // DDD00088: a string has no own
+}
+
+[OwnOnly]
+public sealed record ArchiveBoard([Own] BoardId Board) : IBoardsRequest;     // DDD00088: nothing says what the caller's own UserId is
+```
+
+The check compares the owner the row holds with the caller's own of the same type, as [DDD00086](#ddd00086) compares
+a value the request names: a `Guid`, the caller's verified identity; your seat id, the caller's seat, of Tenancy's; or
+a kind of your own, with a small `ICallersOwn<TValue>` beside your requests, which the host registers with
+`services.AddCallersOwn<UserId, CallersUser>()`. An owner that may be null is fine: a row whose owner is null is
+nobody's, and nobody comes through as its owner.
+
+A `string`, a class or an enum can never be compared, whatever a project sees, so it is reported where the property is
+declared. Whether something says the caller's own of the owner's type is told where the requests are, since your
+handle is declared beside them and the domain does not see it: a request that names the aggregate is reported there,
+at its marker, where the project can tell that nothing does, and no line is written for it. Where a package names the
+owner's type by a template whose classes the project does not see, nothing can be told, and the check says so when
+the request is sent.
 
 ## Building the model fails: the owned type must carry the key part
 
