@@ -5,8 +5,10 @@ using Microsoft.CodeAnalysis;
 
 namespace DDDToolkit.Build.ApiReference.Pages;
 
-/// <summary>A page as it will be written: its groups, their types and their members, each heading with its anchor.</summary>
-internal sealed record PageLayout(PagePlan Plan, IReadOnlyList<GroupLayout> Groups);
+/// <summary>
+/// A page as it will be written: its title, its groups, their types and their members, each heading with its anchor.
+/// </summary>
+internal sealed record PageLayout(PagePlan Plan, string Title, IReadOnlyList<GroupLayout> Groups);
 
 /// <summary>A group of a page.</summary>
 internal sealed record GroupLayout(string Heading, string Anchor, string? Intro, IReadOnlyList<TypeLayout> Types);
@@ -26,11 +28,13 @@ internal sealed record MemberLayout(ISymbol Member, string Heading, string? Anch
 /// </summary>
 internal sealed class ReferenceLayout
 {
+    private readonly ReferencePlan _plan;
     private readonly ApiSurface _surface;
     private readonly Documentation _documentation;
 
-    private ReferenceLayout(ApiSurface surface, Documentation documentation)
+    private ReferenceLayout(ReferencePlan plan, ApiSurface surface, Documentation documentation)
     {
+        _plan = plan;
         _surface = surface;
         _documentation = documentation;
     }
@@ -44,9 +48,10 @@ internal sealed class ReferenceLayout
     /// <summary>Where each documented type and member is: the page's file and the heading's anchor.</summary>
     public Dictionary<ISymbol, (string File, string Anchor)> Locations { get; } = new(SymbolEqualityComparer.Default);
 
-    public static ReferenceLayout Build(PackageCompilation packages, ApiSurface surface, Documentation documentation)
+    /// <summary>Lays out the pages of <paramref name="plan"/>, from its packages.</summary>
+    public static ReferenceLayout Build(ReferencePlan plan, PackageCompilation packages, ApiSurface surface, Documentation documentation)
     {
-        var layout = new ReferenceLayout(surface, documentation);
+        var layout = new ReferenceLayout(plan, surface, documentation);
         layout.Lay(packages);
         return layout;
     }
@@ -72,14 +77,16 @@ internal sealed class ReferenceLayout
             types.AddRange(_surface.TypesOf(assembly).Select(type => (type, assembly.Name, FolderOf(type, folders) ?? "")));
         }
 
+        types.AddRange(BorrowedTypes(packages).Select(type => (type, type.ContainingAssembly.Name, "")));
+
         // Claims by type name first, then by the longest folder.
         var placed = new Dictionary<INamedTypeSymbol, (int Page, int Group, int Claim)>(SymbolEqualityComparer.Default);
         foreach (var (type, assembly, folder) in types)
         {
             (int Page, int Group, int Claim, int Strength)? best = null;
-            for (var page = 0; page < ReferencePlan.Pages.Count; page++)
+            for (var page = 0; page < _plan.Pages.Count; page++)
             {
-                var groups = ReferencePlan.Pages[page].Groups;
+                var groups = _plan.Pages[page].Groups;
                 for (var group = 0; group < groups.Count; group++)
                 {
                     for (var index = 0; index < groups[group].Claims.Count; index++)
@@ -115,18 +122,19 @@ internal sealed class ReferenceLayout
         }
 
         // A type no claim took goes to the last page of its assembly, so it is still documented and still found.
-        var lastPageOf = ReferencePlan.Assemblies.ToDictionary(
+        var lastPageOf = _plan.Assemblies.ToDictionary(
             assembly => assembly,
-            assembly => ReferencePlan.Pages.ToList().FindLastIndex(page => page.Groups.Any(group => group.Claims.Any(claim => claim.Assembly == assembly))));
+            assembly => _plan.Pages.ToList().FindLastIndex(page => page.Groups.Any(group => group.Claims.Any(claim => claim.Assembly == assembly))));
 
         var pages = new List<PageLayout>();
-        for (var pageIndex = 0; pageIndex < ReferencePlan.Pages.Count; pageIndex++)
+        for (var pageIndex = 0; pageIndex < _plan.Pages.Count; pageIndex++)
         {
-            var plan = ReferencePlan.Pages[pageIndex];
+            var plan = _plan.Pages[pageIndex];
+            var title = _plan.FullTitle(plan);
 
             // Every heading of the page goes through one slugger, in the order the page will have them, the title first.
             var slugger = new Slugger();
-            slugger.Slug(plan.FullTitle);
+            slugger.Slug(title);
 
             var groupPlans = plan.Groups.Select((group, groupIndex) => (group.Heading, group.Intro, Lead: (group.Lead ?? []).ToList(), Types: types
                     .Where(entry => placed.TryGetValue(entry.Type, out var at) && at.Page == pageIndex && at.Group == groupIndex)
@@ -181,10 +189,39 @@ internal sealed class ReferenceLayout
                 groups.Add(new GroupLayout(heading, groupAnchor, intro, typeLayouts));
             }
 
-            pages.Add(new PageLayout(plan, groups));
+            pages.Add(new PageLayout(plan, title, groups));
         }
 
         Pages = pages;
+    }
+
+    /// <summary>
+    /// The types the plan's claims name in the assemblies it does not document whole, each found once: a claim that names a
+    /// type the assembly does not have is a plan out of date, and stops the tool.
+    /// </summary>
+    private IEnumerable<INamedTypeSymbol> BorrowedTypes(PackageCompilation packages)
+    {
+        var claims = _plan.Pages.SelectMany(page => page.Groups).SelectMany(group => group.Claims).ToList();
+        foreach (var name in _plan.Borrowed)
+        {
+            var assembly = packages.Referenced(name)
+                ?? throw new InvalidOperationException($"The plan of {_plan.Domain} claims types of {name}, which its packages do not reference.");
+            var named = claims.Where(claim => claim.Assembly == name)
+                .Select(claim => claim.Type ?? throw new InvalidOperationException(
+                    $"A claim of {_plan.Domain}'s plan takes a folder of {name}, which the plan does not document whole: name a type."))
+                .ToHashSet(StringComparer.Ordinal);
+
+            var found = _surface.TypesOf(assembly, type => type.ContainingType is null && named.Contains(type.Name)).ToList();
+            foreach (var missing in named.Where(type => found.All(symbol => symbol.Name != type)))
+            {
+                throw new InvalidOperationException($"{name} has no public type named {missing}, which {_plan.Domain}'s plan claims.");
+            }
+
+            foreach (var type in found)
+            {
+                yield return type;
+            }
+        }
     }
 
     /// <summary>The name the application's class goes by: the attribute's, without <c>Aggregate</c> and <c>Attribute</c>.</summary>

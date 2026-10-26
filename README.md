@@ -94,6 +94,12 @@ public partial class Order { }
 | [Tenancy API: Postgres](docs/tenancy/reference/postgres.md) | Generated from the code: the public API of the Postgres package |
 | [Membership](docs/membership/overview.md) | The second supporting domain: access to one thing through the people on it, what it does and does not do, how its pieces connect, and what the application decides |
 | [Membership: the tutorial](docs/membership/tutorial.md) | Membership built into the Harbor application step by step: a board with its members, owner and roles, its database rules, and reach from above |
+| [Membership API: resource and members](docs/membership/reference/resource-and-members.md) | Generated from the code: the member template and its member list, periods and roles held, what the resource's class says, and the custom role template |
+| [Membership API: rules and permissions](docs/membership/reference/rules.md) | Generated from the code: `MembershipRules`, where the roles come from, the permissions on a resource and their settings, reach from above, and who a member is |
+| [Membership API: use cases and access](docs/membership/reference/use-cases.md) | Generated from the code: the admission, the overviews, starter roles, the access questions, the requirements and the resource access contracts |
+| [Membership API: refusals](docs/membership/reference/refusals.md) | Generated from the code: every refusal code, the codes of one resource, and their texts |
+| [Membership API: Entity Framework](docs/membership/reference/entity-framework.md) | Generated from the code: the public API of the Entity Framework package |
+| [Membership API: Postgres](docs/membership/reference/postgres.md) | Generated from the code: the public API of the Postgres package |
 | [Membership reference](docs/membership.md) | Every detail of Membership: access to a resource through its members, their roles and its owner, for as many kinds of resource as an application has |
 | [Writing your own supporting domain](docs/writing-a-supporting-domain.md) | Shipping a domain as a package that applications extend with their own ids and classes, without losing its rules |
 | [GraphQL](docs/graphql.md) | `AddDDDToolkitTypes()`, the generated scalar bindings, errors with codes, Relay node ids, one schema over the modules |

@@ -36,30 +36,42 @@ internal sealed class SourceFolders
         var pdb = pdbProvider.GetMetadataReader();
 
         var documents = new Dictionary<TypeDefinitionHandle, HashSet<DocumentHandle>>();
-        void Add(TypeDefinitionHandle type, DocumentHandle document)
+        void Add(Dictionary<TypeDefinitionHandle, HashSet<DocumentHandle>> into, TypeDefinitionHandle type, DocumentHandle document)
         {
-            if (!documents.TryGetValue(type, out var set))
+            if (!into.TryGetValue(type, out var set))
             {
-                documents[type] = set = [];
+                into[type] = set = [];
             }
 
             set.Add(document);
         }
 
+        // The bodies of a type's async methods, iterators and lambdas are compiled into types the compiler nests in it, and
+        // the PDB names their documents there: a type whose every method is async has no sequence point of its own.
+        var generated = new Dictionary<TypeDefinitionHandle, HashSet<DocumentHandle>>();
+
         foreach (var typeHandle in metadata.TypeDefinitions)
         {
+            var owner = typeHandle;
+            while (metadata.GetString(metadata.GetTypeDefinition(owner).Name).StartsWith('<')
+                   && metadata.GetTypeDefinition(owner).GetDeclaringType() is { IsNil: false } declaring)
+            {
+                owner = declaring;
+            }
+
+            var into = owner == typeHandle ? documents : generated;
             foreach (var methodHandle in metadata.GetTypeDefinition(typeHandle).GetMethods())
             {
                 var debug = pdb.GetMethodDebugInformation(methodHandle.ToDebugInformationHandle());
                 if (!debug.Document.IsNil)
                 {
-                    Add(typeHandle, debug.Document);
+                    Add(into, owner, debug.Document);
                 }
                 else if (!debug.SequencePointsBlob.IsNil)
                 {
                     foreach (var point in debug.GetSequencePoints())
                     {
-                        Add(typeHandle, point.Document);
+                        Add(into, owner, point.Document);
                     }
                 }
             }
@@ -76,21 +88,26 @@ internal sealed class SourceFolders
             var blob = pdb.GetBlobReader(information.Value);
             while (blob.RemainingBytes > 0)
             {
-                Add((TypeDefinitionHandle)information.Parent, MetadataTokens.DocumentHandle(blob.ReadCompressedInteger()));
+                Add(documents, (TypeDefinitionHandle)information.Parent, MetadataTokens.DocumentHandle(blob.ReadCompressedInteger()));
             }
         }
 
-        var paths = new Dictionary<string, List<string>>(StringComparer.Ordinal);
         var marker = "/" + projectName + "/";
-        foreach (var (type, handles) in documents)
-        {
-            // Generated documents are not under the project and say nothing.
-            paths[MetadataName(metadata, type)] = handles
+        List<string> Sources(IEnumerable<DocumentHandle> handles)
+            => handles
                 .Select(document => pdb.GetString(pdb.GetDocument(document).Name).Replace('\\', '/'))
                 .Select(path => path.IndexOf(marker, StringComparison.OrdinalIgnoreCase) is var at and >= 0 ? path[(at + marker.Length)..] : null)
                 .OfType<string>()
                 .Where(path => !path.StartsWith("obj/", StringComparison.OrdinalIgnoreCase))
                 .ToList();
+
+        var paths = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        foreach (var type in documents.Keys.Concat(generated.Keys).Distinct())
+        {
+            // Generated documents are not under the project and say nothing. What the compiler nested in a type counts
+            // only for a type that names no source of its own.
+            var own = Sources(documents.GetValueOrDefault(type) ?? []);
+            paths[MetadataName(metadata, type)] = own.Count > 0 ? own : Sources(generated.GetValueOrDefault(type) ?? []);
         }
 
         return new SourceFolders(paths);

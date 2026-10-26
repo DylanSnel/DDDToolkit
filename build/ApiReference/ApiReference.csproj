@@ -1,10 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    Writes docs/tenancy/reference/ from the Tenancy packages' assemblies and their XML documentation, so the API
-    reference says what the code says and cannot drift from it. Not in DDDToolkit.slnx: it is a docs tool, run by
-    hand when the packages' public surface or their comments change, with build/generate-api-reference.sh, and the
-    pages it writes are committed with the change.
+    Writes the API reference of each supporting domain, docs/tenancy/reference/ and docs/membership/reference/, from
+    its packages' assemblies and their XML documentation, so the reference says what the code says and cannot drift
+    from it. Not in DDDToolkit.slnx: it is a docs tool, run by hand when the packages' public surface or their comments
+    change, with build/generate-api-reference.sh, and the pages it writes are committed with the change.
   -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -26,6 +26,7 @@
   -->
   <ItemGroup>
     <ProjectReference Include="..\..\Source\DDDToolkit.Supporting.Tenancy.Postgres\DDDToolkit.Supporting.Tenancy.Postgres.csproj" ReferenceOutputAssembly="false" Private="false" />
+    <ProjectReference Include="..\..\Source\DDDToolkit.Supporting.Membership.Postgres\DDDToolkit.Supporting.Membership.Postgres.csproj" ReferenceOutputAssembly="false" Private="false" />
   </ItemGroup>
 
   <!-- The configuration the packages were just built in, which names the bin folder the tool reads. -->

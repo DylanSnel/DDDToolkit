@@ -191,6 +191,16 @@ internal static class Signatures
     /// <summary>The declaration of a member, as it is written in the class.</summary>
     public static string Declaration(ISymbol member)
     {
+        // Roslyn writes an interface's members without modifiers, which suits an instance member, but a static one is
+        // implemented by a type, not by an instance, and reads as the other without its own.
+        var modifiers = member is { IsStatic: true, ContainingType.TypeKind: TypeKind.Interface }
+            ? member.IsAbstract ? "static abstract " : member.IsVirtual ? "static virtual " : "static "
+            : "";
+        return modifiers + Written(member);
+    }
+
+    private static string Written(ISymbol member)
+    {
         switch (member)
         {
             case IMethodSymbol method:
