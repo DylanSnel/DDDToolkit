@@ -1057,7 +1057,7 @@ SingleValueCursorKeySerializer<OrderId, Guid>.Register();
   key's type; and a cursor of this list with a head written into it, which says how many pages to skip and
   what the list's total is, is believed. Check the marker against the query's own keys before paging, and
   refuse it with a code of your own, as the Tenancy sample does for all three:
-  [A marker that is not the list's cursor](tenancy/the-sample.md#a-marker-that-is-not-the-lists-cursor).
+  [A marker that is not the list's cursor](tenancy/sample/who-may-do-what.md#a-marker-that-is-not-the-lists-cursor).
 
 `ToPageAsync` is HotChocolate's, in `GreenDonut.Data.EntityFramework`, which the project that holds the
 context references, on its own or through `HotChocolate.Data.EntityFramework`. This package does not: the

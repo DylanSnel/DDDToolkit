@@ -167,4 +167,4 @@ refuses it elsewhere).
   refuses that for every role, the tables' owner included.
 - A seat that suspends or deactivates itself is still recorded: its seat counts in the transaction that wrote it.
 
-The sample shows [the history as a list](the-sample.md#an-operator-who-changed-a-row-and-the-history-as-a-list).
+The sample shows [the history as a list](sample/who-may-do-what.md#an-operator-who-changed-a-row-and-the-history-as-a-list).

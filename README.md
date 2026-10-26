@@ -78,7 +78,11 @@ public partial class Order { }
 | [Tenancy: invitations](docs/tenancy/invitations.md) | Inviting a person without an account yet into a tenant, with a unit and a role waiting |
 | [Tenancy: operators and history](docs/tenancy/operators-and-history.md) | The application's operators across tenants, who wrote and changed each row, and the access history |
 | [Tenancy on Postgres](docs/tenancy/postgres.md) | The second lock: Tenancy's rules as row level security policies and functions in Postgres, how to set them up, and what they stop |
-| [Tenancy: the sample](docs/tenancy/the-sample.md) | The Tenancy sample: who may do what in it, its GraphQL, how to try it, and each design choice with where to see it |
+| [Tenancy: the sample](docs/tenancy/the-sample.md) | The Tenancy sample: what is in it, the people and units of its seed, and its parts |
+| [Tenancy sample: who may do what](docs/tenancy/sample/who-may-do-what.md) | The sample's modules in layers, a request from route to save, what each request declares, roles and crews, paging, operators and invitations |
+| [Tenancy sample: GraphQL](docs/tenancy/sample/graphql.md) | One schema over the sample's three modules, what a query costs, the rules each module's schema keeps, and the administration's gateway |
+| [Tenancy sample: try it](docs/tenancy/sample/try-it.md) | Running the sample, its UI, one call followed to its refusal, and the presets that each break one rule |
+| [Tenancy sample: design choices](docs/tenancy/sample/design-choices.md) | Every Tenancy design choice with its code, something to try in the sample, and the test that holds it |
 | [Tenancy: design and limits](docs/tenancy/design.md) | Why Tenancy is shaped the way it is, what it does not do, and upgrading from key to permission |
 | [Tenancy API: aggregates and entities](docs/tenancy/reference/aggregates.md) | Generated from the code: the templates of tenant, organization, unit, seat, role and invitation, with their value objects, invariants and events |
 | [Tenancy API: use cases](docs/tenancy/reference/use-cases.md) | Generated from the code: `TenancyUseCases` and every command, directory and record nested in it, and the registration a host calls |

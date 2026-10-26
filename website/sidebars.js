@@ -55,7 +55,20 @@ const sidebars = {
                 'tenancy/invitations',
                 'tenancy/operators-and-history',
                 'tenancy/postgres',
-                'tenancy/the-sample',
+                {
+                  type: 'category',
+                  label: 'The sample',
+                  link: { type: 'doc', id: 'tenancy/the-sample' },
+                  items: [
+                    // The landing page again, as Tenancy's Overview is: llms.txt reads a category's items only.
+                    // It is labelled Overview by its own sidebar_label, which wins over a label given here.
+                    'tenancy/the-sample',
+                    'tenancy/sample/who-may-do-what',
+                    'tenancy/sample/graphql',
+                    'tenancy/sample/try-it',
+                    'tenancy/sample/design-choices',
+                  ],
+                },
                 'tenancy/design',
               ],
             },
