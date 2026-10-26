@@ -88,10 +88,10 @@ public sealed class UiAgainstTheHostTests(SampleHosts sample) : IClassFixture<Sa
             .Should().BeEquivalentTo(new[] { SampleCatalogue.CrewLead, SampleCatalogue.Surveyor, SampleCatalogue.Observer }, "the crew's role pickers offer the tenant's project roles in use");
         projectRoles.Should().OnlyContain(role => role.Permissions == null, "she manages no roles, so what each gives is not hers to read");
 
-        // The directory by id reads into the same records the lists do.
+        // The directory by id reads into the same records the lists do, and names a unit.
         (await api.SeatsByIdAsync([Harbor.SeatOf(DemoPeople.Seth).Value], Cancellation)).Value!.Should().Equal(new SeatInfo(Harbor.SeatOf(DemoPeople.Seth).Value, "Seth", "suspended"));
         (await api.UnitsByIdAsync([Harbor.UnitNamed("South Bay").Value], Cancellation)).Value!.Should().ContainSingle()
-            .Which.Should().Match<UnitInfo>(unit => unit.Path == "Harbor Works / South / South Bay" && unit.Name == "South Bay" && unit.Depth == 3, "she is not placed under South, and reads what it is called");
+            .Which.Should().Match<UnitNameInfo>(unit => unit.Path == "Harbor Works / South / South Bay" && unit.Name == "South Bay" && unit.Depth == 3, "she is not placed under South, and reads what it is called");
         (await api.RolesByIdAsync([Harbor.Roles[SampleCatalogue.Observer].Value], Cancellation)).Value!.Should().ContainSingle()
             .Which.Should().Match<RoleInfo>(role => role.Name == "Observer" && role.IsActive && !role.ManagesAccess);
         (await api.PermissionCatalogueAsync(Cancellation)).Value!.Permissions.Should().Contain(permission => permission.Name == ProjectPermissionNames.Close);

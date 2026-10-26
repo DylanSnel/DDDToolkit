@@ -97,12 +97,15 @@ public sealed class ReadFunctionModelTests
         PropertiesOfTheRowNamed(module.Model, "SeatHolderRow").Should().BeEquivalentTo(["SeatId"]);
         PropertiesOfTheRowNamed(tenancy.Model, "MoveReach").Should().BeEquivalentTo(["UnitId", "Permission", "EndsAt", "Parent", "OfCaller"]);
 
-        // And these are all of them: every type either model maps to nothing is one of the four.
+        // And what the units asked about are called, which is a name and a path and nothing more of a unit.
+        PropertiesOfTheRowNamed(tenancy.Model, "NamedUnit").Should().BeEquivalentTo(["Id", "Name", "Path", "Depth"]);
+
+        // And these are all of them: every type either model maps to nothing is one of the five.
         tenancy.Model.GetEntityTypes().Concat(module.Model.GetEntityTypes())
             .Where(entityType => entityType.GetTableName() is null && entityType.GetViewName() is null && entityType.GetFunctionName() is null)
             .Select(entityType => entityType.ClrType.Name.Split('`')[0])
             .Distinct()
-            .Should().BeEquivalentTo(["TenantAdministratorRow", "TenantToSweepRow", "SeatHolderRow", "MoveReach"]);
+            .Should().BeEquivalentTo(["TenantAdministratorRow", "TenantToSweepRow", "SeatHolderRow", "MoveReach", "NamedUnit"]);
 
         static IEnumerable<string> PropertiesOfTheRowNamed(IModel model, string name)
             => model.GetEntityTypes().Single(entityType => entityType.ClrType.Name.Split('`')[0] == name).GetProperties().Select(property => property.Name);

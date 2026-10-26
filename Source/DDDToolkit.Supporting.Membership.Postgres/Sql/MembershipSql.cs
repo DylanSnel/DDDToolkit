@@ -10,7 +10,7 @@ using Microsoft.EntityFrameworkCore.Metadata;
 namespace DDDToolkit.Supporting.Membership.Postgres;
 
 /// <summary>
-/// The SQL of one resource's membership: its four set functions, written from the resource's rules and from
+/// The SQL of one resource's membership: its five set functions, written from the resource's rules and from
 /// the names the application's model gives the resource's tables and columns, and, where the rules name the
 /// permissions that change the members and the owner, the lock that holds a caller to them. The same questions the
 /// access questions answer in C#, for the caller of the connection.
@@ -34,7 +34,7 @@ internal static class MembershipSql
     /// that still holds what an earlier version of the package wrote is found by the start-up check, although
     /// its rules have not changed. Change the SQL, and change this: a test keeps the two together.
     /// </summary>
-    internal const string SqlForm = "7";
+    internal const string SqlForm = "8";
 
     /// <summary>What the line of each function's body that names the roles that may execute it starts with.</summary>
     internal const string ExecutedBy = "-- Executed by: ";
@@ -118,7 +118,7 @@ internal static class MembershipSql
             SayRolePermissions();
         }
 
-        foreach (var name in new[] { rules.Functions.AsMember, rules.Functions.AsMemberWith, rules.Functions.Seen, rules.Functions.HeldOn })
+        foreach (var name in new[] { rules.Functions.AsMember, rules.Functions.AsMemberWith, rules.Functions.Seen, rules.Functions.HeldOn, rules.Functions.FellowMembers })
         {
             Say(name);
         }
@@ -213,7 +213,7 @@ internal static class MembershipSql
         return grantees;
     }
 
-    /// <summary>The four functions of the resource <paramref name="mapping"/> maps, under the names <paramref name="rules"/> give them.</summary>
+    /// <summary>The five functions of the resource <paramref name="mapping"/> maps, under the names <paramref name="rules"/> give them.</summary>
     /// <param name="mapping">The resource and its member tables, as the context's model maps them.</param>
     /// <param name="rules">The resource's rules.</param>
     /// <param name="owner">The owner the functions' logical names start with.</param>
@@ -342,6 +342,15 @@ internal static class MembershipSql
             heldOn.Add(ownWork + " AND $1 IS NOT NULL");
         }
 
+        // The members now of every resource the caller is a member of now, the caller among them: who it works with.
+        // By the member rows alone, as asMember finds the resources: an owner who is no member finds no one by owning.
+        var fellowMembers = Lines(
+            marker,
+            $"SELECT DISTINCT o.{Column(members, nameof(MemberEntity<,,>.MemberId))} FROM {Table(members)} o",
+            $"WHERE o.{Column(members, toResource.Properties[position].Name)} IN (SELECT joined.id FROM {Own(rules.Functions.AsMember)}() AS joined(id))",
+            $"  AND {Now(members, "o")}");
+        var memberIds = "SETOF " + RowAccessModel.ColumnType(members, nameof(MemberEntity<,,>.MemberId));
+
         // Each runs as its owner, so it reads the member rows without the policies that ask it, and is
         // executable by the roles the row access rules of the resource are for, and no other. The two that answer access say so, by the type of
         // the resource's id: a rule asks them through a [ResourceAccessContract] of that id, and never by name.
@@ -351,6 +360,7 @@ internal static class MembershipSql
             new ContributedFunction(rules.Functions.AsMemberWith, "text", returns, asMemberWith, SecurityDefiner: true, GrantTo: written.GrantTo),
             new ContributedFunction(rules.Functions.Seen, "", returns, Lines([.. seen]), SecurityDefiner: true, GrantTo: written.GrantTo, Answers: new(id.ClrType, ResourceAccessSet.Seen)),
             new ContributedFunction(rules.Functions.HeldOn, "text", returns, Lines([.. heldOn]), SecurityDefiner: true, GrantTo: written.GrantTo, Answers: new(id.ClrType, ResourceAccessSet.HeldOn)),
+            new ContributedFunction(rules.Functions.FellowMembers, "", memberIds, fellowMembers, SecurityDefiner: true, GrantTo: written.GrantTo, Answers: new(id.ClrType, ResourceAccessSet.FellowMembers)),
         ];
     }
 

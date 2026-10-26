@@ -190,8 +190,10 @@ public sealed partial class ShopSeat
   no name. What a unit or a role is called is asked of `TenancyDirectory` by id (`UnitsByIdAsync`,
   `RolesByIdAsync`) by whoever shows it.
 - **The directory answers the application's own classes, whole.** `ListSeatsAsync(ct)` and
-  `SeatsByIdAsync(ids, ct)` answer the module's `Seat`s, `ListUnitsAsync(ct)` and `UnitsByIdAsync(ids, ct)` its
-  units as `UnitInTree` (the unit, its `Path`, its `Depth`), all untracked: show them with a plain `Select`
+  `SeatsByIdAsync(ids, ct)` answer the module's `Seat`s, `ListUnitsAsync(ct)` its units as `UnitInTree` (the unit,
+  its `Path`, its `Depth`), all untracked; `UnitsByIdAsync(ids, ct)` names units alone, as `NamedUnit` (`Id`,
+  `Name`, `Path`, `Depth`), through a function that runs as its owner on Postgres, so a seat kept out of the
+  organization still reads what its project's unit is called. Show them with a plain `Select`
   (`seats.Select(seat => new SeatListing(seat.Id, seat.DisplayName, seat.Status))`). `WhoAmIAsync(ct)` answers a
   `SeatOverview`: the `Seat` with its placements and grants, and only what is not on it (`Tenant`, `Units` by path,
   `Roles` its grants name, `Permissions`, `AsOf`; `UnitOf(id)` and `RoleOf(id)` look them up). The tenant picker's
@@ -263,14 +265,20 @@ Who reads the seats, and who besides the seats managers reads an invitation, are
 or invitation class, `[RowAccess<Seat>(RowOperations.Read)]` (without `To` it is for signed-in users, as the
 default is), takes the place of one, held to the tenant, beside what Tenancy's own work reads (a person's own seats;
 every seat of the tenant to a seat that manages seats, grants or units anywhere, or roles for the whole tenant),
-which no rule takes away. Write it with `TenancyRowAccess`'s questions (`CallerSeat`, `CallerTenant`,
-`UnitsWhereIHold`, `SeatsInMyUnits`: the seats placed at or below the caller's units). It changes what a read of the
+which no rule takes away. Write it with `TenancyRowAccess`'s questions (`CallerSeatId`, `CallerTenant`,
+`UnitsWhereIHold`, `SeatsInMyUnits`: the seats placed at or below the caller's units; `CallerSeat<Seat>().Kind`, a
+field of the caller's own seat), or a module's `[ResourceAccessContract<ProjectId>(ResourceAccessSet.FellowMembers)]`
+(declaring `static partial AccessSet<SeatId> Ids();`), the people on the caller's projects. It changes what a read of the
 seats answers, a direct read, the directory, `tenant_seats()` and `ITenancyQuestions.Seats()`, so Membership's
 admission then takes only seats the caller reads (`member-not-active` otherwise); never Tenancy's questions about
 the caller and rights, the placements (every member still reads each seat's id and units), or who writes. A read
 rule on any other class of Tenancy's is refused.
-See `tenancy.md`, "On Postgres: the second lock", "Who reads the seats", "Who reads which grants" and "What the
-database guards on a seat".
+To take away what Tenancy allows, write a restrictive rule, `[RowAccess<Organization>(RowOperations.Read, Restrictive = true)]`:
+AND-ed with Tenancy's policies, it narrows and never grants (`CallerSeat<Seat>().Kind == SeatKind.Employee` keeps an
+external seat out of the organization, its units and its tree). It goes on the organization, seat or role class;
+a tenant or invitation is DDD00100. Tenancy's own work and its owner-run functions keep working.
+See `tenancy.md`, "On Postgres: the second lock", "Who reads the seats", "Rules that narrow the organization", "Who
+reads which grants" and "What the database guards on a seat".
 
 ## A module on Tenancy, as the sample lays it out
 

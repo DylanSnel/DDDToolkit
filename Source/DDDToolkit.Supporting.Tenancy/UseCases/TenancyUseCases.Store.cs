@@ -128,6 +128,18 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
             DateTimeOffset now,
             CancellationToken cancellationToken);
 
+        /// <summary>
+        /// The units among <paramref name="ids"/> that are <paramref name="tenant"/>'s, by name and path and nothing
+        /// more, whatever the calling seat reads of the organization: on a database that keeps its own policies, where
+        /// an application's restrictive rule may keep the seat out of the units, through Tenancy's function that runs
+        /// as its owner and answers those ids alone. <see langword="null"/> from a storage that keeps no policies of its
+        /// own, where the caller reads every unit of its tenant, so the use case reads them whole.
+        /// </summary>
+        /// <param name="tenant">The tenant, which is the calling seat's.</param>
+        /// <param name="ids">The units asked about, at least one.</param>
+        /// <param name="cancellationToken">Cancels the read.</param>
+        Task<IReadOnlyList<NamedUnit<TUnitId>>?> UnitsNamedAsync(TTenantId tenant, IReadOnlyCollection<TUnitId> ids, CancellationToken cancellationToken);
+
         /// <summary>Adds a new tenant to the unit of work.</summary>
         void Add(TTenant tenant);
 

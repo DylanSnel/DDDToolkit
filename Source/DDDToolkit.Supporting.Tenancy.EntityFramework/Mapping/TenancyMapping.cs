@@ -444,6 +444,20 @@ internal static class TenancyMapping
     }
 
     /// <summary>
+    /// What units are called, as <see cref="TenancyFunctionNames.UnitsNamed"/> answers it: mapped to nothing, and read
+    /// from the SQL that asks the function, under the column names the function gives.
+    /// </summary>
+    internal static void NamedUnits<TUnitId>(EntityTypeBuilder<NamedUnit<TUnitId>> unit)
+        where TUnitId : struct, IEntityId, IEquatable<TUnitId>
+    {
+        ToNothing(unit);
+        unit.Property(row => row.Id).HasColumnName(nameof(NamedUnit<TUnitId>.Id));
+        unit.Property(row => row.Name).HasColumnName(nameof(NamedUnit<TUnitId>.Name));
+        unit.Property(row => row.Path).HasColumnName(nameof(NamedUnit<TUnitId>.Path));
+        unit.Property(row => row.Depth).HasColumnName(nameof(NamedUnit<TUnitId>.Depth));
+    }
+
+    /// <summary>
     /// The tenants a round of system work visits, as <see cref="TenancyFunctionNames.TenantsToSweep"/> answers
     /// them: mapped to nothing, and read from the SQL that asks the function, which names its one column.
     /// </summary>

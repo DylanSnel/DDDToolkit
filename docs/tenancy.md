@@ -1282,12 +1282,13 @@ as the unit and a rule of your class judges it there. A callback that throws lea
 the unit is not added, and not even a later save in the same scope writes it. The root works the same way,
 through `ConfigureRoot` when the tenant is provisioned.
 
-To show the kind, select it. `ListUnitsAsync` and `UnitsByIdAsync` answer your own units, whole, each as a
-`UnitInTree`: the unit, with its path from the root and its depth beside it, the two things a unit does not carry
-itself. So a field your unit class adds is shown with a plain `Select` over the units the directory read, with no
-read more, and nothing you do to one is saved. The sample does all of it: a `UnitKind` enum on its unit, set by
-its command and by its seeding, and a `UnitListing` its queries select, the unit's own fields with the path beside
-them.
+To show the kind, select it. `ListUnitsAsync` answers your own units, whole, each as a `UnitInTree`: the unit,
+with its path from the root and its depth beside it, the two things a unit does not carry itself. So a field your
+unit class adds is shown with a plain `Select` over the units the directory read, with no read more, and nothing
+you do to one is saved. The sample does all of it: a `UnitKind` enum on its unit, set by its command and by its
+seeding, and a `UnitListing` its queries select, the unit's own fields with the path beside them. A unit asked for
+by id, `UnitsByIdAsync`, is named alone, a `NamedUnit` of its name, path and depth: what another module's answer
+needs, for a seat that may not read the rest of the unit.
 
 ## Who may do what
 
@@ -1744,9 +1745,9 @@ kinds from Tenancy's own seats, roles and units, and answers seats and units as 
 | `ListUnitsAsync()` | the units the caller is placed under, your own class, whole, each with its path from the root and its depth (`UnitInTree`) |
 | `SeatsByIdAsync(ids)` | the seats among the ids, as `ListSeatsAsync` answers them |
 | `RolesByIdAsync(ids)` | the roles among the ids, as `ListRolesAsync` answers them |
-| `UnitsByIdAsync(ids)` | the units among the ids, as `ListUnitsAsync` answers them, whichever of them the caller is placed under |
+| `UnitsByIdAsync(ids)` | what the units among the ids are called, whichever of them the caller is placed under: each one's name, path and depth (`NamedUnit`), and nothing more, also for a seat a [restrictive rule](#rules-that-narrow-the-organization) keeps out of the organization |
 
-A seat and a unit come whole, with every field your class adds, so a screen shows a seat by the name you keep
+A seat and a listed unit come whole, with every field your class adds, so a screen shows a seat by the name you keep
 for it, and a unit with the kind your unit class keeps, with a plain `Select`. What Tenancy puts beside them is
 only what is not on your class: a unit's path and depth, which come from the units above it, and in an overview
 the tenant, the paths, the role names and the permissions.
@@ -4281,7 +4282,7 @@ sequenceDiagram
     Gateway->>Projects: projects { nodes { name<br/>unit { id } owner { id } } }
     Note over Projects: the seat gate, then<br/>Send(VisibleProjects):<br/>its access check, and<br/>the page in one statement
     Projects-->>Gateway: names, and the ids<br/>of units and seats
-    Gateway->>Tenants: organizationUnit(id)<br/>and seat(id), for<br/>every id at once
+    Gateway->>Tenants: organizationUnitName(id)<br/>and seat(id), for<br/>every id at once
     Note over Tenants: the seat gate, then<br/>one loader per kind:<br/>Send(OrganizationUnitsById),<br/>Send(SeatsById)
     Tenants-->>Gateway: paths and display names
     Gateway-->>Client: one answer
@@ -5261,6 +5262,9 @@ export writes your rule where the default was.
 | Roles | the tenant's | no default | Tenancy's questions read the roles as their caller, `RolesWithPermission` and which permissions of a grant's role manage access, so a narrower read would change their answers |
 | Units, the tree, placements, grants, rights, the revision, the history | as [What the policies check](#what-the-policies-check) says | no default | a rule is about an aggregate's own table, and these are the rows of an organization or a seat, or rows Tenancy writes itself |
 
+What any of them allows a rule of yours may also narrow, on the organization, the seats and the roles:
+[Rules that narrow the organization](#rules-that-narrow-the-organization).
+
 ```mermaid
 flowchart LR
     Read["A signed-in user<br/>reads the seats"] --> Rule{"a read rule of yours<br/>on your seat class?"}
@@ -5313,7 +5317,8 @@ stays closed to anonymous callers. What else your rule changes, and what it does
   a field of yours, as before.
 - **Not system work, nor operators.** Their policies are Tenancy's, and read as before.
 
-A read rule on your tenant, organization or role class is refused, naming the table: their reads are no default.
+A read rule on your tenant, organization or role class is refused, naming the table: their reads are no default. A
+[restrictive one](#rules-that-narrow-the-organization) on the organization or the roles is not: it only narrows.
 
 <details>
 <summary>Show the code: a rule on the seat class, the building blocks, and what the export writes</summary>
@@ -5346,7 +5351,9 @@ question is asked once per statement, never once per row:
 | You mean | Your rule says | The policy asks |
 |---|---|---|
 | in the caller's tenant | `seat.TenantId == TenancyRowAccess.CallerTenant<TenantId>()` | `"TenantId" = (SELECT "tenancy".caller_tenant())` |
-| the caller itself | `seat.Id == TenancyRowAccess.CallerSeat<SeatId>()` | `"Id" = (SELECT "tenancy".caller_seat())` |
+| the caller itself | `seat.Id == TenancyRowAccess.CallerSeatId<SeatId>()` | `"Id" = (SELECT "tenancy".caller_seat())` |
+| a field of the caller's own seat | `TenancyRowAccess.CallerSeat<Seat>().Kind == SeatKind.Employee` | `(SELECT q1."Kind" FROM "tenancy".caller_seat_row() q1) = 0` |
+| the people on the projects the caller is on | `PeopleOnMyProjects.Ids().Contains(seat.Id)` | `"Id" = ANY (ARRAY(SELECT "projects".projects_fellow_members()))` |
 | the person's own seats, in every tenant | `seat.Identity == caller.UserId` | `"Identity" IS NOT DISTINCT FROM (SELECT auth.uid())` |
 | the seats placed at or below a unit the caller is placed at; to a seat placed at the root, as every seat of a flat tenant is, every placed seat | `TenancyRowAccess.SeatsInMyUnits<SeatId>().Contains(seat.Id)` | `"Id" = ANY (ARRAY(SELECT "tenancy".seats_in_my_units()))` |
 | where the caller holds a permission | `TenancyRowAccess.UnitsWhereIHold<OrganizationUnitId>(permission).Contains(invitation.UnitId)` | `"UnitId" = ANY (ARRAY(SELECT "tenancy".units_where_i_hold_permission('...')))` |
@@ -5389,6 +5396,108 @@ default; issuing and cancelling invitations is a seats manager's work there, whi
 whose members should see only the people of their own part of the tree writes the rule above, and pins it with a
 test that reads the seats as a member, as the package's `ReadRulesTests` do.
 
+### Rules that narrow the organization
+
+The defaults above say what a seat of the tenant reads, and a rule of yours that allows can only add to what they
+allow. To take something away, write a restrictive rule: `Restrictive = true` on a rule about your organization,
+seat or role class. Its policy is AND-ed with Tenancy's ([Rules that only narrow](row-level-security.md#rules-that-only-narrow-restrictive)):
+a row passes only where Tenancy's policy allows it and your rule says so as well, so it never allows more than
+Tenancy does.
+
+Say your tenants have employees and external people, who work on a project of the tenant and have no business in
+the rest of its organization. Your seat class says which a seat is, with a field of your own, and a restrictive
+rule lets only an employee's seat read the organization:
+
+| A signed-in user | Tenancy's policy: the tenant's organization | Your rule: an employee's seat | Reads the units |
+|---|---|---|---|
+| an employee of the tenant | yes | yes | yes |
+| an external seat of the tenant | yes | no | no |
+| a seat of another tenant | no | yes | no: your rule grants nothing |
+
+```csharp
+public enum SeatKind { Employee, External }
+
+[SeatAggregate<SeatId>]
+public sealed partial class Seat
+{
+    public SeatKind Kind { get; private set; }
+
+    public void MarkExternal() => Kind = SeatKind.External;
+}
+
+[RowAccess<Organization>(RowOperations.Read, Restrictive = true)]
+public static partial class OnlyEmployeesReadTheOrganization
+{
+    public static bool Allows(Organization organization, Caller caller)
+        => TenancyRowAccess.CallerSeat<Seat>().Kind == SeatKind.Employee;
+}
+```
+
+The export writes the rule on the organizations, on the units, which are the organization's, and on the closure
+of the tree, which Tenancy says follows the organization:
+
+```sql
+CREATE POLICY "Only employees read the organization (select) for authenticated" ON "tenancy"."Organizations" AS RESTRICTIVE FOR SELECT TO authenticated
+    USING ((SELECT q1."Kind" FROM "tenancy".caller_seat_row() q1) = 0);
+-- and the same on "tenancy"."OrganizationUnits" and on "tenancy"."OrganizationUnitPaths"
+```
+
+- **Where it reaches.** On your organization class it narrows the organization, its units and the closure of its
+  tree; on your seat class the seats with their placements and grants; on your role class the roles. A tenant and
+  an invitation are read by Tenancy's own work and by a person who has no seat yet, so a restrictive rule there is
+  [DDD00100](diagnostics.md#ddd00100).
+- **It narrows what is kept for Tenancy's own work, too.** A restrictive rule is AND-ed with every policy, what
+  Tenancy keeps beside a read rule of yours included. On the seats, that is a person's own seats, which the tenant
+  picker and the seat a request acts as are found from: keep them in the rule, `seat.Identity == caller.UserId || ...`,
+  or the seat it keeps out cannot work in its tenant at all.
+- **A field of the caller's own seat.** `TenancyRowAccess.CallerSeat<Seat>()` is the calling seat's row, read by
+  `caller_seat_row()`, which runs as its owner: a rule reads it whatever your read rule on the seats says, and a rule
+  on the seats reads it without asking itself. No seat, no row: every field is null, and the rule lets nothing
+  through. Another class than your seat class is [DDD00101](diagnostics.md#ddd00101). For the seat's id alone, in
+  a module whose context does not map the seats, ask `TenancyRowAccess.CallerSeatId<SeatId>()`.
+- **Tenancy's own work keeps working.** System work is not narrowed, and the functions that run as their owner read
+  past every policy, so the questions about the caller and about rights answer as before. The package's tests run
+  every use case under the rule above.
+- **What a seat it keeps out still reads.** `TenancyDirectory.UnitsByIdAsync` answers through `units_named()`, which
+  runs as its owner, for the ids asked alone, and for units of the caller's tenant: each one's name, path and depth,
+  and nothing more. So an external seat on a project still reads what the project's unit is called. `ListUnitsAsync`
+  answers it no units, and its own overview, `WhoAmIAsync`, names the units it is placed at as `UnitsByIdAsync` does,
+  nothing below them, and the tenant by its slug, since the organization's name is the organization's.
+- **The seat a request acts as is found as before.** The organization only names a tenant there. A tenant whose
+  organization the caller does not read is named by its slug, in the tenant picker too, and before a tenant is
+  chosen a rule that asks the caller's seat has no seat to ask about: under the rule above the picker names every
+  tenant by its slug.
+- **A rule without `Restrictive`** on your organization or role class is refused: OR-ed with Tenancy's policy, which
+  lets every seat of the tenant read them already, it would change nothing.
+
+Put together with a [read rule on your seat class](#who-reads-the-seats-a-default-you-may-replace): an external
+seat, one the application marks as not an employee, reads the name and path of the unit of the project it is on
+through the project's own query, and the names of the people it may see through the seat read rule, but not the
+rest of the organization. Employees read every seat of the tenant; an external seat reads the people on the
+projects it is on, which the projects' module publishes, as a contract, from the
+[Membership package's](membership.md#on-postgres-the-second-lock) members of the resources the caller is a member of:
+
+```csharp
+// Projects.Contracts: the people on the projects the caller is on, by the seats they are
+[ResourceAccessContract<ProjectId>(ResourceAccessSet.FellowMembers)]
+public static partial class PeopleOnMyProjects
+{
+    public static partial AccessSet<SeatId> Ids();
+}
+
+// Tenants.Infrastructure: a read rule on the seats, in the default's place
+[RowAccess<Seat>(RowOperations.Read)]
+public static partial class EmployeesReadEveryoneExternalsTheirProjects
+{
+    public static bool Allows(Seat seat, Caller caller)
+        => TenancyRowAccess.CallerSeat<Seat>().Kind == SeatKind.Employee || PeopleOnMyProjects.Ids().Contains(seat.Id);
+}
+```
+
+The projects' functions ask Tenancy's, who the calling seat is, and Tenancy's file runs first. The export writes
+the seat rule all the same, through a function of Tenancy's own that asks the projects' one when it runs
+([A rule that asks a module that asks back](row-level-security.md#a-resources-access-asked-by-its-id)).
+
 ### The functions
 
 The contribution writes the questions as functions, with your table names and the column types of your ids.
@@ -5404,6 +5513,7 @@ nothing, and the policies keep system work to its tenant with `system_tenant` in
 |---|---|---|
 | `caller_seat()` | the seat of the caller's identity in the tenant the setting names, when it and that tenant are both active; else null | the seat `TenantSelection` picks |
 | `caller_tenant()` | that seat's tenant; else null | the seat's tenant |
+| `caller_seat_row()` | that seat's own row, every column your seat class maps; no row without a seat | `TenancyRowAccess.CallerSeat<Seat>()`, for a [rule that reads a field of it](#rules-that-narrow-the-organization) |
 | `system_tenant()` | the tenant the setting names: the scoped system role's tenant, and the one a signed-in user's access revision is taken in and its [access history](#access-history) is added to | `TenancyWork.BeginSystemIn`'s tenant |
 | `units_where_i_hold_permission(permission)` | the units where the seat holds the permission live, and every unit below them | `UnitsWhereIHold` |
 | `readable_units()` | the units of the seat's tenant where it is placed, and every unit below them | `ReadableUnits` |
@@ -5416,6 +5526,7 @@ nothing, and the policies keep system work to its tenant with `system_tenant` in
 | `permission_manages_access(permission)` | whether your catalogue marks the permission as managing access | `TenancyCatalogue.ManagesAccess` |
 | `permission_is_contained(permission)` | whether a seat hands the permission on only where it holds it: a permission that manages access while [containment](#containment-on-or-off) is on, and no permission once it is off | `TenancyCatalogue.ContainAccessManagingPermissions` |
 | `pack_permissions(pack)` | the permissions a role made from that pack of your catalogue holds, implied ones included; null for a pack it does not have | `TenancyCatalogue.Packs` |
+| `units_named(ids)` | the units among the ids that are the seat's tenant's, each with its name, its path from the root and its depth, and nothing more of it; for a seat alone | `TenancyDirectory.UnitsByIdAsync` |
 
 Your modules' rules ask them through `TenancyRowAccess`, in `DDDToolkit.Supporting.Tenancy`, so a module
 needs no reference to the Postgres package. A rule that asks one is for signed-in users, since the functions
@@ -5775,7 +5886,7 @@ for each row. The job title has no command, and no rule: it is as writable as th
 public static partial class NameChangesByTheSeatOrWithTheSeatsPermission
 {
     public static bool Allows(Seat seat, Caller caller)
-        => seat.Id == TenancyRowAccess.CallerSeat<SeatId>() || TenancyRowAccess.HoldsAtTenant(RenameSeat.RequiredPermission);
+        => seat.Id == TenancyRowAccess.CallerSeatId<SeatId>() || TenancyRowAccess.HoldsAtTenant(RenameSeat.RequiredPermission);
 }
 ```
 

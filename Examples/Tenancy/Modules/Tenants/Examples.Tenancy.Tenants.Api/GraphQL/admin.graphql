@@ -42,7 +42,7 @@ type Query {
     )
     @cost(weight: "10")
   seat(id: UUID!): Seat @lookup @internal
-  organizationUnit(id: UUID!): OrganizationUnit @lookup @internal
+  organizationUnitName(id: UUID!): OrganizationUnitName @lookup @internal
   role(id: UUID!): Role @lookup @internal
   seatGrants(seatId: UUID!): [SeatGrant!]! @cost(weight: "10")
   unitsWhereIHold(permission: String!): HeldUnits! @cost(weight: "10")
@@ -178,7 +178,7 @@ type InvalidValuesError implements CodedError @shareable {
 }
 
 type Invitation {
-  unit: OrganizationUnit
+  unit: OrganizationUnitName
   role: Role
   issuedBy: Seat
   until: DateTime
@@ -204,14 +204,14 @@ type IssuedInvitation {
   expiresAt: DateTime!
 }
 
-type OrganizationUnit @key(fields: "id") {
+type OrganizationUnit {
   id: UUID!
   parentId: UUID
-  name: String
+  name: String!
   kind: UnitKind
-  status: UnitStatus
-  path: String
-  depth: Int
+  status: UnitStatus!
+  path: String!
+  depth: Int!
 }
 
 type OrganizationUnitAddPayload {
@@ -227,6 +227,13 @@ type OrganizationUnitArchivePayload {
 type OrganizationUnitMovePayload {
   organizationUnit: OrganizationUnit
   errors: [OrganizationUnitMoveError!]
+}
+
+type OrganizationUnitName @key(fields: "id") {
+  id: UUID!
+  name: String
+  path: String
+  depth: Int
 }
 
 "A cursor that points to a specific page."

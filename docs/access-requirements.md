@@ -922,7 +922,7 @@ export finds it by again.
 
 The same holds for the caller's own: `RenameSeat` lets a seat rename itself or any seat with the permission, and the Tenancy
 sample's column rule on the seat's name, `NameChangesByTheSeatOrWithTheSeatsPermission`, says both branches again for each
-row, `seat.Id == TenancyRowAccess.CallerSeat<SeatId>() || TenancyRowAccess.HoldsAtTenant(RenameSeat.RequiredPermission)`.
+row, `seat.Id == TenancyRowAccess.CallerSeatId<SeatId>() || TenancyRowAccess.HoldsAtTenant(RenameSeat.RequiredPermission)`.
 
 ## System work is a scope
 

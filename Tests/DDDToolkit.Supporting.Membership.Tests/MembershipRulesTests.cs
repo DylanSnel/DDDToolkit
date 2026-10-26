@@ -38,7 +38,7 @@ public sealed class MembershipRulesTests
         rules.Resource.Should().Be(typeof(Document));
         rules.Name.Should().Be("documents", "a class's name, made plural and lower case");
         rules.Codes.Should().BeSameAs(DocumentRefusals.Membership, "the codes the document declares, where it declares some");
-        rules.Functions.Should().Be(new MembershipFunctions("documents_as_member", "documents_as_member_with", "documents_i_see", "documents_where_i_hold"));
+        rules.Functions.Should().Be(new MembershipFunctions("documents_as_member", "documents_as_member_with", "documents_i_see", "documents_where_i_hold", "documents_fellow_members"));
         rules.Members.Should().BeSameAs(MemberSource.Inferred, "who a member is follows from what it is known by unless the rules say otherwise");
         rules.Roles.Kind.Should().Be(RolesKind.Fixed);
         rules.ReachFromAbove.Should().BeNull("a resource is reached through its members and by its owner unless the rules say otherwise");
@@ -94,7 +94,7 @@ public sealed class MembershipRulesTests
         rules.EveryMemberPermission.Should().BeNull("no permission of a folder is held by every member");
         (rules.MembersLockPermission, rules.OwnerLockPermission).Should().Be((FolderPermissions.Staff, FolderPermissions.HandOver));
         rules.Codes.Should().BeSameAs(FolderRefusals.Membership);
-        rules.Functions.Should().Be(new MembershipFunctions("folders_as_member", "folders_as_member_with", "folders_i_see", "folders_where_i_hold"));
+        rules.Functions.Should().Be(new MembershipFunctions("folders_as_member", "folders_as_member_with", "folders_i_see", "folders_where_i_hold", "folders_fellow_members"));
         rules.SystemScopes.Should().Equal(FolderMembership.Scope);
     }
 

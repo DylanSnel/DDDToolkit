@@ -38,7 +38,7 @@ internal static class DirectoryEndpoints
         group.MapPost("/tenancy/directory/seats", async (IdsAsked<SeatId> body, ISender sender, CancellationToken cancellationToken)
             => Results.Ok((await sender.Send(new SeatsById(Asked(body)), cancellationToken)).Select(SeatsEndpoints.Describe)));
 
-        // By path, whichever of them the caller is placed under.
+        // By name and path, whichever of them the caller is placed under, and nothing more of them.
         group.MapPost("/tenancy/directory/units", async (IdsAsked<OrganizationUnitId> body, ISender sender, CancellationToken cancellationToken)
             => Results.Ok((await sender.Send(new OrganizationUnitsById(Asked(body)), cancellationToken)).Select(OrganizationEndpoints.Describe)));
 

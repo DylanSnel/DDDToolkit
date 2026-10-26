@@ -17,5 +17,5 @@ public static partial class SeatsRecordWhereTheyMay
     /// <summary>Whether the calling seat may record <paramref name="inspection"/>.</summary>
     public static bool Allows(Inspection inspection, Caller caller)
         => ProjectsWhereIHold.Ids(InspectionPermissionNames.Record).Contains(inspection.ProjectId)
-            && inspection.RecordedBy == TenancyRowAccess.CallerSeat<SeatId>();
+            && inspection.RecordedBy == TenancyRowAccess.CallerSeatId<SeatId>();
 }

@@ -169,7 +169,7 @@ public static class PolicyMatrix
 
         // Seats: read by the tenant's members and by the person whose seat it is; added with the seats permission for the whole
         // tenant; changed by a seats or grants manager, or the seat itself.
-        const string AddSeat = "INSERT INTO tenancy.\"Seats\" (\"Id\", \"Version\", \"TenantId\", \"Identity\", \"DisplayName\", \"Status\") VALUES (gen_random_uuid(), 0, 1, gen_random_uuid(), 'Pat', 'Active')";
+        const string AddSeat = "INSERT INTO tenancy.\"Seats\" (\"Id\", \"Version\", \"TenantId\", \"Identity\", \"DisplayName\", \"Kind\", \"Status\") VALUES (gen_random_uuid(), 0, 1, gen_random_uuid(), 'Pat', 0, 'Active')";
         const string RenameSue = "UPDATE tenancy.\"Seats\" SET \"DisplayName\" = 'Susan' WHERE \"Id\" = {Sue}";
         yield return new("Seats", "SELECT", "a seat of the tenant", OliCaller, "SELECT count(*) FROM tenancy.\"Seats\" WHERE \"TenantId\" = 1", Expectation.Rows);
         yield return new("Seats", "SELECT", "the person, their seat in another tenant", OliCaller, "SELECT count(*) FROM tenancy.\"Seats\" WHERE \"Id\" = {OliInOrchard}", Expectation.Rows);

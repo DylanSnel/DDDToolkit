@@ -105,6 +105,9 @@ internal static class KnownTypes
     /// <summary>A question of an <c>[AccessFunctions]</c> class answered with one value: <c>[AccessScalar("name")]</c>.</summary>
     public const string AccessScalarAttribute = AttributesNamespace + ".AccessScalarAttribute";
 
+    /// <summary>A question of an <c>[AccessFunctions]</c> class answered with one row of a mapped table: <c>[AccessRow("name")]</c>.</summary>
+    public const string AccessRowAttribute = AttributesNamespace + ".AccessRowAttribute";
+
     /// <summary>What a set-shaped question answers with, which a rule asks <c>Contains</c> of.</summary>
     public const string AccessSet = "DDDToolkit.Abstractions.Access.AccessSet`1";
 
@@ -123,6 +126,13 @@ internal static class KnownTypes
     /// row, which would let whoever it allows change every column.
     /// </summary>
     public const string ColumnRuleSqlMarker = "{columns}";
+
+    /// <summary>
+    /// What a restrictive rule's <see cref="RowAccessSqlField"/> starts with. An export that does not know
+    /// restrictive rules stops at it, as at any placeholder it does not know, rather than write a rule meant to
+    /// narrow as a policy that allows more.
+    /// </summary>
+    public const string RestrictiveRuleSqlMarker = "{restrictive}";
 
     /// <summary>On a module's request interface: the generator writes the pipeline behavior that holds its requests to what they declare.</summary>
     public const string AccessRequestsAttribute = AttributesNamespace + ".AccessRequestsAttribute";

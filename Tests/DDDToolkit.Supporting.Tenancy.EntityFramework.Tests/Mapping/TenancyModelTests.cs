@@ -89,7 +89,7 @@ public sealed class TenancyModelTests : IDisposable
         }
 
         tables.Keys.Should().OnlyContain(type => tenancy.FindEntityType(type) != null, "every Tenancy table is in Tenancy's own model");
-        tenancy.GetEntityTypes().Where(AnswersAFunction).Should().HaveCount(5, "the administrators, the rights a move changes, the holders of a permission, the tenants to visit and the invitation of a token's digest")
+        tenancy.GetEntityTypes().Where(AnswersAFunction).Should().HaveCount(6, "the administrators, the rights a move changes, the holders of a permission, the names of units, the tenants to visit and the invitation of a token's digest")
             .And.Contain(entityType => entityType.ClrType == typeof(MoveReach<OrganizationUnitId>));
 
         // A consumer's context: its own entity is kept to a tenant, and every row of the read model is a view.

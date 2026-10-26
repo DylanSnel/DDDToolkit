@@ -864,4 +864,22 @@ internal static class DiagnosticDescriptors
         DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
         description: "The catalogue gives every permission a description, which a screen that puts permissions into roles shows beside it: what holding it lets somebody do. It is said with Description on the permission's level, [AtUnit(Description = \"Open a board at a unit\")] say, which wins where the constant has a <summary> too; where no level says one, the constant's <summary> is the description, read from the comment above it whether the project writes a documentation file or not. A permission with neither would show as a bare name. A retired permission is shown nowhere, and needs none. A translation, in a resx your failure localizer reads, under the permission's name, is read on top of either.");
+    public static readonly DiagnosticDescriptor RestrictiveRuleOutOfReach = Create(
+        id: "DDD00100",
+        title: "A restrictive rule narrows a table it can reach",
+        messageFormat: "'{0}' is a restrictive rule on '{1}', {2} of Tenancy's, and a restrictive rule narrows the organization, the seats, the roles and the application's own aggregates alone: put it on one of those, or leave Restrictive out",
+        category: Tenancy,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "A restrictive row access rule, Restrictive = true, narrows what the permissive policies allow on its aggregate's table and the tables of its entities. On Tenancy's tables it reaches the organization with its units and the closure of its tree, the seats with their placements and grants, and the roles: what an application narrows to keep a seat that is not an employee out of the organization. A tenant and an invitation are read by Tenancy's own work and by the person accepting an invitation, who has no seat yet, so a rule there is refused.");
+
+    public static readonly DiagnosticDescriptor CallerSeatOfAnotherType = Create(
+        id: "DDD00101",
+        title: "TenancyRowAccess.CallerSeat answers with the application's seat class",
+        messageFormat: "TenancyRowAccess.CallerSeat<{0}>() asks for a seat of '{0}', which is not the application's seat class: name the class declared with [SeatAggregate], whose row the function answers with",
+        category: Tenancy,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "TenancyRowAccess.CallerSeat<TSeat>() is the calling seat's own row, read by a rule through the fields of the application's seat class: CallerSeat<Seat>().Kind == SeatKind.Employee. The function answers with the row of Tenancy's seats table, which the seat class is mapped to, so TSeat is that class, the one declared with [SeatAggregate]. For the seat's id in a rule of a module whose context does not map the seats, ask TenancyRowAccess.CallerSeatId<TSeatId>().");
+
 }

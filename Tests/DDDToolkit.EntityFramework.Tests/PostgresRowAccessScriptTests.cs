@@ -1093,6 +1093,105 @@ public sealed class PostgresRowAccessScriptTests(PostgresRowAccessDatabase datab
     }
 
     /// <summary>The script for the desk with <paramref name="rules"/>, which reads no database.</summary>
+    // ------------------------------------------------------------------ restrictive rules
+
+    private const string TicketType = "DDDToolkit.EntityFramework.Tests.Infrastructure.Ticket";
+
+    [Fact]
+    public void A_restrictive_rule_is_a_restrictive_policy_per_command_it_narrows_on_the_root_and_its_entities()
+    {
+        var narrowing = RowAccessRule.For<Ticket>("Only team tickets", RowOperations.Read | RowOperations.Change, "{restrictive}({col:Team} IS NOT NULL)");
+        narrowing.Restrictive.Should().BeTrue("the generator's marker says so");
+        narrowing.Sql.Should().Be("({col:Team} IS NOT NULL)", "and is taken off the SQL");
+
+        var script = ScriptFor(DeskRules.Owners, narrowing);
+
+        script.Should().Contain(
+            "CREATE POLICY \"Only team tickets (select) for authenticated\" ON \"desk\".\"Tickets\" AS RESTRICTIVE FOR SELECT TO authenticated\n" +
+            "    USING (\"Team\" IS NOT NULL);\n",
+            "on the aggregate's table the rule is asked of the row as it is");
+        script.Should().Contain(
+            "CREATE POLICY \"Only team tickets (update) for anon\" ON \"desk\".\"Tickets\" AS RESTRICTIVE FOR UPDATE TO anon\n" +
+            "    USING (\"Team\" IS NOT NULL)\n" +
+            "    WITH CHECK (\"Team\" IS NOT NULL);\n");
+        PoliciesOn(script, "Tickets").Where(name => name.StartsWith("Only team tickets", StringComparison.Ordinal)).Should().Equal(
+            [
+                "Only team tickets (select) for anon",
+                "Only team tickets (select) for authenticated",
+                "Only team tickets (update) for anon",
+                "Only team tickets (update) for authenticated",
+            ],
+            "it narrows the commands of the operations it names, and nothing else");
+
+        script.Should().Contain(
+            "CREATE POLICY \"Only team tickets (select) for authenticated\" ON \"desk\".\"TicketComment\" AS RESTRICTIVE FOR SELECT TO authenticated\n" +
+            "    USING (EXISTS (SELECT 1 FROM \"desk\".\"Tickets\" r WHERE r.\"Id\" = \"desk\".\"TicketComment\".\"TicketId\" AND (r.\"Team\" IS NOT NULL)));\n",
+            "an entity's row is asked about through the ticket it belongs to");
+        PoliciesOn(script, "TicketComment").Where(name => name.StartsWith("Only team tickets", StringComparison.Ordinal)).Should().Equal(
+            [
+                "Only team tickets (select) for anon",
+                "Only team tickets (select) for authenticated",
+                "Only team tickets (insert) for anon",
+                "Only team tickets (insert) for authenticated",
+                "Only team tickets (update) for anon",
+                "Only team tickets (update) for authenticated",
+                "Only team tickets (delete) for anon",
+                "Only team tickets (delete) for authenticated",
+            ],
+            "changing a ticket is adding, changing and removing its comments");
+        script.IndexOf("AS RESTRICTIVE", StringComparison.Ordinal).Should().BeGreaterThan(script.LastIndexOf("\" FOR SELECT TO", StringComparison.Ordinal), "the rules that narrow come after everything they narrow");
+    }
+
+    [Fact]
+    public void A_restrictive_rule_about_the_caller_alone_is_asked_as_it_is_on_every_table()
+    {
+        var narrowing = RowAccessRule.For<Ticket>("Only the signed in", RowOperations.Read, "{restrictive}({caller:signedin})", RowAccessRoles.User);
+
+        var script = ScriptFor(DeskRules.Owners, narrowing);
+
+        script.Should().Contain(
+            "CREATE POLICY \"Only the signed in (select) for authenticated\" ON \"desk\".\"CommentReaction\" AS RESTRICTIVE FOR SELECT TO authenticated\n" +
+            "    USING (((SELECT \"ddd\".caller_id()) IS NOT NULL));\n",
+            "nothing of the row is asked, so no ticket is read to ask it");
+        PoliciesOn(script, "Tickets").Should().NotContain(name => name.EndsWith("for anon", StringComparison.Ordinal) && name.StartsWith("Only the signed in", StringComparison.Ordinal), "the rule is for the roles of its To");
+    }
+
+    [Fact]
+    public void A_restrictive_rule_where_nothing_allows_anything_is_refused()
+    {
+        var narrowing = RowAccessRule.For<Ticket>("Only team tickets", RowOperations.Read, "{restrictive}({col:Team} IS NOT NULL)");
+
+        FluentActions.Invoking(() => ScriptFor(narrowing))
+            .Should().Throw<InvalidOperationException>()
+            .WithMessage("The restrictive rule 'Only team tickets' narrows desk.Tickets, which no rule and no row access contribution lets anybody use*nothing for it to narrow*only takes away from what a permissive one allows*");
+    }
+
+    [Fact]
+    public void A_row_question_is_a_select_of_its_column_from_the_function_and_its_value_as_the_column_stores_it()
+    {
+        var reading = RowAccessRule.For<Ticket>(
+            "Read what the callers ticket says",
+            RowOperations.Read,
+            $"({{row:desk.caller_ticket:1:{TicketType}:q1}}{{col:q1:Status}}{{/row}} = {{rowval:{TicketType}:Status:1}}) AND ({{row:desk.caller_ticket:1:{TicketType}:q2}}{{col:q2:Team}}{{/row}} = {{col:Team}})");
+
+        var script = ScriptFor(reading);
+
+        script.Should().Contain(
+            "USING (((SELECT q1.\"Status\" FROM desk.caller_ticket() q1) = 1) AND ((SELECT q2.\"Team\" FROM desk.caller_ticket() q2) = \"Team\"));",
+            "each property read is a select of its own from the function, the column the model maps it to");
+        PostgresRowAccess.FunctionsAskedBy("{row:desk/caller_ticket:0:" + TicketType + ":q1}{col:q1:Status}{/row}").Should().Equal(["desk/caller_ticket"], "a row question named by its logical name is a function the script asks");
+    }
+
+    [Fact]
+    public void A_row_of_a_type_the_model_does_not_map_is_refused()
+    {
+        var reading = RowAccessRule.For<Ticket>("Read what a stranger says", RowOperations.Read, "({row:desk.caller_person:1:Shop.Person:q1}{col:q1:Kind}{/row} = 1)");
+
+        FluentActions.Invoking(() => ScriptFor(reading))
+            .Should().Throw<InvalidOperationException>()
+            .WithMessage("*reads a row of Shop.Person, which the model of the context the policy is written for does not map to a table*");
+    }
+
     private static string ScriptFor(params RowAccessRule[] rules)
     {
         using var model = DeskContext.Create();

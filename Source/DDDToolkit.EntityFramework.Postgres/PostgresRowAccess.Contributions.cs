@@ -163,7 +163,9 @@ public static partial class PostgresRowAccess
 
         // A column rule adds no policy, only a trigger, so it leaves a table a contribution keeps to itself alone. A
         // rule that takes the place of a default and names no role is for the roles of the default from here on.
-        EnsureKeptToThemselves(context, [.. rules.Where(rule => !rule.IsColumnRule)], contributions, roles, export.Roles);
+        // A restrictive rule takes nothing away from a contribution's table it does not narrow, and only narrows.
+        EnsureKeptToThemselves(context, [.. rules.Where(rule => !rule.IsColumnRule && !rule.Restrictive)], contributions, roles, export.Roles);
+        NarrowWhatIsAllowed(context, rules, contributions, roles, export.Roles);
 
         return new Prepared(context, rules, functions, contributions, names, roles, export.Roles);
     }
@@ -312,6 +314,12 @@ public static partial class PostgresRowAccess
             TableOfTheContext(context, table, $"A table the row access contribution {type} keeps to itself");
         }
 
+        foreach (var (table, aggregate) in result.Following ?? new Dictionary<IEntityType, IEntityType>())
+        {
+            TableOfTheContext(context, table, $"A table the row access contribution {type} says follows an aggregate");
+            TableOfTheContext(context, aggregate, $"An aggregate the row access contribution {type} says a table follows");
+        }
+
         return new Contributed(contribution, RowAccessNames.NormalizeOwner(contribution.Owner), result);
     }
 
@@ -329,7 +337,7 @@ public static partial class PostgresRowAccess
 
         if (!Enum.IsDefined(answers.Set))
         {
-            return $"'{answers.Set}' is no set: a resource access set is Seen or HeldOn";
+            return $"'{answers.Set}' is no set: a resource access set is Seen, HeldOn or FellowMembers";
         }
 
         if (!function.Returns.Trim().StartsWith("SETOF ", StringComparison.OrdinalIgnoreCase))
@@ -343,9 +351,14 @@ public static partial class PostgresRowAccess
             return parameters.Count == 0 ? null : $"takes ({function.Parameters}), where the resources seen are asked without arguments";
         }
 
+        if (answers.Set == ResourceAccessSet.FellowMembers)
+        {
+            return parameters.Count == 0 ? null : $"takes ({function.Parameters}), where the members of the resources the caller is a member of are asked without arguments";
+        }
+
         return parameters is [var key] && key.Split(' ', StringSplitOptions.RemoveEmptyEntries)[^1].Equals("text", StringComparison.OrdinalIgnoreCase)
             ? null
-            : $"takes ({function.Parameters}), where the resources a key is held on are asked with the key alone, as text";
+            : $"takes ({function.Parameters}), where the resources a permission is held on are asked with the permission alone, as text";
     }
 
     /// <summary>The table <paramref name="entity"/> is mapped to, when it is a type of <paramref name="context"/>'s model mapped to one.</summary>
@@ -497,6 +510,42 @@ public static partial class PostgresRowAccess
             .SelectMany(policy => ResolvedRoles([policy.Role], names, $"the policy '{policy.Name}' is for"))
             .Distinct(StringComparer.Ordinal)
             .Order(StringComparer.Ordinal)];
+
+    /// <summary>
+    /// Takes each restrictive rule that names no role for the roles of its default, the signed-in and the anonymous
+    /// caller, that something lets use its aggregate's table: a policy of a contribution there, or a rule that allows.
+    /// A role nothing lets use the table has nothing there to narrow, so the rule writes no policy for it, and asks
+    /// nothing for it either: a rule that narrows Tenancy's organization is for the signed-in user alone, the one of
+    /// the two Tenancy lets read it. Where nothing allows either of them, the rule keeps its roles, and the script
+    /// refuses it as one with nothing to narrow.
+    /// </summary>
+    private static void NarrowWhatIsAllowed(
+        DbContext context,
+        IReadOnlyList<RowAccessRule> rules,
+        IReadOnlyList<Contributed> contributions,
+        Dictionary<RowAccessRule, IReadOnlyList<string>> roles,
+        RowAccessRoleNames names)
+    {
+        foreach (var rule in rules.Where(rule => rule.Restrictive && rule.Roles.Count == 0).Distinct())
+        {
+            var table = TableOf(RootOf(context, rule.AggregateTypeName));
+            var allowed = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var policy in contributions.SelectMany(contributed => contributed.Result.Policies).Where(policy => !policy.Restrictive && TableOf(policy.Table) == table))
+            {
+                allowed.UnionWith(ResolvedRoles([policy.Role], names, $"the policy '{policy.Name}' is for"));
+            }
+
+            foreach (var other in rules.Where(other => !other.Restrictive && !other.IsColumnRule && TableOf(RootOf(context, other.AggregateTypeName)) == table))
+            {
+                allowed.UnionWith(roles[other]);
+            }
+
+            if (roles[rule].Where(allowed.Contains).ToArray() is { Length: > 0 } narrowed)
+            {
+                roles[rule] = narrowed;
+            }
+        }
+    }
 
     /// <summary>The start of every refusal of a rule on a table a contribution keeps to itself.</summary>
     private static string KeptToItself(RowAccessRule rule, StoreObjectIdentifier table, Contributed keeper)
@@ -1022,10 +1071,11 @@ public static partial class PostgresRowAccess
 
     /// <summary>
     /// <paramref name="prepared"/>, each after the contexts that define a function it asks, in its rules, its
-    /// access functions or what its contributions write, and otherwise in the order given.
+    /// access functions or what its contributions write, and otherwise in the order given. A function a context's rules
+    /// ask late (<paramref name="late"/>) it does not wait for: its own function asks that one when it runs.
     /// </summary>
     /// <exception cref="InvalidOperationException">The contexts ask each other's functions in a circle.</exception>
-    private static List<Prepared> InDependencyOrder(IReadOnlyList<Prepared> prepared, IReadOnlyDictionary<string, string> names)
+    private static List<Prepared> InDependencyOrder(IReadOnlyList<Prepared> prepared, IReadOnlyDictionary<string, string> names, IReadOnlyDictionary<Prepared, List<LateFunction>> late)
     {
         var definers = new Dictionary<string, List<Prepared>>(RowAccessNames.Functions);
         foreach (var each in prepared)
@@ -1047,9 +1097,10 @@ public static partial class PostgresRowAccess
             each =>
             {
                 var own = each.Names.Select(named => named.Resolved).ToHashSet(RowAccessNames.Functions);
+                var askedLate = late[each].Select(function => function.Target).ToHashSet(RowAccessNames.Functions);
                 return AskedByAnything(each)
                     .SelectMany(asked => Asks(asked, names))
-                    .Where(asked => !own.Contains(asked) && definers.ContainsKey(asked))
+                    .Where(asked => !own.Contains(asked) && !askedLate.Contains(asked) && definers.ContainsKey(asked))
                     .SelectMany(asked => definers[asked].Select(definer => (Definer: definer, Function: asked)))
                     .ToList();
             });
@@ -1192,11 +1243,12 @@ public static partial class PostgresRowAccess
 
     /// <summary>
     /// What a function returns: an SQL type, possibly with its schema, its length and <c>[]</c>, or <c>SETOF</c>
-    /// one. A name of more than one word is one of the types Postgres spells so, never a word that would be
-    /// read as an option of the function, such as <c>SECURITY DEFINER</c>.
+    /// one, a table's row type among them, whose names may be in double quotes. A name of more than one word is one
+    /// of the types Postgres spells so, never a word that would be read as an option of the function, such as
+    /// <c>SECURITY DEFINER</c>.
     /// </summary>
     [GeneratedRegex(
-        @"^(SETOF\s+)?(double\s+precision|character\s+varying|bit\s+varying|(timestamp|time)(\s*\([0-9]+\))?\s+with(out)?\s+time\s+zone|[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?)(\s*\([0-9]+(\s*,\s*[0-9]+)?\))?(\[\])*$",
+        @"^(SETOF\s+)?(double\s+precision|character\s+varying|bit\s+varying|(timestamp|time)(\s*\([0-9]+\))?\s+with(out)?\s+time\s+zone|(""[^""]+""|[A-Za-z_][A-Za-z0-9_]*)(\.(""[^""]+""|[A-Za-z_][A-Za-z0-9_]*))?)(\s*\([0-9]+(\s*,\s*[0-9]+)?\))?(\[\])*$",
         RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
     private static partial Regex Returns();
 

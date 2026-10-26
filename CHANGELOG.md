@@ -2738,6 +2738,42 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   retired permission needs none. A translation under the permission's name is read on top of either, as before. The
   Tenancy sample's `ProjectPermissions` and `InspectionPermissions` say their descriptions on their levels. See
   [DDD00099](docs/diagnostics.md#ddd00099).
+- **Rules that only narrow: `Restrictive = true`.** Decided for 3.2.0-preview.5. A row access rule marked
+  `[RowAccess<T>(..., Restrictive = true)]` is written as a Postgres `AS RESTRICTIVE` policy: AND-ed with every
+  permissive one, a package's included, so it takes away from what they allow ("only if") and never allows anything
+  itself, where every other rule is OR-ed with the rest ("this is also allowed"). It gets a policy of its own per
+  command and role, on the aggregate's table and its entities' tables, and on a table a package says follows the
+  aggregate (`RowAccessContributionResult.Following`) with a condition about the caller alone. One that names no role
+  narrows those of the signed-in and the anonymous caller that something lets use the table; one where nothing lets
+  anyone use it is refused, naming it, and so is one with `Columns`. A question may now answer a row of the caller's
+  own: `[AccessRow("name")]` on a method of an `[AccessFunctions]` class that returns the class a table is mapped to,
+  read by field, `(SELECT q1."Region" FROM ...caller_profile() q1)`, once per statement. See
+  [Rules that only narrow](docs/row-level-security.md#rules-that-only-narrow-restrictive).
+  - **Tenancy: narrowing the organization.** A restrictive rule on the application's organization, seat or role
+    class narrows Tenancy's own policies there: on the organization its units and the closure of its tree as well, on
+    the seats their placements and grants. `TenancyRowAccess.CallerSeat<Seat>()` is the calling seat's own row,
+    through the new `caller_seat_row()`, which runs as its owner, so a rule reads a field of the application's seat
+    class, `CallerSeat<Seat>().Kind == SeatKind.Employee`. A restrictive rule on a tenant or an invitation is the new
+    DDD00100, `CallerSeat<T>()` over another class than the seat class the new DDD00101, both errors. Tenancy's own
+    work keeps working under such a rule, every use case of it, and a seat it keeps out of the organization still
+    reads what a unit is called: `TenancyDirectory.UnitsByIdAsync` answers through the new `units_named()`, which runs
+    as its owner, for the ids asked alone, a name, a path and a depth; `ListUnitsAsync` answers such a seat no units,
+    and its overview names the units it is placed at, and the tenant by its slug. The seat a request acts as is
+    found past the organization, which only names the tenant: a tenant whose organization the caller does not read,
+    as before a tenant is chosen under a rule that asks the caller's seat, is named by its slug, in the tenant
+    picker too. See [Rules that narrow the organization](docs/tenancy.md#rules-that-narrow-the-organization).
+- **The people the caller works with: `ResourceAccessSet.FellowMembers`.** Decided for 3.2.0-preview.5. A
+  `[ResourceAccessContract<ProjectId>(ResourceAccessSet.FellowMembers)]` declares `static partial AccessSet<SeatId> Ids();`
+  and answers the members now of every resource the caller is a member of now, the caller among them, which
+  Membership writes as `<name>_fellow_members()` beside the other four functions of a resource; a contract that does
+  not declare its `Ids` is DDD00038, since the members' id is no resource's. A read rule on Tenancy's seats asks it:
+  `CallerSeat<Seat>().Kind == SeatKind.Employee || PeopleOnMyProjects.Ids().Contains(seat.Id)`. Such a rule asks a
+  module whose functions ask Tenancy's in turn, and Postgres refuses a policy that asks a function that does not
+  exist yet, so the export writes the asking context's file first with a function of its own, of the same name, that
+  asks the other one when it runs: made with the check of its body turned off, it breaks the circle, and the rule is
+  written as any other. Only a function a contribution writes is asked that way; a circle of access functions or of
+  contributed functions' bodies is refused as before. See
+  [A resource's access, asked by its id](docs/row-level-security.md#a-resources-access-asked-by-its-id).
 
 ### Changed
 
@@ -3578,6 +3614,30 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     `UPDATE ... SET "EventName" = 'tenancy.role-permissions-changed' WHERE "EventName" = 'tenancy.role-keys-changed'`
     on Tenancy's event log and outbox. On Postgres, let the export write the new access file after it. See
     [Upgrading from key to permission](docs/tenancy.md#upgrading-from-key-to-permission).
+
+- **Tenancy: `CallerSeat<TSeatId>()` is `CallerSeatId<TSeatId>()`, and a unit asked for by id is named alone.**
+  Decided for 3.2.0-preview.5, with the restrictive rules above. Nobody uses the packages yet, so the old names are
+  gone with no alias.
+  - From 3.2.0-preview.4, was, now:
+    - `TenancyRowAccess.CallerSeat<SeatId>()`, the calling seat's id: `CallerSeatId<SeatId>()`. `CallerSeat<Seat>()`
+      is now the calling seat's row, over the application's seat class.
+    - `TenancyDirectory.UnitsByIdAsync(ids, ct)` answered the application's units, whole, as `UnitInTree`: it answers
+      `NamedUnit<TUnitId>`, a unit's `Id`, `Name`, `Path` and `Depth`, and nothing more, also to a seat a restrictive
+      rule keeps out of the organization. `ListUnitsAsync` answers `UnitInTree` as before.
+    - `TenancyUseCases.IStore` has `UnitsNamedAsync`, which a storage that keeps its own policies answers through
+      `units_named()`, and any other with `null`.
+    - `MembershipFunctions` takes a fifth name, `FellowMembers`; Membership's SQL is written in form 8.
+    - A row access contribution's function that answers a resource access set is refused, naming the set, with
+      "permission" where the message said "key".
+  - The Tenancy sample follows: `OrganizationUnitsById` answers `UnitName` (`Id`, `Name`, `Path`, `Depth`), and so
+    do the routes and fields that name a unit by id: `POST /tenancy/directory/units` answers `{ id, name, path, depth }`,
+    the GraphQL lookup is `organizationUnitName(id)`, and a project's and an invitation's `unit` is an
+    `OrganizationUnitName`. `OrganizationUnit`, with its kind and status, is what `organizationUnits` and the
+    mutations of the tree answer, and its fields are no longer nullable. A mutation of the tree answers the unit from
+    the list of the units the caller reads, which a seat that manages units reads.
+  - **Upgrading.** Rebuild, and on Postgres let the export write the new access files: Tenancy's has
+    `caller_seat_row()` and `units_named()`, and each resource with members `<name>_fellow_members()`. No table
+    changes; the next migration you add names Tenancy's new row, `NamedUnit`, in its snapshot.
 
 ### Fixed
 

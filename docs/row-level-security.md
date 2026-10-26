@@ -881,7 +881,8 @@ CREATE POLICY "Orders (select) for authenticated" ON "ordering"."Orders" FOR SEL
 
 A policy you wrote yourself, permissive or restrictive, is never merged into these: a script only ever
 drops and makes the policies it made, found by their comment. A restrictive policy of yours on the same
-table still holds every caller it names to its own condition as well.
+table still holds every caller it names to its own condition as well, and so does a
+[restrictive rule](#rules-that-only-narrow-restrictive).
 
 The types of a hierarchy that Entity Framework maps to one table share its policies, and those of their
 entities' tables, in the same way. A rule about a type derived in the hierarchy holds for that type's rows,
@@ -909,6 +910,58 @@ application's own included. So is a name with a `$`, which a script cannot write
 role names in, and one longer than the 63 bytes of a name Postgres keeps. The Supabase build takes the
 roles and the caller functions from two properties of the project; see
 [Supabase](supabase.md#roles-and-caller-functions-of-your-own).
+
+### Rules that only narrow: `Restrictive`
+
+Postgres has two kinds of policy. A **permissive** policy says "this is also allowed": a table's permissive policies
+are OR-ed, so a row passes when one of them allows it. A **restrictive** policy says "only if": it is AND-ed with
+every permissive one, so a row passes only when it allows the row as well. Every rule above is permissive.
+`Restrictive = true` makes a rule restrictive. It takes away from what the other policies allow, yours and a
+package's alike, and never allows anything itself.
+
+Take an organization that every seat of its tenant reads, by a package's policy, and an application that lets only
+its employees read it:
+
+| Who reads | The package's policy, permissive | The rule, restrictive: an employee | Reads the organization |
+|---|---|---|---|
+| an employee of the tenant | yes | yes | yes |
+| an external seat of the same tenant | yes | no | no |
+| a seat of another tenant | no | yes | no: a restrictive rule grants nothing |
+
+```csharp
+[RowAccess<Organization>(RowOperations.Read, Restrictive = true)]
+public static partial class OnlyEmployeesReadTheOrganization
+{
+    public static bool Allows(Organization organization, Caller caller)
+        => TenancyRowAccess.CallerSeat<Seat>().Kind == SeatKind.Employee;
+}
+```
+
+```sql
+-- Only employees read the organization (select) for authenticated is the restrictive rule 'Only employees read the organization': a row passes only where it allows it as well as a permissive policy, so it never allows more.
+CREATE POLICY "Only employees read the organization (select) for authenticated" ON "tenancy"."Organizations" AS RESTRICTIVE FOR SELECT TO authenticated
+    USING ((SELECT q1."Kind" FROM "tenancy".caller_seat_row() q1) = 0);
+-- and the same on the units, and on the closure of the tree, which follows the organization
+```
+
+- **A policy of its own.** A restrictive rule is never merged with your other rules: each command and role gets a
+  policy named after it, beside the permissive one.
+- **It reaches the aggregate.** Its policy is on the aggregate's table and on the tables of its entities, so
+  narrowing what is read of an organization narrows its units. Where a package says a table follows an aggregate,
+  as Tenancy says of the closure of the tree, it reaches that table as well, with a condition that may ask about the
+  caller alone, since that table holds no row of the aggregate to read.
+- **The roles it narrows.** A rule that names no role narrows those of the signed-in and the anonymous caller that
+  something lets use the table: on Tenancy's organization, the signed-in user alone. Where nothing lets anyone use
+  the table there is nothing to narrow, and the script refuses the rule, naming it.
+- **Not what runs past the policies.** Functions that run as their owner read whatever they read, and the scoped
+  system role is narrowed only where the rule names it in `To`. So a package's own work keeps working:
+  [Tenancy's](tenancy.md#rules-that-narrow-the-organization), with every use case, under a rule that keeps a seat
+  out of the organization.
+- **Not with `Columns`.** A column rule is a trigger, not a policy: a rule with both is refused.
+
+A rule without `Restrictive` only adds. Beside a package's policy that already lets a role read every row of a
+table, it would change nothing, so Tenancy refuses one on its organization and its roles, whose reads are no default,
+rather than let it look like a restriction.
 
 ### The scoped system role
 
@@ -1313,6 +1366,28 @@ not "another team" than one nobody knows. The comparison stays unknown under `!`
 `!(ticket.Team == Questions.CallerTeam())` lets such a caller through no more than `==` does. There is no C#
 answer to keep here, since the question throws in C#.
 
+**A row of the caller's own.** An `[AccessRow]` question answers with one row of a table, the caller's, and a rule
+reads a field of it as it reads a column. The method takes no parameters and returns the class the table is mapped
+to, or a type parameter constrained to `class`; the function of its name returns `SETOF` that table. It is asked
+once per statement, for the field the rule reads:
+
+```csharp
+[AccessFunctions]
+public static partial class Questions
+{
+    [AccessRow("caller_profile")]
+    public static partial Profile CallerProfile();
+}
+
+// project.Region == Questions.CallerProfile().Region
+//   "Region" = (SELECT q1."Region" FROM "projects".caller_profile() q1)
+```
+
+The class must be mapped to a table by the model of the context the policy is written for, which is where the column
+names come from; a rule of another context is refused when its script is written. No row is no caller: every field
+is null, and passes no condition. Tenancy offers one, the calling seat's own row:
+`TenancyRowAccess.CallerSeat<Seat>().Kind == SeatKind.Employee`.
+
 ### Names relative to the module
 
 A module's schema is the host's choice, so a module does not have to write it into its function names. A
@@ -1430,7 +1505,10 @@ flowchart LR
 
 The contract is one line, in the contracts of the module that owns the resource. It names the resource's id and
 the set, and no function: `ResourceAccessSet.Seen` publishes `Ids()`, the resources the caller sees, and
-`ResourceAccessSet.HeldOn` publishes `Ids(string permission)`, those the caller holds the permission on. A rule asks it as it
+`ResourceAccessSet.HeldOn` publishes `Ids(string permission)`, those the caller holds the permission on.
+`ResourceAccessSet.FellowMembers` publishes the members of the resources the caller is a member of, the people it
+works with: their ids are no resource's, so that contract declares its `Ids` itself, with the id its members are
+known by, `public static partial AccessSet<SeatId> Ids();`. A rule asks it as it
 asks any set, with `Contains`, once per statement. The generator writes the set into the rule's SQL by the id's
 full name and the set, and the export writes the policy with the function a contribution says answers that set
 for the resource with that id. The Membership package says so of the two functions it writes for each resource,
@@ -1455,8 +1533,16 @@ so listing its contribution is all a host does.
   yours asks `{fn:...}` with `ProjectsWhereIHold.Name` in it, as the sample's `UnitChangesWithItsPermissions` does.
 - **A package of your own** says which set a function answers with `Answers` on its `ContributedFunction`,
   `new ResourceAccessAnswer(typeof(TId), ResourceAccessSet.Seen)`. Such a function returns `SETOF` the id's type,
-  and takes nothing for the resources seen, or the permission as `text` for those it is held on; anything else is
-  refused when the script is written.
+  or the members' for `FellowMembers`, and takes nothing for the resources seen and the members, or the permission
+  as `text` for those it is held on; anything else is refused when the script is written.
+- **A rule that asks a module that asks back.** A read rule on Tenancy's seats that asks who works on the same
+  projects asks a function of the projects' module, whose functions ask Tenancy's in turn, who the calling seat is.
+  Postgres refuses a policy that asks a function that does not exist yet, so neither file could run first. The
+  export writes Tenancy's file first all the same, with a function of Tenancy's own, of the same name, that asks the
+  projects' one by its name when it runs: it is made with Postgres' check of a function's body turned off for it
+  alone, and the policy asks it. So the rule is written as any other, and nothing of it is yours to arrange. Only a
+  function a package writes is asked that way; two modules whose own access functions ask each other's are still
+  refused, naming the circle.
 
 A contract that declares its `Ids` itself, to document it, gets that one implemented. Its key is the id of the
 resource's aggregate: one declared with `[EntityId<Guid>]`, as a module's contracts declare it, or, in the
@@ -1490,7 +1576,7 @@ public static partial class SeatsRecordWhereTheyMay
 {
     public static bool Allows(Inspection inspection, Caller caller)
         => ProjectsWhereIHold.Ids(InspectionPermissionNames.Record).Contains(inspection.ProjectId)
-            && inspection.RecordedBy == TenancyRowAccess.CallerSeat<SeatId>();
+            && inspection.RecordedBy == TenancyRowAccess.CallerSeatId<SeatId>();
 }
 ```
 
@@ -1939,7 +2025,11 @@ COMMENT ON POLICY "Entries are read by who wrote them (select) for authenticated
 - **Tables a contribution keeps to itself**, its `ExclusiveTables`, get row level security and policies
   from it alone: a rule, or another contribution, that would add one is refused, naming both, but for a rule
   that takes the place of a default read, below. A [column rule](#column-rules) adds no policy, and holds a
-  column of such a table all the same: a field the application added to the package's class, say.
+  column of such a table all the same: a field the application added to the package's class, say. Nor does a
+  [restrictive rule](#rules-that-only-narrow-restrictive) take anything from it: it only narrows.
+- **Tables that follow an aggregate**, its `Following`, a map from a table to the aggregate it belongs with though
+  it is no entity of it: a restrictive rule on the aggregate narrows that table too, with a condition about the
+  caller alone. Tenancy says so of the closure of the tree, which follows the organization.
 - **A default read.** Who may see which rows is often your application's choice rather than the package's, so a
   contribution may mark what a role reads a default: a permissive policy for `SELECT` with
   `Default = new ContributedDefault(Kept, Within)`. Without a rule of yours about it, the script writes it as it

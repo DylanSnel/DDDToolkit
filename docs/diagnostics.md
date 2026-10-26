@@ -97,6 +97,8 @@ type looks annotated and behaves like a plain class. Every misuse below reports 
 | [DDD00097](#ddd00097) | Error | [At] marks the one place an aggregate root hangs at |
 | [DDD00098](#ddd00098) | Error | Rules that reach a resource from above read where it hangs from its [At] property |
 | [DDD00099](#ddd00099) | Warning | A permission says what it lets somebody do |
+| [DDD00100](#ddd00100) | Error | A restrictive rule narrows a table it can reach |
+| [DDD00101](#ddd00101) | Error | TenancyRowAccess.CallerSeat answers with the application's seat class |
 
 Most of these say the generator could not do what you asked. The rest are a different kind: they are
 rules about the model rather than about the declaration, and each of them names code that compiles,
@@ -3136,7 +3138,7 @@ its old name with [Members("...")].
 ```
 
 A resource with members is [named after its class](membership.md#names), and the name is what its codes start with,
-`boards.already-member`, and what its four functions in the database are named after, `boards_i_see`. Renaming the
+`boards.already-member`, and what its five functions in the database are named after, `boards_i_see`. Renaming the
 class renames both: a client that branches on a code reads another one, and the next access file writes new
 functions and drops the old. The Supabase export the build runs compares the names of the resources it writes with
 those the newest access file of each module recorded, with the class each came from, and says once, in that build,
@@ -3354,6 +3356,39 @@ the project writes a documentation file or not. A permission with neither would 
 warning, on the constant. A description of white space alone is none, and a retired permission, which no screen
 offers, needs none. A translation under the permission's name, in a resx your failure localizer reads, is read on
 top of whichever said it ([A module states its permissions once](tenancy.md#a-module-states-its-permissions-once)).
+
+## DDD00100
+
+**A restrictive rule narrows a table it can reach.**
+
+```csharp
+[RowAccess<Organization>(RowOperations.Read, Restrictive = true)]   // the organization, its units and its tree: fine
+public static partial class OnlyEmployeesReadTheOrganization { ... }
+
+[RowAccess<Tenant>(RowOperations.Read, Restrictive = true)]         // DDD00100: a tenant of Tenancy's
+public static partial class OnlyEmployeesReadTheTenant { ... }
+```
+
+A restrictive rule (`Restrictive = true`) is AND-ed with every policy that allows on its aggregate's table, and
+narrows what they allow. On Tenancy's tables it reaches the organization with its units and the closure of its
+tree, the seats with their placements and grants, and the roles: what an application narrows to keep a seat that is
+not an employee out of the organization. A tenant and an invitation are read by Tenancy's own work and by a person
+accepting an invitation, who has no seat yet, so a rule there is refused. Put it on one of the others, or leave
+`Restrictive` out ([Rules that narrow the organization](tenancy.md#rules-that-narrow-the-organization)).
+
+## DDD00101
+
+**`TenancyRowAccess.CallerSeat` answers with the application's seat class.**
+
+```csharp
+TenancyRowAccess.CallerSeat<Seat>().Kind == SeatKind.Employee      // the class declared with [SeatAggregate]
+TenancyRowAccess.CallerSeat<Role>().Name == "Employee"             // DDD00101: no seat's row
+```
+
+`CallerSeat<TSeat>()` is the calling seat's own row, which a rule reads a field of, asked of a function that
+answers with a row of Tenancy's seats table: so `TSeat` is the class that table is mapped to, the one declared with
+`[SeatAggregate]`. For the seat's id in a rule of a module whose context does not map the seats, ask
+`TenancyRowAccess.CallerSeatId<SeatId>()`.
 
 ## Building the model fails: the owned type must carry the key part
 

@@ -157,7 +157,7 @@ type InvalidValuesError implements CodedError @shareable {
   failures: [ValueFailure!]!
 }
 
-type OrganizationUnit @key(fields: "id") {
+type OrganizationUnitName @key(fields: "id") {
   id: UUID!
 }
 
@@ -187,7 +187,7 @@ type PageInfo @shareable {
 
 type Project implements Node @key(fields: "id") {
   id: ID!
-  unit: OrganizationUnit
+  unit: OrganizationUnitName
   owner: Seat
   crew: [CrewMember!]
   myRoles: [ProjectRole!]

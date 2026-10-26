@@ -43,6 +43,9 @@ internal static class TenancySql
     /// <summary>The functions, by the names rules ask them by, relative to <see cref="TenancyRowAccess.Owner"/>.</summary>
     internal const string CallerSeat = "caller_seat";
 
+    /// <summary>The calling seat's own row, which <c>TenancyRowAccess.CallerSeat&lt;TSeat&gt;()</c> asks.</summary>
+    internal const string CallerSeatRow = "caller_seat_row";
+
     internal const string CallerTenant = "caller_tenant";
 
     internal const string SystemTenant = "system_tenant";
@@ -193,6 +196,7 @@ internal static class TenancySql
         var policies = new List<ContributedPolicy>();
         var statements = new List<string>();
         var exclusive = new List<IEntityType>();
+        Dictionary<IEntityType, IEntityType>? following = null;
 
         // The tables no caller's role reads, whatever else it reads: the digests of the invitations' tokens.
         var unread = new List<IEntityType>();
@@ -205,6 +209,10 @@ internal static class TenancySql
             HostEntities(tenancy, policies, exclusive);
             History(tenancy, written.RemovesOldHistory, policies, exclusive);
             statements.AddRange(Triggers(tenancy, written));
+
+            // The closure of the tree goes with the organization, although it is no entity of it in the model: a rule of
+            // the application's that narrows who reads the organization narrows who reads its tree as well.
+            following = new Dictionary<IEntityType, IEntityType> { [tenancy.UnitPaths] = tenancy.Organizations };
         }
         else if (TenancyModel.EventLogOf(model) is not null)
         {
@@ -235,7 +243,7 @@ internal static class TenancySql
 
         return functions.Count + policies.Count + statements.Count + exclusive.Count == 0
             ? null
-            : new RowAccessContributionResult(functions, policies, statements, exclusive);
+            : new RowAccessContributionResult(functions, policies, statements, exclusive) { Following = following };
     }
 
     /// <summary>What of an export Tenancy's SQL is written from, beyond the model and the catalogue.</summary>
@@ -409,6 +417,18 @@ internal static class TenancySql
             "",
             tenantType,
             $"SELECT s.{C(seats, "TenantId")} FROM {Q(seats)} s WHERE s.{C(seats, "Id")} = {callerSeat}",
+            SecurityDefiner: true,
+            GrantTo: callers);
+
+        // The calling seat's own row, every column the application's seat class maps, for a rule that reads a field of
+        // it: TenancyRowAccess.CallerSeat<TSeat>().Kind. It runs as its owner, so a rule on the seats that reads it does
+        // not ask the seats' policies again, and a seat reads its own fields whatever the application's read rule on
+        // the seats says. No row for a caller without a seat, so every field it answers is null then.
+        yield return new ContributedFunction(
+            CallerSeatRow,
+            "",
+            "SETOF " + Q(seats),
+            $"SELECT s.* FROM {Q(seats)} s WHERE s.{C(seats, "Id")} = {callerSeat}",
             SecurityDefiner: true,
             GrantTo: callers);
 
@@ -617,6 +637,29 @@ internal static class TenancySql
               AND {Live(rights, "r")}
               AND p.{C(paths, "DescendantId")} = $2
               AND {readable}
+            """,
+            SecurityDefiner: true,
+            GrantTo: seatCallers);
+
+        // What the units asked about are called, those of the seat's tenant: each one's name, the names of the units
+        // above it, the root first, and how deep it is, and nothing more of any unit. It runs as its owner, so a seat
+        // that an application's restrictive rule keeps out of the organization, or one on a project at a unit it is
+        // not placed under, still reads the name of a unit it works on; it answers the ids asked alone, so nobody
+        // lists the organization through it.
+        yield return new ContributedFunction(
+            TenancyFunctionNames.UnitsNamed,
+            $"ids {unitType}[]",
+            $"TABLE (\"Id\" {unitType}, \"Name\" text, \"Path\" text, \"Depth\" integer)",
+            $"""
+            SELECT u.{C(units, "Id")}, u.{C(units, "Name")}::pg_catalog.text,
+                   (SELECT pg_catalog.string_agg(a.{C(units, "Name")}::pg_catalog.text, ' / ' ORDER BY p.{C(paths, "Distance")} DESC)
+                    FROM {Q(paths)} p
+                    JOIN {Q(units)} a ON a.{C(units, "Id")} = p.{C(paths, "AncestorId")} AND a.{C(units, "TenantId")} = p.{C(paths, "TenantId")}
+                    WHERE p.{C(paths, "DescendantId")} = u.{C(units, "Id")} AND p.{C(paths, "TenantId")} = u.{C(units, "TenantId")}),
+                   (SELECT pg_catalog.count(*) FROM {Q(paths)} p
+                    WHERE p.{C(paths, "DescendantId")} = u.{C(units, "Id")} AND p.{C(paths, "TenantId")} = u.{C(units, "TenantId")})::pg_catalog.int4
+            FROM {Q(units)} u
+            WHERE u.{C(units, "TenantId")} = {seatTenant} AND u.{C(units, "Id")} = ANY ($1)
             """,
             SecurityDefiner: true,
             GrantTo: seatCallers);

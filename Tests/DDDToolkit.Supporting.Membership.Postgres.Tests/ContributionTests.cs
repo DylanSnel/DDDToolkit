@@ -31,7 +31,7 @@ public sealed class ContributionTests(FilingPostgres postgres)
         => new() { Roles = roles ?? Export.Roles, Rules = rules ?? Export.Rules };
 
     [Fact]
-    public void The_contribution_writes_four_functions_named_after_the_resource_and_allows_nothing()
+    public void The_contribution_writes_five_functions_named_after_the_resource_and_allows_nothing()
     {
         using var context = FilingPostgres.Model();
 
@@ -43,7 +43,8 @@ public sealed class ContributionTests(FilingPostgres postgres)
             ("folders_as_member", "", "SETOF bigint"),
             ("folders_as_member_with", "text", "SETOF bigint"),
             ("folders_i_see", "", "SETOF bigint"),
-            ("folders_where_i_hold", "text", "SETOF bigint"));
+            ("folders_where_i_hold", "text", "SETOF bigint"),
+            ("folders_fellow_members", "", "SETOF text"));
         written.Functions.Should().OnlyContain(function => function.SecurityDefiner && !function.Inlinable && function.Volatility == "STABLE");
 
         // A document's are its own: other names, another id.
@@ -52,7 +53,8 @@ public sealed class ContributionTests(FilingPostgres postgres)
             ("documents_as_member", "", "SETOF uuid"),
             ("documents_as_member_with", "text", "SETOF uuid"),
             ("documents_i_see", "", "SETOF uuid"),
-            ("documents_where_i_hold", "text", "SETOF uuid"));
+            ("documents_where_i_hold", "text", "SETOF uuid"),
+            ("documents_fellow_members", "", "SETOF uuid"));
     }
 
     [Fact]
@@ -266,7 +268,7 @@ public sealed class ContributionTests(FilingPostgres postgres)
     }
 
     [Fact]
-    public void The_two_functions_that_answer_access_say_which_set_they_answer_for_the_resources_id()
+    public void The_three_functions_that_answer_access_say_which_set_they_answer_for_the_resources_id()
     {
         using var context = FilingPostgres.Model();
 
@@ -277,12 +279,14 @@ public sealed class ContributionTests(FilingPostgres postgres)
             ("documents_as_member", null),
             ("documents_as_member_with", null),
             ("documents_i_see", new ResourceAccessAnswer(typeof(DocumentId), ResourceAccessSet.Seen)),
-            ("documents_where_i_hold", new ResourceAccessAnswer(typeof(DocumentId), ResourceAccessSet.HeldOn)));
+            ("documents_where_i_hold", new ResourceAccessAnswer(typeof(DocumentId), ResourceAccessSet.HeldOn)),
+            ("documents_fellow_members", new ResourceAccessAnswer(typeof(DocumentId), ResourceAccessSet.FellowMembers)));
         folders.Select(function => (function.Name, function.Answers)).Should().Equal(
             ("folders_as_member", null),
             ("folders_as_member_with", null),
             ("folders_i_see", new ResourceAccessAnswer(typeof(FolderId), ResourceAccessSet.Seen)),
-            ("folders_where_i_hold", new ResourceAccessAnswer(typeof(FolderId), ResourceAccessSet.HeldOn)));
+            ("folders_where_i_hold", new ResourceAccessAnswer(typeof(FolderId), ResourceAccessSet.HeldOn)),
+            ("folders_fellow_members", new ResourceAccessAnswer(typeof(FolderId), ResourceAccessSet.FellowMembers)));
     }
 
     [Fact]
@@ -482,7 +486,8 @@ public sealed class ContributionTests(FilingPostgres postgres)
             ("crates_as_member", "", "SETOF uuid"),
             ("crates_as_member_with", "text", "SETOF uuid"),
             ("crates_i_see", "", "SETOF uuid"),
-            ("crates_where_i_hold", "text", "SETOF uuid"));
+            ("crates_where_i_hold", "text", "SETOF uuid"),
+            ("crates_fellow_members", "", "SETOF uuid"));
         crates.Should().OnlyContain(function => function.SecurityDefiner && function.GrantTo!.SequenceEqual(new[] { RowAccessRoles.User, RowAccessRoles.SystemIn }));
 
         // Asked by logical name, a text the script fills in: nothing here refers to what defines them.
@@ -603,7 +608,7 @@ public sealed class ContributionTests(FilingPostgres postgres)
     /// taken out. Kept together: the form is what tells the start-up check that a database holds what an earlier
     /// version of the package wrote, so it goes up whenever what is written changes.
     /// </summary>
-    private static readonly (string SqlForm, string Written) KeptTogether = ("7", "9c5edafbd465c907d0a159d511e3d6708c596019eb3af9c1e41bc4cf0b302b3b");
+    private static readonly (string SqlForm, string Written) KeptTogether = ("8", "eb4be28c4845154d1372eedcbd10e10922ea401fbe9ef9ac800aa9b757a772d7");
 
     [Fact]
     public void What_is_written_for_the_same_rules_changes_only_together_with_the_form_it_is_written_in()

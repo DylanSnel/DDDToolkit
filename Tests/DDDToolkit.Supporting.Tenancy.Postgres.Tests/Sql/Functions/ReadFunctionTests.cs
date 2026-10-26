@@ -309,8 +309,8 @@ public abstract class ReadFunctionTests(TenancyPostgres postgres, TenancyNaming 
                     ('{yard}', 7, NULL, 'Yard', 'A'), ('{shed}', 7, '{yard}', 'Shed', 'X');
                 INSERT INTO tenancy."OrganizationUnitPaths" ("AncestorId", "DescendantId", "TenantId", "Distance") VALUES
                     ('{yard}', '{yard}', 7, 0), ('{shed}', '{shed}', 7, 0), ('{yard}', '{shed}', 7, 1);
-                INSERT INTO tenancy."Seats" ("Id", "Version", "TenantId", "Identity", "DisplayName", "Status") VALUES
-                    ('{amy}', 0, 7, gen_random_uuid(), 'Amy', 0), ('{bert}', 0, 7, gen_random_uuid(), 'Bert', 1), ('{cy}', 0, 7, gen_random_uuid(), 'Cy', 2);
+                INSERT INTO tenancy."Seats" ("Id", "Version", "TenantId", "Identity", "DisplayName", "Kind", "Status") VALUES
+                    ('{amy}', 0, 7, gen_random_uuid(), 'Amy', 0, 0), ('{bert}', 0, 7, gen_random_uuid(), 'Bert', 0, 1), ('{cy}', 0, 7, gen_random_uuid(), 'Cy', 0, 2);
                 INSERT INTO tenancy."Roles" ("Id", "NormalizedName", "Version", "TenantId", "Name", "Description", "FromPack", "Status", "Permissions") VALUES
                     ('{keeper}', 'KEEPER', 0, 7, 'Keeper', '', NULL, 'active', ARRAY['widget.read']),
                     ('{lookout}', 'LOOKOUT', 0, 7, 'Lookout', '', NULL, 'archived', ARRAY['widget.read']);

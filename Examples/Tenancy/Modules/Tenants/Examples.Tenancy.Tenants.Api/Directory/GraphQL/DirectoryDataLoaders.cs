@@ -1,5 +1,5 @@
+using Examples.Tenancy.Tenants.Application.Directory;
 using Examples.Tenancy.Tenants.Application.Directory.Queries;
-using Examples.Tenancy.Tenants.Application.Organization;
 using Examples.Tenancy.Tenants.Application.Roles;
 using Examples.Tenancy.Tenants.Application.Seats;
 using GreenDonut;
@@ -10,7 +10,7 @@ namespace Examples.Tenancy.Tenants.Api.Directory.GraphQL;
 /// <summary>
 /// The seats, units and roles an answer names, each kind asked of the directory a batch at a time: the ids of one
 /// batch are one question. HotChocolate's generator writes a data loader from each method:
-/// <c>ISeatByIdDataLoader</c>, <c>IOrganizationUnitByIdDataLoader</c> and <c>IRoleByIdDataLoader</c>.
+/// <c>ISeatByIdDataLoader</c>, <c>IOrganizationUnitNameByIdDataLoader</c> and <c>IRoleByIdDataLoader</c>.
 /// </summary>
 /// <remarks>
 /// A method sends the query the directory's route sends, and nothing else. The generated loader calls it in a
@@ -43,14 +43,14 @@ internal static class DirectoryDataLoaders
         return seats;
     }
 
-    /// <summary>The units with these ids, by id, each with its kind.</summary>
+    /// <summary>What the units with these ids are called, by id.</summary>
     [DataLoader]
-    public static async Task<IReadOnlyDictionary<OrganizationUnitId, UnitListing>> GetOrganizationUnitByIdAsync(
+    public static async Task<IReadOnlyDictionary<OrganizationUnitId, UnitName>> GetOrganizationUnitNameByIdAsync(
         IReadOnlyList<OrganizationUnitId> ids,
         ISender sender,
         CancellationToken cancellationToken)
     {
-        var units = new Dictionary<OrganizationUnitId, UnitListing>();
+        var units = new Dictionary<OrganizationUnitId, UnitName>();
         foreach (var part in ids.Chunk(TenancyUseCases.TenancyDirectory.MostIds))
         {
             foreach (var unit in await sender.Send(new OrganizationUnitsById(part), cancellationToken))

@@ -117,6 +117,7 @@ public static class TenancyModelBuilderExtensions
         // What the store asks a database that keeps the rights itself: rows of no table, read from its functions.
         modelBuilder.Entity<TenantAdministratorRow<TSeatId, TRoleId>>(TenancyMapping.TenantAdministrators);
         modelBuilder.Entity<MoveReach<TUnitId>>(TenancyMapping.MoveReaches);
+        modelBuilder.Entity<NamedUnit<TUnitId>>(TenancyMapping.NamedUnits);
 
         // And what system work that began in no tenant asks it: which tenants there are to visit.
         modelBuilder.Entity<TenantToSweepRow<TTenantId>>(TenancyMapping.TenantsToSweep);

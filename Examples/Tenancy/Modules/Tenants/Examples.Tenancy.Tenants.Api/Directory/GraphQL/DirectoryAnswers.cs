@@ -1,5 +1,6 @@
 using Examples.Tenancy.Tenants.Application.Directory.Queries;
 using Examples.Tenancy.Tenants.Application.Organization;
+using Examples.Tenancy.Tenants.Application.Organization.Queries;
 using Examples.Tenancy.Tenants.Application.Roles;
 using Examples.Tenancy.Tenants.Application.Seats;
 using Mediator;
@@ -20,9 +21,12 @@ internal static class DirectoryAnswers
     public static async Task<SeatListing?> SeatNowAsync(this ISender sender, SeatId id, CancellationToken cancellationToken)
         => (await sender.Send(new SeatsById([id]), cancellationToken)).FirstOrDefault();
 
-    /// <summary>The unit as the directory answers it now, with its kind.</summary>
+    /// <summary>
+    /// The unit as the directory lists it now, with its kind: among the units the caller reads, which a unit it
+    /// manages is, since it manages units where it is placed.
+    /// </summary>
     public static async Task<UnitListing?> UnitNowAsync(this ISender sender, OrganizationUnitId id, CancellationToken cancellationToken)
-        => (await sender.Send(new OrganizationUnitsById([id]), cancellationToken)).FirstOrDefault();
+        => (await sender.Send(new OrganizationUnits(), cancellationToken)).FirstOrDefault(unit => unit.Id == id);
 
     /// <summary>The role as the directory answers it now, with what the tenant uses it for.</summary>
     public static async Task<RoleListing?> RoleNowAsync(this ISender sender, RoleId id, CancellationToken cancellationToken)

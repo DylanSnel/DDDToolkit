@@ -32,7 +32,7 @@ public sealed class ProjectMembershipTests
         Rules.Codes.Should().BeSameAs(ProjectRefusals.Membership, "the codes the project declares");
 
         // The functions are named after the project, as every row rule that asks them by the project's id reads them.
-        Rules.Functions.Should().Be(new MembershipFunctions("projects_as_member", "projects_as_member_with", "projects_i_see", "projects_where_i_hold"));
+        Rules.Functions.Should().Be(new MembershipFunctions("projects_as_member", "projects_as_member_with", "projects_i_see", "projects_where_i_hold", "projects_fellow_members"));
     }
 
     [Fact]

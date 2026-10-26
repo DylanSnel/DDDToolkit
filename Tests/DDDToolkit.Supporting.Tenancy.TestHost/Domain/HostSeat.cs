@@ -5,7 +5,8 @@ namespace DDDToolkit.Supporting.Tenancy.TestHost.Domain;
 
 /// <summary>
 /// The application's seat: the package's, with the name it is shown by in its tenant, a job title and a rule about
-/// the job title.
+/// the job title, and whether it is an employee's or an external person's, which a restrictive row access rule of
+/// the application's may read.
 /// </summary>
 /// <remarks>
 /// The name is this application's own, as an application's would be: Tenancy keeps none and reads none. Whoever makes
@@ -23,6 +24,12 @@ public sealed partial class HostSeat
 
     /// <summary>What the person does, or <see langword="null"/>.</summary>
     public string? JobTitle { get; private set; }
+
+    /// <summary>Whether the seat is an employee's, as every seat is until the application says otherwise.</summary>
+    public HostSeatKind Kind { get; private set; }
+
+    /// <summary>Marks the seat as an external person's, one who is no employee.</summary>
+    public void MarkExternal() => Kind = HostSeatKind.External;
 
     /// <summary>Gives the seat the name it is shown by, or takes it away.</summary>
     public void Rename(string? displayName) => DisplayName = displayName;
@@ -48,4 +55,14 @@ public sealed partial class HostSeat
                 ? null
                 : new InvariantFailure($"A job title is at most {MaxJobTitleLength} characters.").With("Max", MaxJobTitleLength);
     }
+}
+
+/// <summary>Whose seat a seat is: an employee's, or an external person's.</summary>
+public enum HostSeatKind
+{
+    /// <summary>An employee of the tenant.</summary>
+    Employee,
+
+    /// <summary>Somebody from outside, on a piece of work.</summary>
+    External,
 }

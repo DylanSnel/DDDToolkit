@@ -160,6 +160,31 @@ namespace Examples.Tenancy.Tenants.Infrastructure.Persistence.Migrations
                     b.ToView(null, (string)null);
                 });
 
+            modelBuilder.Entity("DDDToolkit.Supporting.Tenancy.Access.NamedUnit<Examples.Tenancy.Tenants.Contracts.ValueObjects.OrganizationUnitId>", b =>
+                {
+                    b.Property<int>("Depth")
+                        .HasColumnType("integer")
+                        .HasColumnName("Depth");
+
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("Id");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("Name");
+
+                    b.Property<string>("Path")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("Path");
+
+                    b.ToTable((string)null);
+
+                    b.ToView(null, (string)null);
+                });
+
             modelBuilder.Entity("DDDToolkit.Supporting.Tenancy.Access.OrganizationUnitPath<Examples.Tenancy.Tenants.Contracts.ValueObjects.TenantId, Examples.Tenancy.Tenants.Contracts.ValueObjects.OrganizationUnitId>", b =>
                 {
                     b.Property<Guid>("AncestorId")

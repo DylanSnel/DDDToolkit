@@ -475,6 +475,16 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         public async Task<TOrganization> ReadOrganizationAsync(TTenantId id, CancellationToken cancellationToken)
             => await _store.ReadOrganizationAsync(id, cancellationToken).ConfigureAwait(false) ?? throw Missing("organization", id);
 
+        /// <summary>
+        /// The tenant's organization as the caller reads it, read only: <see langword="null"/> for a seat that a
+        /// restrictive row access rule of the application's keeps out of the organization, on a database that keeps
+        /// its own policies. System work in the tenant always reads it.
+        /// </summary>
+        public async Task<TOrganization?> OrganizationTheCallerReadsAsync(TTenantId id, CancellationToken cancellationToken)
+            => BySystem
+                ? await ReadOrganizationAsync(id, cancellationToken).ConfigureAwait(false)
+                : await _store.ReadOrganizationAsync(id, cancellationToken).ConfigureAwait(false);
+
         /// <summary>A seat of the caller's tenant.</summary>
         /// <exception cref="Exceptions.RefusalException"><c>tenancy.seat-not-found</c>, for a seat of another tenant too.</exception>
         public async Task<TSeat> LoadSeatAsync(TSeatId id, CancellationToken cancellationToken)

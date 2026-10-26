@@ -92,6 +92,35 @@ public sealed class MembershipFunctionTests(FilingPostgres postgres)
     }
 
     [Fact]
+    public async Task The_fellow_members_are_the_members_now_of_every_document_the_caller_is_a_member_of_now()
+    {
+        using var filing = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Secured);
+        var data = filing.Scenario;
+        var functions = DocumentMembership.Rules.Functions;
+
+        foreach (var user in data.Users)
+        {
+            await using var session = await filing.SessionAsync(TestCallers.User(user));
+            var expected = data.Documents
+                .Where(document => document.Shares.Any(share => share.MemberId == user && share.AppliesAt(data.Now)))
+                .SelectMany(document => document.Shares.Where(share => share.AppliesAt(data.Now)).Select(share => share.MemberId.Value))
+                .Distinct();
+            (await session.ListAsync<Guid>($"SELECT id FROM {Filing}{functions.FellowMembers}() AS id")).Should().BeEquivalentTo(expected, "of who " + user + " works with");
+        }
+
+        // Eve's membership ended yesterday and Gil's starts tomorrow: neither works with anyone now, and nobody now
+        // works with either. Hal is a member of nothing.
+        await using var ben = await filing.SessionAsync(TestCallers.User(data.Ben));
+        var withBen = await ben.ListAsync<Guid>($"SELECT id FROM {Filing}{functions.FellowMembers}() AS id");
+        withBen.Should().Contain([data.Ben.Value, data.Ian.Value]).And.NotContain([data.Eve.Value, data.Gil.Value, data.Hal.Value]);
+        foreach (var outside in new[] { data.Eve, data.Gil, data.Hal })
+        {
+            await using var session = await filing.SessionAsync(TestCallers.User(outside));
+            (await session.ListAsync<Guid>($"SELECT id FROM {Filing}{functions.FellowMembers}() AS id")).Should().BeEmpty();
+        }
+    }
+
+    [Fact]
     public async Task A_caller_who_is_no_member_is_answered_nothing()
     {
         using var filing = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Secured);
@@ -149,16 +178,18 @@ public sealed class MembershipFunctionTests(FilingPostgres postgres)
             ORDER BY 1
             """);
 
-        // The four of each resource, and the function its lock's trigger runs: that one asks as the caller,
+        // The five of each resource, and the function its lock's trigger runs: that one asks as the caller,
         // and nobody is given it, since a trigger's function is never called by itself.
         found.Should().Equal(
             "documents_as_member |  | SETOF uuid | true | search_path=\"\" | authenticated",
             "documents_as_member_with | text | SETOF uuid | true | search_path=\"\" | authenticated",
+            "documents_fellow_members |  | SETOF uuid | true | search_path=\"\" | authenticated",
             "documents_i_see |  | SETOF uuid | true | search_path=\"\" | authenticated",
             "documents_owner_stays |  | trigger | false | search_path=\"\" | nobody",
             "documents_where_i_hold | text | SETOF uuid | true | search_path=\"\" | authenticated",
             "folders_as_member |  | SETOF bigint | true | search_path=\"\" | authenticated,ddd_system_in," + FilingPostgres.ArchivistRole,
             "folders_as_member_with | text | SETOF bigint | true | search_path=\"\" | authenticated,ddd_system_in," + FilingPostgres.ArchivistRole,
+            "folders_fellow_members |  | SETOF text | true | search_path=\"\" | authenticated,ddd_system_in," + FilingPostgres.ArchivistRole,
             "folders_i_see |  | SETOF bigint | true | search_path=\"\" | authenticated,ddd_system_in," + FilingPostgres.ArchivistRole,
             "folders_owner_stays |  | trigger | false | search_path=\"\" | nobody",
             "folders_where_i_hold | text | SETOF bigint | true | search_path=\"\" | authenticated,ddd_system_in," + FilingPostgres.ArchivistRole);
@@ -286,10 +317,10 @@ public sealed class MembershipFunctionTests(FilingPostgres postgres)
             WHERE n.nspname = '{FilingContext.Schema}' ORDER BY 1
             """);
 
-        // The four functions of each, and the one its lock's trigger runs.
-        bodies.Where(body => body.StartsWith("documents_", StringComparison.Ordinal)).Should().HaveCount(5)
+        // The five functions of each, and the one its lock's trigger runs.
+        bodies.Where(body => body.StartsWith("documents_", StringComparison.Ordinal)).Should().HaveCount(6)
             .And.NotContain(body => body.Contains("Folder", StringComparison.Ordinal) || body.Contains("folder", StringComparison.Ordinal));
-        bodies.Where(body => body.StartsWith("folder", StringComparison.Ordinal)).Should().HaveCount(5)
+        bodies.Where(body => body.StartsWith("folder", StringComparison.Ordinal)).Should().HaveCount(6)
             .And.NotContain(body => body.Contains("Document", StringComparison.Ordinal) || body.Contains("document", StringComparison.Ordinal));
 
         // And each says the host's own names: the folder's tables and its own column for who a member is.

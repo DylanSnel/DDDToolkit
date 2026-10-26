@@ -136,9 +136,11 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
             var seat = (await store.ListSeatsAsync(tenantId, [seatId], cancellationToken).ConfigureAwait(false)).FirstOrDefault()
                        ?? throw TenancyRefusals.Refuse(TenancyRefusals.SeatNotFound);
             var tenant = await gate.LoadTenantAsync(tenantId, cancellationToken).ConfigureAwait(false);
-            var organization = await gate.ReadOrganizationAsync(tenantId, cancellationToken).ConfigureAwait(false);
+            var organization = await gate.OrganizationTheCallerReadsAsync(tenantId, cancellationToken).ConfigureAwait(false);
             var roles = (await store.ListRolesAsync(tenantId, cancellationToken).ConfigureAwait(false)).ToDictionary(role => role.Id);
-            var units = await UnitMap.ReadAsync(store, organization, cancellationToken).ConfigureAwait(false);
+            var units = organization is null
+                ? await UnitsNamedOnlyAsync(tenantId, seat, cancellationToken).ConfigureAwait(false)
+                : UnitsOf(await UnitMap.ReadAsync(store, organization, cancellationToken).ConfigureAwait(false));
 
             // What a role grants, from the rows the access questions read: a filter of the application's own on its
             // role class hides a role's name, never what its grants give, as the rights the questions decide by are
@@ -149,7 +151,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
             // Only what is not on the seat: the paths of its placements' units and the roles its grants name. A role
             // the store does not answer, one a filter of the application's own hides, is left out rather than made
             // up, and SeatOverview.RoleOf answers null for it.
-            var placedAt = units.Refs(seat.Placements.Select(placement => placement.UnitId));
+            var placedAt = units.Refs([.. seat.Placements.Select(placement => placement.UnitId)]);
             var named = seat.Placements
                 .SelectMany(placement => placement.Grants.Select(grant => grant.RoleId))
                 .Distinct()
@@ -175,18 +177,43 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
                         group.Key,
                         units.Root is { } root && grantedAt.Contains(root),
                         units.Refs(grantedAt),
-                        units.Refs(grantedAt.SelectMany(units.Subtree)));
+                        units.Refs([.. grantedAt.SelectMany(units.Subtree)]));
                 })
                 .ToArray();
 
             return new SeatOverview(
-                new TenantSummary(tenant.Id, tenant.Slug.Value, organization.Name, tenant.Shape, tenant.Status),
+                new TenantSummary(tenant.Id, tenant.Slug.Value, organization?.Name ?? tenant.Slug.Value, tenant.Shape, tenant.Status),
                 seat,
                 placedAt,
                 named,
                 permissions,
                 now);
         }
+
+        /// <summary>The units an overview names, from the organization the caller reads: every unit, with the tree.</summary>
+        private static OverviewUnits UnitsOf(UnitMap map) => new(map.Root, map.Refs, map.Subtree);
+
+        /// <summary>
+        /// The units an overview names, for a seat that a restrictive rule of the application's keeps out of the
+        /// organization: the units it is placed at, named through the storage as <see cref="UnitsByIdAsync"/> names
+        /// them, and nothing below them, which the seat does not read.
+        /// </summary>
+        private async Task<OverviewUnits> UnitsNamedOnlyAsync(TTenantId tenantId, TSeat seat, CancellationToken cancellationToken)
+        {
+            TUnitId[] placedAt = [.. seat.Placements.Select(placement => placement.UnitId).Distinct()];
+            var named = placedAt.Length == 0
+                ? []
+                : await store.UnitsNamedAsync(tenantId, placedAt, cancellationToken).ConfigureAwait(false) ?? [];
+            var paths = named.ToDictionary(unit => unit.Id, unit => unit.Path);
+
+            return new OverviewUnits(
+                named.FirstOrDefault(unit => unit.Depth == 1)?.Id,
+                ids => [.. ids.Distinct().Where(paths.ContainsKey).Select(id => new UnitRef(id, paths[id])).OrderBy(unit => unit.Path, StringComparer.OrdinalIgnoreCase)],
+                id => [id]);
+        }
+
+        /// <summary>What an overview needs of the units it names: the root, the path of each, and what is below one.</summary>
+        private sealed record OverviewUnits(TUnitId? Root, Func<IEnumerable<TUnitId>, IReadOnlyList<UnitRef>> Refs, Func<TUnitId, IEnumerable<TUnitId>> Subtree);
 
         /// <summary>
         /// The tenant's seats, the application's own class, each whole and in the order of their ids: a seat has
@@ -300,7 +327,12 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
             var gate = new Gate(store, catalogue, clock);
             var tenantId = gate.RequireTenant();
 
-            var organization = await gate.ReadOrganizationAsync(tenantId, cancellationToken).ConfigureAwait(false);
+            // A seat a restrictive rule of the application's keeps out of the organization reads none of its units.
+            if (await gate.OrganizationTheCallerReadsAsync(tenantId, cancellationToken).ConfigureAwait(false) is not { } organization)
+            {
+                return [];
+            }
+
             var units = await UnitMap.ReadAsync(store, organization, cancellationToken).ConfigureAwait(false);
             IEnumerable<TUnitId> readable = gate.BySystem
                 ? units.Ids
@@ -310,10 +342,12 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         }
 
         /// <summary>
-        /// The units among <paramref name="ids"/> that are the caller's tenant's, as <see cref="ListUnitsAsync"/>
-        /// answers them, by path, whichever of them the caller is placed under: a seat that works on something at a
-        /// unit it is not placed under still reads what that unit is called. An id of another tenant, or of no unit,
-        /// is left out without a word.
+        /// What the units among <paramref name="ids"/> that are the caller's tenant's are called, by path, whichever of
+        /// them the caller is placed under: a seat that works on something at a unit it is not placed under still reads
+        /// what that unit is called, and so does one an application's restrictive rule keeps out of the organization.
+        /// So the answer is each unit's name, path and depth, and nothing more of it: on a database that keeps its own
+        /// policies it comes from Tenancy's function that runs as its owner and answers the ids asked alone. An id of
+        /// another tenant, or of no unit, is left out without a word.
         /// </summary>
         /// <param name="ids">The units asked about, at most <see cref="MostIds"/> different ones.</param>
         /// <param name="cancellationToken">Cancels the read.</param>
@@ -321,7 +355,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         /// The caller is nobody, with its own code; or <c>tenancy.too-many-ids</c>.
         /// </exception>
         /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>
-        public async Task<IReadOnlyList<UnitInTree>> UnitsByIdAsync(IReadOnlyCollection<TUnitId> ids, CancellationToken cancellationToken)
+        public async Task<IReadOnlyList<NamedUnit<TUnitId>>> UnitsByIdAsync(IReadOnlyCollection<TUnitId> ids, CancellationToken cancellationToken)
         {
             ArgumentNullException.ThrowIfNull(ids);
 
@@ -333,9 +367,16 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
                 return [];
             }
 
+            // A seat asks the storage, which answers the ids alone where the database keeps its own policies; system
+            // work in the tenant reads the organization whole, and no rule of the application's narrows it.
+            if (!gate.BySystem && await store.UnitsNamedAsync(tenantId, asked, cancellationToken).ConfigureAwait(false) is { } named)
+            {
+                return [.. named.OrderBy(unit => unit.Path, StringComparer.OrdinalIgnoreCase)];
+            }
+
             var organization = await gate.ReadOrganizationAsync(tenantId, cancellationToken).ConfigureAwait(false);
             var units = await UnitMap.ReadAsync(store, organization, cancellationToken).ConfigureAwait(false);
-            return units.InTree(asked);
+            return [.. units.InTree(asked).Select(found => new NamedUnit<TUnitId>(found.Unit.Id, found.Unit.Name, found.Path, found.Depth))];
         }
 
         /// <summary>

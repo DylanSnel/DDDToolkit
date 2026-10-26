@@ -431,7 +431,8 @@ public sealed partial class RolesACustomerMakesOnPostgresTests(FilingPostgres po
             ("plots_as_member", "", "SETOF uuid"),
             ("plots_as_member_with", "text", "SETOF uuid"),
             ("plots_i_see", "", "SETOF uuid"),
-            ("plots_where_i_hold", "text", "SETOF uuid"));
+            ("plots_where_i_hold", "text", "SETOF uuid"),
+            ("plots_fellow_members", "", "SETOF uuid"));
 
         // A role held now, in a membership that applies now, whose row is in use and holds the permission: the role
         // table of the same context, joined to the roles a gardener holds, for a permission a member's role can give.
@@ -576,7 +577,7 @@ public sealed partial class RolesACustomerMakesOnPostgresTests(FilingPostgres po
         (await FluentActions.Awaiting(() => MembershipPostgresChecks.EnsureFunctionsAreInPlaceAsync(plain.Services.Provider, Cancellation)).Should().ThrowAsync<InvalidOperationException>())
             .Which.Message.Should()
             .StartWith("The functions that answer the membership of Plot in the database are not as its rules, 'plots', say them: ")
-            .And.Contain("\"gardens\".plots_as_member (missing), \"gardens\".plots_as_member_with (missing), \"gardens\".plots_i_see (missing), \"gardens\".plots_where_i_hold (missing)")
+            .And.Contain("\"gardens\".plots_as_member (missing), \"gardens\".plots_as_member_with (missing), \"gardens\".plots_fellow_members (missing), \"gardens\".plots_i_see (missing), \"gardens\".plots_where_i_hold (missing)")
             .And.Contain("[MembershipRules<PlotGardener>]");
 
         // Written from rules that let a member's role give another permission: the database would answer otherwise than the application.

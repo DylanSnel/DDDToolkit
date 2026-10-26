@@ -36,7 +36,7 @@ public sealed class GraphQLLookupScenarios(SampleHosts sample) : IClassFixture<S
               projects(text: "Pier 7") {
                 nodes {
                   number name state via
-                  unit { id path kind }
+                  unit { id name path }
                   owner { id displayName status }
                   crew { isOwner seat { displayName } roles { role { name } } }
                   can { rename manageCrew }
@@ -56,7 +56,7 @@ public sealed class GraphQLLookupScenarios(SampleHosts sample) : IClassFixture<S
         var unit = pier.GetProperty("unit");
         unit.GetProperty("id").GetGuid().Should().Be(Harbor.UnitNamed("North Coast").Value, "Projects gives the id");
         unit.GetProperty("path").GetString().Should().Be("Harbor Works / North / North Coast", "and Tenancy the path");
-        unit.GetProperty("kind").GetString().Should().Be("area");
+        unit.GetProperty("name").GetString().Should().Be("North Coast", "by name, and nothing more of the unit: its kind is the list's");
 
         var owner = pier.GetProperty("owner");
         owner.GetProperty("id").GetGuid().Should().Be(Harbor.SeatOf(DemoPeople.Leo).Value);

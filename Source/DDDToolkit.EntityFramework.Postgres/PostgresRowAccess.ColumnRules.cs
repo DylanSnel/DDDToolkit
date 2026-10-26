@@ -157,7 +157,7 @@ public static partial class PostgresRowAccess
         // Who may change a row of the table at all: the roles of the rules for Change about it, and those of the
         // contributions' permissive policies for UPDATE on it.
         var changers = prepared.Rules
-            .Where(rule => !rule.IsColumnRule && rule.Operations.HasFlag(RowOperations.Change) && TableOf(RootOf(context, rule.AggregateTypeName)) == table)
+            .Where(rule => !rule.IsColumnRule && !rule.Restrictive && rule.Operations.HasFlag(RowOperations.Change) && TableOf(RootOf(context, rule.AggregateTypeName)) == table)
             .SelectMany(rule => prepared.Roles[rule])
             .Concat(contributed.Where(policy => !policy.Restrictive && policy.Command == "UPDATE" && policy.Table == table).Select(policy => policy.Role));
         string?[] systemWork = [names.SystemIn, names.System];

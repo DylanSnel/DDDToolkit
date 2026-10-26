@@ -30,7 +30,7 @@ public sealed class GraphQLDeclarationTests(SampleWithoutDatabase sample) : ICla
     private static readonly IReadOnlyDictionary<string, Declared> Held = new Dictionary<string, Declared>(StringComparer.Ordinal)
     {
         ["Tenants"] = new(
-            Loaders: ["GetSeatByIdAsync", "GetOrganizationUnitByIdAsync", "GetRoleByIdAsync", "GetHeldUnitsByPermissionAsync"],
+            Loaders: ["GetSeatByIdAsync", "GetOrganizationUnitNameByIdAsync", "GetRoleByIdAsync", "GetHeldUnitsByPermissionAsync"],
             PagedFields: ["Query.accessHistory", "Query.tenantAccessHistory"],
             ClassesOfPagedFields: ["HistoryPagedQueries", "OperatorsPagedQueries"],
             RecordsOfTheSchemasOwn: new Dictionary<string, string>(StringComparer.Ordinal),

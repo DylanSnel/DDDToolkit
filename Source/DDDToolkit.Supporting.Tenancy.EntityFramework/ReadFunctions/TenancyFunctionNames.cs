@@ -14,9 +14,9 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 /// none answers what a seat, a unit or a role is called, which the directory answers by id.
 /// </para>
 /// <para>
-/// The next three answer a seat what it may learn of other seats' rights, and the three after them read across
-/// tenants, for system work that began in no tenant. These six run as their owner, and answer ids, permissions and
-/// dates only. So does the last, which a database has where the context maps invitations: it reads across
+/// The next three answer a seat what it may learn of other seats' rights, the one after them what the units it asks
+/// about are called, and the three after that read across tenants, for system work that began in no tenant. These
+/// seven run as their owner, and answer ids, permissions, dates and the names of the units asked about only. So does the last, which a database has where the context maps invitations: it reads across
 /// tenants too, and answers which invitation a token's digest is for.
 /// </para>
 /// </summary>
@@ -82,6 +82,15 @@ public static class TenancyFunctionNames
     /// manages grants, seats or units, or anywhere when it manages roles for the whole tenant.
     /// </summary>
     public const string SeatsHoldingPermissionAt = "seats_holding_permission_at";
+
+    /// <summary>
+    /// What units of the caller's tenant are called, as rows of <c>"Id"</c>, <c>"Name"</c>, <c>"Path"</c> and
+    /// <c>"Depth"</c>: its parameter is the array of the units asked about. The name and path of each of those that
+    /// is the tenant's, and nothing more of it, whatever the seat reads of the organization: a seat on a project at a
+    /// unit it is not placed under, or one an application's restrictive rule keeps out of the units, still reads what
+    /// that unit is called.
+    /// </summary>
+    public const string UnitsNamed = "units_named";
 
     /// <summary>
     /// The permissions stored on the roles of every tenant, each once, as text: no parameters. One of the three reads

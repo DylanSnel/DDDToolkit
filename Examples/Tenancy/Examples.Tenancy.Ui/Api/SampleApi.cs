@@ -128,9 +128,9 @@ public sealed class SampleApi(HttpClient http, UiSession session)
     public Task<ApiOutcome<IReadOnlyList<SeatInfo>>> SeatsByIdAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken = default)
         => AskDirectoryAsync<SeatInfo>("/tenancy/directory/seats", ids, cancellationToken);
 
-    /// <summary><c>POST /tenancy/directory/units</c>: the units with these ids, by path, whichever the session's seat is placed under.</summary>
-    public Task<ApiOutcome<IReadOnlyList<UnitInfo>>> UnitsByIdAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken = default)
-        => AskDirectoryAsync<UnitInfo>("/tenancy/directory/units", ids, cancellationToken);
+    /// <summary><c>POST /tenancy/directory/units</c>: what the units with these ids are called, by path, whichever the session's seat is placed under.</summary>
+    public Task<ApiOutcome<IReadOnlyList<UnitNameInfo>>> UnitsByIdAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken = default)
+        => AskDirectoryAsync<UnitNameInfo>("/tenancy/directory/units", ids, cancellationToken);
 
     /// <summary><c>POST /tenancy/directory/roles</c>: the roles with these ids, by name.</summary>
     public Task<ApiOutcome<IReadOnlyList<RoleInfo>>> RolesByIdAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken = default)

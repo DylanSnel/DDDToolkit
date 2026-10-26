@@ -283,7 +283,7 @@ public sealed class ReadRulesTests(TenancyPostgres postgres)
 public static partial class MembersReadOnlyThemselves
 {
     /// <summary>Whether <paramref name="seat"/> is the calling seat.</summary>
-    public static bool Allows(HostSeat seat, Caller caller) => seat.Id == TenancyRowAccess.CallerSeat<SeatId>();
+    public static bool Allows(HostSeat seat, Caller caller) => seat.Id == TenancyRowAccess.CallerSeatId<SeatId>();
 }
 
 /// <summary>A member reads the people of its own part of the tree: the seats placed at a unit it is placed at, or below one.</summary>

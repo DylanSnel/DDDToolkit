@@ -379,11 +379,12 @@ public class DirectoryTests
         var named = await harness.As(bert, h => h.Directory.UnitsByIdAsync(
             [harness.Harbor.South, harness.Harbor.NorthCoast, harness.Harbor.Root, orchard.North, OrganizationUnitId.CreateSequential(), harness.Harbor.South], default));
 
-        named.Select(unit => (unit.Unit.Id, unit.Unit.ParentId, unit.Unit.Name, unit.Unit.Status, unit.Path, unit.Depth)).Should().Equal(
-            (harness.Harbor.Root, (OrganizationUnitId?)null, "Harbor Works", UnitStatus.Active, "Harbor Works", 1),
-            (harness.Harbor.NorthCoast, harness.Harbor.North, "North Coast", UnitStatus.Archived, "Harbor Works / North / North Coast", 3),
-            (harness.Harbor.South, harness.Harbor.Root, "South", UnitStatus.Active, "Harbor Works / South", 2));
-        harness.Store.Calls.Should().NotContain("ListSeatsAsync").And.Contain("ReadOrganizationAsync", "the names are the organization's own units'");
+        named.Select(unit => (unit.Id, unit.Name, unit.Path, unit.Depth)).Should().Equal(
+            (harness.Harbor.Root, "Harbor Works", "Harbor Works", 1),
+            (harness.Harbor.NorthCoast, "North Coast", "Harbor Works / North / North Coast", 3),
+            (harness.Harbor.South, "South", "Harbor Works / South", 2));
+        harness.Store.Calls.Should().NotContain("ListSeatsAsync").And.ContainInOrder(
+            ["UnitsNamedAsync", "ReadOrganizationAsync"], "a store that keeps no policies of its own answers nothing, and the names are the organization's own units'");
 
         (await harness.As(bert, h => h.Directory.UnitsByIdAsync([orchard.North, orchard.Root], default)))
             .Should().BeEmpty("another tenant's units are left out without a word");
@@ -405,9 +406,10 @@ public class DirectoryTests
         harness.Store.Calls.Where(call => call.EndsWith("Async", StringComparison.Ordinal) && call != "ListAsync")
             .Should().Equal(["ReadOrganizationAsync"], "the units come from the organization the directory read once; the closure and what the seat reads are queries over the read rows");
 
-        // By id, whichever unit of the tenant the caller is placed under; another tenant's are left out as before.
+        // By id, whichever unit of the tenant the caller is placed under, a unit is named, and nothing more: the cost
+        // centre is the list's. Another tenant's are left out as before.
         var named = await harness.As(bert, h => h.Directory.UnitsByIdAsync([harness.Harbor.South, bay, orchard.North], default));
-        named.Select(unit => (unit.Path, unit.Unit.CostCentre)).Should().Equal(("Harbor Works / North / North Bay", "NB-104"), ("Harbor Works / South", null));
+        named.Select(unit => (unit.Name, unit.Path)).Should().Equal(("North Bay", "Harbor Works / North / North Bay"), ("South", "Harbor Works / South"));
     }
 
     [Fact]

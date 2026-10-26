@@ -322,8 +322,8 @@ public sealed class UseCaseTests : IDisposable
 
             _services.Commands.Reset();
             var units = await directory.UnitsByIdAsync([_north, _harbor.RootUnit, orchard.RootUnit], TestContext.Current.CancellationToken);
-            units.Select(unit => (unit.Unit.Name, unit.Path, unit.Depth)).Should().Equal(("Harbor", "Harbor", 1), ("North", "Harbor / North", 2));
-            _services.Commands.Count.Should().Be(2, "the organization with the application's own units, and the closure that orders a path");
+            units.Select(unit => (unit.Name, unit.Path, unit.Depth)).Should().Equal(("Harbor", "Harbor", 1), ("North", "Harbor / North", 2));
+            _services.Commands.Count.Should().Be(2, "a database that keeps no policies of its own: the organization with its units, and the closure that orders a path");
 
             _services.Commands.Reset();
             (await directory.SeatsByIdAsync([], TestContext.Current.CancellationToken)).Should().BeEmpty();

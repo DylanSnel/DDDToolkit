@@ -76,6 +76,7 @@ public sealed class ContributionTests(TenancyPostgres postgres)
             "administrator_remains true search_path=\"\" false false false",
             "caller_permissions false none true true false",
             "caller_seat true search_path=\"\" true true false",
+            "caller_seat_row true search_path=\"\" true true false",
             "caller_tenant true search_path=\"\" true true false",
             "grant_is_fixed false search_path=\"\" false false false",
             "holds_at_tenant true search_path=\"\" true true false",
@@ -116,6 +117,7 @@ public sealed class ContributionTests(TenancyPostgres postgres)
             "tenant_units false none true true false",
             "tenants_to_sweep true search_path=\"\" false true false",
             "unit_parent true search_path=\"\" true true false",
+            "units_named true search_path=\"\" true false false",
             "units_where_i_hold_permission true search_path=\"\" true true false",
             "units_where_i_hold_permission_in_tenant true search_path=\"\" true false false");
 
@@ -276,7 +278,7 @@ public sealed class ContributionTests(TenancyPostgres postgres)
         // A seat granted the role holds each permission of the document, once, and the ones the catalogue has live alone.
         (await owner.ExecuteAsync(
                 $"""
-                INSERT INTO tenancy."Seats" ("Id", "Version", "TenantId", "Identity", "DisplayName", "Status") VALUES ('{TenancySeed.Oli.Seat.Value}', 0, 1, gen_random_uuid(), 'Oli', 'Active');
+                INSERT INTO tenancy."Seats" ("Id", "Version", "TenantId", "Identity", "DisplayName", "Kind", "Status") VALUES ('{TenancySeed.Oli.Seat.Value}', 0, 1, gen_random_uuid(), 'Oli', 0, 'Active');
                 INSERT INTO tenancy."SeatPlacements" ("UnitId", "SeatId", "IsPrimary", "PlacedAt", "TenantId") VALUES ('{TenancySeed.HarborRoot.Value}', '{TenancySeed.Oli.Seat.Value}', true, now(), 1);
                 UPDATE tenancy."Roles" SET "Permissions" = '["{HostCatalogue.WidgetRead}", "{HostCatalogue.WidgetCreate}", "{HostCatalogue.WidgetRead}", "widget.polish"]'::{storeType};
                 INSERT INTO tenancy."SeatRoleGrants" ("RoleId", "SeatId", "UnitId", "StartsAt", "EndsAt", "GrantedBy", "Reason")

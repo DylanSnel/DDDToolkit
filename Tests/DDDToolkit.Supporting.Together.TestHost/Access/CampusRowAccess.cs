@@ -80,3 +80,26 @@ public static partial class MembersReadThePeopleOfTheirUnits
     /// <summary>Whether <paramref name="seat"/> is placed where the calling seat is placed, or below.</summary>
     public static bool Allows(Seat seat, Caller caller) => TenancyRowAccess.SeatsInMyUnits<SeatId>().Contains(seat.Id);
 }
+
+/// <summary>
+/// The people on the courses the calling seat is on now: the members of each, the seat among them. The courses
+/// publish it by the course's id; what its ids are, seats, the contract says itself.
+/// </summary>
+[ResourceAccessContract<CourseId>(ResourceAccessSet.FellowMembers)]
+public static partial class PeopleOnMyCourses
+{
+    /// <summary>The seats on the courses the caller is on now.</summary>
+    public static partial AccessSet<SeatId> Ids();
+}
+
+/// <summary>
+/// A member reads the people it works with: those on a course it is on. A read rule on the seats that asks a function
+/// of the courses, whose functions ask Tenancy's in turn: the export writes it all the same, the campus's file after
+/// Tenancy's. The campus runs without it; the tests of who reads the seats add it.
+/// </summary>
+[RowAccess<Seat>(RowOperations.Read)]
+public static partial class MembersReadThePeopleTheyWorkWith
+{
+    /// <summary>Whether <paramref name="seat"/> is on a course the calling seat is on.</summary>
+    public static bool Allows(Seat seat, Caller caller) => PeopleOnMyCourses.Ids().Contains(seat.Id);
+}

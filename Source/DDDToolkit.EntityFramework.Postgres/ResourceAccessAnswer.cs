@@ -62,7 +62,8 @@ public sealed record ResourceAccessAnswer(Type Key, ResourceAccessSet Set)
         {
             ResourceAccessSet.Seen => "seen",
             ResourceAccessSet.HeldOn => "held_on",
-            _ => throw new ArgumentOutOfRangeException(nameof(set), set, "A resource access set is Seen or HeldOn."),
+            ResourceAccessSet.FellowMembers => "fellow_members",
+            _ => throw new ArgumentOutOfRangeException(nameof(set), set, "A resource access set is Seen, HeldOn or FellowMembers."),
         };
     }
 
@@ -85,6 +86,11 @@ public sealed record ResourceAccessAnswer(Type Key, ResourceAccessSet Set)
         var slash = name.LastIndexOf('/');
         var key = slash > 1 ? name[1..slash] : name.TrimStart('@');
         var set = slash > 1 ? name[(slash + 1)..] : "";
-        return $"the resources {(set == "held_on" ? "the caller holds a key on" : "the caller sees")}, by the id {key}";
+        return set switch
+        {
+            "held_on" => $"the resources the caller holds a permission on, by the id {key}",
+            "fellow_members" => $"the members of the resources the caller is a member of, by the id {key}",
+            _ => $"the resources the caller sees, by the id {key}",
+        };
     }
 }

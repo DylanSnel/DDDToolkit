@@ -17,7 +17,7 @@ namespace DDDToolkit.Supporting.Membership.Access;
 /// services.AddDocumentMembership&lt;DocumentsContext&gt;(DocumentMembership.Rules);
 /// </code>
 /// <para>
-/// Membership on Postgres writes, for every kind of resource, the four set functions that answer its membership
+/// Membership on Postgres writes, for every kind of resource, the five set functions that answer its membership
 /// questions in the database, and the lock that holds its members' rows to the permissions its rules name. The export
 /// runs before the application starts, and the rules the registration is called with are a value the build
 /// cannot read, so the application marks them: the export writes the Membership package's contribution once for

@@ -53,22 +53,29 @@ internal sealed class EfSeatDirectory<TTenant, TTenantId, TOrganization, TUnit, 
 
         var found = await (from seat in SeatsOf(identity)
                            join tenant in Tenants(slug: null) on seat.TenantId equals tenant.Id
-                           join organization in Organizations() on seat.TenantId equals organization.Id
-                           select new { Seat = seat, tenant.Slug, organization.Name, tenant.Status })
+                           join organization in Organizations() on seat.TenantId equals organization.Id into organizations
+                           from organization in organizations.DefaultIfEmpty()
+                           select new { Seat = seat, tenant.Slug, Name = organization == null ? null : organization.Name, tenant.Status })
             .AsNoTracking()
             .AsSingleQuery()
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        return [.. found.Select(row => new SeatInTenant<TAsked>((TAsked)(object)row.Seat, row.Slug.Value, row.Name, row.Status))];
+        return [.. found.Select(row => new SeatInTenant<TAsked>((TAsked)(object)row.Seat, row.Slug.Value, row.Name ?? row.Slug.Value, row.Status))];
     }
 
-    /// <summary>The identity's seats with their tenants, in the tenant with <paramref name="slug"/>; past the tenant filter and no other.</summary>
+    /// <summary>
+    /// The identity's seats with their tenants, in the tenant with <paramref name="slug"/>; past the tenant filter and
+    /// no other. The organization only names the tenant: a seat that a restrictive rule of the application's keeps
+    /// out of it, or a read before any tenant is chosen that such a rule lets nothing through, still finds its seat,
+    /// and the tenant is named by its slug.
+    /// </summary>
     private IQueryable<FoundSeat> SeatsWithIdentity(Guid identity, TenantSlug slug)
         => from seat in SeatsOf(identity)
            join tenant in Tenants(slug) on seat.TenantId equals tenant.Id
-           join organization in Organizations() on seat.TenantId equals organization.Id
-           select new FoundSeat(tenant.Id, tenant.Slug, organization.Name, tenant.Status, seat.Id, seat.Status);
+           join organization in Organizations() on seat.TenantId equals organization.Id into organizations
+           from organization in organizations.DefaultIfEmpty()
+           select new FoundSeat(tenant.Id, tenant.Slug, organization == null ? null : organization.Name, tenant.Status, seat.Id, seat.Status);
 
     /// <summary>The identity's seats in every tenant: past the tenant filter, and no other.</summary>
     private IQueryable<TSeat> SeatsOf(Guid identity)
@@ -89,12 +96,12 @@ internal sealed class EfSeatDirectory<TTenant, TTenantId, TOrganization, TUnit, 
     private sealed record FoundSeat(
         TTenantId Tenant,
         TenantSlug Slug,
-        string OrganizationName,
+        string? OrganizationName,
         TenantStatus TenantStatus,
         TSeatId Seat,
         SeatStatus SeatStatus)
     {
         public SeatOfCaller<TTenantId, TSeatId> ToSeatOfCaller()
-            => new(Tenant, Slug.Value, OrganizationName, TenantStatus, Seat, SeatStatus);
+            => new(Tenant, Slug.Value, OrganizationName ?? Slug.Value, TenantStatus, Seat, SeatStatus);
     }
 }

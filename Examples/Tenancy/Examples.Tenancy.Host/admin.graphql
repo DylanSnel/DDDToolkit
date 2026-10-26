@@ -296,7 +296,7 @@ type Invitation {
   issuedAt: DateTime!
   issuedBy: Seat
   role: Role
-  unit: OrganizationUnit
+  unit: OrganizationUnitName
   until: DateTime
 }
 
@@ -317,13 +317,13 @@ type IssuedInvitation {
 }
 
 type OrganizationUnit {
-  depth: Int
+  depth: Int!
   id: UUID!
   kind: UnitKind
-  name: String
+  name: String!
   parentId: UUID
-  path: String
-  status: UnitStatus
+  path: String!
+  status: UnitStatus!
 }
 
 type OrganizationUnitAddPayload {
@@ -339,6 +339,13 @@ type OrganizationUnitArchivePayload {
 type OrganizationUnitMovePayload {
   errors: [OrganizationUnitMoveError!]
   organizationUnit: OrganizationUnit
+}
+
+type OrganizationUnitName {
+  depth: Int
+  id: UUID!
+  name: String
+  path: String
 }
 
 "A cursor that points to a specific page."
@@ -418,7 +425,7 @@ type Project implements Node {
   owner: Seat
   planned: DateRange
   state: ProjectState
-  unit: OrganizationUnit
+  unit: OrganizationUnitName
   version: Long
   via: ProjectVia
 }

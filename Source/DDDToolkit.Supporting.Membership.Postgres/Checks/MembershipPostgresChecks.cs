@@ -39,7 +39,7 @@ public static class MembershipPostgresChecks
     private const string LogCategory = "DDDToolkit.Supporting.Membership.Postgres";
 
     /// <summary>
-    /// Proves that, for every kind of resource with members the application registered, the database has the four
+    /// Proves that, for every kind of resource with members the application registered, the database has the five
     /// functions of its membership in the schema of the context that maps it, under the names its name gives
     /// them, each running as its owner with an empty search path and answering a set, each written from the
     /// rules the resource is registered with by this version of the package, and each executable by the
@@ -251,7 +251,7 @@ public static class MembershipPostgresChecks
 
     /// <summary>
     /// The roles the export granted a resource's functions to, as the bodies of its functions record them, the first of
-    /// the four that does; none where none does, which the functions' check names.
+    /// the five that does; none where none does, which the functions' check names.
     /// </summary>
     private static async Task<string[]> ExecutorsAsync(DbConnection connection, string schema, MembershipRules rules, CancellationToken cancellationToken)
     {
@@ -262,7 +262,7 @@ public static class MembershipPostgresChecks
             WHERE n.nspname = $1 AND p.proname = ANY ($2::pg_catalog.text[])
             ORDER BY pg_catalog.array_position($2::pg_catalog.text[], p.proname::pg_catalog.text)
             """,
-            [schema, new[] { rules.Functions.AsMember, rules.Functions.AsMemberWith, rules.Functions.Seen, rules.Functions.HeldOn }],
+            [schema, new[] { rules.Functions.AsMember, rules.Functions.AsMemberWith, rules.Functions.Seen, rules.Functions.HeldOn, rules.Functions.FellowMembers }],
             cancellationToken).ConfigureAwait(false);
 
         var line = bodies
@@ -273,11 +273,11 @@ public static class MembershipPostgresChecks
             : [.. line[MembershipSql.ExecutedBy.Length..].Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)];
     }
 
-    /// <summary>What is wrong with the four functions of a resource, each as its name with what is wrong in brackets.</summary>
+    /// <summary>What is wrong with the five functions of a resource, each as its name with what is wrong in brackets.</summary>
     private static Task<List<string>> FunctionsAsync(DbConnection connection, string schema, MembershipRules rules, string marker, string[] roles, CancellationToken cancellationToken)
     {
-        string[] names = [rules.Functions.AsMember, rules.Functions.AsMemberWith, rules.Functions.Seen, rules.Functions.HeldOn];
-        int[] arguments = [0, 1, 0, 1];
+        string[] names = [rules.Functions.AsMember, rules.Functions.AsMemberWith, rules.Functions.Seen, rules.Functions.HeldOn, rules.Functions.FellowMembers];
+        int[] arguments = [0, 1, 0, 1, 0];
 
         // Found by name in the catalog, which needs no privilege on the schema. Positional parameters, as the
         // row level security interceptor's own statement binds.

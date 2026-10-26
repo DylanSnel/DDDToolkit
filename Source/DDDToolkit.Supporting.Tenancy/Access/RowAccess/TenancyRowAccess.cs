@@ -33,7 +33,7 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// <para>
 /// The same questions say who reads Tenancy's own seats and invitations, where the application replaces Tenancy's
 /// default with a read rule on its class: <c>seat.TenantId == CallerTenant&lt;TenantId&gt;()</c> for the caller's
-/// tenant, <c>seat.Id == CallerSeat&lt;SeatId&gt;()</c> for the caller itself,
+/// tenant, <c>seat.Id == CallerSeatId&lt;SeatId&gt;()</c> for the caller itself,
 /// <c>UnitsWhereIHold&lt;OrganizationUnitId&gt;(permission).Contains(invitation.UnitId)</c> for where it holds a permission,
 /// <see cref="HoldsPermission"/> and <see cref="HoldsAtTenant"/>, and <see cref="SeatsInMyUnits{TSeatId}"/> for the
 /// seats placed where it is placed, or below.
@@ -101,14 +101,37 @@ public static partial class TenancyRowAccess
         where TRoleId : struct, IEntityId, IEquatable<TRoleId>;
 
     /// <summary>
-    /// The calling seat: the active seat of the caller's verified identity in the tenant the connection names,
-    /// when that tenant is active too; <c>NULL</c> otherwise.
+    /// The id of the calling seat: the active seat of the caller's verified identity in the tenant the connection
+    /// names, when that tenant is active too; <c>NULL</c> otherwise. A rule of any module asks it, also one whose
+    /// context does not map the seats: <c>inspection.RecordedBy == TenancyRowAccess.CallerSeatId&lt;SeatId&gt;()</c>.
     /// </summary>
     [AccessScalar("caller_seat")]
-    public static partial TSeatId CallerSeat<TSeatId>()
+    public static partial TSeatId CallerSeatId<TSeatId>()
         where TSeatId : struct, IEntityId, IEquatable<TSeatId>;
 
-    /// <summary>The tenant of <see cref="CallerSeat{TSeatId}"/>; <c>NULL</c> when there is no such seat.</summary>
+    /// <summary>
+    /// The calling seat itself, the application's own seat class, whose fields a rule reads as it reads its own row's:
+    /// <code>
+    /// [RowAccess&lt;Organization&gt;(RowOperations.Read, Restrictive = true)]
+    /// public static partial class OnlyEmployeesReadTheOrganization
+    /// {
+    ///     public static bool Allows(Organization organization, Caller caller)
+    ///         =&gt; TenancyRowAccess.CallerSeat&lt;Seat&gt;().Kind == SeatKind.Employee;
+    /// }
+    /// </code>
+    /// A field is <c>(SELECT q1."Kind" FROM "tenancy".caller_seat_row() q1)</c> in the policy, the column the model maps
+    /// it to; an enum or a value object compared with it is written as that column stores it. The function runs as its
+    /// owner, so a rule on the seats themselves may read it too, and a seat reads its own fields whatever a read rule
+    /// on the seats says. For a caller without a seat it answers no row, so every field is <c>NULL</c>, and a
+    /// comparison with one is SQL's own: such a caller never passes it, negated or not. Only a rule of the context that
+    /// maps the seats can ask it; a rule of another module asks <see cref="CallerSeatId{TSeatId}"/>.
+    /// </summary>
+    /// <typeparam name="TSeat">The application's seat class, the one declared with <c>[SeatAggregate]</c> (DDD00101 for another).</typeparam>
+    [AccessRow("caller_seat_row")]
+    public static partial TSeat CallerSeat<TSeat>()
+        where TSeat : class;
+
+    /// <summary>The tenant of <see cref="CallerSeatId{TSeatId}"/>; <c>NULL</c> when there is no such seat.</summary>
     [AccessScalar("caller_tenant")]
     public static partial TTenantId CallerTenant<TTenantId>()
         where TTenantId : struct, IEntityId, IEquatable<TTenantId>;
@@ -128,7 +151,7 @@ public static partial class TenancyRowAccess
 
     /// <summary>
     /// The seat the caller's verified identity has in <paramref name="tenant"/>, while that seat and the tenant
-    /// are active; <c>NULL</c> otherwise. As <see cref="CallerSeat{TSeatId}"/>, of a tenant given as an argument
+    /// are active; <c>NULL</c> otherwise. As <see cref="CallerSeatId{TSeatId}"/>, of a tenant given as an argument
     /// rather than the one the connection names.
     /// </summary>
     /// <param name="tenant">The tenant asked about.</param>

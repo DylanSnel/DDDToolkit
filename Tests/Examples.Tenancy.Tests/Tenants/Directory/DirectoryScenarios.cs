@@ -50,14 +50,13 @@ public sealed class DirectoryScenarios(SampleHosts sample) : IClassFixture<Sampl
 
         var units = await AskAsync(rhea, "/tenancy/directory/units", [Harbor.UnitNamed("North Coast").Value, Harbor.Root.Value]);
 
+        // By id a unit is named, and nothing more: its kind and its status are the list's.
         units.EnumerateArray()
-            .Select(unit => (unit.GetProperty("id").GetGuid(), unit.Text("name"), unit.Text("kind"), unit.Text("status"), unit.Text("path"), unit.GetProperty("depth").GetInt32()))
+            .Select(unit => (unit.GetProperty("id").GetGuid(), unit.Text("name"), unit.Text("path"), unit.GetProperty("depth").GetInt32()))
             .Should().Equal(
-                (Harbor.Root.Value, "Harbor Works", "company", "active", "Harbor Works", 1),
-                (Harbor.UnitNamed("North Coast").Value, "North Coast", "area", "active", "Harbor Works / North / North Coast", 3));
-        units[1].GetProperty("parentId").GetGuid().Should().Be(Harbor.UnitNamed("North").Value);
-        units[0].GetProperty("parentId").ValueKind.Should().Be(JsonValueKind.Null);
-        units[0].EnumerateObject().Select(property => property.Name).Should().Equal("id", "parentId", "name", "kind", "status", "path", "depth");
+                (Harbor.Root.Value, "Harbor Works", "Harbor Works", 1),
+                (Harbor.UnitNamed("North Coast").Value, "North Coast", "Harbor Works / North / North Coast", 3));
+        units[0].EnumerateObject().Select(property => property.Name).Should().Equal("id", "name", "path", "depth");
     }
 
     [Fact]

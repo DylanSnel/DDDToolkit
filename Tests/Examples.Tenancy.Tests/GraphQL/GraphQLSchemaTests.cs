@@ -30,7 +30,7 @@ public sealed class GraphQLSchemaTests(SampleWithoutDatabase sample) : IClassFix
     private static readonly IReadOnlyDictionary<string, string[]> Owners = new Dictionary<string, string[]>(StringComparer.Ordinal)
     {
         ["Seat"] = ["tenants", "admin"],
-        ["OrganizationUnit"] = ["tenants", "admin"],
+        ["OrganizationUnitName"] = ["tenants", "admin"],
         ["Role"] = ["tenants", "admin"],
         ["Project"] = ["projects"],
     };
@@ -67,7 +67,7 @@ public sealed class GraphQLSchemaTests(SampleWithoutDatabase sample) : IClassFix
         Compare(printed, Path.Combine(Path.GetDirectoryName(SampleLayout.HostProjectFile())!, file));
 
         // The lookups that are there for the gateway alone are no fields of what a client is offered.
-        printed.Should().Contain("project(id: ID!): Project").And.NotContain("organizationUnit(id:").And.NotContain("@internal");
+        printed.Should().Contain("project(id: ID!): Project").And.NotContain("organizationUnitName(id:").And.NotContain("@internal");
     }
 
     [Theory]
@@ -109,7 +109,7 @@ public sealed class GraphQLSchemaTests(SampleWithoutDatabase sample) : IClassFix
         var tenancy = (await executors.GetExecutorAsync(TenantsModule.SourceSchema, Cancellation)).Schema;
         var tenancyOfTheAdministration = (await executors.GetExecutorAsync(TenantsModule.AdministrationSchema, Cancellation)).Schema;
         FieldsOf(tenancyOfTheAdministration.QueryType).Should().BeEquivalentTo([.. FieldsOf(tenancy.QueryType), "seatGrants"]);
-        FieldsOf(tenancy.QueryType).Should().Contain(["seat", "organizationUnit", "role"], "the lookups are the gateways' own, in both of Tenancy's schemas");
+        FieldsOf(tenancy.QueryType).Should().Contain(["seat", "organizationUnitName", "role"], "the lookups are the gateways' own, in both of Tenancy's schemas");
     }
 
     private static IReadOnlyList<string> FieldsOf(IObjectTypeDefinition type)

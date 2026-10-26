@@ -30,7 +30,7 @@ public class TenancyReadRuleGeneratorTests
 
     [Theory]
     [InlineData("seat.TenantId == TenancyRowAccess.CallerTenant<TenantId>()", "({col:TenantId} = (SELECT {fn:tenancy/caller_tenant}()))")]
-    [InlineData("seat.Id == TenancyRowAccess.CallerSeat<SeatId>()", "({col:Id} = (SELECT {fn:tenancy/caller_seat}()))")]
+    [InlineData("seat.Id == TenancyRowAccess.CallerSeatId<SeatId>()", "({col:Id} = (SELECT {fn:tenancy/caller_seat}()))")]
     [InlineData("TenancyRowAccess.SeatsInMyUnits<SeatId>().Contains(seat.Id)", "({col:Id} = ANY (ARRAY(SELECT {fn:tenancy/seats_in_my_units}())))")]
     [InlineData("TenancyRowAccess.HoldsPermission(TenancyPermissions.SeatsManage)", "(SELECT {fn:tenancy/holds_permission}('tenancy.seats.manage'))")]
     [InlineData("TenancyRowAccess.HoldsAtTenant(TenancyPermissions.RolesManage)", "(SELECT {fn:tenancy/holds_at_tenant}('tenancy.roles.manage'))")]
@@ -45,7 +45,7 @@ public class TenancyReadRuleGeneratorTests
 
     [Fact]
     public void The_building_blocks_combine_as_any_conditions_do()
-        => RuleSqlOf("Seat", "seat", "seat.Id == TenancyRowAccess.CallerSeat<SeatId>() || TenancyRowAccess.SeatsInMyUnits<SeatId>().Contains(seat.Id)")
+        => RuleSqlOf("Seat", "seat", "seat.Id == TenancyRowAccess.CallerSeatId<SeatId>() || TenancyRowAccess.SeatsInMyUnits<SeatId>().Contains(seat.Id)")
             .Should().Be("(({col:Id} = (SELECT {fn:tenancy/caller_seat}())) OR ({col:Id} = ANY (ARRAY(SELECT {fn:tenancy/seats_in_my_units}()))))");
 
     /// <summary>

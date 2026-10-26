@@ -329,6 +329,35 @@ internal sealed class EfTenancyStore<TTenant, TTenantId, TOrganization, TUnit, T
         return [.. rows.Select(row => new MoveReach<TUnitId>(row.UnitId, row.Permission, row.EndsAt, row.Reaches, row.SeatId.Equals(seat)))];
     }
 
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<NamedUnit<TUnitId>>?> UnitsNamedAsync(TTenantId tenant, IReadOnlyCollection<TUnitId> ids, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+
+        if (!AsksTheDatabase || ids.Count == 0)
+        {
+            return null;
+        }
+
+        // The function finds the tenant from the caller, and answers the units asked about alone, whatever the
+        // policies on the units let the seat read of them.
+        return await context.Set<NamedUnit<TUnitId>>()
+            .FromSqlRaw(
+                TenancyFunctionSql.Select(
+                    context,
+                    schema: null,
+                    TenancyFunctionNames.UnitsNamed,
+                    parameters: 1,
+                    nameof(NamedUnit<TUnitId>.Id),
+                    nameof(NamedUnit<TUnitId>.Name),
+                    nameof(NamedUnit<TUnitId>.Path),
+                    nameof(NamedUnit<TUnitId>.Depth)),
+                TenancyFunctionSql.StoredArray(context, ids))
+            .AsNoTracking()
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     /// <summary>
     /// Whether the database finds a calling seat on this context's connection: what the function that answers
     /// the caller's seat says, which every one of Tenancy's database functions and policies asks first. It tells

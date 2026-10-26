@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 namespace DDDToolkit.Supporting.Membership.Postgres;
 
 /// <summary>
-/// The membership of one kind of resource in the database: the four set functions that answer, for the caller
+/// The membership of one kind of resource in the database: the five set functions that answer, for the caller
 /// of the connection, the questions the access questions answer in C#, written from the resource's rules and
 /// from the model of the context that maps it; and, where the rules name the permissions that change the members
 /// and the owner, the lock that holds a caller that reaches the database to those permissions. This package declares

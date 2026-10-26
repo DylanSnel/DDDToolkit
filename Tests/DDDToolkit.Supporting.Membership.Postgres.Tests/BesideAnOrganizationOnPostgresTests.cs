@@ -323,8 +323,8 @@ public sealed class BesideAnOrganizationOnPostgresTests(FilingPostgres postgres)
             WHERE n.nspname = '{DepotContext.Schema}' AND pg_catalog.has_function_privilege('authenticated', p.oid, 'EXECUTE') ORDER BY 1
             """);
         askable.Should().Equal(
-            "crates_as_member", "crates_as_member_with", "crates_i_see", "crates_where_i_hold",
-            "pallets_as_member", "pallets_as_member_with", "pallets_i_see", "pallets_where_i_hold");
+            "crates_as_member", "crates_as_member_with", "crates_fellow_members", "crates_i_see", "crates_where_i_hold",
+            "pallets_as_member", "pallets_as_member_with", "pallets_fellow_members", "pallets_i_see", "pallets_where_i_hold");
 
         await using var session = await depot.SessionAsync(new DepotPerson("anybody", Guid.CreateVersion7(), null, false));
         (await FluentActions.Awaiting(() => session.ListAsync<Guid>($"SELECT {Depot}caller_porter()")).Should().ThrowAsync<PostgresException>())

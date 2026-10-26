@@ -526,13 +526,12 @@ public sealed class AccessStatementTests(SampleHosts hosts) : IClassFixture<Samp
                 (await sender.Send(new RolesById(roles), Cancellation)).Should().HaveCount(Harbor.Roles.Count);
                 counter.Commands.Should().HaveCount(2, "{0} roles asked about", roles.Length);
 
-                // The units: two statements, the organization with its units and the closure that orders a path. The
-                // kind, the application's own field, comes with the units the directory read: no statement more.
+                // The units: one statement, Tenancy's function that names the units asked about, each with its path.
                 OrganizationUnitId[] units = [Harbor.Root, .. Harbor.Units.Select(unit => unit.Id), .. Enumerable.Range(0, padding).Select(_ => OrganizationUnitId.CreateSequential())];
                 counter.WatchThisFlow();
                 (await sender.Send(new OrganizationUnitsById(units), Cancellation)).Should().HaveCount(Harbor.Units.Count + 1)
-                    .And.OnlyContain(unit => unit.Kind != null, "every unit of the demonstration tenant is seeded with its kind");
-                counter.Commands.Should().HaveCount(2, "{0} units asked about", units.Length);
+                    .And.OnlyContain(unit => unit.Path.StartsWith("Harbor Works", StringComparison.Ordinal), "every unit is named by its path from the root");
+                counter.Commands.Should().ContainSingle("{0} units asked about", units.Length);
 
                 // And no ids at all cost nothing.
                 counter.WatchThisFlow();

@@ -775,12 +775,12 @@ where the mapping is read.
 
 ## On Postgres: the second lock
 
-`DDDToolkit.Supporting.Membership.Postgres` writes four functions per resource: the resources the caller is a
-member of, those where it holds a role that gives a permission, those it sees, and those it holds a permission on, as a
-member, as the owner or from above. They answer what the access questions answer, from the same rules and the
-same permissions. What a
+`DDDToolkit.Supporting.Membership.Postgres` writes five functions per resource: the resources the caller is a
+member of, those where it holds a role that gives a permission, those it sees, those it holds a permission on, as a
+member, as the owner or from above, and the members of the resources it is a member of, the people it works with.
+They answer what the access questions answer, from the same rules and the same permissions. What a
 caller reads and changes of a resource is yours to say, in
-[row access rules](row-level-security.md#row-access-rules-written-in-c) that ask the last two by the resource's
+[row access rules](row-level-security.md#row-access-rules-written-in-c) that ask the last three by the resource's
 id, and the member tables follow the resource's rules, as every table of an aggregate's entities does.
 
 Membership brings no part to a context's options: the member tables are your context's own, and so is the way
@@ -804,6 +804,13 @@ public static partial class DocumentsISee;
 
 [ResourceAccessContract<DocumentId>(ResourceAccessSet.HeldOn)]
 public static partial class DocumentsWhereIHold;
+
+// And the people the caller shares a document with, by the id they are known by, which the contract says
+[ResourceAccessContract<DocumentId>(ResourceAccessSet.FellowMembers)]
+public static partial class PeopleIShareWith
+{
+    public static partial AccessSet<UserId> Ids();
+}
 
 [RowAccess<Document>(RowOperations.Read, To = [RowAccessRoles.User])]
 public static partial class UsersReadTheDocumentsTheySee
@@ -847,8 +854,15 @@ services.RunStartupChecks();
   several modules the declarations are the owning module's contracts, which other modules' rules ask as its
   own rules do, and no other module declares one of its own:
   [a resource's access, asked by its id](row-level-security.md#a-resources-access-asked-by-its-id).
+- **The people the caller works with.** `ResourceAccessSet.FellowMembers` answers the members now of every resource
+  the caller is a member of now, the caller among them: an owner who is on no list finds nobody by owning. Its ids
+  are the members', not the resources', so the contract declares its `Ids` with the id its members are known by. A
+  read rule on another table asks it, such as one on [Tenancy's seats](tenancy.md#rules-that-narrow-the-organization)
+  that lets a seat read the people on its projects: that rule is written into Tenancy's access file, which runs
+  before the one of the module whose functions ask Tenancy's in turn, and the export writes it all the same
+  ([A rule that asks a module that asks back](row-level-security.md#a-resources-access-asked-by-its-id)).
 - **The functions' names** follow from the resource's name ([Names](#names)): `documents_as_member`,
-  `documents_as_member_with`, `documents_i_see` and `documents_where_i_hold` for `documents`. Nothing of yours
+  `documents_as_member_with`, `documents_i_see`, `documents_where_i_hold` and `documents_fellow_members` for `documents`. Nothing of yours
   asks them by name, and the start-up check holds the database to them. A class renamed gives the next access
   file new functions, and drops the old: keep the name with `[Members]` where the database should keep them.
 - **Who may ask them** follows from your row access rules on the resource. The functions run as their owner with
@@ -912,6 +926,14 @@ public static class DocumentPermissions
 
 - **You still decide who may.** The two marks are what the database is told, and nothing else: no code
   of the package gates a command by them, and your commands declare what they require as before.
+- **What your door allows that the lock does not let the caller do itself, the handler does as the application's
+  own work, naming the acting seat.** Leaving is the example. A member may take itself off a document where your
+  application says so: a permission every member holds, `documents.leave` marked `EveryMember = true`, which the
+  command to leave requires at the door. The lock still refuses the member its own row, since it does not hold the
+  permission that locks the members, so the handler removes it as the application's own work, once the door let the
+  command through, begun for the member who leaves: with Tenancy,
+  `TenancyUseCases.BeginSystemIn(tenant, actingSeat: caller, scope: "documents")`, so the history still names who
+  left. The sample's crew does the same for a seat that gives up its own place (`OwnPlaceOnTheCrew`).
 - **What decides who holds a permission, the lock takes as the rows say it.** Three columns are yours to hold,
   since who may change them is your decision and not the package's:
   - *The owner of a new resource.* Your rule about adding one says whom a caller may name: ask that the
@@ -990,6 +1012,11 @@ holds `crates.scrap` at bay A, and scraps the crates that stand there, and no ot
 of its porters, and holds there what his role gives, wherever the crate stands. And a crate whose owner has left
 is still reached by somebody, who can hand it to a new owner: through its members alone, it would be nobody's to
 hand on.
+
+So an organization's administrator can do everything with `reachFromAbove` and an administrators' role at the root
+that holds the resource's permissions, with nothing more to set up. A permission reached from above is not cut by
+`InRoles = false`: that keeps a permission out of the resource's own roles, not out of what is held above. So the
+administrator also says who is on a resource, in which role, and hands it to a new owner.
 
 ```mermaid
 flowchart TB
@@ -1110,7 +1137,7 @@ public sealed class CratesInTheDepot(DepotDesk desk, DepotContext db)
 - **Still one statement.** What you answer is a query over rows your context maps, put into the statement
   that asks, [on the context it runs on](#inside-your-own-statements).
 
-**On Postgres** the [four functions](#on-postgres-the-second-lock) ask functions of yours, each by the
+**On Postgres** the [five functions](#on-postgres-the-second-lock) ask functions of yours, each by the
 `DatabaseFunction` the rules name, its logical name `owner/name`: one without parameters that answers the
 caller's member id or `NULL`, and two that take a permission and answer the role ids, and the places. You define them
 as [a contribution of your own](row-level-security.md#policies-a-package-ships), which the project that runs
@@ -1150,7 +1177,7 @@ public sealed class DepotRowAccess : IRowAccessContribution
 - **A function is named once,** as a `DatabaseFunction` value the rules and your contribution both read, so
   nothing is typed twice. The export refuses a name that nothing it is written with defines, and the start-up
   check refuses functions written from rules that name other ones.
-- **Grant them to nobody.** The four functions run as their owner, so yours need not be executable by a
+- **Grant them to nobody.** The five functions run as their owner, so yours need not be executable by a
   caller, and a caller cannot ask who it is or which roles give what.
 - **Answer for the caller by a condition of your own,** its id or a claim, and never by a policy. The four
   functions ask yours as their owner, past whatever policies your tables have, so a function that reads
@@ -1307,7 +1334,7 @@ before the resource, and the admission asks that.
 
 **Read where it is kept.** Which roles give a permission is a subquery over your role table inside the one
 statement that reads the members, so every question stays one statement. On Postgres the
-[four functions](#on-postgres-the-second-lock) join the role table of the same context, for a role in use
+[five functions](#on-postgres-the-second-lock) join the role table of the same context, for a role in use
 that holds the permission: no function of yours is asked, and nothing is registered for the roles. Their
 fingerprint covers that a customer makes the roles and what a member's role can give, so the start-up check refuses
 functions written before either changed; a starter role more changes no function. A second resource with

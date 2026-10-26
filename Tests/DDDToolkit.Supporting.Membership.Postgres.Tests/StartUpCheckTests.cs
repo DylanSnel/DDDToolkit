@@ -62,7 +62,7 @@ public sealed class StartUpCheckTests(FilingPostgres postgres)
 
         refused.Which.Message.Should()
             .StartWith("The functions that answer the membership of Document in the database are not as its rules, 'documents', say them: ")
-            .And.Contain("\"filing\".documents_as_member (missing), \"filing\".documents_as_member_with (missing), \"filing\".documents_i_see (missing), \"filing\".documents_where_i_hold (missing)")
+            .And.Contain("\"filing\".documents_as_member (missing), \"filing\".documents_as_member_with (missing), \"filing\".documents_fellow_members (missing), \"filing\".documents_i_see (missing), \"filing\".documents_where_i_hold (missing)")
             .And.Contain("Mark the rules the resource is registered with [MembershipRules<DocumentShare>]")
             .And.Contain("where the project that runs the export sees them")
             .And.Contain("apply the access files");
@@ -81,7 +81,7 @@ public sealed class StartUpCheckTests(FilingPostgres postgres)
 
         refused.Which.Message.Should()
             .StartWith("The functions that answer the membership of Folder in the database are not as its rules, 'folders', say them: ")
-            .And.Contain("\"filing\".folders_as_member (missing), \"filing\".folders_as_member_with (missing), \"filing\".folders_i_see (missing), \"filing\".folders_where_i_hold (missing)")
+            .And.Contain("\"filing\".folders_as_member (missing), \"filing\".folders_as_member_with (missing), \"filing\".folders_fellow_members (missing), \"filing\".folders_i_see (missing), \"filing\".folders_where_i_hold (missing)")
             .And.Contain("[MembershipRules<FolderMember>]")
             .And.NotContain("documents_");
 
@@ -135,7 +135,8 @@ public sealed class StartUpCheckTests(FilingPostgres postgres)
         refused.Which.Message.Should()
             .StartWith("The functions that answer the membership of Folder in the database are not as its rules, 'folders', say them: ")
             .And.Contain("\"filing\".folders_as_member (it was written from other rules), \"filing\".folders_as_member_with (it was written from other rules), "
-                + "\"filing\".folders_i_see (it was written from other rules), \"filing\".folders_where_i_hold (it was written from other rules)");
+                + "\"filing\".folders_fellow_members (it was written from other rules), \"filing\".folders_i_see (it was written from other rules), "
+                + "\"filing\".folders_where_i_hold (it was written from other rules)");
     }
 
     [Fact]

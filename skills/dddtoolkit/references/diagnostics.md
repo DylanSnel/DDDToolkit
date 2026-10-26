@@ -858,6 +858,19 @@ the screens that put permissions into roles show the description. Say it on the 
 `[AtUnit(Description = "Open a board at a unit")]` (it wins over a summary), or give the constant a `<summary>`,
 which is read whether the project writes a documentation file or not. Not reported for `Retired = true`.
 
+## DDD00100
+
+Error, at `[RowAccess<T>(..., Restrictive = true)]` where `T` derives from Tenancy's `TenantAggregate` or
+`InvitationAggregate`: a restrictive rule narrows Tenancy's organization (its units and tree with it), seats (with
+placements and grants) and roles, and the application's own aggregates. Tenancy's own work and a person accepting an
+invitation read tenants and invitations. Move the rule to one of those, or leave `Restrictive` out.
+
+## DDD00101
+
+Error, at `TenancyRowAccess.CallerSeat<T>()` where `T` is not the class declared with `[SeatAggregate]`: the function
+answers a row of Tenancy's seats table. Name the seat class, `CallerSeat<Seat>().Kind`. For the seat's id alone, in a
+module whose context does not map the seats, use `TenancyRowAccess.CallerSeatId<SeatId>()`.
+
 ## Not a diagnostic: the owned type must carry the key part
 
 An exception when the Entity Framework model is built, not at compile time: an aggregate with a

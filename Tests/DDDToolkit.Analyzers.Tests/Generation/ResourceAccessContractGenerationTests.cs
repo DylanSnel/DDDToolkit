@@ -101,6 +101,52 @@ public class ResourceAccessContractGenerationTests
     }
 
     [Fact]
+    public void The_members_of_the_resources_the_caller_is_a_member_of_are_asked_by_the_resources_id_as_the_ids_the_contract_declares()
+    {
+        var result = Run(
+            """
+            [EntityId<Guid>]
+            public readonly partial record struct ClerkId;
+
+            [AggregateRoot<ClerkId>]
+            public partial class Clerk
+            {
+                public Clerk(ClerkId id) : base(id) { }
+            }
+
+            [ResourceAccessContract<OrderId>(ResourceAccessSet.FellowMembers)]
+            public static partial class ClerksOnMyOrders
+            {
+                /// <summary>The clerks on the orders the caller is on.</summary>
+                public static partial AccessSet<ClerkId> Ids();
+            }
+
+            [RowAccess<Clerk>(RowOperations.Read)]
+            public static partial class TheRule
+            {
+                public static bool Allows(Clerk clerk, Caller caller) => ClerksOnMyOrders.Ids().Contains(clerk.Id);
+            }
+            """);
+
+        result.ShouldNotHaveDiagnostic("DDD00038").ShouldNotHaveDiagnostic("DDD00039").ShouldCompile();
+        result.ShouldContain("ClerksOnMyOrders.ResourceAccessContract", "public const string Name = \"@Shop.OrderId/fellow_members\";");
+        result.ShouldContain("ClerksOnMyOrders.ResourceAccessContract", "public static partial global::DDDToolkit.Abstractions.Access.AccessSet<global::Shop.ClerkId> Ids() => throw");
+        RuleSql(result).Should().Be("({col:Id} = ANY (ARRAY(SELECT {fn:@Shop.OrderId/fellow_members}())))", "the set is the resource's, and holds the members' ids");
+
+        var emitted = result.Emit();
+        ((string)emitted.Type("Shop.ClerksOnMyOrders").GetField("Name")!.GetRawConstantValue()!)
+            .Should().Be(ResourceAccessAnswer.NameOf(emitted.Type("Shop.OrderId"), ResourceAccessSet.FellowMembers));
+    }
+
+    [Fact]
+    public void A_contract_of_the_fellow_members_that_does_not_say_what_their_ids_are_is_DDD00038()
+        => Run(
+            """
+            [ResourceAccessContract<OrderId>(ResourceAccessSet.FellowMembers)]
+            public static partial class PeopleOnMyOrders;
+            """).ShouldHaveDiagnostic("DDD00038", at: "PeopleOnMyOrders").GetMessage().Should().Contain("'static partial AccessSet<TMemberId> Ids()'");
+
+    [Fact]
     public void Another_modules_rule_asks_a_published_contract_by_what_its_metadata_says()
     {
         const string Contracts =
@@ -250,7 +296,7 @@ public class ResourceAccessContractGenerationTests
             """
             [ResourceAccessContract<OrderId>((ResourceAccessSet)7)]
             public static partial class OrdersSomehow;
-            """).ShouldHaveDiagnostic("DDD00038", at: "OrdersSomehow").GetMessage().Should().Contain("ResourceAccessSet.Seen or ResourceAccessSet.HeldOn");
+            """).ShouldHaveDiagnostic("DDD00038", at: "OrdersSomehow").GetMessage().Should().Contain("ResourceAccessSet.Seen, ResourceAccessSet.HeldOn or ResourceAccessSet.FellowMembers");
 
     [Fact]
     public void The_id_the_toolkit_writes_beside_an_aggregate_root_keys_a_contract_as_a_declared_one_does()

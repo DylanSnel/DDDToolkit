@@ -97,3 +97,5 @@ DDD00096 | DDDToolkit.Access | Warning | [OrOwn] beside a permission the owner o
 DDD00097 | DDDToolkit.Access | Error | [At] marks the one place an aggregate root hangs at
 DDD00098 | DDDToolkit.Membership | Error | Rules that reach a resource from above read where it hangs from its [At] property
 DDD00099 | DDDToolkit.Access | Warning | A permission says what it lets somebody do
+DDD00100 | DDDToolkit.Tenancy | Error | A restrictive rule narrows a table it can reach
+DDD00101 | DDDToolkit.Tenancy | Error | TenancyRowAccess.CallerSeat answers with the application's seat class

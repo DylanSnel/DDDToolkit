@@ -44,11 +44,12 @@ public abstract class DirectoryTests(TenancyPostgres postgres, TenancyNaming nam
 
             // South is no unit Oli is placed under, and the root is above him: both are his tenant's, and named.
             recorder.Clear();
-            (await directory.UnitsByIdAsync([South, HarborRoot, NorthPier], Cancellation)).Select(unit => (unit.Unit.Id, unit.Unit.Name, unit.Path, unit.Depth)).Should().Equal(
+            (await directory.UnitsByIdAsync([South, HarborRoot, NorthPier], Cancellation)).Select(unit => (unit.Id, unit.Name, unit.Path, unit.Depth)).Should().Equal(
                 (HarborRoot, "Harbor", "Harbor", 1),
                 (NorthPier, "North Pier", "Harbor / North / North Pier", 3),
                 (South, "South", "Harbor / South", 2));
-            recorder.Sent.Should().HaveCount(2, "the organization with its units, and the closure that orders a path");
+            recorder.Sent.Should().ContainSingle("Tenancy's function names the units asked about, with their paths, in one statement")
+                .Which.Text.Should().Contain(TenancyFunctionNames.UnitsNamed);
 
             (await directory.ListUnitsAsync(Cancellation)).Select(unit => unit.Path).Should().Equal(["Harbor / North / North Pier"], "the list is still the units he is placed under");
             (await directory.ListSeatsAsync(Cancellation)).Select(seat => seat.DisplayName).Should().BeEquivalentTo(["Ada", "Eve", "Hiro", "Oli", "Seth", "Sue"]);
@@ -72,7 +73,7 @@ public abstract class DirectoryTests(TenancyPostgres postgres, TenancyNaming nam
             var directory = scoped.Directory();
             (await directory.SeatsByIdAsync([OliInOrchard, Odette.Seat, Quin.Seat, Oli.Seat], Cancellation)).Select(seat => seat.Id).Should().Equal(Oli.Seat);
             (await directory.RolesByIdAsync([OrchardRoles.Watcher, QuayRoles.Administrator, HarborRoles.Watcher], Cancellation)).Select(role => role.Id).Should().Equal(HarborRoles.Watcher);
-            (await directory.UnitsByIdAsync([OrchardRoot, QuayRoot, North], Cancellation)).Select(unit => unit.Unit.Id).Should().Equal(North);
+            (await directory.UnitsByIdAsync([OrchardRoot, QuayRoot, North], Cancellation)).Select(unit => unit.Id).Should().Equal(North);
 
             (await directory.SeatsByIdAsync([OliInOrchard, Odette.Seat], Cancellation)).Should().BeEmpty("nothing says whether an id is another tenant's or nobody's");
         });
