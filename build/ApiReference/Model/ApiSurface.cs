@@ -21,8 +21,12 @@ internal sealed class ApiSurface
     /// <summary>How many members the compiler wrote that were left out.</summary>
     public int CompilerWritten { get; private set; }
 
-    /// <summary>The types of <paramref name="assembly"/> a consumer can name, nested types included.</summary>
-    public IEnumerable<INamedTypeSymbol> TypesOf(IAssemblySymbol assembly) => TypesIn(assembly.GlobalNamespace);
+    /// <summary>
+    /// The types of <paramref name="assembly"/> a consumer can name, nested types included; with <paramref name="take"/>,
+    /// only those it takes, and a type it does not take is not looked into.
+    /// </summary>
+    public IEnumerable<INamedTypeSymbol> TypesOf(IAssemblySymbol assembly, Func<INamedTypeSymbol, bool>? take = null)
+        => TypesIn(assembly.GlobalNamespace, take ?? (_ => true));
 
     /// <summary>The members of <paramref name="type"/> a consumer can name, nested types excluded, in declaration order.</summary>
     public IReadOnlyList<ISymbol> MembersOf(INamedTypeSymbol type)
@@ -58,21 +62,21 @@ internal sealed class ApiSurface
         return members;
     }
 
-    private IEnumerable<INamedTypeSymbol> TypesIn(INamespaceOrTypeSymbol container)
+    private IEnumerable<INamedTypeSymbol> TypesIn(INamespaceOrTypeSymbol container, Func<INamedTypeSymbol, bool> take)
     {
         foreach (var member in container.GetMembers())
         {
             if (member is INamespaceSymbol ns)
             {
-                foreach (var type in TypesIn(ns))
+                foreach (var type in TypesIn(ns, take))
                 {
                     yield return type;
                 }
             }
-            else if (member is INamedTypeSymbol type && IsVisible(type))
+            else if (member is INamedTypeSymbol type && take(type) && IsVisible(type))
             {
                 yield return type;
-                foreach (var nested in TypesIn(type))
+                foreach (var nested in TypesIn(type, take))
                 {
                     yield return nested;
                 }

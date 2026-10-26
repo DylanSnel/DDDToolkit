@@ -174,4 +174,5 @@ Most have a default, so the smallest application decides only where the roles co
 
 - **Build it:** the [tutorial](tutorial.md), step by step, on the Harbor application.
 - **Look something up:** the [reference](../membership.md), with every detail of every part.
+- **Every class and method:** the [API reference](reference/resource-and-members.md).
 - **The organization around it:** [Tenancy](../tenancy/overview.md).

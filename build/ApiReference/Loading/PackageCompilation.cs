@@ -31,6 +31,15 @@ internal sealed class PackageCompilation
     public string PathOf(IAssemblySymbol package) => _paths[package];
 
     /// <summary>
+    /// An assembly the packages reference, by name, with its XML documentation: one the reference takes a few types of
+    /// without documenting it whole. <see langword="null"/> when no package references it.
+    /// </summary>
+    public IAssemblySymbol? Referenced(string name)
+        => Compilation.References
+            .Select(reference => Compilation.GetAssemblyOrModuleSymbol(reference) as IAssemblySymbol)
+            .FirstOrDefault(assembly => assembly?.Name == name);
+
+    /// <summary>
     /// Loads <paramref name="projects"/>, each a project under <c>Source</c>, from its <c>bin/{configuration}/net10.0</c>
     /// folder, with the packages they restored and the framework's reference assemblies.
     /// </summary>

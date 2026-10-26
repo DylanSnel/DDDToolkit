@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using DDDToolkit.Build.ApiReference.Model;
 using DDDToolkit.Build.ApiReference.Writing;
@@ -50,19 +51,25 @@ internal sealed class PageWriter
     public List<string> StaleTags { get; } = [];
 
     /// <summary>The Markdown of <paramref name="page"/>.</summary>
-    public string Write(PageLayout page, string intro)
+    public string Write(PageLayout page)
     {
         _file = page.Plan.File;
+        var intro = Regex.Replace(page.Plan.Intro, Regex.Escape(TypeParameterTable) + @"(\w+)\}", match =>
+        {
+            var type = _layout.Locations.Keys.OfType<INamedTypeSymbol>().Single(symbol => symbol.Name == match.Groups[1].Value && symbol.ContainingType is null);
+            return TypeParameters(type);
+        });
+
         var builder = new StringBuilder();
         builder.Append("---\n")
-            .Append("title: \"").Append(page.Plan.FullTitle).Append("\"\n")
+            .Append("title: \"").Append(page.Title).Append("\"\n")
             .Append("sidebar_label: ").Append(page.Plan.Title).Append('\n')
             .Append("---\n\n")
             // An HTML comment, which neither the site nor GitHub shows; a YAML comment in the front matter would read
             // as the page's title to anything that takes the first line starting with "# ", as llms.txt does.
             .Append("<!-- Generated from the packages' code and XML documentation ").Append(GeneratedMarker).Append(". ")
             .Append("Regenerate with build/generate-api-reference.sh. -->\n\n")
-            .Append("# ").Append(page.Plan.FullTitle).Append("\n\n");
+            .Append("# ").Append(page.Title).Append("\n\n");
 
         if (intro.Length > 0)
         {
@@ -93,11 +100,13 @@ internal sealed class PageWriter
     }
 
     /// <summary>
-    /// The table of a generic type's type parameters, with what of the application fills each where its
-    /// <c>[TemplateType]</c> says, and its constraints.
+    /// The table of a generic type's type parameters, with what of the application fills each, where its
+    /// <c>[TemplateType]</c> says or else as its <c>&lt;typeparam&gt;</c> says, and its constraints.
     /// </summary>
     public string TypeParameters(INamedTypeSymbol type)
     {
+        _markdown.CurrentType = type;
+        var described = _documentation.Of(type)?.Elements("typeparam").ToList() ?? [];
         var rows = new StringBuilder("| Type parameter | Filled with | Constraints |\n|---|---|---|\n");
         foreach (var parameter in type.TypeParameters)
         {
@@ -110,6 +119,11 @@ internal sealed class PageWriter
                 filledWith = takesClass
                     ? $"your {ReferenceLayout.ApplicationName(attribute)} class, declared with {declared}"
                     : $"the id it is declared with, in {declared}";
+            }
+            else if (described.FirstOrDefault(tag => tag.Attribute("name")?.Value == parameter.Name) is { } tag)
+            {
+                // A template's attribute, which the application writes itself: its comment says what goes there.
+                filledWith = _markdown.Cell(tag);
             }
 
             var declaration = Signatures.Declaration(type);
