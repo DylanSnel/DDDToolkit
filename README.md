@@ -71,7 +71,9 @@ public partial class Order { }
 | [Tenancy](docs/tenancy/overview.md) | The first supporting domain: what it is for, what it does and does not do, and how its pieces connect |
 | [Tenancy: the tutorial](docs/tenancy/tutorial.md) | Tenancy built into an application step by step: why each step, the whole files, and what they do |
 | [Tenancy reference](docs/tenancy.md) | Every detail of Tenancy: tenants, the organization tree, seats and roles, and who may do what where |
-| [Membership](docs/membership.md) | The second supporting domain: access to a resource through its members, their roles and its owner, for as many kinds of resource as an application has |
+| [Membership](docs/membership/overview.md) | The second supporting domain: access to one thing through the people on it, what it does and does not do, how its pieces connect, and what the application decides |
+| [Membership: the tutorial](docs/membership/tutorial.md) | Membership built into the Harbor application step by step: a board with its members, owner and roles, its database rules, and reach from above |
+| [Membership reference](docs/membership.md) | Every detail of Membership: access to a resource through its members, their roles and its owner, for as many kinds of resource as an application has |
 | [Writing your own supporting domain](docs/writing-a-supporting-domain.md) | Shipping a domain as a package that applications extend with their own ids and classes, without losing its rules |
 | [GraphQL](docs/graphql.md) | `AddDDDToolkitTypes()`, the generated scalar bindings, errors with codes, Relay node ids, one schema over the modules |
 | [FluentValidation](docs/fluent-validation.md) | A value object's rules as a FluentValidation validator, and value objects inside a request validator |

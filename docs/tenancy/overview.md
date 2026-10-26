@@ -35,7 +35,7 @@ your application adds what only it knows: its own fields, its modules' permissio
 
 - **Sign-in**: yours (Supabase Auth, any JWT). A seat points at the identity.
 - **Profiles**: name, e-mail, photo are yours.
-- **Access to one thing** ("Leo may edit this board"): [Membership](../membership.md), built on Tenancy.
+- **Access to one thing** ("Leo may edit this board"): [Membership](../membership/overview.md), beside Tenancy.
 - **Your business data**: your modules'. They ask Tenancy who may do what.
 
 ## How the pieces connect
@@ -144,4 +144,5 @@ Each has a default, so the smallest application decides none of them.
 
 - **Build it:** the [tutorial](tutorial.md), step by step.
 - **Look something up:** the [reference](../tenancy.md), with every detail of every part.
-- **Access to one thing**, such as a board with its own members: [Membership](../membership.md).
+- **Access to one thing**, such as a board with its own members: [Membership](../membership/overview.md), and its
+  [tutorial](../membership/tutorial.md) on Harbor.

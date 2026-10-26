@@ -45,7 +45,17 @@ const sidebars = {
             { type: 'doc', id: 'tenancy', label: 'Reference' },
           ],
         },
-        'membership',
+        {
+          type: 'category',
+          label: 'Membership',
+          collapsed: false,
+          link: { type: 'doc', id: 'membership/overview' },
+          items: [
+            { type: 'doc', id: 'membership/overview', label: 'Overview' },
+            { type: 'doc', id: 'membership/tutorial', label: 'Tutorial' },
+            { type: 'doc', id: 'membership', label: 'Reference' },
+          ],
+        },
         'writing-a-supporting-domain',
       ],
     },

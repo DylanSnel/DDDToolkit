@@ -1353,4 +1353,5 @@ public static class TenancyModule
 | 8 | Units and seats, behind permissions held at a unit |
 | 9 | A role of the tenant's own, granted at a unit, reaching below it |
 
-Next: access to one thing, such as a board with its own members, is [Membership](../membership.md).
+Next: access to one thing, such as a board with its own members: the [Membership tutorial](../membership/tutorial.md)
+adds it to Harbor.
