@@ -1,7 +1,9 @@
+using System.Data.Common;
 using System.Diagnostics;
 using DDDToolkit.EntityFramework.Tests.Infrastructure;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.DependencyInjection;
@@ -30,28 +32,28 @@ public sealed class DatabaseMigrationLockPostgresTests(MigrationLockPostgres pos
     public void Dispose() => _services.Dispose();
 
     [Fact]
-    public async Task Without_the_lock_two_modules_that_both_make_ddd_migrate_side_by_side_and_one_fails_on_the_schema()
+    public async Task Without_the_lock_a_module_that_makes_ddd_while_another_has_made_it_unsaved_fails_on_the_schema()
     {
-        const int Rounds = 10;
-        var failed = 0;
+        // Side by side the two collide only when their transactions overlap, which a race decides. So the overlap is
+        // made here: the dock's migration is held right after it made ddd, inside its transaction, until the quay's
+        // waits for it. Then the dock commits, and the quay's ddd is the second.
+        var connectionString = await postgres.CreateDatabaseAsync(Cancellation);
+        var hold = new HoldAfter("pg_sleep");
+        await using var dock = Wired<DockContext>(connectionString, withoutLock: true, hold);
+        await using var quay = Wired<QuayContext>(connectionString, withoutLock: true);
 
-        for (var round = 0; round < Rounds; round++)
-        {
-            var connectionString = await postgres.CreateDatabaseAsync(Cancellation);
-            var outcomes = await MigrateSideBySideAsync(connectionString, withoutLock: true);
+        var docking = dock.Database.MigrateAsync(Cancellation);
+        await hold.Reached.WaitAsync(Patience, Cancellation);
 
-            var refused = outcomes.OfType<PostgresException>().ToList();
-            outcomes.Where(outcome => outcome is not null and not PostgresException).Should().BeEmpty("a migration fails on the schema or not at all");
-            refused.Should().AllSatisfy(exception =>
-            {
-                exception.SqlState.Should().Be(PostgresErrorCodes.UniqueViolation);
-                exception.ConstraintName.Should().Be("pg_namespace_nspname_index", "both made {0}, each in its own transaction", SharedSchema.Name);
-            });
-            failed += refused.Count;
-        }
+        var quaying = quay.Database.MigrateAsync(Cancellation);
+        await WaitForLockWaitersAsync(connectionString, quaying);
 
-        TestContext.Current.TestOutputHelper?.WriteLine($"Without the lock, {failed} of {Rounds} rounds failed on pg_namespace_nspname_index.");
-        failed.Should().BeGreaterThan(0, "two first migrations that run side by side and both make the schema fail now and then, here nearly always");
+        hold.Release();
+        await docking.WaitAsync(Patience, Cancellation);
+
+        var refused = await FluentActions.Awaiting(() => quaying.WaitAsync(Patience, Cancellation)).Should().ThrowAsync<PostgresException>();
+        refused.Which.SqlState.Should().Be(PostgresErrorCodes.UniqueViolation);
+        refused.Which.ConstraintName.Should().Be("pg_namespace_nspname_index", "both made {0}, each in its own transaction", SharedSchema.Name);
     }
 
     [Fact]
@@ -191,13 +193,18 @@ public sealed class DatabaseMigrationLockPostgresTests(MigrationLockPostgres pos
     /// A module's context as the host wires it, with the one call, and without the lock where asked. Its connections are
     /// not pooled: every round has a database of its own, and the idle pools of them all would fill the server.
     /// </summary>
-    private TContext Wired<TContext>(string connectionString, bool withoutLock = false)
+    private TContext Wired<TContext>(string connectionString, bool withoutLock = false, HoldAfter? hold = null)
         where TContext : DbContext
     {
         var options = new DbContextOptionsBuilder<TContext>().UseNpgsql(Unpooled(connectionString)).UseDDDToolkit(_services);
         if (withoutLock)
         {
             options.WithoutDatabaseMigrationLock();
+        }
+
+        if (hold is not null)
+        {
+            options.AddInterceptors(hold);
         }
 
         return (TContext)Activator.CreateInstance(typeof(TContext), options.Options)!;
@@ -262,6 +269,65 @@ public sealed class DatabaseMigrationLockPostgresTests(MigrationLockPostgres pos
 
             stopwatch.Elapsed.Should().BeLessThan(Patience, "{0} migrations should be waiting for the lock by now", count);
             await Task.Delay(50, Cancellation);
+        }
+    }
+
+    /// <summary>
+    /// Waits until a connection of the database waits for a lock, as <c>pg_stat_activity</c> says, while
+    /// <paramref name="migrating"/> has not finished.
+    /// </summary>
+    private static async Task WaitForLockWaitersAsync(string connectionString, Task migrating)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        await using var connection = new NpgsqlConnection(Unpooled(connectionString));
+        await connection.OpenAsync(Cancellation);
+
+        while (true)
+        {
+            await using var command = new NpgsqlCommand(
+                """
+                SELECT pg_catalog.count(*)::int FROM pg_catalog.pg_stat_activity
+                WHERE datname = pg_catalog.current_database() AND wait_event_type = 'Lock'
+                """,
+                connection);
+            if ((int)(await command.ExecuteScalarAsync(Cancellation))! > 0)
+            {
+                return;
+            }
+
+            if (migrating.IsCompleted)
+            {
+                await migrating;
+                migrating.IsCompleted.Should().BeFalse("the migration should wait for the other's transaction, not finish");
+            }
+
+            stopwatch.Elapsed.Should().BeLessThan(Patience, "the migration should be waiting for the other's transaction by now");
+            await Task.Delay(50, Cancellation);
+        }
+    }
+
+    /// <summary>
+    /// Holds a migration inside its transaction right after the first command whose text has <paramref name="marker"/>,
+    /// until <see cref="Release"/>: <see cref="Reached"/> completes when it is held.
+    /// </summary>
+    private sealed class HoldAfter(string marker) : DbCommandInterceptor
+    {
+        private readonly TaskCompletionSource _reached = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _released = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task Reached => _reached.Task;
+
+        public void Release() => _released.TrySetResult();
+
+        public override async ValueTask<int> NonQueryExecutedAsync(
+            DbCommand command, CommandExecutedEventData eventData, int result, CancellationToken cancellationToken = default)
+        {
+            if (command.CommandText.Contains(marker, StringComparison.Ordinal) && _reached.TrySetResult())
+            {
+                await _released.Task.WaitAsync(Patience, cancellationToken);
+            }
+
+            return result;
         }
     }
 
