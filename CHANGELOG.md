@@ -3447,24 +3447,25 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   the list holding none, a customer archives any role, and naming another owner says what the owner before
   becomes. A resource's permissions are constants of a `[Permissions]` class marked `[On<TResource>]`, and its rules
   are made through its type, which says its name and codes. Who may ask the database's functions follows from the
-  application's row access rules on the resource, and the scope whose system work holds every key is the module's
+  application's row access rules on the resource, and the scope whose system work holds every permission is the module's
   own unless the rules say otherwise. Nobody uses the packages yet, so the old names are gone with no alias.
   - From 3.2.0-preview.4, was, now:
     - `new MembershipRules("documents", keys: [...], roles: [...], ...)`: `MembershipRules.For<Document>(Roles.Fixed([...]))`,
-      with the keys declared as constants of a `[Permissions]` class marked `[On<Document>]`. Rules declared by hand
+      with the permissions declared as constants of a `[Permissions]` class marked `[On<Document>]`. Rules declared by hand
       with a name are `MembershipRules.Declare`, hidden, for tests.
     - the rules' name, `"documents"`: the class's name made plural; `[Members("Documents")]` on the class where it differs.
     - `codes: Document.Codes`: the `Codes` the generator writes on the resource, or a static `MembershipCodes` the
       resource declares itself.
     - `keys:`, every one of which the owner held: `[On<Document>]` on each permission, `Owner = false` for one the
-      owner does not hold by owning; `rules.Keys`: `rules.Permissions`, and `rules.OwnerKeys` for those the owner holds.
-    - `seeKey: "documents.view"`: `[On<Document>(EveryMember = true)]`; `rules.SeeKey`: `rules.EveryMemberKey`.
+      owner does not hold by owning; `rules.Keys`: `rules.Permissions`, and `rules.OwnerPermissions` for those the owner holds.
+    - `seeKey: "documents.view"`: `[On<Document>(EveryMember = true)]`; `rules.SeeKey`: `rules.EveryMemberPermission`.
     - `memberKeys: MemberKeys.Only(...)` and `MemberKeys.AllBut(...)`: `InRoles = false` on a permission no role gives,
-      and `otherKeys: OtherKeys.AllBut(...)` or `OtherKeys.All` on `Roles.Custom` or `Roles.External` for keys of other
-      modules; `MemberKeys` is gone, and `rules.MemberKeys` is `rules.RoleKeys`.
+      and `otherPermissions: OtherPermissions.AllBut(...)` or `OtherPermissions.All` on `Roles.Custom` or
+      `Roles.External` for permissions of other modules; `MemberKeys` is gone, and `rules.MemberKeys` is
+      `rules.RolePermissions`.
     - `roles: [...]`: `Roles.Fixed([...])`; `rolesKept: true` with the roles as starters:
       `Roles.Custom(starters: [...])`; `rolesKeptElsewhere: new("tenancy/roles_with_key")`:
-      `Roles.External(TenancyFunctions.RolesWithKey)`; `RolesKeptElsewhere` is gone; `rules.RolesKept` is
+      `Roles.External(TenancyFunctions.RolesWithPermission)`; `RolesKeptElsewhere` is gone; `rules.RolesKept` is
       `rules.Roles.Kind == RolesKind.Custom`.
     - `above: new("tenancy/units_where_i_hold")`: `reachFromAbove: true`, beside Tenancy, or
       `reachFromAbove: DepotFunctions.BaysWhereIHold` beside a place of the application's own; `rules.Above` is
@@ -3473,7 +3474,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
       seat id (`MemberSource.Inferred`); `MemberSource.Resolved("depot/caller_porter")`:
       `MemberSource.Resolved(DepotFunctions.CallerPorter)`, a `DatabaseFunction`.
     - `changeMembersKey:` and `changeOwnerKey:`: `[On<Document>(LocksMembers = true)]` and `LocksOwner = true`;
-      `rules.ChangeMembersKey` and `rules.ChangeOwnerKey`: `rules.MembersLockKey` and `rules.OwnerLockKey`.
+      `rules.ChangeMembersKey` and `rules.ChangeOwnerKey`: `rules.MembersLockPermission` and `rules.OwnerLockPermission`.
     - `grantTo: [...]`: gone; the roles the application's row access rules on the resource are written for, never
       `anon`, and `ddd_system_in` while the rules let a scope through.
     - `functions: new MembershipFunctions(...)`: gone; the functions are named after the resource, and
@@ -3491,8 +3492,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
       `IsKeptRole()`: `IsCustomRole()`.
     - A list of keys marked `[TenancyPermissions]` by hand: a `[Permissions]` class (DDD00095 for the list); DDD00063
       is gone with it.
-    - `TenancyAccess.ForTheWholeTenant(key)`: `TenancyAccess.AtTenant(key)`, whose case is
-      `TenancyRequirement.AtTenant`; `KeyReach.WholeTenant`: `KeyReach.AtTenant`;
+    - `TenancyAccess.ForTheWholeTenant(key)`: `TenancyAccess.AtTenant(permission)`, whose case is
+      `TenancyRequirement.AtTenant`; `KeyReach.WholeTenant`: `PermissionReach.AtTenant`;
       `ITenancyQuestions.HoldsTenantWideAsync` and `RequireTenantWideAsync`: `HoldsAtTenantAsync` and
       `RequireAtTenantAsync`; `TenancyRowAccess.HoldsTenantWide`: `HoldsAtTenant`.
   - The Tenancy sample follows: `ProjectCatalogue` and `InspectionCatalogue` are `ProjectPermissions` and
@@ -3505,6 +3506,69 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     under the resource's name and drops the old ones, writes the grants from the row access rules, and drops the
     trigger that kept an owner's role in use. Rows of an owner's role that were held stay as they were: the role
     gives what it gives, and the owner holds what it holds by owning.
+
+- **"Key" is "permission" everywhere, the database included.** Decided for 3.2.0-preview.5. What a role gives and a
+  request requires was called a key in one place and a permission in the next; it is a permission now, in the
+  types, their members, the refusals' arguments, the SQL functions, the columns and the docs. A key that is not a
+  permission stays one: a primary key, a pack's key, a resx key, the schema key, a signing key. Nobody uses the
+  packages yet, so the old names are gone with no alias.
+  - From 3.2.0-preview.4, was, now:
+    - `[RequiresKey(key)]`: `[RequiresPermission(permission)]`; `[KeyMarker]`, `[KeyMarkerArgument]` and `[assembly: KeyWithoutMarker]`:
+      `[PermissionMarker]`, `[PermissionMarkerArgument]` and `[assembly: PermissionWithoutMarker]`.
+    - `Permission.Key`: `Permission.Name`, and `Permission.MaxKeyLength`: `Permission.MaxNameLength`;
+      `RolePack.Key` stays, a pack's key, and `RolePack.Keys` is `RolePack.Permissions`.
+    - Tenancy: `TenancyKeys`: `TenancyPermissions`, and its list `TenancyKeys.Permissions`: `TenancyPermissions.All`;
+      `ApplicationCatalogue.AccessManagingKeys` and `ContainAccessManagingKeys`: `AccessManagingPermissions` and
+      `ContainAccessManagingPermissions`; `TenancyCatalogue.LiveKeys`: `LivePermissions`; `KeyReach`:
+      `PermissionReach`; `ITenancyQuestions.KeysIHoldAt`, `KeysHeldAtRoot`, `KeysOn` and `HoldsKey`:
+      `PermissionsIHoldAt`, `PermissionsHeldAtRoot`, `PermissionsOn` and `HoldsPermission`; `RoleWithKey`:
+      `RoleWithPermission`; `RoleKeysChanged`: `RolePermissionsChanged`, stored as `tenancy.role-permissions-changed`;
+      the roles' use case `SetKeysAsync`: `SetPermissionsAsync`; a role's, a draft's and a seat overview's `Keys`:
+      `Permissions`; `SeatRight.Key`, `RoleRow.Keys` and `Role.KeysFromPack`: `Permission`, `Permissions` and
+      `PermissionsFromPack`.
+    - Membership: `OtherKeys`: `OtherPermissions`, and `otherKeys:` on `Roles.Custom` and `Roles.External`:
+      `otherPermissions:`; `rules.KeysOf(role)`: `rules.PermissionsOf(role)`; `IRolesWithKey`:
+      `IRolesWithPermission`; `MemberKeyReach` and `IEfMemberKeyReach`: `MemberPermissionReach` and
+      `IEfMemberPermissionReach`; `MemberAccess.On(key, ...)`, `MemberReach.Key` and `SeenWith<TResourceId>(key)`:
+      `permission` and `Permission`; a custom role's `Keys`, its draft's and its `SetKeys`: `Permissions` and
+      `SetPermissions`.
+    - HotChocolate: `IFieldKeys<TParent>`: `IFieldPermissions<TParent>`; `AddDDDToolkitKeyAuthorization()`:
+      `AddDDDToolkitPermissionAuthorization()`.
+    - The refusals' argument `Key`: `Permission`, and `Keys`: `Permissions`, so `tenancy.not-permitted` names
+      `{Permission}`; the codes that said key say permission: `tenancy.unknown-stored-permissions`,
+      `tenancy.role-permissions-changed`, `tenancy.permissions-not-normalized`,
+      `membership.permission-not-for-members` and the like.
+    - The diagnostics say permission where they said key, and `[RequiresPermission]` where they said
+      `[RequiresKey]`; nothing else about them changed.
+    - Tenancy's functions: `caller_rights`: `caller_permissions`; `holds_key` and `holds_key_in_tenant`:
+      `holds_permission` and `holds_permission_in_tenant`; `holds_tenant_wide`: `holds_at_tenant`;
+      `units_where_i_hold` and `units_where_i_hold_in_tenant`: `units_where_i_hold_permission` and
+      `units_where_i_hold_permission_in_tenant`; `roles_with_key` and `roles_with_key_in_tenant`:
+      `roles_with_permission` and `roles_with_permission_in_tenant`; `key_is_live`, `key_is_contained`,
+      `manages_access` and `pack_keys`: `permission_is_live`, `permission_is_contained`,
+      `permission_manages_access` and `pack_permissions`; `role_keys_in_use`: `role_permissions_in_use`;
+      `seats_holding_at`: `seats_holding_permission_at`; `tenant_roles`: `tenant_roles_with_permissions`;
+      `rights_a_move_changes`: `permissions_a_move_changes`. The columns they answer, `"Key"` and `"Keys"`, are
+      `"Permission"` and `"Permissions"`. The export refuses a function whose arguments or answer changed under
+      the same name, so each of these has a new one; the access file drops the old ones.
+    - Tenancy's columns: `SeatRights."Key"`, with its index `IX_SeatRights_SeatId_Key`: `"Permission"` and
+      `IX_SeatRights_SeatId_Permission`; `Roles."Keys"` and `Roles."KeysFromPack"`: `"Permissions"` and
+      `"PermissionsFromPack"`. A custom role's column `"Keys"`: `"Permissions"`. Membership's SQL is written in
+      form 7, so a database that holds form 6 is found by the start-up check until the new access file is applied.
+  - The Tenancy sample follows: `ProjectKeys` and `InspectionKeys` are `ProjectPermissionNames` and
+    `InspectionPermissionNames`, in `Contracts.Permissions`; the REST routes take `?permission=` and
+    `/permissions` where they took `?key=` and `/keys`, and their bodies `permissions` where they had `keys`; the
+    GraphQL fields `keys`, `keySets` and the mutations `roleKeysSet` and `projectRoleKeysSet` are `permissions`,
+    `permissionSets`, `rolePermissionsSet` and `projectRolePermissionsSet`, and the type `KeyOfMine` is
+    `PermissionOfMine`; `ProjectRoleKeysChanged` is `ProjectRolePermissionsChanged`. Each module whose tables
+    changed has a migration, `PermissionsRenamed`.
+  - **Upgrading.** Rebuild. Add one migration to the context that maps Tenancy's tables, and to each context with a
+    custom role class: Entity Framework writes it as renames, `RenameColumn` for `"Key"`, `"Keys"` and
+    `"KeysFromPack"` and `RenameIndex` for the seat rights' index, so no row is lost. Add to it, by hand, the stored
+    name of the event that was renamed, for the rows the event log and the outbox hold already:
+    `UPDATE ... SET "EventName" = 'tenancy.role-permissions-changed' WHERE "EventName" = 'tenancy.role-keys-changed'`
+    on Tenancy's event log and outbox. On Postgres, let the export write the new access file after it. See
+    [Upgrading from key to permission](docs/tenancy.md#upgrading-from-key-to-permission).
 
 ### Fixed
 

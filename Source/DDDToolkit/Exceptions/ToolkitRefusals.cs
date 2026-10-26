@@ -31,7 +31,7 @@ public static class ToolkitRefusals
     /// </description></item>
     /// <item><description>
     /// A request lets one caller or another through (<see cref="Access.AccessRequirement.Any"/>, or
-    /// <see cref="Access.OrOwnAttribute"/> beside a key), and the caller is neither: its argument
+    /// <see cref="Access.OrOwnAttribute"/> beside a permission), and the caller is neither: its argument
     /// <see cref="ReasonsArgument"/> is each case's own refusal, its code and its arguments, in the order of the cases
     /// (<see cref="RefusalReason"/>), and the refusal's message names them for a log.
     /// </description></item>
@@ -89,7 +89,7 @@ public static class ToolkitRefusals
     /// <summary>
     /// What only the application's own work may do, and the caller is not that work: a signed-in user, whatever
     /// they hold, a caller who did not sign in, or work nobody began a caller for. It is
-    /// <see cref="RefusalKind.NotPermitted"/>, and no key or role gives it. System work is a scope trusted code
+    /// <see cref="RefusalKind.NotPermitted"/>, and no permission or role gives it. System work is a scope trusted code
     /// begins around the work, not a requirement a request declares, so this is made past the door: by a
     /// supporting domain's use case that only system work may call, such as Tenancy's provisioning of a tenant,
     /// and by a handler that only system work may run. So "only the application itself" has one code. No arguments.

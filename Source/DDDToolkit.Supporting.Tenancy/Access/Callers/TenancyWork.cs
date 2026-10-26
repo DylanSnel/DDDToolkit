@@ -77,7 +77,7 @@ public static class TenancyWork
 
     /// <summary>
     /// Begins system work inside one tenant, such as an import, seeding or an operator's command: it holds
-    /// every key there, and nothing in any other tenant. The last-administrator rule still applies to it.
+    /// every permission there, and nothing in any other tenant. The last-administrator rule still applies to it.
     /// <para>
     /// Work that calls Tenancy's use cases keeps the default scope. A module's own system work in a tenant,
     /// that only reads Tenancy's rows next to its own, passes the module's name instead, and then cannot write

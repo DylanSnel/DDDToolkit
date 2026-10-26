@@ -9,7 +9,7 @@ global using DDDToolkit.Supporting.Membership.Access;
 global using Examples.Tenancy.Projects.Application.Access;
 global using Examples.Tenancy.Projects.Application.StoredProjects;
 global using Examples.Tenancy.Projects.Contracts.Gate;
-global using Examples.Tenancy.Projects.Contracts.Keys;
+global using Examples.Tenancy.Projects.Contracts.Permissions;
 global using Examples.Tenancy.Projects.Contracts.ValueObjects;
 global using Examples.Tenancy.Projects.Domain.Aggregates.ProjectRoles;
 global using Examples.Tenancy.Projects.Domain.Aggregates.ProjectRoles.ValueObjects;

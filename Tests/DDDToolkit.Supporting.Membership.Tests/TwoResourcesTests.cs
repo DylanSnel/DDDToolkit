@@ -178,14 +178,14 @@ public sealed class TwoResourcesTests
         var folders = FolderMembership.Rules;
 
         documents.MembersHold(DocumentPermissions.Edit).Should().BeTrue();
-        documents.MembersHold(FolderPermissions.File).Should().BeFalse("a document's roles give a document's keys");
+        documents.MembersHold(FolderPermissions.File).Should().BeFalse("a document's roles give a document's permissions");
         documents.RolesWith(FolderPermissions.Read).Should().BeEmpty();
         documents.Knows(FolderMembership.Clerk).Should().BeFalse();
         folders.Knows(DocumentMembership.Contributor).Should().BeFalse();
         folders.RolesWith(DocumentPermissions.View).Should().BeEmpty();
 
         (documents.Members.Kind, folders.Members.Kind).Should().Be((MemberSourceKind.Inferred, MemberSourceKind.Claim));
-        (documents.OwnerLockKey, folders.OwnerLockKey).Should().Be((DocumentPermissions.Share, FolderPermissions.HandOver));
+        (documents.OwnerLockPermission, folders.OwnerLockPermission).Should().Be((DocumentPermissions.Share, FolderPermissions.HandOver));
         documents.Functions.Should().NotBe(folders.Functions);
     }
 }

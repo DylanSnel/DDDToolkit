@@ -42,10 +42,10 @@ public sealed class SqliteDatabase : TestDatabase
     public override string Provider => "SQLite";
 
     /// <inheritdoc />
-    public override bool KeysAreAnArray => false;
+    public override bool PermissionsAreAnArray => false;
 
     /// <inheritdoc />
-    public override string KeysContain => "json_each";
+    public override string PermissionsContain => "json_each";
 
     /// <inheritdoc />
     public override string PrimaryFilter => "\"IsPrimary\" = 1";

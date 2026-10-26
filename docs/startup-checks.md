@@ -71,7 +71,7 @@ effects:
   and the policies, functions, triggers, grants and extensions are the ones the code expects.
 
 Within a stage the checks run in the order they were registered. A check that has to come before another of its
-stage says so by name, in `RunsBefore`: Tenancy's checks of the database run before its read of the stored keys,
+stage says so by name, in `RunsBefore`: Tenancy's checks of the database run before its read of the stored permissions,
 whatever order `AddTenancy` and `AddTenancyPostgres` were called in. A name no registration brought is passed
 over, and a check that says it runs before one of an earlier stage stops the start, since that cannot be.
 
@@ -99,7 +99,7 @@ made otherwise. They read the catalogs of the database and change nothing.
 | `tenancy.system-in-role-confined` | `TenancyPostgresChecks.SystemInRoleConfinedCheck` | `AddTenancyPostgres` | Database | System work in a tenant cannot leave it |
 | `tenancy.system-reads-across-tenants` | `TenancyPostgresChecks.SystemReadsAcrossTenantsCheck` | `AddTenancyPostgres` | Database | The few reads across tenants answer, with nothing past the policies |
 | `tenancy.policies-in-place` | `TenancyPostgresChecks.PoliciesInPlaceCheck` | `AddTenancyPostgres` | Database | The policies, functions and the index on a tenant's root are the ones the catalogue writes ([Setting it up](tenancy.md#setting-it-up)) |
-| `tenancy.unknown-stored-keys` | `TenancyChecks.UnknownStoredKeysCheck` | `AddTenancy` | Database | Logs a key a role holds that the catalogue has lost, and refuses nothing |
+| `tenancy.unknown-stored-permissions` | `TenancyChecks.UnknownStoredPermissionsCheck` | `AddTenancy` | Database | Logs a permission a role holds that the catalogue has lost, and refuses nothing |
 | `membership.functions-in-place` | `MembershipPostgresChecks.FunctionsInPlaceCheck` | `AddMembershipPostgres` | Database | The functions and the lock of every resource's membership are written from its rules ([On Postgres](membership.md#on-postgres-the-second-lock)) |
 | `pgmq.extension-installed` | `PgmqQueue.ExtensionInstalledCheck` | `AddPgmqSink`, `AddPgmqConsumer` | Database | Every database a sink or a consumer uses has pgmq, with topics where they are used ([Transports](transports.md#queues-creation-and-the-missing-extension)) |
 

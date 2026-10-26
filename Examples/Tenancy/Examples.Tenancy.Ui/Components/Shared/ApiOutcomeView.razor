@@ -1,7 +1,7 @@
 @*
     One answer of the API in full: what was sent, the status, the refusal's code, title and arguments, and the raw
     JSON. An argument that is the id of a seat, a role or a unit the page knows by name shows that name, and the id
-    stays in the raw JSON; so does an argument the refusal leaves empty, which is not listed. A refusal for a key
+    stays in the raw JSON; so does an argument the refusal leaves empty, which is not listed. A refusal for a permission
     that names no unit is one for the whole tenant, which its text does not say, so a line under it does.
 *@
 <div class="api-outcome @(Answer.Succeeded ? "succeeded" : "refused")">
@@ -30,7 +30,7 @@
     {
         <div class="small text-body-secondary">@detail</div>
     }
-    @if (Answer.Problem?.KeyNeededAtTenant == true)
+    @if (Answer.Problem?.PermissionNeededAtTenant == true)
     {
         <div class="small text-body-secondary">@T["answer.whole-tenant"]</div>
     }

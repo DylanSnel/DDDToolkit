@@ -47,8 +47,8 @@ public abstract class TenancyTriggerTests(TenancyPostgres postgres, TenancyNamin
         // and nothing is left for the commit to check.
         await using (var ada = await AsCaller.PersonAsync(database, Ada.Identity, Harbor, Cancellation))
         {
-            (await ada.ExecuteAsync("DELETE FROM tenancy.\"SeatRights\" WHERE \"SeatId\" = $1 AND \"Key\" = 'tenancy.roles.manage'", Cancellation, Ada.Seat.Value)).Should().Be(0);
-            (await ada.ExecuteAsync("UPDATE tenancy.\"SeatRights\" SET \"EndsAt\" = now() WHERE \"SeatId\" = $1 AND \"Key\" = 'tenancy.roles.manage'", Cancellation, Ada.Seat.Value)).Should().Be(0);
+            (await ada.ExecuteAsync("DELETE FROM tenancy.\"SeatRights\" WHERE \"SeatId\" = $1 AND \"Permission\" = 'tenancy.roles.manage'", Cancellation, Ada.Seat.Value)).Should().Be(0);
+            (await ada.ExecuteAsync("UPDATE tenancy.\"SeatRights\" SET \"EndsAt\" = now() WHERE \"SeatId\" = $1 AND \"Permission\" = 'tenancy.roles.manage'", Cancellation, Ada.Seat.Value)).Should().Be(0);
             await ada.CommitAsync(Cancellation);
         }
 
@@ -56,7 +56,7 @@ public abstract class TenancyTriggerTests(TenancyPostgres postgres, TenancyNamin
 
         // The owner is past the policies, and not past the trigger.
         await using var owner = await AsCaller.OwnerAsync(database, Cancellation);
-        (await owner.ExecuteAsync("DELETE FROM tenancy.\"SeatRights\" WHERE \"SeatId\" = $1 AND \"Key\" = 'tenancy.roles.manage'", Cancellation, Ada.Seat.Value)).Should().Be(1);
+        (await owner.ExecuteAsync("DELETE FROM tenancy.\"SeatRights\" WHERE \"SeatId\" = $1 AND \"Permission\" = 'tenancy.roles.manage'", Cancellation, Ada.Seat.Value)).Should().Be(1);
         (await FailsAtCommitAsync(owner)).Should().Be(AdministratorRemains);
     }
 
@@ -102,7 +102,7 @@ public abstract class TenancyTriggerTests(TenancyPostgres postgres, TenancyNamin
         }
 
         // Oli gets a desk that manages seats for the whole tenant, and nothing else.
-        await HoldAtAsync(database, Oli, HarborRoot, [TenancyKeys.SeatsManage], Cancellation);
+        await HoldAtAsync(database, Oli, HarborRoot, [TenancyPermissions.SeatsManage], Cancellation);
         await using (var oli = await AsCaller.PersonAsync(database, Oli.Identity, Harbor, Cancellation))
         {
             // Sue's role manages no access, so her seat is his to reactivate, and her rights come back with it.
@@ -123,7 +123,7 @@ public abstract class TenancyTriggerTests(TenancyPostgres postgres, TenancyNamin
             await oli.CommitAsync(Cancellation);
         }
 
-        // Ada holds every key at the root, for good.
+        // Ada holds every permission at the root, for good.
         await using (var ada = await AsCaller.PersonAsync(database, Ada.Identity, Harbor, Cancellation))
         {
             (await ada.ExecuteAsync(suspending, Cancellation, Hiro.Seat.Value)).Should().Be(1);
@@ -158,16 +158,16 @@ public abstract class TenancyTriggerTests(TenancyPostgres postgres, TenancyNamin
     }
 
     [Fact]
-    public async Task Taking_the_administrator_key_from_the_last_admin_role_by_a_query_as_the_caller_fails_at_commit()
+    public async Task Taking_the_administrator_permission_from_the_last_admin_role_by_a_query_as_the_caller_fails_at_commit()
     {
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
-        const string takingTheKey = "UPDATE tenancy.\"Roles\" SET \"Keys\" = pg_catalog.array_remove(\"Keys\", 'tenancy.roles.manage') WHERE \"Id\" = $1";
+        const string takingThePermission = "UPDATE tenancy.\"Roles\" SET \"Permissions\" = pg_catalog.array_remove(\"Permissions\", 'tenancy.roles.manage') WHERE \"Id\" = $1";
 
-        // The role loses the key, and its holders the rights for it, in the same statement.
+        // The role loses the permission, and its holders the rights for it, in the same statement.
         await using (var ada = await AsCaller.PersonAsync(database, Ada.Identity, Harbor, Cancellation))
         {
-            (await ada.ExecuteAsync(takingTheKey, Cancellation, HarborRoles.Administrator.Value)).Should().Be(1);
-            (await ada.ScalarAsync<long>("SELECT count(*) FROM tenancy.\"SeatRights\" WHERE \"SeatId\" = $1 AND \"Key\" = 'tenancy.roles.manage'", Cancellation, Ada.Seat.Value)).Should().Be(0);
+            (await ada.ExecuteAsync(takingThePermission, Cancellation, HarborRoles.Administrator.Value)).Should().Be(1);
+            (await ada.ScalarAsync<long>("SELECT count(*) FROM tenancy.\"SeatRights\" WHERE \"SeatId\" = $1 AND \"Permission\" = 'tenancy.roles.manage'", Cancellation, Ada.Seat.Value)).Should().Be(0);
 
             (await FailsAtCommitAsync(ada)).Should().Be(AdministratorRemains);
         }
@@ -229,7 +229,7 @@ public abstract class TenancyTriggerTests(TenancyPostgres postgres, TenancyNamin
         await using (var ada = await AsCaller.OwnerAsync(database, Cancellation))
         {
             (await ada.ExecuteAsync(
-                    "INSERT INTO tenancy.\"SeatRights\" (\"SeatId\", \"UnitId\", \"RoleId\", \"Key\", \"TenantId\", \"StartsAt\") VALUES ($1, $2, $3, 'widget.read', 1, now())",
+                    "INSERT INTO tenancy.\"SeatRights\" (\"SeatId\", \"UnitId\", \"RoleId\", \"Permission\", \"TenantId\", \"StartsAt\") VALUES ($1, $2, $3, 'widget.read', 1, now())",
                     Cancellation,
                     Oli.Seat.Value,
                     South.Value,
@@ -239,7 +239,7 @@ public abstract class TenancyTriggerTests(TenancyPostgres postgres, TenancyNamin
             (await FailsAtCommitAsync(ada)).Should().Be(RightsBackedByGrants);
         }
 
-        // Nor may a right outlast its grant, or hold a key its role does not.
+        // Nor may a right outlast its grant, or hold a permission its role does not.
         await using (var ada = await AsCaller.OwnerAsync(database, Cancellation))
         {
             (await ada.ExecuteAsync("UPDATE tenancy.\"SeatRights\" SET \"EndsAt\" = NULL WHERE \"SeatId\" = $1 AND \"RoleId\" = $2", Cancellation, Eve.Seat.Value, HarborRoles.Watcher.Value))
@@ -250,7 +250,7 @@ public abstract class TenancyTriggerTests(TenancyPostgres postgres, TenancyNamin
         await using (var ada = await AsCaller.OwnerAsync(database, Cancellation))
         {
             (await ada.ExecuteAsync(
-                    "INSERT INTO tenancy.\"SeatRights\" (\"SeatId\", \"UnitId\", \"RoleId\", \"Key\", \"TenantId\", \"StartsAt\") SELECT \"SeatId\", \"UnitId\", \"RoleId\", 'tenancy.roles.manage', 1, \"StartsAt\" FROM tenancy.\"SeatRoleGrants\" WHERE \"SeatId\" = $1 AND \"RoleId\" = $2",
+                    "INSERT INTO tenancy.\"SeatRights\" (\"SeatId\", \"UnitId\", \"RoleId\", \"Permission\", \"TenantId\", \"StartsAt\") SELECT \"SeatId\", \"UnitId\", \"RoleId\", 'tenancy.roles.manage', 1, \"StartsAt\" FROM tenancy.\"SeatRoleGrants\" WHERE \"SeatId\" = $1 AND \"RoleId\" = $2",
                     Cancellation,
                     Oli.Seat.Value,
                     HarborRoles.Operator.Value))
@@ -272,7 +272,7 @@ public abstract class TenancyTriggerTests(TenancyPostgres postgres, TenancyNamin
             (await oli.ScalarAsync<long>(hisRights, Cancellation, Oli.Seat.Value)).Should().Be(3);
             (await oli.ExecuteAsync("DELETE FROM tenancy.\"SeatRoleGrants\" WHERE \"SeatId\" = $1 AND \"RoleId\" = $2", Cancellation, Oli.Seat.Value, HarborRoles.Operator.Value)).Should().Be(1);
             (await oli.ScalarAsync<long>(hisRights, Cancellation, Oli.Seat.Value)).Should().Be(0);
-            (await oli.ScalarAsync<bool>("SELECT tenancy.holds_key('widget.change')", Cancellation)).Should().BeFalse();
+            (await oli.ScalarAsync<bool>("SELECT tenancy.holds_permission('widget.change')", Cancellation)).Should().BeFalse();
         }
 
         // Rolled back, he holds them still. Hiro, who gives roles there, takes the role away and commits: nothing is left
@@ -429,8 +429,8 @@ public abstract class TenancyTriggerTests(TenancyPostgres postgres, TenancyNamin
     public async Task Two_transactions_that_each_take_away_another_administrator_cannot_both_commit()
     {
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
-        await HoldAtAsync(database, Hiro, HarborRoot, keys: null, Cancellation);
-        const string takingAway = "DELETE FROM tenancy.\"SeatRights\" WHERE \"SeatId\" = $1 AND \"Key\" = 'tenancy.roles.manage'";
+        await HoldAtAsync(database, Hiro, HarborRoot, permissions: null, Cancellation);
+        const string takingAway = "DELETE FROM tenancy.\"SeatRights\" WHERE \"SeatId\" = $1 AND \"Permission\" = 'tenancy.roles.manage'";
 
         // Harbor has two administrators, Ada and Hiro. Each transaction takes one away, and checks before the other ends.
         await using var first = await AsCaller.OwnerAsync(database, Cancellation);
@@ -457,7 +457,7 @@ public abstract class TenancyTriggerTests(TenancyPostgres postgres, TenancyNamin
             .Which.ConstraintName.Should().Be(AdministratorRemains);
 
         await using var owner = await AsCaller.OwnerAsync(database, Cancellation);
-        (await owner.ScalarAsync<long>("SELECT count(*) FROM tenancy.\"SeatRights\" WHERE \"Key\" = 'tenancy.roles.manage' AND \"TenantId\" = 1 AND \"UnitId\" = $1", Cancellation, HarborRoot.Value))
+        (await owner.ScalarAsync<long>("SELECT count(*) FROM tenancy.\"SeatRights\" WHERE \"Permission\" = 'tenancy.roles.manage' AND \"TenantId\" = 1 AND \"UnitId\" = $1", Cancellation, HarborRoot.Value))
             .Should().Be(1, "Hiro is left");
     }
 
@@ -474,13 +474,13 @@ public abstract class TenancyTriggerTests(TenancyPostgres postgres, TenancyNamin
     {
         await using var owner = await AsCaller.OwnerAsync(database, Cancellation);
         (await owner.ScalarAsync<long>(
-                "SELECT count(*) FROM tenancy.\"SeatRights\" WHERE \"SeatId\" = $1 AND \"Key\" = 'tenancy.roles.manage' AND \"UnitId\" = $2",
+                "SELECT count(*) FROM tenancy.\"SeatRights\" WHERE \"SeatId\" = $1 AND \"Permission\" = 'tenancy.roles.manage' AND \"UnitId\" = $2",
                 Cancellation,
                 Ada.Seat.Value,
                 HarborRoot.Value))
             .Should().Be(1);
         (await owner.ScalarAsync<string>("SELECT \"Status\" FROM tenancy.\"Seats\" WHERE \"Id\" = $1", Cancellation, Ada.Seat.Value)).Should().Be(database.Names.Stored(SeatStatus.Active));
-        (await owner.ScalarAsync<bool>("SELECT 'tenancy.roles.manage' = ANY (\"Keys\") FROM tenancy.\"Roles\" WHERE \"Id\" = $1", Cancellation, HarborRoles.Administrator.Value)).Should().BeTrue();
+        (await owner.ScalarAsync<bool>("SELECT 'tenancy.roles.manage' = ANY (\"Permissions\") FROM tenancy.\"Roles\" WHERE \"Id\" = $1", Cancellation, HarborRoles.Administrator.Value)).Should().BeTrue();
     }
 
     /// <summary>Quay is closed, and loses Quin, its one administrator: system work of Tenancy's, which commits.</summary>

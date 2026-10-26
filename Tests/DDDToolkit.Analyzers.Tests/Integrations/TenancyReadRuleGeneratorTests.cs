@@ -7,7 +7,7 @@ namespace DDDToolkit.Analyzers.Tests.Integrations;
 /// A read rule of the application's on its own seat or invitation class, which takes the place of Tenancy's default
 /// read of that table, written with the questions Tenancy offers as building blocks. Each building block becomes the
 /// SQL a policy asks once per statement, never once per row: the caller's tenant and seat as a scalar question, and
-/// where it holds a key or which people share its units as a set. The package is the real one, seen through
+/// where it holds a permission or which people share its units as a set. The package is the real one, seen through
 /// metadata the way an application sees it.
 /// </summary>
 public class TenancyReadRuleGeneratorTests
@@ -32,16 +32,16 @@ public class TenancyReadRuleGeneratorTests
     [InlineData("seat.TenantId == TenancyRowAccess.CallerTenant<TenantId>()", "({col:TenantId} = (SELECT {fn:tenancy/caller_tenant}()))")]
     [InlineData("seat.Id == TenancyRowAccess.CallerSeat<SeatId>()", "({col:Id} = (SELECT {fn:tenancy/caller_seat}()))")]
     [InlineData("TenancyRowAccess.SeatsInMyUnits<SeatId>().Contains(seat.Id)", "({col:Id} = ANY (ARRAY(SELECT {fn:tenancy/seats_in_my_units}())))")]
-    [InlineData("TenancyRowAccess.HoldsKey(TenancyKeys.SeatsManage)", "(SELECT {fn:tenancy/holds_key}('tenancy.seats.manage'))")]
-    [InlineData("TenancyRowAccess.HoldsAtTenant(TenancyKeys.RolesManage)", "(SELECT {fn:tenancy/holds_tenant_wide}('tenancy.roles.manage'))")]
+    [InlineData("TenancyRowAccess.HoldsPermission(TenancyPermissions.SeatsManage)", "(SELECT {fn:tenancy/holds_permission}('tenancy.seats.manage'))")]
+    [InlineData("TenancyRowAccess.HoldsAtTenant(TenancyPermissions.RolesManage)", "(SELECT {fn:tenancy/holds_at_tenant}('tenancy.roles.manage'))")]
     [InlineData("seat.Identity == caller.UserId", "({col:Identity} IS NOT DISTINCT FROM {caller:uid})")]
     public void A_building_block_in_a_read_rule_on_the_seat_class_is_asked_once_per_statement(string expression, string sql)
         => RuleSqlOf("Seat", "seat", expression).Should().Be(sql);
 
     [Fact]
     public void Where_the_caller_holds_a_key_is_a_set_an_invitation_rule_asks_by_the_invitations_unit()
-        => RuleSqlOf("Invitation", "invitation", "TenancyRowAccess.UnitsWhereIHold<OrganizationUnitId>(TenancyKeys.GrantsManage).Contains(invitation.UnitId)")
-            .Should().Be("({col:UnitId} = ANY (ARRAY(SELECT {fn:tenancy/units_where_i_hold}('tenancy.grants.manage'))))");
+        => RuleSqlOf("Invitation", "invitation", "TenancyRowAccess.UnitsWhereIHold<OrganizationUnitId>(TenancyPermissions.GrantsManage).Contains(invitation.UnitId)")
+            .Should().Be("({col:UnitId} = ANY (ARRAY(SELECT {fn:tenancy/units_where_i_hold_permission}('tenancy.grants.manage'))))");
 
     [Fact]
     public void The_building_blocks_combine_as_any_conditions_do()

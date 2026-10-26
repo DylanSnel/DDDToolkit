@@ -10,11 +10,11 @@ namespace Examples.Tenancy.Projects.Application.ProjectRoles.Commands;
 /// project's owner holds none.
 /// </summary>
 /// <param name="Id">The role.</param>
-[RequiresKey(RequiredKey)]
+[RequiresPermission(RequiredPermission)]
 public sealed record ArchiveProjectRole(ProjectRoleId Id) : ICommand, IProjectsRequest
 {
-    /// <summary>The key the caller holds for the whole tenant.</summary>
-    public const string RequiredKey = ProjectRoleListing.KeysKey;
+    /// <summary>The permission the caller holds for the whole tenant.</summary>
+    public const string RequiredPermission = ProjectRoleListing.ManageRolesPermission;
 }
 
 /// <summary>Handles <see cref="ArchiveProjectRole"/>: loads the role, archives it and saves.</summary>
@@ -31,7 +31,7 @@ public sealed class ArchiveProjectRoleHandler(IProjectStore store, ProjectMember
 {
     /// <inheritdoc />
     /// <exception cref="Exceptions.RefusalException">
-    /// <c>tenancy.not-permitted</c>, naming the key, for a caller that does not hold it for the whole tenant;
+    /// <c>tenancy.not-permitted</c>, naming the permission, for a caller that does not hold it for the whole tenant;
     /// <c>projects.role-not-found</c>, for a role of another tenant too; <c>projects.role-archived</c>.
     /// </exception>
     public async ValueTask<Unit> Handle(ArchiveProjectRole command, CancellationToken cancellationToken)

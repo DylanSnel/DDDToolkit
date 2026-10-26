@@ -10,8 +10,8 @@ namespace DDDToolkit.Supporting.Membership.Postgres;
 /// <summary>
 /// The membership of one kind of resource in the database: the four set functions that answer, for the caller
 /// of the connection, the questions the access questions answer in C#, written from the resource's rules and
-/// from the model of the context that maps it; and, where the rules name the keys that change the members
-/// and the owner, the lock that holds a caller that reaches the database to those keys. This package declares
+/// from the model of the context that maps it; and, where the rules name the permissions that change the members
+/// and the owner, the lock that holds a caller that reaches the database to those permissions. This package declares
 /// it with <c>[assembly: RowAccessContribution]</c>, so the Supabase export of every application that references
 /// the package writes it, once for each kind of resource whose rules the application marks, closed over the
 /// member class the mark names:
@@ -33,15 +33,15 @@ namespace DDDToolkit.Supporting.Membership.Postgres;
 /// </para>
 /// <list type="bullet">
 /// <item><c>as member</c>: the ids of the resources the caller is a member of now.</item>
-/// <item><c>as member with (key)</c>: those where the caller is a member now and holds a role now that gives
-/// the key, as the rules say which role gives which key and which keys a member's role can give at all.</item>
+/// <item><c>as member with (permission)</c>: those where the caller is a member now and holds a role now that gives
+/// the permission, as the rules say which role gives which permission and which permissions a member's role can give at all.</item>
 /// <item><c>seen</c>: the resources the caller sees: those it is a member of now; those it owns, by the owner
 /// column, from the moment a resource's row names it, so a rule that reads a resource through this function
-/// lets its owner write the member rows of a resource it has just opened; and, where the rules name a key for
-/// seeing and let a resource be reached from above, those that sit where the caller holds that key.</item>
-/// <item><c>held on (key)</c>: the resources the caller holds the key on, however the rules let it be held:
-/// through a role, by being a member for the one key that gives, by owning the resource, whose owner holds
-/// every key of it, or from above.</item>
+/// lets its owner write the member rows of a resource it has just opened; and, where the rules name a permission for
+/// seeing and let a resource be reached from above, those that sit where the caller holds that permission.</item>
+/// <item><c>held on (permission)</c>: the resources the caller holds the permission on, however the rules let it be held:
+/// through a role, by being a member for the one permission that gives, by owning the resource, whose owner holds
+/// every permission of it, or from above.</item>
 /// </list>
 /// <para>
 /// Each runs as its owner with an empty search path, so it reads the member rows without the policies that ask
@@ -57,18 +57,18 @@ namespace DDDToolkit.Supporting.Membership.Postgres;
 /// </para>
 /// <para>
 /// What the rules have somebody else answer is asked of functions by their logical names, <c>owner/name</c>: who
-/// the caller is as a member, and where the caller holds a key above, of the function a contribution of the export
+/// the caller is as a member, and where the caller holds a permission above, of the function a contribution of the export
 /// answers for the type of the member or of the place (<see cref="ICallerFunctions"/>), an organization package's for
 /// its seat and its unit, or of the one the rules name (<see cref="MemberSource.Resolved"/>, <see cref="MembershipRules.ReachFromAbove"/>);
-/// which of the roles kept elsewhere give a key, of the one <see cref="Roles.External"/> names. The script finds a
+/// which of the roles kept elsewhere give a permission, of the one <see cref="Roles.External"/> names. The script finds a
 /// function wherever it is defined: in this context's script or another's it is written with. A name nothing
 /// defines there is refused when the script is written, and rules that leave a function they need to nobody are
-/// refused here. What a role kept elsewhere gives a member is cut in these functions as it is in C#: only a key the
+/// refused here. What a role kept elsewhere gives a member is cut in these functions as it is in C#: only a permission the
 /// rules let a role give.
 /// </para>
 /// <para>
 /// Roles a customer makes (<see cref="Roles.Custom"/>) are read from the table of the application's role class,
-/// which the context maps with <c>IsCustomRole</c>: a role in use that holds the key, cut the same way. No function
+/// which the context maps with <c>IsCustomRole</c>: a role in use that holds the permission, cut the same way. No function
 /// is asked for them, and the functions read those rows as they read the member rows, as their owner: which rows a
 /// caller may read of that table is the application's own rule, and the functions do not lean on it. The owner
 /// holds no role, so no role is kept in use for it.
@@ -98,33 +98,33 @@ namespace DDDToolkit.Supporting.Membership.Postgres;
 /// written from them, for the database roles that may ask the functions:
 /// </para>
 /// <list type="bullet">
-/// <item><see cref="MembershipRules.MembersLockKey"/>: a restrictive policy on both member tables for
-/// adding, changing and removing a row. A row is written only on a resource the caller holds that key on, or
+/// <item><see cref="MembershipRules.MembersLockPermission"/>: a restrictive policy on both member tables for
+/// adding, changing and removing a row. A row is written only on a resource the caller holds that permission on, or
 /// the one that locks the owner, where there is one: naming an owner writes member rows too. It
 /// narrows what the application's rules allow and allows nothing itself. Where a customer makes the
 /// roles, a second one on the table of the roles a member holds, for adding and changing a row: the role
 /// is one the caller sees in the role table, asked as the caller, so the application's own rules on that
 /// table decide it. The functions find a role by its id, whoever's it is; this keeps a role the caller does
 /// not see, another customer's, off a member list it writes.</item>
-/// <item><see cref="MembershipRules.OwnerLockKey"/>: a trigger on the resource's table that refuses, as a
-/// policy does, a statement that would leave a row with another owner, unless the caller held that key on
+/// <item><see cref="MembershipRules.OwnerLockPermission"/>: a trigger on the resource's table that refuses, as a
+/// policy does, a statement that would leave a row with another owner, unless the caller held that permission on
 /// the resource before.</item>
 /// </list>
 /// <para>
 /// The lock asks what the caller holds when each statement runs, as every policy does, and a change of a
 /// resource's members is several statements. Two things follow. A resource is opened with its owner on the
 /// list, and those first rows pass the lock like any other: an owner holds the permissions marked <c>Owner</c>
-/// (<see cref="MembershipRules.OwnerKeys"/>), so the one that locks the members is one of them wherever a
-/// caller opens a resource as itself. And an owner that hands its own resource on, holding the keys by
+/// (<see cref="MembershipRules.OwnerPermissions"/>), so the one that locks the members is one of them wherever a
+/// caller opens a resource as itself. And an owner that hands its own resource on, holding the permissions by
 /// owning it alone, holds them no longer once the owner column has changed: the rows written after that are
 /// not its to write, under the lock or under an application's own rule that asks what the caller holds.
-/// Somebody who holds the key through a role, or from above, hands a resource on as itself; an owner's own
+/// Somebody who holds the permission through a role, or from above, hands a resource on as itself; an owner's own
 /// hand-over is saved as the application's own work, once the command's check let it through.
 /// </para>
 /// <para>
 /// The lock holds the database roles that may ask the functions, and no other: a role no rule of the resource is
-/// for holds no key, and nothing is written for it. The role scoped system work runs as is held as well, so work in a
-/// scope the rules do not let through writes no member row; work in one they do holds every key, and passes. The role
+/// for holds no permission, and nothing is written for it. The role scoped system work runs as is held as well, so work in a
+/// scope the rules do not let through writes no member row; work in one they do holds every permission, and passes. The role
 /// that owns the tables is not held, and where no role may ask the functions no lock is written.
 /// </para>
 /// <para>
@@ -175,12 +175,12 @@ public class MembershipRowAccessContribution<TMember> : IRowAccessContribution
     /// <inheritdoc />
     /// <exception cref="ArgumentNullException"><paramref name="context"/> or <paramref name="export"/> is null.</exception>
     /// <exception cref="InvalidOperationException">
-    /// Who the caller is as a member, or where it holds a key above, is answered by nobody: the rules name no
+    /// Who the caller is as a member, or where it holds a permission above, is answered by nobody: the rules name no
     /// function, and no contribution answers one for the type of the member or of the place; the rules let the
     /// resource be reached from above, and it marks no place it hangs at; the roles are fixed, and the members
     /// hold roles that are not <see cref="NamedRole"/>; a customer makes the roles, and the model maps no role class
     /// for the resource, or one a member does not hold by its id; or the model stores a member, a moment of a period
-    /// or a role's keys as something the functions cannot compare; or a permission locks the owner and a role the lock
+    /// or a role's permissions as something the functions cannot compare; or a permission locks the owner and a role the lock
     /// cannot be written for may ask the functions; or a trigger's name would be longer than Postgres keeps one.
     /// </exception>
     public RowAccessContributionResult? Contribute(DbContext context, RowAccessExport export)
@@ -203,7 +203,7 @@ public class MembershipRowAccessContribution<TMember> : IRowAccessContribution
     }
 
     /// <summary>What the functions are written with beyond the rules, for <paramref name="context"/>.</summary>
-    /// <exception cref="InvalidOperationException">Who the caller is as a member, or where it holds a key above, is answered by nobody.</exception>
+    /// <exception cref="InvalidOperationException">Who the caller is as a member, or where it holds a permission above, is answered by nobody.</exception>
     private Written WrittenWith(DbContext context, MemberMapping mapping, RowAccessExport export)
     {
         var what = mapping.Resource.DisplayName();
@@ -234,7 +234,7 @@ public class MembershipRowAccessContribution<TMember> : IRowAccessContribution
                 ?? Answering(export).Select(answers => answers.PlacesWhereCallerHolds(context, at.ClrType)).FirstOrDefault(function => function is not null)
                 ?? throw new InvalidOperationException(
                     "The rules '" + Rules.Name + "' let " + what + " be reached from above, where it hangs at a " + at.ClrType.Name + ", and nothing answers in the database where "
-                    + "the caller holds a key at one: no contribution keeps such a place. Map the read model of the package that keeps such places where the context maps "
+                    + "the caller holds a permission at one: no contribution keeps such a place. Map the read model of the package that keeps such places where the context maps "
                     + what + ", or name the application's own function: reachFromAbove: DepotFunctions.BaysWhereIHold.");
         }
 

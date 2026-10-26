@@ -17,7 +17,7 @@ public interface ITenancyReadSource<TTenantId, TSeatId, TUnitId, TRoleId>
     where TUnitId : struct, IEntityId, IEquatable<TUnitId>
     where TRoleId : struct, IEntityId, IEquatable<TRoleId>
 {
-    /// <summary>The keys seats hold at units.</summary>
+    /// <summary>The permissions seats hold at units.</summary>
     IQueryable<SeatRight<TTenantId, TSeatId, TUnitId, TRoleId>> SeatRights { get; }
 
     /// <summary>The closure of every organization's tree.</summary>
@@ -36,14 +36,14 @@ public interface ITenancyReadSource<TTenantId, TSeatId, TUnitId, TRoleId>
     IQueryable<SeatRow<TTenantId, TSeatId>> Seats { get; }
 
     /// <summary>
-    /// The seats that hold <paramref name="key"/> at <paramref name="unit"/> now, as the storage itself answers
+    /// The seats that hold <paramref name="permission"/> at <paramref name="unit"/> now, as the storage itself answers
     /// the calling seat, or <see langword="null"/> when it has no answer of its own and the question is worked
     /// out over the rows above. A storage that shows a seat only its own <see cref="SeatRights"/> has one: over
     /// those rows the question would find nobody but the seat itself, whoever asks. Its answer keeps to what
-    /// <see cref="ITenancyQuestions{TTenantId, TSeatId, TUnitId, TRoleId}.SeatsHoldingAt"/> says a seat learns,
+    /// <see cref="ITenancyQuestions{TTenantId, TSeatId, TUnitId, TRoleId}.SeatsHoldingPermissionAt"/> says a seat learns,
     /// and is a query of the same context, so it still composes into one statement.
     /// </summary>
-    /// <param name="key">A live key of the catalogue.</param>
+    /// <param name="permission">A live permission of the catalogue.</param>
     /// <param name="unit">The unit.</param>
-    IQueryable<TSeatId>? SeatsHoldingAt(string key, TUnitId unit) => null;
+    IQueryable<TSeatId>? SeatsHoldingPermissionAt(string permission, TUnitId unit) => null;
 }

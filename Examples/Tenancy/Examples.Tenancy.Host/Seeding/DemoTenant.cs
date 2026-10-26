@@ -36,7 +36,7 @@ public sealed record DemoTenant(
 
     /// <summary>
     /// The key of the administrators' pack seeded for this tenant's shape: the pack whose role provisioning grants the
-    /// first administrator. A flat tenant's holds every key; a hierarchical tenant's runs access.
+    /// first administrator. A flat tenant's holds every permission; a hierarchical tenant's runs access.
     /// </summary>
     public string AdministratorsPack => Shape == TenantShape.Flat ? SampleCatalogue.TenantAdmin : SampleCatalogue.AccessAdmin;
 

@@ -38,7 +38,7 @@ public static class ExportedMarks
 
     /// <summary>
     /// Tenancy's contribution as the export makes it, with the constructor the package marks for that: every list of
-    /// keys marked <see cref="TenancyPermissionsAttribute"/>, the catalogue marked <see cref="TenancyCatalogueAttribute"/>
+    /// permissions marked <see cref="TenancyPermissionsAttribute"/>, the catalogue marked <see cref="TenancyCatalogueAttribute"/>
     /// and the operators marked <see cref="DDDToolkit.Supporting.Tenancy.TenancyOperatorsAttribute"/>.
     /// </summary>
     public static TenancyRowAccessContribution Tenancy()

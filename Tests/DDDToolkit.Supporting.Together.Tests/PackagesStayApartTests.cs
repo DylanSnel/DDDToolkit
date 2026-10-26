@@ -50,7 +50,7 @@ public sealed class PackagesStayApartTests
             "DDDToolkit.Supporting.Tenancy", "DDDToolkit.Supporting.Tenancy.EntityFramework", "DDDToolkit.Supporting.Tenancy.Postgres");
 
         // What the projects say they reference, the generator the core package ships included: the one that collects
-        // the keys the modules mark, which references nothing but the compiler.
+        // the permissions the modules mark, which references nothing but the compiler.
         var projects = PackageProjects("DDDToolkit.Supporting.Tenancy*");
         projects.Select(Path.GetFileNameWithoutExtension).Should().BeEquivalentTo(
             "DDDToolkit.Supporting.Tenancy", "DDDToolkit.Supporting.Tenancy.EntityFramework", "DDDToolkit.Supporting.Tenancy.Postgres",

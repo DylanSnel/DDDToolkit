@@ -8,7 +8,7 @@ namespace Examples.Tenancy.Inspections.Application.Recording.Queries;
 /// with their inspections, asked once for all of them.
 /// </summary>
 /// <remarks>
-/// It refuses no project. Those of <paramref name="Projects"/> the caller may see with <see cref="RequiredKey"/>
+/// It refuses no project. Those of <paramref name="Projects"/> the caller may see with <see cref="RequiredPermission"/>
 /// are answered, each with its page, an empty one when nothing was recorded on it; a project the caller may not
 /// see is left out exactly as one that does not exist, so asking about an id tells nothing about it. Projects'
 /// gate is asked once, about all of them, by the handler.
@@ -18,14 +18,14 @@ namespace Examples.Tenancy.Inspections.Application.Recording.Queries;
 public sealed record InspectionsOfProjects(IReadOnlyList<ProjectId> Projects, PagingArguments Paging)
     : IQuery<IReadOnlyDictionary<ProjectId, Page<InspectionOverview>>>, IInspectionsRequest
 {
-    /// <summary>The key that decides whether a project is there for the caller.</summary>
-    public const string RequiredKey = ProjectKeys.View;
+    /// <summary>The permission that decides whether a project is there for the caller.</summary>
+    public const string RequiredPermission = ProjectPermissionNames.View;
 
     /// <summary>The most projects one question is about: what Projects' gate answers at a time.</summary>
     public const int MostProjects = IProjectGate.MostProjects;
 
     /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => new InspectionsRequirement.OnProjectsInReach(RequiredKey, Projects);
+    AccessRequirement IRequireAccess.RequiredAccess => new InspectionsRequirement.OnProjectsInReach(RequiredPermission, Projects);
 }
 
 /// <summary>
@@ -44,7 +44,7 @@ public sealed class InspectionsOfProjectsHandler(IInspectionReads reads, IProjec
         var paging = InspectionPages.Checked(query.Paging);
 
         // Only the projects the gate answers for are read: the others are not there for this caller.
-        var seen = (await projects.AskAsync(query.Projects, InspectionsOfProjects.RequiredKey, cancellationToken)).Keys.ToList();
+        var seen = (await projects.AskAsync(query.Projects, InspectionsOfProjects.RequiredPermission, cancellationToken)).Keys.ToList();
 
         if (seen.Count == 0)
         {

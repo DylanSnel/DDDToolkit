@@ -7,16 +7,16 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
     /// its pack already, one made by hand and one that is archived are in none of the lists.
     /// </summary>
     /// <param name="Changed">
-    /// The roles whose keys changed, each with a <see cref="RoleFollowedItsPack{TTenantId, TRoleId, TSeatId}"/> raised.
+    /// The roles whose permissions changed, each with a <see cref="RoleFollowedItsPack{TTenantId, TRoleId, TSeatId}"/> raised.
     /// </param>
     /// <param name="KeptForAnAdministrator">
-    /// The roles left as they were, keys and record, because following their pack would take the administrator key
+    /// The roles left as they were, permissions and record, because following their pack would take the administrator permission
     /// from the tenant's last administrators. Each follows at a later run, once the tenant has an administrator
     /// through another role.
     /// </param>
     /// <param name="WithoutTheirPack">
-    /// The roles made from a pack the catalogue no longer has. They keep their keys, and follow the pack again if
-    /// the application declares it again under the same key.
+    /// The roles made from a pack the catalogue no longer has. They keep their permissions, and follow the pack again if
+    /// the application declares it again under the same permission.
     /// </param>
     public sealed record PacksFollowed(
         IReadOnlyList<TRoleId> Changed,

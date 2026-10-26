@@ -6,7 +6,7 @@ namespace Examples.Tenancy.Tests.Infrastructure;
 /// <summary>What a project of a module is, which decides the rules it is held to.</summary>
 public enum Layer
 {
-    /// <summary>What other modules may name: ids, keys, questions they may ask.</summary>
+    /// <summary>What other modules may name: ids, permissions, questions they may ask.</summary>
     Contracts,
 
     /// <summary>The classes and their rules.</summary>

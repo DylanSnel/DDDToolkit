@@ -52,18 +52,18 @@ public class OwnerRequirementTests
         }
     }
 
-    /// <summary>A case of the module's own: a key, held by nobody.</summary>
-    public sealed record HoldsKey(string Key) : AccessRequirement;
+    /// <summary>A case of the module's own: a permission, held by nobody.</summary>
+    public sealed record HoldsPermission(string Key) : AccessRequirement;
 
-    /// <summary>Decides the module's key, held by nobody, and says it was asked.</summary>
-    public sealed class KeyCheck(List<string> asked) : IAccessCheck
+    /// <summary>Decides the module's permission, held by nobody, and says it was asked.</summary>
+    public sealed class PermissionCheck(List<string> asked) : IAccessCheck
     {
-        public bool Decides(AccessRequirement requirement) => requirement is HoldsKey;
+        public bool Decides(AccessRequirement requirement) => requirement is HoldsPermission;
 
         public ValueTask RequireAsync(AccessRequirement requirement, IRequireAccess request, CancellationToken cancellationToken)
         {
-            asked.Add(((HoldsKey)requirement).Key);
-            return ValueTask.FromException(new RefusalException("boards.not-permitted", RefusalKind.NotPermitted, "That takes the key."));
+            asked.Add(((HoldsPermission)requirement).Key);
+            return ValueTask.FromException(new RefusalException("boards.not-permitted", RefusalKind.NotPermitted, "That takes the permission."));
         }
     }
 
@@ -153,22 +153,22 @@ public class OwnerRequirementTests
     }
 
     [Fact]
-    public async Task The_owner_or_the_key_asks_the_key_where_the_board_is_somebody_else_s_nobody_s_or_not_found()
+    public async Task The_owner_or_the_permission_asks_the_permission_where_the_board_is_somebody_else_s_nobody_s_or_not_found()
     {
         var asked = new List<string>();
-        using var provider = Provider(Caller.User(Ann), UsersBoards(), services => services.AddSingleton(asked).AddAccessCheck<IBoardsRequest, KeyCheck>());
+        using var provider = Provider(Caller.User(Ann), UsersBoards(), services => services.AddSingleton(asked).AddAccessCheck<IBoardsRequest, PermissionCheck>());
         using var scope = provider.CreateScope();
-        AccessRequirement OwnerOrTheKey(OwnedBoardId board) => AccessRequirement.Any(AccessRequirement.OwnerOf(board), new HoldsKey("boards.manage"));
+        AccessRequirement OwnerOrThePermission(OwnedBoardId board) => AccessRequirement.Any(AccessRequirement.OwnerOf(board), new HoldsPermission("boards.manage"));
 
-        await Checks(scope).RequireAsync(new EditBoard(OwnerOrTheKey(AnnsBoard)), Cancellation);
-        asked.Should().BeEmpty("her own board is hers, and the key is not asked");
+        await Checks(scope).RequireAsync(new EditBoard(OwnerOrThePermission(AnnsBoard)), Cancellation);
+        asked.Should().BeEmpty("her own board is hers, and the permission is not asked");
 
         foreach (var (board, reason) in new[] { (BobsBoard, ToolkitRefusals.NotOwn), (NobodysBoard, ToolkitRefusals.NotOwn), (NoBoard, ToolkitRefusals.NotFound) })
         {
-            var refusal = await RefusedAsync(scope, OwnerOrTheKey(board));
+            var refusal = await RefusedAsync(scope, OwnerOrThePermission(board));
             refusal.Code.Should().Be(ToolkitRefusals.Refused);
             ((IReadOnlyList<RefusalReason>)refusal.Arguments[ToolkitRefusals.ReasonsArgument]!).Select(each => each.Code)
-                .Should().Equal([reason, "boards.not-permitted"], "the owner's way through refused, and the key was asked after it");
+                .Should().Equal([reason, "boards.not-permitted"], "the owner's way through refused, and the permission was asked after it");
         }
 
         asked.Should().Equal("boards.manage", "boards.manage", "boards.manage");

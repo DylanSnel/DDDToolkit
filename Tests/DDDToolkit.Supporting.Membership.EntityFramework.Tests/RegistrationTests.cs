@@ -126,29 +126,29 @@ public sealed class RegistrationTests
                 + "no ICallerMember<DocumentId, UserId> is registered. Register one before the resource, services.AddScoped<ICallerMember<DocumentId, UserId>, YourClass>(), "
                 + "or hand the class that answers to the resource's registration: services.AddDocumentMembership<TContext, YourClass>(rules).*");
 
-        // Where the roles come from: which of them give a key, and which there are.
+        // Where the roles come from: which of them give a permission, and which there are.
         var elsewhere = MembershipRules.Declare(typeof(Crate), "yards", [new("yards.view")], Roles.External());
         FluentActions.Invoking(() => new ServiceCollection().AddMembership<CratePorter, CratePorterId, PorterId, DepotRoleId, DepotContext, Crate, CrateId>(elsewhere))
             .Should().Throw<ArgumentException>().WithParameterName("rules")
-            .WithMessage("The rules 'yards' say the roles of Crate are kept elsewhere, Roles.External, and nothing answers which of them give a key: no IRolesWithKey<CrateId, DepotRoleId> is registered.*");
+            .WithMessage("The rules 'yards' say the roles of Crate are kept elsewhere, Roles.External, and nothing answers which of them give a permission: no IRolesWithPermission<CrateId, DepotRoleId> is registered.*");
 
         var withoutRoles = new ServiceCollection();
-        withoutRoles.AddScoped<IRolesWithKey<CrateId, DepotRoleId>, CratesInTheDepot>();
+        withoutRoles.AddScoped<IRolesWithPermission<CrateId, DepotRoleId>, CratesInTheDepot>();
         FluentActions.Invoking(() => withoutRoles.AddMembership<CratePorter, CratePorterId, PorterId, DepotRoleId, DepotContext, Crate, CrateId>(elsewhere))
             .Should().Throw<ArgumentException>().WithParameterName("rules")
             .WithMessage("The rules 'yards' say the roles of Crate are kept elsewhere, Roles.External, and nothing answers which roles there are: no IMemberRoles<CrateId, DepotRoleId> is registered.*");
 
-        // Whether something above reaches the resource: where a caller holds a key.
+        // Whether something above reaches the resource: where a caller holds a permission.
         var above = MembershipRules.Declare(typeof(Document), "yards", [new("yards.view", EveryMember: true)], Roles.Fixed([new("hand", ["yards.view"])]), reachFromAbove: true);
         FluentActions.Invoking(() => new ServiceCollection().AddMembership<DocumentShare, DocumentShareId, UserId, NamedRole, FilingContext, Document, DocumentId>(above))
             .Should().Throw<ArgumentException>().WithParameterName("rules")
-            .WithMessage("The rules 'yards' let Document be reached from above, and nothing answers where a caller holds a key: no IPlacesReached<DocumentId, TPlaceId> is registered*"
+            .WithMessage("The rules 'yards' let Document be reached from above, and nothing answers where a caller holds a permission: no IPlacesReached<DocumentId, TPlaceId> is registered*"
                 + "services.AddDocumentMembership<TContext, YourClass>(rules).*");
 
         // Registered before the resource, each is what the rules need, and nothing more is asked.
         var answered = new ServiceCollection();
         answered.AddScoped<ICallerMember<CrateId, PorterId>, CratesInTheDepot>();
-        answered.AddScoped<IRolesWithKey<CrateId, DepotRoleId>, CratesInTheDepot>();
+        answered.AddScoped<IRolesWithPermission<CrateId, DepotRoleId>, CratesInTheDepot>();
         answered.AddScoped<IMemberRoles<CrateId, DepotRoleId>, CratesInTheDepot>();
         answered.AddScoped<IPlacesReached<CrateId, BayId>, CratesInTheDepot>();
         answered.AddMembership<CratePorter, CratePorterId, PorterId, DepotRoleId, DepotContext, Crate, CrateId>(CrateMembership.Rules);
@@ -166,7 +166,7 @@ public sealed class RegistrationTests
         services.Should().ContainSingle(descriptor => descriptor.ServiceType == typeof(CratesInTheDepot)).Which.Lifetime.Should().Be(ServiceLifetime.Scoped);
         Type[] ports =
         [
-            typeof(ICallerMember<CrateId, PorterId>), typeof(IRolesWithKey<CrateId, DepotRoleId>), typeof(IMemberRoles<CrateId, DepotRoleId>),
+            typeof(ICallerMember<CrateId, PorterId>), typeof(IRolesWithPermission<CrateId, DepotRoleId>), typeof(IMemberRoles<CrateId, DepotRoleId>),
             typeof(IMemberDirectory<CrateId, PorterId>), typeof(IPlacesReached<CrateId, BayId>),
         ];
         foreach (var port in ports)
@@ -190,7 +190,7 @@ public sealed class RegistrationTests
 
         // And a class that answers less than the rules need leaves the rest to be refused as ever.
         FluentActions.Invoking(() => new ServiceCollection().AddMembership<CratePorter, CratePorterId, PorterId, DepotRoleId, DepotContext, Crate, CrateId, OnlyWhoCalls>(CrateMembership.Rules))
-            .Should().Throw<ArgumentException>().WithMessage("The rules 'crates' say the roles of Crate are kept elsewhere*no IRolesWithKey<CrateId, DepotRoleId> is registered*");
+            .Should().Throw<ArgumentException>().WithMessage("The rules 'crates' say the roles of Crate are kept elsewhere*no IRolesWithPermission<CrateId, DepotRoleId> is registered*");
     }
 
     [Fact]
@@ -244,7 +244,7 @@ public sealed class RegistrationTests
         // only what they say needs an answer.
         var usersWithKeptRoles = MembershipRules.Declare(typeof(Crate), "yards", [new("yards.view", EveryMember: true)], Roles.External(), members: MemberSource.CallerId, reachFromAbove: true);
         var users = new ServiceCollection();
-        users.AddScoped<IRolesWithKey<CrateId, DepotRoleId>, CratesInTheDepot>();
+        users.AddScoped<IRolesWithPermission<CrateId, DepotRoleId>, CratesInTheDepot>();
         users.AddScoped<IMemberRoles<CrateId, DepotRoleId>, CratesInTheDepot>();
         users.AddScoped<IPlacesReached<CrateId, BayId>, CratesInTheDepot>();
         users.AddMembership<CratePorter, CratePorterId, PorterId, DepotRoleId, DepotContext, Crate, CrateId>(usersWithKeptRoles);
@@ -263,9 +263,9 @@ public sealed class RegistrationTests
         resolved.Should().Contain(descriptor => descriptor.ServiceType == typeof(IMemberRoles<PalletId, NamedRole>), "roles the rules declare are answered from the rules");
 
         // Roles the host keeps may be known by name as well: what a role is known by is not what says where it is kept.
-        var namedAndKept = MembershipRules.Declare(typeof(Document), "papers", [new("papers.read")], Roles.External(otherKeys: OtherKeys.All));
+        var namedAndKept = MembershipRules.Declare(typeof(Document), "papers", [new("papers.read")], Roles.External(otherPermissions: OtherPermissions.All));
         var named = new ServiceCollection();
-        named.AddSingleton<IRolesWithKey<DocumentId, NamedRole>>(new NoRolesGive());
+        named.AddSingleton<IRolesWithPermission<DocumentId, NamedRole>>(new NoRolesGive());
         named.AddSingleton<IMemberRoles<DocumentId, NamedRole>>(new NoRoles());
         named.AddMembership<DocumentShare, DocumentShareId, UserId, NamedRole, FilingContext, Document, DocumentId>(namedAndKept);
         named.Should().ContainSingle(descriptor => descriptor.ServiceType == typeof(IMemberRoles<DocumentId, NamedRole>));
@@ -294,13 +294,13 @@ public sealed class RegistrationTests
                 .WithMessage("The rules 'pens' let Pallet be reached from above, and DepotContext does not say where it sits: Pallet marks no property [At]*HasMembers(resource => resource.Members).");
         }
 
-        // And what answers where a key is held answers for the kind of place the resource sits at: a crate
+        // And what answers where a permission is held answers for the kind of place the resource sits at: a crate
         // sits at a bay, and an answer about porters is none.
         var misplaced = new ServiceCollection();
         misplaced.AddDbContext<DepotContext>(options => options.UseSqlite(connection));
         misplaced.AddSingleton<DepotDesk>();
         misplaced.AddScoped<IPlacesReached<CrateId, PorterId>, CratesAtPorters>();
-        misplaced.AddScoped<IRolesWithKey<CrateId, DepotRoleId>, CratesInTheDepot>();
+        misplaced.AddScoped<IRolesWithPermission<CrateId, DepotRoleId>, CratesInTheDepot>();
         misplaced.AddScoped<IMemberRoles<CrateId, DepotRoleId>, CratesInTheDepot>();
         misplaced.AddScoped<ICallerMember<CrateId, PorterId>, CratesInTheDepot>();
         misplaced.AddMembership<CratePorter, CratePorterId, PorterId, DepotRoleId, DepotContext, Crate, CrateId>(CrateMembership.Rules);
@@ -311,7 +311,7 @@ public sealed class RegistrationTests
         {
             FluentActions.Invoking(() => asking.ServiceProvider.GetRequiredService<IMemberQuestions<CrateId>>().Reach(CratePermissions.Pack))
                 .Should().Throw<InvalidOperationException>()
-                .WithMessage("Crate sits at a BayId, and nothing answers where a caller holds a key among those: no IPlacesReached<CrateId, BayId> is registered.*");
+                .WithMessage("Crate sits at a BayId, and nothing answers where a caller holds a permission among those: no IPlacesReached<CrateId, BayId> is registered.*");
         }
     }
 
@@ -324,7 +324,7 @@ public sealed class RegistrationTests
             typeof(Crate),
             "crates",
             CrateMembership.Rules.Permissions,
-            Roles.External(otherKeys: OtherKeys.AllBut(CrateKeys.ManageDepot)),
+            Roles.External(otherPermissions: OtherPermissions.AllBut(DepotPermissions.ManageDepot)),
             members: MemberSource.Resolved(),
             codes: CrateMembership.Codes);
 
@@ -351,7 +351,7 @@ public sealed class RegistrationTests
 
             context.AddRange(data.Porters);
             context.AddRange(data.Roles);
-            context.AddRange(data.RoleKeys);
+            context.AddRange(data.RolePermissions);
             context.AddRange(data.Bays);
             context.AddRange(data.BayPaths);
             context.AddRange(data.BayHolds);
@@ -359,16 +359,16 @@ public sealed class RegistrationTests
             await context.SaveChangesAsync(Cancellation);
         }
 
-        async Task<MemberHold<CrateId>?> HoldAsync(DepotPerson person, CrateId crate, string key)
+        async Task<MemberHold<CrateId>?> HoldAsync(DepotPerson person, CrateId crate, string permission)
         {
             using (Callers.Begin(person.Caller))
             {
                 await using var scope = provider.CreateAsyncScope();
-                return await scope.ServiceProvider.GetRequiredService<IMemberQuestions<CrateId>>().HoldAsync(crate, key, Cancellation);
+                return await scope.ServiceProvider.GetRequiredService<IMemberQuestions<CrateId>>().HoldAsync(crate, permission, Cancellation);
             }
         }
 
-        // Eli and Flo hold their keys at bays as before, and are on no crate: nothing is there for them.
+        // Eli and Flo hold their permissions at bays as before, and are on no crate: nothing is there for them.
         (await HoldAsync(data.Eli, data.Tea, CratePermissions.Move)).Should().BeNull();
         (await HoldAsync(data.Flo, data.Salt, CratePermissions.Pack)).Should().BeNull();
 
@@ -533,28 +533,28 @@ public sealed class RegistrationTests
         public ValueTask<bool> IsActiveAsync(PorterId member, CancellationToken cancellationToken) => ValueTask.FromResult(false);
     }
 
-    /// <summary>Where a caller holds a key, for folders that would sit at bays.</summary>
+    /// <summary>Where a caller holds a permission, for folders that would sit at bays.</summary>
     private sealed class FoldersAtBays : IPlacesReached<FolderId, BayId>
     {
-        public IQueryable<BayId> PlacesReached(DbContext context, Caller caller, string key) => context.Set<BayPath>().Where(path => false).Select(path => path.BayId);
+        public IQueryable<BayId> PlacesReached(DbContext context, Caller caller, string permission) => context.Set<BayPath>().Where(path => false).Select(path => path.BayId);
     }
 
-    /// <summary>Where a caller holds a key, for pallets that would sit at bays.</summary>
+    /// <summary>Where a caller holds a permission, for pallets that would sit at bays.</summary>
     private sealed class PalletsAtBays : IPlacesReached<PalletId, BayId>
     {
-        public IQueryable<BayId> PlacesReached(DbContext context, Caller caller, string key) => context.Set<BayPath>().Where(path => false).Select(path => path.BayId);
+        public IQueryable<BayId> PlacesReached(DbContext context, Caller caller, string permission) => context.Set<BayPath>().Where(path => false).Select(path => path.BayId);
     }
 
-    /// <summary>An answer about the wrong kind of place: crates sit at bays, and this says at which porters a key is held.</summary>
+    /// <summary>An answer about the wrong kind of place: crates sit at bays, and this says at which porters a permission is held.</summary>
     private sealed class CratesAtPorters : IPlacesReached<CrateId, PorterId>
     {
-        public IQueryable<PorterId> PlacesReached(DbContext context, Caller caller, string key) => context.Set<Porter>().Where(porter => false).Select(porter => porter.Id);
+        public IQueryable<PorterId> PlacesReached(DbContext context, Caller caller, string permission) => context.Set<Porter>().Where(porter => false).Select(porter => porter.Id);
     }
 
     /// <summary>Roles the host keeps, known by name, none of which gives anything.</summary>
-    private sealed class NoRolesGive : IRolesWithKey<DocumentId, NamedRole>
+    private sealed class NoRolesGive : IRolesWithPermission<DocumentId, NamedRole>
     {
-        public IQueryable<NamedRole> RolesWith(DbContext context, Caller caller, string key) => Array.Empty<NamedRole>().AsQueryable();
+        public IQueryable<NamedRole> RolesWith(DbContext context, Caller caller, string permission) => Array.Empty<NamedRole>().AsQueryable();
     }
 
     private sealed class NoRoles : IMemberRoles<DocumentId, NamedRole>

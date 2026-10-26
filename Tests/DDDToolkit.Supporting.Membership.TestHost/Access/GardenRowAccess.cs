@@ -7,11 +7,11 @@ namespace DDDToolkit.Supporting.Membership.TestHost.Access;
 // What the database itself lets a caller do with the gardens' plots, on a database that checks every row: thin
 // rules of the application's own, as for a document, which ask the set functions the package writes for the
 // plots. A gardener reads the plots it is on, and whoever fences a plot changes it, its gardeners and their
-// roles among it; the package's lock holds those rows to the same key. Those functions read the roles of plots
+// roles among it; the package's lock holds those rows to the same permission. Those functions read the roles of plots
 // straight from their table.
 //
 // The tables of the roles are the host's to guard: a role's row says what everybody who holds the role may
-// do, so a caller that could write it would give itself, and everybody else, any key a role can give. Each
+// do, so a caller that could write it would give itself, and everybody else, any permission a role can give. Each
 // role class has a rule that lets a signed-in user read roles and nobody write them, which turns row security
 // on for its table. The roles are changed by the host's own work. Whose a role of plots is, is the host's as
 // well, and the database knows it from the caller's token: a gardener reads the roles of its own garden, and
@@ -34,10 +34,10 @@ public static partial class PlotQuestions
     [AccessSet("plots_i_see")]
     public static partial AccessSet<PlotId> Seen();
 
-    /// <summary>The plots on which <paramref name="key"/> is held by the caller: as its owner, or through a role of plots that gives it.</summary>
-    /// <param name="key">A permission key.</param>
+    /// <summary>The plots on which <paramref name="permission"/> is held by the caller: as its owner, or through a role of plots that gives it.</summary>
+    /// <param name="permission">A permission.</param>
     [AccessSet("plots_where_i_hold")]
-    public static partial AccessSet<PlotId> HeldOn(string key);
+    public static partial AccessSet<PlotId> HeldOn(string permission);
 }
 
 /// <summary>A signed-in user reads the roles of plots of its own garden, and changes none: no rule lets a caller write one.</summary>
@@ -64,7 +64,7 @@ public static partial class GardenersReadThePlotsTheyAreOn
     public static bool Allows(Plot plot, Caller caller) => PlotQuestions.Seen().Contains(plot.Id);
 }
 
-/// <summary>Whoever fences a plot changes it, and writes its gardeners and their roles: the key the plots' rules name for the lock.</summary>
+/// <summary>Whoever fences a plot changes it, and writes its gardeners and their roles: the permission the plots' rules name for the lock.</summary>
 [RowAccess<Plot>(RowOperations.Change, To = [RowAccessRoles.User])]
 public static partial class FencersChangeTheirPlots
 {

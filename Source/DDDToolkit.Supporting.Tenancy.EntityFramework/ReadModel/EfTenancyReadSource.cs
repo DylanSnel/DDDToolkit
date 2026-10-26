@@ -14,8 +14,8 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 /// tenant filter, and none is tracked.
 /// <para>
 /// Where the database keeps the rights and shows a seat only its own (<see cref="TenancyStoreOptions.DatabaseKeepsRights"/>),
-/// who holds a key at a unit is asked of the database's function of that name
-/// (<see cref="TenancyFunctionNames.SeatsHoldingAt"/>) rather than worked out over the rows, which would find
+/// who holds a permission at a unit is asked of the database's function of that name
+/// (<see cref="TenancyFunctionNames.SeatsHoldingPermissionAt"/>) rather than worked out over the rows, which would find
 /// nobody but the calling seat. That, too, is a query of the context.
 /// </para>
 /// </summary>
@@ -87,9 +87,9 @@ public sealed class EfTenancyReadSource<TTenantId, TSeatId, TUnitId, TRoleId>
     /// row, as <c>AddTenancy</c>, <c>AddTenancyReadModel</c> and <c>AddTenancyReadFunctions</c> do;
     /// <see langword="null"/> anywhere else.
     /// </remarks>
-    public IQueryable<TSeatId>? SeatsHoldingAt(string key, TUnitId unit)
+    public IQueryable<TSeatId>? SeatsHoldingPermissionAt(string permission, TUnitId unit)
     {
-        ArgumentNullException.ThrowIfNull(key);
+        ArgumentNullException.ThrowIfNull(permission);
 
         if (!DatabaseKeepsRights || _context.Model.FindEntityType(typeof(SeatHolderRow<TSeatId>)) is not { } holders)
         {
@@ -99,12 +99,12 @@ public sealed class EfTenancyReadSource<TTenantId, TSeatId, TUnitId, TRoleId>
         var sql = TenancyFunctionSql.Select(
             _context,
             holders.FindAnnotation(TenancyMapping.FunctionSchemaAnnotation)?.Value as string,
-            TenancyFunctionNames.SeatsHoldingAt,
+            TenancyFunctionNames.SeatsHoldingPermissionAt,
             parameters: 2,
             nameof(SeatHolderRow<TSeatId>.SeatId));
 
         return _context.Set<SeatHolderRow<TSeatId>>()
-            .FromSqlRaw(sql, key, TenancyFunctionSql.Stored(_context, unit))
+            .FromSqlRaw(sql, permission, TenancyFunctionSql.Stored(_context, unit))
             .Select(holder => holder.SeatId);
     }
 

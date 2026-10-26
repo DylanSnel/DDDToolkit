@@ -26,8 +26,8 @@ public static class TryItActions
     public static IReadOnlyList<TryItAction> All { get; } =
     [
         new("try.action.open-project", HttpMethod.Get, "/projects/{projectId}", [TryItField.Project]),
-        new("try.action.check-key", HttpMethod.Get, "/access/projects/{projectId}?key={key}", [TryItField.Project, TryItField.Key]),
-        new("try.action.units-with-key", HttpMethod.Get, "/access/units?key={key}", [TryItField.Key]),
+        new("try.action.check-permission", HttpMethod.Get, "/access/projects/{projectId}?permission={permission}", [TryItField.Project, TryItField.Permission]),
+        new("try.action.units-with-permission", HttpMethod.Get, "/access/units?permission={permission}", [TryItField.Permission]),
         new("try.action.seat-name", HttpMethod.Post, "/tenancy/directory/seats", [TryItField.Seat],
             input => new { ids = new[] { SampleApi.Blank(input.Seat) } }, OnlyAsks: true),
         new("try.action.unit-path", HttpMethod.Post, "/tenancy/directory/units", [TryItField.Unit],

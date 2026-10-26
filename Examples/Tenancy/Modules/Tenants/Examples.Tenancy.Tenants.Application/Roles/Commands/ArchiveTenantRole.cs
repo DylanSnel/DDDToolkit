@@ -7,11 +7,11 @@ namespace Examples.Tenancy.Tenants.Application.Roles.Commands;
 /// Archives a role: it stays where it was granted, and grants nothing from now on.
 /// </summary>
 /// <remarks>
-/// It requires <c>tenancy.roles.manage</c> for the whole tenant. The package's use case asks for that key again, and
+/// It requires <c>tenancy.roles.manage</c> for the whole tenant. The package's use case asks for that permission again, and
 /// that only an administrator archives a role that manages access.
 /// </remarks>
 /// <param name="Role">The role.</param>
-[RequiresKey(TenancyKeys.RolesManage)]
+[RequiresPermission(TenancyPermissions.RolesManage)]
 public sealed record ArchiveTenantRole(RoleId Role) : ICommand, ITenantsRequest;
 
 /// <summary>Handles <see cref="ArchiveTenantRole"/> with the Tenancy package's use case, which checks the caller, decides and saves.</summary>

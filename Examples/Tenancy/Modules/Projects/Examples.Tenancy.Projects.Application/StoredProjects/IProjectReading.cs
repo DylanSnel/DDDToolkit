@@ -25,7 +25,7 @@ namespace Examples.Tenancy.Projects.Application.StoredProjects;
 /// <item>Nothing is tracked, and what comes back is data: a reading only reads. A project a command changes is
 /// loaded through <see cref="IProjectStore"/>.</item>
 /// </list>
-/// The division: the application decides who asks for which key, at which moment; the package says which crews,
+/// The division: the application decides who asks for which permission, at which moment; the package says which crews,
 /// roles and units that reaches; the reading writes the statement around it, with the projects' own columns.
 /// <para>
 /// The projects and the project roles keep to the current caller's tenant, as the storage's tenant filter does:
@@ -37,7 +37,7 @@ public interface IProjectReading : IAsyncDisposable
 {
     /// <summary>
     /// Tenancy's rows the access questions read, on this reading's context, so a question such as
-    /// <c>UnitsWhereIHold</c> becomes a subquery of a project statement. They are access facts: ids, keys,
+    /// <c>UnitsWhereIHold</c> becomes a subquery of a project statement. They are access facts: ids, permissions,
     /// periods and statuses, with no name to read, so nothing this module answers can carry one.
     /// </summary>
     ITenancyReadSource<TenantId, SeatId, OrganizationUnitId, RoleId> Tenancy { get; }
@@ -57,7 +57,7 @@ public interface IProjectReading : IAsyncDisposable
     /// filtered for the caller like the first one. A text that is no cursor of this list is refused, not read as
     /// a place.
     /// </remarks>
-    /// <param name="reach">Who asks, for the key that sees a project.</param>
+    /// <param name="reach">Who asks, for the permission that sees a project.</param>
     /// <param name="filter">What of the reach to list.</param>
     /// <param name="paging">How many, after or before which place, and whether to count the whole list.</param>
     /// <param name="cancellationToken">Cancels the query.</param>
@@ -72,7 +72,7 @@ public interface IProjectReading : IAsyncDisposable
     /// exactly as one that does not exist.
     /// </summary>
     /// <param name="ids">The projects asked about.</param>
-    /// <param name="reach">Who asks, for the key that sees a project.</param>
+    /// <param name="reach">Who asks, for the permission that sees a project.</param>
     /// <param name="cancellationToken">Cancels the query.</param>
     Task<IReadOnlyList<ProjectOverview>> ByIdsAsync(IReadOnlyCollection<ProjectId> ids, MemberReach<ProjectId> reach, CancellationToken cancellationToken);
 
@@ -82,9 +82,9 @@ public interface IProjectReading : IAsyncDisposable
     /// project out of the caller's reach is missing from the answer.
     /// </summary>
     /// <param name="projects">The projects asked about.</param>
-    /// <param name="reach">Who asks, for the key that sees a project: what decides which crews are answered.</param>
+    /// <param name="reach">Who asks, for the permission that sees a project: what decides which crews are answered.</param>
     /// <param name="manage">
-    /// The reach for the key that manages a crew, of the same caller at the same moment: what decides, for each
+    /// The reach for the permission that manages a crew, of the same caller at the same moment: what decides, for each
     /// crew answered, whether its members' roles are the caller's to read.
     /// </param>
     /// <param name="cancellationToken">Cancels the query.</param>
@@ -92,43 +92,43 @@ public interface IProjectReading : IAsyncDisposable
 
     /// <summary>
     /// What decides what the caller may do to each of <paramref name="projects"/> it sees, in one statement: the
-    /// project's state, the keys of <paramref name="reach"/> held on it, and whether <paramref name="units"/>
+    /// project's state, the permissions of <paramref name="reach"/> held on it, and whether <paramref name="units"/>
     /// holds any unit. A project the caller does not see is not in the answer; one it sees is, whatever it holds.
     /// </summary>
     /// <param name="projects">The projects asked about.</param>
-    /// <param name="reach">Which keys are asked about, for the caller.</param>
+    /// <param name="reach">Which permissions are asked about, for the caller.</param>
     /// <param name="units">
-    /// The units where the caller holds a key asked at a unit, as a set not yet read, over this reading's rows:
+    /// The units where the caller holds a permission asked at a unit, as a set not yet read, over this reading's rows:
     /// whether it is empty is answered inside the statement.
     /// </param>
     /// <param name="cancellationToken">Cancels the query.</param>
     Task<IReadOnlyDictionary<ProjectId, ProjectStanding>> StandingOnAsync(
         IReadOnlyCollection<ProjectId> projects,
-        MemberKeyReach<ProjectId> reach,
+        MemberPermissionReach<ProjectId> reach,
         IQueryable<OrganizationUnitId> units,
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// The keys of <paramref name="reach"/> the caller holds on each of <paramref name="projects"/> it sees, through
+    /// The permissions of <paramref name="reach"/> the caller holds on each of <paramref name="projects"/> it sees, through
     /// its crew or through the organization, in one statement. A project the caller does not see, or holds none of
-    /// the keys on, is not in the answer.
+    /// the permissions on, is not in the answer.
     /// </summary>
     /// <param name="projects">The projects asked about.</param>
-    /// <param name="reach">Which keys are asked about, for the caller.</param>
+    /// <param name="reach">Which permissions are asked about, for the caller.</param>
     /// <param name="cancellationToken">Cancels the query.</param>
-    Task<IReadOnlyDictionary<ProjectId, IReadOnlySet<string>>> KeysOnAsync(
+    Task<IReadOnlyDictionary<ProjectId, IReadOnlySet<string>>> PermissionsOnAsync(
         IReadOnlyCollection<ProjectId> projects,
-        MemberKeyReach<ProjectId> reach,
+        MemberPermissionReach<ProjectId> reach,
         CancellationToken cancellationToken);
 
     /// <summary>
     /// What Projects tells another module about each of <paramref name="ids"/> the caller sees, in one statement:
-    /// that it sees it, whether it holds the key of <paramref name="act"/> on it, whether it is closed, and its
+    /// that it sees it, whether it holds the permission of <paramref name="act"/> on it, whether it is closed, and its
     /// planned range. A project the caller does not see is not in the answer.
     /// </summary>
     /// <param name="ids">The projects asked about.</param>
     /// <param name="see">The reach that decides whether a project is there for the caller.</param>
-    /// <param name="act">The reach for the key the asking module needs, of the same caller at the same moment.</param>
+    /// <param name="act">The reach for the permission the asking module needs, of the same caller at the same moment.</param>
     /// <param name="cancellationToken">Cancels the query.</param>
     Task<IReadOnlyDictionary<ProjectId, ProjectAnswer>> AnswersAsync(
         IReadOnlyCollection<ProjectId> ids,
@@ -150,7 +150,7 @@ public interface IProjectReading : IAsyncDisposable
     Task<IReadOnlyList<TenantProject>> OfTenantAsync(TenantId tenant, CancellationToken cancellationToken);
 
     /// <summary>
-    /// The tenant's project roles, archived ones included, by name, each with the keys it gives: those with
+    /// The tenant's project roles, archived ones included, by name, each with the permissions it gives: those with
     /// <paramref name="ids"/>, or every one when that is <see langword="null"/>. One statement.
     /// </summary>
     /// <param name="ids">The roles asked about, or <see langword="null"/> for all of them.</param>

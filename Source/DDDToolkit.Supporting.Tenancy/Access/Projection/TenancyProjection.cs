@@ -5,7 +5,7 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 
 /// <summary>
 /// Works out the rows the access questions read from the aggregates they come from: the closure of an
-/// organization's tree, and the keys a seat holds where. Pure functions, with no storage: the storage writes
+/// organization's tree, and the permissions a seat holds where. Pure functions, with no storage: the storage writes
 /// what they return in the same save as the change it follows from, and the tests call them directly.
 /// </summary>
 public static class TenancyProjection
@@ -77,9 +77,9 @@ public static class TenancyProjection
     }
 
     /// <summary>
-    /// The keys a seat holds, one row for each unit, role and key, with the period of the grant it comes
+    /// The permissions a seat holds, one row for each unit, role and permission, with the period of the grant it comes
     /// from. A seat that is not active holds nothing. A grant of a role that is archived, or that
-    /// <paramref name="roles"/> does not know, holds nothing. A key the catalogue has retired, or no longer
+    /// <paramref name="roles"/> does not know, holds nothing. A permission the catalogue has retired, or no longer
     /// knows, holds nowhere. Whether the period applies is left to whoever reads the rows.
     /// </summary>
     /// <param name="tenant">The seat's tenant.</param>
@@ -87,7 +87,7 @@ public static class TenancyProjection
     /// <param name="status">The seat's status.</param>
     /// <param name="grants">The seat's grants, from <see cref="GrantsOf{TSeatId, TTenantId, TUnitId, TRoleId}"/> or from a query.</param>
     /// <param name="roles">What is known about each role, or <see langword="null"/> for a role that is not found.</param>
-    /// <param name="catalogue">The catalogue that says which keys are live.</param>
+    /// <param name="catalogue">The catalogue that says which permissions are live.</param>
     public static IReadOnlyList<SeatRight<TTenantId, TSeatId, TUnitId, TRoleId>> RightsOf<TTenantId, TSeatId, TUnitId, TRoleId>(
         TTenantId tenant,
         TSeatId seat,
@@ -110,7 +110,7 @@ public static class TenancyProjection
         }
 
         var rights = new List<SeatRight<TTenantId, TSeatId, TUnitId, TRoleId>>();
-        var written = new HashSet<(TUnitId Unit, TRoleId Role, string Key)>();
+        var written = new HashSet<(TUnitId Unit, TRoleId Role, string Permission)>();
         foreach (var grant in grants)
         {
             if (roles(grant.RoleId) is not { IsActive: true } facts)
@@ -118,9 +118,9 @@ public static class TenancyProjection
                 continue;
             }
 
-            foreach (var key in facts.Keys)
+            foreach (var permission in facts.Permissions)
             {
-                if (catalogue.IsLive(key) && written.Add((grant.UnitId, grant.RoleId, key)))
+                if (catalogue.IsLive(permission) && written.Add((grant.UnitId, grant.RoleId, permission)))
                 {
                     rights.Add(new SeatRight<TTenantId, TSeatId, TUnitId, TRoleId>
                     {
@@ -128,7 +128,7 @@ public static class TenancyProjection
                         SeatId = seat,
                         UnitId = grant.UnitId,
                         RoleId = grant.RoleId,
-                        Key = key,
+                        Permission = permission,
                         StartsAt = grant.StartsAt,
                         EndsAt = grant.EndsAt,
                     });

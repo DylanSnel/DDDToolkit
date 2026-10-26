@@ -29,8 +29,8 @@ public sealed class LanguageScenarios(SampleHosts sample) : IClassFixture<Sample
         var english = await RenameAsync(vic, "en");
 
         dutch.Title.Should().Be("Hiervoor is op dit project het recht projects.edit nodig.");
-        english.Title.Should().Be("Doing this to the project needs the key projects.edit.");
-        dutch.Argument("Key").Should().Be(english.Argument("Key")).And.Be(ProjectKeys.Edit, "the arguments are values, the same in every language");
+        english.Title.Should().Be("Doing this to the project needs the permission projects.edit.");
+        dutch.Argument("Permission").Should().Be(english.Argument("Permission")).And.Be(ProjectPermissionNames.Edit, "the arguments are values, the same in every language");
 
         // A regional variant reads its language; a language the sample has no texts in, and no header at all, read English.
         (await RenameAsync(vic, "nl-BE")).Title.Should().Be(dutch.Title);
@@ -97,21 +97,21 @@ public sealed class LanguageScenarios(SampleHosts sample) : IClassFixture<Sample
     public async Task What_a_permission_lets_somebody_do_is_answered_in_the_language_asked_for()
     {
         // The catalogue the screens that make roles read: each permission's text is its summary, or the module's
-        // translation under the permission's key.
+        // translation under the permission's name.
         using var ada = await sample.ClientAsync("ada", Harbor.Slug);
 
-        async Task<string?> DescriptionAsync(string key, string language)
+        async Task<string?> DescriptionAsync(string permission, string language)
         {
             using var response = await SendAsync(ada, HttpMethod.Get, "/tenancy/catalogue", language);
             response.StatusCode.Should().Be(HttpStatusCode.OK);
             var catalogue = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>(Cancellation);
-            return catalogue.GetProperty("permissions").EnumerateArray().Single(permission => permission.GetProperty("key").GetString() == key)
+            return catalogue.GetProperty("permissions").EnumerateArray().Single(entry => entry.GetProperty("name").GetString() == permission)
                 .GetProperty("description").GetString();
         }
 
-        (await DescriptionAsync(ProjectKeys.View, "en")).Should().Be("See a project and its crew.");
-        (await DescriptionAsync(ProjectKeys.View, "nl")).Should().Be("Een project en zijn crew zien.");
-        (await DescriptionAsync(InspectionKeys.Record, "nl")).Should().Be("Een inspectie vastleggen op een project.");
+        (await DescriptionAsync(ProjectPermissionNames.View, "en")).Should().Be("See a project and its crew.");
+        (await DescriptionAsync(ProjectPermissionNames.View, "nl")).Should().Be("Een project en zijn crew zien.");
+        (await DescriptionAsync(InspectionPermissionNames.Record, "nl")).Should().Be("Een inspectie vastleggen op een project.");
     }
 
     private static async Task<Problem> RenameAsync(HttpClient client, string? acceptLanguage)

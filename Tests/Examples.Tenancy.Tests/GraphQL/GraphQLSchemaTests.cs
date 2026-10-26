@@ -139,10 +139,10 @@ public sealed class GraphQLSchemaTests(SampleWithoutDatabase sample) : IClassFix
                 if (owners.Contains(name))
                 {
                     // A reference whose owner answers nothing is its key with the owner's fields null. A field the
-                    // owner declared as never null would turn that into an error, so it declares none but the key.
+                    // owner declared as never null would turn that into an error, so it declares none but the permission.
                     fields.Where(field => field.Name != "id" && field.Type.IsNonNullType()).Select(field => $"{type}.{field.Name}")
                         .Should().BeEmpty("every field of {0} but its key may be null in {1}, which owns it", type, name);
-                    fields.Should().Contain(field => field.Name == "id" && field.Type.IsNonNullType(), "the key is always there");
+                    fields.Should().Contain(field => field.Name == "id" && field.Type.IsNonNullType(), "the permission is always there");
                     fields.Count.Should().BeGreaterThan(1, "the owner gives the rest");
                 }
                 else

@@ -45,7 +45,7 @@ type Query {
   organizationUnit(id: UUID!): OrganizationUnit @lookup @internal
   role(id: UUID!): Role @lookup @internal
   seatGrants(seatId: UUID!): [SeatGrant!]! @cost(weight: "10")
-  unitsWhereIHold(key: String!): HeldUnits! @cost(weight: "10")
+  unitsWhereIHold(permission: String!): HeldUnits! @cost(weight: "10")
   catalogue: Catalogue! @cost(weight: "10")
   openInvitations: [Invitation!]! @cost(weight: "10")
   tenants(after: String, size: Int): TenantDirectoryPage! @cost(weight: "10")
@@ -75,7 +75,8 @@ type Mutation {
   placementWithdraw(input: PlacementWithdrawInput!): PlacementWithdrawPayload!
     @cost(weight: "10")
   roleCreate(input: RoleCreateInput!): RoleCreatePayload! @cost(weight: "10")
-  roleKeysSet(input: RoleKeysSetInput!): RoleKeysSetPayload! @cost(weight: "10")
+  rolePermissionsSet(input: RolePermissionsSetInput!): RolePermissionsSetPayload!
+    @cost(weight: "10")
   roleArchive(input: RoleArchiveInput!): RoleArchivePayload! @cost(weight: "10")
   seatRename(input: SeatRenameInput!): SeatRenamePayload! @cost(weight: "10")
   seatSuspend(input: SeatSuspendInput!): SeatSuspendPayload! @cost(weight: "10")
@@ -203,13 +204,6 @@ type IssuedInvitation {
   expiresAt: DateTime!
 }
 
-type KeyOfMine {
-  key: String!
-  atTenant: Boolean!
-  grantedAt: [UnitPath!]!
-  reaches: [UnitPath!]!
-}
-
 type OrganizationUnit @key(fields: "id") {
   id: UUID!
   parentId: UUID
@@ -260,12 +254,19 @@ type PageInfo @shareable {
 }
 
 type Permission {
-  key: String!
+  name: String!
   module: String!
   description: String!
   implies: [String!]!
   retired: Boolean!
   managesAccess: Boolean!
+}
+
+type PermissionOfMine {
+  permission: String!
+  atTenant: Boolean!
+  grantedAt: [UnitPath!]!
+  reaches: [UnitPath!]!
 }
 
 type PersonInvitePayload {
@@ -303,7 +304,7 @@ type Role @key(fields: "id") {
   name: String
   fromPack: String
   status: RoleStatus
-  keys: [String!] @authorize(policy: "tenancy.roles.manage")
+  permissions: [String!] @authorize(policy: "tenancy.roles.manage")
   managesAccess: Boolean
 }
 
@@ -322,27 +323,27 @@ type RoleGrantPayload {
   errors: [RoleGrantError!]
 }
 
-type RoleKeysSetPayload {
-  role: Role
-  errors: [RoleKeysSetError!]
-}
-
 type RoleOfMine {
   id: UUID!
   name: String!
   fromPack: String
   status: RoleStatus!
-  keys: [String!]!
+  permissions: [String!]!
   managesAccess: Boolean!
 }
 
 type RolePack {
   key: String!
-  keys: [String!]!
+  permissions: [String!]!
   name: String!
   description: String!
   seededFor: TenantShape
   administers: Boolean!
+}
+
+type RolePermissionsSetPayload {
+  role: Role
+  errors: [RolePermissionsSetError!]
 }
 
 type RoleRevokePayload {
@@ -395,7 +396,7 @@ type SeatOverview {
   seat: Seat!
   placements: [PlacementOfMine!]!
   roles: [RoleOfMine!]!
-  keys: [KeyOfMine!]!
+  permissions: [PermissionOfMine!]!
 }
 
 type SeatPlacePayload {
@@ -548,7 +549,7 @@ union RoleGrantError =
   | BrokenRulesError
   | ConcurrencyConflictError
 
-union RoleKeysSetError =
+union RolePermissionsSetError =
   | RefusalError
   | InvalidValuesError
   | BrokenRulesError
@@ -639,7 +640,7 @@ input RoleArchiveInput {
 input RoleCreateInput {
   name: String!
   description: String
-  keys: [String!]
+  permissions: [String!]
 }
 
 input RoleGrantInput {
@@ -650,9 +651,9 @@ input RoleGrantInput {
   reason: String
 }
 
-input RoleKeysSetInput {
+input RolePermissionsSetInput {
   id: UUID!
-  keys: [String!]!
+  permissions: [String!]!
 }
 
 input RoleRevokeInput {

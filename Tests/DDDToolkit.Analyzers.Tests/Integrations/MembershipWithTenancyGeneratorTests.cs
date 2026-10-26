@@ -276,17 +276,17 @@ public class MembershipWithTenancyGeneratorTests
             File,
             "ITenancyAnswers<global::Campus.Tenants.TenantId, global::Campus.Tenants.SeatId, global::Campus.Tenants.OrganizationUnitId, global::Campus.Tenants.RoleId> _tenancy;");
 
-        // Every question is forwarded: who the caller is, who can be made a member, and where a key is held.
+        // Every question is forwarded: who the caller is, who can be made a member, and where a permission is held.
         result.ShouldContain(File, "return current.Kind == global::DDDToolkit.Supporting.Tenancy.Access.TenancyCallerKind.Seat ? current.Seat : null;");
         result.ShouldContain(File, "=> _tenancy.RequireTenant();");
         result.ShouldContain(File, "seat => seat.Id.Equals(member) && seat.Status == global::DDDToolkit.Supporting.Tenancy.SeatStatus.Active,");
-        result.ShouldContain(File, "? tenancy.UnitsWhereIHold(key)");
+        result.ShouldContain(File, "? tenancy.UnitsWhereIHold(permission)");
 
         RegistrationsOf(result).Should().BeEquivalentTo(["AddCourseMembershipWithTenancy<TContext>"]);
         PortsOf(result, "GeneratedCourseMembershipWithTenancy`1").Should().BeEquivalentTo(
             ["ICallerMember`2", "IMemberDirectory`2", "IPlacesReached`2"],
             "a course's roles are kept for it, so nothing is answered about roles: the package reads them where they are kept");
-        result.ShouldNotContain(File, "RolesWithKey");
+        result.ShouldNotContain(File, "RolesWithPermission");
     }
 
     [Fact]
@@ -299,10 +299,10 @@ public class MembershipWithTenancyGeneratorTests
 
         const string File = "GeneratedMembershipWithTenancyExtensions.AddLabMembershipWithTenancy";
         PortsOf(result, "GeneratedLabMembershipWithTenancy`1").Should().BeEquivalentTo(
-            "ICallerMember`2", "IMemberDirectory`2", "IPlacesReached`2", "IRolesWithKey`2", "IMemberRoles`2");
+            "ICallerMember`2", "IMemberDirectory`2", "IPlacesReached`2", "IRolesWithPermission`2", "IMemberRoles`2");
 
-        // Which roles give a key, and which roles there are: the tenant's, asked of Tenancy. None is the owner's.
-        result.ShouldContain(File, "? tenancy.RolesWithKey(key)");
+        // Which roles give a permission, and which roles there are: the tenant's, asked of Tenancy. None is the owner's.
+        result.ShouldContain(File, "? tenancy.RolesWithPermission(permission)");
         result.ShouldContain(File, "row => row.Id.Equals(role) && row.Status == global::DDDToolkit.Supporting.Tenancy.RoleStatus.Active,");
         result.ShouldNotContain(File, "_ownerRole", "the owner holds no role");
     }

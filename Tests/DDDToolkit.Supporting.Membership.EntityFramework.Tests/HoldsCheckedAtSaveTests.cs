@@ -119,7 +119,7 @@ public sealed class HoldsCheckedAtSaveTests
         using var filing = await FilingAsync(holds: true, ownContexts: false);
         var data = filing.Scenario;
 
-        // Ada owns the minutes, and holds the key that shares there: the request checked the minutes, and its
+        // Ada owns the minutes, and holds the permission that shares there: the request checked the minutes, and its
         // handler, by mistake, shares the budget, which she only looks on.
         var refused = await FluentActions.Awaiting(() => filing.Services.AsAsync(TestCallers.User(data.Ada), async provider =>
             {

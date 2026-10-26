@@ -114,7 +114,7 @@ public sealed class TenantsContext(DbContextOptions<TenantsContext> options) : D
         configurationBuilder.AddTenantsConverters();
 
         // What kind of unit a unit is, the unit class's own field, by its key: a row read by hand says region, not 1,
-        // a kind added later never renumbers the ones before it, and the rows written while the kind was a key of
+        // a kind added later never renumbers the ones before it, and the rows written while the kind was a permission of
         // the package's catalogue read the same as the rows written since. A new application that has no such rows
         // writes HaveConversion<string>() here, and stores the name.
         configurationBuilder.Properties<UnitKind>().HaveConversion<UnitKindKeyConverter>().HaveMaxLength(16);

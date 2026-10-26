@@ -4,10 +4,10 @@ namespace DDDToolkit.Supporting.Membership.Access;
 
 /// <summary>
 /// Says that a resource is reached from above as well as through its members: it hangs at a place, a unit of an
-/// organization or a bay of a depot, which its class marks <c>[At]</c>, and a caller that holds a key at that place,
-/// or above it, holds the key on the resource without being a member of it.
+/// organization or a bay of a depot, which its class marks <c>[At]</c>, and a caller that holds a permission at that place,
+/// or above it, holds the permission on the resource without being a member of it.
 /// <code>
-/// // Beside a package that keeps an organization: where a key is held is that package's to answer, and the rules
+/// // Beside a package that keeps an organization: where a permission is held is that package's to answer, and the rules
 /// // say only that it reaches.
 /// MembershipRules.For&lt;Board&gt;(Roles.Custom(...), reachFromAbove: true)
 ///
@@ -32,13 +32,13 @@ namespace DDDToolkit.Supporting.Membership.Access;
 /// without one nobody above would.
 /// </para>
 /// <para>
-/// A key held from above is not cut by what a role gives (<see cref="OnAttribute{TResource}.InRoles"/>): that is about
-/// a member's roles on the resource, and a key held above is held through the place, by a role of the organization, a
+/// A permission held from above is not cut by what a role gives (<see cref="OnAttribute{TResource}.InRoles"/>): that is about
+/// a member's roles on the resource, and a permission held above is held through the place, by a role of the organization, a
 /// permission marked <c>InRoles = false</c> included. Only a permission marked <c>FromAbove = false</c> is not reached
-/// this way. A caller that holds a key both ways holds it as a member (<see cref="MemberVia.Members"/>).
+/// this way. A caller that holds a permission both ways holds it as a member (<see cref="MemberVia.Members"/>).
 /// </para>
 /// <para>
-/// Where a caller holds a key is the application's to answer, or the organization package's: in C# through an
+/// Where a caller holds a permission is the application's to answer, or the organization package's: in C# through an
 /// <c>IPlacesReached&lt;TResourceId, TPlaceId&gt;</c> registered with the resource, which the package that stores the
 /// resources asks inside its own statement, and which such a package's join with this one writes; in a database that
 /// answers the questions itself, through a function. Beside such a package that function is its own, found by the type
@@ -51,9 +51,9 @@ public sealed class ReachFromAbove
     private ReachFromAbove(DatabaseFunction? function) => Function = function;
 
     /// <summary>
-    /// The function that answers in the database where the caller holds a key, or <see langword="null"/> where it
+    /// The function that answers in the database where the caller holds a permission, or <see langword="null"/> where it
     /// follows from the type of the place: the one the organization package's contribution names for its unit id. A function that takes
-    /// the key as text and answers the places the caller's hold of it reaches, each place it is held at and every place
+    /// the permission as text and answers the places the caller's hold of it reaches, each place it is held at and every place
     /// below. It is asked by the resource's functions, which run as their owner, so it answers for the caller by a
     /// condition of its own, never by a policy.
     /// </summary>
@@ -63,14 +63,14 @@ public sealed class ReachFromAbove
     /// <c>reachFromAbove: true</c>: a resource is reached from above, by the function that follows from the type of the
     /// place it hangs at. <c>false</c> is no reach from above, as leaving the argument out is.
     /// </summary>
-    /// <param name="reaches">Whether a key held above the resource reaches it.</param>
+    /// <param name="reaches">Whether a permission held above the resource reaches it.</param>
     public static implicit operator ReachFromAbove?(bool reaches) => reaches ? new ReachFromAbove(null) : null;
 
     /// <summary>
     /// <c>reachFromAbove: DepotFunctions.BaysWhereIHold</c>: a resource is reached from above, by a function the
     /// application declares, beside a place of its own.
     /// </summary>
-    /// <param name="function">The function that answers where the caller holds a key, one the application declares once.</param>
+    /// <param name="function">The function that answers where the caller holds a permission, one the application declares once.</param>
     public static implicit operator ReachFromAbove(DatabaseFunction function)
     {
         ArgumentNullException.ThrowIfNull(function);

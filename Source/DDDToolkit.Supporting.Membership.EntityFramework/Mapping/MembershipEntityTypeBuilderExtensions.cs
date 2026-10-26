@@ -41,8 +41,8 @@ public static class MembershipEntityTypeBuilderExtensions
     /// What the resource says of itself in the domain is read off its class: its owner, the property it marks
     /// <c>[Owner]</c>, of what a member is known by, and where it hangs, the property it marks <c>[At]</c>, where it has
     /// one. Both become columns of the resource whatever else the application says about them. Where it hangs is what
-    /// a key held from above is compared with: a resource whose rules let it be reached from above
-    /// (<see cref="Access.MembershipRules.ReachFromAbove"/>) is held by a caller that holds the key at that place, or
+    /// a permission held from above is compared with: a resource whose rules let it be reached from above
+    /// (<see cref="Access.MembershipRules.ReachFromAbove"/>) is held by a caller that holds the permission at that place, or
     /// above it, as the application answers where that is (<see cref="IPlacesReached{TResourceId, TPlaceId}"/>). The
     /// package keeps no places: it reads that column, and nothing of what is above it.
     /// </para>
@@ -206,7 +206,7 @@ public static class MembershipEntityTypeBuilderExtensions
     /// <para>
     /// What it maps is the package's part of a role: the id, which the application makes; the name, the
     /// description and the starter role it was made from, each no longer than the role allows; the status as
-    /// its name; and the keys as a collection of texts in one column, which is what the access questions and
+    /// its name; and the permissions as a collection of texts in one column, which is what the access questions and
     /// the database's functions read. The id is stored by the application's generated converter, like the ids
     /// of its other entities. The starter role a role was made from is fixed once the row is there
     /// (<c>IsFixedAfterInsert</c>): the starter roles a customer lacks are found by it, so a save that changed it is refused, and
@@ -277,8 +277,8 @@ public static class MembershipEntityTypeBuilderExtensions
         role.Property(row => row.Status).HasConversion<string>().HasMaxLength(StatusLength);
 
         // One column: an array where the database has arrays, a JSON text where it has none. Read inside a
-        // statement either way, which is what lets "the roles that give this key" stay a subquery.
-        role.PrimitiveCollection(row => row.Keys);
+        // statement either way, which is what lets "the roles that give this permission" stay a subquery.
+        role.PrimitiveCollection(row => row.Permissions);
     }
 
     /// <summary>The package's role, closed over the id <paramref name="roleClass"/> was declared with, or <see langword="null"/>.</summary>

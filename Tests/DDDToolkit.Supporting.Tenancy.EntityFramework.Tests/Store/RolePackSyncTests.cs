@@ -44,7 +44,7 @@ public abstract class RolePackSyncTests(TestDatabases databases) : IAsyncLifetim
         (await KeysAsync(harbor, HostCatalogue.WatcherPack)).Should().Equal(HostCatalogue.WidgetCreate, HostCatalogue.WidgetRead);
         (await KeysAsync(orchard, HostCatalogue.OperatorPack)).Should().Equal(HostCatalogue.WidgetChange, HostCatalogue.WidgetRead);
         (await KeysAsync(quay, HostCatalogue.WatcherPack)).Should().Equal([HostCatalogue.WidgetRead], "a closed tenant is closed for good");
-        (await _services.StoredRightsAsync(lin)).Select(right => right.Key).Should().BeEquivalentTo(
+        (await _services.StoredRightsAsync(lin)).Select(right => right.Permission).Should().BeEquivalentTo(
             [HostCatalogue.WidgetChange, HostCatalogue.WidgetRead], "the operator's holder lost creating widgets with the save that changed the role");
 
         var kept = await FollowedAsync();
@@ -86,17 +86,17 @@ public abstract class RolePackSyncTests(TestDatabases databases) : IAsyncLifetim
             {
                 Packs = [.. HostCatalogue.Application.Packs.Select(pack => pack.Key switch
                 {
-                    HostCatalogue.WatcherPack => pack with { Keys = [HostCatalogue.WidgetRead, HostCatalogue.WidgetCreate] },
-                    HostCatalogue.OperatorPack => pack with { Keys = [HostCatalogue.WidgetChange] },
+                    HostCatalogue.WatcherPack => pack with { Permissions = [HostCatalogue.WidgetRead, HostCatalogue.WidgetCreate] },
+                    HostCatalogue.OperatorPack => pack with { Permissions = [HostCatalogue.WidgetChange] },
                     _ => pack,
                 })],
             },
             [])));
 
-    /// <summary>The keys of a tenant's role made from <paramref name="pack"/>, as saved.</summary>
+    /// <summary>The permissions of a tenant's role made from <paramref name="pack"/>, as saved.</summary>
     private Task<List<string>> KeysAsync(HostTenancy.ProvisionedTenant tenant, string pack)
         => _services.BySystemIn(tenant.Tenant, async services =>
-            (await services.Tenancy().Set<HostRole>().SingleAsync(role => role.Id == tenant.RolesByPack[pack], Cancellation)).Keys.ToList());
+            (await services.Tenancy().Set<HostRole>().SingleAsync(role => role.Id == tenant.RolesByPack[pack], Cancellation)).Permissions.ToList());
 
     /// <summary>The access history's rows of roles that followed their pack, in every tenant.</summary>
     private async Task<List<(TenantId Tenant, string ActedByKind)>> FollowedAsync()

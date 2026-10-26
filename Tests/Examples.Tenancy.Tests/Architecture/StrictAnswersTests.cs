@@ -53,7 +53,7 @@ public sealed class StrictAnswersTests(SampleHosts sample) : IClassFixture<Sampl
             ("GET /projects", await rhea.ProjectPageAsync()),
             ("GET /projects/{id}", await rhea.GetFromJsonAsync<JsonElement>($"/projects/{pier}", Cancellation)),
             ("GET /projects/{id}/inspections", await rhea.GetFromJsonAsync<JsonElement>($"/projects/{pier}/inspections", Cancellation)),
-            ("GET /access/projects/{id}?key=", await rhea.GetFromJsonAsync<JsonElement>($"/access/projects/{pier}?key={ProjectKeys.View}", Cancellation)),
+            ("GET /access/projects/{id}?permission=", await rhea.GetFromJsonAsync<JsonElement>($"/access/projects/{pier}?permission={ProjectPermissionNames.View}", Cancellation)),
         ];
 
         foreach (var (route, answer) in answers)

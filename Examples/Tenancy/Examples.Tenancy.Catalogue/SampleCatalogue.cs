@@ -1,6 +1,6 @@
 using Examples.Tenancy.Inspections.Application.Access;
 using Examples.Tenancy.Projects.Application.Access;
-using Examples.Tenancy.Projects.Contracts.Keys;
+using Examples.Tenancy.Projects.Contracts.Permissions;
 using Examples.Tenancy.Projects.Domain.Aggregates.Projects.Entities;
 using DDDToolkit.Supporting.Membership.Access;
 using DDDToolkit.Supporting.Tenancy;
@@ -10,7 +10,7 @@ namespace Examples.Tenancy.Catalogue;
 
 /// <summary>
 /// The application's part of the permission catalogue: the role packs a new tenant's roles of the organization are
-/// copied from, and the keys of a module it marks as managing access; and next to it the starter project roles every
+/// copied from, and the permissions of a module it marks as managing access; and next to it the starter project roles every
 /// tenant's crews begin with.
 /// </summary>
 /// <remarks>
@@ -19,29 +19,29 @@ namespace Examples.Tenancy.Catalogue;
 /// which are written from it. Tenancy and Membership on Postgres write their SQL into the exported files because the
 /// modules that store them on Postgres reference them; what that SQL depends on is marked here, where it is
 /// declared: the catalogue with <c>[TenancyCatalogue]</c> (<see cref="Application"/>) and the projects' rules with
-/// <c>[MembershipRules&lt;CrewMember&gt;]</c> (<see cref="ProjectRules"/>). The keys are not declared here: Tenancy
-/// brings its own (<see cref="TenancyKeys"/>), and every other module states its keys next to the code that asks for
+/// <c>[MembershipRules&lt;CrewMember&gt;]</c> (<see cref="ProjectRules"/>). The permissions are not declared here: Tenancy
+/// brings its own (<see cref="TenancyPermissions"/>), and every other module states its permissions next to the code that asks for
 /// them, once, on the list it marks with <c>[TenancyPermissions]</c>. Tenancy's generator collects those lists into
 /// the host, as <c>TenancyPermissionsOfModules</c>, and the export finds the same marked lists in the modules it
-/// references, so neither names a module's keys, and a module that is added changes nothing here. The packs only
+/// references, so neither names a module's permissions, and a module that is added changes nothing here. The packs only
 /// name them. The catalogue is built and checked once, when the host starts, and a catalogue that does not hold
 /// together stops the start.
 /// <para>
 /// There are two administrators' packs, each seeded for one shape of tenant (<see cref="RolePack.SeededFor"/>),
 /// and a tenant's first seat is granted the one seeded for its shape. A flat tenant has one unit and usually a
-/// handful of people, so its administrator does everything: <see cref="TenantAdmin"/> lists no keys, and once
-/// built holds every live key of the catalogue, the modules' included. A hierarchical tenant separates running
-/// access from doing the work: <see cref="AccessAdmin"/> lists its keys, Tenancy's own and the ones that manage
+/// handful of people, so its administrator does everything: <see cref="TenantAdmin"/> lists no permissions, and once
+/// built holds every live permission of the catalogue, the modules' included. A hierarchical tenant separates running
+/// access from doing the work: <see cref="AccessAdmin"/> lists its permissions, Tenancy's own and the ones that manage
 /// access, so its holder gives every role, names owners, manages crews and sees every project, and renames,
-/// closes and records on none. The catalogue refuses a listing administrators' pack that leaves out a key that
-/// manages access, so marking another key stops the host at start-up until this pack lists it. Either way nobody
+/// closes and records on none. The catalogue refuses a listing administrators' pack that leaves out a permission that
+/// manages access, so marking another permission stops the host at start-up until this pack lists it. Either way nobody
 /// but system work is needed to appoint, say, an area manager.
 /// </para>
 /// <para>
 /// There are two kinds of role, each kept where it belongs. A role of the organization is Tenancy's, copied from a
 /// pack here: granted at a unit, it reaches every project at that unit and below it. A project role is the
 /// Projects module's, made from a starter role here (<see cref="ProjectRoles"/>): given on a project's crew, it
-/// counts on that project only, and gives only the keys that act on a project. The crew lead's holds every one of
+/// counts on that project only, and gives only the permissions that act on a project. The crew lead's holds every one of
 /// them, and a project's owner holds them by owning the project, so the owner may do everything that acts on it.
 /// Opening projects, and so moving one to another unit, naming an owner and managing the organization take a role
 /// at a unit.
@@ -54,7 +54,7 @@ namespace Examples.Tenancy.Catalogue;
 /// when it changes shape. The other packs name no shape, so every tenant gets them.
 /// </para>
 /// <para>
-/// Tenant admin, Access admin, Area manager, Crew lead and People office manage access. Two of Projects' keys are marked as
+/// Tenant admin, Access admin, Area manager, Crew lead and People office manage access. Two of Projects' permissions are marked as
 /// managing access: naming a project's owner, because the owner leads the crew until the organization names
 /// another, and managing a crew, because whoever holds it at a unit may put anyone on every crew there, in any
 /// role, themselves included. So a role at a unit that holds either is given only by someone who holds it there
@@ -64,13 +64,13 @@ namespace Examples.Tenancy.Catalogue;
 /// included; the owner holds none, since it holds what an owner does by owning the project.
 /// </para>
 /// <para>
-/// That a role which manages access is given only by someone who holds its keys is containment, which a catalogue
-/// keeps unless the application turns <see cref="ApplicationCatalogue.ContainAccessManagingKeys"/> off. The sample
+/// That a role which manages access is given only by someone who holds its permissions is containment, which a catalogue
+/// keeps unless the application turns <see cref="ApplicationCatalogue.ContainAccessManagingPermissions"/> off. The sample
 /// leaves it on, and so writes nothing for it: who may give which role is no rule of its own product. Its database,
 /// which only its handlers reach, holds the rule again as a second lock behind every query of the sample's: it
-/// refuses a seat a role that manages access at a unit where the seat lacks that role's keys, any such role to
+/// refuses a seat a role that manages access at a unit where the seat lacks that role's permissions, any such role to
 /// itself, such an invitation, and stopping a seat whose such grants it could not take away; how long a grant runs,
-/// a change of such a key in a role, and moves stay with the use cases. An application that lets somebody
+/// a change of such a permission in a role, and moves stay with the use cases. An application that lets somebody
 /// earn a role that manages access, by passing a course say, keeps it on as well: its own handler checks the
 /// course, and gives the role as Tenancy's system work in the tenant, which containment does not hold, for the
 /// calling seat and with the role the course names, never one the request does.
@@ -80,13 +80,13 @@ public static class SampleCatalogue
 {
     /// <summary>
     /// The key of the administrators' pack of a flat tenant, which its first seat is granted at the root: every
-    /// key there is.
+    /// permission there is.
     /// </summary>
     public const string TenantAdmin = "tenant-admin";
 
     /// <summary>
     /// The key of the administrators' pack of a hierarchical tenant, which its first seat is granted at the root:
-    /// Tenancy's keys and the keys that manage access, and of the application's work only seeing projects.
+    /// Tenancy's permissions and the permissions that manage access, and of the application's work only seeing projects.
     /// </summary>
     public const string AccessAdmin = "access-admin";
 
@@ -107,21 +107,21 @@ public static class SampleCatalogue
 
     /// <summary>
     /// The key of the pack for giving people their roles, and nothing else: whoever holds it at a unit gives any
-    /// role that manages no access to anyone placed there or below, without holding the role's keys.
+    /// role that manages no access to anyone placed there or below, without holding the role's permissions.
     /// </summary>
     public const string PeopleOffice = "people-office";
 
     /// <summary>
     /// The project roles every tenant's crews start with, made once when a tenant is set up: the crew lead's, which
     /// a former owner usually stays on the crew in, a surveyor's, who records inspections, and an observer's. The tenant's own to
-    /// rename, re-key and archive afterwards, and to add to. Each gives the keys that act on a project, of whichever
+    /// rename, give other permissions and archive afterwards, and to add to. Each gives the permissions that act on a project, of whichever
     /// module asks them, which is why the application says them and not the Projects module.
     /// </summary>
     public static IReadOnlyList<StarterProjectRole> ProjectRoles { get; } =
     [
-        new(CrewLead, "Crew lead", "Leads a project crew", [ProjectKeys.View, ProjectKeys.Edit, ProjectKeys.Close, ProjectKeys.ManageCrew, InspectionKeys.Record]),
-        new(Surveyor, "Surveyor", "Records inspections", [ProjectKeys.View, InspectionKeys.Record]),
-        new(Observer, "Observer", "Looks", [ProjectKeys.View]),
+        new(CrewLead, "Crew lead", "Leads a project crew", [ProjectPermissionNames.View, ProjectPermissionNames.Edit, ProjectPermissionNames.Close, ProjectPermissionNames.ManageCrew, InspectionPermissionNames.Record]),
+        new(Surveyor, "Surveyor", "Records inspections", [ProjectPermissionNames.View, InspectionPermissionNames.Record]),
+        new(Observer, "Observer", "Looks", [ProjectPermissionNames.View]),
     ];
 
     /// <summary>
@@ -144,13 +144,13 @@ public static class SampleCatalogue
     public static MembershipRules ProjectRules => Projects.Rules;
 
     /// <summary>
-    /// The application's packs, and the keys of a module it marks as managing access: naming a project's owner and
+    /// The application's packs, and the permissions of a module it marks as managing access: naming a project's owner and
     /// managing a crew, which Projects declares. What kind of unit a unit is, a company, a region, an area or a site,
     /// is not the catalogue's: no access rule reads it, so it is a field of the application's own unit class.
     /// </summary>
     /// <remarks>
     /// Marked, so the export writes Tenancy's policies from the catalogue the host runs with: this part, which the host
-    /// hands Tenancy's registration, and every list of keys the modules mark, which Tenancy's generator collects into
+    /// hands Tenancy's registration, and every list of permissions the modules mark, which Tenancy's generator collects into
     /// the host and the export finds in the modules it references. On Postgres the host's start-up check compares the
     /// database's functions with the catalogue the host runs with: policies written from another catalogue would
     /// contain other grants than the application gives.
@@ -165,8 +165,8 @@ public static class SampleCatalogue
                 "Access admin",
                 "Runs access across the organization",
                 [
-                    .. TenancyKeys.Permissions.Select(permission => permission.Key),
-                    ProjectKeys.ChangeOwner, ProjectKeys.ManageCrew, ProjectKeys.View,
+                    .. TenancyPermissions.All.Select(permission => permission.Name),
+                    ProjectPermissionNames.ChangeOwner, ProjectPermissionNames.ManageCrew, ProjectPermissionNames.View,
                 ],
                 SeededFor: TenantShape.Hierarchical,
                 Administers: true,
@@ -176,9 +176,9 @@ public static class SampleCatalogue
                 "Area manager",
                 "Runs an area of the organization",
                 [
-                    ProjectKeys.View, ProjectKeys.Open, ProjectKeys.Edit, ProjectKeys.Close, ProjectKeys.ManageCrew, ProjectKeys.ChangeOwner,
-                    InspectionKeys.Record,
-                    TenancyKeys.UnitsManage, TenancyKeys.SeatsManage, TenancyKeys.GrantsManage,
+                    ProjectPermissionNames.View, ProjectPermissionNames.Open, ProjectPermissionNames.Edit, ProjectPermissionNames.Close, ProjectPermissionNames.ManageCrew, ProjectPermissionNames.ChangeOwner,
+                    InspectionPermissionNames.Record,
+                    TenancyPermissions.UnitsManage, TenancyPermissions.SeatsManage, TenancyPermissions.GrantsManage,
                 ],
                 SeededFor: TenantShape.Hierarchical,
                 Order: 20),
@@ -186,11 +186,11 @@ public static class SampleCatalogue
                 CrewLead,
                 "Crew lead",
                 "Leads a project crew",
-                [ProjectKeys.View, ProjectKeys.Edit, ProjectKeys.Close, ProjectKeys.ManageCrew, InspectionKeys.Record],
+                [ProjectPermissionNames.View, ProjectPermissionNames.Edit, ProjectPermissionNames.Close, ProjectPermissionNames.ManageCrew, InspectionPermissionNames.Record],
                 Order: 30),
-            new(Surveyor, "Surveyor", "Records inspections", [ProjectKeys.View, InspectionKeys.Record], Order: 40),
-            new(Observer, "Observer", "Looks", [ProjectKeys.View], Order: 50),
-            new(PeopleOffice, "People office", "Gives people their roles", [TenancyKeys.GrantsManage], Order: 60),
+            new(Surveyor, "Surveyor", "Records inspections", [ProjectPermissionNames.View, InspectionPermissionNames.Record], Order: 40),
+            new(Observer, "Observer", "Looks", [ProjectPermissionNames.View], Order: 50),
+            new(PeopleOffice, "People office", "Gives people their roles", [TenancyPermissions.GrantsManage], Order: 60),
         ],
-        AccessManagingKeys: [ProjectKeys.ChangeOwner, ProjectKeys.ManageCrew]);
+        AccessManagingPermissions: [ProjectPermissionNames.ChangeOwner, ProjectPermissionNames.ManageCrew]);
 }

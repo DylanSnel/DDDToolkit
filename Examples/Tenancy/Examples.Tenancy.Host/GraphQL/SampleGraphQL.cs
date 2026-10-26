@@ -81,7 +81,7 @@ internal static class SampleGraphQL
     /// <see cref="OperatorFields"/>, which need an operator; and the two conventions that let a module declare
     /// its types over the records its application layer answers: every field of a type with a key may be null
     /// but the key, so a reference its owner answers nothing for is its key and no error, and a field's
-    /// <c>[Authorize("&lt;key&gt;")]</c> is a permission key, asked of the module that owns the field's type.
+    /// <c>[Authorize("&lt;permission&gt;")]</c> is a permission, asked of the module that owns the field's type.
     /// </summary>
     /// <param name="graphql">A module's source schema.</param>
     public static IRequestExecutorBuilder AddSampleGraphQLConventions(this IRequestExecutorBuilder graphql)
@@ -93,7 +93,7 @@ internal static class SampleGraphQL
             .AddDDDToolkitMutationConventions()
             .AddDDDToolkitEnumValues(EnumValueSpelling.LowerSnakeCase)
             .AddDDDToolkitEntityNullability()
-            .AddDDDToolkitKeyAuthorization()
+            .AddDDDToolkitPermissionAuthorization()
             .ModifyOptions(options =>
             {
                 options.DefaultQueryDependencyInjectionScope = DependencyInjectionScope.Resolver;

@@ -22,14 +22,14 @@ public static partial class PalletQuestions
 [AccessFunctions(Owner = "crates")]
 public static partial class CrateQuestions
 {
-    /// <summary>The crates the caller sees: those it is on, and those that stand where it holds the key that sees.</summary>
+    /// <summary>The crates the caller sees: those it is on, and those that stand where it holds the permission that sees.</summary>
     [AccessSet("crates_i_see")]
     public static partial AccessSet<CrateId> Seen();
 
-    /// <summary>The crates on which <paramref name="key"/> is held by the caller: as one of its porters, as its owner, or from a bay above.</summary>
-    /// <param name="key">A permission key.</param>
+    /// <summary>The crates on which <paramref name="permission"/> is held by the caller: as one of its porters, as its owner, or from a bay above.</summary>
+    /// <param name="permission">A permission.</param>
     [AccessSet("crates_where_i_hold")]
-    public static partial AccessSet<CrateId> HeldOn(string key);
+    public static partial AccessSet<CrateId> HeldOn(string permission);
 }
 
 /// <summary>A porter reads the pallets it is on.</summary>
@@ -40,7 +40,7 @@ public static partial class PortersReadThePalletsTheyAreOn
     public static bool Allows(Pallet pallet, Caller caller) => PalletQuestions.Seen().Contains(pallet.Id);
 }
 
-/// <summary>A porter reads the crates it sees: those it is on, and those in a bay where it holds the key that sees.</summary>
+/// <summary>A porter reads the crates it sees: those it is on, and those in a bay where it holds the permission that sees.</summary>
 [RowAccess<Crate>(RowOperations.Read, To = [RowAccessRoles.User])]
 public static partial class PortersReadTheCratesTheySee
 {

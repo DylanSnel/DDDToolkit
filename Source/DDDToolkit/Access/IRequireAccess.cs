@@ -6,19 +6,19 @@ namespace DDDToolkit.Access;
 /// <remarks>
 /// A module declares one interface of its own that derives from this one, and every request of the module
 /// implements that. A request says what it requires with an attribute where the requirement reads no value of the
-/// request but a key and an id it carries, and answers <see cref="RequiredAccess"/> itself where it computes it:
+/// request but a permission and an id it carries, and answers <see cref="RequiredAccess"/> itself where it computes it:
 /// <code>
 /// [AccessRequests]
 /// public partial interface IBillingRequest : IRequireAccess;
 ///
-/// [RequiresKey(BillingKeys.Close)]
+/// [RequiresPermission(BillingPermissions.Close)]
 /// public sealed record CloseInvoice(string Number) : IBillingRequest;
 ///
 /// public sealed record ListInvoices(OrganizationUnitId? Unit) : IBillingRequest
 /// {
 ///     AccessRequirement IRequireAccess.RequiredAccess =&gt; Unit is { } unit
-///         ? TenancyAccess.AtUnit(BillingKeys.Read, unit)
-///         : TenancyAccess.AtTenant(BillingKeys.Read);
+///         ? TenancyAccess.AtUnit(BillingPermissions.Read, unit)
+///         : TenancyAccess.AtTenant(BillingPermissions.Read);
 /// }
 /// </code>
 /// The toolkit's generator turns the attributes into plain C# at compile time: the module's interface, marked

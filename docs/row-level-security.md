@@ -806,7 +806,7 @@ order, and writes one when the order's write rules let it; see
 up: a row one of them allows is allowed. Each policy is for one role; see
 [One policy per command and role](#one-policy-per-command-and-role).
 
-**A stricter key for one column.** A rule with `Columns = [nameof(Order.Status)]` holds a change of those
+**A stricter permission for one column.** A rule with `Columns = [nameof(Order.Status)]` holds a change of those
 columns alone, beside the rules for the row, for a column whose change takes more than changing the row does;
 see [Column rules](#column-rules).
 
@@ -1111,7 +1111,7 @@ change them, give the function a new name. The old one stays while a policy of a
 it, and the context's next script drops it once none does. The Supabase export refuses the change against
 a module's newest access file and says so; a script of your own has no history to compare with.
 
-**Asked by a key.** The generator adds `Name` and an `Allows` that takes the aggregate's key, for a rule
+**Asked by a permission.** The generator adds `Name` and an `Allows` that takes the aggregate's permission, for a rule
 that holds a project's id rather than the project: `ProjectMembership.Allows(task.ProjectId)` becomes
 `projects.is_member("ProjectId")`. Only the database can answer that one; called in C#, it throws
 `DatabaseOnlyException`. Where C# holds the project, `ProjectMembership.Allows(project, caller)` answers in
@@ -1142,7 +1142,7 @@ public static partial class ProjectMembersWorkOnItsTasks
 }
 ```
 
-The function's name is written once, and the key is typed: a rule cannot pass a task's id where a
+The function's name is written once, and the permission is typed: a rule cannot pass a task's id where a
 project's is asked. The Supabase build writes the access file of the module that owns a function before
 the files of the modules that call it, and refuses a rule that asks a function no module defines.
 
@@ -1175,8 +1175,8 @@ that is DDD00039, and the two belong side by side, joined with `&&` or `||`. A r
 collection at all, an entity's entities included: it asks an access function (DDD00041).
 
 **More than the aggregate.** `Allows` may take more after the caller: a `string`, `bool`, `int`, `long`,
-`Guid` or an id, each a parameter of the SQL function after the key. The generator adds them to
-`Allows(key, ...)` as well, and a rule passes them along:
+`Guid` or an id, each a parameter of the SQL function after the permission. The generator adds them to
+`Allows(permission, ...)` as well, and a rule passes them along:
 
 ```csharp
 [AccessFunction<Project>("projects.has_role")]
@@ -1191,13 +1191,13 @@ public static partial class ProjectRoles
 ```
 
 The function is `projects.has_role(uuid, text)`. A contract publishes one like it by declaring its question,
-`static partial bool Allows(ProjectId key, string role);`, which the generator implements.
+`static partial bool Allows(ProjectId permission, string role);`, which the generator implements.
 
 ### Set-shaped questions
 
 An access function asked about one row runs once for every row a query looks at. Where the question is
 "which of these may the caller see", it is cheaper to ask it the other way round: once per statement, for
-the set of keys it allows, and let Postgres find those rows through the key's index. A set-shaped question
+the set of permissions it allows, and let Postgres find those rows through the permission's index. A set-shaped question
 answers with an `AccessSet<T>`, which a rule asks with `Contains`:
 
 ```csharp
@@ -1216,13 +1216,13 @@ public static partial class WatchersReadTheTicketsTheyWatch
 ```
 
 With `Shape = AccessFunctionShape.Set` the generator adds `Ids(...)`, which takes the function's own
-parameters, in place of `Allows(key, ...)`, and the policy asks the set once:
+parameters, in place of `Allows(permission, ...)`, and the policy asks the set once:
 
 ```mermaid
 flowchart TD
     Rule["TicketsIWatch.Ids().Contains(ticket.Id)"] -->|"the generator"| Policy["Id = ANY (ARRAY(SELECT desk.tickets_i_watch()))"]
     Policy -->|"once per statement"| Set["InitPlan: the ids of the tickets the caller watches"]
-    Set -->|"then"| Scan["Index scan on the key: those tickets and no others"]
+    Set -->|"then"| Scan["Index scan on the permission: those tickets and no others"]
 ```
 
 <details>
@@ -1243,7 +1243,7 @@ CREATE POLICY "Watchers read the tickets they watch (select) for authenticated" 
 </details>
 
 `= ANY (ARRAY(SELECT ...))` is the form on purpose. Postgres runs the `ARRAY(SELECT ...)` as an InitPlan,
-before it reads the table, and looks the ids up in the key's index. The same question written
+before it reads the table, and looks the ids up in the permission's index. The same question written
 `"Id" IN (SELECT ...)` stays a filter in a policy: a hashed SubPlan, checked against every row the scan
 reads, with no index condition to narrow it. The toolkit's own tests read both plans from `EXPLAIN`. A
 function whose whole question is whether one of the aggregate's entities is so, as above, reads the
@@ -1269,7 +1269,7 @@ CREATE OR REPLACE FUNCTION desk.tickets_i_reacted_in() RETURNS SETOF uuid
 $function$;
 ```
 
-A set-shaped function needs an aggregate whose key is one column.
+A set-shaped function needs an aggregate whose permission is one column.
 
 **Questions of your own.** A question the database answers that is not about one aggregate, the ids of
 what the caller follows, say, is declared in an `[AccessFunctions]` class, without a body, which the
@@ -1416,7 +1416,7 @@ CREATE POLICY "Watchers read the tickets they watch (select) for authenticated" 
 
 A package that keeps a resource's access writes the functions that answer it, and names them itself: the
 [Membership package](membership.md#on-postgres-the-second-lock) writes, for each resource with members, the
-resources the caller sees and those it holds a key on, under names it takes from the resource's rules. A rule
+resources the caller sees and those it holds a permission on, under names it takes from the resource's rules. A rule
 should not have to repeat those names, and a module that asks about another module's resource should not even
 know them. So it asks by the resource's id. An `[AccessFunctionContract]`, above, is for a function your module
 defines itself and names; this contract is for a set a package answers:
@@ -1430,7 +1430,7 @@ flowchart LR
 
 The contract is one line, in the contracts of the module that owns the resource. It names the resource's id and
 the set, and no function: `ResourceAccessSet.Seen` publishes `Ids()`, the resources the caller sees, and
-`ResourceAccessSet.HeldOn` publishes `Ids(string key)`, those the caller holds the key on. A rule asks it as it
+`ResourceAccessSet.HeldOn` publishes `Ids(string permission)`, those the caller holds the permission on. A rule asks it as it
 asks any set, with `Contains`, once per statement. The generator writes the set into the rule's SQL by the id's
 full name and the set, and the export writes the policy with the function a contribution says answers that set
 for the resource with that id. The Membership package says so of the two functions it writes for each resource,
@@ -1452,10 +1452,10 @@ so listing its contribution is all a host does.
   other context's names. One function answers a set for a resource: two that say so, in one context or in two,
   are refused, naming both.
 - **SQL of your own asks the same way.** A contract's generated `Name` is the set's name, so a contribution of
-  yours asks `{fn:...}` with `ProjectsWhereIHold.Name` in it, as the sample's `UnitChangesWithItsKeys` does.
+  yours asks `{fn:...}` with `ProjectsWhereIHold.Name` in it, as the sample's `UnitChangesWithItsPermissions` does.
 - **A package of your own** says which set a function answers with `Answers` on its `ContributedFunction`,
   `new ResourceAccessAnswer(typeof(TId), ResourceAccessSet.Seen)`. Such a function returns `SETOF` the id's type,
-  and takes nothing for the resources seen, or the key as `text` for those it is held on; anything else is
+  and takes nothing for the resources seen, or the permission as `text` for those it is held on; anything else is
   refused when the script is written.
 
 A contract that declares its `Ids` itself, to document it, gets that one implemented. Its key is the id of the
@@ -1489,7 +1489,7 @@ public static partial class SeatsSeeTheProjectsTheyReach
 public static partial class SeatsRecordWhereTheyMay
 {
     public static bool Allows(Inspection inspection, Caller caller)
-        => ProjectsWhereIHold.Ids(InspectionKeys.Record).Contains(inspection.ProjectId)
+        => ProjectsWhereIHold.Ids(InspectionPermissionNames.Record).Contains(inspection.ProjectId)
             && inspection.RecordedBy == TenancyRowAccess.CallerSeat<SeatId>();
 }
 ```
@@ -1512,12 +1512,12 @@ CREATE POLICY "Seats record where they may (insert) for authenticated" ON "inspe
 ### Column rules
 
 A policy is asked of a row and a command, and never of a column: Postgres cannot tell it which columns a
-statement changes. Where every change to a row takes the same key, that is all a rule needs. Where one column
-takes a stricter key than the rest of the row, the policy for `UPDATE` has to let through whoever holds any of
-the keys, and whoever holds one of them then changes every column. A project shows it: renaming one takes the
-key to edit it, closing it the key to close it, its crew the key to manage the crew and its owner the key to
-name owners, and a project that is moved has to pass at the unit it arrives at, where the key to open projects
-is what the move asks. So the policy that lets a seat change a project asks for any of those keys. A seat that
+statement changes. Where every change to a row takes the same permission, that is all a rule needs. Where one column
+takes a stricter permission than the rest of the row, the policy for `UPDATE` has to let through whoever holds any of
+the permissions, and whoever holds one of them then changes every column. A project shows it: renaming one takes the
+permission to edit it, closing it the permission to close it, its crew the permission to manage the crew and its owner the permission to
+name owners, and a project that is moved has to pass at the unit it arrives at, where the permission to open projects
+is what the move asks. So the policy that lets a seat change a project asks for any of those permissions. A seat that
 only manages the crew, or only opens projects at the unit, could rename the project with a statement of its own,
 past the check in front of the handler.
 
@@ -1525,9 +1525,9 @@ past the check in front of the handler.
 
 ```csharp
 [RowAccess<Project>(RowOperations.Change, To = [RowAccessRoles.User], Columns = [nameof(Project.State)])]
-public static partial class StateChangesWithTheCloseKey
+public static partial class StateChangesWithTheClosePermission
 {
-    public static bool Allows(Project project, Caller caller) => ProjectsWhereIHold.Ids(ProjectKeys.Close).Contains(project.Id);
+    public static bool Allows(Project project, Caller caller) => ProjectsWhereIHold.Ids(ProjectPermissionNames.Close).Contains(project.Id);
 }
 ```
 
@@ -1550,7 +1550,7 @@ flowchart TB
 <details>
 <summary>Show the code: two column rules of a project, and the trigger one of them becomes</summary>
 
-The project's rule for changing it asks for any key that changes one, on the project or, for the key to open
+The project's rule for changing it asks for any permission that changes one, on the project or, for the permission to open
 projects, at its unit; the two column rules hold the columns whose commands ask a stricter one:
 
 ```csharp
@@ -1558,28 +1558,28 @@ projects, at its unit; the two column rules hold the columns whose commands ask 
 public static partial class SeatsChangeTheProjectsTheyWorkOn
 {
     public static bool Allows(Project project, Caller caller)
-        => ProjectsWhereIHold.Ids(ProjectKeys.Edit).Contains(project.Id)
-            || ProjectsWhereIHold.Ids(ProjectKeys.Close).Contains(project.Id)
-            || ProjectsWhereIHold.Ids(ProjectKeys.ManageCrew).Contains(project.Id)
-            || ProjectsWhereIHold.Ids(ProjectKeys.ChangeOwner).Contains(project.Id)
-            || TenancyRowAccess.UnitsWhereIHold<OrganizationUnitId>(ProjectKeys.Open).Contains(project.UnitId);
+        => ProjectsWhereIHold.Ids(ProjectPermissionNames.Edit).Contains(project.Id)
+            || ProjectsWhereIHold.Ids(ProjectPermissionNames.Close).Contains(project.Id)
+            || ProjectsWhereIHold.Ids(ProjectPermissionNames.ManageCrew).Contains(project.Id)
+            || ProjectsWhereIHold.Ids(ProjectPermissionNames.ChangeOwner).Contains(project.Id)
+            || TenancyRowAccess.UnitsWhereIHold<OrganizationUnitId>(ProjectPermissionNames.Open).Contains(project.UnitId);
 }
 
 [RowAccess<Project>(RowOperations.Change, To = [RowAccessRoles.User], Columns = [nameof(Project.Name), nameof(Project.Planned)])]
-public static partial class NameAndPlanChangeWithTheEditKey
+public static partial class NameAndPlanChangeWithTheEditPermission
 {
-    public static bool Allows(Project project, Caller caller) => ProjectsWhereIHold.Ids(ProjectKeys.Edit).Contains(project.Id);
+    public static bool Allows(Project project, Caller caller) => ProjectsWhereIHold.Ids(ProjectPermissionNames.Edit).Contains(project.Id);
 }
 
 [RowAccess<Project>(RowOperations.Change, To = [RowAccessRoles.User], Columns = [nameof(Project.State)])]
-public static partial class StateChangesWithTheCloseKey
+public static partial class StateChangesWithTheClosePermission
 {
-    public static bool Allows(Project project, Caller caller) => ProjectsWhereIHold.Ids(ProjectKeys.Close).Contains(project.Id);
+    public static bool Allows(Project project, Caller caller) => ProjectsWhereIHold.Ids(ProjectPermissionNames.Close).Contains(project.Id);
 }
 ```
 
 What the script writes for the state, shortened. The rule reads the row's key alone, so the row as it is about
-to be is asked only where the key changes:
+to be is asked only where the permission changes:
 
 ```sql
 CREATE OR REPLACE FUNCTION "projects".projects_state_column_rule() RETURNS trigger
@@ -1589,7 +1589,7 @@ BEGIN
         IF (OLD."Id" = ANY (ARRAY(SELECT "projects".projects_where_i_hold('projects.close')))) IS NOT TRUE
            OR (OLD."Id" IS DISTINCT FROM NEW."Id" AND (NEW."Id" = ANY (ARRAY(SELECT "projects".projects_where_i_hold('projects.close')))) IS NOT TRUE) THEN
             RAISE EXCEPTION USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'projects_state_column_rule', HINT = 'ddd:access.refused',
-                MESSAGE = 'The column rule ''State changes with the close key'' does not let this caller change "State" of "projects"."Projects".';
+                MESSAGE = 'The column rule ''State changes with the close permission'' does not let this caller change "State" of "projects"."Projects".';
         END IF;
     ELSIF CURRENT_USER IN ('anon', 'tenancy_operator') THEN
         RAISE EXCEPTION USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'projects_state_column_rule', HINT = 'ddd:access.refused',
@@ -1605,8 +1605,8 @@ CREATE TRIGGER projects_state_column_rule BEFORE UPDATE OF "State" ON "projects"
 COMMENT ON TRIGGER projects_state_column_rule ON "projects"."Projects" IS 'DDDToolkit column rule';
 ```
 
-A script of your own writes the same from `RowAccessRule.ForColumns<Project>("State changes with the close key",
-[nameof(Project.State)], StateChangesWithTheCloseKey.RowAccessSql, RowAccessRoles.User)`. A column rule's
+A script of your own writes the same from `RowAccessRule.ForColumns<Project>("State changes with the close permission",
+[nameof(Project.State)], StateChangesWithTheClosePermission.RowAccessSql, RowAccessRoles.User)`. A column rule's
 `RowAccessSql` starts with `{columns}`, which `ForColumns` takes and `RowAccessRule.For` refuses: as a rule
 about whole rows, it would let whoever it allows change every column. An export of a version without column
 rules stops at the placeholder it does not know, and asks for the same version of the toolkit's packages
@@ -1665,13 +1665,13 @@ everywhere, rather than write such a policy.
 The policy on Tenancy's seats lets a seat change its own row, and a seat that manages seats or grants anywhere in
 the tenant change any seat's row, since every save of a seat writes its version. A job title you add to your seat
 class is as writable as that, because the package decides nothing about it. Whether to hold it, and to what, is
-yours to say, with the key your command that changes it asks:
+yours to say, with the permission your command that changes it asks:
 
 ```csharp
 [RowAccess<Seat>(RowOperations.Change, To = [RowAccessRoles.User], Columns = [nameof(Seat.JobTitle)])]
-public static partial class JobTitlesChangeWithTheSeatsKey
+public static partial class JobTitlesChangeWithTheSeatsPermission
 {
-    public static bool Allows(Seat seat, Caller caller) => TenancyRowAccess.HoldsAtTenant(TenancyKeys.SeatsManage);
+    public static bool Allows(Seat seat, Caller caller) => TenancyRowAccess.HoldsAtTenant(TenancyPermissions.SeatsManage);
 }
 ```
 
@@ -1687,10 +1687,10 @@ schema. A property the model stores in no column of the aggregate's table, one i
 script is written, naming the rule.
 
 A column rule asks one question of the row before and after the change. A rule that asks something else of each,
-as moving a project does, the key to edit it where it was and the key to open projects where it goes, is a
-trigger of your own, written as a [contribution](#policies-a-package-ships): the sample's `UnitChangesWithItsKeys`.
+as moving a project does, the permission to edit it where it was and the permission to open projects where it goes, is a
+trigger of your own, written as a [contribution](#policies-a-package-ships): the sample's `UnitChangesWithItsPermissions`.
 The owner column of a resource whose members the [Membership package](membership.md#who-writes-the-member-rows)
-keeps is held by the package's own lock, which it writes from the key its rules name for naming an owner.
+keeps is held by the package's own lock, which it writes from the permission its rules name for naming an owner.
 
 ### Policies a package ships
 
@@ -1742,7 +1742,7 @@ public sealed class AuditRowAccess : IRowAccessContribution
 ```
 
 SQL that is your application's own, a trigger one of your modules writes, is a contribution as well, and you
-list it in the project that runs the export: `[assembly: UseRowAccessContribution(typeof(UnitChangesWithItsKeys))]`.
+list it in the project that runs the export: `[assembly: UseRowAccessContribution(typeof(UnitChangesWithItsPermissions))]`.
 That is the line for your own classes only. A module declares its class with `[assembly: RowAccessContribution]`
 as a package does, and because its assembly declares a module, that is an offer rather than a write: nothing
 is written until the exporting project lists it, and the build warns until it does,
@@ -1975,8 +1975,8 @@ A context whose only row access is a contribution gets a script, and a Supabase 
 
 ### When the database refuses
 
-The check in front of a handler refuses first, with your own code and the key that is missing. The database
-refuses only what that check let through: a caller that lost a key between the check and the save, a handler
+The check in front of a handler refuses first, with your own code and the permission that is missing. The database
+refuses only what that check let through: a caller that lost a permission between the check and the save, a handler
 that skipped its check, a rule the database holds more strictly than C# asks it. `UseDDDToolkit` answers each
 of those the same way. The save throws a `RefusalException` with the code `access.refused`, a refusal of the
 kind "not permitted": a 403 from a route and a `RefusalError` from a GraphQL mutation. A line is logged as
@@ -2018,7 +2018,7 @@ somebody else changed it first. That case is told apart by reading the row again
   the `PostgresException` itself. `DatabaseRefusal.From(exception)` reads it as it reads a save's, if you want to
   answer it with `access.refused` too.
 - **The caller is told `access.refused`, and no more.** Not which guard refused, nor its message. The check in
-  C# is where a refusal is specific, with the key that is missing, in the reader's language. When the database
+  C# is where a refusal is specific, with the permission that is missing, in the reader's language. When the database
   refuses what that check let through, the two disagree, and the fix is in the check or in the rule, unless the
   caller's rights changed in between, which the toolkit tells by asking the request's check again
   ([When the policies refuse what C# allowed](#when-the-policies-refuse-what-c-allowed)). The log line names the
@@ -2060,14 +2060,14 @@ CREATE TRIGGER pallets_number_stays BEFORE UPDATE OF "Number" ON depot."Pallets"
     EXECUTE FUNCTION depot.pallets_number_stays();
 ```
 
-From C#, in a contribution's statements, as the sample's `UnitChangesWithItsKeys` writes its trigger:
+From C#, in a contribution's statements, as the sample's `UnitChangesWithItsPermissions` writes its trigger:
 
 ```csharp
 string Refusal(string message) => RowAccessModel.Refusal(Trigger, message);
 
 // ...
-$"    IF NOT ({HeldOn(ProjectKeys.Edit, $"OLD.{id}")}) OR NOT ({HeldAt(ProjectKeys.Open, $"NEW.{unit}")}) THEN\n" +
-$"        {Refusal(MovedWithoutTheKeys)}\n" +
+$"    IF NOT ({HeldOn(ProjectPermissionNames.Edit, $"OLD.{id}")}) OR NOT ({HeldAt(ProjectPermissionNames.Open, $"NEW.{unit}")}) THEN\n" +
+$"        {Refusal(MovedWithoutThePermissions)}\n" +
 "    END IF;\n" +
 ```
 
@@ -2422,7 +2422,7 @@ caller is told no more than that the database refused the change.
 
 Somebody else may need to hear more, and what depends on why the policies refused. There are two reasons:
 
-- **The caller's rights changed between the check and the save.** A key was taken from a role the caller holds,
+- **The caller's rights changed between the check and the save.** A permission was taken from a role the caller holds,
   a grant was revoked, the caller's seat was suspended: in the milliseconds between the request's access check and
   its save, or in the seconds a slow handler takes. The check and the policies agreed, each at the moment it was
   asked, and nothing needs fixing: an information line says what happened, with no stack trace. A change of rights
@@ -2478,7 +2478,7 @@ flowchart TB
 ```
 
 <details>
-<summary>Show the code: the three lines, and a rename in the Tenancy sample that loses its key on the way</summary>
+<summary>Show the code: the three lines, and a rename in the Tenancy sample that loses its permission on the way</summary>
 
 ```text
 info: DDDToolkit.EntityFramework.Interceptors.DatabaseRefusalInterceptor
@@ -2497,11 +2497,11 @@ warn: DDDToolkit.EntityFramework.Interceptors.DatabaseRefusalInterceptor
 In the [Tenancy sample](../Examples/README.md#the-tenancy-sample), Vic renames a project as its crew lead. Between his request's
 check and its save, the tenant's roles manager leaves the crew lead's role giving nothing but `projects.view`.
 The project's row did not change, so the handler loads what was checked, renames it, and saves; the policy on
-`projects.Projects`, which reads the role's keys as they are now, finds no key of Vic's that writes the row and
+`projects.Projects`, which reads the role's permissions as they are now, finds no permission of Vic's that writes the row and
 leaves the statement no row. The request is answered 403 `access.refused`, and the first line above is logged:
 
 ```csharp
-// RequestPipelineTests.A_key_taken_from_a_crew_role_since_the_check_is_refused_by_the_database_and_logged_as_a_change_of_rights
+// RequestPipelineTests.A_permission_taken_from_a_crew_role_since_the_check_is_refused_by_the_database_and_logged_as_a_change_of_rights
 using var renamed = await vic.PutAsJsonAsync($"/projects/{pier.Id.Value}/name", new { name = "Pier 7, east" });
 
 await renamed.ShouldBeRefusedAsync(HttpStatusCode.Forbidden, ToolkitRefusals.Refused);

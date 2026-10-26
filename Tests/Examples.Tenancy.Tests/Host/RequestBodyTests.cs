@@ -9,7 +9,7 @@ namespace Examples.Tenancy.Tests.Host;
 /// <summary>
 /// Bodies that leave out what a command cannot do without. Each is a 400 <c>invalid-request</c> that says so, never
 /// a command run with an empty id, which would answer with a refusal about a unit or seat nobody named, and never a
-/// role's keys emptied because a field was misspelt. A question to the directory without its ids is the same: a
+/// role's permissions emptied because a field was misspelt. A question to the directory without its ids is the same: a
 /// 400, never an empty answer that reads as "none of these is a seat here".
 /// </summary>
 [Trait("Category", "Samples")]
@@ -25,7 +25,7 @@ public sealed class RequestBodyTests(SampleHosts sample) : IClassFixture<SampleH
 
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
-    /// <summary>Ada holds every key in harbor, so nothing but the body stands between her and each command.</summary>
+    /// <summary>Ada holds every permission in harbor, so nothing but the body stands between her and each command.</summary>
     public static TheoryData<string, string, string, string> BodiesWithoutTheirIds => new()
     {
         { "POST", "/projects", """{"number":"P-100","name":"Harbor wall"}""", "unitId" },
@@ -58,11 +58,11 @@ public sealed class RequestBodyTests(SampleHosts sample) : IClassFixture<SampleH
         { "/tenancy/directory/roles", """{"ids":[42]}""" },
     };
 
-    public static TheoryData<string> KeysBodies => new()
+    public static TheoryData<string> PermissionsBodies => new()
     {
         "{}",
-        """{"key":["projects.view"]}""",
-        """{"keys":null}""",
+        """{"permission":["projects.view"]}""",
+        """{"permissions":null}""",
     };
 
     [Theory]
@@ -120,7 +120,7 @@ public sealed class RequestBodyTests(SampleHosts sample) : IClassFixture<SampleH
         { "POST", "/tenancy/invitations", null, "PersonToInvite" },
         { "POST", "/tenancy/invitations", "null", "PersonToInvite" },
         { "POST", "/projects", null, "ProjectToOpen" },
-        { "PUT", $"/tenancy/roles/{Observer}/keys", "null", "KeysToSet" },
+        { "PUT", $"/tenancy/roles/{Observer}/permissions", "null", "PermissionsToSet" },
         { "POST", "/tenancy/directory/seats", null, "IdsAsked" },
     };
 
@@ -166,18 +166,18 @@ public sealed class RequestBodyTests(SampleHosts sample) : IClassFixture<SampleH
     }
 
     [Theory]
-    [MemberData(nameof(KeysBodies))]
-    public async Task Setting_a_roles_keys_without_the_list_is_refused_and_keeps_its_keys(string body)
+    [MemberData(nameof(PermissionsBodies))]
+    public async Task Setting_a_roles_permissions_without_the_list_is_refused_and_keeps_its_permissions(string body)
     {
         using var ada = await sample.ClientAsync("ada", Harbor.Slug);
 
-        using var response = await ada.SendAsync(Json(HttpMethod.Put, $"/tenancy/roles/{Observer}/keys", body), Cancellation);
+        using var response = await ada.SendAsync(Json(HttpMethod.Put, $"/tenancy/roles/{Observer}/permissions", body), Cancellation);
 
         await response.ShouldBeRefusedAsync(HttpStatusCode.BadRequest, RefusalProblems.InvalidRequest);
         var roles = await ada.GetFromJsonAsync<JsonElement>("/tenancy/roles", Cancellation);
         roles.EnumerateArray().Single(role => role.GetProperty("id").GetGuid() == Observer)
-            .GetProperty("keys").EnumerateArray().Select(key => key.GetString())
-            .Should().Equal(ProjectKeys.View);
+            .GetProperty("permissions").EnumerateArray().Select(permission => permission.GetString())
+            .Should().Equal(ProjectPermissionNames.View);
     }
 
     [Fact]

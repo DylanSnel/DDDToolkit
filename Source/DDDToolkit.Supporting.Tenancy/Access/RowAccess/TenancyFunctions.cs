@@ -21,14 +21,14 @@ public static class TenancyFunctions
     public static DatabaseFunction CallerSeat { get; } = new(TenancyRowAccess.Owner, "caller_seat");
 
     /// <summary>
-    /// Answers, for a key, the units the calling seat's hold of it reaches: where it is held, and every unit below.
+    /// Answers, for a permission, the units the calling seat's hold of it reaches: where it is held, and every unit below.
     /// As <see cref="TenancyRowAccess.UnitsWhereIHold{TUnitId}"/>.
     /// </summary>
-    public static DatabaseFunction UnitsWhereIHold { get; } = new(TenancyRowAccess.Owner, "units_where_i_hold");
+    public static DatabaseFunction UnitsWhereIHold { get; } = new(TenancyRowAccess.Owner, "units_where_i_hold_permission");
 
     /// <summary>
-    /// Answers, for a key, the roles of the caller's tenant in use that give it. As
-    /// <see cref="TenancyRowAccess.RolesWithKey{TRoleId}"/>.
+    /// Answers, for a permission, the roles of the caller's tenant in use that give it. As
+    /// <see cref="TenancyRowAccess.RolesWithPermission{TRoleId}"/>.
     /// </summary>
-    public static DatabaseFunction RolesWithKey { get; } = new(TenancyRowAccess.Owner, "roles_with_key");
+    public static DatabaseFunction RolesWithPermission { get; } = new(TenancyRowAccess.Owner, "roles_with_permission");
 }

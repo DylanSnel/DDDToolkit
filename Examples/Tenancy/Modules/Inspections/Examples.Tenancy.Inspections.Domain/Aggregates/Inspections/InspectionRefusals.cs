@@ -16,7 +16,7 @@ namespace Examples.Tenancy.Inspections.Domain.Aggregates.Inspections;
 /// because they are Projects' module's own and only its gate is published; a test holds the two modules to
 /// the same codes and the same English.
 /// <para>
-/// An argument is a value, such as a key or a length, never a word, so a translation can be a sentence of its own.
+/// An argument is a value, such as a permission or a length, never a word, so a translation can be a sentence of its own.
 /// The translations of Inspections' own codes are beside this class, in the two resource files of
 /// <see cref="InspectionFailures"/>; those of the three codes passed on are Projects', so a code has one text.
 /// </para>
@@ -42,7 +42,7 @@ public static class InspectionRefusals
     /// </summary>
     public const string ProjectNotFound = "projects.not-found";
 
-    /// <summary>Projects' code for a project the caller may see but not do this to. Argument: <c>Key</c>.</summary>
+    /// <summary>Projects' code for a project the caller may see but not do this to. Argument: <c>Permission</c>.</summary>
     public const string ProjectNotPermitted = "projects.not-permitted";
 
     /// <summary>Projects' code for a closed project, about which nothing changes until it is reopened.</summary>
@@ -63,7 +63,7 @@ public static class InspectionRefusals
         [DaysInvalid] = (RefusalKind.Invalid, "The days an inspection covers have a first and a last day, and the last is not before the first."),
         [OutsidePlannedRange] = (RefusalKind.Conflict, "The project is planned from {From} to {Until}; an inspection covers days within that. Without days it covers the day it is recorded, by the clock in UTC."),
         [ProjectNotFound] = (RefusalKind.NotFound, "There is no such project, or it is not one you can see."),
-        [ProjectNotPermitted] = (RefusalKind.NotPermitted, "Doing this to the project needs the key {Key}."),
+        [ProjectNotPermitted] = (RefusalKind.NotPermitted, "Doing this to the project needs the permission {Permission}."),
         [ProjectClosed] = (RefusalKind.Conflict, "The project is closed; nothing about it changes until it is reopened."),
         [CursorInvalid] = (RefusalKind.Invalid, "That page marker does not belong to this list. Start again from the first page."),
         [PageSizeInvalid] = (RefusalKind.Invalid, "A page holds 1 to {Max} inspections."),

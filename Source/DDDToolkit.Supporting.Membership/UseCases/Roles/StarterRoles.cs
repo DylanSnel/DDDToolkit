@@ -5,7 +5,7 @@ namespace DDDToolkit.Supporting.Membership.UseCases;
 
 /// <summary>
 /// The first roles of a resource whose roles a customer makes (<see cref="Roles.Custom"/>): the starter roles its
-/// rules declare, each made once into a row a customer can rename, give other keys and archive.
+/// rules declare, each made once into a row a customer can rename, give other permissions and archive.
 /// <para>
 /// Roles are kept in scopes the package does not know: one set for each customer of an application, or one
 /// for the whole of it. So the application says which scope it means by handing over the roles that scope
@@ -29,7 +29,7 @@ public static class StarterRoles
 {
     /// <summary>
     /// The starter roles a scope does not have yet, each as the draft its role is made from: its name as the
-    /// rules declare it, the keys the rules let it give, and the starter role it is, in the order the rules
+    /// rules declare it, the permissions the rules let it give, and the starter role it is, in the order the rules
     /// declare them.
     /// </summary>
     /// <param name="rules">The rules of the resource the roles are of.</param>
@@ -57,6 +57,6 @@ public static class StarterRoles
 
         return [.. rules.Roles.Declared
             .Where(starter => !made.Contains(starter.Name))
-            .Select(starter => new CustomRoleDraft(starter.Name, null, rules.KeysOf(new NamedRole(starter.Name)), starter.Name))];
+            .Select(starter => new CustomRoleDraft(starter.Name, null, rules.PermissionsOf(new NamedRole(starter.Name)), starter.Name))];
     }
 }

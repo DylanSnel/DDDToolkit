@@ -9,8 +9,8 @@
 // wins, and the switch writes no second one.
 //
 // The role written is the package's whole: each tenant's roles start as copies of the catalogue's packs and are the
-// tenant's own to rename, re-key and archive, and a role made from a pack remembers what the pack gave it, so it
-// follows the pack when the host syncs the packs: a key the pack gains later reaches it, and what the tenant changed
+// tenant's own to rename, give other permissions and archive, and a role made from a pack remembers what the pack gave it, so it
+// follows the pack when the host syncs the packs: a permission the pack gains later reaches it, and what the tenant changed
 // in it stays. It is a role of the organization: given at a unit, it counts for every unit below it. A role a
 // project's crew holds is not one of these: it is a project role, kept by the Projects module beside its projects.
 //

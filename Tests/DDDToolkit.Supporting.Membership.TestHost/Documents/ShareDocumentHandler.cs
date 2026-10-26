@@ -8,9 +8,9 @@ using Microsoft.EntityFrameworkCore;
 namespace DDDToolkit.Supporting.Membership.TestHost.Documents;
 
 /// <summary>
-/// Shares a document. Who may was decided before it runs, by what its request requires: the key that shares,
+/// Shares a document. Who may was decided before it runs, by what its request requires: the permission that shares,
 /// held on that document. This host has no rule beyond that for documents, so the handler asks nobody anything
-/// about its caller: whoever holds the key shares with anyone, in any role, for as long as they say.
+/// about its caller: whoever holds the permission shares with anyone, in any role, for as long as they say.
 /// <para>
 /// The default path: it loads the document its request names, which is the one the check read, at the version
 /// the caller named when it named one, and saves. Nothing of what the check read is taken here.

@@ -24,8 +24,8 @@ public static class MembershipPermissions
     /// <param name="declaredIn">The class that declares them, by its full name.</param>
     /// <param name="permissions">The permissions on the resource, in the order they are declared.</param>
     /// <param name="elsewhere">
-    /// The keys the same class declares at another level, held at a unit or across the whole organization say: keys of the
-    /// module that are known not to be the resource's, which no role on it gives, whatever keys of other modules its
+    /// The permissions the same class declares at another level, held at a unit or across the whole organization say: permissions of the
+    /// module that are known not to be the resource's, which no role on it gives, whatever permissions of other modules its
     /// roles take.
     /// </param>
     /// <typeparam name="TResource">The resource.</typeparam>
@@ -54,7 +54,7 @@ public static class MembershipPermissions
 
     /// <summary>
     /// The permissions declared on <typeparamref name="TResource"/>, of every class that declared some, those
-    /// classes in the order of their names and each class's in the order it declares them; and the keys those
+    /// classes in the order of their names and each class's in the order it declares them; and the permissions those
     /// classes declare at another level.
     /// </summary>
     internal static (IReadOnlyList<ResourcePermission> Permissions, IReadOnlyList<string> Elsewhere) Of<TResource>()

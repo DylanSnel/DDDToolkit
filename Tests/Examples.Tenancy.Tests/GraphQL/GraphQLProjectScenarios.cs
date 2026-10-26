@@ -276,7 +276,7 @@ public sealed class GraphQLProjectScenarios(SampleHosts sample) : IClassFixture<
         errors.Should().HaveCount(3);
         errors.Should().OnlyContain(error => error.Code() == ProjectRefusals.NotPermitted && error.Kind() == "not_permitted");
         errors.Should().OnlyContain(error => error.GetProperty("path").EnumerateArray().Last().GetString() == "roles");
-        errors.Should().OnlyContain(error => error.GetProperty("extensions").GetProperty("arguments").GetProperty("Key").GetString() == ProjectKeys.ManageCrew);
+        errors.Should().OnlyContain(error => error.GetProperty("extensions").GetProperty("arguments").GetProperty("Permission").GetString() == ProjectPermissionNames.ManageCrew);
 
         // What she holds herself is not under the rule: her own roles on the crew.
         var own = (await juno.GraphQLDataAsync("{ projects { nodes { myRoles { id } } } }")).GetProperty("projects").GetProperty("nodes")[0];

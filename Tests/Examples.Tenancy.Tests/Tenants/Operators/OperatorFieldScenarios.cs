@@ -157,7 +157,7 @@ public sealed class OperatorFieldScenarios(SampleHosts sample) : IClassFixture<S
     [Fact]
     public async Task A_seat_is_no_operator_and_an_operator_has_no_seat()
     {
-        // Harbor's first administrator, who holds every key there is in her tenant.
+        // Harbor's first administrator, who holds every permission there is in her tenant.
         using var ada = await sample.ClientAsync("ada", Harbor.Slug);
         var refused = (await ada.GraphQLAsync(Tenants)).SingleError();
         refused.Code().Should().Be(TenancyRefusals.OperatorsOnly);

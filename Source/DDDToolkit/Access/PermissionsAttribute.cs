@@ -1,7 +1,7 @@
 namespace DDDToolkit.Access;
 
 /// <summary>
-/// Marks a static class whose constants are permissions: every <c>public const string</c> of it is one, the key a
+/// Marks a static class whose constants are permissions: every <c>public const string</c> of it is one, the permission a
 /// request requires and a role gives, declared once, with where it is asked and what holds it.
 /// <code>
 /// [Permissions]
@@ -23,7 +23,7 @@ namespace DDDToolkit.Access;
 /// it is asked: Tenancy's <c>[AtTenant]</c> for the whole tenant and <c>[AtUnit]</c> at a unit of the organization, and
 /// Membership's <c>[On&lt;TResource&gt;]</c> on one resource, through its members. A permission without one, or a level
 /// on anything that is no such constant, is DDD00092. The constants stay constants, so a request names one where it
-/// requires it: <c>[RequiresKey(BoardPermissions.Create)]</c>.
+/// requires it: <c>[RequiresPermission(BoardPermissions.Create)]</c>.
 /// </para>
 /// <para>
 /// The packages' generators collect what is declared here, so the module says it nowhere else: Membership's into the

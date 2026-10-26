@@ -25,7 +25,7 @@ internal sealed class InspectionsConnection(Page<InspectionOverview> page, Proje
     /// </summary>
     internal const double LoadedForThePage = 1;
 
-    /// <summary>Whether recording an inspection on the project would be allowed now: the caller holds the key, and the project is open.</summary>
+    /// <summary>Whether recording an inspection on the project would be allowed now: the caller holds the permission, and the project is open.</summary>
     [Cost(LoadedForThePage)]
     public async Task<bool> GetCanRecordAsync(IOpenToRecordingByProjectIdDataLoader open, CancellationToken cancellationToken)
         => await open.LoadAsync(project, cancellationToken);

@@ -24,7 +24,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
     /// the same unit of work.
     /// </para>
     /// <para>
-    /// Whoever works in a tenant reads it: a seat of it, or system work in it. No key is asked, for a list, for a
+    /// Whoever works in a tenant reads it: a seat of it, or system work in it. No permission is asked, for a list, for a
     /// question by id or for a seat's overview, and a question by id answers any seat, role or unit of the caller's
     /// tenant; an id of another tenant, or of nothing, is left out of the answer without a word, so the answer never
     /// says which. A question by id takes at most <see cref="MostIds"/> ids. Who may ask is the application's to say,
@@ -49,12 +49,12 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         /// <summary>How many ids one question by id takes.</summary>
         public const int MostIds = 200;
 
-        /// <summary>Every permission key and role pack of the application.</summary>
+        /// <summary>Every permission and role pack of the application.</summary>
         public TenancyCatalogue Catalogue => catalogue;
 
         /// <summary>
         /// Who the calling seat is, and what it may do where: its own seat, whole, as the application's class, with
-        /// the tenant, the paths of the units it is placed at, the roles its grants name, and every live key it holds
+        /// the tenant, the paths of the units it is placed at, the roles its grants name, and every live permission it holds
         /// now with where it is granted and every unit it reaches (<see cref="SeatOverview"/>). A seat asks this about
         /// itself; any seat of the tenant, its own included, is <see cref="SeatOverviewAsync"/>.
         /// </summary>
@@ -80,7 +80,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         /// <summary>
         /// Any seat of the caller's tenant and what it may do where, as <see cref="WhoAmIAsync"/> answers the caller's
         /// own: the seat, whole, as the application's class, with the tenant, the paths of the units it is placed at,
-        /// the roles its grants name, and every key it holds now with where it is granted and every unit it reaches
+        /// the roles its grants name, and every permission it holds now with where it is granted and every unit it reaches
         /// (<see cref="SeatOverview"/>). Asked about the caller's own seat, it answers what <see cref="WhoAmIAsync"/>
         /// answers.
         /// </summary>
@@ -88,17 +88,17 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         /// It asks nothing of the caller beyond what every question of the directory asks, a seat of the tenant or
         /// system work in it. Who may see another person's access is the application's choice, so the request that
         /// asks this states it (<c>IRequireAccess.RequiredAccess</c>), as a request states it for everything else:
-        /// <c>TenancyAccess.AtTenant(TenancyKeys.SeatsManage)</c> for a tenant's administration, say, or
+        /// <c>TenancyAccess.AtTenant(TenancyPermissions.SeatsManage)</c> for a tenant's administration, say, or
         /// <c>TenancyAccess.InTenant()</c> where the database's read rules are the rule.
         /// <para>
         /// What comes back is what the caller reads, through the store, as the lists read seats. On Postgres Tenancy's
         /// policies give a seat another seat's grants only where it may read them: at the units where it manages
         /// grants, seats or units and below them, or all of them when it manages roles for the whole tenant; and a
-        /// read rule of the application's on its seat class decides which seats it reads at all. The keys are worked
+        /// read rule of the application's on its seat class decides which seats it reads at all. The permissions are worked
         /// out from the grants that were read, by the rule the rights are written by, since a database that keeps the
-        /// rights shows a seat its own alone: a key is shown where the caller reads the grant that gives it, and a
+        /// rights shows a seat its own alone: a permission is shown where the caller reads the grant that gives it, and a
         /// seat that is not active holds none. Where no policy applies, on another database or in a context without
-        /// row level security, every seat comes with all its grants and keys, and the request's requirement is the
+        /// row level security, every seat comes with all its grants and permissions, and the request's requirement is the
         /// only rule: choose it as the rule you mean.
         /// </para>
         /// <para>
@@ -144,7 +144,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
             // role class hides a role's name, never what its grants give, as the rights the questions decide by are
             // written from these same rows. A tenant has few roles, so they are one statement.
             var facts = (await store.Queries.ListAsync(store.Reads.Roles.Where(role => role.TenantId.Equals(tenantId)), cancellationToken).ConfigureAwait(false))
-                .ToDictionary(role => role.Id, role => new RoleFacts(role.Status == RoleStatus.Active, role.Keys));
+                .ToDictionary(role => role.Id, role => new RoleFacts(role.Status == RoleStatus.Active, role.Permissions));
 
             // Only what is not on the seat: the paths of its placements' units and the roles its grants name. A role
             // the store does not answer, one a filter of the application's own hides, is left out rather than made
@@ -158,20 +158,20 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
                 .OrderBy(role => role.Name, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
 
-            // The keys the grants that were read give now, worked out as the rights are written: by an active seat,
-            // from an active role, and only the keys the catalogue keeps live, so a key retired since the rights were
+            // The permissions the grants that were read give now, worked out as the rights are written: by an active seat,
+            // from an active role, and only the permissions the catalogue keeps live, so a permission retired since the rights were
             // written holds nowhere. Not read from the rights themselves, which a database that keeps them shows a seat
-            // only of its own: worked out from the grants, a key of another seat's is shown exactly where the caller
+            // only of its own: worked out from the grants, a permission of another seat's is shown exactly where the caller
             // reads the grant that gives it.
             var held = TenancyProjection.RightsOf(tenantId, seat.Id, seat.Status, TenancyProjection.GrantsOf(seat), role => facts.GetValueOrDefault(role), catalogue)
                 .Where(right => right.StartsAt <= now && (right.EndsAt == null || right.EndsAt > now));
-            var keys = held
-                .GroupBy(right => right.Key, StringComparer.Ordinal)
+            var permissions = held
+                .GroupBy(right => right.Permission, StringComparer.Ordinal)
                 .OrderBy(group => group.Key, StringComparer.Ordinal)
                 .Select(group =>
                 {
                     var grantedAt = group.Select(right => right.UnitId).Distinct().ToArray();
-                    return new KeyReach(
+                    return new PermissionReach(
                         group.Key,
                         units.Root is { } root && grantedAt.Contains(root),
                         units.Refs(grantedAt),
@@ -184,7 +184,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
                 seat,
                 placedAt,
                 named,
-                keys,
+                permissions,
                 now);
         }
 
@@ -199,7 +199,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         /// the application added; tracked by nobody, so nothing done to a seat is saved. The identity is the
         /// application's to keep: what leaves is what it selects.
         /// <para>
-        /// No key is asked, and only a database's own read rules narrow what of another seat is read: on Postgres,
+        /// No permission is asked, and only a database's own read rules narrow what of another seat is read: on Postgres,
         /// Tenancy's policies answer another seat's grants only where the caller may read them, and elsewhere, or in a
         /// context without row level security, every seat comes with all its placements and grants. Where another
         /// seat's grants are shown, the request that asks says who may see them, as a request that answers from
@@ -375,7 +375,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
                 .ThenBy(role => role.Name, StringComparer.OrdinalIgnoreCase)];
 
         private RoleSummary Summary(TRole role)
-            => new(role.Id, role.Name, role.FromPack, role.Status, role.Keys, catalogue.AccessManagingKeysOf(role.Facts).Count > 0);
+            => new(role.Id, role.Name, role.FromPack, role.Status, role.Permissions, catalogue.AccessManagingPermissionsOf(role.Facts).Count > 0);
     }
 
     /// <summary>

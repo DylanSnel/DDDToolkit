@@ -5,7 +5,7 @@ namespace DDDToolkit.Supporting.Membership.Postgres;
 
 /// <summary>
 /// What a resource's membership is written with beyond its rules, as the export works it out for the context that
-/// maps the resource: who the caller is as a member, where the caller holds a key above, and which roles may ask the
+/// maps the resource: who the caller is as a member, where the caller holds a permission above, and which roles may ask the
 /// functions.
 /// </summary>
 /// <param name="Members">
@@ -13,7 +13,7 @@ namespace DDDToolkit.Supporting.Membership.Postgres;
 /// id, the caller's id, or the function a contribution answers for that id, an organization package's for its seat.
 /// </param>
 /// <param name="Places">
-/// The function that answers where the caller holds a key, for a resource reached from above: the rules' own, or the
+/// The function that answers where the caller holds a permission, for a resource reached from above: the rules' own, or the
 /// one a contribution answers for the type of the place, an organization package's for its unit; <see langword="null"/> for one that
 /// is not.
 /// </param>

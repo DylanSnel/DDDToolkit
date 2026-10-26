@@ -16,7 +16,7 @@
     <value>That was not found, or it is not one you can see.</value>
   </data>
   <data name="membership.not-permitted" xml:space="preserve">
-    <value>Doing this needs the key {Key}.</value>
+    <value>Doing this needs the permission {Permission}.</value>
   </data>
   <data name="membership.member-not-active" xml:space="preserve">
     <value>That one cannot be a member: not active, or not known here.</value>
@@ -51,10 +51,10 @@
   <data name="membership.role-name-invalid" xml:space="preserve">
     <value>Enter {Min} to {Max} characters.</value>
   </data>
-  <data name="membership.key-not-for-members" xml:space="preserve">
-    <value>A role cannot give these keys here: {Keys}.</value>
+  <data name="membership.permission-not-for-members" xml:space="preserve">
+    <value>A role cannot give these permissions here: {Permissions}.</value>
   </data>
-  <data name="membership.role-keys-not-normalized" xml:space="preserve">
-    <value>A role's keys must be distinct, not blank and in ordinal order.</value>
+  <data name="membership.role-permissions-not-normalized" xml:space="preserve">
+    <value>A role's permissions must be distinct, not blank and in ordinal order.</value>
   </data>
 </root>

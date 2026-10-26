@@ -10,7 +10,7 @@ namespace Examples.Tenancy.Tests.Projects.Access;
 /// <summary>
 /// The projects' rules, as the application makes them from its starter project roles and the permissions on a
 /// project, with no host and no database: what an owner holds, what a crew role may give, which permissions the
-/// database holds a crew and an owner to, whose work holds every key, the codes a crew is refused under, and
+/// database holds a crew and an owner to, whose work holds every permission, the codes a crew is refused under, and
 /// starter roles that could not become a tenant's first project roles refused where the application declares them.
 /// </summary>
 public sealed class ProjectMembershipTests
@@ -22,13 +22,13 @@ public sealed class ProjectMembershipTests
     {
         Rules.Name.Should().Be("projects", "the class's name, made plural");
         Rules.Roles.Kind.Should().Be(RolesKind.Custom, "a crew holds the tenant's project roles, which the package keeps");
-        Rules.Roles.Declared.Select(role => (role.Name, string.Join(" ", role.Keys)))
-            .Should().Equal(SampleCatalogue.ProjectRoles.Select(starter => (starter.Key, string.Join(" ", starter.Keys))));
-        Rules.OwnerKeys.Should().BeEquivalentTo(
-            [ProjectKeys.View, ProjectKeys.Edit, ProjectKeys.Close, ProjectKeys.ManageCrew],
-            "an owner holds a lead's keys by owning the project, and not the one that names an owner");
-        Rules.EveryMemberKey.Should().Be(ProjectKeys.View, "being on a crew is enough to see the project");
-        Rules.ReachFromAbove.Should().NotBeNull("a key held at the project's unit, or above it, reaches the project");
+        Rules.Roles.Declared.Select(role => (role.Name, string.Join(" ", role.Permissions)))
+            .Should().Equal(SampleCatalogue.ProjectRoles.Select(starter => (starter.Key, string.Join(" ", starter.Permissions))));
+        Rules.OwnerPermissions.Should().BeEquivalentTo(
+            [ProjectPermissionNames.View, ProjectPermissionNames.Edit, ProjectPermissionNames.Close, ProjectPermissionNames.ManageCrew],
+            "an owner holds a lead's permissions by owning the project, and not the one that names an owner");
+        Rules.EveryMemberPermission.Should().Be(ProjectPermissionNames.View, "being on a crew is enough to see the project");
+        Rules.ReachFromAbove.Should().NotBeNull("a permission held at the project's unit, or above it, reaches the project");
         Rules.Codes.Should().BeSameAs(ProjectRefusals.Membership, "the codes the project declares");
 
         // The functions are named after the project, as every row rule that asks them by the project's id reads them.
@@ -36,35 +36,35 @@ public sealed class ProjectMembershipTests
     }
 
     [Fact]
-    public void A_crew_role_gives_every_key_that_acts_on_a_project_and_none_of_the_organizations()
+    public void A_crew_role_gives_every_permission_that_acts_on_a_project_and_none_of_the_organizations()
     {
         string[] every =
         [
             .. Examples.Tenancy.Projects.Application.DeclaredPermissions.All
                 .Concat(Examples.Tenancy.Inspections.Application.DeclaredPermissions.All)
-                .Concat(TenancyKeys.Permissions)
-                .Select(permission => permission.Key),
+                .Concat(TenancyPermissions.All)
+                .Select(permission => permission.Name),
         ];
 
-        // The rules say what a crew role may give, for every key there is: the permissions on a project a role can give,
-        // and the keys of other modules, but none of Tenancy's, nor the one Projects asks at a unit.
-        every.Where(Rules.RoleKeys.Allows).Should().BeEquivalentTo(
-            [ProjectKeys.View, ProjectKeys.Edit, ProjectKeys.Close, ProjectKeys.ManageCrew, InspectionKeys.Record]);
-        Rules.RoleKeys.Allows(ProjectKeys.ChangeOwner).Should().BeFalse("naming an owner is the organization's: no crew role gives it");
-        Rules.RoleKeys.Allows(ProjectKeys.Open).Should().BeFalse("opening a project is asked at a unit, where there is no crew");
-        Rules.ReachesFromAbove(ProjectKeys.ChangeOwner).Should().BeTrue("the organization names an owner from above");
+        // The rules say what a crew role may give, for every permission there is: the permissions on a project a role can give,
+        // and the permissions of other modules, but none of Tenancy's, nor the one Projects asks at a unit.
+        every.Where(Rules.RolePermissions.Allows).Should().BeEquivalentTo(
+            [ProjectPermissionNames.View, ProjectPermissionNames.Edit, ProjectPermissionNames.Close, ProjectPermissionNames.ManageCrew, InspectionPermissionNames.Record]);
+        Rules.RolePermissions.Allows(ProjectPermissionNames.ChangeOwner).Should().BeFalse("naming an owner is the organization's: no crew role gives it");
+        Rules.RolePermissions.Allows(ProjectPermissionNames.Open).Should().BeFalse("opening a project is asked at a unit, where there is no crew");
+        Rules.ReachesFromAbove(ProjectPermissionNames.ChangeOwner).Should().BeTrue("the organization names an owner from above");
     }
 
     [Fact]
     public void The_database_holds_a_crew_and_an_owner_to_the_permissions_the_commands_require()
     {
-        Rules.MembersLockKey.Should().Be(AddCrewMember.RequiredKey);
-        new[] { GiveCrewRole.RequiredKey, TakeCrewRole.RequiredKey, RemoveCrewMember.RequiredKey }.Should().OnlyContain(key => key == Rules.MembersLockKey);
-        Rules.OwnerLockKey.Should().Be(ChangeProjectOwner.RequiredKey);
+        Rules.MembersLockPermission.Should().Be(AddCrewMember.RequiredPermission);
+        new[] { GiveCrewRole.RequiredPermission, TakeCrewRole.RequiredPermission, RemoveCrewMember.RequiredPermission }.Should().OnlyContain(permission => permission == Rules.MembersLockPermission);
+        Rules.OwnerLockPermission.Should().Be(ChangeProjectOwner.RequiredPermission);
     }
 
     [Fact]
-    public void Only_the_applications_work_and_this_modules_own_scope_hold_every_key_on_a_project()
+    public void Only_the_applications_work_and_this_modules_own_scope_hold_every_permission_on_a_project()
     {
         Rules.SystemScopes.Should().Equal([ProjectMembership.Scope], "the module's own scope, which the rules let through without saying it");
 
@@ -94,25 +94,25 @@ public sealed class ProjectMembershipTests
     [Fact]
     public void Starter_roles_that_could_not_be_a_tenants_first_project_roles_are_refused_where_they_are_declared()
     {
-        StarterProjectRole Lead(string name = "Crew lead") => new("crew-lead", name, "Leads", [ProjectKeys.View]);
+        StarterProjectRole Lead(string name = "Crew lead") => new("crew-lead", name, "Leads", [ProjectPermissionNames.View]);
 
-        // A key no crew role gives: naming an owner is the organization's.
-        var beyond = () => new ProjectMembership([Lead(), new("site-keeper", "Site keeper", "Keeps the site", [ProjectKeys.View, ProjectKeys.ChangeOwner])]);
-        beyond.Should().Throw<ArgumentException>().WithMessage("*'" + ProjectKeys.ChangeOwner + "'*");
+        // A permission no crew role gives: naming an owner is the organization's.
+        var beyond = () => new ProjectMembership([Lead(), new("site-keeper", "Site keeper", "Keeps the site", [ProjectPermissionNames.View, ProjectPermissionNames.ChangeOwner])]);
+        beyond.Should().Throw<ArgumentException>().WithMessage("*'" + ProjectPermissionNames.ChangeOwner + "'*");
 
         // Nor one of Tenancy's, which manage the organization.
-        var organization = () => new ProjectMembership([new("site-keeper", "Site keeper", "Keeps the site", [ProjectKeys.View, TenancyKeys.RolesManage])]);
-        organization.Should().Throw<ArgumentException>().WithMessage("*'" + TenancyKeys.RolesManage + "'*");
+        var organization = () => new ProjectMembership([new("site-keeper", "Site keeper", "Keeps the site", [ProjectPermissionNames.View, TenancyPermissions.RolesManage])]);
+        organization.Should().Throw<ArgumentException>().WithMessage("*'" + TenancyPermissions.RolesManage + "'*");
 
         // Two of one name, which a tenant's project roles never have.
-        var twice = () => new ProjectMembership([Lead(), new("site-keeper", "Crew lead", "Keeps the site", [ProjectKeys.View])]);
+        var twice = () => new ProjectMembership([Lead(), new("site-keeper", "Crew lead", "Keeps the site", [ProjectPermissionNames.View])]);
         twice.Should().Throw<ArgumentException>().WithMessage("*'Crew lead'*");
 
-        // One key, which a role is made from and found by, twice.
+        // One permission, which a role is made from and found by, twice.
         var again = () => new ProjectMembership([Lead(), Lead("Lead again")]);
         again.Should().Throw<ArgumentException>().WithMessage("*'crew-lead'*");
 
         // No starter role is the owner's: a tenant without the crew lead's role opens projects all the same.
-        new ProjectMembership([new("site-keeper", "Site keeper", "Keeps the site", [ProjectKeys.View])]).Rules.Roles.Declared.Should().ContainSingle();
+        new ProjectMembership([new("site-keeper", "Site keeper", "Keeps the site", [ProjectPermissionNames.View])]).Rules.Roles.Declared.Should().ContainSingle();
     }
 }

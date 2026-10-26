@@ -286,7 +286,7 @@ public abstract class TenancySaveInterceptor : SaveChangesInterceptor
 
     /// <summary>
     /// The tracked owner of an owned entry. Owned entities have no navigation back to their owner, only the
-    /// foreign key, so the state manager finds the owner from the key's values without touching the database.
+    /// foreign key, so the state manager finds the owner from the permission's values without touching the database.
     /// This is Entity Framework's internal API (EF1001), the same lookup the toolkit's version interceptor makes.
     /// </summary>
     private static EntityEntry? OwnerOf(DbContext context, EntityEntry owned, IForeignKey ownership)
@@ -305,7 +305,7 @@ public abstract class TenancySaveInterceptor : SaveChangesInterceptor
 /// for (<see cref="TenancyProjectionWriter{TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId}"/>).
 /// It comes after the check, so a refused save reads and writes nothing more.
 /// </summary>
-/// <param name="catalogue">Which keys are live, for the rights.</param>
+/// <param name="catalogue">Which permissions are live, for the rights.</param>
 /// <param name="store">What the store leaves to the database: the rights, where it keeps them itself.</param>
 /// <param name="services">The application's services, asked once which accessor says who acted.</param>
 internal sealed class TenancySaveInterceptor<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>(

@@ -4,7 +4,7 @@ namespace DDDToolkit.Abstractions.Attributes;
 /// Writes a row access contribution of the application's own into its exported migrations: a class of the host's,
 /// or of one of its modules, that no package declares. Put it in the project that runs the Supabase export:
 /// <code>
-/// [assembly: UseRowAccessContribution(typeof(UnitChangesWithItsKeys))]
+/// [assembly: UseRowAccessContribution(typeof(UnitChangesWithItsPermissions))]
 /// </code>
 /// <para>
 /// The build hands the export the contributions listed this way, each made with <c>new X()</c>, next to those the

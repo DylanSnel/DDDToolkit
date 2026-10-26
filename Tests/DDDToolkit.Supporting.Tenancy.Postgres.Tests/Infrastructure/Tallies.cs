@@ -51,7 +51,7 @@ public sealed partial class Tally
     public void Rename(string name) => Name = name;
 }
 
-/// <summary>A seat reads, adds, changes and removes the tallies at the units where it holds the key to change widgets.</summary>
+/// <summary>A seat reads, adds, changes and removes the tallies at the units where it holds the permission to change widgets.</summary>
 [RowAccess<Tally>(RowOperations.All, To = [RowAccessRoles.User])]
 public static partial class TalliesAreKeptWhereWidgetsAreChanged
 {

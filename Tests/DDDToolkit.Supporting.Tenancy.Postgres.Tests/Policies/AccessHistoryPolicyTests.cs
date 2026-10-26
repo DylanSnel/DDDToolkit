@@ -30,7 +30,7 @@ public abstract class AccessHistoryPolicyTests(TenancyPostgres postgres, Tenancy
         => $"INSERT INTO ddd.\"EventLog\" ({Columns}) VALUES (gen_random_uuid(), 'tenancy.seat-suspended', 1, '{{}}', now(), now(), '{kind}', {(actor is null ? "NULL" : $"'{actor}'")}, {tenant.Value})";
 
     [Fact]
-    public async Task A_seat_without_the_history_key_reads_no_history()
+    public async Task A_seat_without_the_history_permission_reads_no_history()
     {
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
         await using var services = new TenancyServices(database);
@@ -43,8 +43,8 @@ public abstract class AccessHistoryPolicyTests(TenancyPostgres postgres, Tenancy
 
         (await services.BySeat(Seth.Identity, Harbor, Seth.Seat, scoped => scoped.Tenancy().Set<EventLogEntry>().CountAsync(Cancellation))).Should().Be(0);
 
-        // Held below the root, the key is not held for the whole tenant: still nothing.
-        await TenancySeed.HoldAtAsync(database, Seth, North, [TenancyKeys.HistoryView], Cancellation);
+        // Held below the root, the permission is not held for the whole tenant: still nothing.
+        await TenancySeed.HoldAtAsync(database, Seth, North, [TenancyPermissions.HistoryView], Cancellation);
         (await services.BySeat(Seth.Identity, Harbor, Seth.Seat, scoped => scoped.Tenancy().Set<EventLogEntry>().CountAsync(Cancellation))).Should().Be(0);
 
         // An anonymous caller reads none either, and a person in a tenant where they have no seat.
@@ -72,7 +72,7 @@ public abstract class AccessHistoryPolicyTests(TenancyPostgres postgres, Tenancy
             ofOrchard.Should().BeGreaterThan(0);
         }
 
-        // An administrator holds every live key, the history's among them, at the root.
+        // An administrator holds every live permission, the history's among them, at the root.
         await using (var ada = await AsCaller.PersonAsync(database, Ada.Identity, Harbor, Cancellation))
         {
             (await ada.ScalarAsync<long>("SELECT count(*) FROM ddd.\"EventLog\"", Cancellation)).Should().Be(ofHarbor);
@@ -85,9 +85,9 @@ public abstract class AccessHistoryPolicyTests(TenancyPostgres postgres, Tenancy
             (await odette.ScalarAsync<long>("SELECT count(*) FROM ddd.\"EventLog\"", Cancellation)).Should().Be(ofOrchard);
         }
 
-        // The key alone is enough, given for the whole tenant: reading what happened manages no access, so the
+        // The permission alone is enough, given for the whole tenant: reading what happened manages no access, so the
         // role that holds it is given like any other.
-        await TenancySeed.HoldAtAsync(database, Hiro, HarborRoot, [TenancyKeys.HistoryView], Cancellation);
+        await TenancySeed.HoldAtAsync(database, Hiro, HarborRoot, [TenancyPermissions.HistoryView], Cancellation);
         var read = await services.BySeat(Hiro.Identity, Harbor, Hiro.Seat, scoped => scoped.Tenancy().Set<EventLogEntry>()
             .Select(entry => EF.Property<TenantId>(entry, EntityFramework.TenancyEventLogTable.TenantId))
             .ToListAsync(Cancellation));
@@ -110,15 +110,15 @@ public abstract class AccessHistoryPolicyTests(TenancyPostgres postgres, Tenancy
         await using var services = new TenancyServices(database);
         var before = await HistoryOfHarborAsync(services);
 
-        // Ada gives Oli a role, puts a key into a role and renames a unit: three saves by a person, each through the
+        // Ada gives Oli a role, puts a permission into a role and renames a unit: three saves by a person, each through the
         // policies on Tenancy's tables and on the history.
         await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.Seats().GrantAsync(Oli.Seat, NorthPier, HarborRoles.Watcher, until: null, reason: null, Cancellation));
-        await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.Roles().SetKeysAsync(GrantsDesk, [TenancyKeys.GrantsManage, TenancyKeys.SeatsManage], Cancellation));
+        await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.Roles().SetPermissionsAsync(GrantsDesk, [TenancyPermissions.GrantsManage, TenancyPermissions.SeatsManage], Cancellation));
         await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.Organization().RenameUnitAsync(South, "Southside", Cancellation));
 
         var added = (await HistoryOfHarborAsync(services)).ExceptBy(before.Select(row => row.Id), row => row.Id).ToList();
         added.Select(row => row.EventName).Should().BeEquivalentTo(
-            ["tenancy.organization-role-granted", "tenancy.role-keys-changed"],
+            ["tenancy.organization-role-granted", "tenancy.role-permissions-changed"],
             "the rename changes nobody's access, and is no part of the history");
 
         // The row and the event say the same about who did it: Ada's seat.
@@ -131,9 +131,9 @@ public abstract class AccessHistoryPolicyTests(TenancyPostgres postgres, Tenancy
             by.GetProperty("Seat").GetGuid().Should().Be(Ada.Seat.Value, row.EventName);
         }
 
-        using (var changed = JsonDocument.Parse(added.Single(row => row.EventName == "tenancy.role-keys-changed").Payload))
+        using (var changed = JsonDocument.Parse(added.Single(row => row.EventName == "tenancy.role-permissions-changed").Payload))
         {
-            changed.RootElement.GetProperty("Added").EnumerateArray().Select(key => key.GetString()).Should().Equal(TenancyKeys.SeatsManage);
+            changed.RootElement.GetProperty("Added").EnumerateArray().Select(permission => permission.GetString()).Should().Equal(TenancyPermissions.SeatsManage);
             changed.RootElement.GetProperty("Removed").GetArrayLength().Should().Be(0);
         }
 
@@ -241,7 +241,7 @@ public abstract class AccessHistoryPolicyTests(TenancyPostgres postgres, Tenancy
 
         // Hiro administers Harbor next to Ada, and deactivates his own seat: once that row is written he is no seat
         // to be found by, and the same save still says who did it.
-        await TenancySeed.HoldAtAsync(database, Hiro, HarborRoot, keys: null, Cancellation);
+        await TenancySeed.HoldAtAsync(database, Hiro, HarborRoot, permissions: null, Cancellation);
         await services.BySeat(Hiro.Identity, Harbor, Hiro.Seat, scoped => scoped.Seats().DeactivateAsync(Hiro.Seat, Cancellation));
 
         await using (var owner = await AsCaller.OwnerAsync(database, Cancellation))
@@ -312,7 +312,7 @@ public abstract class AccessHistoryPolicyTests(TenancyPostgres postgres, Tenancy
             .WithMessage($"Row level security is off on Tenancy's tables \"ddd\".{names.Shown("EventLog")}, so nothing holds a seat to its tenant there.*");
     }
 
-    /// <summary>Harbor's history, as Ada reads it: its administrator holds the key that reads it.</summary>
+    /// <summary>Harbor's history, as Ada reads it: its administrator holds the permission that reads it.</summary>
     private static Task<List<Kept>> HistoryOfHarborAsync(TenancyServices services)
         => services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.Tenancy().Set<EventLogEntry>()
             .Select(entry => new Kept(entry.Id, entry.EventName, entry.ActedByKind, entry.ActedById, entry.Payload))

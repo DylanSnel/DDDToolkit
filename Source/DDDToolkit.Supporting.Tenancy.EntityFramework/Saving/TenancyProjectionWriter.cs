@@ -14,7 +14,7 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 /// <list type="bullet">
 /// <item>A seat that was added, or whose status or grants changed, has its rights written again in full,
 /// from the seat in memory.</item>
-/// <item>A role that gains or loses keys, or is archived, has the rows it gives rewritten for each seat granted
+/// <item>A role that gains or loses permissions, or is archived, has the rows it gives rewritten for each seat granted
 /// it. Those seats are not loaded: one query reads the grants of that role, and the rest of each seat's rows
 /// stay as they are, since nothing else about the seat changed.</item>
 /// <item>An organization that was added, or whose units were added, removed or moved, has its closure
@@ -25,7 +25,7 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 /// <para>
 /// Its reads look past every query filter, the application's as well as the tenant's: a row an application's
 /// filter hides still holds rights, or still gives them, so leaving it out would rewrite them as if it were
-/// gone. Each read is kept to the keys of what changed. The
+/// gone. Each read is kept to the permissions of what changed. The
 /// rows it adds are not checked against the caller's tenant: they are worked out from the rows the save check
 /// has just passed. A row that already holds the right values is left alone, so a save that changes nothing
 /// about access writes nothing here.
@@ -37,7 +37,7 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 /// seat's save none of another seat's rows to bring up to date.
 /// </para>
 /// </summary>
-/// <param name="catalogue">Which keys are live: a key that is not holds nowhere, and gets no row.</param>
+/// <param name="catalogue">Which permissions are live: a permission that is not holds nowhere, and gets no row.</param>
 /// <param name="store">What the store leaves to the database.</param>
 internal sealed class TenancyProjectionWriter<TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>(TenancyCatalogue catalogue, TenancyStoreOptions store)
     where TOrganization : OrganizationAggregate<TTenantId, TUnit, TUnitId>
@@ -216,7 +216,7 @@ internal sealed class TenancyProjectionWriter<TTenantId, TOrganization, TUnit, T
             context,
             desired,
             right => seats.Contains(right.SeatId) || roles.Contains(right.RoleId),
-            right => (right.SeatId, right.UnitId, right.RoleId, right.Key),
+            right => (right.SeatId, right.UnitId, right.RoleId, right.Permission),
             static (entry, right) =>
             {
                 SetIfChanged(entry.Property(row => row.TenantId), right.TenantId);
@@ -227,7 +227,7 @@ internal sealed class TenancyProjectionWriter<TTenantId, TOrganization, TUnit, T
 
     /// <summary>
     /// What is known of each role: from the role in memory when it is tracked, since it may be changing in this
-    /// very save, and otherwise its status and keys as stored, read in one query. A role that is deleted, or
+    /// very save, and otherwise its status and permissions as stored, read in one query. A role that is deleted, or
     /// found nowhere, is known as nothing.
     /// </summary>
     private static async Task<Dictionary<TRoleId, KnownRole>> RoleFactsAsync(
@@ -264,13 +264,13 @@ internal sealed class TenancyProjectionWriter<TTenantId, TOrganization, TUnit, T
                 context.Set<TRole>()
                     .IgnoreQueryFilters()
                     .Where(role => wanted.Contains(role.Id))
-                    .Select(role => new StoredRole(role.Id, role.TenantId, role.Status, role.Keys)),
+                    .Select(role => new StoredRole(role.Id, role.TenantId, role.Status, role.Permissions)),
                 async,
                 cancellationToken).ConfigureAwait(false);
 
             foreach (var row in rows)
             {
-                facts[row.Id] = new KnownRole(row.TenantId, new RoleFacts(row.Status == RoleStatus.Active, row.Keys));
+                facts[row.Id] = new KnownRole(row.TenantId, new RoleFacts(row.Status == RoleStatus.Active, row.Permissions));
             }
         }
 
@@ -304,7 +304,7 @@ internal sealed class TenancyProjectionWriter<TTenantId, TOrganization, TUnit, T
     /// Makes the tracked rows in scope what <paramref name="desired"/> says: a row it names that exists is kept
     /// and brought up to date in place, one it names that does not is added, and one in scope it does not name
     /// is removed. The rows in scope must have been loaded first; the ones the context already tracked count too,
-    /// so a row is never added next to a tracked one with the same key.
+    /// so a row is never added next to a tracked one with the same permission.
     /// </summary>
     private static void Apply<TRow, TKey>(
         DbContext context,
@@ -396,7 +396,7 @@ internal sealed class TenancyProjectionWriter<TTenantId, TOrganization, TUnit, T
         /// <summary>Seats added or deleted, or whose status or grants changed.</summary>
         public HashSet<TSeatId> ChangedSeats { get; } = [];
 
-        /// <summary>Roles deleted, or whose status or keys changed. A role added has no holder that is not in this save.</summary>
+        /// <summary>Roles deleted, or whose status or permissions changed. A role added has no holder that is not in this save.</summary>
         public HashSet<TRoleId> ChangedRoles { get; } = [];
 
         /// <summary>Organizations added or deleted, or whose units were added, removed or moved.</summary>
@@ -441,7 +441,7 @@ internal sealed class TenancyProjectionWriter<TTenantId, TOrganization, TUnit, T
                         changes.Roles[role.Id] = entry;
                         if (entry.State == EntityState.Deleted
                             || IsModified(entry, nameof(RoleAggregate<TRoleId, TTenantId>.Status))
-                            || IsModified(entry, nameof(RoleAggregate<TRoleId, TTenantId>.Keys)))
+                            || IsModified(entry, nameof(RoleAggregate<TRoleId, TTenantId>.Permissions)))
                         {
                             changes.ChangedRoles.Add(role.Id);
                         }
@@ -457,7 +457,7 @@ internal sealed class TenancyProjectionWriter<TTenantId, TOrganization, TUnit, T
 
                         break;
 
-                    // Owned rows name their owner through the key they share with it.
+                    // Owned rows name their owner through the permission they share with it.
                     case TUnit when entry.State is EntityState.Added or EntityState.Deleted
                                     || IsModified(entry, nameof(OrganizationUnitEntity<TUnitId>.ParentId)):
                         changes.ChangedOrganizations.Add((TTenantId)entry.Property(TenancyMapping.TenantColumn).CurrentValue!);
@@ -487,5 +487,5 @@ internal sealed class TenancyProjectionWriter<TTenantId, TOrganization, TUnit, T
     private sealed record HeldGrant(TSeatId SeatId, TTenantId TenantId, SeatStatus Status, TUnitId UnitId, TRoleId RoleId, DateTimeOffset StartsAt, DateTimeOffset? EndsAt);
 
     /// <summary>A role as the role query reads it: no more than the rights need.</summary>
-    private sealed record StoredRole(TRoleId Id, TTenantId TenantId, RoleStatus Status, IReadOnlyList<string> Keys);
+    private sealed record StoredRole(TRoleId Id, TTenantId TenantId, RoleStatus Status, IReadOnlyList<string> Permissions);
 }

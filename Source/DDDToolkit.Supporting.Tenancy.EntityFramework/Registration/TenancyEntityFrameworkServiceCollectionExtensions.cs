@@ -23,7 +23,7 @@ public static class TenancyEntityFrameworkServiceCollectionExtensions
     /// toolkit's default), and the tenant of each row of the log <c>AddTenancyEventLogTable</c> maps.
     /// <code>
     /// services.AddTenancy&lt;TenancyContext&gt;(options =&gt;
-    ///     options.Catalogue = ShopCatalogue.Application);   // optional: packs, keys of its own, marks
+    ///     options.Catalogue = ShopCatalogue.Application);   // optional: packs, permissions of its own, marks
     /// services.AddDbContext&lt;TenancyContext&gt;((serviceProvider, options) =&gt; options
     ///     .UseNpgsql(connectionString)
     ///     .UseDDDToolkit(serviceProvider));
@@ -44,7 +44,7 @@ public static class TenancyEntityFrameworkServiceCollectionExtensions
     /// <para>
     /// It brings the start-up checks of <see cref="TenancyChecks"/>, which a host runs with
     /// <c>services.RunStartupChecks()</c>: the catalogue builds, every context that keeps rows to a tenant checks
-    /// its saves, and a key a role holds that the catalogue has lost is logged.
+    /// its saves, and a permission a role holds that the catalogue has lost is logged.
     /// </para>
     /// <para>
     /// And it registers <see cref="IRolePackSync"/> over the context, which brings every tenant's roles up to the
@@ -113,7 +113,7 @@ public static class TenancyEntityFrameworkServiceCollectionExtensions
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IEventLogFields, TenancyEventLogFields>());
 
         // Before the host serves anything, once it runs its checks: the catalogue holds together, every context is
-        // wired, and no role holds a key the catalogue has lost.
+        // wired, and no role holds a permission the catalogue has lost.
         TenancyChecks.AddStartupChecks<TRole, TRoleId, TTenantId, TContext>(services);
 
         return services;
@@ -189,9 +189,9 @@ public static class TenancyEntityFrameworkServiceCollectionExtensions
     /// services.AddTenancyAccess&lt;IBillingRequest, BillingContext&gt;();
     /// </code>
     /// A module calls it for its own request interface and its own context, once, next to the checks for the
-    /// cases only it has. The check asks a key for the whole tenant over <typeparamref name="TContext"/>, so
+    /// cases only it has. The check asks a permission for the whole tenant over <typeparamref name="TContext"/>, so
     /// that is Tenancy's own context or one that maps Tenancy's read model (<c>AddTenancyReadModel</c>, or
-    /// <c>AddTenancyReadFunctions</c> where the database keeps the rights), and so is a key at a unit
+    /// <c>AddTenancyReadFunctions</c> where the database keeps the rights), and so is a permission at a unit
     /// (<see cref="TenancyRequirement.AtUnit{TUnitId}"/>, closed over <typeparamref name="TUnitId"/>); a module
     /// whose requests declare neither is never read for, whatever its context maps. The
     /// statement runs on a context of its own where the application registered a factory for the context
@@ -216,7 +216,7 @@ public static class TenancyEntityFrameworkServiceCollectionExtensions
     /// <typeparam name="TUnitId">The application's unit id.</typeparam>
     /// <typeparam name="TRoleId">The application's role id.</typeparam>
     /// <typeparam name="TRequests">The module's request interface, which every command and query of the module implements.</typeparam>
-    /// <typeparam name="TContext">The module's context, which a key for the whole tenant is asked over.</typeparam>
+    /// <typeparam name="TContext">The module's context, which a permission for the whole tenant is asked over.</typeparam>
     /// <param name="services">The service collection.</param>
     /// <exception cref="ArgumentNullException"><paramref name="services"/> is null.</exception>
     [TemplateRegistration]

@@ -216,7 +216,7 @@ public sealed class InvitationScenarios(SampleHosts sample) : IClassFixture<Samp
             new { address = "wren@example.test", unitId = Harbor.UnitNamed("North Coast").Value, roleId = Harbor.Roles[SampleCatalogue.Observer].Value },
             Cancellation);
 
-        (await response.ShouldBeRefusedAsync(HttpStatusCode.Forbidden, TenancyRefusals.NotPermitted)).Argument("Key").Should().Be(TenancyKeys.SeatsManage);
+        (await response.ShouldBeRefusedAsync(HttpStatusCode.Forbidden, TenancyRefusals.NotPermitted)).Argument("Permission").Should().Be(TenancyPermissions.SeatsManage);
     }
 
     [Fact]

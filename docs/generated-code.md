@@ -357,14 +357,14 @@ without it, since whatever asks the checks reads it ([What a request declares](a
 [AccessRequests]
 public partial interface IShopRequest : IRequireAccess;
 
-[RequiresKey("shop.orders.cancel")]
+[RequiresPermission("shop.orders.cancel")]
 public sealed record CancelOrder([OnResource] OrderId Order, [ExpectedVersion] long? ExpectedVersion = null) : IShopRequest;
 
-[RequiresKey("shop.orders.watchers")]                          // stop watching an order yourself, or take a watcher off with the key
+[RequiresPermission("shop.orders.watchers")]                          // stop watching an order yourself, or take a watcher off with the permission
 public sealed record StopWatching([OnResource] OrderId Order, [OrOwn] Guid Watcher) : IShopRequest;
 
 [SignedIn]                                                     // stacked: both hold, in this order
-[RequiresKey("shop.reports.export")]
+[RequiresPermission("shop.reports.export")]
 public sealed record ExportSales : IShopRequest;
 ```
 
@@ -390,8 +390,8 @@ partial interface IShopRequest
 The line names `IRequireAccess` through an alias the file declares, so a namespace of the module's own called
 `DDDToolkit`, `Contoso.DDDToolkit.Shop` say, takes nothing from it. A request that answers `RequiredAccess` itself
 gets no line: C# takes its own over the interface's. Several
-attributes stacked on a request are `AccessRequirement.All` of their calls, and `[OrOwn]` beside a key is
-`AccessRequirement.Any` of the caller's own and the key, the caller's own first; beside `[OnResource]` the caller's own
+attributes stacked on a request are `AccessRequirement.All` of their calls, and `[OrOwn]` beside a permission is
+`AccessRequirement.Any` of the caller's own and the permission, the caller's own first; beside `[OnResource]` the caller's own
 way through still sees the resource, `MemberAccess.Sees`, so the order is read, its version compared and its hold kept
 either way ([Requirements that combine](access-requirements.md#requirements-that-combine)). The member marked
 `[OrOwn]` names the subject the request acts on, the watcher who leaves, and the handler acts on that watcher of that

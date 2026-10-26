@@ -74,56 +74,56 @@ public sealed class ContributionTests(TenancyPostgres postgres)
 
         functions.Should().Equal(
             "administrator_remains true search_path=\"\" false false false",
-            "caller_rights false none true true false",
+            "caller_permissions false none true true false",
             "caller_seat true search_path=\"\" true true false",
             "caller_tenant true search_path=\"\" true true false",
             "grant_is_fixed false search_path=\"\" false false false",
-            "holds_key true search_path=\"\" true true false",
-            "holds_key_in_tenant true search_path=\"\" true false false",
-            "holds_tenant_wide true search_path=\"\" true true false",
+            "holds_at_tenant true search_path=\"\" true true false",
+            "holds_permission true search_path=\"\" true true false",
+            "holds_permission_in_tenant true search_path=\"\" true false false",
             "identity_tenants true search_path=\"\" true true false",
             "invitation_of_digest true search_path=\"\" false true false",
             "invitation_terms_are_fixed false search_path=\"\" false false false",
-            "key_is_contained false search_path=\"\" true true false",
-            "key_is_live false search_path=\"\" false false false",
-            "manages_access false search_path=\"\" true true false",
-            "pack_keys false search_path=\"\" true true false",
+            "pack_permissions false search_path=\"\" true true false",
             "paths_follow_the_tree true search_path=\"\" false false false",
+            "permission_is_contained false search_path=\"\" true true false",
+            "permission_is_live false search_path=\"\" false false false",
+            "permission_manages_access false search_path=\"\" true true false",
+            "permissions_a_move_changes true search_path=\"\" true false false",
             "placement_is_fixed false search_path=\"\" false false false",
             "readable_units true search_path=\"\" true true false",
             "rewrite_tenant_rights true search_path=\"\" false true false",
-            "rights_a_move_changes true search_path=\"\" true false false",
             "rights_backed_by_grants true search_path=\"\" false false false",
             "rights_follow_grants true search_path=\"\" false false false",
             "role_follows_its_pack true search_path=\"\" false false false",
-            "role_keys_in_use true search_path=\"\" false true false",
             "role_pack_is_fixed false search_path=\"\" false false false",
-            "roles_with_key true search_path=\"\" true true false",
-            "roles_with_key_in_tenant true search_path=\"\" true false false",
+            "role_permissions_in_use true search_path=\"\" false true false",
+            "roles_with_permission true search_path=\"\" true true false",
+            "roles_with_permission_in_tenant true search_path=\"\" true false false",
             "seat_identity_is_fixed false search_path=\"\" false false false",
             "seat_in_tenant true search_path=\"\" true false false",
             "seat_status_is_managed true search_path=\"\" false false false",
             "seated_in_tenant true search_path=\"\" true false false",
-            "seats_holding_at true search_path=\"\" true false false",
+            "seats_holding_permission_at true search_path=\"\" true false false",
             "seats_in_my_units true search_path=\"\" true true false",
             "seats_of_identity true search_path=\"\" false true false",
             "system_tenant false search_path=\"\" true true false",
             "tenant_administrators true search_path=\"\" true false false",
             "tenant_placements false none true true false",
-            "tenant_roles false none true true false",
+            "tenant_roles_with_permissions false none true true false",
             "tenant_seats false none true true false",
             "tenant_unit_paths false none true true false",
             "tenant_units false none true true false",
             "tenants_to_sweep true search_path=\"\" false true false",
             "unit_parent true search_path=\"\" true true false",
-            "units_where_i_hold true search_path=\"\" true true false",
-            "units_where_i_hold_in_tenant true search_path=\"\" true false false");
+            "units_where_i_hold_permission true search_path=\"\" true true false",
+            "units_where_i_hold_permission_in_tenant true search_path=\"\" true false false");
 
         // Only what is folded into its caller's query runs without an empty search path, and nothing that does runs as
         // its owner: a function that runs with its owner's rights never looks a name up along the caller's path.
         string[] folded =
         [
-            TenancyFunctionNames.CallerRights, TenancyFunctionNames.TenantPlacements, TenancyFunctionNames.TenantRoles,
+            TenancyFunctionNames.CallerPermissions, TenancyFunctionNames.TenantPlacements, TenancyFunctionNames.TenantRoles,
             TenancyFunctionNames.TenantSeats, TenancyFunctionNames.TenantUnitPaths, TenancyFunctionNames.TenantUnits,
         ];
         functions.Where(function => function.Contains(" none ", StringComparison.Ordinal)).Select(function => function.Split(' ')[0]).Should().Equal(folded);
@@ -140,74 +140,74 @@ public sealed class ContributionTests(TenancyPostgres postgres)
     }
 
     [Fact]
-    public async Task The_function_that_says_which_keys_manage_access_follows_the_catalogues_marks()
+    public async Task The_function_that_says_which_permissions_manage_access_follows_the_catalogues_marks()
     {
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation);
 
         await using (var owner = await OwnerAsync(database))
         {
-            (await owner.ScalarAsync<bool>("SELECT tenancy.manages_access('tenancy.grants.manage')", Cancellation)).Should().BeTrue("Tenancy's own keys manage access, all but the one that reads the history");
-            (await owner.ScalarAsync<bool>("SELECT tenancy.manages_access('tenancy.history.view')", Cancellation)).Should().BeFalse("reading what happened manages no access");
-            (await owner.ScalarAsync<bool>("SELECT tenancy.manages_access('widget.create')", Cancellation)).Should().BeFalse("the TestHost marks none of its own");
+            (await owner.ScalarAsync<bool>("SELECT tenancy.permission_manages_access('tenancy.grants.manage')", Cancellation)).Should().BeTrue("Tenancy's own permissions manage access, all but the one that reads the history");
+            (await owner.ScalarAsync<bool>("SELECT tenancy.permission_manages_access('tenancy.history.view')", Cancellation)).Should().BeFalse("reading what happened manages no access");
+            (await owner.ScalarAsync<bool>("SELECT tenancy.permission_manages_access('widget.create')", Cancellation)).Should().BeFalse("the TestHost marks none of its own");
         }
 
-        // The application marks one of its keys: the next export writes the function again, and that access file is
+        // The application marks one of its permissions: the next export writes the function again, and that access file is
         // the migration.
-        var marked = TenancyCatalogue.Build(HostCatalogue.Application with { AccessManagingKeys = [HostCatalogue.WidgetCreate] }, []);
+        var marked = TenancyCatalogue.Build(HostCatalogue.Application with { AccessManagingPermissions = [HostCatalogue.WidgetCreate] }, []);
         foreach (var script in TenancyPostgres.AccessScripts(marked))
         {
             await TenancyPostgres.ExecuteAsync(database.ConnectionString, script, Cancellation);
         }
 
         await using var after = await OwnerAsync(database);
-        (await after.ScalarAsync<bool>("SELECT tenancy.manages_access('widget.create')", Cancellation)).Should().BeTrue();
-        (await after.ScalarAsync<bool>("SELECT tenancy.manages_access('widget.read')", Cancellation)).Should().BeFalse();
-        (await after.ScalarAsync<bool>("SELECT tenancy.manages_access('tenancy.roles.manage')", Cancellation)).Should().BeTrue();
+        (await after.ScalarAsync<bool>("SELECT tenancy.permission_manages_access('widget.create')", Cancellation)).Should().BeTrue();
+        (await after.ScalarAsync<bool>("SELECT tenancy.permission_manages_access('widget.read')", Cancellation)).Should().BeFalse();
+        (await after.ScalarAsync<bool>("SELECT tenancy.permission_manages_access('tenancy.roles.manage')", Cancellation)).Should().BeTrue();
     }
 
     [Fact]
-    public async Task The_function_that_says_which_keys_are_contained_follows_the_catalogues_setting()
+    public async Task The_function_that_says_which_permissions_are_contained_follows_the_catalogues_setting()
     {
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation);
 
-        // On by default: the keys that manage access, and those alone.
+        // On by default: the permissions that manage access, and those alone.
         await using (var owner = await OwnerAsync(database))
         {
-            (await owner.ScalarAsync<bool>("SELECT tenancy.key_is_contained('tenancy.grants.manage')", Cancellation)).Should().BeTrue();
-            (await owner.ScalarAsync<bool>("SELECT tenancy.key_is_contained('tenancy.history.view')", Cancellation)).Should().BeFalse();
-            (await owner.ScalarAsync<bool>("SELECT tenancy.key_is_contained('widget.create')", Cancellation)).Should().BeFalse();
+            (await owner.ScalarAsync<bool>("SELECT tenancy.permission_is_contained('tenancy.grants.manage')", Cancellation)).Should().BeTrue();
+            (await owner.ScalarAsync<bool>("SELECT tenancy.permission_is_contained('tenancy.history.view')", Cancellation)).Should().BeFalse();
+            (await owner.ScalarAsync<bool>("SELECT tenancy.permission_is_contained('widget.create')", Cancellation)).Should().BeFalse();
         }
 
-        // Turned off, the next export writes the function again to answer no key, and the marks stay as they were.
-        var off = TenancyCatalogue.Build(HostCatalogue.Application with { ContainAccessManagingKeys = false }, []);
+        // Turned off, the next export writes the function again to answer no permission, and the marks stay as they were.
+        var off = TenancyCatalogue.Build(HostCatalogue.Application with { ContainAccessManagingPermissions = false }, []);
         foreach (var script in TenancyPostgres.AccessScripts(off))
         {
             await TenancyPostgres.ExecuteAsync(database.ConnectionString, script, Cancellation);
         }
 
         await using var after = await OwnerAsync(database);
-        (await after.ScalarAsync<bool>("SELECT tenancy.key_is_contained('tenancy.grants.manage')", Cancellation)).Should().BeFalse();
-        (await after.ScalarAsync<bool>("SELECT tenancy.key_is_contained('tenancy.roles.manage')", Cancellation)).Should().BeFalse();
-        (await after.ScalarAsync<bool>("SELECT tenancy.manages_access('tenancy.grants.manage')", Cancellation)).Should().BeTrue();
+        (await after.ScalarAsync<bool>("SELECT tenancy.permission_is_contained('tenancy.grants.manage')", Cancellation)).Should().BeFalse();
+        (await after.ScalarAsync<bool>("SELECT tenancy.permission_is_contained('tenancy.roles.manage')", Cancellation)).Should().BeFalse();
+        (await after.ScalarAsync<bool>("SELECT tenancy.permission_manages_access('tenancy.grants.manage')", Cancellation)).Should().BeTrue();
     }
 
     [Fact]
-    public async Task The_function_that_says_which_keys_a_copy_of_a_pack_holds_follows_the_catalogue()
+    public async Task The_function_that_says_which_permissions_a_copy_of_a_pack_holds_follows_the_catalogue()
     {
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation);
 
         await using (var owner = await OwnerAsync(database))
         {
-            (await owner.ScalarAsync<string[]>("SELECT tenancy.pack_keys('operator')", Cancellation)).Should().Equal("widget.change", "widget.create", "widget.read");
-            (await owner.ScalarAsync<string[]>("SELECT tenancy.pack_keys('host-admin')", Cancellation)).Should().BeEquivalentTo(TenancyPostgres.Catalogue.LiveKeys, "an administrators' pack holds every live key");
-            (await owner.ScalarAsync<bool>("SELECT tenancy.pack_keys('lookout') IS NULL", Cancellation)).Should().BeTrue("a pack the catalogue does not have holds nothing");
+            (await owner.ScalarAsync<string[]>("SELECT tenancy.pack_permissions('operator')", Cancellation)).Should().Equal("widget.change", "widget.create", "widget.read");
+            (await owner.ScalarAsync<string[]>("SELECT tenancy.pack_permissions('host-admin')", Cancellation)).Should().BeEquivalentTo(TenancyPostgres.Catalogue.LivePermissions, "an administrators' pack holds every live permission");
+            (await owner.ScalarAsync<bool>("SELECT tenancy.pack_permissions('lookout') IS NULL", Cancellation)).Should().BeTrue("a pack the catalogue does not have holds nothing");
         }
 
-        // A key added to a pack: the next export writes the function again.
+        // A permission added to a pack: the next export writes the function again.
         var wider = TenancyCatalogue.Build(
             HostCatalogue.Application with
             {
-                Packs = [.. HostCatalogue.Application.Packs.Select(pack => pack.Key == HostCatalogue.WatcherPack ? pack with { Keys = [HostCatalogue.WidgetRead, HostCatalogue.WidgetCreate] } : pack)],
+                Packs = [.. HostCatalogue.Application.Packs.Select(pack => pack.Key == HostCatalogue.WatcherPack ? pack with { Permissions = [HostCatalogue.WidgetRead, HostCatalogue.WidgetCreate] } : pack)],
             },
             []);
         foreach (var script in TenancyPostgres.AccessScripts(wider))
@@ -217,15 +217,15 @@ public sealed class ContributionTests(TenancyPostgres postgres)
 
         await using (var after = await OwnerAsync(database))
         {
-            (await after.ScalarAsync<string[]>("SELECT tenancy.pack_keys('watcher')", Cancellation)).Should().Equal("widget.create", "widget.read");
+            (await after.ScalarAsync<string[]>("SELECT tenancy.pack_permissions('watcher')", Cancellation)).Should().Equal("widget.create", "widget.read");
         }
 
-        // A pack may hold no key at all, a role people are given before it is decided what it may do: its copy
+        // A pack may hold no permission at all, a role people are given before it is decided what it may do: its copy
         // holds none, which is not the same as a pack the catalogue does not have.
         var keyless = TenancyCatalogue.Build(
             HostCatalogue.Application with
             {
-                Packs = [.. HostCatalogue.Application.Packs.Select(pack => pack.Key == HostCatalogue.WatcherPack ? pack with { Keys = [] } : pack)],
+                Packs = [.. HostCatalogue.Application.Packs.Select(pack => pack.Key == HostCatalogue.WatcherPack ? pack with { Permissions = [] } : pack)],
             },
             []);
         var scripts = TenancyPostgres.AccessScripts(keyless);
@@ -236,55 +236,55 @@ public sealed class ContributionTests(TenancyPostgres postgres)
         }
 
         await using var emptied = await OwnerAsync(database);
-        (await emptied.ScalarAsync<string[]>("SELECT tenancy.pack_keys('watcher')", Cancellation)).Should().BeEmpty();
-        (await emptied.ScalarAsync<bool>("SELECT tenancy.pack_keys('watcher') IS NULL", Cancellation)).Should().BeFalse();
+        (await emptied.ScalarAsync<string[]>("SELECT tenancy.pack_permissions('watcher')", Cancellation)).Should().BeEmpty();
+        (await emptied.ScalarAsync<bool>("SELECT tenancy.pack_permissions('watcher') IS NULL", Cancellation)).Should().BeFalse();
     }
 
     [Theory]
     [InlineData("jsonb")]
     [InlineData("json")]
-    public async Task Keys_stored_as_a_json_document_give_access_files_that_apply(string storeType)
+    public async Task Permissions_stored_as_a_json_document_give_access_files_that_apply(string storeType)
     {
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Plain, Cancellation);
         await TenancyPostgres.ExecuteAsync(
             database.ConnectionString,
-            $"ALTER TABLE tenancy.\"Roles\" ALTER COLUMN \"Keys\" TYPE {storeType} USING pg_catalog.to_jsonb(\"Keys\")::{storeType}",
+            $"ALTER TABLE tenancy.\"Roles\" ALTER COLUMN \"Permissions\" TYPE {storeType} USING pg_catalog.to_jsonb(\"Permissions\")::{storeType}",
             Cancellation);
 
-        using (KeysAsDocumentContext tenancy = storeType == "jsonb" ? new KeysAsJsonbContext() : new KeysAsJsonContext())
+        using (PermissionsAsDocumentContext tenancy = storeType == "jsonb" ? new PermissionsAsJsonbContext() : new PermissionsAsJsonContext())
         {
-            tenancy.Model.GetEntityTypes().Single(entity => entity.ClrType == typeof(HostRole)).FindProperty(nameof(HostRole.Keys))!.GetColumnType().Should().Be(storeType);
+            tenancy.Model.GetEntityTypes().Single(entity => entity.ClrType == typeof(HostRole)).FindProperty(nameof(HostRole.Permissions))!.GetColumnType().Should().Be(storeType);
             foreach (var script in PostgresRowAccess.Scripts([tenancy], [], [], new RowAccessExport { Contributions = [new TenancyRowAccessContribution(TenancyPostgres.Catalogue)] }))
             {
                 await TenancyPostgres.ExecuteAsync(database.ConnectionString, script.Script, Cancellation);
             }
         }
 
-        // A role's keys change: the trigger that keeps rights backed compares them, as the document they are, and the
+        // A role's permissions change: the trigger that keeps rights backed compares them, as the document they are, and the
         // one that writes the rights reads them from it.
         await using var owner = await OwnerAsync(database);
         (await owner.ExecuteAsync(
-                $"INSERT INTO tenancy.\"Roles\" (\"Id\", \"NormalizedName\", \"Version\", \"TenantId\", \"Name\", \"Description\", \"FromPack\", \"Status\", \"Keys\") VALUES (gen_random_uuid(), 'CLERK', 0, 1, 'Clerk', '', 'watcher', 'Active', '[\"{HostCatalogue.WidgetRead}\"]'::{storeType})",
+                $"INSERT INTO tenancy.\"Roles\" (\"Id\", \"NormalizedName\", \"Version\", \"TenantId\", \"Name\", \"Description\", \"FromPack\", \"Status\", \"Permissions\") VALUES (gen_random_uuid(), 'CLERK', 0, 1, 'Clerk', '', 'watcher', 'Active', '[\"{HostCatalogue.WidgetRead}\"]'::{storeType})",
                 Cancellation))
             .Should().Be(1);
-        (await owner.ExecuteAsync($"UPDATE tenancy.\"Roles\" SET \"Keys\" = '[\"{HostCatalogue.WidgetRead}\", \"{HostCatalogue.WidgetCreate}\"]'::{storeType}", Cancellation)).Should().Be(1);
-        (await owner.ScalarAsync<long>("SELECT count(*) FROM tenancy.roles_with_key('widget.read')", Cancellation)).Should().Be(0, "the owner has no seat to ask for");
+        (await owner.ExecuteAsync($"UPDATE tenancy.\"Roles\" SET \"Permissions\" = '[\"{HostCatalogue.WidgetRead}\", \"{HostCatalogue.WidgetCreate}\"]'::{storeType}", Cancellation)).Should().Be(1);
+        (await owner.ScalarAsync<long>("SELECT count(*) FROM tenancy.roles_with_permission('widget.read')", Cancellation)).Should().Be(0, "the owner has no seat to ask for");
 
-        // A module reads the keys as an array of text all the same, as they are in the document.
-        (await owner.ScalarAsync<string[]>("SELECT \"Keys\" FROM tenancy.tenant_roles()", Cancellation)).Should().Equal(HostCatalogue.WidgetRead, HostCatalogue.WidgetCreate);
+        // A module reads the permissions as an array of text all the same, as they are in the document.
+        (await owner.ScalarAsync<string[]>("SELECT \"Permissions\" FROM tenancy.tenant_roles_with_permissions()", Cancellation)).Should().Equal(HostCatalogue.WidgetRead, HostCatalogue.WidgetCreate);
 
-        // A seat granted the role holds each key of the document, once, and the ones the catalogue has live alone.
+        // A seat granted the role holds each permission of the document, once, and the ones the catalogue has live alone.
         (await owner.ExecuteAsync(
                 $"""
                 INSERT INTO tenancy."Seats" ("Id", "Version", "TenantId", "Identity", "DisplayName", "Status") VALUES ('{TenancySeed.Oli.Seat.Value}', 0, 1, gen_random_uuid(), 'Oli', 'Active');
                 INSERT INTO tenancy."SeatPlacements" ("UnitId", "SeatId", "IsPrimary", "PlacedAt", "TenantId") VALUES ('{TenancySeed.HarborRoot.Value}', '{TenancySeed.Oli.Seat.Value}', true, now(), 1);
-                UPDATE tenancy."Roles" SET "Keys" = '["{HostCatalogue.WidgetRead}", "{HostCatalogue.WidgetCreate}", "{HostCatalogue.WidgetRead}", "widget.polish"]'::{storeType};
+                UPDATE tenancy."Roles" SET "Permissions" = '["{HostCatalogue.WidgetRead}", "{HostCatalogue.WidgetCreate}", "{HostCatalogue.WidgetRead}", "widget.polish"]'::{storeType};
                 INSERT INTO tenancy."SeatRoleGrants" ("RoleId", "SeatId", "UnitId", "StartsAt", "EndsAt", "GrantedBy", "Reason")
                 SELECT r."Id", '{TenancySeed.Oli.Seat.Value}', '{TenancySeed.HarborRoot.Value}', now(), NULL, NULL, NULL FROM tenancy."Roles" r;
                 """,
                 Cancellation))
             .Should().BePositive();
-        (await owner.ListAsync<string>("SELECT \"Key\" FROM tenancy.\"SeatRights\" ORDER BY 1", Cancellation)).Should().Equal(HostCatalogue.WidgetCreate, HostCatalogue.WidgetRead);
+        (await owner.ListAsync<string>("SELECT \"Permission\" FROM tenancy.\"SeatRights\" ORDER BY 1", Cancellation)).Should().Equal(HostCatalogue.WidgetCreate, HostCatalogue.WidgetRead);
         await owner.CommitAsync(Cancellation);
     }
 
@@ -294,8 +294,8 @@ public sealed class ContributionTests(TenancyPostgres postgres)
         var scripts = TenancyPostgres.AccessScripts();
 
         scripts.Should().HaveCount(2);
-        scripts[0].Should().Contain("CREATE OR REPLACE FUNCTION \"tenancy\".units_where_i_hold(key text)", "Tenancy's context comes first: the widgets' policies ask its functions");
-        scripts[1].Should().Contain("\"UnitId\" = ANY (ARRAY(SELECT \"tenancy\".units_where_i_hold('widget.read')))");
+        scripts[0].Should().Contain("CREATE OR REPLACE FUNCTION \"tenancy\".units_where_i_hold_permission(permission text)", "Tenancy's context comes first: the widgets' policies ask its functions");
+        scripts[1].Should().Contain("\"UnitId\" = ANY (ARRAY(SELECT \"tenancy\".units_where_i_hold_permission('widget.read')))");
         scripts[1].Should().NotContain("CREATE OR REPLACE FUNCTION tenancy.", "only the context that maps Tenancy's tables makes its functions");
     }
 
@@ -356,10 +356,10 @@ public sealed class ContributionTests(TenancyPostgres postgres)
     private static Task<AsCaller> OwnerAsync(TestDatabase database) => AsCaller.OwnerAsync(database, Cancellation);
 
     /// <summary>
-    /// Tenancy's context as <see cref="TestTenancyContext"/> maps it, but with a role's keys stored as a JSON document, as
+    /// Tenancy's context as <see cref="TestTenancyContext"/> maps it, but with a role's permissions stored as a JSON document, as
     /// an application may choose: the model the contribution writes from, which never connects.
     /// </summary>
-    private abstract class KeysAsDocumentContext(DbContextOptions options, string storeType) : DbContext(options)
+    private abstract class PermissionsAsDocumentContext(DbContextOptions options, string storeType) : DbContext(options)
     {
         protected static DbContextOptions ModelOnly<TContext>()
             where TContext : DbContext
@@ -369,9 +369,9 @@ public sealed class ContributionTests(TenancyPostgres postgres)
         {
             modelBuilder.HasDefaultSchema(TestTenancyContext.Schema);
             modelBuilder.AddTenancy<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId>(database: Database);
-            modelBuilder.Entity<HostRole>().Property(role => role.Keys)
+            modelBuilder.Entity<HostRole>().Property(role => role.Permissions)
                 .HasConversion(new ValueConverter<IReadOnlyList<string>, string>(
-                    keys => JsonSerializer.Serialize(keys, (JsonSerializerOptions?)null),
+                    permissions => JsonSerializer.Serialize(permissions, (JsonSerializerOptions?)null),
                     document => JsonSerializer.Deserialize<string[]>(document, (JsonSerializerOptions?)null)!))
                 .HasColumnType(storeType);
         }
@@ -384,9 +384,9 @@ public sealed class ContributionTests(TenancyPostgres postgres)
         }
     }
 
-    private sealed class KeysAsJsonbContext() : KeysAsDocumentContext(ModelOnly<KeysAsJsonbContext>(), "jsonb");
+    private sealed class PermissionsAsJsonbContext() : PermissionsAsDocumentContext(ModelOnly<PermissionsAsJsonbContext>(), "jsonb");
 
-    private sealed class KeysAsJsonContext() : KeysAsDocumentContext(ModelOnly<KeysAsJsonContext>(), "json");
+    private sealed class PermissionsAsJsonContext() : PermissionsAsDocumentContext(ModelOnly<PermissionsAsJsonContext>(), "json");
 
     /// <summary>A contribution that would write a policy of its own on the seats' table.</summary>
     private sealed class Intruder(Type seat) : IRowAccessContribution

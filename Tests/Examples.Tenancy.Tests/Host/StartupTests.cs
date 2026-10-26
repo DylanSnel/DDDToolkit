@@ -30,10 +30,10 @@ public sealed class StartupTests(SampleHosts sample) : IClassFixture<SampleHosts
     [Fact]
     public async Task A_bad_catalogue_refuses_start_up()
     {
-        // A module that declares a key under Tenancy's own prefix: the catalogue refuses it when it is built.
+        // A module that declares a permission under Tenancy's own prefix: the catalogue refuses it when it is built.
         await using var host = await sample.NotStartedAsync(services => services.AddTenancyPermissions(
         [
-            new Permission("tenancy.everything", "Rogue", "Claims a key that is Tenancy's to declare"),
+            new Permission("tenancy.everything", "Rogue", "Claims a permission that is Tenancy's to declare"),
         ]));
 
         // Read from what the host logged as it gave up, as well as from what the start threw: the host fails on a
@@ -131,15 +131,15 @@ public sealed class StartupTests(SampleHosts sample) : IClassFixture<SampleHosts
         // Tenancy's generator collected into the host. The program that exports has no host, and Tenancy's package
         // builds it there from what the sample marks: the part marked [TenancyCatalogue] and every list marked
         // [TenancyPermissions]. Policies written from another catalogue than the host's would let other grants
-        // through than the application gives, so the two are held to the same keys, packs and containment.
+        // through than the application gives, so the two are held to the same permissions, packs and containment.
         var running = (await sample.SharedAsync()).Services.GetRequiredService<TenancyCatalogue>();
         var exported = ExportedMarks.Tenancy().Catalogue;
 
-        exported.Permissions.Select(permission => (permission.Key, permission.ManagesAccess, permission.Retired))
-            .Should().BeEquivalentTo(running.Permissions.Select(permission => (permission.Key, permission.ManagesAccess, permission.Retired)));
-        exported.Packs.Select(pack => (pack.Key, Keys: string.Join(",", pack.Keys.Order(StringComparer.Ordinal)), pack.Administers))
-            .Should().BeEquivalentTo(running.Packs.Select(pack => (pack.Key, Keys: string.Join(",", pack.Keys.Order(StringComparer.Ordinal)), pack.Administers)));
-        exported.ContainAccessManagingKeys.Should().Be(running.ContainAccessManagingKeys);
+        exported.Permissions.Select(permission => (permission.Name, permission.ManagesAccess, permission.Retired))
+            .Should().BeEquivalentTo(running.Permissions.Select(permission => (permission.Name, permission.ManagesAccess, permission.Retired)));
+        exported.Packs.Select(pack => (pack.Key, Keys: string.Join(",", pack.Permissions.Order(StringComparer.Ordinal)), pack.Administers))
+            .Should().BeEquivalentTo(running.Packs.Select(pack => (pack.Key, Keys: string.Join(",", pack.Permissions.Order(StringComparer.Ordinal)), pack.Administers)));
+        exported.ContainAccessManagingPermissions.Should().Be(running.ContainAccessManagingPermissions);
     }
 
     [Fact]

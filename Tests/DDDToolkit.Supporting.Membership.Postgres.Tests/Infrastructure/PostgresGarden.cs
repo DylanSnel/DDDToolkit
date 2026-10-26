@@ -63,7 +63,7 @@ public sealed class PostgresGarden : IDisposable
         RowAccessRule.For<ShedRole>("Users read the roles of sheds", RowOperations.Read, UsersReadTheRolesOfSheds.RowAccessSql, RowAccessRoles.User),
         RowAccessRule.For<Shed>("Users read the sheds", RowOperations.Read, UsersReadTheSheds.RowAccessSql, RowAccessRoles.User),
 
-        // Whoever fences a plot changes it, its gardeners and their roles; the package's lock holds those rows to the same key.
+        // Whoever fences a plot changes it, its gardeners and their roles; the package's lock holds those rows to the same permission.
         RowAccessRule.For<Plot>("Fencers change their plots", RowOperations.Change, FencersChangeTheirPlots.RowAccessSql, RowAccessRoles.User),
     ];
 

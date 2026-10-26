@@ -5,7 +5,7 @@ namespace DDDToolkit.Supporting.Tenancy.Tests;
 /// <summary>
 /// Provisioning makes everything a tenant needs in one save, with an administrator from the start, and only
 /// system work outside any tenant does it. A tenant's life is system work in that tenant; its settings need
-/// the settings key for the whole tenant.
+/// the settings permission for the whole tenant.
 /// </summary>
 public class TenantCommandsTests
 {
@@ -65,11 +65,11 @@ public class TenantCommandsTests
         var tenantWide = await harness.Run(caller, async h =>
         {
             var questions = new TenancyAnswers<TenantId, SeatId, OrganizationUnitId, RoleId>(h.Catalogue, h.Clock).Over(h.Store, h.Store);
-            return await Task.WhenAll(h.Catalogue.LiveKeys.Select(key => questions.HoldsAtTenantAsync(key, default)));
+            return await Task.WhenAll(h.Catalogue.LivePermissions.Select(permission => questions.HoldsAtTenantAsync(permission, default)));
         });
 
-        tenantWide.Should().OnlyContain(held => held, "the administrators' role holds every live key, granted at the root");
-        harness.Store.SavedRights.Where(right => right.Key == TenancyKeys.AdministratorKey)
+        tenantWide.Should().OnlyContain(held => held, "the administrators' role holds every live permission, granted at the root");
+        harness.Store.SavedRights.Where(right => right.Permission == TenancyPermissions.AdministratorPermission)
             .Should().ContainSingle().Which.Should().Match<SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId>>(
                 right => right.SeatId == provisioned.AdminSeat && right.UnitId == provisioned.RootUnit && right.EndsAt == null);
 
@@ -95,11 +95,11 @@ public class TenantCommandsTests
             var source = harness.Catalogue.Packs.Single(candidate => candidate.Key == pack);
             role.FromPack.Should().Be(pack);
             role.Name.Should().Be(source.Name);
-            role.Keys.Should().Equal(source.Keys);
+            role.Permissions.Should().Equal(source.Permissions);
             role.TenantId.Should().Be(hierarchical.Tenant);
         }
 
-        harness.Store.Role(hierarchical.AdministratorRole).Keys.Should().Equal(harness.Catalogue.LiveKeys);
+        harness.Store.Role(hierarchical.AdministratorRole).Permissions.Should().Equal(harness.Catalogue.LivePermissions);
         hierarchical.AdministratorRole.Should().Be(hierarchical.RolesByPack[HostCatalogue.AdministratorPack]);
     }
 
@@ -122,19 +122,19 @@ public class TenantCommandsTests
             administrators.Name.Should().Be("Administrator");
             administrators.Description.Should().Be(TenancyPacks.DefaultAdministrators.Description);
             administrators.FromPack.Should().Be(TenancyPacks.DefaultAdministratorsKey);
-            administrators.Keys.Should().Equal(catalogue.LiveKeys).And.Contain([TenancyKeys.RolesManage, HostCatalogue.WidgetCreate, "gauges.read"]);
+            administrators.Permissions.Should().Equal(catalogue.LivePermissions).And.Contain([TenancyPermissions.RolesManage, HostCatalogue.WidgetCreate, "gauges.read"]);
             var grant = harness.Store.Seat(provisioned.AdminSeat).Placements.Should().ContainSingle().Which.Grants.Should().ContainSingle().Which;
             grant.RoleId.Should().Be(provisioned.AdministratorRole);
             grant.EndsAt.Should().BeNull();
 
-            // So the seat holds every live key for the whole tenant, and runs it: it makes a role, and gives it.
+            // So the seat holds every live permission for the whole tenant, and runs it: it makes a role, and gives it.
             var caller = HostCaller.InSeat(provisioned.Tenant, provisioned.AdminSeat);
             var held = await harness.Run(caller, async h =>
             {
                 var questions = new TenancyAnswers<TenantId, SeatId, OrganizationUnitId, RoleId>(h.Catalogue, h.Clock).Over(h.Store, h.Store);
-                return await Task.WhenAll(h.Catalogue.LiveKeys.Select(key => questions.HoldsAtTenantAsync(key, default)));
+                return await Task.WhenAll(h.Catalogue.LivePermissions.Select(permission => questions.HoldsAtTenantAsync(permission, default)));
             });
-            held.Should().OnlyContain(holds => holds, "the default administrators' role holds every live key, granted at the root");
+            held.Should().OnlyContain(holds => holds, "the default administrators' role holds every live permission, granted at the root");
 
             var clerk = await harness.Run(caller, h => h.Roles.CreateAsync("Clerk", "Files widgets", [HostCatalogue.WidgetCreate], default));
             await harness.Run(caller, h => h.Seats.GrantAsync(provisioned.AdminSeat, provisioned.RootUnit, clerk, until: null, reason: null, default));
@@ -150,41 +150,41 @@ public class TenantCommandsTests
     }
 
     [Fact]
-    public async Task Provisioning_a_listing_pack_grants_its_keys_only()
+    public async Task Provisioning_a_listing_pack_grants_its_permissions_only()
     {
         var catalogue = New.ListingCatalogue();
         var harness = new Harness(catalogue);
         string[] listed =
         [
-            TenancyKeys.GrantsManage, TenancyKeys.HistoryView, TenancyKeys.RolesManage, TenancyKeys.SeatsManage, TenancyKeys.SettingsManage, TenancyKeys.UnitsManage,
+            TenancyPermissions.GrantsManage, TenancyPermissions.HistoryView, TenancyPermissions.RolesManage, TenancyPermissions.SeatsManage, TenancyPermissions.SettingsManage, TenancyPermissions.UnitsManage,
             New.WidgetAssign,
         ];
         string[] widgets = [HostCatalogue.WidgetChange, HostCatalogue.WidgetCreate, HostCatalogue.WidgetRead];
 
         var provisioned = await Provision(harness, Harbor());
 
-        // The administrators' role is a copy of its pack, like every other: what the pack lists, and no live key besides.
+        // The administrators' role is a copy of its pack, like every other: what the pack lists, and no live permission besides.
         var administrators = harness.Store.Role(provisioned.AdministratorRole);
         administrators.FromPack.Should().Be(HostCatalogue.AdministratorPack);
-        administrators.Keys.Should().Equal(listed).And.Equal(catalogue.AdministratorPackFor(TenantShape.Hierarchical).Keys);
-        catalogue.LiveKeys.Should().Contain(widgets, "the keys to work with widgets are live, and the pack leaves them out");
-        harness.Store.Role(provisioned.RolesByPack[New.KeeperPack]).Keys.Should().Equal(New.WidgetAssign, HostCatalogue.WidgetRead);
+        administrators.Permissions.Should().Equal(listed).And.Equal(catalogue.AdministratorPackFor(TenantShape.Hierarchical).Permissions);
+        catalogue.LivePermissions.Should().Contain(widgets, "the permissions to work with widgets are live, and the pack leaves them out");
+        harness.Store.Role(provisioned.RolesByPack[New.KeeperPack]).Permissions.Should().Equal(New.WidgetAssign, HostCatalogue.WidgetRead);
 
-        // So the first administrator's rights are those keys, at the root, and that is what the seat is answered.
+        // So the first administrator's rights are those permissions, at the root, and that is what the seat is answered.
         harness.Store.SavedRights.Where(right => right.SeatId == provisioned.AdminSeat)
             .Should().OnlyContain(right => right.UnitId == provisioned.RootUnit && right.EndsAt == null)
-            .And.Subject.Select(right => right.Key).Should().BeEquivalentTo(listed);
+            .And.Subject.Select(right => right.Permission).Should().BeEquivalentTo(listed);
 
         var caller = HostCaller.InSeat(provisioned.Tenant, provisioned.AdminSeat);
         var held = await harness.Run(caller, async h =>
         {
             var questions = new TenancyAnswers<TenantId, SeatId, OrganizationUnitId, RoleId>(h.Catalogue, h.Clock).Over(h.Store, h.Store);
-            var answers = await Task.WhenAll(h.Catalogue.LiveKeys.Select(key => questions.HoldsAtTenantAsync(key, default)));
-            return h.Catalogue.LiveKeys.Where((_, index) => answers[index]).ToArray();
+            var answers = await Task.WhenAll(h.Catalogue.LivePermissions.Select(permission => questions.HoldsAtTenantAsync(permission, default)));
+            return h.Catalogue.LivePermissions.Where((_, index) => answers[index]).ToArray();
         });
         held.Should().Equal(listed).And.NotContain(widgets);
 
-        // It is an administrator all the same: it makes a role, with a key it does not hold itself.
+        // It is an administrator all the same: it makes a role, with a permission it does not hold itself.
         await harness.Run(caller, h => h.Roles.CreateAsync("Clerk", "Files widgets", [HostCatalogue.WidgetCreate], default));
     }
 
@@ -302,8 +302,8 @@ public class TenantCommandsTests
 
         var refusal = await Refused.WithCodeAsync(TenancyRefusals.NotPermitted,
             () => harness.As(supervisor, h => h.Tenants.RenameOrganizationAsync("Bert's Harbor", default)));
-        refusal.Arguments["Key"].Should().Be(TenancyKeys.SettingsManage);
-        refusal.Message.Should().Be("You lack the permission " + TenancyKeys.SettingsManage + ".");
+        refusal.Arguments["Permission"].Should().Be(TenancyPermissions.SettingsManage);
+        refusal.Message.Should().Be("You lack the permission " + TenancyPermissions.SettingsManage + ".");
 
         await harness.As(harness.Administrator, h => h.Tenants.RenameOrganizationAsync("Harbor Works Group", default));
         harness.Store.Organization(harness.Tenant).Name.Should().Be("Harbor Works Group");
@@ -340,10 +340,10 @@ public class TenantCommandsTests
     }
 
     [Fact]
-    public async Task Changing_shape_copies_a_listing_administrators_pack_with_its_keys_and_gives_it_to_nobody()
+    public async Task Changing_shape_copies_a_listing_administrators_pack_with_its_permissions_and_gives_it_to_nobody()
     {
-        // A flat tenant's administrators hold every live key; a hierarchical tenant's list theirs, Tenancy's own.
-        string[] listed = [.. TenancyKeys.Permissions.Select(permission => permission.Key).Order(StringComparer.Ordinal)];
+        // A flat tenant's administrators hold every live permission; a hierarchical tenant's list theirs, Tenancy's own.
+        string[] listed = [.. TenancyPermissions.All.Select(permission => permission.Name).Order(StringComparer.Ordinal)];
         var catalogue = TenancyCatalogue.Build(
             HostCatalogue.Application with
             {
@@ -361,17 +361,17 @@ public class TenantCommandsTests
 
         await harness.Run(administrator, h => h.Tenants.ChangeShapeAsync(TenantShape.Hierarchical, roleIds: null, language: null, default));
 
-        // The tenant gets the role of the administrators' pack seeded for its new shape, with the keys that pack lists.
+        // The tenant gets the role of the administrators' pack seeded for its new shape, with the permissions that pack lists.
         var roles = harness.Store.RolesOf(provisioned.Tenant);
         var treeAdministrators = roles.Should().ContainSingle(role => role.FromPack == "tree-admin").Which;
-        treeAdministrators.Keys.Should().Equal(listed).And.Equal(catalogue.AdministratorPackFor(TenantShape.Hierarchical).Keys);
+        treeAdministrators.Permissions.Should().Equal(listed).And.Equal(catalogue.AdministratorPackFor(TenantShape.Hierarchical).Permissions);
 
-        // No grant changes. The first administrator keeps the role it was given, with every live key, and the new
+        // No grant changes. The first administrator keeps the role it was given, with every live permission, and the new
         // role is nobody's until someone gives it.
         harness.Store.Seat(provisioned.AdminSeat).Placements.Single().Grants.Should().ContainSingle().Which.RoleId.Should().Be(provisioned.AdministratorRole);
-        harness.Store.Role(provisioned.AdministratorRole).Keys.Should().Equal(catalogue.LiveKeys);
+        harness.Store.Role(provisioned.AdministratorRole).Permissions.Should().Equal(catalogue.LivePermissions);
         harness.Store.SavedRights.Should().NotContain(right => right.RoleId == treeAdministrators.Id);
-        harness.Store.SavedRights.Where(right => right.SeatId == provisioned.AdminSeat).Select(right => right.Key).Should().BeEquivalentTo(catalogue.LiveKeys);
+        harness.Store.SavedRights.Where(right => right.SeatId == provisioned.AdminSeat).Select(right => right.Permission).Should().BeEquivalentTo(catalogue.LivePermissions);
     }
 
     [Fact]

@@ -50,8 +50,8 @@
                     case TryItField.ProjectRole:
                         <IdPicker Label="@Label(field)" @bind-Value="_input.ProjectRole" Options="ProjectRoleOptions" />
                         break;
-                    case TryItField.Key:
-                        <input class="form-control form-control-sm font-monospace" list="try-keys" placeholder="projects.close" @bind="_input.Key" />
+                    case TryItField.Permission:
+                        <input class="form-control form-control-sm font-monospace" list="try-permissions" placeholder="projects.close" @bind="_input.Permission" />
                         break;
                     case TryItField.Name:
                         <input class="form-control form-control-sm" @bind="_input.Name" />
@@ -70,10 +70,10 @@
         }
     </div>
 
-    <datalist id="try-keys">
-        @foreach (var permission in _keys)
+    <datalist id="try-permissions">
+        @foreach (var permission in _permissions)
         {
-            <option value="@permission.Key">@permission.Description@(permission.ManagesAccess ? " (" + T["common.manages-access"] + ")" : string.Empty)</option>
+            <option value="@permission.Name">@permission.Description@(permission.ManagesAccess ? " (" + T["common.manages-access"] + ")" : string.Empty)</option>
         }
     </datalist>
 
@@ -196,7 +196,7 @@
     private IReadOnlyList<UnitInfo> _units = [];
     private IReadOnlyList<RoleInfo> _roles = [];
     private IReadOnlyList<ProjectRoleInfo> _projectRoles = [];
-    private IReadOnlyList<PermissionInfo> _keys = [];
+    private IReadOnlyList<PermissionInfo> _permissions = [];
     private bool _sending;
 
     private TryItAction Action => TryItActions.ByText(_actionName);
@@ -205,7 +205,7 @@
     private string Label(TryItField field) => field switch
     {
         TryItField.Project => T["try.field.project"],
-        TryItField.Key => T["try.field.key"],
+        TryItField.Permission => T["try.field.permission"],
         TryItField.Name => T["try.field.name"],
         TryItField.Unit => T["try.field.unit"],
         TryItField.Title => T["try.field.title"],
@@ -256,7 +256,7 @@
         _units = (await Api.TenantUnitsAsync()).Value ?? [];
         _roles = (await Api.TenantRolesAsync()).Value ?? [];
         _projectRoles = (await Api.ProjectRolesAsync()).Value ?? [];
-        _keys = (await Api.KeyCatalogueAsync()).Value?.Permissions.Where(permission => !permission.Retired).ToList() ?? [];
+        _permissions = (await Api.PermissionCatalogueAsync()).Value?.Permissions.Where(permission => !permission.Retired).ToList() ?? [];
     }
 
     private async Task SendAsync()

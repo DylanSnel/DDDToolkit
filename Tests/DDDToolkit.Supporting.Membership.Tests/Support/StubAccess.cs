@@ -15,7 +15,7 @@ public sealed class StubAccess<TResourceId>(MembershipRules rules) : IMemberQues
 {
     private readonly Dictionary<TResourceId, (long Version, Dictionary<string, MemberVia> Held)> _seen = [];
 
-    /// <summary>What was asked, in order: <c>caller</c>, or <c>hold</c> and the key.</summary>
+    /// <summary>What was asked, in order: <c>caller</c>, or <c>hold</c> and the permission.</summary>
     public List<string> Asked { get; } = [];
 
     /// <summary>The refusal a caller that is nobody is given, or <see langword="null"/> when the caller is somebody.</summary>
@@ -27,13 +27,13 @@ public sealed class StubAccess<TResourceId>(MembershipRules rules) : IMemberQues
     /// <summary>Whether the caller is the application's own work.</summary>
     public bool System { get; set; }
 
-    /// <summary>Until when the caller holds the keys it holds, or <see langword="null"/> when its holds have no end.</summary>
+    /// <summary>Until when the caller holds the permissions it holds, or <see langword="null"/> when its holds have no end.</summary>
     public DateTimeOffset? Until { get; set; }
 
     /// <inheritdoc />
     public MembershipRules Rules { get; } = rules;
 
-    /// <summary>The caller sees <paramref name="resource"/>, at <paramref name="version"/>, and holds these keys on it.</summary>
+    /// <summary>The caller sees <paramref name="resource"/>, at <paramref name="version"/>, and holds these permissions on it.</summary>
     public StubAccess<TResourceId> Sees(TResourceId resource, long version, params (string Key, MemberVia Via)[] held)
     {
         _seen[resource] = (version, held.ToDictionary(pair => pair.Key, pair => pair.Via, StringComparer.Ordinal));
@@ -51,32 +51,32 @@ public sealed class StubAccess<TResourceId>(MembershipRules rules) : IMemberQues
     }
 
     /// <inheritdoc />
-    public MemberReach<TResourceId> Reach(string key) => new StubReach(key, Now, System);
+    public MemberReach<TResourceId> Reach(string permission) => new StubReach(permission, Now, System);
 
     /// <inheritdoc />
-    public MemberKeyReach<TResourceId> KeyReach(IReadOnlyCollection<string> keys)
-        => new StubKeyReach(Rules.EveryMemberKey is { } see ? Reach(see) : new StubReach(Now, System), [.. keys.Distinct(StringComparer.Ordinal)]);
+    public MemberPermissionReach<TResourceId> PermissionReach(IReadOnlyCollection<string> permissions)
+        => new StubPermissionReach(Rules.EveryMemberPermission is { } see ? Reach(see) : new StubReach(Now, System), [.. permissions.Distinct(StringComparer.Ordinal)]);
 
     /// <inheritdoc />
-    public Task<MemberHold<TResourceId>?> HoldAsync(TResourceId resource, string key, CancellationToken cancellationToken)
+    public Task<MemberHold<TResourceId>?> HoldAsync(TResourceId resource, string permission, CancellationToken cancellationToken)
     {
-        Asked.Add("hold " + key);
+        Asked.Add("hold " + permission);
         return Task.FromResult(_seen.TryGetValue(resource, out var seen)
-            ? seen.Held.TryGetValue(key, out var via)
+            ? seen.Held.TryGetValue(permission, out var via)
                 ? new MemberHold<TResourceId>(resource, via, seen.Version, Until)
                 : new MemberHold<TResourceId>(resource, null, seen.Version, null)
             : null);
     }
 
     /// <inheritdoc />
-    public Task<IReadOnlyDictionary<TResourceId, IReadOnlySet<string>>> KeysOnAsync(
+    public Task<IReadOnlyDictionary<TResourceId, IReadOnlySet<string>>> PermissionsOnAsync(
         IReadOnlyCollection<TResourceId> resources,
-        IReadOnlyCollection<string> keys,
+        IReadOnlyCollection<string> permissions,
         CancellationToken cancellationToken)
     {
         IReadOnlyDictionary<TResourceId, IReadOnlySet<string>> held = resources.Distinct()
             .Where(_seen.ContainsKey)
-            .Select(resource => (resource, Keys: (IReadOnlySet<string>)_seen[resource].Held.Keys.Intersect(keys).ToHashSet(StringComparer.Ordinal)))
+            .Select(resource => (resource, Keys: (IReadOnlySet<string>)_seen[resource].Held.Keys.Intersect(permissions).ToHashSet(StringComparer.Ordinal)))
             .Where(pair => pair.Keys.Count > 0)
             .ToDictionary(pair => pair.resource, pair => pair.Keys);
 
@@ -85,17 +85,17 @@ public sealed class StubAccess<TResourceId>(MembershipRules rules) : IMemberQues
 
     private sealed class StubReach : MemberReach<TResourceId>
     {
-        public StubReach(string key, DateTimeOffset now, bool everything)
-            : base(key, now, everything)
+        public StubReach(string permission, DateTimeOffset now, bool everything)
+            : base(permission, now, everything)
         {
         }
 
-        /// <summary>The reach of what the caller sees, under rules that name no key for seeing.</summary>
+        /// <summary>The reach of what the caller sees, under rules that name no permission for seeing.</summary>
         public StubReach(DateTimeOffset now, bool everything)
             : base(now, everything)
         {
         }
     }
 
-    private sealed class StubKeyReach(MemberReach<TResourceId> see, IReadOnlyList<string> keys) : MemberKeyReach<TResourceId>(see, keys);
+    private sealed class StubPermissionReach(MemberReach<TResourceId> see, IReadOnlyList<string> permissions) : MemberPermissionReach<TResourceId>(see, permissions);
 }

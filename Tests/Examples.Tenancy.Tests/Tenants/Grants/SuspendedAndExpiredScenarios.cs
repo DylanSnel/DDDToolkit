@@ -56,7 +56,7 @@ public sealed class SuspendedAndExpiredScenarios(SampleHosts sample) : IClassFix
         using var vic = await sample.ClientAsync("vic", Harbor.Slug);
 
         using var depot = await vic.GetAsync($"/projects/{Harbor.ProjectNamed("Inland depot").Id.Value}", Cancellation);
-        var units = await vic.GetFromJsonAsync<JsonElement>($"/access/units?key={ProjectKeys.View}", Cancellation);
+        var units = await vic.GetFromJsonAsync<JsonElement>($"/access/units?permission={ProjectPermissionNames.View}", Cancellation);
 
         await depot.ShouldBeRefusedAsync(HttpStatusCode.NotFound, ProjectRefusals.NotFound);
         units.GetProperty("unitsWhereIHold").EnumerateArray().Should().BeEmpty("the grant at North Inland has ended, and nothing was written when it did");
@@ -88,6 +88,6 @@ public sealed class SuspendedAndExpiredScenarios(SampleHosts sample) : IClassFix
         grant.GetProperty("role").GetString().Should().Be("Observer");
         grant.GetProperty("appliesNow").GetBoolean().Should().BeFalse();
         grant.GetProperty("endsAt").GetDateTimeOffset().Should().BeBefore(DateTimeOffset.UtcNow);
-        me.GetProperty("keys").EnumerateArray().Should().BeEmpty("a grant that does not apply holds no key");
+        me.GetProperty("permissions").EnumerateArray().Should().BeEmpty("a grant that does not apply holds no permission");
     }
 }

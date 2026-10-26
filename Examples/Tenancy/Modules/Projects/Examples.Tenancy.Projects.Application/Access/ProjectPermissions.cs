@@ -10,45 +10,45 @@ namespace Examples.Tenancy.Projects.Application.Access;
 /// functions in the database answer from the same lines.
 /// </summary>
 /// <remarks>
-/// The keys themselves are published in the contracts (<see cref="ProjectKeys"/>), since another module names one
+/// The permissions themselves are published in the contracts (<see cref="ProjectPermissionNames"/>), since another module names one
 /// when it asks Projects a question, and the host names them in its role packs; what each one is, is said here.
 /// <list type="bullet">
 /// <item>Held by a project's owner by owning it: seeing it, editing it, closing it and managing its crew, the
-/// keys of a crew lead. Opening a project and naming its owner are not: the first is asked at a unit, where there
+/// permissions of a crew lead. Opening a project and naming its owner are not: the first is asked at a unit, where there
 /// is no project yet, and the second is the organization's.</item>
-/// <item>Given by a crew role: every permission on a project but naming its owner. A crew role takes the keys of
-/// other modules that act on a project as well, a surveyor's key to record an inspection say, as the projects' rules
+/// <item>Given by a crew role: every permission on a project but naming its owner. A crew role takes the permissions of
+/// other modules that act on a project as well, a surveyor's permission to record an inspection say, as the projects' rules
 /// say (<see cref="ProjectMembership"/>).</item>
 /// <item>Reached from above: a role of the organization that holds one at the unit a project hangs at, or above
 /// it, holds it on the project; naming an owner is held that way and no other.</item>
 /// </list>
 /// The descriptions are the English texts; <c>ProjectPermissions.nl.resx</c> beside this class has the Dutch, by the
-/// permission's key, as the refusal texts do.
+/// permission's name, as the refusal texts do.
 /// </remarks>
 [Permissions]
 public static class ProjectPermissions
 {
     /// <summary>See a project and its crew.</summary>
     [On<Project>(EveryMember = true)]
-    public const string View = ProjectKeys.View;
+    public const string View = ProjectPermissionNames.View;
 
     /// <summary>Open a project at a unit.</summary>
     [AtUnit]
-    public const string Open = ProjectKeys.Open;
+    public const string Open = ProjectPermissionNames.Open;
 
     /// <summary>Rename or move a project.</summary>
-    [On<Project>(Implies = [ProjectKeys.View])]
-    public const string Edit = ProjectKeys.Edit;
+    [On<Project>(Implies = [ProjectPermissionNames.View])]
+    public const string Edit = ProjectPermissionNames.Edit;
 
     /// <summary>Close or reopen a project.</summary>
     [On<Project>]
-    public const string Close = ProjectKeys.Close;
+    public const string Close = ProjectPermissionNames.Close;
 
     /// <summary>Add and remove crew members, give and take their project roles.</summary>
-    [On<Project>(LocksMembers = true, Implies = [ProjectKeys.View])]
-    public const string ManageCrew = ProjectKeys.ManageCrew;
+    [On<Project>(LocksMembers = true, Implies = [ProjectPermissionNames.View])]
+    public const string ManageCrew = ProjectPermissionNames.ManageCrew;
 
     /// <summary>Name a project's owner.</summary>
     [On<Project>(Owner = false, InRoles = false, LocksOwner = true)]
-    public const string ChangeOwner = ProjectKeys.ChangeOwner;
+    public const string ChangeOwner = ProjectPermissionNames.ChangeOwner;
 }

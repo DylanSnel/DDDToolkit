@@ -30,7 +30,7 @@ public class OwnerDocsExampleTests
         [AccessRequests]
         public partial interface IBoardsRequest : IRequireAccess;
 
-        public static class BoardKeys
+        public static class BoardPermissions
         {
             public const string Manage = "boards.manage";
         }

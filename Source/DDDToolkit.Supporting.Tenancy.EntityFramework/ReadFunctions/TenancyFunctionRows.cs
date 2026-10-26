@@ -18,7 +18,7 @@ internal sealed class TenantAdministratorRow<TSeatId, TRoleId>
     public TRoleId RoleId { get; set; }
 }
 
-/// <summary>One seat that holds a key at a unit, as <see cref="TenancyFunctionNames.SeatsHoldingAt"/> answers it.</summary>
+/// <summary>One seat that holds a permission at a unit, as <see cref="TenancyFunctionNames.SeatsHoldingPermissionAt"/> answers it.</summary>
 internal sealed class SeatHolderRow<TSeatId>
     where TSeatId : struct, IEntityId, IEquatable<TSeatId>
 {

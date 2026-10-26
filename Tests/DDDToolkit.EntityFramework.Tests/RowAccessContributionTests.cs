@@ -393,11 +393,11 @@ public sealed class RowAccessContributionTests
     public void An_answer_that_cannot_be_named_still_prints_for_the_message_that_shows_it()
     {
         var noSet = new ResourceAccessAnswer(typeof(TicketId), (ResourceAccessSet)7);
-        var noKey = new ResourceAccessAnswer(null!, ResourceAccessSet.Seen);
+        var noPermission = new ResourceAccessAnswer(null!, ResourceAccessSet.Seen);
         var function = new ContributedFunction("tickets_somehow", "", "SETOF uuid", "SELECT NULL::uuid", Answers: noSet);
 
         noSet.ToString().Should().Be("ResourceAccessAnswer { Key = DDDToolkit.EntityFramework.Tests.Infrastructure.TicketId, Set = 7 }");
-        noKey.ToString().Should().Be("ResourceAccessAnswer { Key = , Set = Seen }");
+        noPermission.ToString().Should().Be("ResourceAccessAnswer { Key = , Set = Seen }");
         function.ToString().Should().Contain(
             "Answers = ResourceAccessAnswer { Key = DDDToolkit.EntityFramework.Tests.Infrastructure.TicketId, Set = 7 }",
             "a log line or an assertion that prints the function shows what it says it answers");

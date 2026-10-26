@@ -17,7 +17,7 @@ namespace Examples.Tenancy.Projects.Domain.Aggregates.Projects;
 /// <see cref="Project"/> carry the same code, so a client reads one code whether the command refused or the
 /// save's check caught code that went round the command.
 /// <para>
-/// An argument is a value, such as a key or an id, never a word, so a translation can be a sentence of its own.
+/// An argument is a value, such as a permission or an id, never a word, so a translation can be a sentence of its own.
 /// The translations are beside this class, in the two resource files of <see cref="ProjectFailures"/>: the same
 /// English, and Dutch.
 /// </para>
@@ -30,7 +30,7 @@ public static class ProjectRefusals
     /// </summary>
     public const string NotFound = "projects.not-found";
 
-    /// <summary>The caller may see the project but does not hold the key the command needs. Argument: <c>Key</c>.</summary>
+    /// <summary>The caller may see the project but does not hold the permission the command needs. Argument: <c>Permission</c>.</summary>
     public const string NotPermitted = "projects.not-permitted";
 
     /// <summary>The project is closed, and a closed project does not change until it is reopened.</summary>
@@ -120,21 +120,21 @@ public static class ProjectRefusals
     public const string RoleNameTaken = "projects.role-name-taken";
 
     /// <summary>
-    /// A project role was to give keys no crew role may give. Argument: <c>Keys</c>. The package's rule
-    /// <see cref="MembershipRefusals.KeyNotForMembers"/>.
+    /// A project role was to give permissions no crew role may give. Argument: <c>Permissions</c>. The package's rule
+    /// <see cref="MembershipRefusals.PermissionNotForMembers"/>.
     /// </summary>
-    public const string KeyNotForMembers = "projects.key-not-for-members";
+    public const string PermissionNotForMembers = "projects.permission-not-for-members";
 
     /// <summary>
-    /// A project role's keys, as stored, are not each there once, not blank and in order: only code that went
-    /// round the role writes such a row. The package's rule <see cref="MembershipRefusals.RoleKeysNotNormalized"/>.
+    /// A project role's permissions, as stored, are not each there once, not blank and in order: only code that went
+    /// round the role writes such a row. The package's rule <see cref="MembershipRefusals.RolePermissionsNotNormalized"/>.
     /// </summary>
-    public const string RoleKeysNotNormalized = "projects.role-keys-not-normalized";
+    public const string RolePermissionsNotNormalized = "projects.role-permissions-not-normalized";
 
     private static readonly Dictionary<string, (RefusalKind Kind, string Text)> Table = new(StringComparer.Ordinal)
     {
         [NotFound] = (RefusalKind.NotFound, "There is no such project, or it is not one you can see."),
-        [NotPermitted] = (RefusalKind.NotPermitted, "Doing this to the project needs the key {Key}."),
+        [NotPermitted] = (RefusalKind.NotPermitted, "Doing this to the project needs the permission {Permission}."),
         [Closed] = (RefusalKind.Conflict, "The project is closed; nothing about it changes until it is reopened."),
         [NotClosed] = (RefusalKind.Conflict, "The project is open; only a closed project can be reopened."),
         [NumberTaken] = (RefusalKind.Conflict, "Another project in this tenant already has the number {Number}."),
@@ -159,8 +159,8 @@ public static class ProjectRefusals
         [RoleArchived] = (RefusalKind.Conflict, "That project role is archived: it changes no more, and goes to nobody."),
         [RoleNameInvalid] = (RefusalKind.Invalid, "Enter {Min} to {Max} characters."),
         [RoleNameTaken] = (RefusalKind.Conflict, "Another project role of this tenant is called {Name} already."),
-        [KeyNotForMembers] = (RefusalKind.Invalid, "A project role cannot give these keys: {Keys}."),
-        [RoleKeysNotNormalized] = (RefusalKind.Conflict, "A project role's keys are each there once, none of them blank, in order."),
+        [PermissionNotForMembers] = (RefusalKind.Invalid, "A project role cannot give these permissions: {Permissions}."),
+        [RolePermissionsNotNormalized] = (RefusalKind.Conflict, "A project role's permissions are each there once, none of them blank, in order."),
     };
 
     /// <summary>

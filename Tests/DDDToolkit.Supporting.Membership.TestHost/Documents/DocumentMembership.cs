@@ -18,7 +18,7 @@ public static class DocumentPermissions
     [On<Document>]
     public const string Edit = "documents.edit";
 
-    /// <summary>Decide who a document is shared with: the key this host's commands that change the shares require.</summary>
+    /// <summary>Decide who a document is shared with: the permission this host's commands that change the shares require.</summary>
     [On<Document>(LocksMembers = true, LocksOwner = true)]
     public const string Share = "documents.share";
 }
@@ -37,7 +37,7 @@ public static class DocumentRefusals
 /// The rules of access through a document's members, with little said: its roles, and that no system work in a scope
 /// holds anything on a document, <c>systemScopes: []</c>, where the module's own would otherwise. Its name, its codes
 /// and its permissions come through its type. Who may share a document is not said here: the requests that do say
-/// which key they require.
+/// which permission they require.
 /// </summary>
 public static class DocumentMembership
 {

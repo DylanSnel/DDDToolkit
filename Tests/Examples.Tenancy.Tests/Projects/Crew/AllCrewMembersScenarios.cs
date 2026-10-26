@@ -83,7 +83,7 @@ public sealed class AllCrewMembersScenarios(SampleHosts sample) : IClassFixture<
         using var juno = await sample.ClientAsync("juno", Harbor.Slug);
         using var rhea = await sample.ClientAsync("rhea", Harbor.Slug);
 
-        // Rhea is on no crew of Pier 7: she holds the key to see it at North, above its unit.
+        // Rhea is on no crew of Pier 7: she holds the permission to see it at North, above its unit.
         var asRhea = await rhea.CrewAsync(PierSeven);
 
         asRhea.EnumerateArray().Select(member => member.GetProperty("seatId").GetGuid())

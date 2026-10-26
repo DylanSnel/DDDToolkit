@@ -40,7 +40,7 @@ namespace DDDToolkit.Access;
 /// <para>
 /// And the check the request passed can be asked again, now, as the same caller (<see cref="StillPassesAsync"/>).
 /// The toolkit does that when the database refuses a save the application allowed. Under row level security that
-/// happens in two ways. The caller's rights changed between the check and the save, a key taken from a role, a
+/// happens in two ways. The caller's rights changed between the check and the save, a permission taken from a role, a
 /// grant revoked, so the policies refuse what the check let through a moment earlier, and the check and the
 /// policies agreed, each when it was asked. Or the check and the policies hold a rule differently, so the policies
 /// refuse what the check still allows: something a developer should look at. Asking the check again tells the two

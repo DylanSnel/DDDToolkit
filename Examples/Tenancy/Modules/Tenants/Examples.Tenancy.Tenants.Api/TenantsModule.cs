@@ -114,11 +114,11 @@ public static class TenantsModule
     /// Maps every other Tenancy route, feature by feature, each for a seat in the tenant the request selected:
     /// <c>GET /me</c>; <c>/tenancy/units</c> to list, add, move and archive units, and <c>POST /tenancy/shape</c>;
     /// <c>/tenancy/seats</c> to list seats, place and withdraw them, grant and revoke roles, and suspend,
-    /// reactivate or deactivate them; <c>/tenancy/roles</c> to list, create, re-key and archive roles;
+    /// reactivate or deactivate them; <c>/tenancy/roles</c> to list, create and archive roles and set their permissions;
     /// <c>/tenancy/invitations</c> to invite a person by address, list the open
     /// invitations and revoke one; <c>POST /tenancy/directory/seats</c>, <c>/units</c> and <c>/roles</c>, which
-    /// answer names by id; <c>GET /tenancy/catalogue</c>; <c>GET /access/units?key=</c>, where the caller
-    /// holds a key; and <c>GET /tenancy/history</c>, who changed whose access. The module never names the host's
+    /// answer names by id; <c>GET /tenancy/catalogue</c>; <c>GET /access/units?permission=</c>, where the caller
+    /// holds a permission; and <c>GET /tenancy/history</c>, who changed whose access. The module never names the host's
     /// filters: it maps into the group it is given.
     /// </summary>
     /// <param name="seated">The group for callers with a seat. What it requires is the host's to decide.</param>

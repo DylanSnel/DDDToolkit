@@ -8,8 +8,8 @@ namespace Examples.Tenancy.Projects.Application.Overview.Queries;
 /// The projects the caller may see, by number, a page at a time: each with how the caller sees it.
 /// </summary>
 /// <remarks>
-/// Nobody is refused for seeing nothing: the list holds what the caller reaches with <see cref="RequiredKey"/>,
-/// through the organization or by being on a crew, and is empty for a caller who reaches none. So the key is not a
+/// Nobody is refused for seeing nothing: the list holds what the caller reaches with <see cref="RequiredPermission"/>,
+/// through the organization or by being on a crew, and is empty for a caller who reaches none. So the permission is not a
 /// check made before the handler but the filter of the handler's own statement, and the handler reads the same
 /// constant the query declares. Every filter narrows that list and none widens it: a unit the caller holds nothing
 /// at lists the projects below it that the caller reaches some other way, and no others.
@@ -29,15 +29,15 @@ namespace Examples.Tenancy.Projects.Application.Overview.Queries;
 /// have a case is the database's to say, and Postgres folds every letter: a capital outside A to Z in a name,
 /// as in "Écluse", is found in either case.
 /// </param>
-[SeenWith<ProjectId>(RequiredKey)]
+[SeenWith<ProjectId>(RequiredPermission)]
 public sealed record VisibleProjects(
     PagingArguments Paging = default,
     ProjectState? State = null,
     OrganizationUnitId? Unit = null,
     string? Text = null) : IQuery<Page<ProjectOverview>>, IProjectsRequest
 {
-    /// <summary>The key that decides which projects the caller is shown.</summary>
-    public const string RequiredKey = ProjectKeys.View;
+    /// <summary>The permission that decides which projects the caller is shown.</summary>
+    public const string RequiredPermission = ProjectPermissionNames.View;
 
     /// <summary>How many projects a page holds when the caller does not say.</summary>
     public const int DefaultPage = 50;
@@ -74,7 +74,7 @@ public sealed class VisibleProjectsHandler(IProjectReads reads, ProjectAccess ac
 
         // The reach is a set not yet read, and so is the part of the tree under a unit; the reading puts them into
         // the statement that reads the projects.
-        var reach = access.ReachFor(VisibleProjects.RequiredKey);
+        var reach = access.ReachFor(VisibleProjects.RequiredPermission);
         var filter = new ProjectListFilter(
             query.State,
             query.Unit is { } unit ? access.Questions(reading).UnitsUnder(unit) : null,

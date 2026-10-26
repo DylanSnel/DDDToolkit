@@ -61,11 +61,11 @@ public sealed class AreaManagerScenarios(SampleHosts sample) : IClassFixture<Sam
     {
         using var rhea = await sample.ClientAsync("rhea", Harbor.Slug);
 
-        var units = await rhea.GetFromJsonAsync<JsonElement>($"/access/units?key={ProjectKeys.View}", Cancellation);
-        var onPier = await rhea.GetFromJsonAsync<JsonElement>($"/access/projects/{Harbor.ProjectNamed("Pier 7").Id.Value}?key={ProjectKeys.Close}", Cancellation);
-        using var onBridge = await rhea.GetAsync($"/access/projects/{Harbor.ProjectNamed("Bay bridge").Id.Value}?key={ProjectKeys.View}", Cancellation);
+        var units = await rhea.GetFromJsonAsync<JsonElement>($"/access/units?permission={ProjectPermissionNames.View}", Cancellation);
+        var onPier = await rhea.GetFromJsonAsync<JsonElement>($"/access/projects/{Harbor.ProjectNamed("Pier 7").Id.Value}?permission={ProjectPermissionNames.Close}", Cancellation);
+        using var onBridge = await rhea.GetAsync($"/access/projects/{Harbor.ProjectNamed("Bay bridge").Id.Value}?permission={ProjectPermissionNames.View}", Cancellation);
 
-        // The answer is ids: North, where she holds the key, and the two units below it.
+        // The answer is ids: North, where she holds the permission, and the two units below it.
         units.GetProperty("unitsWhereIHold").EnumerateArray().Select(unit => unit.GetGuid())
             .Should().BeEquivalentTo([Harbor.UnitNamed("North").Value, Harbor.UnitNamed("North Coast").Value, Harbor.UnitNamed("North Inland").Value]);
         units.GetProperty("atTenant").GetBoolean().Should().BeFalse();

@@ -30,7 +30,7 @@ public sealed partial class PlotGardener;
 /// <summary>
 /// A plot in a garden, worked by gardeners: the host's kind of resource whose roles are kept. Its members are
 /// plain users, and what they hold on it comes from roles that are rows of <see cref="PlotRole"/>, which each
-/// garden makes, renames, gives keys and archives for itself.
+/// garden makes, renames, gives permissions and archives for itself.
 /// </summary>
 [AggregateRoot<PlotId>]
 public sealed partial class Plot

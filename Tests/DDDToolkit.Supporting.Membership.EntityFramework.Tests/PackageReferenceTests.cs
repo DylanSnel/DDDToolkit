@@ -68,10 +68,10 @@ public sealed class PackageReferenceTests
         // that asks for the expert hold.
         typeof(MembershipModel).Assembly.GetExportedTypes().Select(type => type.Name).Should().BeEquivalentTo(
             "IPlacesReached`2",
-            "IRolesWithKey`2",
+            "IRolesWithPermission`2",
             "MemberFound`1",
             "MemberHoldDbContextOptionsExtensions",
-            "MemberKeyOn`1",
+            "MemberPermissionOn`1",
             "MemberMapping",
             "MemberQueryableExtensions",
             "MemberTableNames",

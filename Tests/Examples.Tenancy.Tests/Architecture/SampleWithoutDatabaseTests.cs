@@ -91,7 +91,7 @@ public sealed class SampleWithoutDatabaseTests
             "tenancy.system-in-role-confined",
             "tenancy.system-reads-across-tenants",
             "tenancy.policies-in-place",
-            "tenancy.unknown-stored-keys",
+            "tenancy.unknown-stored-permissions",
             "membership.functions-in-place");
 
         // And no hosted service of the sample's own asks the database at start-up: the ones that ask it at all are

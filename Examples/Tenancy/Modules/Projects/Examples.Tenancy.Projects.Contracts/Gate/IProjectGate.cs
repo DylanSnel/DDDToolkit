@@ -8,28 +8,28 @@ namespace Examples.Tenancy.Projects.Contracts.Gate;
 /// <remarks>
 /// A module that works on projects, as Inspections records inspections on them, asks here rather than reading
 /// Projects' tables or repeating its rules. Projects answers from both of its ways in, the crew and the
-/// organization, so the asking module never learns which one it was. Only the keys that act on a project come
+/// organization, so the asking module never learns which one it was. Only the permissions that act on a project come
 /// through a crew: opening a project, naming its owner and managing the organization never do, whoever asks.
 /// </remarks>
 public interface IProjectGate
 {
-    /// <summary>What the caller may do with <paramref name="project"/> as far as <paramref name="key"/> goes.</summary>
+    /// <summary>What the caller may do with <paramref name="project"/> as far as <paramref name="permission"/> goes.</summary>
     /// <param name="project">The project.</param>
-    /// <param name="key">A key of the catalogue, of any module: Projects' own, or the asking module's.</param>
+    /// <param name="permission">A permission of the catalogue, of any module: Projects' own, or the asking module's.</param>
     /// <param name="cancellationToken">Cancels the queries.</param>
-    /// <exception cref="ArgumentException">The catalogue does not know <paramref name="key"/>: a typo in code.</exception>
-    Task<ProjectAnswer> AskAsync(ProjectId project, string key, CancellationToken cancellationToken);
+    /// <exception cref="ArgumentException">The catalogue does not know <paramref name="permission"/>: a typo in code.</exception>
+    Task<ProjectAnswer> AskAsync(ProjectId project, string permission, CancellationToken cancellationToken);
 
     /// <summary>The most projects one question is about.</summary>
     const int MostProjects = 200;
 
     /// <summary>
-    /// What the caller may do with each of <paramref name="projects"/> as far as <paramref name="key"/> goes,
+    /// What the caller may do with each of <paramref name="projects"/> as far as <paramref name="permission"/> goes,
     /// asked once for all of them: for a module that shows something of many projects at a time, which would
     /// otherwise ask once per project.
     /// </summary>
     /// <param name="projects">The projects, at most <see cref="MostProjects"/> different ones.</param>
-    /// <param name="key">A key of the catalogue, of any module: Projects' own, or the asking module's.</param>
+    /// <param name="permission">A permission of the catalogue, of any module: Projects' own, or the asking module's.</param>
     /// <param name="cancellationToken">Cancels the query.</param>
     /// <returns>
     /// An answer for every project asked about that the caller may see. One it may not see is not in it, whether
@@ -37,8 +37,8 @@ public interface IProjectGate
     /// over, and learns nothing about it.
     /// </returns>
     /// <exception cref="ArgumentException">
-    /// The catalogue does not know <paramref name="key"/>, or there are more than <see cref="MostProjects"/>
+    /// The catalogue does not know <paramref name="permission"/>, or there are more than <see cref="MostProjects"/>
     /// projects: mistakes in the asking module's code.
     /// </exception>
-    Task<IReadOnlyDictionary<ProjectId, ProjectAnswer>> AskAsync(IReadOnlyCollection<ProjectId> projects, string key, CancellationToken cancellationToken);
+    Task<IReadOnlyDictionary<ProjectId, ProjectAnswer>> AskAsync(IReadOnlyCollection<ProjectId> projects, string permission, CancellationToken cancellationToken);
 }

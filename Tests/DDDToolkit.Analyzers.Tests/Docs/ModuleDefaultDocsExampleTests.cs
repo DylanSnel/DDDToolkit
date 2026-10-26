@@ -29,7 +29,7 @@ public class ModuleDefaultDocsExampleTests
         """
         [EntityId<Guid>] public readonly partial record struct BoardId;
 
-        public static class BoardKeys
+        public static class BoardPermissions
         {
             public const string Archive = "boards.archive";
         }

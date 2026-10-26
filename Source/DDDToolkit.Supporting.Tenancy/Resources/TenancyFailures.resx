@@ -25,7 +25,7 @@
     <value>This tenant is not in use right now.</value>
   </data>
   <data name="tenancy.not-permitted" xml:space="preserve">
-    <value>You lack the permission {Key}.</value>
+    <value>You lack the permission {Permission}.</value>
   </data>
   <data name="tenancy.grant-exceeds-own" xml:space="preserve">
     <value>That reaches past what you hold yourself, there or for that long: {Missing}.</value>
@@ -136,13 +136,13 @@
     <value>Give a reason to suspend or close a tenant.</value>
   </data>
   <data name="tenancy.unknown-permission" xml:space="preserve">
-    <value>These keys are unknown or retired: {Keys}.</value>
+    <value>These permissions are unknown or retired: {Permissions}.</value>
   </data>
   <data name="tenancy.identity-required" xml:space="preserve">
     <value>A seat needs the verified identity of the person it belongs to.</value>
   </data>
-  <data name="tenancy.keys-not-normalized" xml:space="preserve">
-    <value>A role's keys must be expanded, without duplicates, in ordinal order.</value>
+  <data name="tenancy.permissions-not-normalized" xml:space="preserve">
+    <value>A role's permissions must be expanded, without duplicates, in ordinal order.</value>
   </data>
   <data name="tenancy.too-many-ids" xml:space="preserve">
     <value>Ask for at most {Max} ids at a time.</value>

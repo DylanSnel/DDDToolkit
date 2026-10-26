@@ -90,7 +90,7 @@ public class ResourceAccessContractGenerationTests
 
         result.ShouldNotHaveDiagnostic("DDD00038").ShouldNotHaveDiagnostic("DDD00039").ShouldCompile();
         result.ShouldContain("OrdersWhereIHold.ResourceAccessContract", "public const string Name = \"@Shop.OrderId/held_on\";");
-        result.ShouldContain("OrdersWhereIHold.ResourceAccessContract", "public static global::DDDToolkit.Abstractions.Access.AccessSet<global::Shop.OrderId> Ids(string key) => throw");
+        result.ShouldContain("OrdersWhereIHold.ResourceAccessContract", "public static global::DDDToolkit.Abstractions.Access.AccessSet<global::Shop.OrderId> Ids(string permission) => throw");
         RuleSql(result).Should().Be(
             "(({col:Id} = ANY (ARRAY(SELECT {fn:@Shop.OrderId/held_on}('orders.edit')))) OR ({col:Id} = ANY (ARRAY(SELECT {fn:@Shop.OrderId/held_on}('orders.close')))))");
 
@@ -212,7 +212,7 @@ public class ResourceAccessContractGenerationTests
     }
 
     [Theory]
-    [InlineData("ResourceAccessSet.Seen", "public static partial AccessSet<OrderId> Ids(string key);", "Ids")]
+    [InlineData("ResourceAccessSet.Seen", "public static partial AccessSet<OrderId> Ids(string permission);", "Ids")]
     [InlineData("ResourceAccessSet.HeldOn", "public static partial AccessSet<OrderId> Ids();", "Ids")]
     [InlineData("ResourceAccessSet.HeldOn", "public static partial AccessSet<OrderId> Ids(int level);", "Ids")]
     [InlineData("ResourceAccessSet.Seen", "public static partial AccessSet<Guid> Ids();", "Ids")]
@@ -270,7 +270,7 @@ public class ResourceAccessContractGenerationTests
             [ResourceAccessContract<BoardId>(ResourceAccessSet.HeldOn)]
             public static partial class BoardsWhereIHold
             {
-                public static partial AccessSet<BoardId> Ids(string key);
+                public static partial AccessSet<BoardId> Ids(string permission);
             }
 
             [RowAccess<Board>(RowOperations.Read)]
@@ -317,7 +317,7 @@ public class ResourceAccessContractGenerationTests
                 [ResourceAccessContract<OrganizationUnitId>(ResourceAccessSet.HeldOn)]
                 public static partial class UnitsWhereIHold
                 {
-                    public static partial AccessSet<OrganizationUnitId> Ids(string key);
+                    public static partial AccessSet<OrganizationUnitId> Ids(string permission);
                 }
                 """)
             .WithAssemblyName("Shop.Contracts")
@@ -328,7 +328,7 @@ public class ResourceAccessContractGenerationTests
         result.ShouldNotHaveDiagnostic("DDD00038").ShouldCompile();
         result.ShouldContain(
             "UnitsWhereIHold.ResourceAccessContract",
-            "public static partial global::DDDToolkit.Abstractions.Access.AccessSet<global::Shop.Contracts.OrganizationUnitId> Ids(string key) => throw");
+            "public static partial global::DDDToolkit.Abstractions.Access.AccessSet<global::Shop.Contracts.OrganizationUnitId> Ids(string permission) => throw");
 
         var emitted = result.Emit();
         ((string)emitted.Type("Shop.Contracts.UnitsWhereIHold").GetField("Name")!.GetRawConstantValue()!).Should().Be(

@@ -15,7 +15,7 @@ public sealed class MemberQuestionsTests
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
     [Fact]
-    public async Task A_key_that_is_held_answers_the_resource_its_version_how_it_is_held_and_until_when()
+    public async Task A_permission_that_is_held_answers_the_resource_its_version_how_it_is_held_and_until_when()
     {
         var nextWeek = new DateTimeOffset(2026, 10, 8, 9, 0, 0, TimeSpan.Zero);
         var access = new StubAccess<DocumentId>(DocumentMembership.Rules) { Until = nextWeek }
@@ -43,12 +43,12 @@ public sealed class MemberQuestionsTests
         (unseen.Code, unseen.Kind, unseen.Message).Should().Be((missing.Code, missing.Kind, missing.Message));
         unseen.Code.Should().Be("documents.not-found");
         unseen.Kind.Should().Be(RefusalKind.NotFound);
-        unseen.Arguments.Should().BeEmpty("neither the id nor the key is said back");
+        unseen.Arguments.Should().BeEmpty("neither the id nor the permission is said back");
         missing.Arguments.Should().BeEmpty();
     }
 
     [Fact]
-    public async Task A_resource_the_caller_sees_without_holding_the_key_is_not_permitted_and_names_the_key()
+    public async Task A_resource_the_caller_sees_without_holding_the_permission_is_not_permitted_and_names_the_permission()
     {
         var access = new StubAccess<DocumentId>(DocumentMembership.Rules).Sees(Minutes, version: 4, (DocumentPermissions.View, MemberVia.Members));
 
@@ -56,8 +56,8 @@ public sealed class MemberQuestionsTests
 
         refusal.Code.Should().Be("documents.not-permitted");
         refusal.Kind.Should().Be(RefusalKind.NotPermitted);
-        refusal.Arguments.Should().Contain("Key", DocumentPermissions.Share).And.HaveCount(1);
-        refusal.Message.Should().Be("Doing this needs the key documents.share.");
+        refusal.Arguments.Should().Contain("Permission", DocumentPermissions.Share).And.HaveCount(1);
+        refusal.Message.Should().Be("Doing this needs the permission documents.share.");
     }
 
     [Fact]
@@ -71,7 +71,7 @@ public sealed class MemberQuestionsTests
         refused.Which.Should().BeSameAs(nobody, "the caller's own refusal comes first, as the caller was given it");
         access.Asked.Should().Equal(["caller"], "no statement is made for nobody");
 
-        // The question that answers instead of refusing for want of a key starts the same way: nobody is not
+        // The question that answers instead of refusing for want of a permission starts the same way: nobody is not
         // told a resource was not found, as if it had been looked for.
         access.Asked.Clear();
         (await FluentActions.Awaiting(() => access.ViaAsync(Minutes, DocumentPermissions.View, Cancellation)).Should().ThrowAsync<RefusalException>())
@@ -82,13 +82,13 @@ public sealed class MemberQuestionsTests
     }
 
     [Fact]
-    public async Task How_a_key_is_held_is_answered_for_a_resource_the_caller_sees_and_refused_only_for_one_it_does_not()
+    public async Task How_a_permission_is_held_is_answered_for_a_resource_the_caller_sees_and_refused_only_for_one_it_does_not()
     {
         var access = new StubAccess<DocumentId>(DocumentMembership.Rules).Sees(Minutes, version: 4, (DocumentPermissions.View, MemberVia.Members), (DocumentPermissions.Edit, MemberVia.System));
 
         (await access.ViaAsync(Minutes, DocumentPermissions.View, Cancellation)).Should().Be(MemberVia.Members);
         (await access.ViaAsync(Minutes, DocumentPermissions.Edit, Cancellation)).Should().Be(MemberVia.System);
-        (await access.ViaAsync(Minutes, DocumentPermissions.Share, Cancellation)).Should().BeNull("not holding the key is an answer, not a refusal");
+        (await access.ViaAsync(Minutes, DocumentPermissions.Share, Cancellation)).Should().BeNull("not holding the permission is an answer, not a refusal");
 
         var refusal = await Refused.WithCodeAsync(DocumentRefusals.Membership, MembershipRefusals.NotFound, () => access.ViaAsync(Hidden, DocumentPermissions.View, Cancellation));
         refusal.Arguments.Should().BeEmpty();
@@ -113,7 +113,7 @@ public sealed class MemberQuestionsTests
     }
 
     [Fact]
-    public async Task A_question_is_asked_with_a_key()
+    public async Task A_question_is_asked_with_a_permission()
     {
         var access = new StubAccess<DocumentId>(DocumentMembership.Rules);
 
@@ -129,7 +129,7 @@ public sealed class MemberQuestionsTests
         var moment = new DateTimeOffset(2026, 10, 1, 9, 0, 0, TimeSpan.Zero);
         var reach = new StubAccess<DocumentId>(DocumentMembership.Rules) { Now = moment }.Reach(DocumentPermissions.Edit);
 
-        (reach.Key, reach.Now, reach.Everything).Should().Be((DocumentPermissions.Edit, moment, false));
+        (reach.Permission, reach.Now, reach.Everything).Should().Be((DocumentPermissions.Edit, moment, false));
         reach.Via(asMember: true).Should().Be(MemberVia.Members);
         reach.Via(asMember: true, fromAbove: true).Should().Be(MemberVia.Members, "the members come first when both reach the resource");
         reach.Via(asMember: false, fromAbove: true).Should().Be(MemberVia.Above);
@@ -143,36 +143,36 @@ public sealed class MemberQuestionsTests
     }
 
     [Fact]
-    public void The_reach_of_what_is_seen_has_no_key_under_rules_that_name_none_for_seeing()
+    public void The_reach_of_what_is_seen_has_no_permission_under_rules_that_name_none_for_seeing()
     {
-        // A folder is seen by its staff, and its rules give being on it no key: there is a reach of what is seen, for no key.
+        // A folder is seen by its staff, and its rules give being on it no permission: there is a reach of what is seen, for no permission.
         var moment = new DateTimeOffset(2026, 10, 1, 9, 0, 0, TimeSpan.Zero);
-        FolderMembership.Rules.EveryMemberKey.Should().BeNull();
+        FolderMembership.Rules.EveryMemberPermission.Should().BeNull();
 
-        var see = new StubAccess<FolderId>(FolderMembership.Rules) { Now = moment }.KeyReach([FolderPermissions.File]).See;
+        var see = new StubAccess<FolderId>(FolderMembership.Rules) { Now = moment }.PermissionReach([FolderPermissions.File]).See;
 
-        (see.Key, see.Now, see.Everything).Should().Be((null, moment, false));
+        (see.Permission, see.Now, see.Everything).Should().Be((null, moment, false));
         see.Via(asMember: true).Should().Be(MemberVia.Members);
         see.Via(asMember: false).Should().BeNull();
-        new StubAccess<FolderId>(FolderMembership.Rules) { System = true }.KeyReach([FolderPermissions.File]).See.Via(asMember: false).Should().Be(MemberVia.System);
+        new StubAccess<FolderId>(FolderMembership.Rules) { System = true }.PermissionReach([FolderPermissions.File]).See.Via(asMember: false).Should().Be(MemberVia.System);
 
-        // Every other reach is for a key, and a blank one is none.
+        // Every other reach is for a permission, and a blank one is none.
         FluentActions.Invoking(() => new StubAccess<FolderId>(FolderMembership.Rules).Reach(" ")).Should().Throw<ArgumentException>();
     }
 
     [Fact]
-    public async Task The_keys_held_on_several_resources_are_answered_for_those_the_caller_sees()
+    public async Task The_permissions_held_on_several_resources_are_answered_for_those_the_caller_sees()
     {
         var other = DocumentId.CreateSequential();
         var access = new StubAccess<DocumentId>(DocumentMembership.Rules)
             .Sees(Minutes, version: 4, (DocumentPermissions.View, MemberVia.Members), (DocumentPermissions.Edit, MemberVia.Members))
             .Sees(other, version: 1, (DocumentPermissions.View, MemberVia.Members));
 
-        var reach = access.KeyReach([DocumentPermissions.Edit, DocumentPermissions.Share, DocumentPermissions.Edit]);
-        reach.Keys.Should().Equal(DocumentPermissions.Edit, DocumentPermissions.Share);
-        reach.See.Key.Should().Be(DocumentPermissions.View, "which resources are answered about is decided by seeing them");
+        var reach = access.PermissionReach([DocumentPermissions.Edit, DocumentPermissions.Share, DocumentPermissions.Edit]);
+        reach.Permissions.Should().Equal(DocumentPermissions.Edit, DocumentPermissions.Share);
+        reach.See.Permission.Should().Be(DocumentPermissions.View, "which resources are answered about is decided by seeing them");
 
-        var held = await access.KeysOnAsync([Minutes, other, Hidden], [DocumentPermissions.Edit, DocumentPermissions.Share], Cancellation);
+        var held = await access.PermissionsOnAsync([Minutes, other, Hidden], [DocumentPermissions.Edit, DocumentPermissions.Share], Cancellation);
         held.Should().ContainSingle().Which.Should().Match<KeyValuePair<DocumentId, IReadOnlySet<string>>>(pair => pair.Key == Minutes && pair.Value.SetEquals(new[] { DocumentPermissions.Edit }));
         MemberQuestions.MostResources.Should().Be(200);
     }

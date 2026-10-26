@@ -9,19 +9,19 @@ using Microsoft.CodeAnalysis.Diagnostics;
 namespace DDDToolkit.Supporting.Membership.Analyzers;
 
 /// <summary>
-/// DDD00096: <c>[OrOwn]</c> beside a key the owner of a resource with members holds already.
+/// DDD00096: <c>[OrOwn]</c> beside a permission the owner of a resource with members holds already.
 /// <code>
-/// [RequiresKey(BoardPermissions.Edit)]                       // declared [On&lt;Board&gt;], Owner = true by default
+/// [RequiresPermission(BoardPermissions.Edit)]                       // declared [On&lt;Board&gt;], Owner = true by default
 /// public sealed record RenameBoard([OnResource, OrOwn] BoardId Board, string Name) : IBoardsRequest;
 /// </code>
-/// The key is asked on the board, and the board's owner holds every permission declared on it with <c>Owner = true</c>
-/// by owning it, so the owner is let through by the key already: <c>[OrOwn]</c> says nothing more. It stays meant for
-/// an aggregate with an <c>[Owner]</c> and no members, and for a key the owner does not hold.
+/// The permission is asked on the board, and the board's owner holds every permission declared on it with <c>Owner = true</c>
+/// by owning it, so the owner is let through by the permission already: <c>[OrOwn]</c> says nothing more. It stays meant for
+/// an aggregate with an <c>[Owner]</c> and no members, and for a permission the owner does not hold.
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class OwnAlternativeAnalyzer : DiagnosticAnalyzer
 {
-    private const string RequiresKey = "DDDToolkit.Access.RequiresKeyAttribute";
+    private const string RequiresPermission = "DDDToolkit.Access.RequiresPermissionAttribute";
     private const string OrOwn = "DDDToolkit.Access.OrOwnAttribute";
     private const string OnResource = "DDDToolkit.Supporting.Membership.Access.OnResourceAttribute";
     private const string Permissions = "DDDToolkit.Access.PermissionsAttribute";
@@ -44,9 +44,9 @@ public sealed class OwnAlternativeAnalyzer : DiagnosticAnalyzer
                 return;
             }
 
-            // Which keys the owner of which resource holds, by the resource's id: read once, the project's own classes
+            // Which permissions the owner of which resource holds, by the resource's id: read once, the project's own classes
             // and those of the projects it references.
-            var owners = new Lazy<Dictionary<string, List<(ITypeSymbol Id, string Resource)>>>(() => OwnerKeys(start.Compilation, marker));
+            var owners = new Lazy<Dictionary<string, List<(ITypeSymbol Id, string Resource)>>>(() => OwnerPermissions(start.Compilation, marker));
             start.RegisterSymbolAction(symbol => Check(symbol, owners.Value), SymbolKind.NamedType);
         });
     }
@@ -54,11 +54,11 @@ public sealed class OwnAlternativeAnalyzer : DiagnosticAnalyzer
     private static void Check(SymbolAnalysisContext context, Dictionary<string, List<(ITypeSymbol Id, string Resource)>> owners)
     {
         var request = (INamedTypeSymbol)context.Symbol;
-        var key = request.GetAttributes()
-            .Where(static each => each.AttributeClass?.ToDisplayString() == RequiresKey && each.ConstructorArguments.Length == 1)
+        var permission = request.GetAttributes()
+            .Where(static each => each.AttributeClass?.ToDisplayString() == RequiresPermission && each.ConstructorArguments.Length == 1)
             .Select(static each => each.ConstructorArguments[0].Value as string)
             .FirstOrDefault();
-        if (key is null || !owners.TryGetValue(key, out var heldBy))
+        if (permission is null || !owners.TryGetValue(permission, out var heldBy))
         {
             return;
         }
@@ -81,14 +81,14 @@ public sealed class OwnAlternativeAnalyzer : DiagnosticAnalyzer
             if (heldBy.FirstOrDefault(each => SymbolEqualityComparer.Default.Equals(each.Id, type)) is { Resource: { } resource })
             {
                 var location = orOwn.ApplicationSyntaxReference?.GetSyntax(context.CancellationToken).GetLocation() ?? request.Locations.FirstOrDefault();
-                context.ReportDiagnostic(Diagnostic.Create(DiagnosticDescriptors.OwnAlternativeRedundant, location, name, resource, key));
+                context.ReportDiagnostic(Diagnostic.Create(DiagnosticDescriptors.OwnAlternativeRedundant, location, name, resource, permission));
                 return;
             }
         }
     }
 
-    /// <summary>For each key declared on a resource with <c>Owner</c>, the ids of the resources whose owner holds it.</summary>
-    private static Dictionary<string, List<(ITypeSymbol Id, string Resource)>> OwnerKeys(Compilation compilation, INamedTypeSymbol marker)
+    /// <summary>For each permission declared on a resource with <c>Owner</c>, the ids of the resources whose owner holds it.</summary>
+    private static Dictionary<string, List<(ITypeSymbol Id, string Resource)>> OwnerPermissions(Compilation compilation, INamedTypeSymbol marker)
     {
         var found = new Dictionary<string, List<(ITypeSymbol, string)>>(StringComparer.Ordinal);
         var assemblies = new List<IAssemblySymbol> { compilation.Assembly };
@@ -105,7 +105,7 @@ public sealed class OwnAlternativeAnalyzer : DiagnosticAnalyzer
 
                 foreach (var field in type.GetMembers().OfType<IFieldSymbol>())
                 {
-                    if (!field.IsConst || field.ConstantValue is not string key)
+                    if (!field.IsConst || field.ConstantValue is not string permission)
                     {
                         continue;
                     }
@@ -118,9 +118,9 @@ public sealed class OwnAlternativeAnalyzer : DiagnosticAnalyzer
                             && level.TypeArguments[0] is INamedTypeSymbol resource
                             && OwnerDeclarations.AggregateIdOf(resource) is { } id)
                         {
-                            if (!found.TryGetValue(key, out var list))
+                            if (!found.TryGetValue(permission, out var list))
                             {
-                                found[key] = list = [];
+                                found[permission] = list = [];
                             }
 
                             list.Add((id, resource.Name));

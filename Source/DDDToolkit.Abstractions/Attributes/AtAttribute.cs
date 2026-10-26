@@ -13,9 +13,9 @@ namespace DDDToolkit.Abstractions.Attributes;
 ///     [At] public OrganizationUnitId UnitId { get; private set; }
 /// }
 /// </code>
-/// Whether a key held there reaches the aggregate is the policy's to say: the rules of a resource with members say it
+/// Whether a permission held there reaches the aggregate is the policy's to say: the rules of a resource with members say it
 /// with <c>reachFromAbove</c>, and read where it hangs from this property. The name pairs with the levels of a
-/// permission, <c>[AtUnit]</c> and <c>[AtTenant]</c>: a key held at a unit reaches what hangs at it.
+/// permission, <c>[AtUnit]</c> and <c>[AtTenant]</c>: a permission held at a unit reaches what hangs at it.
 /// </summary>
 /// <remarks>
 /// One per aggregate root, on the root itself, of the id of the place: never nullable, since an aggregate that hangs

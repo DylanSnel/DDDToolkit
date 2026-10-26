@@ -11,13 +11,13 @@ namespace Examples.Tenancy.Host.DevLogin;
 /// </summary>
 /// <remarks>
 /// They cover the tenant boundary (another tenant's project, another tenant's slug), the reach of a role (a
-/// project outside the caller's region, one reached only through an expired grant), keys the caller does not hold
+/// project outside the caller's region, one reached only through an expired grant), permissions the caller does not hold
 /// on a project, an access admin who runs access and not the work, naming an owner from a crew, giving or taking
-/// away a role that manages access without its keys that do, granting outside one's region, giving oneself a role
+/// away a role that manages access without its permissions that do, granting outside one's region, giving oneself a role
 /// that manages access, the last administrator, the project owner who may neither go nor hold a project role, a
 /// role of the organization given on a crew, a project role held twice, an inspection for days outside its
-/// project's planned range, the access history read with and without the key that reads it, inviting a person
-/// without the key that adds a seat, accepting with a token nobody was given, a suspended seat, and calls without
+/// project's planned range, the access history read with and without the permission that reads it, inviting a person
+/// without the permission that adds a seat, accepting with a token nobody was given, a suspended seat, and calls without
 /// a token or without a tenant.
 /// <para>
 /// Pier 7's presets assume it is open. Closed, as anyone who may close it can do from the UI, the three that would
@@ -31,7 +31,7 @@ namespace Examples.Tenancy.Host.DevLogin;
 /// </para>
 /// <para>
 /// A seat may suspend itself, revoke its own grant or withdraw its own placement, and its own grants that apply
-/// now are its own hold of their keys, so tove's three in meadow reach the last-administrator rule, which is what
+/// now are its own hold of their permissions, so tove's three in meadow reach the last-administrator rule, which is what
 /// they show. Harbor has two administrators, ada and maud, so there either may step down, and the rule shows in
 /// meadow, which has one.
 /// </para>
@@ -116,7 +116,7 @@ public static class DevAttempts
                 403, TenancyRefusals.NotPermitted),
             WithTokenAndTenant(
                 "give-a-role-that-manages-access",
-                "Give a role that manages access without its keys (hana gives leo Area manager at North Coast)",
+                "Give a role that manages access without its permissions (hana gives leo Area manager at North Coast)",
                 DemoPeople.Hana, harbor, "POST", $"/tenancy/seats/{harbor.SeatOf(DemoPeople.Leo).Value}/grants",
                 new { unitId = harbor.UnitNamed("North Coast").Value, roleId = harbor.Roles[SampleCatalogue.AreaManager].Value },
                 403, TenancyRefusals.GrantExceedsOwn),
@@ -134,7 +134,7 @@ public static class DevAttempts
                 403, TenancyRefusals.GrantExceedsOwn),
             WithTokenAndTenant(
                 "take-away-a-role-that-manages-access",
-                "Take away a role that manages access without its keys (hana revokes rhea's Area manager at North)",
+                "Take away a role that manages access without its permissions (hana revokes rhea's Area manager at North)",
                 DemoPeople.Hana, harbor, "DELETE",
                 $"/tenancy/seats/{harbor.SeatOf(DemoPeople.Rhea).Value}/grants/{harbor.UnitNamed("North").Value}/{harbor.Roles[SampleCatalogue.AreaManager].Value}",
                 null, 403, TenancyRefusals.GrantExceedsOwn),
@@ -145,8 +145,8 @@ public static class DevAttempts
                 new { unitId = harbor.Root.Value, roleId = harbor.Roles[SampleCatalogue.AreaManager].Value },
                 403, TenancyRefusals.SelfAppointment),
             WithTokenAndTenant(
-                "appoint-yourself-holding-its-key",
-                "Give yourself a role whose keys you hold (rhea gives herself People office at North)",
+                "appoint-yourself-holding-its-permission",
+                "Give yourself a role whose permissions you hold (rhea gives herself People office at North)",
                 DemoPeople.Rhea, harbor, "POST", $"/tenancy/seats/{harbor.SeatOf(DemoPeople.Rhea).Value}/grants",
                 new { unitId = harbor.UnitNamed("North").Value, roleId = harbor.Roles[SampleCatalogue.PeopleOffice].Value },
                 403, TenancyRefusals.SelfAppointment),
@@ -175,12 +175,12 @@ public static class DevAttempts
                 DemoPeople.Leo, harbor, "POST", $"/projects/{pierSeven}/crew/{harbor.SeatOf(DemoPeople.Leo).Value}/roles",
                 new { roleId = harbor.ProjectRoles[SampleCatalogue.Surveyor].Value }, 409, ProjectRefusals.OwnerProtected),
             WithTokenAndTenant(
-                "history-with-the-key",
-                "Read the access history with the key that reads it (maud, an access admin, holds tenancy.history.view for all of harbor)",
+                "history-with-the-permission",
+                "Read the access history with the permission that reads it (maud, an access admin, holds tenancy.history.view for all of harbor)",
                 DemoPeople.Maud, harbor, "GET", "/tenancy/history?size=5", null, 200, null),
             WithTokenAndTenant(
-                "history-without-the-key",
-                "Read the access history without the key (rhea runs North, and holds no tenancy.history.view)",
+                "history-without-the-permission",
+                "Read the access history without the permission (rhea runs North, and holds no tenancy.history.view)",
                 DemoPeople.Rhea, harbor, "GET", "/tenancy/history?size=5", null, 403, TenancyRefusals.NotPermitted),
             WithTokenAndTenant(
                 "invite-without-seat-management",

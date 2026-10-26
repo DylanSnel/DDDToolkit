@@ -48,7 +48,7 @@ public static class MembershipPostgresChecks
     /// The functions come with the access files the export writes, which makes
     /// <see cref="MembershipRowAccessContribution{TMember}"/> for every resource whose rules the application marks.
     /// Rules it does not mark get no functions, and functions written from other rules, a role that gives another
-    /// key say, would have the database answer otherwise than the application's own check, and nothing else would
+    /// permission say, would have the database answer otherwise than the application's own check, and nothing else would
     /// say so. The rules a
     /// function was written from are read from its body, which says them in its first line. That line is what
     /// is compared: a body changed by hand below it is not found.
@@ -79,7 +79,7 @@ public static class MembershipPostgresChecks
     /// <param name="cancellationToken">Cancels the check.</param>
     /// <returns>
     /// What the check remarks on without refusing, one line for each resource it concerns, empty when there is
-    /// nothing: a resource whose rules name no key that changes its members, or none that changes its owner,
+    /// nothing: a resource whose rules name no permission that changes its members, or none that changes its owner,
     /// so the database leaves those rows to whoever the application's row access rules let change the
     /// resource. Each line is logged as a warning as well, where the services have a logger.
     /// </returns>
@@ -129,7 +129,7 @@ public static class MembershipPostgresChecks
             {
                 throw new InvalidOperationException(
                     "The roles of " + registration.Resource.Name + " are made in " + unguarded.Table + ", which has no row security, and " + unguarded.Roles + " may write it. "
-                    + "A role's row says what everybody who holds the role may do, so whoever changes its keys there changes that, past the application. "
+                    + "A role's row says what everybody who holds the role may do, so whoever changes its permissions there changes that, past the application. "
                     + "Give " + unguarded.RoleClass + " row access rules of its own, [RowAccess<" + unguarded.RoleClass + ">], so the access file turns row security on for its table, "
                     + "or take the privileges to write the table from those roles.");
             }
@@ -158,13 +158,13 @@ public static class MembershipPostgresChecks
     /// <summary>
     /// What is to be said, without refusing, of a resource whose rules leave its member rows or its owner
     /// column to the application's own rules about changing the resource; <see langword="null"/> for rules
-    /// that name both keys.
+    /// that name both permissions.
     /// </summary>
     private static string? Remark(MembershipRegistration registration)
     {
         var rules = registration.Rules;
         var resource = registration.Resource.Name;
-        var open = (rules.MembersLockKey, rules.OwnerLockKey) switch
+        var open = (rules.MembersLockPermission, rules.OwnerLockPermission) switch
         {
             (null, null) => "has no permission that locks its members and none that locks its owner (LocksMembers, LocksOwner), so the database leaves its member rows and its owner column",
             (null, _) => "has no permission that locks its members (LocksMembers), so the database leaves its member rows",
@@ -334,7 +334,7 @@ public static class MembershipPostgresChecks
         CancellationToken cancellationToken)
     {
         var findings = new List<string>();
-        if (rules.MembersLockKey is not null)
+        if (rules.MembersLockPermission is not null)
         {
             findings.AddRange(await UnheldAsync(
                 connection, [mapping.Members, mapping.Roles], ["a", "w", "d"], roles, MembershipSql.MemberLock, "is not held to the permission that locks the members", cancellationToken).ConfigureAwait(false));
@@ -346,7 +346,7 @@ public static class MembershipPostgresChecks
             }
         }
 
-        if (rules.OwnerLockKey is not null && roles.Length > 0)
+        if (rules.OwnerLockPermission is not null && roles.Length > 0)
         {
             var table = mapping.Resource.GetTableName()!;
             var tableSchema = mapping.Resource.GetSchema() ?? PostgresRowAccess.DefaultSchema;
@@ -425,7 +425,7 @@ public static class MembershipPostgresChecks
         var table = roleClass.GetTableName()!;
         var tableSchema = roleClass.GetSchema() ?? PostgresRowAccess.DefaultSchema;
 
-        // A privilege on the table, or on any column of it: either writes a role's keys.
+        // A privilege on the table, or on any column of it: either writes a role's permissions.
         var able = await ListAsync(
             connection,
             """

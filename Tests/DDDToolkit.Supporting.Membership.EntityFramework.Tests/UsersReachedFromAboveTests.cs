@@ -6,7 +6,7 @@ namespace DDDToolkit.Supporting.Membership.EntityFramework.Tests;
 /// Reach from above with nothing else of an organization: documents whose members are plain users, known by
 /// the id of their token, with the roles their rules declare, as a document always had them. Of the three
 /// things rules say, only one is said another way: a document sits at its owner, and a user's deputy, who
-/// holds a key over everything that user owns, holds it on the document without it being shared with them.
+/// holds a permission over everything that user owns, holds it on the document without it being shared with them.
 /// So where a resource sits is whatever its row keeps, and reach from above needs neither members the
 /// application resolves nor roles kept elsewhere.
 /// </summary>
@@ -24,16 +24,16 @@ public sealed class UsersReachedFromAboveTests
         await using var desk = await Desk.SeededAsync();
 
         // Cy is no member of anything. Ada made him her deputy for seeing and changing what she owns: he holds
-        // both on her minutes, from above, with no end known here, and not the key nobody gave him.
+        // both on her minutes, from above, with no end known here, and not the permission nobody gave him.
         var view = await desk.HoldAsync(desk.Cy, desk.Minutes, DocumentPermissions.View);
         (view!.Via, view.Until).Should().Be((MemberVia.Above, null));
         (await desk.HoldAsync(desk.Cy, desk.Minutes, DocumentPermissions.Edit))!.Via.Should().Be(MemberVia.Above);
-        (await desk.HoldAsync(desk.Cy, desk.Minutes, DocumentPermissions.Share))!.Via.Should().BeNull("he sees the minutes, and nobody gave him that key");
+        (await desk.HoldAsync(desk.Cy, desk.Minutes, DocumentPermissions.Share))!.Via.Should().BeNull("he sees the minutes, and nobody gave him that permission");
 
         // What Ben owns is not Ada's: it sits at another owner, and is not there for her deputy.
         (await desk.HoldAsync(desk.Cy, desk.Notes, DocumentPermissions.View)).Should().BeNull();
 
-        // The members hold what they always held: the owner every key by owning, a member what its role gives.
+        // The members hold what they always held: the owner every permission by owning, a member what its role gives.
         var share = await desk.HoldAsync(desk.Ada, desk.Minutes, DocumentPermissions.Share);
         (share!.Via, share.Until).Should().Be((MemberVia.Members, null));
         var read = await desk.HoldAsync(desk.Ben, desk.Minutes, DocumentPermissions.View);
@@ -45,43 +45,43 @@ public sealed class UsersReachedFromAboveTests
     }
 
     [Fact]
-    public async Task A_deputy_that_does_not_hold_the_key_that_sees_holds_a_key_only_on_what_is_shared_with_it_and_only_that_long()
+    public async Task A_deputy_that_does_not_hold_the_permission_that_sees_holds_a_permission_only_on_what_is_shared_with_it_and_only_that_long()
     {
         await using var desk = await Desk.SeededAsync();
 
-        // Dee changes what Ada owns, and holds the key that sees over nobody. The minutes are shared with her
+        // Dee changes what Ada owns, and holds the permission that sees over nobody. The minutes are shared with her
         // until next week, so they are there for her until then, and so is what she holds on them from above.
         var edit = await desk.HoldAsync(desk.Dee, desk.Minutes, DocumentPermissions.Edit);
         (edit!.Via, edit.Until).Should().Be((MemberVia.Above, desk.NextWeek));
 
-        // The agenda is Ada's as well, and shared with nobody: within the reach of the key, and not there for her.
+        // The agenda is Ada's as well, and shared with nobody: within the reach of the permission, and not there for her.
         (await desk.HoldAsync(desk.Dee, desk.Agenda, DocumentPermissions.Edit)).Should().BeNull();
         (await desk.WithinAsync(desk.Dee, DocumentPermissions.Edit)).Should().BeEquivalentTo([desk.Minutes, desk.Agenda]);
         (await desk.WithinAsync(desk.Dee, DocumentPermissions.View)).Should().BeEquivalentTo([desk.Minutes]);
-        (await desk.KeysOnAsync(desk.Dee)).Should().ContainSingle().Which.Should().Be((desk.Minutes, "documents.edit documents.view"));
+        (await desk.PermissionsOnAsync(desk.Dee)).Should().ContainSingle().Which.Should().Be((desk.Minutes, "documents.edit documents.view"));
 
         // At the moment her membership ends, the minutes are gone for her with everything she held on them.
         desk.Clock.Advance(desk.NextWeek - desk.Clock.Now - TimeSpan.FromTicks(1));
         (await desk.HoldAsync(desk.Dee, desk.Minutes, DocumentPermissions.Edit))!.Via.Should().Be(MemberVia.Above, "one tick before the end the hold named");
         desk.Clock.Advance(TimeSpan.FromTicks(1));
         (await desk.HoldAsync(desk.Dee, desk.Minutes, DocumentPermissions.Edit)).Should().BeNull("at the end the hold named");
-        (await desk.KeysOnAsync(desk.Dee)).Should().BeEmpty();
+        (await desk.PermissionsOnAsync(desk.Dee)).Should().BeEmpty();
     }
 
     [Fact]
-    public async Task The_keys_held_on_many_documents_and_a_list_of_the_hosts_own_are_one_statement_each_with_the_deputies_inside()
+    public async Task The_permissions_held_on_many_documents_and_a_list_of_the_hosts_own_are_one_statement_each_with_the_deputies_inside()
     {
         await using var desk = await Desk.SeededAsync();
 
         // Cy sees what Ada owns from above, and nothing of Ben's.
         desk.Commands.Reset();
-        (await desk.KeysOnAsync(desk.Cy)).Should().BeEquivalentTo(
+        (await desk.PermissionsOnAsync(desk.Cy)).Should().BeEquivalentTo(
             [(desk.Minutes, "documents.edit documents.view"), (desk.Agenda, "documents.edit documents.view")]);
         desk.Commands.Count.Should().Be(1);
 
         desk.Commands.Reset();
         (await desk.WithinAsync(desk.Cy, DocumentPermissions.View)).Should().BeEquivalentTo([desk.Minutes, desk.Agenda]);
-        desk.Commands.Commands.Should().ContainSingle().Which.Should().Contain("\"Deputies\"", "where a key is held above is a subquery of the statement, and no list fetched first");
+        desk.Commands.Commands.Should().ContainSingle().Which.Should().Contain("\"Deputies\"", "where a permission is held above is a subquery of the statement, and no list fetched first");
 
         // The roles are values of the rules, as ever: a member's role is asked of no table but the document's own.
         desk.Commands.Reset();
@@ -95,26 +95,26 @@ public sealed class UsersReachedFromAboveTests
         (await desk.HoldAsync(desk.Cy, desk.Minutes, DocumentPermissions.View))!.Via.Should().Be(MemberVia.Above);
     }
 
-    /// <summary>A key somebody holds over everything a user owns: what a user gives a deputy.</summary>
+    /// <summary>A permission somebody holds over everything a user owns: what a user gives a deputy.</summary>
     private sealed class Deputy
     {
-        /// <summary>The user whose documents the key is held over.</summary>
+        /// <summary>The user whose documents the permission is held over.</summary>
         public required UserId Of { get; init; }
 
         /// <summary>The user that holds it, as its token says who it is.</summary>
         public required Guid User { get; init; }
 
-        /// <summary>The key.</summary>
+        /// <summary>The permission.</summary>
         public required string Key { get; init; }
     }
 
-    /// <summary>Where a caller holds a key over documents: at the owners that made it a deputy for that key.</summary>
+    /// <summary>Where a caller holds a permission over documents: at the owners that made it a deputy for that permission.</summary>
     private sealed class DeputiesOfOwners : IPlacesReached<DocumentId, UserId>
     {
-        public IQueryable<UserId> PlacesReached(DbContext context, Caller caller, string key)
+        public IQueryable<UserId> PlacesReached(DbContext context, Caller caller, string permission)
         {
             var user = caller.UserId;
-            return context.Set<Deputy>().Where(deputy => deputy.User == user && deputy.Key == key).Select(deputy => deputy.Of);
+            return context.Set<Deputy>().Where(deputy => deputy.User == user && deputy.Key == permission).Select(deputy => deputy.Of);
         }
     }
 
@@ -161,7 +161,7 @@ public sealed class UsersReachedFromAboveTests
             services.AddSingleton(Commands);
             services.AddDbContext<DeskContext>((provider, options) => options.UseSqlite(_connection).AddInterceptors(provider.GetRequiredService<CommandCounter>()));
 
-            // Only what the rules say otherwise needs an answer: where a key is held above. Who a member is,
+            // Only what the rules say otherwise needs an answer: where a permission is held above. Who a member is,
             // is the caller's own id, and the roles are the rules' own.
             services.AddScoped<IPlacesReached<DocumentId, UserId>, DeputiesOfOwners>();
             services.AddMembership<DocumentShare, DocumentShareId, UserId, NamedRole, DeskContext, Document, DocumentId>(Rules);
@@ -216,23 +216,23 @@ public sealed class UsersReachedFromAboveTests
             return desk;
         }
 
-        /// <summary>What <paramref name="user"/> holds of <paramref name="key"/> on a document, as the access questions answer it.</summary>
-        public Task<MemberHold<DocumentId>?> HoldAsync(UserId user, DocumentId document, string key)
-            => AsAsync(TestCallers.User(user), provider => provider.GetRequiredService<IMemberQuestions<DocumentId>>().HoldAsync(document, key, Cancellation));
+        /// <summary>What <paramref name="user"/> holds of <paramref name="permission"/> on a document, as the access questions answer it.</summary>
+        public Task<MemberHold<DocumentId>?> HoldAsync(UserId user, DocumentId document, string permission)
+            => AsAsync(TestCallers.User(user), provider => provider.GetRequiredService<IMemberQuestions<DocumentId>>().HoldAsync(document, permission, Cancellation));
 
-        /// <summary>The documents within the reach of <paramref name="key"/>, in a statement of the host's own.</summary>
-        public Task<List<DocumentId>> WithinAsync(UserId user, string key)
+        /// <summary>The documents within the reach of <paramref name="permission"/>, in a statement of the host's own.</summary>
+        public Task<List<DocumentId>> WithinAsync(UserId user, string permission)
             => AsAsync(TestCallers.User(user), provider =>
             {
-                var reach = provider.GetRequiredService<IMemberQuestions<DocumentId>>().Reach(key);
+                var reach = provider.GetRequiredService<IMemberQuestions<DocumentId>>().Reach(permission);
                 return provider.GetRequiredService<DeskContext>().Documents.Within(reach).Select(document => document.Id).ToListAsync(Cancellation);
             });
 
-        /// <summary>The keys <paramref name="user"/> holds on each of the three documents it sees, in the order of their text.</summary>
-        public async Task<List<(DocumentId Document, string Keys)>> KeysOnAsync(UserId user)
+        /// <summary>The permissions <paramref name="user"/> holds on each of the three documents it sees, in the order of their text.</summary>
+        public async Task<List<(DocumentId Document, string Keys)>> PermissionsOnAsync(UserId user)
         {
             var held = await AsAsync(TestCallers.User(user), provider => provider.GetRequiredService<IMemberQuestions<DocumentId>>()
-                .KeysOnAsync([Minutes, Agenda, Notes], [DocumentPermissions.View, DocumentPermissions.Edit, DocumentPermissions.Share], Cancellation));
+                .PermissionsOnAsync([Minutes, Agenda, Notes], [DocumentPermissions.View, DocumentPermissions.Edit, DocumentPermissions.Share], Cancellation));
 
             return [.. held.Select(pair => (pair.Key, string.Join(' ', pair.Value.Order(StringComparer.Ordinal))))];
         }

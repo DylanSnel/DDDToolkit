@@ -26,7 +26,7 @@ internal static partial class HistoryPagedQueries
 
     /// <summary>
     /// Every change to who may do what in the tenant, newest first and a page at a time, each with who made it.
-    /// For whoever holds <c>tenancy.history.view</c> for the whole tenant: the query asks for the key, as it does
+    /// For whoever holds <c>tenancy.history.view</c> for the whole tenant: the query asks for the permission, as it does
     /// for the route. The rows are counted only for a client that asks for <c>totalCount</c>.
     /// </summary>
     /// <remarks>

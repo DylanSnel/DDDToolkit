@@ -7,22 +7,22 @@ namespace Examples.Tenancy.Projects.Application.ProjectRoles.Queries;
 /// crew's roles by, and manages the roles from.
 /// </summary>
 /// <remarks>
-/// Whoever works in the tenant reads them, the module's default, and the keys of each for a caller who holds
-/// <see cref="ProjectRoleListing.KeysKey"/> for the whole tenant (<see cref="ProjectRoleListing"/>).
+/// Whoever works in the tenant reads them, the module's default, and the permissions of each for a caller who holds
+/// <see cref="ProjectRoleListing.ManageRolesPermission"/> for the whole tenant (<see cref="ProjectRoleListing"/>).
 /// </remarks>
 public sealed record TenantProjectRoles : IQuery<IReadOnlyList<ProjectRoleListing>>, IProjectsRequest;
 
 /// <summary>Answers <see cref="TenantProjectRoles"/> in two statements, on a reading of this query's own.</summary>
 /// <param name="reads">Where project roles are read: a context per query.</param>
-/// <param name="access">Whether the caller holds the key the roles' keys are answered to.</param>
+/// <param name="access">Whether the caller holds the permission the roles' permissions are answered to.</param>
 public sealed class TenantProjectRolesHandler(IProjectReads reads, ProjectAccess access) : IQueryHandler<TenantProjectRoles, IReadOnlyList<ProjectRoleListing>>
 {
     /// <inheritdoc />
     public async ValueTask<IReadOnlyList<ProjectRoleListing>> Handle(TenantProjectRoles query, CancellationToken cancellationToken)
     {
-        // The roles, and whether the caller holds the key their keys are answered to, only when there are any.
+        // The roles, and whether the caller holds the permission their permissions are answered to, only when there are any.
         await using var reading = reads.Open();
         var roles = await reading.ProjectRolesAsync(ids: null, cancellationToken);
-        return ProjectRoleListings.Answered(roles, roles.Count > 0 && await access.Questions(reading).HoldsAtTenantAsync(ProjectRoleListing.KeysKey, cancellationToken));
+        return ProjectRoleListings.Answered(roles, roles.Count > 0 && await access.Questions(reading).HoldsAtTenantAsync(ProjectRoleListing.ManageRolesPermission, cancellationToken));
     }
 }

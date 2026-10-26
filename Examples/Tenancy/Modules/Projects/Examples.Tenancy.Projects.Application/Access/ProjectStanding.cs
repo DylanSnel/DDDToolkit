@@ -5,6 +5,6 @@ namespace Examples.Tenancy.Projects.Application.Access;
 /// same facts of every other project asked about, in one statement.
 /// </summary>
 /// <param name="State">Open or closed.</param>
-/// <param name="Held">The keys asked about that the caller holds on it, through its crew or through the organization.</param>
-/// <param name="HoldsAtAUnit">Whether the caller holds the key it was asked with for units at any unit at all.</param>
+/// <param name="Held">The permissions asked about that the caller holds on it, through its crew or through the organization.</param>
+/// <param name="HoldsAtAUnit">Whether the caller holds the permission it was asked with for units at any unit at all.</param>
 public sealed record ProjectStanding(ProjectState State, IReadOnlySet<string> Held, bool HoldsAtAUnit);

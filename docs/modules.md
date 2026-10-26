@@ -457,7 +457,7 @@ at the `AssemblyInfo.cs` that item writes into `obj/`, where a `[*.cs]` section 
 
 ### A contracts project
 
-A module's contracts project exists to be named by the other modules: its ids, its read models, its keys and the
+A module's contracts project exists to be named by the other modules: its ids, its read models, its permissions and the
 interfaces they ask it through. Marking each of those `[ModuleContract]` says the same thing once per type, and a
 type added to the project without the mark is [DDD00022](diagnostics.md#ddd00022) in every module that names it.
 So the project says it once, in its project file:
@@ -566,7 +566,7 @@ Directory.Build.props             every project of a module's folder declares th
 Projects/
   Examples.Tenancy.Projects.Contracts/
     ValueObjects/                 ProjectId.cs
-    Keys/                         ProjectKeys.cs
+    Permissions/                  ProjectPermissionNames.cs
     Gate/                         IProjectGate.cs, ProjectAnswer.cs
     RowAccess/                    ProjectsISee.cs, ProjectsWhereIHold.cs: what another module's row rules may ask
   Examples.Tenancy.Projects.Domain/
@@ -586,8 +586,8 @@ Projects/
         ValueObjects/             ProjectRoleId.cs
   Examples.Tenancy.Projects.Application/
     GlobalUsings.cs, ProjectsApplicationServices.cs
-    Access/                       the access check, the rules it asks, the keys, and what it reads of a project
-      Queries/                    KeyOnProject.cs, KeysOnProjects.cs, KeysHeldAtRoot.cs
+    Access/                       the access check, the rules it asks, the permissions, and what it reads of a project
+      Queries/                    PermissionOnProject.cs, PermissionsOnProjects.cs, PermissionsHeldAtRoot.cs
     Crew/
       Commands/                   AddCrewMember.cs, GiveCrewRole.cs, TakeCrewRole.cs, RemoveCrewMember.cs
       Queries/                    AllCrewMembers.cs
@@ -603,7 +603,7 @@ Projects/
     Ownership/
       Commands/                   ChangeProjectOwner.cs
     ProjectRoles/
-      Commands/                   MakeProjectRole.cs, RenameProjectRole.cs, SetProjectRoleKeys.cs, ArchiveProjectRole.cs, SetUpProjectRoles.cs
+      Commands/                   MakeProjectRole.cs, RenameProjectRole.cs, SetProjectRolePermissions.cs, ArchiveProjectRole.cs, SetUpProjectRoles.cs
       Queries/                    TenantProjectRoles.cs, ProjectRolesById.cs
       ProjectRoleListing.cs       what both answer with
     StoredProjects/               IProjectStore.cs, IProjectReads.cs, IProjectReading.cs: the ports several features share
@@ -613,16 +613,16 @@ Projects/
                                   writes the factory dotnet ef and the export build it with;
                                   EfProjectStore.cs, EfProjectReads.cs; Migrations/
     Access/                       the row rules, a class per file, column rules among them;
-                                  UnitChangesWithItsKeys.cs, a rule Postgres holds beyond the
+                                  UnitChangesWithItsPermissions.cs, a rule Postgres holds beyond the
                                   policies, as a trigger of the module's own
   Examples.Tenancy.Projects.Api/
     Module.cs, GlobalUsings.cs, ProjectsModule.cs
     Access/Rest/                  AccessEndpoints.cs
-    Access/GraphQL/               AccessQueries.cs, ProjectKeySetType.cs; AccessDataLoaders.cs, which a rule on a
+    Access/GraphQL/               AccessQueries.cs, ProjectPermissionSetType.cs; AccessDataLoaders.cs, which a rule on a
                                   field asks through
     Crew/Rest/                    CrewEndpoints.cs
     Crew/GraphQL/                 CrewMutations.cs; CrewMemberType.cs and CrewRoleHoldType.cs, types over the
-                                  application's records; CrewFieldKeys.cs, which answers the permission key a
+                                  application's records; CrewFieldPermissions.cs, which answers the permission a
                                   field of a crew member asks for
     Lifecycle/Rest/               LifecycleEndpoints.cs
     Lifecycle/GraphQL/            LifecycleMutations.cs
@@ -634,7 +634,7 @@ Projects/
     Ownership/GraphQL/            OwnershipMutations.cs
     ProjectRoles/Rest/            ProjectRolesEndpoints.cs
     ProjectRoles/GraphQL/         ProjectRolesQueries.cs, ProjectRolesMutations.cs, ProjectRoleType.cs,
-                                  ProjectRolesDataLoaders.cs, ProjectRoleFieldKeys.cs
+                                  ProjectRolesDataLoaders.cs, ProjectRoleFieldPermissions.cs
     Rest/                         ProjectVersions.cs: what the routes of several features share, here If-Match and ETag
     GraphQL/                      ProjectsGraphQL.cs, which registers the module's schema; ReferencedSeat.cs and
                                   the other entities of Tenancy's as this module names them; schema.graphql

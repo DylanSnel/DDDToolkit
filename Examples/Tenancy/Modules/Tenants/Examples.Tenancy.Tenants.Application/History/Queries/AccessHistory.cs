@@ -9,17 +9,17 @@ namespace Examples.Tenancy.Tenants.Application.History.Queries;
 /// time, each with who made it.
 /// </summary>
 /// <remarks>
-/// For whoever holds <see cref="RequiredKey"/> for the whole tenant: the history says who was given what
-/// everywhere in it, so a key held at one unit does not read it. The key manages no access, so a role that holds
+/// For whoever holds <see cref="RequiredPermission"/> for the whole tenant: the history says who was given what
+/// everywhere in it, so a permission held at one unit does not read it. The permission manages no access, so a role that holds
 /// it is given like any other. The history is not kept to a tenant by the storage's filter, so the handler names
 /// the tenant it reads: the caller's own, and never one a request could supply.
 /// </remarks>
 /// <param name="Paging">Which page: how many rows, and after which marker.</param>
-[RequiresKey(RequiredKey)]
+[RequiresPermission(RequiredPermission)]
 public sealed record AccessHistory(PagingArguments Paging) : IQuery<Page<AccessHistoryEntry>>, ITenantsRequest
 {
-    /// <summary>The key the caller holds for the whole tenant.</summary>
-    public const string RequiredKey = TenancyKeys.HistoryView;
+    /// <summary>The permission the caller holds for the whole tenant.</summary>
+    public const string RequiredPermission = TenancyPermissions.HistoryView;
 }
 
 /// <summary>Answers <see cref="AccessHistory"/> for the tenant the caller works in, on a context of the read's own.</summary>

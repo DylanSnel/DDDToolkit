@@ -7,23 +7,23 @@ namespace DDDToolkit.Supporting.Tenancy.UseCases;
 public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>
 {
     /// <summary>
-    /// What every command asks before it acts: who is calling, whether they hold the key where the command
+    /// What every command asks before it acts: who is calling, whether they hold the permission where the command
     /// needs it, whether a seat may give or take away a role there (freely for a role that manages no access,
-    /// only with its keys that do for one that does, and never one that does to itself), whether it may stop
+    /// only with its permissions that do for one that does, and never one that does to itself), whether it may stop
     /// or restart a seat that holds such a role, whether a move would give or take away what it could not, and
     /// whether the tenant keeps an administrator. One per command call: it fixes the caller and "now" when the
     /// command starts.
     /// <para>
-    /// The rules in the middle hold a seat to containment while the catalogue keeps the keys that manage access
-    /// contained (<see cref="TenancyCatalogue.ContainAccessManagingKeys"/>). Once the application turns that off,
-    /// they ask of a role or a key that manages access what they ask of one that manages none
-    /// (<see cref="ContainedKeysOf"/> and <see cref="IsContained"/>). The key a command asks where it acts, a
-    /// seat's grant to itself against its own <see cref="TenancyKeys.GrantsManage"/>, what a move gives the mover,
+    /// The rules in the middle hold a seat to containment while the catalogue keeps the permissions that manage access
+    /// contained (<see cref="TenancyCatalogue.ContainAccessManagingPermissions"/>). Once the application turns that off,
+    /// they ask of a role or a permission that manages access what they ask of one that manages none
+    /// (<see cref="ContainedPermissionsOf"/> and <see cref="IsContained"/>). The permission a command asks where it acts, a
+    /// seat's grant to itself against its own <see cref="TenancyPermissions.GrantsManage"/>, what a move gives the mover,
     /// and the administrator a tenant keeps, are asked either way.
     /// </para>
     /// <para>
     /// Asking who is calling reads nothing, so a command that takes the access revision can take it before any
-    /// other read; the questions are only made, over the store's reads, when a key is first asked about.
+    /// other read; the questions are only made, over the store's reads, when a permission is first asked about.
     /// </para>
     /// </summary>
     internal sealed class Gate
@@ -50,29 +50,29 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         /// <summary>The moment the command runs at.</summary>
         public DateTimeOffset Now { get; }
 
-        /// <summary>Whether this is system work in a tenant, which holds every key there.</summary>
+        /// <summary>Whether this is system work in a tenant, which holds every permission there.</summary>
         public bool BySystem => Caller.Kind == TenancyCallerKind.SystemInTenant;
 
         /// <summary>
-        /// Whether the caller is held to containment: it is a seat, and the catalogue keeps the keys that manage
-        /// access contained (<see cref="TenancyCatalogue.ContainAccessManagingKeys"/>). System work in a tenant
-        /// holds every key there and never is, whatever the catalogue says.
+        /// Whether the caller is held to containment: it is a seat, and the catalogue keeps the permissions that manage
+        /// access contained (<see cref="TenancyCatalogue.ContainAccessManagingPermissions"/>). System work in a tenant
+        /// holds every permission there and never is, whatever the catalogue says.
         /// </summary>
-        private bool HeldToContainment => Caller.Kind == TenancyCallerKind.Seat && _catalogue.ContainAccessManagingKeys;
+        private bool HeldToContainment => Caller.Kind == TenancyCallerKind.Seat && _catalogue.ContainAccessManagingPermissions;
 
         /// <summary>
-        /// The keys of <paramref name="role"/> that a seat hands on only where it holds them: its keys that manage
+        /// The permissions of <paramref name="role"/> that a seat hands on only where it holds them: its permissions that manage
         /// access while the catalogue keeps them contained, and none once the application turns that off, when
         /// the role is given and taken away as one that manages no access.
         /// </summary>
-        private IReadOnlyList<string> ContainedKeysOf(TRole role)
-            => _catalogue.ContainAccessManagingKeys ? _catalogue.AccessManagingKeysOf(role.Facts) : [];
+        private IReadOnlyList<string> ContainedPermissionsOf(TRole role)
+            => _catalogue.ContainAccessManagingPermissions ? _catalogue.AccessManagingPermissionsOf(role.Facts) : [];
 
         /// <summary>
-        /// Whether a seat hands <paramref name="key"/> on only where it holds it: a key that manages access while
-        /// the catalogue keeps such keys contained, and no key once the application turns that off.
+        /// Whether a seat hands <paramref name="permission"/> on only where it holds it: a permission that manages access while
+        /// the catalogue keeps such permissions contained, and no permission once the application turns that off.
         /// </summary>
-        private bool IsContained(string key) => _catalogue.ContainAccessManagingKeys && _catalogue.ManagesAccess(key);
+        private bool IsContained(string permission) => _catalogue.ContainAccessManagingPermissions && _catalogue.ManagesAccess(permission);
 
         /// <summary>
         /// Who the command's changes are recorded as, on every event it raises: the caller's own actor, a seat as
@@ -149,9 +149,9 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         public Task SerializeAsync(TTenantId tenant, CancellationToken cancellationToken)
             => _store.SerializeAccessChangesAsync(tenant, cancellationToken);
 
-        /// <summary>A seat must hold <paramref name="key"/> for the whole tenant; system work in a tenant holds it.</summary>
+        /// <summary>A seat must hold <paramref name="permission"/> for the whole tenant; system work in a tenant holds it.</summary>
         /// <exception cref="Exceptions.RefusalException"><c>tenancy.not-permitted</c>.</exception>
-        public async Task RequireAtTenantAsync(string key, CancellationToken cancellationToken)
+        public async Task RequireAtTenantAsync(string permission, CancellationToken cancellationToken)
         {
             RequireTenant();
             if (BySystem)
@@ -159,15 +159,15 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
                 return;
             }
 
-            if (!await Questions.HoldsAtTenantAsync(key, cancellationToken).ConfigureAwait(false))
+            if (!await Questions.HoldsAtTenantAsync(permission, cancellationToken).ConfigureAwait(false))
             {
-                throw NotPermitted(key, unit: null);
+                throw NotPermitted(permission, unit: null);
             }
         }
 
-        /// <summary>A seat must hold <paramref name="key"/> at <paramref name="unit"/>, there or above it; system work in a tenant holds it.</summary>
+        /// <summary>A seat must hold <paramref name="permission"/> at <paramref name="unit"/>, there or above it; system work in a tenant holds it.</summary>
         /// <exception cref="Exceptions.RefusalException"><c>tenancy.not-permitted</c>.</exception>
-        public async Task RequireAtAsync(string key, TUnitId unit, CancellationToken cancellationToken)
+        public async Task RequireAtAsync(string permission, TUnitId unit, CancellationToken cancellationToken)
         {
             RequireTenant();
             if (BySystem)
@@ -175,23 +175,23 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
                 return;
             }
 
-            if (!await Questions.HoldsAtAsync(key, unit, cancellationToken).ConfigureAwait(false))
+            if (!await Questions.HoldsAtAsync(permission, unit, cancellationToken).ConfigureAwait(false))
             {
-                throw NotPermitted(key, unit);
+                throw NotPermitted(permission, unit);
             }
         }
 
         /// <summary>
         /// Whether a seat may give <paramref name="role"/> at <paramref name="unit"/>, where it holds
-        /// <see cref="TenancyKeys.GrantsManage"/> already. Holding that key is enough to give roles: a role that
+        /// <see cref="TenancyPermissions.GrantsManage"/> already. Holding that permission is enough to give roles: a role that
         /// manages no access goes to anyone placed there, for as long as the seat says, without the seat holding
-        /// its keys; to the seat itself only for as long as it holds <see cref="TenancyKeys.GrantsManage"/>
-        /// there. A role that manages access goes only from a seat that holds each of its keys that do at that
+        /// its permissions; to the seat itself only for as long as it holds <see cref="TenancyPermissions.GrantsManage"/>
+        /// there. A role that manages access goes only from a seat that holds each of its permissions that do at that
         /// unit, for at least as long as the grant runs, and never to the seat itself, whatever it holds.
-        /// Otherwise a seat holding a key for a week could hand it out for good, and outlast its own grant through
+        /// Otherwise a seat holding a permission for a week could hand it out for good, and outlast its own grant through
         /// another seat. System work in a tenant is not held to this. With containment off every role goes as one
         /// that manages no access: to anyone placed there for as long as the seat says, and to the seat itself for
-        /// no longer than it holds <see cref="TenancyKeys.GrantsManage"/> there.
+        /// no longer than it holds <see cref="TenancyPermissions.GrantsManage"/> there.
         /// </summary>
         /// <param name="to">
         /// The seat the role goes to, or <see langword="null"/> for a seat still to be made, which cannot be the
@@ -203,7 +203,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         /// <param name="cancellationToken">Cancels the query.</param>
         /// <exception cref="Exceptions.RefusalException">
         /// <c>tenancy.self-appointment</c> for a role that manages access given to the caller itself, while
-        /// containment is on; <c>tenancy.grant-exceeds-own</c>, naming the keys the seat lacks there, or lacks for
+        /// containment is on; <c>tenancy.grant-exceeds-own</c>, naming the permissions the seat lacks there, or lacks for
         /// long enough.
         /// </exception>
         public async Task RequireGrantableAsync(TSeatId? to, TUnitId unit, TRole role, DateTimeOffset? until, CancellationToken cancellationToken)
@@ -213,7 +213,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
                 return;
             }
 
-            var managing = ContainedKeysOf(role);
+            var managing = ContainedPermissionsOf(role);
             var self = to is { } target && target.Equals(Caller.Seat!.Value);
             if (managing.Count > 0 && self)
             {
@@ -226,13 +226,13 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
             }
 
             var held = await HeldUntilAsync(unit, cancellationToken).ConfigureAwait(false);
-            RefuseShort(managing.Count > 0 ? managing : [TenancyKeys.GrantsManage], held, until, role.Id);
+            RefuseShort(managing.Count > 0 ? managing : [TenancyPermissions.GrantsManage], held, until, role.Id);
         }
 
         /// <summary>
         /// Whether a seat may take away, at <paramref name="unit"/>, the grants of these roles, where it holds
-        /// <see cref="TenancyKeys.GrantsManage"/> already. A role that manages no access goes without any of its
-        /// keys. For one that manages access the seat holds each of its keys that do at that unit, until at least
+        /// <see cref="TenancyPermissions.GrantsManage"/> already. A role that manages no access goes without any of its
+        /// permissions. For one that manages access the seat holds each of its permissions that do at that unit, until at least
         /// the end of that grant, or for good for a grant with no end: taking a role away is as contained as
         /// giving it. A seat's own grant that applies now is its own hold, so a seat takes its current roles away;
         /// one that has ended, or is still to start, holds nothing. System work in a tenant is not held to this, and
@@ -242,7 +242,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         /// <param name="unit">Where.</param>
         /// <param name="cancellationToken">Cancels the query.</param>
         /// <exception cref="Exceptions.RefusalException">
-        /// <c>tenancy.grant-exceeds-own</c>, for the first role whose keys the seat lacks there, or lacks for long enough.
+        /// <c>tenancy.grant-exceeds-own</c>, for the first role whose permissions the seat lacks there, or lacks for long enough.
         /// </exception>
         public async Task RequireRevocableAsync(IReadOnlyList<(TRole Role, DateTimeOffset? Until)> grants, TUnitId unit, CancellationToken cancellationToken)
         {
@@ -252,8 +252,8 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
             }
 
             var contained = grants
-                .Select(grant => (grant.Role, grant.Until, Keys: _catalogue.AccessManagingKeysOf(grant.Role.Facts)))
-                .Where(grant => grant.Keys.Count > 0)
+                .Select(grant => (grant.Role, grant.Until, Permissions: _catalogue.AccessManagingPermissionsOf(grant.Role.Facts)))
+                .Where(grant => grant.Permissions.Count > 0)
                 .ToArray();
             if (contained.Length == 0)
             {
@@ -261,27 +261,27 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
             }
 
             var held = await HeldUntilAsync(unit, cancellationToken).ConfigureAwait(false);
-            foreach (var (role, until, keys) in contained)
+            foreach (var (role, until, permissions) in contained)
             {
-                RefuseShort(keys, held, until, role.Id);
+                RefuseShort(permissions, held, until, role.Id);
             }
         }
 
         /// <summary>
         /// Whether a seat may suspend, deactivate or reactivate <paramref name="seat"/>, where it holds
-        /// <see cref="TenancyKeys.SeatsManage"/> for the whole tenant already. A seat's status decides whether its
+        /// <see cref="TenancyPermissions.SeatsManage"/> for the whole tenant already. A seat's status decides whether its
         /// grants count, so the change takes away, or gives back, every grant of it that has not ended, and each
         /// one of a role that manages access is held to the rule for taking it away
         /// (<see cref="RequireRevocableAsync"/>): at its own unit, until at least its own end. A grant that has
         /// ended gives nothing either way, and is not counted. A seat's own grant that applies now is its own
         /// hold, so a seat may suspend or deactivate itself; it never reactivates itself, because a
         /// suspended seat acts as nobody. System work in a tenant is not held to this, and with containment off no
-        /// seat is either: the seats key for the whole tenant, which the use case asks, is all it takes.
+        /// seat is either: the seats permission for the whole tenant, which the use case asks, is all it takes.
         /// </summary>
         /// <param name="seat">The seat whose status would change, as it is now.</param>
         /// <param name="cancellationToken">Cancels the queries.</param>
         /// <exception cref="Exceptions.RefusalException">
-        /// <c>tenancy.grant-exceeds-own</c>, for the first role whose keys the seat lacks at that grant's unit, or
+        /// <c>tenancy.grant-exceeds-own</c>, for the first role whose permissions the seat lacks at that grant's unit, or
         /// lacks for long enough.
         /// </exception>
         public async Task RequireStatusChangeableAsync(TSeat seat, CancellationToken cancellationToken)
@@ -312,18 +312,18 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         }
 
         /// <summary>
-        /// An administrator alone, a seat holding <see cref="TenancyKeys.AdministratorKey"/> at the root with no
-        /// end, changes which keys that manage access a role holds: by adding one, which reaches every seat that
+        /// An administrator alone, a seat holding <see cref="TenancyPermissions.AdministratorPermission"/> at the root with no
+        /// end, changes which permissions that manage access a role holds: by adding one, which reaches every seat that
         /// holds the role, seats that gave it to themselves included, or by taking one out or archiving the role,
-        /// which takes it from every holder at once. So a seat holding the key for a week neither gives lasting
+        /// which takes it from every holder at once. So a seat holding the permission for a week neither gives lasting
         /// power over access that way, nor takes away what it could not revoke grant by grant. System work in a
-        /// tenant is not held to this, and with containment off no seat is either: the roles key for the whole
+        /// tenant is not held to this, and with containment off no seat is either: the roles permission for the whole
         /// tenant, which every change of a role asks, is all it takes.
         /// </summary>
         /// <param name="tenant">The tenant.</param>
         /// <param name="role">The role that would change, for the refusal.</param>
         /// <param name="cancellationToken">Cancels the queries.</param>
-        /// <exception cref="Exceptions.RefusalException"><c>tenancy.grant-exceeds-own</c>, naming <see cref="TenancyKeys.AdministratorKey"/>.</exception>
+        /// <exception cref="Exceptions.RefusalException"><c>tenancy.grant-exceeds-own</c>, naming <see cref="TenancyPermissions.AdministratorPermission"/>.</exception>
         public async Task RequireAdministratorAsync(TTenantId tenant, TRoleId role, CancellationToken cancellationToken)
         {
             if (!HeldToContainment)
@@ -334,29 +334,29 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
             var held = await RootAsync(tenant, cancellationToken).ConfigureAwait(false) is { } root
                 ? await HeldUntilAsync(root, cancellationToken).ConfigureAwait(false)
                 : new Dictionary<string, DateTimeOffset?>(StringComparer.Ordinal);
-            RefuseShort([TenancyKeys.AdministratorKey], held, until: null, role);
+            RefuseShort([TenancyPermissions.AdministratorPermission], held, until: null, role);
         }
 
         /// <summary>
         /// Whether a seat may move <paramref name="unit"/> from under <paramref name="parent"/> to under
-        /// <paramref name="newParent"/>, where it holds <see cref="TenancyKeys.UnitsManage"/> at both already. A
+        /// <paramref name="newParent"/>, where it holds <see cref="TenancyPermissions.UnitsManage"/> at both already. A
         /// move changes what reaches the unit and everything below it: the grants at the units above the parent
         /// that are not above the new parent stop reaching it, and those above the new parent that are not above
         /// the parent start to. So a move is held to the rules for giving and taking away, over what it changes.
-        /// It gives the mover nothing: every key the mover's grants there would give it at the unit, it holds at
+        /// It gives the mover nothing: every permission the mover's grants there would give it at the unit, it holds at
         /// the unit already, for at least as long, or for good when they give it for good. And it gives or takes
-        /// away no key that manages access, from anyone, that the mover does not hold at the unit until at least
+        /// away no permission that manages access, from anyone, that the mover does not hold at the unit until at least
         /// the end of the grant that gives it, or for good for a grant with no end. A grant still to start
-        /// counts; one that has ended gives nothing either way. Keys that manage no access follow the move freely
+        /// counts; one that has ended gives nothing either way. Permissions that manage no access follow the move freely
         /// for everyone but the mover, as a role holding only them is given freely. Otherwise a seat that manages
         /// units in two parts of the tree could move a unit where it, or someone else, holds more, or holds the
         /// same for longer, and so give what nobody could have given, or take what nobody could have taken away.
-        /// System work in a tenant is not held to this. With containment off every key follows a move as one that
+        /// System work in a tenant is not held to this. With containment off every permission follows a move as one that
         /// manages no access does, freely for everyone but the mover: the move still gives the mover nothing.
         /// <para>
-        /// An administrator whose role holds every live key passes both parts wherever a unit goes. One whose pack
-        /// lists its keys holds every key that manages access at the root, and so passes the second part; the
-        /// first still counts a grant of its own below the root that gives it a key its role at the root lacks.
+        /// An administrator whose role holds every live permission passes both parts wherever a unit goes. One whose pack
+        /// lists its permissions holds every permission that manages access at the root, and so passes the second part; the
+        /// first still counts a grant of its own below the root that gives it a permission its role at the root lacks.
         /// </para>
         /// </summary>
         /// <param name="unit">The unit that would move.</param>
@@ -364,7 +364,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         /// <param name="newParent">The unit it would hang under.</param>
         /// <param name="cancellationToken">Cancels the queries.</param>
         /// <exception cref="Exceptions.RefusalException">
-        /// <c>tenancy.grant-exceeds-own</c>, naming the keys the move would give or take away that the seat lacks
+        /// <c>tenancy.grant-exceeds-own</c>, naming the permissions the move would give or take away that the seat lacks
         /// at the unit, or lacks for long enough.
         /// </exception>
         public async Task RequireMovableAsync(TUnitId unit, TUnitId parent, TUnitId newParent, CancellationToken cancellationToken)
@@ -374,12 +374,12 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
                 return;
             }
 
-            // Every grant that has not ended, of the mover's or of a key that manages access, at a parent or a
+            // Every grant that has not ended, of the mover's or of a permission that manages access, at a parent or a
             // unit above one, once for each parent it reaches. The move changes nothing that reaches from a unit
             // above both parents: the mover's own come back twice from there, and another seat's not at all. These
             // are other seats' rights too, so the store answers, which reads them where a seat's own reads may not.
             var rows = await _store.RightsAMoveChangesAsync(
-                Caller.Tenant!.Value, Caller.Seat!.Value, parent, newParent, _catalogue.AccessManagingKeys, Now, cancellationToken).ConfigureAwait(false);
+                Caller.Tenant!.Value, Caller.Seat!.Value, parent, newParent, _catalogue.AccessManagingPermissions, Now, cancellationToken).ConfigureAwait(false);
             var aboveParent = rows.Where(row => row.Parent.Equals(parent)).Select(row => row.UnitId).ToHashSet();
             var aboveNewParent = rows.Where(row => row.Parent.Equals(newParent)).Select(row => row.UnitId).ToHashSet();
             var changed = new Dictionary<string, DateTimeOffset?>(StringComparer.Ordinal);
@@ -387,12 +387,12 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
             {
                 var gives = row.Parent.Equals(newParent) && !aboveParent.Contains(row.UnitId);
                 var takes = row.Parent.Equals(parent) && !aboveNewParent.Contains(row.UnitId);
-                var counts = IsContained(row.Key)
+                var counts = IsContained(row.Permission)
                     ? gives || takes
-                    : gives && row.OfCaller && _catalogue.IsLive(row.Key);
+                    : gives && row.OfCaller && _catalogue.IsLive(row.Permission);
                 if (counts)
                 {
-                    Extend(changed, row.Key, row.EndsAt);
+                    Extend(changed, row.Permission, row.EndsAt);
                 }
             }
 
@@ -417,7 +417,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         /// Refuses a change that would leave a tenant that has an administrator without one, before anything is
         /// changed: a refused command leaves nothing behind for a later save in the same unit of work to write.
         /// An administrator is an active seat, placed at the root, holding there an active role with the
-        /// administrator key, granted with no end and applying now.
+        /// administrator permission, granted with no end and applying now.
         /// <para>
         /// The administrators as last saved are the rights at the root that make one, which only active seats and
         /// active roles have, as (seat, role) pairs: the store answers them, since they are other seats' rights
@@ -494,7 +494,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
                 cancellationToken);
 
         /// <summary>
-        /// Every key the calling seat holds now at <paramref name="unit"/>, granted there or above it, with how
+        /// Every permission the calling seat holds now at <paramref name="unit"/>, granted there or above it, with how
         /// long it holds it: the latest end of the grants that give it, or <see langword="null"/> when one of them
         /// has none. One query.
         /// </summary>
@@ -508,42 +508,42 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
                                  && right.StartsAt <= now && (right.EndsAt == null || right.EndsAt > now)
                            join path in _store.Reads.UnitPaths on right.UnitId equals path.AncestorId
                            where path.TenantId.Equals(tenant) && path.DescendantId.Equals(unit)
-                           select new { right.Key, right.EndsAt };
+                           select new { right.Permission, right.EndsAt };
 
             var rows = await _store.Queries.ListAsync(reaching, cancellationToken).ConfigureAwait(false);
             var held = new Dictionary<string, DateTimeOffset?>(StringComparer.Ordinal);
             foreach (var row in rows)
             {
-                Extend(held, row.Key, row.EndsAt);
+                Extend(held, row.Permission, row.EndsAt);
             }
 
             return held;
         }
 
         /// <summary>
-        /// Records in <paramref name="until"/> that <paramref name="key"/> runs until <paramref name="end"/>, or for
-        /// good when <paramref name="end"/> is <see langword="null"/>, keeping the latest end a key has there.
+        /// Records in <paramref name="until"/> that <paramref name="permission"/> runs until <paramref name="end"/>, or for
+        /// good when <paramref name="end"/> is <see langword="null"/>, keeping the latest end a permission has there.
         /// </summary>
-        private static void Extend(Dictionary<string, DateTimeOffset?> until, string key, DateTimeOffset? end)
+        private static void Extend(Dictionary<string, DateTimeOffset?> until, string permission, DateTimeOffset? end)
         {
-            if (!until.TryGetValue(key, out var known))
+            if (!until.TryGetValue(permission, out var known))
             {
-                until[key] = end;
+                until[permission] = end;
             }
             else if (known is { } ends && (end is not { } other || other > ends))
             {
-                until[key] = end;
+                until[permission] = end;
             }
         }
 
         /// <summary>
-        /// Refuses with the keys of <paramref name="wanted"/> the seat lacks: not held, or held until an end
+        /// Refuses with the permissions of <paramref name="wanted"/> the seat lacks: not held, or held until an end
         /// earlier than <paramref name="until"/>, or until any end when the grant would have none.
         /// </summary>
         private static void RefuseShort(IReadOnlyList<string> wanted, IReadOnlyDictionary<string, DateTimeOffset?> held, DateTimeOffset? until, TRoleId role)
         {
             var missing = wanted
-                .Where(key => !HeldLongEnough(held, key, until))
+                .Where(permission => !HeldLongEnough(held, permission, until))
                 .Distinct(StringComparer.Ordinal)
                 .Order(StringComparer.Ordinal)
                 .ToArray();
@@ -554,20 +554,20 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         }
 
         /// <summary>
-        /// Whether <paramref name="key"/> is in <paramref name="held"/> until <paramref name="until"/> or later: for
+        /// Whether <paramref name="permission"/> is in <paramref name="held"/> until <paramref name="until"/> or later: for
         /// good, or until an end no earlier than it when <paramref name="until"/> has one.
         /// </summary>
-        private static bool HeldLongEnough(IReadOnlyDictionary<string, DateTimeOffset?> held, string key, DateTimeOffset? until)
-            => held.TryGetValue(key, out var end) && (end is not { } ends || (until is { } needed && ends >= needed));
+        private static bool HeldLongEnough(IReadOnlyDictionary<string, DateTimeOffset?> held, string permission, DateTimeOffset? until)
+            => held.TryGetValue(permission, out var end) && (end is not { } ends || (until is { } needed && ends >= needed));
 
         private Exceptions.RefusalException Refusal() => TenancyRefusals.Refuse(Caller.Refusal ?? TenancyRefusals.NotSeated);
 
         /// <summary>
-        /// <c>tenancy.not-permitted</c>, with the key and the unit as values. The unit is not written into the
+        /// <c>tenancy.not-permitted</c>, with the permission and the unit as values. The unit is not written into the
         /// message: an argument that carried a piece of formatting would be text, not a value.
         /// </summary>
-        private static Exceptions.RefusalException NotPermitted(string key, TUnitId? unit)
-            => TenancyRefusals.Refuse(TenancyRefusals.NotPermitted, ("Key", key), ("Unit", unit));
+        private static Exceptions.RefusalException NotPermitted(string permission, TUnitId? unit)
+            => TenancyRefusals.Refuse(TenancyRefusals.NotPermitted, ("Permission", permission), ("Unit", unit));
 
         private static InvalidOperationException Missing(string what, TTenantId id)
             => new("The " + what + " " + id + " of the current caller is not found. A seat's tenant always is, so the caller was begun with a tenant that does not exist.");
@@ -605,7 +605,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         /// <summary>One role revoked from a seat at a unit.</summary>
         public static AdministratorLoss OfGrant(TSeatId seat, TUnitId unit, TRoleId role) => new(seat, role, unit);
 
-        /// <summary>A role that stops administering: archived, or without the administrator key from now on.</summary>
+        /// <summary>A role that stops administering: archived, or without the administrator permission from now on.</summary>
         public static AdministratorLoss OfRole(TRoleId role) => new(null, role, null);
 
         /// <summary>Whether the pair of <paramref name="seat"/> and <paramref name="role"/> goes.</summary>

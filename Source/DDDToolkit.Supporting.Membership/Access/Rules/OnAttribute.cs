@@ -75,7 +75,7 @@ public sealed class OnAttribute<TResource> : PermissionLevelAttribute
     /// <para>
     /// <c>InRoles = false</c>: no role can contain this permission, so only the owner (and reach from above) holds it.
     /// A role declared in code that lists it is refused when the rules are made, and a role a customer makes that
-    /// lists it is refused with <c>key-not-for-members</c>; a role that holds it from before the rules changed gives
+    /// lists it is refused with <c>permission-not-for-members</c>; a role that holds it from before the rules changed gives
     /// nothing with it. Say it of a permission a customer must never hand out, such as the one that says who is on
     /// the resource.
     /// </para>

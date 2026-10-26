@@ -15,7 +15,7 @@ public sealed class ProjectsModelTests
     /// <summary>The rows the access questions read, each with the function of Tenancy's it comes from.</summary>
     private static readonly (Type Row, string Function)[] ReadModel =
     [
-        (typeof(SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId>), TenancyFunctionNames.CallerRights),
+        (typeof(SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId>), TenancyFunctionNames.CallerPermissions),
         (typeof(OrganizationUnitPath<TenantId, OrganizationUnitId>), TenancyFunctionNames.TenantUnitPaths),
         (typeof(OrganizationUnitRow<TenantId, OrganizationUnitId>), TenancyFunctionNames.TenantUnits),
         (typeof(RoleRow<TenantId, RoleId>), TenancyFunctionNames.TenantRoles),
@@ -56,7 +56,7 @@ public sealed class ProjectsModelTests
         // filter, which would answer nobody nothing, is left out of the statement.
         var mine = projects.Projects.IgnoreQueryFilters()
             .Where(project => projects.Set<SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId>>().Any(right => right.UnitId == project.UnitId));
-        mine.ToQueryString().Should().Contain("FROM tenancy.caller_rights() AS").And.Contain("FROM projects.\"Projects\" AS").And.NotContain("\"SeatRights\"");
+        mine.ToQueryString().Should().Contain("FROM tenancy.caller_permissions() AS").And.Contain("FROM projects.\"Projects\" AS").And.NotContain("\"SeatRights\"");
     }
 
     [Fact]

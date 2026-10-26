@@ -9,17 +9,17 @@ namespace Examples.Tenancy.Projects.Application.Overview.Queries;
 /// projects with their crews, and reads the crews only when they are shown.
 /// </summary>
 /// <remarks>
-/// Seeing a crew is seeing its project, so the key is <see cref="RequiredKey"/>, and it is the filter of the
+/// Seeing a crew is seeing its project, so the permission is <see cref="RequiredPermission"/>, and it is the filter of the
 /// handler's one statement: a project the caller may not see is missing from the answer exactly as one that does
-/// not exist. The members' roles take <see cref="CrewOverview.RolesKey"/> on the project, read in that same
+/// not exist. The members' roles take <see cref="CrewOverview.RolesPermission"/> on the project, read in that same
 /// statement: on a crew the caller does not manage, each member is answered without them.
 /// </remarks>
 /// <param name="Projects">The projects asked about, at most <see cref="ProjectsById.MostProjects"/> different ones.</param>
-[SeenWith<ProjectId>(RequiredKey)]
+[SeenWith<ProjectId>(RequiredPermission)]
 public sealed record CrewsOfProjects(IReadOnlyList<ProjectId> Projects) : IQuery<IReadOnlyDictionary<ProjectId, ProjectCrew>>, IProjectsRequest
 {
-    /// <summary>The key that decides whether a project, and with it its crew, is there for the caller at all.</summary>
-    public const string RequiredKey = ProjectKeys.View;
+    /// <summary>The permission that decides whether a project, and with it its crew, is there for the caller at all.</summary>
+    public const string RequiredPermission = ProjectPermissionNames.View;
 }
 
 /// <summary>The crew of one project, and the caller's own place on it.</summary>
@@ -53,7 +53,7 @@ public sealed class CrewsOfProjectsHandler(IProjectReads reads, ProjectAccess ac
         }
 
         // Each reach is a set not yet read; the reading puts both into the statement that reads the crews.
-        var (see, manage) = access.SeenAndHeld(CrewOverview.RolesKey);
+        var (see, manage) = access.SeenAndHeld(CrewOverview.RolesPermission);
 
         await using var reading = reads.Open();
         var crews = await reading.CrewsOfAsync(projects, see, manage, cancellationToken);

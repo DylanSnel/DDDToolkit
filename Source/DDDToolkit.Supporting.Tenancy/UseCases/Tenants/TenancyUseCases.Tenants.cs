@@ -38,7 +38,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         /// Provisions a tenant, in one save: the tenant, its organization with the root, a role copied from
         /// every pack seeded for its shape, and a first seat for <see cref="TenantToProvision.AdminIdentity"/>,
         /// placed at the root and granted the administrators' role there with no end. That role holds what the
-        /// administrators' pack seeded for the shape holds, which is every live key unless the pack lists its own.
+        /// administrators' pack seeded for the shape holds, which is every live permission unless the pack lists its own.
         /// The tenant is active when the save is done.
         /// <para>
         /// The roles are named as the catalogue names its packs, or, with a
@@ -162,7 +162,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         /// Changes a flat tenant into a hierarchical one, and gives it a copy of every pack seeded for the new shape
         /// it has no copy of yet. No grant changes: who held what at the root still does. Where the two shapes have
         /// administrators' packs of their own, the tenant gets the role of the pack seeded for the new shape with
-        /// the keys that pack holds, and nobody is given it: the administrators keep the role they have, and give
+        /// the permissions that pack holds, and nobody is given it: the administrators keep the role they have, and give
         /// the new one as they see fit.
         /// </summary>
         /// <param name="to">The new shape.</param>
@@ -176,7 +176,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         /// </param>
         /// <param name="cancellationToken">Cancels the work.</param>
         /// <exception cref="Exceptions.RefusalException">
-        /// <c>tenancy.not-permitted</c> without <see cref="TenancyKeys.SettingsManage"/> for the whole tenant,
+        /// <c>tenancy.not-permitted</c> without <see cref="TenancyPermissions.SettingsManage"/> for the whole tenant,
         /// <c>tenancy.shape-change</c>, <c>tenancy.tenant-state</c> for a closed tenant,
         /// <c>tenancy.role-name-taken</c> when a role of the tenant, or another new role, already has a new
         /// role's name, <c>tenancy.name-invalid</c> for a pack's translated name or description.
@@ -190,7 +190,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         {
             var gate = new Gate(store, catalogue, clock);
             var tenantId = gate.RequireTenant();
-            await gate.RequireAtTenantAsync(TenancyKeys.SettingsManage, cancellationToken).ConfigureAwait(false);
+            await gate.RequireAtTenantAsync(TenancyPermissions.SettingsManage, cancellationToken).ConfigureAwait(false);
 
             // Everything is decided before the tenant changes, so a refusal leaves nothing for a later save.
             var tenant = await gate.LoadTenantAsync(tenantId, cancellationToken).ConfigureAwait(false);
@@ -230,14 +230,14 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
 
         /// <summary>Renames the organization, which is the tenant's name.</summary>
         /// <exception cref="Exceptions.RefusalException">
-        /// <c>tenancy.not-permitted</c> without <see cref="TenancyKeys.SettingsManage"/> for the whole tenant,
+        /// <c>tenancy.not-permitted</c> without <see cref="TenancyPermissions.SettingsManage"/> for the whole tenant,
         /// <c>tenancy.name-invalid</c>.
         /// </exception>
         public async Task RenameOrganizationAsync(string name, CancellationToken cancellationToken)
         {
             var gate = new Gate(store, catalogue, clock);
             var tenantId = gate.RequireTenant();
-            await gate.RequireAtTenantAsync(TenancyKeys.SettingsManage, cancellationToken).ConfigureAwait(false);
+            await gate.RequireAtTenantAsync(TenancyPermissions.SettingsManage, cancellationToken).ConfigureAwait(false);
 
             var organization = await gate.LoadOrganizationAsync(tenantId, cancellationToken).ConfigureAwait(false);
             organization.Rename(name, gate.By);
@@ -281,17 +281,17 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         }
 
         /// <summary>
-        /// What a role copied from <paramref name="pack"/> starts as. It holds the keys the catalogue built the
-        /// pack with, the administrators' role too: every live key for a pack that lists none, and for one that
-        /// lists keys those and no others. Its name and description are the application's texts for the pack in
+        /// What a role copied from <paramref name="pack"/> starts as. It holds the permissions the catalogue built the
+        /// pack with, the administrators' role too: every live permission for a pack that lists none, and for one that
+        /// lists permissions those and no others. Its name and description are the application's texts for the pack in
         /// <paramref name="language"/> when it has some, and the catalogue's otherwise. The default
         /// administrators' pack, which the application did not declare, has the package's texts in between: a
         /// tenant in Dutch gets it in Dutch, as it gets the package's refusals.
         /// </summary>
         private RoleDraft DraftOf(RolePack pack, CultureInfo? language)
             => language is not null && (packTexts?.For(pack, language) ?? PackageTextsOf(pack, language)) is { } texts
-                ? new RoleDraft(texts.Name, texts.Description, pack.Keys, pack.Key)
-                : new RoleDraft(pack.Name, pack.Description, pack.Keys, pack.Key);
+                ? new RoleDraft(texts.Name, texts.Description, pack.Permissions, pack.Key)
+                : new RoleDraft(pack.Name, pack.Description, pack.Permissions, pack.Key);
 
         /// <summary>The package's texts for its own pack, the default administrators' one, in <paramref name="language"/>; none for the application's packs.</summary>
         private (string Name, string Description)? PackageTextsOf(RolePack pack, CultureInfo language)
@@ -326,7 +326,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
             }
 
             var unknown = roleIds.Keys
-                .Where(key => !packs.Any(pack => string.Equals(pack.Key, key, StringComparison.Ordinal)))
+                .Where(packKey => !packs.Any(pack => string.Equals(pack.Key, packKey, StringComparison.Ordinal)))
                 .ToArray();
             if (unknown.Length > 0)
             {

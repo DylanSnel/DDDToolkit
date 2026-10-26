@@ -69,7 +69,7 @@ public sealed class DemoSeederTests(SampleHosts sample) : IClassFixture<SampleHo
     [Fact]
     public async Task Each_tenants_first_administrator_holds_the_administrators_role_of_its_shape_at_the_root_for_good()
     {
-        // A flat tenant's administrator holds every key through the one role. A hierarchical tenant's holds the
+        // A flat tenant's administrator holds every permission through the one role. A hierarchical tenant's holds the
         // role that runs access, and in the demonstration the area manager's next to it, for the work.
         var expected = new Dictionary<string, string[]>(StringComparer.Ordinal)
         {
@@ -94,9 +94,9 @@ public sealed class DemoSeederTests(SampleHosts sample) : IClassFixture<SampleHo
                 grant.GetProperty("appliesNow").GetBoolean().Should().BeTrue();
             }
 
-            // Either way every live key of the catalogue is hers, for the whole tenant.
-            me.GetProperty("keys").EnumerateArray().Where(key => key.GetProperty("atTenant").GetBoolean()).Select(key => key.GetProperty("key").GetString())
-                .Should().BeEquivalentTo((await sample.SharedAsync()).Services.GetRequiredService<TenancyCatalogue>().LiveKeys);
+            // Either way every live permission of the catalogue is hers, for the whole tenant.
+            me.GetProperty("permissions").EnumerateArray().Where(permission => permission.GetProperty("atTenant").GetBoolean()).Select(permission => permission.GetProperty("permission").GetString())
+                .Should().BeEquivalentTo((await sample.SharedAsync()).Services.GetRequiredService<TenancyCatalogue>().LivePermissions);
         }
     }
 
@@ -108,20 +108,20 @@ public sealed class DemoSeederTests(SampleHosts sample) : IClassFixture<SampleHo
             using var administrator = await sample.ClientAsync(tenant.Administrator.Person.Key, tenant.Slug);
 
             // The project roles a tenant's crews begin with, made once when it was set up, with the ids the
-            // demonstration gives them, the names and keys of the starter roles, and in use.
+            // demonstration gives them, the names and permissions of the starter roles, and in use.
             (await administrator.ProjectRolesAsync())
                 .Select(role => (
                     Id: role.GetProperty("id").GetGuid(),
                     MadeFrom: role.Text("madeFrom")!,
                     Name: role.Text("name")!,
                     Status: role.Text("status"),
-                    Keys: string.Join(" ", role.GetProperty("keys").EnumerateArray().Select(key => key.GetString()))))
+                    Keys: string.Join(" ", role.GetProperty("permissions").EnumerateArray().Select(permission => permission.GetString()))))
                 .Should().BeEquivalentTo(SampleCatalogue.ProjectRoles.Select(starter => (
                     tenant.ProjectRoles[starter.Key].Value,
                     starter.Key,
                     starter.Name,
                     (string?)"active",
-                    string.Join(" ", starter.Keys.Order(StringComparer.Ordinal)))));
+                    string.Join(" ", starter.Permissions.Order(StringComparer.Ordinal)))));
         }
     }
 

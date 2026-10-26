@@ -15,7 +15,7 @@ namespace Examples.Tenancy.Tests.Tenants.Grants;
 /// Hana is in the people office: she holds grant management at Harbor Works' root and nothing else. Whoever
 /// gives roles need not hold them, so she gives any role that manages no access to anyone in harbor, herself
 /// included, and takes it away again: Surveyor and Observer. A role that manages access she gives only with its
-/// keys that do, which she lacks but for her own, and never to herself: Crew lead among them, since the host
+/// permissions that do, which she lacks but for her own, and never to herself: Crew lead among them, since the host
 /// marks managing a crew.
 /// </summary>
 /// <remarks>
@@ -45,12 +45,12 @@ public sealed class PeopleOfficeScenarios(SampleHosts sample) : IClassFixture<Sa
 
         me.GetProperty("placements").EnumerateArray().Should().ContainSingle().Which
             .GetProperty("unit").GetProperty("path").GetString().Should().Be("Harbor Works");
-        var key = me.GetProperty("keys").EnumerateArray().Should().ContainSingle().Which;
-        key.GetProperty("key").GetString().Should().Be(TenancyKeys.GrantsManage);
-        key.GetProperty("atTenant").GetBoolean().Should().BeTrue();
+        var permission = me.GetProperty("permissions").EnumerateArray().Should().ContainSingle().Which;
+        permission.GetProperty("permission").GetString().Should().Be(TenancyPermissions.GrantsManage);
+        permission.GetProperty("atTenant").GetBoolean().Should().BeTrue();
         var role = me.GetProperty("roles").EnumerateArray().Should().ContainSingle().Which;
         role.GetProperty("fromPack").GetString().Should().Be(SampleCatalogue.PeopleOffice);
-        role.GetProperty("managesAccess").GetBoolean().Should().BeTrue("its one key gives power over other people's access");
+        role.GetProperty("managesAccess").GetBoolean().Should().BeTrue("its one permission gives power over other people's access");
         (await hana.VisibleProjectsAsync()).Should().BeEmpty("giving roles lets her see nothing");
     }
 
@@ -73,8 +73,8 @@ public sealed class PeopleOfficeScenarios(SampleHosts sample) : IClassFixture<Sa
         me.GetProperty("placements").EnumerateArray().Single().GetProperty("grants").EnumerateArray()
             .Select(grant => grant.GetProperty("role").GetString()).Should().Equal("Observer");
         var hanas = await hana.GetFromJsonAsync<JsonElement>("/me", Cancellation);
-        hanas.GetProperty("keys").EnumerateArray().Select(key => key.GetProperty("key").GetString())
-            .Should().Equal([TenancyKeys.GrantsManage], "giving a role gives the giver nothing");
+        hanas.GetProperty("permissions").EnumerateArray().Select(permission => permission.GetProperty("permission").GetString())
+            .Should().Equal([TenancyPermissions.GrantsManage], "giving a role gives the giver nothing");
     }
 
     [Fact]
@@ -177,7 +177,7 @@ public sealed class PeopleOfficeScenarios(SampleHosts sample) : IClassFixture<Sa
             new { unitId = NorthCoast.Value, roleId = Harbor.Roles[pack].Value },
             Cancellation);
 
-        // Only the role's keys that manage access count, and of those she holds tenancy.grants.manage alone.
+        // Only the role's permissions that manage access count, and of those she holds tenancy.grants.manage alone.
         var refused = await response.ShouldBeRefusedAsync(HttpStatusCode.Forbidden, TenancyRefusals.GrantExceedsOwn);
         refused.Argument("Missing").Should().Be(missing);
     }
@@ -192,7 +192,7 @@ public sealed class PeopleOfficeScenarios(SampleHosts sample) : IClassFixture<Sa
             Cancellation);
 
         var refused = await response.ShouldBeRefusedAsync(HttpStatusCode.Forbidden, TenancyRefusals.GrantExceedsOwn);
-        refused.Argument("Missing").Should().Be(ProjectKeys.ManageCrew + ", " + ProjectKeys.ChangeOwner + ", " + TenancyKeys.SeatsManage + ", " + TenancyKeys.UnitsManage);
+        refused.Argument("Missing").Should().Be(ProjectPermissionNames.ManageCrew + ", " + ProjectPermissionNames.ChangeOwner + ", " + TenancyPermissions.SeatsManage + ", " + TenancyPermissions.UnitsManage);
     }
 
     [Fact]
@@ -226,7 +226,7 @@ public sealed class PeopleOfficeScenarios(SampleHosts sample) : IClassFixture<Sa
             new { unitId = Harbor.Root.Value, roleId = Harbor.Roles[pack].Value },
             Cancellation);
 
-        // Refused before her keys are counted, and before anything else about the grant.
+        // Refused before her permissions are counted, and before anything else about the grant.
         var refused = await response.ShouldBeRefusedAsync(HttpStatusCode.Forbidden, TenancyRefusals.SelfAppointment);
         refused.Argument("Role").Should().Be(Harbor.Roles[pack].Value.ToString());
     }
@@ -242,7 +242,7 @@ public sealed class PeopleOfficeScenarios(SampleHosts sample) : IClassFixture<Sa
             Cancellation);
 
         var refused = await response.ShouldBeRefusedAsync(HttpStatusCode.Forbidden, TenancyRefusals.NotPermitted);
-        refused.Argument("Key").Should().Be(TenancyKeys.SeatsManage);
+        refused.Argument("Permission").Should().Be(TenancyPermissions.SeatsManage);
     }
 
     [Fact]
@@ -255,13 +255,13 @@ public sealed class PeopleOfficeScenarios(SampleHosts sample) : IClassFixture<Sa
 
         catalogue.GetProperty("permissions").EnumerateArray()
             .Where(permission => permission.GetProperty("managesAccess").GetBoolean())
-            .Select(permission => permission.GetProperty("key").GetString())
+            .Select(permission => permission.GetProperty("name").GetString())
             .Should().BeEquivalentTo(
             [
-                ProjectKeys.ChangeOwner, ProjectKeys.ManageCrew,
-                TenancyKeys.SettingsManage, TenancyKeys.UnitsManage, TenancyKeys.SeatsManage, TenancyKeys.GrantsManage, TenancyKeys.RolesManage,
+                ProjectPermissionNames.ChangeOwner, ProjectPermissionNames.ManageCrew,
+                TenancyPermissions.SettingsManage, TenancyPermissions.UnitsManage, TenancyPermissions.SeatsManage, TenancyPermissions.GrantsManage, TenancyPermissions.RolesManage,
             ],
-            "the host marks naming an owner and managing a crew, keys Projects declares, and Tenancy's own keys all manage access");
+            "the host marks naming an owner and managing a crew, permissions Projects declares, and Tenancy's own permissions all manage access");
         roles.EnumerateArray()
             .Select(role => (Pack: role.GetProperty("fromPack").GetString(), ManagesAccess: role.GetProperty("managesAccess").GetBoolean()))
             .Should().BeEquivalentTo(
@@ -272,14 +272,14 @@ public sealed class PeopleOfficeScenarios(SampleHosts sample) : IClassFixture<Sa
     }
 
     [Fact]
-    public async Task Of_the_keys_that_manage_access_a_crew_gives_crew_management_alone()
+    public async Task Of_the_permissions_that_manage_access_a_crew_gives_crew_management_alone()
     {
-        // A crew gives only keys that act on its project, and whoever manages the crew gives them, holding them or
-        // not. Managing the crew is the one marked key among them: held at a unit it reaches every crew below it,
+        // A crew gives only permissions that act on its project, and whoever manages the crew gives them, holding them or
+        // not. Managing the crew is the one marked permission among them: held at a unit it reaches every crew below it,
         // on a crew only that crew, which whoever gives it there manages already.
         var catalogue = (await sample.SharedAsync()).Services.GetRequiredService<TenancyCatalogue>();
 
-        catalogue.AccessManagingKeys.Where(SampleCatalogue.Projects.Rules.RoleKeys.Allows).Should().Equal(ProjectKeys.ManageCrew);
+        catalogue.AccessManagingPermissions.Where(SampleCatalogue.Projects.Rules.RolePermissions.Allows).Should().Equal(ProjectPermissionNames.ManageCrew);
     }
 
     private static OrganizationUnitId NorthCoast => Harbor.UnitNamed("North Coast");

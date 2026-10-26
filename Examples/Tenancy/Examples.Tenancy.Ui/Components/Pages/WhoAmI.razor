@@ -82,7 +82,7 @@ else
     {
         <div class="table-responsive">
             <table class="table table-sm">
-                <thead><tr><th>@T["common.role"]</th><th>@T["whoami.from-pack"]</th><th>@T["common.status"]</th><th>@T["whoami.manages-access"]</th><th>@T["whoami.keys"]</th></tr></thead>
+                <thead><tr><th>@T["common.role"]</th><th>@T["whoami.from-pack"]</th><th>@T["common.status"]</th><th>@T["whoami.manages-access"]</th><th>@T["whoami.permissions"]</th></tr></thead>
                 <tbody>
                     @foreach (var role in me.Roles)
                     {
@@ -91,7 +91,7 @@ else
                             <td><code>@role.FromPack</code></td>
                             <td>@role.Status</td>
                             <td>@(role.ManagesAccess ? T["common.yes"] : T["common.no"])</td>
-                            <td><div class="keys">@foreach (var key in role.KeysShown) { <code>@key</code> }</div></td>
+                            <td><div class="permissions">@foreach (var key in role.PermissionsShown) { <code>@key</code> }</div></td>
                         </tr>
                     }
                 </tbody>
@@ -99,45 +99,45 @@ else
         </div>
     }
 
-    @if (me.Keys.Any(key => key.Key == GrantsManage))
+    @if (me.Permissions.Any(held => held.Permission == GrantsManage))
     {
         <p class="small text-body-secondary">@T.Html("whoami.grants-manage", GrantsManage)</p>
     }
 
-    @if (me.Keys.Any(key => key.Key == SeatsManage && key.AtTenant))
+    @if (me.Permissions.Any(held => held.Permission == SeatsManage && held.AtTenant))
     {
         <p class="small text-body-secondary">@T.Html("whoami.seats-manage", SeatsManage)</p>
     }
 
-    @if (me.Keys.Any(key => key.Key == UnitsManage))
+    @if (me.Permissions.Any(held => held.Permission == UnitsManage))
     {
         <p class="small text-body-secondary">@T.Html("whoami.units-manage", UnitsManage)</p>
     }
 
-    <h2 class="h5 mt-4">@T["whoami.keys-now"]</h2>
-    @if (me.Keys.Count == 0)
+    <h2 class="h5 mt-4">@T["whoami.permissions-now"]</h2>
+    @if (me.Permissions.Count == 0)
     {
-        <p class="text-body-secondary">@T["whoami.keys-now.none"]</p>
+        <p class="text-body-secondary">@T["whoami.permissions-now.none"]</p>
     }
     else
     {
         <div class="table-responsive">
             <table class="table table-sm">
-                <thead><tr><th>@T["whoami.key"]</th><th>@T["whoami.granted-at"]</th><th>@T["whoami.reaches"]</th></tr></thead>
+                <thead><tr><th>@T["whoami.permission"]</th><th>@T["whoami.granted-at"]</th><th>@T["whoami.reaches"]</th></tr></thead>
                 <tbody>
-                    @foreach (var key in me.Keys)
+                    @foreach (var held in me.Permissions)
                     {
                         <tr>
-                            <td><code>@key.Key</code></td>
-                            <td>@string.Join("; ", key.GrantedAt.Select(unit => unit.Path))</td>
+                            <td><code>@held.Permission</code></td>
+                            <td>@string.Join("; ", held.GrantedAt.Select(unit => unit.Path))</td>
                             <td>
-                                @if (key.AtTenant)
+                                @if (held.AtTenant)
                                 {
                                     <span class="badge text-bg-info">@T["whoami.whole-tenant"]</span>
                                 }
                                 else
                                 {
-                                    <ul class="paths">@foreach (var unit in key.Reaches) { <li>@unit.Path</li> }</ul>
+                                    <ul class="paths">@foreach (var unit in held.Reaches) { <li>@unit.Path</li> }</ul>
                                 }
                             </td>
                         </tr>
@@ -149,8 +149,8 @@ else
 }
 
 @code {
-    // Tenancy's keys for giving roles, managing seats and moving units. The UI knows the API by its wire, so the
-    // keys are written out here.
+    // Tenancy's permissions for giving roles, managing seats and moving units. The UI knows the API by its wire, so the
+    // permissions are written out here.
     private const string GrantsManage = "tenancy.grants.manage";
     private const string SeatsManage = "tenancy.seats.manage";
     private const string UnitsManage = "tenancy.units.manage";

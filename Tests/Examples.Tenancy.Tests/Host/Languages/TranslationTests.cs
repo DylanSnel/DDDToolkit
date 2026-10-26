@@ -80,7 +80,7 @@ public sealed partial class TranslationTests(SampleWithoutDatabase sample) : ICl
                  })
         {
             Texts(marker, CultureInfo.InvariantCulture).Should().Equal(
-                declared.ToDictionary(permission => permission.Key, permission => permission.Description),
+                declared.ToDictionary(permission => permission.Name, permission => permission.Description),
                 "{0}.resx holds every permission the module declares, in the words of its summary", marker.Name);
         }
 

@@ -103,7 +103,7 @@ public class FailureErrorFilterTests
         Extensions(error).GetProperty("kind").GetString().Should().Be("NOT_PERMITTED");
         var reasons = Extensions(error).GetProperty("arguments").GetProperty(ToolkitRefusals.ReasonsArgument).EnumerateArray().ToList();
         reasons.Select(reason => reason.GetProperty("code").GetString()).Should().Equal("tenancy.operators-only", "tenancy.not-permitted");
-        reasons[1].GetProperty("arguments").GetProperty("Key").GetString().Should().Be("tenancy.seats.manage", "each reason keeps its arguments, written as a refusal's are");
+        reasons[1].GetProperty("arguments").GetProperty("Permission").GetString().Should().Be("tenancy.seats.manage", "each reason keeps its arguments, written as a refusal's are");
     }
 
     [Fact]

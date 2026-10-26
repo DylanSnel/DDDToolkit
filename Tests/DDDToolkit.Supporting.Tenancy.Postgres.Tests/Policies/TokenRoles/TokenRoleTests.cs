@@ -98,7 +98,7 @@ public sealed class TokenRoleTests(TenancyPostgres postgres)
             (await adding.Should().ThrowAsync<PostgresException>()).Which.SqlState.Should().Be(PostgresErrorCodes.InsufficientPrivilege, "nor is a row its to add");
 
             // The questions a seat asks are not its to ask.
-            foreach (var function in (string[])["caller_seat()", "caller_tenant()", "identity_tenants()", "holds_key('tenancy.seats.manage')", "readable_units()"])
+            foreach (var function in (string[])["caller_seat()", "caller_tenant()", "identity_tenants()", "holds_permission('tenancy.seats.manage')", "readable_units()"])
             {
                 var asking = () => analyst.AttemptAsync($"SELECT tenancy.{function}", Cancellation);
                 (await asking.Should().ThrowAsync<PostgresException>()).Which.SqlState.Should().Be(PostgresErrorCodes.InsufficientPrivilege, $"{function} is granted to seats and to system work alone");
@@ -235,7 +235,7 @@ public sealed class TokenRoleTests(TenancyPostgres postgres)
 
         // Granted by hand to the role itself: a question that runs as its owner, and a function a module reads
         // through, which runs as its caller. The holder of such a token has no seat, and would ask what a seat asks.
-        const string Two = "\"tenancy\".caller_rights(), \"tenancy\".holds_key(text)";
+        const string Two = "\"tenancy\".caller_permissions(), \"tenancy\".holds_permission(text)";
         await TenancyPostgres.ExecuteAsync(database.ConnectionString, $"GRANT EXECUTE ON FUNCTION {Two} TO analysts_given_functions", Cancellation);
         await FluentActions.Awaiting(() => TenancyPostgresChecks.EnsureSystemInRoleIsConfinedAsync(granted.Provider, Cancellation))
             .Should().ThrowAsync<InvalidOperationException>()
@@ -253,7 +253,7 @@ public sealed class TokenRoleTests(TenancyPostgres postgres)
         await TenancyPostgres.ExecuteAsync(database.ConnectionString, "GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA tenancy TO analysts_given_functions", Cancellation);
         var all = (await FluentActions.Awaiting(() => TenancyPostgresChecks.EnsureSystemInRoleIsConfinedAsync(granted.Provider, Cancellation))
             .Should().ThrowAsync<InvalidOperationException>()).Which.Message;
-        all.Should().ContainAll("\"tenancy\".caller_seat()", "\"tenancy\".role_keys_in_use()", "\"tenancy\".tenant_administrators()", "\"tenancy\".rights_follow_grants()");
+        all.Should().ContainAll("\"tenancy\".caller_seat()", "\"tenancy\".role_permissions_in_use()", "\"tenancy\".tenant_administrators()", "\"tenancy\".rights_follow_grants()");
 
         // The access files applied again take back every grant they did not write, on the functions they write. The
         // trigger functions keep theirs: Postgres runs those as triggers alone, and the check goes on naming them.
@@ -264,7 +264,7 @@ public sealed class TokenRoleTests(TenancyPostgres postgres)
 
         var left = (await FluentActions.Awaiting(() => TenancyPostgresChecks.EnsureSystemInRoleIsConfinedAsync(granted.Provider, Cancellation))
             .Should().ThrowAsync<InvalidOperationException>()).Which.Message;
-        left.Should().Contain("\"tenancy\".rights_follow_grants()").And.NotContainAny("\"tenancy\".caller_seat()", "\"tenancy\".role_keys_in_use()", "\"tenancy\".tenant_administrators()");
+        left.Should().Contain("\"tenancy\".rights_follow_grants()").And.NotContainAny("\"tenancy\".caller_seat()", "\"tenancy\".role_permissions_in_use()", "\"tenancy\".tenant_administrators()");
         await TenancyPostgres.ExecuteAsync(database.ConnectionString, "REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA tenancy FROM analysts_given_functions", Cancellation);
         await TenancyPostgresChecks.EnsureSystemInRoleIsConfinedAsync(granted.Provider, Cancellation);
 
@@ -276,7 +276,7 @@ public sealed class TokenRoleTests(TenancyPostgres postgres)
             .WithMessage(
                 "*- analysts_among_the_askers, the role of a mapped token role, may execute \"tenancy\".caller_seat() with the privileges of askers_of_tenancy, which it has, " +
                 "and Tenancy's functions are for signed-in users*: REVOKE askers_of_tenancy FROM analysts_among_the_askers;*");
-        await TenancyPostgres.ExecuteAsync(database.ConnectionString, "GRANT EXECUTE ON FUNCTION tenancy.holds_key(text), tenancy.readable_units() TO askers_of_tenancy", Cancellation);
+        await TenancyPostgres.ExecuteAsync(database.ConnectionString, "GRANT EXECUTE ON FUNCTION tenancy.holds_permission(text), tenancy.readable_units() TO askers_of_tenancy", Cancellation);
         await FluentActions.Awaiting(() => TenancyPostgresChecks.EnsureSystemInRoleIsConfinedAsync(among.Provider, Cancellation))
             .Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*- analysts_among_the_askers, the role of a mapped token role, may execute 3 functions of \"tenancy\", \"tenancy\".caller_seat() among them with the privileges of askers_of_tenancy, which it has,*");

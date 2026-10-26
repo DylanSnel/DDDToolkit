@@ -17,8 +17,8 @@ public sealed partial class CourseRole
     /// <summary>The college the role is of: the application's own column, which Membership knows nothing of.</summary>
     public TenantId TenantId { get; private set; }
 
-    /// <summary>Has the role give these keys.</summary>
-    public void HaveItGive(params string[] keys) => SetKeys(keys, CourseMembership.Rules);
+    /// <summary>Has the role give these permissions.</summary>
+    public void HaveItGive(params string[] permissions) => SetPermissions(permissions, CourseMembership.Rules);
 
     /// <summary>Puts the role away: it gives nothing from then on.</summary>
     public void PutAway() => Archive(CourseMembership.Rules);

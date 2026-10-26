@@ -416,14 +416,14 @@ public sealed class SampleOnPostgres : IAsyncDisposable
     }
 
     /// <summary>
-    /// Keys no crew gives, which the application refuses to put on a project role: naming an owner, opening
+    /// Permissions no crew gives, which the application refuses to put on a project role: naming an owner, opening
     /// projects, and managing seats and grants.
     /// </summary>
-    public static IReadOnlyList<string> KeysNoCrewGives { get; } =
-        [ProjectKeys.ChangeOwner, ProjectKeys.Open, DDDToolkit.Supporting.Tenancy.Catalogue.TenancyKeys.SeatsManage, DDDToolkit.Supporting.Tenancy.Catalogue.TenancyKeys.GrantsManage];
+    public static IReadOnlyList<string> PermissionsNoCrewGives { get; } =
+        [ProjectPermissionNames.ChangeOwner, ProjectPermissionNames.Open, DDDToolkit.Supporting.Tenancy.Catalogue.TenancyPermissions.SeatsManage, DDDToolkit.Supporting.Tenancy.Catalogue.TenancyPermissions.GrantsManage];
 
     /// <summary>
-    /// Writes <see cref="KeysNoCrewGives"/> into a project role's row beside its own keys, as the role that owns the
+    /// Writes <see cref="PermissionsNoCrewGives"/> into a project role's row beside its own permissions, as the role that owns the
     /// database: what a role manager's own statement could write past the application. Whoever holds the role on a
     /// crew is then cut to what a crew gives by the questions and by the projects' functions alone, which is what a
     /// test of that cut needs.
@@ -432,7 +432,7 @@ public sealed class SampleOnPostgres : IAsyncDisposable
         => AsOwnerAsync(
             $"""
             UPDATE projects."{ProjectsContext.ProjectRolesTable}"
-            SET "Keys" = "Keys" || ARRAY[{string.Join(", ", KeysNoCrewGives.Select(key => "'" + key + "'"))}]::text[]
+            SET "Permissions" = "Permissions" || ARRAY[{string.Join(", ", PermissionsNoCrewGives.Select(permission => "'" + permission + "'"))}]::text[]
             WHERE "Id" = '{role.Value}'
             """,
             cancellationToken);

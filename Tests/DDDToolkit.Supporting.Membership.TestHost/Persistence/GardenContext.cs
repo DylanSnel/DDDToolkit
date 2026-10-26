@@ -59,7 +59,7 @@ public sealed class GardenContext(DbContextOptions<GardenContext> options) : DbC
 
         modelBuilder.Entity<PlotRole>(role =>
         {
-            // The package's part of a role: its name, what it is for, its keys, its status, and the starter role it came from.
+            // The package's part of a role: its name, what it is for, its permissions, its status, and the starter role it came from.
             role.IsCustomRole();
 
             // The host's part. A name is used once in a garden, and a garden has each starter role once: two

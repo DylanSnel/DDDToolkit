@@ -16,7 +16,7 @@
     <value>Dit project bestaat niet of is hier niet zichtbaar.</value>
   </data>
   <data name="projects.not-permitted" xml:space="preserve">
-    <value>Hiervoor is op dit project het recht {Key} nodig.</value>
+    <value>Hiervoor is op dit project het recht {Permission} nodig.</value>
   </data>
   <data name="projects.closed" xml:space="preserve">
     <value>Het project is gesloten; er verandert niets aan tot het weer geopend is.</value>
@@ -90,10 +90,10 @@
   <data name="projects.role-name-taken" xml:space="preserve">
     <value>Een andere projectrol van deze tenant heet al {Name}.</value>
   </data>
-  <data name="projects.key-not-for-members" xml:space="preserve">
-    <value>Deze rechten kan een projectrol niet geven: {Keys}.</value>
+  <data name="projects.permission-not-for-members" xml:space="preserve">
+    <value>Deze rechten kan een projectrol niet geven: {Permissions}.</value>
   </data>
-  <data name="projects.role-keys-not-normalized" xml:space="preserve">
+  <data name="projects.role-permissions-not-normalized" xml:space="preserve">
     <value>De rechten van een projectrol staan er elk een keer, geen ervan leeg, op volgorde.</value>
   </data>
 </root>

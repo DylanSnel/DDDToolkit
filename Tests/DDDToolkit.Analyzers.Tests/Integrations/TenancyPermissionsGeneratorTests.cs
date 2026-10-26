@@ -147,10 +147,10 @@ public class TenancyPermissionsGeneratorTests
 
         var module = result.Emit();
         var all = (IReadOnlyList<Permission>)module.StaticProperty("Shop.Ordering." + Declared, "All")!;
-        all.Select(permission => (permission.Key, permission.Module, permission.Description)).Should().Equal(
+        all.Select(permission => (permission.Name, permission.Module, permission.Description)).Should().Equal(
             ("orders.view", "Ordering", "See the orders."),
             ("orders.refund", "Ordering", "Refund an order."));
-        TenancyCatalogue.Build(all).LiveKeys.Should().Contain(["orders.view", "orders.refund"]);
+        TenancyCatalogue.Build(all).LivePermissions.Should().Contain(["orders.view", "orders.refund"]);
     }
 
     [Fact]
@@ -183,7 +183,7 @@ public class TenancyPermissionsGeneratorTests
 
         result.ShouldCompile();
         var all = (IReadOnlyList<Permission>)result.Emit().StaticProperty("Shop.Billing." + Declared, "All")!;
-        all.Select(permission => (permission.Key, permission.Description, permission.Retired)).Should().Equal(
+        all.Select(permission => (permission.Name, permission.Description, permission.Retired)).Should().Equal(
             ("invoices.view", "See the View of an invoice & its lines.", false),
             ("invoices.void", "What the level says", true));
     }
@@ -201,7 +201,7 @@ public class TenancyPermissionsGeneratorTests
 
             namespace Shop.Ordering;
 
-            public static class OrderingKeys
+            public static class OrderingList
             {
                 [TenancyPermissions]
                 public static IReadOnlyList<Permission> Permissions { get; } = [new("orders.view", "Ordering", "See the orders")];
@@ -213,7 +213,7 @@ public class TenancyPermissionsGeneratorTests
         result.ShouldNotCrash();
         var reported = result.ShouldHaveDiagnostic("DDD00095", at: "Permissions");
         reported.Severity.Should().Be(DiagnosticSeverity.Error);
-        reported.GetMessage().Should().StartWith("'OrderingKeys.Permissions' is a list of permissions marked [TenancyPermissions] by hand. Declare each permission as a constant of a static class marked [Permissions]");
+        reported.GetMessage().Should().StartWith("'OrderingList.Permissions' is a list of permissions marked [TenancyPermissions] by hand. Declare each permission as a constant of a static class marked [Permissions]");
         result.Count("DDD00095").Should().Be(1);
     }
 
@@ -258,7 +258,7 @@ public class TenancyPermissionsGeneratorTests
 
         var kiosk = result.Emit();
         var all = (IReadOnlyList<Permission>)kiosk.StaticProperty("Kiosk." + Written, "All")!;
-        all.Select(permission => (permission.Key, permission.Module)).Should().Equal(
+        all.Select(permission => (permission.Name, permission.Module)).Should().Equal(
             [("sales.view", "Kiosk"), ("stock.count", "Kiosk"), ("stock.order", "Kiosk")],
             "the classes one after the other, in the order of their names, under the project's name where it declares no module");
 
@@ -287,7 +287,7 @@ public class TenancyPermissionsGeneratorTests
         var kiosk = result.Emit();
         var services = (IServiceCollection)kiosk.CallStatic("Kiosk." + Written, "AddTenancyPermissionsOfModules", new ServiceCollection())!;
         services.Should().ContainSingle().Which.ImplementationInstance.Should().BeOfType<PermissionContribution>()
-            .Which.Permissions.Select(permission => permission.Key).Should().Equal(["sales.view", "stock.count", "stock.order"]);
+            .Which.Permissions.Select(permission => permission.Name).Should().Equal(["sales.view", "stock.count", "stock.order"]);
     }
 
     [Fact]
@@ -395,25 +395,25 @@ public class TenancyPermissionsGeneratorTests
 
             namespace Shop.Ordering;
 
-            public sealed class InstanceKeys
+            public sealed class InstancePermissions
             {
                 [TenancyPermissions]
                 public IReadOnlyList<Permission> Permissions { get; } = [new("orders.copy", "Ordering", "Copy an order")];
             }
 
-            public static class HiddenKeys
+            public static class HiddenPermissions
             {
                 [TenancyPermissions]
                 internal static IReadOnlyList<Permission> Permissions { get; } = [new("orders.hide", "Ordering", "Hide an order")];
             }
 
-            public interface IVirtualKeys
+            public interface IVirtualPermissions
             {
                 [TenancyPermissions]
                 static virtual IReadOnlyList<Permission> Permissions => [new("orders.bend", "Ordering", "Bend an order")];
             }
 
-            public static class OrderingKeys
+            public static class OrderingList
             {
                 [TenancyPermissions]
                 public static IReadOnlyList<Permission> Permissions { get; } = [new("orders.view", "Ordering", "See the orders")];
@@ -423,7 +423,7 @@ public class TenancyPermissionsGeneratorTests
         const string Extended =
             """
 
-            public static class ExtendedKeys
+            public static class ExtendedPermissions
             {
                 extension(string)
                 {
@@ -439,11 +439,11 @@ public class TenancyPermissionsGeneratorTests
 
         result.ShouldCompile();
         result.ReportedDiagnostics.Should().BeEmpty("what is wrong with the module's lists is the module's to hear, where they are declared");
-        result.ShouldContain(Written, "global::Shop.Ordering.OrderingKeys.Permissions);");
-        result.ShouldNotContain(Written, "InstanceKeys", "a list that is no static member cannot be read as Type.Member");
-        result.ShouldNotContain(Written, "HiddenKeys", "nor can one the host does not see");
-        result.ShouldNotContain(Written, "VirtualKeys", "nor one of an interface that only a type parameter reads");
-        result.ShouldNotContain(Written, "ExtendedKeys", "nor one in an extension block, which code cannot name");
+        result.ShouldContain(Written, "global::Shop.Ordering.OrderingList.Permissions);");
+        result.ShouldNotContain(Written, "InstancePermissions", "a list that is no static member cannot be read as Type.Member");
+        result.ShouldNotContain(Written, "HiddenPermissions", "nor can one the host does not see");
+        result.ShouldNotContain(Written, "VirtualPermissions", "nor one of an interface that only a type parameter reads");
+        result.ShouldNotContain(Written, "ExtendedPermissions", "nor one in an extension block, which code cannot name");
     }
 
     // ------------------------------------------------------------------ incremental

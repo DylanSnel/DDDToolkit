@@ -9,18 +9,18 @@ namespace Examples.Tenancy.Inspections.Application.Recording.Queries;
 /// </summary>
 /// <remarks>
 /// An answer, not a check: it asks about the caller only and refuses nobody, and whether the command may run is
-/// asked again when it runs. A project is in the answer when the caller holds <see cref="RequiredKey"/> on it and
+/// asked again when it runs. A project is in the answer when the caller holds <see cref="RequiredPermission"/> on it and
 /// it is open, which is what the command's own check requires; one the caller may not see is left out exactly as
 /// one that does not exist. Projects' gate is asked once, about all of them, by the handler.
 /// </remarks>
 /// <param name="Projects">The projects, at most <see cref="InspectionsOfProjects.MostProjects"/> different ones.</param>
 public sealed record ProjectsOpenToRecording(IReadOnlyList<ProjectId> Projects) : IQuery<IReadOnlySet<ProjectId>>, IInspectionsRequest
 {
-    /// <summary>The key asked about: the one the command that records declares, so a command whose key changes takes this answer with it.</summary>
-    public const string RequiredKey = RecordInspection.RequiredKey;
+    /// <summary>The permission asked about: the one the command that records declares, so a command whose permission changes takes this answer with it.</summary>
+    public const string RequiredPermission = RecordInspection.RequiredPermission;
 
     /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => new InspectionsRequirement.OnProjectsInReach(RequiredKey, Projects);
+    AccessRequirement IRequireAccess.RequiredAccess => new InspectionsRequirement.OnProjectsInReach(RequiredPermission, Projects);
 }
 
 /// <summary>Answers <see cref="ProjectsOpenToRecording"/> from what Projects' gate answers, asked once for all of them.</summary>
@@ -29,7 +29,7 @@ public sealed class ProjectsOpenToRecordingHandler(IProjectGate projects) : IQue
 {
     /// <inheritdoc />
     public async ValueTask<IReadOnlySet<ProjectId>> Handle(ProjectsOpenToRecording query, CancellationToken cancellationToken)
-        => (await projects.AskAsync(query.Projects, ProjectsOpenToRecording.RequiredKey, cancellationToken))
+        => (await projects.AskAsync(query.Projects, ProjectsOpenToRecording.RequiredPermission, cancellationToken))
             .Where(answer => answer.Value is { Allowed: true, Closed: false })
             .Select(answer => answer.Key)
             .ToHashSet();

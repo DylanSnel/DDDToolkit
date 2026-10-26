@@ -8,7 +8,7 @@ namespace DDDToolkit.Supporting.Membership.EntityFramework;
 /// </summary>
 /// <param name="Members">The resource's collection of members.</param>
 /// <param name="Owner">The resource's property that holds its owner.</param>
-/// <param name="Above">How a key held from above is compared with where the resource sits, or <see langword="null"/> for a resource that is not reached from above.</param>
+/// <param name="Above">How a permission held from above is compared with where the resource sits, or <see langword="null"/> for a resource that is not reached from above.</param>
 /// <param name="Roles">The rows of the resource's roles, or <see langword="null"/> for a resource whose roles are not kept for it.</param>
 /// <param name="FollowTheRequest">
 /// Whether the rows a question reads, the resource's or its kept roles', are under a query filter that reads

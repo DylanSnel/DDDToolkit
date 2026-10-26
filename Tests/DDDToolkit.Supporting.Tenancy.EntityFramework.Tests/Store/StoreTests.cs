@@ -10,12 +10,12 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework.Tests;
 
 /// <summary>
 /// The store the use cases load and save through: it keeps to the caller's tenant, provisions a working tenant in
-/// one save, and stores Tenancy's domain events under their own names and off the sinks. A key removed from the
+/// one save, and stores Tenancy's domain events under their own names and off the sinks. A permission removed from the
 /// catalogue is reported, and its holders get no rights for it.
 /// </summary>
 public abstract class StoreTests(TestDatabases databases) : IAsyncLifetime
 {
-    private const string PolishKey = "widget.polish";
+    private const string PolishPermission = "widget.polish";
 
     private TestServices _services = null!;
 
@@ -60,7 +60,7 @@ public abstract class StoreTests(TestDatabases databases) : IAsyncLifetime
         var lin = await _services.AddSeatAsync(harbor.Tenant, Guid.NewGuid(), "Lin");
         await _services.BySystemIn(harbor.Tenant, services => services.Seats().SuspendAsync(lin, TestContext.Current.CancellationToken));
 
-        // Grace has no placement and no key: whoever works in a tenant reads its seats, for the directory's answers.
+        // Grace has no placement and no permission: whoever works in a tenant reads its seats, for the directory's answers.
         await _services.BySeat(harbor.Tenant, grace, async services =>
         {
             var store = services.GetRequiredService<HostTenancy.IStore>();
@@ -169,16 +169,16 @@ public abstract class StoreTests(TestDatabases databases) : IAsyncLifetime
             (await store.RoleNameTakenAsync(harbor.Tenant, "Administrator", except: harbor.AdministratorRole, TestContext.Current.CancellationToken)).Should().BeFalse();
         });
 
-        // The rows the questions read are written by the same save: the first administrator holds every live key at the root.
+        // The rows the questions read are written by the same save: the first administrator holds every live permission at the root.
         var catalogue = _services.Provider.GetRequiredService<TenancyCatalogue>();
-        (await _services.StoredRightsAsync(harbor.AdminSeat)).Select(right => (right.UnitId, right.Key))
-            .Should().BeEquivalentTo(catalogue.LiveKeys.Select(key => (harbor.RootUnit, key)));
+        (await _services.StoredRightsAsync(harbor.AdminSeat)).Select(right => (right.UnitId, right.Permission))
+            .Should().BeEquivalentTo(catalogue.LivePermissions.Select(permission => (harbor.RootUnit, permission)));
         (await _services.StoredPathsAsync(harbor.Tenant)).Should().ContainSingle();
         _services.Database.CountRows("TenancyAccessRevisions").Should().Be(1);
 
         var overview = await _services.BySeat(harbor.Tenant, harbor.AdminSeat, services => services.Directory().WhoAmIAsync(TestContext.Current.CancellationToken));
         overview.Tenant.Slug.Should().Be("harbor");
-        overview.Keys.Should().OnlyContain(reach => reach.AtTenant).And.HaveCount(catalogue.LiveKeys.Count);
+        overview.Permissions.Should().OnlyContain(reach => reach.AtTenant).And.HaveCount(catalogue.LivePermissions.Count);
     }
 
     [Fact]
@@ -286,7 +286,7 @@ public abstract class StoreTests(TestDatabases databases) : IAsyncLifetime
                 .SendTo(sink)
                 .PublishAs<OrganizationRoleGranted<TenantId, SeatId, OrganizationUnitId, RoleId>, RoleGiven>(granted => new RoleGiven(
                     granted.SeatId.Value, TenancyActorKinds.From(granted.By!.Value.Kind), granted.By.Value.Seat?.Value, granted.By.Value.Operator, granted.By.Value.Scope))
-                .PublishAs<RoleKeysChanged<TenantId, RoleId, SeatId>, RoleKeysSet>(changed => new RoleKeysSet(
+                .PublishAs<RolePermissionsChanged<TenantId, RoleId, SeatId>, RolePermissionsSet>(changed => new RolePermissionsSet(
                     changed.RoleId.Value, string.Join(" ", changed.Added), string.Join(" ", changed.Removed), changed.By!.Value.Seat?.Value)))));
 
         var operatorIdentity = Guid.NewGuid();
@@ -306,7 +306,7 @@ public abstract class StoreTests(TestDatabases databases) : IAsyncLifetime
         await services.BySeat(harbor.Tenant, harbor.AdminSeat, scoped =>
             scoped.Seats().GrantAsync(grace, harbor.RootUnit, watcher, until: null, reason: null, TestContext.Current.CancellationToken));
         await services.BySeat(harbor.Tenant, harbor.AdminSeat, scoped =>
-            scoped.Roles().SetKeysAsync(watcher, [HostCatalogue.WidgetCreate, HostCatalogue.WidgetChange], TestContext.Current.CancellationToken));
+            scoped.Roles().SetPermissionsAsync(watcher, [HostCatalogue.WidgetCreate, HostCatalogue.WidgetChange], TestContext.Current.CancellationToken));
 
         await ProcessAsync(services);
 
@@ -315,8 +315,8 @@ public abstract class StoreTests(TestDatabases databases) : IAsyncLifetime
             new RoleGiven(harbor.AdminSeat.Value, "operator", null, operatorIdentity, "tenancy"),
             new RoleGiven(grace.Value, "system", harbor.AdminSeat.Value, null, "tenancy"),
             new RoleGiven(grace.Value, "seat", harbor.AdminSeat.Value, null, null));
-        sink.Messages.Select(message => message.Body).OfType<RoleKeysSet>().Should().Equal(
-            new RoleKeysSet(watcher.Value, "widget.change widget.create", string.Empty, harbor.AdminSeat.Value));
+        sink.Messages.Select(message => message.Body).OfType<RolePermissionsSet>().Should().Equal(
+            new RolePermissionsSet(watcher.Value, "widget.change widget.create", string.Empty, harbor.AdminSeat.Value));
     }
 
     [Fact]
@@ -351,38 +351,38 @@ public abstract class StoreTests(TestDatabases databases) : IAsyncLifetime
     }
 
     [Fact]
-    public async Task A_key_removed_from_the_catalogue_is_reported()
+    public async Task A_permission_removed_from_the_catalogue_is_reported()
     {
-        // The application once declared a key, gave it to a role, and granted the role.
-        using var before = await databases.ServicesAsync(collection => collection.AddTenancyPermissions([new Permission(PolishKey, "Widgets", "Polish widgets")]));
+        // The application once declared a permission, gave it to a role, and granted the role.
+        using var before = await databases.ServicesAsync(collection => collection.AddTenancyPermissions([new Permission(PolishPermission, "Widgets", "Polish widgets")]));
         var harbor = await before.ProvisionAsync("harbor");
         var polisher = await before.BySystemIn(harbor.Tenant, services =>
-            services.Roles().CreateAsync("Polisher", "Polishes widgets", [PolishKey, HostCatalogue.WidgetRead], TestContext.Current.CancellationToken));
+            services.Roles().CreateAsync("Polisher", "Polishes widgets", [PolishPermission, HostCatalogue.WidgetRead], TestContext.Current.CancellationToken));
         var grace = await before.SeatAtAsync(harbor, "Grace", harbor.RootUnit);
         await before.BySystemIn(harbor.Tenant, services => services.Seats().GrantAsync(grace, harbor.RootUnit, polisher, until: null, reason: null, TestContext.Current.CancellationToken));
-        (await before.StoredRightsAsync(grace)).Select(right => right.Key).Should().Contain(PolishKey);
+        (await before.StoredRightsAsync(grace)).Select(right => right.Permission).Should().Contain(PolishPermission);
 
-        // A later version of it removed the key from the code instead of retiring it.
+        // A later version of it removed the permission from the code instead of retiring it.
         using var after = new TestServices(database: before.Database);
         await using (var scope = after.Scope())
         {
-            var unknown = await TenancyChecks.UnknownStoredKeysAsync<HostRole, RoleId, TenantId>(
+            var unknown = await TenancyChecks.UnknownStoredPermissionsAsync<HostRole, RoleId, TenantId>(
                 scope.ServiceProvider.Tenancy(), scope.ServiceProvider.GetRequiredService<TenancyCatalogue>(), TestContext.Current.CancellationToken);
-            unknown.Should().Equal(PolishKey);
+            unknown.Should().Equal(PolishPermission);
         }
 
-        // The role keeps the key, and it gives no rights: a new holder gets no row for it, and an old one loses
+        // The role keeps the permission, and it gives no rights: a new holder gets no row for it, and an old one loses
         // its row the next time its rights are written.
         var lin = await after.SeatAtAsync(harbor, "Lin", harbor.RootUnit);
         await after.BySystemIn(harbor.Tenant, services => services.Seats().GrantAsync(lin, harbor.RootUnit, polisher, until: null, reason: null, TestContext.Current.CancellationToken));
-        (await after.StoredRightsAsync(lin)).Select(right => right.Key).Should().Equal(HostCatalogue.WidgetRead);
+        (await after.StoredRightsAsync(lin)).Select(right => right.Permission).Should().Equal(HostCatalogue.WidgetRead);
 
         await after.BySystemIn(harbor.Tenant, services => services.Seats().SuspendAsync(grace, TestContext.Current.CancellationToken));
         await after.BySystemIn(harbor.Tenant, services => services.Seats().ReactivateAsync(grace, TestContext.Current.CancellationToken));
-        (await after.StoredRightsAsync(grace)).Select(right => right.Key).Should().Equal(HostCatalogue.WidgetRead);
+        (await after.StoredRightsAsync(grace)).Select(right => right.Permission).Should().Equal(HostCatalogue.WidgetRead);
 
         await after.BySystemIn(harbor.Tenant, async services =>
-            (await services.Tenancy().Set<HostRole>().SingleAsync(role => role.Id == polisher, TestContext.Current.CancellationToken)).Keys.Should().Contain(PolishKey));
+            (await services.Tenancy().Set<HostRole>().SingleAsync(role => role.Id == polisher, TestContext.Current.CancellationToken)).Permissions.Should().Contain(PolishPermission));
     }
 
     [Fact]
@@ -410,29 +410,29 @@ public abstract class StoreTests(TestDatabases databases) : IAsyncLifetime
             _services.Commands.Reset();
             var answered = (
                 await store.AdministratorsAsync(harbor.Tenant, now.AddMinutes(1), TestContext.Current.CancellationToken),
-                await store.RightsAMoveChangesAsync(harbor.Tenant, grace, north, south, catalogue.AccessManagingKeys, now.AddMinutes(1), TestContext.Current.CancellationToken));
+                await store.RightsAMoveChangesAsync(harbor.Tenant, grace, north, south, catalogue.AccessManagingPermissions, now.AddMinutes(1), TestContext.Current.CancellationToken));
             _services.Commands.Count.Should().Be(2, "one statement each");
-            _services.Commands.Commands.Should().OnlyContain(command => command.Contains("\"SeatRights\"") && !command.Contains("tenant_administrators") && !command.Contains("rights_a_move_changes"));
+            _services.Commands.Commands.Should().OnlyContain(command => command.Contains("\"SeatRights\"") && !command.Contains("tenant_administrators") && !command.Contains("permissions_a_move_changes"));
             return answered;
         });
 
-        // The administrators: a right at the root for the role key, with no end. Bert's ends, and Orchard's is not Harbor's.
+        // The administrators: a right at the root for the role permission, with no end. Bert's ends, and Orchard's is not Harbor's.
         pairs.Should().BeEquivalentTo([(harbor.AdminSeat, administrators), (second, administrators)]);
         pairs.Should().NotContain(pair => pair.Seat == orchard.AdminSeat);
 
-        // A move from under North to under South: Grace's own rights at North, whatever their key, reaching North; Ivy's
-        // of a key that manages access at South, reaching South alone, which is where the move changes them; nothing of
+        // A move from under North to under South: Grace's own rights at North, whatever their permission, reaching North; Ivy's
+        // of a permission that manages access at South, reaching South alone, which is where the move changes them; nothing of
         // the administrators' at the root, which reach both parents, wherever the unit hangs; and nothing of Hal's at
-        // South, whose operator's keys manage no access.
-        reaches.Where(reach => reach.OfCaller).Select(reach => (reach.UnitId, reach.Key, reach.Parent)).Should().BeEquivalentTo(
+        // South, whose operator's permissions manage no access.
+        reaches.Where(reach => reach.OfCaller).Select(reach => (reach.UnitId, reach.Permission, reach.Parent)).Should().BeEquivalentTo(
         [
-            (north, TenancyKeys.GrantsManage, north), (north, TenancyKeys.SeatsManage, north), (north, TenancyKeys.UnitsManage, north),
+            (north, TenancyPermissions.GrantsManage, north), (north, TenancyPermissions.SeatsManage, north), (north, TenancyPermissions.UnitsManage, north),
             (north, HostCatalogue.WidgetChange, north), (north, HostCatalogue.WidgetCreate, north), (north, HostCatalogue.WidgetRead, north),
             (north, HostCatalogue.WidgetRead, north),
-        ], "the supervisor's keys and the watcher's, each a right of its own");
-        reaches.Where(reach => !reach.OfCaller).Select(reach => (reach.UnitId, reach.Key, reach.Parent)).Should().BeEquivalentTo(
-            [(south, TenancyKeys.GrantsManage, south), (south, TenancyKeys.SeatsManage, south), (south, TenancyKeys.UnitsManage, south)],
-            "the supervisor's keys that manage access, and not the administrators' at the root");
+        ], "the supervisor's permissions and the watcher's, each a right of its own");
+        reaches.Where(reach => !reach.OfCaller).Select(reach => (reach.UnitId, reach.Permission, reach.Parent)).Should().BeEquivalentTo(
+            [(south, TenancyPermissions.GrantsManage, south), (south, TenancyPermissions.SeatsManage, south), (south, TenancyPermissions.UnitsManage, south)],
+            "the supervisor's permissions that manage access, and not the administrators' at the root");
         reaches.Where(reach => reach.EndsAt != null).Should().HaveCount(3, "Ivy's, which have not ended")
             .And.OnlyContain(reach => reach.EndsAt > now.AddDays(6));
         hal.Should().NotBe(grace);
@@ -450,8 +450,8 @@ public abstract class StoreTests(TestDatabases databases) : IAsyncLifetime
     /// <summary>The application's own contract for a role given to a seat, with who gave it, flattened.</summary>
     public sealed record RoleGiven(Guid Seat, string ByKind, Guid? BySeat, Guid? ByOperator, string? ByScope);
 
-    /// <summary>The application's own contract for a role whose keys changed.</summary>
-    public sealed record RoleKeysSet(Guid Role, string Added, string Removed, Guid? BySeat);
+    /// <summary>The application's own contract for a role whose permissions changed.</summary>
+    public sealed record RolePermissionsSet(Guid Role, string Added, string Removed, Guid? BySeat);
 
     /// <summary>A transport that keeps what it was handed.</summary>
     private sealed class RecordingSink : IIntegrationEventSink

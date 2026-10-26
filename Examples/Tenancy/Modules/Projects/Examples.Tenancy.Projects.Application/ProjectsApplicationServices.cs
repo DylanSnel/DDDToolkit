@@ -11,9 +11,9 @@ namespace Examples.Tenancy.Projects.Application;
 /// package, so the host still makes one call per module.
 /// </summary>
 /// <remarks>
-/// Projects' keys are not registered here: the module states them once, in its <c>[Permissions]</c> class
+/// Projects' permissions are not registered here: the module states them once, in its <c>[Permissions]</c> class
 /// (<see cref="ProjectPermissions"/>), and the host adds every module's permissions with the one call Tenancy's
-/// generator writes into it. A second registration here would add the keys twice, which the catalogue refuses.
+/// generator writes into it. A second registration here would add the permissions twice, which the catalogue refuses.
 /// </remarks>
 public static class ProjectsApplicationServices
 {
@@ -27,7 +27,7 @@ public static class ProjectsApplicationServices
     /// <remarks>
     /// The behavior is the one the toolkit's generator writes for <see cref="IProjectsRequest"/>, and
     /// <c>AddProjectsAccessBehavior</c> is written with it. It asks the checks registered for the interface: the
-    /// module's own, added here; the Membership package's, for a key held on a project, which the infrastructure
+    /// module's own, added here; the Membership package's, for a permission held on a project, which the infrastructure
     /// project adds with the projects' registration; and the Tenancy package's for the cases that are Tenancy's,
     /// which the infrastructure project adds over the module's context with <c>AddTenancyAccess</c>.
     /// <para>
@@ -67,7 +67,7 @@ public static class ProjectsApplicationServices
         // What the commands ask of the organization: one per scope, and safe for the requests of a scope that run at once.
         services.AddScoped<ProjectTenancy>();
 
-        // The check for the case only Projects can decide, a key at a unit, and the behavior that asks the module's
+        // The check for the case only Projects can decide, a permission at a unit, and the behavior that asks the module's
         // checks before every handler. A handler takes nothing from them: it acts on what its command names, which is
         // what was checked, and the database checks the write again as the caller.
         services.AddAccessCheck<IProjectsRequest, ProjectsAccessCheck>();

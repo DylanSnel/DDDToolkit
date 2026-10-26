@@ -11,12 +11,12 @@ namespace DDDToolkit.Supporting.Membership.EntityFramework.Tests.Infrastructure;
 /// Eve contributed until yesterday, her membership ended; Fay is a member whose contributor's role ended
 /// yesterday and whose onlooker's role starts tomorrow; Gil contributes from tomorrow; Ian manages it without
 /// being the owner. The budget, owned by Ben: Ada looks on. The outline, owned by Cy alone. Hal is a member of
-/// nothing. An owner holds every key of a document by owning it, and holds no role; the manager's role gives every
-/// key as well, to whoever holds it.
+/// nothing. An owner holds every permission of a document by owning it, and holds no role; the manager's role gives every
+/// permission as well, to whoever holds it.
 /// </para>
 /// <para>
 /// The cabinet, kept by K-001: C-014 is a clerk, V-020 a visitor, and T-030 is on it with no role. The
-/// annex, kept by C-014 alone. X-999 is on no folder. A keeper holds every key of a folder by keeping it, two
+/// annex, kept by C-014 alone. X-999 is on no folder. A keeper holds every permission of a folder by keeping it, two
 /// of them no role gives: the keeper's role is one the host declared, and lists less.
 /// </para>
 /// </remarks>
@@ -113,11 +113,11 @@ public sealed class FilingScenario
     /// <summary>Everybody a question about folders is asked as.</summary>
     public IReadOnlyList<StaffCode> Staff => [Keeper, Clerk, Visitor, Temp, Nobody];
 
-    /// <summary>Every key a question about documents is asked with, and one nobody declared.</summary>
-    public static IReadOnlyList<string> DocumentKeysAsked => [DocumentPermissions.View, DocumentPermissions.Edit, DocumentPermissions.Share, "documents.unheard-of"];
+    /// <summary>Every permission a question about documents is asked with, and one nobody declared.</summary>
+    public static IReadOnlyList<string> DocumentPermissionsAsked => [DocumentPermissions.View, DocumentPermissions.Edit, DocumentPermissions.Share, "documents.unheard-of"];
 
-    /// <summary>Every key a question about folders is asked with, and one nobody declared.</summary>
-    public static IReadOnlyList<string> FolderKeysAsked => [FolderPermissions.Read, FolderPermissions.File, FolderPermissions.Staff, FolderPermissions.Shred, FolderPermissions.HandOver, "folders.unheard-of"];
+    /// <summary>Every permission a question about folders is asked with, and one nobody declared.</summary>
+    public static IReadOnlyList<string> FolderPermissionsAsked => [FolderPermissions.Read, FolderPermissions.File, FolderPermissions.Staff, FolderPermissions.Shred, FolderPermissions.HandOver, "folders.unheard-of"];
 
     /// <summary>Saves the scenario as the application's own work.</summary>
     public async Task SaveAsync(FilingServices services)
@@ -130,16 +130,16 @@ public sealed class FilingScenario
         });
 
     /// <summary>
-    /// The documents a user holds <paramref name="key"/> on, worked out from the aggregates in memory with the
+    /// The documents a user holds <paramref name="permission"/> on, worked out from the aggregates in memory with the
     /// rules, the way a reader of the rules would: what every storage has to agree with.
     /// </summary>
-    public IReadOnlyList<DocumentId> DocumentsHeldBy(UserId user, string key)
+    public IReadOnlyList<DocumentId> DocumentsHeldBy(UserId user, string permission)
     {
         var rules = DocumentMembership.Rules;
         return [.. Documents
-            .Where(document => (rules.OwnerHolds(key) && document.OwnerId == user)
+            .Where(document => (rules.OwnerHolds(permission) && document.OwnerId == user)
                 || document.Shares.Any(share => share.MemberId == user && share.AppliesAt(Now)
-                    && (rules.MembershipGives(key) || rules.RolesWith(key).Any(role => share.HoldsAt(role, Now)))))
+                    && (rules.MembershipGives(permission) || rules.RolesWith(permission).Any(role => share.HoldsAt(role, Now)))))
             .Select(document => document.Id)
             .Order()];
     }
@@ -148,21 +148,21 @@ public sealed class FilingScenario
     public IReadOnlyList<DocumentId> DocumentsSeenBy(UserId user)
         => [.. Documents.Where(document => document.OwnerId == user || document.Shares.Any(share => share.MemberId == user && share.AppliesAt(Now))).Select(document => document.Id).Order()];
 
-    /// <summary>The documents where a user is a member now and holds a role now that gives <paramref name="key"/>.</summary>
-    public IReadOnlyList<DocumentId> DocumentsWithARoleFor(UserId user, string key)
+    /// <summary>The documents where a user is a member now and holds a role now that gives <paramref name="permission"/>.</summary>
+    public IReadOnlyList<DocumentId> DocumentsWithARoleFor(UserId user, string permission)
         => [.. Documents
-            .Where(document => document.Shares.Any(share => share.MemberId == user && DocumentMembership.Rules.RolesWith(key).Any(role => share.HoldsAt(role, Now))))
+            .Where(document => document.Shares.Any(share => share.MemberId == user && DocumentMembership.Rules.RolesWith(permission).Any(role => share.HoldsAt(role, Now))))
             .Select(document => document.Id)
             .Order()];
 
-    /// <summary>The folders a member of staff holds <paramref name="key"/> on, worked out in memory with the rules.</summary>
-    public IReadOnlyList<FolderId> FoldersHeldBy(StaffCode staff, string key)
+    /// <summary>The folders a member of staff holds <paramref name="permission"/> on, worked out in memory with the rules.</summary>
+    public IReadOnlyList<FolderId> FoldersHeldBy(StaffCode staff, string permission)
     {
         var rules = FolderMembership.Rules;
         return [.. Folders
-            .Where(folder => (rules.OwnerHolds(key) && folder.Keeper == staff)
+            .Where(folder => (rules.OwnerHolds(permission) && folder.Keeper == staff)
                 || folder.Staff.Any(member => member.MemberId == staff && member.AppliesAt(Now)
-                    && (rules.MembershipGives(key) || rules.RolesWith(key).Any(role => member.HoldsAt(role, Now)))))
+                    && (rules.MembershipGives(permission) || rules.RolesWith(permission).Any(role => member.HoldsAt(role, Now)))))
             .Select(folder => folder.Id)
             .Order()];
     }
@@ -171,10 +171,10 @@ public sealed class FilingScenario
     public IReadOnlyList<FolderId> FoldersSeenBy(StaffCode staff)
         => [.. Folders.Where(folder => folder.Keeper == staff || folder.Staff.Any(member => member.MemberId == staff && member.AppliesAt(Now))).Select(folder => folder.Id).Order()];
 
-    /// <summary>The folders where a member of staff is on it now and holds a role now that gives <paramref name="key"/>.</summary>
-    public IReadOnlyList<FolderId> FoldersWithARoleFor(StaffCode staff, string key)
+    /// <summary>The folders where a member of staff is on it now and holds a role now that gives <paramref name="permission"/>.</summary>
+    public IReadOnlyList<FolderId> FoldersWithARoleFor(StaffCode staff, string permission)
         => [.. Folders
-            .Where(folder => folder.Staff.Any(member => member.MemberId == staff && FolderMembership.Rules.RolesWith(key).Any(role => member.HoldsAt(role, Now))))
+            .Where(folder => folder.Staff.Any(member => member.MemberId == staff && FolderMembership.Rules.RolesWith(permission).Any(role => member.HoldsAt(role, Now))))
             .Select(folder => folder.Id)
             .Order()];
 }

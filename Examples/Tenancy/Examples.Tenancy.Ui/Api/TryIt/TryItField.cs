@@ -6,8 +6,8 @@ public enum TryItField
     /// <summary>A project's id.</summary>
     Project,
 
-    /// <summary>A key of the catalogue, such as <c>projects.close</c>.</summary>
-    Key,
+    /// <summary>A permission of the catalogue, such as <c>projects.close</c>.</summary>
+    Permission,
 
     /// <summary>A project's new name.</summary>
     Name,

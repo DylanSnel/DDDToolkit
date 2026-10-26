@@ -21,7 +21,7 @@ namespace Campus.Persistence;
 /// runs on, so the choice is the same for every instance.</item>
 /// <item><b>The tenant.</b> A course, a lab and a role of courses are each a college's, and kept to it by
 /// Tenancy's own rule: neither is read or written from another tenant. Membership knows nothing of it.</item>
-/// <item><b>Where a resource sits.</b> Said with its members, <c>at:</c>: the unit a key held in the
+/// <item><b>Where a resource sits.</b> Said with its members, <c>at:</c>: the unit a permission held in the
 /// organization is compared with.</item>
 /// </list>
 /// </summary>
@@ -73,13 +73,13 @@ public sealed class CampusContext(DbContextOptions<CampusContext> options) : DbC
             course.ScopeToTenant(row => row.TenantId);
             course.HasIndex(row => row.UnitId);
 
-            // The tutors and the roles they hold, and the unit a key held in the organization is compared with.
+            // The tutors and the roles they hold, and the unit a permission held in the organization is compared with.
             course.HasMembers(row => row.Tutors);
         });
 
         modelBuilder.Entity<CourseRole>(role =>
         {
-            // Membership's part of a role: its name, what it is for, its keys, its status, and the starter role it came from.
+            // Membership's part of a role: its name, what it is for, its permissions, its status, and the starter role it came from.
             role.IsCustomRole();
 
             // The application's part: whose it is. A name is used once in a college, and a college has each starter role once.

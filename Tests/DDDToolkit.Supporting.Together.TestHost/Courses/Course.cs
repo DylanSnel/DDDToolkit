@@ -29,8 +29,8 @@ public sealed partial class CourseTutor;
 /// <summary>
 /// A course, given at a faculty or an institute of a college: the usual resource of an application with an
 /// organization. Its members are seats; the roles they hold on it are roles of courses, which the application
-/// keeps for each college (<see cref="CourseRole"/>); and somebody who holds a key in the organization, at the
-/// unit the course is given at or above it, holds that key on the course without teaching on it.
+/// keeps for each college (<see cref="CourseRole"/>); and somebody who holds a permission in the organization, at the
+/// unit the course is given at or above it, holds that permission on the course without teaching on it.
 /// </summary>
 [AggregateRoot<CourseId>]
 public sealed partial class Course
@@ -103,7 +103,7 @@ public sealed partial class Course
 
 /// <summary>
 /// The permissions asked on a course: its owner holds all four; a role the college makes gives all but the one that
-/// dissolves it; a key held at the course's unit, or above it, reaches the course.
+/// dissolves it; a permission held at the course's unit, or above it, reaches the course.
 /// </summary>
 [Permissions]
 public static class CoursePermissions
@@ -128,7 +128,7 @@ public static class CoursePermissions
 /// <summary>
 /// The rules of access through a course's tutors: roles the college makes for itself, from two starter roles, and
 /// reach from above through Tenancy's grants. Who a tutor is follows from the seat id; the college's own work on a
-/// course runs in the module's scope, <c>campus</c>, and holds every key there. A lab's rules let no work in a scope
+/// course runs in the module's scope, <c>campus</c>, and holds every permission there. A lab's rules let no work in a scope
 /// through, <c>systemScopes: []</c>.
 /// </summary>
 public static class CourseMembership

@@ -15,12 +15,12 @@ type Query {
     last: Int
   ): AccessHistoryEntryConnection! @cost(weight: "10")
   catalogue: Catalogue! @cost(weight: "10")
-  keySets(keys: [String!]!, projects: [ID!]!): ProjectKeySets!
-    @cost(weight: "10")
   node(id: ID!): Node
   openInvitations: [Invitation!]! @cost(weight: "10")
   organizationUnits: [OrganizationUnit!]! @cost(weight: "10")
   overviewOfMine: SeatOverview! @cost(weight: "10")
+  permissionSets(permissions: [String!]!, projects: [ID!]!): ProjectPermissionSets!
+    @cost(weight: "10")
   project(id: ID!): Project
   projectRoles: [ProjectRole!]! @cost(weight: "10")
   projects(
@@ -55,7 +55,7 @@ type Query {
     @cost(weight: "10")
   tenantProjects(tenant: UUID!): [TenantProject!]! @cost(weight: "10")
   tenants(after: String, size: Int): TenantDirectoryPage! @cost(weight: "10")
-  unitsWhereIHold(key: String!): HeldUnits! @cost(weight: "10")
+  unitsWhereIHold(permission: String!): HeldUnits! @cost(weight: "10")
 }
 
 type Mutation {
@@ -99,14 +99,15 @@ type Mutation {
     @cost(weight: "10")
   projectRoleCreate(input: ProjectRoleCreateInput!): ProjectRoleCreatePayload!
     @cost(weight: "10")
-  projectRoleKeysSet(input: ProjectRoleKeysSetInput!): ProjectRoleKeysSetPayload!
+  projectRolePermissionsSet(input: ProjectRolePermissionsSetInput!): ProjectRolePermissionsSetPayload!
     @cost(weight: "10")
   projectRoleRename(input: ProjectRoleRenameInput!): ProjectRoleRenamePayload!
     @cost(weight: "10")
   roleArchive(input: RoleArchiveInput!): RoleArchivePayload! @cost(weight: "10")
   roleCreate(input: RoleCreateInput!): RoleCreatePayload! @cost(weight: "10")
   roleGrant(input: RoleGrantInput!): RoleGrantPayload! @cost(weight: "10")
-  roleKeysSet(input: RoleKeysSetInput!): RoleKeysSetPayload! @cost(weight: "10")
+  rolePermissionsSet(input: RolePermissionsSetInput!): RolePermissionsSetPayload!
+    @cost(weight: "10")
   roleRevoke(input: RoleRevokeInput!): RoleRevokePayload! @cost(weight: "10")
   seatDeactivate(input: SeatDeactivateInput!): SeatDeactivatePayload!
     @cost(weight: "10")
@@ -315,13 +316,6 @@ type IssuedInvitation {
   token: String!
 }
 
-type KeyOfMine {
-  atTenant: Boolean!
-  grantedAt: [UnitPath!]!
-  key: String!
-  reaches: [UnitPath!]!
-}
-
 type OrganizationUnit {
   depth: Int
   id: UUID!
@@ -374,10 +368,17 @@ type PageInfo {
 type Permission {
   description: String!
   implies: [String!]!
-  key: String!
   managesAccess: Boolean!
   module: String!
+  name: String!
   retired: Boolean!
+}
+
+type PermissionOfMine {
+  atTenant: Boolean!
+  grantedAt: [UnitPath!]!
+  permission: String!
+  reaches: [UnitPath!]!
 }
 
 type PersonInvitePayload {
@@ -456,16 +457,6 @@ type ProjectEdge {
   node: Project!
 }
 
-type ProjectKeySet {
-  keys: [String!]!
-  project: ID!
-}
-
-type ProjectKeySets {
-  heldAtRoot: [String!]!
-  onProjects: [ProjectKeySet!]!
-}
-
 type ProjectMovePayload {
   errors: [ProjectMoveError!]
   project: Project
@@ -479,6 +470,16 @@ type ProjectOpenAtUnitPayload {
 type ProjectOwnerChangePayload {
   errors: [ProjectOwnerChangeError!]
   project: Project
+}
+
+type ProjectPermissionSet {
+  permissions: [String!]!
+  project: ID!
+}
+
+type ProjectPermissionSets {
+  heldAtRoot: [String!]!
+  onProjects: [ProjectPermissionSet!]!
 }
 
 type ProjectPlanPayload {
@@ -499,9 +500,9 @@ type ProjectReopenPayload {
 type ProjectRole {
   description: String!
   id: UUID!
-  keys: [String!] @authorize(policy: "tenancy.roles.manage")
   madeFrom: String
   name: String!
+  permissions: [String!] @authorize(policy: "tenancy.roles.manage")
   status: ProjectRoleStatus!
 }
 
@@ -515,8 +516,8 @@ type ProjectRoleCreatePayload {
   projectRole: ProjectRole
 }
 
-type ProjectRoleKeysSetPayload {
-  errors: [ProjectRoleKeysSetError!]
+type ProjectRolePermissionsSetPayload {
+  errors: [ProjectRolePermissionsSetError!]
   projectRole: ProjectRole
 }
 
@@ -542,9 +543,9 @@ type RefusalError implements CodedError {
 type Role {
   fromPack: String
   id: UUID!
-  keys: [String!] @authorize(policy: "tenancy.roles.manage")
   managesAccess: Boolean
   name: String
+  permissions: [String!] @authorize(policy: "tenancy.roles.manage")
   status: RoleStatus
 }
 
@@ -563,17 +564,12 @@ type RoleGrantPayload {
   seat: Seat
 }
 
-type RoleKeysSetPayload {
-  errors: [RoleKeysSetError!]
-  role: Role
-}
-
 type RoleOfMine {
   fromPack: String
   id: UUID!
-  keys: [String!]!
   managesAccess: Boolean!
   name: String!
+  permissions: [String!]!
   status: RoleStatus!
 }
 
@@ -581,9 +577,14 @@ type RolePack {
   administers: Boolean!
   description: String!
   key: String!
-  keys: [String!]!
   name: String!
+  permissions: [String!]!
   seededFor: TenantShape
+}
+
+type RolePermissionsSetPayload {
+  errors: [RolePermissionsSetError!]
+  role: Role
 }
 
 type RoleRevokePayload {
@@ -632,7 +633,7 @@ type SeatOfMine {
 }
 
 type SeatOverview {
-  keys: [KeyOfMine!]!
+  permissions: [PermissionOfMine!]!
   placements: [PlacementOfMine!]!
   roles: [RoleOfMine!]!
   seat: Seat!
@@ -861,7 +862,7 @@ union ProjectRoleCreateError =
   | BrokenRulesError
   | ConcurrencyConflictError
 
-union ProjectRoleKeysSetError =
+union ProjectRolePermissionsSetError =
   | RefusalError
   | InvalidValuesError
   | BrokenRulesError
@@ -891,7 +892,7 @@ union RoleGrantError =
   | BrokenRulesError
   | ConcurrencyConflictError
 
-union RoleKeysSetError =
+union RolePermissionsSetError =
   | RefusalError
   | InvalidValuesError
   | BrokenRulesError
@@ -1064,13 +1065,13 @@ input ProjectRoleArchiveInput {
 
 input ProjectRoleCreateInput {
   description: String
-  keys: [String!]
   name: String!
+  permissions: [String!]
 }
 
-input ProjectRoleKeysSetInput {
+input ProjectRolePermissionsSetInput {
   id: UUID!
-  keys: [String!]!
+  permissions: [String!]!
 }
 
 input ProjectRoleRenameInput {
@@ -1085,8 +1086,8 @@ input RoleArchiveInput {
 
 input RoleCreateInput {
   description: String
-  keys: [String!]
   name: String!
+  permissions: [String!]
 }
 
 input RoleGrantInput {
@@ -1097,9 +1098,9 @@ input RoleGrantInput {
   until: DateTime
 }
 
-input RoleKeysSetInput {
+input RolePermissionsSetInput {
   id: UUID!
-  keys: [String!]!
+  permissions: [String!]!
 }
 
 input RoleRevokeInput {

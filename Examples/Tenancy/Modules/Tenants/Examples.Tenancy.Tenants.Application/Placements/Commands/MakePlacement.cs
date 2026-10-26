@@ -8,12 +8,12 @@ namespace Examples.Tenancy.Tenants.Application.Placements.Commands;
 /// </summary>
 /// <remarks>
 /// It requires <c>tenancy.seats.manage</c> at the unit, which the request names. The package's use case asks for
-/// that key again, and refuses a seat that places itself.
+/// that permission again, and refuses a seat that places itself.
 /// </remarks>
 /// <param name="Seat">The seat.</param>
 /// <param name="Unit">The unit, which must be active.</param>
 /// <param name="Primary">Whether this becomes the seat's primary placement.</param>
-[RequiresKey(TenancyKeys.SeatsManage)]
+[RequiresPermission(TenancyPermissions.SeatsManage)]
 public sealed record MakePlacement(SeatId Seat, [AtUnit] OrganizationUnitId Unit, bool Primary) : ICommand, ITenantsRequest;
 
 /// <summary>Handles <see cref="MakePlacement"/> with the Tenancy package's use case, which checks the caller, decides and saves.</summary>

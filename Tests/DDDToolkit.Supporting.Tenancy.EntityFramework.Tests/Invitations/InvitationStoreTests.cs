@@ -117,7 +117,7 @@ public abstract class InvitationStoreTests(TestDatabases databases) : IAsyncLife
         grant.RoleId.Should().Be(Watcher);
         grant.GrantedBy.Should().Be(_harbor.AdminSeat);
         grant.Reason.Should().Be("invitation");
-        (await _services.StoredRightsAsync(accepted.Seat)).Should().ContainSingle(right => right.Key == HostCatalogue.WidgetRead && right.UnitId == _north);
+        (await _services.StoredRightsAsync(accepted.Seat)).Should().ContainSingle(right => right.Permission == HostCatalogue.WidgetRead && right.UnitId == _north);
 
         var invitation = await InAsync(_harbor.Tenant, context => context.Set<HostInvitation>().AsNoTracking().SingleAsync(Cancellation));
         invitation.State.Should().Be(InvitationState.Accepted);

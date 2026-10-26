@@ -10,7 +10,7 @@ namespace DDDToolkit.Supporting.Tenancy.Catalogue;
 /// {
 ///     [TenancyCatalogue]
 ///     public static ApplicationCatalogue Application { get; } = new(
-///         Packs: [new RolePack("viewer", "Viewer", "Looks at the orders", [ShopKeys.OrdersView])]);
+///         Packs: [new RolePack("viewer", "Viewer", "Looks at the orders", [ShopPermissions.OrdersView])]);
 /// }
 /// </code>
 /// <para>
@@ -18,9 +18,9 @@ namespace DDDToolkit.Supporting.Tenancy.Catalogue;
 /// from the catalogue the application runs with: its marks decide which roles manage access, and so which grants
 /// the policies contain, and its packs which roles a settings manager may add. The export runs before the
 /// application starts, so it builds that catalogue itself, as the host's registration does: this part, with the
-/// keys of every module the exporting project references, every list marked <see cref="TenancyPermissionsAttribute"/>.
+/// permissions of every module the exporting project references, every list marked <see cref="TenancyPermissionsAttribute"/>.
 /// An application that marks nothing gets what an application that leaves <c>TenancyOptions.Catalogue</c> unset gets:
-/// <c>new ApplicationCatalogue()</c>, Tenancy's keys and the modules' and the default administrators' pack.
+/// <c>new ApplicationCatalogue()</c>, Tenancy's permissions and the modules' and the default administrators' pack.
 /// </para>
 /// <para>
 /// The member is a static property or field of type <see cref="ApplicationCatalogue"/>, readable from the project

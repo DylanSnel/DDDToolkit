@@ -15,14 +15,14 @@ public class TenancyRowAccessTests
         TenancyRowAccess.Owner.Should().Be("tenancy");
 
         Asked(() => TenancyRowAccess.UnitsWhereIHold<OrganizationUnitId>(HostCatalogue.WidgetRead).Contains(OrganizationUnitId.CreateSequential()))
-            .Should().Be("tenancy/units_where_i_hold");
+            .Should().Be("tenancy/units_where_i_hold_permission");
         Asked(() => TenancyRowAccess.ReadableUnits<OrganizationUnitId>().Contains(OrganizationUnitId.CreateSequential())).Should().Be("tenancy/readable_units");
         Asked(() => TenancyRowAccess.SeatsInMyUnits<SeatId>().Contains(SeatId.CreateSequential())).Should().Be("tenancy/seats_in_my_units");
-        Asked(() => TenancyRowAccess.RolesWithKey<RoleId>(HostCatalogue.WidgetRead).Contains(RoleId.CreateSequential())).Should().Be("tenancy/roles_with_key");
+        Asked(() => TenancyRowAccess.RolesWithPermission<RoleId>(HostCatalogue.WidgetRead).Contains(RoleId.CreateSequential())).Should().Be("tenancy/roles_with_permission");
         Asked(() => TenancyRowAccess.CallerSeat<SeatId>()).Should().Be("tenancy/caller_seat");
         Asked(() => TenancyRowAccess.CallerTenant<TenantId>()).Should().Be("tenancy/caller_tenant");
-        Asked(() => TenancyRowAccess.HoldsKey(HostCatalogue.WidgetRead)).Should().Be("tenancy/holds_key");
-        Asked(() => TenancyRowAccess.HoldsAtTenant(TenancyKeys.SeatsManage)).Should().Be("tenancy/holds_tenant_wide");
+        Asked(() => TenancyRowAccess.HoldsPermission(HostCatalogue.WidgetRead)).Should().Be("tenancy/holds_permission");
+        Asked(() => TenancyRowAccess.HoldsAtTenant(TenancyPermissions.SeatsManage)).Should().Be("tenancy/holds_at_tenant");
     }
 
     [Fact]
@@ -32,11 +32,11 @@ public class TenancyRowAccessTests
 
         Asked(() => TenancyRowAccess.SeatInTenant<SeatId, TenantId>(tenant)).Should().Be("tenancy/seat_in_tenant");
         Asked(() => TenancyRowAccess.SeatedInTenant(tenant)).Should().Be("tenancy/seated_in_tenant");
-        Asked(() => TenancyRowAccess.HoldsKeyInTenant(tenant, HostCatalogue.WidgetRead)).Should().Be("tenancy/holds_key_in_tenant");
+        Asked(() => TenancyRowAccess.HoldsPermissionInTenant(tenant, HostCatalogue.WidgetRead)).Should().Be("tenancy/holds_permission_in_tenant");
         Asked(() => TenancyRowAccess.UnitsWhereIHoldInTenant<OrganizationUnitId, TenantId>(tenant, HostCatalogue.WidgetRead).Contains(OrganizationUnitId.CreateSequential()))
-            .Should().Be("tenancy/units_where_i_hold_in_tenant");
-        Asked(() => TenancyRowAccess.RolesWithKeyInTenant<RoleId, TenantId>(tenant, HostCatalogue.WidgetRead).Contains(RoleId.CreateSequential()))
-            .Should().Be("tenancy/roles_with_key_in_tenant");
+            .Should().Be("tenancy/units_where_i_hold_permission_in_tenant");
+        Asked(() => TenancyRowAccess.RolesWithPermissionInTenant<RoleId, TenantId>(tenant, HostCatalogue.WidgetRead).Contains(RoleId.CreateSequential()))
+            .Should().Be("tenancy/roles_with_permission_in_tenant");
     }
 
     /// <summary>The function <paramref name="question"/> says only the database answers, as the <see cref="DatabaseOnlyException"/> it throws names it.</summary>

@@ -251,7 +251,7 @@ public abstract class CampusPostgresServer(CampusSchemas schemas) : CampusDataba
             contexts,
             new CampusScenario(clock.GetUtcNow()),
             "PostgreSQL",
-            Delimited(schemas.Tenancy) + ".caller_rights()")
+            Delimited(schemas.Tenancy) + ".caller_permissions()")
         {
             ConnectionString = connectionString,
         };

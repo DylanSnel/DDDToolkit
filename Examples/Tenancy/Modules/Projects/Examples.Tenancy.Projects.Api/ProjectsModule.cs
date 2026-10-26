@@ -48,7 +48,7 @@ public static class ProjectsModule
 
     /// <summary>
     /// Registers Projects: how it is stored, the projects' rules, the checks its commands and queries pass, and the
-    /// gate other modules ask. Its keys are not registered here: the host adds them with every module's, from the
+    /// gate other modules ask. Its permissions are not registered here: the host adds them with every module's, from the
     /// <c>[Permissions]</c> class the module declares. The host says where its tables live and where
     /// what it publishes goes (see <see cref="ModuleHost"/>), and hands over the starter roles the application
     /// declares for its tenants' crews, which the projects' rules are made with. Tenancy must be registered first:
@@ -75,9 +75,9 @@ public static class ProjectsModule
     /// <c>/projects</c> to list, a page at a time, and open, <c>/projects/{id}</c> to read, rename, move, close and
     /// reopen one; <c>/projects/{id}/crew</c> to list its crew, put a seat on it and take it off, and
     /// <c>/projects/{id}/crew/{seatId}/roles</c> to give and take a member's project roles;
-    /// <c>PUT /projects/{id}/owner</c>; <c>/project-roles</c> to list, make, rename, re-key and archive the
-    /// tenant's project roles; and, for what the caller holds, <c>GET /access/projects/{id}?key=</c>,
-    /// <c>GET /access/keys?keys=</c> and <c>POST /access/projects/keys</c>. The module never names the host's
+    /// <c>PUT /projects/{id}/owner</c>; <c>/project-roles</c> to list, make, rename, set the permissions of and archive the
+    /// tenant's project roles; and, for what the caller holds, <c>GET /access/projects/{id}?permission=</c>,
+    /// <c>GET /access/permissions?permissions=</c> and <c>POST /access/projects/permissions</c>. The module never names the host's
     /// filters: it maps into the group it is given.
     /// </summary>
     /// <param name="seated">The group for callers with a seat. What it requires is the host's to decide.</param>

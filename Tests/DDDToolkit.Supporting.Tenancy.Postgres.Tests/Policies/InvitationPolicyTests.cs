@@ -107,7 +107,7 @@ public abstract class InvitationPolicyTests(TenancyPostgres postgres, TenancyNam
             (await owner.ScalarAsync<Guid>("SELECT \"UnitId\" FROM tenancy.\"SeatPlacements\" WHERE \"SeatId\" = $1 AND \"IsPrimary\"", Cancellation, accepted.Seat.Value)).Should().Be(NorthPier.Value);
             (await owner.ScalarAsync<Guid>("SELECT \"GrantedBy\" FROM tenancy.\"SeatRoleGrants\" WHERE \"SeatId\" = $1 AND \"RoleId\" = $2", Cancellation, accepted.Seat.Value, HarborRoles.Operator.Value))
                 .Should().Be(Ada.Seat.Value, "the issuer is who the grant keeps as its giver");
-            (await owner.ListAsync<string>("SELECT \"Key\" FROM tenancy.\"SeatRights\" WHERE \"SeatId\" = $1 ORDER BY 1", Cancellation, accepted.Seat.Value))
+            (await owner.ListAsync<string>("SELECT \"Permission\" FROM tenancy.\"SeatRights\" WHERE \"SeatId\" = $1 ORDER BY 1", Cancellation, accepted.Seat.Value))
                 .Should().Equal([HostCatalogue.WidgetChange, HostCatalogue.WidgetCreate, HostCatalogue.WidgetRead], "the database wrote the new seat's rights, with the save that made it");
             (await owner.ScalarAsync<string>("SELECT \"State\" || ' ' || coalesce(\"Address\", 'forgotten') FROM tenancy.\"Invitations\" WHERE \"Id\" = $1", Cancellation, issued.Id.Value))
                 .Should().Be(names.Stored(InvitationState.Accepted) + " forgotten");
@@ -120,7 +120,7 @@ public abstract class InvitationPolicyTests(TenancyPostgres postgres, TenancyNam
 
         // The person is a seat like any other from here on, and the invitation is used.
         var wren = await services.BySeat(Wren, Harbor, accepted.Seat, scoped => scoped.Directory().WhoAmIAsync(Cancellation));
-        wren.Keys.Select(key => key.Key).Should().BeEquivalentTo([HostCatalogue.WidgetChange, HostCatalogue.WidgetCreate, HostCatalogue.WidgetRead]);
+        wren.Permissions.Select(permission => permission.Permission).Should().BeEquivalentTo([HostCatalogue.WidgetChange, HostCatalogue.WidgetCreate, HostCatalogue.WidgetRead]);
         (await services.BySignedInUser(Wren, scoped => scoped.Invitations().AcceptAsync(issued.Token, null, Cancellation))).Should().Be(accepted);
         await RefusedWithAsync(TenancyRefusals.InvitationUsed,
             () => services.BySignedInUser(Guid.NewGuid(), scoped => scoped.Invitations().AcceptAsync(issued.Token, null, Cancellation, configure: seat => seat.Rename("Lark"))));
@@ -141,7 +141,7 @@ public abstract class InvitationPolicyTests(TenancyPostgres postgres, TenancyNam
             (await owner.ScalarAsync<byte[]>("SELECT \"Digest\" FROM tenancy.\"InvitationDigests\"", Cancellation)).Should().Equal(digest, "the row is there, as the tables' owner reads it");
         }
 
-        // Whoever asks, with whatever keys, in the invitation's tenant or not: the table answers no row, and gives none up.
+        // Whoever asks, with whatever permissions, in the invitation's tenant or not: the table answers no row, and gives none up.
         var callers = new (string Who, Func<Task<AsCaller>> As)[]
         {
             ("Ada, who issued it", () => AsCaller.PersonAsync(database, Ada.Identity, Harbor, Cancellation)),
@@ -219,9 +219,9 @@ public abstract class InvitationPolicyTests(TenancyPostgres postgres, TenancyNam
     [Fact]
     public async Task Only_a_seat_that_could_add_the_seat_and_make_the_grant_adds_an_invitation_by_a_query()
     {
-        // Eve is given seats and grants for the whole tenant, and no other key that manages access.
+        // Eve is given seats and grants for the whole tenant, and no other permission that manages access.
         var database = await DatabaseAsync();
-        await HoldAtAsync(database, Eve, HarborRoot, [TenancyKeys.SeatsManage, TenancyKeys.GrantsManage], Cancellation);
+        await HoldAtAsync(database, Eve, HarborRoot, [TenancyPermissions.SeatsManage, TenancyPermissions.GrantsManage], Cancellation);
 
         await using (var seth = await AsCaller.PersonAsync(database, Seth.Identity, Harbor, Cancellation))
         {
@@ -235,12 +235,12 @@ public abstract class InvitationPolicyTests(TenancyPostgres postgres, TenancyNam
 
         await using (var eve = await AsCaller.PersonAsync(database, Eve.Identity, Harbor, Cancellation))
         {
-            (await eve.AttemptAsync(Insert(Guid.NewGuid(), 1, North, HarborRoles.Watcher, Eve.Seat), Cancellation)).Should().Be(1, "a role that manages no access is offered without its keys");
+            (await eve.AttemptAsync(Insert(Guid.NewGuid(), 1, North, HarborRoles.Watcher, Eve.Seat), Cancellation)).Should().Be(1, "a role that manages no access is offered without its permissions");
             await RefusedAsync(eve, Insert(Guid.NewGuid(), 1, North, HarborRoles.Supervisor, Eve.Seat));
         }
 
         await using var ada = await AsCaller.PersonAsync(database, Ada.Identity, Harbor, Cancellation);
-        (await ada.AttemptAsync(Insert(Guid.NewGuid(), 1, North, HarborRoles.Supervisor, Ada.Seat), Cancellation)).Should().Be(1, "she holds every key the supervisors' role has that manages access");
+        (await ada.AttemptAsync(Insert(Guid.NewGuid(), 1, North, HarborRoles.Supervisor, Ada.Seat), Cancellation)).Should().Be(1, "she holds every permission the supervisors' role has that manages access");
 
         // What accepting an invitation trusts is not a seat's to say: that system work issued it, or another seat.
         await RefusedAsync(ada, Insert(Guid.NewGuid(), 1, North, HarborRoles.Watcher, Ada.Seat, asSystem: true));
@@ -399,12 +399,12 @@ public abstract class InvitationPolicyTests(TenancyPostgres postgres, TenancyNam
     [Fact]
     public async Task An_invitation_whose_issuer_may_no_longer_give_it_is_refused_and_nothing_is_written()
     {
-        // Eve manages seats and grants for the whole tenant, and holds no other key that manages access. What she may
+        // Eve manages seats and grants for the whole tenant, and holds no other permission that manages access. What she may
         // give is asked again when her invitation is used: as her, while the work and its connection are system
         // work's in the tenant, which reads every seat's rights there. Hers alone are to count, and not Ada's, who
-        // holds every key.
+        // holds every permission.
         var database = await DatabaseAsync();
-        await HoldAtAsync(database, Eve, HarborRoot, [TenancyKeys.SeatsManage, TenancyKeys.GrantsManage], Cancellation);
+        await HoldAtAsync(database, Eve, HarborRoot, [TenancyPermissions.SeatsManage, TenancyPermissions.GrantsManage], Cancellation);
         await using var services = new TenancyServices(database);
 
         Task<HostTenancy.IssuedInvitation<InvitationId>> ByEve(string address)
@@ -416,12 +416,12 @@ public abstract class InvitationPolicyTests(TenancyPostgres postgres, TenancyNam
         var first = await ByEve(Address);
         var second = await ByEve("lark@example.test");
 
-        // The role she offered comes to manage access, by a key she does not hold.
-        await services.BySystemIn(Harbor, scoped => scoped.Roles().SetKeysAsync(HarborRoles.Watcher, [HostCatalogue.WidgetRead, TenancyKeys.UnitsManage], Cancellation));
+        // The role she offered comes to manage access, by a permission she does not hold.
+        await services.BySystemIn(Harbor, scoped => scoped.Roles().SetPermissionsAsync(HarborRoles.Watcher, [HostCatalogue.WidgetRead, TenancyPermissions.UnitsManage], Cancellation));
         await RefusedWithAsync(TenancyRefusals.InvitationUnbacked, () => Accept(Wren, first.Token));
 
         // The role as it was again, her invitation is good: it was what she holds that refused it.
-        await services.BySystemIn(Harbor, scoped => scoped.Roles().SetKeysAsync(HarborRoles.Watcher, [HostCatalogue.WidgetRead], Cancellation));
+        await services.BySystemIn(Harbor, scoped => scoped.Roles().SetPermissionsAsync(HarborRoles.Watcher, [HostCatalogue.WidgetRead], Cancellation));
         (await Accept(Wren, first.Token)).Tenant.Should().Be(Harbor);
 
         // Her desk taken away, the other invitation gives nothing, whoever else in the tenant could still give it.

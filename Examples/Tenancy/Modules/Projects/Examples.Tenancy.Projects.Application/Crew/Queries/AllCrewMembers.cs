@@ -10,22 +10,22 @@ namespace Examples.Tenancy.Projects.Application.Crew.Queries;
 /// For a screen that shows a crew and nothing else of the project. It answers what a project's crew reads as
 /// everywhere, in the same order, without the project around it and without asking what the caller may do.
 /// <para>
-/// Seeing a crew is seeing its project, so the key is <see cref="RequiredKey"/>. It is the filter of the
+/// Seeing a crew is seeing its project, so the permission is <see cref="RequiredPermission"/>. It is the filter of the
 /// handler's own statement, not a check made before it: the whole query is one statement, and a project the
 /// caller does not reach is not found, exactly as one that does not exist.
 /// </para>
 /// <para>
-/// The members' roles take a second key, <see cref="CrewOverview.RolesKey"/>, held on the project. Whether the
+/// The members' roles take a second permission, <see cref="CrewOverview.RolesPermission"/>, held on the project. Whether the
 /// caller holds it is read in the same statement, and a caller who does not is answered every member without
 /// its roles: the rule is held here, where the data is read, so no route and no field has to remember it.
 /// </para>
 /// </remarks>
 /// <param name="Project">The project.</param>
-[SeenWith<ProjectId>(RequiredKey)]
+[SeenWith<ProjectId>(RequiredPermission)]
 public sealed record AllCrewMembers(ProjectId Project) : IQuery<IReadOnlyList<CrewOverview>>, IProjectsRequest
 {
-    /// <summary>The key that decides whether the project, and with it its crew, is there for the caller at all.</summary>
-    public const string RequiredKey = ProjectKeys.View;
+    /// <summary>The permission that decides whether the project, and with it its crew, is there for the caller at all.</summary>
+    public const string RequiredPermission = ProjectPermissionNames.View;
 }
 
 /// <summary>
@@ -41,7 +41,7 @@ public sealed class AllCrewMembersHandler(IProjectReads reads, ProjectAccess acc
     public async ValueTask<IReadOnlyList<CrewOverview>> Handle(AllCrewMembers query, CancellationToken cancellationToken)
     {
         // Each reach is a set not yet read; the reading puts both into the statement that reads the crew.
-        var (see, manage) = access.SeenAndHeld(CrewOverview.RolesKey);
+        var (see, manage) = access.SeenAndHeld(CrewOverview.RolesPermission);
 
         await using var reading = reads.Open();
         var crews = await reading.CrewsOfAsync([query.Project], see, manage, cancellationToken);

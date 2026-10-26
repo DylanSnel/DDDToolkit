@@ -28,7 +28,7 @@ namespace DDDToolkit.Access;
 /// kept only once the whole requirement let the caller through, and only for the cases it was let through by.
 /// </para>
 /// <para>
-/// A requirement that combines cases may have several of them keep a <typeparamref name="T"/>, two keys on two
+/// A requirement that combines cases may have several of them keep a <typeparamref name="T"/>, two permissions on two
 /// documents say: then each is kept, in the order the cases were asked. <see cref="TakeFor"/> hands out one and
 /// refuses to guess among several, <see cref="TakeAllFor"/> hands out all of them, and
 /// <see cref="TryFindInHand(Func{T, bool}, out T)"/> finds the one code of the handling is about.

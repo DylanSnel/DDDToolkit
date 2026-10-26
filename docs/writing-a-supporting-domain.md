@@ -299,7 +299,7 @@ The build makes the class in the project that runs the export, before any host e
 property or field the application marks. A parameter with a default the application may leave unmarked, so
 give a default wherever the package can do without the value, as Tenancy does for its catalogue. One without
 is a warning when nothing is marked, [DDD00054](diagnostics.md#ddd00054), and the package's SQL is not
-written. `Every = true` hands the parameter every member so marked, as Tenancy collects every module's keys,
+written. `Every = true` hands the parameter every member so marked, as Tenancy collects every module's permissions,
 and a generic attribute closes a generic contribution once for every member it marks, as Membership is made
 once for each resource.
 
@@ -376,7 +376,7 @@ context. A module's model then names what the package offers and nothing of how 
 application names the package's tables and columns as it likes, and the policies on those tables still decide
 what each caller is answered ([Tenancy's read functions](tenancy.md#modules-read-through-functions)).
 
-Keep what a module can read that way to what a rule needs. A read model of ids, keys, periods and statuses
+Keep what a module can read that way to what a rule needs. A read model of ids, permissions, periods and statuses
 lets a module ask "is this subscription active" inside its own query, and gives it nothing to show: no plan's
 name, no subscriber's. Names are a question of their own, asked of the package by id: a directory, where
 `PlansByIdAsync(ids)` answers what the plans a module's answer carried are called, to whoever may work with
@@ -1025,20 +1025,20 @@ the package's docs has to have explained. These can be the package's to write:
   [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, Inherited = false)]
   public sealed class OnAccountAttribute : Attribute;
 
-  [KeyMarker(typeof(BillingAccess), nameof(BillingAccess.OnLedger), IdOf = typeof(LedgerAttribute<>))]
+  [PermissionMarker(typeof(BillingAccess), nameof(BillingAccess.OnLedger), IdOf = typeof(LedgerAttribute<>))]
   [AttributeUsage(AttributeTargets.Parameter | AttributeTargets.Property, Inherited = false)]
-  public sealed class OnLedgerAttribute : Attribute;                             // [RequiresKey(key)] with [OnLedger]: OnLedger(key, request.Ledger)
+  public sealed class OnLedgerAttribute : Attribute;                             // [RequiresPermission(permission)] with [OnLedger]: OnLedger(permission, request.Ledger)
   ```
 
   `[StatesRequirement]` hands the call the attribute's constructor arguments in their order and its type arguments as
-  the method's, as `[SeenWith<DocumentId>(key)]` is `MemberAccess.SeenWith<DocumentId>(key)`, and `QueriesOnly = true`
-  says the requirement is for queries only ([DDD00082](diagnostics.md#ddd00082)). `[KeyMarker]` marks where the key of
-  the core's one `[RequiresKey(key)]` is held: the call takes the key and the marked member, and `IdOf` names the
+  the method's, as `[SeenWith<DocumentId>(permission)]` is `MemberAccess.SeenWith<DocumentId>(permission)`, and `QueriesOnly = true`
+  says the requirement is for queries only ([DDD00082](diagnostics.md#ddd00082)). `[PermissionMarker]` marks where the permission of
+  the core's one `[RequiresPermission(permission)]` is held: the call takes the permission and the marked member, and `IdOf` names the
   template whose classes' ids the member is, as a `[TemplateType]` names one, `Argument` and `IdOfArgument` included,
   so a marker on another id is [DDD00081](diagnostics.md#ddd00081) where the application's classes are seen.
-  `[KeyMarkerArgument(typeof(OnLedgerAttribute))]` marks one more argument of that call, as Membership's
-  `[ExpectedVersion]` is of `[OnResource]`'s, and `[assembly: KeyWithoutMarker(typeof(...), nameof(...))]` says what a
-  key without any marker means, which one package of an application says: Tenancy, for the whole tenant. The call's
+  `[PermissionMarkerArgument(typeof(OnLedgerAttribute))]` marks one more argument of that call, as Membership's
+  `[ExpectedVersion]` is of `[OnResource]`'s, and `[assembly: PermissionWithoutMarker(typeof(...), nameof(...))]` says what a
+  permission without any marker means, which one package of an application says: Tenancy, for the whole tenant. The call's
   types are checked by the compiler in the line written, so a declaration that does not fit is the package's to find
   in its own tests of a request that carries the attribute.
 
@@ -1047,11 +1047,11 @@ the package's docs has to have explained. These can be the package's to write:
   module's own attribute declared this way stacks as yours does. Three more things the marks say, each with a default:
   `Implies = [typeof(SignedInAttribute)]` on any of the three marks names the requirement attributes yours already
   requires, so one of them stacked beside it is a warning, [DDD00084](diagnostics.md#ddd00084), as Tenancy's
-  `[RequiresOperator]` names `[SignedIn]` and its key cases `[InTenant]`; `OwnAlternative = nameof(...)` on
-  `[KeyMarker]` says that the marked member is what the request acts on, so `[OrOwn]` may stand beside it, and names the
+  `[RequiresOperator]` names `[SignedIn]` and its permission cases `[InTenant]`; `OwnAlternative = nameof(...)` on
+  `[PermissionMarker]` says that the marked member is what the request acts on, so `[OrOwn]` may stand beside it, and names the
   method of your factory, taking what the marker's method takes, whose case the caller's own way through still meets
   there: Membership's `[OnResource]` names `MemberAccess.Sees`, so a caller acting on its own still sees the resource,
-  and `[OrOwn]` beside it is `Any(All(Own(member), Sees(key, resource)), On(key, resource))`; without it `[OrOwn]` is
+  and `[OrOwn]` beside it is `Any(All(Own(member), Sees(permission, resource)), On(permission, resource))`; without it `[OrOwn]` is
   [DDD00085](diagnostics.md#ddd00085); and a type your package says the caller's own of, with an `ICallersOwn<TValue>`
   it registers, goes in `[assembly: CallersOwn(typeof(...))]`, or, for an id the application declares with your
   template, `[assembly: CallersOwn(IdOf = typeof(SeatAggregateAttribute<>))]` as Tenancy says for its seat id, so the
@@ -1087,8 +1087,8 @@ the package's docs has to have explained. These can be the package's to write:
   list of permissions from the `[Permissions]` classes the module declares, and reads every module's list in the
   assemblies a project references, and writes them into each project that declares no module, with `DDD_Module`
   or `[assembly: Module]`, the host among them, with the call that registers them
-  ([A module states its keys once](tenancy.md#a-module-states-its-keys-once)). So a module says a thing once that
-  two programs need, and no project lists the modules. A list a module writes by hand would say its keys twice,
+  ([A module states its permissions once](tenancy.md#a-module-states-its-permissions-once)). So a module says a thing once that
+  two programs need, and no project lists the modules. A list a module writes by hand would say its permissions twice,
   and is an error where it is declared: [DDD00095](diagnostics.md#ddd00095).
 
 A generator of the package's own ships inside the package it belongs to, in `analyzers/dotnet/cs`, and is no
@@ -1110,7 +1110,7 @@ registration it belongs to is written. Membership's two generators ship this way
 writes in the host because the host is where the modules are composed. What proves they arrive, and write
 nowhere else, is a build from the packed packages of an application in three projects: a domain project on the
 two domain packages, an infrastructure project on the two Postgres packages, and a host above them that is
-handed every generator, gets nothing from Membership's, and gets the modules' keys from Tenancy's.
+handed every generator, gets nothing from Membership's, and gets the modules' permissions from Tenancy's.
 
 ## Requirements
 

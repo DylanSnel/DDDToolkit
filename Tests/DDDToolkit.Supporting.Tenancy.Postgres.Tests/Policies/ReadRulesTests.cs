@@ -61,8 +61,8 @@ public sealed class ReadRulesTests(TenancyPostgres postgres)
         tenancy.Should().Contain(
             ", held to what that default holds a rule to, beside what it keeps whatever a rule says: a row one of them allows is allowed.\n" +
             "CREATE POLICY \"Seats (select) for authenticated\" ON \"tenancy\".\"Seats\" FOR SELECT TO authenticated\n" +
-            "    USING ((\"Identity\" = (SELECT \"ddd\".caller_id()) OR ((\"TenantId\" = (SELECT \"tenancy\".caller_tenant())) AND ((SELECT \"tenancy\".holds_key('tenancy.seats.manage')) " +
-            "OR (SELECT \"tenancy\".holds_key('tenancy.grants.manage')) OR (SELECT \"tenancy\".holds_key('tenancy.units.manage')) OR (SELECT \"tenancy\".holds_tenant_wide('tenancy.roles.manage')))))" +
+            "    USING ((\"Identity\" = (SELECT \"ddd\".caller_id()) OR ((\"TenantId\" = (SELECT \"tenancy\".caller_tenant())) AND ((SELECT \"tenancy\".holds_permission('tenancy.seats.manage')) " +
+            "OR (SELECT \"tenancy\".holds_permission('tenancy.grants.manage')) OR (SELECT \"tenancy\".holds_permission('tenancy.units.manage')) OR (SELECT \"tenancy\".holds_at_tenant('tenancy.roles.manage')))))" +
             " OR ((\"TenantId\" = (SELECT \"tenancy\".caller_tenant())) AND (\"Id\" = (SELECT \"tenancy\".caller_seat()))));",
             "a person's own seats and the managers' read stay, and the rule decides the rest, in the calling seat's tenant");
         tenancy.Should().NotContain("\"Members and the person read seats (select) for authenticated\"", "the default itself is gone");
@@ -133,7 +133,7 @@ public sealed class ReadRulesTests(TenancyPostgres postgres)
         var ada = await services.BySeat(Seth.Identity, Harbor, Seth.Seat, scoped => scoped.Directory().SeatOverviewAsync(Ada.Seat, Cancellation));
         (ada.Seat.Id, ada.Units.Select(unit => unit.Path).Single()).Should().Be((Ada.Seat, "Harbor"));
         ada.Seat.Placements.SelectMany(placement => placement.Grants).Should().BeEmpty();
-        ada.Keys.Should().BeEmpty();
+        ada.Permissions.Should().BeEmpty();
 
         // And every command of the use cases runs as it did: none of them loads a seat its caller no longer reads.
         await EveryUseCase.RunAsync(services, Cancellation);
@@ -151,11 +151,11 @@ public sealed class ReadRulesTests(TenancyPostgres postgres)
         string[] questions =
         [
             "SELECT coalesce(tenancy.caller_seat()::text, '') || ' ' || coalesce(tenancy.caller_tenant()::text, '')",
-            "SELECT coalesce(string_agg(u::text, ',' ORDER BY u::text), '') FROM tenancy.units_where_i_hold('widget.read') u",
+            "SELECT coalesce(string_agg(u::text, ',' ORDER BY u::text), '') FROM tenancy.units_where_i_hold_permission('widget.read') u",
             "SELECT coalesce(string_agg(u::text, ',' ORDER BY u::text), '') FROM tenancy.readable_units() u",
-            "SELECT coalesce(string_agg(r::text, ',' ORDER BY r::text), '') FROM tenancy.roles_with_key('widget.read') r",
-            "SELECT tenancy.holds_key('tenancy.seats.manage')::text || ' ' || tenancy.holds_tenant_wide('tenancy.roles.manage')::text",
-            $"SELECT coalesce(string_agg(s.\"SeatId\"::text, ',' ORDER BY s.\"SeatId\"::text), '') FROM tenancy.seats_holding_at('widget.read', '{NorthPier.Value}') s",
+            "SELECT coalesce(string_agg(r::text, ',' ORDER BY r::text), '') FROM tenancy.roles_with_permission('widget.read') r",
+            "SELECT tenancy.holds_permission('tenancy.seats.manage')::text || ' ' || tenancy.holds_at_tenant('tenancy.roles.manage')::text",
+            $"SELECT coalesce(string_agg(s.\"SeatId\"::text, ',' ORDER BY s.\"SeatId\"::text), '') FROM tenancy.seats_holding_permission_at('widget.read', '{NorthPier.Value}') s",
             "SELECT coalesce(string_agg(a.\"SeatId\"::text, ',' ORDER BY a.\"SeatId\"::text), '') FROM tenancy.tenant_administrators() a",
             "SELECT coalesce(string_agg(t::text, ',' ORDER BY t::text), '') FROM tenancy.identity_tenants() t",
             "SELECT coalesce(string_agg(s::text, ',' ORDER BY s::text), '') FROM tenancy.seats_in_my_units() s",
@@ -308,5 +308,5 @@ public static partial class GrantsManagersReadTheInvitationsAtTheirUnits
 {
     /// <summary>Whether the calling seat manages grants at <paramref name="invitation"/>'s unit.</summary>
     public static bool Allows(HostInvitation invitation, Caller caller)
-        => TenancyRowAccess.UnitsWhereIHold<OrganizationUnitId>(TenancyKeys.GrantsManage).Contains(invitation.UnitId);
+        => TenancyRowAccess.UnitsWhereIHold<OrganizationUnitId>(TenancyPermissions.GrantsManage).Contains(invitation.UnitId);
 }

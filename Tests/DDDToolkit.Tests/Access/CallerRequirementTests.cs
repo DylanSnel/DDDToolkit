@@ -170,7 +170,7 @@ public class CallerRequirementTests
                      (typeof(AllowAnonymousAttribute), AttributeTargets.Class | AttributeTargets.Struct),
                      (typeof(OwnOnlyAttribute), AttributeTargets.Class | AttributeTargets.Struct),
                      (typeof(SignedInAttribute), AttributeTargets.Class | AttributeTargets.Struct | AttributeTargets.Interface),
-                     (typeof(RequiresKeyAttribute), AttributeTargets.Class | AttributeTargets.Struct | AttributeTargets.Interface),
+                     (typeof(RequiresPermissionAttribute), AttributeTargets.Class | AttributeTargets.Struct | AttributeTargets.Interface),
                  })
         {
             var usage = attribute.GetCustomAttribute<AttributeUsageAttribute>()!;

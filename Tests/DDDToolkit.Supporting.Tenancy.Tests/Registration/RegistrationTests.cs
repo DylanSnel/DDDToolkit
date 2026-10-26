@@ -92,8 +92,8 @@ public class RegistrationTests
         catalogue.Knows("gauges.read").Should().BeTrue();
         catalogue.Knows("valves.turn").Should().BeTrue();
         catalogue.Knows(HostCatalogue.WidgetRead).Should().BeTrue();
-        catalogue.Knows(TenancyKeys.RolesManage).Should().BeTrue();
-        catalogue.Packs.Single(pack => pack.Administers).Keys.Should().Contain(["gauges.read", "valves.turn"]);
+        catalogue.Knows(TenancyPermissions.RolesManage).Should().BeTrue();
+        catalogue.Packs.Single(pack => pack.Administers).Permissions.Should().Contain(["gauges.read", "valves.turn"]);
         provider.GetRequiredService<TenancyCatalogue>().Should().BeSameAs(catalogue, "it is built once");
 
         var clash = new ServiceCollection().AddTenancyPermissions([new Permission("tenancy.everything", "Stray", "All of it")]);
@@ -114,12 +114,12 @@ public class RegistrationTests
 
         FluentActions.Invoking(() => provider.GetRequiredService<TenancyCatalogue>())
             .Should().Throw<TenancyCatalogueException>().Which.Problems.Should().ContainSingle().Which.Should()
-            .Contain("'gauges.read', 'gauges.lock'", "one problem for the list, naming its keys")
+            .Contain("'gauges.read', 'gauges.lock'", "one problem for the list, naming its permissions")
             .And.Contain("AddTenancyPermissionsOfModules()").And.Contain("AddTenancyPermissions no more");
     }
 
     [Fact]
-    public void An_application_without_a_catalogue_of_its_own_runs_on_its_modules_keys_and_the_default_administrators()
+    public void An_application_without_a_catalogue_of_its_own_runs_on_its_modules_permissions_and_the_default_administrators()
     {
         var services = new ServiceCollection().AddTenancyPermissions([new Permission("gauges.read", "Gauges", "Read gauges")]);
         AddTenancyCore(services, options =>
@@ -131,9 +131,9 @@ public class RegistrationTests
 
         var catalogue = provider.GetRequiredService<TenancyCatalogue>();
 
-        catalogue.LiveKeys.Should().BeEquivalentTo([.. TenancyKeys.Permissions.Select(permission => permission.Key), "gauges.read"]);
+        catalogue.LivePermissions.Should().BeEquivalentTo([.. TenancyPermissions.All.Select(permission => permission.Name), "gauges.read"]);
         catalogue.HasDefaultAdministrators.Should().BeTrue();
-        catalogue.Packs.Should().ContainSingle().Which.Keys.Should().Equal(catalogue.LiveKeys);
+        catalogue.Packs.Should().ContainSingle().Which.Permissions.Should().Equal(catalogue.LivePermissions);
     }
 
     [Fact]
@@ -152,7 +152,7 @@ public class RegistrationTests
         scope.ServiceProvider.GetRequiredService<HostTenancy.OrganizationCommands>().Should().NotBeNull();
         scope.ServiceProvider.GetRequiredService<HostTenancy.SeatCommands>().Should().NotBeNull();
         scope.ServiceProvider.GetRequiredService<HostTenancy.RoleCommands>().Should().NotBeNull();
-        scope.ServiceProvider.GetRequiredService<HostTenancy.TenancyDirectory>().Catalogue.Knows(TenancyKeys.RolesManage).Should().BeTrue();
+        scope.ServiceProvider.GetRequiredService<HostTenancy.TenancyDirectory>().Catalogue.Knows(TenancyPermissions.RolesManage).Should().BeTrue();
         scope.ServiceProvider.GetRequiredService<TenantSelection<TenantId, SeatId>>().Should().NotBeNull();
         scope.ServiceProvider.GetRequiredService<ITenantSelection>().Should().BeSameAs(
             scope.ServiceProvider.GetRequiredService<TenantSelection<TenantId, SeatId>>(),

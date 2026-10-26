@@ -9,8 +9,8 @@ namespace Examples.Tenancy.Projects.Application.Crew.Commands;
 /// </summary>
 /// <remarks>
 /// Giving a project role is positional: whoever manages the crew gives any of the tenant's project roles in use,
-/// to anyone on the crew, themselves included, without holding that role's keys. That is this application's rule,
-/// declared as <see cref="RequiredKey"/> on the project. A seat holds a role once on a crew, so one it still holds
+/// to anyone on the crew, themselves included, without holding that role's permissions. That is this application's rule,
+/// declared as <see cref="RequiredPermission"/> on the project. A seat holds a role once on a crew, so one it still holds
 /// is refused; a role's period is its own, and may end before the membership does, or after it, where it then
 /// counts for nothing.
 /// </remarks>
@@ -22,11 +22,11 @@ namespace Examples.Tenancy.Projects.Application.Crew.Commands;
 /// The version of the project the caller last read, or <see langword="null"/> to change it as it is now. Any other
 /// version than the project's is a lost race: somebody changed it since, so the caller reads again and decides again.
 /// </param>
-[RequiresKey(RequiredKey)]
+[RequiresPermission(RequiredPermission)]
 public sealed record GiveCrewRole([OnResource] ProjectId Project, SeatId Seat, ProjectRoleId Role, DateTimeOffset? Until, [ExpectedVersion] long? ExpectedVersion = null) : ICommand, IProjectsRequest
 {
-    /// <summary>The key the caller holds on the project.</summary>
-    public const string RequiredKey = ProjectKeys.ManageCrew;
+    /// <summary>The permission the caller holds on the project.</summary>
+    public const string RequiredPermission = ProjectPermissionNames.ManageCrew;
 }
 
 /// <summary>

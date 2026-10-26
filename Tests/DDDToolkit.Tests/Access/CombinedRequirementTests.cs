@@ -323,7 +323,7 @@ public class CombinedRequirementTests
         FluentActions.Invoking(() => AccessRequirement.All(null!)).Should().Throw<ArgumentNullException>();
         FluentActions.Invoking(() => AccessRequirement.Any(Met("a"), null!)).Should().Throw<ArgumentException>().WithMessage("*holds no null*");
         FluentActions.Invoking(() => AccessRequirement.Any(AccessRequirement.AllowAnonymous(), Met("a"))).Should().Throw<ArgumentException>()
-            .WithMessage("*does not take AllowAnonymous()*", "anyone or a key is anyone, and reads as if it were closed");
+            .WithMessage("*does not take AllowAnonymous()*", "anyone or a permission is anyone, and reads as if it were closed");
         FluentActions.Invoking(() => AccessRequirement.All(AccessRequirement.AllowAnonymous(), Met("a"))).Should().Throw<ArgumentException>();
     }
 
@@ -371,8 +371,8 @@ public class CombinedRequirementTests
         var json = JsonSerializer.Serialize(refusal.Arguments, new JsonSerializerOptions(JsonSerializerDefaults.Web));
 
         json.Should().Be("""{"Reasons":[{"code":"access.not-own","arguments":{}},{"code":"boards.not-permitted","arguments":{"Board":"a"}}]}""");
-        new RefusalReason("tenancy.not-permitted", new Dictionary<string, object?> { ["key"] = "tenancy.seats.manage" })
-            .Should().Be(new RefusalReason("tenancy.not-permitted", new Dictionary<string, object?> { ["Key"] = "tenancy.seats.manage" }), "two reasons that say the same are equal, the names matched as arguments are");
+        new RefusalReason("tenancy.not-permitted", new Dictionary<string, object?> { ["permission"] = "tenancy.seats.manage" })
+            .Should().Be(new RefusalReason("tenancy.not-permitted", new Dictionary<string, object?> { ["Permission"] = "tenancy.seats.manage" }), "two reasons that say the same are equal, the names matched as arguments are");
         FluentActions.Invoking(() => new RefusalReason(" ")).Should().Throw<ArgumentException>();
     }
 

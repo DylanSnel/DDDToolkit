@@ -46,7 +46,7 @@ public static class TenancyEventLogTable
     /// Every row says which tenant its event is about, taken from the event itself, which every event of Tenancy's
     /// carries, and who acted, from the Tenancy caller of the save: a seat, an operator, the system or a token
     /// (<see cref="TenancyActedByAccessor"/>). An event of the application's own that names no tenant gets the
-    /// tenant the save runs in. The payload is the event as the outbox stores it: ids, keys and dates, who made
+    /// tenant the save runs in. The payload is the event as the outbox stores it: ids, permissions and dates, who made
     /// the change, and never what a tenant, a unit, a seat or a role is called.
     /// <see cref="TenancyEventLogExtensions.AddTenancyEventLog{TTenantId, TSeatId, TUnitId, TRoleId}"/> chooses
     /// the events that change access.
@@ -56,7 +56,7 @@ public static class TenancyEventLogTable
     /// table whole: code that reads the history names the tenant itself, and asks
     /// <c>tenancy.history.view</c> for the whole tenant first. On Postgres,
     /// <c>DDDToolkit.Supporting.Tenancy.Postgres</c> writes the table's policies: a seat adds rows about itself in
-    /// its tenant and reads its tenant's with that key, and system work adds and reads its tenant's. It writes
+    /// its tenant and reads its tenant's with that permission, and system work adds and reads its tenant's. It writes
     /// them with those of Tenancy's own tables, so the log belongs in the context that maps them: an export
     /// refuses it in any other, where it would be left without a policy.
     /// </para>
@@ -126,7 +126,7 @@ internal sealed class TenancyEventLogFields : IEventLogFields
 
         var column = entry.Property(TenancyEventLogTable.TenantId);
         var tenantType = Nullable.GetUnderlyingType(column.Metadata.ClrType) ?? column.Metadata.ClrType;
-        var named = TenantOf.GetOrAdd((domainEvent.GetType(), tenantType), static key => ReaderOf(key.Event, key.Tenant))?.Invoke(domainEvent);
+        var named = TenantOf.GetOrAdd((domainEvent.GetType(), tenantType), static permission => ReaderOf(permission.Event, permission.Tenant))?.Invoke(domainEvent);
 
         // The save check has let the save through, so whatever is saved here is of the caller's tenant.
         column.CurrentValue = named

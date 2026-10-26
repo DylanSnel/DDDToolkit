@@ -9,7 +9,7 @@ namespace Examples.Tenancy.Tenants.Application.Invitations.Commands;
 /// </summary>
 /// <remarks>
 /// It requires a signed-in user, and nothing more, because it is sent before the person is in any tenant: there is
-/// no seat yet to hold a key. The package's use case asks the rest: a verified identity that may hold a seat, read
+/// no seat yet to hold a permission. The package's use case asks the rest: a verified identity that may hold a seat, read
 /// from the caller's own token and never from the request, which holds the token of an invitation that is still
 /// open. It then does its work as system work in the invitation's tenant, begun by the package itself: what the
 /// person gets is the seat the invitation offers, and nothing of the system work's.

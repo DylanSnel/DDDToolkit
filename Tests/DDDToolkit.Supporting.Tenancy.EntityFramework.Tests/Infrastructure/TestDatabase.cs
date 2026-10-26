@@ -16,13 +16,13 @@ public abstract class TestDatabase : IDisposable
     public bool HasTables { get; set; }
 
     /// <summary>
-    /// Whether a role's keys are one text array, as Npgsql stores a primitive collection of strings, rather than one
+    /// Whether a role's permissions are one text array, as Npgsql stores a primitive collection of strings, rather than one
     /// JSON document, as SQLite does.
     /// </summary>
-    public abstract bool KeysAreAnArray { get; }
+    public abstract bool PermissionsAreAnArray { get; }
 
-    /// <summary>What a role's keys are asked with in SQL: <c>json_each</c> on SQLite, <c>= ANY</c> over the array on Postgres.</summary>
-    public abstract string KeysContain { get; }
+    /// <summary>What a role's permissions are asked with in SQL: <c>json_each</c> on SQLite, <c>= ANY</c> over the array on Postgres.</summary>
+    public abstract string PermissionsContain { get; }
 
     /// <summary>The filter of the unique index on a seat's primary placement, as the provider writes a true boolean.</summary>
     public abstract string PrimaryFilter { get; }

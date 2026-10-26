@@ -7,7 +7,7 @@ namespace DDDToolkit.Supporting.Membership.Postgres.Tests;
 /// <summary>
 /// The start-up check: a host whose database does not have the functions of every resource, as the rules that
 /// resource is registered with say them, does not start, and is told which function of which resource is wrong
-/// and what to do. The same for the lock the rules name a key for, for the trigger that keeps the owner's role
+/// and what to do. The same for the lock the rules name a permission for, for the trigger that keeps the owner's role
 /// of kept roles in use, and for a table of kept roles that callers may write as they like. What the rules leave
 /// open is said, and refused by nobody.
 /// </summary>
@@ -22,7 +22,7 @@ public sealed class StartUpCheckTests(FilingPostgres postgres)
     {
         using var filing = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Secured, seed: false);
 
-        // The documents and the folders name both keys of the lock: there is nothing to remark on either.
+        // The documents and the folders name both permissions of the lock: there is nothing to remark on either.
         (await CheckAsync(filing)).Should().BeEmpty();
 
         // And for a host whose contexts run as the caller, whoever is calling when it starts: the check asks as the application itself.
@@ -91,13 +91,13 @@ public sealed class StartUpCheckTests(FilingPostgres postgres)
     }
 
     [Theory]
-    [InlineData("a role gives another key")]
-    [InlineData("another key is what being a member gives")]
-    [InlineData("the resource has another key")]
-    [InlineData("the owner holds another key")]
+    [InlineData("a role gives another permission")]
+    [InlineData("another permission is what being a member gives")]
+    [InlineData("the resource has another permission")]
+    [InlineData("the owner holds another permission")]
     [InlineData("the members are known by another claim")]
-    [InlineData("another key changes the members")]
-    [InlineData("no key changes the owner")]
+    [InlineData("another permission changes the members")]
+    [InlineData("no permission changes the owner")]
     [InlineData("another scope is the host's own work")]
     public async Task Functions_written_from_other_rules_than_the_resource_is_registered_with_are_refused(string difference)
     {
@@ -108,17 +108,17 @@ public sealed class StartUpCheckTests(FilingPostgres postgres)
         IReadOnlyList<DeclaredRole> roles =
         [
             new("keeper", [FolderPermissions.Read, FolderPermissions.File, FolderPermissions.Staff]),
-            new("clerk", difference == "a role gives another key" ? [FolderPermissions.Read] : [FolderPermissions.Read, FolderPermissions.File]),
+            new("clerk", difference == "a role gives another permission" ? [FolderPermissions.Read] : [FolderPermissions.Read, FolderPermissions.File]),
             new("visitor", [FolderPermissions.Read]),
         ];
         IReadOnlyList<ResourcePermission> permissions =
         [
-            new(FolderPermissions.Read, EveryMember: difference == "another key is what being a member gives"),
-            new(FolderPermissions.File, LocksMembers: difference == "another key changes the members"),
-            new(FolderPermissions.Staff, LocksMembers: difference != "another key changes the members"),
-            new(FolderPermissions.Shred, Owner: difference != "the owner holds another key", InRoles: false),
-            new(FolderPermissions.HandOver, InRoles: false, LocksOwner: difference != "no key changes the owner"),
-            .. difference == "the resource has another key" ? [new ResourcePermission("folders.audit")] : Array.Empty<ResourcePermission>(),
+            new(FolderPermissions.Read, EveryMember: difference == "another permission is what being a member gives"),
+            new(FolderPermissions.File, LocksMembers: difference == "another permission changes the members"),
+            new(FolderPermissions.Staff, LocksMembers: difference != "another permission changes the members"),
+            new(FolderPermissions.Shred, Owner: difference != "the owner holds another permission", InRoles: false),
+            new(FolderPermissions.HandOver, InRoles: false, LocksOwner: difference != "no permission changes the owner"),
+            .. difference == "the resource has another permission" ? [new ResourcePermission("folders.audit")] : Array.Empty<ResourcePermission>(),
         ];
         var exported = MembershipRules.Declare(
             typeof(Folder),
@@ -320,7 +320,7 @@ public sealed class StartUpCheckTests(FilingPostgres postgres)
         await CheckAsync(filing);
 
         // One policy of the lock dropped: signed-in users are held for adding and changing a share, and no longer for removing one.
-        await filing.ExecuteAsync("DROP POLICY \"Members change with the key (delete) for authenticated\" ON filing.\"DocumentShares\"");
+        await filing.ExecuteAsync("DROP POLICY \"Members change with the permission (delete) for authenticated\" ON filing.\"DocumentShares\"");
         var refused = await FluentActions.Awaiting(() => CheckAsync(filing)).Should().ThrowAsync<InvalidOperationException>();
         refused.Which.Message.Should()
             .StartWith("A permission of Document locks its members or its owner, and the database does not hold callers to it: ")
@@ -380,9 +380,9 @@ public sealed class StartUpCheckTests(FilingPostgres postgres)
     }
 
     [Fact]
-    public async Task Rules_that_name_no_key_for_the_lock_are_said_loudly_and_refused_by_nobody()
+    public async Task Rules_that_name_no_permission_for_the_lock_are_said_loudly_and_refused_by_nobody()
     {
-        // The plots name both keys. The sheds name neither: whoever the host's rules let change a shed writes
+        // The plots name both permissions. The sheds name neither: whoever the host's rules let change a shed writes
         // its hands and its owner. That is the host's to choose, so the check starts, and says it.
         var logged = new Logged();
         using var garden = await PostgresGarden.CreateAsync(postgres, seed: false, configure: services => services.AddLogging(logging => logging.AddProvider(logged)));
@@ -401,7 +401,7 @@ public sealed class StartUpCheckTests(FilingPostgres postgres)
                 typeof(Shed),
                 "sheds",
                 [new(ShedPermissions.Open), new(ShedPermissions.Stock, LocksMembers: membersLocked), new(ShedPermissions.Sell, InRoles: false, LocksOwner: ownerLocked)],
-                Roles.Custom(starters: ShedMembership.Rules.Roles.Declared, otherKeys: OtherKeys.All),
+                Roles.Custom(starters: ShedMembership.Rules.Roles.Declared, otherPermissions: OtherPermissions.All),
                 systemScopes: ShedMembership.Rules.SystemScopes,
                 codes: ShedMembership.Codes);
 
@@ -437,8 +437,8 @@ public sealed class StartUpCheckTests(FilingPostgres postgres)
         await garden.ExecuteAsync("REVOKE INSERT, UPDATE, DELETE ON gardens.\"PlotRoles\", gardens.\"ShedRoles\" FROM authenticated, ddd_system_in");
         await MembershipPostgresChecks.EnsureFunctionsAreInPlaceAsync(garden.Services.Provider, Cancellation);
 
-        // A privilege on one column writes a role's keys as well.
-        await garden.ExecuteAsync("GRANT UPDATE (\"Keys\") ON gardens.\"ShedRoles\" TO authenticated");
+        // A privilege on one column writes a role's permissions as well.
+        await garden.ExecuteAsync("GRANT UPDATE (\"Permissions\") ON gardens.\"ShedRoles\" TO authenticated");
         (await FluentActions.Awaiting(() => MembershipPostgresChecks.EnsureFunctionsAreInPlaceAsync(garden.Services.Provider, Cancellation)).Should().ThrowAsync<InvalidOperationException>())
             .Which.Message.Should().StartWith("The roles of Shed are made in \"gardens\".\"ShedRoles\", which has no row security, and authenticated may write it. ");
 

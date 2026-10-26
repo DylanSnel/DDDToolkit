@@ -79,9 +79,9 @@ public class ModuleDefaultGenerationTests
 
             [AllowAnonymous] public sealed record ListPlans : IBillingRequest;
 
-            [RequiresKey("billing.close")] public sealed record CloseTheBooks(int Year) : IBillingRequest;
+            [RequiresPermission("billing.close")] public sealed record CloseTheBooks(int Year) : IBillingRequest;
 
-            [RequiresKey("billing.open-ledger")] public sealed record OpenLedger(string Name, [AtUnit] OrganizationUnitId Unit) : IBillingRequest;
+            [RequiresPermission("billing.open-ledger")] public sealed record OpenLedger(string Name, [AtUnit] OrganizationUnitId Unit) : IBillingRequest;
 
             public sealed record ListLedgers(OrganizationUnitId? Unit) : IBillingRequest
             {
@@ -128,7 +128,7 @@ public class ModuleDefaultGenerationTests
             """
             public sealed record ListUnits : IBillingRequest;
 
-            [RequiresKey("billing.close")] public sealed record CloseTheBooks(int Year) : IBillingRequest;
+            [RequiresPermission("billing.close")] public sealed record CloseTheBooks(int Year) : IBillingRequest;
             """).RunCore();
 
         result.ShouldCompile();
@@ -172,7 +172,7 @@ public class ModuleDefaultGenerationTests
     [Fact]
     public void A_key_as_the_default_is_held_for_the_whole_tenant()
     {
-        var result = Module("RequiresKey(\"billing.read\")", "public sealed record ListLedgers : IBillingRequest;").RunCore();
+        var result = Module("RequiresPermission(\"billing.read\")", "public sealed record ListLedgers : IBillingRequest;").RunCore();
 
         result.ShouldCompile();
         result.ShouldHaveExactlyDiagnostics();
@@ -205,7 +205,7 @@ public class ModuleDefaultGenerationTests
 
             public record Ledger : IBillingRequest;
             public sealed record SpecialLedger : Ledger;
-            [RequiresKey("billing.close")] public sealed record ClosedLedger : Ledger;
+            [RequiresPermission("billing.close")] public sealed record ClosedLedger : Ledger;
             """).RunCore();
 
         result.ShouldCompile();

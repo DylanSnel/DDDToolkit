@@ -25,7 +25,7 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 /// <list type="bullet">
 /// <item>Every enum is stored as its name, at most <see cref="EnumLength"/> characters.</item>
 /// <item>Every timestamp is stored as its UTC instant in a <see cref="DateTime"/> column, which SQLite can compare in SQL.</item>
-/// <item>A role's keys are a primitive collection, a JSON document on SQLite and SQL Server.</item>
+/// <item>A role's permissions are a primitive collection, a JSON document on SQLite and SQL Server.</item>
 /// <item>Columns are named after the properties.</item>
 /// <item>Every row that has a tenant gets the tenant filter, through <see cref="TenancyModelBuilderExtensions.ScopeToTenant"/>.</item>
 /// <item>Every unique index says which of Tenancy's refusals a save that breaks it gets, so a rule the use case
@@ -61,7 +61,7 @@ internal static class TenancyMapping
     internal const string NormalizedNameColumn = "NormalizedName";
 
     /// <summary>
-    /// The annotation on the row of <see cref="TenancyFunctionNames.SeatsHoldingAt"/>: the schema Tenancy's
+    /// The annotation on the row of <see cref="TenancyFunctionNames.SeatsHoldingPermissionAt"/>: the schema Tenancy's
     /// functions are in, where it is not the model's own default schema, as in a consumer's model.
     /// </summary>
     internal const string FunctionSchemaAnnotation = "DDDToolkit:Tenancy:FunctionSchema";
@@ -115,7 +115,7 @@ internal static class TenancyMapping
         {
             unit.ToTable(tables.Units);
 
-            // The organization's id is its tenant's, so the owner's key is the unit's tenant column.
+            // The organization's id is its tenant's, so the owner's permission is the unit's tenant column.
             unit.WithOwner().HasForeignKey(TenantColumn);
             unit.HasKey(row => row.Id);
             unit.Property(row => row.Id).ValueGeneratedNever();
@@ -217,13 +217,13 @@ internal static class TenancyMapping
         Refuses(role.HasIndex(nameof(RoleAggregate<TRoleId, TTenantId>.TenantId), NormalizedNameColumn).IsUnique(), TenancyRefusals.RoleNameTaken);
         role.Property(row => row.Name).HasMaxLength(RoleAggregate<TRoleId, TTenantId>.MaxNameLength);
         role.Property(row => row.Description).HasMaxLength(RoleAggregate<TRoleId, TTenantId>.MaxDescriptionLength);
-        role.PrimitiveCollection(row => row.KeysFromPack);
+        role.PrimitiveCollection(row => row.PermissionsFromPack);
         RoleColumns<TRoleId, TTenantId>(role);
         role.ScopeToTenant(row => row.TenantId);
     }
 
     /// <summary>
-    /// The keys seats hold where: a table in Tenancy's model, and a row of the read model, with
+    /// The permissions seats hold where: a table in Tenancy's model, and a row of the read model, with
     /// <paramref name="read"/>, in a consumer's. The table is indexed on the role as well as on the seat, for the
     /// save that rewrites the rows of a role that changed.
     /// </summary>
@@ -236,17 +236,17 @@ internal static class TenancyMapping
         if (read is null)
         {
             right.ToTable(tables.Rights);
-            right.HasKey(row => new { row.SeatId, row.UnitId, row.RoleId, row.Key });
+            right.HasKey(row => new { row.SeatId, row.UnitId, row.RoleId, row.Permission });
             right.HasIndex(row => row.TenantId);
-            right.HasIndex(row => new { row.SeatId, row.Key });
+            right.HasIndex(row => new { row.SeatId, row.Permission });
             right.HasIndex(row => row.RoleId);
         }
         else
         {
-            read.Map(right, tables.Rights, TenancyFunctionNames.CallerRights);
+            read.Map(right, tables.Rights, TenancyFunctionNames.CallerPermissions);
         }
 
-        right.Property(row => row.Key).HasMaxLength(Permission.MaxKeyLength);
+        right.Property(row => row.Permission).HasMaxLength(Permission.MaxNameLength);
         right.Property(row => row.StartsAt).HasConversion(new UtcDateTimeOffsetConverter());
         right.Property(row => row.EndsAt).HasConversion(new NullableUtcDateTimeOffsetConverter());
         right.ScopeToTenant(row => row.TenantId);
@@ -429,7 +429,7 @@ internal static class TenancyMapping
     }
 
     /// <summary>
-    /// The rights a move changes, as <see cref="TenancyFunctionNames.RightsAMoveChanges"/> answers them: mapped to
+    /// The rights a move changes, as <see cref="TenancyFunctionNames.PermissionsAMoveChanges"/> answers them: mapped to
     /// nothing, and read from the SQL that asks the function, under the column names the function gives.
     /// </summary>
     internal static void MoveReaches<TUnitId>(EntityTypeBuilder<MoveReach<TUnitId>> reach)
@@ -437,7 +437,7 @@ internal static class TenancyMapping
     {
         ToNothing(reach);
         reach.Property(row => row.UnitId).HasColumnName(nameof(MoveReach<TUnitId>.UnitId));
-        reach.Property(row => row.Key).HasColumnName(nameof(MoveReach<TUnitId>.Key));
+        reach.Property(row => row.Permission).HasColumnName(nameof(MoveReach<TUnitId>.Permission));
         reach.Property(row => row.EndsAt).HasColumnName(nameof(MoveReach<TUnitId>.EndsAt)).HasConversion(new NullableUtcDateTimeOffsetConverter());
         reach.Property(row => row.Parent).HasColumnName(nameof(MoveReach<TUnitId>.Parent));
         reach.Property(row => row.OfCaller).HasColumnName(nameof(MoveReach<TUnitId>.OfCaller));
@@ -455,7 +455,7 @@ internal static class TenancyMapping
     }
 
     /// <summary>
-    /// The seats that hold a key at a unit, as <see cref="TenancyFunctionNames.SeatsHoldingAt"/> answers them:
+    /// The seats that hold a permission at a unit, as <see cref="TenancyFunctionNames.SeatsHoldingPermissionAt"/> answers them:
     /// mapped to nothing, and read from the SQL that asks the function, in the schema <paramref name="read"/> names.
     /// </summary>
     internal static void SeatHolders<TSeatId>(EntityTypeBuilder<SeatHolderRow<TSeatId>> holder, ReadModel read)
@@ -467,7 +467,7 @@ internal static class TenancyMapping
     }
 
     /// <summary>
-    /// Maps <paramref name="row"/>, which has no key, to no table and no view: it is read from SQL that asks one of
+    /// Maps <paramref name="row"/>, which has no permission, to no table and no view: it is read from SQL that asks one of
     /// Tenancy's functions, and a migration makes nothing for it. The table is taken away as well as the view,
     /// because a naming convention gives every entity type a table name as it is added to the model, and that
     /// name would otherwise stand.
@@ -495,7 +495,7 @@ internal static class TenancyMapping
         => AsName(column(nameof(SeatRow<TTenantId, TSeatId>.Status)));
 
     /// <summary>
-    /// The columns a role and its row share: the pack, the status and the keys. The name is the table's alone.
+    /// The columns a role and its row share: the pack, the status and the permissions. The name is the table's alone.
     /// </summary>
     private static void RoleColumns<TRoleId, TTenantId>(EntityTypeBuilder role)
         where TRoleId : struct, IEntityId, IEquatable<TRoleId>
@@ -503,7 +503,7 @@ internal static class TenancyMapping
     {
         role.Property(nameof(RoleRow<TTenantId, TRoleId>.FromPack)).HasMaxLength(RolePack.MaxKeyLength);
         AsName(role.Property(nameof(RoleRow<TTenantId, TRoleId>.Status)));
-        role.PrimitiveCollection(nameof(RoleRow<TTenantId, TRoleId>.Keys));
+        role.PrimitiveCollection(nameof(RoleRow<TTenantId, TRoleId>.Permissions));
     }
 
     /// <summary>
@@ -570,7 +570,7 @@ internal static class TenancyMapping
     /// <param name="ThroughFunctions">Whether the rows are read from the functions rather than from views.</param>
     internal sealed record ReadModel(string? Schema, bool ThroughFunctions = false)
     {
-        /// <summary>Maps <paramref name="row"/>, which has no key, to the view named <paramref name="table"/> or to <paramref name="function"/>.</summary>
+        /// <summary>Maps <paramref name="row"/>, which has no permission, to the view named <paramref name="table"/> or to <paramref name="function"/>.</summary>
         public void Map<TRow>(EntityTypeBuilder<TRow> row, string table, string function)
             where TRow : class
         {

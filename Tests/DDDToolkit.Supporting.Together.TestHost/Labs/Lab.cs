@@ -26,7 +26,7 @@ public sealed partial class LabTechnician;
 /// <summary>
 /// A lab, at a faculty or an institute of a college: the resource whose roles are the tenant's own. Nothing is
 /// kept for a lab but who works in it: the roles a technician holds there are roles the college made in its
-/// organization, and which of them give a key is asked of Tenancy. A key held in the organization where the lab
+/// organization, and which of them give a permission is asked of Tenancy. A permission held in the organization where the lab
 /// is, or above it, reaches the lab as it reaches a course.
 /// </summary>
 [AggregateRoot<LabId>]
@@ -111,7 +111,7 @@ public static class LabPermissions
 
 /// <summary>
 /// The rules of access through a lab's technicians: the organization's own roles, kept by Tenancy, and reach from
-/// above through its grants. A role of the organization holds keys of many modules; on a lab it gives the lab's alone.
+/// above through its grants. A role of the organization holds permissions of many modules; on a lab it gives the lab's alone.
 /// The college's own work in its module's scope holds everything on a course and nothing on a lab: the labs' rules
 /// let no scope through, <c>systemScopes: []</c>.
 /// </summary>
@@ -122,7 +122,7 @@ public static class LabMembership
 
     /// <summary>The rules.</summary>
     public static MembershipRules Rules { get; } = MembershipRules.For<Lab>(
-        Roles.External(TenancyFunctions.RolesWithKey),
+        Roles.External(TenancyFunctions.RolesWithPermission),
         reachFromAbove: true,
         systemScopes: []);
 }

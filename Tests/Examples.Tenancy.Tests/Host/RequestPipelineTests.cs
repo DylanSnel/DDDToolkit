@@ -62,23 +62,23 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
 
         // The other tests' hosts trace on the same source, so the test's own requests are told apart by their trace.
         using var mine = new Activity("the test's own requests").Start();
-        var notAKey = new UnitsWhereIHold("projects.nothing");
+        var notAPermission = new UnitsWhereIHold("projects.nothing");
 
-        // Nobody, a caller who did not sign in: the access check refuses before the handler sees the key, which it would
+        // Nobody, a caller who did not sign in: the access check refuses before the handler sees the permission, which it would
         // have refused. The host requires every flow to say who it runs as, so the test says so too.
         RefusalException asNobody;
         using (Callers.Begin(Caller.Anonymous))
         {
-            asNobody = await RefusalOfAsync(host, notAKey);
+            asNobody = await RefusalOfAsync(host, notAPermission);
         }
 
         asNobody.Code.Should().Be(TenancyRefusals.NotSeated, "the access check comes before the handler");
 
-        // A seat: the access check lets it through, and the handler refuses the key.
+        // A seat: the access check lets it through, and the handler refuses the permission.
         RefusalException asRhea;
         using (AsSeatOf(DemoPeople.Rhea))
         {
-            asRhea = await RefusalOfAsync(host, notAKey);
+            asRhea = await RefusalOfAsync(host, notAPermission);
         }
 
         asRhea.Code.Should().Be(TenancyRefusals.UnknownPermission, "the handler runs once the access check has passed");
@@ -160,7 +160,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
             var ofTenants = new TenantsAccessBehavior<DeclaresAnothersCase, Unit>(scope.ServiceProvider.GetRequiredService<AccessChecks<ITenantsRequest>>());
 
             var handle = async () => await ofTenants.Handle(
-                new DeclaresAnothersCase(MemberAccess.On(ProjectKeys.View, pier)),
+                new DeclaresAnothersCase(MemberAccess.On(ProjectPermissionNames.View, pier)),
                 (_, _) =>
                 {
                     reached = true;
@@ -243,8 +243,8 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
                 Cancellation);
         }
 
-        // Its administrator holds every key that manages access, and may not: a caller in the tenant may send it, and
-        // its handler lets only system work mark a tenant, which no key gives.
+        // Its administrator holds every permission that manages access, and may not: a caller in the tenant may send it, and
+        // its handler lets only system work mark a tenant, which no permission gives.
         using (AsSeatOf(DemoPeople.Ada))
         {
             var refused = await RefusalOfAsync(host, new MarkTenantAsDemo());
@@ -293,9 +293,9 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
     public async Task A_command_of_the_package_s_is_refused_at_the_door_as_its_use_case_refuses_it_past_the_door()
     {
         // A request handed to a use case of Tenancy's says the first thing that use case asks. Juno, a surveyor,
-        // holds none of the keys that manage the organization: each command is refused before its handler runs,
+        // holds none of the permissions that manage the organization: each command is refused before its handler runs,
         // and handed to its handler directly, past the door, the use case refuses her the same way, with the same
-        // key, and at the same unit. Nothing is changed either way.
+        // permission, and at the same unit. Nothing is changed either way.
         await using var host = await sample.StartAsync();
         var unit = Harbor.Root;
         var seat = Harbor.Administrator.Id;
@@ -311,7 +311,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
             new ReactivateTenantSeat(seat),
             new DeactivateTenantSeat(seat),
             new CreateTenantRole("Storekeeper", "Keeps the stores", []),
-            new SetRoleKeys(role, []),
+            new SetRolePermissions(role, []),
             new ArchiveTenantRole(role),
             new ChangeTenantShape(TenantShape.Hierarchical),
             new InvitePerson("wren@example.test", unit, role, Until: null),
@@ -326,10 +326,10 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
                 var atTheDoor = await RefusalAtTheDoorAsync(host, command);
                 var pastTheDoor = await RefusalPastTheDoorAsync(host, command);
 
-                atTheDoor.Code.Should().Be(TenancyRefusals.NotPermitted, "{0} requires a key juno does not hold", name);
+                atTheDoor.Code.Should().Be(TenancyRefusals.NotPermitted, "{0} requires a permission juno does not hold", name);
                 pastTheDoor.Code.Should().Be(atTheDoor.Code, "the use case of {0} asks first what its request requires", name);
-                atTheDoor.Arguments["Key"].Should().Be(declared is TenancyRequirement.AtUnit<OrganizationUnitId> at ? at.Key : ((TenancyRequirement.AtTenant)declared).Key, name)
-                    .And.Be(pastTheDoor.Arguments["Key"], "the door and the use case name the same key for {0}", name);
+                atTheDoor.Arguments["Permission"].Should().Be(declared is TenancyRequirement.AtUnit<OrganizationUnitId> at ? at.Permission : ((TenancyRequirement.AtTenant)declared).Permission, name)
+                    .And.Be(pastTheDoor.Arguments["Permission"], "the door and the use case name the same permission for {0}", name);
                 if (declared is TenancyRequirement.AtUnit<OrganizationUnitId> atUnit)
                 {
                     atTheDoor.Arguments["Unit"].Should().Be(atUnit.Unit, name).And.Be(pastTheDoor.Arguments["Unit"], "and the same unit for {0}", name);
@@ -347,7 +347,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
 
         // Nothing of a package's stands between this command and the role, so its handler asks again what the
         // command declared. Leo owns a project and manages no roles: handed the command directly, past the check, the
-        // handler refuses him as the check does, naming the key.
+        // handler refuses him as the check does, naming the permission.
         using (AsSeatOf(DemoPeople.Leo))
         {
             await using var scope = host.Services.CreateAsyncScope();
@@ -355,7 +355,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
             var refused = (await handle.Should().ThrowAsync<RefusalException>()).Which;
             refused.Code.Should().Be(TenancyRefusals.NotPermitted);
             refused.Kind.Should().Be(RefusalKind.NotPermitted);
-            refused.Arguments["Key"].Should().Be(TenancyKeys.RolesManage);
+            refused.Arguments["Permission"].Should().Be(TenancyPermissions.RolesManage);
         }
 
         // Nobody, a caller who did not sign in, is refused as nobody, before anything is read.
@@ -368,7 +368,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
 
         (await StatusOfAsync(host, observer)).Should().Be(CustomRoleStatus.Active, "a refused command changes nothing");
 
-        // Maud holds the key for the whole tenant, so the handler goes on for her wherever it runs.
+        // Maud holds the permission for the whole tenant, so the handler goes on for her wherever it runs.
         using (AsSeatOf(DemoPeople.Maud))
         {
             await using var scope = host.Services.CreateAsyncScope();
@@ -395,7 +395,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
             // What each answers alone, to compare with.
             var seats = await sender.Send(new TenantSeats(), Cancellation);
             var roles = await sender.Send(new TenantRoles(), Cancellation);
-            var held = await sender.Send(new UnitsWhereIHold(TenancyKeys.UnitsManage), Cancellation);
+            var held = await sender.Send(new UnitsWhereIHold(TenancyPermissions.UnitsManage), Cancellation);
 
             // Two queries the Tenancy package answers, each in a scope of its own.
             var packageQueries = sideBySide.WatchThisFlow();
@@ -410,8 +410,8 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
             // The same query twice, so one handler answers both at once, each on a context from the factory.
             var sameQuery = sideBySide.WatchThisFlow();
             var twice = await Task.WhenAll(
-                sender.Send(new UnitsWhereIHold(TenancyKeys.UnitsManage), Cancellation).AsTask(),
-                sender.Send(new UnitsWhereIHold(TenancyKeys.UnitsManage), Cancellation).AsTask());
+                sender.Send(new UnitsWhereIHold(TenancyPermissions.UnitsManage), Cancellation).AsTask(),
+                sender.Send(new UnitsWhereIHold(TenancyPermissions.UnitsManage), Cancellation).AsTask());
             twice.Should().AllBeEquivalentTo(held);
             sameQuery.Met.Should().BeTrue("the two queries ran at the same time, or this proves nothing");
             sameQuery.Contexts.Should().HaveCount(2).And.NotContain(ofTheScope);
@@ -420,7 +420,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
             var mixed = sideBySide.WatchThisFlow();
             var overview = sender.Send(new OverviewOfMine(), Cancellation).AsTask();
             var units = sender.Send(new OrganizationUnits(), Cancellation).AsTask();
-            var heldAgain = sender.Send(new UnitsWhereIHold(TenancyKeys.UnitsManage), Cancellation).AsTask();
+            var heldAgain = sender.Send(new UnitsWhereIHold(TenancyPermissions.UnitsManage), Cancellation).AsTask();
             await Task.WhenAll(overview, units, heldAgain);
             (await overview).Seat.Id.Should().Be(Harbor.SeatOf(DemoPeople.Ada));
             (await heldAgain).Should().BeEquivalentTo(held);
@@ -465,20 +465,20 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
             ofTheScope.Should().OnlyContain(context => context.IsPooled());
 
             // What each answers alone, to compare with.
-            var held = await sender.Send(new UnitsWhereIHold(TenancyKeys.UnitsManage), Cancellation);
+            var held = await sender.Send(new UnitsWhereIHold(TenancyPermissions.UnitsManage), Cancellation);
             var seats = await sender.Send(new TenantSeats(), Cancellation);
             var list = await sender.Send(new VisibleProjects(), Cancellation);
             var detail = await sender.Send(new ProjectDetail(pier), Cancellation);
             var inspections = await sender.Send(new ProjectInspections(pier), Cancellation);
 
-            // A query of every module and of every kind, at once, four times over: one that asks a key, one the
+            // A query of every module and of every kind, at once, four times over: one that asks a permission, one the
             // Tenancy package answers, a list, a detail behind its access check, and one that asks another module's gate.
             var instances = new HashSet<DbContext>();
             var rentals = new HashSet<DbContextId>();
             for (var round = 0; round < 4; round++)
             {
                 var encounter = sideBySide.WatchThisFlow();
-                var heldAtOnce = sender.Send(new UnitsWhereIHold(TenancyKeys.UnitsManage), Cancellation).AsTask();
+                var heldAtOnce = sender.Send(new UnitsWhereIHold(TenancyPermissions.UnitsManage), Cancellation).AsTask();
                 var seatsAtOnce = sender.Send(new TenantSeats(), Cancellation).AsTask();
                 var listAtOnce = sender.Send(new VisibleProjects(), Cancellation).AsTask();
                 var detailAtOnce = sender.Send(new ProjectDetail(pier), Cancellation).AsTask();
@@ -524,7 +524,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
 
             // One query, one statement, on one context: taken from the pool for it, and given back.
             counter.WatchThisFlow();
-            await sender.Send(new UnitsWhereIHold(TenancyKeys.UnitsManage), Cancellation);
+            await sender.Send(new UnitsWhereIHold(TenancyPermissions.UnitsManage), Cancellation);
             var read = counter.Rentals.ToList();
             read.Should().ContainSingle("the query reads on one context");
 
@@ -609,7 +609,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
             var list = await sender.Send(new VisibleProjects(), Cancellation);
             var ofPier = await sender.Send(new ProjectDetail(pier), Cancellation);
             var ofBridge = await sender.Send(new ProjectDetail(bridge), Cancellation);
-            var key = await sender.Send(new KeyOnProject(pier, ProjectKeys.Edit), Cancellation);
+            var permission = await sender.Send(new PermissionOnProject(pier, ProjectPermissionNames.Edit), Cancellation);
             ofPier.Id.Should().Be(pier);
             ofBridge.Id.Should().Be(bridge);
 
@@ -624,15 +624,15 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
             twoDetails.Met.Should().BeTrue("the two queries ran at the same time, or this proves nothing");
             twoDetails.Contexts.Should().HaveCountGreaterThanOrEqualTo(2).And.NotContain(ofTheScope);
 
-            // A query of each kind: one filtered by what the caller sees, one checked on a project, one that asks a key.
+            // A query of each kind: one filtered by what the caller sees, one checked on a project, one that asks a permission.
             var mixed = sideBySide.WatchThisFlow();
             var listAtOnce = sender.Send(new VisibleProjects(), Cancellation).AsTask();
             var detailAtOnce = sender.Send(new ProjectDetail(bridge), Cancellation).AsTask();
-            var keyAtOnce = sender.Send(new KeyOnProject(pier, ProjectKeys.Edit), Cancellation).AsTask();
+            var keyAtOnce = sender.Send(new PermissionOnProject(pier, ProjectPermissionNames.Edit), Cancellation).AsTask();
             await Task.WhenAll(listAtOnce, detailAtOnce, keyAtOnce);
             (await listAtOnce).Should().BeEquivalentTo(list, options => options.WithStrictOrdering());
             (await detailAtOnce).Should().BeEquivalentTo(ofBridge);
-            (await keyAtOnce).Should().Be(key);
+            (await keyAtOnce).Should().Be(permission);
             mixed.Met.Should().BeTrue();
 
             // Three reads, each checked and answered on contexts taken from the pool for it. Counted by rental,
@@ -749,8 +749,8 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
             (await RefusalOfAsync(host, new RecordInspection(outOfSight, Blank))).Code.Should().Be(InspectionRefusals.ProjectNotFound);
 
             var notPermitted = await RefusalOfAsync(host, new RecordInspection(pier, Blank));
-            notPermitted.Code.Should().Be(InspectionRefusals.ProjectNotPermitted, "the key is asked about before the title is read");
-            notPermitted.Arguments["Key"].Should().Be(RecordInspection.RequiredKey);
+            notPermitted.Code.Should().Be(InspectionRefusals.ProjectNotPermitted, "the permission is asked about before the title is read");
+            notPermitted.Arguments["Permission"].Should().Be(RecordInspection.RequiredPermission);
         }
 
         // Juno may record, so hers is the first request to reach the handler, and the inspection refuses its title.
@@ -818,7 +818,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
             (await sender.Send(new CrewsOfProjects([pier]), Cancellation))[pier].Members.Should().NotBeEmpty();
             ofTheScope.ChangeTracker.Entries().Should().BeEmpty();
 
-            (await sender.Send(new KeyOnProject(pier, ProjectKeys.Edit), Cancellation)).Allowed.Should().BeTrue();
+            (await sender.Send(new PermissionOnProject(pier, ProjectPermissionNames.Edit), Cancellation)).Allowed.Should().BeTrue();
             ofTheScope.ChangeTracker.Entries().Should().BeEmpty();
 
             // A command does track: the project it loaded to change, and saved.
@@ -872,7 +872,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
     public async Task A_crew_role_taken_between_the_check_and_the_save_leaves_the_write_to_the_database_which_refuses_it()
     {
         // The same step, taking away the crew role the caller was checked with. Who may rename was decided before the
-        // handler, about a lead; the database checks the write as the caller he is by then, who holds no key that
+        // handler, about a lead; the database checks the write as the caller he is by then, who holds no permission that
         // writes the project, and refuses it, so a caller who was a lead when checked and is none when the handler
         // runs changes nothing.
         await using var host = await sample.StartAsync(
@@ -922,12 +922,12 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
     }
 
     [Fact]
-    public async Task A_key_taken_from_a_crew_role_since_the_check_is_refused_by_the_database_and_logged_as_a_change_of_rights()
+    public async Task A_permission_taken_from_a_crew_role_since_the_check_is_refused_by_the_database_and_logged_as_a_change_of_rights()
     {
-        // The same step, taking the key away from the role instead of the role from the caller. A project role is a
+        // The same step, taking the permission away from the role instead of the role from the caller. A project role is a
         // row of its own, kept for every crew it is given on, so the project's version stays where it was and this is
         // no lost race over the project: the handler loads what was checked, renames it and saves, and the policies,
-        // which read the role's keys as they are now, leave the statement no row to change. The caller is refused;
+        // which read the role's permissions as they are now, leave the statement no row to change. The caller is refused;
         // and the toolkit asks the request's access check again, which refuses as well, so it logs that the caller's
         // rights changed in between, not a warning that C# and the policies disagree: they agreed.
         var logs = new RecordingLoggerProvider();
@@ -950,7 +950,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
         await renamed.ShouldBeRefusedAsync(HttpStatusCode.Forbidden, ToolkitRefusals.Refused);
         var after = await vic.ProjectDetailAsync(pier);
         after.GetProperty("name").GetString().Should().Be("Pier 7", "the refused save changed nothing");
-        after.GetProperty("can").GetProperty("rename").GetBoolean().Should().BeFalse("his role no longer gives the key");
+        after.GetProperty("can").GetProperty("rename").GetBoolean().Should().BeFalse("his role no longer gives the permission");
 
         var said = logs.Entries.Where(entry => entry.Category == typeof(DatabaseRefusalInterceptor).FullName).ToList();
         said.Should().ContainSingle("the refusal is said once").Which.Level.Should().Be(LogLevel.Information, "a change of rights is no disagreement");
@@ -975,7 +975,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
             using (SampleCallers.BeginSeatOf(DemoPeople.Ada, DemoData.Harbor))
             {
                 await using var scope = scopes.CreateAsyncScope();
-                await scope.ServiceProvider.GetRequiredService<ISender>().Send(new SetProjectRoleKeys(Role, [ProjectKeys.View]), cancellationToken);
+                await scope.ServiceProvider.GetRequiredService<ISender>().Send(new SetProjectRolePermissions(Role, [ProjectPermissionNames.View]), cancellationToken);
             }
 
             return await next(message, cancellationToken);
@@ -989,7 +989,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
         var pier = Harbor.ProjectNamed("Pier 7");
 
         // Called directly, a command passes no check, and what holds it is the database, which checks every write as
-        // the caller. Vic is an observer on Pier 7's crew: he sees the project and holds no key that writes it, nor one
+        // the caller. Vic is an observer on Pier 7's crew: he sees the project and holds no permission that writes it, nor one
         // at any unit, so he closes nothing, and opens nothing, though the unit is there and the number is free.
         using (AsSeatOf(DemoPeople.Vic))
         {
@@ -1006,7 +1006,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
             var opening = async () => await open.Handle(new OpenProject("P-901", "Past the check", Harbor.Root), Cancellation);
             (await opening.Should().ThrowAsync<RefusalException>()).Which.Code.Should().Be(ToolkitRefusals.Refused);
 
-            // Sent, the same command is checked, and refused at the door for the key he does not hold there.
+            // Sent, the same command is checked, and refused at the door for the permission he does not hold there.
             (await RefusalOfAsync(host, new OpenProject("P-901", "Past the check", Harbor.Root))).Code.Should().Be(ProjectRefusals.NotPermitted);
         }
 
@@ -1051,7 +1051,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
             await scope.ServiceProvider.GetRequiredService<ISender>().Send(new CloseProject(pier), Cancellation);
         }
 
-        // Juno is a surveyor on Pier 7's crew: she holds the key to record, so the database would write her
+        // Juno is a surveyor on Pier 7's crew: she holds the permission to record, so the database would write her
         // inspection, since that a closed project takes none is the application's to say. Called directly, the
         // command passed no check, and the handler, which asks Projects' gate again, says it.
         using (AsSeatOf(DemoPeople.Juno))
@@ -1159,7 +1159,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
             (await RefusalOfAsync(host, new SetUpProjectRoles())).Code.Should().Be(ToolkitRefusals.SystemOnly);
             (await RefusalOfAsync(host, new MakeProjectRole("Rigger", null, []))).Code.Should().Be(TenancyRefusals.NotPermitted);
             (await RefusalOfAsync(host, new RenameProjectRole(role, "Rigger", null))).Code.Should().Be(TenancyRefusals.NotPermitted);
-            (await RefusalOfAsync(host, new SetProjectRoleKeys(role, []))).Code.Should().Be(TenancyRefusals.NotPermitted);
+            (await RefusalOfAsync(host, new SetProjectRolePermissions(role, []))).Code.Should().Be(TenancyRefusals.NotPermitted);
             (await RefusalOfAsync(host, new ArchiveProjectRole(role))).Code.Should().Be(TenancyRefusals.NotPermitted);
         }
 

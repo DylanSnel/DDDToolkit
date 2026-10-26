@@ -7,10 +7,10 @@ namespace Examples.Tenancy.Tenants.Application.Access;
 /// </summary>
 /// <remarks>
 /// The one line of access plumbing the module writes. A request says who may send it with an attribute: one of
-/// Tenancy's cases, such as <c>[RequiresKey(TenancyKeys.RolesManage)]</c> for a key held for the whole tenant,
-/// <c>[AtUnit]</c> on the unit for a key held there, or <c>[InTenant]</c>; or one of the toolkit's, such as
-/// <c>[SignedIn]</c> for a signed-in user who has no seat yet, and <c>[OrOwn]</c> on the seat beside a key, for a request
-/// about the caller's own seat that another sends with the key, as <c>RenameSeat</c> does. Where the requirement is computed from the request's
+/// Tenancy's cases, such as <c>[RequiresPermission(TenancyPermissions.RolesManage)]</c> for a permission held for the whole tenant,
+/// <c>[AtUnit]</c> on the unit for a permission held there, or <c>[InTenant]</c>; or one of the toolkit's, such as
+/// <c>[SignedIn]</c> for a signed-in user who has no seat yet, and <c>[OrOwn]</c> on the seat beside a permission, for a request
+/// about the caller's own seat that another sends with the permission, as <c>RenameSeat</c> does. Where the requirement is computed from the request's
 /// values it answers <see cref="IRequireAccess.RequiredAccess"/> itself, as <c>SeatGrants</c> does. The interface is
 /// partial because the toolkit's generator writes <see cref="IRequireAccess.RequiredAccess"/> into it, one line per
 /// request that says it with an attribute, and the pipeline behavior beside it,

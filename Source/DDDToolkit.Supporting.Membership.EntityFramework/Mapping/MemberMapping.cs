@@ -15,11 +15,11 @@ namespace DDDToolkit.Supporting.Membership.EntityFramework;
 /// <param name="Roles">The entity type of the roles members hold, in a table of its own, owned by the member.</param>
 /// <param name="At">
 /// The resource's property that holds where it sits, for a resource mapped with <c>at:</c>, or
-/// <see langword="null"/>: what a key held from above is compared with.
+/// <see langword="null"/>: what a permission held from above is compared with.
 /// </param>
 /// <param name="RoleClass">
 /// The entity type of the application's role class for this resource, mapped with <c>IsCustomRole</c>, or
-/// <see langword="null"/> when the model maps none: the rows a role's keys are read from, for a resource whose
+/// <see langword="null"/> when the model maps none: the rows a role's permissions are read from, for a resource whose
 /// roles are kept.
 /// </param>
 public sealed record MemberMapping(

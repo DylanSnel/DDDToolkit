@@ -62,7 +62,7 @@ internal sealed class RolePackSyncService(IServiceProvider services, IHostApplic
         }
 
         _logger.LogInformation(
-            "The role packs are synced in {Tenants} tenants: {Changed} roles followed their packs, and {WithoutTheirPack} were made from packs the catalogue no longer has and kept their keys.",
+            "The role packs are synced in {Tenants} tenants: {Changed} roles followed their packs, and {WithoutTheirPack} were made from packs the catalogue no longer has and kept their permissions.",
             report.Tenants,
             report.RolesChanged,
             report.RolesWithoutTheirPack);

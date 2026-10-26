@@ -52,7 +52,7 @@ public sealed class ModuleModelTests
         // The check has something to judge: Projects maps the six rows, each without a name.
         using var projects = Make(typeof(ProjectsContext));
         projects.Model.FindEntityType(typeof(SeatRow<TenantId, SeatId>))!.GetProperties().Select(property => property.Name).Should().BeEquivalentTo("Id", "TenantId", "Status");
-        projects.Model.FindEntityType(typeof(RoleRow<TenantId, RoleId>))!.GetProperties().Select(property => property.Name).Should().BeEquivalentTo("Id", "TenantId", "FromPack", "Status", "Keys");
+        projects.Model.FindEntityType(typeof(RoleRow<TenantId, RoleId>))!.GetProperties().Select(property => property.Name).Should().BeEquivalentTo("Id", "TenantId", "FromPack", "Status", "Permissions");
         projects.Model.FindEntityType(typeof(OrganizationUnitRow<TenantId, OrganizationUnitId>))!.GetProperties().Select(property => property.Name)
             .Should().BeEquivalentTo("Id", "TenantId", "ParentId", "Status");
 

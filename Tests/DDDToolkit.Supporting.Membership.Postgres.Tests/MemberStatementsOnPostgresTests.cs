@@ -2,7 +2,7 @@ namespace DDDToolkit.Supporting.Membership.Postgres.Tests;
 
 /// <summary>
 /// The access questions on Postgres are the statements they are on SQLite: one for what is held on a resource,
-/// one for the keys held on many, and a reach inside whatever statement the module runs. Counted with the
+/// one for the permissions held on many, and a reach inside whatever statement the module runs. Counted with the
 /// context running as the caller, under the policies, as a host on row level security runs it.
 /// </summary>
 public sealed class MemberStatementsOnPostgresTests(FilingPostgres postgres)
@@ -10,7 +10,7 @@ public sealed class MemberStatementsOnPostgresTests(FilingPostgres postgres)
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
     [Fact]
-    public async Task What_is_held_on_one_resource_and_the_keys_held_on_many_are_one_statement_each()
+    public async Task What_is_held_on_one_resource_and_the_permissions_held_on_many_are_one_statement_each()
     {
         using var filing = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Secured, asCaller: true);
         var data = filing.Scenario;
@@ -22,23 +22,23 @@ public sealed class MemberStatementsOnPostgresTests(FilingPostgres postgres)
         commands.Commands[0].Should().Contain("EXISTS").And.Contain("filing.\"DocumentShares\"").And.Contain("filing.\"DocumentShareRoles\"");
 
         commands.Reset();
-        var keys = await filing.Services.AsAsync(TestCallers.User(data.Ada), provider => provider.GetRequiredService<IMemberQuestions<DocumentId>>()
-            .KeysOnAsync([data.Minutes, data.Budget, data.Outline], FilingScenario.DocumentKeysAsked, Cancellation));
+        var permissions = await filing.Services.AsAsync(TestCallers.User(data.Ada), provider => provider.GetRequiredService<IMemberQuestions<DocumentId>>()
+            .PermissionsOnAsync([data.Minutes, data.Budget, data.Outline], FilingScenario.DocumentPermissionsAsked, Cancellation));
         commands.Count.Should().Be(1);
-        keys[data.Minutes].Should().BeEquivalentTo([DocumentPermissions.View, DocumentPermissions.Edit, DocumentPermissions.Share]);
-        keys[data.Budget].Should().BeEquivalentTo([DocumentPermissions.View]);
-        keys.Should().NotContainKey(data.Outline);
+        permissions[data.Minutes].Should().BeEquivalentTo([DocumentPermissions.View, DocumentPermissions.Edit, DocumentPermissions.Share]);
+        permissions[data.Budget].Should().BeEquivalentTo([DocumentPermissions.View]);
+        permissions.Should().NotContainKey(data.Outline);
 
         // A folder's, known by the claim: the same shape over the host's own table names.
         commands.Reset();
         var staff = await filing.Services.AsAsync(TestCallers.Staff(data.Clerk), provider => provider.GetRequiredService<IMemberQuestions<FolderId>>()
-            .KeysOnAsync([data.Cabinet, data.Annex], FilingScenario.FolderKeysAsked, Cancellation));
+            .PermissionsOnAsync([data.Cabinet, data.Annex], FilingScenario.FolderPermissionsAsked, Cancellation));
         commands.Count.Should().Be(1);
         commands.Commands[0].Should().Contain($"filing.\"{FilingContext.FolderStaffTable}\"").And.Contain($"\"{FilingContext.StaffColumn}\"").And.NotContain("Document");
         staff[data.Cabinet].Should().BeEquivalentTo([FolderPermissions.Read, FolderPermissions.File]);
         staff[data.Annex].Should().BeEquivalentTo(
             [FolderPermissions.Read, FolderPermissions.File, FolderPermissions.Staff, FolderPermissions.Shred, FolderPermissions.HandOver],
-            "the clerk keeps the annex, and a keeper holds every key of a folder");
+            "the clerk keeps the annex, and a keeper holds every permission of a folder");
     }
 
     [Fact]
@@ -96,18 +96,18 @@ public sealed class MemberStatementsOnPostgresTests(FilingPostgres postgres)
     }
 
     [Fact]
-    public async Task Until_when_a_key_is_held_is_read_in_the_statement_that_reads_the_hold()
+    public async Task Until_when_a_permission_is_held_is_read_in_the_statement_that_reads_the_hold()
     {
         using var filing = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Secured, asCaller: true);
         var data = filing.Scenario;
         var commands = filing.Services.Commands;
         var precision = TimeSpan.FromMilliseconds(1);
 
-        async Task<MemberHold<DocumentId>?> AskAsync(UserId user, string key)
+        async Task<MemberHold<DocumentId>?> AskAsync(UserId user, string permission)
         {
             commands.Reset();
-            var held = await filing.Services.AsAsync(TestCallers.User(user), provider => provider.GetRequiredService<IMemberQuestions<DocumentId>>().HoldAsync(data.Minutes, key, Cancellation));
-            commands.Count.Should().Be(1, "how " + key + " is held, until when, and the document's version are one statement");
+            var held = await filing.Services.AsAsync(TestCallers.User(user), provider => provider.GetRequiredService<IMemberQuestions<DocumentId>>().HoldAsync(data.Minutes, permission, Cancellation));
+            commands.Count.Should().Be(1, "how " + permission + " is held, until when, and the document's version are one statement");
             return held;
         }
 
@@ -128,7 +128,7 @@ public sealed class MemberStatementsOnPostgresTests(FilingPostgres postgres)
         // By being a member: the membership's end. By a role: the role's end, or its membership's if that is sooner.
         (await AskAsync(data.Cy, DocumentPermissions.View))!.Until.Should().BeCloseTo(data.Now.AddDays(7), precision);
         (await AskAsync(data.Dee, DocumentPermissions.Edit))!.Until.Should().BeCloseTo(data.Now.AddHours(2), precision);
-        (await AskAsync(data.Hal, DocumentPermissions.Edit))!.Until.Should().BeCloseTo(data.Now.AddDays(3), precision, "the role that ends last gives the key for ten days, and counts only inside a membership of three");
+        (await AskAsync(data.Hal, DocumentPermissions.Edit))!.Until.Should().BeCloseTo(data.Now.AddDays(3), precision, "the role that ends last gives the permission for ten days, and counts only inside a membership of three");
         (await AskAsync(data.Hal, DocumentPermissions.Share))!.Until.Should().BeCloseTo(data.Now.AddDays(3), precision);
 
         // Not held: nothing to end.
@@ -165,7 +165,7 @@ public sealed class MemberStatementsOnPostgresTests(FilingPostgres postgres)
             var act = access.Reach(DocumentPermissions.Edit);
             var found = await provider.GetRequiredService<FilingContext>().Documents
                 .Where(document => document.Id == data.Minutes)
-                .Within(access.KeyReach([]).See)
+                .Within(access.PermissionReach([]).See)
                 .Reached(act)
                 .Select(reached => new { reached.Resource.Title, reached.Resource.Archived, reached.AsMember, reached.FromAbove })
                 .SingleAsync(Cancellation);

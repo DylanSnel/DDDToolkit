@@ -4,11 +4,11 @@ namespace Examples.Tenancy.Projects.Application.Access;
 
 /// <summary>
 /// Decides the requirement that is Projects' own (<see cref="ProjectsRequirement"/>) before a handler of this
-/// module runs: registered for <see cref="IProjectsRequest"/>, next to the Membership package's check for a key on
+/// module runs: registered for <see cref="IProjectsRequest"/>, next to the Membership package's check for a permission on
 /// a project and Tenancy's for the cases that are Tenancy's, and asked by the module's access behavior.
 /// </summary>
 /// <remarks>
-/// The caller's own refusal when it is nobody comes first, then <c>projects.not-permitted</c> for a key it does not
+/// The caller's own refusal when it is nobody comes first, then <c>projects.not-permitted</c> for a permission it does not
 /// hold at the unit. Only then does the handler run, at the unit its command names, which is the one asked about
 /// here: it keeps nothing for the handler.
 /// <para>
@@ -16,7 +16,7 @@ namespace Examples.Tenancy.Projects.Application.Access;
 /// that declares it, rather than letting it through.
 /// </para>
 /// </remarks>
-/// <param name="access">Who holds which key where.</param>
+/// <param name="access">Who holds which permission where.</param>
 public sealed class ProjectsAccessCheck(ProjectAccess access) : IAccessCheck
 {
     /// <inheritdoc />
@@ -35,7 +35,7 @@ public sealed class ProjectsAccessCheck(ProjectAccess access) : IAccessCheck
         switch (requirement)
         {
             case ProjectsRequirement.AtUnit required:
-                await access.RequireAtAsync(required.Unit, required.Key, cancellationToken);
+                await access.RequireAtAsync(required.Unit, required.Permission, cancellationToken);
                 break;
 
             default:

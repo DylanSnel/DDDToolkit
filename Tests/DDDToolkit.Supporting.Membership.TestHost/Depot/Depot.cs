@@ -3,7 +3,7 @@ using DDDToolkit.Abstractions.Attributes;
 namespace DDDToolkit.Supporting.Membership.TestHost.Depot;
 
 // The application's organization, as small as one can be: a depot. It takes porters on, keeps roles of its
-// own with the keys each gives, has bays in a tree, and lets a porter hold a key at a bay. None of it is the
+// own with the permissions each gives, has bays in a tree, and lets a porter hold a permission at a bay. None of it is the
 // package's: it is what an application has beside its resources, and what the resources' rules have it answer.
 // Plain rows, since nothing here is an aggregate the tests are about.
 
@@ -45,14 +45,14 @@ public sealed class DepotRole
     public required bool InUse { get; set; }
 }
 
-/// <summary>A key a role of the depot's gives.</summary>
-public sealed class DepotRoleKey
+/// <summary>A permission a role of the depot's gives.</summary>
+public sealed class DepotRolePermission
 {
     /// <summary>The role.</summary>
     public required DepotRoleId RoleId { get; init; }
 
-    /// <summary>The key it gives.</summary>
-    public required string Key { get; init; }
+    /// <summary>The permission it gives.</summary>
+    public required string Permission { get; init; }
 }
 
 /// <summary>A bay of the depot, under another or under none.</summary>
@@ -75,15 +75,15 @@ public sealed class BayPath
     public required BayId BayId { get; init; }
 }
 
-/// <summary>A key a porter holds at a bay, and so at every bay below it.</summary>
+/// <summary>A permission a porter holds at a bay, and so at every bay below it.</summary>
 public sealed class BayHold
 {
     /// <summary>The porter.</summary>
     public required PorterId PorterId { get; init; }
 
-    /// <summary>The bay the key is held at.</summary>
+    /// <summary>The bay the permission is held at.</summary>
     public required BayId BayId { get; init; }
 
-    /// <summary>The key.</summary>
-    public required string Key { get; init; }
+    /// <summary>The permission.</summary>
+    public required string Permission { get; init; }
 }

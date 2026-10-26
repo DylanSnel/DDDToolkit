@@ -140,16 +140,16 @@ internal static class KnownTypes
     public const string StatesRequirementAttribute = "DDDToolkit.Access.StatesRequirementAttribute";
 
     /// <summary>On a request: the key its caller holds, where a marker on one of its members says, or for the whole tenant.</summary>
-    public const string RequiresKeyAttribute = "DDDToolkit.Access.RequiresKeyAttribute";
+    public const string RequiresPermissionAttribute = "DDDToolkit.Access.RequiresPermissionAttribute";
 
-    /// <summary>On an attribute a package ships: it marks where the key of <c>[RequiresKey]</c> is held, and names the call.</summary>
-    public const string KeyMarkerAttribute = "DDDToolkit.Access.KeyMarkerAttribute";
+    /// <summary>On an attribute a package ships: it marks where the key of <c>[RequiresPermission]</c> is held, and names the call.</summary>
+    public const string PermissionMarkerAttribute = "DDDToolkit.Access.PermissionMarkerAttribute";
 
     /// <summary>On an attribute a package ships: it marks one more argument of a key marker's call, such as the version read.</summary>
-    public const string KeyMarkerArgumentAttribute = "DDDToolkit.Access.KeyMarkerArgumentAttribute";
+    public const string PermissionMarkerArgumentAttribute = "DDDToolkit.Access.PermissionMarkerArgumentAttribute";
 
-    /// <summary>On a package's assembly: what <c>[RequiresKey]</c> means on a request that marks no member.</summary>
-    public const string KeyWithoutMarkerAttribute = "DDDToolkit.Access.KeyWithoutMarkerAttribute";
+    /// <summary>On a package's assembly: what <c>[RequiresPermission]</c> means on a request that marks no member.</summary>
+    public const string PermissionWithoutMarkerAttribute = "DDDToolkit.Access.PermissionWithoutMarkerAttribute";
 
     /// <summary>On a request: anyone may send it. The core's, which goes beside no other requirement attribute.</summary>
     public const string AllowAnonymousAttribute = "DDDToolkit.Access.AllowAnonymousAttribute";

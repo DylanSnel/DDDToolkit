@@ -132,7 +132,7 @@ public sealed class OperatorScenarios(SampleHosts sample) : IClassFixture<Sample
     [MemberData(nameof(RoutesOfTheOperators))]
     public async Task A_seat_is_never_an_operator(string template)
     {
-        // Harbor's first administrator, who holds every key there is in her tenant.
+        // Harbor's first administrator, who holds every permission there is in her tenant.
         using var ada = await sample.ClientAsync("ada", Harbor.Slug);
 
         using var response = await ada.SendAsync(SeatedRoutes.Named(template).Request(), Cancellation);
@@ -144,7 +144,7 @@ public sealed class OperatorScenarios(SampleHosts sample) : IClassFixture<Sample
     public async Task The_use_cases_themselves_refuse_whoever_is_no_operator()
     {
         // Past the routes and their policy: each query sent as the application's own work in harbor, which holds
-        // every key there and is no operator. What refuses is each module's own check, on the way to the handler.
+        // every permission there and is no operator. What refuses is each module's own check, on the way to the handler.
         var host = await sample.SharedAsync();
         IMessage[] queries =
         [

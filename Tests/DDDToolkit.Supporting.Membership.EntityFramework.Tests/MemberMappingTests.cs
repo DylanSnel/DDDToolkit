@@ -87,9 +87,9 @@ public sealed class MemberMappingTests
     }
 
     [Fact]
-    public void A_resource_known_by_more_than_its_id_keeps_its_members_under_its_whole_key()
+    public void A_resource_known_by_more_than_its_id_keeps_its_members_under_its_whole_permission()
     {
-        // A key of two parts, said before the members are mapped: a member's row carries both, and a role's row carries them on.
+        // A permission of two parts, said before the members are mapped: a member's row carries both, and a role's row carries them on.
         var model = ModelOf(document =>
         {
             document.HasKey(nameof(Document.Title), nameof(Document.Id));
@@ -165,7 +165,7 @@ public sealed class MemberMappingTests
             (await reading.Database.SqlQuery<int>($"SELECT count(*) AS \"Value\" FROM \"BinderBorrowerRoles\" WHERE \"ShelfId\" = {upper.Value}").SingleAsync(cancellation))
                 .Should().Be(1);
 
-            // And a change of the members is saved under the same key: the loan and its role are gone, the owner's stay.
+            // And a change of the members is saved under the same permission: the loan and its role are gone, the owner's stay.
             read.TakeBackFrom(ben);
             await reading.SaveChangesAsync(cancellation);
         }
@@ -176,9 +176,9 @@ public sealed class MemberMappingTests
     }
 
     [Fact]
-    public void A_resource_whose_key_is_said_after_its_members_is_refused_where_its_members_are_read()
+    public void A_resource_whose_permission_is_said_after_its_members_is_refused_where_its_members_are_read()
     {
-        // The other order: the members are mapped under the key the resource has then, and a key said
+        // The other order: the members are mapped under the permission the resource has then, and a permission said
         // afterwards does not reach their tables. Refused where the mapping is read, with what to write.
         var model = ModelOf(document =>
         {
@@ -190,7 +190,7 @@ public sealed class MemberMappingTests
             .Should().Throw<InvalidOperationException>()
             .WithMessage("Document was keyed after its members were mapped*Say the key first: call HasKey before HasMembers*");
 
-        // A key part is no such key: it is the resource's own declaration, known when the members are mapped.
+        // A key part is no such permission: it is the resource's own declaration, known when the members are mapped.
         FluentActions.Invoking(() => MembershipModel.MembersOf(ShelvesOf(binder => binder.HasMembers(row => row.Borrowers)).FindEntityType(typeof(Binder))!))
             .Should().NotThrow();
     }

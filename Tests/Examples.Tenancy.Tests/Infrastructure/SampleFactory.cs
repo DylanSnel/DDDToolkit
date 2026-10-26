@@ -153,9 +153,9 @@ public sealed class SampleFactory : WebApplicationFactory<Program>
     {
         builder.UseEnvironment(_environment);
 
-        foreach (var (key, value) in _settings)
+        foreach (var (permission, value) in _settings)
         {
-            builder.UseSetting(key, value);
+            builder.UseSetting(permission, value);
         }
 
         builder.ConfigureTestServices(services => services.AddSingleton<ILoggerProvider>(Errors));

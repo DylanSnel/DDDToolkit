@@ -7,7 +7,7 @@ using FluentAssertions;
 namespace Examples.Tenancy.Tests.Host;
 
 /// <summary>
-/// Requests that are wrong in themselves, whoever sends them: a key the catalogue does not know, an id that is
+/// Requests that are wrong in themselves, whoever sends them: a permission the catalogue does not know, an id that is
 /// not an id, in the routes of a project, of its crew and of a project role. Each is a 400 with a code, never a 500
 /// and never a 404 that would pass for an answer.
 /// </summary>
@@ -28,30 +28,30 @@ public sealed class ProbeRouteTests(SampleHosts sample) : IClassFixture<SampleHo
     {
         using var ada = await sample.ClientAsync("ada", Harbor.Slug);
 
-        using var response = await ada.GetAsync("/access/units?key=projects.nothing", Cancellation);
+        using var response = await ada.GetAsync("/access/units?permission=projects.nothing", Cancellation);
 
         var problem = await response.ShouldBeRefusedAsync(HttpStatusCode.BadRequest, TenancyRefusals.UnknownPermission);
         problem.Title.Should().NotBeNullOrWhiteSpace().And.Contain("projects.nothing");
-        problem.Argument("Keys").Should().Be("projects.nothing");
-        problem.Argument(RefusalException.FieldArgument).Should().Be("keys", "a refusal about one input names it, for a form to put the text under");
+        problem.Argument("Permissions").Should().Be("projects.nothing");
+        problem.Argument(RefusalException.FieldArgument).Should().Be("permissions", "a refusal about one input names it, for a form to put the text under");
         problem.Body.GetProperty("status").GetInt32().Should().Be(400);
     }
 
     [Fact]
-    public async Task An_unknown_key_in_an_access_probe_is_400_with_code()
+    public async Task An_unknown_permission_in_an_access_probe_is_400_with_code()
     {
         using var rhea = await sample.ClientAsync("rhea", Harbor.Slug);
 
-        using var response = await rhea.GetAsync($"/access/projects/{Harbor.ProjectNamed("Pier 7").Id.Value}?key=projects.nothing", Cancellation);
+        using var response = await rhea.GetAsync($"/access/projects/{Harbor.ProjectNamed("Pier 7").Id.Value}?permission=projects.nothing", Cancellation);
 
         var refused = await response.ShouldBeRefusedAsync(HttpStatusCode.BadRequest, TenancyRefusals.UnknownPermission);
-        refused.Argument("Keys").Should().Be("projects.nothing");
+        refused.Argument("Permissions").Should().Be("projects.nothing");
     }
 
     [Theory]
     [InlineData("/projects/not-a-project")]
     [InlineData("/projects/not-a-project/crew")]
-    [InlineData("/access/projects/not-a-project?key=projects.view")]
+    [InlineData("/access/projects/not-a-project?permission=projects.view")]
     public async Task A_malformed_project_id_is_400_invalid_request(string path)
     {
         using var rhea = await sample.ClientAsync("rhea", Harbor.Slug);

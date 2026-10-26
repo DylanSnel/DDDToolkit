@@ -15,7 +15,7 @@ namespace DDDToolkit.Supporting.Membership.UseCases;
 /// <para>
 /// It asks what makes a change well formed, whoever makes it: a member that exists, a role that exists. It
 /// does not ask who may make the change. Who may add a member or give a role, which roles and for how long,
-/// is the application's to decide: by the key its command requires, and by any rule of its own in the
+/// is the application's to decide: by the permission its command requires, and by any rule of its own in the
 /// handler, in front of these.
 /// </para>
 /// <para>

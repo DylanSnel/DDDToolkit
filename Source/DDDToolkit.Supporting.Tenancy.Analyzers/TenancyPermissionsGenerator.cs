@@ -47,7 +47,7 @@ namespace DDDToolkit.Supporting.Tenancy.Analyzers;
 /// <c>Retired</c> are said on the level. The list is marked <c>[TenancyPermissions]</c>, the mark the project that
 /// composes the modules collects; a list a module marks by hand is DDD00095.
 /// </para>
-/// The keys are needed twice, by two programs that cannot ask each other: the host registers them, where its
+/// The permissions are needed twice, by two programs that cannot ask each other: the host registers them, where its
 /// catalogue is built from the services, and the program that exports the database's policies builds the same
 /// catalogue without any. Both compose the modules, so both see every module's assembly, and in it the marked
 /// lists. So the host calls <c>services.AddTenancyPermissionsOfModules()</c> once, an export builds with
@@ -59,10 +59,10 @@ namespace DDDToolkit.Supporting.Tenancy.Analyzers;
 /// the host, or a project the host and the export share. It collects the project's own marked lists and those of
 /// every project it references, directly or not, and writes the class when it finds none as well, with an empty
 /// <c>All</c>, so the host's one call and the export's build stay what they are while no module, or no module any
-/// more, marks a list. A library that declares a module gets nothing: a module states its own keys, and composes no
+/// more, marks a list. A library that declares a module gets nothing: a module states its own permissions, and composes no
 /// other module's. An application gets the class whether it declares a module or not, because no other project
 /// composes the modules from it: an application in one project that sets <c>DDD_Module</c> to name its code is a
-/// module too, and still has to register its own keys. The class is internal and in the namespace named after the
+/// module too, and still has to register its own permissions. The class is internal and in the namespace named after the
 /// project's assembly, so two projects that both compose the modules each have their own, and a project that sees
 /// the other's internals still names its own.
 /// </para>
@@ -129,7 +129,7 @@ public sealed class TenancyPermissionsGenerator : IIncrementalGenerator
     // ------------------------------------------------------------------ a list of this project
 
     /// <summary>One list this project marks by hand: what the report names, and where.</summary>
-    /// <param name="Name">The list as a message names it: <c>OrderingKeys.Permissions</c>.</param>
+    /// <param name="Name">The list as a message names it: <c>OrderingList.Permissions</c>.</param>
     /// <param name="Location">Its name in its declaration.</param>
     private sealed record OwnList(string Name, LocationInfo? Location);
 
@@ -224,7 +224,7 @@ public sealed class TenancyPermissionsGenerator : IIncrementalGenerator
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        // A generic type's members are named only with type arguments, which a list of keys has none to take; nor
+        // A generic type's members are named only with type arguments, which a list of permissions has none to take; nor
         // are those of a type nested in one. A list the generator writes is never in one.
         if (type.IsGenericType || !compilation.IsSymbolAccessibleWithin(type, compilation.Assembly))
         {
@@ -273,7 +273,7 @@ public sealed class TenancyPermissionsGenerator : IIncrementalGenerator
             return "has no getter";
         }
 
-        // Such a member is read through a type parameter constrained to the interface, which a list of keys has none of.
+        // Such a member is read through a type parameter constrained to the interface, which a list of permissions has none of.
         if (member.ContainingType.TypeKind == TypeKind.Interface && (member.IsVirtual || member.IsAbstract))
         {
             return "is a static virtual or abstract member of an interface, which is read only through a type parameter";
@@ -320,7 +320,7 @@ public sealed class TenancyPermissionsGenerator : IIncrementalGenerator
         => compilation.IsSymbolAccessibleWithin(member, compilation.Assembly)
            && (member is not IPropertySymbol { GetMethod: { } getter } || compilation.IsSymbolAccessibleWithin(getter, compilation.Assembly));
 
-    /// <summary>What reads the list from anywhere: <c>global::Shop.Ordering.OrderingKeys.Permissions</c>.</summary>
+    /// <summary>What reads the list from anywhere: <c>global::Shop.Ordering.OrderingList.Permissions</c>.</summary>
     private static string ExpressionOf(ISymbol member)
     {
         var name = SyntaxFacts.GetKeywordKind(member.Name) != SyntaxKind.None ? "@" + member.Name : member.Name;
@@ -363,7 +363,7 @@ public sealed class TenancyPermissionsGenerator : IIncrementalGenerator
     // ------------------------------------------------------------------ a project's own permissions
 
     /// <summary>One permission of a <c>[Permissions]</c> class, as the catalogue lists it.</summary>
-    private sealed record DeclaredPermission(string Key, string Description, EquatableArray<string> Implies, bool Retired);
+    private sealed record DeclaredPermission(string Name, string Description, EquatableArray<string> Implies, bool Retired);
 
     /// <summary>A <c>[Permissions]</c> class of this project and its permissions, in the order they are written.</summary>
     private sealed record DeclaredClass(string Name, EquatableArray<DeclaredPermission> Permissions);
@@ -379,7 +379,7 @@ public sealed class TenancyPermissionsGenerator : IIncrementalGenerator
         foreach (var field in type.GetMembers().OfType<IFieldSymbol>().OrderBy(static field => field.Locations.FirstOrDefault()?.SourceSpan.Start ?? 0))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (!field.IsConst || field.ConstantValue is not string key || field.DeclaredAccessibility != Accessibility.Public)
+            if (!field.IsConst || field.ConstantValue is not string permission || field.DeclaredAccessibility != Accessibility.Public)
             {
                 continue;
             }
@@ -414,7 +414,7 @@ public sealed class TenancyPermissionsGenerator : IIncrementalGenerator
             }
 
             permissions.Add(new DeclaredPermission(
-                key,
+                permission,
                 description ?? Summary(field, cancellationToken) ?? string.Empty,
                 (implies ?? []).ToEquatableArray(),
                 retired));
@@ -506,7 +506,7 @@ public sealed class TenancyPermissionsGenerator : IIncrementalGenerator
                 {
                     order += 10;
                     var implies = permission.Implies.Count == 0 ? "null" : "new string[] { " + string.Join(", ", permission.Implies.Select(Literal)) + " }";
-                    writer.Line("    new(" + Literal(permission.Key) + ", " + Literal(composition.Module) + ", " + Literal(permission.Description) + ", Implies: " + implies
+                    writer.Line("    new(" + Literal(permission.Name) + ", " + Literal(composition.Module) + ", " + Literal(permission.Description) + ", Implies: " + implies
                                 + ", Retired: " + (permission.Retired ? "true" : "false") + ", Order: " + order + "),");
                 }
             }
@@ -552,7 +552,7 @@ public sealed class TenancyPermissionsGenerator : IIncrementalGenerator
         writer.Line("/// </remarks>");
         using (writer.Block("internal static class " + ClassName))
         {
-            writer.Line("/// <summary>Every module's keys, one list after the other.</summary>");
+            writer.Line("/// <summary>Every module's permissions, one list after the other.</summary>");
             if (lists.Count == 0)
             {
                 writer.Line("public static global::System.Collections.Generic.IReadOnlyList<" + Permission + "> All { get; } = global::System.Array.Empty<" + Permission + ">();");
@@ -571,7 +571,7 @@ public sealed class TenancyPermissionsGenerator : IIncrementalGenerator
                 writer.Line();
                 writer.Line("/// <summary>");
                 writer.Line("/// Adds <see cref=\"All\"/> to Tenancy's catalogue as one contribution, the way <c>AddTenancyPermissions</c> adds a");
-                writer.Line("/// list by hand. Call it once, in the project that composes the modules: a key that is added twice stops the");
+                writer.Line("/// list by hand. Call it once, in the project that composes the modules: a permission that is added twice stops the");
                 writer.Line("/// catalogue when it is built.");
                 writer.Line("/// </summary>");
                 writer.Line("/// <param name=\"services\">The service collection.</param>");

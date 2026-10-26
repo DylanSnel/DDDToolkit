@@ -503,7 +503,7 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
     /// <summary>What <c>ResourceAccessSet.Seen</c> is: the resources the caller sees.</summary>
     private const int ResourceSeen = 0;
 
-    /// <summary>What <c>ResourceAccessSet.HeldOn</c> is: the resources the caller holds a key on, asked with the key.</summary>
+    /// <summary>What <c>ResourceAccessSet.HeldOn</c> is: the resources the caller holds a permission on, asked with the permission.</summary>
     private const int ResourceHeldOn = 1;
 
     /// <summary>
@@ -1008,7 +1008,7 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
     /// A <c>[ResourceAccessContract&lt;TKey&gt;]</c>: one set the access to a resource answers, published by the
     /// resource's id. The generator writes its <c>Name</c>, which the export resolves to the function a contribution
     /// says answers that set for the resource, and its <c>Ids</c>: <c>Ids()</c> for the resources seen,
-    /// <c>Ids(string key)</c> for those a key is held on. A contract that declares its <c>Ids</c> itself, to document
+    /// <c>Ids(string permission)</c> for those a permission is held on. A contract that declares its <c>Ids</c> itself, to document
     /// it, gets that one implemented.
     /// </summary>
     private static RowAccessDefinition DeclareResourceAccess(GeneratorAttributeSyntaxContext attributed)
@@ -1065,7 +1065,7 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
 
         var heldOn = set == ResourceHeldOn;
         var expected = heldOn
-            ? $"nothing, or 'static partial AccessSet<{key.Name}> Ids(string key)' without a body for the generator to implement: the resources a key is held on are asked with the key"
+            ? $"nothing, or 'static partial AccessSet<{key.Name}> Ids(string permission)' without a body for the generator to implement: the resources a permission is held on are asked with the permission"
             : $"nothing, or 'static partial AccessSet<{key.Name}> Ids()' without a body for the generator to implement: the resources seen are asked without arguments";
 
         IMethodSymbol? declared = null;
@@ -1097,7 +1097,7 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
         }
 
         var name = ResourceAccessName(resource, published);
-        var keyName = declared?.Parameters.FirstOrDefault()?.Name ?? "key";
+        var keyName = declared?.Parameters.FirstOrDefault()?.Name ?? "permission";
         List<string> parameters = heldOn ? ["string " + Identifier(keyName)] : [];
         List<string> names = heldOn ? [keyName] : [];
         List<string> members =
@@ -1129,7 +1129,7 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
            + "/// </summary>\n"
            + "public const string Name = " + SymbolDisplay.FormatLiteral(name, quote: true) + ";";
 
-    /// <summary><c>Ids()</c> or <c>Ids(string key)</c>: the ids of the resources in a resource access set, which only the database answers.</summary>
+    /// <summary><c>Ids()</c> or <c>Ids(string permission)</c>: the ids of the resources in a resource access set, which only the database answers.</summary>
     private static string ResourceAccessIdsMethod(string name, string keyType, string key, IReadOnlyList<string> parameters, IReadOnlyList<string> names, bool heldOn, string accessibility, bool partial)
         => "/// <summary>\n"
            + (heldOn

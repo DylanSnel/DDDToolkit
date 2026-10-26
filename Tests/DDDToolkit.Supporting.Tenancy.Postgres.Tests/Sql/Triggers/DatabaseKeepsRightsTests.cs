@@ -11,21 +11,21 @@ namespace DDDToolkit.Supporting.Tenancy.Postgres.Tests;
 /// <summary>
 /// The database keeps the rights: a trigger writes them as a grant, a seat or a role is written, in the same
 /// statement, so they are what the use cases' own projection says after every command, whoever wrote and however; it
-/// writes only what differs; a key the catalogue has retired gets none; no caller writes a right; and Tenancy's own
+/// writes only what differs; a permission the catalogue has retired gets none; no caller writes a right; and Tenancy's own
 /// system work writes a tenant's rights again where rows got past the trigger.
 /// </summary>
 public abstract class DatabaseKeepsRightsTests(TenancyPostgres postgres, TenancyNaming names)
 {
     /// <summary>Every right there is, with the transaction that last wrote the row: a row written again shows.</summary>
     private const string EveryRight =
-        "SELECT \"SeatId\" || ' ' || \"UnitId\" || ' ' || \"RoleId\" || ' ' || \"Key\" || ' ' || \"StartsAt\" || ' ' || coalesce(\"EndsAt\"::text, 'no end') || ' ' || xmin::text FROM tenancy.\"SeatRights\" ORDER BY 1";
+        "SELECT \"SeatId\" || ' ' || \"UnitId\" || ' ' || \"RoleId\" || ' ' || \"Permission\" || ' ' || \"StartsAt\" || ' ' || coalesce(\"EndsAt\"::text, 'no end') || ' ' || xmin::text FROM tenancy.\"SeatRights\" ORDER BY 1";
 
     /// <summary>A grant of a role to a seat at a unit, for good, written by a query.</summary>
     private const string GivingHiroAtNorth =
         "INSERT INTO tenancy.\"SeatRoleGrants\" (\"RoleId\", \"SeatId\", \"UnitId\", \"StartsAt\", \"EndsAt\", \"GrantedBy\", \"Reason\") VALUES ($1, $2, $3, now(), NULL, NULL, NULL)";
 
-    /// <summary>The keys a seat holds by a role, in order.</summary>
-    private const string HirosKeysBy = "SELECT \"Key\" FROM tenancy.\"SeatRights\" WHERE \"SeatId\" = $1 AND \"RoleId\" = $2 ORDER BY 1";
+    /// <summary>The permissions a seat holds by a role, in order.</summary>
+    private const string HirosPermissionsBy = "SELECT \"Permission\" FROM tenancy.\"SeatRights\" WHERE \"SeatId\" = $1 AND \"RoleId\" = $2 ORDER BY 1";
 
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
@@ -67,7 +67,7 @@ public abstract class DatabaseKeepsRightsTests(TenancyPostgres postgres, Tenancy
 
         // And the trigger that backs every right with a grant agrees, asked of every row at once.
         await using var owner = await AsCaller.OwnerAsync(database, Cancellation);
-        (await owner.ExecuteAsync("UPDATE tenancy.\"SeatRights\" SET \"Key\" = \"Key\"", Cancellation)).Should().Be(compared, "every tenant was compared");
+        (await owner.ExecuteAsync("UPDATE tenancy.\"SeatRights\" SET \"Permission\" = \"Permission\"", Cancellation)).Should().Be(compared, "every tenant was compared");
         await owner.CommitAsync(Cancellation);
     }
 
@@ -80,7 +80,7 @@ public abstract class DatabaseKeepsRightsTests(TenancyPostgres postgres, Tenancy
         // reads the right and is answered by it.
         await using (var hiro = await AsCaller.PersonAsync(database, Hiro.Identity, Harbor, Cancellation))
         {
-            (await hiro.ScalarAsync<bool>("SELECT tenancy.holds_key('widget.read')", Cancellation)).Should().BeFalse();
+            (await hiro.ScalarAsync<bool>("SELECT tenancy.holds_permission('widget.read')", Cancellation)).Should().BeFalse();
             (await hiro.ExecuteAsync(
                     "INSERT INTO tenancy.\"SeatRoleGrants\" (\"RoleId\", \"SeatId\", \"UnitId\", \"StartsAt\", \"EndsAt\", \"GrantedBy\", \"Reason\") VALUES ($1, $2, $3, now(), now() + interval '2 days', $2, NULL)",
                     Cancellation,
@@ -89,10 +89,10 @@ public abstract class DatabaseKeepsRightsTests(TenancyPostgres postgres, Tenancy
                     North.Value))
                 .Should().Be(1);
 
-            (await hiro.ListAsync<string>("SELECT \"Key\" || ' ' || (\"EndsAt\" - \"StartsAt\") FROM tenancy.\"SeatRights\" WHERE \"RoleId\" = $1", Cancellation, HarborRoles.Watcher.Value))
+            (await hiro.ListAsync<string>("SELECT \"Permission\" || ' ' || (\"EndsAt\" - \"StartsAt\") FROM tenancy.\"SeatRights\" WHERE \"RoleId\" = $1", Cancellation, HarborRoles.Watcher.Value))
                 .Should().Equal("widget.read 2 days");
-            (await hiro.ScalarAsync<bool>("SELECT tenancy.holds_key('widget.read')", Cancellation)).Should().BeTrue();
-            (await hiro.ListAsync<Guid>("SELECT tenancy.units_where_i_hold('widget.read')", Cancellation)).Should().BeEquivalentTo([North.Value, NorthPier.Value]);
+            (await hiro.ScalarAsync<bool>("SELECT tenancy.holds_permission('widget.read')", Cancellation)).Should().BeTrue();
+            (await hiro.ListAsync<Guid>("SELECT tenancy.units_where_i_hold_permission('widget.read')", Cancellation)).Should().BeEquivalentTo([North.Value, NorthPier.Value]);
 
             // The grant's period changes, and the right's with it.
             (await hiro.ExecuteAsync("UPDATE tenancy.\"SeatRoleGrants\" SET \"EndsAt\" = NULL WHERE \"SeatId\" = $1 AND \"RoleId\" = $2", Cancellation, Hiro.Seat.Value, HarborRoles.Watcher.Value)).Should().Be(1);
@@ -104,7 +104,7 @@ public abstract class DatabaseKeepsRightsTests(TenancyPostgres postgres, Tenancy
         await using var services = new TenancyServices(database);
         await services.BySeat(Hiro.Identity, Harbor, Hiro.Seat, scoped => scoped.Seats().GrantAsync(Oli.Seat, NorthPier, HarborRoles.Watcher, until: null, reason: null, Cancellation));
         await using var owner = await AsCaller.OwnerAsync(database, Cancellation);
-        (await owner.ListAsync<string>("SELECT \"Key\" FROM tenancy.\"SeatRights\" WHERE \"SeatId\" = $1 AND \"RoleId\" = $2", Cancellation, Oli.Seat.Value, HarborRoles.Watcher.Value))
+        (await owner.ListAsync<string>("SELECT \"Permission\" FROM tenancy.\"SeatRights\" WHERE \"SeatId\" = $1 AND \"RoleId\" = $2", Cancellation, Oli.Seat.Value, HarborRoles.Watcher.Value))
             .Should().Equal("widget.read");
     }
 
@@ -135,11 +135,11 @@ public abstract class DatabaseKeepsRightsTests(TenancyPostgres postgres, Tenancy
         (await RightsAsync(database, withTransaction: false)).Should().BeEquivalentTo(before.Where(right => !right.StartsWith(Seth.Seat.Value.ToString(), StringComparison.Ordinal)));
 
         await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.Seats().ReactivateAsync(Seth.Seat, Cancellation));
-        (await RightsAsync(database, withTransaction: false)).Should().BeEquivalentTo(before, "each right is back, with its unit, its role, its key and its period");
+        (await RightsAsync(database, withTransaction: false)).Should().BeEquivalentTo(before, "each right is back, with its unit, its role, its permission and its period");
     }
 
     [Fact]
-    public async Task Changing_a_roles_keys_rewrites_every_holders_rights_and_nothing_else()
+    public async Task Changing_a_roles_permissions_rewrites_every_holders_rights_and_nothing_else()
     {
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
         await using var services = new TenancyServices(database);
@@ -147,8 +147,8 @@ public abstract class DatabaseKeepsRightsTests(TenancyPostgres postgres, Tenancy
         bool OfTheRole(string right) => right.Contains(HarborRoles.Operator.Value.ToString(), StringComparison.Ordinal);
 
         // The Operator role of Harbor: Oli holds it at North Pier, Eve from the day after tomorrow at South, and Sue,
-        // who is suspended, holds nothing by it. It loses two keys and keeps one.
-        await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.Roles().SetKeysAsync(HarborRoles.Operator, [HostCatalogue.WidgetRead], Cancellation));
+        // who is suspended, holds nothing by it. It loses two permissions and keeps one.
+        await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.Roles().SetPermissionsAsync(HarborRoles.Operator, [HostCatalogue.WidgetRead], Cancellation));
 
         var after = await RightsAsync(database);
         after.Where(OfTheRole).Select(right => right.Split(' ')[0] + " " + right.Split(' ')[3])
@@ -175,29 +175,29 @@ public abstract class DatabaseKeepsRightsTests(TenancyPostgres postgres, Tenancy
     }
 
     [Fact]
-    public async Task A_key_the_catalogue_retired_gets_no_rights()
+    public async Task A_permission_the_catalogue_retired_gets_no_rights()
     {
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
-        const string creating = "SELECT count(*) FROM tenancy.\"SeatRights\" WHERE \"Key\" = 'widget.create'";
+        const string creating = "SELECT count(*) FROM tenancy.\"SeatRights\" WHERE \"Permission\" = 'widget.create'";
 
         await using (var owner = await AsCaller.OwnerAsync(database, Cancellation))
         {
             (await owner.ScalarAsync<long>(creating, Cancellation)).Should().BePositive();
-            (await owner.ScalarAsync<bool>("SELECT tenancy.key_is_live('widget.create')", Cancellation)).Should().BeTrue();
-            (await owner.ScalarAsync<bool>("SELECT tenancy.key_is_live('widget.polish')", Cancellation)).Should().BeFalse("a key the catalogue never had is not live either");
+            (await owner.ScalarAsync<bool>("SELECT tenancy.permission_is_live('widget.create')", Cancellation)).Should().BeTrue();
+            (await owner.ScalarAsync<bool>("SELECT tenancy.permission_is_live('widget.polish')", Cancellation)).Should().BeFalse("a permission the catalogue never had is not live either");
         }
 
-        // While the key is live, every question answers for it: Oli operates widgets at North Pier, and Ada holds
-        // every key at the root.
-        (await AnswersForTheKeyAsync(Oli, Harbor)).Should().Equal("units_where_i_hold", "holds_key", "roles_with_key", "units_where_i_hold_in_tenant", "holds_key_in_tenant", "roles_with_key_in_tenant");
-        (await AnswersForTheKeyAsync(Ada, Harbor)).Should().Contain("holds_tenant_wide");
+        // While the permission is live, every question answers for it: Oli operates widgets at North Pier, and Ada holds
+        // every permission at the root.
+        (await AnswersForThePermissionAsync(Oli, Harbor)).Should().Equal("units_where_i_hold_permission", "holds_permission", "roles_with_permission", "units_where_i_hold_permission_in_tenant", "holds_permission_in_tenant", "roles_with_permission_in_tenant");
+        (await AnswersForThePermissionAsync(Ada, Harbor)).Should().Contain("holds_at_tenant");
 
-        // The application retires the key: the next export writes the function that says which keys are live again,
-        // and that access file is the migration. The roles keep the key, as they do in C#.
+        // The application retires the permission: the next export writes the function that says which permissions are live again,
+        // and that access file is the migration. The roles keep the permission, as they do in C#.
         var catalogue = HostCatalogue.Application with
         {
-            Permissions = [.. HostCatalogue.Permissions.Select(permission => permission.Key == HostCatalogue.WidgetCreate ? permission with { Retired = true } : permission)],
-            Packs = [.. HostCatalogue.Application.Packs.Select(pack => pack with { Keys = [.. pack.Keys.Where(key => key != HostCatalogue.WidgetCreate)] })],
+            Permissions = [.. HostCatalogue.Permissions.Select(permission => permission.Name == HostCatalogue.WidgetCreate ? permission with { Retired = true } : permission)],
+            Packs = [.. HostCatalogue.Application.Packs.Select(pack => pack with { Permissions = [.. pack.Permissions.Where(permission => permission != HostCatalogue.WidgetCreate)] })],
         };
         foreach (var script in TenancyPostgres.AccessScripts(TenancyCatalogue.Build(catalogue, []), names: names))
         {
@@ -211,22 +211,22 @@ public abstract class DatabaseKeepsRightsTests(TenancyPostgres postgres, Tenancy
         await services.BySeat(Hiro.Identity, Harbor, Hiro.Seat, scoped => scoped.Seats().GrantAsync(Hiro.Seat, North, HarborRoles.Operator, until: null, reason: null, Cancellation));
         await using (var owner = await AsCaller.OwnerAsync(database, Cancellation))
         {
-            (await owner.ScalarAsync<bool>("SELECT 'widget.create' = ANY (\"Keys\") FROM tenancy.\"Roles\" WHERE \"Id\" = $1", Cancellation, HarborRoles.Operator.Value)).Should().BeTrue();
-            (await owner.ListAsync<string>("SELECT \"Key\" FROM tenancy.\"SeatRights\" WHERE \"SeatId\" = $1 AND \"RoleId\" = $2 ORDER BY 1", Cancellation, Hiro.Seat.Value, HarborRoles.Operator.Value))
+            (await owner.ScalarAsync<bool>("SELECT 'widget.create' = ANY (\"Permissions\") FROM tenancy.\"Roles\" WHERE \"Id\" = $1", Cancellation, HarborRoles.Operator.Value)).Should().BeTrue();
+            (await owner.ListAsync<string>("SELECT \"Permission\" FROM tenancy.\"SeatRights\" WHERE \"SeatId\" = $1 AND \"RoleId\" = $2 ORDER BY 1", Cancellation, Hiro.Seat.Value, HarborRoles.Operator.Value))
                 .Should().Equal("widget.change", "widget.read");
             (await owner.ScalarAsync<long>(creating, Cancellation)).Should().BePositive("the rights written before stay until they are written again");
         }
 
         // No question answers for it meanwhile, of the caller's tenant or of a tenant given, though the rights rows
-        // and the roles' keys still say it: a policy on a stored file or a channel has no C# in front of it.
+        // and the roles' permissions still say it: a policy on a stored file or a channel has no C# in front of it.
         await using (var oli = await AsCaller.PersonAsync(database, Oli.Identity, Harbor, Cancellation))
         {
-            (await oli.ListAsync<Guid>("SELECT \"SeatId\" FROM tenancy.seats_holding_at('widget.create', $1)", Cancellation, NorthPier.Value)).Should().BeEmpty();
+            (await oli.ListAsync<Guid>("SELECT \"SeatId\" FROM tenancy.seats_holding_permission_at('widget.create', $1)", Cancellation, NorthPier.Value)).Should().BeEmpty();
         }
 
-        (await AnswersForTheKeyAsync(Oli, Harbor)).Should().BeEmpty();
-        (await AnswersForTheKeyAsync(Ada, Harbor)).Should().BeEmpty();
-        (await AnswersForTheKeyAsync(Odette, Orchard)).Should().BeEmpty();
+        (await AnswersForThePermissionAsync(Oli, Harbor)).Should().BeEmpty();
+        (await AnswersForThePermissionAsync(Ada, Harbor)).Should().BeEmpty();
+        (await AnswersForThePermissionAsync(Odette, Orchard)).Should().BeEmpty();
 
         foreach (var tenant in new[] { Harbor, Orchard, Quay })
         {
@@ -240,17 +240,17 @@ public abstract class DatabaseKeepsRightsTests(TenancyPostgres postgres, Tenancy
 
         // The questions about the caller that answer something for widget.create, asked as that person: in the tenant
         // the connection names, and with the tenant as an argument on a connection that names none.
-        async Task<List<string>> AnswersForTheKeyAsync(Person person, TenantId tenant)
+        async Task<List<string>> AnswersForThePermissionAsync(Person person, TenantId tenant)
         {
             var answering = new List<string>();
             await using (var seated = await AsCaller.PersonAsync(database, person.Identity, tenant, Cancellation))
             {
-                if ((await seated.ListAsync<Guid>("SELECT tenancy.units_where_i_hold('widget.create')", Cancellation)).Count > 0)
+                if ((await seated.ListAsync<Guid>("SELECT tenancy.units_where_i_hold_permission('widget.create')", Cancellation)).Count > 0)
                 {
-                    answering.Add("units_where_i_hold");
+                    answering.Add("units_where_i_hold_permission");
                 }
 
-                foreach (var asked in new[] { "holds_key", "holds_tenant_wide" })
+                foreach (var asked in new[] { "holds_permission", "holds_at_tenant" })
                 {
                     if (await seated.ScalarAsync<bool>($"SELECT tenancy.{asked}('widget.create')", Cancellation))
                     {
@@ -258,26 +258,26 @@ public abstract class DatabaseKeepsRightsTests(TenancyPostgres postgres, Tenancy
                     }
                 }
 
-                if ((await seated.ListAsync<Guid>("SELECT tenancy.roles_with_key('widget.create')", Cancellation)).Count > 0)
+                if ((await seated.ListAsync<Guid>("SELECT tenancy.roles_with_permission('widget.create')", Cancellation)).Count > 0)
                 {
-                    answering.Add("roles_with_key");
+                    answering.Add("roles_with_permission");
                 }
             }
 
             await using var elsewhere = await AsCaller.PersonAsync(database, person.Identity, tenant: null, Cancellation);
-            if ((await elsewhere.ListAsync<Guid>("SELECT tenancy.units_where_i_hold_in_tenant($1, 'widget.create')", Cancellation, tenant.Value)).Count > 0)
+            if ((await elsewhere.ListAsync<Guid>("SELECT tenancy.units_where_i_hold_permission_in_tenant($1, 'widget.create')", Cancellation, tenant.Value)).Count > 0)
             {
-                answering.Add("units_where_i_hold_in_tenant");
+                answering.Add("units_where_i_hold_permission_in_tenant");
             }
 
-            if (await elsewhere.ScalarAsync<bool>("SELECT tenancy.holds_key_in_tenant($1, 'widget.create')", Cancellation, tenant.Value))
+            if (await elsewhere.ScalarAsync<bool>("SELECT tenancy.holds_permission_in_tenant($1, 'widget.create')", Cancellation, tenant.Value))
             {
-                answering.Add("holds_key_in_tenant");
+                answering.Add("holds_permission_in_tenant");
             }
 
-            if ((await elsewhere.ListAsync<Guid>("SELECT tenancy.roles_with_key_in_tenant($1, 'widget.create')", Cancellation, tenant.Value)).Count > 0)
+            if ((await elsewhere.ListAsync<Guid>("SELECT tenancy.roles_with_permission_in_tenant($1, 'widget.create')", Cancellation, tenant.Value)).Count > 0)
             {
-                answering.Add("roles_with_key_in_tenant");
+                answering.Add("roles_with_permission_in_tenant");
             }
 
             return answering;
@@ -291,7 +291,7 @@ public abstract class DatabaseKeepsRightsTests(TenancyPostgres postgres, Tenancy
         await using var services = new TenancyServices(database);
         var before = await RightsAsync(database);
 
-        // Commands that change no grant, no seat's status and no role's keys.
+        // Commands that change no grant, no seat's status and no role's permissions.
         await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.RenameSeatAsync(Hiro.Seat, "Hiro B.", Cancellation));
         await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.Roles().RenameAsync(HarborRoles.Operator, "Operators", "Work with widgets", Cancellation));
         await services.BySeat(Seth.Identity, Harbor, Seth.Seat, scoped => scoped.Seats().PlaceAsync(Eve.Seat, North, primary: false, Cancellation));
@@ -299,12 +299,12 @@ public abstract class DatabaseKeepsRightsTests(TenancyPostgres postgres, Tenancy
         (await RightsAsync(database)).Should().Equal(before);
 
         // Statements that fire the trigger and change nothing it writes from: a grant's reason, and a seat's status, a
-        // role's keys and a role's status set to what they were.
+        // role's permissions and a role's status set to what they were.
         await using (var owner = await AsCaller.OwnerAsync(database, Cancellation))
         {
             (await owner.ExecuteAsync("UPDATE tenancy.\"SeatRoleGrants\" SET \"Reason\" = 'Standing in'", Cancellation)).Should().BePositive();
             (await owner.ExecuteAsync("UPDATE tenancy.\"Seats\" SET \"Status\" = \"Status\"", Cancellation)).Should().BePositive();
-            (await owner.ExecuteAsync("UPDATE tenancy.\"Roles\" SET \"Keys\" = \"Keys\", \"Status\" = \"Status\"", Cancellation)).Should().BePositive();
+            (await owner.ExecuteAsync("UPDATE tenancy.\"Roles\" SET \"Permissions\" = \"Permissions\", \"Status\" = \"Status\"", Cancellation)).Should().BePositive();
             await owner.CommitAsync(Cancellation);
         }
 
@@ -317,7 +317,7 @@ public abstract class DatabaseKeepsRightsTests(TenancyPostgres postgres, Tenancy
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
         var before = await RightsAsync(database);
 
-        // Ada holds every key of Harbor, Seth the grants and seats keys at North, Hiro gives roles there, Oli holds none
+        // Ada holds every permission of Harbor, Seth the grants and seats permissions at North, Hiro gives roles there, Oli holds none
         // that manages access: none of them adds a right, to anyone, and none changes or removes one, its own included.
         foreach (var person in new[] { Ada, Seth, Hiro, Oli })
         {
@@ -325,7 +325,7 @@ public abstract class DatabaseKeepsRightsTests(TenancyPostgres postgres, Tenancy
             foreach (var seat in new[] { person.Seat, Oli.Seat })
             {
                 var adding = await FluentActions.Awaiting(() => caller.AttemptAsync(
-                        "INSERT INTO tenancy.\"SeatRights\" (\"SeatId\", \"UnitId\", \"RoleId\", \"Key\", \"TenantId\", \"StartsAt\", \"EndsAt\") VALUES ($1, $2, $3, 'tenancy.roles.manage', 1, now(), NULL)",
+                        "INSERT INTO tenancy.\"SeatRights\" (\"SeatId\", \"UnitId\", \"RoleId\", \"Permission\", \"TenantId\", \"StartsAt\", \"EndsAt\") VALUES ($1, $2, $3, 'tenancy.roles.manage', 1, now(), NULL)",
                         Cancellation,
                         seat.Value,
                         NorthPier.Value,
@@ -353,7 +353,7 @@ public abstract class DatabaseKeepsRightsTests(TenancyPostgres postgres, Tenancy
         {
             await using var system = await AsCaller.SystemInAsync(database, Harbor, scope, Cancellation);
             var adding = await FluentActions.Awaiting(() => system.AttemptAsync(
-                    "INSERT INTO tenancy.\"SeatRights\" (\"SeatId\", \"UnitId\", \"RoleId\", \"Key\", \"TenantId\", \"StartsAt\", \"EndsAt\") VALUES ($1, $2, $3, 'widget.read', 1, now(), NULL)",
+                    "INSERT INTO tenancy.\"SeatRights\" (\"SeatId\", \"UnitId\", \"RoleId\", \"Permission\", \"TenantId\", \"StartsAt\", \"EndsAt\") VALUES ($1, $2, $3, 'widget.read', 1, now(), NULL)",
                     Cancellation,
                     Oli.Seat.Value,
                     South.Value,
@@ -430,14 +430,14 @@ public abstract class DatabaseKeepsRightsTests(TenancyPostgres postgres, Tenancy
     {
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
 
-        // One transaction takes a key from the Operator role while another gives the role to Hiro at North. Neither sees
-        // what the other wrote, so the grant's rights are written with the key the role is losing. The use cases never get
+        // One transaction takes a permission from the Operator role while another gives the role to Hiro at North. Neither sees
+        // what the other wrote, so the grant's rights are written with the permission the role is losing. The use cases never get
         // here, since each command waits for the one before it; two statements past them can.
         await using var changingTheRole = await AsCaller.OwnerAsync(database, Cancellation);
         await using var givingTheRole = await AsCaller.OwnerAsync(database, Cancellation);
-        (await changingTheRole.ExecuteAsync("UPDATE tenancy.\"Roles\" SET \"Keys\" = array_remove(\"Keys\", 'widget.create') WHERE \"Id\" = $1", Cancellation, HarborRoles.Operator.Value)).Should().Be(1);
+        (await changingTheRole.ExecuteAsync("UPDATE tenancy.\"Roles\" SET \"Permissions\" = array_remove(\"Permissions\", 'widget.create') WHERE \"Id\" = $1", Cancellation, HarborRoles.Operator.Value)).Should().Be(1);
         (await givingTheRole.ExecuteAsync(GivingHiroAtNorth, Cancellation, HarborRoles.Operator.Value, Hiro.Seat.Value, North.Value)).Should().Be(1);
-        (await givingTheRole.ListAsync<string>(HirosKeysBy, Cancellation, Hiro.Seat.Value, HarborRoles.Operator.Value)).Should().Contain("widget.create");
+        (await givingTheRole.ListAsync<string>(HirosPermissionsBy, Cancellation, Hiro.Seat.Value, HarborRoles.Operator.Value)).Should().Contain("widget.create");
 
         // The check that every right comes from a grant runs when each commits and reads what the other committed: the
         // second one to commit is refused, whichever it is, and the right the role does not give is never stored.
@@ -449,7 +449,7 @@ public abstract class DatabaseKeepsRightsTests(TenancyPostgres postgres, Tenancy
 
         await using var owner = await AsCaller.OwnerAsync(database, Cancellation);
         (await owner.ScalarAsync<long>(
-                "SELECT count(*) FROM tenancy.\"SeatRights\" r JOIN tenancy.\"Roles\" ro ON ro.\"Id\" = r.\"RoleId\" WHERE NOT r.\"Key\" = ANY (ro.\"Keys\")",
+                "SELECT count(*) FROM tenancy.\"SeatRights\" r JOIN tenancy.\"Roles\" ro ON ro.\"Id\" = r.\"RoleId\" WHERE NOT r.\"Permission\" = ANY (ro.\"Permissions\")",
                 Cancellation))
             .Should().Be(0);
     }
@@ -459,13 +459,13 @@ public abstract class DatabaseKeepsRightsTests(TenancyPostgres postgres, Tenancy
     {
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
 
-        // The other way round: one transaction adds a key to the Watcher role while another gives the role to Hiro at
-        // North. The grant's rights are written without the key, and nothing is refused, since every right stored has its
-        // grant: Hiro holds a key less than his role gives.
+        // The other way round: one transaction adds a permission to the Watcher role while another gives the role to Hiro at
+        // North. The grant's rights are written without the permission, and nothing is refused, since every right stored has its
+        // grant: Hiro holds a permission less than his role gives.
         await using (var changingTheRole = await AsCaller.OwnerAsync(database, Cancellation))
         await using (var givingTheRole = await AsCaller.OwnerAsync(database, Cancellation))
         {
-            (await changingTheRole.ExecuteAsync("UPDATE tenancy.\"Roles\" SET \"Keys\" = array_append(\"Keys\", 'widget.create') WHERE \"Id\" = $1", Cancellation, HarborRoles.Watcher.Value)).Should().Be(1);
+            (await changingTheRole.ExecuteAsync("UPDATE tenancy.\"Roles\" SET \"Permissions\" = array_append(\"Permissions\", 'widget.create') WHERE \"Id\" = $1", Cancellation, HarborRoles.Watcher.Value)).Should().Be(1);
             (await givingTheRole.ExecuteAsync(GivingHiroAtNorth, Cancellation, HarborRoles.Watcher.Value, Hiro.Seat.Value, North.Value)).Should().Be(1);
             await givingTheRole.CommitAsync(Cancellation);
             await changingTheRole.CommitAsync(Cancellation);
@@ -473,7 +473,7 @@ public abstract class DatabaseKeepsRightsTests(TenancyPostgres postgres, Tenancy
 
         await using (var owner = await AsCaller.OwnerAsync(database, Cancellation))
         {
-            (await owner.ListAsync<string>(HirosKeysBy, Cancellation, Hiro.Seat.Value, HarborRoles.Watcher.Value)).Should().Equal("widget.read");
+            (await owner.ListAsync<string>(HirosPermissionsBy, Cancellation, Hiro.Seat.Value, HarborRoles.Watcher.Value)).Should().Equal("widget.read");
         }
 
         // Writing the tenant's rights again adds it, and it alone.
@@ -484,7 +484,7 @@ public abstract class DatabaseKeepsRightsTests(TenancyPostgres postgres, Tenancy
         }
 
         await using var after = await AsCaller.OwnerAsync(database, Cancellation);
-        (await after.ListAsync<string>(HirosKeysBy, Cancellation, Hiro.Seat.Value, HarborRoles.Watcher.Value)).Should().Equal("widget.create", "widget.read");
+        (await after.ListAsync<string>(HirosPermissionsBy, Cancellation, Hiro.Seat.Value, HarborRoles.Watcher.Value)).Should().Equal("widget.create", "widget.read");
     }
 
     /// <summary>
@@ -497,15 +497,15 @@ public abstract class DatabaseKeepsRightsTests(TenancyPostgres postgres, Tenancy
         await using var owner = await AsCaller.OwnerAsync(database, Cancellation);
         await owner.ExecuteAsync("ALTER TABLE tenancy.\"SeatRights\" DISABLE TRIGGER USER", Cancellation);
         await owner.ExecuteAsync("ALTER TABLE tenancy.\"SeatRoleGrants\" DISABLE TRIGGER USER", Cancellation);
-        (await owner.ExecuteAsync("DELETE FROM tenancy.\"SeatRights\" WHERE \"SeatId\" = $1 AND \"Key\" = 'widget.create'", Cancellation, Ada.Seat.Value)).Should().Be(1);
+        (await owner.ExecuteAsync("DELETE FROM tenancy.\"SeatRights\" WHERE \"SeatId\" = $1 AND \"Permission\" = 'widget.create'", Cancellation, Ada.Seat.Value)).Should().Be(1);
         (await owner.ExecuteAsync(
-                "INSERT INTO tenancy.\"SeatRights\" (\"SeatId\", \"UnitId\", \"RoleId\", \"Key\", \"TenantId\", \"StartsAt\", \"EndsAt\") VALUES ($1, $2, $3, 'tenancy.roles.manage', 1, now(), NULL)",
+                "INSERT INTO tenancy.\"SeatRights\" (\"SeatId\", \"UnitId\", \"RoleId\", \"Permission\", \"TenantId\", \"StartsAt\", \"EndsAt\") VALUES ($1, $2, $3, 'tenancy.roles.manage', 1, now(), NULL)",
                 Cancellation,
                 Oli.Seat.Value,
                 South.Value,
                 HarborRoles.Administrator.Value))
             .Should().Be(1);
-        (await owner.ExecuteAsync("UPDATE tenancy.\"SeatRights\" SET \"EndsAt\" = now() + interval '1 day' WHERE \"SeatId\" = $1 AND \"Key\" = 'tenancy.seats.manage'", Cancellation, Seth.Seat.Value)).Should().Be(1);
+        (await owner.ExecuteAsync("UPDATE tenancy.\"SeatRights\" SET \"EndsAt\" = now() + interval '1 day' WHERE \"SeatId\" = $1 AND \"Permission\" = 'tenancy.seats.manage'", Cancellation, Seth.Seat.Value)).Should().Be(1);
         (await owner.ExecuteAsync(
                 "INSERT INTO tenancy.\"SeatRoleGrants\" (\"RoleId\", \"SeatId\", \"UnitId\", \"StartsAt\", \"EndsAt\", \"GrantedBy\", \"Reason\") VALUES ($1, $2, $3, now(), NULL, NULL, 'Loaded')",
                 Cancellation,
@@ -530,7 +530,7 @@ public abstract class DatabaseKeepsRightsTests(TenancyPostgres postgres, Tenancy
     private static List<string> WithoutTransaction(IEnumerable<string> rights) => [.. rights.Select(right => right[..right.LastIndexOf(' ')])];
 
     private static string Described(SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId> right)
-        => $"{right.TenantId} {right.SeatId} {right.UnitId} {right.RoleId} {right.Key} {right.StartsAt.UtcDateTime:O} {right.EndsAt?.UtcDateTime.ToString("O")}";
+        => $"{right.TenantId} {right.SeatId} {right.UnitId} {right.RoleId} {right.Permission} {right.StartsAt.UtcDateTime:O} {right.EndsAt?.UtcDateTime.ToString("O")}";
 }
 
 /// <summary>The database keeps the rights, under the names Entity Framework gives the tables and columns.</summary>

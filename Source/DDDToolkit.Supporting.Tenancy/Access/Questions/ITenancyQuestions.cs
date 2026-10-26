@@ -8,12 +8,12 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// moment "now" once, so every answer of one set of questions agrees with the others.
 /// <para>
 /// The queries are not run here: a module composes them into its own query, where they become subqueries,
-/// or runs them itself. A key granted at the root holds for the whole tenant; one granted lower down covers
-/// its unit and every unit below it. A grant counts from its start until its end, and a key the catalogue
+/// or runs them itself. A permission granted at the root holds for the whole tenant; one granted lower down covers
+/// its unit and every unit below it. A grant counts from its start until its end, and a permission the catalogue
 /// has retired holds nowhere.
 /// </para>
 /// <para>
-/// A seat is answered from its own rights. System work in a tenant holds every key in that tenant and
+/// A seat is answered from its own rights. System work in a tenant holds every permission in that tenant and
 /// nothing in another. Nobody holds nothing. System work outside any tenant has nothing to ask about here,
 /// and asking is a programming error.
 /// </para>
@@ -24,16 +24,16 @@ public interface ITenancyQuestions<TTenantId, TSeatId, TUnitId, TRoleId>
     where TUnitId : struct, IEntityId, IEquatable<TUnitId>
     where TRoleId : struct, IEntityId, IEquatable<TRoleId>
 {
-    /// <summary>Every unit where the caller holds <paramref name="key"/> now: the units it is held at, and every unit below them.</summary>
-    /// <param name="key">A key of the catalogue.</param>
-    /// <exception cref="ArgumentException">The catalogue does not know <paramref name="key"/>: a typo in code.</exception>
+    /// <summary>Every unit where the caller holds <paramref name="permission"/> now: the units it is held at, and every unit below them.</summary>
+    /// <param name="permission">A permission of the catalogue.</param>
+    /// <exception cref="ArgumentException">The catalogue does not know <paramref name="permission"/>: a typo in code.</exception>
     /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>
-    IQueryable<TUnitId> UnitsWhereIHold(string key);
+    IQueryable<TUnitId> UnitsWhereIHold(string permission);
 
     /// <summary>
-    /// Every pair of a unit and a key of <paramref name="keys"/> the caller holds there now: for each key, the
-    /// units it is held at and every unit below them. It is <see cref="UnitsWhereIHold"/> for several keys in one
-    /// query, so a list that shows what the caller may do with each row asks once, not once per key:
+    /// Every pair of a unit and a permission of <paramref name="permissions"/> the caller holds there now: for each permission, the
+    /// units it is held at and every unit below them. It is <see cref="UnitsWhereIHold"/> for several permissions in one
+    /// query, so a list that shows what the caller may do with each row asks once, not once per permission:
     /// <code>
     /// var held = tenancy.WhereIHold(["projects.edit", "projects.close"]);
     /// var abilities = from project in projects
@@ -42,14 +42,14 @@ public interface ITenancyQuestions<TTenantId, TSeatId, TUnitId, TRoleId>
     /// </code>
     /// <para>
     /// The answer is for showing what a caller can do, a button or a menu. Whether a command may run is still
-    /// asked when it runs, by the use case that runs it: a key set read a moment ago decides nothing.
+    /// asked when it runs, by the use case that runs it: a permission set read a moment ago decides nothing.
     /// </para>
     /// </summary>
-    /// <param name="keys">Keys of the catalogue. A retired key is held nowhere, and none at all answers nothing.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="keys"/> is null.</exception>
-    /// <exception cref="ArgumentException">The catalogue does not know one of <paramref name="keys"/>: a typo in code.</exception>
+    /// <param name="permissions">Permissions of the catalogue. A retired permission is held nowhere, and none at all answers nothing.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="permissions"/> is null.</exception>
+    /// <exception cref="ArgumentException">The catalogue does not know one of <paramref name="permissions"/>: a typo in code.</exception>
     /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>
-    IQueryable<UnitKey<TUnitId>> WhereIHold(IReadOnlyCollection<string> keys);
+    IQueryable<UnitPermission<TUnitId>> WhereIHold(IReadOnlyCollection<string> permissions);
 
     /// <summary>The units the caller belongs to: each unit it is placed in, and every unit below it.</summary>
     /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>
@@ -63,40 +63,40 @@ public interface ITenancyQuestions<TTenantId, TSeatId, TUnitId, TRoleId>
     /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>
     IQueryable<TUnitId> UnitsUnder(TUnitId unit);
 
-    /// <summary>The tenant's active roles that grant <paramref name="key"/>.</summary>
-    /// <param name="key">A key of the catalogue.</param>
-    /// <exception cref="ArgumentException">The catalogue does not know <paramref name="key"/>.</exception>
+    /// <summary>The tenant's active roles that grant <paramref name="permission"/>.</summary>
+    /// <param name="permission">A permission of the catalogue.</param>
+    /// <exception cref="ArgumentException">The catalogue does not know <paramref name="permission"/>.</exception>
     /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>
-    IQueryable<TRoleId> RolesWithKey(string key);
+    IQueryable<TRoleId> RolesWithPermission(string permission);
 
     /// <summary>
-    /// Every pair of one of the tenant's active roles and a key of <paramref name="keys"/> it grants:
-    /// <see cref="RolesWithKey"/> for several keys in one query.
+    /// Every pair of one of the tenant's active roles and a permission of <paramref name="permissions"/> it grants:
+    /// <see cref="RolesWithPermission"/> for several permissions in one query.
     /// </summary>
-    /// <param name="keys">Keys of the catalogue. A retired key is granted by no role here, and none at all answers nothing.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="keys"/> is null.</exception>
-    /// <exception cref="ArgumentException">The catalogue does not know one of <paramref name="keys"/>.</exception>
+    /// <param name="permissions">Permissions of the catalogue. A retired permission is granted by no role here, and none at all answers nothing.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="permissions"/> is null.</exception>
+    /// <exception cref="ArgumentException">The catalogue does not know one of <paramref name="permissions"/>.</exception>
     /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>
-    IQueryable<RoleWithKey<TRoleId>> RoleKeys(IReadOnlyCollection<string> keys);
+    IQueryable<RoleWithPermission<TRoleId>> RolePermissions(IReadOnlyCollection<string> permissions);
 
-    /// <summary>Every live key the caller holds now that reaches <paramref name="unit"/>, each once. A retired key is never among them.</summary>
+    /// <summary>Every live permission the caller holds now that reaches <paramref name="unit"/>, each once. A retired permission is never among them.</summary>
     /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>
-    IQueryable<string> KeysIHoldAt(TUnitId unit);
+    IQueryable<string> PermissionsIHoldAt(TUnitId unit);
 
     /// <summary>
-    /// Who holds <paramref name="key"/> at <paramref name="unit"/> now: the active seats with a right for it that
+    /// Who holds <paramref name="permission"/> at <paramref name="unit"/> now: the active seats with a right for it that
     /// applies now, held at the unit or at a unit above it. A seat learns about another seat's right only where it
     /// may read the grant that gives it: at a unit where it manages grants, seats or units, held there or above it,
     /// or anywhere when it manages roles for the whole tenant. So a seat that manages one part of the tree learns
-    /// who holds the key from within that part, and not who holds it from above; a seat that manages none learns
-    /// only whether it holds the key there itself. System work in a tenant learns about every seat of that tenant,
+    /// who holds the permission from within that part, and not who holds it from above; a seat that manages none learns
+    /// only whether it holds the permission there itself. System work in a tenant learns about every seat of that tenant,
     /// and nobody about none.
     /// </summary>
-    /// <param name="key">A key of the catalogue.</param>
+    /// <param name="permission">A permission of the catalogue.</param>
     /// <param name="unit">The unit.</param>
-    /// <exception cref="ArgumentException">The catalogue does not know <paramref name="key"/>: a typo in code.</exception>
+    /// <exception cref="ArgumentException">The catalogue does not know <paramref name="permission"/>: a typo in code.</exception>
     /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>
-    IQueryable<TSeatId> SeatsHoldingAt(string key, TUnitId unit);
+    IQueryable<TSeatId> SeatsHoldingPermissionAt(string permission, TUnitId unit);
 
     /// <summary>
     /// The tenant's units, archived ones included, as access facts, without a name: where each hangs and whether
@@ -107,7 +107,7 @@ public interface ITenancyQuestions<TTenantId, TSeatId, TUnitId, TRoleId>
 
     /// <summary>
     /// The tenant's roles, archived ones included, as access facts, without a name: the pack each was copied
-    /// from, its status and the keys it grants. What a role is called is the directory's to answer, by id.
+    /// from, its status and the permissions it grants. What a role is called is the directory's to answer, by id.
     /// </summary>
     /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>
     IQueryable<RoleRow<TTenantId, TRoleId>> Roles();
@@ -126,18 +126,18 @@ public interface ITenancyQuestions<TTenantId, TSeatId, TUnitId, TRoleId>
     /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>
     IQueryable<SeatRow<TTenantId, TSeatId>> Seats();
 
-    /// <summary>Whether the caller holds <paramref name="key"/> now for the whole tenant: at its root.</summary>
-    /// <param name="key">A key of the catalogue.</param>
+    /// <summary>Whether the caller holds <paramref name="permission"/> now for the whole tenant: at its root.</summary>
+    /// <param name="permission">A permission of the catalogue.</param>
     /// <param name="cancellationToken">Cancels the query.</param>
-    /// <exception cref="ArgumentException">The catalogue does not know <paramref name="key"/>.</exception>
+    /// <exception cref="ArgumentException">The catalogue does not know <paramref name="permission"/>.</exception>
     /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>
-    Task<bool> HoldsAtTenantAsync(string key, CancellationToken cancellationToken);
+    Task<bool> HoldsAtTenantAsync(string permission, CancellationToken cancellationToken);
 
-    /// <summary>Whether the caller holds <paramref name="key"/> now at <paramref name="unit"/>, held there or above it.</summary>
-    /// <param name="key">A key of the catalogue.</param>
+    /// <summary>Whether the caller holds <paramref name="permission"/> now at <paramref name="unit"/>, held there or above it.</summary>
+    /// <param name="permission">A permission of the catalogue.</param>
     /// <param name="unit">The unit.</param>
     /// <param name="cancellationToken">Cancels the query.</param>
-    /// <exception cref="ArgumentException">The catalogue does not know <paramref name="key"/>.</exception>
+    /// <exception cref="ArgumentException">The catalogue does not know <paramref name="permission"/>.</exception>
     /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>
-    Task<bool> HoldsAtAsync(string key, TUnitId unit, CancellationToken cancellationToken);
+    Task<bool> HoldsAtAsync(string permission, TUnitId unit, CancellationToken cancellationToken);
 }

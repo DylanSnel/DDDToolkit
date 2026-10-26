@@ -9,7 +9,7 @@ public abstract partial record TenancyRequirement
     /// <see cref="TenancyAccess.RequiresOperator"/>.
     /// </summary>
     /// <remarks>
-    /// An operator works in no tenant and holds no key, so nothing is asked about either: the request names the
+    /// An operator works in no tenant and holds no permission, so nothing is asked about either: the request names the
     /// tenant it reads. It is the toolkit's own caller that is asked, never the Tenancy caller, which is nobody
     /// for an operator in every tenant. For queries only; an operator changes nothing itself.
     /// </remarks>

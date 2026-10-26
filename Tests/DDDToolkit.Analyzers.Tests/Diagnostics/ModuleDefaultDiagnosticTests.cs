@@ -6,7 +6,7 @@ namespace DDDToolkit.Analyzers.Tests.Diagnostics;
 
 /// <summary>
 /// The default of a module's requests, the requirement attributes on its interface: DDD00089 for one that may not be a
-/// default, since every request that forgets its own takes it; DDD00083 where nothing reads it; DDD00080 for a key no
+/// default, since every request that forgets its own takes it; DDD00083 where nothing reads it; DDD00080 for a permission no
 /// package says where it is held without a marker; and DDD00084 for a request's own attributes that say what the
 /// default says. A request of a module with a default is no DDD00077: it takes the default, on a line of its own.
 /// </summary>
@@ -108,12 +108,12 @@ public class ModuleDefaultDiagnosticTests
         Message(result, "DDD00089", at: "RequiresPlan(Plan.Pro)").Should().Contain("its package declares it for queries only");
     }
 
-    // ------------------------------------------------------------------ DDD00080: a key without a marker
+    // ------------------------------------------------------------------ DDD00080: a permission without a marker
 
     [Fact]
-    public void A_key_as_the_default_where_no_package_says_where_it_is_held_is_DDD00080()
+    public void A_permission_as_the_default_where_no_package_says_where_it_is_held_is_DDD00080()
     {
-        var result = GeneratorTestHost.Create(ModuleDefaultGenerationTests.Billing("RequiresKey(\"documents.read\")").Replace("using DDDToolkit.Supporting.Tenancy.Access;", string.Empty, StringComparison.Ordinal), "Billing.cs")
+        var result = GeneratorTestHost.Create(ModuleDefaultGenerationTests.Billing("RequiresPermission(\"documents.read\")").Replace("using DDDToolkit.Supporting.Tenancy.Access;", string.Empty, StringComparison.Ordinal), "Billing.cs")
             .WithMembershipAlone()
             .WithSource("namespace Shop.Billing;\n\npublic sealed record ReadAll : IBillingRequest;", "Requests.cs")
             .WithDependencyInjection()
@@ -121,19 +121,19 @@ public class ModuleDefaultDiagnosticTests
 
         result.ShouldHaveExactlyDiagnostics("DDD00080");
         Message(result, "DDD00080", at: "IBillingRequest").Should()
-            .Contain("'IBillingRequest' requires a key as the default of its module, and no package this project references says where a key without a marker is held")
+            .Contain("'IBillingRequest' requires a permission as the default of its module, and no package this project references says where a permission without a marker is held")
             .And.Contain("a default reads no member of a request");
     }
 
     [Fact]
-    public void A_marker_without_a_key_of_its_own_is_DDD00080_beside_a_default_with_a_key_too()
+    public void A_marker_without_a_permission_of_its_own_is_DDD00080_beside_a_default_with_a_permission_too()
     {
-        var result = Run("RequiresKey(\"billing.read\")", "public sealed record OpenLedger([AtUnit] OrganizationUnitId Unit) : IBillingRequest;");
+        var result = Run("RequiresPermission(\"billing.read\")", "public sealed record OpenLedger([AtUnit] OrganizationUnitId Unit) : IBillingRequest;");
 
         result.ShouldHaveExactlyDiagnostics("DDD00080");
         Message(result, "DDD00080", at: "AtUnit").Should()
-            .Contain("marks 'Unit' [AtUnit], and requires no key")
-            .And.Contain("the key of its module's default, on 'IBillingRequest', reads no member of a request");
+            .Contain("marks 'Unit' [AtUnit], and requires no permission")
+            .And.Contain("the permission of its module's default, on 'IBillingRequest', reads no member of a request");
     }
 
     // ------------------------------------------------------------------ DDD00083: where a default is read
@@ -193,7 +193,7 @@ public class ModuleDefaultDiagnosticTests
             """
             [InTenant] public sealed record ListUnits : IBillingRequest;
 
-            [RequiresKey("billing.read")] public sealed record ListLedgers : IBillingRequest;
+            [RequiresPermission("billing.read")] public sealed record ListLedgers : IBillingRequest;
             """);
 
         result.ShouldCompile();
@@ -229,10 +229,10 @@ public class ModuleDefaultDiagnosticTests
     [Fact]
     public void An_attribute_of_the_default_that_another_there_requires_already_is_DDD00084()
     {
-        var result = Run("InTenant, RequiresKey(\"billing.read\")", "public sealed record ListLedgers : IBillingRequest;");
+        var result = Run("InTenant, RequiresPermission(\"billing.read\")", "public sealed record ListLedgers : IBillingRequest;");
 
         result.ShouldCompile();
         result.ShouldHaveExactlyDiagnostics("DDD00084");
-        Message(result, "DDD00084", at: "InTenant").Should().Contain("'IBillingRequest' carries [InTenant] beside [RequiresKey], which requires it already");
+        Message(result, "DDD00084", at: "InTenant").Should().Contain("'IBillingRequest' carries [InTenant] beside [RequiresPermission], which requires it already");
     }
 }

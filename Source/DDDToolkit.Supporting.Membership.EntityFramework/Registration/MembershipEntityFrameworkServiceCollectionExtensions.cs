@@ -66,10 +66,10 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
     /// rows of the application's role class, which needs nothing registered: the context maps that class
     /// with <c>IsCustomRole</c>, and the roles are read from there; or they are kept elsewhere
     /// (<see cref="Roles.External"/>), which needs an
-    /// <see cref="IRolesWithKey{TResourceId, TRoleId}"/> for which roles give a key and an
+    /// <see cref="IRolesWithPermission{TResourceId, TRoleId}"/> for which roles give a permission and an
     /// <see cref="IMemberRoles{TResourceId, TRoleId}"/> for which roles there are.</item>
     /// <item><b>Whether a resource is reached from above</b> (<see cref="MembershipRules.ReachFromAbove"/>), which needs
-    /// an <see cref="IPlacesReached{TResourceId, TPlaceId}"/> for where a caller holds a key, and the resource
+    /// an <see cref="IPlacesReached{TResourceId, TPlaceId}"/> for where a caller holds a permission, and the resource
     /// marking where it hangs <c>[At]</c>.</item>
     /// </list>
     /// <para>
@@ -91,7 +91,7 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
     /// </para>
     /// <para>
     /// The ambient caller answers <see cref="Caller.System"/> where nobody began one, and the application
-    /// itself holds every key on every resource. An application whose requests each have a caller says so,
+    /// itself holds every permission on every resource. An application whose requests each have a caller says so,
     /// with <c>services.RequireExplicitCallers()</c>, and a request that reaches the questions with no caller
     /// then fails rather than passes as the application. Work in a scope
     /// (<see cref="Caller.SystemIn"/>) holds nothing on a resource unless the rules name that scope
@@ -214,10 +214,10 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
     /// <list type="bullet">
     /// <item><see cref="ICallerMember{TResourceId, TMemberId}"/>: who the caller is as a member, for rules with
     /// <see cref="MemberSource.Resolved"/>.</item>
-    /// <item><see cref="IRolesWithKey{TResourceId, TRoleId}"/> and
-    /// <see cref="IMemberRoles{TResourceId, TRoleId}"/>: which roles give a key, and which roles there are, for
+    /// <item><see cref="IRolesWithPermission{TResourceId, TRoleId}"/> and
+    /// <see cref="IMemberRoles{TResourceId, TRoleId}"/>: which roles give a permission, and which roles there are, for
     /// rules whose roles are kept elsewhere.</item>
-    /// <item><see cref="IPlacesReached{TResourceId, TPlaceId}"/>: where the caller holds a key, for rules that
+    /// <item><see cref="IPlacesReached{TResourceId, TPlaceId}"/>: where the caller holds a permission, for rules that
     /// let a resource be reached from above.</item>
     /// <item><see cref="IMemberDirectory{TResourceId, TMemberId}"/> and
     /// <see cref="IMemberRolePolicy{TResourceId, TRoleId}"/>, which no rules need: who can be made a member,
@@ -277,7 +277,7 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
             .. new[]
             {
                 typeof(ICallerMember<TResourceId, TMemberId>),
-                typeof(IRolesWithKey<TResourceId, TRoleId>),
+                typeof(IRolesWithPermission<TResourceId, TRoleId>),
                 typeof(IMemberRoles<TResourceId, TRoleId>),
                 typeof(IMemberDirectory<TResourceId, TMemberId>),
                 typeof(IMemberRolePolicy<TResourceId, TRoleId>),
@@ -289,7 +289,7 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
         {
             throw new ArgumentException(
                 typeof(TPorts).Name + " answers nothing of " + typeof(TResource).Name + ": it implements none of ICallerMember<" + typeof(TResourceId).Name + ", "
-                + typeof(TMemberId).Name + ">, IRolesWithKey<" + typeof(TResourceId).Name + ", " + typeof(TRoleId).Name + ">, IMemberRoles<" + typeof(TResourceId).Name + ", "
+                + typeof(TMemberId).Name + ">, IRolesWithPermission<" + typeof(TResourceId).Name + ", " + typeof(TRoleId).Name + ">, IMemberRoles<" + typeof(TResourceId).Name + ", "
                 + typeof(TRoleId).Name + ">, IPlacesReached<" + typeof(TResourceId).Name + ", TPlaceId>, IMemberDirectory<" + typeof(TResourceId).Name + ", " + typeof(TMemberId).Name
                 + "> and IMemberRolePolicy<" + typeof(TResourceId).Name + ", " + typeof(TRoleId).Name + ">. Hand over the class that does, or register the resource without one.",
                 nameof(TPorts));
@@ -505,11 +505,11 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
             return;
         }
 
-        var giving = "IRolesWithKey<" + typeof(TResourceId).Name + ", " + typeof(TRoleId).Name + ">";
-        if (!IsRegistered(services, typeof(IRolesWithKey<TResourceId, TRoleId>)))
+        var giving = "IRolesWithPermission<" + typeof(TResourceId).Name + ", " + typeof(TRoleId).Name + ">";
+        if (!IsRegistered(services, typeof(IRolesWithPermission<TResourceId, TRoleId>)))
         {
             throw new ArgumentException(
-                "The rules '" + rules.Name + "' say the roles of " + typeof(TResource).Name + " are kept elsewhere, Roles.External, and nothing answers which of them give a key: no "
+                "The rules '" + rules.Name + "' say the roles of " + typeof(TResource).Name + " are kept elsewhere, Roles.External, and nothing answers which of them give a permission: no "
                 + giving + " is registered. " + HowToAnswer<TResource>(giving),
                 nameof(rules));
         }
@@ -524,7 +524,7 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
         }
     }
 
-    /// <summary>Holds rules that reach a resource from above to an application that answers where a caller holds a key.</summary>
+    /// <summary>Holds rules that reach a resource from above to an application that answers where a caller holds a permission.</summary>
     /// <exception cref="ArgumentException">The application registered nothing that answers.</exception>
     private static void RequirePlacesReached<TResource, TResourceId>(IServiceCollection services, MembershipRules rules)
         where TResourceId : struct, IEntityId, IEquatable<TResourceId>
@@ -533,7 +533,7 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
         {
             var above = "IPlacesReached<" + typeof(TResourceId).Name + ", TPlaceId>";
             throw new ArgumentException(
-                "The rules '" + rules.Name + "' let " + typeof(TResource).Name + " be reached from above, and nothing answers where a caller holds a key: no "
+                "The rules '" + rules.Name + "' let " + typeof(TResource).Name + " be reached from above, and nothing answers where a caller holds a permission: no "
                 + above + " is registered, for what the place a " + typeof(TResource).Name + " sits at is known by. " + HowToAnswer<TResource>(above),
                 nameof(rules));
         }

@@ -12,7 +12,7 @@ namespace DDDToolkit.Exceptions;
 ///     &amp;&amp; refused.Arguments.TryGetValue(ToolkitRefusals.ReasonsArgument, out var value)
 ///     &amp;&amp; value is IReadOnlyList&lt;RefusalReason&gt; reasons)
 /// {
-///     // reasons[0].Code is "tenancy.operators-only", reasons[1].Code "tenancy.not-permitted", with its Key
+///     // reasons[0].Code is "tenancy.operators-only", reasons[1].Code "tenancy.not-permitted", with its Permission
 /// }
 /// </code>
 /// </summary>
@@ -20,8 +20,8 @@ namespace DDDToolkit.Exceptions;
 /// Its message is left out on purpose: a client phrases a reason from its code, as it phrases any refusal, in the
 /// reader's language. Two reasons are equal when their codes and arguments are, however the arguments were built, and
 /// the reasons of a combination nested in another are compared one by one. Written for a log it is the code and the
-/// arguments by name, <c>tenancy.not-permitted (Key = tenancy.seats.manage)</c>, and a nested combination's reasons in
-/// brackets, <c>access.refused (Reasons = [access.not-own; tenancy.not-permitted (Key = tenancy.seats.manage)])</c>.
+/// arguments by name, <c>tenancy.not-permitted (Permission = tenancy.seats.manage)</c>, and a nested combination's reasons in
+/// brackets, <c>access.refused (Reasons = [access.not-own; tenancy.not-permitted (Permission = tenancy.seats.manage)])</c>.
 /// </remarks>
 public sealed record RefusalReason
 {
@@ -70,7 +70,7 @@ public sealed record RefusalReason
         return HashCode.Combine(StringComparer.Ordinal.GetHashCode(Code), hash);
     }
 
-    /// <summary>The code, and the arguments by name, ordered by name: <c>tenancy.not-permitted (Key = tenancy.seats.manage)</c>.</summary>
+    /// <summary>The code, and the arguments by name, ordered by name: <c>tenancy.not-permitted (Permission = tenancy.seats.manage)</c>.</summary>
     public override string ToString()
         => Arguments.Count == 0
             ? Code

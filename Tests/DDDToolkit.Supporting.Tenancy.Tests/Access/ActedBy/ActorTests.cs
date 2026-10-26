@@ -296,7 +296,7 @@ public class ActorTests
 
         var polisher = await harness.As(ada, use => use.Roles.CreateAsync("Polisher", "Polishes widgets", [HostCatalogue.WidgetRead], Cancellation));
         await harness.As(ada, use => use.Roles.RenameAsync(polisher, "Buffer", "Buffs widgets", Cancellation));
-        await harness.As(ada, use => use.Roles.SetKeysAsync(polisher, [HostCatalogue.WidgetCreate], Cancellation));
+        await harness.As(ada, use => use.Roles.SetPermissionsAsync(polisher, [HostCatalogue.WidgetCreate], Cancellation));
         await harness.As(ada, use => use.Roles.ArchiveAsync(polisher, Cancellation));
 
         var ben = await harness.As(ada, use => use.Seats.AddSeatAsync(Guid.NewGuid(), Cancellation, configure: added => added.Rename("Ben")));
@@ -342,7 +342,7 @@ public class ActorTests
         var later = TenancyCatalogue.Build(
             HostCatalogue.Application with
             {
-                Packs = [.. HostCatalogue.Application.Packs.Select(pack => pack.Key == HostCatalogue.WatcherPack ? pack with { Keys = [HostCatalogue.WidgetCreate] } : pack)],
+                Packs = [.. HostCatalogue.Application.Packs.Select(pack => pack.Key == HostCatalogue.WatcherPack ? pack with { Permissions = [HostCatalogue.WidgetCreate] } : pack)],
             },
             []);
         await harness.BySystemWork(use => new HostTenancy.RoleCommands(use.Store, later, use.Clock).FollowPacksAsync(Cancellation));
@@ -463,36 +463,36 @@ public class ActorTests
     }
 
     [Fact]
-    public async Task A_role_keys_change_names_the_keys_added_and_taken_out()
+    public async Task A_role_permissions_change_names_the_permissions_added_and_taken_out()
     {
         var catalogue = New.Catalogue();
         var role = New.Role(catalogue, "Operator", HostCatalogue.WidgetRead, HostCatalogue.WidgetCreate);
         role.DrainEvents();
         TenancyActor<SeatId>? by = TenancyActor<SeatId>.OfSeat(Ada);
 
-        // Changing implies reading, so the key that was named before stays, as an implied one now.
-        var first = role.AsScenario().When(changed => changed.SetKeys([HostCatalogue.WidgetChange], catalogue, by))
-            .SingleEvent<RoleKeysChanged<TenantId, RoleId, SeatId>>();
+        // Changing implies reading, so the permission that was named before stays, as an implied one now.
+        var first = role.AsScenario().When(changed => changed.SetPermissions([HostCatalogue.WidgetChange], catalogue, by))
+            .SingleEvent<RolePermissionsChanged<TenantId, RoleId, SeatId>>();
         first.Added.Should().Equal(HostCatalogue.WidgetChange);
         first.Removed.Should().Equal(HostCatalogue.WidgetCreate);
         first.By.Should().Be(by);
         role.DrainEvents();
 
-        // Taking out the key that implied another takes both out, and both are named, in order.
-        var second = role.AsScenario().When(changed => changed.SetKeys<SeatId>([HostCatalogue.WidgetCreate], catalogue))
-            .SingleEvent<RoleKeysChanged<TenantId, RoleId, SeatId>>();
+        // Taking out the permission that implied another takes both out, and both are named, in order.
+        var second = role.AsScenario().When(changed => changed.SetPermissions<SeatId>([HostCatalogue.WidgetCreate], catalogue))
+            .SingleEvent<RolePermissionsChanged<TenantId, RoleId, SeatId>>();
         second.Added.Should().Equal(HostCatalogue.WidgetCreate);
         second.Removed.Should().Equal(HostCatalogue.WidgetChange, HostCatalogue.WidgetRead);
         second.By.Should().BeNull("the role was changed with nobody named");
 
-        // Through the use case the keys are the same, and the caller is who changed them.
+        // Through the use case the permissions are the same, and the caller is who changed them.
         var harness = Harness.OfHarbor();
         var watcher = harness.RoleFromPack(HostCatalogue.WatcherPack);
-        await harness.As(harness.Administrator, use => use.Roles.SetKeysAsync(watcher, [HostCatalogue.WidgetChange, TenancyKeys.SeatsManage], Cancellation));
+        await harness.As(harness.Administrator, use => use.Roles.SetPermissionsAsync(watcher, [HostCatalogue.WidgetChange, TenancyPermissions.SeatsManage], Cancellation));
 
-        var changedByAda = harness.Store.SavedEvents.Should().ContainSingle().Which.Should().BeOfType<RoleKeysChanged<TenantId, RoleId, SeatId>>().Which;
+        var changedByAda = harness.Store.SavedEvents.Should().ContainSingle().Which.Should().BeOfType<RolePermissionsChanged<TenantId, RoleId, SeatId>>().Which;
         changedByAda.RoleId.Should().Be(watcher);
-        changedByAda.Added.Should().Equal(TenancyKeys.SeatsManage, HostCatalogue.WidgetChange);
+        changedByAda.Added.Should().Equal(TenancyPermissions.SeatsManage, HostCatalogue.WidgetChange);
         changedByAda.Removed.Should().BeEmpty("reading is implied by changing, and stays");
         changedByAda.By.Should().Be(TenancyActor<SeatId>.OfSeat(harness.Administrator));
     }

@@ -13,11 +13,11 @@ namespace Examples.Tenancy.Projects.Application.Crew.Commands;
 /// The version of the project the caller last read, or <see langword="null"/> to change it as it is now. Any other
 /// version than the project's is a lost race: somebody changed it since, so the caller reads again and decides again.
 /// </param>
-[RequiresKey(RequiredKey)]
+[RequiresPermission(RequiredPermission)]
 public sealed record TakeCrewRole([OnResource] ProjectId Project, SeatId Seat, ProjectRoleId Role, [ExpectedVersion] long? ExpectedVersion = null) : ICommand, IProjectsRequest
 {
-    /// <summary>The key the caller holds on the project.</summary>
-    public const string RequiredKey = ProjectKeys.ManageCrew;
+    /// <summary>The permission the caller holds on the project.</summary>
+    public const string RequiredPermission = ProjectPermissionNames.ManageCrew;
 }
 
 /// <summary>

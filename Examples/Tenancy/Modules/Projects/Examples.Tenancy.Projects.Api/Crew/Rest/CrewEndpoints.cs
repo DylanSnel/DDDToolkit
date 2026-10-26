@@ -48,7 +48,7 @@ internal static class CrewEndpoints
         });
 
         // A project role is given by whoever manages the crew, to anyone on it, themselves included, whether or not
-        // they hold the role's keys, next to the roles the member holds already and for a period of its own. On a
+        // they hold the role's permissions, next to the roles the member holds already and for a period of its own. On a
         // crew a role gives only what acts on the project: opening projects and naming the owner never come
         // through a crew, so the owner is named by the organization alone.
         group.MapPost("/projects/{id}/crew/{seatId}/roles", async (ProjectId id, SeatId seatId, RoleToGive body, HttpRequest request, ISender sender, CancellationToken cancellationToken) =>

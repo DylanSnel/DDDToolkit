@@ -16,8 +16,8 @@ public abstract class TenantArgumentFunctionTests(TenancyPostgres postgres, Tena
     /// <summary>The five functions, as the catalog names them.</summary>
     private static readonly string[] Functions =
     [
-        "tenancy.holds_key_in_tenant(bigint,text)", "tenancy.roles_with_key_in_tenant(bigint,text)", "tenancy.seat_in_tenant(bigint)",
-        "tenancy.seated_in_tenant(bigint)", "tenancy.units_where_i_hold_in_tenant(bigint,text)",
+        "tenancy.holds_permission_in_tenant(bigint,text)", "tenancy.roles_with_permission_in_tenant(bigint,text)", "tenancy.seat_in_tenant(bigint)",
+        "tenancy.seated_in_tenant(bigint)", "tenancy.units_where_i_hold_permission_in_tenant(bigint,text)",
     ];
 
     private static readonly Dictionary<string, (Guid Identity, TenantId Tenant)> Asking = new(StringComparer.Ordinal)
@@ -92,14 +92,14 @@ public abstract class TenantArgumentFunctionTests(TenancyPostgres postgres, Tena
             (await oli.ScalarAsync<Guid?>("SELECT tenancy.seat_in_tenant(1)", Cancellation)).Should().Be(Oli.Seat.Value, because);
             (await oli.ScalarAsync<Guid?>("SELECT tenancy.seat_in_tenant(2)", Cancellation)).Should().Be(OliInOrchard.Value, because);
             (await oli.ScalarAsync<bool>("SELECT tenancy.seated_in_tenant(1) AND tenancy.seated_in_tenant(2)", Cancellation)).Should().BeTrue(because);
-            (await oli.ScalarAsync<bool>("SELECT tenancy.holds_key_in_tenant(1, 'widget.change')", Cancellation)).Should().BeTrue(because);
-            (await oli.ScalarAsync<bool>("SELECT tenancy.holds_key_in_tenant(2, 'widget.change')", Cancellation)).Should().BeFalse(because);
-            (await oli.ScalarAsync<bool>("SELECT tenancy.holds_key_in_tenant(2, 'widget.read')", Cancellation)).Should().BeTrue(because);
-            (await oli.ListAsync<Guid>("SELECT tenancy.units_where_i_hold_in_tenant(1, 'widget.change')", Cancellation)).Should().Equal([NorthPier.Value], because);
-            (await oli.ListAsync<Guid>("SELECT tenancy.units_where_i_hold_in_tenant(2, 'widget.read')", Cancellation)).Should().Equal([OrchardRoot.Value], because);
-            (await oli.ListAsync<Guid>("SELECT tenancy.units_where_i_hold_in_tenant(2, 'widget.change')", Cancellation)).Should().BeEmpty(because);
-            (await oli.ListAsync<Guid>("SELECT tenancy.roles_with_key_in_tenant(2, 'tenancy.roles.manage')", Cancellation)).Should().Equal([OrchardRoles.Administrator.Value], because);
-            (await oli.ListAsync<Guid>("SELECT tenancy.roles_with_key_in_tenant(1, 'tenancy.roles.manage')", Cancellation)).Should().Equal([HarborRoles.Administrator.Value], because);
+            (await oli.ScalarAsync<bool>("SELECT tenancy.holds_permission_in_tenant(1, 'widget.change')", Cancellation)).Should().BeTrue(because);
+            (await oli.ScalarAsync<bool>("SELECT tenancy.holds_permission_in_tenant(2, 'widget.change')", Cancellation)).Should().BeFalse(because);
+            (await oli.ScalarAsync<bool>("SELECT tenancy.holds_permission_in_tenant(2, 'widget.read')", Cancellation)).Should().BeTrue(because);
+            (await oli.ListAsync<Guid>("SELECT tenancy.units_where_i_hold_permission_in_tenant(1, 'widget.change')", Cancellation)).Should().Equal([NorthPier.Value], because);
+            (await oli.ListAsync<Guid>("SELECT tenancy.units_where_i_hold_permission_in_tenant(2, 'widget.read')", Cancellation)).Should().Equal([OrchardRoot.Value], because);
+            (await oli.ListAsync<Guid>("SELECT tenancy.units_where_i_hold_permission_in_tenant(2, 'widget.change')", Cancellation)).Should().BeEmpty(because);
+            (await oli.ListAsync<Guid>("SELECT tenancy.roles_with_permission_in_tenant(2, 'tenancy.roles.manage')", Cancellation)).Should().Equal([OrchardRoles.Administrator.Value], because);
+            (await oli.ListAsync<Guid>("SELECT tenancy.roles_with_permission_in_tenant(1, 'tenancy.roles.manage')", Cancellation)).Should().Equal([HarborRoles.Administrator.Value], because);
 
             // The questions that read the setting answer for the tenant it names, and for no other.
             (await oli.ScalarAsync<Guid?>("SELECT tenancy.caller_seat()", Cancellation))
@@ -115,7 +115,7 @@ public abstract class TenantArgumentFunctionTests(TenancyPostgres postgres, Tena
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
 
         // The same person asks twice: with the tenant on the connection, the questions that read it; with none, the
-        // ones that take it. Every one of the five answers as the question it stands in for, for every key.
+        // ones that take it. Every one of the five answers as the question it stands in for, for every permission.
         await using var set = await AsCaller.PersonAsync(database, identity, tenant, Cancellation);
         await using var given = await AsCaller.PersonAsync(database, identity, tenant: null, Cancellation);
 
@@ -124,19 +124,19 @@ public abstract class TenantArgumentFunctionTests(TenancyPostgres postgres, Tena
         (await given.ScalarAsync<bool>("SELECT tenancy.seated_in_tenant($1)", Cancellation, tenant.Value)).Should().Be(seat is not null, "seated_in_tenant is whether there is one");
         (await given.ScalarAsync<Guid?>("SELECT tenancy.caller_seat()", Cancellation)).Should().BeNull("without the setting, the questions that read it find no seat");
 
-        foreach (var key in TenancyPostgres.Catalogue.LiveKeys)
+        foreach (var permission in TenancyPostgres.Catalogue.LivePermissions)
         {
-            (await given.ListAsync<Guid>("SELECT tenancy.units_where_i_hold_in_tenant($1, $2)", Cancellation, tenant.Value, key))
-                .Should().BeEquivalentTo(await set.ListAsync<Guid>("SELECT tenancy.units_where_i_hold($1)", Cancellation, key), "units_where_i_hold_in_tenant('{0}') is units_where_i_hold", key);
-            (await given.ScalarAsync<bool>("SELECT tenancy.holds_key_in_tenant($1, $2)", Cancellation, tenant.Value, key))
-                .Should().Be(await set.ScalarAsync<bool>("SELECT tenancy.holds_key($1)", Cancellation, key), "holds_key_in_tenant('{0}') is holds_key", key);
-            (await given.ListAsync<Guid>("SELECT tenancy.roles_with_key_in_tenant($1, $2)", Cancellation, tenant.Value, key))
-                .Should().BeEquivalentTo(await set.ListAsync<Guid>("SELECT tenancy.roles_with_key($1)", Cancellation, key), "roles_with_key_in_tenant('{0}') is roles_with_key", key);
+            (await given.ListAsync<Guid>("SELECT tenancy.units_where_i_hold_permission_in_tenant($1, $2)", Cancellation, tenant.Value, permission))
+                .Should().BeEquivalentTo(await set.ListAsync<Guid>("SELECT tenancy.units_where_i_hold_permission($1)", Cancellation, permission), "units_where_i_hold_permission_in_tenant('{0}') is units_where_i_hold_permission", permission);
+            (await given.ScalarAsync<bool>("SELECT tenancy.holds_permission_in_tenant($1, $2)", Cancellation, tenant.Value, permission))
+                .Should().Be(await set.ScalarAsync<bool>("SELECT tenancy.holds_permission($1)", Cancellation, permission), "holds_permission_in_tenant('{0}') is holds_permission", permission);
+            (await given.ListAsync<Guid>("SELECT tenancy.roles_with_permission_in_tenant($1, $2)", Cancellation, tenant.Value, permission))
+                .Should().BeEquivalentTo(await set.ListAsync<Guid>("SELECT tenancy.roles_with_permission($1)", Cancellation, permission), "roles_with_permission_in_tenant('{0}') is roles_with_permission", permission);
         }
     }
 
     [Fact]
-    public async Task Roles_with_key_in_tenant_answers_nothing_to_someone_seatless_in_that_tenant()
+    public async Task Roles_with_permission_in_tenant_answers_nothing_to_someone_seatless_in_that_tenant()
     {
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
 
@@ -144,7 +144,7 @@ public abstract class TenantArgumentFunctionTests(TenancyPostgres postgres, Tena
         List<Guid> ofHarbor, ofOrchard, ofQuay;
         await using (var owner = await AsCaller.OwnerAsync(database, Cancellation))
         {
-            const string Reading = "SELECT \"Id\" FROM tenancy.\"Roles\" WHERE \"TenantId\" = $1 AND \"Status\" = 'Active' AND 'widget.read' = ANY (\"Keys\")";
+            const string Reading = "SELECT \"Id\" FROM tenancy.\"Roles\" WHERE \"TenantId\" = $1 AND \"Status\" = 'Active' AND 'widget.read' = ANY (\"Permissions\")";
             ofHarbor = await owner.ListAsync<Guid>(Reading, Cancellation, Harbor.Value);
             ofOrchard = await owner.ListAsync<Guid>(Reading, Cancellation, Orchard.Value);
             ofQuay = await owner.ListAsync<Guid>(Reading, Cancellation, Quay.Value);
@@ -156,7 +156,7 @@ public abstract class TenantArgumentFunctionTests(TenancyPostgres postgres, Tena
         async Task<List<Guid>> AnsweredAsync(Guid identity, TenantId tenant)
         {
             await using var caller = await AsCaller.PersonAsync(database, identity, tenant: null, Cancellation);
-            return await caller.ListAsync<Guid>("SELECT tenancy.roles_with_key_in_tenant($1, 'widget.read')", Cancellation, tenant.Value);
+            return await caller.ListAsync<Guid>("SELECT tenancy.roles_with_permission_in_tenant($1, 'widget.read')", Cancellation, tenant.Value);
         }
 
         // A seat of the tenant is answered its roles, whatever it holds itself.
@@ -178,11 +178,11 @@ public abstract class TenantArgumentFunctionTests(TenancyPostgres postgres, Tena
             await using var caller = await AsCaller.PersonAsync(database, identity, tenant: null, Cancellation);
             (await caller.ScalarAsync<bool>("SELECT tenancy.seated_in_tenant($1)", Cancellation, tenant.Value)).Should().BeFalse();
             (await caller.ScalarAsync<bool>("SELECT tenancy.seat_in_tenant($1) IS NULL", Cancellation, tenant.Value)).Should().BeTrue();
-            foreach (var key in TenancyPostgres.Catalogue.LiveKeys)
+            foreach (var permission in TenancyPostgres.Catalogue.LivePermissions)
             {
-                (await caller.ScalarAsync<bool>("SELECT tenancy.holds_key_in_tenant($1, $2)", Cancellation, tenant.Value, key)).Should().BeFalse();
-                (await caller.ListAsync<Guid>("SELECT tenancy.units_where_i_hold_in_tenant($1, $2)", Cancellation, tenant.Value, key)).Should().BeEmpty();
-                (await caller.ListAsync<Guid>("SELECT tenancy.roles_with_key_in_tenant($1, $2)", Cancellation, tenant.Value, key)).Should().BeEmpty();
+                (await caller.ScalarAsync<bool>("SELECT tenancy.holds_permission_in_tenant($1, $2)", Cancellation, tenant.Value, permission)).Should().BeFalse();
+                (await caller.ListAsync<Guid>("SELECT tenancy.units_where_i_hold_permission_in_tenant($1, $2)", Cancellation, tenant.Value, permission)).Should().BeEmpty();
+                (await caller.ListAsync<Guid>("SELECT tenancy.roles_with_permission_in_tenant($1, $2)", Cancellation, tenant.Value, permission)).Should().BeEmpty();
             }
         }
     }
@@ -195,9 +195,9 @@ public abstract class TenantArgumentFunctionTests(TenancyPostgres postgres, Tena
         [
             ("seat_in_tenant", "SELECT tenancy.seat_in_tenant(1)"),
             ("seated_in_tenant", "SELECT tenancy.seated_in_tenant(1)"),
-            ("holds_key_in_tenant", "SELECT tenancy.holds_key_in_tenant(1, 'widget.read')"),
-            ("units_where_i_hold_in_tenant", "SELECT tenancy.units_where_i_hold_in_tenant(1, 'widget.read')"),
-            ("roles_with_key_in_tenant", "SELECT tenancy.roles_with_key_in_tenant(1, 'widget.read')"),
+            ("holds_permission_in_tenant", "SELECT tenancy.holds_permission_in_tenant(1, 'widget.read')"),
+            ("units_where_i_hold_permission_in_tenant", "SELECT tenancy.units_where_i_hold_permission_in_tenant(1, 'widget.read')"),
+            ("roles_with_permission_in_tenant", "SELECT tenancy.roles_with_permission_in_tenant(1, 'widget.read')"),
         ];
 
         // They speak of a signed-in person's own seat: an anonymous caller has none to ask about, and system work in
@@ -237,16 +237,16 @@ public abstract class TenantArgumentFunctionTests(TenancyPostgres postgres, Tena
 
         // Files kept by their path, tenant/unit/name, as a file store keeps them: the policy has the path and the
         // reader's verified identity to go by, and no tenant on the connection. It asks, for each path, where the
-        // reader holds the key in the tenant the path names.
+        // reader holds the permission in the tenant the path names.
         await TenancyPostgres.ExecuteAsync(
             database.ConnectionString,
             $"""
             CREATE TABLE widgets.stored_files (path text PRIMARY KEY);
             ALTER TABLE widgets.stored_files ENABLE ROW LEVEL SECURITY;
             GRANT SELECT ON widgets.stored_files TO authenticated, anon;
-            CREATE POLICY "Read where the key is held in the tenant of the path" ON widgets.stored_files FOR SELECT TO authenticated
+            CREATE POLICY "Read where the permission is held in the tenant of the path" ON widgets.stored_files FOR SELECT TO authenticated
                 USING (pg_catalog.split_part(path, '/', 2)::uuid = ANY (ARRAY(
-                    SELECT tenancy.units_where_i_hold_in_tenant(pg_catalog.split_part(path, '/', 1)::bigint, 'widget.read'))));
+                    SELECT tenancy.units_where_i_hold_permission_in_tenant(pg_catalog.split_part(path, '/', 1)::bigint, 'widget.read'))));
             INSERT INTO widgets.stored_files (path) VALUES
                 ('{Harbor.Value}/{North.Value}/pump.pdf'), ('{Harbor.Value}/{NorthPier.Value}/valve.pdf'), ('{Harbor.Value}/{South.Value}/gauge.pdf'),
                 ('{Orchard.Value}/{OrchardRoot.Value}/crate.pdf'), ('{Quay.Value}/{QuayRoot.Value}/hull.pdf');
@@ -259,7 +259,7 @@ public abstract class TenantArgumentFunctionTests(TenancyPostgres postgres, Tena
             return await reader.ListAsync<string>("SELECT pg_catalog.split_part(path, '/', 3) FROM widgets.stored_files ORDER BY 1", Cancellation);
         }
 
-        // With no tenant set: each reads the files at the units where they hold the key, and below, in whichever
+        // With no tenant set: each reads the files at the units where they hold the permission, and below, in whichever
         // tenant the path is of. Oli holds it in two, and reads of both in one statement.
         (await ReadAsync(Ada.Identity)).Should().Equal("gauge.pdf", "pump.pdf", "valve.pdf");
         (await ReadAsync(Seth.Identity)).Should().Equal("pump.pdf", "valve.pdf");
@@ -288,12 +288,12 @@ public abstract class TenantArgumentFunctionTests(TenancyPostgres postgres, Tena
         // The widgets' own function, declared in C# over Tenancy's question that takes the tenant: the tenant is the
         // function's parameter, so the set of units is worked out once, and the widget is looked up by its key.
         WidgetIsReadableInTenant.RowAccessSql.Should().Be(
-            "(({col:TenantId} = {arg:1}) AND ({col:UnitId} = ANY (ARRAY(SELECT {fn:tenancy/units_where_i_hold_in_tenant}({arg:1}, 'widget.read')))))");
+            "(({col:TenantId} = {arg:1}) AND ({col:UnitId} = ANY (ARRAY(SELECT {fn:tenancy/units_where_i_hold_permission_in_tenant}({arg:1}, 'widget.read')))))");
         WidgetIsReadableInTenant.RowAccessParameters.Should().Be("bigint");
 
         var scripts = TenancyPostgres.AccessScripts(functions: [WidgetRules.ReadableInTenant], names: names);
         scripts[1].Should().Contain("CREATE OR REPLACE FUNCTION widgets.readable_in_tenant(uuid, bigint) RETURNS boolean")
-            .And.Contain($"WHERE root.\"{names.Of("Id")}\" = $1 AND ((root.\"{names.Of("TenantId")}\" = $2) AND (root.\"{names.Of("UnitId")}\" = ANY (ARRAY(SELECT \"tenancy\".units_where_i_hold_in_tenant($2, 'widget.read')))))");
+            .And.Contain($"WHERE root.\"{names.Of("Id")}\" = $1 AND ((root.\"{names.Of("TenantId")}\" = $2) AND (root.\"{names.Of("UnitId")}\" = ANY (ARRAY(SELECT \"tenancy\".units_where_i_hold_permission_in_tenant($2, 'widget.read')))))");
         foreach (var script in scripts)
         {
             await TenancyPostgres.ExecuteAsync(database.ConnectionString, script, Cancellation);
@@ -340,22 +340,22 @@ public abstract class TenantArgumentFunctionTests(TenancyPostgres postgres, Tena
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
 
         // The widgets' second function is declared over the four questions the first leaves out: whether the caller
-        // is seated in the tenant, whether its seat holds a key there, which seat it is, and the tenant's roles that
-        // grant a key. Each is the database's function of the same name, asked with the function's own parameters.
+        // is seated in the tenant, whether its seat holds a permission there, which seat it is, and the tenant's roles that
+        // grant a permission. Each is the database's function of the same name, asked with the function's own parameters.
         WidgetIsReadAsInTenant.RowAccessSql.Should()
             .Contain("{fn:tenancy/seated_in_tenant}({arg:1})")
-            .And.Contain("{fn:tenancy/holds_key_in_tenant}({arg:1}, 'widget.read')")
+            .And.Contain("{fn:tenancy/holds_permission_in_tenant}({arg:1}, 'widget.read')")
             .And.Contain("{fn:tenancy/seat_in_tenant}({arg:1})")
-            .And.Contain("{fn:tenancy/roles_with_key_in_tenant}({arg:1}, 'widget.read')")
+            .And.Contain("{fn:tenancy/roles_with_permission_in_tenant}({arg:1}, 'widget.read')")
             .And.Contain("{arg:2}").And.Contain("{arg:3}");
         WidgetIsReadAsInTenant.RowAccessParameters.Should().Be("bigint, uuid, uuid");
 
         var scripts = TenancyPostgres.AccessScripts(functions: [WidgetRules.ReadAsInTenant], names: names);
         scripts[1].Should().Contain("CREATE OR REPLACE FUNCTION widgets.read_as_in_tenant(uuid, bigint, uuid, uuid) RETURNS boolean")
             .And.Contain("\"tenancy\".seated_in_tenant($2)")
-            .And.Contain("\"tenancy\".holds_key_in_tenant($2, 'widget.read')")
+            .And.Contain("\"tenancy\".holds_permission_in_tenant($2, 'widget.read')")
             .And.Contain("\"tenancy\".seat_in_tenant($2)")
-            .And.Contain("\"tenancy\".roles_with_key_in_tenant($2, 'widget.read')");
+            .And.Contain("\"tenancy\".roles_with_permission_in_tenant($2, 'widget.read')");
         foreach (var script in scripts)
         {
             await TenancyPostgres.ExecuteAsync(database.ConnectionString, script, Cancellation);
@@ -374,14 +374,14 @@ public abstract class TenantArgumentFunctionTests(TenancyPostgres postgres, Tena
         (await AsksAsync(Oli.Identity, Valve, Harbor, Oli.Seat, HarborRoles.Operator)).Should().BeTrue();
         (await AsksAsync(Oli.Identity, Crate, Orchard, OliInOrchard, OrchardRoles.Watcher)).Should().BeTrue();
 
-        // Each question decides: another seat than his, a role of the other tenant, a role that grants no such key,
+        // Each question decides: another seat than his, a role of the other tenant, a role that grants no such permission,
         // and a widget filed under a tenant it is not of.
         (await AsksAsync(Oli.Identity, Valve, Harbor, OliInOrchard, HarborRoles.Operator)).Should().BeFalse("his seat in Harbor is not that one");
         (await AsksAsync(Oli.Identity, Valve, Harbor, Oli.Seat, OrchardRoles.Watcher)).Should().BeFalse("that role is Orchard's");
-        (await AsksAsync(Oli.Identity, Valve, Harbor, Oli.Seat, GrantsDesk)).Should().BeFalse("the grants desk gives no widget key");
+        (await AsksAsync(Oli.Identity, Valve, Harbor, Oli.Seat, GrantsDesk)).Should().BeFalse("the grants desk gives no widget permission");
         (await AsksAsync(Oli.Identity, Valve, Orchard, OliInOrchard, OrchardRoles.Watcher)).Should().BeFalse("the valve is Harbor's");
 
-        // Hiro is seated in Harbor and holds no widget key. Sue's seat is suspended, Quay is, and a stranger has no seat.
+        // Hiro is seated in Harbor and holds no widget permission. Sue's seat is suspended, Quay is, and a stranger has no seat.
         (await AsksAsync(Hiro.Identity, Valve, Harbor, Hiro.Seat, HarborRoles.Operator)).Should().BeFalse();
         (await AsksAsync(Sue.Identity, Gauge, Harbor, Sue.Seat, HarborRoles.Operator)).Should().BeFalse();
         (await AsksAsync(Quin.Identity, Valve, Quay, Quin.Seat, QuayRoles.Administrator)).Should().BeFalse();

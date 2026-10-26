@@ -43,7 +43,7 @@ public sealed class RowAccessAttribute<TAggregate>(RowOperations operations) : A
     /// The properties of <typeparamref name="TAggregate"/> whose change the rule holds, which makes it a column
     /// rule: <c>Columns = [nameof(Project.State)]</c>. A row's own rules let a caller change a row, whichever of
     /// its columns the change is to; a column rule is one condition more, for a change of these columns alone,
-    /// where one of them takes a stricter key than the rest of the row. It goes with
+    /// where one of them takes a stricter permission than the rest of the row. It goes with
     /// <see cref="RowOperations.Change"/> and no other operation. A value object stored in the aggregate's row
     /// is every column it is stored in, and <c>"Planned.From"</c> is one of them. Left empty, the rule is about
     /// whole rows, as it always was.

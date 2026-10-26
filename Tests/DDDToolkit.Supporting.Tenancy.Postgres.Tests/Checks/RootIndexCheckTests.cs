@@ -12,7 +12,7 @@ namespace DDDToolkit.Supporting.Tenancy.Postgres.Tests;
 
 /// <summary>
 /// On Postgres a host starts only on a database that has the unique index on a tenant's root. The policies keep a
-/// seat from making a second root; Tenancy's own system work and the tables' owner they do not hold, and a key
+/// seat from making a second root; Tenancy's own system work and the tables' owner they do not hold, and a permission
 /// held at any unit without a parent is held for the whole tenant. So the start-up check that proves the policies
 /// are in place looks for the index, by what it does and whatever it is called, and says how to get it: by the
 /// migration, where the model maps it, and by passing the context's <c>Database</c> to <c>AddTenancy</c>, where it
@@ -30,7 +30,7 @@ public abstract class RootIndexCheckTests(TenancyPostgres postgres, TenancyNamin
         "The database has no unique index that keeps a tenant's organization to a single root: none in use on " +
         $"\"tenancy\".{names.Shown("OrganizationUnits")} over {names.Shown("TenantId")} alone, for the units where {names.Shown("ParentId")} IS NULL. " +
         "On Postgres that index is required: the policies keep a seat from making a second root, and hold neither Tenancy's own system work nor the tables' owner, " +
-        "while a key held at any unit without a parent is held for the whole tenant. ";
+        "while a permission held at any unit without a parent is held for the whole tenant. ";
 
     [Fact]
     public async Task A_database_without_the_unique_index_on_a_tenants_root_is_refused_at_start_up()

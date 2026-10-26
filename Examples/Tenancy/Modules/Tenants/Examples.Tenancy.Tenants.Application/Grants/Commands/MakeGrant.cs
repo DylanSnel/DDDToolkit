@@ -9,8 +9,8 @@ namespace Examples.Tenancy.Tenants.Application.Grants.Commands;
 /// </summary>
 /// <remarks>
 /// It requires <c>tenancy.grants.manage</c> at the unit, which the request names, so a caller without it is refused
-/// before the handler runs. The package's use case asks for that key again, and then for what only it can read: for
-/// a role that manages access, that the caller holds its keys that do, there and for at least as long, and is not
+/// before the handler runs. The package's use case asks for that permission again, and then for what only it can read: for
+/// a role that manages access, that the caller holds its permissions that do, there and for at least as long, and is not
 /// giving it to itself.
 /// </remarks>
 /// <param name="Seat">The seat.</param>
@@ -18,7 +18,7 @@ namespace Examples.Tenancy.Tenants.Application.Grants.Commands;
 /// <param name="Role">The role, which must be active.</param>
 /// <param name="Until">When the grant ends, or <see langword="null"/> for no end.</param>
 /// <param name="Reason">Why, or <see langword="null"/>.</param>
-[RequiresKey(TenancyKeys.GrantsManage)]
+[RequiresPermission(TenancyPermissions.GrantsManage)]
 public sealed record MakeGrant(SeatId Seat, [AtUnit] OrganizationUnitId Unit, RoleId Role, DateTimeOffset? Until, string? Reason) : ICommand, ITenantsRequest;
 
 /// <summary>Handles <see cref="MakeGrant"/> with the Tenancy package's use case, which checks the caller, decides and saves.</summary>

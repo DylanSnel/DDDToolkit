@@ -6,8 +6,8 @@ namespace DDDToolkit.Supporting.Membership.EntityFramework.Tests;
 
 /// <summary>
 /// Requirements that combine Membership's cases, sent through the door, the handler and its save under the expert hold
-/// (<c>UseMemberHolds</c>): the caller's own beside a key on a resource, <c>[OrOwn]</c> beside <c>[OnResource]</c>, whose
-/// own way through still reads the resource, compares its version and keeps what the save is held to; and a key on each
+/// (<c>UseMemberHolds</c>): the caller's own beside a permission on a resource, <c>[OrOwn]</c> beside <c>[OnResource]</c>, whose
+/// own way through still reads the resource, compares its version and keeps what the save is held to; and a permission on each
 /// of two resources of one kind, each saved under its own hold.
 /// </summary>
 public sealed class CombinedRequirementsUnderTheHoldTests
@@ -16,7 +16,7 @@ public sealed class CombinedRequirementsUnderTheHoldTests
 
     private static Task<SqliteFiling> FilingAsync() => SqliteFiling.SeededAsync(wiring: (options, provider) => options.UseDDDToolkit(provider).UseMemberHolds(provider));
 
-    /// <summary>Shares a document with a user on each of two documents: the key that shares, on both.</summary>
+    /// <summary>Shares a document with a user on each of two documents: the permission that shares, on both.</summary>
     private sealed record ShareOnBoth(DocumentId First, DocumentId Second, UserId With) : IFilingRequest
     {
         AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.All(
@@ -25,24 +25,24 @@ public sealed class CombinedRequirementsUnderTheHoldTests
     }
 
     [Fact]
-    public async Task A_member_takes_itself_off_a_document_it_sees_without_the_key_and_the_save_is_held_to_what_the_door_read()
+    public async Task A_member_takes_itself_off_a_document_it_sees_without_the_permission_and_the_save_is_held_to_what_the_door_read()
     {
         using var filing = await FilingAsync();
         var data = filing.Scenario;
 
-        // Dee is a member of the minutes with no role: she sees them, and does not hold the key that shares them.
+        // Dee is a member of the minutes with no role: she sees them, and does not hold the permission that shares them.
         await filing.Services.SendAsync(TestCallers.User(data.Dee), new LeaveDocument(data.Minutes, data.Dee));
 
         (await filing.Services.ReadAsync(data.Minutes)).Shares.Should().NotContain(share => share.MemberId == data.Dee);
     }
 
     [Fact]
-    public async Task Whoever_holds_the_key_takes_another_member_off_and_a_member_without_it_takes_nobody_else_off()
+    public async Task Whoever_holds_the_permission_takes_another_member_off_and_a_member_without_it_takes_nobody_else_off()
     {
         using var filing = await FilingAsync();
         var data = filing.Scenario;
 
-        // Ada owns the minutes, so she holds every key on them.
+        // Ada owns the minutes, so she holds every permission on them.
         await filing.Services.SendAsync(TestCallers.User(data.Ada), new LeaveDocument(data.Minutes, data.Cy));
         (await filing.Services.ReadAsync(data.Minutes)).Shares.Should().NotContain(share => share.MemberId == data.Cy);
 
@@ -50,12 +50,12 @@ public sealed class CombinedRequirementsUnderTheHoldTests
             .Should().ThrowAsync<RefusalException>()).Which;
         refused.Code.Should().Be(ToolkitRefusals.Refused);
         ((IReadOnlyList<RefusalReason>)refused.Arguments[ToolkitRefusals.ReasonsArgument]!).Select(reason => reason.Code)
-            .Should().Equal([ToolkitRefusals.NotOwn, DocumentRefusals.Membership[MembershipRefusals.NotPermitted]], "Ben is not hers to take off, and she does not hold the key");
+            .Should().Equal([ToolkitRefusals.NotOwn, DocumentRefusals.Membership[MembershipRefusals.NotPermitted]], "Ben is not hers to take off, and she does not hold the permission");
         (await filing.Services.ReadAsync(data.Minutes)).Shares.Should().Contain(share => share.MemberId == data.Ben);
     }
 
     [Fact]
-    public async Task On_the_caller_s_own_way_through_the_version_it_named_is_compared_at_the_door_as_on_the_key_s()
+    public async Task On_the_caller_s_own_way_through_the_version_it_named_is_compared_at_the_door_as_on_the_permission_s()
     {
         using var filing = await FilingAsync();
         var data = filing.Scenario;
@@ -87,7 +87,7 @@ public sealed class CombinedRequirementsUnderTheHoldTests
     }
 
     [Fact]
-    public async Task A_key_on_each_of_two_documents_keeps_a_hold_on_each_and_both_are_saved_under_the_hold()
+    public async Task A_permission_on_each_of_two_documents_keeps_a_hold_on_each_and_both_are_saved_under_the_hold()
     {
         using var filing = await FilingAsync();
         var data = filing.Scenario;
@@ -121,7 +121,7 @@ public sealed class CombinedRequirementsUnderTheHoldTests
         using var filing = await FilingAsync();
         var data = filing.Scenario;
 
-        // Ada holds the key on the minutes and only looks on at the budget: the first case passes, the second refuses.
+        // Ada holds the permission on the minutes and only looks on at the budget: the first case passes, the second refuses.
         var command = new ShareOnBoth(data.Minutes, data.Budget, data.Hal);
         await filing.Services.AsAsync(TestCallers.User(data.Ada), async provider =>
         {

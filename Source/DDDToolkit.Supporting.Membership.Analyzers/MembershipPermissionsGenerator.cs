@@ -100,14 +100,14 @@ public sealed class MembershipPermissionsGenerator : IIncrementalGenerator
     // ------------------------------------------------------------------ what is declared
 
     /// <summary>One permission on a resource, as the attribute says it.</summary>
-    private sealed record Declared(string Key, bool Owner, bool EveryMember, bool InRoles, bool LocksMembers, bool LocksOwner, bool FromAbove, string Field, LocationInfo? At);
+    private sealed record Declared(string Name, bool Owner, bool EveryMember, bool InRoles, bool LocksMembers, bool LocksOwner, bool FromAbove, string Field, LocationInfo? At);
 
     /// <summary>What one class declares on one resource.</summary>
     /// <param name="Resource">The resource, written out in full.</param>
     /// <param name="ResourceName">The resource's own name, for a message.</param>
     /// <param name="IsResource">Whether the class is a resource with members, as far as this project can tell; null where it cannot.</param>
     /// <param name="Permissions">The permissions on it, in the order they are declared.</param>
-    /// <param name="Elsewhere">The keys the class declares at another level.</param>
+    /// <param name="Elsewhere">The permissions the class declares at another level.</param>
     private sealed record OnResource(string Resource, string ResourceName, bool? IsResource, EquatableArray<Declared> Permissions, EquatableArray<string> Elsewhere);
 
     /// <summary>A <c>[Permissions]</c> class and what it declares on each resource.</summary>
@@ -133,11 +133,11 @@ public sealed class MembershipPermissionsGenerator : IIncrementalGenerator
     private static DeclaringClass? Of(INamedTypeSymbol type, Compilation compilation, bool own, CancellationToken cancellationToken)
     {
         var byResource = new Dictionary<string, (INamedTypeSymbol Resource, List<Declared> Permissions)>(StringComparer.Ordinal);
-        var levelled = new List<(string Key, HashSet<string> On)>();
+        var levelled = new List<(string Name, HashSet<string> On)>();
         foreach (var field in type.GetMembers().OfType<IFieldSymbol>())
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (!field.IsConst || field.ConstantValue is not string key || field.DeclaredAccessibility != Accessibility.Public)
+            if (!field.IsConst || field.ConstantValue is not string permission || field.DeclaredAccessibility != Accessibility.Public)
             {
                 continue;
             }
@@ -168,7 +168,7 @@ public sealed class MembershipPermissionsGenerator : IIncrementalGenerator
                 }
 
                 entry.Permissions.Add(new Declared(
-                    key,
+                    permission,
                     Named(attribute, "Owner", true),
                     Named(attribute, "EveryMember", false),
                     Named(attribute, "InRoles", true),
@@ -181,7 +181,7 @@ public sealed class MembershipPermissionsGenerator : IIncrementalGenerator
 
             if (hasLevel)
             {
-                levelled.Add((key, on));
+                levelled.Add((permission, on));
             }
         }
 
@@ -204,7 +204,7 @@ public sealed class MembershipPermissionsGenerator : IIncrementalGenerator
                 resource.Name,
                 isResource,
                 pair.Value.Permissions.ToEquatableArray(),
-                levelled.Where(each => !each.On.Contains(pair.Key)).Select(static each => each.Key).Distinct(StringComparer.Ordinal).ToEquatableArray()));
+                levelled.Where(each => !each.On.Contains(pair.Key)).Select(static each => each.Name).Distinct(StringComparer.Ordinal).ToEquatableArray()));
         }
 
         return new DeclaringClass(type.ToDisplayString(), resources.ToEquatableArray(), accessible);
@@ -358,7 +358,7 @@ public sealed class MembershipPermissionsGenerator : IIncrementalGenerator
             }
         }
 
-        // One permission of a resource at most for each of the settings that name the one key.
+        // One permission of a resource at most for each of the settings that name the one permission.
         foreach (var resource in ownClasses.SelectMany(static each => each.Resources).GroupBy(static on => on.Resource, StringComparer.Ordinal))
         {
             var permissions = resource.SelectMany(static on => on.Permissions).ToList();
@@ -366,7 +366,7 @@ public sealed class MembershipPermissionsGenerator : IIncrementalGenerator
             Once(production, permissions.Where(static each => each.EveryMember).ToList(), name, "EveryMember", "every member holds");
             Once(production, permissions.Where(static each => each.LocksMembers).ToList(), name, "LocksMembers", "locks the members");
             Once(production, permissions.Where(static each => each.LocksOwner).ToList(), name, "LocksOwner", "locks the owner");
-            foreach (var twice in permissions.GroupBy(static each => each.Key, StringComparer.Ordinal).Where(static each => each.Count() > 1))
+            foreach (var twice in permissions.GroupBy(static each => each.Name, StringComparer.Ordinal).Where(static each => each.Count() > 1))
             {
                 var second = twice.Skip(1).First();
                 DiagnosticInfo.Create(
@@ -464,7 +464,7 @@ public sealed class MembershipPermissionsGenerator : IIncrementalGenerator
                     writer.Line("    {");
                     foreach (var permission in on.Permissions)
                     {
-                        writer.Line("        new(" + Literal(permission.Key) + ", Owner: " + Bool(permission.Owner) + ", EveryMember: " + Bool(permission.EveryMember)
+                        writer.Line("        new(" + Literal(permission.Name) + ", Owner: " + Bool(permission.Owner) + ", EveryMember: " + Bool(permission.EveryMember)
                                     + ", InRoles: " + Bool(permission.InRoles) + ", LocksMembers: " + Bool(permission.LocksMembers) + ", LocksOwner: " + Bool(permission.LocksOwner)
                                     + ", FromAbove: " + Bool(permission.FromAbove) + "),");
                     }

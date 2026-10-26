@@ -7,7 +7,7 @@ namespace Examples.Tenancy.Projects.Application.Operators.Queries;
 /// Every project of one tenant, by number, for the application's own staff: its own data and who changed it last.
 /// </summary>
 /// <remarks>
-/// For operators only. An operator holds no seat and no key, so nothing here is filtered by a reach: the query
+/// For operators only. An operator holds no seat and no permission, so nothing here is filtered by a reach: the query
 /// names the tenant, and answers all of its projects. A tenant that does not exist has none, and is answered an
 /// empty list. It answers no crew: who is on a project, with which role, is the tenant's own business.
 /// </remarks>

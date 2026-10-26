@@ -12,7 +12,7 @@ namespace DDDToolkit.Abstractions.Attributes;
 /// </code>
 /// Who may do what with the owner's own is the request's to say, at the door, in the words a request says the
 /// caller's own with: <c>[OwnOnly]</c> with <c>[Own] BoardId Board</c> lets the board's owner alone through, and
-/// <c>[OrOwn] BoardId Board</c> beside <c>[RequiresKey(key)]</c> the owner, or whoever holds the key.
+/// <c>[OrOwn] BoardId Board</c> beside <c>[RequiresPermission(permission)]</c> the owner, or whoever holds the permission.
 /// </summary>
 /// <remarks>
 /// The property is of a type the caller has an own of: a <see cref="Guid"/>, the caller's verified identity;

@@ -68,7 +68,7 @@ function walk(scenario, caller, form, chosen) {
     say: scenario.propertyOnly
       ? 'One caller or another: no stack of attributes says it, so the request answers the property `RequiredAccess` itself.'
       : form === 'attribute'
-        ? 'The requirement as attributes, above the request: a marker on a member says where a key is held, and the key is a constant of the catalogue. This is how the sample writes it.'
+        ? 'The requirement as attributes, above the request: a marker on a member says where a permission is held, and the permission is a constant of the catalogue. This is how the sample writes it.'
         : 'The same requirement written as the property. The sample writes the attribute, and keeps the property for what no attribute says, such as one caller or another.',
     content: <Snippet id={scenario.write[form]} />,
   };

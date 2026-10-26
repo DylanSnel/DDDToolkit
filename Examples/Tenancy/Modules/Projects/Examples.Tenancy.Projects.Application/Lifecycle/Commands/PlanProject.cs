@@ -4,7 +4,7 @@ namespace Examples.Tenancy.Projects.Application.Lifecycle.Commands;
 
 /// <summary>Plans a project for a range of days, or takes its planned range away.</summary>
 /// <remarks>
-/// Editing a project, as renaming it is, so it asks the same key. The range says which days the project takes
+/// Editing a project, as renaming it is, so it asks the same permission. The range says which days the project takes
 /// from now on: Inspections asks Projects' gate for it when an inspection is recorded, and what was recorded
 /// before a change stays as it was.
 /// </remarks>
@@ -14,11 +14,11 @@ namespace Examples.Tenancy.Projects.Application.Lifecycle.Commands;
 /// The version of the project the caller last read, or <see langword="null"/> to change it as it is now. Any other
 /// version than the project's is a lost race: somebody changed it since, so the caller reads again and decides again.
 /// </param>
-[RequiresKey(RequiredKey)]
+[RequiresPermission(RequiredPermission)]
 public sealed record PlanProject([OnResource] ProjectId Id, DateRange? Planned, [ExpectedVersion] long? ExpectedVersion = null) : ICommand, IProjectsRequest
 {
-    /// <summary>The key the caller holds on the project.</summary>
-    public const string RequiredKey = ProjectKeys.Edit;
+    /// <summary>The permission the caller holds on the project.</summary>
+    public const string RequiredPermission = ProjectPermissionNames.Edit;
 }
 
 /// <summary>Handles <see cref="PlanProject"/>: loads the project its command names, plans it and saves.</summary>

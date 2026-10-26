@@ -6,19 +6,19 @@ using DDDToolkit.Supporting.Membership.Access;
 namespace DDDToolkit.Supporting.Membership;
 
 /// <summary>
-/// A role of one kind of resource, kept as a row: a name, what it is for, and the permission keys it gives
+/// A role of one kind of resource, kept as a row: a name, what it is for, and the permissions it gives
 /// a member that holds it. The application declares its own class with
 /// <see cref="CustomRoleAttribute{TRoleId, TResource}"/>, for a resource whose rules say a customer makes its
 /// roles (<see cref="Access.Roles.Custom"/>): roles a customer makes for itself, where fixed roles are the same for
 /// everybody.
 /// <para>
-/// A role is made, renamed, given keys and archived, and each of those says what happened, so the
+/// A role is made, renamed, given permissions and archived, and each of those says what happened, so the
 /// application raises its own events: the role raises none. Who may do any of it is the application's to
 /// decide, command by command, as it decides who may give a role.
 /// </para>
 /// <para>
-/// Its keys are held to the resource's rules: a role gives only keys the rules let a member's role give
-/// (<see cref="MembershipRules.RoleKeys"/>), the permissions marked <c>InRoles</c>, and one that would give another
+/// Its permissions are held to the resource's rules: a role gives only permissions the rules let a member's role give
+/// (<see cref="MembershipRules.RolePermissions"/>), the permissions marked <c>InRoles</c>, and one that would give another
 /// is refused. The rules are
 /// handed to everything that changes the role, as the one declaration the application has of them, and a
 /// refusal carries the code those rules give it.
@@ -57,7 +57,7 @@ public abstract partial class CustomRoleAggregate<TRoleId>
     /// </code>
     /// </summary>
     /// <param name="id">The role's id.</param>
-    /// <param name="draft">Its name, what it is for, the keys it gives, and the starter role it is made from, if any.</param>
+    /// <param name="draft">Its name, what it is for, the permissions it gives, and the starter role it is made from, if any.</param>
     /// <param name="rules">The rules of the resource the role is of.</param>
     /// <exception cref="ArgumentNullException"><paramref name="draft"/> or <paramref name="rules"/> is null.</exception>
     /// <exception cref="ArgumentException">
@@ -66,7 +66,7 @@ public abstract partial class CustomRoleAggregate<TRoleId>
     /// </exception>
     /// <exception cref="RefusalException">
     /// <c>role-name-invalid</c> for a name that is blank or too long, or a description that is too long;
-    /// <c>key-not-for-members</c> for a key the rules do not let a member's role give. Under the resource's codes.
+    /// <c>permission-not-for-members</c> for a permission the rules do not let a member's role give. Under the resource's codes.
     /// </exception>
     protected CustomRoleAggregate(TRoleId id, CustomRoleDraft draft, MembershipRules rules)
         : base(id)
@@ -76,7 +76,7 @@ public abstract partial class CustomRoleAggregate<TRoleId>
 
         Name = ValidName(draft.Name, codes);
         Description = ValidDescription(draft.Description, codes);
-        Keys = ValidKeys(draft.Keys, rules);
+        Permissions = ValidKeys(draft.Permissions, rules);
         MadeFrom = StarterNamed(draft.MadeFrom, rules);
         Status = CustomRoleStatus.Active;
     }
@@ -87,8 +87,8 @@ public abstract partial class CustomRoleAggregate<TRoleId>
     /// <summary>What the role is for; empty when nobody said.</summary>
     public string Description { get; private set; } = string.Empty;
 
-    /// <summary>The permission keys the role holds: distinct and in ordinal order. What it gives a member is asked of <see cref="Gives"/>.</summary>
-    public IReadOnlyList<string> Keys { get; private set; } = [];
+    /// <summary>The permissions the role holds: distinct and in ordinal order. What it gives a member is asked of <see cref="Gives"/>.</summary>
+    public IReadOnlyList<string> Permissions { get; private set; } = [];
 
     /// <summary>Whether the role is in use. An archived role gives nothing.</summary>
     public CustomRoleStatus Status { get; private set; }
@@ -101,19 +101,19 @@ public abstract partial class CustomRoleAggregate<TRoleId>
     public string? MadeFrom { get; private set; }
 
     /// <summary>
-    /// Whether the role gives <paramref name="key"/> to a member that holds it: it is in use, it holds the
-    /// key, and the resource's rules let a member's role give that key. The last is asked again here, since
-    /// the rules may have changed since the role was given its keys.
+    /// Whether the role gives <paramref name="permission"/> to a member that holds it: it is in use, it holds the
+    /// permission, and the resource's rules let a member's role give that permission. The last is asked again here, since
+    /// the rules may have changed since the role was given its permissions.
     /// </summary>
-    /// <param name="key">A permission key.</param>
+    /// <param name="permission">A permission.</param>
     /// <param name="rules">The rules of the resource the role is of.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="key"/> or <paramref name="rules"/> is null.</exception>
-    public bool Gives(string key, MembershipRules rules)
+    /// <exception cref="ArgumentNullException"><paramref name="permission"/> or <paramref name="rules"/> is null.</exception>
+    public bool Gives(string permission, MembershipRules rules)
     {
-        ArgumentNullException.ThrowIfNull(key);
+        ArgumentNullException.ThrowIfNull(permission);
         ArgumentNullException.ThrowIfNull(rules);
 
-        return Status == CustomRoleStatus.Active && Keys.Contains(key, StringComparer.Ordinal) && rules.RoleKeys.Allows(key);
+        return Status == CustomRoleStatus.Active && Permissions.Contains(permission, StringComparer.Ordinal) && rules.RolePermissions.Allows(permission);
     }
 
     /// <summary>Renames the role and says again what it is for.</summary>
@@ -141,30 +141,30 @@ public abstract partial class CustomRoleAggregate<TRoleId>
     }
 
     /// <summary>
-    /// Sets the keys the role gives, for every member that holds it. Every key is one the resource's rules
-    /// let a member's role give; white space around a key is dropped, and a key said twice is one key.
+    /// Sets the permissions the role gives, for every member that holds it. Every permission is one the resource's rules
+    /// let a member's role give; white space around a permission is dropped, and a permission said twice is one permission.
     /// </summary>
-    /// <param name="keys">Every key the role gives from now on.</param>
+    /// <param name="permissions">Every permission the role gives from now on.</param>
     /// <param name="rules">The rules of the resource the role is of.</param>
-    /// <returns>The keys that came in and the keys that went out; neither for the keys it has already.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="keys"/> or <paramref name="rules"/> is null.</exception>
+    /// <returns>The permissions that came in and the permissions that went out; neither for the permissions it has already.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="permissions"/> or <paramref name="rules"/> is null.</exception>
     /// <exception cref="RefusalException">
-    /// <c>role-archived</c>; <c>key-not-for-members</c>, naming every key the rules do not let a member's role
+    /// <c>role-archived</c>; <c>permission-not-for-members</c>, naming every permission the rules do not let a member's role
     /// give. Under the resource's codes.
     /// </exception>
-    public RoleKeysSet SetKeys(IReadOnlyCollection<string> keys, MembershipRules rules)
+    public RolePermissionsSet SetPermissions(IReadOnlyCollection<string> permissions, MembershipRules rules)
     {
-        ArgumentNullException.ThrowIfNull(keys);
+        ArgumentNullException.ThrowIfNull(permissions);
         RequireInUse(CodesOf(rules));
 
-        var next = ValidKeys(keys, rules);
-        var before = Keys;
+        var next = ValidKeys(permissions, rules);
+        var before = Permissions;
 
-        // Both lists are distinct and in ordinal order, as a role's keys are, so what is left of each is too.
-        var set = new RoleKeysSet([.. next.Except(before, StringComparer.Ordinal)], [.. before.Except(next, StringComparer.Ordinal)]);
+        // Both lists are distinct and in ordinal order, as a role's permissions are, so what is left of each is too.
+        var set = new RolePermissionsSet([.. next.Except(before, StringComparer.Ordinal)], [.. before.Except(next, StringComparer.Ordinal)]);
         if (set.Changed)
         {
-            Keys = next;
+            Permissions = next;
         }
 
         return set;
@@ -225,16 +225,16 @@ public abstract partial class CustomRoleAggregate<TRoleId>
     }
 
     /// <summary>
-    /// The keys as a role keeps them, distinct and in ordinal order, refused when one of them is blank or is
-    /// not a key the rules let a member's role give.
+    /// The permissions as a role keeps them, distinct and in ordinal order, refused when one of them is blank or is
+    /// not a permission the rules let a member's role give.
     /// </summary>
-    private static string[] ValidKeys(IReadOnlyCollection<string>? keys, MembershipRules rules)
+    private static string[] ValidKeys(IReadOnlyCollection<string>? permissions, MembershipRules rules)
     {
-        string[] asked = [.. (keys ?? []).Select(key => key?.Trim() ?? string.Empty).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)];
-        string[] refused = [.. asked.Where(key => key.Length == 0 || !rules.RoleKeys.Allows(key))];
+        string[] asked = [.. (permissions ?? []).Select(permission => permission?.Trim() ?? string.Empty).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)];
+        string[] refused = [.. asked.Where(permission => permission.Length == 0 || !rules.RolePermissions.Allows(permission))];
 
         return refused.Length > 0
-            ? throw rules.Codes.Refuse(MembershipRefusals.KeyNotForMembers, ("Keys", string.Join(", ", refused)))
+            ? throw rules.Codes.Refuse(MembershipRefusals.PermissionNotForMembers, ("Permissions", string.Join(", ", refused)))
             : asked;
     }
 

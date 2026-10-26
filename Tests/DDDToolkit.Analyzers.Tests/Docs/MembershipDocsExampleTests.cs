@@ -97,7 +97,7 @@ public class MembershipDocsExampleTests
         var rules = (MembershipRules)emitted.StaticProperty("Filing.DocumentMembership", "Rules")!;
         rules.Name.Should().Be("documents", "the class's name, made plural");
         rules.Codes.Should().BeSameAs(emitted.StaticProperty("Filing.Document", "Codes"), "the rules refuse under the codes written on the document");
-        rules.OwnerKeys.Should().Equal("documents.view", "documents.edit", "documents.share");
+        rules.OwnerPermissions.Should().Equal("documents.view", "documents.edit", "documents.share");
         rules.SystemScopes.Should().Equal(["filing"], "the scope of the document's module");
 
         // The owner holds no role: it opens the document with nothing else to say.
@@ -105,7 +105,7 @@ public class MembershipDocsExampleTests
         emitted.Call(document, "ShareWith", reader, new NamedRole("contributor"), MemberPeriod.Open(now), now, owner);
 
         ((System.Collections.IEnumerable)emitted.Property(document, "Shares")!).Cast<object>().Should().HaveCount(2);
-        rules.KeysOf(new NamedRole("contributor")).Should().Equal("documents.view", "documents.edit");
+        rules.PermissionsOf(new NamedRole("contributor")).Should().Equal("documents.view", "documents.edit");
 
         var twice = FluentActions.Invoking(() => emitted.Call(document, "ShareWith", reader, new NamedRole("onlooker"), MemberPeriod.Open(now), now, owner))
             .Should().Throw<TargetInvocationException>().WithInnerException<RefusalException>().Which;
@@ -119,7 +119,7 @@ public class MembershipDocsExampleTests
         // and no warning at start-up that the rules leave them to whoever may change a document.
         var rules = (MembershipRules)Run().Emit().StaticProperty("Filing.DocumentMembership", "Rules")!;
 
-        (rules.MembersLockKey, rules.OwnerLockKey).Should().Be(("documents.share", "documents.share"), "the permission the example's command that shares requires");
+        (rules.MembersLockPermission, rules.OwnerLockPermission).Should().Be(("documents.share", "documents.share"), "the permission the example's command that shares requires");
     }
 
     [Fact]

@@ -36,8 +36,8 @@ public sealed partial class ShedRole
 
 /// <summary>
 /// A shed, kept by hands: a second kind of resource whose roles are kept, in the same project and the same
-/// context as the plots. Its rules differ from a plot's in every way they can: no key comes with being a
-/// hand, the only starter role is the keeper's, and a role may give any key but one, a key of
+/// context as the plots. Its rules differ from a plot's in every way they can: no permission comes with being a
+/// hand, the only starter role is the keeper's, and a role may give any permission but one, a permission of
 /// another module among them.
 /// </summary>
 [AggregateRoot<ShedId>]
@@ -111,14 +111,14 @@ public static class ShedPermissions
     public const string Sell = "sheds.sell";
 }
 
-/// <summary>Keys of the garden's other modules that a shed's role may hold beside a shed's permissions.</summary>
-public static class ShedKeys
+/// <summary>Permissions of the garden's other modules that a shed's role may hold beside a shed's permissions.</summary>
+public static class ToolPermissions
 {
-    /// <summary>Lend the tools: another module's key.</summary>
+    /// <summary>Lend the tools: another module's permission.</summary>
     public const string LendTools = "tools.lend";
 }
 
-/// <summary>The rules of access through a shed's hands: roles a garden makes, which take keys of other modules too.</summary>
+/// <summary>The rules of access through a shed's hands: roles a garden makes, which take permissions of other modules too.</summary>
 public static class ShedMembership
 {
     /// <summary>The starter role that keeps a shed.</summary>
@@ -129,5 +129,5 @@ public static class ShedMembership
 
     /// <summary>The rules.</summary>
     public static MembershipRules Rules { get; } = MembershipRules.For<Shed>(
-        Roles.Custom(starters: [new(Keeper, [ShedPermissions.Open, ShedPermissions.Stock])], otherKeys: OtherKeys.All));
+        Roles.Custom(starters: [new(Keeper, [ShedPermissions.Open, ShedPermissions.Stock])], otherPermissions: OtherPermissions.All));
 }

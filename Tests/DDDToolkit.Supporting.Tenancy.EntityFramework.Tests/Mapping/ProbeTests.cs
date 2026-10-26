@@ -8,7 +8,7 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework.Tests;
 /// it, on the Entity Framework this build runs and on the oldest one the packages allow, on SQLite and on
 /// Postgres: a keyless view over a table the same model owns, a tenant filter that follows the caller from one
 /// execution to the next, ids compared with a generic <c>Equals</c> inside the package's generic questions, a
-/// role's keys asked through a view, a row the model maps to nothing, read from SQL of the store's own with
+/// role's permissions asked through a view, a row the model maps to nothing, read from SQL of the store's own with
 /// the application's ids, and a list of the application's ids asked about in one statement.
 /// </summary>
 public abstract class ProbeTests(TestDatabases databases) : IAsyncLifetime
@@ -146,11 +146,11 @@ public abstract class ProbeTests(TestDatabases databases) : IAsyncLifetime
 
         // The table's name is the model's own, and the unit is a parameter.
         var children =
-            "SELECT u.\"Id\" AS \"UnitId\", u.\"Name\" AS \"Key\", NULL AS \"EndsAt\", u.\"ParentId\" AS \"Parent\", u.\"Name\" = 'North' AS \"OfCaller\" FROM "
+            "SELECT u.\"Id\" AS \"UnitId\", u.\"Name\" AS \"Permission\", NULL AS \"EndsAt\", u.\"ParentId\" AS \"Parent\", u.\"Name\" = 'North' AS \"OfCaller\" FROM "
             + units + " u WHERE u.\"ParentId\" = {0}";
         var below = tenancy.Set<MoveReach<OrganizationUnitId>>().FromSqlRaw(children, harbor.RootUnit.Value);
 
-        (await below.OrderBy(row => row.Key).ToListAsync(TestContext.Current.CancellationToken)).Should().Equal(
+        (await below.OrderBy(row => row.Permission).ToListAsync(TestContext.Current.CancellationToken)).Should().Equal(
             new MoveReach<OrganizationUnitId>(north, "North", null, harbor.RootUnit, true),
             new MoveReach<OrganizationUnitId>(south, "South", null, harbor.RootUnit, false));
 
@@ -197,10 +197,10 @@ public abstract class ProbeTests(TestDatabases databases) : IAsyncLifetime
     private const string SeatIdentityColumn = "\"Identity\"";
 
     /// <summary>
-    /// Asks which roles hold a key, through the role view of the widgets' context and in memory over the roles
+    /// Asks which roles hold a permission, through the role view of the widgets' context and in memory over the roles
     /// themselves, and checks the SQL it became with <paramref name="translated"/>.
     /// </summary>
-    protected async Task KeysContainAsync(Action<string> translated)
+    protected async Task PermissionsContainAsync(Action<string> translated)
     {
         var harbor = await _services.ProvisionAsync("harbor");
 
@@ -211,26 +211,26 @@ public abstract class ProbeTests(TestDatabases databases) : IAsyncLifetime
         using (TenancyWork.BeginSystemIn<TenantId, SeatId>(harbor.Tenant))
         {
             var expected = (await tenancy.Set<HostRole>().ToListAsync(TestContext.Current.CancellationToken))
-                .Where(role => role.Keys.Contains(HostCatalogue.WidgetRead))
+                .Where(role => role.Permissions.Contains(HostCatalogue.WidgetRead))
                 .Select(role => role.Id)
                 .ToList();
-            expected.Should().HaveCountGreaterThan(1, "several packs hold the key, so the question has something to tell apart");
+            expected.Should().HaveCountGreaterThan(1, "several packs hold the permission, so the question has something to tell apart");
 
-            var holders = widgets.Set<RoleRow<TenantId, RoleId>>().Where(role => role.Keys.Contains(HostCatalogue.WidgetRead)).Select(role => role.Id);
+            var holders = widgets.Set<RoleRow<TenantId, RoleId>>().Where(role => role.Permissions.Contains(HostCatalogue.WidgetRead)).Select(role => role.Id);
             translated(holders.ToQueryString());
 
             (await holders.ToListAsync(TestContext.Current.CancellationToken)).Should().BeEquivalentTo(expected);
         }
     }
 
-    private static SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId> Right(TenantId tenant, SeatId seat, OrganizationUnitId unit, string key)
+    private static SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId> Right(TenantId tenant, SeatId seat, OrganizationUnitId unit, string permission)
         => new()
         {
             TenantId = tenant,
             SeatId = seat,
             UnitId = unit,
             RoleId = RoleId.CreateSequential(),
-            Key = key,
+            Permission = permission,
             StartsAt = DateTimeOffset.UtcNow.AddDays(-1),
         };
 
@@ -241,25 +241,25 @@ public abstract class ProbeTests(TestDatabases databases) : IAsyncLifetime
         => new() { Id = Guid.NewGuid(), TenantId = tenant, UnitId = unit, Name = name };
 }
 
-/// <summary>The probes on SQLite, in memory, where a role's keys are one JSON document.</summary>
+/// <summary>The probes on SQLite, in memory, where a role's permissions are one JSON document.</summary>
 public sealed class ProbeTestsOnSqlite() : ProbeTests(TestDatabases.Sqlite)
 {
     [Fact]
-    public Task Json_keys_Contains_translates_in_a_keyless_view()
-        => KeysContainAsync(sql => sql.Should().Contain("json_each", "SQLite reads the JSON keys in SQL"));
+    public Task Json_permissions_Contains_translates_in_a_keyless_view()
+        => PermissionsContainAsync(sql => sql.Should().Contain("json_each", "SQLite reads the JSON permissions in SQL"));
 }
 
 /// <summary>
 /// The probes on Postgres, as the tables' owner with no row level security: what Npgsql makes of the mapping, where
-/// a role's keys are a text array and the ids travel as their stored types.
+/// a role's permissions are a text array and the ids travel as their stored types.
 /// </summary>
 public sealed class ProbeTestsOnPostgres(PostgresDatabases postgres) : ProbeTests(postgres)
 {
     [Fact]
-    public Task Keys_Contains_reads_a_text_array()
-        => KeysContainAsync(sql =>
+    public Task Permissions_Contains_reads_a_text_array()
+        => PermissionsContainAsync(sql =>
         {
-            sql.Should().MatchRegex(@"= ANY \(\w+\.""Keys""\)", "Npgsql asks the array itself, with no JSON in between");
+            sql.Should().MatchRegex(@"= ANY \(\w+\.""Permissions""\)", "Npgsql asks the array itself, with no JSON in between");
             sql.Should().NotContain("json");
         });
 
@@ -282,7 +282,7 @@ public sealed class ProbeTestsOnPostgres(PostgresDatabases postgres) : ProbeTest
                 SeatId = seat,
                 UnitId = unit,
                 RoleId = RoleId.CreateSequential(),
-                Key = HostCatalogue.WidgetRead,
+                Permission = HostCatalogue.WidgetRead,
                 StartsAt = DateTimeOffset.UtcNow.AddDays(-1),
             });
             tenancy.Add(new OrganizationUnitPath<TenantId, OrganizationUnitId> { TenantId = tenant, AncestorId = unit, DescendantId = unit, Distance = 0 });

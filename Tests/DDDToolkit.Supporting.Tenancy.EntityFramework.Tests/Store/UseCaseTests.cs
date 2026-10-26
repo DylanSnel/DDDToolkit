@@ -42,7 +42,7 @@ public sealed class UseCaseTests : IDisposable
 
         var refusal = await Refused.WithCodeAsync(TenancyRefusals.GrantExceedsOwn, () => AsGrace(services =>
             services.Seats().GrantAsync(_lin, _coast, _harbor.AdministratorRole, until: null, reason: null, TestContext.Current.CancellationToken)));
-        refusal.Arguments["Missing"].Should().Be(TenancyKeys.RolesManage + ", " + TenancyKeys.SettingsManage);
+        refusal.Arguments["Missing"].Should().Be(TenancyPermissions.RolesManage + ", " + TenancyPermissions.SettingsManage);
 
         await Refused.WithCodeAsync(TenancyRefusals.NotPermitted, () => AsGrace(services =>
             services.Seats().GrantAsync(_lin, _south, Operator, until: null, reason: null, TestContext.Current.CancellationToken)));
@@ -53,7 +53,7 @@ public sealed class UseCaseTests : IDisposable
         (await KeysAsync(_lin)).Should().BeEmpty();
 
         // Someone who manages grants at North and holds nothing else gives Operator all the same.
-        var desk = await BySystem(services => services.Roles().CreateAsync("Grant desk", "Gives people their roles", [TenancyKeys.GrantsManage], TestContext.Current.CancellationToken));
+        var desk = await BySystem(services => services.Roles().CreateAsync("Grant desk", "Gives people their roles", [TenancyPermissions.GrantsManage], TestContext.Current.CancellationToken));
         var nell = await _services.SeatAtAsync(_harbor, "Nell", _north);
         await BySystem(services => services.Seats().GrantAsync(nell, _north, desk, until: null, reason: null, TestContext.Current.CancellationToken));
 
@@ -62,11 +62,11 @@ public sealed class UseCaseTests : IDisposable
         (await KeysAsync(_lin)).Should().HaveCount(3);
         var supervisor = await Refused.WithCodeAsync(TenancyRefusals.GrantExceedsOwn, () => _services.BySeat(_harbor.Tenant, nell, services =>
             services.Seats().GrantAsync(_lin, _coast, _harbor.RolesByPack[HostCatalogue.SupervisorPack], until: null, reason: null, TestContext.Current.CancellationToken)));
-        supervisor.Arguments["Missing"].Should().Be(TenancyKeys.SeatsManage + ", " + TenancyKeys.UnitsManage);
+        supervisor.Arguments["Missing"].Should().Be(TenancyPermissions.SeatsManage + ", " + TenancyPermissions.UnitsManage);
     }
 
     [Fact]
-    public async Task A_role_that_manages_access_is_granted_for_no_longer_than_the_granter_holds_those_keys()
+    public async Task A_role_that_manages_access_is_granted_for_no_longer_than_the_granter_holds_those_permissions()
     {
         await BuildHarborAsync();
         var supervisors = _harbor.RolesByPack[HostCatalogue.SupervisorPack];
@@ -95,7 +95,7 @@ public sealed class UseCaseTests : IDisposable
 
         await AsGrace(services => services.Seats().GrantAsync(_grace, _north, Operator, until: null, reason: null, TestContext.Current.CancellationToken));
 
-        (await _services.StoredRightsAsync(_grace)).Should().Contain(right => right.RoleId == Operator && right.Key == HostCatalogue.WidgetCreate && right.UnitId == _north);
+        (await _services.StoredRightsAsync(_grace)).Should().Contain(right => right.RoleId == Operator && right.Permission == HostCatalogue.WidgetCreate && right.UnitId == _north);
         var refusal = await Refused.WithCodeAsync(TenancyRefusals.SelfAppointment, () => AsGrace(services =>
             services.Seats().GrantAsync(_grace, _north, _harbor.AdministratorRole, until: null, reason: null, TestContext.Current.CancellationToken)));
         refusal.Arguments["Role"].Should().Be(_harbor.AdministratorRole);
@@ -116,7 +116,7 @@ public sealed class UseCaseTests : IDisposable
         await Refused.WithCodeAsync(TenancyRefusals.LastAdmin, () => BySystem(services => services.Seats().WithdrawAsync(ada, root, TestContext.Current.CancellationToken)));
         await Refused.WithCodeAsync(TenancyRefusals.LastAdmin, () => BySystem(services => services.Roles().ArchiveAsync(administrators, TestContext.Current.CancellationToken)));
         await Refused.WithCodeAsync(TenancyRefusals.LastAdmin, () => BySystem(services =>
-            services.Roles().SetKeysAsync(administrators, [TenancyKeys.SeatsManage], TestContext.Current.CancellationToken)));
+            services.Roles().SetPermissionsAsync(administrators, [TenancyPermissions.SeatsManage], TestContext.Current.CancellationToken)));
 
         // An administrator whose grant ends does not count.
         var cy = await _services.SeatAtAsync(_harbor, "Cy", root);
@@ -134,11 +134,11 @@ public sealed class UseCaseTests : IDisposable
     public async Task A_moved_unit_is_reached_from_its_new_parent_only()
     {
         await BuildHarborAsync();
-        (await GraceHoldsAtAsync(TenancyKeys.UnitsManage, _coast)).Should().BeTrue();
+        (await GraceHoldsAtAsync(TenancyPermissions.UnitsManage, _coast)).Should().BeTrue();
 
         await BySystem(services => services.Organization().MoveUnitAsync(_coast, _south, TestContext.Current.CancellationToken));
 
-        (await GraceHoldsAtAsync(TenancyKeys.UnitsManage, _coast)).Should().BeFalse("Coast is under South now");
+        (await GraceHoldsAtAsync(TenancyPermissions.UnitsManage, _coast)).Should().BeFalse("Coast is under South now");
         (await AsGrace(services => services.Directory().ListUnitsAsync(TestContext.Current.CancellationToken))).Select(unit => unit.Path).Should().Equal("Harbor / North");
         await Refused.WithCodeAsync(TenancyRefusals.NotPermitted, () => AsGrace(services =>
             services.Organization().RenameUnitAsync(_coast, "Coastline", TestContext.Current.CancellationToken)));
@@ -163,7 +163,7 @@ public sealed class UseCaseTests : IDisposable
 
         (await _services.StoredRightsAsync(hal)).Should().BeEquivalentTo(stored, "nothing was written when the grant ended");
         var overview = await _services.BySeat(_harbor.Tenant, hal, services => services.Directory().WhoAmIAsync(TestContext.Current.CancellationToken));
-        overview.Keys.Should().BeEmpty();
+        overview.Permissions.Should().BeEmpty();
         overview.Seat.Placements.Single().Grants.Single().AppliesAt(overview.AsOf).Should().BeFalse();
     }
 
@@ -175,24 +175,24 @@ public sealed class UseCaseTests : IDisposable
         await BySystem(services => services.Seats().SuspendAsync(_grace, TestContext.Current.CancellationToken));
         await Refused.WithCodeAsync(TenancyRefusals.NotPermitted, () => AsGrace(services =>
             services.Organization().AddUnitAsync(_north, "Bay", TestContext.Current.CancellationToken)));
-        (await AsGrace(services => services.Directory().WhoAmIAsync(TestContext.Current.CancellationToken))).Keys.Should().BeEmpty();
+        (await AsGrace(services => services.Directory().WhoAmIAsync(TestContext.Current.CancellationToken))).Permissions.Should().BeEmpty();
 
         await BySystem(services => services.Seats().ReactivateAsync(_grace, TestContext.Current.CancellationToken));
         await AsGrace(services => services.Organization().AddUnitAsync(_north, "Bay", TestContext.Current.CancellationToken));
     }
 
     [Fact]
-    public async Task Suspending_a_seat_that_holds_a_role_that_manages_access_needs_its_keys()
+    public async Task Suspending_a_seat_that_holds_a_role_that_manages_access_needs_its_permissions()
     {
         await BuildHarborAsync();
-        var desk = await BySystem(services => services.Roles().CreateAsync("Seat desk", "Keeps the list of people", [TenancyKeys.SeatsManage], TestContext.Current.CancellationToken));
+        var desk = await BySystem(services => services.Roles().CreateAsync("Seat desk", "Keeps the list of people", [TenancyPermissions.SeatsManage], TestContext.Current.CancellationToken));
         var oli = await _services.SeatAtAsync(_harbor, "Oli", _harbor.RootUnit);
         await BySystem(services => services.Seats().GrantAsync(oli, _harbor.RootUnit, desk, until: null, reason: null, TestContext.Current.CancellationToken));
         await _services.GrantAsync(_harbor, _lin, _coast, HostCatalogue.WatcherPack);
 
         var refusal = await Refused.WithCodeAsync(TenancyRefusals.GrantExceedsOwn, () => _services.BySeat(_harbor.Tenant, oli, services =>
             services.Seats().SuspendAsync(_grace, TestContext.Current.CancellationToken)));
-        refusal.Arguments["Missing"].Should().Be(TenancyKeys.GrantsManage + ", " + TenancyKeys.UnitsManage, "Supervisor manages access, and Oli holds none of its keys that do but seats.manage");
+        refusal.Arguments["Missing"].Should().Be(TenancyPermissions.GrantsManage + ", " + TenancyPermissions.UnitsManage, "Supervisor manages access, and Oli holds none of its permissions that do but seats.manage");
         (await _services.StoredRightsAsync(_grace)).Should().NotBeEmpty("the refused suspension wrote nothing");
 
         await _services.BySeat(_harbor.Tenant, oli, services => services.Seats().SuspendAsync(_lin, TestContext.Current.CancellationToken));
@@ -200,7 +200,7 @@ public sealed class UseCaseTests : IDisposable
     }
 
     [Fact]
-    public async Task A_move_that_would_hold_the_movers_keys_longer_is_refused()
+    public async Task A_move_that_would_hold_the_movers_permissions_longer_is_refused()
     {
         await BuildHarborAsync();
         await BySystem(services => services.Seats().PlaceAsync(_grace, _south, primary: false, TestContext.Current.CancellationToken));
@@ -209,14 +209,14 @@ public sealed class UseCaseTests : IDisposable
 
         var refusal = await Refused.WithCodeAsync(TenancyRefusals.GrantExceedsOwn, () => AsGrace(services =>
             services.Organization().MoveUnitAsync(pier, _north, TestContext.Current.CancellationToken)));
-        refusal.Arguments["Missing"].As<string>().Should().Contain(TenancyKeys.UnitsManage, "Grace holds South's keys for a week, and North's for good");
+        refusal.Arguments["Missing"].As<string>().Should().Contain(TenancyPermissions.UnitsManage, "Grace holds South's permissions for a week, and North's for good");
 
         await AsGrace(services => services.Organization().MoveUnitAsync(_coast, _south, TestContext.Current.CancellationToken));
-        (await GraceHoldsAtAsync(TenancyKeys.UnitsManage, _coast)).Should().BeTrue("the other way round her hold only gets shorter");
+        (await GraceHoldsAtAsync(TenancyPermissions.UnitsManage, _coast)).Should().BeTrue("the other way round her hold only gets shorter");
     }
 
     [Fact]
-    public async Task A_move_takes_no_key_that_manages_access_from_someone_whose_hold_the_mover_does_not_match()
+    public async Task A_move_takes_no_permission_that_manages_access_from_someone_whose_hold_the_mover_does_not_match()
     {
         await BuildHarborAsync();
         var hal = await _services.SeatAtAsync(_harbor, "Hal", _harbor.RootUnit);
@@ -224,13 +224,13 @@ public sealed class UseCaseTests : IDisposable
 
         var refusal = await Refused.WithCodeAsync(TenancyRefusals.GrantExceedsOwn, () => _services.BySeat(_harbor.Tenant, hal, services =>
             services.Organization().MoveUnitAsync(_coast, _south, TestContext.Current.CancellationToken)));
-        refusal.Arguments["Missing"].Should().Be(TenancyKeys.GrantsManage + ", " + TenancyKeys.SeatsManage + ", " + TenancyKeys.UnitsManage,
+        refusal.Arguments["Missing"].Should().Be(TenancyPermissions.GrantsManage + ", " + TenancyPermissions.SeatsManage + ", " + TenancyPermissions.UnitsManage,
             "Grace supervises North for good, and Hal runs the tenant for a week");
-        (await GraceHoldsAtAsync(TenancyKeys.UnitsManage, _coast)).Should().BeTrue("the refused move wrote nothing");
+        (await GraceHoldsAtAsync(TenancyPermissions.UnitsManage, _coast)).Should().BeTrue("the refused move wrote nothing");
 
         await _services.BySeat(_harbor.Tenant, _harbor.AdminSeat, services =>
             services.Organization().MoveUnitAsync(_coast, _south, TestContext.Current.CancellationToken));
-        (await GraceHoldsAtAsync(TenancyKeys.UnitsManage, _coast)).Should().BeFalse("an administrator holds every key for good");
+        (await GraceHoldsAtAsync(TenancyPermissions.UnitsManage, _coast)).Should().BeFalse("an administrator holds every permission for good");
     }
 
     [Fact]
@@ -280,14 +280,14 @@ public sealed class UseCaseTests : IDisposable
         var overview = await AsGrace(services => services.Directory().WhoAmIAsync(TestContext.Current.CancellationToken));
         overview.Seat.DisplayName.Should().Be("Grace", "the host's own name, on the seat the directory read");
         overview.UnitOf(overview.Seat.Placements.Should().ContainSingle().Which.UnitId).Path.Should().Be("Harbor / North");
-        overview.Keys.Single(reach => reach.Key == TenancyKeys.UnitsManage).Reaches.Select(unit => unit.Path)
+        overview.Permissions.Single(reach => reach.Permission == TenancyPermissions.UnitsManage).Reaches.Select(unit => unit.Path)
             .Should().Equal("Harbor / North", "Harbor / North / Coast");
 
         // Lin holds no role, and the directory asks none: with no policy on this database, Grace's overview comes to
         // him whole, the same as her own, so who may ask is the request's to say.
         var asked = await _services.BySeat(_harbor.Tenant, _lin, services => services.Directory().SeatOverviewAsync(_grace, TestContext.Current.CancellationToken));
         (asked.Seat.Id, asked.Seat.DisplayName).Should().Be((_grace, "Grace"));
-        asked.Keys.Should().BeEquivalentTo(overview.Keys, options => options.WithStrictOrdering());
+        asked.Permissions.Should().BeEquivalentTo(overview.Permissions, options => options.WithStrictOrdering());
         asked.Roles.Should().BeEquivalentTo(overview.Roles, options => options.WithStrictOrdering());
 
         (await BySystem(services => services.Directory().ListSeatsAsync(TestContext.Current.CancellationToken))).Select(seat => seat.DisplayName)
@@ -482,9 +482,9 @@ public sealed class UseCaseTests : IDisposable
 
     private Task BySystem(Func<IServiceProvider, Task> act) => _services.BySystemIn(_harbor.Tenant, act);
 
-    private Task<bool> GraceHoldsAtAsync(string key, OrganizationUnitId unit)
-        => AsGrace(services => services.Answers().Over(services.Tenancy()).HoldsAtAsync(key, unit, TestContext.Current.CancellationToken));
+    private Task<bool> GraceHoldsAtAsync(string permission, OrganizationUnitId unit)
+        => AsGrace(services => services.Answers().Over(services.Tenancy()).HoldsAtAsync(permission, unit, TestContext.Current.CancellationToken));
 
     private async Task<List<(OrganizationUnitId Unit, string Key)>> KeysAsync(SeatId seat)
-        => [.. (await _services.StoredRightsAsync(seat)).Select(right => (right.UnitId, right.Key))];
+        => [.. (await _services.StoredRightsAsync(seat)).Select(right => (right.UnitId, right.Permission))];
 }

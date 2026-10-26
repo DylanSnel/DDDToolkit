@@ -12,14 +12,14 @@ public enum ResourceAccessSet
 {
     /// <summary>
     /// The resources the caller sees, asked without arguments: <c>Ids()</c>. A resource with members is seen by its
-    /// members, by its owner, and, where its rules let a key held above reach it, by whoever holds the key that sees
+    /// members, by its owner, and, where its rules let a permission held above reach it, by whoever holds the permission that sees
     /// it there.
     /// </summary>
     Seen,
 
     /// <summary>
-    /// The resources the caller holds a key on, asked with the key: <c>Ids(string key)</c>. On a resource with members
-    /// a key is held through a role, by being a member for the key that being one gives, by owning the resource, or
+    /// The resources the caller holds a permission on, asked with the permission: <c>Ids(string permission)</c>. On a resource with members
+    /// a permission is held through a role, by being a member for the permission that being one gives, by owning the resource, or
     /// from above.
     /// </summary>
     HeldOn,

@@ -17,7 +17,7 @@ namespace DDDToolkit.Supporting.Tenancy.Postgres.Tests;
 /// every other writer is held to the roles' guards as before; and two syncs at once change each role once.
 /// <para>
 /// Harbor's Operator role is stored as a version of the application made it whose operator's pack did not create
-/// widgets yet: without the key, and remembering a pack without it. The application syncs with the pack as it is now.
+/// widgets yet: without the permission, and remembering a pack without it. The application syncs with the pack as it is now.
 /// </para>
 /// </summary>
 public sealed class RolePackSyncTests(TenancyPostgres postgres)
@@ -31,16 +31,16 @@ public sealed class RolePackSyncTests(TenancyPostgres postgres)
     {
         var database = await BehindAndForcedAsync();
         await using var services = new TenancyServices(database);
-        (await OlisKeysAsync(services)).Should().NotContain(HostCatalogue.WidgetCreate, "Oli is an Operator at North Pier, of the older pack");
+        (await OlisPermissionsAsync(services)).Should().NotContain(HostCatalogue.WidgetCreate, "Oli is an Operator at North Pier, of the older pack");
 
         var report = await services.Provider.GetRequiredService<IRolePackSync>().SyncAsync(Cancellation);
 
         report.Failed.Should().BeEmpty();
         report.Should().BeEquivalentTo(new { Tenants = 3, RolesChanged = 1, RolesKeptForAnAdministrator = 0, RolesWithoutTheirPack = 0 }, "Quay is suspended, and visited all the same");
         var operatorRole = await services.BySystemIn(Harbor, scoped => scoped.Tenancy().Set<HostRole>().AsNoTracking().SingleAsync(role => role.Id == HarborRoles.Operator, Cancellation));
-        operatorRole.Keys.Should().Equal(HostCatalogue.WidgetChange, HostCatalogue.WidgetCreate, HostCatalogue.WidgetRead);
-        operatorRole.KeysFromPack.Should().Equal(HostCatalogue.WidgetChange, HostCatalogue.WidgetCreate, HostCatalogue.WidgetRead);
-        (await OlisKeysAsync(services)).Should().Contain(HostCatalogue.WidgetCreate, "the database wrote the rights of every holder as the role changed");
+        operatorRole.Permissions.Should().Equal(HostCatalogue.WidgetChange, HostCatalogue.WidgetCreate, HostCatalogue.WidgetRead);
+        operatorRole.PermissionsFromPack.Should().Equal(HostCatalogue.WidgetChange, HostCatalogue.WidgetCreate, HostCatalogue.WidgetRead);
+        (await OlisPermissionsAsync(services)).Should().Contain(HostCatalogue.WidgetCreate, "the database wrote the rights of every holder as the role changed");
 
         var kept = await FollowedAsync(services);
         var row = kept.Should().ContainSingle().Which;
@@ -57,13 +57,13 @@ public sealed class RolePackSyncTests(TenancyPostgres postgres)
     public async Task Every_other_writer_is_held_to_the_roles_guards_as_before()
     {
         var database = await BehindAndForcedAsync();
-        string Remembering(string role) => $"UPDATE tenancy.\"Roles\" SET \"KeysFromPack\" = ARRAY['widget.change', 'widget.create', 'widget.read'] WHERE \"Id\" = '{role}'";
+        string Remembering(string role) => $"UPDATE tenancy.\"Roles\" SET \"PermissionsFromPack\" = ARRAY['widget.change', 'widget.create', 'widget.read'] WHERE \"Id\" = '{role}'";
         var operatorRole = HarborRoles.Operator.Value.ToString();
 
-        // The administrator changes a role's keys, and nothing of what its pack gave it or which pack that was.
+        // The administrator changes a role's permissions, and nothing of what its pack gave it or which pack that was.
         await using (var ada = await AsCaller.PersonAsync(database, Ada.Identity, Harbor, Cancellation))
         {
-            (await ada.ExecuteAsync($"UPDATE tenancy.\"Roles\" SET \"Keys\" = ARRAY['widget.read'] WHERE \"Id\" = '{operatorRole}'", Cancellation)).Should().Be(1);
+            (await ada.ExecuteAsync($"UPDATE tenancy.\"Roles\" SET \"Permissions\" = ARRAY['widget.read'] WHERE \"Id\" = '{operatorRole}'", Cancellation)).Should().Be(1);
             var remembered = await FluentActions.Awaiting(() => ada.ExecuteAsync(Remembering(operatorRole), Cancellation)).Should().ThrowAsync<PostgresException>();
             remembered.Which.SqlState.Should().Be(PostgresErrorCodes.InsufficientPrivilege);
             remembered.Which.ConstraintName.Should().Be("tenancy_role_follows_its_pack");
@@ -91,7 +91,7 @@ public sealed class RolePackSyncTests(TenancyPostgres postgres)
         // role for, the database refuses at commit.
         await using var lastAdministrator = await AsCaller.SystemInAsync(database, Harbor, TenancyWork.SystemScope, Cancellation);
         (await lastAdministrator.ExecuteAsync(
-                $"UPDATE tenancy.\"Roles\" SET \"Keys\" = pg_catalog.array_remove(\"Keys\", 'tenancy.roles.manage') WHERE \"Id\" = '{HarborRoles.Administrator.Value}'",
+                $"UPDATE tenancy.\"Roles\" SET \"Permissions\" = pg_catalog.array_remove(\"Permissions\", 'tenancy.roles.manage') WHERE \"Id\" = '{HarborRoles.Administrator.Value}'",
                 Cancellation))
             .Should().Be(1);
         (await FluentActions.Awaiting(() => lastAdministrator.CommitAsync(Cancellation)).Should().ThrowAsync<PostgresException>())
@@ -116,7 +116,7 @@ public sealed class RolePackSyncTests(TenancyPostgres postgres)
         report.Failed.Should().BeEmpty("a save that lost the race on the tenant's access revision is read again");
         report.RolesChanged.Should().Be(0, "read again, there was nothing left to change");
         (await FollowedAsync(first)).Should().HaveCount(1, "the role followed its pack once");
-        (await OlisKeysAsync(first)).Should().Contain(HostCatalogue.WidgetCreate);
+        (await OlisPermissionsAsync(first)).Should().Contain(HostCatalogue.WidgetCreate);
     }
 
     /// <summary>
@@ -132,7 +132,7 @@ public sealed class RolePackSyncTests(TenancyPostgres postgres)
             (await owner.ExecuteAsync(
                     $"""
                     UPDATE tenancy."Roles"
-                    SET "Keys" = pg_catalog.array_remove("Keys", 'widget.create'), "KeysFromPack" = pg_catalog.array_remove("KeysFromPack", 'widget.create')
+                    SET "Permissions" = pg_catalog.array_remove("Permissions", 'widget.create'), "PermissionsFromPack" = pg_catalog.array_remove("PermissionsFromPack", 'widget.create')
                     WHERE "Id" = '{HarborRoles.Operator.Value}'
                     """,
                     Cancellation))
@@ -144,11 +144,11 @@ public sealed class RolePackSyncTests(TenancyPostgres postgres)
         return database;
     }
 
-    /// <summary>The keys Oli holds by Harbor's Operator role at North Pier, as the database wrote them, read by system work in Harbor.</summary>
-    private static Task<List<string>> OlisKeysAsync(TenancyServices services)
+    /// <summary>The permissions Oli holds by Harbor's Operator role at North Pier, as the database wrote them, read by system work in Harbor.</summary>
+    private static Task<List<string>> OlisPermissionsAsync(TenancyServices services)
         => services.BySystemIn(Harbor, scoped => scoped.Tenancy().Set<SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId>>()
             .Where(right => right.SeatId == Oli.Seat && right.RoleId == HarborRoles.Operator && right.UnitId == NorthPier)
-            .Select(right => right.Key)
+            .Select(right => right.Permission)
             .ToListAsync(Cancellation));
 
     /// <summary>Harbor's history rows of a role that followed its pack: who acted, and what it says.</summary>

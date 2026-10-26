@@ -9,12 +9,12 @@ namespace DDDToolkit.Supporting.Membership.Access;
 /// and the export writes the policy with whatever the names are.
 /// </summary>
 /// <param name="AsMember">Answers the ids of the resources the caller is a member of now.</param>
-/// <param name="AsMemberWith">Answers, for a key, the ids of the resources where the caller is a member now and holds a role now that gives the key.</param>
+/// <param name="AsMemberWith">Answers, for a permission, the ids of the resources where the caller is a member now and holds a role now that gives the permission.</param>
 /// <param name="Seen">
 /// Answers the ids of the resources the caller sees: those it is a member of now, those it owns, from the moment
 /// a resource's row names it as owner, and, where the rules say so, those reached from above.
 /// </param>
-/// <param name="HeldOn">Answers, for a key, the ids of the resources the caller holds the key on.</param>
+/// <param name="HeldOn">Answers, for a permission, the ids of the resources the caller holds the permission on.</param>
 public sealed record MembershipFunctions(string AsMember, string AsMemberWith, string Seen, string HeldOn)
 {
     /// <summary>

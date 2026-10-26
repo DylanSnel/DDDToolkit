@@ -15,7 +15,7 @@ namespace DDDToolkit.Access;
 /// An application needs none: the generator finds its own <see cref="ICallersOwn{TValue}"/> where the requests' project
 /// sees it, its own or one it references. A package needs it where its handle is written over a type parameter, the
 /// application's seat id say, which the generator cannot read off the class: <see cref="IdOf"/> names the template the
-/// application declares the class with, as <see cref="KeyMarkerAttribute.IdOf"/> does, and the id of every class the
+/// application declares the class with, as <see cref="PermissionMarkerAttribute.IdOf"/> does, and the id of every class the
 /// project sees declared with it is one. Where the project sees no such class, nothing can be told, and nothing is
 /// reported.
 /// </remarks>
@@ -42,10 +42,10 @@ public sealed class CallersOwnAttribute : Attribute
 
     /// <summary>
     /// The requirement attributes a caller who has an own of the type meets already, as
-    /// <see cref="KeyMarkerAttribute.Implies"/> says them of a key: only a signed-in user has a verified identity, so the
+    /// <see cref="PermissionMarkerAttribute.Implies"/> says them of a permission: only a signed-in user has a verified identity, so the
     /// core's <see cref="Guid"/> names <see cref="SignedInAttribute"/>, and only a seat in the tenant, a signed-in user, has a
     /// seat of its own there, so Tenancy's seat id names <c>[InTenant]</c> and <c>[SignedIn]</c>. Beside <c>[OwnOnly]</c> on
-    /// a member of the type, or beside a key with <c>[OrOwn]</c> that requires it too, one of them is DDD00084, a warning.
+    /// a member of the type, or beside a permission with <c>[OrOwn]</c> that requires it too, one of them is DDD00084, a warning.
     /// Empty by default.
     /// </summary>
     public Type[] Implies { get; set; } = [];

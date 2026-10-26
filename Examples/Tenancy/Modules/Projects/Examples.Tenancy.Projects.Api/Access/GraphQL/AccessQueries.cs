@@ -9,14 +9,14 @@ namespace Examples.Tenancy.Projects.Api.Access.GraphQL;
 internal static class AccessQueries
 {
     /// <summary>
-    /// Which of <paramref name="keys"/> the caller holds for the whole tenant and on each of
-    /// <paramref name="projects"/>, for a page of them at once. A key the catalogue does not know is refused.
+    /// Which of <paramref name="permissions"/> the caller holds for the whole tenant and on each of
+    /// <paramref name="projects"/>, for a page of them at once. A permission the catalogue does not know is refused.
     /// </summary>
     [Query]
-    public static async Task<ProjectKeySets> GetKeySetsAsync(
-        IReadOnlyList<string> keys,
+    public static async Task<ProjectPermissionSets> GetPermissionSetsAsync(
+        IReadOnlyList<string> permissions,
         [ID("Project")] IReadOnlyList<ProjectId> projects,
         [Service] ISender sender,
         CancellationToken cancellationToken)
-        => await sender.Send(new KeysOnProjects(projects, keys), cancellationToken);
+        => await sender.Send(new PermissionsOnProjects(projects, permissions), cancellationToken);
 }

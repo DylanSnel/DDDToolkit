@@ -13,7 +13,7 @@ public abstract class SeatsAsMembersTests(CampusDatabases databases)
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
     [Fact]
-    public async Task A_seat_on_the_member_list_holds_the_keys_of_the_roles_it_holds_there()
+    public async Task A_seat_on_the_member_list_holds_the_permissions_of_the_roles_it_holds_there()
     {
         using var campus = await databases.CreateAsync();
         var data = campus.Scenario;
@@ -32,10 +32,10 @@ public abstract class SeatsAsMembersTests(CampusDatabases databases)
         outline.Until.Should().BeCloseTo(data.NextWeek, TimeSpan.FromMilliseconds(1));
 
         // A lab's roles are the college's own: the demonstrator's gives seeing and equipping in the lab it is held in,
-        // and its key of Tenancy's own is no key a lab's member gets by it.
+        // and its permission of Tenancy's own is no permission a lab's member gets by it.
         (await HoldInAsync(campus, tom, data.Laser, LabPermissions.Equip))!.Via.Should().Be(MemberVia.Members);
         (await HoldInAsync(campus, tom, data.Laser, LabPermissions.Calibrate))!.Via.Should().BeNull();
-        (await HoldInAsync(campus, tom, data.Laser, TenancyKeys.HistoryView))!.Via.Should().BeNull("a role given in a lab gives the keys of a lab, whatever else it holds in the organization");
+        (await HoldInAsync(campus, tom, data.Laser, TenancyPermissions.HistoryView))!.Via.Should().BeNull("a role given in a lab gives the permissions of a lab, whatever else it holds in the organization");
         (await HoldInAsync(campus, tom, data.Darkroom, LabPermissions.See)).Should().BeNull();
     }
 
@@ -53,12 +53,12 @@ public abstract class SeatsAsMembersTests(CampusDatabases databases)
 
         // She is on Optics as well, with no role: what she holds both ways she holds as a member.
         (await HoldOnAsync(campus, dee, data.Optics, CoursePermissions.See))!.Via.Should().Be(MemberVia.Members);
-        (await HoldOnAsync(campus, dee, data.Optics, CoursePermissions.Outline))!.Via.Should().BeNull("the dean's role does not hold the key");
+        (await HoldOnAsync(campus, dee, data.Optics, CoursePermissions.Outline))!.Via.Should().BeNull("the dean's role does not hold the permission");
 
         // Poetry is given at Arts, beside Science: not below where she holds anything.
         (await HoldOnAsync(campus, dee, data.Poetry, CoursePermissions.See)).Should().BeNull();
 
-        // The administrator holds every key of the catalogue at the root, so on every course and lab of the college.
+        // The administrator holds every permission of the catalogue at the root, so on every course and lab of the college.
         (await HoldOnAsync(campus, ada, data.Optics, CoursePermissions.Outline))!.Via.Should().Be(MemberVia.Above);
         (await HoldOnAsync(campus, ada, data.Poetry, CoursePermissions.See))!.Via.Should().Be(MemberVia.Above);
         (await HoldInAsync(campus, ada, data.Darkroom, LabPermissions.Calibrate))!.Via.Should().Be(MemberVia.Above);
@@ -74,13 +74,13 @@ public abstract class SeatsAsMembersTests(CampusDatabases databases)
     }
 
     [Fact]
-    public async Task A_key_the_catalogue_does_not_know_is_held_by_nobody_above_and_asking_it_is_no_mistake()
+    public async Task A_permission_the_catalogue_does_not_know_is_held_by_nobody_above_and_asking_it_is_no_mistake()
     {
         using var campus = await databases.CreateAsync();
         var data = campus.Scenario;
 
         // Dissolving a course is its owner's alone: no role of courses may give it, and the catalogue does not know it, so
-        // no role of the organization holds it. Tenancy itself would take a question about such a key for a typo.
+        // no role of the organization holds it. Tenancy itself would take a question about such a permission for a typo.
         var asAdministrator = await HoldOnAsync(campus, new Asking(data.Ada, CampusScenario.InAlder), data.Optics, CoursePermissions.Dissolve);
         asAdministrator.Should().NotBeNull("the administrator sees the course");
         asAdministrator!.Via.Should().BeNull();
@@ -98,19 +98,19 @@ public abstract class SeatsAsMembersTests(CampusDatabases databases)
 
         // A course's permissions are its owner's, each with no end, whatever a role gives; a lab's alike, though its
         // roles are the college's own. No role is the owner's.
-        foreach (var key in CourseMembership.Rules.OwnerKeys)
+        foreach (var permission in CourseMembership.Rules.OwnerPermissions)
         {
-            var held = await HoldOnAsync(campus, owen, data.Optics, key);
-            (held!.Via, held.Until).Should().Be((MemberVia.Members, (DateTimeOffset?)null), "the owner holds {0}", key);
+            var held = await HoldOnAsync(campus, owen, data.Optics, permission);
+            (held!.Via, held.Until).Should().Be((MemberVia.Members, (DateTimeOffset?)null), "the owner holds {0}", permission);
         }
 
-        foreach (var key in LabMembership.Rules.OwnerKeys)
+        foreach (var permission in LabMembership.Rules.OwnerPermissions)
         {
-            var held = await HoldInAsync(campus, owen, data.Laser, key);
-            (held!.Via, held.Until).Should().Be((MemberVia.Members, (DateTimeOffset?)null), "the owner holds {0}", key);
+            var held = await HoldInAsync(campus, owen, data.Laser, permission);
+            (held!.Via, held.Until).Should().Be((MemberVia.Members, (DateTimeOffset?)null), "the owner holds {0}", permission);
         }
 
-        (await HoldInAsync(campus, owen, data.Laser, CoursePermissions.Grade))!.Via.Should().BeNull("a key of courses is none of a lab's");
+        (await HoldInAsync(campus, owen, data.Laser, CoursePermissions.Grade))!.Via.Should().BeNull("a permission of courses is none of a lab's");
         data.Labs.Single(lab => lab.Id == data.Laser).Technicians.Single(row => row.MemberId == data.OwenSeat).Roles.Should().BeEmpty();
     }
 
@@ -122,7 +122,7 @@ public abstract class SeatsAsMembersTests(CampusDatabases databases)
         var bea = new Asking(data.Bea, CampusScenario.InBirch);
         var tomInBirch = new Asking(data.Tom, CampusScenario.InBirch);
 
-        // Birch's administrator holds every key in Birch, and Alder's courses and labs are not there for her.
+        // Birch's administrator holds every permission in Birch, and Alder's courses and labs are not there for her.
         (await HoldOnAsync(campus, bea, data.Latin, CoursePermissions.Grade))!.Via.Should().Be(MemberVia.Members);
         (await HoldOnAsync(campus, bea, data.Optics, CoursePermissions.See)).Should().BeNull();
         (await HoldInAsync(campus, bea, data.Laser, LabPermissions.See)).Should().BeNull();
@@ -146,9 +146,9 @@ public abstract class SeatsAsMembersTests(CampusDatabases databases)
         var sue = new Asking(data.Sue, CampusScenario.InAlder);
 
         // Sue tutors Optics and is a dean of Science, and her seat is suspended: every row still applies, and she is nobody.
-        foreach (var key in CampusScenario.CourseKeysAsked)
+        foreach (var permission in CampusScenario.CoursePermissionsAsked)
         {
-            (await HoldOnAsync(campus, sue, data.Optics, key)).Should().BeNull("a suspended seat holds {0} nowhere", key);
+            (await HoldOnAsync(campus, sue, data.Optics, permission)).Should().BeNull("a suspended seat holds {0} nowhere", permission);
         }
 
         (await SeenCoursesAsync(campus, sue)).Should().BeEmpty();
@@ -178,33 +178,33 @@ public abstract class SeatsAsMembersTests(CampusDatabases databases)
             (await SeenCoursesAsync(campus, asking)).Should().BeEquivalentTo(data.CoursesSeenBy(asking), "of the courses {0} sees", asking);
             (await SeenLabsAsync(campus, asking)).Should().BeEquivalentTo(data.LabsSeenBy(asking), "of the labs {0} sees", asking);
 
-            foreach (var key in CampusScenario.CourseKeysAsked)
+            foreach (var permission in CampusScenario.CoursePermissionsAsked)
             {
                 var held = await campus.Services.AsAsync(asking.Person, asking.College, async provider =>
                 {
-                    var reach = provider.GetRequiredService<IMemberQuestions<CourseId>>().Reach(key);
+                    var reach = provider.GetRequiredService<IMemberQuestions<CourseId>>().Reach(permission);
                     return await provider.Campus().Courses.Within(reach).Select(course => course.Id).ToListAsync(Cancellation);
                 });
-                held.Should().BeEquivalentTo(data.CoursesHeldBy(asking, key), "of the courses {0} holds {1} on", asking, key);
+                held.Should().BeEquivalentTo(data.CoursesHeldBy(asking, permission), "of the courses {0} holds {1} on", asking, permission);
             }
 
-            foreach (var key in CampusScenario.LabKeysAsked)
+            foreach (var permission in CampusScenario.LabPermissionsAsked)
             {
                 var held = await campus.Services.AsAsync(asking.Person, asking.College, async provider =>
                 {
-                    var reach = provider.GetRequiredService<IMemberQuestions<LabId>>().Reach(key);
+                    var reach = provider.GetRequiredService<IMemberQuestions<LabId>>().Reach(permission);
                     return await provider.Campus().Labs.Within(reach).Select(lab => lab.Id).ToListAsync(Cancellation);
                 });
-                held.Should().BeEquivalentTo(data.LabsHeldBy(asking, key), "of the labs {0} holds {1} on", asking, key);
+                held.Should().BeEquivalentTo(data.LabsHeldBy(asking, permission), "of the labs {0} holds {1} on", asking, permission);
             }
         }
 
-        // And how each key is held on the one course everybody is asked about.
+        // And how each permission is held on the one course everybody is asked about.
         foreach (var asking in data.Everybody.Where(asking => data.CoursesSeenBy(asking).Contains(data.Optics)))
         {
-            foreach (var key in CampusScenario.CourseKeysAsked)
+            foreach (var permission in CampusScenario.CoursePermissionsAsked)
             {
-                (await HoldOnAsync(campus, asking, data.Optics, key))!.Via.Should().Be(data.ViaOn(asking, data.Optics, key), "of how {0} holds {1} on Optics", asking, key);
+                (await HoldOnAsync(campus, asking, data.Optics, permission))!.Via.Should().Be(data.ViaOn(asking, data.Optics, permission), "of how {0} holds {1} on Optics", asking, permission);
             }
         }
     }
@@ -216,18 +216,18 @@ public abstract class SeatsAsMembersTests(CampusDatabases databases)
         var data = campus.Scenario;
         var commands = campus.Commands;
 
-        // What a caller holds on one course: the members, the roles of courses and where the key is held above, read at once.
+        // What a caller holds on one course: the members, the roles of courses and where the permission is held above, read at once.
         MemberHold<CourseId>? grade = null;
         await campus.Services.AsAsync(data.Dee, CampusScenario.InAlder, async provider =>
         {
             commands.Reset();
             grade = await provider.GetRequiredService<IMemberQuestions<CourseId>>().HoldAsync(data.Optics, CoursePermissions.Grade, Cancellation);
-            commands.Count.Should().Be(1, "how the key is held, until when, and the course's version are one statement");
-            commands.Commands[0].Should().Contain("CourseTutors").And.Contain("CourseRoles").And.Contain(campus.ReadModel, "where the dean holds the key is a subquery of the statement");
+            commands.Count.Should().Be(1, "how the permission is held, until when, and the course's version are one statement");
+            commands.Commands[0].Should().Contain("CourseTutors").And.Contain("CourseRoles").And.Contain(campus.ReadModel, "where the dean holds the permission is a subquery of the statement");
         });
         grade!.Via.Should().Be(MemberVia.Above);
 
-        // What a lab's member holds: which of the college's roles give the key is Tenancy's answer, in the same statement.
+        // What a lab's member holds: which of the college's roles give the permission is Tenancy's answer, in the same statement.
         await campus.Services.AsAsync(data.Tom, CampusScenario.InAlder, async provider =>
         {
             commands.Reset();
@@ -237,17 +237,17 @@ public abstract class SeatsAsMembersTests(CampusDatabases databases)
             equip!.Via.Should().Be(MemberVia.Members);
         });
 
-        // The keys held on many, and a page of the application's own with a reach in it: one statement each.
+        // The permissions held on many, and a page of the application's own with a reach in it: one statement each.
         await campus.Services.AsAsync(data.Ada, CampusScenario.InAlder, async provider =>
         {
             commands.Reset();
-            var keys = await provider.GetRequiredService<IMemberQuestions<CourseId>>().KeysOnAsync([data.Optics, data.Poetry, data.Latin], CampusScenario.CourseKeysAsked, Cancellation);
+            var permissions = await provider.GetRequiredService<IMemberQuestions<CourseId>>().PermissionsOnAsync([data.Optics, data.Poetry, data.Latin], CampusScenario.CoursePermissionsAsked, Cancellation);
             commands.Count.Should().Be(1);
-            keys.Keys.Should().BeEquivalentTo([data.Optics, data.Poetry], "Latin is another college's");
+            permissions.Keys.Should().BeEquivalentTo([data.Optics, data.Poetry], "Latin is another college's");
 
-            // What is held above is whatever the organization gives there: every key of the catalogue for the administrator,
+            // What is held above is whatever the organization gives there: every permission of the catalogue for the administrator,
             // another module's among them, and never the one the catalogue does not know.
-            keys.Values.Should().OnlyContain(held => held.SetEquals(new[] { CoursePermissions.See, CoursePermissions.Grade, CoursePermissions.Outline, LabPermissions.Equip, TenancyKeys.HistoryView }));
+            permissions.Values.Should().OnlyContain(held => held.SetEquals(new[] { CoursePermissions.See, CoursePermissions.Grade, CoursePermissions.Outline, LabPermissions.Equip, TenancyPermissions.HistoryView }));
 
             commands.Reset();
             var seen = provider.GetRequiredService<IMemberQuestions<CourseId>>().Reach(CoursePermissions.See);
@@ -264,7 +264,7 @@ public abstract class SeatsAsMembersTests(CampusDatabases databases)
         using var campus = await databases.CreateAsync(CampusContexts.FromAPool);
         var data = campus.Scenario;
 
-        // Where the dean holds the key is asked on the context the statement runs on, which is not the request's own here.
+        // Where the dean holds the permission is asked on the context the statement runs on, which is not the request's own here.
         await campus.Services.AsAsync(data.Dee, CampusScenario.InAlder, async provider =>
         {
             var requests = provider.Campus();
@@ -376,13 +376,13 @@ public abstract class SeatsAsMembersTests(CampusDatabases databases)
     }
 
     [Fact]
-    public async Task System_work_in_a_college_holds_every_key_on_what_names_its_scope_and_reaches_nothing_of_another_college()
+    public async Task System_work_in_a_college_holds_every_permission_on_what_names_its_scope_and_reaches_nothing_of_another_college()
     {
         using var campus = await databases.CreateAsync();
         var data = campus.Scenario;
 
         // The courses' rules name the scope the application's own work on them runs in: in a college, that
-        // work holds every key on every course there.
+        // work holds every permission on every course there.
         await campus.Services.BySystemInAsync(
             data.Alder,
             async provider =>
@@ -413,23 +413,23 @@ public abstract class SeatsAsMembersTests(CampusDatabases databases)
             });
     }
 
-    private static Task<MemberHold<CourseId>?> HoldOnAsync(CampusApp campus, Asking asking, CourseId course, string key)
-        => campus.Services.CoursesAsync(asking.Person, asking.College, access => access.HoldAsync(course, key, Cancellation));
+    private static Task<MemberHold<CourseId>?> HoldOnAsync(CampusApp campus, Asking asking, CourseId course, string permission)
+        => campus.Services.CoursesAsync(asking.Person, asking.College, access => access.HoldAsync(course, permission, Cancellation));
 
-    private static Task<MemberHold<LabId>?> HoldInAsync(CampusApp campus, Asking asking, LabId lab, string key)
-        => campus.Services.LabsAsync(asking.Person, asking.College, access => access.HoldAsync(lab, key, Cancellation));
+    private static Task<MemberHold<LabId>?> HoldInAsync(CampusApp campus, Asking asking, LabId lab, string permission)
+        => campus.Services.LabsAsync(asking.Person, asking.College, access => access.HoldAsync(lab, permission, Cancellation));
 
     private static Task<List<CourseId>> SeenCoursesAsync(CampusApp campus, Asking asking)
         => campus.Services.AsAsync(asking.Person, asking.College, async provider =>
         {
-            var see = provider.GetRequiredService<IMemberQuestions<CourseId>>().KeyReach([]).See;
+            var see = provider.GetRequiredService<IMemberQuestions<CourseId>>().PermissionReach([]).See;
             return await provider.Campus().Courses.Within(see).Select(course => course.Id).ToListAsync(Cancellation);
         });
 
     private static Task<List<LabId>> SeenLabsAsync(CampusApp campus, Asking asking)
         => campus.Services.AsAsync(asking.Person, asking.College, async provider =>
         {
-            var see = provider.GetRequiredService<IMemberQuestions<LabId>>().KeyReach([]).See;
+            var see = provider.GetRequiredService<IMemberQuestions<LabId>>().PermissionReach([]).See;
             return await provider.Campus().Labs.Within(see).Select(lab => lab.Id).ToListAsync(Cancellation);
         });
 

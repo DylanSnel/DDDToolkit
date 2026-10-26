@@ -14,7 +14,7 @@ namespace DDDToolkit.Access;
 /// <remarks>
 /// The toolkit's generator writes the call for every request that carries the attribute, in the module's request
 /// interface: the method of <see cref="Factory"/> named <see cref="Method"/>, with the attribute's constructor
-/// arguments in their order and its type arguments as the method's. So <c>[SeenWith&lt;DocumentId&gt;(DocumentKeys.View)]</c>,
+/// arguments in their order and its type arguments as the method's. So <c>[SeenWith&lt;DocumentId&gt;(DocumentPermissions.View)]</c>,
 /// whose class is marked <c>[StatesRequirement(typeof(MemberAccess), nameof(MemberAccess.SeenWith))]</c>, is
 /// <c>MemberAccess.SeenWith&lt;DocumentId&gt;("documents.view")</c>. The method is public and static, answers an
 /// <see cref="AccessRequirement"/>, and takes what the attribute's constructor takes, in that order: what does not is
@@ -47,7 +47,7 @@ public sealed class StatesRequirementAttribute(Type factory, string method) : At
     public string Method { get; } = method;
 
     /// <summary>
-    /// Whether only a query may state it: a requirement that refuses nobody for want of a key and says what a query's
+    /// Whether only a query may state it: a requirement that refuses nobody for want of a permission and says what a query's
     /// own statement filters by, such as Membership's <c>SeenWith</c>, or one for a caller who changes nothing, such
     /// as Tenancy's operators. On a message of the Mediator library that is no query, a command or a plain request,
     /// it would let the handler run unchecked, or let through a caller who changes nothing, so there it is DDD00082.

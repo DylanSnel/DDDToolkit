@@ -17,7 +17,7 @@ public static class FolderPermissions
     [On<Folder>]
     public const string File = "folders.file";
 
-    /// <summary>Decide who is on a folder's staff: the key this host's commands that change the staff require.</summary>
+    /// <summary>Decide who is on a folder's staff: the permission this host's commands that change the staff require.</summary>
     [On<Folder>(LocksMembers = true)]
     public const string Staff = "folders.staff";
 
@@ -40,7 +40,7 @@ public static class FolderRefusals
     public const string Locked = "folders.locked";
 
     /// <summary>
-    /// Somebody would be put on a folder for longer than whoever asks holds the key that lets them: the host's
+    /// Somebody would be put on a folder for longer than whoever asks holds the permission that lets them: the host's
     /// own rule about who gives what, which the package knows nothing of.
     /// </summary>
     public const string LongerThanHeld = "folders.longer-than-held";

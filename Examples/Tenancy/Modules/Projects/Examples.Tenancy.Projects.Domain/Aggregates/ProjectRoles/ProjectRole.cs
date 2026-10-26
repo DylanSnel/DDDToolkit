@@ -7,7 +7,7 @@ using Examples.Tenancy.Projects.Domain.Aggregates.Projects;
 namespace Examples.Tenancy.Projects.Domain.Aggregates.ProjectRoles;
 
 /// <summary>
-/// A role a tenant gives on a project's crew: a name, what it is for, and the keys it gives on the one project it
+/// A role a tenant gives on a project's crew: a name, what it is for, and the permissions it gives on the one project it
 /// is held on. An aggregate of its own, beside the project, made by the tenant and kept by this module.
 /// </summary>
 /// <remarks>
@@ -15,10 +15,10 @@ namespace Examples.Tenancy.Projects.Domain.Aggregates.ProjectRoles;
 /// Tenancy's: given at a unit, it counts for every project there and below. A project role is this one: given on
 /// one project's crew, it counts there and nowhere else. A tenant starts with the starter roles the application
 /// declares (a crew lead's, a surveyor's, an observer's), made once when the tenant is set up, and makes, renames,
-/// re-keys and archives its own from then on.
+/// archives and gives other permissions to its own from then on.
 /// <para>
 /// Declared with the Membership package's role template, which keeps what a role is: its name and description,
-/// its keys, chosen from what the rules let a crew role give, whether it is archived, and which starter role it
+/// its permissions, chosen from what the rules let a crew role give, whether it is archived, and which starter role it
 /// was made from, so a starter role is made once whatever the tenant has called it since. The tenant is this
 /// application's column, set here and kept to by Tenancy's own rule, like every row of a tenant. The rules are
 /// handed in, never kept: a role is a row, and the rules are the module's one declaration of what a crew role may
@@ -38,10 +38,10 @@ public sealed partial class ProjectRole
     /// </summary>
     /// <param name="id">Its id.</param>
     /// <param name="tenantId">The tenant it is a role of, for good.</param>
-    /// <param name="draft">Its name, what it is for, its keys, and the starter role it is made from, if any.</param>
-    /// <param name="rules">The rules of the projects' crews, which the keys are held to.</param>
+    /// <param name="draft">Its name, what it is for, its permissions, and the starter role it is made from, if any.</param>
+    /// <param name="rules">The rules of the projects' crews, which the permissions are held to.</param>
     /// <exception cref="Exceptions.RefusalException">
-    /// <c>projects.role-name-invalid</c>, naming the field; <c>projects.key-not-for-members</c>, naming the keys
+    /// <c>projects.role-name-invalid</c>, naming the field; <c>projects.permission-not-for-members</c>, naming the permissions
     /// no crew role may give.
     /// </exception>
     public ProjectRole(ProjectRoleId id, TenantId tenantId, CustomRoleDraft draft, MembershipRules rules) : base(id, draft, rules)
@@ -67,16 +67,16 @@ public sealed partial class ProjectRole
     }
 
     /// <summary>
-    /// Has the role give these keys from now on, on every crew it is held on. The same keys again change nothing.
+    /// Has the role give these permissions from now on, on every crew it is held on. The same permissions again change nothing.
     /// </summary>
-    /// <param name="keys">Every key it is to give.</param>
+    /// <param name="permissions">Every permission it is to give.</param>
     /// <param name="rules">The rules of the projects' crews, which say what a crew role may give.</param>
-    /// <exception cref="Exceptions.RefusalException"><c>projects.role-archived</c>, <c>projects.key-not-for-members</c>.</exception>
-    public void SetRoleKeys(IReadOnlyCollection<string> keys, MembershipRules rules)
+    /// <exception cref="Exceptions.RefusalException"><c>projects.role-archived</c>, <c>projects.permission-not-for-members</c>.</exception>
+    public void SetRolePermissions(IReadOnlyCollection<string> permissions, MembershipRules rules)
     {
-        if (SetKeys(keys, rules).Changed)
+        if (SetPermissions(permissions, rules).Changed)
         {
-            RaiseDomainEvent(new ProjectRoleKeysChanged(Id));
+            RaiseDomainEvent(new ProjectRolePermissionsChanged(Id));
         }
     }
 

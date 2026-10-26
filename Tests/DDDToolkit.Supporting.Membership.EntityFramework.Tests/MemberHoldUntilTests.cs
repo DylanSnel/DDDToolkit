@@ -1,7 +1,7 @@
 namespace DDDToolkit.Supporting.Membership.EntityFramework.Tests;
 
 /// <summary>
-/// A hold says until when the caller holds the key on the resource: the first moment it no longer does, as its
+/// A hold says until when the caller holds the permission on the resource: the first moment it no longer does, as its
 /// membership and its roles stand now, and nothing when that is never. The package refuses nobody by it; it is
 /// what a host's own rule about giving reads. Read from the database in the one statement that reads the hold.
 /// </summary>
@@ -15,17 +15,17 @@ public sealed class MemberHoldUntilTests
         using var filing = await SqliteFiling.SeededAsync();
         var data = filing.Scenario;
 
-        // The owner, for every key of the resource: it holds no role, and nothing it holds by owning ends.
-        foreach (var key in DocumentMembership.Rules.Permissions.Select(permission => permission.Key))
+        // The owner, for every permission of the resource: it holds no role, and nothing it holds by owning ends.
+        foreach (var permission in DocumentMembership.Rules.Permissions.Select(permission => permission.Name))
         {
-            var held = await filing.DocumentsAsync(TestCallers.User(data.Ada), access => access.HoldAsync(data.Minutes, key, Cancellation));
-            (held!.Via, held.Until).Should().Be((MemberVia.Members, null), "Ada owns the minutes, and holds " + key + " by owning them");
+            var held = await filing.DocumentsAsync(TestCallers.User(data.Ada), access => access.HoldAsync(data.Minutes, permission, Cancellation));
+            (held!.Via, held.Until).Should().Be((MemberVia.Members, null), "Ada owns the minutes, and holds " + permission + " by owning them");
         }
 
-        // A keeper, for the keys no role gives as for the others.
-        foreach (var key in FolderMembership.Rules.Permissions.Select(permission => permission.Key))
+        // A keeper, for the permissions no role gives as for the others.
+        foreach (var permission in FolderMembership.Rules.Permissions.Select(permission => permission.Name))
         {
-            (await filing.FoldersAsync(TestCallers.Staff(data.Keeper), access => access.HoldAsync(data.Cabinet, key, Cancellation)))!.Until.Should().BeNull();
+            (await filing.FoldersAsync(TestCallers.Staff(data.Keeper), access => access.HoldAsync(data.Cabinet, permission, Cancellation)))!.Until.Should().BeNull();
         }
 
         // The application's own work.
@@ -34,7 +34,7 @@ public sealed class MemberHoldUntilTests
     }
 
     [Fact]
-    public async Task A_key_that_being_a_member_gives_is_held_until_the_membership_ends()
+    public async Task A_permission_that_being_a_member_gives_is_held_until_the_membership_ends()
     {
         using var filing = await SqliteFiling.SeededAsync();
         var data = filing.Scenario;
@@ -48,14 +48,14 @@ public sealed class MemberHoldUntilTests
     }
 
     [Fact]
-    public async Task A_key_a_role_gives_is_held_until_the_role_ends_or_its_membership_if_that_ends_sooner()
+    public async Task A_permission_a_role_gives_is_held_until_the_role_ends_or_its_membership_if_that_ends_sooner()
     {
         using var filing = await SqliteFiling.SeededAsync();
         var data = filing.Scenario;
         var now = data.Now;
 
-        Task<MemberHold<DocumentId>?> AskAsync(UserId user, string key)
-            => filing.DocumentsAsync(TestCallers.User(user), access => access.HoldAsync(data.Minutes, key, Cancellation));
+        Task<MemberHold<DocumentId>?> AskAsync(UserId user, string permission)
+            => filing.DocumentsAsync(TestCallers.User(user), access => access.HoldAsync(data.Minutes, permission, Cancellation));
 
         // A role with no end in a membership with no end: no end.
         (await AskAsync(data.Ben, DocumentPermissions.Edit))!.Until.Should().BeNull();
@@ -78,19 +78,19 @@ public sealed class MemberHoldUntilTests
         await filing.Services.ChangeAsync(data.Minutes, document => document.GiveRole(data.Hal, DocumentMembership.Manager, MemberPeriod.Between(now, now.AddDays(10)), now, by: data.Ada));
         (await AskAsync(data.Hal, DocumentPermissions.Share))!.Until.Should().Be(now.AddDays(3));
 
-        // A key that is not held has no end to name.
+        // A permission that is not held has no end to name.
         var cy = await AskAsync(data.Cy, DocumentPermissions.Edit);
         (cy!.Via, cy.Until).Should().Be(((MemberVia?)null, (DateTimeOffset?)null));
     }
 
     [Fact]
-    public async Task Of_several_roles_that_give_the_key_now_the_last_to_end_counts_and_one_that_starts_later_does_not_yet()
+    public async Task Of_several_roles_that_give_the_permission_now_the_last_to_end_counts_and_one_that_starts_later_does_not_yet()
     {
         using var filing = await SqliteFiling.SeededAsync();
         var data = filing.Scenario;
         var now = data.Now;
 
-        // Dee contributes for two hours, and holds the manager's role, which gives the same key, from the next hour until the ninth.
+        // Dee contributes for two hours, and holds the manager's role, which gives the same permission, from the next hour until the ninth.
         await filing.Services.ChangeAsync(data.Minutes, document =>
         {
             document.GiveRole(data.Dee, DocumentMembership.Contributor, MemberPeriod.Between(now, now.AddHours(2)), now, by: data.Ada);
@@ -103,7 +103,7 @@ public sealed class MemberHoldUntilTests
         (await AskAsync())!.Until.Should().Be(now.AddHours(2), "the second role has not started, so it gives nothing now and lengthens nothing");
 
         filing.Clock.Advance(TimeSpan.FromHours(1));
-        (await AskAsync())!.Until.Should().Be(now.AddHours(9), "both give the key now, and the last to end is when she stops holding it");
+        (await AskAsync())!.Until.Should().Be(now.AddHours(9), "both give the permission now, and the last to end is when she stops holding it");
 
         filing.Clock.Advance(TimeSpan.FromHours(1));
         (await AskAsync())!.Until.Should().Be(now.AddHours(9), "the first role is over, at the very moment it ends");
@@ -144,25 +144,25 @@ public sealed class MemberHoldUntilTests
 
             foreach (var user in data.Users)
             {
-                foreach (var key in FilingScenario.DocumentKeysAsked)
+                foreach (var permission in FilingScenario.DocumentPermissionsAsked)
                 {
-                    var held = await filing.DocumentsAsync(TestCallers.User(user), access => access.HoldAsync(data.Minutes, key, Cancellation));
-                    var expected = Read(minutes, user, key, filing.Clock.Now);
+                    var held = await filing.DocumentsAsync(TestCallers.User(user), access => access.HoldAsync(data.Minutes, permission, Cancellation));
+                    var expected = Read(minutes, user, permission, filing.Clock.Now);
 
-                    (held?.Via is not null, held?.Until).Should().Be(expected, "of " + user + " and " + key + " at " + filing.Clock.Now.ToString("O"));
+                    (held?.Via is not null, held?.Until).Should().Be(expected, "of " + user + " and " + permission + " at " + filing.Clock.Now.ToString("O"));
                 }
             }
         }
     }
 
     /// <summary>
-    /// Whether a user holds a key on a document, and until when, worked out from the aggregate in memory the way
+    /// Whether a user holds a permission on a document, and until when, worked out from the aggregate in memory the way
     /// a reader of the rules would: what every storage has to agree with.
     /// </summary>
-    private static (bool Held, DateTimeOffset? Until) Read(Document document, UserId user, string key, DateTimeOffset now)
+    private static (bool Held, DateTimeOffset? Until) Read(Document document, UserId user, string permission, DateTimeOffset now)
     {
         var rules = DocumentMembership.Rules;
-        if (rules.OwnerHolds(key) && document.OwnerId == user)
+        if (rules.OwnerHolds(permission) && document.OwnerId == user)
         {
             return (true, null);
         }
@@ -172,12 +172,12 @@ public sealed class MemberHoldUntilTests
             return (false, null);
         }
 
-        if (rules.MembershipGives(key))
+        if (rules.MembershipGives(permission))
         {
             return (true, share.EndsAt);
         }
 
-        var giving = share.Roles.Where(held => held.AppliesAt(now) && rules.RolesWith(key).Contains(held.RoleId)).ToList();
+        var giving = share.Roles.Where(held => held.AppliesAt(now) && rules.RolesWith(permission).Contains(held.RoleId)).ToList();
         if (giving.Count == 0)
         {
             return (false, null);

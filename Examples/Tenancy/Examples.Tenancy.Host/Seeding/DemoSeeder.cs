@@ -29,7 +29,7 @@ namespace Examples.Tenancy.Host.Seeding;
 /// <para>
 /// Nothing here writes a row by hand, and nothing here names a context: the host knows no module's storage.
 /// Provisioning is system work outside any tenant, the only thing such work may do; everything after it is
-/// system work inside the tenant, acting for its first administrator, which holds every key there and nothing
+/// system work inside the tenant, acting for its first administrator, which holds every permission there and nothing
 /// anywhere else. Each command is a unit of work of its own, in a scope of its own, as it would be in a request.
 /// Within a tenant the first step is setting it up, which a tenant made at any time goes through as well: the
 /// starter project roles its crews begin with. Then units, seats, placements, grants, state changes, and then

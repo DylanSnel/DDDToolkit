@@ -33,7 +33,7 @@ public sealed class AdministrationSchemaScenarios(SampleHosts sample) : IClassFi
     [Fact]
     public async Task Maud_reads_rheas_roles_at_the_administrations_endpoint_and_her_route_answers_the_same()
     {
-        // Maud is harbor's second access admin, who holds every key of Tenancy at the root.
+        // Maud is harbor's second access admin, who holds every permission of Tenancy at the root.
         using var maud = await sample.ClientAsync("maud", Harbor.Slug);
 
         var grant = (await maud.AdministrationDataAsync(Grants, new { seat = Rhea })).GetProperty("seatGrants")
@@ -50,7 +50,7 @@ public sealed class AdministrationSchemaScenarios(SampleHosts sample) : IClassFi
     }
 
     [Fact]
-    public async Task Leo_whose_seat_holds_no_key_gets_nothing_from_the_administrations_field()
+    public async Task Leo_whose_seat_holds_no_permission_gets_nothing_from_the_administrations_field()
     {
         // Leo has a seat, so the endpoint lets him ask; the request refuses him before anything is read.
         using var leo = await sample.ClientAsync("leo", Harbor.Slug);
@@ -76,7 +76,7 @@ public sealed class AdministrationSchemaScenarios(SampleHosts sample) : IClassFi
     [Fact]
     public async Task Rhea_reads_the_roles_held_at_a_unit_of_her_region_when_she_asks_at_it()
     {
-        // The request computes what it requires: asked at a unit, the seats key there or above it, which she holds at
+        // The request computes what it requires: asked at a unit, the seats permission there or above it, which she holds at
         // North. So she reads Vic's role at North Inland, below North, and is refused for every unit, at the root and at
         // South, beside North.
         using var rhea = await sample.ClientAsync("rhea", Harbor.Slug);
@@ -105,7 +105,7 @@ public sealed class AdministrationSchemaScenarios(SampleHosts sample) : IClassFi
     [Fact]
     public async Task A_seat_of_another_tenant_is_not_found_at_the_field_or_on_the_route()
     {
-        // Tove is meadow's administrator, with the key for the whole of meadow: her own seat there has her role.
+        // Tove is meadow's administrator, with the permission for the whole of meadow: her own seat there has her role.
         var toveInMeadow = DemoData.Meadow.SeatOf(DemoPeople.Tove).Value;
         using var tove = await sample.ClientAsync("tove", DemoData.Meadow.Slug);
         (await tove.AdministrationDataAsync(Grants, new { seat = toveInMeadow })).GetProperty("seatGrants")
@@ -120,7 +120,7 @@ public sealed class AdministrationSchemaScenarios(SampleHosts sample) : IClassFi
             await response.ShouldBeRefusedAsync(HttpStatusCode.NotFound, TenancyRefusals.SeatNotFound);
         }
 
-        // And the other way: Maud holds every key of harbor, and reads nothing of Tove's seat in meadow.
+        // And the other way: Maud holds every permission of harbor, and reads nothing of Tove's seat in meadow.
         using var maud = await sample.ClientAsync("maud", Harbor.Slug);
         var refused = await maud.GraphQLAsync(SampleGraphQLCalls.Administration, Grants, new { seat = toveInMeadow });
         refused.SingleError().Code().Should().Be(TenancyRefusals.SeatNotFound);
@@ -135,7 +135,7 @@ public sealed class AdministrationSchemaScenarios(SampleHosts sample) : IClassFi
     public async Task Past_the_mediator_the_storage_asks_again_as_the_caller_and_leo_reads_nothing()
     {
         // The request's access check is the mediator's step. Called without it, as Leo, the handler still asks the
-        // package's directory as his seat, which asks no key and reads under the policies: they give him the seat and
+        // package's directory as his seat, which asks no permission and reads under the policies: they give him the seat and
         // where it is placed, and nobody's roles but his own.
         var host = await sample.SharedAsync();
         using (SampleCallers.BeginSeatOf(DemoPeople.Leo, Harbor))
@@ -159,9 +159,9 @@ public sealed class AdministrationSchemaScenarios(SampleHosts sample) : IClassFi
     [Fact]
     public async Task Past_the_mediator_rhea_reads_the_roles_in_her_region_and_none_above_it()
     {
-        // Rhea manages seats, grants and units at North, and the request refuses her (above), since it asks the seats key
+        // Rhea manages seats, grants and units at North, and the request refuses her (above), since it asks the seats permission
         // for the whole tenant. Called without it, the directory reads as her seat, and the policy on the grants draws a
-        // line of its own, wider than the request's, a key reading only where it applies: Vic's role at North Inland,
+        // line of its own, wider than the request's, a permission reading only where it applies: Vic's role at North Inland,
         // below North, and nothing of Maud's at the root, or Seth's at South Bay.
         var host = await sample.SharedAsync();
         using (SampleCallers.BeginSeatOf(DemoPeople.Rhea, Harbor))
@@ -175,13 +175,13 @@ public sealed class AdministrationSchemaScenarios(SampleHosts sample) : IClassFi
             (await handler.Handle(new SeatGrants(Harbor.SeatOf(DemoPeople.Maud)), Cancellation)).Should().BeEmpty("Maud's role is held at the root, above North");
             (await handler.Handle(new SeatGrants(Harbor.SeatOf(DemoPeople.Seth)), Cancellation)).Should().BeEmpty("Seth's is at South Bay, beside it");
 
-            // The package's overview the handler selects from: Maud holds every key of Tenancy at the root, and what
+            // The package's overview the handler selects from: Maud holds every permission of Tenancy at the root, and what
             // Rhea reads of her holds none, since the grant that gives them is above North. Her own is whole.
             var maud = await reads.AskDirectoryAsync(directory => directory.SeatOverviewAsync(Harbor.SeatOf(DemoPeople.Maud), Cancellation));
             maud.Units.Should().ContainSingle().Which.Id.Should().Be(Harbor.Root, "where a seat is placed every member reads");
-            maud.Keys.Should().BeEmpty();
+            maud.Permissions.Should().BeEmpty();
             var own = await reads.AskDirectoryAsync(directory => directory.SeatOverviewAsync(Harbor.SeatOf(DemoPeople.Rhea), Cancellation));
-            own.Keys.Select(key => key.Key).Should().Contain(SeatGrants.RequiredKey);
+            own.Permissions.Select(permission => permission.Permission).Should().Contain(SeatGrants.RequiredPermission);
         }
     }
 

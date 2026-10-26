@@ -7,7 +7,7 @@ namespace DDDToolkit.Access;
 /// permission is for, which permissions come with it, and whether it is retired.
 /// </summary>
 /// <remarks>
-/// A permission carries at least one level. Tenancy's two may stand together, for a key asked for the whole tenant
+/// A permission carries at least one level. Tenancy's two may stand together, for a permission asked for the whole tenant
 /// and at a unit alike; a permission on a resource is asked there and nowhere else. The settings are read off the
 /// first level that says them, so say each once.
 /// </remarks>
@@ -19,15 +19,15 @@ public abstract class PermissionLevelAttribute : Attribute
     /// shows as well, so a permission is described once.
     /// <para>
     /// It is the English text, and the fallback: a reader in another language gets what the application's
-    /// translations hold under the permission's key, in a resx it adds to its failure localizer, as refusal texts
-    /// are translated (<c>IFailureLocalizer.Text(key, description)</c>). A permission without either has an empty
+    /// translations hold under the permission's name, in a resx it adds to its failure localizer, as refusal texts
+    /// are translated (<c>IFailureLocalizer.Text(permission, description)</c>). A permission without either has an empty
     /// description in the catalogue.
     /// </para>
     /// </summary>
     public string? Description { get; set; }
 
     /// <summary>
-    /// The permissions that come with this one, such as the key that sees a board with the key that edits it: a role
+    /// The permissions that come with this one, such as the permission that sees a board with the permission that edits it: a role
     /// that holds this one holds those as well, wherever it holds this. One hop only: a permission another implies
     /// implies nothing itself. Empty unless said.
     /// <para>

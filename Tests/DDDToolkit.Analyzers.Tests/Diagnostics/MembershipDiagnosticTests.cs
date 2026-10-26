@@ -8,7 +8,7 @@ namespace DDDToolkit.Analyzers.Tests.Diagnostics;
 /// What is said of a resource with members and of the permissions on it, where it is declared: the name a resource is
 /// given (DDD00091, and the plural it is named by), a permission of a <c>[Permissions]</c> class (DDD00092), the level
 /// <c>[On&lt;TResource&gt;]</c> and its settings (DDD00093), rules made for a resource nothing is declared on (DDD00094),
-/// <c>[OrOwn]</c> beside a key the owner holds already (DDD00096), <c>[At]</c> (DDD00097), and rules that reach from
+/// <c>[OrOwn]</c> beside a permission the owner holds already (DDD00096), <c>[At]</c> (DDD00097), and rules that reach from
 /// above a resource that marks no place (DDD00098).
 /// </summary>
 public class MembershipDiagnosticTests
@@ -65,7 +65,7 @@ public class MembershipDiagnosticTests
         string view = "[On<Board>(EveryMember = true)]",
         string edit = "[On<Board>]",
         string handOn = "[On<Board>(Owner = false, InRoles = false)]",
-        string handOnKey = "boards.hand-on",
+        string handOnPermission = "boards.hand-on",
         string modifiers = "public static",
         string extra = "")
         => $$"""
@@ -87,7 +87,7 @@ public class MembershipDiagnosticTests
 
                  /// <summary>Hand a board on.</summary>
                  {{handOn}}
-                 public const string HandOn = "{{handOnKey}}";
+                 public const string HandOn = "{{handOnPermission}}";
 
              {{extra}}
              }
@@ -189,7 +189,7 @@ public class MembershipDiagnosticTests
 
             namespace Shop;
 
-            public static class BoardKeys
+            public static class MoreBoardPermissions
             {
                 [On<Board>]
                 public const string Pin = "boards.pin";
@@ -199,14 +199,14 @@ public class MembershipDiagnosticTests
         Message(result, "DDD00092", "Comment").Should().Contain("is a permission without a level");
         var levels = result.ReportedDiagnostics.Where(diagnostic => diagnostic.Id == "DDD00092").Select(diagnostic => diagnostic.GetMessage(CultureInfo.InvariantCulture)).ToList();
         levels.Should().Contain(message => message.Contains("is no public const string"));
-        levels.Should().Contain(message => message.Contains("'BoardKeys' is not marked [Permissions]"));
+        levels.Should().Contain(message => message.Contains("'MoreBoardPermissions' is not marked [Permissions]"));
         levels.Should().HaveCount(3);
     }
 
     [Fact]
-    public void A_key_declared_twice_in_one_class_is_DDD00092_on_the_second()
+    public void A_permission_declared_twice_in_one_class_is_DDD00092_on_the_second()
     {
-        var result = Run(Board(), PermissionsWith(handOnKey: "boards.edit"));
+        var result = Run(Board(), PermissionsWith(handOnPermission: "boards.edit"));
 
         Message(result, "DDD00092", "HandOn").Should().Contain("declares 'boards.edit', which 'Edit' declares already");
     }
@@ -248,7 +248,7 @@ public class MembershipDiagnosticTests
     [InlineData("EveryMember", "View")]
     [InlineData("LocksMembers", "Edit")]
     [InlineData("LocksOwner", "Edit")]
-    public void A_second_permission_with_a_setting_that_names_the_one_key_is_DDD00093(string setting, string first)
+    public void A_second_permission_with_a_setting_that_names_the_one_permission_is_DDD00093(string setting, string first)
     {
         var second = "On<Board>(Owner = false, InRoles = false, " + setting + " = true)";
         var result = Run(
@@ -341,7 +341,7 @@ public class MembershipDiagnosticTests
 
     // ------------------------------------------------------------------ DDD00096: [OrOwn] beside what the owner holds
 
-    private static string Request(string key)
+    private static string Request(string permission)
         => $$"""
              using DDDToolkit.Abstractions.Attributes;
              using DDDToolkit.Access;
@@ -352,12 +352,12 @@ public class MembershipDiagnosticTests
              [AccessRequests]
              public partial interface IBoardsRequest : IRequireAccess;
 
-             [RequiresKey({{key}})]
+             [RequiresPermission({{permission}})]
              public sealed record RenameBoard([OnResource, OrOwn] BoardId Board, string Name) : IBoardsRequest;
              """;
 
     [Fact]
-    public void OrOwn_on_a_resource_beside_a_key_its_owner_holds_is_DDD00096()
+    public void OrOwn_on_a_resource_beside_a_permission_its_owner_holds_is_DDD00096()
     {
         var result = Run(Board(), Permissions, Request("BoardPermissions.Edit"));
 
@@ -366,7 +366,7 @@ public class MembershipDiagnosticTests
     }
 
     [Fact]
-    public void OrOwn_on_a_resource_beside_a_key_its_owner_does_not_hold_is_no_diagnostic()
+    public void OrOwn_on_a_resource_beside_a_permission_its_owner_does_not_hold_is_no_diagnostic()
     {
         Run(Board(), Permissions, Request("BoardPermissions.HandOn")).ShouldNotHaveDiagnostic("DDD00096");
     }

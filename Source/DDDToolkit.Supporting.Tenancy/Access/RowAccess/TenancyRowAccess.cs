@@ -9,7 +9,7 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// roles Tenancy keeps without referencing anything of a database:
 /// <code>
 /// [RowAccess&lt;Report&gt;(RowOperations.Read, To = [RowAccessRoles.User])]
-/// public static partial class ReportsAreReadWhereTheKeyIsHeld
+/// public static partial class ReportsAreReadWhereThePermissionIsHeld
 /// {
 ///     public static bool Allows(Report report, Caller caller)
 ///         =&gt; TenancyRowAccess.UnitsWhereIHold&lt;OrganizationUnitId&gt;("reports.read").Contains(report.UnitId);
@@ -34,8 +34,8 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// The same questions say who reads Tenancy's own seats and invitations, where the application replaces Tenancy's
 /// default with a read rule on its class: <c>seat.TenantId == CallerTenant&lt;TenantId&gt;()</c> for the caller's
 /// tenant, <c>seat.Id == CallerSeat&lt;SeatId&gt;()</c> for the caller itself,
-/// <c>UnitsWhereIHold&lt;OrganizationUnitId&gt;(key).Contains(invitation.UnitId)</c> for where it holds a key,
-/// <see cref="HoldsKey"/> and <see cref="HoldsAtTenant"/>, and <see cref="SeatsInMyUnits{TSeatId}"/> for the
+/// <c>UnitsWhereIHold&lt;OrganizationUnitId&gt;(permission).Contains(invitation.UnitId)</c> for where it holds a permission,
+/// <see cref="HoldsPermission"/> and <see cref="HoldsAtTenant"/>, and <see cref="SeatsInMyUnits{TSeatId}"/> for the
 /// seats placed where it is placed, or below.
 /// </para>
 /// <para>
@@ -51,18 +51,18 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 public static partial class TenancyRowAccess
 {
     /// <summary>
-    /// The owner the functions are named relative to: <c>tenancy/units_where_i_hold</c>, whatever schema the
+    /// The owner the functions are named relative to: <c>tenancy/units_where_i_hold_permission</c>, whatever schema the
     /// application gives Tenancy's tables.
     /// </summary>
     public const string Owner = "tenancy";
 
     /// <summary>
-    /// Every unit where the calling seat holds <paramref name="key"/> now: the units it is held at, and every unit
+    /// Every unit where the calling seat holds <paramref name="permission"/> now: the units it is held at, and every unit
     /// below them. As <see cref="ITenancyQuestions{TTenantId, TSeatId, TUnitId, TRoleId}.UnitsWhereIHold"/>.
     /// </summary>
-    /// <param name="key">A key of the catalogue.</param>
-    [AccessSet("units_where_i_hold")]
-    public static partial AccessSet<TUnitId> UnitsWhereIHold<TUnitId>(string key)
+    /// <param name="permission">A permission of the catalogue.</param>
+    [AccessSet("units_where_i_hold_permission")]
+    public static partial AccessSet<TUnitId> UnitsWhereIHold<TUnitId>(string permission)
         where TUnitId : struct, IEntityId, IEquatable<TUnitId>;
 
     /// <summary>
@@ -92,12 +92,12 @@ public static partial class TenancyRowAccess
         where TSeatId : struct, IEntityId, IEquatable<TSeatId>;
 
     /// <summary>
-    /// The active roles of the caller's tenant that grant <paramref name="key"/>. As
-    /// <see cref="ITenancyQuestions{TTenantId, TSeatId, TUnitId, TRoleId}.RolesWithKey"/>.
+    /// The active roles of the caller's tenant that grant <paramref name="permission"/>. As
+    /// <see cref="ITenancyQuestions{TTenantId, TSeatId, TUnitId, TRoleId}.RolesWithPermission"/>.
     /// </summary>
-    /// <param name="key">A key of the catalogue.</param>
-    [AccessSet("roles_with_key")]
-    public static partial AccessSet<TRoleId> RolesWithKey<TRoleId>(string key)
+    /// <param name="permission">A permission of the catalogue.</param>
+    [AccessSet("roles_with_permission")]
+    public static partial AccessSet<TRoleId> RolesWithPermission<TRoleId>(string permission)
         where TRoleId : struct, IEntityId, IEquatable<TRoleId>;
 
     /// <summary>
@@ -113,18 +113,18 @@ public static partial class TenancyRowAccess
     public static partial TTenantId CallerTenant<TTenantId>()
         where TTenantId : struct, IEntityId, IEquatable<TTenantId>;
 
-    /// <summary>Whether the calling seat holds <paramref name="key"/> now, at any unit.</summary>
-    /// <param name="key">A key of the catalogue.</param>
-    [AccessScalar("holds_key")]
-    public static partial bool HoldsKey(string key);
+    /// <summary>Whether the calling seat holds <paramref name="permission"/> now, at any unit.</summary>
+    /// <param name="permission">A permission of the catalogue.</param>
+    [AccessScalar("holds_permission")]
+    public static partial bool HoldsPermission(string permission);
 
     /// <summary>
-    /// Whether the calling seat holds <paramref name="key"/> now for the whole tenant: at its root. As
+    /// Whether the calling seat holds <paramref name="permission"/> now for the whole tenant: at its root. As
     /// <see cref="ITenancyQuestions{TTenantId, TSeatId, TUnitId, TRoleId}.HoldsAtTenantAsync"/>.
     /// </summary>
-    /// <param name="key">A key of the catalogue.</param>
-    [AccessScalar("holds_tenant_wide")]
-    public static partial bool HoldsAtTenant(string key);
+    /// <param name="permission">A permission of the catalogue.</param>
+    [AccessScalar("holds_at_tenant")]
+    public static partial bool HoldsAtTenant(string permission);
 
     /// <summary>
     /// The seat the caller's verified identity has in <paramref name="tenant"/>, while that seat and the tenant
@@ -144,36 +144,36 @@ public static partial class TenancyRowAccess
         where TTenantId : struct, IEntityId, IEquatable<TTenantId>;
 
     /// <summary>
-    /// Whether the caller's seat in <paramref name="tenant"/> holds <paramref name="key"/> now, at any unit. As
-    /// <see cref="HoldsKey"/>, of a tenant given as an argument.
+    /// Whether the caller's seat in <paramref name="tenant"/> holds <paramref name="permission"/> now, at any unit. As
+    /// <see cref="HoldsPermission"/>, of a tenant given as an argument.
     /// </summary>
     /// <param name="tenant">The tenant asked about.</param>
-    /// <param name="key">A key of the catalogue.</param>
-    [AccessScalar("holds_key_in_tenant")]
-    public static partial bool HoldsKeyInTenant<TTenantId>(TTenantId tenant, string key)
+    /// <param name="permission">A permission of the catalogue.</param>
+    [AccessScalar("holds_permission_in_tenant")]
+    public static partial bool HoldsPermissionInTenant<TTenantId>(TTenantId tenant, string permission)
         where TTenantId : struct, IEntityId, IEquatable<TTenantId>;
 
     /// <summary>
-    /// Every unit where the caller's seat in <paramref name="tenant"/> holds <paramref name="key"/> now: the units
+    /// Every unit where the caller's seat in <paramref name="tenant"/> holds <paramref name="permission"/> now: the units
     /// it is held at, and every unit below them. As <see cref="UnitsWhereIHold{TUnitId}"/>, of a tenant given as
     /// an argument.
     /// </summary>
     /// <param name="tenant">The tenant asked about.</param>
-    /// <param name="key">A key of the catalogue.</param>
-    [AccessSet("units_where_i_hold_in_tenant")]
-    public static partial AccessSet<TUnitId> UnitsWhereIHoldInTenant<TUnitId, TTenantId>(TTenantId tenant, string key)
+    /// <param name="permission">A permission of the catalogue.</param>
+    [AccessSet("units_where_i_hold_permission_in_tenant")]
+    public static partial AccessSet<TUnitId> UnitsWhereIHoldInTenant<TUnitId, TTenantId>(TTenantId tenant, string permission)
         where TUnitId : struct, IEntityId, IEquatable<TUnitId>
         where TTenantId : struct, IEntityId, IEquatable<TTenantId>;
 
     /// <summary>
-    /// The active roles of <paramref name="tenant"/> that grant <paramref name="key"/>, answered only to a caller
+    /// The active roles of <paramref name="tenant"/> that grant <paramref name="permission"/>, answered only to a caller
     /// with an active seat there, so the roles of a tenant stay unknown to everyone outside it. As
-    /// <see cref="RolesWithKey{TRoleId}"/>, of a tenant given as an argument.
+    /// <see cref="RolesWithPermission{TRoleId}"/>, of a tenant given as an argument.
     /// </summary>
     /// <param name="tenant">The tenant asked about.</param>
-    /// <param name="key">A key of the catalogue.</param>
-    [AccessSet("roles_with_key_in_tenant")]
-    public static partial AccessSet<TRoleId> RolesWithKeyInTenant<TRoleId, TTenantId>(TTenantId tenant, string key)
+    /// <param name="permission">A permission of the catalogue.</param>
+    [AccessSet("roles_with_permission_in_tenant")]
+    public static partial AccessSet<TRoleId> RolesWithPermissionInTenant<TRoleId, TTenantId>(TTenantId tenant, string permission)
         where TRoleId : struct, IEntityId, IEquatable<TRoleId>
         where TTenantId : struct, IEntityId, IEquatable<TTenantId>;
 }

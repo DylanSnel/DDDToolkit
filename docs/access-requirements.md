@@ -3,7 +3,7 @@
 Three questions stand between a caller and a row of your database, and each is answered in one place of its own:
 
 - **Who may send the request.** Its requirement, which the request states and the module's checks hold the caller
-  to at the door, before the handler runs: anyone, a signed-in user, a key held for the whole tenant, at a unit or on
+  to at the door, before the handler runs: anyone, a signed-in user, a permission held for the whole tenant, at a unit or on
   the thing the request is about, the caller's own, or several of these at once. An attribute on the request, where a
   review reads it.
 - **With what rights the code runs.** The caller the work runs as: the person who sent the request, or system work,
@@ -55,7 +55,7 @@ handler runs. They are part of the core package, free of any dispatcher and of a
 | Type | What it is |
 |---|---|
 | `IRequireAccess` | What a request implements: one member, `RequiredAccess`. |
-| `[AllowAnonymous]`, `[SignedIn]`, `[RequiresKey(key)]`, `[OrOwn]`, `[OwnOnly]` with `[Own]` | The core's attributes a request states its requirement with; a package ships the rest of the vocabulary the same way. Stacked, they all hold. |
+| `[AllowAnonymous]`, `[SignedIn]`, `[RequiresPermission(permission)]`, `[OrOwn]`, `[OwnOnly]` with `[Own]` | The core's attributes a request states its requirement with; a package ships the rest of the vocabulary the same way. Stacked, they all hold. |
 | `AccessRequirement` | What `RequiredAccess` answers: a record that says what is required. The core spells the cases about who is calling, the caller's own, the owner of an aggregate, and what combines cases, `All` and `Any`; the others come from whoever can decide them. |
 | `ICallersOwn<TValue>` | Says what the caller's own value of a type is: the core's for a `Guid`, Tenancy's for its seat id, an application's for a kind of its own. |
 | `[Owner]`, `IAggregateOwners<TId>` | The property of an aggregate root that names its owner, a fact the domain states, and what reads it for a request about the owner's own: the Entity Framework package's, for every id. |
@@ -78,7 +78,7 @@ from another's: the checks are registered for it, so a request of billing is nev
 shipping. Mark it `[AccessRequests]` and declare it `partial`, so the toolkit's generator can write into it what its
 requests' attributes say.
 
-A request says what it requires with an attribute where the requirement reads no value of the request but a key and
+A request says what it requires with an attribute where the requirement reads no value of the request but a permission and
 an id it carries, which is nearly always. It answers `RequiredAccess` itself where the requirement is computed from
 its values, and for a case of your module's own, which no attribute stands for:
 
@@ -115,7 +115,7 @@ public sealed record CloseInvoice(InvoiceId Invoice) : IBillingRequest
 - **The member is implemented explicitly,** where a request answers it, so the requirement stands next to the
   request's own fields without becoming one of them: it is not serialized with the request and not part of its
   shape.
-- **A requirement says what is asked, never who may.** It carries a key and the ids the request names. The
+- **A requirement says what is asked, never who may.** It carries a permission and the ids the request names. The
   check reads the rest where it is kept. What a requirement cannot say, a rule about what is given to whom or
   about the state the request meets, stays in the handler, in plain sight, or in the use case of the package the
   handler calls.
@@ -157,7 +157,7 @@ not, since whatever asks the checks reads them.
 
 ### A module's default
 
-Nearly every request of a module that reads a tenant's data requires a seat in the tenant, `[InTenant]`, and a key
+Nearly every request of a module that reads a tenant's data requires a seat in the tenant, `[InTenant]`, and a permission
 a request requires already requires one, so `[InTenant]` stands alone on the requests any seat may send. A module
 like that says it once, on its interface: a requirement attribute there is the module's default, and a request of
 the module that states nothing of its own requires what the default says. The Tenancy sample's Projects module
@@ -169,7 +169,7 @@ public partial interface IBoardsRequest : IRequireAccess;
 
 public sealed record ListBoards : IBoardsRequest;                            // states nothing: takes the default
 
-[RequiresKey(BoardKeys.Archive)]                                             // states its own: the key, and only the key
+[RequiresPermission(BoardPermissions.Archive)]                                             // states its own: the permission, and only the permission
 public sealed record ArchiveBoard(BoardId Board) : IBoardsRequest;
 
 [SignedIn]                                                                   // its own too: a signed-in user, a seat or not
@@ -188,28 +188,28 @@ flowchart LR
 - **What a request states is all it requires.** A request that states its requirement, with an attribute, the
   property or the attributes of a request it derives from, keeps only its own: the default replaces nothing and
   stacks onto nothing. `MyInvitations` lets a signed-in user without a seat through, as it says, and `ArchiveBoard`
-  asks the key alone. Several attributes on the interface all hold, `AccessRequirement.All` in the order written, as
+  asks the permission alone. Several attributes on the interface all hold, `AccessRequirement.All` in the order written, as
   on a request.
 - **The switch shows what each request got.** A request that takes the default gets a line of its own with the
   default's call, `ListBoards => TenancyAccess.InTenant()`, so the generated file still reads as the list of the
   module's requests and what each requires. A request no line can name, one of another project or one with type
   parameters, takes the default in the last arm, which answers it where it would otherwise stop the request: that is
   what a module's default means.
-- **A default is one any request may take.** `[SignedIn]`, `[InTenant]`, `[RequiresKey(key)]`, whose key is held for
+- **A default is one any request may take.** `[SignedIn]`, `[InTenant]`, `[RequiresPermission(permission)]`, whose permission is held for
   the whole tenant, since a default reads no member of a request and so has no marker, and an attribute of your own
   whose class allows `AttributeTargets.Interface` in its `AttributeUsage`. Not `[AllowAnonymous]`: every request that
   forgot its own would let anyone in, and a forgotten requirement never opens a door. Not a requirement for queries
-  only, `[RequiresOperator]` or `[SeenWith<TResourceId>(key)]`: a command that says nothing would take it. Not
+  only, `[RequiresOperator]` or `[SeenWith<TResourceId>(permission)]`: a command that says nothing would take it. Not
   `[OwnOnly]`, which reads a member. Each is [DDD00089](diagnostics.md#ddd00089), and a default on an interface that
   is not `partial`, or on one that is not the module's, is [DDD00083](diagnostics.md#ddd00083).
 - **Said once is said once.** A request's own attributes that say what the default says, `[InTenant]` on `ListBoards`,
   add nothing: [DDD00084](diagnostics.md#ddd00084), a warning. On a request another derives from they are kept, since
   the request that derives from it holds to them beside its own.
 - **What it costs.** [DDD00077](diagnostics.md#ddd00077) no longer reports a request of the module that states
-  nothing, since it takes the default. So a command that forgets its `[RequiresKey]` lets every seat in the tenant
+  nothing, since it takes the default. So a command that forgets its `[RequiresPermission]` lets every seat in the tenant
   through, and the build says nothing of it. That is why the default is an opt-in you write, for a module whose
   requests nearly all require it, and why the generated switch shows per request what it got; a test that pins what
-  each request requires ([Holding it with a test](#holding-it-with-a-test)) finds the forgotten key where the build
+  each request requires ([Holding it with a test](#holding-it-with-a-test)) finds the forgotten permission where the build
   does not.
 
 <details>
@@ -245,14 +245,14 @@ stands for, and what a request that computes its requirement writes:
 | anyone, a caller who did not sign in too | `[AllowAnonymous]` | `AccessRequirement.AllowAnonymous()` | everyone: nobody is asked | |
 | a signed-in user, who need not hold anything yet | `[SignedIn]` | `AccessRequirement.SignedIn()` | a user who signed in, an anonymous sign-in of the identity provider too | `access.not-signed-in` |
 | a caller who works in the tenant | `[InTenant]`, of [Tenancy](tenancy.md#what-a-request-requires-of-its-caller) | `TenancyAccess.InTenant()` | a seat in the tenant the request was sent for, and system work there | the caller's own reason, such as `tenancy.not-seated` |
-| a key for the whole tenant | `[RequiresKey(key)]` | `TenancyAccess.AtTenant(key)` | whoever holds the key at the tenant's root now | `tenancy.not-permitted`, naming the key |
-| a key at a unit | `[RequiresKey(key)]`, `[AtUnit]` on the unit | `TenancyAccess.AtUnit(key, unit)` | whoever holds the key at that unit now, there or above it | `tenancy.not-permitted`, with the key and the unit |
-| a key on a resource | `[RequiresKey(key)]`, `[OnResource]` on the resource, `[ExpectedVersion]` on the version read, of [Membership](membership.md#a-document-and-the-people-it-is-shared-with) | `MemberAccess.On(key, resource, expectedVersion)` | whoever holds the key on it, through its members or from above | the resource's `not-found` or `not-permitted` |
-| a query that shows the resources a key is held on | `[SeenWith<TResourceId>(key)]`, of [Membership](membership.md#inside-your-own-statements) | `MemberAccess.SeenWith<TResourceId>(key)` | every caller who signed in, and system work: the query's own statement leaves out what the caller does not hold the key on | the caller's own reason where it is nobody; the resource's `not-permitted`, naming the key, for a caller who did not sign in |
+| a permission for the whole tenant | `[RequiresPermission(permission)]` | `TenancyAccess.AtTenant(permission)` | whoever holds the permission at the tenant's root now | `tenancy.not-permitted`, naming the permission |
+| a permission at a unit | `[RequiresPermission(permission)]`, `[AtUnit]` on the unit | `TenancyAccess.AtUnit(permission, unit)` | whoever holds the permission at that unit now, there or above it | `tenancy.not-permitted`, with the permission and the unit |
+| a permission on a resource | `[RequiresPermission(permission)]`, `[OnResource]` on the resource, `[ExpectedVersion]` on the version read, of [Membership](membership.md#a-document-and-the-people-it-is-shared-with) | `MemberAccess.On(permission, resource, expectedVersion)` | whoever holds the permission on it, through its members or from above | the resource's `not-found` or `not-permitted` |
+| a query that shows the resources a permission is held on | `[SeenWith<TResourceId>(permission)]`, of [Membership](membership.md#inside-your-own-statements) | `MemberAccess.SeenWith<TResourceId>(permission)` | every caller who signed in, and system work: the query's own statement leaves out what the caller does not hold the permission on | the caller's own reason where it is nobody; the resource's `not-permitted`, naming the permission, for a caller who did not sign in |
 | one of the application's operators, on a query | `[RequiresOperator]` | `TenancyAccess.RequiresOperator()` | a signed-in user with an [operator's token role](tenancy.md#operators) | `tenancy.operators-only` |
-| the caller's own, or a key | `[RequiresKey(key)]`, `[OrOwn]` on the member that names it | `AccessRequirement.Any(AccessRequirement.Own(seat), ...)` | the caller the member names, and whoever holds the key | one `access.refused`, with `access.not-own` and the key's reason |
+| the caller's own, or a permission | `[RequiresPermission(permission)]`, `[OrOwn]` on the member that names it | `AccessRequirement.Any(AccessRequirement.Own(seat), ...)` | the caller the member names, and whoever holds the permission | one `access.refused`, with `access.not-own` and the permission's reason |
 | the caller's own alone | `[OwnOnly]`, `[Own]` on the member that names it | `AccessRequirement.Own(seat)` | the caller the member names | `access.not-own` |
-| the owner of an aggregate, or a key | `[RequiresKey(key)]`, `[OrOwn]` on the aggregate's id, whose owner the aggregate marks `[Owner]` | `AccessRequirement.Any(AccessRequirement.OwnerOf(board), ...)` | the aggregate's owner, and whoever holds the key | one `access.refused`, with `access.not-own` or `access.not-found` and the key's reason |
+| the owner of an aggregate, or a permission | `[RequiresPermission(permission)]`, `[OrOwn]` on the aggregate's id, whose owner the aggregate marks `[Owner]` | `AccessRequirement.Any(AccessRequirement.OwnerOf(board), ...)` | the aggregate's owner, and whoever holds the permission | one `access.refused`, with `access.not-own` or `access.not-found` and the permission's reason |
 | the owner of an aggregate alone | `[OwnOnly]`, `[Own]` on the aggregate's id | `AccessRequirement.OwnerOf(board)` | the aggregate's owner | `access.not-own`; `access.not-found` for a row the caller does not see |
 | several of these, all of them | the attributes, stacked | `AccessRequirement.All(...)` | whoever meets every one | the first failing one's own reason |
 | one of several | | `AccessRequirement.Any(...)` | whoever meets one | one `access.refused`, with each one's reason |
@@ -275,57 +275,57 @@ caller, and one of `[AllowAnonymous]` included.
   is written.
 
 Each call is a method on the class of whoever decides it, so the requirements read alike side by side:
-`AccessRequirement.SignedIn()`, `TenancyAccess.InTenant()`, `MemberAccess.On(key, resource)`. A method rather
-than a constructor, so a case closed over your own id takes it from the argument: `TenancyAccess.AtUnit(key,
+`AccessRequirement.SignedIn()`, `TenancyAccess.InTenant()`, `MemberAccess.On(permission, resource)`. A method rather
+than a constructor, so a case closed over your own id takes it from the argument: `TenancyAccess.AtUnit(permission,
 unit)` is closed over your unit id without your writing it. And `AllowAnonymous()` and `SignedIn()` say who is let
 through rather than what is checked, as the name a reviewer looks for. What each attribute stands for is its
 package's to say, with an attribute of the core's on the attribute's class, `[StatesRequirement]` or
-`[KeyMarker]`: the generator knows none of them by name, and a module can declare one for a case of its own the
+`[PermissionMarker]`: the generator knows none of them by name, and a module can declare one for a case of its own the
 same way ([Writing your own supporting domain](writing-a-supporting-domain.md)).
 
-### Where the key is held
+### Where the permission is held
 
-`[RequiresKey(key)]` is one attribute, wherever the key is held. A marker on one of the request's members says
+`[RequiresPermission(permission)]` is one attribute, wherever the permission is held. A marker on one of the request's members says
 where: none for the whole tenant, `[AtUnit]` at that unit or above it, `[OnResource]` on that resource through its
 members, with `[ExpectedVersion]` beside it on the version the caller read, which the check compares only once the
 caller may act. A marker goes on a positional parameter of a record as it is, or on a property; `[property: AtUnit]`
 is read as well. Nothing is named by a string: no `nameof`, no member's name in an attribute.
 
 ```csharp
-[RequiresKey(BillingKeys.CloseTheBooks)]                                     // for the whole tenant
+[RequiresPermission(BillingPermissions.CloseTheBooks)]                                     // for the whole tenant
 public sealed record CloseTheBooks(int Year) : IBillingRequest;
 
-[RequiresKey(BillingKeys.OpenLedger)]                                        // at the unit, or above it
+[RequiresPermission(BillingPermissions.OpenLedger)]                                        // at the unit, or above it
 public sealed record OpenLedger(string Name, [AtUnit] OrganizationUnitId Unit) : IBillingRequest;
 
-[RequiresKey(DocumentKeys.Share)]                                            // on the document, through its members
+[RequiresPermission(DocumentPermissions.Share)]                                            // on the document, through its members
 public sealed record ShareDocument([OnResource] DocumentId Document, UserId With, [ExpectedVersion] long? ExpectedVersion = null) : IDocumentsRequest;
 
-[RequiresKey(BillingKeys.ArchiveLedger)]                                     // an ordinary property takes a marker too
+[RequiresPermission(BillingPermissions.ArchiveLedger)]                                     // an ordinary property takes a marker too
 public sealed class ArchiveLedger : IBillingRequest
 {
     [AtUnit] public required OrganizationUnitId Unit { get; init; }
 }
 ```
 
-The key is a constant, one of the catalogue's, as an attribute's argument is: a request may name its own constant,
-`[RequiresKey(RequiredKey)]` beside `public const string RequiredKey = ProjectKeys.Edit;`, where its handler or a
-list of abilities reads the same key.
+The permission is a constant, one of the catalogue's, as an attribute's argument is: a request may name its own constant,
+`[RequiresPermission(RequiredPermission)]` beside `public const string RequiredPermission = ProjectPermissionNames.Edit;`, where its handler or a
+list of abilities reads the same permission.
 
 ### What goes together
 
-Stacked requirement attributes all hold, and a marker says where for the key of the one `[RequiresKey]` a request
+Stacked requirement attributes all hold, and a marker says where for the permission of the one `[RequiresPermission]` a request
 carries. What does not go together is reported where it is written, as an error, since a request that reads as if it
 said what it requires and says something else is a door a review would take for closed; what says nothing more than
 its neighbour is a warning:
 
-| `[RequiresKey(key)]` with | no marker | `[AtUnit]` | `[OnResource]` | `[OnResource]` and `[ExpectedVersion]` |
+| `[RequiresPermission(permission)]` with | no marker | `[AtUnit]` | `[OnResource]` | `[OnResource]` and `[ExpectedVersion]` |
 |---|---|---|---|---|
-| is | `AtTenant(key)` | `AtUnit(key, unit)` | `On(key, resource)` | `On(key, resource, version)` |
-| and `[OrOwn]` on a member | `Any(Own(member), AtTenant(key))` | not: [DDD00085](diagnostics.md#ddd00085) | `Any(All(Own(member), Sees(key, resource)), On(key, resource))` | `Any(All(Own(member), Sees(key, resource, version)), On(key, resource, version))` |
+| is | `AtTenant(permission)` | `AtUnit(permission, unit)` | `On(permission, resource)` | `On(permission, resource, version)` |
+| and `[OrOwn]` on a member | `Any(Own(member), AtTenant(permission))` | not: [DDD00085](diagnostics.md#ddd00085) | `Any(All(Own(member), Sees(permission, resource)), On(permission, resource))` | `Any(All(Own(member), Sees(permission, resource, version)), On(permission, resource, version))` |
 
 Beside `[OnResource]` the caller's own way through is held to the resource too: the caller sees it, its version is
-compared, and what a save is held to is kept, as on the key's way ([Yours, or the key](#yours-or-the-key)). On the id
+compared, and what a save is held to is kept, as on the permission's way ([Yours, or the permission](#yours-or-the-permission)). On the id
 of an aggregate whose owner it marks `[Owner]`, `[OrOwn]` is the same with `OwnerOf(member)` in the place of
 `Own(member)` ([The owner of an aggregate](#the-owner-of-an-aggregate)).
 
@@ -333,45 +333,45 @@ of an aggregate whose owner it marks `[Owner]`, `[OrOwn]` is the same with `Owne
 |---|---|---|
 | `[AllowAnonymous]` | no other requirement attribute, on it or on a request it derives from, and not the property | [DDD00079](diagnostics.md#ddd00079), [DDD00078](diagnostics.md#ddd00078) |
 | any other requirement attribute | other requirement attributes, on it and on the requests it derives from, all of which hold; not the property | [DDD00078](diagnostics.md#ddd00078) |
-| `[InTenant]`, `[SignedIn]` | a neighbour that does not already require it: not a key of Tenancy's for `[InTenant]`, not `[RequiresOperator]` for `[SignedIn]`, not `[OwnOnly]` with `[Own]` on a member whose own requires it, not the same attribute on a request it derives from; and not alone what its module's default says, on a sealed request | [DDD00084](diagnostics.md#ddd00084), a warning |
-| `[RequiresKey]` | one per request, the requests it derives from counted | [DDD00080](diagnostics.md#ddd00080) |
-| `[AtUnit]` or `[OnResource]` | `[RequiresKey]`, one of the two, on a member of the id it marks that is never null | [DDD00080](diagnostics.md#ddd00080), [DDD00081](diagnostics.md#ddd00081) |
+| `[InTenant]`, `[SignedIn]` | a neighbour that does not already require it: not a permission of Tenancy's for `[InTenant]`, not `[RequiresOperator]` for `[SignedIn]`, not `[OwnOnly]` with `[Own]` on a member whose own requires it, not the same attribute on a request it derives from; and not alone what its module's default says, on a sealed request | [DDD00084](diagnostics.md#ddd00084), a warning |
+| `[RequiresPermission]` | one per request, the requests it derives from counted | [DDD00080](diagnostics.md#ddd00080) |
+| `[AtUnit]` or `[OnResource]` | `[RequiresPermission]`, one of the two, on a member of the id it marks that is never null | [DDD00080](diagnostics.md#ddd00080), [DDD00081](diagnostics.md#ddd00081) |
 | `[ExpectedVersion]` | `[OnResource]`, on a `long?` | [DDD00080](diagnostics.md#ddd00080), [DDD00081](diagnostics.md#ddd00081) |
-| `[RequiresKey]` without a marker | a package that says where such a key is held, Tenancy | [DDD00080](diagnostics.md#ddd00080) |
-| `[OrOwn]` | `[RequiresKey]`, without `[AtUnit]`, once, on a member that is never null, of a type with an own or the id of an aggregate whose owner is of one; not on the id of a resource with members beside a permission its owner holds | [DDD00085](diagnostics.md#ddd00085), [DDD00086](diagnostics.md#ddd00086), [DDD00088](diagnostics.md#ddd00088), [DDD00096](diagnostics.md#ddd00096), a warning |
+| `[RequiresPermission]` without a marker | a package that says where such a permission is held, Tenancy | [DDD00080](diagnostics.md#ddd00080) |
+| `[OrOwn]` | `[RequiresPermission]`, without `[AtUnit]`, once, on a member that is never null, of a type with an own or the id of an aggregate whose owner is of one; not on the id of a resource with members beside a permission its owner holds | [DDD00085](diagnostics.md#ddd00085), [DDD00086](diagnostics.md#ddd00086), [DDD00088](diagnostics.md#ddd00088), [DDD00096](diagnostics.md#ddd00096), a warning |
 | `[Own]` | `[OwnOnly]`, once, on a member that is never null, of a type with an own or the id of an aggregate whose owner is of one | [DDD00085](diagnostics.md#ddd00085), [DDD00086](diagnostics.md#ddd00086), [DDD00088](diagnostics.md#ddd00088) |
 | `[Owner]`, on an aggregate's property | the root itself, once, on a property of a type with an own, nullable or not | [DDD00087](diagnostics.md#ddd00087), [DDD00088](diagnostics.md#ddd00088) |
 | `[At]`, on an aggregate's property | the root itself, once, on an instance property that is never null: where it hangs, which the rules of a resource with members read where it is reached from above | [DDD00097](diagnostics.md#ddd00097), and [DDD00098](diagnostics.md#ddd00098) for rules that reach a class that marks none |
 | `[Permissions]`, on a class | a static class whose public constants each carry a level, `[AtTenant]`, `[AtUnit]` or `[On<TResource>]` | [DDD00092](diagnostics.md#ddd00092), [DDD00093](diagnostics.md#ddd00093) |
-| `[SeenWith<TResourceId>(key)]`, `[RequiresOperator]` | a query | [DDD00082](diagnostics.md#ddd00082) on a command or a plain request of Mediator's |
+| `[SeenWith<TResourceId>(permission)]`, `[RequiresOperator]` | a query | [DDD00082](diagnostics.md#ddd00082) on a command or a plain request of Mediator's |
 | any of them | one module interface of the same project, `[AccessRequests]` and `partial` | [DDD00083](diagnostics.md#ddd00083) |
 
 | On the module's interface | Goes with | Reported otherwise |
 |---|---|---|
-| `[SignedIn]`, `[InTenant]`, `[RequiresKey(key)]`, your own that allows an interface | `[AccessRequests]` and `partial`; each other, all of which hold; a key without a marker, held where a package says, Tenancy | [DDD00083](diagnostics.md#ddd00083), [DDD00080](diagnostics.md#ddd00080), [DDD00084](diagnostics.md#ddd00084) |
-| `[AllowAnonymous]`, `[RequiresOperator]`, `[SeenWith<TResourceId>(key)]`, `[OwnOnly]` | nothing: they are no default | [DDD00089](diagnostics.md#ddd00089) |
+| `[SignedIn]`, `[InTenant]`, `[RequiresPermission(permission)]`, your own that allows an interface | `[AccessRequests]` and `partial`; each other, all of which hold; a permission without a marker, held where a package says, Tenancy | [DDD00083](diagnostics.md#ddd00083), [DDD00080](diagnostics.md#ddd00080), [DDD00084](diagnostics.md#ddd00084) |
+| `[AllowAnonymous]`, `[RequiresOperator]`, `[SeenWith<TResourceId>(permission)]`, `[OwnOnly]` | nothing: they are no default | [DDD00089](diagnostics.md#ddd00089) |
 
-`[AllowAnonymous]` beside `[RequiresKey]` would open the door the key closes, whichever was meant. `[InTenant]`
-beside `[RequiresKey]` says nothing the key does not: only a seat in the tenant or system work there holds a key of
-Tenancy's. `[SignedIn]` beside `[RequiresKey]` does say more, since system work holds every key and is nobody's
+`[AllowAnonymous]` beside `[RequiresPermission]` would open the door the permission closes, whichever was meant. `[InTenant]`
+beside `[RequiresPermission]` says nothing the permission does not: only a seat in the tenant or system work there holds a permission of
+Tenancy's. `[SignedIn]` beside `[RequiresPermission]` does say more, since system work holds every permission and is nobody's
 sign-in, and is not reported. The caller's own says what it requires as well: only a signed-in user has a verified
 identity, so `[SignedIn]` beside `[OwnOnly]` with `[Own]` on a `Guid` is a warning, and only a seat in the tenant has a
-seat of its own there, so `[InTenant]` beside `[OwnOnly]` with `[Own]` on the seat id is one too. Beside a key with
-`[OrOwn]` only what both ways through require counts: `[InTenant]` beside a key of Tenancy's with `[OrOwn]` on the seat
-id says nothing more, and `[SignedIn]` there does, since system work holds the key.
+seat of its own there, so `[InTenant]` beside `[OwnOnly]` with `[Own]` on the seat id is one too. Beside a permission with
+`[OrOwn]` only what both ways through require counts: `[InTenant]` beside a permission of Tenancy's with `[OrOwn]` on the seat
+id says nothing more, and `[SignedIn]` there does, since system work holds the permission.
 
 ### A requirement computed from the request
 
 Where the request's values decide which requirement it is, no attribute can say it, and the request answers the
-property itself. The Tenancy sample's `SeatGrants` reads the roles a seat holds in every unit with the key for the
-whole tenant, and those at one unit with the key there:
+property itself. The Tenancy sample's `SeatGrants` reads the roles a seat holds in every unit with the permission for the
+whole tenant, and those at one unit with the permission there:
 
 ```csharp
 public sealed record ListLedgers(OrganizationUnitId? Unit) : IBillingRequest
 {
     AccessRequirement IRequireAccess.RequiredAccess => Unit is { } unit
-        ? TenancyAccess.AtUnit(BillingKeys.Read, unit)
-        : TenancyAccess.AtTenant(BillingKeys.Read);
+        ? TenancyAccess.AtUnit(BillingPermissions.Read, unit)
+        : TenancyAccess.AtTenant(BillingPermissions.Read);
 }
 ```
 
@@ -380,10 +380,10 @@ requirement is computed from whether it is given.
 
 ## Requirements that combine
 
-Some requests require more than one thing of their caller: a plan the tenant pays for and a key, a key on the project
-and a key at the unit it moves to. Others let one caller or another through: one of the application's operators, or a
+Some requests require more than one thing of their caller: a plan the tenant pays for and a permission, a permission on the project
+and a permission at the unit it moves to. Others let one caller or another through: one of the application's operators, or a
 seat that manages the tenant's seats. And some are about the caller's own: a person renames their own seat, and
-somebody with a key renames anybody's. A requirement says each of these, as one record the door holds the caller to
+somebody with a permission renames anybody's. A requirement says each of these, as one record the door holds the caller to
 before the handler runs:
 
 | Said as | Holds when | Refused with |
@@ -391,11 +391,11 @@ before the handler runs:
 | `AccessRequirement.All(a, b)`, and requirement attributes stacked on one request | every case holds, asked in the order they are written | the first failing case's own refusal; what follows it is not asked |
 | `AccessRequirement.Any(a, b)` | the first case that holds; what follows it is not asked | one `access.refused`, whose argument `Reasons` is each case's own refusal, its code and its arguments, in order |
 | `AccessRequirement.Own(value)`, `[OwnOnly]` with `[Own]` on the member | the value is the caller's own | `access.not-own` |
-| `[RequiresKey(key)]` with `[OrOwn]` on the member | the value is the caller's own, or the caller holds the key: `Any(Own(value), the key's case)` | one `access.refused`, with both reasons |
+| `[RequiresPermission(permission)]` with `[OrOwn]` on the member | the value is the caller's own, or the caller holds the permission: `Any(Own(value), the permission's case)` | one `access.refused`, with both reasons |
 | `AccessRequirement.OwnerOf(id)`, `[OwnOnly]` with `[Own]` on an aggregate's id | the aggregate's owner, read from its row as the caller, is the caller's own | `access.not-own`, or `access.not-found` for a row the caller does not see |
 
 Each case of a combination is decided by the check that decides it alone, so cases of different owners combine: a
-key on a project of Membership's with a key at a unit of Tenancy's, a module's own case with either. A combination
+permission on a project of Membership's with a permission at a unit of Tenancy's, a module's own case with either. A combination
 may hold another, `Any(All(a, b), c)`. Every case needs its check before any is asked: a combination with a case none
 of the module's checks decides is stopped as that case alone would be, whichever case would have let the caller
 through. `AllowAnonymous()` combines with nothing; beside another case it would open the door that case closes.
@@ -403,7 +403,7 @@ through. `AllowAnonymous()` combines with nothing; beside another case it would 
 What a case's check keeps for the handler and its save ([The request in hand](#the-request-in-hand)) is kept only
 once the whole combination let the caller through, and only for the cases it was let through by: every case of an
 `All`, the one case of an `Any` that let the caller in. A refused combination leaves nothing behind, whichever of its
-cases passed before the one that refused, and a branch of an `Any` that refused leaves nothing of its own. A key on each
+cases passed before the one that refused, and a branch of an `Any` that refused leaves nothing of its own. A permission on each
 of two resources of one kind keeps a hold on each, and each save is held to its own.
 
 ```mermaid
@@ -431,7 +431,7 @@ and the cases after it are not asked. `RequestInHand.ToString()` names a combina
 // The request: one of the application's operators, or a seat that manages seats for the whole tenant
 AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.Any(
     TenancyAccess.RequiresOperator(),
-    TenancyAccess.AtTenant(TenancyKeys.SeatsManage));
+    TenancyAccess.AtTenant(TenancyPermissions.SeatsManage));
 
 // A client that wants each reason reads them from the refusal's arguments
 catch (RefusalException refused) when (refused.Code == ToolkitRefusals.Refused
@@ -450,7 +450,7 @@ catch (RefusalException refused) when (refused.Code == ToolkitRefusals.Refused
   "arguments": {
     "Reasons": [
       { "code": "tenancy.operators-only", "arguments": {} },
-      { "code": "tenancy.not-permitted", "arguments": { "Key": "tenancy.seats.manage" } }
+      { "code": "tenancy.not-permitted", "arguments": { "Permission": "tenancy.seats.manage" } }
     ]
   }
 }
@@ -463,13 +463,13 @@ catch (RefusalException refused) when (refused.Code == ToolkitRefusals.Refused
 Requirement attributes stacked on one request all hold, as several `[Authorize]` attributes do in ASP.NET Core. The
 generator writes `AccessRequirement.All` of the calls they stand for, in the order they are written above the
 request, so the one written first is asked first, and its refusal is the one a caller gets where it fails. A marker
-keeps saying where the key of `[RequiresKey]` is held, whatever stands beside it. A module's own attribute, declared
+keeps saying where the permission of `[RequiresPermission]` is held, whatever stands beside it. A module's own attribute, declared
 with `[StatesRequirement]` as a package declares one ([Writing your own supporting domain](writing-a-supporting-domain.md)),
 stacks the same way:
 
 ```csharp
 [RequiresPlan(Plan.Pro)]                                                     // the module's own: the tenant's plan
-[RequiresKey(BoardKeys.Export)]                                              // Tenancy's: a key for the whole tenant
+[RequiresPermission(BoardPermissions.Export)]                                              // Tenancy's: a permission for the whole tenant
 public sealed record ExportBoard(BoardId Board) : IBoardsRequest;
 ```
 
@@ -480,18 +480,18 @@ the requirement, the attribute, `PlanCheck` and its registration.
 
 - **One opens no door the other closes.** `[AllowAnonymous]` beside any other requirement attribute is a
   contradiction, [DDD00079](diagnostics.md#ddd00079), an error.
-- **One that says nothing more is a warning.** `[InTenant]` beside a key of Tenancy's, and `[SignedIn]` beside
+- **One that says nothing more is a warning.** `[InTenant]` beside a permission of Tenancy's, and `[SignedIn]` beside
   `[RequiresOperator]`, add nothing to what their neighbour requires already, [DDD00084](diagnostics.md#ddd00084).
   A package says what its requirement already requires with `Implies` on its mark, so a module's own attribute is held
   to the same rule.
-- **One key per request.** `[RequiresKey]` is not stacked twice: a marker could not say which key it says where of.
-  Two keys, and one case or another, are written as the property.
+- **One permission per request.** `[RequiresPermission]` is not stacked twice: a marker could not say which permission it says where of.
+  Two permissions, and one case or another, are written as the property.
 - **A derived request adds to its base.** A request that derives from one carrying requirement attributes, and carries
   some of its own, holds to both, its base's first, as `[Authorize]` on a controller and on the one it derives from do:
   `[SignedIn] MyReport : Report`, where `Report` is `[InTenant]`, is `All(InTenant(), SignedIn())`, and never
   `SignedIn()` alone. The markers of the base are read with it, a bare one on the base record's parameter too. One
   without attributes of its own takes its base's line as it is. A derived request cannot take back what its base
-  requires: `[AllowAnonymous]` on it below a base that requires something is DDD00079, a second `[RequiresKey]` is
+  requires: `[AllowAnonymous]` on it below a base that requires something is DDD00079, a second `[RequiresPermission]` is
   DDD00080, and an attribute its base carries already is DDD00084.
 - **A module's default stacks onto nothing.** It is no attribute of a request: a request that states nothing takes
   it, and one that states its own, or derives from one that does, keeps that alone
@@ -537,22 +537,22 @@ partial interface IBoardsRequest
 
 </details>
 
-### One caller or another, and two keys at once
+### One caller or another, and two permissions at once
 
-Where a request lets one caller or another through, or needs two keys in two places, no stack of attributes says it,
+Where a request lets one caller or another through, or needs two permissions in two places, no stack of attributes says it,
 and the request answers the property with `Any` or `All`:
 
 - **One caller or another.** A tenant's audit log, read by the application's operators across tenants, and by a
-  seat that manages the tenant's seats: `Any(TenancyAccess.RequiresOperator(), TenancyAccess.AtTenant(TenancyKeys.SeatsManage))`.
+  seat that manages the tenant's seats: `Any(TenancyAccess.RequiresOperator(), TenancyAccess.AtTenant(TenancyPermissions.SeatsManage))`.
   An operator is let through by the first case with nothing read; a seat manager by the second, in one statement.
-- **Two keys at two units.** Moving a seat from one unit to another needs the key that manages seats at both:
-  `All(TenancyAccess.AtUnit(TenancyKeys.SeatsManage, From), TenancyAccess.AtUnit(TenancyKeys.SeatsManage, To))`. The
+- **Two permissions at two units.** Moving a seat from one unit to another needs the permission that manages seats at both:
+  `All(TenancyAccess.AtUnit(TenancyPermissions.SeatsManage, From), TenancyAccess.AtUnit(TenancyPermissions.SeatsManage, To))`. The
   door checked the units the request names, so the handler acts on those: it moves the seat away from `From`, and
   refuses a seat that is not placed there, rather than moving it from wherever it is. Otherwise a caller who holds the
-  key at two units of its own would move a seat away from a third.
-- **A key of each package.** Moving a project to another unit needs the key to edit it, on the project, and the key
-  that opens a project, at the unit it goes to: `All(MemberAccess.On(ProjectKeys.Edit, Project, ExpectedVersion),
-  TenancyAccess.AtUnit(ProjectKeys.Open, To))`, Membership's case and Tenancy's. The Tenancy sample's
+  permission at two units of its own would move a seat away from a third.
+- **A permission of each package.** Moving a project to another unit needs the permission to edit it, on the project, and the permission
+  that opens a project, at the unit it goes to: `All(MemberAccess.On(ProjectPermissionNames.Edit, Project, ExpectedVersion),
+  TenancyAccess.AtUnit(ProjectPermissionNames.Open, To))`, Membership's case and Tenancy's. The Tenancy sample's
   `MoveProjectToUnit` says the same with its module's own case at the unit, whose refusal is `projects.not-permitted`.
 
 <details>
@@ -563,14 +563,14 @@ public sealed record TenantAuditLog(TenantId Tenant, PagingArguments Paging) : I
 {
     AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.Any(
         TenancyAccess.RequiresOperator(),
-        TenancyAccess.AtTenant(TenancyKeys.SeatsManage));
+        TenancyAccess.AtTenant(TenancyPermissions.SeatsManage));
 }
 
 public sealed record MoveSeat(SeatId Seat, OrganizationUnitId From, OrganizationUnitId To) : ICommand, ISeatsRequest
 {
     AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.All(
-        TenancyAccess.AtUnit(TenancyKeys.SeatsManage, From),
-        TenancyAccess.AtUnit(TenancyKeys.SeatsManage, To));
+        TenancyAccess.AtUnit(TenancyPermissions.SeatsManage, From),
+        TenancyAccess.AtUnit(TenancyPermissions.SeatsManage, To));
 }
 
 public sealed class MoveSeatHandler(TenancyUseCases.SeatCommands seats) : ICommandHandler<MoveSeat>
@@ -587,20 +587,20 @@ public sealed class MoveSeatHandler(TenancyUseCases.SeatCommands seats) : IComma
 public sealed record MoveProject(ProjectId Project, OrganizationUnitId To, long? ExpectedVersion = null) : ICommand, IProjectsRequest
 {
     AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.All(
-        MemberAccess.On(ProjectKeys.Edit, Project, ExpectedVersion),
-        TenancyAccess.AtUnit(ProjectKeys.Open, To));
+        MemberAccess.On(ProjectPermissionNames.Edit, Project, ExpectedVersion),
+        TenancyAccess.AtUnit(ProjectPermissionNames.Open, To));
 }
 ```
 
 </details>
 
-### Yours, or the key
+### Yours, or the permission
 
 A request about the caller's own names the value, a seat or a user, and the door compares it with the caller's own
 value of that type, so the request never says whose it is and nobody can send it for somebody else by naming
-themselves. `[OrOwn]` on that member, beside `[RequiresKey]`, makes the caller's own the alternative of the key: the
-person renames their own seat, and whoever holds the key renames any. The caller's own is asked first, since it reads
-nothing, and the key only where the value is not the caller's.
+themselves. `[OrOwn]` on that member, beside `[RequiresPermission]`, makes the caller's own the alternative of the permission: the
+person renames their own seat, and whoever holds the permission renames any. The caller's own is asked first, since it reads
+nothing, and the permission only where the value is not the caller's.
 
 ```mermaid
 sequenceDiagram
@@ -623,36 +623,36 @@ What the caller's own value of a type is, whoever knows says, with an `ICallersO
 | a kind of the application's own, its `UserId` say | what the application's handle answers | a small handle beside the requests, registered by the host: `services.AddCallersOwn<UserId, CallersUser>()` |
 | the id of an aggregate with an `[Owner]` property | the aggregate, where its owner, read from its row as the caller, is the caller's own of the owner's type | the aggregate, which marks the property; the Entity Framework package reads it, with nothing registered ([The owner of an aggregate](#the-owner-of-an-aggregate)) |
 
-Nobody else has an own: a caller who did not sign in, the application's own work, which holds every key in its tenant
+Nobody else has an own: a caller who did not sign in, the application's own work, which holds every permission in its tenant
 but has no seat, an operator. `[OwnOnly]` on the request, with `[Own]` on the member, says the caller's own alone,
-with no key standing in: leaving a tenant, closing one's own account.
+with no permission standing in: leaving a tenant, closing one's own account.
 
 - **Beside a resource, not beside a unit.** `[OrOwn]` goes beside `[OnResource]`: `LeaveCrew([OnResource] ProjectId
-  Project, [OrOwn] SeatId Seat)` takes the caller off the crew of a project it sees, or anybody with the key on the
+  Project, [OrOwn] SeatId Seat)` takes the caller off the crew of a project it sees, or anybody with the permission on the
   project, and the handler still finds the seat on that crew ([The caller's own on a resource](#the-callers-own-on-a-resource)).
-  It does not go beside `[AtUnit]`, [DDD00085](diagnostics.md#ddd00085): the unit says where the key is checked, not
-  what the request acts on, so a caller would send a unit where it holds the key for another person's seat, and a key
+  It does not go beside `[AtUnit]`, [DDD00085](diagnostics.md#ddd00085): the unit says where the permission is checked, not
+  what the request acts on, so a caller would send a unit where it holds the permission for another person's seat, and a permission
   held at one unit would act on a seat anywhere. A package says which of its markers may stand beside `[OrOwn]`, and
-  what the caller's own way through still meets there, with `OwnAlternative` on `[KeyMarker]`.
-- **Said in one place.** `[OrOwn]` without `[RequiresKey]`, `[Own]` without `[OwnOnly]` and the other way round, a
+  what the caller's own way through still meets there, with `OwnAlternative` on `[PermissionMarker]`.
+- **Said in one place.** `[OrOwn]` without `[RequiresPermission]`, `[Own]` without `[OwnOnly]` and the other way round, a
   member marked both ways, and two members marked one way are [DDD00085](diagnostics.md#ddd00085). On a member of a
   type nothing says the caller's own of, or one that may be null, it is [DDD00086](diagnostics.md#ddd00086): the
   request would be stopped every time it is sent. The id of an aggregate that marks its owner is no such type: it
   is about that owner.
 - **As the property.** `AccessRequirement.Own(value)` is the case, and `TenancyAccess.Own(seat)` the same case
-  spelled beside Tenancy's others: `Any(TenancyAccess.Own(Seat), TenancyAccess.AtTenant(key))`.
+  spelled beside Tenancy's others: `Any(TenancyAccess.Own(Seat), TenancyAccess.AtTenant(permission))`.
 
 <details>
-<summary>Show the code: yours or the key, yours alone, and a handle of the application's own</summary>
+<summary>Show the code: yours or the permission, yours alone, and a handle of the application's own</summary>
 
 ```csharp
-[RequiresKey(TenancyKeys.SeatsManage)]                                       // rename yourself, or any seat with the key
+[RequiresPermission(TenancyPermissions.SeatsManage)]                                       // rename yourself, or any seat with the permission
 public sealed record RenameSeat([OrOwn] SeatId Seat, string? DisplayName) : ITenantsRequest;
 
-[RequiresKey(ProjectKeys.ManageCrew)]                                        // take yourself off, or manage the crew
+[RequiresPermission(ProjectPermissionNames.ManageCrew)]                                        // take yourself off, or manage the crew
 public sealed record LeaveCrew([OnResource] ProjectId Project, [OrOwn] SeatId Seat) : IProjectsRequest;
 
-[OwnOnly]                                                                    // only your own, no key stands in
+[OwnOnly]                                                                    // only your own, no permission stands in
 public sealed record CloseAccount([Own] UserId User) : IAccountsRequest;
 
 // The handle: what the caller's own UserId is, beside the requests, where the generator sees it
@@ -688,7 +688,7 @@ from what is known of the caller already, as the check that asks it reads nothin
 A row the caller owns is the same question, asked of the row: a board is its owner's, an order the customer's who
 placed it. The fact sits in the domain, and the policy at the door. The aggregate root marks the property that names
 its owner `[Owner]`, which says what the aggregate is and nothing of who may do what with it; a request marks the
-aggregate's id `[Own]`, with `[OwnOnly]`, for the owner alone, or `[OrOwn]` beside a key, for the owner or the key, as
+aggregate's id `[Own]`, with `[OwnOnly]`, for the owner alone, or `[OrOwn]` beside a permission, for the owner or the permission, as
 it marks a value of the caller's own. The generator sees both, the domain through the project the requests
 reference, and writes `AccessRequirement.OwnerOf(request.Board)` where nothing says the caller's own of the id itself.
 
@@ -704,7 +704,7 @@ public sealed partial class Board
 [OwnOnly]                                                                    // the board's owner alone
 public sealed record ArchiveBoard([Own] BoardId Board) : IBoardsRequest;
 
-[RequiresKey(BoardKeys.Manage)]                                              // the owner, or the key for every board
+[RequiresPermission(BoardPermissions.Manage)]                                              // the owner, or the permission for every board
 public sealed record RenameBoard([OrOwn] BoardId Board, string Name) : IBoardsRequest;
 ```
 
@@ -720,8 +720,8 @@ sign in or the application's own work, is refused with `access.not-own` before a
 owner, the one column of the one row the id names, in one statement, as the caller. A row the caller does not see,
 because row level security or a query filter keeps it from them, is as missing as one never made: `access.not-found`,
 as a resource of Membership's the caller does not see is its own `not-found`. A row that is somebody else's is
-`access.not-own`, and so is one whose owner is null, which is nobody's. Beside a key each of these lets the key be
-asked, and where the key is not held either the caller gets one `access.refused` with both reasons.
+`access.not-own`, and so is one whose owner is null, which is nobody's. Beside a permission each of these lets the permission be
+asked, and where the permission is not held either the caller gets one `access.refused` with both reasons.
 
 ```mermaid
 flowchart LR
@@ -753,15 +753,15 @@ flowchart LR
   own, or Tenancy for its seat id, the line compares the id, `Own(request.Seat)`, and the owner is not read: that
   handle reads nothing, and says what the id is first.
 - **Beside a resource as well.** `[OrOwn]` on the id of an aggregate that marks its owner, beside `[OnResource]`, is the
-  caller's own on a resource with the owner in the place of the value: `Any(All(OwnerOf(member), Sees(key, resource)),
-  On(key, resource))`, and the handler still finds the aggregate on that resource.
+  caller's own on a resource with the owner in the place of the value: `Any(All(OwnerOf(member), Sees(permission, resource)),
+  On(permission, resource))`, and the handler still finds the aggregate on that resource.
 - **The owner of a resource with members holds its permissions already.** On a resource of
   [Membership](membership.md)'s the property marked `[Owner]` names the member that owns it, who holds every
   permission said for the owner by owning it. So `[OrOwn]` on the resource's own id, beside `[OnResource]` and a
-  permission the owner holds, lets through nobody the key does not: the warning
+  permission the owner holds, lets through nobody the permission does not: the warning
   [DDD00096](diagnostics.md#ddd00096) says to take it off. It stays for a permission declared `Owner = false`.
 - **One owner, of a type with an own.** Several owners of one aggregate are members: a resource with members, which
-  [Membership](membership.md) keeps, with the keys each member's roles give. `[Owner]` twice on one aggregate, on an
+  [Membership](membership.md) keeps, with the permissions each member's roles give. `[Owner]` twice on one aggregate, on an
   entity inside it or on a type that is no aggregate root is [DDD00087](diagnostics.md#ddd00087). On a type nothing
   could say the caller's own of it is [DDD00088](diagnostics.md#ddd00088): where it is declared, for a `string`, a class
   or an enum, and at the request, where the requests' project sees no handle of the owner's type. An owner that may be
@@ -776,26 +776,26 @@ Its endpoint asks the checks itself, as one without Mediator does ([Asking the c
 
 #### The caller's own on a resource
 
-Beside `[OnResource]` the caller's own way through is held to the resource, as the key's way is. The caller's own seat
+Beside `[OnResource]` the caller's own way through is held to the resource, as the permission's way is. The caller's own seat
 alone would let a seat send any project's id with its own seat; so the own way also asks Membership's
-`MemberAccess.Sees(key, resource, version)`: the caller sees the resource, whether or not it holds the key there.
+`MemberAccess.Sees(permission, resource, version)`: the caller sees the resource, whether or not it holds the permission there.
 The resource's check reads it in one statement, refuses one the caller does not see with its `not-found`, compares the
 version `[ExpectedVersion]` names, and keeps what the [expert hold](membership.md#the-expert-hold) holds the save to,
-as on the key's way, so a save under `UseMemberHolds` is held to what the door read whichever way the caller came
-through. A package names that case with `OwnAlternative` on its `[KeyMarker]`; Tenancy's `[AtUnit]` names none.
+as on the permission's way, so a save under `UseMemberHolds` is held to what the door read whichever way the caller came
+through. A package names that case with `OwnAlternative` on its `[PermissionMarker]`; Tenancy's `[AtUnit]` names none.
 
 ```mermaid
 flowchart LR
     Sent["LeaveCrew<br/>project, seat"] --> Own{"seat the<br/>caller's own?"}
     Own -- "yes" --> Sees{"Sees: project<br/>seen?"}
     Sees -- "yes, hold kept" --> Mine["handler saves the<br/>own place as the<br/>application's work"]
-    Own -- "no" --> Key{"On: crew key<br/>on the project?"}
-    Sees -- "no" --> Key
-    Key -- "yes, hold kept" --> Theirs["handler saves<br/>as the caller"]
-    Key -- "no" --> Refused["one access.refused,<br/>both reasons"]
+    Own -- "no" --> Permission{"On: crew permission<br/>on the project?"}
+    Sees -- "no" --> Permission
+    Permission -- "yes, hold kept" --> Theirs["handler saves<br/>as the caller"]
+    Permission -- "no" --> Refused["one access.refused,<br/>both reasons"]
 ```
 
-The database may still hold the save to the key. Where a permission of the resource is marked `LocksMembers`, the
+The database may still hold the save to the permission. Where a permission of the resource is marked `LocksMembers`, the
 one the commands that change the members require, Membership's lock is a restrictive policy on the member tables: a
 member row changes only for a caller that holds that permission, and no row rule of the application's widens it. A caller who takes itself off passes the
 door, and the database refuses its own row. So the handler saves the caller's own place as the application's own
@@ -807,7 +807,7 @@ sample's `OwnPlaceOnTheCrew.BeginSave` does it for a seat, in its module's own s
 <summary>Show the code: taking yourself off, saved as the application's own work</summary>
 
 ```csharp
-[RequiresKey(DocumentKeys.Share)]                                            // take yourself off, or anybody with the key
+[RequiresPermission(DocumentPermissions.Share)]                                            // take yourself off, or anybody with the permission
 public sealed record LeaveDocument([OnResource] DocumentId Document, [OrOwn] UserId Member, [ExpectedVersion] long? ExpectedVersion = null) : IDocumentsRequest;
 
 public sealed class LeaveDocumentHandler(DocumentsContext context, ICallerAccessor callers)
@@ -881,7 +881,7 @@ public sealed record TenantAuditLog(TenantId Tenant, PagingArguments Paging) : I
 {
     AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.Any(
         TenancyAccess.RequiresOperator(),
-        TenancyAccess.AtTenant(TenancyKeys.SeatsManage));
+        TenancyAccess.AtTenant(TenancyPermissions.SeatsManage));
 }
 
 // Which rows: a rule for each way, each for its own role
@@ -894,7 +894,7 @@ public static partial class OperatorsReadTheAuditLog
 [RowAccess<AuditEntry>(RowOperations.Read, To = [RowAccessRoles.User])]
 public static partial class SeatManagersReadTheAuditLog
 {
-    public static bool Allows(AuditEntry entry, Caller caller) => TenancyRowAccess.HoldsAtTenant(TenancyKeys.SeatsManage);
+    public static bool Allows(AuditEntry entry, Caller caller) => TenancyRowAccess.HoldsAtTenant(TenancyPermissions.SeatsManage);
 }
 ```
 
@@ -903,7 +903,7 @@ CREATE POLICY "Operators read the audit log (select) for tenancy_operator" ON "a
     USING (TRUE);
 
 CREATE POLICY "Seat managers read the audit log (select) for authenticated" ON "audit"."AuditEntries" FOR SELECT TO authenticated
-    USING ((SELECT "tenancy".holds_tenant_wide('tenancy.seats.manage')));
+    USING ((SELECT "tenancy".holds_at_tenant('tenancy.seats.manage')));
 
 -- Tenancy's own, on every table kept to a tenant: a seat reads its tenant's rows alone, and an operator writes none
 CREATE POLICY "Kept to its tenant (all) for authenticated" ON "audit"."AuditEntries" AS RESTRICTIVE FOR ALL TO authenticated
@@ -920,9 +920,9 @@ export finds it by again.
 
 </details>
 
-The same holds for the caller's own: `RenameSeat` lets a seat rename itself or any seat with the key, and the Tenancy
-sample's column rule on the seat's name, `NameChangesByTheSeatOrWithTheSeatsKey`, says both branches again for each
-row, `seat.Id == TenancyRowAccess.CallerSeat<SeatId>() || TenancyRowAccess.HoldsAtTenant(RenameSeat.RequiredKey)`.
+The same holds for the caller's own: `RenameSeat` lets a seat rename itself or any seat with the permission, and the Tenancy
+sample's column rule on the seat's name, `NameChangesByTheSeatOrWithTheSeatsPermission`, says both branches again for each
+row, `seat.Id == TenancyRowAccess.CallerSeat<SeatId>() || TenancyRowAccess.HoldsAtTenant(RenameSeat.RequiredPermission)`.
 
 ## System work is a scope
 
@@ -1024,8 +1024,8 @@ with the `IAccessCheck` that does:
 | the caller's own | `[OrOwn]`, `[OwnOnly]` with `[Own]`, `AccessRequirement.Own(value)`, of the core | nothing for a `Guid` or Tenancy's seat id; `services.AddCallersOwn<TValue, TCallersOwn>()` for a kind of your own |
 | the owner of an aggregate | `[OrOwn]`, `[OwnOnly]` with `[Own]` on the id of an aggregate that marks its owner `[Owner]`, `AccessRequirement.OwnerOf(id)`, of the core | nothing more on Entity Framework, whose `AddDDDToolkitEntityFramework` registers what reads the owner; the caller's own of the owner's type as in the row above |
 | several cases at once, or one of several | stacked attributes, `AccessRequirement.All(...)` and `Any(...)`, of the core | nothing: the set asks each case of the check that decides it |
-| a tenant: a seat in it, a key for the whole of it or at a unit, operators | `[InTenant]`, `[RequiresKey(key)]` with `[AtUnit]` or without a marker, `[RequiresOperator]`: `TenancyAccess.InTenant()` and the rest of `TenancyRequirement`'s cases, of [Tenancy](tenancy.md#what-a-request-requires-of-its-caller) | `services.AddTenancyAccess<...>()`, for each module |
-| a resource with members: a key held on it | `[RequiresKey(key)]` with `[OnResource]`, `[SeenWith<TResourceId>(key)]`: `MemberAccess.On(key, resource)` and `SeenWith`, of [Membership](membership.md#a-document-and-the-people-it-is-shared-with) | `services.AddDocumentMemberAccess<IFilingRequest>()`, generated for each resource |
+| a tenant: a seat in it, a permission for the whole of it or at a unit, operators | `[InTenant]`, `[RequiresPermission(permission)]` with `[AtUnit]` or without a marker, `[RequiresOperator]`: `TenancyAccess.InTenant()` and the rest of `TenancyRequirement`'s cases, of [Tenancy](tenancy.md#what-a-request-requires-of-its-caller) | `services.AddTenancyAccess<...>()`, for each module |
+| a resource with members: a permission held on it | `[RequiresPermission(permission)]` with `[OnResource]`, `[SeenWith<TResourceId>(permission)]`: `MemberAccess.On(permission, resource)` and `SeenWith`, of [Membership](membership.md#a-document-and-the-people-it-is-shared-with) | `services.AddDocumentMemberAccess<IFilingRequest>()`, generated for each resource |
 | something only your module knows | a record of your own | `services.AddAccessCheck<IBillingRequest, BillingAccessCheck>()` |
 
 A check of your own is two methods. `Decides` says whether a requirement is one of its cases, and only looks
@@ -1037,13 +1037,13 @@ branch refuses. Below, the cast does the same for the one case there is.
 ```csharp
 public abstract record BillingAccess : AccessRequirement
 {
-    public sealed record OnInvoice(string Key, InvoiceId Invoice) : BillingAccess;
+    public sealed record OnInvoice(string Permission, InvoiceId Invoice) : BillingAccess;
 }
 
-// Yours: whatever answers whether the caller holds a key on an invoice
+// Yours: whatever answers whether the caller holds a permission on an invoice
 public interface IInvoiceAccess
 {
-    ValueTask<bool> HoldsKeyAsync(string key, InvoiceId invoice, CancellationToken cancellationToken);
+    ValueTask<bool> HoldsPermissionAsync(string permission, InvoiceId invoice, CancellationToken cancellationToken);
 }
 
 public sealed class BillingAccessCheck(IInvoiceAccess invoices) : IAccessCheck
@@ -1053,9 +1053,9 @@ public sealed class BillingAccessCheck(IInvoiceAccess invoices) : IAccessCheck
     public async ValueTask RequireAsync(AccessRequirement requirement, IRequireAccess request, CancellationToken cancellationToken)
     {
         var required = (BillingAccess.OnInvoice)requirement;
-        if (!await invoices.HoldsKeyAsync(required.Key, required.Invoice, cancellationToken))
+        if (!await invoices.HoldsPermissionAsync(required.Permission, required.Invoice, cancellationToken))
         {
-            throw new RefusalException("billing.not-permitted", RefusalKind.NotPermitted, "That takes a key on the invoice.");
+            throw new RefusalException("billing.not-permitted", RefusalKind.NotPermitted, "That takes a permission on the invoice.");
         }
     }
 }
@@ -1106,14 +1106,14 @@ for a request that passed no check that keeps a `T`. A request is found by refer
 or a record class. What a check keeps is kept with the [request in hand](#the-request-in-hand) as well, where
 code that is not handed the request finds it: that is how the Membership package's
 [expert hold](membership.md#the-expert-hold) holds a save to what its check read, with no line in the handler.
-Where the cases of a [combination](#requirements-that-combine) each keep a `T`, a key on each of two documents say,
+Where the cases of a [combination](#requirements-that-combine) each keep a `T`, a permission on each of two documents say,
 each is kept, in the order the cases were asked: `TakeAllFor(request)` hands them all out, `TakeFor` refuses to
 guess which one of several the handler means, and `Checked<T>.TryFindInHand(each => ..., out var kept)` finds the one
 code of the handling is about, the hold on the very document a save changes.
 
 ```mermaid
 flowchart LR
-    Request["CloseInvoice<br/>requires a key<br/>on an invoice"] --> Checks["the checks of<br/>IBillingRequest"]
+    Request["CloseInvoice<br/>requires a permission<br/>on an invoice"] --> Checks["the checks of<br/>IBillingRequest"]
     Checks -- "who is calling" --> Core["the core's check"]
     Checks -- "a package's case" --> Package["the package's check"]
     Checks -- "the module's own case" --> Own["the module's check"]
@@ -1431,7 +1431,7 @@ A few things no check can see are worth a test of your own, over the requests of
   that declares a requirement can pass at all, without reading anything: for a combination, whether every case of it
   can, and for the caller's own, whether something says what the caller's own value of the type is. Ask it for every
   requirement the module's requests declare, and a case added without its check fails the build rather than a request.
-- **A requirement that refuses nobody for want of the key is a query's.** `[SeenWith<TResourceId>(key)]` lets
+- **A requirement that refuses nobody for want of the permission is a query's.** `[SeenWith<TResourceId>(permission)]` lets
   a signed-in caller through, one that holds nothing too, and refuses a caller who did not sign in, who
   reaches nothing under any rules: it says what a query's own statement filters by, and that filter is the check.
   Declared on a message of Mediator's that is no query, a command or a plain `IRequest`, it is
@@ -1443,12 +1443,12 @@ A few things no check can see are worth a test of your own, over the requests of
   a new one is a decision a review sees. The Tenancy sample holds it to none: every route of it takes a token.
 - **The property is for what an attribute cannot say.** Hold the requests that answer `RequiredAccess` themselves
   to a case of your module's own, a requirement computed from their values, or a combination no stack of attributes
-  says, one case or another, two keys, as the Tenancy sample's `AccessDeclarationTests` does, so one that could be an
-  attribute is written as one. `All` of a sign-in and a key is a stack, `[SignedIn] [RequiresKey(key)]`, and `Any` of
-  the caller's own and a key is `[OrOwn]`: the sample holds its guard to those too.
+  says, one case or another, two permissions, as the Tenancy sample's `AccessDeclarationTests` does, so one that could be an
+  attribute is written as one. `All` of a sign-in and a permission is a stack, `[SignedIn] [RequiresPermission(permission)]`, and `Any` of
+  the caller's own and a permission is `[OrOwn]`: the sample holds its guard to those too.
 
 Because a requirement is a record, the same test can pin which request declares which: a table of request
 types and the requirement each is meant to answer, compared with what they do answer. Where a module has a
-[default](#a-modules-default) that table is what finds a command that forgot its key, which the build does not: it
-takes the default, and the table says the key. The Tenancy sample's `AccessDeclarationTests` holds its Projects module,
+[default](#a-modules-default) that table is what finds a command that forgot its permission, which the build does not: it
+takes the default, and the table says the permission. The Tenancy sample's `AccessDeclarationTests` holds its Projects module,
 whose default is `[InTenant]`, to such a table.

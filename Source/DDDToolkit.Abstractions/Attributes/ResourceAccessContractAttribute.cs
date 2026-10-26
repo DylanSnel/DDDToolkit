@@ -1,7 +1,7 @@
 namespace DDDToolkit.Abstractions.Attributes;
 
 /// <summary>
-/// Publishes one set the access to a resource answers, the resources the caller sees or those it holds a key on,
+/// Publishes one set the access to a resource answers, the resources the caller sees or those it holds a permission on,
 /// for row access rules to ask by the resource's id, typed, with no function's name anywhere. Apply, in the
 /// contracts of the module that owns the resource, to an empty <c>static partial class</c>; the generator adds
 /// <c>Name</c> and <c>Ids(...)</c>:
@@ -17,7 +17,7 @@ namespace DDDToolkit.Abstractions.Attributes;
 ///
 /// // A rule of Inspections, and one of Projects' own, alike
 /// public static bool Allows(Inspection inspection, Caller caller) =&gt; ProjectsISee.Ids().Contains(inspection.ProjectId);
-/// public static bool Allows(Project project, Caller caller) =&gt; ProjectsWhereIHold.Ids(ProjectKeys.Edit).Contains(project.Id);
+/// public static bool Allows(Project project, Caller caller) =&gt; ProjectsWhereIHold.Ids(ProjectPermissionNames.Edit).Contains(project.Id);
 /// </code>
 /// </summary>
 /// <remarks>
@@ -39,7 +39,7 @@ namespace DDDToolkit.Abstractions.Attributes;
 /// <para>
 /// The class may declare its question itself, to write its own documentation on it, and the generator implements
 /// it: <c>static partial AccessSet&lt;ProjectId&gt; Ids();</c> for <see cref="ResourceAccessSet.Seen"/>, and
-/// <c>static partial AccessSet&lt;ProjectId&gt; Ids(string key);</c> for <see cref="ResourceAccessSet.HeldOn"/>.
+/// <c>static partial AccessSet&lt;ProjectId&gt; Ids(string permission);</c> for <see cref="ResourceAccessSet.HeldOn"/>.
 /// Called in C#, <c>Ids</c> throws: only the database answers it.
 /// </para>
 /// </remarks>

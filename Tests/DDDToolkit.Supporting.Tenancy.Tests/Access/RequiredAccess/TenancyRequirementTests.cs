@@ -19,21 +19,21 @@ public class TenancyRequirementTests
     {
         TenancyAccess.InTenant().Should().Be(TenancyAccess.InTenant());
         TenancyAccess.RequiresOperator().Should().Be(TenancyAccess.RequiresOperator());
-        TenancyAccess.AtTenant(TenancyKeys.RolesManage).Should().Be(TenancyAccess.AtTenant(TenancyKeys.RolesManage))
-            .And.NotBe(TenancyAccess.AtTenant(TenancyKeys.SeatsManage), "another key is another requirement");
+        TenancyAccess.AtTenant(TenancyPermissions.RolesManage).Should().Be(TenancyAccess.AtTenant(TenancyPermissions.RolesManage))
+            .And.NotBe(TenancyAccess.AtTenant(TenancyPermissions.SeatsManage), "another permission is another requirement");
 
         AccessRequirement inTenant = TenancyAccess.InTenant();
         inTenant.Should().NotBe(TenancyAccess.RequiresOperator(), "two cases are never each other")
             .And.NotBe(AccessRequirement.SignedIn(), "nor one of the core's");
-        TenancyAccess.AtTenant(TenancyKeys.RolesManage).Key.Should().Be(TenancyKeys.RolesManage);
+        TenancyAccess.AtTenant(TenancyPermissions.RolesManage).Permission.Should().Be(TenancyPermissions.RolesManage);
 
         var north = OrganizationUnitId.CreateSequential();
-        TenancyAccess.AtUnit(TenancyKeys.UnitsManage, north).Should().Be(TenancyAccess.AtUnit(TenancyKeys.UnitsManage, north))
-            .And.NotBe(TenancyAccess.AtUnit(TenancyKeys.UnitsManage, OrganizationUnitId.CreateSequential()), "another unit is another requirement")
-            .And.NotBe(TenancyAccess.AtUnit(TenancyKeys.SeatsManage, north), "and so is another key");
-        ((AccessRequirement)TenancyAccess.AtUnit(TenancyKeys.UnitsManage, north)).Should().NotBe(TenancyAccess.AtTenant(TenancyKeys.UnitsManage));
-        var atNorth = TenancyAccess.AtUnit(TenancyKeys.UnitsManage, north);
-        (atNorth.Key, atNorth.Unit).Should().Be((TenancyKeys.UnitsManage, north));
+        TenancyAccess.AtUnit(TenancyPermissions.UnitsManage, north).Should().Be(TenancyAccess.AtUnit(TenancyPermissions.UnitsManage, north))
+            .And.NotBe(TenancyAccess.AtUnit(TenancyPermissions.UnitsManage, OrganizationUnitId.CreateSequential()), "another unit is another requirement")
+            .And.NotBe(TenancyAccess.AtUnit(TenancyPermissions.SeatsManage, north), "and so is another permission");
+        ((AccessRequirement)TenancyAccess.AtUnit(TenancyPermissions.UnitsManage, north)).Should().NotBe(TenancyAccess.AtTenant(TenancyPermissions.UnitsManage));
+        var atNorth = TenancyAccess.AtUnit(TenancyPermissions.UnitsManage, north);
+        (atNorth.Permission, atNorth.Unit).Should().Be((TenancyPermissions.UnitsManage, north));
     }
 
     [Fact]
@@ -42,8 +42,8 @@ public class TenancyRequirementTests
         var north = OrganizationUnitId.CreateSequential();
 
         TenancyAccess.InTenant().Should().BeOfType<TenancyRequirement.InTenant>();
-        TenancyAccess.AtTenant(TenancyKeys.RolesManage).Should().BeOfType<TenancyRequirement.AtTenant>();
-        TenancyAccess.AtUnit(TenancyKeys.UnitsManage, north).Should().BeOfType<TenancyRequirement.AtUnit<OrganizationUnitId>>("the unit's type is taken from the argument")
+        TenancyAccess.AtTenant(TenancyPermissions.RolesManage).Should().BeOfType<TenancyRequirement.AtTenant>();
+        TenancyAccess.AtUnit(TenancyPermissions.UnitsManage, north).Should().BeOfType<TenancyRequirement.AtUnit<OrganizationUnitId>>("the unit's type is taken from the argument")
             .Which.Unit.Should().Be(north);
         TenancyAccess.RequiresOperator().Should().BeOfType<TenancyRequirement.Operator>();
     }
@@ -66,15 +66,15 @@ public class TenancyRequirementTests
     [InlineData(null)]
     [InlineData("")]
     [InlineData("  ")]
-    public void A_key_for_the_whole_tenant_is_never_blank(string? key)
-        => FluentActions.Invoking(() => TenancyAccess.AtTenant(key!)).Should().Throw<ArgumentException>();
+    public void A_permission_for_the_whole_tenant_is_never_blank(string? permission)
+        => FluentActions.Invoking(() => TenancyAccess.AtTenant(permission!)).Should().Throw<ArgumentException>();
 
     [Theory]
     [InlineData(null)]
     [InlineData("")]
     [InlineData("  ")]
-    public void A_key_at_a_unit_is_never_blank(string? key)
-        => FluentActions.Invoking(() => TenancyAccess.AtUnit(key!, OrganizationUnitId.CreateSequential())).Should().Throw<ArgumentException>();
+    public void A_permission_at_a_unit_is_never_blank(string? permission)
+        => FluentActions.Invoking(() => TenancyAccess.AtUnit(permission!, OrganizationUnitId.CreateSequential())).Should().Throw<ArgumentException>();
 
     [Fact]
     public void The_cases_are_these_four_and_nobody_adds_one()

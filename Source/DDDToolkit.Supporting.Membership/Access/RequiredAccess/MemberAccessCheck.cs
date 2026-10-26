@@ -14,15 +14,15 @@ namespace DDDToolkit.Supporting.Membership.Access;
 /// </code>
 /// <para>
 /// The order of what a caller is refused with is the same for every request: the caller's own refusal when it
-/// is nobody; then <c>not-found</c> for a resource it may not see; then <c>not-permitted</c> for a key it does
+/// is nobody; then <c>not-found</c> for a resource it may not see; then <c>not-permitted</c> for a permission it does
 /// not hold; then, for a command that names the version its caller read, a lost race when the resource is at
 /// another one. Only then does the handler run, and whatever else it refuses comes after these.
 /// </para>
 /// <para>
-/// A query that shows what a key is held on (<see cref="MemberAccess{TResourceId}.SeenWith"/>) refuses nobody
-/// for want of the key: its own statement leaves out what the caller does not reach. Only a caller who did not
-/// sign in is refused there, <c>not-permitted</c> naming the key, after the caller's own refusal: under no
-/// rules is such a caller anybody's member or holds a key from above, so it reaches nothing, and its query is
+/// A query that shows what a permission is held on (<see cref="MemberAccess{TResourceId}.SeenWith"/>) refuses nobody
+/// for want of the permission: its own statement leaves out what the caller does not reach. Only a caller who did not
+/// sign in is refused there, <c>not-permitted</c> naming the permission, after the caller's own refusal: under no
+/// rules is such a caller anybody's member or holds a permission from above, so it reaches nothing, and its query is
 /// not run at all. A database that checks every row may refuse such a caller outright, rather than answer
 /// nothing, so its statement is never sent.
 /// </para>
@@ -31,7 +31,7 @@ namespace DDDToolkit.Supporting.Membership.Access;
 /// checked, with the version the caller named, <c>context.ExpectVersion(document, command.ExpectedVersion)</c>,
 /// so a resource changed since the caller read it is a lost race at the load as well as here; the save compares
 /// the version it loaded, the aggregate keeps its own rules, and a database that checks every row checks the
-/// write again. A rule that needs how or until when the caller holds the key asks the questions for it
+/// write again. A rule that needs how or until when the caller holds the permission asks the questions for it
 /// (<see cref="IMemberQuestions{TResourceId}.HoldAsync"/>).
 /// </para>
 /// <para>
@@ -44,7 +44,7 @@ namespace DDDToolkit.Supporting.Membership.Access;
 /// </para>
 /// <para>
 /// The caller's own way through a request about a resource (<see cref="MemberAccess{TResourceId}.Sees"/>, which
-/// <c>[OrOwn]</c> beside <c>[OnResource]</c> writes) is decided the same way, without the key: <c>not-found</c> for a
+/// <c>[OrOwn]</c> beside <c>[OnResource]</c> writes) is decided the same way, without the permission: <c>not-found</c> for a
 /// resource the caller may not see, the version compared, and the hold kept.
 /// </para>
 /// <para>
@@ -77,9 +77,9 @@ public sealed class MemberAccessCheck<TResource, TResourceId>(IMemberQuestions<T
         {
             case MemberAccess<TResourceId>.On required:
             {
-                var hold = await access.RequireAsync(required.Resource, required.Key, cancellationToken).ConfigureAwait(false);
+                var hold = await access.RequireAsync(required.Resource, required.Permission, cancellationToken).ConfigureAwait(false);
 
-                // Only now, with the resource seen and the key held: a version that is not the one the caller
+                // Only now, with the resource seen and the permission held: a version that is not the one the caller
                 // read means somebody changed the resource since. Asked any earlier, the answer would tell a
                 // caller without access which version a resource is at.
                 if (required.ExpectedVersion is { } expected && expected != hold.Version)
@@ -96,10 +96,10 @@ public sealed class MemberAccessCheck<TResource, TResourceId>(IMemberQuestions<T
             case MemberAccess<TResourceId>.Sees required:
             {
                 // The caller's own way through a request about a resource: the resource seen, in the same order of
-                // refusals as a key on it, and no key required. Read, compared and kept as a key's case is, so a save of
+                // refusals as a permission on it, and no permission required. Read, compared and kept as a permission's case is, so a save of
                 // the resource is held to what was read whichever way the caller came through.
                 access.RequireCaller();
-                var hold = await access.HoldAsync(required.Resource, required.Key, cancellationToken).ConfigureAwait(false)
+                var hold = await access.HoldAsync(required.Resource, required.Permission, cancellationToken).ConfigureAwait(false)
                            ?? throw access.Rules.Codes.Refuse(MembershipRefusals.NotFound);
 
                 if (required.ExpectedVersion is { } expected && expected != hold.Version)
@@ -112,14 +112,14 @@ public sealed class MemberAccessCheck<TResource, TResourceId>(IMemberQuestions<T
             }
 
             case MemberAccess<TResourceId>.SeenWith required:
-                // The key is the filter of the query's own statement. Here only: a caller the questions can be
+                // The permission is the filter of the query's own statement. Here only: a caller the questions can be
                 // asked about at all, and one that can reach something. A caller who did not sign in reaches
                 // nothing under any rules, and the statement is not sent for it: a database that checks every
                 // row may refuse that caller's role the resource's schema outright.
                 access.RequireCaller();
                 if (callers.Current.Kind == CallerKind.Anonymous)
                 {
-                    throw access.Rules.Codes.Refuse(MembershipRefusals.NotPermitted, ("Key", required.Key));
+                    throw access.Rules.Codes.Refuse(MembershipRefusals.NotPermitted, ("Permission", required.Permission));
                 }
 
                 break;

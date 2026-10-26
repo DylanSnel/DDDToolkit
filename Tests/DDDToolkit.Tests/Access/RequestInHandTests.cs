@@ -15,7 +15,7 @@ public class RequestInHandTests
 
     public interface IBillingRequest : IRequireAccess;
 
-    /// <summary>The one case of the tests: a key on an invoice, held by whoever <see cref="BillingCheck"/> says.</summary>
+    /// <summary>The one case of the tests: a permission on an invoice, held by whoever <see cref="BillingCheck"/> says.</summary>
     public sealed record OnInvoice(int Invoice) : AccessRequirement;
 
     public sealed record CloseInvoice(int Invoice) : IBillingRequest

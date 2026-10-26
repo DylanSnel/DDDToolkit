@@ -21,7 +21,7 @@ public readonly partial record struct BinderBorrowerId;
 public sealed partial class BinderBorrower;
 
 /// <summary>
-/// A binder, known by the shelf it stands on and its own id: a resource whose key has a part in front of the
+/// A binder, known by the shelf it stands on and its own id: a resource whose permission has a part in front of the
 /// id, which its member tables carry as well. Nothing else about it differs from a document.
 /// </summary>
 [AggregateRoot<BinderId>]

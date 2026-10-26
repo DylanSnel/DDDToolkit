@@ -8,7 +8,7 @@ namespace Examples.Tenancy.Tests.Projects.Lifecycle;
 
 /// <summary>
 /// A project's planned range: the days the work is planned for, given when the project is opened or by a command
-/// of its own later, under the key that edits a project. What Inspections does with it is in its own scenarios.
+/// of its own later, under the permission that edits a project. What Inspections does with it is in its own scenarios.
 /// </summary>
 /// <remarks>
 /// A test that is refused and changes nothing shares the class's host; a test that changes something makes its own.
@@ -69,7 +69,7 @@ public sealed class PlanningScenarios(SampleHosts sample) : IClassFixture<Sample
     }
 
     [Fact]
-    public async Task Planning_a_project_takes_the_key_that_edits_it()
+    public async Task Planning_a_project_takes_the_permission_that_edits_it()
     {
         using var vic = await sample.ClientAsync("vic", Harbor.Slug);
         using var juno = await sample.ClientAsync("juno", Harbor.Slug);
@@ -78,7 +78,7 @@ public sealed class PlanningScenarios(SampleHosts sample) : IClassFixture<Sample
         using var observed = await vic.PutAsJsonAsync($"/projects/{PierSeven.Id.Value}/planned-range", body, Cancellation);
         using var outOfSight = await juno.PutAsJsonAsync($"/projects/{Harbor.ProjectNamed("Bay bridge").Id.Value}/planned-range", body, Cancellation);
 
-        (await observed.ShouldBeRefusedAsync(HttpStatusCode.Forbidden, ProjectRefusals.NotPermitted)).Argument("Key").Should().Be(ProjectKeys.Edit);
+        (await observed.ShouldBeRefusedAsync(HttpStatusCode.Forbidden, ProjectRefusals.NotPermitted)).Argument("Permission").Should().Be(ProjectPermissionNames.Edit);
         await outOfSight.ShouldBeRefusedAsync(HttpStatusCode.NotFound, ProjectRefusals.NotFound);
     }
 

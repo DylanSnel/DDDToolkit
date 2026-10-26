@@ -4,7 +4,7 @@ namespace Examples.Tenancy.Tenants.Application.Seats.Queries;
 
 /// <summary>
 /// Who the calling seat is: its tenant, the seat with the name this application keeps on it, where it is placed and
-/// with which roles for which period, and every key it holds now with where that key reaches.
+/// with which roles for which period, and every permission it holds now with where that permission reaches.
 /// </summary>
 /// <remarks>
 /// It requires a caller who works in the tenant. Only a seat has a self, so the package's directory refuses
@@ -15,7 +15,7 @@ public sealed record OverviewOfMine : IQuery<SeatOverviewListing>, ITenantsReque
 
 /// <summary>
 /// Answers <see cref="OverviewOfMine"/> from the Tenancy package's directory: the module's own seat, whole, with the
-/// paths, role names and keys the package puts beside it, selected into what this module shows of a seat.
+/// paths, role names and permissions the package puts beside it, selected into what this module shows of a seat.
 /// </summary>
 /// <param name="reads">Where Tenancy is read: the directory, in a scope of this query's own.</param>
 public sealed class OverviewOfMineHandler(ITenancyReads reads) : IQueryHandler<OverviewOfMine, SeatOverviewListing>
@@ -48,6 +48,6 @@ public sealed class OverviewOfMineHandler(ITenancyReads reads) : IQueryHandler<O
                     .ThenBy(placement => placement.Unit.Path, StringComparer.OrdinalIgnoreCase),
             ],
             overview.Roles,
-            overview.Keys);
+            overview.Permissions);
     }
 }

@@ -9,7 +9,7 @@ namespace Examples.Tenancy.Tenants.Application.Invitations.Commands;
 /// and the account the identity provider made for that address is deleted when nobody ever used it.
 /// </summary>
 /// <remarks>
-/// It requires a caller who works in the tenant. The key is for the package's use case to ask, since only it reads
+/// It requires a caller who works in the tenant. The permission is for the package's use case to ask, since only it reads
 /// which unit the invitation is for: <c>tenancy.seats.manage</c> at that unit, whoever issued it. It answers anyone
 /// else that there is no such invitation, as it is not among the ones they list.
 /// </remarks>

@@ -10,9 +10,9 @@ namespace Examples.Tenancy.Inspections.Application;
 /// registration, which registers the ports, so the host still makes one call per module.
 /// </summary>
 /// <remarks>
-/// Inspections' key is not registered here: the module states it once, in its <c>[Permissions]</c> class
+/// Inspections' permission is not registered here: the module states it once, in its <c>[Permissions]</c> class
 /// (<see cref="InspectionPermissions"/>), and the host adds every module's permissions with the one call Tenancy's
-/// generator writes into it. A second registration here would add the key twice, which the catalogue refuses.
+/// generator writes into it. A second registration here would add the permission twice, which the catalogue refuses.
 /// </remarks>
 public static class InspectionsApplicationServices
 {

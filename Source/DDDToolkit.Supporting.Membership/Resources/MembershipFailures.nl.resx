@@ -16,7 +16,7 @@
     <value>Dit bestaat niet of is hier niet zichtbaar.</value>
   </data>
   <data name="membership.not-permitted" xml:space="preserve">
-    <value>Hiervoor is het recht {Key} nodig.</value>
+    <value>Hiervoor is het recht {Permission} nodig.</value>
   </data>
   <data name="membership.member-not-active" xml:space="preserve">
     <value>Dit kan geen lid zijn: niet actief, of hier niet bekend.</value>
@@ -51,10 +51,10 @@
   <data name="membership.role-name-invalid" xml:space="preserve">
     <value>Vul {Min} tot {Max} tekens in.</value>
   </data>
-  <data name="membership.key-not-for-members" xml:space="preserve">
-    <value>Deze rechten kan een rol hier niet geven: {Keys}.</value>
+  <data name="membership.permission-not-for-members" xml:space="preserve">
+    <value>Deze rechten kan een rol hier niet geven: {Permissions}.</value>
   </data>
-  <data name="membership.role-keys-not-normalized" xml:space="preserve">
+  <data name="membership.role-permissions-not-normalized" xml:space="preserve">
     <value>De rechten van een rol moeten uniek zijn, niet leeg, en in ordinale volgorde staan.</value>
   </data>
 </root>

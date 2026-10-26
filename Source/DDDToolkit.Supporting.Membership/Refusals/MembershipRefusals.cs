@@ -16,14 +16,14 @@ namespace DDDToolkit.Supporting.Membership;
 /// what the entries of <c>MembershipFailures.resx</c> and its Dutch sibling are called, and what the one rule a
 /// member checks by itself reports (<see cref="RoleHeld"/>), since a member does not know whose it is. A role
 /// kept for a resource reports the two rules it checks by itself the same way (<see cref="RoleNameInvalid"/>,
-/// <see cref="RoleKeysNotNormalized"/>).
+/// <see cref="RolePermissionsNotNormalized"/>).
 /// </para>
 /// <para>
-/// An argument a message shows is a value, such as a key or an id, never a word: the English and the Dutch
+/// An argument a message shows is a value, such as a permission or an id, never a word: the English and the Dutch
 /// texts are whole sentences of their own. A refusal of kind <see cref="RefusalKind.Invalid"/> names the input
 /// it is about in the argument <see cref="RefusalException.FieldArgument"/>, in the word the member list calls
 /// that input by, <c>role</c> or <c>until</c>, or the word a role calls it by, <c>name</c>, <c>description</c>
-/// or <c>keys</c>, so a form puts the text under the input; an edge whose input is called otherwise maps the
+/// or <c>permissions</c>, so a form puts the text under the input; an edge whose input is called otherwise maps the
 /// word.
 /// </para>
 /// <para>
@@ -50,7 +50,7 @@ public static class MembershipRefusals
     /// </summary>
     public const string NotFound = "membership.not-found";
 
-    /// <summary>The caller may see the resource but does not hold the key the request needs on it. Argument: <c>Key</c>.</summary>
+    /// <summary>The caller may see the resource but does not hold the permission the request needs on it. Argument: <c>Permission</c>.</summary>
     public const string NotPermitted = "membership.not-permitted";
 
     // ---------------------------------------------------------------- who may be a member, in which role
@@ -98,7 +98,7 @@ public static class MembershipRefusals
 
     // ---------------------------------------------------------------- the roles kept for a resource
 
-    /// <summary>The role is archived: it gives nothing, and it is not renamed, given keys or archived again.</summary>
+    /// <summary>The role is archived: it gives nothing, and it is not renamed, given permissions or archived again.</summary>
     public const string RoleIsArchived = "membership.role-archived";
 
     /// <summary>
@@ -108,13 +108,13 @@ public static class MembershipRefusals
     public const string RoleNameInvalid = "membership.role-name-invalid";
 
     /// <summary>
-    /// A role would give a key the resource's rules do not let a member's role give. Arguments: <c>Keys</c>,
-    /// the keys refused, and <c>Field</c>, which is <c>keys</c>.
+    /// A role would give a permission the resource's rules do not let a member's role give. Arguments: <c>Permissions</c>,
+    /// the permissions refused, and <c>Field</c>, which is <c>permissions</c>.
     /// </summary>
-    public const string KeyNotForMembers = "membership.key-not-for-members";
+    public const string PermissionNotForMembers = "membership.permission-not-for-members";
 
-    /// <summary>A role's keys are not distinct, not blank and in ordinal order: what a role checks of itself after the fact.</summary>
-    public const string RoleKeysNotNormalized = "membership.role-keys-not-normalized";
+    /// <summary>A role's permissions are not distinct, not blank and in ordinal order: what a role checks of itself after the fact.</summary>
+    public const string RolePermissionsNotNormalized = "membership.role-permissions-not-normalized";
 
     /// <summary>
     /// The kind and English text of every rule. The text is a template: <c>{Name}</c> is filled from the
@@ -124,7 +124,7 @@ public static class MembershipRefusals
         new ReadOnlyDictionary<string, (RefusalKind Kind, string Template)>(new Dictionary<string, (RefusalKind Kind, string Template)>(StringComparer.Ordinal)
         {
             [NotFound] = (RefusalKind.NotFound, "That was not found, or it is not one you can see."),
-            [NotPermitted] = (RefusalKind.NotPermitted, "Doing this needs the key {Key}."),
+            [NotPermitted] = (RefusalKind.NotPermitted, "Doing this needs the permission {Permission}."),
 
             [MemberNotActive] = (RefusalKind.Conflict, "That one cannot be a member: not active, or not known here."),
             [RoleNotForMembers] = (RefusalKind.Invalid, "That role cannot be given to a member here."),
@@ -139,8 +139,8 @@ public static class MembershipRefusals
 
             [RoleIsArchived] = (RefusalKind.Conflict, "That role is archived."),
             [RoleNameInvalid] = (RefusalKind.Invalid, "Enter {Min} to {Max} characters."),
-            [KeyNotForMembers] = (RefusalKind.Invalid, "A role cannot give these keys here: {Keys}."),
-            [RoleKeysNotNormalized] = (RefusalKind.Conflict, "A role's keys must be distinct, not blank and in ordinal order."),
+            [PermissionNotForMembers] = (RefusalKind.Invalid, "A role cannot give these permissions here: {Permissions}."),
+            [RolePermissionsNotNormalized] = (RefusalKind.Conflict, "A role's permissions must be distinct, not blank and in ordinal order."),
         });
 
     /// <summary>
@@ -154,7 +154,7 @@ public static class MembershipRefusals
             [RoleNotForMembers] = "role",
             [InvalidPeriod] = "until",
             [RoleNameInvalid] = "name",
-            [KeyNotForMembers] = "keys",
+            [PermissionNotForMembers] = "permissions",
         });
 
     /// <summary>Every name, in the order the table lists them.</summary>
@@ -166,7 +166,7 @@ public static class MembershipRefusals
     public static RefusalKind KindOf(string code) => Row(code).Kind;
 
     /// <summary>
-    /// The English text of a rule, as a template: a placeholder such as <c>{Key}</c> is filled from the argument
+    /// The English text of a rule, as a template: a placeholder such as <c>{Permission}</c> is filled from the argument
     /// of that name.
     /// </summary>
     /// <param name="code">One of the names above.</param>

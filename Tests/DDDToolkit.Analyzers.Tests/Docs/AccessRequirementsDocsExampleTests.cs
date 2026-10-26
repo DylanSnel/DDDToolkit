@@ -47,7 +47,7 @@ public class AccessRequirementsDocsExampleTests
 
         public sealed class TheAnswer(bool holds) : IInvoiceAccess
         {
-            public ValueTask<bool> HoldsKeyAsync(string key, InvoiceId invoice, CancellationToken cancellationToken) => ValueTask.FromResult(holds);
+            public ValueTask<bool> HoldsPermissionAsync(string key, InvoiceId invoice, CancellationToken cancellationToken) => ValueTask.FromResult(holds);
         }
 
         public sealed class RememberingStore : IInvoiceStore
@@ -84,7 +84,7 @@ public class AccessRequirementsDocsExampleTests
     }
 
     [Fact]
-    public void A_caller_that_holds_the_key_passes_and_the_handler_closes_the_invoice_its_request_names()
+    public void A_caller_that_holds_the_permission_passes_and_the_handler_closes_the_invoice_its_request_names()
     {
         var emitted = Run().Emit();
         using var provider = Services(emitted, holds: true);
@@ -106,7 +106,7 @@ public class AccessRequirementsDocsExampleTests
     }
 
     [Fact]
-    public void A_caller_that_does_not_hold_the_key_is_refused_with_the_modules_code_and_a_request_anyone_may_send_passes()
+    public void A_caller_that_does_not_hold_the_permission_is_refused_with_the_modules_code_and_a_request_anyone_may_send_passes()
     {
         var emitted = Run().Emit();
         using var provider = Services(emitted, holds: false);

@@ -25,10 +25,10 @@ public static class DepotFunctions
     /// <summary>Answers the calling porter, or <c>NULL</c> for a caller the depot does not count.</summary>
     public static DatabaseFunction CallerPorter { get; } = new(Owner, "caller_porter");
 
-    /// <summary>Answers, for a key, the depot's roles in use that give it.</summary>
-    public static DatabaseFunction RolesWithKey { get; } = new(Owner, "roles_with_key");
+    /// <summary>Answers, for a permission, the depot's roles in use that give it.</summary>
+    public static DatabaseFunction RolesWithPermission { get; } = new(Owner, "roles_with_permission");
 
-    /// <summary>Answers, for a key, the bays the calling porter's hold of it reaches: where it is held, and every bay below.</summary>
+    /// <summary>Answers, for a permission, the bays the calling porter's hold of it reaches: where it is held, and every bay below.</summary>
     public static DatabaseFunction BaysWhereIHold { get; } = new(Owner, "bays_where_i_hold");
 }
 
@@ -70,7 +70,7 @@ public sealed class PalletsInTheDepot(DepotDesk desk, DepotContext context) : IC
 
 /// <summary>
 /// What the depot answers for its crates, in one class: who the caller is as a member and who can be made
-/// one, which of its roles there are and which give a key, and where the caller holds a key among its bays.
+/// one, which of its roles there are and which give a permission, and where the caller holds a permission among its bays.
 /// </summary>
 /// <param name="desk">Who the depot knows its callers as.</param>
 /// <param name="context">The depot's rows, for what is asked outside a statement.</param>
@@ -78,7 +78,7 @@ public sealed class CratesInTheDepot(DepotDesk desk, DepotContext context)
     : ICallerMember<CrateId, PorterId>,
       IMemberDirectory<CrateId, PorterId>,
       IMemberRoles<CrateId, DepotRoleId>,
-      IRolesWithKey<CrateId, DepotRoleId>,
+      IRolesWithPermission<CrateId, DepotRoleId>,
       IPlacesReached<CrateId, BayId>
 {
     /// <summary>What a caller the depot does not know is refused with, where a question refuses.</summary>
@@ -107,21 +107,21 @@ public sealed class CratesInTheDepot(DepotDesk desk, DepotContext context)
 
     /// <inheritdoc />
     /// <remarks>Over the context the statement runs on, which is not always this request's own.</remarks>
-    public IQueryable<DepotRoleId> RolesWith(DbContext context, Caller caller, string key)
-        => from given in context.Set<DepotRoleKey>()
-           where given.Key == key
+    public IQueryable<DepotRoleId> RolesWith(DbContext context, Caller caller, string permission)
+        => from given in context.Set<DepotRolePermission>()
+           where given.Permission == permission
            join kept in context.Set<DepotRole>() on given.RoleId equals kept.Id
            where kept.InUse
            select given.RoleId;
 
     /// <inheritdoc />
-    public IQueryable<BayId> PlacesReached(DbContext context, Caller caller, string key)
+    public IQueryable<BayId> PlacesReached(DbContext context, Caller caller, string permission)
     {
         var user = caller.UserId;
         return from porter in context.Set<Porter>()
                where porter.UserId == user && porter.Active
                join hold in context.Set<BayHold>() on porter.Id equals hold.PorterId
-               where hold.Key == key
+               where hold.Permission == permission
                join path in context.Set<BayPath>() on hold.BayId equals path.AboveId
                select path.BayId;
     }

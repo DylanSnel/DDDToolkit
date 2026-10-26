@@ -352,12 +352,12 @@ public static IServiceCollection AddShipping(this IServiceCollection services)
 ### What a permission lets somebody do
 
 A permission's text, the one an administrator reads where roles are made, is its summary in the `[Permissions]`
-class it is declared in ([A module states its keys once](tenancy.md#a-module-states-its-keys-once)). That is the
-English, and the fallback. A translation is a resx entry under the permission's key, read with
+class it is declared in ([A module states its permissions once](tenancy.md#a-module-states-its-permissions-once)). That is the
+English, and the fallback. A translation is a resx entry under the permission's name, read with
 `IFailureLocalizer.Text`, which answers the entry in the current UI culture or the text it is handed:
 
 ```csharp
-var description = localizer.Text(permission.Key, permission.Description);   // "orders.view": "De orders zien."
+var description = localizer.Text(permission.Name, permission.Description);   // "orders.view": "De orders zien."
 ```
 
 Keep the permissions' texts in a pair of their own beside the class, `OrderingPermissionTexts.resx` and its

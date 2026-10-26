@@ -28,7 +28,7 @@ public sealed class MembershipFunctionTests(FilingPostgres postgres)
             // The documents the caller sees, and those it is a member of: the same, for members that are users.
             var seenInCSharp = await filing.Services.AsAsync(caller, async provider =>
             {
-                var see = provider.GetRequiredService<IMemberQuestions<DocumentId>>().KeyReach([]).See;
+                var see = provider.GetRequiredService<IMemberQuestions<DocumentId>>().PermissionReach([]).See;
                 return await provider.GetRequiredService<FilingContext>().Documents.Within(see).Select(document => document.Id.Value).ToListAsync(Cancellation);
             });
             var seen = data.DocumentsSeenBy(user).Select(id => id.Value).ToList();
@@ -36,22 +36,22 @@ public sealed class MembershipFunctionTests(FilingPostgres postgres)
             (await session.ListAsync<Guid>($"SELECT id FROM {Filing}{functions.AsMember}() AS id")).Should().BeEquivalentTo(seen);
             seenInCSharp.Should().BeEquivalentTo(seen);
 
-            foreach (var key in FilingScenario.DocumentKeysAsked)
+            foreach (var permission in FilingScenario.DocumentPermissionsAsked)
             {
                 var heldInCSharp = await filing.Services.AsAsync(caller, async provider =>
                 {
-                    var reach = provider.GetRequiredService<IMemberQuestions<DocumentId>>().Reach(key);
+                    var reach = provider.GetRequiredService<IMemberQuestions<DocumentId>>().Reach(permission);
                     return await provider.GetRequiredService<FilingContext>().Documents.Within(reach).Select(document => document.Id.Value).ToListAsync(Cancellation);
                 });
-                var held = data.DocumentsHeldBy(user, key).Select(id => id.Value).ToList();
-                var because = "of what " + user + " holds " + key + " on";
+                var held = data.DocumentsHeldBy(user, permission).Select(id => id.Value).ToList();
+                var because = "of what " + user + " holds " + permission + " on";
 
-                (await session.ListAsync<Guid>($"SELECT id FROM {Filing}{functions.HeldOn}($1) AS id", key)).Should().BeEquivalentTo(held, because);
+                (await session.ListAsync<Guid>($"SELECT id FROM {Filing}{functions.HeldOn}($1) AS id", permission)).Should().BeEquivalentTo(held, because);
                 heldInCSharp.Should().BeEquivalentTo(held, because);
 
                 // Through a role alone: what being a member or owning the document gives is not a role's to give.
-                (await session.ListAsync<Guid>($"SELECT id FROM {Filing}{functions.AsMemberWith}($1) AS id", key))
-                    .Should().BeEquivalentTo(data.DocumentsWithARoleFor(user, key).Select(id => id.Value), because + " through a role");
+                (await session.ListAsync<Guid>($"SELECT id FROM {Filing}{functions.AsMemberWith}($1) AS id", permission))
+                    .Should().BeEquivalentTo(data.DocumentsWithARoleFor(user, permission).Select(id => id.Value), because + " through a role");
             }
         }
     }
@@ -73,20 +73,20 @@ public sealed class MembershipFunctionTests(FilingPostgres postgres)
             (await session.ListAsync<long>($"SELECT id FROM {Filing}{functions.Seen}() AS id")).Should().BeEquivalentTo(seen, "of what " + staff + " sees");
             (await session.ListAsync<long>($"SELECT id FROM {Filing}{functions.AsMember}() AS id")).Should().BeEquivalentTo(seen);
 
-            foreach (var key in FilingScenario.FolderKeysAsked)
+            foreach (var permission in FilingScenario.FolderPermissionsAsked)
             {
                 var heldInCSharp = await filing.Services.AsAsync(caller, async provider =>
                 {
-                    var reach = provider.GetRequiredService<IMemberQuestions<FolderId>>().Reach(key);
+                    var reach = provider.GetRequiredService<IMemberQuestions<FolderId>>().Reach(permission);
                     return await provider.GetRequiredService<FilingContext>().Folders.Within(reach).Select(folder => folder.Id.Value).ToListAsync(Cancellation);
                 });
-                var held = data.FoldersHeldBy(staff, key).Select(id => id.Value).ToList();
-                var because = "of what " + staff + " holds " + key + " on";
+                var held = data.FoldersHeldBy(staff, permission).Select(id => id.Value).ToList();
+                var because = "of what " + staff + " holds " + permission + " on";
 
-                (await session.ListAsync<long>($"SELECT id FROM {Filing}{functions.HeldOn}($1) AS id", key)).Should().BeEquivalentTo(held, because);
+                (await session.ListAsync<long>($"SELECT id FROM {Filing}{functions.HeldOn}($1) AS id", permission)).Should().BeEquivalentTo(held, because);
                 heldInCSharp.Should().BeEquivalentTo(held, because);
-                (await session.ListAsync<long>($"SELECT id FROM {Filing}{functions.AsMemberWith}($1) AS id", key))
-                    .Should().BeEquivalentTo(data.FoldersWithARoleFor(staff, key).Select(id => id.Value), because + " through a role");
+                (await session.ListAsync<long>($"SELECT id FROM {Filing}{functions.AsMemberWith}($1) AS id", permission))
+                    .Should().BeEquivalentTo(data.FoldersWithARoleFor(staff, permission).Select(id => id.Value), because + " through a role");
             }
         }
     }
@@ -113,10 +113,10 @@ public sealed class MembershipFunctionTests(FilingPostgres postgres)
             {
                 (await session.ListAsync<object>($"SELECT id FROM {Filing}{functions.Seen}() AS id")).Should().BeEmpty(what);
                 (await session.ListAsync<object>($"SELECT id FROM {Filing}{functions.AsMember}() AS id")).Should().BeEmpty(what);
-                foreach (var key in FilingScenario.DocumentKeysAsked.Concat(FilingScenario.FolderKeysAsked))
+                foreach (var permission in FilingScenario.DocumentPermissionsAsked.Concat(FilingScenario.FolderPermissionsAsked))
                 {
-                    (await session.ListAsync<object>($"SELECT id FROM {Filing}{functions.HeldOn}($1) AS id", key)).Should().BeEmpty(what);
-                    (await session.ListAsync<object>($"SELECT id FROM {Filing}{functions.AsMemberWith}($1) AS id", key)).Should().BeEmpty(what);
+                    (await session.ListAsync<object>($"SELECT id FROM {Filing}{functions.HeldOn}($1) AS id", permission)).Should().BeEmpty(what);
+                    (await session.ListAsync<object>($"SELECT id FROM {Filing}{functions.AsMemberWith}($1) AS id", permission)).Should().BeEmpty(what);
                 }
             }
         }
@@ -218,14 +218,14 @@ public sealed class MembershipFunctionTests(FilingPostgres postgres)
                 (await session.ListAsync<Guid>($"SELECT id FROM filing.{functions.HeldOn}($1) AS id", DocumentPermissions.Edit)).Contains(minutes));
         }
 
-        // As the rows are: a member, seen, with a role that gives the key, which is held.
+        // As the rows are: a member, seen, with a role that gives the permission, which is held.
         (await AskAsync(data.Ben, before: null)).Should().Be((true, true, true, true));
 
         // A membership that starts at this very moment counts already, and one that ends at it counts no longer.
         (await AskAsync(data.Ben, Membership("StartsAt", data.Ben))).Should().Be((true, true, true, true), "a period counts from its first moment");
         (await AskAsync(data.Ben, Membership("EndsAt", data.Ben))).Should().Be((false, false, false, false), "an end is the first moment a period no longer counts");
 
-        // The same for a role held in a membership that runs: the member stays one, and the key comes and goes with the role.
+        // The same for a role held in a membership that runs: the member stays one, and the permission comes and goes with the role.
         (await AskAsync(data.Ben, Role("StartsAt", data.Ben))).Should().Be((true, true, true, true));
         (await AskAsync(data.Ben, Role("EndsAt", data.Ben))).Should().Be((true, true, false, false));
 
@@ -246,12 +246,12 @@ public sealed class MembershipFunctionTests(FilingPostgres postgres)
         static string Scoped(string scope) => $$"""{"role":"ddd_system_in","scope":"{{scope}}"}""";
         long[] every = [data.Cabinet.Value, data.Annex.Value];
 
-        // The module's own scope: every folder is seen, and every key is held on every folder. Nobody's member.
+        // The module's own scope: every folder is seen, and every permission is held on every folder. Nobody's member.
         await using (var own = await filing.SessionAsync(Callers.FromClaims(Scoped(FolderMembership.Scope)), role: "ddd_system_in"))
         {
             (await own.ListAsync<long>("SELECT id FROM filing.folders_i_see() AS id")).Should().BeEquivalentTo(every);
             (await own.ListAsync<long>("SELECT id FROM filing.folders_where_i_hold($1) AS id", FolderPermissions.Shred)).Should().BeEquivalentTo(every);
-            (await own.ListAsync<long>("SELECT id FROM filing.folders_where_i_hold($1) AS id", "folders.unheard-of")).Should().BeEquivalentTo(every, "the application's own work holds every key there is");
+            (await own.ListAsync<long>("SELECT id FROM filing.folders_where_i_hold($1) AS id", "folders.unheard-of")).Should().BeEquivalentTo(every, "the application's own work holds every permission there is");
             (await own.ListAsync<long>("SELECT id FROM filing.folders_as_member() AS id")).Should().BeEmpty();
             (await own.ListAsync<long>("SELECT id FROM filing.folders_as_member_with($1) AS id", FolderPermissions.Read)).Should().BeEmpty();
         }

@@ -72,7 +72,7 @@ public sealed record TenancyCaller<TTenantId, TSeatId> : ITenancyCaller
         => new(TenancyCallerKind.Seat, tenant, seat, null, TenancyActor<TSeatId>.OfSeat(seat));
 
     /// <summary>
-    /// System work inside one tenant, holding every key there. Recorded as the system, in Tenancy's own scope.
+    /// System work inside one tenant, holding every permission there. Recorded as the system, in Tenancy's own scope.
     /// </summary>
     /// <param name="tenant">The tenant.</param>
     /// <param name="actingSeat">The seat the work is done for, recorded as who placed or granted; it adds no rights.</param>
@@ -80,7 +80,7 @@ public sealed record TenancyCaller<TTenantId, TSeatId> : ITenancyCaller
         => SystemIn(tenant, TenancyActor<TSeatId>.OfSystem(TenancyWork.SystemScope, actingSeat));
 
     /// <summary>
-    /// System work inside one tenant, holding every key there, recorded as <paramref name="actor"/>: the system in
+    /// System work inside one tenant, holding every permission there, recorded as <paramref name="actor"/>: the system in
     /// a scope of its own, an operator the work is carried out for, or the token a link carried. The seat the
     /// actor names, if any, is the seat the work is done for. <see cref="TenancyWork"/> begins such a caller
     /// together with the toolkit's own, which is how work is meant to begin it.
@@ -112,7 +112,7 @@ public sealed record TenancyCaller<TTenantId, TSeatId> : ITenancyCaller
 
     /// <summary>
     /// The actor system work is recorded as. Never a seat: a person acts through their own seat, with that seat's
-    /// keys. And always one that says who it is, as the factories of <see cref="TenancyActor{TSeatId}"/> make it:
+    /// permissions. And always one that says who it is, as the factories of <see cref="TenancyActor{TSeatId}"/> make it:
     /// an actor put together by hand that names nobody would be written into records that are kept for good.
     /// </summary>
     private static TenancyActor<TSeatId> OfSystemWork(TenancyActor<TSeatId> actor)
@@ -120,7 +120,7 @@ public sealed record TenancyCaller<TTenantId, TSeatId> : ITenancyCaller
         if (actor.Kind == TenancyActorKind.Seat)
         {
             throw new ArgumentException(
-                "System work is recorded as the system, an operator or a token, never as a seat: a seat acts through TenancyCaller.InSeat, with its own keys.",
+                "System work is recorded as the system, an operator or a token, never as a seat: a seat acts through TenancyCaller.InSeat, with its own permissions.",
                 nameof(actor));
         }
 

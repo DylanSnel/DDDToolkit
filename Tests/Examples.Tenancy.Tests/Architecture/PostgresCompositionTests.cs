@@ -248,7 +248,7 @@ public sealed partial class PostgresCompositionTests
     /// <summary>
     /// <paramref name="schema"/> without its double quotes where a statement names it: before a function or a table,
     /// in a string Postgres reads as a name too, <c>to_regprocedure('"ddd".f(xid)')</c>, or on its own after
-    /// <c>SCHEMA</c>. A setting's or a key's name in a string, <c>'tenancy.caller_tenant'</c>, is no schema: no
+    /// <c>SCHEMA</c>. A setting's or a permission's name in a string, <c>'tenancy.caller_tenant'</c>, is no schema: no
     /// function's parenthesis or table's quote follows it.
     /// </summary>
     private static Regex Unquoted(string schema)
@@ -332,7 +332,7 @@ public sealed partial class PostgresCompositionTests
     {
         var program = File.ReadAllText(Path.Combine(Path.GetDirectoryName(ExporterFile)!, "Program.cs"));
         ListedContribution().Matches(program).Select(match => match.Groups["type"].Value)
-            .Should().BeEquivalentTo([nameof(UnitChangesWithItsKeys), nameof(CrewSeatsOfTheProjectsTenant)], "a package's contribution listed again would be written twice");
+            .Should().BeEquivalentTo([nameof(UnitChangesWithItsPermissions), nameof(CrewSeatsOfTheProjectsTenant)], "a package's contribution listed again would be written twice");
 
         ExportedMarks.Marked(typeof(TenancyCatalogueAttribute)).Should().ContainSingle()
             .Which.GetValue(null).Should().BeSameAs(SampleCatalogue.Application, "the export writes Tenancy's policies from the part the host hands Tenancy's registration");

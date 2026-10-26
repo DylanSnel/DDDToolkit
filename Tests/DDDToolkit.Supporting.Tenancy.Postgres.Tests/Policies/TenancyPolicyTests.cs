@@ -13,7 +13,7 @@ namespace DDDToolkit.Supporting.Tenancy.Postgres.Tests;
 
 /// <summary>
 /// The policies Tenancy's contribution writes, each proven by a query as the caller: on Tenancy's own tables, the
-/// key where the use case asks it and the tenant always, and reads across tenants only where a person finds their
+/// permission where the use case asks it and the tenant always, and reads across tenants only where a person finds their
 /// own seats; on every table kept to a tenant, every caller kept to its tenant whatever the rules add; and no cell
 /// stricter than C#, which every use case run under the policies shows. Who reads the grants and the rights is
 /// <see cref="RightsVisibilityTests"/>.
@@ -182,7 +182,7 @@ public abstract class TenancyPolicyTests(TenancyPostgres postgres, TenancyNaming
     {
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
 
-        // A row that puts South below North would give Seth's keys at North over South's widgets.
+        // A row that puts South below North would give Seth's permissions at North over South's widgets.
         await using (var seth = await AsCaller.PersonAsync(database, Seth.Identity, Harbor, Cancellation))
         {
             (await seth.ExecuteAsync(
@@ -191,14 +191,14 @@ public abstract class TenancyPolicyTests(TenancyPostgres postgres, TenancyNaming
                     North.Value,
                     South.Value))
                 .Should().Be(1, "the policy lets a units manager write the closure");
-            (await seth.ListAsync<Guid>("SELECT tenancy.units_where_i_hold('widget.read')", Cancellation)).Should().Contain(South.Value, "inside the transaction it widens");
+            (await seth.ListAsync<Guid>("SELECT tenancy.units_where_i_hold_permission('widget.read')", Cancellation)).Should().Contain(South.Value, "inside the transaction it widens");
 
             var failure = await FluentActions.Awaiting(() => seth.CommitAsync(Cancellation)).Should().ThrowAsync<PostgresException>();
             failure.Which.ConstraintName.Should().Be("tenancy_paths_follow_the_tree");
         }
 
         await using var after = await AsCaller.PersonAsync(database, Seth.Identity, Harbor, Cancellation);
-        (await after.ListAsync<Guid>("SELECT tenancy.units_where_i_hold('widget.read')", Cancellation)).Should().BeEquivalentTo([North.Value, NorthPier.Value]);
+        (await after.ListAsync<Guid>("SELECT tenancy.units_where_i_hold_permission('widget.read')", Cancellation)).Should().BeEquivalentTo([North.Value, NorthPier.Value]);
     }
 
     [Fact]
@@ -210,13 +210,13 @@ public abstract class TenancyPolicyTests(TenancyPostgres postgres, TenancyNaming
         // the policies alone stand between a query and a second root, and they hold a seat by themselves.
         await TenancyPostgres.ExecuteAsync(database.ConnectionString, $"DROP INDEX tenancy.\"{names.Of("IX_OrganizationUnits_TenantId_WhereRoot")}\"", Cancellation);
 
-        // Seth manages units at North. A key held at a unit without a parent is held for the whole tenant, so North,
+        // Seth manages units at North. A permission held at a unit without a parent is held for the whole tenant, so North,
         // made a second root, would make him a manager of all of Harbor. He may take North's subtree out from under the
         // root in the closure, which the tree would then have to agree with at commit; the unit itself he may not
         // leave without a parent.
         await using (var seth = await AsCaller.PersonAsync(database, Seth.Identity, Harbor, Cancellation))
         {
-            (await seth.ScalarAsync<bool>("SELECT tenancy.holds_tenant_wide('tenancy.units.manage')", Cancellation)).Should().BeFalse();
+            (await seth.ScalarAsync<bool>("SELECT tenancy.holds_at_tenant('tenancy.units.manage')", Cancellation)).Should().BeFalse();
             (await seth.ExecuteAsync(
                     "DELETE FROM tenancy.\"OrganizationUnitPaths\" WHERE \"AncestorId\" = $1 AND \"DescendantId\" = ANY ($2)",
                     Cancellation,
@@ -224,7 +224,7 @@ public abstract class TenancyPolicyTests(TenancyPostgres postgres, TenancyNaming
                     new[] { North.Value, NorthPier.Value }))
                 .Should().Be(2);
             await RefusedAsync(seth, $"UPDATE tenancy.\"OrganizationUnits\" SET \"ParentId\" = NULL WHERE \"Id\" = '{North.Value}'");
-            (await seth.ScalarAsync<bool>("SELECT tenancy.holds_tenant_wide('tenancy.units.manage')", Cancellation)).Should().BeFalse();
+            (await seth.ScalarAsync<bool>("SELECT tenancy.holds_at_tenant('tenancy.units.manage')", Cancellation)).Should().BeFalse();
 
             // What the unit says besides, he changes, and it keeps its parent.
             (await seth.ExecuteAsync("UPDATE tenancy.\"OrganizationUnits\" SET \"Name\" = 'North region' WHERE \"Id\" = $1", Cancellation, North.Value)).Should().Be(1);
@@ -256,7 +256,7 @@ public abstract class TenancyPolicyTests(TenancyPostgres postgres, TenancyNaming
                 .Should().Equal("North true", "South false");
         }
 
-        // Making South primary again takes the seats key at South, which he does not hold.
+        // Making South primary again takes the seats permission at South, which he does not hold.
         await using var seth = await AsCaller.PersonAsync(database, Seth.Identity, Harbor, Cancellation);
         (await seth.ExecuteAsync("UPDATE tenancy.\"SeatPlacements\" SET \"IsPrimary\" = false WHERE \"SeatId\" = $1 AND \"UnitId\" = $2", Cancellation, Eve.Seat.Value, North.Value)).Should().Be(1);
         await RefusedAsync(seth, $"UPDATE tenancy.\"SeatPlacements\" SET \"IsPrimary\" = true WHERE \"SeatId\" = '{Eve.Seat.Value}' AND \"UnitId\" = '{South.Value}'");
@@ -279,7 +279,7 @@ public abstract class TenancyPolicyTests(TenancyPostgres postgres, TenancyNaming
             await RefusedAsync(ada, $"UPDATE widgets.\"Widgets\" SET \"TenantId\" = 2 WHERE \"Id\" = '{Pump.Value}'");
         }
 
-        // Oli reads by his rule where he holds the key, in the tenant he acts in.
+        // Oli reads by his rule where he holds the permission, in the tenant he acts in.
         await using (var oli = await AsCaller.PersonAsync(database, Oli.Identity, Harbor, Cancellation))
         {
             (await oli.ListAsync<string>("SELECT \"Name\" FROM widgets.\"Widgets\"", Cancellation)).Should().Equal("Valve");
@@ -325,7 +325,7 @@ public abstract class TenancyPolicyTests(TenancyPostgres postgres, TenancyNaming
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
         await ApplyAsync(database, []);
 
-        // Ada holds every key of Harbor; with no rule for signed-in users, the widgets are closed to her.
+        // Ada holds every permission of Harbor; with no rule for signed-in users, the widgets are closed to her.
         await using (var ada = await AsCaller.PersonAsync(database, Ada.Identity, Harbor, Cancellation))
         {
             (await ada.ScalarAsync<long>("SELECT count(*) FROM widgets.\"Widgets\"", Cancellation)).Should().Be(0);
@@ -368,7 +368,7 @@ public abstract class TenancyPolicyTests(TenancyPostgres postgres, TenancyNaming
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
         const string Note = "INSERT INTO tenancy.\"TenantNote\" (\"Id\", \"HostTenantId\", \"Text\") VALUES (gen_random_uuid(), {0}, 'Moored at the quay')";
 
-        // A note on a tenant is written by whoever may change the tenant: the settings key for the whole tenant.
+        // A note on a tenant is written by whoever may change the tenant: the settings permission for the whole tenant.
         await using (var ada = await AsCaller.PersonAsync(database, Ada.Identity, Harbor, Cancellation))
         {
             (await ada.ExecuteAsync(string.Format(System.Globalization.CultureInfo.InvariantCulture, Note, 1), Cancellation)).Should().Be(1);
@@ -505,12 +505,12 @@ public abstract class TenancyPolicyTests(TenancyPostgres postgres, TenancyNaming
 
     /// <summary>
     /// A database of its own where <paramref name="person"/> holds a role at <paramref name="unit"/>, placed there first
-    /// where they are not: Harbor's Administrator, or one holding <paramref name="keys"/> alone.
+    /// where they are not: Harbor's Administrator, or one holding <paramref name="permissions"/> alone.
     /// </summary>
-    private async Task<TestDatabase> HoldingAtAsync(Person person, OrganizationUnitId unit, string[]? keys)
+    private async Task<TestDatabase> HoldingAtAsync(Person person, OrganizationUnitId unit, string[]? permissions)
     {
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
-        await HoldAtAsync(database, person, unit, keys, Cancellation);
+        await HoldAtAsync(database, person, unit, permissions, Cancellation);
         return database;
     }
 

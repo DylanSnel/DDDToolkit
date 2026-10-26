@@ -41,7 +41,7 @@ namespace DDDToolkit.Supporting.Membership.EntityFramework.Analyzers;
 /// </para>
 /// <para>
 /// <b>Which roles.</b> A member that holds roles by the id of Tenancy's role class holds the tenant's own
-/// roles, and the written class answers which of them give a key and which there are. A member that holds
+/// roles, and the written class answers which of them give a permission and which there are. A member that holds
 /// roles by name, or by the id of a role class kept for the resource, holds roles Tenancy knows nothing of,
 /// and nothing is answered about roles.
 /// </para>
@@ -203,10 +203,10 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
             return ids;
         }
 
-        var key = attribute.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        var permission = attribute.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
         foreach (var definition in declared)
         {
-            if (definition.TemplateKey == key)
+            if (definition.TemplateKey == permission)
             {
                 ids.Add(definition.TemplateIdIsEntityId ? definition.IdType : null);
             }
@@ -356,7 +356,7 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
         writer.Line();
         writer.Line("/// <summary>");
         writer.Line("/// What joins " + join.ResourceName + " to the organization: each of Membership's questions about it is forwarded to one of Tenancy's.");
-        writer.Line("/// A member is the caller's seat, somebody can be made a member while that seat is active, and a key the organization");
+        writer.Line("/// A member is the caller's seat, somebody can be made a member while that seat is active, and a permission the organization");
         writer.Line("/// gives at a unit counts for what sits there and below." + (join.TenantsRoles ? " The roles a member holds are the tenant's own." : string.Empty));
         writer.Line("/// </summary>");
         var answered = new List<string>
@@ -367,7 +367,7 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
         };
         if (join.TenantsRoles)
         {
-            answered.Add(Membership + ".EntityFramework.IRolesWithKey<" + join.IdOfResource + ", " + join.Role + ">");
+            answered.Add(Membership + ".EntityFramework.IRolesWithPermission<" + join.IdOfResource + ", " + join.Role + ">");
             answered.Add(Membership + ".UseCases.IMemberRoles<" + join.IdOfResource + ", " + join.Role + ">");
         }
 
@@ -420,27 +420,27 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
 
             writer.Line();
             writer.Line("/// <summary>");
-            writer.Line("/// The units the caller's hold of <paramref name=\"key\"/> reaches: where it is held, and every unit below. A key the");
+            writer.Line("/// The units the caller's hold of <paramref name=\"permission\"/> reaches: where it is held, and every unit below. A permission the");
             writer.Line("/// catalogue does not know is one no role of the organization can hold, so it is held nowhere: Tenancy itself would");
             writer.Line("/// take the question for a typo.");
             writer.Line("/// </summary>");
-            using (writer.Block("public global::System.Linq.IQueryable<" + unit + "> PlacesReached(" + EntityFramework + ".DbContext context, " + Caller + " caller, string key)"))
+            using (writer.Block("public global::System.Linq.IQueryable<" + unit + "> PlacesReached(" + EntityFramework + ".DbContext context, " + Caller + " caller, string permission)"))
             {
                 writer.Line("var tenancy = " + Over + "(_tenancy, context);");
-                writer.Line("return _catalogue.Knows(key)");
-                writer.Line("    ? tenancy.UnitsWhereIHold(key)");
+                writer.Line("return _catalogue.Knows(permission)");
+                writer.Line("    ? tenancy.UnitsWhereIHold(permission)");
                 writer.Line("    : " + Queryable + ".Select(" + Queryable + ".Where(tenancy.Units(), unit => false), unit => unit.Id);");
             }
 
             if (join.TenantsRoles)
             {
                 writer.Line();
-                writer.Line("/// <summary>The tenant's roles in use that give <paramref name=\"key\"/>; none for a key the catalogue does not know.</summary>");
-                using (writer.Block("public global::System.Linq.IQueryable<" + join.Role + "> RolesWith(" + EntityFramework + ".DbContext context, " + Caller + " caller, string key)"))
+                writer.Line("/// <summary>The tenant's roles in use that give <paramref name=\"permission\"/>; none for a permission the catalogue does not know.</summary>");
+                using (writer.Block("public global::System.Linq.IQueryable<" + join.Role + "> RolesWith(" + EntityFramework + ".DbContext context, " + Caller + " caller, string permission)"))
                 {
                     writer.Line("var tenancy = " + Over + "(_tenancy, context);");
-                    writer.Line("return _catalogue.Knows(key)");
-                    writer.Line("    ? tenancy.RolesWithKey(key)");
+                    writer.Line("return _catalogue.Knows(permission)");
+                    writer.Line("    ? tenancy.RolesWithPermission(permission)");
                     writer.Line("    : " + Queryable + ".Select(" + Queryable + ".Where(tenancy.Roles(), role => false), role => role.Id);");
                 }
 

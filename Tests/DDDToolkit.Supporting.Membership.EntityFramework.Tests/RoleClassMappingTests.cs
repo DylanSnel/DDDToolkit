@@ -28,7 +28,7 @@ public sealed class RoleClassMappingTests
         (role.GetTableName(), role.GetSchema()).Should().Be(("PlotRoles", GardenContext.Schema));
         role.FindOwnership().Should().BeNull("a role is an aggregate beside the plot, not a part of one");
         role.GetProperties().Select(property => property.Name).Should().BeEquivalentTo(
-            ["Id", "Name", "Description", "Keys", "Status", "MadeFrom", "GardenId", "Version"],
+            ["Id", "Name", "Description", "Permissions", "Status", "MadeFrom", "GardenId", "Version"],
             "the package's six, the host's garden, and the version every aggregate has");
 
         role.FindProperty("Id")!.ValueGenerated.Should().Be(ValueGenerated.Never, "the host makes a role's id");
@@ -37,9 +37,9 @@ public sealed class RoleClassMappingTests
         role.FindProperty("MadeFrom")!.GetMaxLength().Should().Be(NamedRole.MaxLength, "a starter role is one the rules declare, by a name a role can have");
         role.FindProperty("MadeFrom")!.IsNullable.Should().BeTrue("a role a garden made itself came from no starter role");
 
-        // The status as its name, and the keys as one collection in one column, read inside a statement.
+        // The status as its name, and the permissions as one collection in one column, read inside a statement.
         role.FindProperty("Status")!.GetProviderClrType().Should().Be(typeof(string));
-        role.FindProperty("Keys")!.IsPrimitiveCollection.Should().BeTrue();
+        role.FindProperty("Permissions")!.IsPrimitiveCollection.Should().BeTrue();
 
         // What is the host's: the two indexes over its garden, and the rule about which roles a request reads.
         role.GetIndexes().Select(index => string.Join("+", index.Properties.Select(property => property.Name)) + (index.IsUnique ? " once" : string.Empty))
@@ -109,14 +109,14 @@ public sealed class RoleClassMappingTests
         FluentActions.Invoking(() => MembershipModel.MembersOf(two.FindEntityType(typeof(Plot))!))
             .Should().Throw<InvalidOperationException>().WithMessage("Plot has two role classes in this model, *Role and *Role. A resource has one*");
 
-        // A mark on something that has no keys: the mapping was changed after IsCustomRole, or never was one.
+        // A mark on something that has no permissions: the mapping was changed after IsCustomRole, or never was one.
         var unkeyed = ModelOf(builder =>
         {
             builder.Entity<Plot>().HasMembers(plot => plot.Gardeners);
             builder.Entity<Barrow>().HasAnnotation(MembershipModel.RoleOfAnnotation, typeof(Plot).FullName);
         });
         FluentActions.Invoking(() => MembershipModel.MembersOf(unkeyed.FindEntityType(typeof(Plot))!))
-            .Should().Throw<InvalidOperationException>().WithMessage("Barrow was mapped with IsCustomRole as the role class of Plot, and the model no longer has its keys, its status or its id.*");
+            .Should().Throw<InvalidOperationException>().WithMessage("Barrow was mapped with IsCustomRole as the role class of Plot, and the model no longer has its permissions, its status or its id.*");
     }
 
     [Fact]
@@ -139,7 +139,7 @@ public sealed class RoleClassMappingTests
         var services = new ServiceCollection();
         services.AddMembership<PlotGardener, PlotGardenerId, UserId, PlotRoleId, GardenContext, Plot, PlotId>(PlotMembership.Rules);
         services.Should().ContainSingle(descriptor => descriptor.ServiceType == typeof(IMemberRoles<PlotId, PlotRoleId>));
-        services.Select(descriptor => descriptor.ServiceType).Should().NotContain(typeof(IRolesWithKey<PlotId, PlotRoleId>));
+        services.Select(descriptor => descriptor.ServiceType).Should().NotContain(typeof(IRolesWithPermission<PlotId, PlotRoleId>));
 
         // A host that answers which roles there are itself, by a scope it reads from elsewhere say, registers
         // its answer before the resource, and that one stays: the admission asks it, and not the rows.
@@ -266,7 +266,7 @@ public sealed class RoleClassMappingTests
     {
         public GardenId Id { get; set; }
 
-        public List<string> Keys { get; set; } = [];
+        public List<string> Permissions { get; set; } = [];
 
         public CustomRoleStatus Status { get; set; }
     }

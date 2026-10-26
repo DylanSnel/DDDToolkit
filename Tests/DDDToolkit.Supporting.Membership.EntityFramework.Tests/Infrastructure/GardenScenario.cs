@@ -37,7 +37,7 @@ public sealed record GardenPerson(string Name, Guid User, GardenId Garden)
 /// </para>
 /// <para>
 /// The sheds have one set of roles, in no garden's name: the keeper, their starter role (open, stock), and
-/// the lender, made since (open, and lending tools, a key of another module's). The tool shed is owned by
+/// the lender, made since (open, and lending tools, a permission of another module's). The tool shed is owned by
 /// Ada, with Ben lending and Di in it with no role.
 /// </para>
 /// </remarks>
@@ -97,7 +97,7 @@ public sealed class GardenScenario
 
         // The sheds' roles: the one starter role, and one made since.
         ShedKeeper = new ShedRole(ShedRoleId.CreateSequential(), StarterRoles.Missing<ShedRoleId>(ShedMembership.Rules, []).Single());
-        Lender = new ShedRole(ShedRoleId.CreateSequential(), new CustomRoleDraft("Lender", "Lends the tools out.", [ShedPermissions.Open, ShedKeys.LendTools]));
+        Lender = new ShedRole(ShedRoleId.CreateSequential(), new CustomRoleDraft("Lender", "Lends the tools out.", [ShedPermissions.Open, ToolPermissions.LendTools]));
         ShedRoles = [ShedKeeper, Lender];
 
         var tools = new Shed(ToolShed, "Tools", Ada.Member, monthAgo);
@@ -171,7 +171,7 @@ public sealed class GardenScenario
     /// <summary>The sheds' keeper, made from the starter role their rules declare.</summary>
     public ShedRole ShedKeeper { get; }
 
-    /// <summary>A role of sheds made since: open, and lend tools, which is another module's key.</summary>
+    /// <summary>A role of sheds made since: open, and lend tools, which is another module's permission.</summary>
     public ShedRole Lender { get; }
 
     public ShedId ToolShed { get; } = ShedId.CreateSequential();
@@ -188,11 +188,11 @@ public sealed class GardenScenario
     /// <summary>The plots, as their aggregates.</summary>
     public IReadOnlyList<Plot> Plots { get; }
 
-    /// <summary>Every key a question about plots is asked with, and one nobody declared.</summary>
-    public static IReadOnlyList<string> KeysAsked => [PlotPermissions.See, PlotPermissions.Plant, PlotPermissions.Water, PlotPermissions.Fence, PlotPermissions.Sell, "plots.unheard-of"];
+    /// <summary>Every permission a question about plots is asked with, and one nobody declared.</summary>
+    public static IReadOnlyList<string> PermissionsAsked => [PlotPermissions.See, PlotPermissions.Plant, PlotPermissions.Water, PlotPermissions.Fence, PlotPermissions.Sell, "plots.unheard-of"];
 
-    /// <summary>Every key a question about sheds is asked with, another module's among them, and one nobody declared.</summary>
-    public static IReadOnlyList<string> ShedKeysAsked => [ShedPermissions.Open, ShedPermissions.Stock, ShedPermissions.Sell, ShedKeys.LendTools, "sheds.unheard-of"];
+    /// <summary>Every permission a question about sheds is asked with, another module's among them, and one nobody declared.</summary>
+    public static IReadOnlyList<string> ShedPermissionsAsked => [ShedPermissions.Open, ShedPermissions.Stock, ShedPermissions.Sell, ToolPermissions.LendTools, "sheds.unheard-of"];
 
     /// <summary>Saves the scenario as the application's own work, in no garden.</summary>
     public async Task SaveAsync(GardenServices services)
@@ -215,45 +215,45 @@ public sealed class GardenScenario
         => [.. Plots.Where(plot => plot.Gardeners.Any(row => row.MemberId == person.Member && row.AppliesAt(Now))).Select(plot => plot.Id).Order()];
 
     /// <summary>
-    /// The plots where somebody is a gardener now and holds a role now that gives <paramref name="key"/>: a
-    /// role in use that holds the key, for a key the plots' rules let a member's role give.
+    /// The plots where somebody is a gardener now and holds a role now that gives <paramref name="permission"/>: a
+    /// role in use that holds the permission, for a permission the plots' rules let a member's role give.
     /// </summary>
-    public IReadOnlyList<PlotId> PlotsWithARoleFor(GardenPerson person, string key)
+    public IReadOnlyList<PlotId> PlotsWithARoleFor(GardenPerson person, string permission)
         => [.. Plots
             .Where(plot => plot.Gardeners.Any(row => row.MemberId == person.Member
-                && Roles.Any(role => role.Gives(key, PlotMembership.Rules) && row.HoldsAt(role.Id, Now))))
+                && Roles.Any(role => role.Gives(permission, PlotMembership.Rules) && row.HoldsAt(role.Id, Now))))
             .Select(plot => plot.Id)
             .Order()];
 
     /// <summary>
-    /// The plots somebody holds <paramref name="key"/> on, worked out from the aggregates in memory with the
+    /// The plots somebody holds <paramref name="permission"/> on, worked out from the aggregates in memory with the
     /// rules, the way a reader of the rules would: by owning it, by being on it, or through a role of plots.
     /// </summary>
-    public IReadOnlyList<PlotId> PlotsHeldBy(GardenPerson person, string key)
+    public IReadOnlyList<PlotId> PlotsHeldBy(GardenPerson person, string permission)
     {
         var rules = PlotMembership.Rules;
-        var owned = Plots.Where(plot => rules.OwnerHolds(key) && plot.OwnerId == person.Member).Select(plot => plot.Id);
-        var joined = rules.MembershipGives(key) ? PlotsAsMember(person) : [];
+        var owned = Plots.Where(plot => rules.OwnerHolds(permission) && plot.OwnerId == person.Member).Select(plot => plot.Id);
+        var joined = rules.MembershipGives(permission) ? PlotsAsMember(person) : [];
 
-        return [.. owned.Union(joined).Union(PlotsWithARoleFor(person, key)).Order()];
+        return [.. owned.Union(joined).Union(PlotsWithARoleFor(person, permission)).Order()];
     }
 
     /// <summary>The sheds somebody sees: those it owns, and those it is a hand in now.</summary>
     public IReadOnlyList<ShedId> ShedsSeenBy(GardenPerson person)
         => [.. Sheds.Where(shed => shed.OwnerId == person.Member || shed.Hands.Any(row => row.MemberId == person.Member && row.AppliesAt(Now))).Select(shed => shed.Id).Order()];
 
-    /// <summary>The sheds where somebody is a hand now and holds a role of sheds now that gives <paramref name="key"/>.</summary>
-    public IReadOnlyList<ShedId> ShedsWithARoleFor(GardenPerson person, string key)
+    /// <summary>The sheds where somebody is a hand now and holds a role of sheds now that gives <paramref name="permission"/>.</summary>
+    public IReadOnlyList<ShedId> ShedsWithARoleFor(GardenPerson person, string permission)
         => [.. Sheds
             .Where(shed => shed.Hands.Any(row => row.MemberId == person.Member
-                && ShedRoles.Any(role => role.Gives(key, ShedMembership.Rules) && row.HoldsAt(role.Id, Now))))
+                && ShedRoles.Any(role => role.Gives(permission, ShedMembership.Rules) && row.HoldsAt(role.Id, Now))))
             .Select(shed => shed.Id)
             .Order()];
 
-    /// <summary>The sheds somebody holds <paramref name="key"/> on: by owning it, or through a role of sheds. Being a hand gives no key.</summary>
-    public IReadOnlyList<ShedId> ShedsHeldBy(GardenPerson person, string key)
-        => [.. Sheds.Where(shed => ShedMembership.Rules.OwnerHolds(key) && shed.OwnerId == person.Member).Select(shed => shed.Id)
-            .Union(ShedsWithARoleFor(person, key))
+    /// <summary>The sheds somebody holds <paramref name="permission"/> on: by owning it, or through a role of sheds. Being a hand gives no permission.</summary>
+    public IReadOnlyList<ShedId> ShedsHeldBy(GardenPerson person, string permission)
+        => [.. Sheds.Where(shed => ShedMembership.Rules.OwnerHolds(permission) && shed.OwnerId == person.Member).Select(shed => shed.Id)
+            .Union(ShedsWithARoleFor(person, permission))
             .Order()];
 
     private static GardenPerson Person(string name, GardenId garden) => new(name, Guid.CreateVersion7(), garden);

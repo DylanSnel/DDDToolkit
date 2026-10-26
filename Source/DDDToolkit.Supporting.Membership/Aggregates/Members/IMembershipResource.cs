@@ -29,7 +29,7 @@ public interface IMembershipResource
     /// <summary>
     /// The scope of the system work of the module that declares the resource, its name as a scope is written:
     /// <c>boards</c> for the module <c>Boards</c>. <see langword="null"/> for a resource of a project that declares no
-    /// module. Work begun in this scope holds every key on the resource unless its rules say otherwise.
+    /// module. Work begun in this scope holds every permission on the resource unless its rules say otherwise.
     /// </summary>
     static abstract string? MembershipScope { get; }
 }

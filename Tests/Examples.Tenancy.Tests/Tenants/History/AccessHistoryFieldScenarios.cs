@@ -9,7 +9,7 @@ namespace Examples.Tenancy.Tests.Tenants.History;
 
 /// <summary>
 /// The access history through the GraphQL schema: a connection over the query the route sends, so a page of the
-/// field is the page of the route, cut at the same markers, and it is refused under the same key. Who acted is a
+/// field is the page of the route, cut at the same markers, and it is refused under the same permission. Who acted is a
 /// kind and, for a seat, the seat, read once for a whole page.
 /// </summary>
 /// <remarks>
@@ -110,7 +110,7 @@ public sealed class AccessHistoryFieldScenarios(SampleHosts sample) : IClassFixt
     [Theory]
     [InlineData("rhea")]
     [InlineData("hana")]
-    public async Task Without_the_key_the_field_is_refused_with_the_code_the_route_gives(string person)
+    public async Task Without_the_permission_the_field_is_refused_with_the_code_the_route_gives(string person)
     {
         using var client = await sample.ClientAsync(person, Harbor.Slug);
 
@@ -118,7 +118,7 @@ public sealed class AccessHistoryFieldScenarios(SampleHosts sample) : IClassFixt
 
         error.Code().Should().Be(TenancyRefusals.NotPermitted);
         error.Kind().Should().Be("not_permitted");
-        error.GetProperty("extensions").GetProperty("arguments").Text("Key").Should().Be(TenancyKeys.HistoryView);
+        error.GetProperty("extensions").GetProperty("arguments").Text("Permission").Should().Be(TenancyPermissions.HistoryView);
     }
 
     [Fact]

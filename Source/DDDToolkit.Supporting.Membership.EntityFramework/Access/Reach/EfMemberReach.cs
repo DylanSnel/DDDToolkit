@@ -10,7 +10,7 @@ namespace DDDToolkit.Supporting.Membership.EntityFramework;
 
 /// <summary>
 /// The reach the access questions of a resource stored with Entity Framework make: what the rules decided for
-/// one key and one caller, as conditions over the resource's own rows, and over what the application answers
+/// one permission and one caller, as conditions over the resource's own rows, and over what the application answers
 /// where the rules say it does. It reads nothing itself; it becomes part of whichever statement it is put
 /// into.
 /// </summary>
@@ -27,17 +27,17 @@ internal sealed class EfMemberReach<TResource, TResourceId, TMember, TId, TMembe
     private readonly List<TRoleId> _roles;
     private readonly AskedOfTheApplication<TResource, TRoleId>? _asked;
 
-    /// <summary>A reach for <paramref name="key"/>.</summary>
-    /// <param name="key">The key.</param>
+    /// <summary>A reach for <paramref name="permission"/>.</summary>
+    /// <param name="permission">The permission.</param>
     /// <param name="now">The moment a membership, and a role held in it, must apply at.</param>
     /// <param name="everything">Whether the caller is the application's own work, which reaches every resource.</param>
-    /// <param name="heldBy">How the caller can hold the key; <see cref="MemberHeldBy.None"/> for a caller that holds it in no way.</param>
+    /// <param name="heldBy">How the caller can hold the permission; <see cref="MemberHeldBy.None"/> for a caller that holds it in no way.</param>
     /// <param name="member">Who the caller is as a member, for the ways that ask it.</param>
-    /// <param name="roles">The roles that give the key, for <see cref="MemberHeldBy.Roles"/> under rules that declare the roles.</param>
+    /// <param name="roles">The roles that give the permission, for <see cref="MemberHeldBy.Roles"/> under rules that declare the roles.</param>
     /// <param name="names">The properties of the resource the conditions read.</param>
     /// <param name="asked">What the reach puts into a statement as a query of its own, or <see langword="null"/> when it puts in none.</param>
     public EfMemberReach(
-        string key,
+        string permission,
         DateTimeOffset now,
         bool everything,
         MemberHeldBy heldBy,
@@ -45,7 +45,7 @@ internal sealed class EfMemberReach<TResource, TResourceId, TMember, TId, TMembe
         List<TRoleId> roles,
         MemberNames<TResource, TRoleId> names,
         AskedOfTheApplication<TResource, TRoleId>? asked = null)
-        : base(key, now, everything)
+        : base(permission, now, everything)
     {
         HeldBy = everything ? MemberHeldBy.None : heldBy;
         _member = member;
@@ -54,7 +54,7 @@ internal sealed class EfMemberReach<TResource, TResourceId, TMember, TId, TMembe
         _asked = everything ? null : asked;
     }
 
-    /// <summary>The reach of what the caller sees, under rules that name no key for it.</summary>
+    /// <summary>The reach of what the caller sees, under rules that name no permission for it.</summary>
     /// <param name="now">The moment a membership must apply at.</param>
     /// <param name="everything">Whether the caller is the application's own work, which reaches every resource.</param>
     /// <param name="heldBy">How a member sees a resource; <see cref="MemberHeldBy.None"/> for a caller that is nobody's member.</param>
@@ -69,10 +69,10 @@ internal sealed class EfMemberReach<TResource, TResourceId, TMember, TId, TMembe
         _names = names;
     }
 
-    /// <summary>How the caller can hold the key; nothing for the application's own work, which holds it anyway.</summary>
+    /// <summary>How the caller can hold the permission; nothing for the application's own work, which holds it anyway.</summary>
     public MemberHeldBy HeldBy { get; }
 
-    /// <summary>Whether the caller reaches nothing: it holds the key in no way the rules know.</summary>
+    /// <summary>Whether the caller reaches nothing: it holds the permission in no way the rules know.</summary>
     public bool Nothing => !Everything && HeldBy == MemberHeldBy.None;
 
     /// <inheritdoc />
@@ -87,8 +87,8 @@ internal sealed class EfMemberReach<TResource, TResourceId, TMember, TId, TMembe
     /// Each of <paramref name="resources"/> the caller sees, as <paramref name="see"/> says it, with how this
     /// reach reaches it: what a hold is read from, in one statement.
     /// <para>
-    /// Its <see cref="MemberFound{TResource}.Until"/> is until when the caller holds the key on the resource,
-    /// however it holds it. A key held from above has no end known here, and is held on a resource for as
+    /// Its <see cref="MemberFound{TResource}.Until"/> is until when the caller holds the permission on the resource,
+    /// however it holds it. A permission held from above has no end known here, and is held on a resource for as
     /// long as the caller sees that resource: with no end where it sees it from above as well, and until its
     /// membership ends where it sees it as a member alone.
     /// </para>
@@ -103,7 +103,7 @@ internal sealed class EfMemberReach<TResource, TResourceId, TMember, TId, TMembe
     {
         if (Everything || !HeldBy.HasFlag(MemberHeldBy.Above))
         {
-            // Nothing is held from above here, so a hold ends when the members say: a member holds a key
+            // Nothing is held from above here, so a hold ends when the members say: a member holds a permission
             // no longer than it is one.
             return Reached(see.Within(resources, context), context);
         }
@@ -117,7 +117,7 @@ internal sealed class EfMemberReach<TResource, TResourceId, TMember, TId, TMembe
 
     private static Expression NoEnd => Expression.Constant(null, typeof(DateTimeOffset?));
 
-    /// <summary>Those of <paramref name="resources"/> a key is held on in either way, and none of them where it can be held in neither.</summary>
+    /// <summary>Those of <paramref name="resources"/> a permission is held on in either way, and none of them where it can be held in neither.</summary>
     private static IQueryable<TResource> Where(
         IQueryable<TResource> resources,
         (Expression<Func<TResource, bool>>? AsMember, Expression<Func<TResource, bool>>? FromAbove) held)
@@ -132,14 +132,14 @@ internal sealed class EfMemberReach<TResource, TResourceId, TMember, TId, TMembe
 
     /// <summary>
     /// Each of <paramref name="resources"/> with how this reach reaches it. One projection whatever the caller,
-    /// so a statement has the same shape for everybody: the resource, whether the caller holds the key on it
-    /// as a member, and until when, and whether it holds the key from above, each a subquery of the statement.
+    /// so a statement has the same shape for everybody: the resource, whether the caller holds the permission on it
+    /// as a member, and until when, and whether it holds the permission from above, each a subquery of the statement.
     /// </summary>
     /// <param name="resources">The resources.</param>
     /// <param name="context">The context the statement runs on, or <see langword="null"/> for the request's own.</param>
     /// <param name="whileSeen">
-    /// Until when the caller sees a resource, where a key held from above is to be held that long;
-    /// <see langword="null"/> to say until when the key is held as a member and nothing of a hold from above.
+    /// Until when the caller sees a resource, where a permission held from above is to be held that long;
+    /// <see langword="null"/> to say until when the permission is held as a member and nothing of a hold from above.
     /// </param>
     private IQueryable<MemberFound<TResource>> Found(IQueryable<TResource> resources, DbContext? context, Func<ParameterExpression, Expression?>? whileSeen)
     {
@@ -150,7 +150,7 @@ internal sealed class EfMemberReach<TResource, TResourceId, TMember, TId, TMembe
         var until = Everything ? null : HeldUntil(resource, statement);
         if (above is not null && whileSeen is not null)
         {
-            // Held from above, the key outlasts whatever the members say, for as long as the resource is seen.
+            // Held from above, the permission outlasts whatever the members say, for as long as the resource is seen.
             var seen = whileSeen(resource);
             until = seen is not null ? Expression.Condition(above, seen, until ?? NoEnd)
                 : until is not null ? Expression.Condition(above, NoEnd, until)
@@ -211,18 +211,18 @@ internal sealed class EfMemberReach<TResource, TResourceId, TMember, TId, TMembe
             given is not null
                 ? "The context handed over with this reach is not the one the query over " + typeof(TResource).Name + " runs on. Hand over the context the query was made from."
                 : (_names.Roles is null
-                      ? "This reach of " + typeof(TResource).Name + " puts what the application answers into the query, the roles that give the key or where the key is held above, "
+                      ? "This reach of " + typeof(TResource).Name + " puts what the application answers into the query, the roles that give the permission or where the permission is held above, "
                         + "and that is asked for the context the query runs on. "
-                      : "This reach of " + typeof(TResource).Name + " puts the roles that give the key into the query, the rows of its role class, "
+                      : "This reach of " + typeof(TResource).Name + " puts the roles that give the permission into the query, the rows of its role class, "
                         + "and those are read on the context the query runs on. ")
                   + "This query does not run on the request's own context: hand over the context it was made from, "
                   + "as in db.Set<" + typeof(TResource).Name + ">().Within(reach, db).");
     }
 
     /// <summary>
-    /// Whether the caller holds the key on a resource, as two conditions about that resource. As one of its
+    /// Whether the caller holds the permission on a resource, as two conditions about that resource. As one of its
     /// members: by owning it, by being a member now, or by a role held now, whichever of these the rules let
-    /// the key be held by. And from above: by holding the key where the resource sits. Each is
+    /// the permission be held by. And from above: by holding the permission where the resource sits. Each is
     /// <see langword="null"/> for a reach that does not ask it.
     /// </summary>
     /// <remarks>
@@ -238,7 +238,7 @@ internal sealed class EfMemberReach<TResource, TResourceId, TMember, TId, TMembe
         var now = Now;
         var roles = Roles(context);
 
-        // A key of the resource is held by matching the owner, never through a role.
+        // A permission of the resource is held by matching the owner, never through a role.
         Expression<Func<TResource, bool>>? owns = HeldBy.HasFlag(MemberHeldBy.Owner)
             ? resource => EF.Property<TMemberId>(resource, owner).Equals(member)
             : null;
@@ -251,7 +251,7 @@ internal sealed class EfMemberReach<TResource, TResourceId, TMember, TId, TMembe
                 && row.StartsAt <= now
                 && (row.EndsAt == null || row.EndsAt > now))
 
-            // A role that gives the key, held now, in a membership that applies now: a role counts only inside
+            // A role that gives the permission, held now, in a membership that applies now: a role counts only inside
             // its membership.
             : HeldBy.HasFlag(MemberHeldBy.Roles) ? resource => EF.Property<IEnumerable<TMember>>(resource, members).Any(row =>
                 row.MemberId.Equals(member)
@@ -274,19 +274,19 @@ internal sealed class EfMemberReach<TResource, TResourceId, TMember, TId, TMembe
     }
 
     /// <summary>
-    /// The roles that give the key: the ones the rules declare, as values, or, where the roles are rows, the
+    /// The roles that give the permission: the ones the rules declare, as values, or, where the roles are rows, the
     /// ones their table or the application answers, as a query of the statement's own context.
     /// </summary>
     private IEnumerable<TRoleId> Roles(DbContext? context)
         => HeldBy.HasFlag(MemberHeldBy.Roles) && _asked?.Roles is { } kept ? kept(context!) : _roles;
 
     /// <summary>
-    /// The first moment the caller no longer holds the key on a resource as one of its members, as its
+    /// The first moment the caller no longer holds the permission on a resource as one of its members, as its
     /// membership and its roles stand now, as an expression about the resource <paramref name="about"/> stands
     /// for; <see langword="null"/> where that is never, for a reach that asks nothing of the members.
     /// <para>
-    /// An owner holds a key of the resource with no end. A key that being a member gives is held until the
-    /// membership ends. A key a role gives is held until the last of the roles that give it now ends, and no
+    /// An owner holds a permission of the resource with no end. A permission that being a member gives is held until the
+    /// membership ends. A permission a role gives is held until the last of the roles that give it now ends, and no
     /// longer than the membership those roles are held in: a role counts only inside its membership.
     /// </para>
     /// </summary>
@@ -318,11 +318,11 @@ internal sealed class EfMemberReach<TResource, TResourceId, TMember, TId, TMembe
                         && (held.EndsAt == null || held.EndsAt > now)))
                 .Select(row =>
 
-                    // A role with no end of its own that gives the key now: the membership's end is the hold's.
+                    // A role with no end of its own that gives the permission now: the membership's end is the hold's.
                     row.Roles.Any(held => roles.Contains(held.RoleId) && held.StartsAt <= now && held.EndsAt == null)
                         ? row.EndsAt
 
-                        // Otherwise the roles that give the key now all end: the last of them, or the membership if it ends sooner.
+                        // Otherwise the roles that give the permission now all end: the last of them, or the membership if it ends sooner.
                         : row.EndsAt == null
                           || row.Roles.Where(held => roles.Contains(held.RoleId) && held.StartsAt <= now && held.EndsAt > now).Max(held => held.EndsAt) < row.EndsAt
                             ? row.Roles.Where(held => roles.Contains(held.RoleId) && held.StartsAt <= now && held.EndsAt > now).Max(held => held.EndsAt)
@@ -332,7 +332,7 @@ internal sealed class EfMemberReach<TResource, TResourceId, TMember, TId, TMembe
 
         if (joined is null)
         {
-            // Nothing but owning the resource holds the key as a member, and that has no end.
+            // Nothing but owning the resource holds the permission as a member, and that has no end.
             return null;
         }
 

@@ -77,33 +77,33 @@ public sealed class MembershipRules
         ReachFromAbove = reachFromAbove;
         Permissions = Checked(permissions, what);
 
-        OwnerKeys = [.. Permissions.Where(permission => permission.Owner).Select(permission => permission.Key)];
-        _ownerKeys = new HashSet<string>(OwnerKeys, StringComparer.Ordinal);
-        EveryMemberKey = OneMarked(permission => permission.EveryMember, "EveryMember", "every member holds", what)?.Key;
-        MembersLockKey = OneMarked(permission => permission.LocksMembers, "LocksMembers", "locks the members", what)?.Key;
-        OwnerLockKey = OneMarked(permission => permission.LocksOwner, "LocksOwner", "locks the owner", what)?.Key;
-        _notFromAbove = new HashSet<string>(Permissions.Where(permission => !permission.FromAbove).Select(permission => permission.Key), StringComparer.Ordinal);
+        OwnerPermissions = [.. Permissions.Where(permission => permission.Owner).Select(permission => permission.Name)];
+        _ownerKeys = new HashSet<string>(OwnerPermissions, StringComparer.Ordinal);
+        EveryMemberPermission = OneMarked(permission => permission.EveryMember, "EveryMember", "every member holds", what)?.Name;
+        MembersLockPermission = OneMarked(permission => permission.LocksMembers, "LocksMembers", "locks the members", what)?.Name;
+        OwnerLockPermission = OneMarked(permission => permission.LocksOwner, "LocksOwner", "locks the owner", what)?.Name;
+        _notFromAbove = new HashSet<string>(Permissions.Where(permission => !permission.FromAbove).Select(permission => permission.Name), StringComparer.Ordinal);
 
-        // What a role can give: the permissions marked InRoles, or, where the roles take keys of other modules, every
-        // key but the resource's own that no role gives, the keys its module declares at another level, and those named.
-        RoleKeys = roles.OtherKeys is { } other
-            ? new RoleKeys(excepts: true, [.. Permissions.Where(permission => !permission.InRoles).Select(permission => permission.Key), .. elsewhere, .. other.Excepted])
-            : new RoleKeys(excepts: false, Permissions.Where(permission => permission.InRoles).Select(permission => permission.Key));
+        // What a role can give: the permissions marked InRoles, or, where the roles take permissions of other modules, every
+        // permission but the resource's own that no role gives, the permissions its module declares at another level, and those named.
+        RolePermissions = roles.OtherPermissions is { } other
+            ? new RolePermissions(excepts: true, [.. Permissions.Where(permission => !permission.InRoles).Select(permission => permission.Name), .. elsewhere, .. other.Excepted])
+            : new RolePermissions(excepts: false, Permissions.Where(permission => permission.InRoles).Select(permission => permission.Name));
 
-        if (reachFromAbove is not null && EveryMemberKey is null)
+        if (reachFromAbove is not null && EveryMemberPermission is null)
         {
-            // A resource that is not seen does not exist for a caller, so a key held above would reach nobody but its
-            // members: whoever holds the key that sees, there, sees it.
+            // A resource that is not seen does not exist for a caller, so a permission held above would reach nobody but its
+            // members: whoever holds the permission that sees, there, sees it.
             throw new ArgumentException(
                 "The rules of " + what + " let it be reached from above, and no permission on it is held by every member: whoever holds that permission where a "
                 + what + " sits, or above it, sees it, and without one nobody above would. Mark the permission that sees it [On<" + what + ">(EveryMember = true)].",
                 nameof(reachFromAbove));
         }
 
-        if (reachFromAbove is not null && !ReachesFromAbove(EveryMemberKey!))
+        if (reachFromAbove is not null && !ReachesFromAbove(EveryMemberPermission!))
         {
             throw new ArgumentException(
-                "'" + EveryMemberKey + "', the permission every member of " + what + " holds, is the one that sees it from above, and is marked FromAbove = false. "
+                "'" + EveryMemberPermission + "', the permission every member of " + what + " holds, is the one that sees it from above, and is marked FromAbove = false. "
                 + "Let it reach from above, or leave reachFromAbove out.",
                 nameof(reachFromAbove));
         }
@@ -111,8 +111,8 @@ public sealed class MembershipRules
         CheckRoles(what);
         _roles = roles.Declared.ToDictionary(role => role.Name, StringComparer.Ordinal);
 
-        MembersLock(MembersLockKey, "LocksMembers", what);
-        MembersLock(OwnerLockKey, "LocksOwner", what);
+        MembersLock(MembersLockPermission, "LocksMembers", what);
+        MembersLock(OwnerLockPermission, "LocksOwner", what);
         SystemScopes = Scopes(systemScopes, scope);
     }
 
@@ -129,7 +129,7 @@ public sealed class MembershipRules
     /// <param name="reachFromAbove">
     /// Says that a permission held where the resource hangs, or above it, reaches the resource
     /// (<see cref="Access.ReachFromAbove"/>): <c>true</c> beside a package that keeps an organization's units, or the function of the application's own
-    /// that answers where the caller holds a key. Left out, a resource is reached through its members and by its owner
+    /// that answers where the caller holds a permission. Left out, a resource is reached through its members and by its owner
     /// alone. Said, the resource's class marks the place it hangs at <c>[At]</c>, and one permission is held by every
     /// member (<see cref="OnAttribute{TResource}.EveryMember"/>): what is held above sees a resource by that permission.
     /// </param>
@@ -195,14 +195,14 @@ public sealed class MembershipRules
     /// </summary>
     public ReachFromAbove? ReachFromAbove { get; }
 
-    /// <summary>The permissions on the resource, each once, as they are declared: every key asked about on a resource of this kind.</summary>
+    /// <summary>The permissions on the resource, each once, as they are declared: every permission asked about on a resource of this kind.</summary>
     public IReadOnlyList<ResourcePermission> Permissions { get; }
 
     /// <summary>
     /// The permissions the owner holds by owning the resource, those marked <c>Owner</c>, in the order they are
     /// declared. The owner holds no role, so this is all it holds by owning it.
     /// </summary>
-    public IReadOnlyList<string> OwnerKeys { get; }
+    public IReadOnlyList<string> OwnerPermissions { get; }
 
     /// <summary>
     /// The permission every member holds by being one, whatever roles it holds, or <see langword="null"/>: usually
@@ -210,10 +210,10 @@ public sealed class MembershipRules
     /// that is all membership alone gives. Where a resource is reached from above (<see cref="ReachFromAbove"/>) it is the
     /// permission that sees it from there as well.
     /// </summary>
-    public string? EveryMemberKey { get; }
+    public string? EveryMemberPermission { get; }
 
-    /// <summary>Which keys a member's role can give on the resource, wherever the roles come from.</summary>
-    public RoleKeys RoleKeys { get; }
+    /// <summary>Which permissions a member's role can give on the resource, wherever the roles come from.</summary>
+    public RolePermissions RolePermissions { get; }
 
     /// <summary>
     /// The permission the application's own commands require to change the members of a resource, the one marked
@@ -226,11 +226,11 @@ public sealed class MembershipRules
     /// where a caller opens a resource as itself: the owner's own first rows are then its to write.
     /// </para>
     /// </summary>
-    public string? MembersLockKey { get; }
+    public string? MembersLockPermission { get; }
 
     /// <summary>
     /// The permission the application's own command requires to hand a resource to another owner, the one marked
-    /// <c>LocksOwner</c>, or <see langword="null"/>. As <see cref="MembersLockKey"/>, it is here for a database that
+    /// <c>LocksOwner</c>, or <see langword="null"/>. As <see cref="MembersLockPermission"/>, it is here for a database that
     /// checks every row itself: a change of a resource leaves its owner as it was unless the caller holds it there.
     /// <para>
     /// Whoever holds it by owning the resource alone holds it no longer once the owner has changed, and what a
@@ -238,7 +238,7 @@ public sealed class MembershipRules
     /// application's own work; one by somebody who holds it through a role, or from above, as the caller.
     /// </para>
     /// </summary>
-    public string? OwnerLockKey { get; }
+    public string? OwnerLockPermission { get; }
 
     /// <summary>
     /// The scopes whose work is the application's own for this resource: work that runs as
@@ -250,32 +250,32 @@ public sealed class MembershipRules
     public IReadOnlyList<string> SystemScopes { get; }
 
     /// <summary>
-    /// Whether being a member gives <paramref name="key"/> by itself, whatever roles the member holds: so for
-    /// <see cref="EveryMemberKey"/>, and for nothing else.
+    /// Whether being a member gives <paramref name="permission"/> by itself, whatever roles the member holds: so for
+    /// <see cref="EveryMemberPermission"/>, and for nothing else.
     /// </summary>
-    /// <param name="key">A permission key.</param>
-    public bool MembershipGives(string key) => EveryMemberKey is not null && string.Equals(key, EveryMemberKey, StringComparison.Ordinal);
+    /// <param name="permission">A permission.</param>
+    public bool MembershipGives(string permission) => EveryMemberPermission is not null && string.Equals(permission, EveryMemberPermission, StringComparison.Ordinal);
 
     /// <summary>
-    /// Whether a resource's owner holds <paramref name="key"/> on it by being its owner: so for every one of
-    /// <see cref="OwnerKeys"/>, and for no other key, with no end.
+    /// Whether a resource's owner holds <paramref name="permission"/> on it by being its owner: so for every one of
+    /// <see cref="OwnerPermissions"/>, and for no other permission, with no end.
     /// </summary>
-    /// <param name="key">A permission key.</param>
-    public bool OwnerHolds(string key) => _ownerKeys.Contains(key);
+    /// <param name="permission">A permission.</param>
+    public bool OwnerHolds(string permission) => _ownerKeys.Contains(permission);
 
     /// <summary>
-    /// Whether a member can hold <paramref name="key"/> on the resource at all, by being a member or through a
-    /// role: <see cref="EveryMemberKey"/>, and every key within <see cref="RoleKeys"/>.
+    /// Whether a member can hold <paramref name="permission"/> on the resource at all, by being a member or through a
+    /// role: <see cref="EveryMemberPermission"/>, and every permission within <see cref="RolePermissions"/>.
     /// </summary>
-    /// <param name="key">A permission key.</param>
-    public bool MembersHold(string key) => MembershipGives(key) || RoleKeys.Allows(key);
+    /// <param name="permission">A permission.</param>
+    public bool MembersHold(string permission) => MembershipGives(permission) || RolePermissions.Allows(permission);
 
     /// <summary>
-    /// Whether <paramref name="key"/> held where the resource sits, or above it, reaches the resource: where the
-    /// rules let a resource be reached from above, for every key but the permissions marked <c>FromAbove = false</c>.
+    /// Whether <paramref name="permission"/> held where the resource sits, or above it, reaches the resource: where the
+    /// rules let a resource be reached from above, for every permission but the permissions marked <c>FromAbove = false</c>.
     /// </summary>
-    /// <param name="key">A permission key.</param>
-    public bool ReachesFromAbove(string key) => ReachFromAbove is not null && !_notFromAbove.Contains(key);
+    /// <param name="permission">A permission.</param>
+    public bool ReachesFromAbove(string permission) => ReachFromAbove is not null && !_notFromAbove.Contains(permission);
 
     /// <summary>
     /// Whether <paramref name="caller"/> is the application's own work for this resource, which holds every
@@ -293,25 +293,25 @@ public sealed class MembershipRules
     }
 
     /// <summary>
-    /// The fixed roles that give <paramref name="key"/> on the resource: those that list it, when a member's role can
+    /// The fixed roles that give <paramref name="permission"/> on the resource: those that list it, when a member's role can
     /// give it at all, in the order they are declared. None where the roles are rows, a customer's or kept elsewhere,
-    /// since which of those give a key is read where they are kept.
+    /// since which of those give a permission is read where they are kept.
     /// </summary>
-    /// <param name="key">A permission key.</param>
-    public IReadOnlyList<NamedRole> RolesWith(string key)
-        => Roles.Kind == RolesKind.Fixed && RoleKeys.Allows(key)
-            ? [.. Roles.Declared.Where(role => role.Keys.Contains(key, StringComparer.Ordinal)).Select(role => new NamedRole(role.Name))]
+    /// <param name="permission">A permission.</param>
+    public IReadOnlyList<NamedRole> RolesWith(string permission)
+        => Roles.Kind == RolesKind.Fixed && RolePermissions.Allows(permission)
+            ? [.. Roles.Declared.Where(role => role.Permissions.Contains(permission, StringComparer.Ordinal)).Select(role => new NamedRole(role.Name))]
             : [];
 
     /// <summary>
-    /// The keys <paramref name="role"/> gives a member on the resource: the keys it lists that a member's role can
-    /// give. None for a role the rules do not declare. For a customer's roles, the keys the starter role of that name
+    /// The permissions <paramref name="role"/> gives a member on the resource: the permissions it lists that a member's role can
+    /// give. None for a role the rules do not declare. For a customer's roles, the permissions the starter role of that name
     /// is made with.
     /// </summary>
     /// <param name="role">A role.</param>
-    public IReadOnlyList<string> KeysOf(NamedRole role)
+    public IReadOnlyList<string> PermissionsOf(NamedRole role)
         => role.Value is { } name && _roles.TryGetValue(name, out var declared)
-            ? [.. declared.Keys.Where(RoleKeys.Allows)]
+            ? [.. declared.Permissions.Where(RolePermissions.Allows)]
             : [];
 
     /// <summary>Whether <paramref name="role"/> is one of the roles declared in code: a fixed role, or a starter role a customer's roles are made from.</summary>
@@ -333,7 +333,7 @@ public sealed class MembershipRules
     /// <param name="systemScopes">The scopes whose system work holds everything on it; left out, <paramref name="scope"/>.</param>
     /// <param name="scope">The scope of its module's system work, or <see langword="null"/>.</param>
     /// <param name="codes">The codes it refuses under; <see cref="MembershipCodes.Under"/> the name when left out.</param>
-    /// <param name="elsewhere">The keys its module declares at another level.</param>
+    /// <param name="elsewhere">The permissions its module declares at another level.</param>
     /// <exception cref="ArgumentException">The rules do not hold together.</exception>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public static MembershipRules Declare(
@@ -360,17 +360,17 @@ public sealed class MembershipRules
         if (permissions.Count == 0)
         {
             throw new ArgumentException(
-                "No permission is declared on " + what + ". Mark the keys asked on it [On<" + what + ">] in a [Permissions] class of the project that makes "
+                "No permission is declared on " + what + ". Mark the permissions asked on it [On<" + what + ">] in a [Permissions] class of the project that makes "
                 + "the rules, or of one it references: the package's generator declares them for MembershipRules.For<" + what + ">.",
                 nameof(permissions));
         }
 
-        if (permissions.Any(permission => permission is null || string.IsNullOrWhiteSpace(permission.Key)))
+        if (permissions.Any(permission => permission is null || string.IsNullOrWhiteSpace(permission.Name)))
         {
-            throw new ArgumentException("The permissions of " + what + " are permission keys, and a key is not blank.", nameof(permissions));
+            throw new ArgumentException("The permissions of " + what + " are permissions, and a permission is not blank.", nameof(permissions));
         }
 
-        if (permissions.GroupBy(permission => permission.Key, StringComparer.Ordinal).FirstOrDefault(key => key.Count() > 1) is { } twice)
+        if (permissions.GroupBy(permission => permission.Name, StringComparer.Ordinal).FirstOrDefault(permission => permission.Count() > 1) is { } twice)
         {
             throw new ArgumentException("'" + twice.Key + "' is declared on " + what + " twice. A permission is declared once.", nameof(permissions));
         }
@@ -384,7 +384,7 @@ public sealed class MembershipRules
         return found.Count <= 1
             ? found.FirstOrDefault()
             : throw new ArgumentException(
-                "Two permissions on " + resource + " are marked " + setting + ": '" + found[0].Key + "' and '" + found[1].Key + "'. One permission " + what + "; mark the one.",
+                "Two permissions on " + resource + " are marked " + setting + ": '" + found[0].Name + "' and '" + found[1].Name + "'. One permission " + what + "; mark the one.",
                 "permissions");
     }
 
@@ -394,20 +394,20 @@ public sealed class MembershipRules
         {
             foreach (var role in Roles.Declared)
             {
-                foreach (var key in role.Keys)
+                foreach (var permission in role.Permissions)
                 {
-                    if (!Permissions.Any(permission => permission.Key == key))
+                    if (!Permissions.Any(declared => declared.Name == permission))
                     {
-                        // A key the resource never declares: a typo, or a permission that was never marked [On<TResource>].
+                        // A permission the resource never declares: a typo, or a permission that was never marked [On<TResource>].
                         throw new ArgumentException(
-                            "The role '" + role.Name + "' lists '" + key + "', which is no permission on " + what + ". Mark it [On<" + what + ">], or take it out of the role.",
+                            "The role '" + role.Name + "' lists '" + permission + "', which is no permission on " + what + ". Mark it [On<" + what + ">], or take it out of the role.",
                             "roles");
                     }
 
-                    if (!RoleKeys.Allows(key))
+                    if (!RolePermissions.Allows(permission))
                     {
                         throw new ArgumentException(
-                            "The role '" + role.Name + "' lists '" + key + "', which no role gives on " + what + ": it is marked InRoles = false. Take it out of the role.",
+                            "The role '" + role.Name + "' lists '" + permission + "', which no role gives on " + what + ": it is marked InRoles = false. Take it out of the role.",
                             "roles");
                     }
                 }
@@ -418,24 +418,24 @@ public sealed class MembershipRules
 
         if (Roles.Kind == RolesKind.Custom)
         {
-            if (RoleKeys is { Excepts: false, Keys.Count: 0 })
+            if (RolePermissions is { Excepts: false, Permissions.Count: 0 })
             {
-                // A role's keys are chosen from what a role can give, so a customer could make roles and none of them could
-                // ever give anything: every key would be refused, and nothing would say why.
+                // A role's permissions are chosen from what a role can give, so a customer could make roles and none of them could
+                // ever give anything: every permission would be refused, and nothing would say why.
                 throw new ArgumentException(
                     "No permission on " + what + " can be given by a role: every one is marked InRoles = false, so no role a customer makes could give anything. "
-                    + "Let a role give one, or take the keys of other modules, Roles.Custom(otherKeys: OtherKeys.All).",
+                    + "Let a role give one, or take the permissions of other modules, Roles.Custom(otherPermissions: OtherPermissions.All).",
                     "roles");
             }
 
-            // A starter role is a row in the end, and a row's keys are held to what a role can give.
+            // A starter role is a row in the end, and a row's permissions are held to what a role can give.
             foreach (var role in Roles.Declared)
             {
-                if (role.Keys.FirstOrDefault(key => !RoleKeys.Allows(key)) is { } refused)
+                if (role.Permissions.FirstOrDefault(permission => !RolePermissions.Allows(permission)) is { } refused)
                 {
                     throw new ArgumentException(
                         "The starter role '" + role.Name + "' lists '" + refused + "', which a role cannot give on " + what + ". Take it out of the role, "
-                        + "or let a role give it: InRoles on a permission of " + what + ", or otherKeys for a key of another module.",
+                        + "or let a role give it: InRoles on a permission of " + what + ", or otherPermissions for a permission of another module.",
                         "roles");
                 }
             }
@@ -446,15 +446,15 @@ public sealed class MembershipRules
     /// Refuses a lock nobody could pass: a permission the database's lock asks for that the owner does not hold,
     /// every member does not hold, no role can give and nothing above reaches. The lock would keep everybody out.
     /// </summary>
-    private void MembersLock(string? key, string setting, string what)
+    private void MembersLock(string? permission, string setting, string what)
     {
-        if (key is null || OwnerHolds(key) || MembershipGives(key) || RoleKeys.Allows(key) || ReachesFromAbove(key))
+        if (permission is null || OwnerHolds(permission) || MembershipGives(permission) || RolePermissions.Allows(permission) || ReachesFromAbove(permission))
         {
             return;
         }
 
         throw new ArgumentException(
-            "'" + key + "' is marked " + setting + ", and nobody would hold it on " + what + ": not the owner (Owner = false), no role (InRoles = false), not every member, "
+            "'" + permission + "' is marked " + setting + ", and nobody would hold it on " + what + ": not the owner (Owner = false), no role (InRoles = false), not every member, "
             + "and nothing above. The database's lock would keep everybody out. Let the owner hold it, or a role give it.",
             "permissions");
     }

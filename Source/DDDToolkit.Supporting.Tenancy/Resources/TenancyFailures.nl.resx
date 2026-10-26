@@ -25,7 +25,7 @@
     <value>Deze tenant is op dit moment niet in gebruik.</value>
   </data>
   <data name="tenancy.not-permitted" xml:space="preserve">
-    <value>Hiervoor is het recht {Key} nodig.</value>
+    <value>Hiervoor is het recht {Permission} nodig.</value>
   </data>
   <data name="tenancy.grant-exceeds-own" xml:space="preserve">
     <value>Dat gaat verder dan de eigen rechten, daar of voor zo lang: {Missing}.</value>
@@ -136,12 +136,12 @@
     <value>Geef een reden om een tenant te schorsen of te sluiten.</value>
   </data>
   <data name="tenancy.unknown-permission" xml:space="preserve">
-    <value>Deze sleutels zijn onbekend of buiten gebruik: {Keys}.</value>
+    <value>Deze sleutels zijn onbekend of buiten gebruik: {Permissions}.</value>
   </data>
   <data name="tenancy.identity-required" xml:space="preserve">
     <value>Een plaats heeft de geverifieerde identiteit nodig van de persoon van wie hij is.</value>
   </data>
-  <data name="tenancy.keys-not-normalized" xml:space="preserve">
+  <data name="tenancy.permissions-not-normalized" xml:space="preserve">
     <value>De sleutellijst van een rol moet uitgebreid zijn, zonder dubbele, in ordinale volgorde.</value>
   </data>
   <data name="tenancy.too-many-ids" xml:space="preserve">

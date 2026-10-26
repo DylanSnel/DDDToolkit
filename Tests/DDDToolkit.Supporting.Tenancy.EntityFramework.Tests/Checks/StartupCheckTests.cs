@@ -11,7 +11,7 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework.Tests;
 
 /// <summary>
 /// <c>AddTenancy</c> brings Tenancy's start-up checks with it: the catalogue builds, every context that keeps rows
-/// to a tenant checks its saves, and a key a role holds that the catalogue has lost is logged. A host that runs its
+/// to a tenant checks its saves, and a permission a role holds that the catalogue has lost is logged. A host that runs its
 /// checks gets them without a class of its own; each is the method it always was, run as the application.
 /// </summary>
 public sealed class StartupCheckTests
@@ -19,7 +19,7 @@ public sealed class StartupCheckTests
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
     [Fact]
-    public void AddTenancy_brings_the_checks_of_the_catalogue_the_contexts_and_the_stored_keys()
+    public void AddTenancy_brings_the_checks_of_the_catalogue_the_contexts_and_the_stored_permissions()
     {
         var services = new ServiceCollection();
         TestHostTenancy.Add(services);
@@ -28,7 +28,7 @@ public sealed class StartupCheckTests
         services.GetStartupChecks().InOrder().Select(check => (check.Name, check.Stage)).Should().Equal(
             (TenancyChecks.CatalogueBuildsCheck, StartupCheckStage.Services),
             (TenancyChecks.ContextsWiredCheck, StartupCheckStage.Services),
-            (TenancyChecks.UnknownStoredKeysCheck, StartupCheckStage.Database));
+            (TenancyChecks.UnknownStoredPermissionsCheck, StartupCheckStage.Database));
     }
 
     [Fact]
@@ -43,7 +43,7 @@ public sealed class StartupCheckTests
             EntityFrameworkChecks.OwnersMappedCheck,
             TenancyChecks.CatalogueBuildsCheck,
             TenancyChecks.ContextsWiredCheck,
-            TenancyChecks.UnknownStoredKeysCheck);
+            TenancyChecks.UnknownStoredPermissionsCheck);
     }
 
     [Fact]
@@ -65,9 +65,9 @@ public sealed class StartupCheckTests
     }
 
     [Fact]
-    public async Task A_key_a_role_holds_that_the_catalogue_has_lost_is_logged_and_refuses_nothing()
+    public async Task A_permission_a_role_holds_that_the_catalogue_has_lost_is_logged_and_refuses_nothing()
     {
-        // The application once declared a key and gave it to a role; a later version removed it from the code.
+        // The application once declared a permission and gave it to a role; a later version removed it from the code.
         const string polish = "widget.polish";
         using var before = new TestServices(configure: registered => registered.AddTenancyPermissions([new Permission(polish, "Widgets", "Polish widgets")]));
         var harbor = await before.ProvisionAsync("harbor");
@@ -80,7 +80,7 @@ public sealed class StartupCheckTests
         await RunAllAsync(after.Provider);
 
         logs.Where(entry => entry.Level == LogLevel.Warning).Select(entry => entry.Message).Should().Equal(
-            "A role holds the key widget.polish, which the catalogue does not know. It gives no rights. Retire a key rather than removing it from the code, or take it off the roles that hold it.");
+            "A role holds the permission widget.polish, which the catalogue does not know. It gives no rights. Retire a permission rather than removing it from the code, or take it off the roles that hold it.");
     }
 
     /// <summary>

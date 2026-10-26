@@ -7,7 +7,7 @@ using Microsoft.AspNetCore.Routing;
 namespace Examples.Tenancy.Tenants.Api.Catalogue.Rest;
 
 /// <summary>
-/// The permission catalogue over HTTP: the keys and the role packs the application knows. The route sends the one
+/// The permission catalogue over HTTP: the permissions and the role packs the application knows. The route sends the one
 /// query of the application project's <c>Catalogue</c> feature.
 /// </summary>
 /// <remarks>
@@ -32,7 +32,7 @@ internal static class CatalogueEndpoints
     {
         permissions = catalogue.Permissions.Select(permission => new
         {
-            permission.Key,
+            permission.Name,
             permission.Module,
             permission.Description,
             implies = permission.Implies,
@@ -44,7 +44,7 @@ internal static class CatalogueEndpoints
             pack.Key,
             pack.Name,
             pack.Description,
-            pack.Keys,
+            pack.Permissions,
             pack.SeededFor,
             pack.Administers,
         }),

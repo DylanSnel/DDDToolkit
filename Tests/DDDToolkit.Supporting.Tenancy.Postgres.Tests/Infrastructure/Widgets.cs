@@ -67,17 +67,17 @@ public sealed partial class WidgetPart
     public string Name { get; private set; }
 }
 
-/// <summary>A seat reads the widgets at the units where it holds the key to read them, and below.</summary>
+/// <summary>A seat reads the widgets at the units where it holds the permission to read them, and below.</summary>
 [RowAccess<Widget>(RowOperations.Read, To = [RowAccessRoles.User])]
-public static partial class WidgetsAreReadWhereTheKeyIsHeld
+public static partial class WidgetsAreReadWhereThePermissionIsHeld
 {
     public static bool Allows(Widget widget, Caller caller)
         => TenancyRowAccess.UnitsWhereIHold<OrganizationUnitId>(HostCatalogue.WidgetRead).Contains(widget.UnitId);
 }
 
-/// <summary>A seat adds, changes and removes the widgets at the units where it holds the key to change them.</summary>
+/// <summary>A seat adds, changes and removes the widgets at the units where it holds the permission to change them.</summary>
 [RowAccess<Widget>(RowOperations.Create | RowOperations.Change | RowOperations.Remove, To = [RowAccessRoles.User])]
-public static partial class WidgetsAreChangedWhereTheKeyIsHeld
+public static partial class WidgetsAreChangedWhereThePermissionIsHeld
 {
     public static bool Allows(Widget widget, Caller caller)
         => TenancyRowAccess.UnitsWhereIHold<OrganizationUnitId>(HostCatalogue.WidgetChange).Contains(widget.UnitId);
@@ -101,7 +101,7 @@ public static partial class WidgetIsReadableInTenant
 /// Whether a widget of a tenant given as an argument is one the caller reads as the seat and through the role it
 /// names: the module's own function over the other four of Tenancy's questions that take the tenant, so each of
 /// them is declared in C#, exported and asked of the database. True when the caller has an active seat in the
-/// tenant, that seat is the one named and holds the key to read widgets there, and the role named is one of the
+/// tenant, that seat is the one named and holds the permission to read widgets there, and the role named is one of the
 /// tenant's that grants it.
 /// </summary>
 [AccessFunction<Widget>("widgets.read_as_in_tenant")]
@@ -110,21 +110,21 @@ public static partial class WidgetIsReadAsInTenant
     public static bool Allows(Widget widget, Caller caller, TenantId tenant, SeatId seat, RoleId role)
         => widget.TenantId == tenant
            && TenancyRowAccess.SeatedInTenant(tenant)
-           && TenancyRowAccess.HoldsKeyInTenant(tenant, HostCatalogue.WidgetRead)
+           && TenancyRowAccess.HoldsPermissionInTenant(tenant, HostCatalogue.WidgetRead)
            && TenancyRowAccess.SeatInTenant<SeatId, TenantId>(tenant) == seat
-           && TenancyRowAccess.RolesWithKeyInTenant<RoleId, TenantId>(tenant, HostCatalogue.WidgetRead).Contains(role);
+           && TenancyRowAccess.RolesWithPermissionInTenant<RoleId, TenantId>(tenant, HostCatalogue.WidgetRead).Contains(role);
 }
 
 /// <summary>The widgets' rules, as a script is written from them.</summary>
 public static class WidgetRules
 {
     public static readonly RowAccessRule Read = RowAccessRule.For<Widget>(
-        "Read where the key is held", RowOperations.Read, WidgetsAreReadWhereTheKeyIsHeld.RowAccessSql, RowAccessRoles.User);
+        "Read where the permission is held", RowOperations.Read, WidgetsAreReadWhereThePermissionIsHeld.RowAccessSql, RowAccessRoles.User);
 
     public static readonly RowAccessRule Change = RowAccessRule.For<Widget>(
-        "Changed where the key is held",
+        "Changed where the permission is held",
         RowOperations.Create | RowOperations.Change | RowOperations.Remove,
-        WidgetsAreChangedWhereTheKeyIsHeld.RowAccessSql,
+        WidgetsAreChangedWhereThePermissionIsHeld.RowAccessSql,
         RowAccessRoles.User);
 
     public static IReadOnlyList<RowAccessRule> All { get; } = [Read, Change];

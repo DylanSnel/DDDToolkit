@@ -16,8 +16,8 @@ public sealed class TryItInput
     /// <inheritdoc cref="TryItField.Project"/>
     public string? Project { get; set; }
 
-    /// <inheritdoc cref="TryItField.Key"/>
-    public string? Key { get; set; }
+    /// <inheritdoc cref="TryItField.Permission"/>
+    public string? Permission { get; set; }
 
     /// <inheritdoc cref="TryItField.Name"/>
     public string? Name { get; set; }

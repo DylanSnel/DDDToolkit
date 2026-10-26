@@ -8,13 +8,13 @@ using FluentAssertions;
 namespace Examples.Tenancy.Tests.Projects.Ownership;
 
 /// <summary>
-/// Opening a project for an owner the command names: the key that opens a project at the unit, and of the owner, the
-/// caller's own seat or the organization's key to name somebody else, all of it at the door. A seat that may open
-/// projects and names nobody else opens one; naming somebody else without the second key is one <c>access.refused</c>
+/// Opening a project for an owner the command names: the permission that opens a project at the unit, and of the owner, the
+/// caller's own seat or the organization's permission to name somebody else, all of it at the door. A seat that may open
+/// projects and names nobody else opens one; naming somebody else without the second permission is one <c>access.refused</c>
 /// with both reasons, over REST and in the GraphQL mutation alike.
 /// </summary>
 /// <remarks>
-/// Nobody of the demonstration holds the key that opens a project without the key that names an owner, so Ada makes a
+/// Nobody of the demonstration holds the permission that opens a project without the permission that names an owner, so Ada makes a
 /// role of the organization's that opens projects alone and gives it to Juno at North Coast. The class's hosts run on
 /// Supabase's own Postgres image, with the exported policies and privileges under the application's own checks.
 /// </remarks>
@@ -30,7 +30,7 @@ public sealed class OpeningForAnOwnerScenarios(SampleHosts sample) : IClassFixtu
     private static DemoTenant Harbor => DemoData.Harbor;
 
     [Fact]
-    public async Task A_seat_that_may_open_projects_names_itself_the_owner_and_nobody_else_without_the_key_to_name_one()
+    public async Task A_seat_that_may_open_projects_names_itself_the_owner_and_nobody_else_without_the_permission_to_name_one()
     {
         await using var host = await sample.StartAsync();
         var northCoast = Harbor.UnitNamed("North Coast").Value;
@@ -39,7 +39,7 @@ public sealed class OpeningForAnOwnerScenarios(SampleHosts sample) : IClassFixtu
 
         using (var ada = await host.ClientAsync("ada", Harbor.Slug))
         {
-            using var made = await ada.PostAsJsonAsync("/tenancy/roles", new { name = "Opener", keys = new[] { ProjectKeys.View, ProjectKeys.Open } }, Cancellation);
+            using var made = await ada.PostAsJsonAsync("/tenancy/roles", new { name = "Opener", permissions = new[] { ProjectPermissionNames.View, ProjectPermissionNames.Open } }, Cancellation);
             made.StatusCode.Should().Be(HttpStatusCode.Created, await made.Content.ReadAsStringAsync(Cancellation));
             var opener = (await made.Content.ReadFromJsonAsync<JsonElement>(Cancellation)).GetProperty("id").GetGuid();
             using var given = await ada.PostAsJsonAsync($"/tenancy/seats/{juno}/grants", new { unitId = northCoast, roleId = opener }, Cancellation);
@@ -48,8 +48,8 @@ public sealed class OpeningForAnOwnerScenarios(SampleHosts sample) : IClassFixtu
 
         using var asJuno = await host.ClientAsync("juno", Harbor.Slug);
 
-        // Leo as the owner: his seat is not hers, and she holds no key to name somebody else. One refusal, both reasons,
-        // the caller's own first, then the key's, each with its own code.
+        // Leo as the owner: his seat is not hers, and she holds no permission to name somebody else. One refusal, both reasons,
+        // the caller's own first, then the permission's, each with its own code.
         using (var refused = await asJuno.PostAsJsonAsync("/projects", new { number = "P-901", name = "Quay wall", unitId = northCoast, ownerSeat = leo }, Cancellation))
         {
             (await refused.ShouldBeRefusedAsync(HttpStatusCode.Forbidden, ToolkitRefusals.Refused)).Reasons

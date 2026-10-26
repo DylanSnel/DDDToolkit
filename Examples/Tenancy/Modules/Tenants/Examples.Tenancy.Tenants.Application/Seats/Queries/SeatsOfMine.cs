@@ -10,7 +10,7 @@ namespace Examples.Tenancy.Tenants.Application.Seats.Queries;
 /// </summary>
 /// <remarks>
 /// It requires a signed-in user and nothing more, because it is asked before any tenant: there is no seat yet to
-/// hold a key, and no tenant to be in. What keeps it safe is what it looks up: the verified identity of the
+/// hold a permission, and no tenant to be in. What keeps it safe is what it looks up: the verified identity of the
 /// caller's own token and nothing a request could supply. Which signed-in users hold seats at all is the Tenancy
 /// package's rule, and the package applies it: a user whose token role holds no seat is answered no seats,
 /// whatever their identity has.

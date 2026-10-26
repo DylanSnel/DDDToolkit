@@ -25,12 +25,12 @@ public static class StatedRequests
     public sealed record InTheTenant : IHostRequest;
 
     /// <summary>The key that manages seats, for the whole tenant: a key without a marker.</summary>
-    [RequiresKey(TenancyKeys.SeatsManage)]
+    [RequiresPermission(TenancyPermissions.SeatsManage)]
     public sealed record ManageEverySeat : IHostRequest;
 
     /// <summary>The key that manages seats, at the unit it names or above it.</summary>
     /// <param name="Unit">The unit.</param>
-    [RequiresKey(TenancyKeys.SeatsManage)]
+    [RequiresPermission(TenancyPermissions.SeatsManage)]
     public sealed record ManageSeatsAt([AtUnit] OrganizationUnitId Unit) : IHostRequest;
 
     /// <summary>One of the application's operators.</summary>
@@ -39,7 +39,7 @@ public static class StatedRequests
 
     /// <summary>A seat renames itself, and any seat with the key that manages seats for the whole tenant: yours, or the key.</summary>
     /// <param name="Seat">The seat.</param>
-    [RequiresKey(TenancyKeys.SeatsManage)]
+    [RequiresPermission(TenancyPermissions.SeatsManage)]
     public sealed record RenameSeat([OrOwn] SeatId Seat) : IHostRequest;
 
     /// <summary>A seat gives up its own place, and no key stands in for it.</summary>
@@ -49,6 +49,6 @@ public static class StatedRequests
 
     /// <summary>A signed-in seat with the key that manages seats for the whole tenant: both, so system work, nobody's sign-in, is not let through.</summary>
     [SignedIn]
-    [RequiresKey(TenancyKeys.SeatsManage)]
+    [RequiresPermission(TenancyPermissions.SeatsManage)]
     public sealed record ManageEverySeatAsAPerson : IHostRequest;
 }

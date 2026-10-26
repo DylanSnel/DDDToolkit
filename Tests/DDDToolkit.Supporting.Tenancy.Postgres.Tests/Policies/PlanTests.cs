@@ -20,14 +20,14 @@ public sealed class PlanTests(TenancyPostgres postgres)
         // The policy alone: every widget Seth may read, with nothing in the query that narrows it.
         var plan = await seth.PlanAsync("SELECT \"Id\" FROM widgets.\"Widgets\"", Cancellation);
 
-        QueryPlans.InitPlansCalling(plan, "tenancy.units_where_i_hold(").Should().NotBeEmpty("the question is asked once, before the scan");
+        QueryPlans.InitPlansCalling(plan, "tenancy.units_where_i_hold_permission(").Should().NotBeEmpty("the question is asked once, before the scan");
         QueryPlans.InitPlansCalling(plan, "tenancy.caller_tenant(").Should().NotBeEmpty("and so is the tenant the restrictive policy compares with");
 
         var scans = QueryPlans.Scans(plan, "Widgets");
         scans.Should().NotBeEmpty();
         scans.Should().OnlyContain(
-            scan => (scan.Filter ?? string.Empty).Contains("units_where_i_hold(", StringComparison.Ordinal) == false
-                    && (scan.IndexCondition ?? string.Empty).Contains("units_where_i_hold(", StringComparison.Ordinal) == false,
+            scan => (scan.Filter ?? string.Empty).Contains("units_where_i_hold_permission(", StringComparison.Ordinal) == false
+                    && (scan.IndexCondition ?? string.Empty).Contains("units_where_i_hold_permission(", StringComparison.Ordinal) == false,
             "no row calls the function itself");
 
         (await seth.ListAsync<string>("SELECT \"Name\" FROM widgets.\"Widgets\" ORDER BY 1", Cancellation)).Should().Equal("Pump", "Valve");

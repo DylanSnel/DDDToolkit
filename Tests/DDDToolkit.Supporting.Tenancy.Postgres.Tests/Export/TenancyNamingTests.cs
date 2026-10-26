@@ -34,7 +34,7 @@ public sealed partial class TenancyNamingTests(TenancyPostgres postgres)
         var plain = string.Join("\n", TenancyPostgres.AccessScripts());
 
         // What is left once the names the files give themselves are set aside, a policy's name and the columns a
-        // function answers under, is what they take from the model: tables, columns, and the keys they name.
+        // function answers under, is what they take from the model: tables, columns, and the permissions they name.
         NamesWithACapital(snake).Should().BeEmpty("every name the files take from the model is the model's, and under this naming none has a capital");
         NamesWithACapital(plain).Should().Contain(["SeatRights", "SeatId", "IsPrimary"], "the same reading of the default files finds the model's names");
 
@@ -77,7 +77,7 @@ public sealed partial class TenancyNamingTests(TenancyPostgres postgres)
         await using (var owner = await AsCaller.OwnerAsync(snake, Cancellation))
         {
             var named = await owner.ListAsync<string>(Named, Cancellation);
-            named.Should().HaveCountGreaterThan(100).And.Contain(["relation seat_rights", "column seat_role_grants.granted_by", "relation ix_seat_rights_seat_id_key", "constraint pk_seat_role_grants"]);
+            named.Should().HaveCountGreaterThan(100).And.Contain(["relation seat_rights", "column seat_role_grants.granted_by", "relation ix_seat_rights_seat_id_permission", "constraint pk_seat_role_grants"]);
             named.Where(name => name.Any(char.IsUpper)).Should().BeEmpty("the convention named what was left to it, and Tenancy named the rest as it was told");
         }
 
@@ -220,9 +220,9 @@ public sealed partial class TenancyNamingTests(TenancyPostgres postgres)
         await using var widgets = await pooled.Provider.GetRequiredService<IDbContextFactory<WidgetContext>>().CreateDbContextAsync(Cancellation);
         widgets.Model.FindEntityType(typeof(Widget))!.GetTableName().Should().Be("widgets");
         var rights = widgets.Model.FindEntityType(typeof(SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId>))!;
-        rights.GetFunctionName().Should().Be(TenancyFunctionNames.CallerRights);
-        var function = StoreObjectIdentifier.DbFunction(widgets.Model.FindDbFunction(TenancyFunctionNames.CallerRights)!.ModelName);
-        rights.GetProperties().Select(property => property.GetColumnName(function)).Should().BeEquivalentTo(["TenantId", "SeatId", "UnitId", "RoleId", "Key", "StartsAt", "EndsAt"]);
+        rights.GetFunctionName().Should().Be(TenancyFunctionNames.CallerPermissions);
+        var function = StoreObjectIdentifier.DbFunction(widgets.Model.FindDbFunction(TenancyFunctionNames.CallerPermissions)!.ModelName);
+        rights.GetProperties().Select(property => property.GetColumnName(function)).Should().BeEquivalentTo(["TenantId", "SeatId", "UnitId", "RoleId", "Permission", "StartsAt", "EndsAt"]);
     }
 
     [Fact]
@@ -285,7 +285,7 @@ public sealed partial class TenancyNamingTests(TenancyPostgres postgres)
                 + (property.ClrType.IsEnum ? ", stored as " + string.Join("/", Enum.GetValues(property.ClrType).Cast<object>().Select(value => property.GetTypeMapping().Converter?.ConvertToProvider(value) ?? value)) : string.Empty)));
 
             // A foreign key is left out: the convention names it after the class it points to, as the model had it
-            // when the key was added, and the default it replaces after that class's table.
+            // when the permission was added, and the default it replaces after that class's table.
             if (entityType.GetTableName() is not null)
             {
                 lines.AddRange(entityType.GetKeys().Select(key => $"{entityType.DisplayName()}: key {key.GetName()}"));

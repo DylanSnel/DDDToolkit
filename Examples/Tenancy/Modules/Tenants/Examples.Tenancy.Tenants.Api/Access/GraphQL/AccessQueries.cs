@@ -8,11 +8,11 @@ namespace Examples.Tenancy.Tenants.Api.Access.GraphQL;
 internal static class AccessQueries
 {
     /// <summary>
-    /// Where the caller holds a key, for the screens that show who may do what: the units, by id, and whether
-    /// that is the whole tenant. A key the catalogue does not know is refused. The answer is the query's own
+    /// Where the caller holds a permission, for the screens that show who may do what: the units, by id, and whether
+    /// that is the whole tenant. A permission the catalogue does not know is refused. The answer is the query's own
     /// record, which the schema shows as it is.
     /// </summary>
     [Query]
-    public static async Task<HeldUnits> GetUnitsWhereIHoldAsync(string key, [Service] ISender sender, CancellationToken cancellationToken)
-        => await sender.Send(new UnitsWhereIHold(key), cancellationToken);
+    public static async Task<HeldUnits> GetUnitsWhereIHoldAsync(string permission, [Service] ISender sender, CancellationToken cancellationToken)
+        => await sender.Send(new UnitsWhereIHold(permission), cancellationToken);
 }

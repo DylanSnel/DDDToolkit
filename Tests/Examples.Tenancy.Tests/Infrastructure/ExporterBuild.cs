@@ -124,7 +124,7 @@ public static class ExporterBuild
     /// <summary>
     /// The contributions the export asks, in the order the build hands them over: the packages' first, Membership's for
     /// the rules marked <c>[MembershipRules&lt;CrewMember&gt;]</c> and Tenancy's from the catalogue, the operators and
-    /// the modules' keys the sample marks, then the module's own two the exporter lists.
+    /// the modules' permissions the sample marks, then the module's own two the exporter lists.
     /// </summary>
     private static IReadOnlyList<IRowAccessContribution> Contributions(Func<ApplicationCatalogue, ApplicationCatalogue>? application)
     {
@@ -145,7 +145,7 @@ public static class ExporterBuild
                 tenancy.OperatorTokenRoles.ToList());
         }
 
-        return [.. membership.Append(tenancy).Select(contribution => new MadeByTheBuild(contribution)), new UnitChangesWithItsKeys(), new CrewSeatsOfTheProjectsTenant()];
+        return [.. membership.Append(tenancy).Select(contribution => new MadeByTheBuild(contribution)), new UnitChangesWithItsPermissions(), new CrewSeatsOfTheProjectsTenant()];
     }
 
     /// <summary>The types of the sample's assemblies, as the generator walks them.</summary>

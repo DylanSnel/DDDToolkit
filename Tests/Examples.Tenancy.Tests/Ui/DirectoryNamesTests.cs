@@ -209,8 +209,8 @@ public sealed class DirectoryNamesTests
         {
             "/tenancy/directory/seats" => [.. IdsOf(request).Select(id => new { id, displayName = "seat " + id, status = "active" })],
             "/tenancy/directory/units" => [.. IdsOf(request).Select(id => new { id, parentId = (Guid?)null, name = "unit", kind = "area", status = "active", path = "path of " + id, depth = 1 })],
-            "/tenancy/directory/roles" => [.. IdsOf(request).Select(id => new { id, name = "role " + id, fromPack = (string?)null, status = "active", keys = Array.Empty<string>(), managesAccess = false })],
-            "/project-roles" => [.. projectRoles.Select(id => new { id, name = "crew role " + id, description = string.Empty, madeFrom = (string?)null, status = "active", keys = (string[]?)null })],
+            "/tenancy/directory/roles" => [.. IdsOf(request).Select(id => new { id, name = "role " + id, fromPack = (string?)null, status = "active", permissions = Array.Empty<string>(), managesAccess = false })],
+            "/project-roles" => [.. projectRoles.Select(id => new { id, name = "crew role " + id, description = string.Empty, madeFrom = (string?)null, status = "active", permissions = (string[]?)null })],
             _ => throw new InvalidOperationException("The stub has no route " + request.PathAndQuery + "."),
         };
         return StubApi.Response(HttpStatusCode.OK, JsonSerializer.Serialize(rows));

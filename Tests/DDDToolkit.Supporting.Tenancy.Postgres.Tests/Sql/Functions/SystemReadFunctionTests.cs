@@ -13,7 +13,7 @@ namespace DDDToolkit.Supporting.Tenancy.Postgres.Tests;
 /// <summary>
 /// What Tenancy reads before any tenant is known, it reads with nothing running past the policies: as scoped system
 /// work in no tenant, which the policies show no row of any table, through three functions of the database that run as
-/// their owner and answer ids or keys only. The keys stored on every tenant's roles and the seats a person has are
+/// their owner and answer ids or permissions only. The permissions stored on every tenant's roles and the seats a person has are
 /// answered to Tenancy's own work and to no other scope's; the tenants to visit to the system work of every module.
 /// No seat and no anonymous caller may ask any of them, and nothing of Tenancy's begins the application itself. The
 /// start-up check that proves the functions are <see cref="StartUpCheckTests"/>.
@@ -22,7 +22,7 @@ public abstract class SystemReadFunctionTests(TenancyPostgres postgres, TenancyN
 {
     private const string ScopedRole = "ddd_system_in";
 
-    private const string KeysInUse = "SELECT f.v AS \"Value\" FROM tenancy.role_keys_in_use() AS f(v)";
+    private const string PermissionsInUse = "SELECT f.v AS \"Value\" FROM tenancy.role_permissions_in_use() AS f(v)";
 
     private const string TenantsToSweep = "SELECT f.v AS \"TenantId\" FROM tenancy.tenants_to_sweep() AS f(v)";
 
@@ -32,15 +32,15 @@ public abstract class SystemReadFunctionTests(TenancyPostgres postgres, TenancyN
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
     [Fact]
-    public async Task The_keys_in_use_are_read_across_tenants_by_tenancys_own_system_work()
+    public async Task The_permissions_in_use_are_read_across_tenants_by_tenancys_own_system_work()
     {
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
 
-        // Keys the code no longer declares, stored on roles of two tenants, one of them suspended.
+        // Permissions the code no longer declares, stored on roles of two tenants, one of them suspended.
         await using (var owner = await AsCaller.OwnerAsync(database, Cancellation))
         {
-            (await owner.ExecuteAsync("UPDATE tenancy.\"Roles\" SET \"Keys\" = pg_catalog.array_append(\"Keys\", 'widget.polish') WHERE \"Id\" = $1", Cancellation, OrchardRoles.Watcher.Value)).Should().Be(1);
-            (await owner.ExecuteAsync("UPDATE tenancy.\"Roles\" SET \"Keys\" = pg_catalog.array_append(\"Keys\", 'widget.paint') WHERE \"Id\" = $1", Cancellation, QuayRoles.Operator.Value)).Should().Be(1);
+            (await owner.ExecuteAsync("UPDATE tenancy.\"Roles\" SET \"Permissions\" = pg_catalog.array_append(\"Permissions\", 'widget.polish') WHERE \"Id\" = $1", Cancellation, OrchardRoles.Watcher.Value)).Should().Be(1);
+            (await owner.ExecuteAsync("UPDATE tenancy.\"Roles\" SET \"Permissions\" = pg_catalog.array_append(\"Permissions\", 'widget.paint') WHERE \"Id\" = $1", Cancellation, QuayRoles.Operator.Value)).Should().Be(1);
             await owner.CommitAsync(Cancellation);
         }
 
@@ -50,7 +50,7 @@ public abstract class SystemReadFunctionTests(TenancyPostgres postgres, TenancyN
 
         // Asked at start-up, before anyone calls: the package begins its own scoped system work for that one query.
         Callers.Ambient.Should().BeNull();
-        var unknown = await services.InScopeAsync(scoped => TenancyChecks.UnknownStoredKeysAsync<HostRole, RoleId, TenantId>(
+        var unknown = await services.InScopeAsync(scoped => TenancyChecks.UnknownStoredPermissionsAsync<HostRole, RoleId, TenantId>(
             scoped.Tenancy(), scoped.GetRequiredService<TenancyCatalogue>(), Cancellation));
 
         unknown.Should().Equal("widget.paint", "widget.polish");
@@ -58,22 +58,22 @@ public abstract class SystemReadFunctionTests(TenancyPostgres postgres, TenancyN
         read.Caller!.Kind.Should().Be(CallerKind.SystemIn, "scoped system work, which the policies hold, and not the application itself");
         read.Caller.Scope.Should().Be(TenancyWork.SystemScope, "the scope of Tenancy's work");
         read.TenancyCaller.Should().BeNull("in no tenant");
-        read.Text.Trim().Should().Be(KeysInUse, "it asks the function, which answers keys and nothing else of any role, and names no table");
-        sessions.Seen.Should().Equal([new RecordedSession(KeysInUse, ScopedRole, Tenant: "", TenancyWork.SystemScope)], "and so the database saw it");
+        read.Text.Trim().Should().Be(PermissionsInUse, "it asks the function, which answers permissions and nothing else of any role, and names no table");
+        sessions.Seen.Should().Equal([new RecordedSession(PermissionsInUse, ScopedRole, Tenant: "", TenancyWork.SystemScope)], "and so the database saw it");
 
         // The caller's own work is untouched by it.
         Callers.Ambient.Should().BeNull();
 
-        // By a query, as that work: the function answers every tenant's keys, each once, on a connection the policies
+        // By a query, as that work: the function answers every tenant's permissions, each once, on a connection the policies
         // show no role at all.
         await using var work = await AsCaller.SystemInAsync(database, tenant: null, TenancyWork.SystemScope, Cancellation);
         (await work.ScalarAsync<long>("SELECT count(*) FROM tenancy.\"Roles\"", Cancellation)).Should().Be(0, "in no tenant, the policies show system work no role");
-        var keys = await work.ListAsync<string>("SELECT tenancy.role_keys_in_use()", Cancellation);
+        var permissions = await work.ListAsync<string>("SELECT tenancy.role_permissions_in_use()", Cancellation);
 
         await using var stored = await AsCaller.OwnerAsync(database, Cancellation);
-        keys.Should().OnlyHaveUniqueItems()
-            .And.BeEquivalentTo(await stored.ListAsync<string>("SELECT DISTINCT pg_catalog.unnest(\"Keys\") FROM tenancy.\"Roles\"", Cancellation))
-            .And.Contain(["widget.paint", "widget.polish"]).And.Contain(TenancyPostgres.Catalogue.LiveKeys);
+        permissions.Should().OnlyHaveUniqueItems()
+            .And.BeEquivalentTo(await stored.ListAsync<string>("SELECT DISTINCT pg_catalog.unnest(\"Permissions\") FROM tenancy.\"Roles\"", Cancellation))
+            .And.Contain(["widget.paint", "widget.polish"]).And.Contain(TenancyPostgres.Catalogue.LivePermissions);
     }
 
     [Fact]
@@ -81,17 +81,17 @@ public abstract class SystemReadFunctionTests(TenancyPostgres postgres, TenancyN
     {
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
 
-        // Another module's system work, in no tenant and in one: it is answered no key and nobody's seats.
+        // Another module's system work, in no tenant and in one: it is answered no permission and nobody's seats.
         foreach (var tenant in new TenantId?[] { null, Harbor })
         {
             await using var other = await AsCaller.SystemInAsync(database, tenant, "widgets", Cancellation);
-            (await other.ListAsync<string>("SELECT tenancy.role_keys_in_use()", Cancellation)).Should().BeEmpty("the keys in use are for Tenancy's own work to read");
+            (await other.ListAsync<string>("SELECT tenancy.role_permissions_in_use()", Cancellation)).Should().BeEmpty("the permissions in use are for Tenancy's own work to read");
             (await other.ScalarAsync<long>("SELECT count(*) FROM tenancy.seats_of_identity($1)", Cancellation, Oli.Identity)).Should().Be(0, "and so are a person's seats");
         }
 
         // Tenancy's own work is answered both: the scope is what kept them from the other.
         await using var own = await AsCaller.SystemInAsync(database, tenant: null, TenancyWork.SystemScope, Cancellation);
-        (await own.ListAsync<string>("SELECT tenancy.role_keys_in_use()", Cancellation)).Should().NotBeEmpty();
+        (await own.ListAsync<string>("SELECT tenancy.role_permissions_in_use()", Cancellation)).Should().NotBeEmpty();
         (await own.ScalarAsync<long>("SELECT count(*) FROM tenancy.seats_of_identity($1)", Cancellation, Oli.Identity)).Should().Be(2);
     }
 
@@ -250,7 +250,7 @@ public abstract class SystemReadFunctionTests(TenancyPostgres postgres, TenancyN
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
         (string Function, string Asked)[] reads =
         [
-            (TenancyFunctionNames.RoleKeysInUse, "SELECT tenancy.role_keys_in_use()"),
+            (TenancyFunctionNames.RolePermissionsInUse, "SELECT tenancy.role_permissions_in_use()"),
             (TenancyFunctionNames.TenantsToSweep, "SELECT tenancy.tenants_to_sweep()"),
             (TenancyFunctionNames.SeatsOfIdentity, $"SELECT count(*) FROM tenancy.seats_of_identity('{Oli.Identity:D}')"),
         ];
@@ -283,7 +283,7 @@ public abstract class SystemReadFunctionTests(TenancyPostgres postgres, TenancyN
                 Cancellation,
                 (object)reads.Select(read => read.Function).ToArray()))
             .Should().Equal(
-                "role_keys_in_use true false false false",
+                "role_permissions_in_use true false false false",
                 "seats_of_identity true false false false",
                 "tenants_to_sweep true false false false");
     }
@@ -300,14 +300,14 @@ public abstract class SystemReadFunctionTests(TenancyPostgres postgres, TenancyN
         // writes all of it.
         var (unknown, tenants) = await services.BySeat(Oli.Identity, Harbor, Oli.Seat, async scoped =>
         {
-            var keys = await TenancyChecks.UnknownStoredKeysAsync<HostRole, RoleId, TenantId>(scoped.Tenancy(), scoped.GetRequiredService<TenancyCatalogue>(), Cancellation);
+            var permissions = await TenancyChecks.UnknownStoredPermissionsAsync<HostRole, RoleId, TenantId>(scoped.Tenancy(), scoped.GetRequiredService<TenancyCatalogue>(), Cancellation);
             var ids = await TenancySystemReads.TenantsToSweepAsync<HostTenant, TenantId>(scoped.Tenancy(), "widgets", Cancellation);
 
             // His own work goes on as it was: as him, in his seat.
             Callers.Ambient!.UserId.Should().Be(Oli.Identity);
             TenancyCallers.Ambient.Should().Be(HostCaller.InSeat(Harbor, Oli.Seat));
             (await scoped.Tenancy().Set<SeatRow<TenantId, SeatId>>().CountAsync(Cancellation)).Should().Be(6, "the seats of Harbor");
-            return (keys, ids);
+            return (permissions, ids);
         });
 
         unknown.Should().BeEmpty();
@@ -336,7 +336,7 @@ public abstract class SystemReadFunctionTests(TenancyPostgres postgres, TenancyN
                     .Should().BeEquivalentTo([Harbor, Orchard, Quay]);
                 (await services.BySeat(Odette.Identity, Orchard, Odette.Seat, scoped => scoped.Tenancy().Set<SeatRow<TenantId, SeatId>>().CountAsync(Cancellation)))
                     .Should().Be(2, "Orchard's seats, read by a seat on a context a read across tenants may just have given back");
-                (await services.InScopeAsync(scoped => TenancyChecks.UnknownStoredKeysAsync<HostRole, RoleId, TenantId>(scoped.Tenancy(), catalogue, Cancellation)))
+                (await services.InScopeAsync(scoped => TenancyChecks.UnknownStoredPermissionsAsync<HostRole, RoleId, TenantId>(scoped.Tenancy(), catalogue, Cancellation)))
                     .Should().BeEmpty();
             }
         }));
@@ -345,7 +345,7 @@ public abstract class SystemReadFunctionTests(TenancyPostgres postgres, TenancyN
         sessions.Seen.Should().HaveCount(12 * 3 * 3);
         sessions.Seen.Should().OnlyContain(session =>
             session.Text == TenantsToSweep ? session == new RecordedSession(TenantsToSweep, ScopedRole, "", "widgets")
-            : session.Text == KeysInUse ? session == new RecordedSession(KeysInUse, ScopedRole, "", TenancyWork.SystemScope)
+            : session.Text == PermissionsInUse ? session == new RecordedSession(PermissionsInUse, ScopedRole, "", TenancyWork.SystemScope)
             : session.Role == "authenticated" && session.Tenant == "2" && session.Scope == null);
 
         // And the start-up check that proves them finds a context that comes from a pool.
@@ -394,7 +394,7 @@ public abstract class SystemReadFunctionTests(TenancyPostgres postgres, TenancyN
         await EveryUseCase.RunAsync(services, Cancellation);
 
         callers.During = Reads;
-        (await services.InScopeAsync(scoped => TenancyChecks.UnknownStoredKeysAsync<HostRole, RoleId, TenantId>(scoped.Tenancy(), catalogue, Cancellation))).Should().BeEmpty();
+        (await services.InScopeAsync(scoped => TenancyChecks.UnknownStoredPermissionsAsync<HostRole, RoleId, TenantId>(scoped.Tenancy(), catalogue, Cancellation))).Should().BeEmpty();
         (await services.InScopeAsync(scoped => TenancySystemReads.TenantsToSweepAsync<HostTenant, TenantId>(scoped.Tenancy(), "widgets", Cancellation)))
             .Should().BeEquivalentTo([Harbor, Orchard, Quay]);
 

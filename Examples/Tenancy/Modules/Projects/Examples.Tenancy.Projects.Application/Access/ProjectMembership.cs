@@ -4,7 +4,7 @@ using DDDToolkit.Supporting.Tenancy.Catalogue;
 namespace Examples.Tenancy.Projects.Application.Access;
 
 /// <summary>
-/// Who holds which key on a project through its crew, as one declaration: the rules of the Membership package
+/// Who holds which permission on a project through its crew, as one declaration: the rules of the Membership package
 /// for this module's projects, which the access checks in C#, the database's functions and the export all read,
 /// with the starter roles every tenant's project roles are made from.
 /// </summary>
@@ -16,17 +16,17 @@ namespace Examples.Tenancy.Projects.Application.Access;
 /// <list type="bullet">
 /// <item><b>Where the roles come from.</b> A tenant makes its own project roles, <c>ProjectRole</c>s, from the
 /// starter roles the host declares (<see cref="Roles.Custom"/>). A crew role gives the permissions on a project
-/// that a role can, and keys of other modules that act on a project, a surveyor's key to record an inspection say:
+/// that a role can, and permissions of other modules that act on a project, a surveyor's permission to record an inspection say:
 /// never one of Tenancy's, which manage the organization, nor one Projects asks at a unit. A project role that holds
-/// such a key gives nothing with it, so no crew role reaches past its project.</item>
-/// <item><b>Reach from above.</b> A key held at the unit a project hangs at, its <c>[At]</c> property, or above it,
+/// such a permission gives nothing with it, so no crew role reaches past its project.</item>
+/// <item><b>Reach from above.</b> A permission held at the unit a project hangs at, its <c>[At]</c> property, or above it,
 /// reaches the project: an organization role at North sees and acts on every project there, and the
 /// organization names a project's owner that way alone. Tenancy's function answers where the caller holds a
-/// key.</item>
+/// permission.</item>
 /// <item><b>Who the caller is as a member</b>, which is said by nothing: a crew member is a seat of the tenant,
 /// so it is the seat Tenancy resolved for the request, and the database asks Tenancy's function for it.</item>
 /// </list>
-/// System work of this module, in the scope <see cref="Scope"/>, holds every key on every project of its tenant,
+/// System work of this module, in the scope <see cref="Scope"/>, holds every permission on every project of its tenant,
 /// which is what the rules say when they name no scope: the seeder opens projects and puts seats on their crews
 /// in it, and a seat that gives up its own place on a crew is saved as this module's work for it. Work in any
 /// other scope, Tenancy's own included, holds nothing on a project.
@@ -49,11 +49,11 @@ public sealed class ProjectMembership
 
     /// <summary>The projects' rules, with <paramref name="starterRoles"/> as the roles every tenant starts with.</summary>
     /// <param name="starterRoles">
-    /// The starter roles the application declares: the keys of each one are permissions a crew role can give, or keys
+    /// The starter roles the application declares: the permissions of each one are permissions a crew role can give, or permissions
     /// of other modules that act on a project.
     /// </param>
     /// <exception cref="ArgumentException">
-    /// The starter roles have one key or one name twice, or one of them lists a key twice or a key a crew role may
+    /// The starter roles have one permission or one name twice, or one of them lists a permission twice or a permission a crew role may
     /// not give.
     /// </exception>
     public ProjectMembership(IReadOnlyList<StarterProjectRole> starterRoles)
@@ -73,8 +73,8 @@ public sealed class ProjectMembership
         StarterRoles = [.. starterRoles];
         Rules = MembershipRules.For<Project>(
             Roles.Custom(
-                starters: [.. starterRoles.Select(role => new DeclaredRole(role.Key, role.Keys))],
-                otherKeys: OtherKeys.AllBut([.. TenancyKeys.Permissions.Select(permission => permission.Key)])),
+                starters: [.. starterRoles.Select(role => new DeclaredRole(role.Key, role.Permissions))],
+                otherPermissions: OtherPermissions.AllBut([.. TenancyPermissions.All.Select(permission => permission.Name)])),
             reachFromAbove: true);
     }
 

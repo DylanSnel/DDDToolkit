@@ -36,7 +36,7 @@ public sealed class PeriodsInBothDomainsTests
             provider => provider.Seats().GrantAsync(data.NedSeat, data.Arts, data.AlderDean, until: data.Now + threeDays, reason: null, Cancellation));
 
         // From then on he grades what is given at Arts. The hold names no end: when a role of the organization ends is
-        // Tenancy's to know, so a key held from above is held for as long as the course is seen.
+        // Tenancy's to know, so a permission held from above is held for as long as the course is seen.
         var grade = await HoldOnAsync(campus, ned, data.Poetry, CoursePermissions.Grade);
         (grade!.Via, grade.Until).Should().Be((MemberVia.Above, (DateTimeOffset?)null));
         (await HoldInAsync(campus, ned, data.Darkroom, LabPermissions.Equip))!.Via.Should().Be(MemberVia.Above);
@@ -71,7 +71,7 @@ public sealed class PeriodsInBothDomainsTests
         var pia = new Asking(data.Pia, CampusScenario.InAlder);
         var twoDays = TimeSpan.FromDays(2);
 
-        // Ada administers Alder, so she holds every key of the catalogue on Optics from above. She tutors it for two days.
+        // Ada administers Alder, so she holds every permission of the catalogue on Optics from above. She tutors it for two days.
         await campus.Services.ChangeAsync(data.Alder, async context =>
             (await context.Courses.SingleAsync(course => course.Id == data.Optics, Cancellation))
                 .TakeOn(data.AdaSeat, data.AlderCourseRoles[CourseMembership.Tutor], MemberPeriod.Between(data.Now, data.Now + twoDays), data.Now, by: data.OwenSeat));
@@ -84,7 +84,7 @@ public sealed class PeriodsInBothDomainsTests
         clock.Advance(twoDays - Tick);
         (await HoldOnAsync(campus, ada, data.Optics, CoursePermissions.Grade))!.Via.Should().Be(MemberVia.Members);
 
-        // At the moment her place ends, the organization still gives her the key, and nothing says she tutors.
+        // At the moment her place ends, the organization still gives her the permission, and nothing says she tutors.
         clock.Advance(Tick);
         grade = await HoldOnAsync(campus, ada, data.Optics, CoursePermissions.Grade);
         (grade!.Via, grade.Until).Should().Be((MemberVia.Above, (DateTimeOffset?)null));
@@ -107,9 +107,9 @@ public sealed class PeriodsInBothDomainsTests
         (await HoldOnAsync(campus, pia, data.Poetry, CoursePermissions.Dissolve))!.Via.Should().Be(MemberVia.Members, "she owns Poetry, with no end");
     }
 
-    private static Task<MemberHold<CourseId>?> HoldOnAsync(CampusApp campus, Asking asking, CourseId course, string key)
-        => campus.Services.CoursesAsync(asking.Person, asking.College, access => access.HoldAsync(course, key, Cancellation));
+    private static Task<MemberHold<CourseId>?> HoldOnAsync(CampusApp campus, Asking asking, CourseId course, string permission)
+        => campus.Services.CoursesAsync(asking.Person, asking.College, access => access.HoldAsync(course, permission, Cancellation));
 
-    private static Task<MemberHold<LabId>?> HoldInAsync(CampusApp campus, Asking asking, LabId lab, string key)
-        => campus.Services.LabsAsync(asking.Person, asking.College, access => access.HoldAsync(lab, key, Cancellation));
+    private static Task<MemberHold<LabId>?> HoldInAsync(CampusApp campus, Asking asking, LabId lab, string permission)
+        => campus.Services.LabsAsync(asking.Person, asking.College, access => access.HoldAsync(lab, permission, Cancellation));
 }

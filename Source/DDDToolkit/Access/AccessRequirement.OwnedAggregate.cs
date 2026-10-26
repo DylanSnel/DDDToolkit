@@ -16,11 +16,11 @@ public abstract partial record AccessRequirement
     /// <code>
     /// AccessRequirement IRequireAccess.RequiredAccess =&gt; AccessRequirement.Any(
     ///     AccessRequirement.OwnerOf(Board),                              // the board's owner,
-    ///     TenancyAccess.AtTenant(BoardKeys.Manage));           // or the key for every board
+    ///     TenancyAccess.AtTenant(BoardPermissions.Manage));           // or the permission for every board
     /// </code>
     /// A request says it with the attributes it says the caller's own with as well: <see cref="OwnAttribute"/> on the
     /// aggregate's id with <see cref="OwnOnlyAttribute"/> for the owner alone, <see cref="OrOwnAttribute"/> beside
-    /// <see cref="RequiresKeyAttribute"/> for the owner or the key.
+    /// <see cref="RequiresPermissionAttribute"/> for the owner or the permission.
     /// </summary>
     /// <remarks>
     /// The fact is the domain's, and the policy the request's: the aggregate marks the property that names its owner,

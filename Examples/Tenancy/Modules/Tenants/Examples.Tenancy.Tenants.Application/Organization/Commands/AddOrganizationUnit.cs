@@ -9,14 +9,14 @@ namespace Examples.Tenancy.Tenants.Application.Organization.Commands;
 /// </summary>
 /// <remarks>
 /// It requires <c>tenancy.units.manage</c> at the parent, which the request names, and the package's use case asks
-/// for that key again. The kind is the application's own field on its unit class, which the package does not know:
+/// for that permission again. The kind is the application's own field on its unit class, which the package does not know:
 /// the use case hands the new unit to a callback before it saves, and the handler sets the kind there, so it is
 /// written in the same save.
 /// </remarks>
 /// <param name="Parent">The unit it hangs under.</param>
 /// <param name="Name">Its name.</param>
 /// <param name="Kind">What kind of unit it is, or <see langword="null"/> to leave it unsaid.</param>
-[RequiresKey(TenancyKeys.UnitsManage)]
+[RequiresPermission(TenancyPermissions.UnitsManage)]
 public sealed record AddOrganizationUnit([AtUnit] OrganizationUnitId Parent, string Name, UnitKind? Kind) : ICommand<OrganizationUnitId>, ITenantsRequest;
 
 /// <summary>Handles <see cref="AddOrganizationUnit"/> with the Tenancy package's use case, which checks the caller, decides and saves.</summary>

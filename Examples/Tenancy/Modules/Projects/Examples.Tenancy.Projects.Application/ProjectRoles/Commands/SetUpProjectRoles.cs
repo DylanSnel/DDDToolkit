@@ -27,7 +27,7 @@ namespace Examples.Tenancy.Projects.Application.ProjectRoles.Commands;
 /// </para>
 /// </remarks>
 /// <param name="Ids">
-/// The ids of the roles to make, by the key of the starter role each is made from, for seeding and imports whose
+/// The ids of the roles to make, by the permission of the starter role each is made from, for seeding and imports whose
 /// ids are known beforehand; the rest get new ones.
 /// </param>
 public sealed record SetUpProjectRoles(IReadOnlyDictionary<string, ProjectRoleId>? Ids = null) : ICommand, IProjectsRequest;

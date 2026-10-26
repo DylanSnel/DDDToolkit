@@ -31,7 +31,7 @@ public sealed class DirectoryScenarios(SampleHosts sample) : IClassFixture<Sampl
     [Fact]
     public async Task A_seat_asks_the_names_of_seats_by_their_ids()
     {
-        // Juno is a surveyor on one crew and holds no role in the organization: a name needs no key.
+        // Juno is a surveyor on one crew and holds no role in the organization: a name needs no permission.
         using var juno = await sample.ClientAsync("juno", Harbor.Slug);
         Guid[] ids = [Harbor.SeatOf(DemoPeople.Vic).Value, Harbor.SeatOf(DemoPeople.Seth).Value, Harbor.SeatOf(DemoPeople.Leo).Value, Harbor.SeatOf(DemoPeople.Vic).Value];
 
@@ -94,15 +94,15 @@ public sealed class DirectoryScenarios(SampleHosts sample) : IClassFixture<Sampl
                 (Harbor.Roles[SampleCatalogue.AreaManager].Value, "Area manager", SampleCatalogue.AreaManager, "active", true),
                 (Harbor.Roles[SampleCatalogue.CrewLead].Value, "Crew lead", SampleCatalogue.CrewLead, "active", true),
                 (Harbor.Roles[SampleCatalogue.Observer].Value, "Observer", SampleCatalogue.Observer, "active", false));
-        roles[0].EnumerateObject().Select(property => property.Name).Should().Equal("id", "name", "fromPack", "status", "keys", "managesAccess");
+        roles[0].EnumerateObject().Select(property => property.Name).Should().Equal("id", "name", "fromPack", "status", "permissions", "managesAccess");
 
         // What a role lets its holder do is for whoever manages the tenant's roles. Vic does not, and is answered
-        // no keys at all, rather than an empty list, which would say the role brings none; Ada does.
-        roles.EnumerateArray().Should().OnlyContain(role => role.GetProperty("keys").ValueKind == JsonValueKind.Null);
+        // no permissions at all, rather than an empty list, which would say the role brings none; Ada does.
+        roles.EnumerateArray().Should().OnlyContain(role => role.GetProperty("permissions").ValueKind == JsonValueKind.Null);
 
         using var ada = await sample.ClientAsync("ada", Harbor.Slug);
         var asAda = await AskAsync(ada, "/tenancy/directory/roles", [Harbor.Roles[SampleCatalogue.Observer].Value]);
-        asAda[0].GetProperty("keys").EnumerateArray().Select(key => key.GetString()).Should().Equal(ProjectKeys.View);
+        asAda[0].GetProperty("permissions").EnumerateArray().Select(permission => permission.GetString()).Should().Equal(ProjectPermissionNames.View);
     }
 
     [Fact]

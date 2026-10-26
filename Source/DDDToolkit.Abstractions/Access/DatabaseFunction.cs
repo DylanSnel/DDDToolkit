@@ -5,7 +5,7 @@ namespace DDDToolkit.Abstractions.Access;
 /// <c>owner/name</c>. A package ships the functions it writes as values of this, so an application names one by
 /// a member it can find, and never by a text it types:
 /// <code>
-/// Roles.External(TenancyFunctions.RolesWithKey)
+/// Roles.External(TenancyFunctions.RolesWithPermission)
 /// </code>
 /// Whatever writes the policies finds the function by its logical name, in the script of the context that defines
 /// it or of another one it is written with, and writes it with the schema that context gives it.

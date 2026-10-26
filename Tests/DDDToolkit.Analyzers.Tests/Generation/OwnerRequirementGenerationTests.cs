@@ -135,7 +135,7 @@ public class OwnerRequirementGenerationTests
         var result = Module(
             CallersUser
             + """
-              [RequiresKey("boards.manage")]
+              [RequiresPermission("boards.manage")]
               public sealed record RenameBoard([OrOwn] BoardId Board, string Name) : IBillingRequest;
               """).RunCore();
 
@@ -160,7 +160,7 @@ public class OwnerRequirementGenerationTests
         var result = OverTheDomain(
             """
             [OwnOnly] public sealed record MoveCard([Own] CardId Card) : IBillingRequest;
-            [RequiresKey("notes.edit")] public sealed record EditNote([OrOwn] NoteId Note) : IBillingRequest;
+            [RequiresPermission("notes.edit")] public sealed record EditNote([OrOwn] NoteId Note) : IBillingRequest;
             """).RunCore();
 
         result.ShouldCompile();
@@ -211,7 +211,7 @@ public class OwnerRequirementGenerationTests
         // on a resource, the owner in the place of the value.
         var result = OverTheDomain(
             """
-            [RequiresKey("documents.manage")]
+            [RequiresPermission("documents.manage")]
             public sealed record UnpinCard([OnResource] DocumentId Document, [OrOwn] CardId Card) : IBillingRequest;
             """).RunCore();
 
@@ -247,7 +247,7 @@ public class OwnerRequirementGenerationTests
               [OwnOnly]
               public sealed record ArchiveBoard([Own] BoardId Board) : IBillingRequest;
 
-              [RequiresKey("boards.manage")]
+              [RequiresPermission("boards.manage")]
               public sealed record RenameBoard([OrOwn] BoardId Board) : IBillingRequest;
 
               public sealed record EditNote(NoteId Note) : IBillingRequest

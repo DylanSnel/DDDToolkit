@@ -16,7 +16,7 @@
     <value>There is no such project, or it is not one you can see.</value>
   </data>
   <data name="projects.not-permitted" xml:space="preserve">
-    <value>Doing this to the project needs the key {Key}.</value>
+    <value>Doing this to the project needs the permission {Permission}.</value>
   </data>
   <data name="projects.closed" xml:space="preserve">
     <value>The project is closed; nothing about it changes until it is reopened.</value>
@@ -90,10 +90,10 @@
   <data name="projects.role-name-taken" xml:space="preserve">
     <value>Another project role of this tenant is called {Name} already.</value>
   </data>
-  <data name="projects.key-not-for-members" xml:space="preserve">
-    <value>A project role cannot give these keys: {Keys}.</value>
+  <data name="projects.permission-not-for-members" xml:space="preserve">
+    <value>A project role cannot give these permissions: {Permissions}.</value>
   </data>
-  <data name="projects.role-keys-not-normalized" xml:space="preserve">
-    <value>A project role's keys are each there once, none of them blank, in order.</value>
+  <data name="projects.role-permissions-not-normalized" xml:space="preserve">
+    <value>A project role's permissions are each there once, none of them blank, in order.</value>
   </data>
 </root>

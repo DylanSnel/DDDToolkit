@@ -13,7 +13,7 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 /// </summary>
 /// <remarks>
 /// Every case but two reads nothing: who is calling is kept with the flow of work, and is asked each time. A
-/// key for the whole tenant, and a key at a unit, are each asked in one statement, over
+/// permission for the whole tenant, and a permission at a unit, are each asked in one statement, over
 /// <typeparamref name="TContext"/>, the context of the module the check was registered for: Tenancy's own, or a
 /// module's that maps Tenancy's read model. So no module is checked over another module's context. The statement runs on a context of its own, from the
 /// context's factory where the application registered one, since the requests of one scope may be checked side
@@ -26,7 +26,7 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 /// <param name="answers">Tenancy's answers about the current caller.</param>
 /// <param name="options">Which token roles are operators'.</param>
 /// <param name="callers">Who is calling, as the toolkit says: what says whether the caller is an operator.</param>
-/// <param name="services">The services of the scope the check runs in, for the context a key is asked over.</param>
+/// <param name="services">The services of the scope the check runs in, for the context a permission is asked over.</param>
 internal sealed class TenancyAccessCheck<TTenantId, TSeatId, TUnitId, TRoleId, TContext>(
     ITenancyAnswers<TTenantId, TSeatId, TUnitId, TRoleId> answers,
     TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId> options,
@@ -43,7 +43,7 @@ internal sealed class TenancyAccessCheck<TTenantId, TSeatId, TUnitId, TRoleId, T
 
     /// <inheritdoc />
     /// <exception cref="RefusalException">The caller is not who the request requires.</exception>
-    /// <exception cref="ArgumentException">The catalogue does not know the key the request requires.</exception>
+    /// <exception cref="ArgumentException">The catalogue does not know the permission the request requires.</exception>
     /// <exception cref="InvalidOperationException">
     /// The requirement is not one of Tenancy's; or it requires a tenant and the caller is system work outside any.
     /// </exception>
@@ -61,9 +61,9 @@ internal sealed class TenancyAccessCheck<TTenantId, TSeatId, TUnitId, TRoleId, T
             case TenancyRequirement.AtTenant required:
                 // The caller before anything is opened: nobody is refused as nobody, without a context made for it.
                 answers.RequireTenant();
-                if (!await HoldsAtTenantAsync(required.Key, cancellationToken).ConfigureAwait(false))
+                if (!await HoldsAtTenantAsync(required.Permission, cancellationToken).ConfigureAwait(false))
                 {
-                    throw TenancyRefusals.Refuse(TenancyRefusals.NotPermitted, ("Key", required.Key));
+                    throw TenancyRefusals.Refuse(TenancyRefusals.NotPermitted, ("Permission", required.Permission));
                 }
 
                 break;
@@ -71,9 +71,9 @@ internal sealed class TenancyAccessCheck<TTenantId, TSeatId, TUnitId, TRoleId, T
             case TenancyRequirement.AtUnit<TUnitId> required:
                 // As for the whole tenant: the caller first, then one statement.
                 answers.RequireTenant();
-                if (!await HoldsAtAsync(required.Key, required.Unit, cancellationToken).ConfigureAwait(false))
+                if (!await HoldsAtAsync(required.Permission, required.Unit, cancellationToken).ConfigureAwait(false))
                 {
-                    throw TenancyRefusals.Refuse(TenancyRefusals.NotPermitted, ("Key", required.Key), ("Unit", required.Unit));
+                    throw TenancyRefusals.Refuse(TenancyRefusals.NotPermitted, ("Permission", required.Permission), ("Unit", required.Unit));
                 }
 
                 break;
@@ -96,12 +96,12 @@ internal sealed class TenancyAccessCheck<TTenantId, TSeatId, TUnitId, TRoleId, T
     }
 
     /// <summary>One statement, on a context of its own where the application registered a factory for <typeparamref name="TContext"/>.</summary>
-    private Task<bool> HoldsAtTenantAsync(string key, CancellationToken cancellationToken)
-        => AskAsync(questions => questions.HoldsAtTenantAsync(key, cancellationToken), cancellationToken);
+    private Task<bool> HoldsAtTenantAsync(string permission, CancellationToken cancellationToken)
+        => AskAsync(questions => questions.HoldsAtTenantAsync(permission, cancellationToken), cancellationToken);
 
     /// <summary>One statement, on a context of its own where the application registered a factory for <typeparamref name="TContext"/>.</summary>
-    private Task<bool> HoldsAtAsync(string key, TUnitId unit, CancellationToken cancellationToken)
-        => AskAsync(questions => questions.HoldsAtAsync(key, unit, cancellationToken), cancellationToken);
+    private Task<bool> HoldsAtAsync(string permission, TUnitId unit, CancellationToken cancellationToken)
+        => AskAsync(questions => questions.HoldsAtAsync(permission, unit, cancellationToken), cancellationToken);
 
     /// <summary>Asks Tenancy's questions over <typeparamref name="TContext"/>: a context of its own where the application registered a factory for it, and the scope's otherwise.</summary>
     private async Task<bool> AskAsync(Func<ITenancyQuestions<TTenantId, TSeatId, TUnitId, TRoleId>, Task<bool>> ask, CancellationToken cancellationToken)

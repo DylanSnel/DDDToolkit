@@ -224,7 +224,7 @@ internal sealed class EfTenancyStore<TTenant, TTenantId, TOrganization, TUnit, T
             // The function finds the tenant from the caller, as its seat's, and reads the database's own clock. It
             // answers a seat that may read the grants at the root, and any other seat its own administration at
             // most. For the use cases that is the whole answer all the same: every command that could take an
-            // administrator away first asks a key at the root that makes its caller such a seat, the one for seats
+            // administrator away first asks a permission at the root that makes its caller such a seat, the one for seats
             // or for grants there, or the one for roles for the whole tenant; and one that acts below the root takes
             // no administrator away, and does not ask. Should the database see the caller as someone else, its own
             // trigger still keeps the tenant's last administrator when the save commits.
@@ -242,7 +242,7 @@ internal sealed class EfTenancyStore<TTenant, TTenantId, TOrganization, TUnit, T
         }
 
         var administrators = from right in Reads.SeatRights
-                             where right.TenantId.Equals(tenant) && right.Key == TenancyKeys.AdministratorKey
+                             where right.TenantId.Equals(tenant) && right.Permission == TenancyPermissions.AdministratorPermission
                                    && right.EndsAt == null && right.StartsAt <= now
                              join root in Reads.Units on right.UnitId equals root.Id
                              where root.TenantId.Equals(tenant) && !root.ParentId.HasValue
@@ -266,17 +266,17 @@ internal sealed class EfTenancyStore<TTenant, TTenantId, TOrganization, TUnit, T
 
         if (AsksTheDatabase)
         {
-            // The function finds the tenant and the seat from the caller, knows which keys manage access from
+            // The function finds the tenant and the seat from the caller, knows which permissions manage access from
             // the catalogue it was written from, and reads the database's own clock.
             var answered = await context.Set<MoveReach<TUnitId>>()
                 .FromSqlRaw(
                     TenancyFunctionSql.Select(
                         context,
                         schema: null,
-                        TenancyFunctionNames.RightsAMoveChanges,
+                        TenancyFunctionNames.PermissionsAMoveChanges,
                         parameters: 2,
                         nameof(MoveReach<TUnitId>.UnitId),
-                        nameof(MoveReach<TUnitId>.Key),
+                        nameof(MoveReach<TUnitId>.Permission),
                         nameof(MoveReach<TUnitId>.EndsAt),
                         nameof(MoveReach<TUnitId>.Parent),
                         nameof(MoveReach<TUnitId>.OfCaller)),
@@ -286,7 +286,7 @@ internal sealed class EfTenancyStore<TTenant, TTenantId, TOrganization, TUnit, T
                 .ConfigureAwait(false);
 
             // The function answers only a seat that manages units at both parents, and that seat's own rights for
-            // that key are then among the rows. The use case found the calling seat to manage units at both
+            // that permission are then among the rows. The use case found the calling seat to manage units at both
             // before it asked, so no row at all is one of two things, and never "the move changes nothing": taken
             // for that, it would let every move through, and nothing in the database checks a move's reach after it.
             if (answered.Count == 0)
@@ -318,15 +318,15 @@ internal sealed class EfTenancyStore<TTenant, TTenantId, TOrganization, TUnit, T
         var reaching = from right in Reads.SeatRights
                        where right.TenantId.Equals(tenant) && (right.EndsAt == null || right.EndsAt > now)
                              && (right.SeatId.Equals(seat)
-                                 || (marked.Contains(right.Key)
+                                 || (marked.Contains(right.Permission)
                                      && !(paths.Any(path => path.AncestorId.Equals(right.UnitId) && path.DescendantId.Equals(parent))
                                           && paths.Any(path => path.AncestorId.Equals(right.UnitId) && path.DescendantId.Equals(newParent)))))
                        join path in Reads.UnitPaths on right.UnitId equals path.AncestorId
                        where path.TenantId.Equals(tenant) && (path.DescendantId.Equals(parent) || path.DescendantId.Equals(newParent))
-                       select new { right.SeatId, right.UnitId, right.Key, right.EndsAt, Reaches = path.DescendantId };
+                       select new { right.SeatId, right.UnitId, right.Permission, right.EndsAt, Reaches = path.DescendantId };
 
         var rows = await reaching.ToListAsync(cancellationToken).ConfigureAwait(false);
-        return [.. rows.Select(row => new MoveReach<TUnitId>(row.UnitId, row.Key, row.EndsAt, row.Reaches, row.SeatId.Equals(seat)))];
+        return [.. rows.Select(row => new MoveReach<TUnitId>(row.UnitId, row.Permission, row.EndsAt, row.Reaches, row.SeatId.Equals(seat)))];
     }
 
     /// <summary>

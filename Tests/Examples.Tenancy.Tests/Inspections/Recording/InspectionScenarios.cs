@@ -41,7 +41,7 @@ public sealed class InspectionScenarios(SampleHosts sample) : IClassFixture<Samp
         { "juno", true },
         { "vic", false },
 
-        // Through the organization: the area manager at North, and the administrator, who holds every key.
+        // Through the organization: the area manager at North, and the administrator, who holds every permission.
         { "rhea", true },
         { "ada", true },
     };
@@ -97,7 +97,7 @@ public sealed class InspectionScenarios(SampleHosts sample) : IClassFixture<Samp
 
         // He sees Pier 7 through the crew, so the project is found; his observer's role does not let him record.
         var refused = await response.ShouldBeRefusedAsync(HttpStatusCode.Forbidden, ProjectRefusals.NotPermitted);
-        refused.Argument("Key").Should().Be(InspectionKeys.Record);
+        refused.Argument("Permission").Should().Be(InspectionPermissionNames.Record);
     }
 
     [Theory]

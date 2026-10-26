@@ -12,10 +12,10 @@ internal abstract class CustomRoles<TRoleId>
     where TRoleId : struct, IEntityId, IEquatable<TRoleId>
 {
     /// <summary>
-    /// The roles in use that hold <paramref name="key"/>, for the context a statement runs on: a query over
+    /// The roles in use that hold <paramref name="permission"/>, for the context a statement runs on: a query over
     /// the role table, which becomes a subquery of that statement. An archived role is not among them.
     /// </summary>
-    public abstract Func<DbContext, IQueryable<TRoleId>> ThatGive(string key);
+    public abstract Func<DbContext, IQueryable<TRoleId>> ThatGive(string permission);
 
     /// <summary>Whether <paramref name="role"/> is a role in use, among the rows <paramref name="context"/> reads.</summary>
     public abstract Task<bool> InUseAsync(DbContext context, TRoleId role, CancellationToken cancellationToken);
@@ -29,9 +29,9 @@ internal sealed class CustomRoles<TRole, TRoleId> : CustomRoles<TRoleId>
     where TRoleId : struct, IEntityId, IEquatable<TRoleId>
 {
     /// <inheritdoc />
-    public override Func<DbContext, IQueryable<TRoleId>> ThatGive(string key)
+    public override Func<DbContext, IQueryable<TRoleId>> ThatGive(string permission)
         => context => context.Set<TRole>()
-            .Where(role => role.Status == CustomRoleStatus.Active && role.Keys.Contains(key))
+            .Where(role => role.Status == CustomRoleStatus.Active && role.Permissions.Contains(permission))
             .Select(role => role.Id);
 
     /// <inheritdoc />

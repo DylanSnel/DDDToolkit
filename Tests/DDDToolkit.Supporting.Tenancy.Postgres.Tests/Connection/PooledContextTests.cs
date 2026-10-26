@@ -92,7 +92,7 @@ public abstract class PooledContextTests(TenancyPostgres postgres, TenancyNaming
         await using var services = new TenancyServices(database, contexts: options => options.AddInterceptors(recorder), pooled: true);
         var rented = new System.Collections.Concurrent.ConcurrentBag<DbContext>();
 
-        // Who asks, and the widgets each may read: at the units where they hold the key, in the tenant they chose.
+        // Who asks, and the widgets each may read: at the units where they hold the permission, in the tenant they chose.
         (Person Person, TenantId Tenant, SeatId Seat, string[] Widgets)[] reading =
         [
             (Seth, Harbor, Seth.Seat, ["Pump", "Valve"]),
@@ -135,7 +135,7 @@ public abstract class PooledContextTests(TenancyPostgres postgres, TenancyNaming
         rented.Should().HaveCount(60);
         rented.Distinct().Count().Should().BeLessThan(rented.Count, "the pool handed contexts out again");
         recorder.Sent.Should().HaveCount(60, "each read is one statement, the question inside it")
-            .And.OnlyContain(command => command.Text.Contains("tenancy." + TenancyFunctionNames.CallerRights + "()", StringComparison.Ordinal) && command.Caller!.Kind == CallerKind.User);
+            .And.OnlyContain(command => command.Text.Contains("tenancy." + TenancyFunctionNames.CallerPermissions + "()", StringComparison.Ordinal) && command.Caller!.Kind == CallerKind.User);
     }
 
     [Fact]
@@ -166,19 +166,19 @@ public abstract class PooledContextTests(TenancyPostgres postgres, TenancyNaming
         (await services.BySystemIn(Harbor, scoped => AdministratorsAsync(scoped, Harbor))).Should().Equal((Ada.Seat, HarborRoles.Administrator));
         recorder.Sent.Should().HaveCount(4).And.Subject.Last().Text.Should().NotContain(TenancyFunctionNames.TenantAdministrators);
 
-        // The rights a move changes, likewise: Seth, who supervises North, is answered his own and those of the keys
+        // The rights a move changes, likewise: Seth, who supervises North, is answered his own and those of the permissions
         // that manage access, and Ada after him hers.
         async Task<int> OwnReachesAsync(IServiceProvider scoped, SeatId seat)
         {
             rented.Add(scoped.Tenancy());
             var reaches = await scoped.GetRequiredService<HostTenancy.IStore>().RightsAMoveChangesAsync(
-                Harbor, seat, North, NorthPier, scoped.GetRequiredService<Catalogue.TenancyCatalogue>().AccessManagingKeys, DateTimeOffset.UtcNow, Cancellation);
+                Harbor, seat, North, NorthPier, scoped.GetRequiredService<Catalogue.TenancyCatalogue>().AccessManagingPermissions, DateTimeOffset.UtcNow, Cancellation);
             return reaches.Count(reach => reach.OfCaller);
         }
 
         var catalogue = services.Provider.GetRequiredService<Catalogue.TenancyCatalogue>();
-        (await services.BySeat(Seth.Identity, Harbor, Seth.Seat, scoped => OwnReachesAsync(scoped, Seth.Seat))).Should().Be(6 + 6, "the six keys of a supervisor, held at North, reach North and North Pier");
-        (await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => OwnReachesAsync(scoped, Ada.Seat))).Should().Be(2 * catalogue.LiveKeys.Count, "each of her keys reaches both parents from the root");
+        (await services.BySeat(Seth.Identity, Harbor, Seth.Seat, scoped => OwnReachesAsync(scoped, Seth.Seat))).Should().Be(6 + 6, "the six permissions of a supervisor, held at North, reach North and North Pier");
+        (await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => OwnReachesAsync(scoped, Ada.Seat))).Should().Be(2 * catalogue.LivePermissions.Count, "each of her permissions reaches both parents from the root");
 
         rented.Distinct().Should().ContainSingle("each request was handed the context the one before gave back");
 
@@ -219,7 +219,7 @@ public abstract class PooledContextTests(TenancyPostgres postgres, TenancyNaming
 
         // Oli, on the context she gave back, manages no seats: the use case asks the database as him, and refuses.
         var refused = await RefusedAsync(TenancyRefusals.NotPermitted, () => As(Oli, scoped => scoped.Seats().AddSeatAsync(Guid.NewGuid(), Cancellation, configure: seat => seat.Rename("Uninvited"))));
-        refused.Arguments["Key"].Should().Be(Catalogue.TenancyKeys.SeatsManage);
+        refused.Arguments["Permission"].Should().Be(Catalogue.TenancyPermissions.SeatsManage);
 
         rented.Should().HaveCount(4);
         rented.Distinct().Should().ContainSingle("each request was handed the context the one before gave back");
@@ -233,7 +233,7 @@ public abstract class PooledContextTests(TenancyPostgres postgres, TenancyNaming
             .Should().Equal("tenancy.seat-added", "tenancy.seat-placed", "tenancy.organization-role-granted");
 
         // The rights the role gives are there, and no command of the application wrote them: the database did.
-        (await owner.ListAsync<string>("SELECT \"Key\" FROM tenancy.\"SeatRights\" WHERE \"SeatId\" = $1 AND \"RoleId\" = $2", Cancellation, seat.Value, HarborRoles.Watcher.Value))
+        (await owner.ListAsync<string>("SELECT \"Permission\" FROM tenancy.\"SeatRights\" WHERE \"SeatId\" = $1 AND \"RoleId\" = $2", Cancellation, seat.Value, HarborRoles.Watcher.Value))
             .Should().Equal(HostCatalogue.WidgetRead);
         recorder.Sent.Should().Contain(command => command.Text.StartsWith("INSERT INTO", StringComparison.Ordinal), "the commands wrote");
         recorder.Sent.Where(command => !command.Text.StartsWith("SELECT", StringComparison.Ordinal))
@@ -387,16 +387,16 @@ public abstract class PooledContextTests(TenancyPostgres postgres, TenancyNaming
 
         // Every command of the use cases, once, each in a scope of its own, as a request is: seats, placements and
         // grants; units added, moved and archived, which changes what every right under them reaches; roles made
-        // and their keys changed, which changes the rights of everyone who holds them; tenants provisioned,
+        // and their permissions changed, which changes the rights of everyone who holds them; tenants provisioned,
         // suspended and closed.
         await EveryUseCase.RunAsync(services, Cancellation);
 
-        // Three questions: who the caller is, with every key it holds and where; who holds a key at a unit, inside a
+        // Three questions: who the caller is, with every permission it holds and where; who holds a permission at a unit, inside a
         // query on a context taken from the factory; and where the caller holds one, inside a module's own query.
         var catalogue = services.Provider.GetRequiredService<Catalogue.TenancyCatalogue>();
         var overview = await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.Directory().WhoAmIAsync(Cancellation));
         overview.Seat.Id.Should().Be(Ada.Seat);
-        overview.Keys.Should().HaveCount(catalogue.LiveKeys.Count).And.OnlyContain(reach => reach.AtTenant);
+        overview.Permissions.Should().HaveCount(catalogue.LivePermissions.Count).And.OnlyContain(reach => reach.AtTenant);
 
         (await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => HoldersAsync<WidgetContext>(scoped, HarborRoot, _ => { }))).Should().Equal(Ada.Seat);
 
@@ -413,7 +413,7 @@ public abstract class PooledContextTests(TenancyPostgres postgres, TenancyNaming
     }
 
     /// <summary>
-    /// Asks who holds the key to read widgets, one caller after another over the one context of
+    /// Asks who holds the permission to read widgets, one caller after another over the one context of
     /// <typeparamref name="TContext"/> the pool hands out, gives back and hands out again: a seat that manages nothing,
     /// an administrator, the same person in another tenant, that tenant's administrator, system work, and the first
     /// seat once more.
@@ -433,13 +433,13 @@ public abstract class PooledContextTests(TenancyPostgres postgres, TenancyNaming
         // For a seat, the database's function answers, in one statement each, sent as that person.
         recorder.Sent.Should().HaveCount(Asking.Length);
         recorder.Sent.Select(command => command.Caller!.UserId).Should().Equal(Asking.Select(asking => (Guid?)asking.Person.Identity));
-        recorder.Sent.Should().OnlyContain(command => command.Text.Contains(TenancyFunctionNames.SeatsHoldingAt, StringComparison.Ordinal),
+        recorder.Sent.Should().OnlyContain(command => command.Text.Contains(TenancyFunctionNames.SeatsHoldingPermissionAt, StringComparison.Ordinal),
             "the context found that the database keeps the rights, from the application's services its options were built with");
 
         // System work in the tenant reads every right of it, and works the answer out; the seat after it is answered
         // as a seat again.
         (await services.BySystemIn(Harbor, scoped => HoldersAsync<TContext>(scoped, NorthPier, rented.Add))).Should().BeEquivalentTo([Ada.Seat, Seth.Seat, Oli.Seat]);
-        recorder.Sent.Last().Text.Should().NotContain(TenancyFunctionNames.SeatsHoldingAt);
+        recorder.Sent.Last().Text.Should().NotContain(TenancyFunctionNames.SeatsHoldingPermissionAt);
         (await services.BySeat(Oli.Identity, Harbor, Oli.Seat, scoped => HoldersAsync<TContext>(scoped, NorthPier, rented.Add))).Should().Equal(Oli.Seat);
 
         rented.Should().HaveCount(Asking.Length + 2);
@@ -455,7 +455,7 @@ public abstract class PooledContextTests(TenancyPostgres postgres, TenancyNaming
     }
 
     /// <summary>
-    /// The seats that hold the key to read widgets at <paramref name="unit"/>, asked inside a query of a context taken
+    /// The seats that hold the permission to read widgets at <paramref name="unit"/>, asked inside a query of a context taken
     /// from the pool for this one question, and given back after it.
     /// </summary>
     private static async Task<List<SeatId>> HoldersAsync<TContext>(IServiceProvider scoped, OrganizationUnitId unit, Action<DbContext> rented)
@@ -464,7 +464,7 @@ public abstract class PooledContextTests(TenancyPostgres postgres, TenancyNaming
         await using var context = await scoped.GetRequiredService<IDbContextFactory<TContext>>().CreateDbContextAsync(Cancellation);
         rented(context);
 
-        var holders = scoped.Answers().Over(context).SeatsHoldingAt(HostCatalogue.WidgetRead, unit);
+        var holders = scoped.Answers().Over(context).SeatsHoldingPermissionAt(HostCatalogue.WidgetRead, unit);
         return await context.Set<SeatRow<TenantId, SeatId>>().Where(seat => holders.Contains(seat.Id)).Select(seat => seat.Id).ToListAsync(Cancellation);
     }
 }

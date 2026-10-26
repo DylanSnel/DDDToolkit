@@ -19,7 +19,7 @@ public sealed class ReadFunctionModelTests
     /// <summary>The rows of the read model, with the function that answers each.</summary>
     private static readonly Dictionary<Type, string> Functions = new()
     {
-        [typeof(SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId>)] = TenancyFunctionNames.CallerRights,
+        [typeof(SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId>)] = TenancyFunctionNames.CallerPermissions,
         [typeof(OrganizationUnitPath<TenantId, OrganizationUnitId>)] = TenancyFunctionNames.TenantUnitPaths,
         [typeof(OrganizationUnitRow<TenantId, OrganizationUnitId>)] = TenancyFunctionNames.TenantUnits,
         [typeof(RoleRow<TenantId, RoleId>)] = TenancyFunctionNames.TenantRoles,
@@ -30,10 +30,10 @@ public sealed class ReadFunctionModelTests
     /// <summary>The properties each row of the read model has in a model, the placements' shadow tenant included: no name among them.</summary>
     private static readonly Dictionary<Type, string[]> Properties = new()
     {
-        [typeof(SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId>)] = ["TenantId", "SeatId", "UnitId", "RoleId", "Key", "StartsAt", "EndsAt"],
+        [typeof(SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId>)] = ["TenantId", "SeatId", "UnitId", "RoleId", "Permission", "StartsAt", "EndsAt"],
         [typeof(OrganizationUnitPath<TenantId, OrganizationUnitId>)] = ["TenantId", "AncestorId", "DescendantId", "Distance"],
         [typeof(OrganizationUnitRow<TenantId, OrganizationUnitId>)] = ["Id", "TenantId", "ParentId", "Status"],
-        [typeof(RoleRow<TenantId, RoleId>)] = ["Id", "TenantId", "FromPack", "Status", "Keys"],
+        [typeof(RoleRow<TenantId, RoleId>)] = ["Id", "TenantId", "FromPack", "Status", "Permissions"],
         [typeof(PlacementRow<SeatId, OrganizationUnitId>)] = ["SeatId", "UnitId", "IsPrimary", "TenantId"],
         [typeof(SeatRow<TenantId, SeatId>)] = ["Id", "TenantId", "Status"],
     };
@@ -95,7 +95,7 @@ public sealed class ReadFunctionModelTests
         PropertiesOfTheRowNamed(tenancy.Model, "TenantToSweepRow").Should().BeEquivalentTo(["TenantId"]);
         PropertiesOfTheRowNamed(tenancy.Model, "SeatHolderRow").Should().BeEquivalentTo(["SeatId"]);
         PropertiesOfTheRowNamed(module.Model, "SeatHolderRow").Should().BeEquivalentTo(["SeatId"]);
-        PropertiesOfTheRowNamed(tenancy.Model, "MoveReach").Should().BeEquivalentTo(["UnitId", "Key", "EndsAt", "Parent", "OfCaller"]);
+        PropertiesOfTheRowNamed(tenancy.Model, "MoveReach").Should().BeEquivalentTo(["UnitId", "Permission", "EndsAt", "Parent", "OfCaller"]);
 
         // And these are all of them: every type either model maps to nothing is one of the four.
         tenancy.Model.GetEntityTypes().Concat(module.Model.GetEntityTypes())
@@ -127,7 +127,7 @@ public sealed class ReadFunctionModelTests
             function.Schema.Should().Be(TestTenancyContext.Schema, "the function is Tenancy's, in the schema of its tables");
             function.Parameters.Should().BeEmpty();
 
-            // No table, no view and no key: nothing a migration creates, and nothing of Tenancy's tables.
+            // No table, no view and no permission: nothing a migration creates, and nothing of Tenancy's tables.
             entityType.GetTableName().Should().BeNull();
             entityType.GetViewName().Should().BeNull();
             entityType.FindPrimaryKey().Should().BeNull();
@@ -155,7 +155,7 @@ public sealed class ReadFunctionModelTests
 
         model.FindEntityType(typeof(PlacementRow<SeatId, OrganizationUnitId>))!.FindProperty("TenantId")!.IsShadowProperty().Should().BeTrue();
 
-        // Besides the six, who holds a key at a unit: mapped to nothing, and asked of its function when the question is.
+        // Besides the six, who holds a permission at a unit: mapped to nothing, and asked of its function when the question is.
         model.GetEntityTypes().Where(entityType => entityType.GetFunctionName() is null).Should().ContainSingle()
             .Which.Should().Match<IEntityType>(holder => holder.GetTableName() == null && holder.GetViewName() == null);
 
@@ -173,11 +173,11 @@ public sealed class ReadFunctionModelTests
         named.Model.GetDbFunctions().Should().HaveCount(6).And.OnlyContain(function => function.Schema == TestTenancyContext.Schema);
         own.Model.GetDbFunctions().Should().HaveCount(6).And.OnlyContain(function => function.Schema == TestWidgetContext.Schema, "without a schema, the functions are looked for where the model's own tables are");
 
-        named.Set<SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId>>().ToQueryString().Should().Contain("FROM tenancy.caller_rights() AS");
-        own.Set<SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId>>().ToQueryString().Should().Contain("FROM widgets.caller_rights() AS");
+        named.Set<SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId>>().ToQueryString().Should().Contain("FROM tenancy.caller_permissions() AS");
+        own.Set<SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId>>().ToQueryString().Should().Contain("FROM widgets.caller_permissions() AS");
 
-        // On Npgsql a role's keys are the array the function answers, asked in SQL.
-        named.Model.FindEntityType(typeof(RoleRow<TenantId, RoleId>))!.FindProperty(nameof(RoleRow<TenantId, RoleId>.Keys))!.GetColumnType().Should().Be("text[]");
+        // On Npgsql a role's permissions are the array the function answers, asked in SQL.
+        named.Model.FindEntityType(typeof(RoleRow<TenantId, RoleId>))!.FindProperty(nameof(RoleRow<TenantId, RoleId>.Permissions))!.GetColumnType().Should().Be("text[]");
     }
 
     [Fact]

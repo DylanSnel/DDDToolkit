@@ -56,8 +56,8 @@ namespace DDDToolkit.Analyzers;
 /// </para>
 /// <para>
 /// <b>What a request requires, from its attributes.</b> A request says what it requires of its caller with an attribute
-/// where the requirement reads no value of the request but a key and an id it carries: <c>[SignedIn]</c>,
-/// <c>[InTenant]</c>, <c>[RequiresKey(key)]</c> with a marker of where the key is held, <c>[AtUnit]</c> on the unit.
+/// where the requirement reads no value of the request but a permission and an id it carries: <c>[SignedIn]</c>,
+/// <c>[InTenant]</c>, <c>[RequiresPermission(permission)]</c> with a marker of where the permission is held, <c>[AtUnit]</c> on the unit.
 /// Where the interface is declared <c>partial</c>, the file implements <c>IRequireAccess.RequiredAccess</c> in it, with one
 /// line per request of the project that states its requirement so, the call the attributes stand for written out, and
 /// <c>AccessRequirement.All</c> of the calls, in the order they are written, where several are stacked:
@@ -77,7 +77,7 @@ namespace DDDToolkit.Analyzers;
 /// A request that answers the property itself answers with its own, which C# takes over the interface's, so the line
 /// is read wherever the property is read: by the behavior below, by a handler that asks the checks again, by a test. It
 /// is written whether or not the project uses the library. What each attribute stands for is its package's to say
-/// (<c>[StatesRequirement]</c>, <c>[KeyMarker]</c>, <c>[KeyWithoutMarker]</c>, <c>[CallersOwn]</c>), and what is wrong
+/// (<c>[StatesRequirement]</c>, <c>[PermissionMarker]</c>, <c>[PermissionWithoutMarker]</c>, <c>[CallersOwn]</c>), and what is wrong
 /// with a request's attributes is DDD00077 to DDD00086 (<see cref="RequestRequirement"/>).
 /// </para>
 /// <para>

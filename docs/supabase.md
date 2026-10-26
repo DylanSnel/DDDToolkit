@@ -915,7 +915,7 @@ offers, the project that runs the export lists, and the build warns while it doe
 [DDD00069](diagnostics.md#ddd00069):
 
 ```csharp
-[assembly: UseRowAccessContribution(typeof(UnitChangesWithItsKeys))]
+[assembly: UseRowAccessContribution(typeof(UnitChangesWithItsPermissions))]
 ```
 
 What a contribution writes for a module goes into that module's access file, with a comment that names it.

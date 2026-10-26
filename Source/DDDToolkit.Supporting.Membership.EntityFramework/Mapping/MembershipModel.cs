@@ -115,13 +115,13 @@ public static class MembershipModel
                     + ". A resource has one: a member holds a role of it by its id, and that id is one class's.");
             }
 
-            if (entityType.FindProperty(nameof(CustomRoleAggregate<>.Keys)) is null
+            if (entityType.FindProperty(nameof(CustomRoleAggregate<>.Permissions)) is null
                 || entityType.FindProperty(nameof(CustomRoleAggregate<>.Status)) is null
                 || entityType.FindProperty(nameof(CustomRoleAggregate<>.Id)) is null)
             {
                 throw new InvalidOperationException(
                     entityType.DisplayName() + " was mapped with IsCustomRole as the role class of " + resource.DisplayName()
-                    + ", and the model no longer has its keys, its status or its id. Map the role class with IsCustomRole alone: it maps all three.");
+                    + ", and the model no longer has its permissions, its status or its id. Map the role class with IsCustomRole alone: it maps all three.");
             }
 
             found = entityType;

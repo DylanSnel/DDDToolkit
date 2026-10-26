@@ -18,14 +18,14 @@ namespace DDDToolkit.Supporting.Membership.EntityFramework;
 /// sees and the reach that acts of one question share it. Who the caller is as a member comes from the rules,
 /// its user id, a claim of its token, or what the application resolves for it, and only a signed-in user is
 /// one. The owner of a resource is found by the resource's own owner column, holds the permissions the rules give
-/// an owner, holding no role, and sees it. Which roles give a key is what the rules declare; where the roles are
+/// an owner, holding no role, and sees it. Which roles give a permission is what the rules declare; where the roles are
 /// kept for the resource, what their rows say, read inside the statement; or, where they are kept elsewhere,
-/// what the application answers inside the statement. Either way only for a key a member's role can give
-/// at all. Where the rules let a resource be reached from above, a signed-in caller holds a key on it as well
-/// when the application answers that it holds the key where the resource sits. The application itself
-/// (<see cref="Caller.System"/>) holds every key on every resource, and so does its work in a scope the rules
+/// what the application answers inside the statement. Either way only for a permission a member's role can give
+/// at all. Where the rules let a resource be reached from above, a signed-in caller holds a permission on it as well
+/// when the application answers that it holds the permission where the resource sits. The application itself
+/// (<see cref="Caller.System"/>) holds every permission on every resource, and so does its work in a scope the rules
 /// name as its own for the resource (<see cref="MembershipRules.SystemScopes"/>). Work in any other scope is
-/// nobody's member and nothing above the rules: like anybody else that holds a key in none of these ways it
+/// nobody's member and nothing above the rules: like anybody else that holds a permission in none of these ways it
 /// reaches nothing, and nothing is read for it.
 /// </para>
 /// <para>
@@ -54,7 +54,7 @@ internal sealed class EfMemberQuestions<TContext, TResource, TResourceId, TMembe
     private readonly MemberNamesOf<TContext, TResource, TRoleId> _names;
     private readonly Func<Caller, TMemberId?> _asMember;
     private readonly ICallerMember<TResourceId, TMemberId>? _resolved;
-    private readonly IRolesWithKey<TResourceId, TRoleId>? _kept;
+    private readonly IRolesWithPermission<TResourceId, TRoleId>? _kept;
     private readonly ICallerAccessor _callers;
     private readonly TimeProvider _clock;
 
@@ -79,7 +79,7 @@ internal sealed class EfMemberQuestions<TContext, TResource, TResourceId, TMembe
         // What the application answers is asked of the scope the questions are asked in: it knows the request.
         _resolved = asMember is null ? services.GetRequiredService<ICallerMember<TResourceId, TMemberId>>() : null;
         _asMember = asMember ?? _resolved!.Find;
-        _kept = rules.Roles.Kind == RolesKind.External ? services.GetRequiredService<IRolesWithKey<TResourceId, TRoleId>>() : null;
+        _kept = rules.Roles.Kind == RolesKind.External ? services.GetRequiredService<IRolesWithPermission<TResourceId, TRoleId>>() : null;
     }
 
     /// <inheritdoc />
@@ -102,25 +102,25 @@ internal sealed class EfMemberQuestions<TContext, TResource, TResourceId, TMembe
     }
 
     /// <inheritdoc />
-    public MemberReach<TResourceId> Reach(string key)
+    public MemberReach<TResourceId> Reach(string permission)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(key);
+        ArgumentException.ThrowIfNullOrWhiteSpace(permission);
 
-        return ReachFor(key, Ask());
+        return ReachFor(permission, Ask());
     }
 
     /// <inheritdoc />
-    public MemberKeyReach<TResourceId> KeyReach(IReadOnlyCollection<string> keys)
+    public MemberPermissionReach<TResourceId> PermissionReach(IReadOnlyCollection<string> permissions)
     {
-        ArgumentNullException.ThrowIfNull(keys);
+        ArgumentNullException.ThrowIfNull(permissions);
 
-        return KeyReachFor(Distinct(keys), Ask());
+        return PermissionReachFor(Distinct(permissions), Ask());
     }
 
     /// <inheritdoc />
-    public async Task<MemberHold<TResourceId>?> HoldAsync(TResourceId resource, string key, CancellationToken cancellationToken)
+    public async Task<MemberHold<TResourceId>?> HoldAsync(TResourceId resource, string permission, CancellationToken cancellationToken)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(key);
+        ArgumentException.ThrowIfNullOrWhiteSpace(permission);
 
         var asked = Ask();
         var see = See(asked);
@@ -129,9 +129,9 @@ internal sealed class EfMemberQuestions<TContext, TResource, TResourceId, TMembe
             return null;
         }
 
-        // Whether it is there for the caller is the filter; how the caller holds the key on it, and until
-        // when, is what is read. A key held from above is held for as long as the resource is seen.
-        var act = ReachFor(key, asked);
+        // Whether it is there for the caller is the filter; how the caller holds the permission on it, and until
+        // when, is what is read. A permission held from above is held for as long as the resource is seen.
+        var act = ReachFor(permission, asked);
         var held = await ReadAsync(
             context => act.HeldWhereSeen(context.Set<TResource>().AsNoTracking().Where(candidate => candidate.Id.Equals(resource)), context, see)
                 .Select(found => new { found.Resource.Version, found.AsMember, found.FromAbove, found.Until })
@@ -144,26 +144,26 @@ internal sealed class EfMemberQuestions<TContext, TResource, TResourceId, TMembe
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyDictionary<TResourceId, IReadOnlySet<string>>> KeysOnAsync(
+    public async Task<IReadOnlyDictionary<TResourceId, IReadOnlySet<string>>> PermissionsOnAsync(
         IReadOnlyCollection<TResourceId> resources,
-        IReadOnlyCollection<string> keys,
+        IReadOnlyCollection<string> permissions,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(resources);
-        ArgumentNullException.ThrowIfNull(keys);
+        ArgumentNullException.ThrowIfNull(permissions);
 
         var about = resources.Distinct().ToList();
         if (about.Count > MemberQuestions.MostResources)
         {
             throw new ArgumentException(
-                "Which keys are held is asked about at most " + MemberQuestions.MostResources + " different resources at once, and these are "
+                "Which permissions are held is asked about at most " + MemberQuestions.MostResources + " different resources at once, and these are "
                 + about.Count + ". A use case that takes the ids from a request refuses its caller before it asks.",
                 nameof(resources));
         }
 
-        var wanted = Distinct(keys);
+        var wanted = Distinct(permissions);
         var asked = Ask();
-        var reach = KeyReachFor(wanted, asked);
+        var reach = PermissionReachFor(wanted, asked);
         var none = new Dictionary<TResourceId, IReadOnlySet<string>>();
         if (about.Count == 0 || wanted.Count == 0 || reach.HoldsNothing)
         {
@@ -172,7 +172,7 @@ internal sealed class EfMemberQuestions<TContext, TResource, TResourceId, TMembe
 
         if (asked.Everything)
         {
-            // The application's own work for this resource holds every key on every one, so only which exist is read.
+            // The application's own work for this resource holds every permission on every one, so only which exist is read.
             var existing = await ReadAsync(
                 context => context.Set<TResource>().AsNoTracking().Where(candidate => about.Contains(candidate.Id)).Select(candidate => candidate.Id).ToListAsync(cancellationToken),
                 cancellationToken).ConfigureAwait(false);
@@ -181,20 +181,20 @@ internal sealed class EfMemberQuestions<TContext, TResource, TResourceId, TMembe
         }
 
         var held = await ReadAsync(
-            context => reach.KeysOn(context.Set<TResource>().AsNoTracking().Where(candidate => about.Contains(candidate.Id)), context).ToListAsync(cancellationToken),
+            context => reach.PermissionsOn(context.Set<TResource>().AsNoTracking().Where(candidate => about.Contains(candidate.Id)), context).ToListAsync(cancellationToken),
             cancellationToken).ConfigureAwait(false);
 
-        // One row for each key held on a resource, put together by resource here.
+        // One row for each permission held on a resource, put together by resource here.
         return held
             .GroupBy(pair => pair.Resource)
-            .ToDictionary(pairs => pairs.Key, pairs => (IReadOnlySet<string>)pairs.Select(pair => pair.Key).ToHashSet(StringComparer.Ordinal));
+            .ToDictionary(pairs => pairs.Key, pairs => (IReadOnlySet<string>)pairs.Select(pair => pair.Permission).ToHashSet(StringComparer.Ordinal));
     }
 
-    /// <summary>The keys asked about, each once, in the order they were asked.</summary>
-    private static List<string> Distinct(IReadOnlyCollection<string> keys)
-        => keys.Any(string.IsNullOrWhiteSpace)
-            ? throw new ArgumentException("A permission key is not blank.", nameof(keys))
-            : [.. keys.Distinct(StringComparer.Ordinal)];
+    /// <summary>The permissions asked about, each once, in the order they were asked.</summary>
+    private static List<string> Distinct(IReadOnlyCollection<string> permissions)
+        => permissions.Any(string.IsNullOrWhiteSpace)
+            ? throw new ArgumentException("A permission is not blank.", nameof(permissions))
+            : [.. permissions.Distinct(StringComparer.Ordinal)];
 
     /// <summary>Who asks, and when: taken once for a question, so everything it is answered from is of one caller and one moment.</summary>
     private Asking Ask()
@@ -216,35 +216,35 @@ internal sealed class EfMemberQuestions<TContext, TResource, TResourceId, TMembe
     /// The reach of what the caller sees: the resources it is a member of now, whatever roles it holds there;
     /// those it owns, by the owner column, since the owner sees what it owns, from the moment the resource names
     /// it, before its own membership has begun; and, where the
-    /// rules let a resource be reached from above and name a key for seeing, those that sit where the caller
-    /// holds that key. The functions in the database see a resource the same way.
+    /// rules let a resource be reached from above and name a permission for seeing, those that sit where the caller
+    /// holds that permission. The functions in the database see a resource the same way.
     /// </summary>
     private EfMemberReach<TResource, TResourceId, TMember, TId, TMemberId, TRoleId> See(Asking asked)
     {
         var names = Names();
         var heldBy = asked.Member is null ? MemberHeldBy.None : MemberHeldBy.Membership | MemberHeldBy.Owner;
         var member = asked.Member ?? default;
-        if (Rules.EveryMemberKey is not { } key)
+        if (Rules.EveryMemberPermission is not { } permission)
         {
-            // No key to ask about above: such a resource is seen by its members and its owner, and by nobody else.
+            // No permission to ask about above: such a resource is seen by its members and its owner, and by nobody else.
             return new(asked.Now, asked.Everything, heldBy, member, names);
         }
 
-        var above = asked.SignedIn && !asked.Everything ? names.Above?.Reaching(_services, asked.Caller, key) : null;
-        return new(key, asked.Now, asked.Everything, above is null ? heldBy : heldBy | MemberHeldBy.Above, member, [], names, Asked(null, above));
+        var above = asked.SignedIn && !asked.Everything ? names.Above?.Reaching(_services, asked.Caller, permission) : null;
+        return new(permission, asked.Now, asked.Everything, above is null ? heldBy : heldBy | MemberHeldBy.Above, member, [], names, Asked(null, above));
     }
 
     /// <summary>
-    /// The reach for one key, as the rules say it is held: by the owner, for a key of the resource; by being a
-    /// member, for the one key that gives; through the roles that give it; and from above, where the rules
-    /// say a resource is reached so. A key held in none of these ways reaches nothing.
+    /// The reach for one permission, as the rules say it is held: by the owner, for a permission of the resource; by being a
+    /// member, for the one permission that gives; through the roles that give it; and from above, where the rules
+    /// say a resource is reached so. A permission held in none of these ways reaches nothing.
     /// </summary>
-    private EfMemberReach<TResource, TResourceId, TMember, TId, TMemberId, TRoleId> ReachFor(string key, Asking asked)
+    private EfMemberReach<TResource, TResourceId, TMember, TId, TMemberId, TRoleId> ReachFor(string permission, Asking asked)
     {
         var names = Names();
         if (asked.Everything || !asked.SignedIn)
         {
-            return new(key, asked.Now, asked.Everything, MemberHeldBy.None, default, [], names);
+            return new(permission, asked.Now, asked.Everything, MemberHeldBy.None, default, [], names);
         }
 
         var heldBy = MemberHeldBy.None;
@@ -253,65 +253,65 @@ internal sealed class EfMemberQuestions<TContext, TResource, TResourceId, TMembe
         if (asked.Member is not null)
         {
             // The owner holds the permissions the rules give an owner by owning the resource, and nothing through a role.
-            if (Rules.OwnerHolds(key))
+            if (Rules.OwnerHolds(permission))
             {
                 heldBy |= MemberHeldBy.Owner;
             }
 
-            if (Rules.MembershipGives(key))
+            if (Rules.MembershipGives(permission))
             {
                 heldBy |= MemberHeldBy.Membership;
             }
             else if (Rules.Roles.Kind == RolesKind.Custom)
             {
-                // The roles are rows kept for the resource, and which of them give the key is read from
-                // those rows, inside the statement. Only for a key a member's role can give: whatever a
-                // row still holds from before the rules changed, it gives no key the rules keep from members.
-                if (Rules.RoleKeys.Allows(key))
+                // The roles are rows kept for the resource, and which of them give the permission is read from
+                // those rows, inside the statement. Only for a permission a member's role can give: whatever a
+                // row still holds from before the rules changed, it gives no permission the rules keep from members.
+                if (Rules.RolePermissions.Allows(permission))
                 {
-                    kept = names.Roles!.ThatGive(key);
+                    kept = names.Roles!.ThatGive(permission);
                     heldBy |= MemberHeldBy.Roles;
                 }
             }
             else if (_kept is null)
             {
                 // The roles are the ones the rules declare, held under their names: checked where the resource was registered.
-                roles = [.. Rules.RolesWith(key).Select(role => (TRoleId)(object)role)];
+                roles = [.. Rules.RolesWith(permission).Select(role => (TRoleId)(object)role)];
                 if (roles.Count > 0)
                 {
                     heldBy |= MemberHeldBy.Roles;
                 }
             }
-            else if (Rules.RoleKeys.Allows(key))
+            else if (Rules.RolePermissions.Allows(permission))
             {
-                // The roles are kept elsewhere, and which of them give the key is asked there, inside the
-                // statement. Only for a key a member's role can give: whatever else such a role holds, it
-                // gives no key the rules keep from members.
+                // The roles are kept elsewhere, and which of them give the permission is asked there, inside the
+                // statement. Only for a permission a member's role can give: whatever else such a role holds, it
+                // gives no permission the rules keep from members.
                 var answers = _kept;
                 var caller = asked.Caller;
-                kept = context => answers.RolesWith(context, caller, key)
-                    ?? throw new InvalidOperationException(answers.GetType().Name + " answered no query for the roles that give '" + key + "'. Answer an empty one for none.");
+                kept = context => answers.RolesWith(context, caller, permission)
+                    ?? throw new InvalidOperationException(answers.GetType().Name + " answered no query for the roles that give '" + permission + "'. Answer an empty one for none.");
                 heldBy |= MemberHeldBy.Roles;
             }
         }
 
         // Held where the resource sits, or above it: asked of the application, for members and others alike, for
-        // every key but a permission the rules keep from above.
-        var above = Rules.ReachesFromAbove(key) ? names.Above?.Reaching(_services, asked.Caller, key) : null;
+        // every permission but a permission the rules keep from above.
+        var above = Rules.ReachesFromAbove(permission) ? names.Above?.Reaching(_services, asked.Caller, permission) : null;
         if (above is not null)
         {
             heldBy |= MemberHeldBy.Above;
         }
 
-        return new(key, asked.Now, false, heldBy, asked.Member ?? default, roles, names, Asked(kept, above));
+        return new(permission, asked.Now, false, heldBy, asked.Member ?? default, roles, names, Asked(kept, above));
     }
 
     /// <summary>What a reach puts into a statement as a query of its own, or <see langword="null"/> when it puts in none.</summary>
     private AskedOfTheApplication<TResource, TRoleId>? Asked(Func<DbContext, IQueryable<TRoleId>>? roles, Func<DbContext, System.Linq.Expressions.Expression<Func<TResource, bool>>>? above)
         => roles is null && above is null ? null : new(roles, above, () => _services.GetService<TContext>());
 
-    private EfMemberKeyReach<TResource, TResourceId, TMember, TId, TMemberId, TRoleId> KeyReachFor(List<string> keys, Asking asked)
-        => new(See(asked), [.. keys.Select(key => ReachFor(key, asked))]);
+    private EfMemberPermissionReach<TResource, TResourceId, TMember, TId, TMemberId, TRoleId> PermissionReachFor(List<string> permissions, Asking asked)
+        => new(See(asked), [.. permissions.Select(permission => ReachFor(permission, asked))]);
 
     /// <summary>
     /// Runs one reading: on a context of its own where the application registered a factory for the context,
@@ -347,7 +347,7 @@ internal sealed class EfMemberQuestions<TContext, TResource, TResourceId, TMembe
     /// <summary>Who asks, and when.</summary>
     /// <param name="Caller">The caller the question is asked for.</param>
     /// <param name="Everything">Whether the caller is the application's own work for this resource.</param>
-    /// <param name="SignedIn">Whether the caller is a signed-in user: the only caller that is a member, or holds a key from above.</param>
+    /// <param name="SignedIn">Whether the caller is a signed-in user: the only caller that is a member, or holds a permission from above.</param>
     /// <param name="Member">Who the caller is as a member, or nobody.</param>
     /// <param name="Now">The moment the question is asked at.</param>
     private readonly record struct Asking(Caller Caller, bool Everything, bool SignedIn, TMemberId? Member, DateTimeOffset Now);

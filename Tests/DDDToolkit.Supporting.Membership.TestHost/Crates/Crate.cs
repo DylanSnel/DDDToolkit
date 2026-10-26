@@ -23,7 +23,7 @@ public sealed partial class CratePorter;
 /// <summary>
 /// A crate, standing in a bay of the depot: the host's fourth kind of resource with members, and the one that
 /// stands beside the organization in every way. Its members are porters, its roles are the depot's, and a
-/// porter who holds a key at the crate's bay, or above it, holds that key on the crate without being on it.
+/// porter who holds a permission at the crate's bay, or above it, holds that permission on the crate without being on it.
 /// </summary>
 [AggregateRoot<CrateId>]
 public sealed partial class Crate
@@ -92,7 +92,7 @@ public sealed partial class Crate
 
 /// <summary>
 /// The permissions asked on a crate. Its owner holds the ones that pack, weigh and scrap it; every porter on it sees
-/// it; a depot role gives those, and keys of other modules besides; one is held from above alone.
+/// it; a depot role gives those, and permissions of other modules besides; one is held from above alone.
 /// </summary>
 [Permissions]
 public static class CratePermissions
@@ -118,19 +118,19 @@ public static class CratePermissions
     public const string Scrap = "crates.scrap";
 }
 
-/// <summary>Keys of the depot's other modules that a depot role holds beside a crate's permissions.</summary>
-public static class CrateKeys
+/// <summary>Permissions of the depot's other modules that a depot role holds beside a crate's permissions.</summary>
+public static class DepotPermissions
 {
-    /// <summary>Print labels: another module's key, which a depot role on a crate gives on it as well.</summary>
+    /// <summary>Print labels: another module's permission, which a depot role on a crate gives on it as well.</summary>
     public const string PrintLabels = "labels.print";
 
-    /// <summary>Run the depot: the depot's own key, which no role on a crate gives.</summary>
+    /// <summary>Run the depot: the depot's own permission, which no role on a crate gives.</summary>
     public const string ManageDepot = "depot.manage";
 }
 
 /// <summary>
 /// The rules of access through a crate's porters, with the depot's own functions: porters known by the depot, roles
-/// it keeps, and its bays, from which a key held at a crate's bay or above it reaches the crate.
+/// it keeps, and its bays, from which a permission held at a crate's bay or above it reaches the crate.
 /// </summary>
 public static class CrateMembership
 {
@@ -139,7 +139,7 @@ public static class CrateMembership
 
     /// <summary>The rules.</summary>
     public static MembershipRules Rules { get; } = MembershipRules.For<Crate>(
-        Roles.External(DepotFunctions.RolesWithKey, otherKeys: OtherKeys.AllBut(CrateKeys.ManageDepot)),
+        Roles.External(DepotFunctions.RolesWithPermission, otherPermissions: OtherPermissions.AllBut(DepotPermissions.ManageDepot)),
         members: MemberSource.Resolved(DepotFunctions.CallerPorter),
         reachFromAbove: DepotFunctions.BaysWhereIHold);
 }

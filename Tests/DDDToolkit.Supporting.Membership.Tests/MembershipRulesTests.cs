@@ -5,8 +5,8 @@ namespace DDDToolkit.Supporting.Membership.Tests;
 
 /// <summary>
 /// The rules of access through a resource's members are one declaration, made through the resource's type and
-/// checked when it is made: what it reads off the resource, what it defaults to, what it answers about a key and a
-/// role, and what it refuses to hold together. They say who holds which key, and nothing about who may change the
+/// checked when it is made: what it reads off the resource, what it defaults to, what it answers about a permission and a
+/// role, and what it refuses to hold together. They say who holds which permission, and nothing about who may change the
 /// members.
 /// </summary>
 public sealed class MembershipRulesTests
@@ -42,10 +42,10 @@ public sealed class MembershipRulesTests
         rules.Members.Should().BeSameAs(MemberSource.Inferred, "who a member is follows from what it is known by unless the rules say otherwise");
         rules.Roles.Kind.Should().Be(RolesKind.Fixed);
         rules.ReachFromAbove.Should().BeNull("a resource is reached through its members and by its owner unless the rules say otherwise");
-        rules.Permissions.Select(permission => permission.Key).Should().Equal(DocumentPermissions.View, DocumentPermissions.Edit, DocumentPermissions.Share);
-        rules.OwnerKeys.Should().Equal(DocumentPermissions.View, DocumentPermissions.Edit, DocumentPermissions.Share);
-        rules.EveryMemberKey.Should().Be(DocumentPermissions.View);
-        (rules.MembersLockKey, rules.OwnerLockKey).Should().Be((DocumentPermissions.Share, DocumentPermissions.Share));
+        rules.Permissions.Select(permission => permission.Name).Should().Equal(DocumentPermissions.View, DocumentPermissions.Edit, DocumentPermissions.Share);
+        rules.OwnerPermissions.Should().Equal(DocumentPermissions.View, DocumentPermissions.Edit, DocumentPermissions.Share);
+        rules.EveryMemberPermission.Should().Be(DocumentPermissions.View);
+        (rules.MembersLockPermission, rules.OwnerLockPermission).Should().Be((DocumentPermissions.Share, DocumentPermissions.Share));
         rules.SystemScopes.Should().BeEmpty("the documents' rules let no scope through, systemScopes: []");
     }
 
@@ -63,18 +63,18 @@ public sealed class MembershipRulesTests
     [Fact]
     public void The_rules_decide_nothing_about_who_may_change_the_members()
     {
-        // Which key a command requires is the application's to choose, on the command. Two settings of the permissions
+        // Which permission a command requires is the application's to choose, on the command. Two settings of the permissions
         // name the ones the application's commands require to change the members and the owner: they are what a
         // database that checks every row is told, so it holds a caller that reaches it past the application to the
-        // same keys. Nothing else is said, and nothing here names who may.
+        // same permissions. Nothing else is said, and nothing here names who may.
         typeof(MembershipRules).GetProperties().Select(property => property.Name).Should().BeEquivalentTo(
-            "Resource", "Name", "Codes", "Functions", "Members", "Roles", "ReachFromAbove", "Permissions", "OwnerKeys", "EveryMemberKey", "RoleKeys",
-            "MembersLockKey", "OwnerLockKey", "SystemScopes");
+            "Resource", "Name", "Codes", "Functions", "Members", "Roles", "ReachFromAbove", "Permissions", "OwnerPermissions", "EveryMemberPermission", "RolePermissions",
+            "MembersLockPermission", "OwnerLockPermission", "SystemScopes");
         typeof(MembershipRules).GetMethod(nameof(MembershipRules.For))!.GetParameters().Select(parameter => parameter.Name)
             .Should().Equal("roles", "members", "reachFromAbove", "systemScopes");
         typeof(MembershipRules).GetConstructors().Should().BeEmpty("rules are made through the resource's type");
 
-        // The member list, which is what changes the members, is made without the rules and takes no key: it
+        // The member list, which is what changes the members, is made without the rules and takes no permission: it
         // could not gate by one if it wanted to.
         typeof(MemberList<,,,>).GetConstructors().Single().GetParameters().Select(parameter => parameter.ParameterType.Name)
             .Should().NotContain(nameof(MembershipRules));
@@ -88,11 +88,11 @@ public sealed class MembershipRulesTests
         rules.Name.Should().Be("folders");
         (rules.Members.Kind, rules.Members.ClaimPath).Should().Be((MemberSourceKind.Claim, "app_metadata.staff"));
         rules.Roles.Declared.Select(role => role.Name).Should().Equal("keeper", "clerk", "visitor");
-        rules.RoleKeys.Excepts.Should().BeFalse("the roles take no keys of other modules");
-        rules.RoleKeys.Keys.Should().Equal(FolderPermissions.Read, FolderPermissions.File, FolderPermissions.Staff);
-        rules.OwnerKeys.Should().Equal(FolderPermissions.Read, FolderPermissions.File, FolderPermissions.Staff, FolderPermissions.Shred, FolderPermissions.HandOver);
-        rules.EveryMemberKey.Should().BeNull("no permission of a folder is held by every member");
-        (rules.MembersLockKey, rules.OwnerLockKey).Should().Be((FolderPermissions.Staff, FolderPermissions.HandOver));
+        rules.RolePermissions.Excepts.Should().BeFalse("the roles take no permissions of other modules");
+        rules.RolePermissions.Permissions.Should().Equal(FolderPermissions.Read, FolderPermissions.File, FolderPermissions.Staff);
+        rules.OwnerPermissions.Should().Equal(FolderPermissions.Read, FolderPermissions.File, FolderPermissions.Staff, FolderPermissions.Shred, FolderPermissions.HandOver);
+        rules.EveryMemberPermission.Should().BeNull("no permission of a folder is held by every member");
+        (rules.MembersLockPermission, rules.OwnerLockPermission).Should().Be((FolderPermissions.Staff, FolderPermissions.HandOver));
         rules.Codes.Should().BeSameAs(FolderRefusals.Membership);
         rules.Functions.Should().Be(new MembershipFunctions("folders_as_member", "folders_as_member_with", "folders_i_see", "folders_where_i_hold"));
         rules.SystemScopes.Should().Equal(FolderMembership.Scope);
@@ -104,14 +104,14 @@ public sealed class MembershipRulesTests
         MembershipPermissions.Declare<Pad>("Tests.PadPermissions", [new("pads.read", EveryMember: true), new("pads.write")], elsewhere: ["pads.order"]);
         MembershipPermissions.Declare<Pad>("Tests.MorePadPermissions", [new("pads.tear", InRoles: false)]);
 
-        var rules = MembershipRules.For<Pad>(Roles.Custom(otherKeys: OtherKeys.All));
+        var rules = MembershipRules.For<Pad>(Roles.Custom(otherPermissions: OtherPermissions.All));
 
         // Each class's in the order it declares them, and the classes in the order of their names.
-        rules.Permissions.Select(permission => permission.Key).Should().Equal("pads.tear", "pads.read", "pads.write");
+        rules.Permissions.Select(permission => permission.Name).Should().Equal("pads.tear", "pads.read", "pads.write");
         rules.SystemScopes.Should().Equal("stationery");
-        rules.RoleKeys.Allows("labels.print").Should().BeTrue("the roles take keys of other modules");
-        rules.RoleKeys.Allows("pads.order").Should().BeFalse("a key the module declares at another level is no key of a pad's role, whatever the roles take");
-        rules.RoleKeys.Allows("pads.tear").Should().BeFalse("no role gives what is marked InRoles = false");
+        rules.RolePermissions.Allows("labels.print").Should().BeTrue("the roles take permissions of other modules");
+        rules.RolePermissions.Allows("pads.order").Should().BeFalse("a permission the module declares at another level is no permission of a pad's role, whatever the roles take");
+        rules.RolePermissions.Allows("pads.tear").Should().BeFalse("no role gives what is marked InRoles = false");
 
         // A class declared again says what it said: two assemblies that declare it see one class.
         FluentActions.Invoking(() => MembershipPermissions.Declare<Pad>("Tests.PadPermissions", [new("pads.read", EveryMember: true), new("pads.write")], elsewhere: ["pads.order"]))
@@ -134,11 +134,11 @@ public sealed class MembershipRulesTests
     {
         var rules = Notes([new(View, EveryMember: true), new(Edit), new(Sharing, Owner: false)], Roles.Fixed([Drafter, Bystander]));
 
-        rules.OwnerKeys.Should().Equal(View, Edit);
+        rules.OwnerPermissions.Should().Equal(View, Edit);
         rules.OwnerHolds(View).Should().BeTrue();
         rules.OwnerHolds(Edit).Should().BeTrue();
         rules.OwnerHolds(Sharing).Should().BeFalse("marked Owner = false: the owner holds it only as anybody would");
-        rules.OwnerHolds("notes.print").Should().BeFalse("a key of nobody's is held by no owner");
+        rules.OwnerHolds("notes.print").Should().BeFalse("a permission of nobody's is held by no owner");
     }
 
     [Fact]
@@ -147,13 +147,13 @@ public sealed class MembershipRulesTests
         var rules = Notes(Permissions, Roles.Fixed([Drafter, new("owner", [View])]));
 
         rules.Roles.Declared.Select(role => role.Name).Should().Equal("drafter", "owner");
-        rules.KeysOf(new NamedRole("owner")).Should().Equal([View], "it gives what it lists, to whoever holds it");
+        rules.PermissionsOf(new NamedRole("owner")).Should().Equal([View], "it gives what it lists, to whoever holds it");
         rules.RolesWith(Edit).Should().Equal([new NamedRole("drafter")]);
 
         var unnamed = Notes(Permissions, Roles.Fixed([Drafter]));
         unnamed.Roles.Declared.Select(role => role.Name).Should().Equal(["drafter"], "nothing is added for the owner, which holds no role");
         unnamed.Knows(new NamedRole("owner")).Should().BeFalse();
-        unnamed.KeysOf(new NamedRole("owner")).Should().BeEmpty();
+        unnamed.PermissionsOf(new NamedRole("owner")).Should().BeEmpty();
     }
 
     [Fact]
@@ -168,41 +168,41 @@ public sealed class MembershipRulesTests
         rules.MembersHold(Sharing).Should().BeFalse("no role gives it, and being a member does not");
 
         var none = Notes([new(View), new(Edit)], Roles.Fixed([Drafter]));
-        none.EveryMemberKey.Should().BeNull();
+        none.EveryMemberPermission.Should().BeNull();
         none.MembershipGives(View).Should().BeFalse("being a member gives nothing unless a permission says so");
     }
 
     [Fact]
-    public void A_role_gives_the_permissions_marked_in_roles_and_where_the_roles_take_them_keys_of_other_modules_but_those_excepted()
+    public void A_role_gives_the_permissions_marked_in_roles_and_where_the_roles_take_them_permissions_of_other_modules_but_those_excepted()
     {
         var fixedRoles = Notes(Permissions, Roles.Fixed([Drafter, Bystander]));
-        fixedRoles.RoleKeys.Excepts.Should().BeFalse();
-        fixedRoles.RoleKeys.Keys.Should().Equal(View, Edit);
-        fixedRoles.RoleKeys.Allows("labels.print").Should().BeFalse("roles in code give the resource's permissions and nothing else");
+        fixedRoles.RolePermissions.Excepts.Should().BeFalse();
+        fixedRoles.RolePermissions.Permissions.Should().Equal(View, Edit);
+        fixedRoles.RolePermissions.Allows("labels.print").Should().BeFalse("roles in code give the resource's permissions and nothing else");
 
-        var custom = Notes(Permissions, Roles.Custom(otherKeys: OtherKeys.AllBut("depot.manage")), elsewhere: ["notes.open"]);
-        custom.RoleKeys.Excepts.Should().BeTrue();
-        custom.RoleKeys.Allows(View).Should().BeTrue();
-        custom.RoleKeys.Allows("labels.print").Should().BeTrue("a key of another module the roles take");
-        custom.RoleKeys.Allows("depot.manage").Should().BeFalse("excepted by name");
-        custom.RoleKeys.Allows(Sharing).Should().BeFalse("marked InRoles = false");
-        custom.RoleKeys.Allows("notes.open").Should().BeFalse("declared by the resource's module at another level: held at a unit, never through a role on a note");
+        var custom = Notes(Permissions, Roles.Custom(otherPermissions: OtherPermissions.AllBut("depot.manage")), elsewhere: ["notes.open"]);
+        custom.RolePermissions.Excepts.Should().BeTrue();
+        custom.RolePermissions.Allows(View).Should().BeTrue();
+        custom.RolePermissions.Allows("labels.print").Should().BeTrue("a permission of another module the roles take");
+        custom.RolePermissions.Allows("depot.manage").Should().BeFalse("excepted by name");
+        custom.RolePermissions.Allows(Sharing).Should().BeFalse("marked InRoles = false");
+        custom.RolePermissions.Allows("notes.open").Should().BeFalse("declared by the resource's module at another level: held at a unit, never through a role on a note");
 
-        var external = Notes(Permissions, Roles.External(new DatabaseFunction("org", "roles_with_key")));
-        external.RoleKeys.Excepts.Should().BeFalse("no keys of other modules unless the roles take them");
-        external.Roles.Function.Should().Be(new DatabaseFunction("org", "roles_with_key"));
+        var external = Notes(Permissions, Roles.External(new DatabaseFunction("org", "roles_with_permission")));
+        external.RolePermissions.Excepts.Should().BeFalse("no permissions of other modules unless the roles take them");
+        external.Roles.Function.Should().Be(new DatabaseFunction("org", "roles_with_permission"));
     }
 
     [Fact]
-    public void The_fixed_roles_that_give_a_key_are_the_declared_ones_in_the_order_they_are_declared()
+    public void The_fixed_roles_that_give_a_permission_are_the_declared_ones_in_the_order_they_are_declared()
     {
         var rules = Notes(Permissions, Roles.Fixed([Drafter, Bystander]));
 
         rules.RolesWith(View).Should().Equal(new NamedRole("drafter"), new NamedRole("bystander"));
         rules.RolesWith(Edit).Should().Equal([new NamedRole("drafter")]);
         rules.RolesWith(Sharing).Should().BeEmpty();
-        rules.KeysOf(new NamedRole("drafter")).Should().Equal(View, Edit);
-        rules.KeysOf(new NamedRole("auditor")).Should().BeEmpty("a role the rules do not declare gives nothing");
+        rules.PermissionsOf(new NamedRole("drafter")).Should().Equal(View, Edit);
+        rules.PermissionsOf(new NamedRole("auditor")).Should().BeEmpty("a role the rules do not declare gives nothing");
 
         // Rows of a customer's, or of the application's own, are read where they are kept.
         Notes(Permissions, Roles.Custom(starters: [Drafter])).RolesWith(View).Should().BeEmpty();
@@ -259,7 +259,7 @@ public sealed class MembershipRulesTests
             .Should().Throw<ArgumentException>().WithMessage("Two permissions on Pad are marked LocksOwner*");
 
         // One permission may lock both, as a document's that decides who it is shared with does.
-        Notes([new(View, LocksMembers: true, LocksOwner: true)], Roles.Fixed([Bystander])).OwnerLockKey.Should().Be(View);
+        Notes([new(View, LocksMembers: true, LocksOwner: true)], Roles.Fixed([Bystander])).OwnerLockPermission.Should().Be(View);
     }
 
     [Fact]
@@ -283,14 +283,14 @@ public sealed class MembershipRulesTests
         Making(() => Notes(Permissions, Roles.Custom(starters: [new("drafter", [View, Sharing])])))
             .Should().Throw<ArgumentException>().WithMessage("The starter role 'drafter' lists 'notes.share', which a role cannot give on Pad*");
         Making(() => Notes(Permissions, Roles.Custom(starters: [new("printer", ["labels.print"])])))
-            .Should().Throw<ArgumentException>("a key of another module, where the roles take none");
-        Notes(Permissions, Roles.Custom(starters: [new("printer", ["labels.print"])], otherKeys: OtherKeys.All))
-            .Roles.Declared.Single().Keys.Should().Equal("labels.print");
+            .Should().Throw<ArgumentException>("a permission of another module, where the roles take none");
+        Notes(Permissions, Roles.Custom(starters: [new("printer", ["labels.print"])], otherPermissions: OtherPermissions.All))
+            .Roles.Declared.Single().Permissions.Should().Equal("labels.print");
 
-        // Rows of which none could ever give anything are refused, since every key would be refused with them.
+        // Rows of which none could ever give anything are refused, since every permission would be refused with them.
         Making(() => Notes([new(View, InRoles: false)], Roles.Custom()))
-            .Should().Throw<ArgumentException>().WithMessage("No permission on Pad can be given by a role*OtherKeys.All*");
-        Notes([new(View, InRoles: false)], Roles.Custom(otherKeys: OtherKeys.All)).RoleKeys.Allows("labels.print").Should().BeTrue();
+            .Should().Throw<ArgumentException>().WithMessage("No permission on Pad can be given by a role*OtherPermissions.All*");
+        Notes([new(View, InRoles: false)], Roles.Custom(otherPermissions: OtherPermissions.All)).RolePermissions.Allows("labels.print").Should().BeTrue();
     }
 
     [Fact]
@@ -303,7 +303,7 @@ public sealed class MembershipRulesTests
 
         // Held from above, it is passed by whoever holds it there.
         Notes([new(View, EveryMember: true), new(Sharing, Owner: false, InRoles: false, LocksOwner: true)], Roles.Fixed([Bystander]), reachFromAbove: true)
-            .OwnerLockKey.Should().Be(Sharing);
+            .OwnerLockPermission.Should().Be(Sharing);
     }
 
     [Fact]
@@ -321,7 +321,7 @@ public sealed class MembershipRulesTests
         var reached = Notes([new(View, EveryMember: true), new(Edit), new(Sharing, FromAbove: false)], Roles.Fixed([Bystander]), reachFromAbove: true);
         reached.ReachesFromAbove(View).Should().BeTrue();
         reached.ReachesFromAbove(Edit).Should().BeTrue();
-        reached.ReachesFromAbove("labels.print").Should().BeTrue("a key of another module held above reaches the resource as well");
+        reached.ReachesFromAbove("labels.print").Should().BeTrue("a permission of another module held above reaches the resource as well");
         reached.ReachesFromAbove(Sharing).Should().BeFalse("marked FromAbove = false: held there, it gives nothing on the resource");
 
         Notes(Permissions, Roles.Fixed([Bystander])).ReachesFromAbove(View).Should().BeFalse("the rules let nothing reach from above");
@@ -346,20 +346,20 @@ public sealed class MembershipRulesTests
     public void Rules_are_data_that_never_changes_after_it_is_made()
     {
         List<ResourcePermission> stated = [new(View, EveryMember: true), new(Edit)];
-        List<string> keys = [View];
-        List<DeclaredRole> roles = [Drafter, new("bystander", keys)];
+        List<string> permissions = [View];
+        List<DeclaredRole> roles = [Drafter, new("bystander", permissions)];
         List<string> scopes = ["notes"];
         var rules = Notes(stated, Roles.Fixed(roles), systemScopes: scopes);
 
         stated.Add(new("notes.print"));
         roles.Add(new("auditor", [View]));
-        keys.Add(Edit);
+        permissions.Add(Edit);
         scopes.Add("billing");
 
-        rules.Permissions.Select(permission => permission.Key).Should().Equal(View, Edit);
+        rules.Permissions.Select(permission => permission.Name).Should().Equal(View, Edit);
         rules.OwnerHolds("notes.print").Should().BeFalse("a permission added to the list afterwards is none of the resource's");
         rules.Roles.Declared.Select(role => role.Name).Should().Equal("drafter", "bystander");
-        rules.KeysOf(new NamedRole("bystander")).Should().Equal([View], "the keys of a role are the ones it was declared with");
+        rules.PermissionsOf(new NamedRole("bystander")).Should().Equal([View], "the permissions of a role are the ones it was declared with");
         rules.SystemScopes.Should().Equal(["notes"]);
         typeof(MembershipRules).GetProperties().Should().OnlyContain(property => property.SetMethod == null, "everything that reads the rules reads the same thing");
     }

@@ -8,17 +8,17 @@ using Microsoft.EntityFrameworkCore;
 namespace DDDToolkit.Supporting.Membership.TestHost.Folders;
 
 /// <summary>
-/// Puts a member of staff on a folder. Its request requires the key that decides a folder's staff, as a
-/// document's requires the key that shares. The folders also have a rule the host wrote itself, here in plain
-/// sight: nobody puts staff on a folder for longer than they themselves hold that key.
+/// Puts a member of staff on a folder. Its request requires the permission that decides a folder's staff, as a
+/// document's requires the permission that shares. The folders also have a rule the host wrote itself, here in plain
+/// sight: nobody puts staff on a folder for longer than they themselves hold that permission.
 /// <para>
-/// The package decides nothing of the kind. It answers until when the caller holds the key
+/// The package decides nothing of the kind. It answers until when the caller holds the permission
 /// (<see cref="MemberHold{TResourceId}.Until"/>), asked here of the folders' questions in one statement, and
-/// the rule is two lines over that answer. The keeper holds every key of a folder with no end, and so does the
+/// the rule is two lines over that answer. The keeper holds every permission of a folder with no end, and so does the
 /// application's own work, so neither is held back by it.
 /// </para>
 /// </summary>
-/// <param name="questions">The folders' access questions: until when the caller holds the key.</param>
+/// <param name="questions">The folders' access questions: until when the caller holds the permission.</param>
 /// <param name="admission">What makes an admission well formed: a member that is known, a role there is.</param>
 /// <param name="context">The host's context.</param>
 /// <param name="callers">Who is calling, for who admitted.</param>
@@ -34,7 +34,7 @@ public sealed class AdmitStaffHandler(
     /// <param name="command">The request, which passed the host's checks.</param>
     /// <param name="cancellationToken">Cancels the work.</param>
     /// <exception cref="RefusalException">
-    /// <c>folders.longer-than-held</c> when the admission would outlast the caller's own hold of the key; or the
+    /// <c>folders.longer-than-held</c> when the admission would outlast the caller's own hold of the permission; or the
     /// member is not known, the role is none of a folder's, or the folder's own rules refuse the admission.
     /// </exception>
     /// <exception cref="ConcurrencyConflictException">The folder is at another version than the caller named, or changed while this was saved.</exception>
@@ -42,7 +42,7 @@ public sealed class AdmitStaffHandler(
     {
         ArgumentNullException.ThrowIfNull(command);
 
-        // Until when the caller holds the key its request required: asked of the questions, since the check let
+        // Until when the caller holds the permission its request required: asked of the questions, since the check let
         // the request through and the handler takes nothing of what it read. It refuses as the check refuses.
         var hold = await questions.RequireAsync(command.Folder, FolderPermissions.Staff, cancellationToken);
 
@@ -53,7 +53,7 @@ public sealed class AdmitStaffHandler(
             throw new RefusalException(
                 FolderRefusals.LongerThanHeld,
                 RefusalKind.NotPermitted,
-                "Nobody is put on a folder for longer than you hold the key to put them there.",
+                "Nobody is put on a folder for longer than you hold the permission to put them there.",
                 new Dictionary<string, object?> { ["Until"] = mine });
         }
 

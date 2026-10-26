@@ -30,7 +30,7 @@ public sealed class GraphQLDeclarationTests(SampleWithoutDatabase sample) : ICla
     private static readonly IReadOnlyDictionary<string, Declared> Held = new Dictionary<string, Declared>(StringComparer.Ordinal)
     {
         ["Tenants"] = new(
-            Loaders: ["GetSeatByIdAsync", "GetOrganizationUnitByIdAsync", "GetRoleByIdAsync", "GetHeldUnitsByKeyAsync"],
+            Loaders: ["GetSeatByIdAsync", "GetOrganizationUnitByIdAsync", "GetRoleByIdAsync", "GetHeldUnitsByPermissionAsync"],
             PagedFields: ["Query.accessHistory", "Query.tenantAccessHistory"],
             ClassesOfPagedFields: ["HistoryPagedQueries", "OperatorsPagedQueries"],
             RecordsOfTheSchemasOwn: new Dictionary<string, string>(StringComparer.Ordinal),
@@ -42,7 +42,7 @@ public sealed class GraphQLDeclarationTests(SampleWithoutDatabase sample) : ICla
             },
         },
         ["Projects"] = new(
-            Loaders: ["GetProjectByIdAsync", "GetCrewByProjectIdAsync", "GetAbilitiesByProjectIdAsync", "GetHeldKeysByProjectIdAsync", "GetProjectRoleByIdAsync"],
+            Loaders: ["GetProjectByIdAsync", "GetCrewByProjectIdAsync", "GetAbilitiesByProjectIdAsync", "GetHeldPermissionsByProjectIdAsync", "GetProjectRoleByIdAsync"],
             PagedFields: ["Query.projects"],
             ClassesOfPagedFields: ["OverviewPagedQueries"],
             RecordsOfTheSchemasOwn: new Dictionary<string, string>(StringComparer.Ordinal),
@@ -211,7 +211,7 @@ public sealed class GraphQLDeclarationTests(SampleWithoutDatabase sample) : ICla
             }
             else
             {
-                Assembly[] answers = Held[module].AnswersOfThePackage ? [application, typeof(TenancyUseCases.KeyReach).Assembly] : [application];
+                Assembly[] answers = Held[module].AnswersOfThePackage ? [application, typeof(TenancyUseCases.PermissionReach).Assembly] : [application];
                 answers.Should().Contain(over.Assembly, "{0} is declared over what {1}'s application layer answers", typeClass.Name, module);
             }
         }

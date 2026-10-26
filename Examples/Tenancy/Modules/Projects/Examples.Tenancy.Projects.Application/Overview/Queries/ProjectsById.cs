@@ -7,16 +7,16 @@ namespace Examples.Tenancy.Projects.Application.Overview.Queries;
 /// what they stand for, such as a lookup that resolves the projects another module named.
 /// </summary>
 /// <remarks>
-/// Nobody is refused for an id: a project the caller may not see with <see cref="RequiredKey"/> is left out of the
-/// answer exactly as one that does not exist, so asking about an id tells nothing about it. The key is the filter
+/// Nobody is refused for an id: a project the caller may not see with <see cref="RequiredPermission"/> is left out of the
+/// answer exactly as one that does not exist, so asking about an id tells nothing about it. The permission is the filter
 /// of the handler's one statement, not a check made before it.
 /// </remarks>
 /// <param name="Ids">The projects asked about, at most <see cref="MostProjects"/> different ones.</param>
-[SeenWith<ProjectId>(RequiredKey)]
+[SeenWith<ProjectId>(RequiredPermission)]
 public sealed record ProjectsById(IReadOnlyList<ProjectId> Ids) : IQuery<IReadOnlyList<ProjectOverview>>, IProjectsRequest
 {
-    /// <summary>The key that decides whether a project is there for the caller at all.</summary>
-    public const string RequiredKey = ProjectKeys.View;
+    /// <summary>The permission that decides whether a project is there for the caller at all.</summary>
+    public const string RequiredPermission = ProjectPermissionNames.View;
 
     /// <summary>The most projects one question is about.</summary>
     public const int MostProjects = 200;
@@ -56,6 +56,6 @@ public sealed class ProjectsByIdHandler(IProjectReads reads, ProjectAccess acces
         }
 
         await using var reading = reads.Open();
-        return await reading.ByIdsAsync(ids, access.ReachFor(ProjectsById.RequiredKey), cancellationToken);
+        return await reading.ByIdsAsync(ids, access.ReachFor(ProjectsById.RequiredPermission), cancellationToken);
     }
 }

@@ -91,7 +91,7 @@ internal sealed class EfProjectStore(ProjectsContext db) : IProjectStore
 
     /// <summary>
     /// The project a tracked row belongs to: a project's own id, and for a crew member or a crew role the first
-    /// part of its owner's key, which is the project's id at either depth. <see langword="null"/> for anything else.
+    /// part of its owner's permission, which is the project's id at either depth. <see langword="null"/> for anything else.
     /// </summary>
     private static object? ProjectOf(EntityEntry entry)
         => entry.Entity is Project project ? project.Id

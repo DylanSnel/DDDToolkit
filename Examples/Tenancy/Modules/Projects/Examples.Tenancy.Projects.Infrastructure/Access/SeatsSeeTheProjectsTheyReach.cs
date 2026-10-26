@@ -16,7 +16,7 @@ namespace Examples.Tenancy.Projects.Infrastructure.Access;
 // as other modules' rules do.
 
 /// <summary>
-/// A seat reads the projects it reaches: those whose crew it is on, and those at a unit where it holds the key to
+/// A seat reads the projects it reaches: those whose crew it is on, and those at a unit where it holds the permission to
 /// see them, there or above it (<see cref="ProjectsISee"/>). The set is asked once per statement, however many
 /// projects are read.
 /// </summary>
