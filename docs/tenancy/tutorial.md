@@ -573,9 +573,10 @@ the database before it starts.
 
 **`src/Harbor.Host/Program.cs`**
 
-```csharp {11-14,17,21}
+```csharp {3,12-15,18,22}
 using DDDToolkit.EntityFramework.Supabase;
 using DDDToolkit.Startup;
+using Harbor.Host;
 using Harbor.Host.Requests;
 using Harbor.Tenancy.Api;
 
@@ -663,6 +664,7 @@ public sealed class RefusalsAsProblems : IExceptionHandler
 ### What it does
 
 - `AddSupabaseRowLevelSecurity()`: every query runs as the caller's database role, the one the policies are for.
+- `using Harbor.Host;`: the calls the toolkit generates into the host live in the host's own namespace.
 - `AddTenancyPermissionsOfModules()`: generated into the host: the permissions of every module it references.
 - `AddSupabaseMigrations()` and `RunStartupChecks()`: before the API serves anything, it checks that the database has
   every migration and policy, and that the login role may become the callers' roles. A failed check names the fix.
@@ -793,9 +795,10 @@ public static class TenancyModule
 
 **`src/Harbor.Host/Program.cs`**: the development route, in Development only.
 
-```csharp {23-26}
+```csharp {24-27}
 using DDDToolkit.EntityFramework.Supabase;
 using DDDToolkit.Startup;
+using Harbor.Host;
 using Harbor.Host.Requests;
 using Harbor.Tenancy.Api;
 
@@ -921,8 +924,31 @@ internal static class SeatsEndpoints
 }
 ```
 
-In `TenancyModule.cs`, `MapTenancyModule` now maps it: `=> routes.MapSeatsEndpoints();`, with
-`using Harbor.Tenancy.Api.Seats.Rest;`.
+**`Harbor.Tenancy.Api/TenancyModule.cs`**: the module maps it.
+
+```csharp {2,17}
+using Harbor.Tenancy.Api.Development;
+using Harbor.Tenancy.Api.Seats.Rest;
+using Harbor.Tenancy.Application;
+using Harbor.Tenancy.Infrastructure;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace Harbor.Tenancy.Api;
+
+// The module's entry: the host calls these, and nothing else of the module.
+public static class TenancyModule
+{
+    public static IServiceCollection AddTenancyModule(this IServiceCollection services, string connectionString)
+        => services.AddTenancyInfrastructure(connectionString).AddTenancyApplication();
+
+    public static IEndpointRouteBuilder MapTenancyModule(this IEndpointRouteBuilder routes)
+        => routes.MapSeatsEndpoints();
+
+    public static IEndpointRouteBuilder MapTenancyDevelopment(this IEndpointRouteBuilder routes)
+        => routes.MapDevelopmentEndpoints();
+}
+```
 
 ### What it does
 
@@ -1048,12 +1074,90 @@ public sealed class AddSeatHandler(TenancyUseCases.SeatCommands seats) : IComman
 }
 ```
 
-**The routes.** `UnitsEndpoints.cs` maps `GET /units` and `POST /units`; `SeatsEndpoints.cs` gets `POST /seats`;
-`MapTenancyModule` maps both: `=> routes.MapUnitsEndpoints().MapSeatsEndpoints();`. Each route only sends:
+**`Harbor.Tenancy.Api/Units/Rest/UnitsEndpoints.cs`**: each route only sends its request.
 
-```csharp
-routes.MapPost("/units", async (NewUnit body, ISender sender, CancellationToken cancellationToken)
-    => Results.Ok(new { unit = await sender.Send(new AddUnit(body.Parent, body.Name), cancellationToken) }));
+```csharp {15-16,18-19}
+using Harbor.Tenancy.Application.Units.AddUnit;
+using Harbor.Tenancy.Application.Units.ListUnits;
+using Harbor.Tenancy.Contracts.ValueObjects;
+using Mediator;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
+
+namespace Harbor.Tenancy.Api.Units.Rest;
+
+internal static class UnitsEndpoints
+{
+    public static IEndpointRouteBuilder MapUnitsEndpoints(this IEndpointRouteBuilder routes)
+    {
+        routes.MapGet("/units", async (ISender sender, CancellationToken cancellationToken)
+            => Results.Ok(await sender.Send(new ListUnits(), cancellationToken)));
+
+        routes.MapPost("/units", async (NewUnit body, ISender sender, CancellationToken cancellationToken)
+            => Results.Ok(new { unit = await sender.Send(new AddUnit(body.Parent, body.Name), cancellationToken) }));
+
+        return routes;
+    }
+
+    public sealed record NewUnit(OrganizationUnitId Parent, string Name);
+}
+```
+
+**`Harbor.Tenancy.Api/Seats/Rest/SeatsEndpoints.cs`**: `POST /seats` beside `GET /me`.
+
+```csharp {1,3,17-18,23}
+using Harbor.Tenancy.Application.Seats.AddSeat;
+using Harbor.Tenancy.Application.Seats.WhoAmI;
+using Harbor.Tenancy.Contracts.ValueObjects;
+using Mediator;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
+
+namespace Harbor.Tenancy.Api.Seats.Rest;
+
+internal static class SeatsEndpoints
+{
+    public static IEndpointRouteBuilder MapSeatsEndpoints(this IEndpointRouteBuilder routes)
+    {
+        routes.MapGet("/me", async (ISender sender, CancellationToken cancellationToken)
+            => Results.Ok(await sender.Send(new WhoAmI(), cancellationToken)));
+        routes.MapPost("/seats", async (NewSeat body, ISender sender, CancellationToken cancellationToken)
+            => Results.Ok(new { seat = await sender.Send(new AddSeat(body.Identity, body.Unit), cancellationToken) }));
+
+        return routes;
+    }
+
+    public sealed record NewSeat(Guid Identity, OrganizationUnitId Unit);
+}
+```
+
+**`Harbor.Tenancy.Api/TenancyModule.cs`**: the module maps both.
+
+```csharp {3,18}
+using Harbor.Tenancy.Api.Development;
+using Harbor.Tenancy.Api.Seats.Rest;
+using Harbor.Tenancy.Api.Units.Rest;
+using Harbor.Tenancy.Application;
+using Harbor.Tenancy.Infrastructure;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace Harbor.Tenancy.Api;
+
+// The module's entry: the host calls these, and nothing else of the module.
+public static class TenancyModule
+{
+    public static IServiceCollection AddTenancyModule(this IServiceCollection services, string connectionString)
+        => services.AddTenancyInfrastructure(connectionString).AddTenancyApplication();
+
+    public static IEndpointRouteBuilder MapTenancyModule(this IEndpointRouteBuilder routes)
+        => routes.MapUnitsEndpoints().MapSeatsEndpoints();
+
+    public static IEndpointRouteBuilder MapTenancyDevelopment(this IEndpointRouteBuilder routes)
+        => routes.MapDevelopmentEndpoints();
+}
 ```
 
 ### What it does
@@ -1130,8 +1234,95 @@ public sealed class GrantRoleHandler(TenancyUseCases.SeatCommands seats) : IComm
 }
 ```
 
-**The routes.** `POST /roles` (a new `RolesEndpoints.cs`) and `POST /grants` (in `SeatsEndpoints.cs`), each sending
-its request; `MapTenancyModule` maps `RolesEndpoints` too.
+**`Harbor.Tenancy.Api/Roles/Rest/RolesEndpoints.cs`**
+
+```csharp {13-14}
+using Harbor.Tenancy.Application.Roles.CreateRole;
+using Mediator;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
+
+namespace Harbor.Tenancy.Api.Roles.Rest;
+
+internal static class RolesEndpoints
+{
+    public static IEndpointRouteBuilder MapRolesEndpoints(this IEndpointRouteBuilder routes)
+    {
+        routes.MapPost("/roles", async (NewRole body, ISender sender, CancellationToken cancellationToken)
+            => Results.Ok(new { role = await sender.Send(new CreateRole(body.Name, body.Description, body.Permissions), cancellationToken) }));
+
+        return routes;
+    }
+
+    public sealed record NewRole(string Name, string Description, string[] Permissions);
+}
+```
+
+**`Harbor.Tenancy.Api/Seats/Rest/SeatsEndpoints.cs`**: `POST /grants` beside the others.
+
+```csharp {1,20-24,31}
+using Harbor.Tenancy.Application.Grants.GrantRole;
+using Harbor.Tenancy.Application.Seats.AddSeat;
+using Harbor.Tenancy.Application.Seats.WhoAmI;
+using Harbor.Tenancy.Contracts.ValueObjects;
+using Mediator;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
+
+namespace Harbor.Tenancy.Api.Seats.Rest;
+
+internal static class SeatsEndpoints
+{
+    public static IEndpointRouteBuilder MapSeatsEndpoints(this IEndpointRouteBuilder routes)
+    {
+        routes.MapGet("/me", async (ISender sender, CancellationToken cancellationToken)
+            => Results.Ok(await sender.Send(new WhoAmI(), cancellationToken)));
+        routes.MapPost("/seats", async (NewSeat body, ISender sender, CancellationToken cancellationToken)
+            => Results.Ok(new { seat = await sender.Send(new AddSeat(body.Identity, body.Unit), cancellationToken) }));
+        routes.MapPost("/grants", async (NewGrant body, ISender sender, CancellationToken cancellationToken) =>
+        {
+            await sender.Send(new GrantRole(body.Seat, body.Unit, body.Role), cancellationToken);
+            return Results.NoContent();
+        });
+
+        return routes;
+    }
+
+    public sealed record NewSeat(Guid Identity, OrganizationUnitId Unit);
+
+    public sealed record NewGrant(SeatId Seat, OrganizationUnitId Unit, RoleId Role);
+}
+```
+
+**`Harbor.Tenancy.Api/TenancyModule.cs`**: the roles' routes too.
+
+```csharp {2,19}
+using Harbor.Tenancy.Api.Development;
+using Harbor.Tenancy.Api.Roles.Rest;
+using Harbor.Tenancy.Api.Seats.Rest;
+using Harbor.Tenancy.Api.Units.Rest;
+using Harbor.Tenancy.Application;
+using Harbor.Tenancy.Infrastructure;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace Harbor.Tenancy.Api;
+
+// The module's entry: the host calls these, and nothing else of the module.
+public static class TenancyModule
+{
+    public static IServiceCollection AddTenancyModule(this IServiceCollection services, string connectionString)
+        => services.AddTenancyInfrastructure(connectionString).AddTenancyApplication();
+
+    public static IEndpointRouteBuilder MapTenancyModule(this IEndpointRouteBuilder routes)
+        => routes.MapUnitsEndpoints().MapSeatsEndpoints().MapRolesEndpoints();
+
+    public static IEndpointRouteBuilder MapTenancyDevelopment(this IEndpointRouteBuilder routes)
+        => routes.MapDevelopmentEndpoints();
+}
+```
 
 ### What it does
 
