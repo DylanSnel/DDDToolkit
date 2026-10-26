@@ -2485,7 +2485,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   such. With the dev login, and without the setting, the token reaches the person from whoever invited them. The
   AppHost sets it and names the UI as Auth's site, and `supabase/config.toml` names the UI as
   the site of the stack the Supabase CLI starts: Auth sends a browser on only to its site, told by host name.
-  See [Inviting a person by address](docs/tenancy/the-sample.md#inviting-a-person-by-address).
+  See [Inviting a person by address](docs/tenancy/sample/who-may-do-what.md#inviting-a-person-by-address).
 - **The Tenancy sample runs on Postgres, as Supabase runs it, and on no other database.** Its host logs in at
   `ConnectionStrings:Supabase` as a login role that owns nothing, `tenancy_api`, under forced policies and
   privileges written from them; without that setting it stops before it is built and says how to get one. The

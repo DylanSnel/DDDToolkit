@@ -247,5 +247,5 @@ have no policy.
   seat counts in the transaction that wrote it, and in no later one.
 
 The [sample](the-sample.md#who-may-do-what-in-the-sample) keeps its history this way and reads it
-[as a list](the-sample.md#an-operator-who-changed-a-row-and-the-history-as-a-list): a route for whoever holds the
+[as a list](sample/who-may-do-what.md#an-operator-who-changed-a-row-and-the-history-as-a-list): a route for whoever holds the
 permission and one for an operator, each with a GraphQL field.

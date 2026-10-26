@@ -350,5 +350,5 @@ organization", "Who reads which grants" and "What the database guards on a seat"
   `Commands` or `Queries`, every namespace its folder, every request declaring its access. Add to them
   when the layout gains a rule.
 
-`tenancy/the-sample.md`, "Design choices and where to see them", lists each choice with its code, something to
-try and its test.
+`tenancy/sample/design-choices.md`, "Design choices and where to see them", lists each choice with its code,
+something to try and its test.

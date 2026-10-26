@@ -234,7 +234,7 @@ public sealed class InspectionsOfProjectsScenarios(SampleHosts sample) : IClassF
     }
 
     /// <summary>
-    /// What a reader is shown runs as it is written: the query of the documentation's GraphQL section, and the
+    /// What a reader is shown runs as it is written: the query of the sample's GraphQL page, and the
     /// request of the host's <c>.http</c> file, each sent exactly as its file has it.
     /// </summary>
     [Fact]
@@ -244,8 +244,8 @@ public sealed class InspectionsOfProjectsScenarios(SampleHosts sample) : IClassF
         using var juno = await host.ClientAsync("juno", Harbor.Slug);
         await RecordAsync(juno, PierSeven, "Handrails on the north pier checked");
 
-        // The documentation: the one fenced query that asks for a project's inspections.
-        var docs = await File.ReadAllTextAsync(System.IO.Path.Combine(SampleLayout.RepositoryRoot(), "docs", "tenancy", "the-sample.md"), Cancellation);
+        // The documentation: the one fenced query of the sample's GraphQL page that asks for a project's inspections.
+        var docs = await File.ReadAllTextAsync(System.IO.Path.Combine(SampleLayout.RepositoryRoot(), "docs", "tenancy", "sample", "graphql.md"), Cancellation);
         var query = docs.Split("```graphql")[1..].Select(fenced => fenced.Split("```")[0]).Should().ContainSingle(fenced => fenced.Contains(Documented, StringComparison.Ordinal)).Subject;
         string.Join(' ', query.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
             .Should().Be("{ projects { nodes { name inspections(first: 5) { nodes { title } } } } }", "this is the query the documentation shows");
