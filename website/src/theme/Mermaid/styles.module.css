@@ -7,3 +7,113 @@
 .container > svg {
   max-width: 100%;
 }
+
+/* The button that opens a diagram full size, at the top right of its frame. */
+
+.frame {
+  position: relative;
+}
+
+.expand {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 1px solid var(--ddd-border);
+  border-radius: 0.5rem;
+  background: var(--ddd-card);
+  color: var(--ddd-muted);
+  cursor: pointer;
+  opacity: 0.75;
+}
+
+.expand:hover,
+.expand:focus-visible {
+  color: var(--ifm-color-primary);
+  opacity: 1;
+}
+
+/* The dialog: most of the window, over a dimmed page. */
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(0 0 0 / 0.6);
+}
+
+.dialog {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 95vw;
+  height: 90vh;
+  border: 1px solid var(--ddd-border);
+  border-radius: 0.75rem;
+  background: var(--ddd-card);
+  overflow: hidden;
+}
+
+.toolbar {
+  display: flex;
+  gap: 0.25rem;
+  justify-content: flex-end;
+  padding: 0.5rem;
+  border-bottom: 1px solid var(--ddd-border);
+}
+
+.toolbar button {
+  min-width: 2rem;
+  height: 2rem;
+  padding: 0 0.5rem;
+  border: 1px solid var(--ddd-border);
+  border-radius: 0.5rem;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.toolbar button:hover,
+.toolbar button:focus-visible {
+  color: var(--ifm-color-primary);
+}
+
+.stage {
+  position: relative;
+  flex: 1;
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.stage:active {
+  cursor: grabbing;
+}
+
+/* The diagram is moved and zoomed as a whole; the site's frame around a diagram is not wanted here. */
+.content {
+  position: absolute;
+  top: 0;
+  left: 0;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  overflow: visible !important;
+  transform-origin: 0 0;
+}
+
+.content svg {
+  max-width: none !important;
+}
