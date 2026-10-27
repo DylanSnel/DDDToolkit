@@ -1185,11 +1185,11 @@ using (access.BeginSystemIn(tenant.Id))
 
 // Who may send it: a caller in the tenant, which the system work there is
 [InTenant]
-public sealed record MarkTenantAsDemo : ICommand, ITenantsRequest;
+public sealed record MarkTenantAsDemo : ICommand<Tenant>, ITenantsRequest;
 
-public sealed class MarkTenantAsDemoHandler(TenancyStore store, TenancyAccessManager access) : ICommandHandler<MarkTenantAsDemo>
+public sealed class MarkTenantAsDemoHandler(TenancyStore store, TenancyAccessManager access) : ICommandHandler<MarkTenantAsDemo, Tenant>
 {
-    public async ValueTask<Unit> Handle(MarkTenantAsDemo command, CancellationToken cancellationToken)
+    public async ValueTask<Tenant> Handle(MarkTenantAsDemo command, CancellationToken cancellationToken)
     {
         var scope = access.CurrentTenant.Require();
         if (!scope.BySystem)
@@ -1197,7 +1197,7 @@ public sealed class MarkTenantAsDemoHandler(TenancyStore store, TenancyAccessMan
             throw ToolkitRefusals.Refuse(ToolkitRefusals.SystemOnly);           // what only system work may do
         }
 
-        // ... load the tenant, mark it, save
+        // ... load the tenant, mark it, save, and return it
     }
 }
 

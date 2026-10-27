@@ -1,4 +1,5 @@
 using DDDToolkit.Supporting.Tenancy.Catalogue;
+using Examples.Tenancy.Tenants.Domain.Aggregates.Seats;
 using Mediator;
 
 namespace Examples.Tenancy.Tenants.Application.Seats.Commands;
@@ -7,22 +8,20 @@ namespace Examples.Tenancy.Tenants.Application.Seats.Commands;
 /// Makes a suspended seat active again, with every grant that has not ended.
 /// </summary>
 /// <remarks>
-/// It requires <c>tenancy.seats.manage</c> for the whole tenant. The package's use case asks for that permission again, and
+/// It requires <c>tenancy.seats.manage</c> for the whole tenant. The package's manager asks for that permission again, and
 /// for what giving each of the seat's roles would need.
 /// </remarks>
 /// <param name="Seat">The seat.</param>
 [RequiresPermission(TenancyPermissions.SeatsManage)]
-public sealed record ReactivateTenantSeat(SeatId Seat) : ICommand, ITenantsRequest;
+public sealed record ReactivateTenantSeat(SeatId Seat) : ICommand<Seat>, ITenantsRequest;
 
-/// <summary>Handles <see cref="ReactivateTenantSeat"/> with the Tenancy package's use case, which checks the caller, decides and saves.</summary>
-/// <param name="seats">The package's use cases that change a seat.</param>
-public sealed class ReactivateTenantSeatHandler(SeatManager seats) : ICommandHandler<ReactivateTenantSeat>
+/// <summary>Handles <see cref="ReactivateTenantSeat"/> with the Tenancy package's manager, which checks the caller, decides and saves.</summary>
+/// <param name="seats">The package's seat manager.</param>
+public sealed class ReactivateTenantSeatHandler(SeatManager seats) : ICommandHandler<ReactivateTenantSeat, Seat>
 {
     /// <inheritdoc />
-    /// <exception cref="Exceptions.RefusalException">What the package's use case refuses, with its code.</exception>
-    public async ValueTask<Unit> Handle(ReactivateTenantSeat command, CancellationToken cancellationToken)
-    {
-        await seats.ReactivateAsync(command.Seat, cancellationToken);
-        return Unit.Value;
-    }
+    /// <returns>The seat, active again.</returns>
+    /// <exception cref="Exceptions.RefusalException">What the package's manager refuses, with its code.</exception>
+    public async ValueTask<Seat> Handle(ReactivateTenantSeat command, CancellationToken cancellationToken)
+        => await seats.ReactivateAsync(command.Seat, cancellationToken);
 }

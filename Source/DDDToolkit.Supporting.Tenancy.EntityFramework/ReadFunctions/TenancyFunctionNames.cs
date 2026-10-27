@@ -47,7 +47,7 @@ public static class TenancyFunctionNames
     /// <c>"FromStarterRole"</c>, <c>"Status"</c> and <c>"Permissions"</c>, an array of text however the roles' table stores
     /// them; never the name.
     /// </summary>
-    public const string TenantRoles = "tenant_role_rows";
+    public const string TenantRoles = "tenant_roles_with_starter_roles";
 
     /// <summary>
     /// Where seats are placed, as rows of <see cref="Access.PlacementRow{TSeatId, TUnitId}"/>: <c>"SeatId"</c>,

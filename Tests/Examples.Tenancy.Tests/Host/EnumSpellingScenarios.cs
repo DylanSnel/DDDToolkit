@@ -45,7 +45,7 @@ public sealed class EnumSpellingScenarios(SampleHosts sample) : IClassFixture<Sa
         using var tove = await host.ClientAsync("tove", DemoData.Meadow.Slug);
         using (var changed = await tove.PostAsJsonAsync("/tenancy/shape", new { shape = "hierarchical" }, Cancellation))
         {
-            changed.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            changed.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         (await tove.GetFromJsonAsync<JsonElement>("/me", Cancellation)).GetProperty("tenant").GetProperty("shape").GetString().Should().Be("hierarchical");

@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 using DDDToolkit.Supporting.Tenancy.Access;
 using Examples.Tenancy.Tenants.Application.Organization.Commands;
 using Examples.Tenancy.Tenants.Application.Organization.Queries;
+using Examples.Tenancy.Tenants.Domain.Aggregates.Organizations.Entities;
 using Examples.Tenancy.Tenants.Domain.Aggregates.Organizations.ValueObjects;
 using Mediator;
 using Microsoft.AspNetCore.Builder;
@@ -35,27 +36,25 @@ internal static class OrganizationEndpoints
 
         // A missing name is passed on empty, so the package refuses it by its code rather than by a null reference.
         // A missing kind is no kind; one the application does not have fails to bind, a 400 invalid-request. The
-        // answer is the new id; there is no route of one unit, so no Location either.
-        group.MapPost("/tenancy/units", async (UnitToAdd body, ISender sender, CancellationToken cancellationToken) =>
-        {
-            var id = await sender.Send(new AddOrganizationUnit(body.ParentId, body.Name ?? string.Empty, body.Kind), cancellationToken);
-            return Results.Created((string?)null, new { id });
-        });
+        // answer is the new unit, as the command answers it; there is no route of one unit, so no Location either.
+        group.MapPost("/tenancy/units", async (UnitToAdd body, ISender sender, CancellationToken cancellationToken)
+            => Results.Created((string?)null, Describe(await sender.Send(new AddOrganizationUnit(body.ParentId, body.Name ?? string.Empty, body.Kind), cancellationToken))));
 
-        group.MapPut("/tenancy/units/{id}/parent", async (OrganizationUnitId id, NewParent body, ISender sender, CancellationToken cancellationToken) =>
-        {
-            await sender.Send(new MoveOrganizationUnit(id, body.ParentId), cancellationToken);
-            return Results.NoContent();
-        });
+        // A change answers the unit as its command answers it.
+        group.MapPut("/tenancy/units/{id}/parent", async (OrganizationUnitId id, NewParent body, ISender sender, CancellationToken cancellationToken)
+            => Results.Ok(Describe(await sender.Send(new MoveOrganizationUnit(id, body.ParentId), cancellationToken))));
 
-        group.MapPost("/tenancy/units/{id}/archive", async (OrganizationUnitId id, ISender sender, CancellationToken cancellationToken) =>
-        {
-            await sender.Send(new ArchiveOrganizationUnit(id), cancellationToken);
-            return Results.NoContent();
-        });
+        group.MapPost("/tenancy/units/{id}/archive", async (OrganizationUnitId id, ISender sender, CancellationToken cancellationToken)
+            => Results.Ok(Describe(await sender.Send(new ArchiveOrganizationUnit(id), cancellationToken))));
 
         return group;
     }
+
+    /// <summary>
+    /// A unit as a command answers it: the unit's own fields, with its kind by the name a request gives it in. Its path
+    /// and its depth are no fields of the unit, and the command reads nothing more.
+    /// </summary>
+    internal static object Describe(OrganizationUnit unit) => new { unit.Id, unit.ParentId, unit.Name, unit.Kind, unit.Status };
 
     /// <summary>A unit where a seat's overview points at one: its id and its path from the root.</summary>
     internal static object Describe(SeatManager.UnitRef unit) => new { unit.Id, unit.Path };

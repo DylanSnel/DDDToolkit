@@ -190,7 +190,7 @@ public sealed class RequestBodyTests(SampleHosts sample) : IClassFixture<SampleH
 
         using (var granted = await rhea.PostAsJsonAsync($"/tenancy/seats/{LeoSeat}/grants", new { unitId = NorthCoast, roleId = Observer, until }, Cancellation))
         {
-            granted.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            granted.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         var ada = Harbor.Administrator.Id.Value;

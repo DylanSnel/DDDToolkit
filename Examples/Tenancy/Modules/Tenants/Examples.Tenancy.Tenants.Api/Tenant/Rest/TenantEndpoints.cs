@@ -25,11 +25,9 @@ internal static class TenantEndpoints
         ArgumentNullException.ThrowIfNull(group);
 
         // Flat to hierarchical, never back. The tenant gains the roles of the starter roles seeded for the new shape it lacks.
-        group.MapPost("/tenancy/shape", async (NewShape body, ISender sender, CancellationToken cancellationToken) =>
-        {
-            await sender.Send(new ChangeTenantShape(body.Shape), cancellationToken);
-            return Results.NoContent();
-        });
+        // The answer is the tenant as the command answers it, in its new shape.
+        group.MapPost("/tenancy/shape", async (NewShape body, ISender sender, CancellationToken cancellationToken)
+            => Results.Ok(Describe(await sender.Send(new ChangeTenantShape(body.Shape), cancellationToken))));
 
         return group;
     }

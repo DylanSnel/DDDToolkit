@@ -73,7 +73,7 @@ namespace DDDToolkit.Supporting.Tenancy.Postgres;
 /// <para>
 /// A module reads Tenancy through six more functions, one for each row of the read model, which its context maps
 /// with <c>AddTenancyReadFunctions</c>: <c>caller_permissions</c>, <c>tenant_unit_paths</c>, <c>tenant_units</c>,
-/// <c>tenant_role_rows</c>, <c>tenant_placements</c> and <c>tenant_seats</c>. They are executable by signed-in users
+/// <c>tenant_roles_with_starter_roles</c>, <c>tenant_placements</c> and <c>tenant_seats</c>. They are executable by signed-in users
 /// and by system work in a tenant, run as their caller, so the policies on Tenancy's tables decide their rows, and
 /// are written for Postgres to fold into the query that asks them: a module's question is planned over the
 /// tables, with their indexes. They answer under column names of their own and a status as the name of its enum

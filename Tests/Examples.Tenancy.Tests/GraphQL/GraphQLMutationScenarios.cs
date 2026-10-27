@@ -1,11 +1,13 @@
 using System.Text.Json;
 using FluentAssertions;
+using Mediator;
 
 namespace Examples.Tenancy.Tests.GraphQL;
 
 /// <summary>
-/// A mutation sends the command its route sends and answers what it changed, read after the save. What the use
-/// case refuses is no top-level error: it is a typed error in the mutation's payload, with its code.
+/// A mutation sends the command its route sends and answers what it changed: a mutation of Tenants the object its
+/// command answers, with nothing read again, and a project's mutation the project, read after the save. What the
+/// manager refuses is no top-level error: it is a typed error in the mutation's payload, with its code.
 /// </summary>
 /// <remarks>
 /// The class's hosts run on Supabase's own Postgres image, with the exported policies and privileges under the
@@ -157,6 +159,32 @@ public sealed class GraphQLMutationScenarios(SampleHosts sample) : IClassFixture
             inspection.GetProperty("project").GetProperty("unit").GetProperty("path").GetString().Should().Be("Harbor Works / North / North Coast");
             inspection.GetProperty("recordedBy").GetProperty("displayName").GetString().Should().Be(DemoPeople.Juno.Name);
         }
+    }
+
+    [Fact]
+    public async Task A_mutation_of_Tenants_answers_the_seat_its_command_answers_and_sends_nothing_more()
+    {
+        var sent = new SentRequests();
+        await using var host = await sample.StartAsync(sent.AddTo);
+        using var leo = await host.ClientAsync("leo", Harbor.Slug);
+        sent.Clear();
+
+        var renamed = (await leo.GraphQLDataAsync(
+            $$"""
+            mutation($seat: UUID!) {
+              seatRename(input: { seatId: $seat, displayName: "Leo Marsh" }) {
+                seat { id displayName status }
+                {{SampleGraphQLCalls.Errors}}
+              }
+            }
+            """,
+            new { seat = Harbor.SeatOf(DemoPeople.Leo).Value })).GetProperty("seatRename");
+
+        renamed.GetProperty("errors").ValueKind.Should().Be(JsonValueKind.Null);
+        var seat = renamed.GetProperty("seat");
+        seat.GetProperty("id").GetGuid().Should().Be(Harbor.SeatOf(DemoPeople.Leo).Value);
+        seat.GetProperty("displayName").GetString().Should().Be("Leo Marsh", "the seat is the one the command renamed and saved");
+        sent.OfType<IMessage>().Select(request => request.GetType().Name).Should().Equal([nameof(RenameSeat)], "the mutation answers what its command answered, and reads nothing again");
     }
 
     [Fact]

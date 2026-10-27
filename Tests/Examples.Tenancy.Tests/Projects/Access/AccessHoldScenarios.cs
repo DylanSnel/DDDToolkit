@@ -121,7 +121,8 @@ public sealed class AccessHoldScenarios(SampleHosts sample) : IClassFixture<Samp
         using var renamed = await RenameAsync(renamer, "Renamed after the check", ifMatch);
 
         between.Ran.Should().BeTrue("the change came between the check and the handler");
-        between.Answer.Should().Be(HttpStatusCode.NoContent, "the change in between was made");
+        // A project's route answers a change with 204; Tenancy's grant route answers the seat it changed, with 200.
+        between.Answer.Should().Be(race == "grant-revoked" ? HttpStatusCode.OK : HttpStatusCode.NoContent, "the change in between was made");
         var problem = await renamed.ProblemAsync();
         renamed.StatusCode.Should().Be(status, "the answer was {0}", problem.Body.GetRawText());
         problem.Code.Should().Be(code);

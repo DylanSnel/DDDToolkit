@@ -1,4 +1,6 @@
 using System.Text.Json.Serialization;
+using Examples.Tenancy.Tenants.Api.Seats.Rest;
+using Examples.Tenancy.Tenants.Api.Tenant.Rest;
 using Examples.Tenancy.Tenants.Application.Invitations.Commands;
 using Examples.Tenancy.Tenants.Application.Invitations.Queries;
 using Examples.Tenancy.Tenants.Domain.Aggregates.Invitations;
@@ -47,19 +49,17 @@ internal static class InvitationsEndpoints
             return Results.Ok(new { invitation = Describe(issued.Invitation), issued.Token });
         });
 
-        group.MapDelete("/tenancy/invitations/{invitationId}", async (InvitationId invitationId, ISender sender, CancellationToken cancellationToken) =>
-        {
-            await sender.Send(new CancelInvitation(invitationId), cancellationToken);
-            return Results.NoContent();
-        });
+        // The answer is the invitation as the command answers it: cancelled, and with the address it was for forgotten.
+        group.MapDelete("/tenancy/invitations/{invitationId}", async (InvitationId invitationId, ISender sender, CancellationToken cancellationToken)
+            => Results.Ok(Describe(await sender.Send(new CancelInvitation(invitationId), cancellationToken))));
 
         return group;
     }
 
     /// <summary>
     /// <c>POST /invitations/accept</c>: the signed-in person accepts the invitation their token is for, and is
-    /// answered the seat they now have; <c>GET /me/seats</c> then lists it with its tenant. It needs a token and
-    /// no tenant, so it is mapped outside the group that requires a seat.
+    /// answered the invitation manager's record: the tenant, whose slug the next request names, and the seat they now
+    /// have. It needs a token and no tenant, so it is mapped outside the group that requires a seat.
     /// </summary>
     public static IEndpointRouteBuilder MapInvitationAcceptance(this IEndpointRouteBuilder group)
     {
@@ -67,8 +67,8 @@ internal static class InvitationsEndpoints
 
         group.MapPost("/invitations/accept", async (InvitationToAccept body, ISender sender, CancellationToken cancellationToken) =>
         {
-            var seat = await sender.Send(new AcceptInvitation(body.Token, body.DisplayName), cancellationToken);
-            return Results.Ok(new { seatId = seat });
+            var accepted = await sender.Send(new AcceptInvitation(body.Token, body.DisplayName), cancellationToken);
+            return Results.Ok(new { tenant = TenantEndpoints.Describe(accepted.Tenant), seat = SeatsEndpoints.Describe(accepted.Seat) });
         });
 
         return group;

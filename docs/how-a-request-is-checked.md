@@ -132,10 +132,10 @@ The permission is a constant of the catalogue. A request can declare its own con
 public sealed record OrganizationUnits : IQuery<IReadOnlyList<OrganizationManager.UnitInTree>>, ITenantsRequest;
 
 [RequiresPermission(TenancyPermissions.UnitsManage)]
-public sealed record AddOrganizationUnit([AtUnit] OrganizationUnitId Parent, string Name, UnitKind? Kind) : ICommand<OrganizationUnitId>, ITenantsRequest;
+public sealed record AddOrganizationUnit([AtUnit] OrganizationUnitId Parent, string Name, UnitKind? Kind) : ICommand<OrganizationUnit>, ITenantsRequest;
 
 [RequiresPermission(RequiredPermission)]
-public sealed record RenameSeat([OrOwn] SeatId Seat, string? DisplayName) : ICommand, ITenantsRequest
+public sealed record RenameSeat([OrOwn] SeatId Seat, string? DisplayName) : ICommand<Seat>, ITenantsRequest
 {
     public const string RequiredPermission = TenancyPermissions.SeatsManage;
 }
@@ -178,12 +178,12 @@ public sealed record OrganizationUnits : IQuery<IReadOnlyList<OrganizationManage
     AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.InTenant();
 }
 
-public sealed record AddOrganizationUnit(OrganizationUnitId Parent, string Name, UnitKind? Kind) : ICommand<OrganizationUnitId>, ITenantsRequest
+public sealed record AddOrganizationUnit(OrganizationUnitId Parent, string Name, UnitKind? Kind) : ICommand<OrganizationUnit>, ITenantsRequest
 {
     AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.AtUnit(TenancyPermissions.UnitsManage, Parent);
 }
 
-public sealed record RenameSeat(SeatId Seat, string? DisplayName) : ICommand, ITenantsRequest
+public sealed record RenameSeat(SeatId Seat, string? DisplayName) : ICommand<Seat>, ITenantsRequest
 {
     AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.Any(
         AccessRequirement.Own(Seat),

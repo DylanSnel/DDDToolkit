@@ -29,9 +29,9 @@ public sealed class InvitationFieldScenarios(SampleHosts sample) : IClassFixture
         }
         """;
 
-    private const string Accept = $$"""mutation($token: String!, $name: String!) { invitationAccept(input: { token: $token, displayName: $name }) { seatId {{SampleGraphQLCalls.Errors}} } }""";
+    private const string Accept = $$"""mutation($token: String!, $name: String!) { invitationAccept(input: { token: $token, displayName: $name }) { acceptedInvitation { tenant { slug } seat { id displayName } } {{SampleGraphQLCalls.Errors}} } }""";
 
-    private const string Cancel = $$"""mutation($id: UUID!) { invitationCancel(input: { id: $id }) { invitationId {{SampleGraphQLCalls.Errors}} } }""";
+    private const string Cancel = $$"""mutation($id: UUID!) { invitationCancel(input: { id: $id }) { invitation { id } {{SampleGraphQLCalls.Errors}} } }""";
 
     private const string Open =
         "{ openInvitations { id address grantUntil issuedAt expiresAt unit { id name } role { id name } issuedBy { id displayName } } }";
@@ -79,13 +79,16 @@ public sealed class InvitationFieldScenarios(SampleHosts sample) : IClassFixture
         open.GetRawText().Should().NotContain(token, "a token is shown once, to whoever invited");
 
         // She accepts, signed in and naming no tenant: the token says which. With a blank name the seat's own rule
-        // refuses in the payload, and the invitation stays open. With the name she is shown by there the answer is her
-        // new seat's id, and her own seats, the other field that needs no tenant, list it in meadow by that name.
+        // refuses in the payload, and the invitation stays open. With the name she is shown by there the answer is the
+        // tenant and her new seat, and her own seats, the other field that needs no tenant, list it in meadow by that name.
         var nameless = (await juno.GraphQLDataAsync(Accept, new { token, name = " " })).GetProperty("invitationAccept");
         nameless.GetProperty("errors").EnumerateArray().Should().ContainSingle().Which.Text("code").Should().Be(Seat.DisplayNameIsValid.ViolationCode);
         var accepted = (await juno.GraphQLDataAsync(Accept, new { token, name = "Juno" })).GetProperty("invitationAccept");
         accepted.GetProperty("errors").ValueKind.Should().Be(JsonValueKind.Null);
-        var seat = accepted.GetProperty("seatId").GetGuid();
+        var answered = accepted.GetProperty("acceptedInvitation");
+        answered.GetProperty("tenant").Text("slug").Should().Be(Meadow.Slug, "the answer names the tenant the next request names");
+        answered.GetProperty("seat").Text("displayName").Should().Be("Juno");
+        var seat = answered.GetProperty("seat").GetProperty("id").GetGuid();
 
         var mine = (await juno.GraphQLDataAsync("{ seatsOfMine { slug seat { id displayName } } }")).GetProperty("seatsOfMine");
         var inMeadow = mine.EnumerateArray().Single(of => of.Text("slug") == Meadow.Slug).GetProperty("seat");
@@ -103,12 +106,12 @@ public sealed class InvitationFieldScenarios(SampleHosts sample) : IClassFixture
         (await tove.GraphQLDataAsync(Open)).GetProperty("openInvitations").EnumerateArray().Should().BeEmpty();
         using var leo = await host.ClientAsync("leo", tenant: null);
         var taken = (await leo.GraphQLDataAsync(Accept, new { token, name = "Leo" })).GetProperty("invitationAccept");
-        taken.GetProperty("seatId").ValueKind.Should().Be(JsonValueKind.Null);
+        taken.GetProperty("acceptedInvitation").ValueKind.Should().Be(JsonValueKind.Null);
         Refusal(taken).Should().Be((TenancyRefusals.InvitationUsed, "conflict"));
     }
 
     [Fact]
-    public async Task Cancelling_answers_the_invitations_id_and_its_token_is_refused_from_then_on()
+    public async Task Cancelling_answers_the_cancelled_invitation_and_its_token_is_refused_from_then_on()
     {
         await using var host = await sample.StartAsync();
         using var tove = await host.ClientAsync("tove", Meadow.Slug);
@@ -121,12 +124,12 @@ public sealed class InvitationFieldScenarios(SampleHosts sample) : IClassFixture
 
         // To somebody of another tenant there is no such invitation.
         var notTheirs = (await ada.GraphQLDataAsync(Cancel, new { id })).GetProperty("invitationCancel");
-        notTheirs.GetProperty("invitationId").ValueKind.Should().Be(JsonValueKind.Null);
+        notTheirs.GetProperty("invitation").ValueKind.Should().Be(JsonValueKind.Null);
         Refusal(notTheirs).Should().Be((TenancyRefusals.InvitationNotFound, "not_found"));
 
         var cancelled = (await tove.GraphQLDataAsync(Cancel, new { id })).GetProperty("invitationCancel");
         cancelled.GetProperty("errors").ValueKind.Should().Be(JsonValueKind.Null);
-        cancelled.GetProperty("invitationId").GetGuid().Should().Be(id);
+        cancelled.GetProperty("invitation").GetProperty("id").GetGuid().Should().Be(id);
 
         (await tove.GraphQLDataAsync(Open)).GetProperty("openInvitations").EnumerateArray().Should().BeEmpty();
         Refusal((await leo.GraphQLDataAsync(Accept, new { token, name = "Leo" })).GetProperty("invitationAccept")).Should().Be((TenancyRefusals.InvitationCancelled, "conflict"));

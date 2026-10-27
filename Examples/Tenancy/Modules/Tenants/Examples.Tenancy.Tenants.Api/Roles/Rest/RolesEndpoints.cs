@@ -33,26 +33,21 @@ internal static class RolesEndpoints
         group.MapGet("/tenancy/roles", async (ISender sender, CancellationToken cancellationToken)
             => Results.Ok((await sender.Send(new TenantRoles(), cancellationToken)).Select(Describe)));
 
-        group.MapPost("/tenancy/roles", async (RoleToCreate body, ISender sender, CancellationToken cancellationToken) =>
-        {
-            var id = await sender.Send(new CreateTenantRole(body.Name ?? string.Empty, body.Description ?? string.Empty, body.Permissions ?? []), cancellationToken);
-            return Results.Created((string?)null, new { id });
-        });
+        // Each command answers the role, and its route writes it with its permissions: every one of them requires
+        // tenancy.roles.manage for the whole tenant, which is who reads them.
+        group.MapPost("/tenancy/roles", async (RoleToCreate body, ISender sender, CancellationToken cancellationToken)
+            => Results.Created((string?)null, DescribeChanged(await sender.Send(new CreateTenantRole(body.Name ?? string.Empty, body.Description ?? string.Empty, body.Permissions ?? []), cancellationToken))));
 
         // The role's permissions become exactly the list: an empty one takes every permission off it. So the list must be there,
         // since a body that misspelt or left out the field would otherwise empty the role without a word.
         group.MapPut("/tenancy/roles/{id}/permissions", async (RoleId id, PermissionsToSet body, ISender sender, CancellationToken cancellationToken) =>
         {
             var permissions = body.Permissions ?? throw new BadHttpRequestException("The body's \"permissions\" is null: give the role's permissions as a list, an empty one to take them all off.");
-            await sender.Send(new SetRolePermissions(id, permissions), cancellationToken);
-            return Results.NoContent();
+            return Results.Ok(DescribeChanged(await sender.Send(new SetRolePermissions(id, permissions), cancellationToken)));
         });
 
-        group.MapPost("/tenancy/roles/{id}/archive", async (RoleId id, ISender sender, CancellationToken cancellationToken) =>
-        {
-            await sender.Send(new ArchiveTenantRole(id), cancellationToken);
-            return Results.NoContent();
-        });
+        group.MapPost("/tenancy/roles/{id}/archive", async (RoleId id, ISender sender, CancellationToken cancellationToken)
+            => Results.Ok(DescribeChanged(await sender.Send(new ArchiveTenantRole(id), cancellationToken))));
 
         return group;
     }
@@ -68,6 +63,20 @@ internal static class RolesEndpoints
         role.Name,
         role.FromStarterRole,
         role.Status,
+    };
+
+    /// <summary>
+    /// A role as a command of this feature answers it: the role's fields, with its permissions, since each of those
+    /// commands requires <c>tenancy.roles.manage</c> for the whole tenant. Whether it manages access is read beside a
+    /// role, and the command reads nothing more.
+    /// </summary>
+    internal static object DescribeChanged(Role role) => new
+    {
+        role.Id,
+        role.Name,
+        role.FromStarterRole,
+        role.Status,
+        role.Permissions,
     };
 
     /// <summary>

@@ -74,30 +74,19 @@ internal static class SeatsEndpoints
             })));
 
         // The name a seat is shown by is this application's field, and renaming it this application's own command: a
-        // seat renames itself, another seat takes tenancy.seats.manage for the whole tenant.
-        group.MapPut("/tenancy/seats/{seatId}/name", async (SeatId seatId, NewName body, ISender sender, CancellationToken cancellationToken) =>
-        {
-            await sender.Send(new RenameSeat(seatId, body.DisplayName), cancellationToken);
-            return Results.NoContent();
-        });
+        // seat renames itself, another seat takes tenancy.seats.manage for the whole tenant. Each change answers the
+        // seat as its command answers it.
+        group.MapPut("/tenancy/seats/{seatId}/name", async (SeatId seatId, NewName body, ISender sender, CancellationToken cancellationToken)
+            => Results.Ok(Describe(await sender.Send(new RenameSeat(seatId, body.DisplayName), cancellationToken))));
 
-        group.MapPost("/tenancy/seats/{seatId}/suspend", async (SeatId seatId, ISender sender, CancellationToken cancellationToken) =>
-        {
-            await sender.Send(new SuspendTenantSeat(seatId), cancellationToken);
-            return Results.NoContent();
-        });
+        group.MapPost("/tenancy/seats/{seatId}/suspend", async (SeatId seatId, ISender sender, CancellationToken cancellationToken)
+            => Results.Ok(Describe(await sender.Send(new SuspendTenantSeat(seatId), cancellationToken))));
 
-        group.MapPost("/tenancy/seats/{seatId}/reactivate", async (SeatId seatId, ISender sender, CancellationToken cancellationToken) =>
-        {
-            await sender.Send(new ReactivateTenantSeat(seatId), cancellationToken);
-            return Results.NoContent();
-        });
+        group.MapPost("/tenancy/seats/{seatId}/reactivate", async (SeatId seatId, ISender sender, CancellationToken cancellationToken)
+            => Results.Ok(Describe(await sender.Send(new ReactivateTenantSeat(seatId), cancellationToken))));
 
-        group.MapPost("/tenancy/seats/{seatId}/deactivate", async (SeatId seatId, ISender sender, CancellationToken cancellationToken) =>
-        {
-            await sender.Send(new DeactivateTenantSeat(seatId), cancellationToken);
-            return Results.NoContent();
-        });
+        group.MapPost("/tenancy/seats/{seatId}/deactivate", async (SeatId seatId, ISender sender, CancellationToken cancellationToken)
+            => Results.Ok(Describe(await sender.Send(new DeactivateTenantSeat(seatId), cancellationToken))));
 
         return group;
     }

@@ -531,8 +531,8 @@ The Tenants module turns [invitations](../invitations.md) on, in its own feature
 |---|---|---|
 | `POST /tenancy/invitations` | `InvitePerson` | The id, the end time, and the token. The token is returned this one time only. |
 | `GET /tenancy/invitations` | `OpenInvitations` | The open invitations into units where the caller manages seats |
-| `DELETE /tenancy/invitations/{id}` | `CancelInvitation` | Nothing. The token stops working. |
-| `POST /invitations/accept` | `AcceptInvitation` | The new seat. The body is `{ token, displayName }`. |
+| `DELETE /tenancy/invitations/{id}` | `CancelInvitation` | The invitation, cancelled. The token stops working. |
+| `POST /invitations/accept` | `AcceptInvitation` | The tenant and the new seat. The next request names the tenant by its `slug`. The body is `{ token, displayName }`. |
 
 - Who may invite is the [package's rule](../invitations.md#who-may-issue-an-invitation). Hana adds no seats, so she gets
   `tenancy.not-permitted`.

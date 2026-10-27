@@ -70,7 +70,7 @@ public sealed class PeopleOfficeScenarios(SampleHosts sample) : IClassFixture<Sa
                    new { unitId = NorthCoast.Value, roleId = Harbor.Roles[SampleCatalogue.Observer].Value, reason = "Follows the projects on the coast" },
                    Cancellation))
         {
-            given.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            given.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         var me = await leo.GetFromJsonAsync<JsonElement>("/me", Cancellation);
@@ -93,7 +93,7 @@ public sealed class PeopleOfficeScenarios(SampleHosts sample) : IClassFixture<Sa
                    new { unitId = NorthCoast.Value, roleId = Harbor.Roles[SampleCatalogue.Observer].Value, reason = "Follows the projects on the coast" },
                    Cancellation))
         {
-            given.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            given.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         // The history, read as the application's own work in harbor. The seeding gave every role as system work,
@@ -142,7 +142,7 @@ public sealed class PeopleOfficeScenarios(SampleHosts sample) : IClassFixture<Sa
                    new { unitId = Harbor.UnitNamed("North Inland").Value, roleId = Harbor.Roles[SampleCatalogue.Surveyor].Value },
                    Cancellation))
         {
-            given.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            given.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         using var after = await vic.GetAsync($"/projects/{depot.Id.Value}", Cancellation);
@@ -161,7 +161,7 @@ public sealed class PeopleOfficeScenarios(SampleHosts sample) : IClassFixture<Sa
                    $"/tenancy/seats/{Harbor.SeatOf(DemoPeople.Vic).Value}/grants/{northInland}/{Harbor.Roles[SampleCatalogue.Observer].Value}",
                    Cancellation))
         {
-            taken.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            taken.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         var me = await vic.GetFromJsonAsync<JsonElement>("/me", Cancellation);
@@ -210,7 +210,7 @@ public sealed class PeopleOfficeScenarios(SampleHosts sample) : IClassFixture<Sa
                    new { unitId = Harbor.Root.Value, roleId = Harbor.Roles[SampleCatalogue.Surveyor].Value },
                    Cancellation))
         {
-            given.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            given.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         (await hana.VisibleProjectsAsync()).Select(project => project.Text("number"))

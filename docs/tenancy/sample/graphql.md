@@ -169,11 +169,36 @@ The types of the Tenants schema, with the class or record each is declared over:
 | `TenantPage`, `TenantListing` | `TenantManager.TenantPage` and `TenantManager.TenantListing` | None. |
 | `OrganizationUnitName` | `NamedUnit<OrganizationUnitId>` | None. |
 | `IssuedInvitation` | `InvitationManager.IssuedInvitation` | None. |
+| `AcceptedInvitation` | `InvitationManager.AcceptedInvitation` | None. |
 
 The routes write the same fields as the types. `GET /tenancy/units` writes each unit with `path` and `depth`, from the
 organization manager's `UnitInTree`. `GET /me` writes the fields of `SeatOverview`. Its `placements` name units and
 roles by id, and the overview's `units` and `roles` say what each id is called. A route writes a seat as `id`,
 `displayName` and `status`. It never writes the identity.
+
+### What a mutation returns
+
+A command of the Tenants module returns the object that its manager returned. A command that creates returns the
+new object, and a command that changes returns the changed aggregate. The mutation sends the command and returns that
+object. It reads nothing again.
+
+| Mutations | Return |
+|---|---|
+| `seatRename`, `seatSuspend`, `seatReactivate`, `seatDeactivate`, `seatPlace`, `placementWithdraw`, `roleGrant`, `roleRevoke` | The `Seat` |
+| `roleCreate`, `rolePermissionsSet`, `roleArchive` | The `Role` |
+| `organizationUnitAdd`, `organizationUnitMove`, `organizationUnitArchive` | The `OrganizationUnit` |
+| `tenantShapeChange` | The `Tenant`, in its new shape |
+| `personInvite` | The `IssuedInvitation`: the invitation and its token |
+| `invitationCancel` | The cancelled `Invitation` |
+| `invitationAccept` | The `AcceptedInvitation`: the `Tenant`, whose slug the next request names, and the new `Seat` |
+
+- The resolvers of a type still run for what the class lacks. A unit's `path` and a role's `managesAccess` load
+  through their data loaders after the command has saved.
+- The route of the same command writes the same object, with `200`, or `201` for a new unit or role. A route writes a
+  unit from a command without `path` and `depth`, because the command reads nothing more. It writes a role from a
+  command with its `permissions`, because each of those commands requires `tenancy.roles.manage`.
+- A mutation of Projects sends the project's query after its command and returns the project's overview. The overview
+  holds what the caller may do with the project, which the command does not read.
 
 ## A field on another module's type
 
@@ -262,7 +287,7 @@ module against these rules. Projects' schema is the example:
 [`CrewMemberType.cs`](../../../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Api/Crew/GraphQL/CrewMemberType.cs).
 
 - **A field contains no logic.** It sends the request that the route of its feature sends. A mutation returns what it
-  changed.
+  changed ([What a mutation returns](#what-a-mutation-returns)).
 - **A type is what a query returns.** It is declared over that class or record with
   [`[ObjectType<T>]`](../../graphql.md#types-over-application-records). In Projects and Inspections that is the
   application's record. In Tenants it is one of Tenancy's classes or a manager's record, as

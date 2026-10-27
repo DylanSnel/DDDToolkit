@@ -69,10 +69,13 @@ public sealed class InvitationScenarios(SampleHosts sample) : IClassFixture<Samp
         }
 
         // She accepts, signed in and naming no tenant: the token says which, and with the name she is shown by in
-        // meadow, the module's own field. The answer is her new seat.
+        // meadow, the module's own field. The answer is the tenant, whose slug the next request names, and her new seat.
         using var accepted = await juno.PostAsJsonAsync(Accept, new { token, displayName = "Juno" }, Cancellation);
         accepted.StatusCode.Should().Be(HttpStatusCode.OK);
-        var seat = (await accepted.Content.ReadFromJsonAsync<JsonElement>(Cancellation)).GetProperty("seatId").GetGuid();
+        var acceptedAnswer = await accepted.Content.ReadFromJsonAsync<JsonElement>(Cancellation);
+        acceptedAnswer.GetProperty("tenant").Text("slug").Should().Be(Meadow.Slug);
+        acceptedAnswer.GetProperty("seat").Text("displayName").Should().Be("Juno");
+        var seat = acceptedAnswer.GetProperty("seat").GetProperty("id").GetGuid();
 
         // The seat, its placement and its grant are there together: placed at the root, a surveyor until the day asked.
         var me = await junoInMeadow.GetFromJsonAsync<JsonElement>("/me", Cancellation);
@@ -96,7 +99,7 @@ public sealed class InvitationScenarios(SampleHosts sample) : IClassFixture<Samp
         using (var again = await juno.PostAsJsonAsync(Accept, new { token }, Cancellation))
         {
             again.StatusCode.Should().Be(HttpStatusCode.OK);
-            (await again.Content.ReadFromJsonAsync<JsonElement>(Cancellation)).GetProperty("seatId").GetGuid().Should().Be(seat);
+            (await again.Content.ReadFromJsonAsync<JsonElement>(Cancellation)).GetProperty("seat").GetProperty("id").GetGuid().Should().Be(seat);
         }
 
         using var leo = await host.ClientAsync("leo", tenant: null);
@@ -154,7 +157,7 @@ public sealed class InvitationScenarios(SampleHosts sample) : IClassFixture<Samp
 
         using (var revoked = await tove.DeleteAsync($"{Invitations}/{id}", Cancellation))
         {
-            revoked.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            revoked.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         (await OpenAsync(tove)).Should().BeEmpty();
@@ -352,7 +355,7 @@ public sealed class InvitationScenarios(SampleHosts sample) : IClassFixture<Samp
         // The first invitation is cancelled: it forgets the account, which the second still keeps, so it stays.
         using (var cancelled = await tove.DeleteAsync($"{Invitations}/{first}", Cancellation))
         {
-            cancelled.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            cancelled.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         (await KeptAccountAsync(host, first)).Should().BeNull("an invitation that is over keeps nothing about the person it was sent to");
@@ -361,7 +364,7 @@ public sealed class InvitationScenarios(SampleHosts sample) : IClassFixture<Samp
         // The last one is cancelled: nobody ever used the account, so it goes, and the address is free again.
         using (var cancelled = await tove.DeleteAsync($"{Invitations}/{second}", Cancellation))
         {
-            cancelled.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            cancelled.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         provider.Deleted.Should().Equal(account);
@@ -392,7 +395,7 @@ public sealed class InvitationScenarios(SampleHosts sample) : IClassFixture<Samp
         foreach (var invitation in new[] { first, second })
         {
             using var cancelled = await tove.DeleteAsync($"{Invitations}/{invitation}", Cancellation);
-            cancelled.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            cancelled.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         provider.Deleted.Should().BeEmpty();

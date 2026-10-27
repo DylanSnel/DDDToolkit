@@ -423,7 +423,7 @@ public sealed class CrewRoleScenarios(SampleHosts sample) : IClassFixture<Sample
         // Juno manages North's crews for a week, through an area manager's grant that ends then.
         using (var placed = await ada.PostAsJsonAsync($"/tenancy/seats/{junoSeat}/placements", new { unitId = north, primary = false }, Cancellation))
         {
-            placed.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            placed.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         using (var granted = await ada.PostAsJsonAsync(
@@ -431,7 +431,7 @@ public sealed class CrewRoleScenarios(SampleHosts sample) : IClassFixture<Sample
                    new { unitId = north, roleId = Harbor.Roles[SampleCatalogue.AreaManager].Value, until },
                    Cancellation))
         {
-            granted.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            granted.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         // Giving a crew role is positional, and a membership ends when whoever gives it says, not when their own

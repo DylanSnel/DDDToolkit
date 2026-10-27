@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Examples.Tenancy.Tenants.Api.Seats.Rest;
 using Examples.Tenancy.Tenants.Application.Placements.Commands;
 using Mediator;
 using Microsoft.AspNetCore.Builder;
@@ -26,17 +27,12 @@ internal static class PlacementsEndpoints
     {
         ArgumentNullException.ThrowIfNull(group);
 
-        group.MapPost("/tenancy/seats/{seatId}/placements", async (SeatId seatId, PlacementToMake body, ISender sender, CancellationToken cancellationToken) =>
-        {
-            await sender.Send(new MakePlacement(seatId, body.UnitId, body.Primary), cancellationToken);
-            return Results.NoContent();
-        });
+        // Each route answers the seat as its command answers it.
+        group.MapPost("/tenancy/seats/{seatId}/placements", async (SeatId seatId, PlacementToMake body, ISender sender, CancellationToken cancellationToken)
+            => Results.Ok(SeatsEndpoints.Describe(await sender.Send(new MakePlacement(seatId, body.UnitId, body.Primary), cancellationToken))));
 
-        group.MapDelete("/tenancy/seats/{seatId}/placements/{unitId}", async (SeatId seatId, OrganizationUnitId unitId, ISender sender, CancellationToken cancellationToken) =>
-        {
-            await sender.Send(new WithdrawPlacement(seatId, unitId), cancellationToken);
-            return Results.NoContent();
-        });
+        group.MapDelete("/tenancy/seats/{seatId}/placements/{unitId}", async (SeatId seatId, OrganizationUnitId unitId, ISender sender, CancellationToken cancellationToken)
+            => Results.Ok(SeatsEndpoints.Describe(await sender.Send(new WithdrawPlacement(seatId, unitId), cancellationToken))));
 
         return group;
     }

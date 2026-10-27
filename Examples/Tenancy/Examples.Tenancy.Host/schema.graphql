@@ -121,6 +121,11 @@ type Mutation {
     @cost(weight: "10")
 }
 
+type AcceptedInvitation {
+  seat: Seat!
+  tenant: Tenant!
+}
+
 type AccessHistoryEntry {
   byKind: String!
   bySeat: Seat
@@ -294,13 +299,13 @@ type Invitation {
 }
 
 type InvitationAcceptPayload {
+  acceptedInvitation: AcceptedInvitation
   errors: [InvitationAcceptError!]
-  seatId: UUID
 }
 
 type InvitationCancelPayload {
   errors: [InvitationCancelError!]
-  invitationId: UUID
+  invitation: Invitation
 }
 
 type IssuedInvitation {
@@ -687,7 +692,7 @@ type TenantProjectRenamePayload {
 
 type TenantShapeChangePayload {
   errors: [TenantShapeChangeError!]
-  shape: TenantShape
+  tenant: Tenant
 }
 
 type UnitPath {

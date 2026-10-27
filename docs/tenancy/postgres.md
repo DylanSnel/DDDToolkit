@@ -573,7 +573,7 @@ public async Task<List<string>> VisibleProjectsAsync(CancellationToken cancellat
 | `caller_permissions()` | The rights the caller may read. For a seat, its own rights. For system work in a tenant, the rights of that tenant. | `"TenantId"`, `"SeatId"`, `"UnitId"`, `"RoleId"`, `"Permission"`, `"StartsAt"`, `"EndsAt"` |
 | `tenant_unit_paths()` | The closure of the tenant's tree. | `"TenantId"`, `"AncestorId"`, `"DescendantId"`, `"Distance"` |
 | `tenant_units()` | The tenant's units. | `"Id"`, `"TenantId"`, `"ParentId"`, `"Status"` |
-| `tenant_role_rows()` | The tenant's roles, with the permissions as an array of text. | `"Id"`, `"TenantId"`, `"FromStarterRole"`, `"Status"`, `"Permissions"` |
+| `tenant_roles_with_starter_roles()` | The tenant's roles, with the permissions as an array of text. | `"Id"`, `"TenantId"`, `"FromStarterRole"`, `"Status"`, `"Permissions"` |
 | `tenant_placements()` | Where the tenant's seats are placed. | `"SeatId"`, `"UnitId"`, `"IsPrimary"`, `"TenantId"` |
 | `tenant_seats()` | The seats the caller may read. That is every seat, or only the seats that a [read rule of yours](#default-read-policies-for-seats-and-invitations) lets through. | `"Id"`, `"TenantId"`, `"Status"` |
 

@@ -50,7 +50,7 @@ public sealed class InvitationWithSupabaseAuthTests(SampleSupabaseStack stack)
         using var wren = sample.Host.Client(session, tenant: null);
         using var accepted = await wren.PostAsJsonAsync("/invitations/accept", new { token, displayName = "Wren" }, Cancellation);
         accepted.StatusCode.Should().Be(HttpStatusCode.OK, "the answer was {0}", await accepted.Content.ReadAsStringAsync(Cancellation));
-        var seat = (await accepted.Content.ReadFromJsonAsync<JsonElement>(Cancellation)).GetProperty("seatId").GetGuid();
+        var seat = (await accepted.Content.ReadFromJsonAsync<JsonElement>(Cancellation)).GetProperty("seat").GetProperty("id").GetGuid();
 
         using var inMeadow = sample.Host.Client(session, Meadow.Slug);
         var me = await inMeadow.GetFromJsonAsync<JsonElement>("/me", Cancellation);

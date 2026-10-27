@@ -45,7 +45,7 @@ public sealed class FlatAndHierarchicalScenarios(SampleHosts sample) : IClassFix
         using var reshaped = await tove.PostAsJsonAsync("/tenancy/shape", new { shape = "hierarchical" }, Cancellation);
         using var added = await tove.PostAsJsonAsync("/tenancy/units", Greenhouse, Cancellation);
 
-        reshaped.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        reshaped.StatusCode.Should().Be(HttpStatusCode.OK);
         added.StatusCode.Should().Be(HttpStatusCode.Created);
         var id = (await added.Content.ReadFromJsonAsync<JsonElement>(Cancellation)).GetProperty("id").GetGuid();
 
@@ -74,7 +74,7 @@ public sealed class FlatAndHierarchicalScenarios(SampleHosts sample) : IClassFix
         // only its root to manage, and one administrator's role that holds every permission.
         before.EnumerateArray().Select(role => role.GetProperty("fromStarterRole").GetString())
             .Should().BeEquivalentTo(SampleCatalogue.TenantAdmin, SampleCatalogue.CrewLead, SampleCatalogue.Surveyor, SampleCatalogue.Observer, SampleCatalogue.PeopleOffice);
-        reshaped.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        reshaped.StatusCode.Should().Be(HttpStatusCode.OK);
         var manager = after.EnumerateArray().Should().ContainSingle(role => role.GetProperty("fromStarterRole").GetString() == SampleCatalogue.AreaManager).Which;
         manager.GetProperty("name").GetString().Should().Be("Area manager");
         manager.GetProperty("status").GetString().Should().Be("active");
@@ -100,7 +100,7 @@ public sealed class FlatAndHierarchicalScenarios(SampleHosts sample) : IClassFix
         using var reshaped = await tove.PostAsJsonAsync("/tenancy/shape", new { shape = "hierarchical" }, Cancellation);
         using var back = await tove.PostAsJsonAsync("/tenancy/shape", new { shape = "flat" }, Cancellation);
 
-        reshaped.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        reshaped.StatusCode.Should().Be(HttpStatusCode.OK);
         await back.ShouldBeRefusedAsync(HttpStatusCode.Conflict, TenancyRefusals.ShapeChange);
     }
 

@@ -90,7 +90,7 @@ public sealed class AccessAdminScenarios(SampleHosts sample) : IClassFixture<Sam
                    new { unitId = Harbor.UnitNamed("North Coast").Value, roleId = Harbor.Roles[SampleCatalogue.CrewLead].Value },
                    Cancellation))
         {
-            granted.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            granted.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         var me = await leo.GetFromJsonAsync<JsonElement>("/me", Cancellation);
@@ -103,7 +103,7 @@ public sealed class AccessAdminScenarios(SampleHosts sample) : IClassFixture<Sam
                    new { unitId = Harbor.Root.Value, roleId = Harbor.Roles[SampleCatalogue.AccessAdmin].Value },
                    Cancellation))
         {
-            second.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            second.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         using var herself = await maud.PostAsJsonAsync(

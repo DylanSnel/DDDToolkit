@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Examples.Tenancy.Tenants.Api.Seats.Rest;
 using Examples.Tenancy.Tenants.Application.Grants.Commands;
 using Mediator;
 using Microsoft.AspNetCore.Builder;
@@ -27,18 +28,12 @@ internal static class GrantsEndpoints
         ArgumentNullException.ThrowIfNull(group);
 
         // A grant made over HTTP starts now: the package refuses a start from anyone but system work, so neither
-        // the body nor the command has a field for one.
-        group.MapPost("/tenancy/seats/{seatId}/grants", async (SeatId seatId, GrantToMake body, ISender sender, CancellationToken cancellationToken) =>
-        {
-            await sender.Send(new MakeGrant(seatId, body.UnitId, body.RoleId, body.EndsAt, body.Reason), cancellationToken);
-            return Results.NoContent();
-        });
+        // the body nor the command has a field for one. Each route answers the seat as its command answers it.
+        group.MapPost("/tenancy/seats/{seatId}/grants", async (SeatId seatId, GrantToMake body, ISender sender, CancellationToken cancellationToken)
+            => Results.Ok(SeatsEndpoints.Describe(await sender.Send(new MakeGrant(seatId, body.UnitId, body.RoleId, body.EndsAt, body.Reason), cancellationToken))));
 
-        group.MapDelete("/tenancy/seats/{seatId}/grants/{unitId}/{roleId}", async (SeatId seatId, OrganizationUnitId unitId, RoleId roleId, ISender sender, CancellationToken cancellationToken) =>
-        {
-            await sender.Send(new RevokeGrant(seatId, unitId, roleId), cancellationToken);
-            return Results.NoContent();
-        });
+        group.MapDelete("/tenancy/seats/{seatId}/grants/{unitId}/{roleId}", async (SeatId seatId, OrganizationUnitId unitId, RoleId roleId, ISender sender, CancellationToken cancellationToken)
+            => Results.Ok(SeatsEndpoints.Describe(await sender.Send(new RevokeGrant(seatId, unitId, roleId), cancellationToken))));
 
         return group;
     }

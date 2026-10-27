@@ -484,7 +484,7 @@ public sealed class StartUpCheckTests(TenancyPostgres postgres)
             database.ConnectionString,
             """
             ALTER FUNCTION tenancy.caller_permissions() SET search_path = '';
-            ALTER FUNCTION tenancy.tenant_role_rows() SECURITY DEFINER;
+            ALTER FUNCTION tenancy.tenant_roles_with_starter_roles() SECURITY DEFINER;
             ALTER FUNCTION tenancy.tenant_units() STRICT;
             ALTER FUNCTION tenancy.tenant_unit_paths() VOLATILE;
             DROP FUNCTION tenancy.tenant_seats();
@@ -495,7 +495,7 @@ public sealed class StartUpCheckTests(TenancyPostgres postgres)
         await FluentActions.Awaiting(() => TenancyPostgresChecks.EnsurePoliciesAreInPlaceAsync(services.Provider, Cancellation))
             .Should().ThrowAsync<InvalidOperationException>().WithMessage(
                 "The functions of \"tenancy\" that modules read Tenancy through are not as Tenancy's contribution writes them: " +
-                $"caller_permissions{Changed}, tenant_role_rows{Changed}, tenant_seats (missing), tenant_unit_paths{Changed}, tenant_units{Changed}.*AddTenancyReadFunctions*");
+                $"caller_permissions{Changed}, tenant_roles_with_starter_roles{Changed}, tenant_seats (missing), tenant_unit_paths{Changed}, tenant_units{Changed}.*AddTenancyReadFunctions*");
 
         // The access files applied again write each as it was: replacing a function takes its settings off as well.
         foreach (var script in TenancyPostgres.AccessScripts())

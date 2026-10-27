@@ -242,7 +242,7 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
         using var asHana = await sample.Host.ClientAsync("hana", Harbor.Slug);
         using (var given = await asHana.PostAsJsonAsync($"/tenancy/seats/{leo}/grants", new { unitId = Harbor.UnitNamed("North Coast").Value, roleId = observer }, Cancellation))
         {
-            given.StatusCode.Should().Be(HttpStatusCode.NoContent, await given.Content.ReadAsStringAsync(Cancellation));
+            given.StatusCode.Should().Be(HttpStatusCode.OK, await given.Content.ReadAsStringAsync(Cancellation));
         }
 
         // The seeding gave every role as system work, so the one grant a seat made is hers: the row's own columns
@@ -615,7 +615,7 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
             made.StatusCode.Should().Be(HttpStatusCode.Created, await made.Content.ReadAsStringAsync(Cancellation));
             var opener = (await made.Content.ReadFromJsonAsync<JsonElement>(Cancellation)).GetProperty("id").GetGuid();
             using var given = await ada.PostAsJsonAsync($"/tenancy/seats/{juno}/grants", new { unitId = northCoast, roleId = opener }, Cancellation);
-            given.StatusCode.Should().Be(HttpStatusCode.NoContent, await given.Content.ReadAsStringAsync(Cancellation));
+            given.StatusCode.Should().Be(HttpStatusCode.OK, await given.Content.ReadAsStringAsync(Cancellation));
         }
 
         // Each statement is recorded as changed by Juno, which another trigger holds her to: what refuses below is a
@@ -1018,7 +1018,7 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
             made.StatusCode.Should().Be(HttpStatusCode.Created, await made.Content.ReadAsStringAsync(Cancellation));
             var opener = (await made.Content.ReadFromJsonAsync<JsonElement>(Cancellation)).GetProperty("id").GetGuid();
             using var given = await ada.PostAsJsonAsync($"/tenancy/seats/{leo}/grants", new { unitId = northCoast, roleId = opener }, Cancellation);
-            given.StatusCode.Should().Be(HttpStatusCode.NoContent, await given.Content.ReadAsStringAsync(Cancellation));
+            given.StatusCode.Should().Be(HttpStatusCode.OK, await given.Content.ReadAsStringAsync(Cancellation));
         }
 
         string Opening(string number, Guid owner) => $"""

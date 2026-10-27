@@ -39,7 +39,7 @@ public sealed class SeatNameScenarios(SampleHosts sample) : IClassFixture<Sample
 
         using (var renamed = await leo.PutAsJsonAsync($"/tenancy/seats/{Leo}/name", new { displayName = "  Leo Marsh  " }, Cancellation))
         {
-            renamed.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            renamed.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         // Who he is, the tenant's seats and the directory by id: each from the seat the directory read, with no read more.
@@ -82,7 +82,7 @@ public sealed class SeatNameScenarios(SampleHosts sample) : IClassFixture<Sample
 
         using (var renamed = await ada.PutAsJsonAsync($"/tenancy/seats/{Leo}/name", new { displayName = "Leopold" }, Cancellation))
         {
-            renamed.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            renamed.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         (await ada.GetFromJsonAsync<JsonElement>("/tenancy/seats", Cancellation)).EnumerateArray()
@@ -112,7 +112,7 @@ public sealed class SeatNameScenarios(SampleHosts sample) : IClassFixture<Sample
         using (var inMeadow = await host.ClientAsync("tove", meadow.Slug))
         using (var renamed = await inMeadow.PutAsJsonAsync($"/tenancy/seats/{tovesMeadowSeat}/name", new { displayName = "Tove of the meadow" }, Cancellation))
         {
-            renamed.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            renamed.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         // Her own seats are read across tenants, before one is picked, each with the name its tenant keeps, from the

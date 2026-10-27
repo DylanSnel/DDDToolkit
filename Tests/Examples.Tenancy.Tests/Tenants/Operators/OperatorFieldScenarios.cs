@@ -71,7 +71,7 @@ public sealed class OperatorFieldScenarios(SampleHosts sample) : IClassFixture<S
         // Hana gives leo a role: the newest row of harbor's history, made by her seat, above what the seeding did.
         using (var given = await hana.PostAsJsonAsync(grant, new { unitId = Harbor.UnitNamed("North Coast").Value, roleId = Harbor.Roles[SampleCatalogue.Observer].Value }, Cancellation))
         {
-            given.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            given.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         var route = $"/operations/tenants/{Harbor.Id.Value}/history";
@@ -139,7 +139,7 @@ public sealed class OperatorFieldScenarios(SampleHosts sample) : IClassFixture<S
 
         using (var given = await hana.PostAsJsonAsync($"/tenancy/seats/{Harbor.SeatOf(DemoPeople.Leo).Value}/grants", new { unitId = Harbor.UnitNamed("North Coast").Value, roleId = Harbor.Roles[SampleCatalogue.Observer].Value }, Cancellation))
         {
-            given.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            given.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         // The row is answered with the seat's id. Who that seat is, the directory says to a seat of the tenant,

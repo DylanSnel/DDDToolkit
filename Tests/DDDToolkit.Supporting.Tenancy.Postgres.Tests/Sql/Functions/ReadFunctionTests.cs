@@ -323,7 +323,7 @@ public abstract class ReadFunctionTests(TenancyPostgres postgres, TenancyNaming 
         {
             (await owner.ListAsync<string>("SELECT \"Id\"::text || ' ' || \"Status\" FROM tenancy.tenant_seats()", Cancellation))
                 .Should().BeEquivalentTo($"{amy} Active", $"{bert} Suspended", $"{cy} Deactivated");
-            (await owner.ListAsync<string>("SELECT \"Id\"::text || ' ' || \"Status\" FROM tenancy.tenant_role_rows()", Cancellation))
+            (await owner.ListAsync<string>("SELECT \"Id\"::text || ' ' || \"Status\" FROM tenancy.tenant_roles_with_starter_roles()", Cancellation))
                 .Should().BeEquivalentTo($"{keeper} Active", $"{lookout} Archived");
             (await owner.ListAsync<string>("SELECT \"Id\"::text || ' ' || \"Status\" FROM tenancy.tenant_units()", Cancellation))
                 .Should().BeEquivalentTo($"{shed} Archived", $"{yard} Active");
@@ -379,7 +379,7 @@ public abstract class ReadFunctionTests(TenancyPostgres postgres, TenancyNaming 
             (await oli.ListAsync<Guid>("SELECT u.\"Id\" FROM tenancy.tenant_units() u", Cancellation)).Should().BeEquivalentTo([HarborRoot.Value, North.Value, NorthPier.Value, South.Value]);
             (await oli.ListAsync<long>("SELECT DISTINCT \"TenantId\" FROM tenancy.tenant_unit_paths()", Cancellation)).Should().Equal(Harbor.Value);
             (await oli.ScalarAsync<long>("SELECT count(*) FROM tenancy.tenant_unit_paths()", Cancellation)).Should().Be(8, "each unit with itself, three below the root, and North Pier below North");
-            (await oli.ListAsync<Guid>("SELECT r.\"Id\" FROM tenancy.tenant_role_rows() r", Cancellation)).Should().BeEquivalentTo(
+            (await oli.ListAsync<Guid>("SELECT r.\"Id\" FROM tenancy.tenant_roles_with_starter_roles() r", Cancellation)).Should().BeEquivalentTo(
                 [HarborRoles.Administrator.Value, GrantsDesk.Value, HarborRoles.Operator.Value, HarborRoles.Supervisor.Value, HarborRoles.Watcher.Value]);
             (await oli.ScalarAsync<long>("SELECT count(*) FROM tenancy.tenant_placements()", Cancellation)).Should().Be(7, "Seth is placed twice");
             (await oli.ListAsync<long>("SELECT DISTINCT \"TenantId\" FROM tenancy.tenant_placements()", Cancellation)).Should().Equal(Harbor.Value);

@@ -586,18 +586,30 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
     }
 
     [Fact]
-    public void A_command_answers_with_an_id_or_with_nothing()
+    public void A_command_of_Tenants_answers_what_its_manager_made_or_changed_and_any_other_an_id_or_nothing()
     {
-        // A command changes something, and says at most which thing it made: its id, for whoever sent the command
-        // to ask about with a query. It hands back no entity, and nothing it read on the way. One answers more:
-        // inviting answers the invitation's token, which is kept nowhere, so no query could answer it afterwards.
-        var commands = Requests.Where(request => !request.IsQuery && request.Type != typeof(InvitePerson)).ToList();
-        Requests.Single(request => request.Type == typeof(InvitePerson)).Response.Should().Be(typeof(InvitationManager.IssuedInvitation));
-
-        commands.Where(command => command.Response != typeof(Unit) && !typeof(IEntityId).IsAssignableFrom(command.Response))
+        // A command of Tenants answers what Tenancy's manager answered it: the new object, or the aggregate it changed,
+        // one of Tenancy's classes, or the manager's record that holds them. Its mutation and its route answer that,
+        // with nothing read again. Inviting answers the invitation beside its token, which is kept nowhere, and
+        // accepting the tenant beside the new seat, since the person names no tenant yet.
+        var commands = Requests.Where(request => !request.IsQuery).ToList();
+        var tenants = commands.Where(command => command.Type.Assembly == typeof(InvitePerson).Assembly).ToList();
+        tenants.Where(command => !IsTenancysClass(command.Response))
             .Select(command => $"{command.Type.Name} answers with {command.Response}")
-            .Should().BeEmpty("what a caller wants to know of what a command changed, a query answers");
-        commands.Select(command => command.Response).Should()
+            .Should().BeEmpty("a command of Tenants answers what Tenancy's manager answered it");
+        tenants.Single(command => command.Type == typeof(InvitePerson)).Response.Should().Be(typeof(InvitationManager.IssuedInvitation));
+        tenants.Single(command => command.Type == typeof(AcceptInvitation)).Response.Should().Be(typeof(InvitationManager.AcceptedInvitation));
+        tenants.Select(command => command.Response).Should()
+            .Contain([typeof(Seat), typeof(Examples.Tenancy.Tenants.Domain.Role), typeof(OrganizationUnit), typeof(Tenant), typeof(Examples.Tenancy.Tenants.Domain.Aggregates.Invitations.Invitation)], "each of Tenancy's classes is answered by a command that changes it");
+
+        // A command of another module changes the module's own aggregate, and says at most which thing it made: its id,
+        // for whoever sent the command to ask about with a query. What a caller may do with a project is read beside it,
+        // so a mutation asks the query for the project after its command.
+        var others = commands.Except(tenants).ToList();
+        others.Where(command => command.Response != typeof(Unit) && !typeof(IEntityId).IsAssignableFrom(command.Response))
+            .Select(command => $"{command.Type.Name} answers with {command.Response}")
+            .Should().BeEmpty("what a caller wants to know of what such a command changed, a query answers");
+        others.Select(command => command.Response).Should()
             .Contain(typeof(Unit), "some answer nothing")
             .And.Contain(typeof(ProjectId), "and some the id of what they made, or this proves nothing");
     }

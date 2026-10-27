@@ -79,7 +79,7 @@ public sealed class ContainmentAndLastAdminScenarios(SampleHosts sample) : IClas
             new { unitId = NorthCoast.Value, roleId = Harbor.Roles[SampleCatalogue.Observer].Value },
             Cancellation);
 
-        granted.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        granted.StatusCode.Should().Be(HttpStatusCode.OK);
         var me = await leo.GetFromJsonAsync<JsonElement>("/me", Cancellation);
         me.GetProperty("placements").EnumerateArray().Single().GetProperty("grants").EnumerateArray()
             .Select(grant => (Role: me.RoleNameOf(grant.GetProperty("roleId").GetGuid()), Applies: me.AppliesNow(grant)))
@@ -101,7 +101,7 @@ public sealed class ContainmentAndLastAdminScenarios(SampleHosts sample) : IClas
                    new { unitId = NorthCoast.Value, roleId = crewLead },
                    Cancellation))
         {
-            granted.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            granted.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         var me = await leo.GetFromJsonAsync<JsonElement>("/me", Cancellation);
@@ -147,7 +147,7 @@ public sealed class ContainmentAndLastAdminScenarios(SampleHosts sample) : IClas
                    new { unitId = NorthCoast.Value, roleId = Harbor.Roles[SampleCatalogue.PeopleOffice].Value },
                    Cancellation))
         {
-            granted.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            granted.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         // Now Leo gives roles at North Coast: Observer, whose permission he need not hold.
@@ -156,7 +156,7 @@ public sealed class ContainmentAndLastAdminScenarios(SampleHosts sample) : IClas
                    new { unitId = NorthCoast.Value, roleId = Harbor.Roles[SampleCatalogue.Observer].Value },
                    Cancellation))
         {
-            given.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            given.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         var me = await juno.GetFromJsonAsync<JsonElement>("/me", Cancellation);
@@ -206,7 +206,7 @@ public sealed class ContainmentAndLastAdminScenarios(SampleHosts sample) : IClas
                    new { unitId = NorthCoast.Value, roleId = Harbor.Roles[SampleCatalogue.AccessAdmin].Value },
                    Cancellation))
         {
-            granted.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            granted.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         // Rhea may withdraw a seat in her area, but withdrawing Leo would revoke a role she could not have granted.
@@ -227,7 +227,7 @@ public sealed class ContainmentAndLastAdminScenarios(SampleHosts sample) : IClas
         // The access admin's role holds every permission that manages access, so Ada can grant every other starter role.
         using (var placed = await ada.PostAsJsonAsync($"/tenancy/seats/{toveSeat}/placements", new { unitId = south, primary = false }, Cancellation))
         {
-            placed.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            placed.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         using (var granted = await ada.PostAsJsonAsync(
@@ -235,7 +235,7 @@ public sealed class ContainmentAndLastAdminScenarios(SampleHosts sample) : IClas
                    new { unitId = south, roleId = Harbor.Roles[SampleCatalogue.AreaManager].Value },
                    Cancellation))
         {
-            granted.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            granted.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         // Tove now closes Bay bridge as South's manager, where she was only its surveyor.
@@ -259,7 +259,7 @@ public sealed class ContainmentAndLastAdminScenarios(SampleHosts sample) : IClas
         // the area manager's, which makes nobody an administrator.
         using (var steppedDown = await ada.DeleteAsync($"/tenancy/seats/{Harbor.Administrator.Id.Value}/grants/{Harbor.Root.Value}/{accessAdmin}", Cancellation))
         {
-            steppedDown.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            steppedDown.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         var adas = await ada.GetFromJsonAsync<JsonElement>($"/access/units?permission={TenancyPermissions.RolesManage}", Cancellation);
@@ -291,7 +291,7 @@ public sealed class ContainmentAndLastAdminScenarios(SampleHosts sample) : IClas
         // Rhea runs the tenant's access for a week: Access admin at the root, until then.
         using (var placed = await ada.PostAsJsonAsync($"/tenancy/seats/{rheaSeat}/placements", new { unitId = Harbor.Root.Value, primary = false }, Cancellation))
         {
-            placed.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            placed.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         using (var granted = await ada.PostAsJsonAsync(
@@ -299,7 +299,7 @@ public sealed class ContainmentAndLastAdminScenarios(SampleHosts sample) : IClas
                    new { unitId = Harbor.Root.Value, roleId = Harbor.Roles[SampleCatalogue.AccessAdmin].Value, until },
                    Cancellation))
         {
-            granted.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            granted.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         // Suspending Hana would take away her People office, given for good at the root, which a week does not cover.
@@ -312,7 +312,7 @@ public sealed class ContainmentAndLastAdminScenarios(SampleHosts sample) : IClas
         // Juno holds no role at a unit, so suspending her takes nothing that manages access.
         using (var suspended = await rhea.PostAsync($"/tenancy/seats/{Harbor.SeatOf(DemoPeople.Juno).Value}/suspend", content: null, Cancellation))
         {
-            suspended.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            suspended.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         var seats = await ada.GetFromJsonAsync<JsonElement>("/tenancy/seats", Cancellation);
@@ -333,7 +333,7 @@ public sealed class ContainmentAndLastAdminScenarios(SampleHosts sample) : IClas
         // Leo runs the tenant's access for a week: Access admin at the root, until then.
         using (var placed = await ada.PostAsJsonAsync($"/tenancy/seats/{leoSeat}/placements", new { unitId = Harbor.Root.Value, primary = false }, Cancellation))
         {
-            placed.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            placed.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         using (var granted = await ada.PostAsJsonAsync(
@@ -341,7 +341,7 @@ public sealed class ContainmentAndLastAdminScenarios(SampleHosts sample) : IClas
                    new { unitId = Harbor.Root.Value, roleId = Harbor.Roles[SampleCatalogue.AccessAdmin].Value, until },
                    Cancellation))
         {
-            granted.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            granted.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         // Under South, North Coast would no longer be Rhea's to manage, which it is for good: the move would take
@@ -355,7 +355,7 @@ public sealed class ContainmentAndLastAdminScenarios(SampleHosts sample) : IClas
 
         using (var moved = await ada.PutAsJsonAsync($"/tenancy/units/{NorthCoast.Value}/parent", south, Cancellation))
         {
-            moved.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            moved.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         var units = await ada.GetFromJsonAsync<JsonElement>("/tenancy/units", Cancellation);

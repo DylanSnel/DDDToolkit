@@ -185,7 +185,7 @@ namespace Examples.Tenancy.Projects.Infrastructure.Persistence.Migrations
 
                     b.ToTable((string)null);
 
-                    b.ToFunction("tenant_role_rows");
+                    b.ToFunction("tenant_roles_with_starter_roles");
 
                     b.HasAnnotation("DDDToolkit:Tenancy:TenantProperty", "TenantId");
                 });

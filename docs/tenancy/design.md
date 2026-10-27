@@ -103,7 +103,7 @@ says starter role too, in C# and in SQL. Upgrading loses no row:
 
 3. **On Postgres, export the new access file** after that migration. The function `pack_permissions(pack)` becomes
    `starter_role_permissions(starter_role)`. The read function `tenant_roles_with_permissions()` becomes
-   `tenant_role_rows()`, which returns `"FromStarterRole"`. The access file drops the old functions. It does not drop
-   the old triggers, so the migration in step 2 does.
+   `tenant_roles_with_starter_roles()`, which returns `"FromStarterRole"`. The access file drops the old functions. It
+   does not drop the old triggers, so the migration in step 2 does.
 
 The sample's migration `StarterRolesRenamed` does all of this.

@@ -232,8 +232,9 @@ public sealed class UiAgainstTheHostTests(SampleHosts sample) : IClassFixture<Sa
         accepted.Tenant.Should().BeNull("accepting names no tenant");
         accepted.RawBody.Should().NotContain(token);
         var seats = (await juno.SeatsOfMineAsync(Cancellation)).Value!;
-        var hers = seats.Single(mine => mine.Seat.Id == accepted.Value!.SeatId);
-        junoSession.SeatAdded(hers.Slug);
+        var hers = seats.Single(mine => mine.Seat.Id == accepted.Value!.Seat.Id);
+        accepted.Value!.Tenant.Slug.Should().Be(hers.Slug, "the answer names the tenant of the new seat");
+        junoSession.SeatAdded(accepted.Value!.Tenant.Slug);
         (junoSession.Tenant, junoSession.SeatsAdded).Should().Be((meadow.Slug, 1));
         var overview = (await juno.WhoAmIAsync(Cancellation)).Value!;
         overview.Seat.DisplayName.Should().Be("Juno");

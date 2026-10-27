@@ -112,7 +112,7 @@ public sealed class ContributionTests(TenancyPostgres postgres)
             "system_tenant false search_path=\"\" true true false",
             "tenant_administrators true search_path=\"\" true false false",
             "tenant_placements false none true true false",
-            "tenant_role_rows false none true true false",
+            "tenant_roles_with_starter_roles false none true true false",
             "tenant_seats false none true true false",
             "tenant_unit_paths false none true true false",
             "tenant_units false none true true false",
@@ -274,7 +274,7 @@ public sealed class ContributionTests(TenancyPostgres postgres)
         (await owner.ScalarAsync<long>("SELECT count(*) FROM tenancy.roles_with_permission('widget.read')", Cancellation)).Should().Be(0, "the owner has no seat to ask for");
 
         // A module reads the permissions as an array of text all the same, as they are in the document.
-        (await owner.ScalarAsync<string[]>("SELECT \"Permissions\" FROM tenancy.tenant_role_rows()", Cancellation)).Should().Equal(HostCatalogue.WidgetRead, HostCatalogue.WidgetCreate);
+        (await owner.ScalarAsync<string[]>("SELECT \"Permissions\" FROM tenancy.tenant_roles_with_starter_roles()", Cancellation)).Should().Equal(HostCatalogue.WidgetRead, HostCatalogue.WidgetCreate);
 
         // A seat granted the role holds each permission of the document, once, and the ones the catalogue has live alone.
         (await owner.ExecuteAsync(

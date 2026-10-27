@@ -298,7 +298,7 @@ public sealed class FailClosedScenarios(SampleHosts sample) : IClassFixture<Samp
             new { unitId = Harbor.UnitNamed("North Coast").Value, roleId = Harbor.Roles[SampleCatalogue.Observer].Value },
             Cancellation))
         {
-            granted.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            granted.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         using (var renamed = await leo.PutAsJsonAsync($"/projects/{Harbor.ProjectNamed("Pier 7").Id.Value}/name", new { name = "Pier 7 east" }, Cancellation))
@@ -340,7 +340,7 @@ public sealed class FailClosedScenarios(SampleHosts sample) : IClassFixture<Samp
             new { unitId = Harbor.UnitNamed("North Coast").Value, roleId = Harbor.Roles[SampleCatalogue.Observer].Value },
             Cancellation))
         {
-            granted.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            granted.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         using (var renamed = await leo.PutAsJsonAsync($"/projects/{Harbor.ProjectNamed("Pier 7").Id.Value}/name", new { name = "Pier 7 east" }, Cancellation))

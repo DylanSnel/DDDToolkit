@@ -1402,14 +1402,14 @@
       "language": "csharp",
       "lines": [
         "[RequiresPermission(TenancyPermissions.UnitsManage)]",
-        "public sealed record AddOrganizationUnit([AtUnit] OrganizationUnitId Parent, string Name, UnitKind? Kind) : ICommand<OrganizationUnitId>, ITenantsRequest;"
+        "public sealed record AddOrganizationUnit([AtUnit] OrganizationUnitId Parent, string Name, UnitKind? Kind) : ICommand<OrganizationUnit>, ITenantsRequest;"
       ]
     },
     "write.rename-seat": {
       "language": "csharp",
       "lines": [
         "[RequiresPermission(RequiredPermission)]",
-        "public sealed record RenameSeat([OrOwn] SeatId Seat, string? DisplayName) : ICommand, ITenantsRequest",
+        "public sealed record RenameSeat([OrOwn] SeatId Seat, string? DisplayName) : ICommand<Seat>, ITenantsRequest",
         "{",
         "    public const string RequiredPermission = TenancyPermissions.SeatsManage;",
         "}"
@@ -1455,7 +1455,7 @@
     "write.add-unit.property": {
       "language": "csharp",
       "lines": [
-        "public sealed record AddOrganizationUnit(OrganizationUnitId Parent, string Name, UnitKind? Kind) : ICommand<OrganizationUnitId>, ITenantsRequest",
+        "public sealed record AddOrganizationUnit(OrganizationUnitId Parent, string Name, UnitKind? Kind) : ICommand<OrganizationUnit>, ITenantsRequest",
         "{",
         "    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.AtUnit(TenancyPermissions.UnitsManage, Parent);",
         "}"
@@ -1464,7 +1464,7 @@
     "write.rename-seat.property": {
       "language": "csharp",
       "lines": [
-        "public sealed record RenameSeat(SeatId Seat, string? DisplayName) : ICommand, ITenantsRequest",
+        "public sealed record RenameSeat(SeatId Seat, string? DisplayName) : ICommand<Seat>, ITenantsRequest",
         "{",
         "    AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.Any(",
         "        AccessRequirement.Own(Seat),",

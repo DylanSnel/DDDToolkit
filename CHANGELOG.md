@@ -2066,9 +2066,9 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   same rule by the tree. So a move by a seat that holds the permission at the old parent through one grant and at the
   new parent through another goes through, although the save removes the unit's old paths before it changes the unit.
 - `AddTenancyReadFunctions` and the six read functions of Tenancy on Postgres, which `TenancyFunctionNames` names:
-  `caller_permissions`, `tenant_unit_paths`, `tenant_units`, `tenant_role_rows`, `tenant_placements` and
-  `tenant_seats`. A module's context maps its read model to them in place of the views of `AddTenancyReadModel`, so its
-  model names no table of Tenancy's, and `db.Tenancy()` asks in one statement all the same. Where the database keeps
+  `caller_permissions`, `tenant_unit_paths`, `tenant_units`, `tenant_roles_with_starter_roles`, `tenant_placements`
+  and `tenant_seats`. A module's context maps its read model to them in place of the views of `AddTenancyReadModel`, so
+  its model names no table of Tenancy's, and `db.Tenancy()` asks in one statement all the same. Where the database keeps
   the rights, as `AddTenancyPostgres()` says it does, `db.Tenancy()` refuses a module's context that maps the views, and
   names `AddTenancyReadFunctions`. Tenancy's own context and every other database are asked through the views. The
   functions return the read rows' own column names, with a status as the name of its enum member, whatever Tenancy's
@@ -2978,6 +2978,25 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     /tenancy/invitations` is the invitation and its token. An open invitation's end is `grantUntil`.
   - The UI's wire records, the `.http` file, the schema snapshots and the tests follow. See [The sample's
     GraphQL](docs/tenancy/sample/graphql.md).
+- **The Tenancy sample's commands answer the aggregate.** A Tenants command answers what its manager answers, as the
+  managers do: a command that creates answers the new object, and a command that changes answers the changed
+  aggregate. `AddOrganizationUnit`, `MoveOrganizationUnit` and `ArchiveOrganizationUnit` answer the unit;
+  `CreateTenantRole`, `SetRolePermissions` and `ArchiveTenantRole` the role; `MakePlacement`, `WithdrawPlacement`,
+  `MakeGrant`, `RevokeGrant`, `RenameSeat` and suspending, reactivating and deactivating a seat the seat;
+  `ChangeTenantShape` and `MarkTenantAsDemo` the tenant; `CancelInvitation` the invitation; and `AcceptInvitation`
+  the invitation manager's `AcceptedInvitation`, the tenant and the new seat.
+  - The mutations answer that object and read nothing again. `tenantShapeChange` answers `tenant` where it answered
+    `shape`, `invitationCancel` answers `invitation` where it answered `invitationId`, and `invitationAccept` answers
+    `acceptedInvitation { tenant seat }` where it answered `seatId`. The resolvers that read what a class lacks, a
+    unit's `path` and a role's `managesAccess`, still run.
+  - The routes answer the same object with the fields of its type, `200` where they answered `204`: a seat as
+    `{ id, displayName, status }`, a role with its `permissions`, a unit without `path` and `depth`, the tenant and
+    the invitation. `POST /tenancy/units` and `POST /tenancy/roles` answer `201` with the new unit or role where they
+    answered `{ id }`. `POST /invitations/accept` answers `{ tenant, seat }` where it answered `{ seatId }`, and the
+    UI takes the tenant's slug from it.
+  - Projects and Inspections keep their answers: a project mutation reads the project's overview again, since the
+    overview holds what the caller may do with it. See [What a mutation
+    returns](docs/tenancy/sample/graphql.md#what-a-mutation-returns).
 - **Docs: Tenancy's API reference follows the managers.** [Tenancy API: managers](docs/tenancy/reference/managers.md)
   is the page that was `use-cases.md`, with `TenantManager`, `OrganizationManager`, `SeatManager`, `RoleManager`,
   `InvitationManager`, the stores and the registration. [Tenancy API: access manager and
@@ -3148,8 +3167,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
         `tenancy.role-followed-its-starter-role`, and its `StarterRole`.
       - The catalogue's problems and the sync's log lines say starter role where they said pack.
       - Tenancy's SQL: `pack_permissions(pack)`: `starter_role_permissions(starter_role)`.
-        `tenant_roles_with_permissions()`: `tenant_role_rows()`, which returns `"FromStarterRole"` where it returned
-        `"FromPack"`. The triggers `tenancy_role_pack_is_fixed` and `tenancy_role_follows_its_pack`, and their
+        `tenant_roles_with_permissions()`: `tenant_roles_with_starter_roles()`, which returns `"FromStarterRole"` where
+        it returned `"FromPack"`. The triggers `tenancy_role_pack_is_fixed` and `tenancy_role_follows_its_pack`, and their
         functions: `tenancy_role_starter_role_is_fixed` and `tenancy_role_follows_its_starter_role`. The export
         refuses a function whose answer changed under the same name, so the read function has a new name. The access
         file drops the functions it no longer writes, but not the old triggers (below).
@@ -4054,8 +4073,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     do the routes and fields that name a unit by id: `POST /tenancy/directory/units` answers `{ id, name, path, depth }`,
     the GraphQL lookup is `organizationUnitName(id)`, and a project's and an invitation's `unit` is an
     `OrganizationUnitName`. `OrganizationUnit`, with its kind and status, is what `organizationUnits` and the
-    mutations of the tree answer, and its fields are no longer nullable. A mutation of the tree answers the unit from
-    the list of the units the caller reads, which a seat that manages units reads.
+    mutations of the tree answer, and its fields are no longer nullable. A mutation of the tree answers the unit its
+    command answers (see The Tenancy sample's commands answer the aggregate, above).
   - **Upgrading.** Rebuild, and on Postgres let the export write the new access files: Tenancy's has
     `caller_seat_row()`, `units_named()` and `identity_tenant_names()`, and each resource with members
     `<name>_fellow_members()`. No table changes; the next migration you add names Tenancy's new rows, `NamedUnit` and

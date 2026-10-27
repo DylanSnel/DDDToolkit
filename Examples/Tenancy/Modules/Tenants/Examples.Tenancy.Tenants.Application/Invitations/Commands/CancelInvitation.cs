@@ -9,16 +9,16 @@ namespace Examples.Tenancy.Tenants.Application.Invitations.Commands;
 /// and the account the identity provider made for that address is deleted when nobody ever used it.
 /// </summary>
 /// <remarks>
-/// It requires a caller who works in the tenant. The permission is for the package's use case to ask, since only it reads
+/// It requires a caller who works in the tenant. The permission is for the package's manager to ask, since only it reads
 /// which unit the invitation is for: <c>tenancy.seats.manage</c> at that unit, whoever issued it. It answers anyone
 /// else that there is no such invitation, as it is not among the ones they list.
 /// </remarks>
 /// <param name="Invitation">The invitation.</param>
 [InTenant]
-public sealed record CancelInvitation(InvitationId Invitation) : ICommand, ITenantsRequest;
+public sealed record CancelInvitation(InvitationId Invitation) : ICommand<Invitation>, ITenantsRequest;
 
 /// <summary>
-/// Handles <see cref="CancelInvitation"/> with the Tenancy package's use case, which checks the caller, decides
+/// Handles <see cref="CancelInvitation"/> with the Tenancy package's manager, which checks the caller, decides
 /// and saves; and then takes away the account the invitation was the only reason for.
 /// </summary>
 /// <remarks>
@@ -37,18 +37,19 @@ public sealed record CancelInvitation(InvitationId Invitation) : ICommand, ITena
 /// invitation cancelled, which is what was asked for; the account is then left for whoever looks after unused
 /// accounts.
 /// </remarks>
-/// <param name="invitations">The package's use cases for invitations.</param>
+/// <param name="invitations">The package's invitation manager.</param>
 /// <param name="kept">Where an invitation is found, to read and forget the account it kept.</param>
 /// <param name="accounts">The accounts people sign in with, or <see langword="null"/> in a host that makes none.</param>
 public sealed class CancelInvitationHandler(
     InvitationManager invitations,
     InvitationStore kept,
     IIdentityAccounts? accounts = null)
-    : ICommandHandler<CancelInvitation>
+    : ICommandHandler<CancelInvitation, Invitation>
 {
     /// <inheritdoc />
-    /// <exception cref="Exceptions.RefusalException">What the package's use case refuses, with its code.</exception>
-    public async ValueTask<Unit> Handle(CancelInvitation command, CancellationToken cancellationToken)
+    /// <returns>The invitation, cancelled.</returns>
+    /// <exception cref="Exceptions.RefusalException">What the package's manager refuses, with its code.</exception>
+    public async ValueTask<Invitation> Handle(CancelInvitation command, CancellationToken cancellationToken)
     {
         // The store keeps to the caller's tenant, and what is read here is told to nobody: whether the caller may
         // cancel this invitation at all is the package's to say, below.
@@ -58,9 +59,10 @@ public sealed class CancelInvitationHandler(
         // Forgotten in the unit of work, so the package's own save writes it with the cancellation. A refusal
         // saves nothing, and then the unit of work holds again what the database does.
         invitation?.ForgetAccount();
+        Invitation cancelled;
         try
         {
-            await invitations.CancelAsync(command.Invitation, cancellationToken);
+            cancelled = await invitations.CancelAsync(command.Invitation, cancellationToken);
         }
         catch when (invitation is not null && account is { } still)
         {
@@ -74,7 +76,7 @@ public sealed class CancelInvitationHandler(
             await accounts.DeleteAsync(unused, cancellationToken);
         }
 
-        return Unit.Value;
+        return cancelled;
     }
 
     /// <summary>Whether an invitation of the tenant that can still be accepted keeps <paramref name="account"/> as well.</summary>
