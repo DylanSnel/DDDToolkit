@@ -286,7 +286,7 @@ managers reads an invitation. Replace one with a read rule on your own class, wr
 |---|---|
 | your queries, the directory's seats, `tenant_seats()` and `ITenancyQuestions.Seats()` | Tenancy's questions about the caller and rights (`caller_seat`, `seats_in_my_units`, `seats_holding_permission_at` …): they run as their owner |
 | your own entities on the seat class | placements and grants: every member still reads every seat's id and units; your rule hides the row (identity, your fields), not that the seat is there |
-| admission that asks there: [Membership](../membership.md) refuses a seat outside your rule with `member-not-active`, as one that does not exist, and so does a module's rule on `tenant_seats()` | writes, which stay Tenancy's (a [column rule](#what-the-database-guards-on-a-seat) still holds your fields); system work and operators |
+| admission that asks there: [Membership](../membership/overview.md) refuses a seat outside your rule with `member-not-active`, as one that does not exist, and so does a module's rule on `tenant_seats()` | writes, which stay Tenancy's (a [column rule](#what-the-database-guards-on-a-seat) still holds your fields); system work and operators |
 
 <details>
 <summary>Show the code: two read rules, their building blocks, and the policy the export writes</summary>
@@ -397,7 +397,7 @@ CREATE POLICY "Only employees read the organization (select) for authenticated" 
 
 Add a [read rule on your seat class](#who-reads-the-seats-a-default-you-may-replace), and an external seat reads only
 the people on its projects, a contract the projects' module publishes from its
-[Membership](../membership.md#on-postgres-the-second-lock) members:
+[Membership](../membership/postgres.md#on-postgres-the-second-lock) members:
 
 ```csharp
 // Projects.Contracts: the people on the projects the caller is on, by the seats they are

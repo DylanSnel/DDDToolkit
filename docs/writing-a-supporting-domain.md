@@ -4,7 +4,7 @@ Your core domain is what the application is for, and the [building blocks](entit
 are how you write it. Around it sit domains that many applications need and none is set apart by:
 subscriptions, tenants, audit. A **supporting domain** is one of those written once, as a package, and
 used by many applications. The toolkit ships its own under `DDDToolkit.Supporting.*`, [Tenancy](tenancy/overview.md)
-and [Membership](membership.md), and you can write one the same way.
+and [Membership](membership/overview.md), and you can write one the same way.
 
 A supporting domain is not a building block. It is written with the building blocks, the way your own
 modules are, and once an application references it, it is a module of that application. What makes it a
@@ -410,7 +410,7 @@ the application declared all the same: a restrictive policy that asks the applic
 `EXISTS (SELECT 1 FROM <the application's table> ... )`, is answered under the application's own rules on that
 table, so a row that refers to one the caller is not shown is not written. And what the package's own
 operations refuse whoever asks, a row in a state nobody may leave it in, is a trigger written from the rules,
-which holds whoever writes the row. [Membership's roles a customer makes](membership.md#roles-a-customer-makes)
+which holds whoever writes the row. [Membership's roles a customer makes](membership/permissions-and-roles.md#roles-a-customer-makes)
 do both.
 
 ## A registration closed over your classes
@@ -661,7 +661,7 @@ internal static partial class GeneratedCommentModelBuilderExtensions
   needs exactly one class, so leave `AllowSeveral` off a template another template takes from.
 - **Write the package for several.** What the registration adds is called once per class in one application:
   key every service, option and name by the class or its id, never by the author's id alone, and take table
-  names as parameters rather than fixing them. [Membership](membership.md#several-kinds-of-resource) is
+  names as parameters rather than fixing them. [Membership](membership/resources-and-members.md#several-kinds-of-resource) is
   written that way: a member class per kind of resource, and everything it registers asked for by the
   resource.
 
@@ -743,7 +743,7 @@ modelBuilder.AddShopInvoiceDiscounts();   // AddDiscounts<ShopInvoiceDiscount, I
   what the generator will make of it, so a child entity named where `TOwner : AggregateRoot<TOwnerId>` is asked
   is reported on the class that names it ([DDD00050](diagnostics.md#ddd00050)), not inside the registration.
 
-[Membership](membership.md) is written this way: `[Member<DocumentShareId, UserId, NamedRole, Document>]` names
+[Membership](membership/overview.md) is written this way: `[Member<DocumentShareId, UserId, NamedRole, Document>]` names
 the document its members are of, and the application calls `services.AddDocumentMembership<TContext>(rules)`.
 
 ### In a module split by layer
@@ -924,7 +924,7 @@ public abstract class SubscriptionUseCases : global::Acme.Subscriptions.Subscrip
   the package's own tests, with a project that names the class.
 
 [Tenancy](tenancy/your-module.md#calling-a-use-case) is written this way: its use cases are `TenancyUseCases<...>`, and an
-application, the sample among them, names them `TenancyUseCases.SeatCommands`. [Membership](membership.md)'s are
+application, the sample among them, names them `TenancyUseCases.SeatCommands`. [Membership](membership/overview.md)'s are
 small classes generic over the ids alone, which read where they are taken, so it asks for none, and no other
 package of the toolkit asks for one either.
 
@@ -960,7 +960,7 @@ first. So a package asks for what it needs, and does not name who answers:
   and generator tests for an application with both, with one, with types that do not fit, and with several
   classes in a project.
 
-[Membership](membership.md#with-tenancy) is written this way beside [Tenancy](tenancy/overview.md): it works for
+[Membership](membership/beside-an-organization.md#with-tenancy) is written this way beside [Tenancy](tenancy/overview.md): it works for
 plain users, and where an application has an organization, a member is a seat.
 
 ## What the application should not have to write

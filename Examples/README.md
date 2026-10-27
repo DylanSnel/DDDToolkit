@@ -563,7 +563,7 @@ What it does not show: Newtonsoft, FluentValidation validators, and upcasting an
 
 A second application, smaller than the shop and apart from it: crews, the people who work on a project,
 in two tenants, on the [Tenancy](../docs/tenancy/overview.md) supporting domain, and on the
-[Membership](../docs/membership.md) one for the crews. It is there to show who may see and do what, and to let
+[Membership](../docs/membership/overview.md) one for the crews. It is there to show who may see and do what, and to let
 you try it: a dev login with seeded people, a UI that calls the API with each person's token and tenant, and
 calls that deliberately break a rule and show the refusal. How the access works is explained on Tenancy's
 sample page, in [Who may do what, in the sample](../docs/tenancy/the-sample.md#who-may-do-what-in-the-sample) and

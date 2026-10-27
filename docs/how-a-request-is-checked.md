@@ -3,7 +3,7 @@
 This page follows one request from the attribute written above it to the rows Postgres lets it touch. The other
 pages explain each piece on its own: [Access requirements](access-requirements.md) the requirement and the checks,
 [Row level security](row-level-security.md) the caller on the connection and the policies,
-[Tenancy](tenancy/overview.md) and [Membership](membership.md) the cases they decide. Here they are put in the order a
+[Tenancy](tenancy/overview.md) and [Membership](membership/overview.md) the cases they decide. Here they are put in the order a
 request meets them, for six requests, four of them the [Tenancy sample](../Examples/Tenancy)'s own, and six callers
 of the sample's seed.
 
@@ -376,7 +376,7 @@ is nobody in the tenant is refused with its own reason, without a statement made
 Membership's order is the same for every request: nobody, then not found, then not permitted, then the version.
 So a caller who does not see a project learns nothing about it, not even that it exists, and only a caller who may
 act learns that somebody changed it since they read it. What the check read it keeps for the request: a save under
-[the expert hold](membership.md#the-expert-hold) is held to it.
+[the expert hold](membership/checks-and-saves.md#the-expert-hold) is held to it.
 
 <details>
 <summary>Show the code: the core's check, Tenancy's, Membership's and the combinations'</summary>
@@ -796,7 +796,7 @@ CREATE POLICY "Operators only read (insert) for tenancy_operator" ON "audit"."Au
 The crew's permissive policy for a signed-in caller, `"ProjectCrewMembers (insert) for authenticated"`, lets
 whoever may change the project add a row; Membership's restrictive lock, `"Members change with the permission"`, narrows
 that to the permission that changes the members, `projects.crew.manage`, or the one that names the owner. That lock is
-[the second lock](membership.md#on-postgres-the-second-lock), and it is why a request the door let through for its
+[the second lock](membership/postgres.md#on-postgres-the-second-lock), and it is why a request the door let through for its
 own seat may still be saved as the application's work ([The caller's own on a resource](access-requirements.md#the-callers-own-on-a-resource)).
 
 ### Going round the door
@@ -1069,7 +1069,7 @@ with "–" where the door let the caller through, or refused for something other
   with a test.
 - [Row level security](row-level-security.md): the caller on the connection, row access rules, column rules, and
   what happens when the policies refuse what C# allowed.
-- [Tenancy](tenancy/who-may-do-what.md#what-a-request-requires-of-its-caller) and [Membership](membership.md#with-tenancy): the cases
+- [Tenancy](tenancy/who-may-do-what.md#what-a-request-requires-of-its-caller) and [Membership](membership/beside-an-organization.md#with-tenancy): the cases
   they decide, and the policies they ship.
 - [Who may do what, in the sample](tenancy/the-sample.md#who-may-do-what-in-the-sample): the sample's modules, and how to run
   them.

@@ -101,12 +101,12 @@ own cases only:
 Tenants has no check of its own. Under Projects' [module default](../../access-requirements.md#a-modules-default),
 `[InTenant]`, a request any seat may send states nothing. An undecided case stops the request where it is sent.
 
-**From the check to the save** ([the whole of it](../../membership.md#from-the-check-to-the-save)):
+**From the check to the save** ([the whole of it](../../membership/checks-and-saves.md#from-the-check-to-the-save)):
 
 - The handler loads what its command names, at the `If-Match` version: any change since is 409 `concurrency-conflict`.
 - The version, the project's rules and the database, checking every row as the caller, hold the write: a caller who
   lost every permission that writes it gets 403 `access.refused`.
-- The sample ships without [the expert hold](../../membership.md#the-expert-hold), which ties the save to the
+- The sample ships without [the expert hold](../../membership/checks-and-saves.md#the-expert-hold), which ties the save to the
   checked version.
 
 ## What each request declares
@@ -251,7 +251,7 @@ flowchart LR
 Each answers 204. A crew is answered to whoever sees the project, each member's roles only to a caller with
 `projects.crew.manage` on it (`null` for anybody else, in the query's statement: `CrewOverview.RolesPermission`).
 
-**Project roles** are the crews' roles, kept with the [Membership package](../../membership.md), whose worked example
+**Project roles** are the crews' roles, kept with the [Membership package](../../membership/overview.md), whose worked example
 the sample is.
 
 | Starter role | Permissions |

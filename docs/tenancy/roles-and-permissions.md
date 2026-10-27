@@ -54,7 +54,7 @@ public static class OrderingPermissions
 |---|---|---|
 | `[AtTenant]` | for the whole tenant: `TenancyAccess.AtTenant`, or `[RequiresPermission]` with no marker | a role granted at the root |
 | `[AtUnit]` | at a unit: `TenancyAccess.AtUnit`, or a request's `[AtUnit]` member | a role granted at that unit or above |
-| `[On<TResource>]`, [Membership's](../membership.md#the-settings-of-a-permission) | on one resource with members | its owner, its members through their roles, and, where its rules say so, a role granted where it hangs |
+| `[On<TResource>]`, [Membership's](../membership/permissions-and-roles.md#the-settings-of-a-permission) | on one resource with members | its owner, its members through their roles, and, where its rules say so, a role granted where it hangs |
 
 - A permission asked both ways carries both levels; say each setting on one. At any level it is in the catalogue
   under its module, so a role of the organization can hold it.

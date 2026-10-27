@@ -134,11 +134,11 @@ request that says nothing, reads as if it said one thing with its attributes and
 [DDD00087](#ddd00087) and [DDD00088](#ddd00088) are about [the owner an aggregate marks](access-requirements.md#the-owner-of-an-aggregate),
 where it is a request about the owner's own that no row could ever let through.
 [DDD00059](#ddd00059) and [DDD00060](#ddd00060) are about the
-[member list of a resource](membership.md#the-member-list-is-written-for-you), and say what the generator of
+[member list of a resource](membership/resources-and-members.md#the-member-list-is-written-for-you), and say what the generator of
 the Membership package could not tell, and which member class names the wrong resource.
-[DDD00092](#ddd00092) to [DDD00095](#ddd00095) are about [permissions declared once](membership.md#the-settings-of-a-permission),
+[DDD00092](#ddd00092) to [DDD00095](#ddd00095) are about [permissions declared once](membership/permissions-and-roles.md#the-settings-of-a-permission),
 where it is a permission read as something it is not, said twice, or that never reaches the rules or the catalogue;
-[DDD00090](#ddd00090) and [DDD00091](#ddd00091) about [the names of resources with members](membership.md#names), where
+[DDD00090](#ddd00090) and [DDD00091](#ddd00091) about [the names of resources with members](membership/resources-and-members.md#names), where
 it is a code clients read or a function that changes with a class's name; and [DDD00096](#ddd00096) to
 [DDD00098](#ddd00098) about the owner and the place of a resource with members, where it is an attribute that adds
 nothing, or rules that read a place nobody said.
@@ -2032,7 +2032,7 @@ public sealed partial class Document                    // DDD00059: no property
 }
 ```
 
-For a class declared with [Membership](membership.md)'s member template, the package's generator writes the
+For a class declared with [Membership](membership/overview.md)'s member template, the package's generator writes the
 member list on the resource the template names: a private property `Members`, which the resource's own
 methods change its members through. It writes it from three things the resource declares and the member
 class's own id, and only when each can be told without a guess:
@@ -2042,7 +2042,7 @@ class's own id, and only when each can be told without a guess:
 | the members | the one get-only `partial` property of `IReadOnlyList<TMember>`, `IReadOnlyCollection<TMember>` or `IEnumerable<TMember>`, which the toolkit keeps in a list | there is none, or there are two; a set is kept in a `HashSet` |
 | the owner | the one property marked `[Owner]`, of what a member is known by, the template's second type | none is marked, two are, or the one marked is of another type |
 | a new row's id | the `Create()` of the member class's own id, which the generator writes for an `[EntityId<Guid>]` | the id is over something else, a `long` say, and declares no `Create()` |
-| the codes | the one static property or field of `MembershipCodes` on the resource, or, where it declares none, the ones the generator writes under the resource's [name](membership.md#names) | there are two, or a member called `Codes` that is not one |
+| the codes | the one static property or field of `MembershipCodes` on the resource, or, where it declares none, the ones the generator writes under the resource's [name](membership/resources-and-members.md#names) | there are two, or a member called `Codes` that is not one |
 
 It is also not written when the resource has a member called `Members` already, and when two member classes
 name the same resource and it keeps a collection of both, or of neither, since both lists would be called the
@@ -2099,7 +2099,7 @@ public sealed partial class DocumentWatcher;                // DDD00060: the doc
 public sealed partial class NoteShare;                      // DDD00060: a share is no aggregate root
 ```
 
-The fourth type of the [member template](membership.md) is the resource the members are of: an aggregate root
+The fourth type of the [member template](membership/overview.md) is the resource the members are of: an aggregate root
 of yours, which keeps them in a collection of the member class and gets the member list over it. A resource
 has one member class. Of two that name it, the one the resource keeps a collection of is its member class, and
 its list is written, so the resource's own methods still compile; the other is reported, on itself, as the
@@ -3065,7 +3065,7 @@ property of the aggregate root itself, once. Reported where the property is decl
 | an entity inside an aggregate | a request names the root by the root's id, and the check reads the root's row |
 | a type that is no aggregate root | no request names it by an id whose row the check reads |
 | a static property | the owner is a column of each row |
-| a second property of one aggregate | an aggregate has one owner; several owners are members, a resource with members, which [Membership](membership.md) keeps |
+| a second property of one aggregate | an aggregate has one owner; several owners are members, a resource with members, which [Membership](membership/overview.md) keeps |
 
 The first of two in the order they are written is the one, and the second is reported. And at a request: an id the
 project sees as the id of two aggregate roots that each mark an owner cannot say which aggregate the request is about,
@@ -3137,7 +3137,7 @@ warning DDD00090: Membership names changed since the last access file. Gone: boa
 its old name with [Members("...")].
 ```
 
-A resource with members is [named after its class](membership.md#names), and the name is what its codes start with,
+A resource with members is [named after its class](membership/resources-and-members.md#names), and the name is what its codes start with,
 `boards.already-member`, and what its five functions in the database are named after, `boards_i_see`. Renaming the
 class renames both: a client that branches on a code reads another one, and the next access file writes new
 functions and drops the old. The Supabase export the build runs compares the names of the resources it writes with
@@ -3164,7 +3164,7 @@ It is converted the way a class's name is, PascalCase split into words, and take
 it as a class's name, `CraneBoards`, or as it comes out, `crane-boards`: letters and digits, with `-` or `_`
 between words, starting with a letter. A space, another symbol, a digit or a separator first, or a separator last
 cannot be converted, and nothing of the resource is written: its rules, `MembershipRules.For<Board>`, do not
-compile until the name is put right ([Names](membership.md#names)).
+compile until the name is put right ([Names](membership/resources-and-members.md#names)).
 
 ## DDD00092
 
@@ -3190,7 +3190,7 @@ public static class BoardPermissions
 A module declares its permissions in a static class marked `[Permissions]`: every public `const string` of it is a
 permission, which a request names in `[RequiresPermission]` and a role gives, and each carries its **level**, the
 attribute that says where it is asked: Tenancy's `[AtTenant]` or `[AtUnit]`, or Membership's `[On<TResource>]`
-([The settings of a permission](membership.md#the-settings-of-a-permission),
+([The settings of a permission](membership/permissions-and-roles.md#the-settings-of-a-permission),
 [A module states its permissions once](tenancy/roles-and-permissions.md#a-module-states-its-permissions-once)). The packages' generators read the class
 and nothing else, so each of these would be read as something it is not, or not at all:
 
@@ -3239,7 +3239,7 @@ a `[Permissions]` class marked `[On<TResource>]`, in the project that makes the 
 which the package's generator hands over when the project is first used. Rules without a permission give the owner
 nothing and every role nothing, and the call would throw when the rules are made, so it is said where they are
 made. Declare the permissions asked on the resource:
-[The settings of a permission](membership.md#the-settings-of-a-permission).
+[The settings of a permission](membership/permissions-and-roles.md#the-settings-of-a-permission).
 
 ## DDD00095
 
@@ -3310,7 +3310,7 @@ public sealed partial class Column
 `[At]` marks the property of an aggregate root that says where it hangs: the unit of an organization a board belongs
 to, the bay a crate stands in. A fact of the domain, which the rules of a resource with members read where they let
 it be reached from above: a permission held at that place, or above it, reaches the aggregate
-([Beside an organization](membership.md#beside-an-organization)). So it goes on one instance property of an
+([Beside an organization](membership/beside-an-organization.md#beside-an-organization)). So it goes on one instance property of an
 aggregate root, the root itself and never an entity inside it, and that property is never empty: an aggregate that
 hangs nowhere could not be reached from above, which is what `[At]` says. A static property, one on a type that is
 no aggregate root, a second one and a nullable one are each refused, where the property is declared.

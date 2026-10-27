@@ -8,14 +8,14 @@ using Microsoft.Extensions.DependencyInjection;
 namespace DDDToolkit.Analyzers.Tests.Docs;
 
 /// <summary>
-/// The first example of docs/membership.md, read from the page and compiled as it stands, with the generators
+/// The first example of docs/membership/resources-and-members.md, read from the page and compiled as it stands, with the generators
 /// an application runs: a document, its member class, its rules, its context and registrations, and a request
 /// with its handler. The page says the code is all there is to write; this holds it to that, and holds what the
 /// page shows the generators write to what they do write.
 /// </summary>
 public class MembershipDocsExampleTests
 {
-    private const string Page = "membership.md";
+    private const string Page = "membership/resources-and-members.md";
 
     private const string Heading = "A document and the people it is shared with";
 
@@ -143,26 +143,30 @@ public class MembershipDocsExampleTests
     }
 
     [Fact]
-    public void The_page_writes_host_code_outside_the_toolkits_namespaces()
+    public void The_pages_write_host_code_outside_the_toolkits_namespaces()
     {
         // HotChocolate's generator writes names inside a namespace that starts with the toolkit's without
-        // global::, so code a reader copies stays in a namespace of its own.
-        System.Text.RegularExpressions.Regex.Matches(File.ReadAllText(PagePath()), @"^namespace\s+(?<name>[\w.]+);", System.Text.RegularExpressions.RegexOptions.Multiline)
+        // global::, so code a reader copies stays in a namespace of its own, on every page of Membership's.
+        var pages = Directory.GetFiles(MembershipPages(), "*.md", SearchOption.TopDirectoryOnly);
+        pages.Should().Contain(path => Path.GetFileName(path) == "resources-and-members.md");
+
+        pages.SelectMany(path => System.Text.RegularExpressions.Regex.Matches(File.ReadAllText(path), @"^namespace\s+(?<name>[\w.]+);", System.Text.RegularExpressions.RegexOptions.Multiline))
             .Select(match => match.Groups["name"].Value)
             .Where(name => name.StartsWith("DDDToolkit", StringComparison.Ordinal))
-            .Should().OnlyContain(name => name == "DDDToolkit.Supporting.Membership.EntityFramework", "only what a generator writes into the package's own namespace says so");
+            .Should().NotContain(name => name != "DDDToolkit.Supporting.Membership.EntityFramework", "only what a generator writes into the package's own namespace says so");
     }
 
     private static IEnumerable<string> Lines(string code)
         => code.ReplaceLineEndings("\n").Split('\n').Select(line => line.Trim()).Where(line => line.Length > 0 && line is not "{" and not "}");
 
-    private static string PagePath()
+    /// <summary>docs/membership: the overview, the tutorial and the topic pages, without the generated API reference below it.</summary>
+    private static string MembershipPages()
     {
         for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
         {
             if (File.Exists(Path.Combine(directory.FullName, "DDDToolkit.slnx")))
             {
-                return Path.Combine(directory.FullName, "docs", Page);
+                return Path.Combine(directory.FullName, "docs", "membership");
             }
         }
 

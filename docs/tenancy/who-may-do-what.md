@@ -75,7 +75,7 @@ modelBuilder.Entity<Project>().ScopeToTenant(project => project.TenantId);
   ([modules read through functions](postgres.md#modules-read-through-functions)): the questions refuse a module's
   context that maps the views there.
 - Where your classes are visible, the call without the four ids is generated.
-- A module whose resources have members leaves these questions to [Membership](../membership.md), as the sample's
+- A module whose resources have members leaves these questions to [Membership](../membership/overview.md), as the sample's
   Projects module does.
 
 ## Permission sets for navigation, abilities for actions
@@ -151,7 +151,7 @@ public sealed record OpenLedger(string Name, [AtUnit] OrganizationUnitId Unit) :
   permission at both units, `All(TenancyAccess.AtUnit(p, From), TenancyAccess.AtUnit(p, To))`, and the handler
   moves it from `From` alone.
 - What is held on one thing a module keeps at a unit is that module's own case
-  ([What answers it](../access-requirements.md#what-answers-it)); [Membership](../membership.md) ships such cases.
+  ([What answers it](../access-requirements.md#what-answers-it)); [Membership](../membership/overview.md) ships such cases.
 
 **A request handed to a package use case declares what that use case asks first.**
 

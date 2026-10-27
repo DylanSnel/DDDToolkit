@@ -1490,7 +1490,7 @@ CREATE POLICY "Watchers read the tickets they watch (select) for authenticated" 
 ### A resource's access, asked by its id
 
 A package that keeps a resource's access writes the functions that answer it, and names them itself: the
-[Membership package](membership.md#on-postgres-the-second-lock) writes, for each resource with members, the
+[Membership package](membership/postgres.md#on-postgres-the-second-lock) writes, for each resource with members, the
 resources the caller sees and those it holds a permission on, under names it takes from the resource's rules. A rule
 should not have to repeat those names, and a module that asks about another module's resource should not even
 know them. So it asks by the resource's id. An `[AccessFunctionContract]`, above, is for a function your module
@@ -1775,7 +1775,7 @@ script is written, naming the rule.
 A column rule asks one question of the row before and after the change. A rule that asks something else of each,
 as moving a project does, the permission to edit it where it was and the permission to open projects where it goes, is a
 trigger of your own, written as a [contribution](#policies-a-package-ships): the sample's `UnitChangesWithItsPermissions`.
-The owner column of a resource whose members the [Membership package](membership.md#who-writes-the-member-rows)
+The owner column of a resource whose members the [Membership package](membership/postgres.md#who-writes-the-member-rows)
 keeps is held by the package's own lock, which it writes from the permission its rules name for naming an owner.
 
 ### Policies a package ships

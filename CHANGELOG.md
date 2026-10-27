@@ -1897,7 +1897,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 - **`AddMembershipPostgres()`.** It registers the package's start-up check, `membership.functions-in-place`, which
   a host runs with its other checks (`RunStartupChecks()`): the functions and the lock of every registered
   resource's membership are written from its rules. `MembershipPostgresChecks.EnsureFunctionsAreInPlaceAsync` stays
-  for a host that calls it by hand. See [On Postgres: the second lock](docs/membership.md#on-postgres-the-second-lock).
+  for a host that calls it by hand. See [On Postgres: the second lock](docs/membership/postgres.md#on-postgres-the-second-lock).
 - **Membership**, the toolkit's second supporting domain. `DDDToolkit.Supporting.Membership` is access to one
   resource through its members: a document shared with people, a folder with staff on it. An application
   declares a member class with `[Member<TId, TMemberId, TRoleId, TResource>]`, naming the resource it is a
@@ -1946,7 +1946,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   the server can change (one in `user_metadata` is refused), unless the application says who else they are. For a screen that lists the
   members of a resource, `MemberOverviews.From(members, owner, now)` puts them in one order, the owner first,
   each with its roles and whether they count now, and reads nothing. It comes in three
-  packages. See [Membership](docs/membership.md).
+  packages. See [Membership](docs/membership/overview.md).
 - **Membership stored with Entity Framework.** `DDDToolkit.Supporting.Membership.EntityFramework` maps a
   resource's members into the application's own context,
   `modelBuilder.Entity<Document>().HasMembers(document => document.Shares)`, with the owner the property the
@@ -1976,7 +1976,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   checks every row checks the write again as the caller, so one who lost every key that writes the resource
   since the check is refused, `access.refused`. Permission is about who; the version is about what the caller
   read. A rule that needs how or until when the caller holds the key asks the questions for it, in one
-  statement. See [From the check to the save](docs/membership.md#from-the-check-to-the-save).
+  statement. See [From the check to the save](docs/membership/checks-and-saves.md#from-the-check-to-the-save).
 - **Membership: the expert hold.** `options.UseMemberHolds(serviceProvider)`, one line on a context after
   `UseDDDToolkit` (or `UseDDDToolkitCore`), holds every save that changes a resource with members, a member or a
   role of one included, to what the access check of the request in hand read of it, with nothing written in a
@@ -1993,7 +1993,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   request in hand and is refused, with a message that says so. A model that does not compare `Version` is refused
   at the first held save, and `UseMemberHolds` before `UseDDDToolkit` or `UseDDDToolkitCore` where the context is
   built. It is no part `UseDDDToolkit` puts on: no registration brings it, a host writes it per context, and a
-  second call adds nothing. See [The expert hold](docs/membership.md#the-expert-hold).
+  second call adds nothing. See [The expert hold](docs/membership/checks-and-saves.md#the-expert-hold).
 - **Membership on Postgres.** `DDDToolkit.Supporting.Membership.Postgres` declares
   `MembershipRowAccessContribution<TMember>`: for each kind of resource whose rules the application marks
   `[MembershipRules<TMember>]`, the export of every application that references the package writes four set functions
@@ -2035,7 +2035,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   works. The names follow from the resource's name alone, `documents_i_see` and so on: nothing of the
   application's names them. A rule that asks a resource whose
   contribution the export is not written with is refused, naming the rule and the resource. See
-  [On Postgres: the second lock](docs/membership.md#on-postgres-the-second-lock).
+  [On Postgres: the second lock](docs/membership/postgres.md#on-postgres-the-second-lock).
 - **Membership beside an organization.** A resource's rules say three things apart from each other, each with
   the default a resource of plain users has, and any of the one goes with any of the others. Who a member is:
   what follows from the member id, a claim, or an id the application resolves for the caller,
@@ -2052,7 +2052,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   membership ends where it sees it as a member alone (`MemberHold.Until`). So the people of an organization
   can be the members of a resource with roles of its own, or with the organization's roles, with reach from
   above or without, and the package references no package that keeps an organization. See
-  [Beside an organization](docs/membership.md#beside-an-organization).
+  [Beside an organization](docs/membership/beside-an-organization.md#beside-an-organization).
 - **Roles a customer makes.** A third place a resource's roles can come from, next to the rules and to roles
   kept elsewhere: rows kept for the resource, `Roles.Custom(starters: [...])`. An application declares a role
   class with `[CustomRole<TRoleId, TResource>]`, an aggregate of its own named for the resource it is a role of, so
@@ -2076,7 +2076,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   same context: no port, and no function of the application's. The functions' fingerprint covers that a
   customer makes the roles and what a member's role can give, and the start-up check refuses rules whose roles a
   customer makes over a context that maps no role class. Who may make, change or archive a role is the application's
-  to decide. See [Roles a customer makes](docs/membership.md#roles-a-customer-makes).
+  to decide. See [Roles a customer makes](docs/membership/permissions-and-roles.md#roles-a-customer-makes).
 - **Membership with Tenancy.** In an application that has both supporting domains, a member of a resource can
   be a seat of a tenant, and what joins the two is written into the application. Membership's Entity
   Framework package ships a generator of its own, which notices Tenancy by its types and, for each member
@@ -2091,14 +2091,14 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   role's id in the call. Nothing is written without Tenancy, or, where a project sees the application's
   seat class, for a member class whose members are not seats. Neither package references the other, and
   the toolkit's own generator names neither. See
-  [With Tenancy](docs/membership.md#with-tenancy).
+  [With Tenancy](docs/membership/beside-an-organization.md#with-tenancy).
 - **A resource with members is named after its class.** `Board` is `boards`, `CraneBoard` `crane-boards`: the
   plural of the class's name, which its codes start with, `boards.already-member`, and its four functions in the
   database are named after, `boards_i_see`. `[Members("People")]` on the class says another, and keeps the name a
   renamed class had; one that cannot be converted to a code is DDD00091, an error. The build that runs the Supabase
   export compares the names it writes with those the newest access file recorded, and says once which are gone and
   which are new, DDD00090, a warning, since a client reads other codes and the database gets new functions. See
-  [Names](docs/membership.md#names).
+  [Names](docs/membership/resources-and-members.md#names).
 - **Permissions on a resource, declared once.** `[On<TResource>]` is the level of a permission asked on a resource
   with members, a constant of a `[Permissions]` class: `Owner` (the owner holds it by owning, unless `Owner =
   false`), `EveryMember`, `InRoles`, `LocksMembers`, `LocksOwner` and `FromAbove` say how it is held there, and every
@@ -2106,12 +2106,12 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   permissions to `MembershipRules.For<TResource>` when the project is first used. A level on a class that is no
   resource with members, and a second permission that says `EveryMember`, `LocksMembers` or `LocksOwner` on one
   resource, are DDD00093; rules made for a resource no permission is declared on, DDD00094. See
-  [The settings of a permission](docs/membership.md#the-settings-of-a-permission).
+  [The settings of a permission](docs/membership/permissions-and-roles.md#the-settings-of-a-permission).
 - **Where an aggregate hangs: `[At]`.** The core's `[At]` marks the one property of an aggregate root that says where
   it hangs, a unit of an organization or a bay of a depot, never nullable (DDD00097 otherwise). Rules that reach a
   resource from above, `reachFromAbove: true` beside a package that keeps the places or
   `reachFromAbove: DepotFunctions.BaysWhereIHold` beside a place of the application's own, read it, and rules that
-  reach a class that marks none are DDD00098. See [Beside an organization](docs/membership.md#beside-an-organization).
+  reach a class that marks none are DDD00098. See [Beside an organization](docs/membership/beside-an-organization.md#beside-an-organization).
 - **`[OrOwn]` on a resource whose owner holds the key says nothing: DDD00096.** A warning at `[OrOwn]` on the id of a
   resource with members beside `[OnResource]`, where the required permission is one its owner holds by owning: the
   owner passes the key already.
@@ -2276,7 +2276,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     project, in one statement: the query `AllCrewMembers`. Each member's roles are answered to a caller who
     manages the crew, and are `null` for anybody else.
 - **Tenancy sample: crews on the Membership package, with the project roles each tenant keeps.** A crew member
-  is declared with the [Membership](docs/membership.md) package's member template,
+  is declared with the [Membership](docs/membership/overview.md) package's member template,
   `[Member<CrewMemberId, SeatId, ProjectRoleId, Project>]`, and a project keeps its crew through the member list
   the package writes on it. The projects' permissions, `ProjectPermissions`, say what an owner holds, what a crew
   role may give, and which keys change a crew and name an owner, and the rules, `ProjectMembership`, are made from
@@ -2704,7 +2704,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 - **Docs: Access requirements, a page of its own.** [Access requirements](docs/access-requirements.md) says
   what a request declares, what answers it, how the checks are asked without a dispatcher and the behavior
   written for Mediator, once, and the Tenancy and Membership pages link to it for their own cases. Its
-  examples, and the first example of [Membership](docs/membership.md), are read from the pages by docs tests
+  examples, and the first example of [Membership](docs/membership/overview.md), are read from the pages by docs tests
   and compiled as they stand.
 - **Docs: Tenancy's design choices, each with where to see it.**
   [The Tenancy page](docs/tenancy/the-sample.md#design-choices-and-where-to-see-them) lists every choice with its code,

@@ -409,7 +409,7 @@ this skill:
 | One request from its attribute to the rows: the generated line, the check that decides, the statement at the door, the policies | `how-a-request-is-checked` |
 | pgmq, Wolverine, MassTransit, a custom sink | `transports` |
 | Tenants, the organization tree, seats and roles | `tenancy` |
-| Access to a resource through its members, their roles and its owner | `membership` |
+| Access to a resource through its members, their roles and its owner | `membership/overview`, then its topic pages: `membership/resources-and-members`, `membership/permissions-and-roles`, `membership/checks-and-saves`, `membership/postgres`, `membership/beside-an-organization` |
 | Extending a supporting domain's aggregate, or writing one (`[AggregateRootBase]`, templates) | `writing-a-supporting-domain` |
 | GraphQL with HotChocolate, Fusion across modules | `graphql` |
 | Value object rules as FluentValidation validators | `fluent-validation` |
