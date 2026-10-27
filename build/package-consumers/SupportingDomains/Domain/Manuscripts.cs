@@ -3,6 +3,7 @@ using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.Access;
 using DDDToolkit.Supporting.Membership;
 using DDDToolkit.Supporting.Membership.Access;
+using DDDToolkit.Supporting.Tenancy;
 
 namespace Acme.Press.Manuscripts;
 
@@ -29,7 +30,8 @@ public sealed partial class ManuscriptRole
     /// <summary>Makes a role of manuscripts for a house.</summary>
     public ManuscriptRole(ManuscriptRoleId id, TenantId tenant, CustomRoleDraft draft) : base(id, draft, ManuscriptMembership.Rules) => TenantId = tenant;
 
-    /// <summary>The house the role is of: the application's own column.</summary>
+    /// <summary>The house the role is of: the application's own column, kept to the caller's house by its mark.</summary>
+    [OfTenant]
     public TenantId TenantId { get; private set; }
 }
 
@@ -50,7 +52,8 @@ public sealed partial class Manuscript
         Members.Open(now);
     }
 
-    /// <summary>The house the manuscript is of.</summary>
+    /// <summary>The house the manuscript is of: every context that maps the manuscript keeps it to the caller's house by it.</summary>
+    [OfTenant]
     public TenantId TenantId { get; private set; }
 
     /// <summary>The imprint the manuscript is at: where it sits, and where the organization reaches it from.</summary>

@@ -1,3 +1,5 @@
+using DDDToolkit.Abstractions.Attributes;
+using DDDToolkit.Supporting.Tenancy;
 using DDDToolkit.Supporting.Membership;
 using DDDToolkit.Supporting.Membership.Access;
 using Examples.Tenancy.Projects.Domain.Aggregates.ProjectRoles.Events;
@@ -50,7 +52,8 @@ public sealed partial class ProjectRole
         RaiseDomainEvent(new ProjectRoleMade(id, tenantId));
     }
 
-    /// <summary>The tenant the role is of. It never changes; the tenant filter reads it.</summary>
+    /// <summary>The tenant the role is of. It never changes; marked <c>[OfTenant]</c>, so the tenant filter reads it.</summary>
+    [OfTenant]
     public TenantId TenantId { get; private set; }
 
     /// <summary>Gives the role another name, or another description, or both. The same again changes nothing.</summary>

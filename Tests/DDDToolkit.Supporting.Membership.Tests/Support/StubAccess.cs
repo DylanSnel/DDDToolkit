@@ -4,13 +4,15 @@ using DDDToolkit.Exceptions;
 namespace DDDToolkit.Supporting.Membership.Tests.Support;
 
 /// <summary>
-/// The access questions of one kind of resource, answered from what a test says the caller sees and holds: the
-/// part a storage answers. What the package decides over it, the refusals and their order, is what the tests
-/// are about.
+/// What a storage answers about one kind of resource, from what a test says the caller sees and holds. What the
+/// package decides over it, the refusals and their order, is what the tests are about, asked of the access manager
+/// made over it (<see cref="Manager"/>), which a stub stands for where a manager is taken.
 /// </summary>
+/// <typeparam name="TResource">The resource's aggregate.</typeparam>
 /// <typeparam name="TResourceId">The resource's id.</typeparam>
 /// <param name="rules">The rules of the resource the questions are about.</param>
-public sealed class StubAccess<TResourceId>(MembershipRules rules) : IMemberQuestions<TResourceId>
+public sealed class StubAccess<TResource, TResourceId>(MembershipRules rules) : IMembershipStorage<TResource, TResourceId>
+    where TResource : class, IEntity<TResourceId>
     where TResourceId : struct, IEntityId, IEquatable<TResourceId>
 {
     private readonly Dictionary<TResourceId, (long Version, Dictionary<string, MemberVia> Held)> _seen = [];
@@ -33,12 +35,26 @@ public sealed class StubAccess<TResourceId>(MembershipRules rules) : IMemberQues
     /// <inheritdoc />
     public MembershipRules Rules { get; } = rules;
 
+    /// <summary>The access manager over this stub: what an application takes.</summary>
+    public MembershipAccessManager<TResource> Manager => MembershipAccessManager.Over(this);
+
+    /// <summary>The access manager over <paramref name="stub"/>, wherever a test hands a stub to what takes a manager.</summary>
+    public static implicit operator MembershipAccessManager<TResource>(StubAccess<TResource, TResourceId> stub) => stub.Manager;
+
     /// <summary>The caller sees <paramref name="resource"/>, at <paramref name="version"/>, and holds these permissions on it.</summary>
-    public StubAccess<TResourceId> Sees(TResourceId resource, long version, params (string Key, MemberVia Via)[] held)
+    public StubAccess<TResource, TResourceId> Sees(TResourceId resource, long version, params (string Key, MemberVia Via)[] held)
     {
         _seen[resource] = (version, held.ToDictionary(pair => pair.Key, pair => pair.Via, StringComparer.Ordinal));
         return this;
     }
+
+    /// <summary>Asks the access manager over this stub, by id: the question a request asks.</summary>
+    public Task<MemberHold<TResourceId>> RequireAsync(TResourceId resource, string permission, CancellationToken cancellationToken)
+        => Manager.RequireAsync(resource, permission, cancellationToken);
+
+    /// <summary>Asks the access manager over this stub, by id.</summary>
+    public Task<MemberVia?> ViaAsync(TResourceId resource, string permission, CancellationToken cancellationToken)
+        => Manager.ViaAsync(resource, permission, cancellationToken);
 
     /// <inheritdoc />
     public void RequireCaller()
@@ -51,11 +67,10 @@ public sealed class StubAccess<TResourceId>(MembershipRules rules) : IMemberQues
     }
 
     /// <inheritdoc />
-    public MemberReach<TResourceId> Reach(string permission) => new StubReach(permission, Now, System);
+    public MemberReach<TResource> Reach(string permission) => new StubReach(permission, Now, System);
 
     /// <inheritdoc />
-    public MemberPermissionReach<TResourceId> PermissionReach(IReadOnlyCollection<string> permissions)
-        => new StubPermissionReach(Rules.EveryMemberPermission is { } see ? Reach(see) : new StubReach(Now, System), [.. permissions.Distinct(StringComparer.Ordinal)]);
+    public MemberReach<TResource> ReachSeen() => Rules.EveryMemberPermission is { } see ? Reach(see) : new StubReach(Now, System);
 
     /// <inheritdoc />
     public Task<MemberHold<TResourceId>?> HoldAsync(TResourceId resource, string permission, CancellationToken cancellationToken)
@@ -83,7 +98,7 @@ public sealed class StubAccess<TResourceId>(MembershipRules rules) : IMemberQues
         return Task.FromResult(held);
     }
 
-    private sealed class StubReach : MemberReach<TResourceId>
+    private sealed class StubReach : MemberReach<TResource>
     {
         public StubReach(string permission, DateTimeOffset now, bool everything)
             : base(permission, now, everything)
@@ -96,6 +111,4 @@ public sealed class StubAccess<TResourceId>(MembershipRules rules) : IMemberQues
         {
         }
     }
-
-    private sealed class StubPermissionReach(MemberReach<TResourceId> see, IReadOnlyList<string> permissions) : MemberPermissionReach<TResourceId>(see, permissions);
 }

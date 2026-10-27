@@ -13,9 +13,10 @@ namespace Examples.Tenancy.Projects.Application.StoredProjects;
 /// </summary>
 /// <remarks>
 /// Who may see a project is asked inside the statement that reads the projects, so the two halves meet here. The
-/// application asks the Membership package's questions about projects for a reach, a set not yet read
-/// (<see cref="MemberReach{TResourceId}"/>), and the reading puts that into its own statement, where it becomes
-/// subqueries over the crews, the project roles and Tenancy's rows. What the application depends on, though no
+/// application asks the Membership package's access manager of projects for a reach, a set not yet read
+/// (<see cref="MemberReach{TResource}"/>), and the reading puts that into its own statement, where it becomes
+/// subqueries over the crews, the project roles and Tenancy's rows. Where only which permissions are held is read, the
+/// reading asks the projects' own set itself, <c>WhereIHold(permissions, db)</c>, for the caller current when it asks. What the application depends on, though no
 /// reference says so:
 /// <list type="bullet">
 /// <item><see cref="Tenancy"/>, <see cref="Queries"/> and the projects come from one provider and one context, so
@@ -64,7 +65,7 @@ public interface IProjectReading : IAsyncDisposable
     /// <exception cref="DDDToolkit.Exceptions.RefusalException">
     /// <c>projects.cursor-invalid</c>: the place <paramref name="paging"/> names is not a cursor this list gave.
     /// </exception>
-    Task<Page<ProjectOverview>> PageAsync(MemberReach<ProjectId> reach, ProjectListFilter filter, PagingArguments paging, CancellationToken cancellationToken);
+    Task<Page<ProjectOverview>> PageAsync(MemberReach<Project> reach, ProjectListFilter filter, PagingArguments paging, CancellationToken cancellationToken);
 
     /// <summary>
     /// Those of <paramref name="ids"/> that are within <paramref name="reach"/>, each with how it was reached and
@@ -74,7 +75,7 @@ public interface IProjectReading : IAsyncDisposable
     /// <param name="ids">The projects asked about.</param>
     /// <param name="reach">Who asks, for the permission that sees a project.</param>
     /// <param name="cancellationToken">Cancels the query.</param>
-    Task<IReadOnlyList<ProjectOverview>> ByIdsAsync(IReadOnlyCollection<ProjectId> ids, MemberReach<ProjectId> reach, CancellationToken cancellationToken);
+    Task<IReadOnlyList<ProjectOverview>> ByIdsAsync(IReadOnlyCollection<ProjectId> ids, MemberReach<Project> reach, CancellationToken cancellationToken);
 
     /// <summary>
     /// The crews of those of <paramref name="projects"/> that are within <paramref name="reach"/>, each member with
@@ -88,15 +89,16 @@ public interface IProjectReading : IAsyncDisposable
     /// crew answered, whether its members' roles are the caller's to read.
     /// </param>
     /// <param name="cancellationToken">Cancels the query.</param>
-    Task<IReadOnlyList<ProjectCrewData>> CrewsOfAsync(IReadOnlyCollection<ProjectId> projects, MemberReach<ProjectId> reach, MemberReach<ProjectId> manage, CancellationToken cancellationToken);
+    Task<IReadOnlyList<ProjectCrewData>> CrewsOfAsync(IReadOnlyCollection<ProjectId> projects, MemberReach<Project> reach, MemberReach<Project> manage, CancellationToken cancellationToken);
 
     /// <summary>
     /// What decides what the caller may do to each of <paramref name="projects"/> it sees, in one statement: the
-    /// project's state, the permissions of <paramref name="reach"/> held on it, and whether <paramref name="units"/>
-    /// holds any unit. A project the caller does not see is not in the answer; one it sees is, whatever it holds.
+    /// project's state, which of <paramref name="permissions"/> the caller holds on it, and whether <paramref name="units"/>
+    /// holds any unit. A project the caller does not see is not in the answer; one it sees is, whatever it holds. The
+    /// reading asks the projects' own set, for the caller current when it asks.
     /// </summary>
     /// <param name="projects">The projects asked about.</param>
-    /// <param name="reach">Which permissions are asked about, for the caller.</param>
+    /// <param name="permissions">The permissions asked about, of the catalogue, each once.</param>
     /// <param name="units">
     /// The units where the caller holds a permission asked at a unit, as a set not yet read, over this reading's rows:
     /// whether it is empty is answered inside the statement.
@@ -104,21 +106,22 @@ public interface IProjectReading : IAsyncDisposable
     /// <param name="cancellationToken">Cancels the query.</param>
     Task<IReadOnlyDictionary<ProjectId, ProjectStanding>> StandingOnAsync(
         IReadOnlyCollection<ProjectId> projects,
-        MemberPermissionReach<ProjectId> reach,
+        IReadOnlyCollection<string> permissions,
         IQueryable<OrganizationUnitId> units,
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// The permissions of <paramref name="reach"/> the caller holds on each of <paramref name="projects"/> it sees, through
-    /// its crew or through the organization, in one statement. A project the caller does not see, or holds none of
-    /// the permissions on, is not in the answer.
+    /// The permissions of <paramref name="permissions"/> the caller holds on each of <paramref name="projects"/> it sees,
+    /// through its crew or through the organization, in one statement. A project the caller does not see, or holds none
+    /// of the permissions on, is not in the answer. The reading asks the projects' own set, for the caller current when
+    /// it asks.
     /// </summary>
     /// <param name="projects">The projects asked about.</param>
-    /// <param name="reach">Which permissions are asked about, for the caller.</param>
+    /// <param name="permissions">The permissions asked about, of the catalogue, each once.</param>
     /// <param name="cancellationToken">Cancels the query.</param>
     Task<IReadOnlyDictionary<ProjectId, IReadOnlySet<string>>> PermissionsOnAsync(
         IReadOnlyCollection<ProjectId> projects,
-        MemberPermissionReach<ProjectId> reach,
+        IReadOnlyCollection<string> permissions,
         CancellationToken cancellationToken);
 
     /// <summary>
@@ -132,8 +135,8 @@ public interface IProjectReading : IAsyncDisposable
     /// <param name="cancellationToken">Cancels the query.</param>
     Task<IReadOnlyDictionary<ProjectId, ProjectAnswer>> AnswersAsync(
         IReadOnlyCollection<ProjectId> ids,
-        MemberReach<ProjectId> see,
-        MemberReach<ProjectId> act,
+        MemberReach<Project> see,
+        MemberReach<Project> act,
         CancellationToken cancellationToken);
 
     /// <summary>

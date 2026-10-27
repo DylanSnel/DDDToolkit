@@ -20,7 +20,10 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 public static class TenancyModelBuilderExtensions
 {
     /// <summary>The registration that brings the save check, as a context that lacks it is told to write it.</summary>
-    private const string TenancyRegistration = "services.AddTenancy<…, TContext>(…) of DDDToolkit.Supporting.Tenancy.EntityFramework";
+    internal const string TenancyRegistration = "services.AddTenancy<…, TContext>(…) of DDDToolkit.Supporting.Tenancy.EntityFramework";
+
+    /// <summary>The save check's own call on a context's options, as a context given the base alone is told to write it.</summary>
+    internal const string TenancyCall = "options.UseTenancy(serviceProvider)";
 
     /// <summary>
     /// Maps Tenancy's tables, closed over the application's classes and ids, into the context's default
@@ -335,6 +338,11 @@ public static class TenancyModelBuilderExtensions
     /// <c>UseDDDToolkit</c> adds (<c>UseTenancy</c> after <c>UseDDDToolkitCore</c>), and
     /// <see cref="TenancyChecks.EnsureWired"/> checks it.
     /// </para>
+    /// <para>
+    /// A class whose tenant is marked <c>[OfTenant]</c> in the domain needs no call: <see cref="OfTenantConvention"/>,
+    /// which <c>AddDDDToolkitConventions()</c> runs, gives it the same. Call this for a class without the marker, or for
+    /// a tenant the context holds elsewhere than in the marked property: the call wins over the marker.
+    /// </para>
     /// </summary>
     /// <typeparam name="TEntity">The entity.</typeparam>
     /// <typeparam name="TTenantId">The application's tenant id.</typeparam>
@@ -370,7 +378,7 @@ public static class TenancyModelBuilderExtensions
 
         // A context of this model cannot do without the save check: where it lacks it, because nothing registered
         // Tenancy or the context was given the base alone, its first save is refused rather than written unchecked.
-        entity.Metadata.Model.RequireContextPart(TenancySaveInterceptor.PartName, typeof(TenancySaveInterceptor), TenancyRegistration, "options.UseTenancy(serviceProvider)");
+        entity.Metadata.Model.RequireContextPart(TenancySaveInterceptor.PartName, typeof(TenancySaveInterceptor), TenancyRegistration, TenancyCall);
 
         // A row never moves to another tenant: Entity Framework refuses a save that changed the property, and the
         // privileges an export writes from the policies leave its column out of UPDATE.

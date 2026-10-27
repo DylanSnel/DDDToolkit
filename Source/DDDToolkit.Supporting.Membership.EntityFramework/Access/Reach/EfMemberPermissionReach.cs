@@ -1,15 +1,15 @@
 using DDDToolkit.Abstractions.Interfaces;
 using DDDToolkit.BaseTypes;
-using DDDToolkit.Supporting.Membership.Access;
 using Microsoft.EntityFrameworkCore;
 
 namespace DDDToolkit.Supporting.Membership.EntityFramework;
 
 /// <summary>
-/// The reach for several permissions the access questions of a resource stored with Entity Framework make: the
-/// reach that sees, and one reach for each permission asked about.
+/// The reach for several permissions the access manager of a resource stored with Entity Framework makes: the
+/// reach that sees, and one reach for each permission asked about. A permission on a resource the caller may not see
+/// is never answered, so asking about a resource says nothing about whether it exists.
 /// </summary>
-internal sealed class EfMemberPermissionReach<TResource, TResourceId, TMember, TId, TMemberId, TRoleId> : MemberPermissionReach<TResourceId>, IEfMemberPermissionReach<TResource, TResourceId>
+internal sealed class EfMemberPermissionReach<TResource, TResourceId, TMember, TId, TMemberId, TRoleId>
     where TResource : AggregateRoot<TResourceId>
     where TResourceId : struct, IEntityId, IEquatable<TResourceId>
     where TMember : MemberEntity<TId, TMemberId, TRoleId>
@@ -24,7 +24,6 @@ internal sealed class EfMemberPermissionReach<TResource, TResourceId, TMember, T
     public EfMemberPermissionReach(
         EfMemberReach<TResource, TResourceId, TMember, TId, TMemberId, TRoleId> see,
         IReadOnlyList<EfMemberReach<TResource, TResourceId, TMember, TId, TMemberId, TRoleId>> held)
-        : base(see, [.. held.Select(reach => reach.Permission!)])
     {
         _see = see;
         _held = held;
@@ -33,7 +32,10 @@ internal sealed class EfMemberPermissionReach<TResource, TResourceId, TMember, T
     /// <summary>Whether no permission asked about can be held by the caller at all, so there is nothing to read.</summary>
     public bool HoldsNothing => _held.All(reach => reach.Nothing);
 
-    /// <inheritdoc />
+    /// <summary>
+    /// The permissions held on those of <paramref name="resources"/> the caller sees, one row for each permission held
+    /// on a resource, by the resource's id: in a statement that runs on <paramref name="context"/>, or on the request's own.
+    /// </summary>
     /// <remarks>
     /// One part for each permission the caller can hold, each over the resources it sees, put together where the
     /// statement runs: a part per permission, since not every database can apply a set of permissions to each row.
@@ -66,4 +68,15 @@ internal sealed class EfMemberPermissionReach<TResource, TResourceId, TMember, T
 
         return held ?? seen.Where(resource => false).Select(resource => new MemberPermissionOn<TResourceId> { Resource = resource.Id, Permission = string.Empty });
     }
+
+    /// <summary>
+    /// The pairs of resource and permission <see cref="PermissionsOn"/> answers, with the resource itself in each: the
+    /// permissions put together first, by id, and each joined to its resource of <paramref name="resources"/>.
+    /// </summary>
+    public IQueryable<PermissionOn<TResource>> Pairs(IQueryable<TResource> resources, DbContext? context)
+        => PermissionsOn(resources, context).Join(
+            resources,
+            held => held.Resource,
+            resource => resource.Id,
+            (held, resource) => new PermissionOn<TResource> { Resource = resource, Permission = held.Permission });
 }

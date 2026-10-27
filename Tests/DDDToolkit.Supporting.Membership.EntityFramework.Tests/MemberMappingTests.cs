@@ -288,6 +288,24 @@ public sealed class MemberMappingTests
     }
 
     [Fact]
+    public void A_context_that_says_nothing_of_the_members_maps_them_by_convention_as_HasMembers_does()
+    {
+        // The members of a resource, mapped by the package's convention because the context said nothing of them: the
+        // same tables, columns, keys, indexes and marks as the call by hand.
+        var byHand = ModelOf(document => document.HasMembers(row => row.Shares));
+        var byConvention = ModelOf(_ => { });
+
+        byConvention.ToDebugString(Microsoft.EntityFrameworkCore.Infrastructure.MetadataDebugStringOptions.LongDefault).Should().Be(byHand.ToDebugString(Microsoft.EntityFrameworkCore.Infrastructure.MetadataDebugStringOptions.LongDefault));
+        MembershipModel.MembersOf(byConvention.FindEntityType(typeof(Document))!)!.Members.GetTableName().Should().Be("DocumentShares");
+
+        // What the context says by hand wins: its names, and a collection it ignores stays ignored.
+        var named = ModelOf(document => document.HasMembers(row => row.Shares, new MemberTableNames("Readers", "ReaderRoles")));
+        MembershipModel.MembersOf(named.FindEntityType(typeof(Document))!)!.Members.GetTableName().Should().Be("Readers");
+        var ignored = ModelOf(document => document.Ignore(row => row.Shares));
+        MembershipModel.MembersOf(ignored.FindEntityType(typeof(Document))!).Should().BeNull();
+    }
+
+    [Fact]
     public void The_owner_is_the_property_the_resource_marks_owner()
     {
         // Said once, on the class: the mapping reads it, and nothing names it again.

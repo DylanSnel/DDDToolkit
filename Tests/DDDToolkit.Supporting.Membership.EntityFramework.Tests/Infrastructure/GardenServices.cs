@@ -115,8 +115,8 @@ public sealed class GardenServices : IDisposable
     }
 
     /// <summary>The access questions about plots, asked as <paramref name="person"/>, in its garden.</summary>
-    public Task<T> PlotsAsync<T>(GardenPerson person, Func<IMemberQuestions<PlotId>, Task<T>> ask)
-        => AsAsync(person, provider => ask(provider.GetRequiredService<IMemberQuestions<PlotId>>()));
+    public Task<T> PlotsAsync<T>(GardenPerson person, Func<MembershipAccessManager<Plot>, Task<T>> ask)
+        => AsAsync(person, provider => ask(provider.GetRequiredService<MembershipAccessManager<Plot>>()));
 
     /// <summary>Does the application's own work in <paramref name="garden"/>, in a scope of its own, and answers what it found.</summary>
     public async Task<T> InAsync<T>(GardenId garden, Func<IServiceProvider, Task<T>> work)

@@ -28,7 +28,7 @@ public sealed class MembershipFunctionTests(FilingPostgres postgres)
             // The documents the caller sees, and those it is a member of: the same, for members that are users.
             var seenInCSharp = await filing.Services.AsAsync(caller, async provider =>
             {
-                var see = provider.GetRequiredService<IMemberQuestions<DocumentId>>().PermissionReach([]).See;
+                var see = provider.GetRequiredService<MembershipAccessManager<Document>>().ReachSeen();
                 return await provider.GetRequiredService<FilingContext>().Documents.Within(see).Select(document => document.Id.Value).ToListAsync(Cancellation);
             });
             var seen = data.DocumentsSeenBy(user).Select(id => id.Value).ToList();
@@ -40,7 +40,7 @@ public sealed class MembershipFunctionTests(FilingPostgres postgres)
             {
                 var heldInCSharp = await filing.Services.AsAsync(caller, async provider =>
                 {
-                    var reach = provider.GetRequiredService<IMemberQuestions<DocumentId>>().Reach(permission);
+                    var reach = provider.GetRequiredService<MembershipAccessManager<Document>>().Reach(permission);
                     return await provider.GetRequiredService<FilingContext>().Documents.Within(reach).Select(document => document.Id.Value).ToListAsync(Cancellation);
                 });
                 var held = data.DocumentsHeldBy(user, permission).Select(id => id.Value).ToList();
@@ -77,7 +77,7 @@ public sealed class MembershipFunctionTests(FilingPostgres postgres)
             {
                 var heldInCSharp = await filing.Services.AsAsync(caller, async provider =>
                 {
-                    var reach = provider.GetRequiredService<IMemberQuestions<FolderId>>().Reach(permission);
+                    var reach = provider.GetRequiredService<MembershipAccessManager<Folder>>().Reach(permission);
                     return await provider.GetRequiredService<FilingContext>().Folders.Within(reach).Select(folder => folder.Id.Value).ToListAsync(Cancellation);
                 });
                 var held = data.FoldersHeldBy(staff, permission).Select(id => id.Value).ToList();
@@ -301,9 +301,9 @@ public sealed class MembershipFunctionTests(FilingPostgres postgres)
         (await user.ListAsync<long>("SELECT id FROM filing.folders_where_i_hold($1) AS id", FolderPermissions.Read)).Should().BeEmpty();
 
         // And what C# answers for the same callers.
-        var hold = await filing.Services.AsAsync(Caller.SystemIn(FolderMembership.Scope), provider => provider.GetRequiredService<IMemberQuestions<FolderId>>().HoldAsync(data.Annex, FolderPermissions.Shred, Cancellation));
+        var hold = await filing.Services.AsAsync(Caller.SystemIn(FolderMembership.Scope), provider => provider.GetRequiredService<MembershipAccessManager<Folder>>().HoldAsync(data.Annex, FolderPermissions.Shred, Cancellation));
         hold!.Via.Should().Be(MemberVia.System);
-        (await filing.Services.AsAsync(Caller.SystemIn("other"), provider => provider.GetRequiredService<IMemberQuestions<FolderId>>().HoldAsync(data.Annex, FolderPermissions.Read, Cancellation))).Should().BeNull();
+        (await filing.Services.AsAsync(Caller.SystemIn("other"), provider => provider.GetRequiredService<MembershipAccessManager<Folder>>().HoldAsync(data.Annex, FolderPermissions.Read, Cancellation))).Should().BeNull();
     }
 
     [Fact]

@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- The markers are Membership's, in the package's own namespace, as an application names them beside its other types. -->
+    <RootNamespace>DDDToolkit.Supporting.Membership</RootNamespace>
+    <Title>Domain Driven Design Toolkit - Supporting domain: Membership abstractions</Title>
+    <PackageTags>ddd;domain;driven;design;toolkit;supporting;membership;members;abstractions</PackageTags>
+    <Description>Membership's markers for domain classes, such as [At] on the property that says where a resource hangs. No Entity Framework in it.</Description>
+  </PropertyGroup>
+
+  <!--
+    It declares no classes, ids or value objects, so no generator runs on it. Membership's own package references it, so
+    an application that has Membership has the markers as well, and Membership's generator, which ships in that package,
+    checks where they are put.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\DDDToolkit.Abstractions\DDDToolkit.Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>

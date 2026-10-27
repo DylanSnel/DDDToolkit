@@ -46,12 +46,12 @@ public sealed class SqliteFiling : IDisposable
     }
 
     /// <summary>The access questions about documents, asked as <paramref name="caller"/>.</summary>
-    public Task<T> DocumentsAsync<T>(Caller caller, Func<IMemberQuestions<DocumentId>, Task<T>> ask)
-        => Services.AsAsync(caller, provider => ask(provider.GetRequiredService<IMemberQuestions<DocumentId>>()));
+    public Task<T> DocumentsAsync<T>(Caller caller, Func<MembershipAccessManager<Document>, Task<T>> ask)
+        => Services.AsAsync(caller, provider => ask(provider.GetRequiredService<MembershipAccessManager<Document>>()));
 
     /// <summary>The access questions about folders, asked as <paramref name="caller"/>.</summary>
-    public Task<T> FoldersAsync<T>(Caller caller, Func<IMemberQuestions<FolderId>, Task<T>> ask)
-        => Services.AsAsync(caller, provider => ask(provider.GetRequiredService<IMemberQuestions<FolderId>>()));
+    public Task<T> FoldersAsync<T>(Caller caller, Func<MembershipAccessManager<Folder>, Task<T>> ask)
+        => Services.AsAsync(caller, provider => ask(provider.GetRequiredService<MembershipAccessManager<Folder>>()));
 
     /// <inheritdoc />
     public void Dispose()

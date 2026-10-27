@@ -109,6 +109,10 @@ projects build with 0 warnings.
 - **Custom role**: a role stored as a row of the tenant. The tenant may rename it and change it. The role template
   has the name, the permissions, and the starter role it was made from. You add the role's tenant, `TenantId`,
   yourself, because Membership does not know about tenants.
+- **The tenant of a row**: `[OfTenant]` marks the property that says which tenant a board or a role belongs to. The
+  marker is a fact about the class, like `[Owner]`, so it goes on the domain class. It comes from Tenancy's markers
+  package, `Supporting.Tenancy.Abstractions`, which has nothing else of Tenancy's. Step 3 shows what the context does
+  with it.
 - **The rules are passed in**: the role checks its permissions against the rules (step 2). The rules live in the
   application layer, and the role's constructor takes them. The domain describes what a board is. The application
   layer decides who may do what with a board.
@@ -118,12 +122,13 @@ projects build with 0 warnings.
 
 ### What you write
 
-**The package versions**, at the root. **Why:** this adds the three Membership packages, and Tenancy's Entity
-Framework package. Boards' context uses that package to read Tenancy's rows (step 3). All versions stay in one file.
+**The package versions**, at the root. **Why:** this adds the three Membership packages, Tenancy's Entity Framework
+package and Tenancy's markers package. Boards' context uses the Entity Framework package to read Tenancy's rows
+(step 3). Boards' domain project takes `[OfTenant]` from the markers package. All versions stay in one file.
 
 **`Directory.Packages.props`**
 
-```xml {10-13}
+```xml {10-14}
 <Project>
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
@@ -134,6 +139,7 @@ Framework package. Boards' context uses that package to read Tenancy's rows (ste
     <PackageVersion Include="Temp.DDDToolkit.Supporting.Tenancy" Version="3.2.0-preview.5" />
     <PackageVersion Include="Temp.DDDToolkit.Supporting.Tenancy.Postgres" Version="3.2.0-preview.5" />
     <PackageVersion Include="Temp.DDDToolkit.Supporting.Tenancy.EntityFramework" Version="3.2.0-preview.5" />
+    <PackageVersion Include="Temp.DDDToolkit.Supporting.Tenancy.Abstractions" Version="3.2.0-preview.5" />
     <PackageVersion Include="Temp.DDDToolkit.Supporting.Membership" Version="3.2.0-preview.5" />
     <PackageVersion Include="Temp.DDDToolkit.Supporting.Membership.EntityFramework" Version="3.2.0-preview.5" />
     <PackageVersion Include="Temp.DDDToolkit.Supporting.Membership.Postgres" Version="3.2.0-preview.5" />
@@ -165,16 +171,19 @@ the toolkit's core package.
 ```
 
 **The domain project.** **Why:** it gets the member and role templates, and the generator that writes the member
-list. From Tenancy, it references only the contracts project. A board stores Tenancy's ids and cannot change a seat.
+list. From Tenancy, it references the contracts project and the markers package, for `[OfTenant]`. A board stores
+Tenancy's ids and cannot change a seat.
 
 **`src/Modules/Boards/Harbor.Boards.Domain/Harbor.Boards.Domain.csproj`**
 
-```xml {5,11}
+```xml {5,7,13}
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!-- The board classes: a board, the seats on it, and the roles a tenant keeps for boards. -->
   <ItemGroup>
     <PackageReference Include="Temp.DDDToolkit.Supporting.Membership" />
+    <!-- [OfTenant], Tenancy's marker of the tenant a board or a role belongs to, and nothing else of Tenancy's. -->
+    <PackageReference Include="Temp.DDDToolkit.Supporting.Tenancy.Abstractions" />
   </ItemGroup>
 
   <ItemGroup>
@@ -246,8 +255,9 @@ change to them raises the board's version. The board does not read a clock, so t
 
 **`Harbor.Boards.Domain/Aggregates/Boards/Board.cs`**
 
-```csharp {17,26-27,29}
+```csharp {18,21,28-29,31}
 using DDDToolkit.Abstractions.Attributes;
+using DDDToolkit.Supporting.Tenancy;
 using Harbor.Boards.Contracts.ValueObjects;
 using Harbor.Boards.Domain.Aggregates.Boards.Entities;
 using Harbor.Tenancy.Contracts.ValueObjects;
@@ -266,6 +276,7 @@ public sealed partial class Board
         Members.Open(now);
     }
 
+    [OfTenant]
     public TenantId TenantId { get; private set; }
 
     public OrganizationUnitId UnitId { get; private set; }
@@ -279,14 +290,15 @@ public sealed partial class Board
 }
 ```
 
-**The role class.** **Why:** a role belongs to a tenant, so it has a `TenantId`. The constructor takes the rules, so
-a role cannot give a permission that the rules do not allow in a role.
+**The role class.** **Why:** a role belongs to a tenant, so it has a `TenantId`, marked `[OfTenant]`. The constructor
+takes the rules, so a role cannot give a permission that the rules do not allow in a role.
 
 **`Harbor.Boards.Domain/Aggregates/BoardRoles/BoardRole.cs`**
 
-```csharp {9,12-13,15}
+```csharp {10,13-14,16-17}
 using DDDToolkit.Supporting.Membership;
 using DDDToolkit.Supporting.Membership.Access;
+using DDDToolkit.Supporting.Tenancy;
 using Harbor.Boards.Domain.Aggregates.BoardRoles.ValueObjects;
 using Harbor.Boards.Domain.Aggregates.Boards;
 using Harbor.Tenancy.Contracts.ValueObjects;
@@ -299,6 +311,7 @@ public sealed partial class BoardRole
     public BoardRole(BoardRoleId id, TenantId tenantId, CustomRoleDraft draft, MembershipRules rules) : base(id, draft, rules)
         => TenantId = tenantId;
 
+    [OfTenant]
     public TenantId TenantId { get; private set; }
 }
 ```
@@ -478,17 +491,21 @@ step 4 from this model.
 **What we want.** A context for Boards with its tables in the schema `boards`, the first migration, and a mark on the
 rules for the export.
 
-### The idea: one call maps the members in your context
+### The idea: the conventions map the board and the role
 
 - Boards has its own context and its own schema, like Tenancy.
-- `HasMembers(row => row.People)` maps the two member tables: the members, and the roles each member holds. The board
-  owns both tables, and they are saved with the board. The owner is the property marked `[Owner]`.
-- `IsCustomRole()` maps the columns Membership adds to a role row: name, description, permissions, status, and the
-  starter role the role was made from (`MadeFrom`).
-- **The role's tenant is yours to map**: you add two unique indexes. One allows each role name once per tenant. The
-  other allows each starter role once per tenant.
-- `ScopeToTenant` adds Tenancy's tenant filter and save check to the board and to the role, as for every class that
-  belongs to a tenant.
+- **Conventions**: `AddDDDToolkitConventions()` in `ConfigureConventions` runs the conventions that the markers on your
+  classes name. `[Member<...>]` and `[CustomRole<...>]` name Membership's, and `[OfTenant]` names Tenancy's. You write
+  no line for the board or the role in `OnModelCreating`.
+- **The members**: the board's collection of `BoardMember` becomes two tables: the members, and the roles each member
+  holds. The board owns both tables, and they are saved with the board. The owner is the property marked `[Owner]`.
+  `HasMembers(row => row.People, names)` in `OnModelCreating` does the same by hand, for table names of your own.
+- **The role**: Membership maps the columns it adds to a role row: name, description, permissions, status, and the
+  starter role the role was made from (`MadeFrom`). The role marks its tenant, so Membership also adds two unique
+  indexes. One allows each role name once per tenant. The other allows each starter role once per tenant.
+- **The tenant filter and the save check**: Tenancy's convention adds both to every class with a property marked
+  `[OfTenant]`, here the board and the role. A query returns only the rows of the caller's tenant. The save check
+  refuses a row of another tenant.
 - `AddTenancyReadFunctions` maps Tenancy's rows, the rights and the units, through Tenancy's database functions. So a
   question such as "does Rhea hold `boards.create` at North" becomes part of this context's query. The query reads
   no Tenancy table directly. Boards knows Tenancy's ids but not its classes, so the call names the four id types.
@@ -529,15 +546,14 @@ joins Membership to Tenancy (step 5).
 </Project>
 ```
 
-**The context.** **Why:** your context builds the model. It says which collection is the member list, what the tables
-are called, and which tenant a role belongs to.
+**The context.** **Why:** your context builds the model. It reads Tenancy's rows, and leaves the board and the role to
+the conventions.
 
 **`Harbor.Boards.Infrastructure/Persistence/BoardsContext.cs`**
 
-```csharp {27,31-32,37-40,48}
+```csharp {26,28,33,35}
 using DDDToolkit.EntityFramework.Conventions;
 using DDDToolkit.EntityFramework.Supabase;
-using DDDToolkit.Supporting.Membership.EntityFramework;
 using DDDToolkit.Supporting.Tenancy.EntityFramework;
 using Harbor.Boards.Domain.Aggregates.BoardRoles;
 using Harbor.Boards.Domain.Aggregates.Boards;
@@ -563,19 +579,7 @@ public sealed class BoardsContext(DbContextOptions<BoardsContext> options) : DbC
         // Tenancy's rows, read through its functions, so a question about the organization is part of this context's queries.
         modelBuilder.AddTenancyReadFunctions<TenantId, SeatId, OrganizationUnitId, RoleId>("tenancy");
 
-        modelBuilder.Entity<Board>(board =>
-        {
-            board.ScopeToTenant(row => row.TenantId);
-            board.HasMembers(row => row.People);
-        });
-
-        modelBuilder.Entity<BoardRole>(role =>
-        {
-            role.IsCustomRole();
-            role.ScopeToTenant(row => row.TenantId);
-            role.HasIndex(row => new { row.TenantId, row.Name }).IsUnique();
-            role.HasIndex(row => new { row.TenantId, row.MadeFrom }).IsUnique();
-        });
+        // The conventions map the members, the role, the tenant and the role's two indexes.
     }
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
@@ -624,6 +628,8 @@ dotnet ef migrations add Boards --project src/Modules/Boards/Harbor.Boards.Infra
   contracts, as their `Guid`.
 - The migration creates the schema `boards` with four tables: `Boards`, `BoardPeople` (the members, named after the
   board and its collection), `BoardMemberRoles` and `BoardRoles`. It creates none of Tenancy's tables.
+- The role's two unique indexes are in the migration too, as `IX_BoardRoles_TenantId_Name` and
+  `IX_BoardRoles_TenantId_MadeFrom`.
 
 > **Going further.** Your own table and column names: [Several kinds of resource](resources-and-members.md#several-kinds-of-resource).
 
@@ -1154,12 +1160,11 @@ not see it yet.
 
 - **Hidden boards**: for a board the caller does not see, the answer is `404`, `boards.not-found`. An id that is not a
   board gets the same answer, so a caller cannot find out that a board exists.
-- **Reach**: `IMemberQuestions<BoardId>.Reach(permission)` returns a `MemberReach<BoardId>`. It describes the boards
-  the caller holds the permission on, and runs no query by itself. `Within(reach)` adds it to an Entity Framework
-  query, so the list is one SQL statement. The code never loads the ids first.
+- **The boards I hold a permission on**: `db.Boards.WhereIHold(permission)` adds the boards the caller holds the
+  permission on to an Entity Framework query, so the list is one SQL statement. The code never loads the ids first.
 - **Repository**: the handlers load and save boards through `IBoardRepository`. The interface is in the application
-  project, and the infrastructure project implements it. The handler passes the reach to the repository, because
-  `Within` is part of an Entity Framework query.
+  project, and the infrastructure project implements it. The repository asks `WhereIHold`, because it is part of an
+  Entity Framework query.
 - **The owner is the caller**: the handler gets the caller's tenant and seat from `ITenancy` with `RequireTenant()`.
   The create rule of step 4 makes the database check the same.
 
@@ -1180,7 +1185,7 @@ public interface IBoardRepository
 
     Task<Board?> FindAsync(BoardId id, CancellationToken cancellationToken);
 
-    Task<IReadOnlyList<Board>> ListAsync(MemberReach<BoardId> reach, CancellationToken cancellationToken);
+    Task<IReadOnlyList<Board>> ListVisibleAsync(CancellationToken cancellationToken);
 
     Task SaveAsync(CancellationToken cancellationToken);
 }
@@ -1189,8 +1194,8 @@ public interface IBoardRepository
 **`Harbor.Boards.Infrastructure/Persistence/BoardRepository.cs`**
 
 ```csharp {18}
-using DDDToolkit.Supporting.Membership.Access;
 using DDDToolkit.Supporting.Membership.EntityFramework;
+using Harbor.Boards.Application.Access;
 using Harbor.Boards.Application.Boards;
 using Harbor.Boards.Contracts.ValueObjects;
 using Harbor.Boards.Domain.Aggregates.Boards;
@@ -1205,8 +1210,8 @@ internal sealed class BoardRepository(BoardsContext db) : IBoardRepository
     public Task<Board?> FindAsync(BoardId id, CancellationToken cancellationToken)
         => db.Boards.SingleOrDefaultAsync(board => board.Id == id, cancellationToken);
 
-    public async Task<IReadOnlyList<Board>> ListAsync(MemberReach<BoardId> reach, CancellationToken cancellationToken)
-        => await db.Boards.Within(reach).OrderBy(board => board.Name).ToListAsync(cancellationToken);
+    public async Task<IReadOnlyList<Board>> ListVisibleAsync(CancellationToken cancellationToken)
+        => await db.Boards.WhereIHold(BoardPermissions.View).OrderBy(board => board.Name).ToListAsync(cancellationToken);
 
     public Task SaveAsync(CancellationToken cancellationToken) => db.SaveChangesAsync(cancellationToken);
 }
@@ -1316,20 +1321,19 @@ contains.
 
 **`Harbor.Boards.Application/Boards/ListBoards/ListBoards.cs`**
 
-```csharp {3-4,12-13}
+```csharp {3-4,12}
 namespace Harbor.Boards.Application.Boards.ListBoards;
 
 [SeenWith<BoardId>(BoardPermissions.View)]
 public sealed record ListBoards : IQuery<IReadOnlyList<BoardListing>>, IBoardsRequest;
 
-public sealed class ListBoardsHandler(IMemberQuestions<BoardId> questions, IBoardRepository boards)
+public sealed class ListBoardsHandler(IBoardRepository boards)
     : IQueryHandler<ListBoards, IReadOnlyList<BoardListing>>
 {
     public async ValueTask<IReadOnlyList<BoardListing>> Handle(ListBoards query, CancellationToken cancellationToken)
     {
-        // The boards the caller holds boards.view on, as part of the query: never the ids first.
-        var seen = questions.Reach(BoardPermissions.View);
-        var found = await boards.ListAsync(seen, cancellationToken);
+        // The boards the caller holds boards.view on, as part of the repository's query: never the ids first.
+        var found = await boards.ListVisibleAsync(cancellationToken);
         return [.. found.Select(board => new BoardListing(board.Id, board.Name, board.UnitId, board.OwnerSeatId))];
     }
 }
@@ -1410,7 +1414,7 @@ public static class BoardsModule
 - `MemberOverviews.From(...)` puts the members in the standard order: the owner first, then by the start of each
   membership. It runs no query.
 - `board.Version`: the board's version, which every save that changes the board or its members raises.
-- `Within(reach)` adds the boards Rhea holds `boards.view` on as a subquery, in the same statement.
+- `WhereIHold(BoardPermissions.View)` adds the boards Rhea holds `boards.view` on as a subquery, in the same statement.
 
 ### Try it
 
@@ -1473,9 +1477,10 @@ is "a closed board takes no new members". The member list applies the other rule
 
 **`Harbor.Boards.Domain/Aggregates/Boards/Board.cs`**
 
-```csharp {2,4,33,35-37}
+```csharp {2,5,35,37-39}
 using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.Supporting.Membership;
+using DDDToolkit.Supporting.Tenancy;
 using Harbor.Boards.Contracts.ValueObjects;
 using Harbor.Boards.Domain.Aggregates.BoardRoles.ValueObjects;
 using Harbor.Boards.Domain.Aggregates.Boards.Entities;
@@ -1495,6 +1500,7 @@ public sealed partial class Board
         Members.Open(now);
     }
 
+    [OfTenant]
     public TenantId TenantId { get; private set; }
 
     public OrganizationUnitId UnitId { get; private set; }
@@ -1891,9 +1897,10 @@ board he is a member of.
 
 **`Harbor.Boards.Domain/Aggregates/Boards/Board.cs`**
 
-```csharp {24-25}
+```csharp {26-27}
 using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.Supporting.Membership;
+using DDDToolkit.Supporting.Tenancy;
 using Harbor.Boards.Contracts.ValueObjects;
 using Harbor.Boards.Domain.Aggregates.BoardRoles.ValueObjects;
 using Harbor.Boards.Domain.Aggregates.Boards.Entities;
@@ -1913,6 +1920,7 @@ public sealed partial class Board
         Members.Open(now);
     }
 
+    [OfTenant]
     public TenantId TenantId { get; private set; }
 
     // Where the board hangs: a permission held here, or above, reaches the board.
@@ -1955,10 +1963,9 @@ public static class BoardMembership
 
 **`Harbor.Boards.Infrastructure/Persistence/BoardsContext.cs`**
 
-```csharp {34-35}
+```csharp {29-33}
 using DDDToolkit.EntityFramework.Conventions;
 using DDDToolkit.EntityFramework.Supabase;
-using DDDToolkit.Supporting.Membership.EntityFramework;
 using DDDToolkit.Supporting.Tenancy.EntityFramework;
 using Harbor.Boards.Domain.Aggregates.BoardRoles;
 using Harbor.Boards.Domain.Aggregates.Boards;
@@ -1984,21 +1991,11 @@ public sealed class BoardsContext(DbContextOptions<BoardsContext> options) : DbC
         // Tenancy's rows, read through its functions, so a question about the organization is part of this context's queries.
         modelBuilder.AddTenancyReadFunctions<TenantId, SeatId, OrganizationUnitId, RoleId>("tenancy");
 
+        // The conventions map the members, the role, the tenant and the role's two indexes.
         modelBuilder.Entity<Board>(board =>
         {
-            board.ScopeToTenant(row => row.TenantId);
-            board.HasMembers(row => row.People);
-
             // Where a board hangs decides who reaches it from above, so no statement moves it once it is there.
             board.Property(row => row.UnitId).IsFixedAfterInsert();
-        });
-
-        modelBuilder.Entity<BoardRole>(role =>
-        {
-            role.IsCustomRole();
-            role.ScopeToTenant(row => row.TenantId);
-            role.HasIndex(row => new { row.TenantId, row.Name }).IsUnique();
-            role.HasIndex(row => new { row.TenantId, row.MadeFrom }).IsUnique();
         });
     }
 

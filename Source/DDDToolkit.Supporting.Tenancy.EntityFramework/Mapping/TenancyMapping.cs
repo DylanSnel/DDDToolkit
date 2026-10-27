@@ -40,8 +40,8 @@ internal static class TenancyMapping
     internal const int EnumLength = 32;
 
     /// <summary>
-    /// The annotation <see cref="TenancyModelBuilderExtensions.ScopeToTenant"/> puts on an entity type: the name of
-    /// the property that holds its tenant, which the save check reads.
+    /// The annotation <see cref="TenancyModelBuilderExtensions.ScopeToTenant"/> and <see cref="OfTenantConvention"/> put on
+    /// an entity type: the name of the property that holds its tenant, which the save check reads.
     /// </summary>
     internal const string TenantPropertyAnnotation = "DDDToolkit:Tenancy:TenantProperty";
 

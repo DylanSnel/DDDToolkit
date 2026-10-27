@@ -339,6 +339,7 @@ public class MembershipDiagnosticTests
             Board(),
             """
             using DDDToolkit.Abstractions.Attributes;
+            using DDDToolkit.Supporting.Membership;
 
             namespace Shop;
 

@@ -162,7 +162,7 @@ public sealed class AccessStatementTests(SampleHosts hosts) : IClassFixture<Samp
             await using var scope = sample.Services.CreateAsyncScope();
             counter.WatchThisFlow();
 
-            var hold = await scope.ServiceProvider.GetRequiredService<IMemberQuestions<ProjectId>>().RequireAsync(depot, ProjectPermissionNames.Edit, Cancellation);
+            var hold = await scope.ServiceProvider.GetRequiredService<MembershipAccessManager<Project>>().RequireAsync(depot, ProjectPermissionNames.Edit, Cancellation);
 
             // Whether she sees it, how she holds the permission on it, and its version, in the one statement: her
             // membership, and in it a role that gives the permission.
@@ -182,7 +182,7 @@ public sealed class AccessStatementTests(SampleHosts hosts) : IClassFixture<Samp
             await using var scope = sample.Services.CreateAsyncScope();
             counter.WatchThisFlow();
 
-            var hold = await scope.ServiceProvider.GetRequiredService<IMemberQuestions<ProjectId>>().RequireAsync(bridge, ProjectPermissionNames.ChangeOwner, Cancellation);
+            var hold = await scope.ServiceProvider.GetRequiredService<MembershipAccessManager<Project>>().RequireAsync(bridge, ProjectPermissionNames.ChangeOwner, Cancellation);
 
             counter.Commands.Should().ContainSingle();
             hold.Via.Should().Be(MemberVia.Above, "naming an owner never comes through a crew");
@@ -211,7 +211,7 @@ public sealed class AccessStatementTests(SampleHosts hosts) : IClassFixture<Samp
             await using var scope = sample.Services.CreateAsyncScope();
             counter.WatchThisFlow();
 
-            var hold = await scope.ServiceProvider.GetRequiredService<IMemberQuestions<ProjectId>>().RequireAsync(depot, ProjectPermissionNames.ChangeOwner, Cancellation);
+            var hold = await scope.ServiceProvider.GetRequiredService<MembershipAccessManager<Project>>().RequireAsync(depot, ProjectPermissionNames.ChangeOwner, Cancellation);
 
             counter.Commands.Should().ContainSingle().Which.Should().NotContain(CallerPermissions);
             hold.Via.Should().Be(MemberVia.System);
@@ -544,7 +544,7 @@ public sealed class AccessStatementTests(SampleHosts hosts) : IClassFixture<Samp
     }
 
     /// <summary>The projects the current caller reaches with <see cref="ProjectPermissionNames.View"/>, read through the port, counted.</summary>
-    private static async Task<(MemberReach<ProjectId> Reach, IReadOnlyList<ProjectOverview> Projects)> ListedAsync(SampleFactory sample, CommandCounter counter)
+    private static async Task<(MemberReach<Project> Reach, IReadOnlyList<ProjectOverview> Projects)> ListedAsync(SampleFactory sample, CommandCounter counter)
     {
         await using var scope = sample.Services.CreateAsyncScope();
         var access = scope.ServiceProvider.GetRequiredService<ProjectAccess>();

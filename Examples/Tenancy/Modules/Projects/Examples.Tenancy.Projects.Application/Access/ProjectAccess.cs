@@ -4,8 +4,8 @@ namespace Examples.Tenancy.Projects.Application.Access;
 
 /// <summary>
 /// Who may see a project and act on it, for the current caller, as this module asks it: the Membership package's
-/// questions about projects, put into this module's own statements, and Tenancy's, where a permission is asked at a unit.
-/// It is also the <see cref="IProjectGate"/> other modules ask.
+/// access manager of projects, whose reaches go into this module's own statements, and Tenancy's, where a permission is
+/// asked at a unit. It is also the <see cref="IProjectGate"/> other modules ask.
 /// </summary>
 /// <remarks>
 /// A seat reaches a project in two ways, and the package asks both inside one statement: a role held at the
@@ -21,11 +21,11 @@ namespace Examples.Tenancy.Projects.Application.Access;
 /// instance a request has serves its queries whichever run at once.
 /// </para>
 /// </remarks>
-/// <param name="members">The Membership package's questions about projects, for the current caller.</param>
+/// <param name="members">The Membership package's access manager of projects, for the current caller.</param>
 /// <param name="reads">Where projects, and Tenancy's rows next to them, are read: a context per reading.</param>
 /// <param name="tenancy">Tenancy, asked about the current caller.</param>
 /// <param name="catalogue">The permissions the application knows.</param>
-public sealed class ProjectAccess(IMemberQuestions<ProjectId> members, IProjectReads reads, TenancyAccessManager tenancy, TenancyCatalogue catalogue) : IProjectGate
+public sealed class ProjectAccess(MembershipAccessManager<Project> members, IProjectReads reads, TenancyAccessManager tenancy, TenancyCatalogue catalogue) : IProjectGate
 {
     /// <summary>
     /// Tenancy's queries about the current caller, in a reading's rows. Everything in this project that asks
@@ -51,7 +51,7 @@ public sealed class ProjectAccess(IMemberQuestions<ProjectId> members, IProjectR
     /// </summary>
     /// <param name="permission">A permission of the catalogue.</param>
     /// <exception cref="ArgumentException">The catalogue does not know <paramref name="permission"/>.</exception>
-    public MemberReach<ProjectId> ReachFor(string permission) => members.Reach(Known(permission));
+    public MemberReach<Project> ReachFor(string permission) => members.Reach(Known(permission));
 
     /// <summary>
     /// The two reaches a crew is read with: which projects the caller sees, and on which of them it holds
@@ -60,7 +60,7 @@ public sealed class ProjectAccess(IMemberQuestions<ProjectId> members, IProjectR
     /// </summary>
     /// <param name="permission">A permission of the catalogue, asked about on each project that is seen.</param>
     /// <exception cref="ArgumentException">The catalogue does not know <paramref name="permission"/>.</exception>
-    public (MemberReach<ProjectId> See, MemberReach<ProjectId> Hold) SeenAndHeld(string permission)
+    public (MemberReach<Project> See, MemberReach<Project> Hold) SeenAndHeld(string permission)
     {
         // The permission that was asked about first, so an unknown one is refused before anything else is.
         var hold = ReachFor(permission);
@@ -68,16 +68,17 @@ public sealed class ProjectAccess(IMemberQuestions<ProjectId> members, IProjectR
     }
 
     /// <summary>
-    /// Which of <paramref name="permissions"/> the caller holds on which projects, as sets a reading puts into one
-    /// statement. Only projects the caller sees are answered about.
+    /// <paramref name="permissions"/>, each once, when the catalogue knows every one: what a reading asks of the projects'
+    /// own set, which of them the caller holds on which projects, in one statement. Only projects the caller sees are
+    /// answered about.
     /// </summary>
     /// <param name="permissions">Permissions of the catalogue. A retired one is held nowhere.</param>
     /// <exception cref="ArgumentException">The catalogue does not know one of <paramref name="permissions"/>.</exception>
-    public MemberPermissionReach<ProjectId> PermissionsReachFor(IReadOnlyCollection<string> permissions)
+    public IReadOnlyList<string> KnownPermissions(IReadOnlyCollection<string> permissions)
     {
         ArgumentNullException.ThrowIfNull(permissions);
 
-        return members.PermissionReach([.. permissions.Distinct(StringComparer.Ordinal).Select(Known)]);
+        return [.. permissions.Distinct(StringComparer.Ordinal).Select(Known)];
     }
 
     /// <summary>

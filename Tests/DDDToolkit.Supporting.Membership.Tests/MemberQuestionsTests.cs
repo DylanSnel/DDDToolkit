@@ -18,7 +18,7 @@ public sealed class MemberQuestionsTests
     public async Task A_permission_that_is_held_answers_the_resource_its_version_how_it_is_held_and_until_when()
     {
         var nextWeek = new DateTimeOffset(2026, 10, 8, 9, 0, 0, TimeSpan.Zero);
-        var access = new StubAccess<DocumentId>(DocumentMembership.Rules) { Until = nextWeek }
+        var access = new StubAccess<Document, DocumentId>(DocumentMembership.Rules) { Until = nextWeek }
             .Sees(Minutes, version: 4, (DocumentPermissions.View, MemberVia.Members), (DocumentPermissions.Edit, MemberVia.Members));
 
         var hold = await access.RequireAsync(Minutes, DocumentPermissions.Edit, Cancellation);
@@ -34,7 +34,7 @@ public sealed class MemberQuestionsTests
     [Fact]
     public async Task A_resource_the_caller_does_not_see_is_not_found_exactly_as_one_that_does_not_exist()
     {
-        var access = new StubAccess<DocumentId>(DocumentMembership.Rules).Sees(Minutes, version: 4, (DocumentPermissions.View, MemberVia.Members));
+        var access = new StubAccess<Document, DocumentId>(DocumentMembership.Rules).Sees(Minutes, version: 4, (DocumentPermissions.View, MemberVia.Members));
 
         var unseen = await Refused.WithCodeAsync(DocumentRefusals.Membership, MembershipRefusals.NotFound, () => access.RequireAsync(Hidden, DocumentPermissions.Edit, Cancellation));
         var missing = await Refused.WithCodeAsync(DocumentRefusals.Membership, MembershipRefusals.NotFound, () => access.RequireAsync(DocumentId.CreateSequential(), DocumentPermissions.View, Cancellation));
@@ -50,7 +50,7 @@ public sealed class MemberQuestionsTests
     [Fact]
     public async Task A_resource_the_caller_sees_without_holding_the_permission_is_not_permitted_and_names_the_permission()
     {
-        var access = new StubAccess<DocumentId>(DocumentMembership.Rules).Sees(Minutes, version: 4, (DocumentPermissions.View, MemberVia.Members));
+        var access = new StubAccess<Document, DocumentId>(DocumentMembership.Rules).Sees(Minutes, version: 4, (DocumentPermissions.View, MemberVia.Members));
 
         var refusal = await Refused.WithCodeAsync(DocumentRefusals.Membership, MembershipRefusals.NotPermitted, () => access.RequireAsync(Minutes, DocumentPermissions.Share, Cancellation));
 
@@ -64,7 +64,7 @@ public sealed class MemberQuestionsTests
     public async Task A_caller_that_is_nobody_is_refused_as_nobody_before_anything_is_read()
     {
         var nobody = new RefusalException("host.not-signed-in", RefusalKind.NotPermitted, "Sign in first.");
-        var access = new StubAccess<DocumentId>(DocumentMembership.Rules) { Nobody = nobody }.Sees(Minutes, version: 4, (DocumentPermissions.View, MemberVia.Members));
+        var access = new StubAccess<Document, DocumentId>(DocumentMembership.Rules) { Nobody = nobody }.Sees(Minutes, version: 4, (DocumentPermissions.View, MemberVia.Members));
 
         var refused = await FluentActions.Awaiting(() => access.RequireAsync(Minutes, DocumentPermissions.View, Cancellation)).Should().ThrowAsync<RefusalException>();
 
@@ -84,7 +84,7 @@ public sealed class MemberQuestionsTests
     [Fact]
     public async Task How_a_permission_is_held_is_answered_for_a_resource_the_caller_sees_and_refused_only_for_one_it_does_not()
     {
-        var access = new StubAccess<DocumentId>(DocumentMembership.Rules).Sees(Minutes, version: 4, (DocumentPermissions.View, MemberVia.Members), (DocumentPermissions.Edit, MemberVia.System));
+        var access = new StubAccess<Document, DocumentId>(DocumentMembership.Rules).Sees(Minutes, version: 4, (DocumentPermissions.View, MemberVia.Members), (DocumentPermissions.Edit, MemberVia.System));
 
         (await access.ViaAsync(Minutes, DocumentPermissions.View, Cancellation)).Should().Be(MemberVia.Members);
         (await access.ViaAsync(Minutes, DocumentPermissions.Edit, Cancellation)).Should().Be(MemberVia.System);
@@ -98,8 +98,8 @@ public sealed class MemberQuestionsTests
     [Fact]
     public async Task Each_kind_of_resource_is_asked_through_its_own_questions_and_refused_under_its_own_codes()
     {
-        var documents = new StubAccess<DocumentId>(DocumentMembership.Rules).Sees(Minutes, version: 1, (DocumentPermissions.View, MemberVia.Members));
-        var folders = new StubAccess<FolderId>(FolderMembership.Rules).Sees(new FolderId(7), version: 9, (FolderPermissions.Read, MemberVia.Members));
+        var documents = new StubAccess<Document, DocumentId>(DocumentMembership.Rules).Sees(Minutes, version: 1, (DocumentPermissions.View, MemberVia.Members));
+        var folders = new StubAccess<Folder, FolderId>(FolderMembership.Rules).Sees(new FolderId(7), version: 9, (FolderPermissions.Read, MemberVia.Members));
 
         (await Refused.WithCodeAsync(DocumentRefusals.Membership, MembershipRefusals.NotPermitted, () => documents.RequireAsync(Minutes, DocumentPermissions.Edit, Cancellation)))
             .Code.Should().Be("documents.not-permitted");
@@ -115,11 +115,11 @@ public sealed class MemberQuestionsTests
     [Fact]
     public async Task A_question_is_asked_with_a_permission()
     {
-        var access = new StubAccess<DocumentId>(DocumentMembership.Rules);
+        var access = new StubAccess<Document, DocumentId>(DocumentMembership.Rules);
 
         await FluentActions.Awaiting(() => access.RequireAsync(Minutes, " ", Cancellation)).Should().ThrowAsync<ArgumentException>();
         await FluentActions.Awaiting(() => access.ViaAsync(Minutes, "", Cancellation)).Should().ThrowAsync<ArgumentException>();
-        await FluentActions.Awaiting(() => ((IMemberQuestions<DocumentId>)null!).RequireAsync(Minutes, DocumentPermissions.View, Cancellation)).Should().ThrowAsync<ArgumentNullException>();
+        await FluentActions.Awaiting(() => ((MembershipAccessManager<Document>)null!).RequireAsync(Minutes, DocumentPermissions.View, Cancellation)).Should().ThrowAsync<ArgumentNullException>();
         access.Asked.Should().BeEmpty("a question that is not one is refused before anything is asked");
     }
 
@@ -127,7 +127,7 @@ public sealed class MemberQuestionsTests
     public void A_reach_says_how_a_resource_it_was_read_with_is_reached_members_first()
     {
         var moment = new DateTimeOffset(2026, 10, 1, 9, 0, 0, TimeSpan.Zero);
-        var reach = new StubAccess<DocumentId>(DocumentMembership.Rules) { Now = moment }.Reach(DocumentPermissions.Edit);
+        var reach = new StubAccess<Document, DocumentId>(DocumentMembership.Rules) { Now = moment }.Reach(DocumentPermissions.Edit);
 
         (reach.Permission, reach.Now, reach.Everything).Should().Be((DocumentPermissions.Edit, moment, false));
         reach.Via(asMember: true).Should().Be(MemberVia.Members);
@@ -136,7 +136,7 @@ public sealed class MemberQuestionsTests
         reach.Via(asMember: false).Should().BeNull("the resource is not within the reach");
 
         // The application's own work reaches everything, by neither way.
-        var system = new StubAccess<DocumentId>(DocumentMembership.Rules) { System = true }.Reach(DocumentPermissions.Edit);
+        var system = new StubAccess<Document, DocumentId>(DocumentMembership.Rules) { System = true }.Reach(DocumentPermissions.Edit);
         system.Everything.Should().BeTrue();
         system.Via(asMember: false).Should().Be(MemberVia.System);
         system.Via(asMember: true, fromAbove: true).Should().Be(MemberVia.System);
@@ -149,31 +149,54 @@ public sealed class MemberQuestionsTests
         var moment = new DateTimeOffset(2026, 10, 1, 9, 0, 0, TimeSpan.Zero);
         FolderMembership.Rules.EveryMemberPermission.Should().BeNull();
 
-        var see = new StubAccess<FolderId>(FolderMembership.Rules) { Now = moment }.PermissionReach([FolderPermissions.File]).See;
+        var see = new StubAccess<Folder, FolderId>(FolderMembership.Rules) { Now = moment }.Manager.ReachSeen();
 
         (see.Permission, see.Now, see.Everything).Should().Be((null, moment, false));
         see.Via(asMember: true).Should().Be(MemberVia.Members);
         see.Via(asMember: false).Should().BeNull();
-        new StubAccess<FolderId>(FolderMembership.Rules) { System = true }.PermissionReach([FolderPermissions.File]).See.Via(asMember: false).Should().Be(MemberVia.System);
+        new StubAccess<Folder, FolderId>(FolderMembership.Rules) { System = true }.Manager.ReachSeen().Via(asMember: false).Should().Be(MemberVia.System);
+
+        // Under rules that name one, what is seen is what that permission reaches.
+        new StubAccess<Document, DocumentId>(DocumentMembership.Rules).Manager.ReachSeen().Permission.Should().Be(DocumentPermissions.View);
 
         // Every other reach is for a permission, and a blank one is none.
-        FluentActions.Invoking(() => new StubAccess<FolderId>(FolderMembership.Rules).Reach(" ")).Should().Throw<ArgumentException>();
+        FluentActions.Invoking(() => new StubAccess<Folder, FolderId>(FolderMembership.Rules).Reach(" ")).Should().Throw<ArgumentException>();
     }
 
     [Fact]
     public async Task The_permissions_held_on_several_resources_are_answered_for_those_the_caller_sees()
     {
         var other = DocumentId.CreateSequential();
-        var access = new StubAccess<DocumentId>(DocumentMembership.Rules)
+        var access = new StubAccess<Document, DocumentId>(DocumentMembership.Rules)
             .Sees(Minutes, version: 4, (DocumentPermissions.View, MemberVia.Members), (DocumentPermissions.Edit, MemberVia.Members))
             .Sees(other, version: 1, (DocumentPermissions.View, MemberVia.Members));
 
-        var reach = access.PermissionReach([DocumentPermissions.Edit, DocumentPermissions.Share, DocumentPermissions.Edit]);
-        reach.Permissions.Should().Equal(DocumentPermissions.Edit, DocumentPermissions.Share);
-        reach.See.Permission.Should().Be(DocumentPermissions.View, "which resources are answered about is decided by seeing them");
-
-        var held = await access.PermissionsOnAsync([Minutes, other, Hidden], [DocumentPermissions.Edit, DocumentPermissions.Share], Cancellation);
+        var held = await access.Manager.PermissionsOnAsync([Minutes, other, Hidden], [DocumentPermissions.Edit, DocumentPermissions.Share], Cancellation);
         held.Should().ContainSingle().Which.Should().Match<KeyValuePair<DocumentId, IReadOnlySet<string>>>(pair => pair.Key == Minutes && pair.Value.SetEquals(new[] { DocumentPermissions.Edit }));
-        MemberQuestions.MostResources.Should().Be(200);
+        MembershipAccessManager.MostResources.Should().Be(200);
+    }
+
+    [Fact]
+    public async Task A_question_asked_with_the_resource_answers_about_that_resource()
+    {
+        var now = new DateTimeOffset(2026, 10, 1, 9, 0, 0, TimeSpan.Zero);
+        var minutes = new Document(Minutes, "Minutes", UserId.CreateSequential(), now);
+        var hidden = new Document(Hidden, "Hidden", UserId.CreateSequential(), now);
+        var access = new StubAccess<Document, DocumentId>(DocumentMembership.Rules)
+            .Sees(Minutes, version: 4, (DocumentPermissions.View, MemberVia.Members), (DocumentPermissions.Edit, MemberVia.Members));
+        var manager = access.Manager;
+
+        // The same questions as by id, answered about the very resource that was given.
+        (await manager.HoldAsync(minutes, DocumentPermissions.Edit, Cancellation)).Should().Be(new MemberHold<Document>(minutes, MemberVia.Members, 4, null));
+        (await manager.HoldAsync(hidden, DocumentPermissions.View, Cancellation)).Should().BeNull("a resource the caller does not see is not there for it");
+        (await manager.RequireAsync(minutes, DocumentPermissions.Edit, Cancellation)).Resource.Should().BeSameAs(minutes);
+        (await manager.ViaAsync(minutes, DocumentPermissions.Share, Cancellation)).Should().BeNull();
+        await Refused.WithCodeAsync(DocumentRefusals.Membership, MembershipRefusals.NotFound, () => manager.RequireAsync(hidden, DocumentPermissions.View, Cancellation));
+        await Refused.WithCodeAsync(DocumentRefusals.Membership, MembershipRefusals.NotPermitted, () => manager.RequireAsync(minutes, DocumentPermissions.Share, Cancellation));
+
+        var held = await manager.PermissionsOnAsync([minutes, hidden], [DocumentPermissions.View, DocumentPermissions.Edit], Cancellation);
+        held.Keys.Should().ContainSingle().Which.Should().BeSameAs(minutes);
+        held[minutes].Should().BeEquivalentTo([DocumentPermissions.View, DocumentPermissions.Edit]);
+        await FluentActions.Awaiting(() => manager.HoldAsync(null!, DocumentPermissions.View, Cancellation)).Should().ThrowAsync<ArgumentNullException>();
     }
 }

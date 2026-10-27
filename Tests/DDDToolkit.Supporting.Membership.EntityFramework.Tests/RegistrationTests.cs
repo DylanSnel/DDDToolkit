@@ -79,7 +79,7 @@ public sealed class RegistrationTests
 
         services.Count.Should().Be(registered);
         services.Count(descriptor => descriptor.ServiceType == typeof(MembershipRegistration)).Should().Be(2);
-        services.Count(descriptor => descriptor.ServiceType == typeof(IMemberQuestions<DocumentId>)).Should().Be(1);
+        services.Count(descriptor => descriptor.ServiceType == typeof(MembershipAccessManager<Document>)).Should().Be(1);
     }
 
     [Fact]
@@ -152,7 +152,7 @@ public sealed class RegistrationTests
         answered.AddScoped<IMemberRoles<CrateId, DepotRoleId>, CratesInTheDepot>();
         answered.AddScoped<IPlacesReached<CrateId, BayId>, CratesInTheDepot>();
         answered.AddMembership<CratePorter, CratePorterId, PorterId, DepotRoleId, DepotContext, Crate, CrateId>(CrateMembership.Rules);
-        answered.Should().Contain(descriptor => descriptor.ServiceType == typeof(IMemberQuestions<CrateId>));
+        answered.Should().Contain(descriptor => descriptor.ServiceType == typeof(MembershipAccessManager<Crate>));
     }
 
     [Fact]
@@ -289,7 +289,7 @@ public sealed class RegistrationTests
         await using var scope = provider.CreateAsyncScope();
         using (Callers.Begin(TestCallers.User(UserId.CreateSequential())))
         {
-            FluentActions.Invoking(() => scope.ServiceProvider.GetRequiredService<IMemberQuestions<PalletId>>().Reach("pens.view"))
+            FluentActions.Invoking(() => scope.ServiceProvider.GetRequiredService<MembershipAccessManager<Pallet>>().Reach("pens.view"))
                 .Should().Throw<InvalidOperationException>()
                 .WithMessage("The rules 'pens' let Pallet be reached from above, and DepotContext does not say where it sits: Pallet marks no property [At]*HasMembers(resource => resource.Members).");
         }
@@ -309,7 +309,7 @@ public sealed class RegistrationTests
         await using var asking = other.CreateAsyncScope();
         using (Callers.Begin(TestCallers.User(UserId.CreateSequential())))
         {
-            FluentActions.Invoking(() => asking.ServiceProvider.GetRequiredService<IMemberQuestions<CrateId>>().Reach(CratePermissions.Pack))
+            FluentActions.Invoking(() => asking.ServiceProvider.GetRequiredService<MembershipAccessManager<Crate>>().Reach(CratePermissions.Pack))
                 .Should().Throw<InvalidOperationException>()
                 .WithMessage("Crate sits at a BayId, and nothing answers where a caller holds a permission among those: no IPlacesReached<CrateId, BayId> is registered.*");
         }
@@ -364,7 +364,7 @@ public sealed class RegistrationTests
             using (Callers.Begin(person.Caller))
             {
                 await using var scope = provider.CreateAsyncScope();
-                return await scope.ServiceProvider.GetRequiredService<IMemberQuestions<CrateId>>().HoldAsync(crate, permission, Cancellation);
+                return await scope.ServiceProvider.GetRequiredService<MembershipAccessManager<Crate>>().HoldAsync(crate, permission, Cancellation);
             }
         }
 
@@ -417,7 +417,7 @@ public sealed class RegistrationTests
             await using var scope = provider.CreateAsyncScope();
             using (Callers.Begin(TestCallers.User(UserId.CreateSequential())))
             {
-                return FluentActions.Invoking(() => scope.ServiceProvider.GetRequiredService<IMemberQuestions<DocumentId>>().Reach(DocumentPermissions.View))
+                return FluentActions.Invoking(() => scope.ServiceProvider.GetRequiredService<MembershipAccessManager<Document>>().Reach(DocumentPermissions.View))
                     .Should().Throw<InvalidOperationException>().Which;
             }
         }

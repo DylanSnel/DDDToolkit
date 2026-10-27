@@ -411,8 +411,8 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
         // A reach is what a reading filters by: what the projects' rules say the caller the request runs as
         // reaches. Only the Membership package makes one, from the rules and the caller, so an adapter, a route or
         // a test is never the one that decides what a reading shows.
-        typeof(MemberReach<ProjectId>).GetConstructors().Should().BeEmpty("a reach has no public constructor");
-        typeof(MemberReach<ProjectId>).GetProperties().Should().OnlyContain(property => property.SetMethod == null, "and nothing of it can be changed afterwards");
+        typeof(MemberReach<Project>).GetConstructors().Should().BeEmpty("a reach has no public constructor");
+        typeof(MemberReach<Project>).GetProperties().Should().OnlyContain(property => property.SetMethod == null, "and nothing of it can be changed afterwards");
         SampleLayout.Projects.Select(project => project.Anchor.Assembly).Append(typeof(Program).Assembly)
             .SelectMany(TypeScan.TypesOf)
             .Where(type => IsReach(type.BaseType))

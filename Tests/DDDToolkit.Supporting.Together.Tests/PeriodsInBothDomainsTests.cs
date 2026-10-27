@@ -90,7 +90,7 @@ public sealed class PeriodsInBothDomainsTests
         (grade!.Via, grade.Until).Should().Be((MemberVia.Above, (DateTimeOffset?)null));
         (await campus.Services.AsAsync(data.Ada, CampusScenario.InAlder, async provider =>
             {
-                var reach = provider.GetRequiredService<IMemberQuestions<CourseId>>().Reach(CoursePermissions.Grade);
+                var reach = provider.GetRequiredService<MembershipAccessManager<Course>>().Reach(CoursePermissions.Grade);
                 return await provider.Campus().Courses.Reached(reach).Where(found => found.Resource.Id == data.Optics).Select(found => new { found.AsMember, found.FromAbove }).SingleAsync(Cancellation);
             }))
             .Should().Be(new { AsMember = false, FromAbove = true });

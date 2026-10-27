@@ -444,7 +444,7 @@ public sealed class GeneratorTestHost
     /// </summary>
     public GeneratorTestHost WithMembershipAlone()
     {
-        _extraReferences.Add(ReferenceSets.MembershipAlone);
+        _extraReferences.AddRange(ReferenceSets.MembershipAlone);
         return this;
     }
 

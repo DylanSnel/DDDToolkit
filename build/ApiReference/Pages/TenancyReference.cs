@@ -8,13 +8,14 @@ namespace DDDToolkit.Build.ApiReference.Pages;
 internal static class TenancyReference
 {
     public const string Tenancy = "DDDToolkit.Supporting.Tenancy";
+    public const string Markers = "DDDToolkit.Supporting.Tenancy.Abstractions";
     public const string EntityFramework = "DDDToolkit.Supporting.Tenancy.EntityFramework";
     public const string Postgres = "DDDToolkit.Supporting.Tenancy.Postgres";
 
     public static readonly ReferencePlan Plan = new(
         "Tenancy",
         "docs/tenancy/reference",
-        [Tenancy, EntityFramework, Postgres],
+        [Tenancy, Markers, EntityFramework, Postgres],
         [
             new(
                 "aggregates.md",
@@ -107,7 +108,7 @@ internal static class TenancyReference
                 + "`AddTenancy`, `AddTenancyAccess` and the table names, is with the use cases, under "
                 + "[Registration](use-cases.md#registration).",
                 [
-                    new("Mapping", [new(EntityFramework, Folder: "Mapping")]),
+                    new("Mapping", [new(EntityFramework, Folder: "Mapping"), new(Markers, Folder: "")], Lead: ["OfTenantAttribute", "OfTenantConvention"]),
                     new("Store", [new(EntityFramework, Folder: "Store")]),
                     new("Saving", [new(EntityFramework, Folder: "Saving")]),
                     new("Read model", [new(EntityFramework, Folder: "ReadModel")]),

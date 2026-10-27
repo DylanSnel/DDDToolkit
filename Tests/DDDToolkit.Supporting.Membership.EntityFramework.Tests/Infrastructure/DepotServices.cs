@@ -92,12 +92,12 @@ public sealed class DepotServices : IDisposable
     }
 
     /// <summary>The access questions about pallets, asked as <paramref name="person"/>.</summary>
-    public Task<T> PalletsAsync<T>(DepotPerson person, Func<IMemberQuestions<PalletId>, Task<T>> ask)
-        => AsAsync(person.Caller, provider => ask(provider.GetRequiredService<IMemberQuestions<PalletId>>()));
+    public Task<T> PalletsAsync<T>(DepotPerson person, Func<MembershipAccessManager<Pallet>, Task<T>> ask)
+        => AsAsync(person.Caller, provider => ask(provider.GetRequiredService<MembershipAccessManager<Pallet>>()));
 
     /// <summary>The access questions about crates, asked as <paramref name="person"/>.</summary>
-    public Task<T> CratesAsync<T>(DepotPerson person, Func<IMemberQuestions<CrateId>, Task<T>> ask)
-        => AsAsync(person.Caller, provider => ask(provider.GetRequiredService<IMemberQuestions<CrateId>>()));
+    public Task<T> CratesAsync<T>(DepotPerson person, Func<MembershipAccessManager<Crate>, Task<T>> ask)
+        => AsAsync(person.Caller, provider => ask(provider.GetRequiredService<MembershipAccessManager<Crate>>()));
 
     /// <summary>Changes the depot's own rows, or its resources, as the application's own work, and saves.</summary>
     public Task ChangeAsync(Func<DepotContext, DepotDesk, Task> change)

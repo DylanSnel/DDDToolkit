@@ -110,10 +110,14 @@ public abstract class TenancySaveInterceptor : SaveChangesInterceptor
     /// Checks every row of <paramref name="context"/> the save would write against the current Tenancy caller.
     /// </summary>
     /// <exception cref="Exceptions.RefusalException"><c>tenancy.other-tenant</c> or <c>tenancy.not-seated</c>.</exception>
-    /// <exception cref="InvalidOperationException">An entity type kept to a tenant has lost the tenant filter.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// An entity type kept to a tenant has lost the tenant filter, or one marks its tenant with <c>[OfTenant]</c> and is
+    /// not kept to it.
+    /// </exception>
     private static void CheckTenants(DbContext context)
     {
         var facts = TenancyModelFacts.Of(context.Model);
+        facts.RequireMarkedTypesAreScoped();
         facts.RequireAttributedTypesAreScoped();
         if (!facts.HasScopedTypes)
         {

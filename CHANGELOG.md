@@ -558,7 +558,26 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   with one marker, and a member the module's interface cannot read; DDD00081 reports a member of another id than
   `IdOf` names.
 
+- **A package's marker names the convention that maps it: `[ModelConvention]`.** A package marks an attribute of its
+  own, which domain classes carry without Entity Framework, with the assembly-qualified name of an
+  `IModelFinalizingConvention` in its package for Entity Framework: `[ModelConvention("Billing.EntityFramework.BilledToConvention,
+  Billing.EntityFramework")]`. `AddDDDToolkitConventions()` runs that convention once per model, in every model that
+  maps a class with the marker, on the class or on a property. Every class the model maps counts: one the context
+  names, one Entity Framework reaches only through a navigation of another, and one the model owns, also where two
+  owners share it. A generic marker, such as a template attribute, names the convention on its definition. A model
+  without a marked class is not touched. A model with a marked class whose convention the application does not have is
+  refused while it is built, naming the class, the marker and the assembly to reference. So a module whose
+  infrastructure project lacks the package's Entity Framework assembly is told so, and never runs without the
+  mapping. The conventions follow from the classes a model maps and from nothing registered, so `dotnet ef` and the
+  Supabase export build the model the application runs with. The convention needs a public constructor that takes
+  nothing, and may be internal to its package. Tenancy's `[OfTenant]` and Membership's templates are the first (see
+  Tenancy and Membership).
+
 #### Entity Framework and row level security
+
+- **`context.ScopeOf()`.** The services of the scope a context was bound to for the rental it is in, by `BindToScope`
+  or by `AddScopedFromPool`, or `null`: what a package asks first for the application's scoped services about a
+  statement of that context, as Membership's queries on a resource's set do.
 
 - **The owner of an aggregate is read with nothing written.** `AddDDDToolkitEntityFramework` registers
   `IAggregateOwners<TId>` for every id, so a host on Entity Framework writes nothing for a request about an
@@ -1025,6 +1044,14 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   database's alone, so services on another database never wait for it. On by default; a context leaves it out with
   `WithoutDatabaseMigrationLock()` after the toolkit's call. SQL Server and SQLite are unchanged: their lock is the
   database's already. See [Several services on one database](docs/entity-framework.md#several-services-on-one-database).
+
+- **`MarkerConvention` in `AddDDDToolkitConventions()`, and `RequireContextPart` from a convention.** The convention
+  runs the conventions that markers name with `[ModelConvention]`, as `[OfTenant]` names Tenancy's. It runs when the
+  model is finished, after `OnModelCreating`, so what a context says by hand wins. It runs before the version and the
+  key parts, so what a package maps is keyed as the rest is, and before the check of the indexes that say what they
+  refuse with, so an index a package adds is checked. A package's convention states the part its model requires with
+  the new overload on `IConventionModel`, `modelBuilder.Metadata.RequireContextPart(...)`, as its mapping does on
+  `IMutableModel`.
 
 #### Supabase and Auth
 
@@ -1923,7 +1950,50 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `EnsurePoliciesAreInPlaceAsync` checks that these functions and the ones that take the tenant are in the
   database, running as their owner.
 
+- **The tenant of a row, said in the domain: `[OfTenant]`, in `DDDToolkit.Supporting.Tenancy.Abstractions`.** It
+  marks the property of an aggregate root that says which tenant the aggregate belongs to,
+  `[OfTenant] public TenantId TenantId { get; private set; }`. It is a fact about the aggregate, beside its `[Owner]`,
+  so it goes on the domain class. It is in a new package of Tenancy's markers for domain classes, namespace
+  `DDDToolkit.Supporting.Tenancy`, which references `DDDToolkit.Abstractions` alone and no Entity Framework. Tenancy's
+  package references it, so a project with Tenancy has the marker. A module's domain project that sees only
+  Tenancy's ids references the new package and nothing else of Tenancy's.
+- **A class that marks its tenant `[OfTenant]` is kept to it with no line in its context.** `OfTenantConvention`,
+  which `AddDDDToolkitConventions()` runs because the marker names it, gives every class with an `[OfTenant]` property
+  what `ScopeToTenant(row => row.TenantId)` gives: the tenant filter beside the class's other named filters, the
+  property for the save check, which `UseDDDToolkit` adds, the requirement of that save check, and the property fixed
+  once the row is there. A context that calls `ScopeToTenant` on the class keeps its own mapping: the call wins, for a
+  tenant held in another property. The marked property is the application's tenant id, never nullable, one per
+  class, on the root of a hierarchy stored in one table; a type the context owns is kept through its owner, so a marker
+  on it maps nothing. A model that breaks one of these is refused while it is built. A context whose
+  `ConfigureConventions` leaves `AddDDDToolkitConventions()` out is refused at its first save, since nothing keeps its
+  marked classes to a tenant. See [Keeping tenants apart](docs/tenancy/keeping-tenants-apart.md).
+
 #### Membership
+
+- **Queries on the resource's own set: `db.Boards.WhereIHold(BoardPermissions.View)`.** The boards the caller holds a
+  permission on, as part of a query of your own, one statement and never a list of ids fetched first. On the set the
+  query finds its context; a query that does not start at a set hands it over, `query.WhereIHold(permission, db)`.
+  Several permissions at once are an overload, `db.Boards.WhereIHold([BoardPermissions.Edit, BoardPermissions.Archive])`,
+  which answers pairs of resource and permission (`PermissionOn<Board>`: `Resource`, `Permission`) for the resources
+  the caller sees, for a list that shows what may be done with each row. The rules, and what they ask of the
+  application, come from the services the context was made with: the scope it is bound to, or the services its
+  options were built with, which for `AddDbContext` are the scope's; a context of a pool or a factory that a query
+  asks the application's scoped services through is bound to the scope first, `context.BindToScope(scope)`.
+- **Mapping by convention.** A context that calls `AddDDDToolkitConventions()` maps a resource's collection of a
+  `[Member<...>]` class as `HasMembers(row => row.People)` maps it, and a `[CustomRole<...>]` class as `IsCustomRole()`
+  maps it, with no call in the context. Both templates name Membership's convention with `[ModelConvention]`, so a
+  model that maps such a class without Membership's Entity Framework package is refused while it is built, naming the
+  package. A hand-written `HasMembers` or `IsCustomRole` still works and wins, for table names of your own
+  (`MemberTableNames`), and a members collection the context ignores stays ignored. The model a convention builds is
+  the one the calls by hand build, to the last annotation.
+- **A role of a tenant has a name and a starter role once per tenant, with no line in its context.** Membership's
+  mapping of a role class, by convention or by `IsCustomRole()`, adds two unique indexes where the class marks its
+  tenant with Tenancy's `[OfTenant]`: the tenant and `Name`, and the tenant and `MadeFrom`. Entity Framework names
+  them as it names the indexes a context wrote by hand, `IX_{table}_TenantId_Name` and `IX_{table}_TenantId_MadeFrom`,
+  so an application's migrations stay as they are. The marker is read by its name, and no Membership package
+  references Tenancy. A context gives the name's index a refusal of its own on the same index,
+  `role.HasIndex(row => new { row.TenantId, row.Name }).RefusesAs(code, message)`. A role class kept to a customer of
+  another kind keeps its indexes in its context.
 
 - **A member list makes a new row's id with `TId.Create()`.** `MemberList` takes no id factory any more,
   `new(members, owner, codes)`, and asks `ICreatableEntityId<TId>` of the member class's own id. The generated list is
@@ -2143,11 +2213,15 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   resource with members, and a second permission that says `EveryMember`, `LocksMembers` or `LocksOwner` on one
   resource, are DDD00093; rules made for a resource no permission is declared on, DDD00094. See
   [The settings of a permission](docs/membership/permissions-and-roles.md#the-settings-of-a-permission).
-- **Where an aggregate hangs: `[At]`.** The core's `[At]` marks the one property of an aggregate root that says where
-  it hangs, a unit of an organization or a bay of a depot, never nullable (DDD00097 otherwise). Rules that reach a
-  resource from above, `reachFromAbove: true` beside a package that keeps the places or
-  `reachFromAbove: DepotFunctions.BaysWhereIHold` beside a place of the application's own, read it, and rules that
-  reach a class that marks none are DDD00098. See [Beside an organization](docs/membership/beside-an-organization.md#reach-from-above).
+- **Where an aggregate hangs: `[At]`, in `DDDToolkit.Supporting.Membership.Abstractions`.** Membership's `[At]` marks
+  the one property of an aggregate root that says where it hangs, a unit of an organization or a bay of a depot, never
+  nullable (DDD00097 otherwise). Rules that reach a resource from above, `reachFromAbove: true` beside a package that
+  keeps the places or `reachFromAbove: DepotFunctions.BaysWhereIHold` beside a place of the application's own, read
+  it, and rules that reach a class that marks none are DDD00098. It is in a new package of Membership's markers for
+  domain classes, namespace `DDDToolkit.Supporting.Membership`, which references `DDDToolkit.Abstractions` alone and
+  no Entity Framework. Membership's package references it, and Membership's generator, which ships in that package,
+  reports both diagnostics. `[Owner]` stays the core's, since the core's owner checks read it. See
+  [Beside an organization](docs/membership/beside-an-organization.md#reach-from-above).
 - **`[OrOwn]` on a resource whose owner holds the key says nothing: DDD00096.** A warning at `[OrOwn]` on the id of a
   resource with members beside `[OnResource]`, where the required permission is one its owner holds by owning: the
   owner passes the key already.
@@ -2717,6 +2791,15 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   nowhere. Tenancy's own test host names its class `HostTenancy` with one `[assembly: TemplateFacadeName]`, so its
   three test projects drop their nine-type aliases too.
 
+- **The Tenancy sample's classes mark their tenant in the domain.** `Project`, `ProjectRole` and `Inspection` mark
+  their `TenantId` `[OfTenant]`, and `ProjectsContext` and `InspectionsContext` drop their `ScopeToTenant` calls: the
+  toolkit's conventions keep them to the caller's tenant. The Projects and Inspections domain projects reference
+  `DDDToolkit.Supporting.Tenancy.Abstractions` for the marker, and nothing else of Tenancy's. Membership's convention
+  maps the project roles, their two unique indexes included, under the names the migrations have. `ProjectsContext`
+  keeps one line for a project role, the module's own refusal on the name's index. The Membership tutorial's board
+  and board role do the same, as does the application the package check builds, and their contexts write no line
+  for either.
+
 #### Docs
 
 - **Docs: a module's default.** [A module's default](docs/access-requirements.md#a-modules-default) says what an
@@ -2828,6 +2911,23 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ### Changed
 
+- **Membership: `MembershipAccessManager<Board>` answers what the current caller may do on the resources of one
+  kind.** Your code takes `MembershipAccessManager<Board>`, generic over the resource alone, which the resource's
+  registration adds per scope. Its questions take the resource, and an overload of each takes its id, for a caller
+  that has only the id, as a request does: `HoldAsync`, `RequireAsync` and `ViaAsync` with a permission, and
+  `PermissionsOnAsync` with several resources and permissions; an answer names the resource as it was asked about,
+  `MemberHold<Board>` for a board and `MemberHold<BoardId>` for an id, and `PermissionsOnAsync` keys by the boards or
+  by the ids it was given. `Rules`, `RequireCaller()`, `Reach(permission)` and the new `ReachSeen()`, the reach of
+  what the caller sees, stay on it as the lower level for a statement of your own (`Within`, `Reached`).
+  - **Breaking.** `IMemberQuestions<TResourceId>` and the static `MemberQuestions` are gone: take
+    `MembershipAccessManager<TResource>`, and ask `access.RequireAsync(id, ...)` and `access.ViaAsync(id, ...)` on it.
+    `MemberQuestions.MostResources` is `MembershipAccessManager.MostResources`. `db.Boards.Within(questions.Reach(p))`
+    is `db.Boards.WhereIHold(p)`. `PermissionReach(permissions)`, `MemberPermissionReach<TResourceId>` and
+    `PermissionsOn(reach)` are gone: ask `WhereIHold(permissions)`, which answers the resource in each pair rather
+    than its id. `MemberReach<TResourceId>` is `MemberReach<TResource>`, and `MemberHold<TResourceId>` is
+    `MemberHold<TResource>`, of the resource or its id. What a storage answers is `IMembershipStorage<TResource,
+    TResourceId>`, which an application never takes; `MemberAccessCheck<TResource, TResourceId>` takes the access
+    manager.
 - **Tenancy: `TenancyAccessManager` answers who acts, in which tenant, and begins the work that is not the caller's
   own.** Your code takes `TenancyAccessManager`, a class the generator writes closed over your ids, with no type
   argument: in the global namespace of the project that declares Tenancy's classes, and in the root namespace of a

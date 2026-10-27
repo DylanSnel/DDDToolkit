@@ -24,7 +24,7 @@ namespace DDDToolkit.Supporting.Membership.TestHost.Folders;
 /// <param name="callers">Who is calling, for who admitted.</param>
 /// <param name="clock">The clock an admission starts by.</param>
 public sealed class AdmitStaffHandler(
-    IMemberQuestions<FolderId> questions,
+    MembershipAccessManager<Folder> questions,
     MemberAdmission<FolderId, StaffCode, NamedRole> admission,
     FilingContext context,
     ICallerAccessor callers,

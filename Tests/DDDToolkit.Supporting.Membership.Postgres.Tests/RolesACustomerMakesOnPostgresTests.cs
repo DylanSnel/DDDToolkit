@@ -48,7 +48,7 @@ public sealed partial class RolesACustomerMakesOnPostgresTests(FilingPostgres po
             {
                 var heldInCSharp = await garden.Services.AsAsync(person, async provider =>
                 {
-                    var reach = provider.GetRequiredService<IMemberQuestions<ShedId>>().Reach(permission);
+                    var reach = provider.GetRequiredService<MembershipAccessManager<Shed>>().Reach(permission);
                     return await provider.GetRequiredService<GardenContext>().Sheds.Within(reach).Select(shed => shed.Id.Value).ToListAsync(Cancellation);
                 });
                 var held = data.ShedsHeldBy(person, permission).Select(id => id.Value).ToList();
@@ -333,7 +333,7 @@ public sealed partial class RolesACustomerMakesOnPostgresTests(FilingPostgres po
         commands.Reset();
         var watered = await garden.Services.AsAsync(data.Ada, async provider =>
         {
-            var access = provider.GetRequiredService<IMemberQuestions<PlotId>>();
+            var access = provider.GetRequiredService<MembershipAccessManager<Plot>>();
             return await provider.GetRequiredService<GardenContext>().Plots
                 .Within(access.Reach(PlotPermissions.See))
                 .Within(access.Reach(PlotPermissions.Water))
@@ -620,7 +620,7 @@ public sealed partial class RolesACustomerMakesOnPostgresTests(FilingPostgres po
 
             var seenInCSharp = await garden.Services.AsAsync(person, async provider =>
             {
-                var see = provider.GetRequiredService<IMemberQuestions<PlotId>>().PermissionReach([]).See;
+                var see = provider.GetRequiredService<MembershipAccessManager<Plot>>().ReachSeen();
                 return await provider.GetRequiredService<GardenContext>().Plots.Within(see).Select(plot => plot.Id.Value).ToListAsync(Cancellation);
             });
             var seen = data.PlotsSeenBy(person).Select(id => id.Value).ToList();
@@ -632,7 +632,7 @@ public sealed partial class RolesACustomerMakesOnPostgresTests(FilingPostgres po
             {
                 var heldInCSharp = await garden.Services.AsAsync(person, async provider =>
                 {
-                    var reach = provider.GetRequiredService<IMemberQuestions<PlotId>>().Reach(permission);
+                    var reach = provider.GetRequiredService<MembershipAccessManager<Plot>>().Reach(permission);
                     return await provider.GetRequiredService<GardenContext>().Plots.Within(reach).Select(plot => plot.Id.Value).ToListAsync(Cancellation);
                 });
                 var held = data.PlotsHeldBy(person, permission).Select(id => id.Value).ToList();

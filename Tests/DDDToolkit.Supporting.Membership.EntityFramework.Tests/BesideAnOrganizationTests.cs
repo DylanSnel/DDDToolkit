@@ -1,3 +1,4 @@
+using DDDToolkit.EntityFramework;
 using DDDToolkit.Exceptions;
 
 namespace DDDToolkit.Supporting.Membership.EntityFramework.Tests;
@@ -72,7 +73,7 @@ public sealed class BesideAnOrganizationTests
         // She sees it by owning it, and holds by owning it what the rules give an owner, packing and scrapping among them, with no end.
         var seen = await depot.Services.AsAsync(data.Dot.Caller, async provider =>
         {
-            var see = provider.GetRequiredService<IMemberQuestions<CrateId>>().PermissionReach([]).See;
+            var see = provider.GetRequiredService<MembershipAccessManager<Crate>>().ReachSeen();
             return await provider.GetRequiredService<DepotContext>().Crates.Within(see).Select(crate => crate.Id).ToListAsync(Cancellation);
         });
         seen.Should().Contain(barley);
@@ -134,7 +135,7 @@ public sealed class BesideAnOrganizationTests
         depot.Commands.Reset();
         var packed = await depot.Services.AsAsync(data.Bo.Caller, async provider =>
         {
-            var access = provider.GetRequiredService<IMemberQuestions<CrateId>>();
+            var access = provider.GetRequiredService<MembershipAccessManager<Crate>>();
             return await provider.GetRequiredService<DepotContext>().Crates
                 .Within(access.Reach(CratePermissions.See))
                 .Within(access.Reach(CratePermissions.Pack))
@@ -155,7 +156,7 @@ public sealed class BesideAnOrganizationTests
         // where it holds a permission, and no statement is sent to find out.
         await depot.Services.AsAsync(Caller.Anonymous, async provider =>
         {
-            var access = provider.GetRequiredService<IMemberQuestions<CrateId>>();
+            var access = provider.GetRequiredService<MembershipAccessManager<Crate>>();
             (await access.HoldAsync(data.Tea, CratePermissions.See, Cancellation)).Should().BeNull();
             (await access.PermissionsOnAsync([data.Tea, data.Salt, data.Rice], DepotScenario.CratePermissionsAsked, Cancellation)).Should().BeEmpty();
             depot.Commands.Count.Should().Be(0);
@@ -180,7 +181,7 @@ public sealed class BesideAnOrganizationTests
         // In a statement of the host's own the two are apart: how it is held as a member, until when, and from above.
         var found = await depot.Services.AsAsync(data.Bo.Caller, async provider =>
         {
-            var access = provider.GetRequiredService<IMemberQuestions<CrateId>>();
+            var access = provider.GetRequiredService<MembershipAccessManager<Crate>>();
             return await provider.GetRequiredService<DepotContext>().Crates
                 .Where(crate => crate.Id == data.Tea)
                 .Reached(access.Reach(CratePermissions.Pack))
@@ -249,7 +250,7 @@ public sealed class BesideAnOrganizationTests
         // A statement of the host's own reads the two apart, as it did: until when as a member, and whether from above.
         var found = await depot.Services.AsAsync(data.Cas.Caller, async provider =>
         {
-            var access = provider.GetRequiredService<IMemberQuestions<CrateId>>();
+            var access = provider.GetRequiredService<MembershipAccessManager<Crate>>();
             return await provider.GetRequiredService<DepotContext>().Crates
                 .Where(crate => crate.Id == data.Tea)
                 .Reached(access.Reach(CratePermissions.Pack))
@@ -288,7 +289,7 @@ public sealed class BesideAnOrganizationTests
         (await CratesWithinAsync(depot.Services, data.Cas, CratePermissions.Weigh)).Should().BeEquivalentTo([data.Tea, data.Rice], "he weighs in the tea's bay, and owns the rice, and an owner weighs");
         var inSight = await depot.Services.AsAsync(data.Cas.Caller, async provider =>
         {
-            var access = provider.GetRequiredService<IMemberQuestions<CrateId>>();
+            var access = provider.GetRequiredService<MembershipAccessManager<Crate>>();
             return await provider.GetRequiredService<DepotContext>().Crates
                 .Within(access.Reach(CratePermissions.See))
                 .Within(access.Reach(CratePermissions.Weigh))
@@ -405,7 +406,7 @@ public sealed class BesideAnOrganizationTests
         });
 
         // The application's own work is never asked about: it holds every permission on every crate.
-        (await depot.Services.AsAsync(Caller.System, provider => provider.GetRequiredService<IMemberQuestions<CrateId>>().RequireAsync(data.Tea, CratePermissions.Scrap, Cancellation)))
+        (await depot.Services.AsAsync(Caller.System, provider => provider.GetRequiredService<MembershipAccessManager<Crate>>().RequireAsync(data.Tea, CratePermissions.Scrap, Cancellation)))
             .Should().BeEquivalentTo(new { Via = MemberVia.System, Until = (DateTimeOffset?)null });
 
         // A pallet's rules have the depot resolve who a caller is too, and the depot refuses nobody there:
@@ -425,7 +426,7 @@ public sealed class BesideAnOrganizationTests
             var seen = data.CratesSeenBy(person);
             var seenInTheDatabase = await depot.Services.AsAsync(person.Caller, async provider =>
             {
-                var see = provider.GetRequiredService<IMemberQuestions<CrateId>>().PermissionReach([]).See;
+                var see = provider.GetRequiredService<MembershipAccessManager<Crate>>().ReachSeen();
                 return await provider.GetRequiredService<DepotContext>().Crates.Within(see).Select(crate => crate.Id).ToListAsync(Cancellation);
             });
             seenInTheDatabase.Should().BeEquivalentTo(seen, "of what " + person + " sees");
@@ -515,9 +516,8 @@ public sealed class BesideAnOrganizationTests
 
         await depot.Services.AsAsync(data.Eli.Caller, async provider =>
         {
-            var access = provider.GetRequiredService<IMemberQuestions<CrateId>>();
+            var access = provider.GetRequiredService<MembershipAccessManager<Crate>>();
             var seen = access.Reach(CratePermissions.See);
-            var permissions = access.PermissionReach([CratePermissions.Move, CratePermissions.Pack]);
 
             // On the request's own context nothing more is said.
             var requests = provider.GetRequiredService<DepotContext>();
@@ -529,15 +529,25 @@ public sealed class BesideAnOrganizationTests
             depot.Commands.Reset();
             (await reading.Crates.AsNoTracking().Within(seen, reading).CountAsync(Cancellation)).Should().Be(2);
             (await reading.Crates.Where(crate => crate.Id == data.Tea).Reached(seen, reading).Select(found => found.FromAbove).SingleAsync(Cancellation)).Should().BeTrue();
-            (await reading.Crates.PermissionsOn(permissions, reading).ToListAsync(Cancellation)).Select(row => (row.Resource, row.Permission))
+
+            // The queries on the set ask the host per scope as well, so a reading of a pool's is bound to the scope first.
+            (await reading.BindToScope(provider).Crates.WhereIHold([CratePermissions.Move, CratePermissions.Pack])
+                    .Select(pair => new { pair.Resource.Id, pair.Permission })
+                    .ToListAsync(Cancellation))
+                .Select(row => (row.Id, row.Permission))
                 .Should().BeEquivalentTo([(data.Tea, CratePermissions.Move), (data.Rice, CratePermissions.Move)]);
-            depot.Commands.Sent.Should().HaveCount(3).And.OnlyContain(sent => sent.Context == reading);
+            (await reading.Crates.WhereIHold(CratePermissions.See).AsNoTracking().CountAsync(Cancellation)).Should().Be(2);
+            depot.Commands.Sent.Should().HaveCount(4).And.OnlyContain(sent => sent.Context == reading);
 
             // Left unsaid, it is refused where the statement is put together, with what to write.
             FluentActions.Invoking(() => reading.Crates.Within(seen)).Should().Throw<InvalidOperationException>()
                 .WithMessage("This reach of Crate puts what the application answers into the query*hand over the context it was made from*Within(reach, db)*");
             FluentActions.Invoking(() => reading.Crates.Reached(seen)).Should().Throw<InvalidOperationException>();
-            FluentActions.Invoking(() => reading.Crates.PermissionsOn(permissions)).Should().Throw<InvalidOperationException>();
+
+            // A reading in no scope cannot be asked what the host answers per scope, and is told so.
+            await using var unbound = await provider.GetRequiredService<IDbContextFactory<DepotContext>>().CreateDbContextAsync(Cancellation);
+            FluentActions.Invoking(() => unbound.Crates.WhereIHold(new[] { CratePermissions.Move })).Should().Throw<InvalidOperationException>()
+                .WithMessage("The rules of Crate ask the application's services of a scope*BindToScope(scope.ServiceProvider)*");
 
             // And so is a context that is not the one the query was made from.
             FluentActions.Invoking(() => reading.Crates.Within(seen, requests)).Should().Throw<InvalidOperationException>()
@@ -548,7 +558,7 @@ public sealed class BesideAnOrganizationTests
         // roles are declared in its rules, and nothing above reaches it.
         await depot.Services.AsAsync(data.Bo.Caller, async provider =>
         {
-            var loads = provider.GetRequiredService<IMemberQuestions<PalletId>>().Reach(PalletPermissions.Load);
+            var loads = provider.GetRequiredService<MembershipAccessManager<Pallet>>().Reach(PalletPermissions.Load);
             await using var reading = await provider.GetRequiredService<IDbContextFactory<DepotContext>>().CreateDbContextAsync(Cancellation);
             (await reading.Pallets.Within(loads).Select(pallet => pallet.Id).ToListAsync(Cancellation)).Should().BeEquivalentTo([data.Pears, data.Plums]);
         });
@@ -557,7 +567,7 @@ public sealed class BesideAnOrganizationTests
         depot.Commands.Reset();
         await depot.Services.AsAsync(data.Flo.Caller, async provider =>
         {
-            var access = provider.GetRequiredService<IMemberQuestions<CrateId>>();
+            var access = provider.GetRequiredService<MembershipAccessManager<Crate>>();
             var asked = await Task.WhenAll(
                 access.HoldAsync(data.Tea, CratePermissions.Pack, Cancellation),
                 access.HoldAsync(data.Salt, CratePermissions.Pack, Cancellation),
@@ -598,7 +608,7 @@ public sealed class BesideAnOrganizationTests
     private static Task<List<CrateId>> CratesWithinAsync(DepotServices services, DepotPerson person, string permission)
         => services.AsAsync(person.Caller, async provider =>
         {
-            var reach = provider.GetRequiredService<IMemberQuestions<CrateId>>().Reach(permission);
+            var reach = provider.GetRequiredService<MembershipAccessManager<Crate>>().Reach(permission);
             return await provider.GetRequiredService<DepotContext>().Crates.Within(reach).Select(crate => crate.Id).ToListAsync(Cancellation);
         });
 

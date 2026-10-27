@@ -55,7 +55,7 @@ public sealed class MembersTheHostResolvesTests
             var seen = data.PalletsSeenBy(person);
             var seenInTheDatabase = await depot.Services.AsAsync(person.Caller, async provider =>
             {
-                var see = provider.GetRequiredService<IMemberQuestions<PalletId>>().PermissionReach([]).See;
+                var see = provider.GetRequiredService<MembershipAccessManager<Pallet>>().ReachSeen();
                 return await provider.GetRequiredService<DepotContext>().Pallets.Within(see).Select(pallet => pallet.Id).ToListAsync(Cancellation);
             });
             seenInTheDatabase.Should().BeEquivalentTo(seen, "of what " + person + " sees");
@@ -66,7 +66,7 @@ public sealed class MembersTheHostResolvesTests
                 var held = data.PalletsHeldBy(person, permission);
                 var heldInTheDatabase = await depot.Services.AsAsync(person.Caller, async provider =>
                 {
-                    var reach = provider.GetRequiredService<IMemberQuestions<PalletId>>().Reach(permission);
+                    var reach = provider.GetRequiredService<MembershipAccessManager<Pallet>>().Reach(permission);
                     return await provider.GetRequiredService<DepotContext>().Pallets.Within(reach).Select(pallet => pallet.Id).ToListAsync(Cancellation);
                 });
 
@@ -147,7 +147,7 @@ public sealed class MembersTheHostResolvesTests
         (await depot.Services.PalletsAsync(data.Ivo, access => access.HoldAsync(data.Limes, PalletPermissions.Load, Cancellation)))!.Via.Should().Be(MemberVia.Members);
 
         // Only a signed-in user is asked about at all: the host is not asked who an anonymous caller is.
-        (await depot.Services.AsAsync(Caller.Anonymous, provider => provider.GetRequiredService<IMemberQuestions<PalletId>>().HoldAsync(data.Limes, PalletPermissions.See, Cancellation))).Should().BeNull();
+        (await depot.Services.AsAsync(Caller.Anonymous, provider => provider.GetRequiredService<MembershipAccessManager<Pallet>>().HoldAsync(data.Limes, PalletPermissions.See, Cancellation))).Should().BeNull();
     }
 
     [Fact]

@@ -6,9 +6,10 @@ using Microsoft.EntityFrameworkCore;
 namespace DDDToolkit.Supporting.Membership.TestHost.Persistence;
 
 /// <summary>
-/// The application's context: a plain context in a schema of its own, with both kinds of resource in it and the
-/// members of each mapped by <c>HasMembers</c>. A document's member tables take the names the package gives
-/// them; a folder's take names of the application's own, and its own word for who a member is.
+/// The application's context: a plain context in a schema of its own, with both kinds of resource in it. A document's
+/// members are mapped by the package's convention, which <c>AddDDDToolkitConventions()</c> brings, under the names the
+/// package gives them; a folder's by <c>HasMembers</c> by hand, under names of the application's own and its own word for
+/// who a member is, which wins over the convention.
 /// </summary>
 /// <param name="options">The context's options.</param>
 public sealed class FilingContext(DbContextOptions<FilingContext> options) : DbContext(options)
@@ -41,8 +42,7 @@ public sealed class FilingContext(DbContextOptions<FilingContext> options) : DbC
             document.Property(row => row.Id).ValueGeneratedNever();
             document.Property(row => row.Title).HasMaxLength(200);
 
-            // Every type argument is inferred: the member class from the collection, the member's id from the owner.
-            document.HasMembers(row => row.Shares);
+            // Nothing about the shares: a collection of a member class is mapped by the convention, as HasMembers maps it.
         });
 
         modelBuilder.Entity<Folder>(folder =>
