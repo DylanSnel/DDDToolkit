@@ -166,9 +166,9 @@ public sealed record OpenLedger(string Name, [AtUnit] OrganizationUnitId Unit) :
   lets a caller with `tenancy.seats.manage` for the whole tenant rename any seat.
 - `[OrOwn]` together with `[AtUnit]` is [DDD00085](../diagnostics.md#ddd00085). With both, a caller could send a
   unit where it holds the permission together with another person's seat.
-  [What goes together](../access-requirements.md#what-goes-together) lists the other pairs that clash or add nothing.
+  [What goes together](../access-requirements.md#valid-combinations-of-attributes) lists the other pairs that clash or add nothing.
 - `[AllowAnonymous]` and `[SignedIn]` (a user who has no seat yet) belong to the toolkit core
-  ([the vocabulary](../access-requirements.md#the-vocabulary)).
+  ([the vocabulary](../access-requirements.md#requirements-and-their-attributes)).
 - Combine cases with `AccessRequirement.All` and `Any`
   ([Requirements that combine](../access-requirements.md#requirements-that-combine)). Example: moving a seat requires
   the permission at both units, `All(TenancyAccess.AtUnit(p, From), TenancyAccess.AtUnit(p, To))`. The handler then

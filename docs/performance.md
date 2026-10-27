@@ -1,19 +1,19 @@
 # Performance
 
-[Identifiers](identifiers.md) tells you to prefer the struct form of an identifier, and argues it from
-memory layout. This page is the measurement behind that advice, including the two places where the
-measurement does not agree with it. The [Tenancy section](#tenancy-the-shape-of-the-access-data) measures
-something else: the database shapes behind the Tenancy supporting domain.
+[Identifiers](identifiers.md) recommends the struct form of an identifier, because of its memory layout. This page
+has the measurements behind that advice, including two places where the measurements first disagreed with it. The
+[Tenancy section](#tenancy-the-shape-of-the-access-data) measures the database shapes behind the Tenancy
+supporting domain.
 
-The benchmarks live in `Benchmarks/DDDToolkit.Benchmarks` and use
-[BenchmarkDotNet](https://benchmarkdotnet.org). Run them yourself with:
+The benchmarks are in `Benchmarks/DDDToolkit.Benchmarks` and use [BenchmarkDotNet](https://benchmarkdotnet.org).
+Run them with:
 
 ```
 dotnet build Benchmarks/DDDToolkit.Benchmarks/DDDToolkit.Benchmarks.csproj -c Release
 Benchmarks/DDDToolkit.Benchmarks/bin/Release/net10.0/DDDToolkit.Benchmarks.exe --filter *
 ```
 
-Both identifiers wrap a `Guid` and carry the same prefix, so nothing but the form differs:
+Both identifiers wrap a `Guid` and have the same prefix. Only the form differs:
 
 ```csharp
 [EntityId<Guid>("ORD")]
@@ -26,10 +26,10 @@ public partial record RecordOrderId
 }
 ```
 
-## The machine
+## Test machine
 
-Every number below came from one run on one machine. Treat the ratios as the result and the absolute
-times as trivia: yours will differ.
+Every number below comes from one run on one machine. Compare the ratios. The absolute times will differ on your
+machine.
 
 ```
 BenchmarkDotNet v0.15.8, Windows 11 (10.0.26200.9445/25H2)
@@ -39,15 +39,14 @@ BenchmarkDotNet v0.15.8, Windows 11 (10.0.26200.9445/25H2)
 GC=Concurrent Workstation
 ```
 
-The Entity Framework benchmarks run against SQLite in memory. That is the fastest database a benchmark
-can talk to, which is the point: it makes the share of a round trip that belongs to Entity Framework
-and to the identifier as large as it will ever be. On a real server across a network the same
-difference is smaller, never larger.
+The Entity Framework benchmarks run against SQLite in memory, the fastest database a benchmark can use. So the
+share of a round trip that Entity Framework and the identifier take is as large as it can be. On a real server
+across a network, the same difference is smaller.
 
 ## Creating identifiers
 
-10,000 identifiers built from values already in hand, into an array. `RawGuid` is the floor: the same
-array with no wrapper on it.
+The benchmark builds 10,000 identifiers from existing values, into an array. The `Guid` row (`RawGuid` in the
+benchmark) is the floor: the same array without a wrapper.
 
 | | Mean | Allocated |
 |---|---|---|
@@ -55,22 +54,22 @@ array with no wrapper on it.
 | Struct id | 42.67 μs | 156.29 KB |
 | Record id | 58.54 μs | 625.02 KB |
 
-The struct id is the raw `Guid` array, to the byte and inside the measurement error. The record id
-costs **4 times the memory**: 64 bytes per identifier against 16, which is an 8-byte reference in the
-array plus a 56-byte object holding the object header, the `Guid`, the prefix reference and the two
-validation bookkeeping fields it inherits from `ValueObject`.
+- The struct id costs the same as the raw `Guid` array. It allocates the same bytes, and its time is within the
+  measurement error.
+- The record id costs **4 times the memory**, 64 bytes per identifier against 16. That is an 8-byte reference in
+  the array plus a 56-byte object. The object holds the object header, the `Guid`, the prefix reference, and two
+  validation fields that it inherits from `ValueObject`.
 
-That is the same 64 bytes [Identifiers](identifiers.md#struct-or-record) counts. The two fields at the
-end are easy to forget: the record form carries the value object validation state, two fields per
-identifier that an identifier never uses.
+[Identifiers](identifiers.md#struct-or-record) counts the same 64 bytes. The two validation fields, `_isValid` and
+`_validationErrors`, hold the validation state of a value object. An identifier never uses them.
 
-The time difference here (1.37x) is mostly garbage collection, and it is the least reliable number on
-this page: the record run had a standard deviation of 13.8 μs against a mean of 58.5 μs, because 625 KB
-per operation puts the GC in the middle of the measurement.
+The time difference here (1.37x) is mostly garbage collection. It is the least reliable number on this page. The
+record run had a standard deviation of 13.8 μs against a mean of 58.5 μs, because 625 KB per operation makes the
+garbage collector run during the measurement.
 
-## Walking a collection
+## Comparing ids in an array
 
-10,000 identifiers in an array, compared against a target that matches the last element, so every
+The benchmark compares 10,000 identifiers in an array with a target that matches the last element, so every
 comparison runs.
 
 | | Mean | Ratio | Allocated |
@@ -80,29 +79,29 @@ comparison runs.
 | Struct id, read `.Value` | 7.23 μs | 2.15 | none |
 | Record id, read `.Value` | 8.63 μs | 2.57 | none |
 
-Reading the value through a reference costs about 20%, which is the dereference the page predicts.
-Comparing costs 2.5 times, which is the same dereference paid twice plus the call.
+Reading the value through a reference costs about 20% more. That is the dereference that
+[Identifiers](identifiers.md) predicts. Comparing costs 2.5 times as much, for the same dereference twice plus the
+call.
 
-**This measurement used to read 69.6, with 1,440,000 bytes allocated.** A record identifier inherited
-equality from `ValueObject`, which compares `GetEqualityComponents()` sequences:
+**The ratio of the record id used to be 69.6, with 1,440,000 bytes allocated.** A record identifier inherited its
+equality from `ValueObject`, which compares the sequences of `GetEqualityComponents()`:
 
 ```csharp
 return Enumerable.SequenceEqual(GetEqualityComponents(), other.GetEqualityComponents());
 ```
 
-Two iterator objects, two boxed `Guid`s and a LINQ call, for every comparison. That is a reasonable
-default for a value object with several components and absurd for an identifier wrapping one `Guid`,
-and nobody had measured it. The generators now emit a direct comparison of `Value` for entity ids and
-single value objects, which yields the same answer because both types have exactly one component. The
-numbers above are from after that change.
+Every comparison made two iterator objects, boxed two `Guid`s and called LINQ. That fits a value object with
+several components. For an identifier that wraps one `Guid`, it was far too expensive, and nobody had measured it.
+The generators now write a direct comparison of `Value` for entity ids and single value objects. The answer is
+the same, because both types have one component. The numbers above are from after that change.
 
 ## Reading a read-only collection
 
-`order.Lines` hands out a read-only view over the generated backing field. `List<T>.AsReadOnly()` is
-`new ReadOnlyCollection<T>(this)` and caches nothing, so a property written as `=> _lines.AsReadOnly()`
-builds a wrapper on every read. The generator holds the view in a second field instead.
+`order.Lines` returns a read-only view over the generated backing field. `List<T>.AsReadOnly()` is
+`new ReadOnlyCollection<T>(this)` and caches nothing. So a property written as `=> _lines.AsReadOnly()` builds a
+new wrapper on every read. The generator keeps the view in a second field instead.
 
-Sixteen reads of one property:
+The benchmark reads one property 16 times:
 
 | | Time | Allocated |
 |---|---|---|
@@ -110,17 +109,17 @@ Sixteen reads of one property:
 | The wrapper held in a field | 10.5 ns | 0 B |
 | The bare list, no protection | 5.2 ns | 0 B |
 
-384 bytes is exactly 16 wrappers of 24. The element count does not change any of it: at 4 elements and
-at 256 the numbers are the same, because the wrapper wraps rather than copies.
+384 bytes is 16 wrappers of 24 bytes. The number of elements changes nothing. At 4 elements and at 256 the
+numbers are the same, because the wrapper does not copy the list.
 
-The third row is not an option, only the floor. Returning `_lines` allocates nothing and satisfies
-`IReadOnlyList<T>`, but a caller can cast it back to `List<T>` and mutate the aggregate around every
-invariant it has. The 5 nanoseconds between the second row and the third are what that protection
-costs once it is no longer rebuilt per read.
+The third row is the floor, and no real option. Returning `_lines` allocates nothing and satisfies
+`IReadOnlyList<T>`. But a caller can cast it back to `List<T>` and change the aggregate past every invariant it
+has. The 5 nanoseconds between the second and the third row are the cost of that protection, now that the
+wrapper is built once.
 
 ## Dictionary and set lookup
 
-1,000 hits against a container holding 10,000 entries.
+The benchmark makes 1,000 lookups that hit, in a container of 10,000 entries.
 
 | | Mean | Ratio | Allocated |
 |---|---|---|---|
@@ -129,14 +128,14 @@ costs once it is no longer rebuilt per read.
 | `HashSet` of struct ids | 3.55 μs | 1.01 | none |
 | `HashSet` of record ids | 4.92 μs | 1.40 | none |
 
-Every probe pays for a hash and at least one equality check, so this tracked the defect above
-exactly: it used to read 17.5 and 21.1, with 272,000 bytes allocated by something whose whole job is
-to be a fast index. With the direct comparison in place the record form costs about half as much
-again as the struct form, which is the dereference and the call, and allocates nothing.
+Every lookup computes a hash and makes at least one equality check. So this benchmark showed the same defect as
+the comparison above. The ratios of the record id used to be 17.5 and 21.1, with 272,000 bytes allocated. With the
+direct comparison, the record form costs about 1.5 times the struct form, for the dereference and the call, and
+allocates nothing.
 
-## Equality and hashing on their own
+## Equality and hashing
 
-One comparison and one hash, undiluted.
+One comparison and one hash, measured alone.
 
 | | Mean | Allocated |
 |---|---|---|
@@ -145,17 +144,17 @@ One comparison and one hash, undiluted.
 | Struct id `GetHashCode` | not measurable | none |
 | Record id `GetHashCode` | 0.19 ns | none |
 
-Both forms are now effectively free, and the numbers here are at the edge of what the harness can
-resolve: BenchmarkDotNet reports the struct hash as *"the method duration is indistinguishable from
-the empty method duration"*, so there is no honest figure to quote for it.
+Both forms now cost close to nothing, and these numbers are at the limit of what BenchmarkDotNet can measure. For
+the struct hash it reports *"the method duration is indistinguishable from the empty method duration"*, so the
+table gives no figure for it.
 
-Before the generators emitted a direct comparison, the record form measured 30.47 ns and 144 bytes for
-an equality check and 23.81 ns and 128 bytes for a hash. Those two lines were the whole of the
-17x-to-70x gap in the two sections above.
+Before the generators wrote a direct comparison, an equality check of the record form took 30.47 ns and 144 bytes,
+and a hash took 23.81 ns and 128 bytes. Those two costs caused the whole gap of 17x to 70x in the two sections
+above.
 
-## Text
+## ToString and Parse
 
-`ToString` and `Parse`, the operations at the edges of the system.
+`ToString` and `Parse`, the operations at the edges of the system:
 
 | | Mean | Allocated |
 |---|---|---|
@@ -164,10 +163,10 @@ an equality check and 23.81 ns and 128 bytes for a hash. Those two lines were th
 | Struct id `Parse` | 23.62 ns | 96 B |
 | Record id `Parse` | 28.11 ns | 152 B |
 
-**This one goes against the recommendation, and it is a real finding.** The struct identifier's
-`ToString` allocates 2.2 times what the record identifier's does.
+**This measurement went against the recommendation.** The `ToString` of the struct identifier used to allocate
+2.2 times as much as that of the record identifier: 232 bytes against 104.
 
-It is not the struct's fault, it is the generator's. The struct form emits:
+The cause was the generated code of the struct. The generator used to write:
 
 ```csharp
 public override string ToString()
@@ -176,12 +175,11 @@ public override string ToString()
 private string ValueToString() => Convert.ToString(Value, CultureInfo.InvariantCulture) ?? string.Empty;
 ```
 
-`Convert.ToString(object, IFormatProvider)` boxed the `Guid` and built the 36-character string, and the
-concatenation then built a second 40-character string: three allocations against the record form's one,
-which went through an interpolated string. A struct identifier written into a log line on every request
-paid 232 bytes for it.
+`Convert.ToString(object, IFormatProvider)` boxed the `Guid` and built the 36-character string. The concatenation
+then built a second string of 40 characters. That made three allocations, against one for the record form, which
+used an interpolated string. A struct identifier written into a log line on every request cost 232 bytes.
 
-The generator now writes the interpolated form too, pinned to the invariant culture:
+The generator now writes the interpolated form for the struct too, with the invariant culture:
 
 ```csharp
 public override string ToString()
@@ -190,14 +188,14 @@ public override string ToString()
         : string.Create(CultureInfo.InvariantCulture, $"{IdPrefix}_{Value}");
 ```
 
-Nothing is boxed, one string comes out, and both forms now allocate 104 bytes. The table above is from
-after that change.
+Nothing is boxed, and one string is built. Both forms now allocate 104 bytes. The table above is from after that
+change.
 
 ## The Entity Framework round trip
 
-The question is whether the form of the identifier matters to persistence at all.
-[Identifiers](identifiers.md#struct-or-record) says it does not, on the strength of this measurement.
-Both aggregates are the same shape, with the same payload column, keyed differently:
+This section measures whether the form of the identifier matters to persistence.
+[Identifiers](identifiers.md#struct-or-record) says it does not, based on this measurement. Both aggregates have
+the same shape and the same payload column. Only the key differs:
 
 ```csharp
 [AggregateRoot<StructOrderId>] public partial class StructOrder { ... }
@@ -206,21 +204,21 @@ Both aggregates are the same shape, with the same payload column, keyed differen
 
 ### Inserting
 
-1,000 aggregates added and saved, against a database created fresh for each measured invocation.
+The benchmark adds and saves 1,000 aggregates, in a new database for each measured run.
 
 | | Mean | Allocated |
 |---|---|---|
 | Struct id | 30.26 ms ± 3.68 | 7.38 MB |
 | Record id | 31.44 ms ± 4.15 | 7.71 MB |
 
-The times overlap. Do not read a winner into them: the error bars are ±12%, the distribution is
-bimodal, and a database write is not a thing you measure to three significant figures. The allocation
-figure is deterministic and says what there is to say: 4% more, which is the 1,000 identifier objects.
+The times overlap, so neither form wins. The error bars are ±12%, the distribution has two peaks, and a database
+write cannot be measured to three significant figures. The allocation is deterministic. The record form allocates
+4% more, for the 1,000 identifier objects.
 
 ### Reading
 
-2,000 rows in the table. "Read all" materialises every row through a new context; "find by key" does
-100 single-row lookups.
+The table has 2,000 rows. "Read all" loads every row through a new context. "Find by key" makes 100 lookups of one
+row each.
 
 | | Mean | Allocated |
 |---|---|---|
@@ -229,83 +227,93 @@ figure is deterministic and says what there is to say: 4% more, which is the 1,0
 | Find by key, struct id | 1.11 ms | 888.16 KB |
 | Find by key, record id | 1.20 ms | 899.90 KB |
 
-The claim holds, with one correction to how it is phrased. **The struct identifier costs nothing in
-persistence, and neither does the record identifier.** Both go through the same generated value
-converter to the same provider column (the provider test suite asserts that the two produce the same
-column type), and the database work swamps everything either of them does. The 19% extra allocation on
-the record read is one object per row, and it disappears into the 1 MB that materialising 2,000 rows
-costs anyway.
+The claim holds, with one correction. **Neither form costs anything in persistence.**
 
-If you were choosing between the two forms on persistence alone, there would be nothing to choose.
+- Both forms go through the same generated value converter to the same column type. The provider test suite
+  checks that the two forms produce the same column type.
+- The database work is far larger than anything either form adds.
+- The record form allocates 19% more when it reads all rows. That is one object per row, small next to the 1 MB
+  that loading 2,000 rows costs anyway.
 
-## What this means for the recommendation
+So persistence is no reason to choose either form.
 
-[Identifiers](identifiers.md) says to prefer the struct form. These are the reasons that
-recommendation has rested on, and what the measurements say about each:
+## Summary: struct or record
+
+[Identifiers](identifiers.md) recommends the struct form. The table lists the reasons for that recommendation, and
+what the measurements say about each:
 
 | Claim | Verdict |
 |---|---|
-| The struct is 16 bytes and the record adds a reference and a header | True, and more than it sounds: 64 bytes against 16, because the record also carries validation state. |
-| A list of ten thousand is one block instead of ten thousand objects | True. Reading through the reference costs about 20%. |
-| The struct costs nothing in persistence | True. So does the record: this is not a reason to choose either. |
-| (unstated) Equality and hashing | Was the strongest reason by far, at 17x to 70x with allocation on every comparison. Writing this page found the cause and it is fixed; the gap is now 1.4x to 2.5x with nothing allocated. |
-| (unstated) `ToString` | Was the one place the record form won, because of a fixable inefficiency in the generated struct. Also fixed; both allocate 104 bytes. |
+| The struct is 16 bytes, and the record adds a reference and a header. | True, and the difference is larger: 64 bytes against 16, because the record also carries validation state. |
+| A list of ten thousand is one block instead of ten thousand objects. | True. Reading through the reference costs about 20%. |
+| The struct costs nothing in persistence. | True. The record costs nothing either, so this is no reason to choose one form. |
+| (unstated) Equality and hashing | This was the strongest reason, at 17x to 70x with an allocation on every comparison. The measurements for this page found the cause, and it is fixed. The gap is now 1.4x to 2.5x, with nothing allocated. |
+| (unstated) `ToString` | This was the one place where the record form won, because of an inefficiency in the generated struct code. That is fixed too. Both forms allocate 104 bytes. |
 
-The short version: choose the struct form to avoid an object per identifier and a dereference on every
-read, not for the database, and no longer because equality is catastrophic. Two of the five rows in
-this table describe defects that existed only because nobody had measured, which is the case for
-keeping the benchmarks in the repository rather than running them once.
+Choose the struct form to avoid an object per identifier and a dereference on every read. Persistence is no reason
+for either form, and equality is no longer a reason. Two of the five rows describe defects that existed because
+nobody had measured. That is why the benchmarks stay in the repository.
 
 ## Provider coverage
 
-The benchmarks above are SQLite only. Correctness on other providers is a separate question, and it is
-answered by a separate suite: `Tests/DDDToolkit.EntityFramework.Providers.Tests` runs the mapping,
-concurrency, outbox and inbox tests against real PostgreSQL 17 and SQL Server 2022 in
-[Testcontainers](https://dotnet.testcontainers.org). Without Docker every test in it skips with a
-message naming the reason, so a machine without Docker stays green and stays honest about it.
+The benchmarks above run on SQLite only. A separate test suite checks the mapping on other providers.
+`Tests/DDDToolkit.EntityFramework.Providers.Tests` runs the mapping, concurrency, outbox and inbox tests against
+PostgreSQL 17 and SQL Server 2022 in [Testcontainers](https://dotnet.testcontainers.org).
 
-Three things that suite pins down and SQLite never could:
+- Without Docker, every test in the suite skips with a message that names the reason.
+- With the environment variable `DDDTOOLKIT_REQUIRE_CONTAINERS` set, a container that does not start fails the
+  test instead.
 
-- **The `ddd` schema is real.** SQLite has no schemas and silently drops the argument, so the default
-  the outbox and inbox ship with was never exercised. It works: `EnsureCreated` creates the schema and
-  both tables land in it on both servers.
-- **A struct id and a record id produce the same column.** `uuid` on PostgreSQL,
-  `uniqueidentifier` on SQL Server, for the key, for a plain property and for a nullable one. This is
-  what the persistence numbers above are measuring the other half of.
-- **The outbox timestamp conversion costs SQL Server and not PostgreSQL.** The outbox stores every
-  timestamp as a UTC `DateTime` because SQLite cannot order by `DateTimeOffset`. On PostgreSQL both
-  land in `timestamp with time zone`, so the workaround is free. On SQL Server the column is
-  `datetime2` where a `DateTimeOffset` would have been `datetimeoffset`: the offset is not stored,
-  which is harmless while everything is UTC and is still a column shape SQL Server users did not
-  choose.
+The suite checks three things that SQLite cannot:
 
-A fourth is a difference rather than a cost: a primitive collection of converted ids becomes a native
-`integer[]` on PostgreSQL and a JSON `nvarchar` on SQL Server. Both round trip, and a query that
-reaches inside one will not port.
+- **The `ddd` schema works.** SQLite has no schemas and ignores the schema argument without an error. So the
+  default schema of the outbox and the inbox was never tested there. On both servers, `EnsureCreated` creates the
+  schema, and creates both tables in it.
+- **A struct id and a record id produce the same column.** The column is `uuid` on PostgreSQL and
+  `uniqueidentifier` on SQL Server, for the key, for a plain property and for a nullable one. This is the other
+  half of the persistence numbers above.
+- **The outbox and the inbox keep their timestamps in the provider's own instant type.** That is
+  `timestamp with time zone` on PostgreSQL and `datetimeoffset` on SQL Server. The toolkit converts to a UTC
+  `DateTime` on SQLite only, because SQLite cannot order by a `DateTimeOffset`. A database made with
+  `DomainEventTimestamps.UtcDateTime` keeps its `datetime2` columns on SQL Server, and both shapes read back the
+  same instant ([Outbox and inbox timestamps](migrating-to-3.md#outbox-and-inbox-timestamps)).
+
+The suite also shows one difference between the providers. A primitive collection of converted ids becomes a
+native `integer[]` on PostgreSQL and a JSON `nvarchar` on SQL Server. Both round trip, and a LINQ query over the
+collection works on both providers. A SQL query that reads inside the collection needs a different form for each
+provider.
 
 ## Tenancy: the shape of the access data
 
-The [Tenancy](tenancy/overview.md) supporting domain stores who holds what as facts, starts every question from the
-person asking, and keeps the organization as a closure table. These are the measurements those choices
-rest on. They compare it with the shape a permission model tends to grow into: a table of what every
-person may do on every project, kept up to date by triggers, a copy of the organization path on every
-project, and row level security policies that call a function for every row.
+The [Tenancy](tenancy/overview.md) supporting domain makes three choices:
+
+- it stores facts, such as which seat holds which role at which unit;
+- it starts every query from the person who asks;
+- it keeps the organization tree as a closure table.
+
+The measurements below support these choices. They compare Tenancy's shape with a shape that permission models
+often grow into:
+
+- a table of what every person may do on every project, kept up to date by triggers;
+- a copy of the organization path on every project;
+- row level security (RLS) policies that call a function for every row.
 
 ### The data
 
-The same data both ways, and both give every person the same answer:
+Both shapes hold the same data, and both give every person the same result:
 
-- one large tenant: 3,111 units in five levels (a root, 10 regions, 100 areas, 1,000 units below the areas
-  and 2,000 below those), 49,776 projects, 1,000 seats, and a crew of three on every project, a crew lead,
-  a surveyor and an observer;
+- one large tenant: 3,111 units in five levels (the root, 10 regions, 100 areas, 1,000 units below the areas and
+  2,000 below those), 49,776 projects, 1,000 seats, and a crew of three on every project: a crew lead, a surveyor
+  and an observer;
 - 20 area managers who hold `projects.edit` at an area, and one who holds it at the root;
 - 49 small tenants of 111 units and 999 projects each, 98,727 projects in all.
 
-### Storage, and the list of my projects
+### Storage and the project list
 
-Measured on PostgreSQL 17 for two people: an area manager, who holds the permission at one area and is on some
-crews as well, and sees 643 projects; and a surveyor, who holds no permission in the organization and is on the
-crew of 150 projects.
+Measured on PostgreSQL 17, for two people:
+
+- an area manager, who holds the permission at one area, is also on some crews, and sees 643 projects;
+- a surveyor, who holds no permission in the organization, and is on the crew of 150 projects.
 
 | | Per-person table, per-row policies | Per-person table, set-shaped policy | Facts, set-shaped |
 |---|---:|---:|---:|
@@ -318,29 +326,33 @@ crew of 150 projects.
 | Growth of the connection's memory | +1.0 MB | +0.8 MB | +0.6 MB |
 | Cached plans in the connection | 293 KB | 49 KB | none |
 
-Three things account for the difference:
+Three causes explain the difference:
 
-- **Storing outcomes is what costs the space.** The table of what every person may do on every project,
-  one row per person, permission and project, is 256 MB on its own. The facts it is computed from, the crews and
-  the permissions of each role, are 39 MB.
-- **A policy that runs per row reads the whole tenant.** Asked for a list, it runs its function once for
-  each of the tenant's projects, whatever the person may see. Rewritten set-shaped, the policy computes
-  the set of permitted projects once per statement, which fixes the list and breaks the other case: a
-  single project now pays for the whole set, 9 seconds for 50 of them. Starting from the person is cheap
-  both ways, because the set is only as large as what that person may do.
-- **What a connection keeps is multiplied by the connections.** PostgreSQL gives every connection a
-  process of its own, and each keeps its cached plans and catalogue entries for as long as it lives. The
-  per-row policies call PL/pgSQL functions, whose plans are cached per connection. The facts version's
-  set functions are SQL functions that run once per statement, for which PostgreSQL 17 keeps no cached
-  plan. A connection grew by 0.6 MB instead of 1.0 to 1.1 MB: small per connection, and it adds up with
-  hundreds of them.
+- **Storing outcomes costs the space.** The table of what every person may do on every project has one row per
+  person, permission and project. It is 256 MB on its own. The facts it is computed from, the crews and the
+  permissions of each role, take 39 MB.
+- **A policy that runs per row reads the whole tenant.** For a list, the policy calls its function once for each
+  project of the tenant, whatever the person may see. A set-shaped policy computes the set of permitted projects
+  once per statement. That makes the list fast, and makes the other case slow. A single project now pays for the
+  whole set, 9 seconds for 50 projects. Starting from the person is fast in both cases, because the set is only as
+  large as what that person may do.
+- **Memory per connection is multiplied by the number of connections.** PostgreSQL runs every connection in its
+  own process, and each process keeps its cached plans and catalogue entries for its lifetime. The per-row
+  policies call PL/pgSQL functions, whose plans each connection caches. The set functions of the facts shape are
+  SQL functions that run once per statement, and PostgreSQL 17 caches no plan for them. A connection grew by
+  0.6 MB instead of 1.0 to 1.1 MB. That is small per connection, and it adds up over hundreds of connections.
 
 ### The organization tree
 
-The tree was measured on data of its own: the same tenants, units and projects, no seats or crews, and
-three people who hold `projects.edit`: an area manager at two areas, who sees 992 projects, an area manager
-at the root, and a crew lead at one unit below an area. On PostgreSQL, the median execution time of seven
-runs, per way to ask "which projects are under the units where I hold the permission":
+The tree has its own data set: the same tenants, units and projects, without seats or crews. Three people hold
+`projects.edit`:
+
+- an area manager at two areas, who sees 992 projects;
+- an area manager at the root;
+- a crew lead at one unit below an area.
+
+The query asks which projects are below the units where the person holds the permission. The table shows the
+median execution time of seven runs on PostgreSQL, for each way to store the tree:
 
 | Who, and how many projects | `ltree` | Text path, a range | Closure table | Path copied on every project, per row |
 |---|---:|---:|---:|---:|
@@ -348,15 +360,16 @@ runs, per way to ask "which projects are under the units where I hold the permis
 | Area manager at the root, 49,776 | 10.41 ms | 10.23 ms | 10.31 ms | 16.15 ms |
 | Crew lead at one unit, 48 | 0.22 ms | 0.16 ms | 0.14 ms | 15.22 ms |
 
-The three ways of storing the tree are equally fast. The path copied onto every project is slower for
-everyone, the manager at the root included, because it checks every project of the tenant whatever the
-person may see. Moving an area with its 30 units under another region takes 0.4 ms with a text path,
-0.7 ms with `ltree` and 3.3 ms with the closure table, which replaces the 62 rows that link the moved units
-to the ancestors they leave and gain. No project is touched in any of them.
+- The three ways to store the tree are equally fast.
+- The path copied onto every project is slower for everyone, the manager at the root included, because the query
+  checks every project of the tenant.
+- Moving an area with its 30 units below another region takes 0.4 ms with a text path, 0.7 ms with `ltree`, and
+  3.3 ms with the closure table. The closure table replaces the 62 rows that link the moved units to the units
+  above them that they leave and gain. None of the three changes a project row.
 
-The closure table is the one that works everywhere. It is plain joins on ids: no extension, no collation
-that decides whether a range query is right, and no limit on the length of an index key. The same query
-on SQL Server 2022, against a text path with a binary collation, and on SQLite in memory:
+The closure table works on every database. It uses plain joins on ids. It needs no extension and no collation for
+a range query, and it has no limit on the length of an index key. The same query on SQL Server 2022, against a
+text path with a binary collation, and on SQLite in memory:
 
 | Who | SQL Server, text path | SQL Server, closure table | SQLite, text path | SQLite, closure table |
 |---|---:|---:|---:|---:|
@@ -364,26 +377,25 @@ on SQL Server 2022, against a text path with a binary collation, and on SQLite i
 | Area manager at the root | 4.00 ms | 4.01 ms | 2.52 ms | 1.88 ms |
 | Crew lead at one unit | 1.24 ms | 1.26 ms | 0.01 ms | 0.01 ms |
 
-Compare the columns of one database, not the databases: SQL Server's times are taken inside the server,
-200 executions at a time because its clock moves in steps of about 4 ms, and SQLite runs in the process,
-in memory.
+Compare the columns within one database, and do not compare the databases. SQL Server's times are taken inside
+the server, over 200 executions at a time, because its clock moves in steps of about 4 ms. SQLite runs in the
+process, in memory.
 
 ### How it was measured
 
-On the machine above, with PostgreSQL 17 and SQL Server 2022 in Docker, one session at a time and a warm
-cache. This is not a load test: how the shapes behave with many people at once is not measured here.
+On the test machine above, with PostgreSQL 17 and SQL Server 2022 in Docker, one session at a time, and a warm
+cache. This is no load test. The behavior with many people at once is not measured.
 
-The tree comparison is in `Benchmarks/Tenancy`, with a `README.md` that says how to run it and how each
-number is taken. The storage and list comparison is different: its script is not in the repository, and
-the numbers are given as measured.
+The tree comparison is in `Benchmarks/Tenancy`. Its `README.md` says how to run it and how each number is taken.
+The script of the storage and list comparison is not in the repository. Its numbers are given as measured.
 
-## Things this page does not measure
+## Not measured
 
-- **Other providers.** Everything before the Tenancy section is SQLite in memory. Mapping behaviour on
-  PostgreSQL and SQL Server is covered by the suite above, but nothing times it.
-- **The generators.** Build-time cost of the source generators is not measured anywhere.
-- **The outbox.** Throughput of `OutboxProcessor` under load, and what the `ProcessedAt` index does as
-  the table grows, are open questions.
-- **JSON and GraphQL.** The generated converters are not benchmarked.
-- **Value objects.** `ValueObject` equality has the same `GetEqualityComponents` cost measured above,
-  and value objects are compared far less often than identifiers, but nobody has checked.
+- **Other providers.** Everything before the Tenancy section runs on SQLite in memory. The suite above checks the
+  mapping on PostgreSQL and SQL Server, but does not time it.
+- **The generators.** Nothing measures the build-time cost of the source generators.
+- **The outbox.** The throughput of `OutboxProcessor` under load, and the effect of the `ProcessedAt` index as the
+  table grows, are open questions.
+- **JSON and GraphQL.** The generated converters have no benchmarks.
+- **Value objects.** `ValueObject` equality still walks `GetEqualityComponents`, with the cost measured above.
+  Value objects are compared far less often than identifiers, but nobody has measured them.

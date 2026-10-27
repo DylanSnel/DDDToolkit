@@ -73,7 +73,7 @@ Tenancy's save check.
 
 - Sets the caller's tenant on every connection ([Passing the tenant to Postgres](#passing-the-tenant-to-postgres)).
 - Requires explicit callers. Work that never says who it runs as fails. Without this rule, that work would run
-  as the application, past every policy ([Fail-closed callers](../row-level-security.md#fail-closed-callers)).
+  as the application, past every policy ([Fail-closed callers](../row-level-security.md#requiring-explicit-callers)).
 - Leaves [the rights](#how-rights-are-written) to the database, by turning on
   `TenancyStoreOptions.DatabaseKeepsRights`.
 - Turns the refusal of the administrator trigger into `tenancy.last-admin`, and registers the
@@ -185,7 +185,7 @@ A tenant with two roots cannot get the index until one of the roots has a parent
 - Tenancy passes the tenant in one setting, `tenancy.caller_tenant`
   ([`TenantSetting`](reference/postgres.md#tenantsetting)). The value is the Tenancy caller's tenant id, or empty.
   The interceptor sets it in the same statement as the role and the claims
-  ([Settings of your own](../row-level-security.md#settings-of-your-own)). An anonymous caller gets an empty value.
+  ([Settings of your own](../row-level-security.md#custom-connection-settings)). An anonymous caller gets an empty value.
 - **For a signed-in user**, the setting names the tenant and never the seat. `caller_seat()` finds the seat of the
   token's identity in that tenant, while the seat and the tenant are active. A wrong tenant finds no seat.
 - **System work in a tenant** runs as the scoped system role, with that tenant in the setting.
@@ -401,7 +401,7 @@ member, as the package's `ReadRulesTests` do.
 
 A rule that allows can only add rows. To take rows away, set `Restrictive = true` on a rule about your organization,
 seat or role class. The export joins its policy with Tenancy's policy by AND
-([Rules that only narrow](../row-level-security.md#rules-that-only-narrow-restrictive)). A row passes only where both
+([Rules that only narrow](../row-level-security.md#restrictive-rules)). A row passes only where both
 policies allow it.
 
 Example: a tenant has employees and external people. External people work on one project, and should not read the
@@ -486,7 +486,7 @@ public static partial class EmployeesReadEveryoneExternalsTheirProjects
 
 Tenancy's access file runs before the projects' access file, which creates the function the rule calls. So the
 export writes the rule through a function of Tenancy's that calls the projects' function at run time
-([A rule that asks a module that asks back](../row-level-security.md#a-resources-access-asked-by-its-id)).
+([A rule that asks a module that asks back](../row-level-security.md#resource-access-contracts)).
 
 ## Tenancy's SQL functions
 
@@ -539,7 +539,7 @@ public static partial class ProjectsAreReadWhereThePermissionIsHeld
 In SQL, the rule becomes `"UnitId" = ANY (ARRAY(SELECT "tenancy".units_where_i_hold_permission('projects.read')))`.
 `EXPLAIN` shows an init plan. Postgres runs the function once per statement, and compares each row's `UnitId` with
 the result, through an index when the table is large enough. The function never runs per row
-([set-shaped questions](../row-level-security.md#set-shaped-questions)).
+([set-shaped questions](../row-level-security.md#set-shaped-access-functions)).
 
 ## Read functions for modules
 
@@ -627,7 +627,7 @@ Keep such files in a table or bucket of their own, or test the shape in a `CASE`
 
 **In a module's rule**, a scalar function may take the tenant from the row. A set-shaped function runs once per
 statement, so it may not take the tenant from the row ([DDD00051](../diagnostics.md#ddd00051)). Pass the tenant as a
-parameter of an [access function](../row-level-security.md#asking-the-aggregates-entities-access-functions)
+parameter of an [access function](../row-level-security.md#access-functions)
 instead:
 
 ```csharp
@@ -973,7 +973,7 @@ Postgres checks a role's privileges on a table before it applies any policy.
 - To grant by hand, give signed-in users and the scoped system role usage of Tenancy's schema and
   `select, insert, update, delete` on its tables. Give `anon` nothing.
 - Tenancy's outbox and inbox have no policies. Callers add outbox rows. The scoped system role reads and adds inbox
-  rows ([grants](../row-level-security.md#a-postgres-of-your-own)).
+  rows ([grants](../row-level-security.md#setup-on-postgres-without-supabase)).
 
 ## Reads across tenants
 

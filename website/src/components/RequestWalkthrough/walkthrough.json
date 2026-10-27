@@ -40,7 +40,7 @@
     {
       "id": "system",
       "name": "System work",
-      "who": "The application's own work in harbor, begun by trusted code with `TenancyUseCases.BeginSystemIn(harbor)`.",
+      "who": "System work in harbor, started by trusted code with `TenancyUseCases.BeginSystemIn(harbor)`.",
       "runsAs": "ddd_system_in",
       "connection": "SELECT set_config('role', 'ddd_system_in', false), set_config('request.jwt.claims', '{\"role\":\"ddd_system_in\",\"scope\":\"tenancy\"}', false), …, set_config('tenancy.caller_tenant', '<harbor>', false);"
     }
@@ -72,14 +72,14 @@
     },
     {
       "id": "statement",
-      "title": "The statement at the door",
+      "title": "The statement the check sends",
       "short": "Statement",
       "where": "Postgres, as the caller"
     },
     {
       "id": "door",
-      "title": "What the door says",
-      "short": "The door",
+      "title": "Let through or refused",
+      "short": "The answer",
       "where": "before the handler runs"
     },
     {
@@ -184,7 +184,7 @@
           },
           "statement": {
             "snippet": null,
-            "say": "`InTenant` reads nothing at the door: the caller's seat in harbor was found by the host when the request came in."
+            "say": "`InTenant` reads nothing in the access check. The host found the caller's seat in harbor when the request came in."
           },
           "rows": {
             "result": "200 · every unit of harbor",
@@ -205,7 +205,7 @@
           },
           "statement": {
             "snippet": null,
-            "say": "`InTenant` reads nothing at the door: the caller's seat in harbor was found by the host when the request came in."
+            "say": "`InTenant` reads nothing in the access check. The host found the caller's seat in harbor when the request came in."
           },
           "rows": {
             "result": "200 · North Coast",
@@ -233,7 +233,7 @@
           "rows": {
             "round": true,
             "result": "no row",
-            "say": "The handler does not run. A statement of theirs that goes round the door reads no unit: `caller_tenant()` finds no seat, so no row is of their tenant.",
+            "say": "A statement they send directly reads no unit, because `caller_tenant()` finds no seat, so no row is in their tenant.",
             "snippet": "rows.units-read"
           }
         },
@@ -257,7 +257,7 @@
           "rows": {
             "round": true,
             "result": "every unit of every tenant",
-            "say": "Round the door she reads every unit of every tenant: operators read every tenant, and this policy says so. The request requires a seat; the table lets operators read. The door and the rows answer different questions.",
+            "say": "Sent directly, she reads every unit of every tenant, because this policy lets operators read every tenant. The request requires a seat, while the table lets operators read. The access check and the policies answer different questions.",
             "snippet": "rows.units-read-operators"
           }
         },
@@ -281,7 +281,7 @@
           "rows": {
             "round": true,
             "result": "refused, 42501",
-            "say": "Round the door nothing: `anon` may not use Tenancy's schema at all, and a restrictive policy closes every table of it as well.",
+            "say": "Sent directly, nothing is read. `anon` may not use Tenancy's schema at all, and a restrictive policy also closes every table in it.",
             "snippet": "rows.closed-to-anon"
           }
         },
@@ -298,7 +298,7 @@
           },
           "statement": {
             "snippet": null,
-            "say": "`InTenant` reads nothing at the door."
+            "say": "`InTenant` reads nothing in the access check."
           },
           "rows": {
             "result": "200 · every unit of harbor",
@@ -361,7 +361,7 @@
           },
           "statement": {
             "snippet": "statement.at-unit",
-            "say": "One statement, as Ada: her rights joined to the closure table of the tree, so \"at North Coast or above it\" is one join."
+            "say": "One statement, as Ada. It joins her `SeatRights` rows to the closure table of the tree, so \"at North Coast or above it\" is one join."
           },
           "rows": {
             "result": "200 · a new unit below North Coast",
@@ -381,16 +381,16 @@
             "pass": false,
             "status": 403,
             "code": "tenancy.not-permitted",
-            "say": "Meadow Gardens' root is not a unit of harbor, and Ada's rights are harbor's: the statement finds the permission at no unit above it. The refusal names the permission and the unit."
+            "say": "Meadow Gardens' root is not a unit of harbor, and Ada's permissions are harbor's only. The statement finds the permission at no unit above it. The refusal names the permission and the unit."
           },
           "statement": {
             "snippet": "statement.at-unit",
-            "say": "One statement, as Ada: no right of hers reaches that unit."
+            "say": "One statement, as Ada. None of her permissions reaches that unit."
           },
           "rows": {
             "round": true,
             "result": "refused, 42501",
-            "say": "Round the door the insert policy refuses the row: it is not of her tenant, and its parent is none of the units where she holds the permission.",
+            "say": "Sent directly, the insert policy refuses the row. The row is not in her tenant, and its parent is not one of the units where she holds the permission.",
             "snippet": "rows.units-insert"
           }
         },
@@ -409,12 +409,12 @@
           },
           "statement": {
             "snippet": "statement.at-unit",
-            "say": "One statement, as Juno: it finds no right."
+            "say": "One statement, as Juno. It finds no permission."
           },
           "rows": {
             "round": true,
             "result": "refused, 42501",
-            "say": "Round the door the insert policy refuses the row: the parent is not among `units_where_i_hold_permission('tenancy.units.manage')` for her.",
+            "say": "Sent directly, the insert policy refuses the row. The parent is not in `units_where_i_hold_permission('tenancy.units.manage')` for her.",
             "snippet": "rows.units-insert"
           }
         },
@@ -438,7 +438,7 @@
           "rows": {
             "round": true,
             "result": "refused, 42501",
-            "say": "Round the door the insert policy finds no tenant of theirs, and refuses the row.",
+            "say": "Sent directly, the insert policy finds no tenant of theirs, and refuses the row.",
             "snippet": "rows.units-insert"
           }
         },
@@ -462,7 +462,7 @@
           "rows": {
             "round": true,
             "result": "refused, 42501",
-            "say": "Round the door: no permissive policy lets the operators' role write Tenancy's units, so it holds only `SELECT` there, the one command its policy here allows, and Postgres refuses the insert before it asks a policy.",
+            "say": "Sent directly, the insert fails before any policy is checked. No permissive policy lets the operators' role write Tenancy's units, so the role has only `SELECT` there, the one command its policy here allows.",
             "snippet": "rows.units-read-operators"
           }
         },
@@ -486,7 +486,7 @@
           "rows": {
             "round": true,
             "result": "refused, 42501",
-            "say": "Round the door: `anon` may not use Tenancy's schema, and a restrictive policy closes every table of it.",
+            "say": "Sent directly, nothing is written. `anon` may not use Tenancy's schema, and a restrictive policy closes every table in it.",
             "snippet": "rows.closed-to-anon"
           }
         },
@@ -533,7 +533,7 @@
           "rows": {
             "round": true,
             "result": "refused, 42501",
-            "say": "Round the door the policy of Tenancy's work refuses a row of another tenant: `system_tenant()` is harbor.",
+            "say": "Sent directly, the policy for Tenancy's work refuses a row of another tenant, because `system_tenant()` is harbor.",
             "snippet": "rows.units-insert-system"
           }
         }
@@ -658,7 +658,7 @@
           "rows": {
             "round": true,
             "result": "refused, 42501",
-            "say": "Round the door Membership's lock refuses her row: Pier 7 is not among `projects_where_i_hold('projects.crew.manage')` for her.",
+            "say": "Sent directly, Membership's lock refuses her row. Pier 7 is not in `projects_where_i_hold('projects.crew.manage')` for her.",
             "snippet": "rows.crew-insert"
           }
         },
@@ -683,7 +683,7 @@
           "rows": {
             "round": true,
             "result": "refused, 42501",
-            "say": "Round the door Membership's lock refuses her row as well.",
+            "say": "Sent directly, Membership's lock refuses her row as well.",
             "snippet": "rows.crew-insert"
           }
         },
@@ -707,7 +707,7 @@
           "rows": {
             "round": true,
             "result": "refused, 42501",
-            "say": "Round the door the crew's policies find no seat of theirs, and refuse the row.",
+            "say": "Sent directly, the crew's policies find no seat of theirs, and refuse the row.",
             "snippet": "rows.crew-insert"
           }
         },
@@ -731,7 +731,7 @@
           "rows": {
             "round": true,
             "result": "refused, 42501",
-            "say": "Round the door: her role holds only `SELECT` on the crew's table, so Postgres refuses the insert before it asks a policy, and Tenancy's restrictive `Operators only read` would refuse the row as well.",
+            "say": "Sent directly, the insert fails before any policy is checked, because her role has only `SELECT` on the crew's table. Tenancy's restrictive `Operators only read` would refuse the row as well.",
             "snippet": null
           }
         },
@@ -755,7 +755,7 @@
           "rows": {
             "round": true,
             "result": "refused, 42501",
-            "say": "Round the door: no permissive policy is for `anon`, so it may not use the schema of a module kept to a tenant, and a restrictive policy closes every table of it as well.",
+            "say": "Sent directly, nothing is written. No permissive policy is for `anon`, so it may not use the schema of a module that belongs to a tenant, and a restrictive policy also closes every table in it.",
             "snippet": null
           }
         },
@@ -771,7 +771,7 @@
             "pass": false,
             "status": 409,
             "code": "concurrency-conflict",
-            "say": "The application's own work holds every permission, so only the project and its version are read, and the version is not the one it read."
+            "say": "System work holds every permission, so only the project and its version are read. The version is not the one it read."
           },
           "statement": {
             "snippet": "statement.member-hold-system",
@@ -860,7 +860,7 @@
           },
           "statement": {
             "snippet": null,
-            "say": "Nothing is sent: the caller's own is compared at the door with the seat found when the request came in."
+            "say": "Nothing is sent. The access check compares the caller's own seat with the seat found when the request came in."
           },
           "rows": {
             "result": "200 · renamed",
@@ -928,12 +928,12 @@
           },
           "statement": {
             "snippet": "statement.tenant-wide",
-            "say": "One statement, for the second way in. It finds no right."
+            "say": "One statement, for the second alternative. It finds no permission."
           },
           "rows": {
             "round": true,
             "result": "UPDATE 0",
-            "say": "Round the door the update policy hides Leo's row from her: the statement changes nothing.",
+            "say": "Sent directly, the update policy hides Leo's row from her, so the statement changes nothing.",
             "snippet": "rows.seat-update"
           }
         },
@@ -957,7 +957,7 @@
           "rows": {
             "round": true,
             "result": "UPDATE 0",
-            "say": "Round the door the update policy finds no seat of theirs in harbor, so it lets them change no row: the statement changes nothing.",
+            "say": "Sent directly, the update policy finds no seat of theirs in harbor, so it lets them change no row. The statement changes nothing.",
             "snippet": "rows.seat-update"
           }
         },
@@ -982,7 +982,7 @@
           "rows": {
             "round": true,
             "result": "refused, 42501",
-            "say": "Round the door neither may change a seat. No permissive policy lets the operators' role write Tenancy's seats, so the export grants it only `SELECT` there, and Postgres refuses the update before it asks a policy; `anon` may not use Tenancy's schema at all. The column rule on the name would refuse both roles as well.",
+            "say": "Sent directly, neither may change a seat. No permissive policy lets the operators' role write Tenancy's seats, so the export grants it only `SELECT` there, and Postgres refuses the update before it checks a policy. `anon` may not use Tenancy's schema at all. The column rule on the name would refuse both roles as well.",
             "snippet": "rows.seat-update"
           }
         },
@@ -1003,7 +1003,7 @@
           },
           "rows": {
             "result": "200 · renamed",
-            "say": "Written as `ddd_system_in`, under the policy of Tenancy's own work. The column rule holds the roles of callers, not the application's own work.",
+            "say": "Written as `ddd_system_in`, allowed by the policy for Tenancy's own work. The column rule checks only the roles of callers, so system work passes it.",
             "snippet": "rows.seat-update-system"
           }
         }
@@ -1068,7 +1068,7 @@
           "rows": {
             "result": "500 · 42501, permission denied",
             "warn": true,
-            "say": "The trap. The door let her through, but with the operators' rule gone no permissive policy is for her role, and the Supabase export writes a table's privileges from its permissive policies: `tenancy_operator` may not read the audit table at all. The read fails with 42501, permission denied, an error the toolkit does not make a refusal of, so the host answers 500. Where the host grants the privileges itself, she reads an empty page instead, and nothing says why. Each way through an `Any` to a table of your own needs a row rule of its own.",
+            "say": "The trap. The access check let her through, but with the operators' rule gone no permissive policy is for her role. The Supabase export writes a table's privileges from its permissive policies, so `tenancy_operator` may not read the audit table at all. The read fails with 42501, permission denied. The toolkit does not turn this error into a refusal, so the host answers 500. When the host grants the privileges itself, she reads an empty page instead, with no reason given. Each alternative of an `Any` that reaches a table of your own needs its own row rule.",
             "snippet": "rows.audit-forgotten"
           }
         },
@@ -1129,12 +1129,12 @@
           },
           "statement": {
             "snippet": "statement.tenant-wide",
-            "say": "One statement, for the second way in. It finds no right."
+            "say": "One statement, for the second alternative. It finds no permission."
           },
           "rows": {
             "round": true,
             "result": "no row",
-            "say": "Round the door the seat managers' rule lets her read no row: she does not hold the permission.",
+            "say": "Sent directly, the seat managers' rule lets her read no row, because she does not hold the permission.",
             "snippet": "rows.audit"
           }
         },
@@ -1158,7 +1158,7 @@
           "rows": {
             "round": true,
             "result": "no row",
-            "say": "Round the door the seat managers' rule lets them read no row: no seat of theirs manages seats, and Tenancy's restrictive policy finds no tenant of theirs.",
+            "say": "Sent directly, the seat managers' rule lets them read no row. No seat of theirs manages seats, and Tenancy's restrictive policy finds no tenant of theirs.",
             "snippet": "rows.audit"
           }
         },
@@ -1182,7 +1182,7 @@
           "rows": {
             "round": true,
             "result": "refused, 42501",
-            "say": "Round the door no permissive policy is for `anon`, so the export grants it nothing: it may not read the table, nor use its schema.",
+            "say": "Sent directly, nothing is read. No permissive policy is for `anon`, so the export grants it nothing. It may not read the table, nor use its schema.",
             "snippet": "rows.audit"
           }
         },
@@ -1203,7 +1203,7 @@
           },
           "rows": {
             "result": "200 · harbor's entries",
-            "say": "Read as `ddd_system_in`, under the policy Tenancy writes for system work on every table kept to a tenant, which keeps it to harbor.",
+            "say": "Read as `ddd_system_in`, allowed by the policy that Tenancy writes for system work on every table that belongs to a tenant. That policy keeps it to harbor.",
             "snippet": null
           }
         }
@@ -1268,7 +1268,7 @@
           "rows": {
             "status": 403,
             "code": "access.system-only",
-            "say": "The door let them through, but the handler began no system work: Tenancy's provisioning refuses a seat with `access.system-only`. Who may send a request and what the work runs with are two decisions.",
+            "say": "The access check let them through, but the handler started no system work. Tenancy's provisioning refuses a seat with `access.system-only`. Who may send a request and which caller the work runs as are two separate decisions.",
             "snippet": "rows.register-forgotten"
           }
         },
@@ -1343,7 +1343,7 @@
           "rows": {
             "round": true,
             "result": "refused, 42501",
-            "say": "Round the door no policy lets a caller write a tenant: only Tenancy's own work, in the tenant whose id the connection names.",
+            "say": "Sent directly, no policy lets a caller write a tenant. Only Tenancy's own work may, in the tenant whose id the connection names.",
             "snippet": "rows.tenant-insert"
           }
         },
@@ -1689,7 +1689,7 @@
     "statement.member-hold-system": {
       "language": "sql",
       "lines": [
-        "-- EfMemberQuestions.HoldAsync for the application's own work: every permission, so only the project and its version",
+        "-- EfMemberQuestions.HoldAsync for system work: every permission, so only the project and its version",
         "SELECT p.\"Version\" FROM \"projects\".\"Projects\" AS p WHERE p.\"Id\" = @project LIMIT 1"
       ]
     },

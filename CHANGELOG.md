@@ -37,7 +37,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   the use cases are named through, whose type parameters ask for `ICreatableEntityId<T>`, stand back for it rather
   than fail in generated code; where the template does not say so, they report it themselves, DDD00050 and
   DDD00065. No other id needs a `Create()`. See
-  [A package that makes the ids of its classes](docs/writing-a-supporting-domain.md#a-package-that-makes-the-ids-of-its-classes).
+  [A package that makes the ids of its classes](docs/writing-a-supporting-domain.md#ids-the-package-creates).
 - **A package's switch writes the classes an application adds nothing to, and their ids.** A package marks an
   assembly attribute of its own `[TemplateDefaults(typeof(SubscriptionAttribute<>), ...)]`, and an application that
   writes it, `[assembly: GenerateBillingClasses]`, gets a class of each template it declares none of, called after
@@ -60,7 +60,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   writes for an `[AggregateRoot<Guid>]` of that name. A class that takes from one kept out is kept out with it, no
   id is written for either, and the registrations and the class the use cases are named through stand back rather
   than report it missing.
-  See [What the application should not have to write](docs/writing-a-supporting-domain.md#what-the-application-should-not-have-to-write).
+  See [What the application should not have to write](docs/writing-a-supporting-domain.md#code-the-package-writes-for-the-application).
 
 - **Supporting domains.** A package can ship an abstract generic parent for aggregate roots
   (`[AggregateRootBase]`) or child entities (`[EntityBase]`), and an attribute of its own, marked
@@ -112,7 +112,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   last. DDD00050
   reports a type argument whose id is taken and that is no entity, a child entity named where the
   registration asks for an aggregate root, and a type a registration is named after that has no name. See
-  [A registration named after what it is for](docs/writing-a-supporting-domain.md#a-registration-named-after-what-it-is-for).
+  [A registration named after what it is for](docs/writing-a-supporting-domain.md#naming-a-registration).
 - **A template declared more than once.** A package marks a template an application declares once per thing
   it has, the comments on a subscription and the comments on an invoice, with `AllowSeveral = true` on
   `[AggregateRootTemplate]` or `[EntityTemplate]`. A project with several such classes gets each registration
@@ -238,7 +238,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   after it returned has nothing in hand. `services.AddAccessChecks<TRequests>()`
   registers the set alone, for whoever asks it in front of the handlers of a module that adds no check, since
   its requests require only what the core decides. All of it is in `DDDToolkit.Access`. See
-  [Access requirements](docs/access-requirements.md) and [the vocabulary](docs/access-requirements.md#the-vocabulary).
+  [Access requirements](docs/access-requirements.md) and [the vocabulary](docs/access-requirements.md#requirements-and-their-attributes).
 - **Requirements as attributes.** A request says who may send it with an attribute where the requirement reads no
   value of the request but a key and an id it carries: the core's `[AllowAnonymous]`, `[SignedIn]` and one
   `[RequiresKey(key)]`, whose marker on one of the request's members says where the key is held (none for the whole
@@ -276,7 +276,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   using alias of `IRequireAccess`, so a module's own namespace called `DDDToolkit`, `Contoso.DDDToolkit.Billing`,
   takes nothing from it. See
   [What a request declares](docs/access-requirements.md#what-a-request-declares) and
-  [What goes together](docs/access-requirements.md#what-goes-together).
+  [What goes together](docs/access-requirements.md#valid-combinations-of-attributes).
 - **Requirements that combine.** `AccessRequirement.All(params AccessRequirement[])` holds when every case does,
   asked in their order, and a refusal is the first failing case's own; `AccessRequirement.Any(params
   AccessRequirement[])` lets the first case that holds through, asks nothing after it, and where none does refuses with
@@ -306,7 +306,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   and Membership's expert hold holds each save to the hold on its own resource. A nested combination's reasons are
   written in the log line, `access.refused (Reasons = [...])`, and compared one by one. See
   [Requirements that combine](docs/access-requirements.md#requirements-that-combine) and
-  [The door and the rows](docs/access-requirements.md#the-door-and-the-rows), which says why each way of an `Any`
+  [The door and the rows](docs/access-requirements.md#access-checks-and-row-policies), which says why each way of an `Any`
   onto a table of the application's own needs a row rule of its own.
 - **Yours, or the key: the caller's own.** `AccessRequirement.Own(value)` is a request about the caller's own: the
   check compares the value the request names with the caller's own value of its type at the door, so the request never
@@ -333,7 +333,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   reports `[OrOwn]` without a key or beside a marker that names none, `[AtUnit]`, `[Own]` without `[OwnOnly]` and the
   other way round, and a member marked twice; DDD00086 `[OrOwn]` or `[Own]` on a type nothing says the caller's own of,
   one that may be null, or a `string`, a class or an enum, which never has one. See
-  [Yours, or the key](docs/access-requirements.md#yours-or-the-permission).
+  [Yours, or the key](docs/access-requirements.md#the-callers-own-or-a-permission).
 - **The owner of an aggregate: the fact in the domain, the policy at the door.** An aggregate root marks the property
   that names its owner `[Owner]`, `[Owner] public UserId Owner { get; private set; }`, a fact about what it is and no
   rule; it may be nullable, and a row whose owner is null is nobody's. A request about the owner's own says the policy
@@ -441,7 +441,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   collection a test composes. The generator says what it wrote in a new assembly attribute beside the behavior,
   `[assembly: AccessBehavior(typeof(IBillingRequest), typeof(BillingAccessBehavior<,>), ...)]`, which is what the
   check reads; an interface without one, of a project without Mediator, is held to nothing. See
-  [When nothing asks the checks](docs/access-requirements.md#when-nothing-asks-the-checks).
+  [When nothing asks the checks](docs/access-requirements.md#handlers-reached-without-the-access-check).
 - DDD00061, a warning, reports a request of an `[AccessRequests]` interface handed to its handler directly:
   `Handle` of one of Mediator's handlers (`ICommandHandler`, `IQueryHandler`, `IRequestHandler`, their stream
   kinds, or a class that implements one or derives from one), called or made into a delegate, which passes no
@@ -463,7 +463,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   Nothing to write for it where the checks are awaited in an `async` method that then calls the handler, as the
   generated behavior does; a dispatcher of your own is written that way, and the message of DDD00057 now says
   so. The toolkit asks it when the policies refuse a save, below. See
-  [Access requirements](docs/access-requirements.md#asking-its-check-again).
+  [Access requirements](docs/access-requirements.md#asking-the-check-again).
 - **A module declared by its folder: `DDD_Module`.** A project that sets `DDD_Module` is a project of that module,
   as `[assembly: Module]` makes it one, so a `Directory.Build.props` that names the module of every project below
   a folder replaces a `Module.cs` in each project of a module in layers. The build writes the property into the
@@ -520,7 +520,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   position as registered; a part says whether it belongs from what the builder holds (`AppliesTo`), and where the
   builder cannot tell yet it goes on, and what it adds passes over at use what it has nothing to do for.
   `services.GetContextParts<TBuilder>()` reads them before the host is built. `UseDDDToolkit` applies the parts
-  of a context's options, below. See [A part of your own](docs/entity-framework.md#a-part-of-your-own).
+  of a context's options, below. See [A part of your own](docs/entity-framework.md#writing-a-context-part).
 
 #### Entity Framework and row level security
 
@@ -569,7 +569,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   naming the registration where nothing registered the part and `UseDDDToolkit`, or the part's own call after
   `UseDDDToolkitCore`, where something did. `entity-framework.toolkit-wired`, and
   `ContextPartRequirements.EnsureRequiredParts`, hold every registered context to the same at start-up. See
-  [A part a model cannot do without](docs/entity-framework.md#a-part-a-model-cannot-do-without).
+  [A part a model cannot do without](docs/entity-framework.md#parts-a-model-requires).
 - **Row level security comes with `UseDDDToolkit`.** `AddPostgresRowLevelSecurity`, and so
   `AddSupabaseRowLevelSecurity`, bring it to every context on Postgres that `UseDDDToolkit` wires, as the part
   `postgres.row-level-security` at position 100 (`PostgresRowLevelSecurityInterceptor.PartName` and
@@ -604,7 +604,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   instant in a `DateTime` column, so a query that compares or orders one runs in SQL on SQLite too. The
   two converters the outbox already used for this, `UtcDateTimeOffsetConverter` and
   `NullableUtcDateTimeOffsetConverter`, are public. See
-  [Your own timestamps on SQLite](docs/entity-framework.md#your-own-timestamps-on-sqlite).
+  [Your own timestamps on SQLite](docs/entity-framework.md#datetimeoffset-properties-on-sqlite).
 - **A unique index says what it refuses with.** `index.RefusesAs(code, message, kind)`, next to `IsUnique()`
   in the mapping, makes a save that breaks the index a `RefusalException` with that code instead of a
   `DbUpdateException`: the answer of the check in C# that lost a race, a conflict unless the index says
@@ -678,7 +678,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   the caller unless `Callers.Begin(Caller.System)` made it so, whichever accessor answered it.
   `PostgresRowLevelSecurityInterceptor.RequireExplicitCallers` says whether the interceptor the contexts use was
   built with the option, for a start-up check. Without the option nothing changes. See
-  [Fail-closed callers](docs/row-level-security.md#fail-closed-callers).
+  [Fail-closed callers](docs/row-level-security.md#requiring-explicit-callers).
 - **The scoped system caller.** `Caller.SystemIn(scope)` is the application's own work inside a scope a
   module chose, such as its name: it runs as `PostgresRowLevelSecurityOptions.SystemInRole`, `ddd_system_in`,
   with the claims `{"role":"ddd_system_in","scope":"…"}`, so a policy can ask whose work it is. It is not
@@ -728,7 +728,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   same statement: every name it declares, to its value or to `''`. Names are checked when the interceptor is
   built, `prefix.name` in lower case, not `request.*`, one owner each, and not `ddd.caller_mark`, which marks a
   transaction the caller was set for; a value for a name a provider did not declare fails the connection. See
-  [Settings of your own](docs/row-level-security.md#settings-of-your-own).
+  [Settings of your own](docs/row-level-security.md#custom-connection-settings).
 - **Row level security through a transaction pooler.** `PostgresRowLevelSecurityOptions.Scope`, set to
   `RowLevelSecurityScope.Transaction`, sets the caller's role, claims and settings for one transaction at a
   time, so nothing lives on a session and a pooler that hands each transaction another server connection,
@@ -741,8 +741,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   own, is refused. `No Reset On Close` and port 6543 are allowed in that scope. `PostgresRowAccess.SetupScript`,
   every script of policies and every exported access file make the procedure `ddd.use_caller`, which only
   the role the application logs in as may call. `Connection`, as before, stays the default. See
-  [How the settings travel](docs/row-level-security.md#how-the-settings-travel) and, for Supabase,
-  [Through the transaction pooler](docs/supabase.md#through-the-transaction-pooler).
+  [How the settings travel](docs/row-level-security.md#settings-per-connection-or-per-transaction) and, for Supabase,
+  [Through the transaction pooler](docs/supabase.md#the-transaction-pooler).
 - `PostgresRowLevelSecurityInterceptor.Scope` says how long the settings last, as the interceptor read it
   when it was built.
 - **A statement timeout per kind of caller.** `PostgresRowLevelSecurityOptions.StatementTimeouts` gives a
@@ -755,7 +755,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `services.AddCallerConnections(provider => dataSource)`, opens a connection, or begins a transaction, with
   the current caller set as a context's connections have it, for SQL a module sends outside Entity
   Framework. A context handed such a connection or transaction finds the caller there. See
-  [SQL of your own](docs/row-level-security.md#sql-of-your-own).
+  [SQL of your own](docs/row-level-security.md#raw-sql).
 - **Set-shaped questions in row access rules.** A question only the database answers may answer with a
   set, an `AccessSet<T>`, which a rule asks with `Contains`: `TicketsIWatch.Ids().Contains(ticket.Id)`
   becomes `"Id" = ANY (ARRAY(SELECT "desk".tickets_i_watch()))`, which Postgres asks once per statement, as
@@ -767,7 +767,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   to throw `DatabaseOnlyException`; a scalar question with no argument that reads the row is asked once, as
   `(SELECT f())`. A comparison with a scalar question is SQL's own, `=`, `<>`, `<` and so on, which is
   unknown for a caller the question does not know, a policy's no, and stays unknown under `!`. See
-  [Set-shaped questions](docs/row-level-security.md#set-shaped-questions).
+  [Set-shaped questions](docs/row-level-security.md#set-shaped-access-functions).
 - **Access functions over the entities of an entity.** Inside an `Any` over one of the aggregate's
   collections, an access function may ask the entity about its own entities in the same way, as deep as the
   model goes: `ticket.Comments.Any(comment => comment.Reactions.Any(reaction => reaction.User == caller.UserId))`.
@@ -775,7 +775,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   that entity, the caller and the function's parameters. A set-shaped function over them still starts from the
   first entities' table and never reads the aggregate's. Asking one of the aggregate's own collections from
   inside another stays DDD00039. See
-  [Asking the aggregate's entities](docs/row-level-security.md#asking-the-aggregates-entities-access-functions).
+  [Asking the aggregate's entities](docs/row-level-security.md#access-functions).
 - **Access functions that take more than the aggregate.** `Allows(aggregate, caller, ...)` may take strings,
   numbers, flags, `Guid`s and ids after the caller, which become the SQL function's parameters after the
   key, and the generated `Allows(key, ...)` takes them too. A contract declares such a question,
@@ -792,7 +792,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `RowAccessExport.FunctionNames` do it for a script of one context. Two functions that would be one in the
   database, one `schema.name`, are refused, whichever contexts write them. A module's schema may have any
   name Postgres keeps (see Changed, every schema the toolkit writes is in double quotes). See
-  [Names relative to the module](docs/row-level-security.md#names-relative-to-the-module).
+  [Names relative to the module](docs/row-level-security.md#function-names-relative-to-the-module).
 - `DateTimeOffset.UtcNow` and `DateTime.UtcNow` in a rule are the database's `now()`, where they were
   DDD00039.
 - DDD00051 reports an argument of a set-shaped question that reads the row, which would make the database
@@ -927,7 +927,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   contract of another shape, keyed by
   something that is no id, or declared in another module than the one whose assembly holds the id, is DDD00038:
   what a module publishes of its resources is its own to say. DDD00039 names the contract among what a rule may
-  ask. See [A resource's access, asked by its id](docs/row-level-security.md#a-resources-access-asked-by-its-id).
+  ask. See [A resource's access, asked by its id](docs/row-level-security.md#resource-access-contracts).
 - **Privileges from the policies.** `RowAccessExport.WriteGrants` has a script of policies write the
   privileges of its tables as well, read from the policies it holds: every privilege the script's roles and
   `PUBLIC` held on a table is taken back, and a role gets each command a permissive policy allows it,
@@ -1031,7 +1031,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   (`uid=…|role=…|claims=…`). The pairs are separated by `|`, because MSBuild splits the export's variables
   at every `;`; a `;` fails the build, and an unknown key, a malformed pair, a role no policy can be for
   or a caller function that is not a call without arguments is an `error :` line. See
-  [Roles and caller functions of your own](docs/supabase.md#roles-and-caller-functions-of-your-own).
+  [Roles and caller functions of your own](docs/supabase.md#custom-roles-and-caller-functions).
 - **The roles are said once, in the project file, and the host checks them against the database.** The build
   records `SupabaseRowAccessRoles` in an application whose project sets it, and that is not a test project, as
   `[assembly: AssemblyMetadata("SupabaseRowAccessRoles", "...")]` in a file of its own under `obj`, the way
@@ -1055,7 +1055,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   as one of the platform's roles. The next build writes a new access file for every module, which adds the record
   and nothing else. `PostgresRowLevelSecurityInterceptor.Options` is public, so such a check reads the roles a
   context really runs with. See
-  [Roles and caller functions of your own](docs/supabase.md#roles-and-caller-functions-of-your-own).
+  [Roles and caller functions of your own](docs/supabase.md#custom-roles-and-caller-functions).
 - **The role the application logs in as, written by the export.** `<SupabaseLoginRole>sample_api</SupabaseLoginRole>`
   in the project that exports, beside `SupabaseRowAccessRoles`, and `SupabaseMigrationOptions.LoginRole` by hand,
   write the migration that makes that role, `{version}_login_role.sample_api.ddd.sql`: `NOLOGIN NOINHERIT`,
@@ -1119,7 +1119,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   host's own; and `SupabaseTokens.KeysAddressOf(authUrl)`. Every Supabase registration takes the project's URL,
   or one `SupabaseAuthOptions` that a host builds once and hands to each: `AddSupabaseJwtBearer` in
   `DDDToolkit.Auth.Supabase.AspNetCore`, `AddSupabaseAuth` and `AddSupabaseAuthAdmin`. Each reads it when it
-  is called. See [Where Auth answers](docs/supabase.md#where-auth-answers).
+  is called. See [Where Auth answers](docs/supabase.md#the-address-of-supabase-auth).
 - `context.GetSupabaseCaller()`, in `DDDToolkit.Auth.Supabase.AspNetCore`, is a request's own caller, the
   user of its validated token or `Caller.Anonymous`, whatever caller is ambient, so a host can make it
   current at the start of every request.
@@ -1146,7 +1146,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   into `true`, `false` or `null` fails the schema's build. `AddDDDToolkitErrors()` spells a refusal's `kind`
   extension the same way, from that one call, and as HotChocolate does, `NOT_PERMITTED`, in a schema that does
   not call it. See
-  [Enum values, spelled your way](docs/graphql.md#enum-values-spelled-your-way).
+  [Enum values, spelled your way](docs/graphql.md#spelling-of-enum-values).
 - **GraphQL bindings for ids of other projects.** The generated `Add{Module}GraphQlRuntimeBindings()` also
   binds the ids and single value objects of the module's other projects that have no nested provider of
   their own, and the published ones of other modules (`[ModuleContract]`, or every public type of a contracts
@@ -1158,7 +1158,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   project, still gets the method. An assembly that declares no module is left alone, and the bindings of
   projects that reference HotChocolate themselves do not change; where the module has such a project, whose
   bindings this one calls, what that one bound is not bound again. See
-  [Bound by a project that does not declare it](docs/graphql.md#bound-by-a-project-that-does-not-declare-it).
+  [Bound by a project that does not declare it](docs/graphql.md#binding-ids-from-other-projects).
 - **GraphQL types over an application's own records.** `AddDDDToolkitEntityNullability()` in
   `DDDToolkit.HotChocolate` makes every field of an object type with a key (`[EntityKey]`) nullable in the
   schema, except the fields of the key, whatever the type it is declared over says
@@ -1167,7 +1167,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   reference a gateway cannot resolve reaches the client as the object with its key and every other field
   `null`, without an entry in `errors`. Only the outermost nullability changes, and a type without a key and
   a type that is only its key are not touched. See
-  [Types over your own records](docs/graphql.md#types-over-your-own-records).
+  [Types over your own records](docs/graphql.md#types-over-application-records).
 - **A permission key on a GraphQL field.** `AddDDDToolkitKeyAuthorization()` in `DDDToolkit.HotChocolate`
   registers `KeyAuthorizationHandler` on HotChocolate's own authorization: the policy of `[Authorize("<key>")]`
   on a field is a permission key, asked of the `IFieldKeys<TParent>` a module registers for the type of the
@@ -1193,7 +1193,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   serves it (`PrintGatewayAsync()` the one gateway's), `PrintSourceAsync(name)` one module's source schema with the
   directives the gateways compose by, `GatewayNames` the gateways, `SourceSchemaNames` every schema some gateway
   composes and `SourceSchemaNamesOf(gateway)` one gateway's, so a test compares each with a committed file. See
-  [Your schemas in a test](docs/graphql.md#your-schemas-in-a-test).
+  [Your schemas in a test](docs/graphql.md#testing-your-schemas).
 - **A field for one schema only.** `[GraphQLSchema("admin", OperationType.Query)]`, new in
   `DDDToolkit.HotChocolate.Attributes`, says that a class of fields belongs to the schema of that name and to no
   other: an administration schema at `/admin/graphql` beside the one every user is offered at `/graphql`. Its public
@@ -2695,7 +2695,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 - **Docs: how a new id is made.** [Creating identifiers](docs/identifiers.md#creating-identifiers) and
   [The identifier](docs/generated-code.md#the-identifier) show `Create()` and `ICreatableEntityId<TSelf>`,
   [How a new id is made](docs/tenancy/your-module.md#how-a-new-id-is-made) draws how Tenancy gets one, and
-  [Ids the database never makes](docs/entity-framework.md#ids-the-database-never-makes) says why Entity Framework
+  [Ids the database never makes](docs/entity-framework.md#ids-made-in-code) says why Entity Framework
   stores the key of an id as it is given, on every provider, which new tests on Postgres and SQLite hold it to.
 - **Docs: Start-up checks, a page of its own.** [Start-up checks](docs/startup-checks.md) says what each
   registration brings, the order and why, how to turn one off, why they wait for the host to ask, and how a
@@ -2759,7 +2759,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   anyone use it is refused, naming it, and so is one with `Columns`. A question may now answer a row of the caller's
   own: `[AccessRow("name")]` on a method of an `[AccessFunctions]` class that returns the class a table is mapped to,
   read by field, `(SELECT q1."Region" FROM ...caller_profile() q1)`, once per statement. See
-  [Rules that only narrow](docs/row-level-security.md#rules-that-only-narrow-restrictive).
+  [Rules that only narrow](docs/row-level-security.md#restrictive-rules).
   - **Tenancy: narrowing the organization.** A restrictive rule on the application's organization, seat or role
     class narrows Tenancy's own policies there: on the organization its units and the closure of its tree as well, on
     the seats their placements and grants. `TenancyRowAccess.CallerSeat<Seat>()` is the calling seat's own row,
@@ -2788,7 +2788,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   asks the other one when it runs: made with the check of its body turned off, it breaks the circle, and the rule is
   written as any other. Only a function a contribution writes is asked that way; a circle of access functions or of
   contributed functions' bodies is refused as before. See
-  [A resource's access, asked by its id](docs/row-level-security.md#a-resources-access-asked-by-its-id).
+  [A resource's access, asked by its id](docs/row-level-security.md#resource-access-contracts).
 
 ### Changed
 
@@ -2992,7 +2992,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     at one unit for a caller who manages seats there (`GET /tenancy/seats/{seatId}/grants?unit=`) and computes its
     requirement, and `MarkTenantAsDemo` and `SetUpProjectRoles` declare `[InTenant]`. The Tenancy and Membership test
     hosts' request interfaces are marked and partial, and their requests say what they require with attributes.
-    See [System work is a scope](docs/access-requirements.md#system-work-is-a-scope).
+    See [System work is a scope](docs/access-requirements.md#system-work).
 - **For the 3.2.0 previews: requirements combine, and the caller's own is a requirement.** From 3.2.0-preview.3:
   - A rule a handler asked by hand beside its request's requirement, a second key or the caller's own, is the
     requirement now, checked at the door before the handler: `if (!own && !await KeyIsHeldAsync(...)) throw ...` in a
@@ -3034,7 +3034,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 - **For the 3.2.0 previews: every request says what it requires.** `3.2.0-preview.1` and `3.2.0-preview.2`
   shipped `AccessRequirement.Open(reason)` and Tenancy's `DecidedByThePackage`, `SystemWorkInTenant` and
   `OperatorsOnly`. They are gone, so a request that still declares one no longer compiles; each maps onto the
-  [vocabulary](docs/access-requirements.md#the-vocabulary):
+  [vocabulary](docs/access-requirements.md#requirements-and-their-attributes):
   - `new AccessRequirement.Open(reason)`: `AccessRequirement.AllowAnonymous()` where anyone may send the
     request, or `AccessRequirement.SignedIn()` where the caller only had to be signed in.
   - `new TenancyRequirement.DecidedByThePackage()`: what the package's use case asks first and the request can
@@ -3107,7 +3107,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   but its calls then go to `{address}/auth/v1/...`, where that server has nothing, and every one of them fails
   with a `SupabaseAuthAdminException`, at the first invitation and not when the host starts. That address moves
   to `SupabaseAuthOptions.AuthUrl`, registered with `AddSupabaseAuthAdmin(supabase, secretKey)`, the object the
-  bearer is given (see [Where Auth answers](docs/supabase.md#where-auth-answers)).
+  bearer is given (see [Where Auth answers](docs/supabase.md#the-address-of-supabase-auth)).
   - `allowPlainHttp: true` is `SupabaseAuthOptions.AllowPlainHttp`, the one setting for the bearer's keys and
     the admin client's secret key alike.
   - `new SupabaseAuthAdmin(authUrl, secretKey, handler)` is `new SupabaseAuthAdmin(supabase, secretKey,
@@ -3154,7 +3154,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   have applied them. The login role's file names no schema, and has no new one. On Supabase, a schema the Data API
   serves goes into `[api] schemas` as the model spells it, without quotes. See
   [Schema names](docs/row-level-security.md#schema-names) and
-  [A schema of any name](docs/supabase.md#a-schema-of-any-name).
+  [A schema of any name](docs/supabase.md#schema-names-with-capitals-or-sql-keywords).
   - From `3.2.0-preview.3`: what the toolkit writes says `"tenancy".caller_seat()` where it said
     `tenancy.caller_seat()`, `GRANT USAGE ON SCHEMA "ddd"` where it said `GRANT USAGE ON SCHEMA ddd`, and
     `CALL "ddd".use_caller(...)` where it said `CALL ddd.use_caller(...)`. Postgres reads a lower-case schema the
@@ -3253,7 +3253,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   key is never taken for a secret, and a token signed any other way is refused without asking anybody.
   Nothing is fetched for a token signed with the secret. This holds for `AddSupabaseJwtBearer` and for
   `SupabaseTokenValidator`, and so for the Azure Functions middleware. See
-  [Two kinds of token](docs/supabase.md#two-kinds-of-token).
+  [Two kinds of token](docs/supabase.md#signing-keys-and-the-jwt-secret).
   - The published keys are fetched from `{Auth}/.well-known/jwks.json` directly, where the project's
     discovery document was read first, when the first token needs them and not before. They are kept and
     fetched again as ASP.NET Core's JWT bearer does, by the scheme's `AutomaticRefreshInterval`,
@@ -3770,7 +3770,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   the right to use both for every role a policy names. It leaves what is already right alone, so a script
   run by the application's own role still works after somebody else ran `PostgresRowAccess.SetupScript()`,
   which makes the function as well. See
-  [The aggregate's entities](docs/row-level-security.md#the-aggregates-entities).
+  [The aggregate's entities](docs/row-level-security.md#policies-on-entity-tables).
   - The entity tables' policies have new names, one per command and role, `"<table> (<command>) for <role>"`,
     for example `"OrderLine (insert) for anon"`, instead of `"OrderLine goes with its Orders"`. The next
     script or access file drops the old one, found by its comment; SQL or a test of your own that names it
@@ -3847,7 +3847,7 @@ references `DDDToolkit`; a project that references only `DDDToolkit.Abstractions
   got the generators through another project, because the file was only in `build/`, which does not
   travel past the project that references the package. `DDDToolkit.Analyzers` now carries the props
   file itself, in `build/` and in `buildTransitive/`, and `DDDToolkit` no longer has one.
-  See [DDD_Module, and the package that brings it](docs/modules.md#ddd_module-and-the-package-that-brings-it).
+  See [DDD_Module, and the package that brings it](docs/modules.md#the-module-name-in-generated-code).
 
 ### Added
 
@@ -4152,7 +4152,7 @@ messages, [From an earlier 3.0 build](docs/migrating-to-3.md#from-an-earlier-30-
   `Allows(key)`, so a rule holding only an id asks it typed, `ProjectMembership.Allows(task.ProjectId)`;
   `[AccessFunctionContract<ProjectId>("projects.is_member")]` in a module's contracts publishes the same
   to other modules, and the Supabase build refuses a rule that asks a function no module defines. See
-  [Access functions](docs/row-level-security.md#asking-the-aggregates-entities-access-functions).
+  [Access functions](docs/row-level-security.md#access-functions).
 - The Supabase build writes the row access rules of every module a host references into
   `supabase/migrations`, a file per module, `{version}_access.{module}.ddd.sql`, asking `auth.uid()`. The
   file says what the rules are now: it drops the policies the previous one made and makes them again, so
@@ -4202,7 +4202,7 @@ messages, [From an earlier 3.0 build](docs/migrating-to-3.md#from-an-earlier-30-
   functions of `PgmqQueue` throw `PgmqTopicsNotSupportedException` as well, an
   `InvalidOperationException` as before.
   `Examples/Microservices.Pgmq` drops its hand-written check for this one. See
-  [Queues, creation and the missing extension](docs/transports.md#queues-creation-and-the-missing-extension).
+  [Queues, creation and the missing extension](docs/transports.md#queues-creation-and-the-extension-check).
 - Long polling in `PgmqConsumer`. While the host runs, an empty read waits inside Postgres with
   `pgmq.read_with_poll` for up to `LongPollTimeout` (five seconds) instead of returning at once and
   sleeping `PollingInterval`, so a message is picked up within `LongPollInterval` (100 milliseconds) of its
@@ -4274,7 +4274,7 @@ messages, [From an earlier 3.0 build](docs/migrating-to-3.md#from-an-earlier-30-
   a hand-written migration, `enable_queues`, turns the extension on. It runs on pgmq 1.5.1, the version
   Supabase ships, which has no topic routing (that came in 1.11), and the Supabase Live workflow plays the
   scenarios against a real project both in process and through its queue. The AppHost's container is now
-  Postgres 17 with that same pgmq. [Transports](docs/transports.md#when-a-module-becomes-its-own-deployable-pgmq)
+  Postgres 17 with that same pgmq. [Transports](docs/transports.md#postgres-queues-pgmq)
   lists what each pgmq version supports.
 - `DDDToolkit.HotChocolate.Fusion.InMemory`, one GraphQL schema over a modular monolith. Every module
   serves a source schema of its own and a HotChocolate Fusion gateway inside the application composes
@@ -4493,7 +4493,7 @@ convention.
   `OutboxOptions.RegisterEvent<TEvent>(name, version)`, `IntegrationEventContractRegistry.Register<TContract>(name, version)`
   and `ModuleIntegrationEvents.Handle<TContract, THandler>(contract, consumer, create)`, and the outbox and
   the processor now look names and versions up in the registries before asking a type's attributes. See
-  [Registered when the module compiles](docs/integration-events.md#registered-when-the-module-compiles).
+  [Registered when the module compiles](docs/integration-events.md#the-generated-registration).
 - `IntegrationEventSubscriptions` (`services.IntegrationEventSubscriptions()`): the contracts a process
   handles, the ones it publishes, and `FromElsewhere`, the ones other services have to send it, with
   `VisitFromElsewhere` handing each contract type over as a generic argument. The transports read it to
@@ -4609,7 +4609,7 @@ convention.
   `Money.Times(int)` was published as `times(quantity: Int!)`, and a method on an aggregate that changed
   state and returned a result became a field that ran inside a query. A type declared with
   `BindFieldsExplicitly()` still publishes every method it names, and type extensions are untouched. See
-  [Domain types publish their data, not their behaviour](docs/graphql.md#domain-types-publish-their-data-not-their-behaviour).
+  [Domain types publish their data, not their behaviour](docs/graphql.md#methods-of-domain-types-are-removed).
 
 - **Breaking:** `IInvariant<T>.Check` returns `InvariantFailure?` instead of `string?`, so a rule can
   hand on the values its message names. A string converts to `InvariantFailure` and `null` still means

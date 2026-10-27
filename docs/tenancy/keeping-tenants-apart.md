@@ -51,7 +51,7 @@ covered by the same `UseDDDToolkit` call.
 ### A context without the save check
 
 - `ScopeToTenant` records in the model that its context needs the save check
-  ([A part a model cannot do without](../entity-framework.md#a-part-a-model-cannot-do-without)). A context without
+  ([A part a model cannot do without](../entity-framework.md#parts-a-model-requires)). A context without
   the check fails at its first save, before anything is written. The error message names the missing call.
 - `UseDDDToolkitCore` adds the toolkit's interceptors and no package's part. After it, add the save check with
   `.UseTenancy(serviceProvider)`. With `UseTenancy` first, `TenancyChecks.EnsureWired` fails.
@@ -144,7 +144,7 @@ A module that sees only your ids, and not your classes, calls the same methods o
   - Tenancy's system-only use cases (provisioning, suspending, reactivating or closing a tenant) refuse every other
     caller with `access.system-only`.
 - Code that runs without a started caller is nobody to Tenancy. This holds where the toolkit's caller is
-  `Caller.System`, and in a host that does not [require explicit callers](../row-level-security.md#fail-closed-callers).
+  `Caller.System`, and in a host that does not [require explicit callers](../row-level-security.md#requiring-explicit-callers).
   Tenancy's use cases refuse a caller that is nobody with `tenancy.not-seated`.
 
 ### System work outside any tenant
@@ -192,4 +192,4 @@ foreach (var tenant in await TenancySystemReads.TenantsToSweepAsync<ShopTenant, 
 
 `services.RequireExplicitCallers()` makes work fail when the work does not state who it runs as. Without it, work
 that states no caller runs as the application. The sample uses it
-([Fail-closed callers](../row-level-security.md#fail-closed-callers)).
+([Fail-closed callers](../row-level-security.md#requiring-explicit-callers)).

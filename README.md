@@ -65,7 +65,7 @@ public partial class Order { }
 | [Modules](docs/modules.md) | `DDD_Module`, `[assembly: Module]` and the boundary the analyzer checks |
 | [Module contracts](docs/module-contracts.md) | What a module publishes, why, and where to keep it |
 | [Access requirements](docs/access-requirements.md) | What a command or a query requires of its caller, the checks that hold it to that before the handler, and the behavior written for Mediator |
-| [How a request is checked](docs/how-a-request-is-checked.md) | One request followed from the attribute on it to the rows it touches: the generated requirement, the module's checks, the statement at the door, the caller on the connection and the policies, with a walk-through to click through |
+| [How a request is checked](docs/how-a-request-is-checked.md) | One request followed from the attribute on it to the rows it touches: the generated requirement, the module's checks, the statement the access check sends, the caller on the connection and the policies, with a walk-through to click through |
 | [Integration events](docs/integration-events.md) | Contracts between modules, the outbox and the inbox, versioning |
 | [Transports](docs/transports.md) | Carrying integration events out of the process: pgmq, Wolverine, MassTransit, or a sink of your own |
 | [Tenancy](docs/tenancy/overview.md) | The first supporting domain: what it is for, what it does and does not do, and how its pieces connect |
@@ -160,7 +160,7 @@ of another fails restore with NU1605, a package downgrade, or fails at run time 
 | Package | Use it for |
 |---|---|
 | `DDDToolkit` | Base types and the core generators. Start here. |
-| `DDDToolkit.Abstractions` | The attributes and marker interfaces alone, for projects that must not reference the runtime. With `DDDToolkit.Analyzers` beside it the generators run there too, which is what a [contracts project](docs/modules.md#ddd_module-and-the-package-that-brings-it) wants. |
+| `DDDToolkit.Abstractions` | The attributes and marker interfaces alone, for projects that must not reference the runtime. With `DDDToolkit.Analyzers` beside it the generators run there too, which is what a [contracts project](docs/modules.md#the-module-name-in-generated-code) wants. |
 | `DDDToolkit.EntityFramework` | Value converters, model conventions, domain event dispatch, invariant checks, optimistic concurrency, the outbox and the inbox. |
 | `DDDToolkit.Messaging.Postgres` | A [pgmq](https://github.com/pgmq/pgmq) sink, so the outbox enqueues inside the same Postgres transaction that writes the aggregate, and a consumer that reads a queue into the modules' inboxes. |
 | `DDDToolkit.Messaging.Wolverine` | [Wolverine](https://wolverinefx.net/) as the transport between one process's outbox and another's inbox. |
@@ -201,7 +201,7 @@ The core has no mediator dependency and does not need one: in-process event deli
 write, and `DDDToolkit.Mediator` only saves you writing it. The examples publish through Mediator
 rather than MediatR because MediatR is commercially licensed from version 13, and this repository
 prefers dependencies its users can take for free. MediatR still works perfectly well with the toolkit;
-[Delivering domain events](docs/event-delivery.md#the-delegate) shows the delegate to write for it.
+[Delivering domain events](docs/event-delivery.md#the-dispatch-delegate) shows the delegate to write for it.
 
 ## What the generators produce
 

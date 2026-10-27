@@ -1,41 +1,45 @@
 # Localization
 
-A failure the toolkit reports carries three things: a stable **code**, a **message** in the domain's
-own words, and the **arguments** that message was built from. `DDDToolkit.Localization` uses the
-first and the third to phrase the failure again in the reader's language, at the moment it becomes a
-response.
+Every failure that the toolkit reports carries three things:
 
-This covers every failure the toolkit hands you: `ValidationError` from a value object or a
-FluentValidation validator, `InvariantViolation` from `GetInvariantViolations()` or from
-`InvariantViolationException.InvariantViolations` on the throwing path, and `RefusalException` from a
-command that was refused.
+- a stable **code**;
+- a **message** in the words of the domain;
+- the **arguments** that the message was built from.
 
-## The rule: the domain stays language-free
+`DDDToolkit.Localization` uses the code and the arguments to write the failure in the reader's language, at the
+moment the failure becomes a response.
 
-The domain never looks at a culture. An invariant runs on a save in a background job as readily as in
-a request, and there is no reader there to ask. So the domain reports *what* is wrong, and the edge
-decides *how to say it*:
+This covers every failure that the toolkit hands you:
 
-```text
-domain                                   edge
-──────                                   ────
-Code       "Till.OverLimit"      ──►     looked up in your resx for the current UI culture
-Message    "A till holds at most 100…"   kept as the fallback when nobody translated the code
-Arguments  { Limit: 100, Cash: 150 }     fill the translated template
-```
+- `ValidationError`, from a value object or a FluentValidation validator;
+- `InvariantViolation`, from `GetInvariantViolations()`, or from `InvariantViolationException.InvariantViolations`
+  when the invariants throw;
+- `RefusalException`, from a refused command.
 
-A failure whose code nobody translated keeps the domain's own message, so adding localization never
-makes a response worse than it was.
+## Where translation happens
 
-## Setting it up
+The domain never reads a culture. An invariant also runs when a background job saves, and that job has no reader
+to ask for a language. So the domain reports what is wrong, and the edge of the application, such as an
+endpoint, writes the text:
+
+| Part of the failure | Example | What the edge does with it |
+|---|---|---|
+| Code | `Till.OverLimit` | Looks it up in your resx, for the current UI culture. |
+| Message | "A till holds at most 100…" | Keeps it as the fallback, for a code without a translation. |
+| Arguments | `{ Limit: 100, Cash: 150 }` | Fills them into the translated template. |
+
+A failure whose code has no translation keeps the domain's message. So adding localization never makes a response
+worse.
+
+## Setup
 
 ```bash
 dotnet add package Temp.DDDToolkit.Localization --prerelease
 ```
 
-`IFailureLocalizer` itself lives in the core `DDDToolkit` package, so an integration can ask for one
-without depending on how translations are stored. `DDDToolkit.Localization` provides the implementation
-that reads them through `IStringLocalizer`.
+The interface `IFailureLocalizer` is in the core package `DDDToolkit`. So an integration can ask for a localizer
+without a dependency on how the translations are stored. `DDDToolkit.Localization` has the implementation, which
+reads translations through `IStringLocalizer`.
 
 ```csharp
 builder.Services.AddLocalization();
@@ -45,19 +49,20 @@ var app = builder.Build();
 app.UseRequestLocalization("en", "nl");
 ```
 
-`SharedFailures` is an empty marker class with `SharedFailures.resx`, `SharedFailures.nl.resx` and so
-on beside it, found exactly as `IStringLocalizer<SharedFailures>` finds them. Sources are asked in the
-order they were added. `AddLocalizer(IStringLocalizer)` adds one you built yourself, such as one that
-reads translations from a database.
+- `SharedFailures` is an empty marker class. `SharedFailures.resx`, `SharedFailures.nl.resx` and the files of the
+  other languages sit next to it. The localizer finds them the same way `IStringLocalizer<SharedFailures>` does.
+- The localizer asks the sources in the order they were added.
+- `AddLocalizer(IStringLocalizer)` adds a localizer that you built yourself, such as one that reads translations
+  from a database.
+- The localizer is a singleton. It reads the language on every call.
 
-The language is `CultureInfo.CurrentUICulture`, which the request localization middleware sets per
-request. Numbers and dates inside a message are formatted with `CultureInfo.CurrentCulture`. Where there
-is no request, the code that writes the text names the language:
-[Texts outside a request](#texts-outside-a-request).
+The language is `CultureInfo.CurrentUICulture`, which the request localization middleware sets for each request.
+Numbers and dates in a message use the format of `CultureInfo.CurrentCulture`. Without a request, the code that
+writes the text sets the language ([Texts outside a request](#texts-outside-a-request)).
 
 ## Writing translations
 
-The key is the failure's code. The value is a template with named placeholders:
+The key is the code of the failure. The value is a template with named placeholders:
 
 ```xml
 <data name="Till.OverLimit" xml:space="preserve">
@@ -68,29 +73,31 @@ The key is the failure's code. The value is a template with named placeholders:
 </data>
 ```
 
-- `{Name}` is replaced by the argument of that name, matched without regard to case.
-- `{Name:format}` applies a .NET format string, so `{Limit:C}` is a currency in the current culture.
+- `{Name}` is replaced by the argument with that name. The name is matched without regard to case.
+- `{Name:format}` applies a .NET format string. `{Limit:C}` is a currency amount in the current culture.
 - `{{` and `}}` are literal braces.
-- A placeholder with no value is left as written, so a typo shows on screen rather than as an exception
-  on the failure path.
+- A placeholder without a value stays as written. So a typo shows on screen, and the failure path throws no
+  exception.
 
-Besides its arguments, a template can name the failure's own members:
+A template can also name these members of the failure:
 
 | Failure | Placeholders |
 | --- | --- |
 | `ValidationError` | `{PropertyName}`, `{AttemptedValue}`, `{Code}` |
 | `InvariantViolation` | `{EntityType}`, `{EntityId}`, `{Code}` |
+| `RefusalException` | `{Code}`, `{Kind}` |
 
-An argument of the same name wins.
+When an argument has the same name as a member, the argument wins.
 
-An invariant violation is looked up as `{EntityType}.{Code}` first and then as the bare code. A rule
-shared by several entities can then have one translation, and still get a different one where the
-sentence has to differ: `Drawer.NotNegative` beats `NotNegative`.
+The localizer looks up an invariant violation as `{EntityType}.{Code}` first, and then as the code alone. So a
+rule that several entities share can have one translation, and one entity can still get its own sentence.
+`Drawer.NotNegative` wins over `NotNegative`.
 
-## Using it
+## Localizing failures in an endpoint
 
-`IFailureLocalizer` phrases one failure. The extension methods phrase a list and keep everything else,
-so the result can still be branched on:
+`IFailureLocalizer` translates one failure. The extension methods `Localized(localizer)` and
+`ToErrorDictionary(localizer)` translate a list. They replace only the message and keep the code and the
+arguments, so a caller can still branch on the code:
 
 ```csharp
 app.MapPost("/subscribers", (SubscribeRequest body, IFailureLocalizer localizer) =>
@@ -112,8 +119,8 @@ if (violations.Count > 0)
 }
 ```
 
-On the throwing path, `InvariantViolationException.InvariantViolations` holds the same violations,
-codes and arguments included, one for one with the phrased `Violations`:
+When the invariants throw, `InvariantViolationException.InvariantViolations` holds the same violations, with their
+codes and arguments. They are in the same order as the messages in `Violations`:
 
 ```csharp
 catch (InvariantViolationException exception)
@@ -123,14 +130,14 @@ catch (InvariantViolationException exception)
 }
 ```
 
-## Giving a failure its arguments
+## Adding arguments to a failure
 
-A template's placeholders are filled from the failure's `Arguments`, so a failure whose message names a
-value has to carry that value as well.
+A template fills its placeholders from the `Arguments` of the failure. So a failure whose message names a value
+must also carry that value as an argument.
 
 ### Value objects
 
-A rule you write by hand adds its values next to its message:
+A rule that you write by hand passes its values next to its message:
 
 ```csharp
 protected override void Validate(ValidationErrorBuilder errors)
@@ -145,21 +152,19 @@ protected override void Validate(ValidationErrorBuilder errors)
 
 `new ValidationError(...).With("MaxLength", 40)` does the same for a single failure.
 
-With [FluentValidation](fluent-validation.md) you write nothing: every placeholder value FluentValidation knows (`MaxLength`,
-`TotalLength`, `ComparisonValue`, `PropertyName`, and anything you add with
-`context.MessageFormatter.AppendArgument`) arrives in `Arguments`, and the error code
-(`MaximumLengthValidator`, `NotEmptyValidator`, ...) is the key. The same goes for
-`result.ToValidationErrors()` on a validator you wrote yourself.
+With [FluentValidation](fluent-validation.md) you write nothing extra. Every placeholder value that FluentValidation
+knows arrives in `Arguments`: `MaxLength`, `TotalLength`, `ComparisonValue`, `PropertyName`, and anything you add
+with `context.MessageFormatter.AppendArgument`. The code of the failure (`MaximumLengthValidator`, `NotEmptyValidator`,
+...) is the key. The same holds for `result.ToValidationErrors()` on a validator of your own.
 
-FluentValidation also has its own translations, and they are used for `Message`. But a value object
-validates once and caches the verdict, so that message is in whichever language was current *the first
-time* anything asked. The localizer phrases the failure when it is read, which is the moment that
-counts.
+FluentValidation also has its own translations, and uses them for `Message`. But a value object validates once and
+caches the result. So that message is in the language that was current the first time something asked. The
+localizer translates the failure when your code asks for the text, in the language that is current then.
 
 ### Invariants
 
-`IInvariant<T>.Check` returns an `InvariantFailure`. A string converts to one, so a rule with nothing
-to add returns its message. A rule whose message names values adds them:
+`IInvariant<T>.Check` returns an `InvariantFailure`. A string converts to an `InvariantFailure`, so a rule without
+values returns its message. A rule whose message names values adds them with `With`:
 
 ```csharp
 public partial class Order
@@ -180,24 +185,26 @@ public partial class Order
 }
 ```
 
-The rule is nested inside the entity it is about, which is where the generator looks for rules to run.
-The happy path returns `null` and allocates nothing.
+The rule is nested in the entity it checks, because the generator looks for rules there. When the rule holds,
+`Check` returns `null` and allocates nothing.
 
-The `CheckInvariants()` seam reports strings, so its violations carry `InvariantViolation.SeamCode`
-and have no code worth translating. A rule that needs translating needs a code, which is one more
-reason to give it [a type of its own](invariants.md#a-named-invariant).
+The `CheckInvariants()` seam reports strings. All its violations carry the code `InvariantViolation.SeamCode`
+(`CheckInvariants`), so a translation cannot tell them apart. A rule that needs a translation needs its own code,
+so give the rule [a type of its own](invariants.md#a-named-invariant).
 
 ### Refusals
 
-A command that is refused throws `RefusalException`, with a `Code`, a `Kind` and the `Arguments` its
-message names. `IFailureLocalizer.Localize(refusal)` looks it up by its code like any other failure, and
-a template can name its arguments as well as `{Code}` and `{Kind}`. The method has a default on the
-interface that returns the refusal's own message, so a localizer you wrote before refusals existed keeps
-compiling and keeps working. The edge chooses the status from `Kind`: `Invalid` is a 400, `NotPermitted`
-a 403, `NotFound` a 404 and `Conflict` a 409.
+A refused command throws `RefusalException`, with a `Code`, a `Kind`, and the `Arguments` that its message names.
 
-A refusal of kind `Invalid` that is about one input names that input in the argument
-`RefusalException.FieldArgument` (`"Field"`), so a form can put the text under it:
+- `IFailureLocalizer.Localize(refusal)` looks the refusal up by its code, like any other failure. A template can
+  name the arguments, `{Code}` and `{Kind}`.
+- The interface has a default body for this method, which returns the refusal's own message. So a localizer that
+  you wrote before refusals existed still compiles and works.
+- The edge picks the HTTP status from `Kind`: `Invalid` is 400, `NotPermitted` is 403, `NotFound` is 404 and
+  `Conflict` is 409.
+
+A refusal of kind `Invalid` about one input names that input in the argument `RefusalException.FieldArgument`
+(`"Field"`). A form can then show the text under that input:
 
 ```csharp
 throw new RefusalException(
@@ -207,23 +214,28 @@ throw new RefusalException(
     new Dictionary<string, object?> { [RefusalException.FieldArgument] = "name", ["Max"] = 40 });
 ```
 
-The value is the domain's word for the input. An edge whose input is called otherwise maps it, the way
-`Prefixed("shipTo")` does for a value object's failures. It stays an argument and is no property of the
-refusal, because a refusal about a command as a whole has no field to name.
+- The value is the domain's name for the input. An edge that names the input differently maps the name, as
+  `Prefixed("shipTo")` does for the failures of a value object.
+- `Field` is an argument. `RefusalException` has no `Field` property, because a refusal about the whole command
+  has no field to name.
 
-The toolkit and its packages keep their codes in a class, each code with its kind and its English text, and
-make the refusal with `Refuse`: `throw TenancyRefusals.Refuse(TenancyRefusals.SeatNotFound)`, or with the values
-its text names, `ToolkitRefusals.Refuse(ToolkitRefusals.RoleNotAllowed, ("Role", role))`, which fills in
-`{Role}`. A module can keep its own codes the same way, so a handler reads
-`throw ProjectRefusals.Refuse(ProjectRefusals.NotFound)` and nobody writes a kind or a text twice. The Tenancy
-sample's `ProjectRefusals` is such a class, with its English and Dutch texts in the resource files beside it.
+The toolkit and its packages keep their codes in a class. Each code has its kind and its English text in that
+class. `Refuse` makes the refusal:
+
+- `throw TenancyRefusals.Refuse(TenancyRefusals.SeatNotFound);`
+- `throw ToolkitRefusals.Refuse(ToolkitRefusals.RoleNotAllowed, ("Role", role));` also fills in `{Role}` in the
+  text.
+
+A module can keep its own codes the same way. A handler then writes
+`throw ProjectRefusals.Refuse(ProjectRefusals.NotFound)`, and the kind and the text are written once. The Tenancy
+sample's `ProjectRefusals` is such a class. Its English and Dutch texts are in the resource files next to it.
 
 ## GraphQL
 
-`DDDToolkit.HotChocolate` has an error filter that does all of the above for you: every failure the
-toolkit throws becomes a GraphQL error of its own, with its code in the extensions and its message in
-the reader's language. A refusal becomes one error, with its kind in the `kind` extension, and with the
-input it names in the `field` extension, which is where a validation failure has its property.
+`DDDToolkit.HotChocolate` has an error filter that does all of this for GraphQL. Every failure that the toolkit
+throws becomes a GraphQL error, with its code in the extensions and its message in the reader's language. A
+refusal becomes one error. Its kind is in the `kind` extension, and the input it names is in the `field`
+extension. A validation failure has its property in the `field` extension too.
 
 ```csharp
 services.AddGraphQLServer()
@@ -233,35 +245,46 @@ services.AddGraphQLServer()
 
 See [GraphQL](graphql.md#failures-as-graphql-errors).
 
-With `AddDDDToolkitMutationConventions()` a mutation's failures are typed errors in its payload, and
-their `message` fields are phrased by the same localizer. Two of those errors have a code of the
-toolkit's own, `invalid-value` and `concurrency-conflict`, looked up the way a refusal's code is: give
-them a text in your resources and it is what a client reads. See
+With `AddDDDToolkitMutationConventions()`, the failures of a mutation are typed errors in its payload. The same
+localizer writes their `message` fields. Two of these errors have a code of the toolkit: `invalid-value` and
+`concurrency-conflict`. The localizer looks these codes up like the code of a refusal. Give them a text in your
+resources, and a client reads that text. See
 [Typed errors in mutation payloads](graphql.md#typed-errors-in-mutation-payloads).
 
 ## Texts outside a request
 
-A request has a reader, and the middleware has asked which language they read. A mail, a notice, the
-result of a job or a line in an export is written with nobody at the other end, and often for someone
-other than whoever started the work. The domain still does not look at a culture. The code that writes
-the text says whose language it is:
+In a request, the middleware has set the reader's language. A mail, a notice, the result of a job or a line in an
+export has no request. Its reader is often someone other than the person who started the work. The domain still
+does not read a culture. The code that writes the text sets the reader's language.
+
+In the diagram, purple is where the language comes from, and green is the result:
 
 ```mermaid
 flowchart TD
     subgraph outside ["Outside a request"]
-        Kept["The language the application keeps<br/>for the reader of the text"] --> Scope["CultureScope.Use(language)"]
-        Scope --> OfWork["Current culture of this flow of work"]
-        Kept --> Named["Localize(failure, language)"]
+        kept["<b>Reader's language</b><br/><small>kept by the application</small>"]
+        scope["<b>CultureScope.Use(language)</b><br/><small>sets the culture of this flow of work</small>"]
+        named["<b>Localize(failure, language)</b><br/><small>one failure</small>"]
+        kept --> scope
+        kept --> named
     end
     subgraph inside ["Inside a request"]
-        Asked["The language the client asks for"] --> Middleware["Request localization middleware"]
-        Known["The language the application keeps<br/>for the caller, when the client asks for none"] --> Middleware
-        Middleware --> OfRequest["Current culture of the request"]
+        asked["<b>Accept-Language</b><br/><small>the language the client asks for</small>"]
+        known["<b>Caller's language</b><br/><small>kept by the application, when the client asks for none</small>"]
+        middleware["<b>Request localization middleware</b><br/><small>sets the culture of the request</small>"]
+        asked --> middleware
+        known --> middleware
     end
-    OfRequest --> Localizers["IFailureLocalizer and IStringLocalizer"]
-    OfWork --> Localizers
-    Named --> Localizers
-    Localizers --> Text["The text, in its reader's language"]
+    localizers["<b>IFailureLocalizer, IStringLocalizer</b><br/><small>read the current UI culture</small>"]
+    text["<b>The text</b><br/><small>in the reader's language</small>"]
+    scope --> localizers
+    named --> localizers
+    middleware --> localizers
+    localizers --> text
+    classDef strong fill:#5b2ec933,stroke:#5b2ec9,stroke-width:2px
+    classDef good fill:#1f8a5b26,stroke:#1f8a5b
+    class kept,asked,known strong
+    class text good
 ```
 
 <details>
@@ -283,17 +306,18 @@ var why = localizer.Localize(refusal, language);
 
 </details>
 
-`CultureScope.Use(culture)` makes a culture the current culture and the current UI culture until the scope
-is disposed, and puts back the two that were current before, also when the work inside throws. It takes a
-`CultureInfo` or a culture's name, such as the `"nl"` the application keeps for a reader. Everything inside
-the scope reads that culture: `IFailureLocalizer`, `IStringLocalizer`, and the formatting of numbers and
-dates.
+- `CultureScope.Use(culture)` sets both the current culture and the current UI culture until the scope is
+  disposed. Disposing restores the two previous cultures, also when the work inside throws.
+- `CultureScope.Use` takes a `CultureInfo` or the name of a culture, such as the `"nl"` that the application keeps
+  for a reader.
+- Everything inside the scope uses that culture: `IFailureLocalizer`, `IStringLocalizer`, and the format of numbers
+  and dates.
 
-The current culture belongs to a flow of work. It follows an `await` inside the scope, and work started
-inside the scope starts with it. It does not reach work that was running already, and it does not flow
-back out of an `async` method to its caller. So open and dispose a scope in one method, with `using`.
+The current culture belongs to a flow of work. It follows an `await` inside the scope, and work started inside the
+scope starts with that culture. The culture does not reach work that was already running. It also does not flow
+back from an `async` method to its caller. So open and dispose a scope in one method, with `using`.
 
-For a single failure there is an overload that takes the culture:
+For a single failure, an overload takes the culture:
 
 ```csharp
 string Localize(this IFailureLocalizer localizer, RefusalException refusal, CultureInfo culture);
@@ -301,13 +325,13 @@ string Localize(this IFailureLocalizer localizer, ValidationError error, Culture
 string Localize(this IFailureLocalizer localizer, InvariantViolation violation, CultureInfo culture);
 ```
 
-Each asks the localizer inside a scope, so a localizer of your own, which reads the current UI culture
-like any other, is asked in that culture too.
+Each overload calls the localizer inside a scope. So a localizer of your own, which reads the current UI culture,
+also answers in that culture.
 
-The same overloads are what an exception handler needs. The request localization middleware sets the
-culture inside its own `async` method, further in than the handler, so by the time an exception reaches
-the handler that culture is gone and a plain `Localize(refusal)` answers in the server's language. The
-choice the middleware made is still on the request, and the handler names it:
+An exception handler needs these overloads too. The request localization middleware comes after the exception
+handler in the pipeline, and sets the culture inside its own `async` method. When an exception reaches the
+handler, that culture is gone, and a plain `Localize(refusal)` answers in the server's language. The middleware's choice is still on the
+request, so the handler passes it:
 
 ```csharp
 var culture = httpContext.Features.Get<IRequestCultureFeature>()?.RequestCulture.UICulture
@@ -315,31 +339,28 @@ var culture = httpContext.Features.Get<IRequestCultureFeature>()?.RequestCulture
 problem.Title = localizer.Localize(refusal, culture);
 ```
 
-## A browser app with its own translations
+## Translations in a browser app
 
-An application whose front end has translations of its own does not need the server's sentences at all.
-What the server and the client agree on is the code and the arguments. The message is what a client
-shows when it knows no better.
+A front end with its own translations does not need the server's sentences. The server and the client share the
+code and the arguments. The client shows the message only when it has no translation for the code.
 
-- **The code is the translation key, as it is.** `subscription.plan-name-invalid` or `Till.OverLimit` is a
-  valid key in every common translation format, so the client's file has the same keys as your resx and a test
-  can hold the two lists to each other.
-- **The arguments fill the client's template.** They arrive by name, as values:
-  `{ "Max": 40 }`, `{ "Min": 1, "Max": 200 }`. The client formats numbers and dates
-  its own way.
-- **The message is the fallback.** A code the client's file does not know yet, because the server was
-  deployed first, still shows a sentence in the reader's language when the request said which.
-- **`Field` puts the text under its input.** A refusal about one input carries `Field`, and a value
-  object's failure its `PropertyName`. In GraphQL both arrive as `field`. A form looks the input up by
-  that name, and shows a failure without one at the top.
+- **The code is the translation key, unchanged.** `subscription.plan-name-invalid` and `Till.OverLimit` are valid
+  keys in every common translation format. So the client's file has the same keys as your resx, and a test can
+  compare the two lists.
+- **The arguments fill the client's template.** They arrive by name, as values: `{ "Max": 40 }`,
+  `{ "Min": 1, "Max": 200 }`. The client formats numbers and dates itself.
+- **The message is the fallback.** When the server is deployed first, the client's file may not know a new code
+  yet. The client then shows the message, in the reader's language when the request named one.
+- **`Field` places the text under its input.** A refusal about one input carries `Field`, and a failure of a value
+  object carries `PropertyName`. In GraphQL both arrive as `field`. A form finds the input by that name, and shows
+  a failure without one at the top.
 
-Send `Accept-Language` from the client anyway. It costs nothing, and the fallback is then in the right
-language.
+Send `Accept-Language` from the client anyway, so the fallback message is in the reader's language.
 
-## One module, one resx
+## Translations per module
 
-Calls to `AddDDDToolkitLocalization()` add up, so each module registers its own translations from its
-own composition method and every one of them is asked, in the order the calls were made:
+Calls to `AddDDDToolkitLocalization()` add up. So each module registers its own translations in its own
+composition method. The localizer asks every source, in the order of the calls:
 
 ```csharp
 public static IServiceCollection AddOrdering(this IServiceCollection services)
@@ -349,28 +370,29 @@ public static IServiceCollection AddShipping(this IServiceCollection services)
     => services.AddDDDToolkitLocalization(o => o.AddResource<ShippingFailures>());
 ```
 
-### What a permission lets somebody do
+### Permission descriptions
 
-A permission's text, the one an administrator reads where roles are made, is the `Description` of its level in the `[Permissions]`
-class it is declared in ([A module states its permissions once](tenancy/roles-and-permissions.md#declaring-a-modules-permissions)). That is the
-English, and the fallback. A translation is a resx entry under the permission's name, read with
-`IFailureLocalizer.Text`, which answers the entry in the current UI culture or the text it is handed:
+An administrator reads a text for each permission on the screen where roles are made. That text is the
+`Description` of the permission's level, in the `[Permissions]` class that declares it
+([Declaring a module's permissions](tenancy/roles-and-permissions.md#declaring-a-modules-permissions)). The
+description is the English text and the fallback. A translation is a resx entry under the permission's name.
+`IFailureLocalizer.Text(key, fallback)` returns the entry in the current UI culture, or the fallback:
 
 ```csharp
 var description = localizer.Text(permission.Name, permission.Description);   // "orders.view": "De orders zien."
 ```
 
-Keep the permissions' texts in a pair of their own beside the class, `OrderingPermissionTexts.resx` and its
-`.nl.resx`, and add it as a module adds its refusals' texts. The English file repeats the summaries, so a
-translator has every text in one file per language. The Tenancy sample's catalogue answers its permissions so, and
-a test holds each English file to the summaries.
+Keep the texts of the permissions in their own pair of files next to the class, such as
+`OrderingPermissionTexts.resx` and `OrderingPermissionTexts.nl.resx`. Add them the same way a module adds the
+texts of its refusals. The English file repeats the descriptions, so a translator has every text in one file per
+language. The Tenancy sample's catalogue reads its permission texts this way, and a test checks each English file
+against the descriptions.
 
 ## A package's texts under your own codes
 
-A package that ships its texts names each one once, in its own resx. When the codes are yours to choose,
-because the package refuses under a prefix per module or per resource, a failure carries your code and the
-resx has the package's name for it. Add the resx with the codes that read it: for each code a failure
-carries, the name of the entry that holds its text.
+A package that ships texts names each text once, in its own resx. Some packages refuse under a prefix that you
+choose, per module or per resource. Then a failure carries your code, and the resx has the package's name for the
+entry. Add the resx with a map: for each code that a failure carries, the name of the entry that holds its text.
 
 ```csharp
 services.AddDDDToolkitLocalization(o => o.AddResource<SubscriptionFailures>(new Dictionary<string, string>
@@ -379,14 +401,16 @@ services.AddDDDToolkitLocalization(o => o.AddResource<SubscriptionFailures>(new 
 }));
 ```
 
-Only the codes you name are answered, several codes may read one entry, and the same resx can be added
-once for each set of codes. [The check](#checking-that-everything-is-translated) follows your codes to the
-entries they read, language by language. A package whose codes are yours hands you the map.
+- The localizer answers only the codes in the map.
+- Several codes can read one entry.
+- You can add the same resx once for each set of codes.
+- [The check](#checking-that-everything-is-translated) follows your codes to their entries, language by language.
+- A package whose codes you choose gives you the map.
 
 ### Texts a package's registration offers
 
-A package that knows the codes when you register what they are for can do this for you. Its registration
-offers its texts, with the map, and you write no line for them:
+A package that knows the codes at registration can add the map itself. Its registration offers its texts with the
+map, and you write nothing for them:
 
 ```csharp
 // In the package's registration: the texts of what this resource refuses with, under the codes it was given
@@ -396,83 +420,88 @@ services.AddFailureTexts<MembershipFailures>(rules.Codes.TextKeys);
 services.AddDDDToolkitLocalization(o => o.AddResource<SharedFailures>());
 ```
 
-[Membership](membership/overview.md) offers its texts this way, once for each resource you register, under that
-resource's codes.
+[Membership](membership/overview.md) offers its texts this way, once for each resource you register, under the
+codes of that resource.
 
-- **An offer changes nothing by itself.** `AddFailureTexts` is in the core package and registers a
-  `FailureTexts`, which only `AddDDDToolkitLocalization` reads. An application that does not phrase its
-  failures in the reader's language is given no localizer by a package, and its failures keep their own
-  sentences.
-- **Your texts come first.** The localizer asks the sources you add, wherever you add them, then every offer
-  in the order it was made, then the toolkit's own messages. A text of yours for a package's code is the one
-  a reader gets, whether you added it before the package was registered or after.
-- **No resx factory is needed for it.** An offer is read from the package's own assembly and its satellites,
-  by the marker type's name, whatever folder you keep your own resources in, and without
-  `AddLocalization()`. [The check](#checking-that-everything-is-translated) reads an offer as it reads any
-  source, under the name of its resx.
+- **An offer adds no localizer.** `AddFailureTexts` is in the core package and registers a `FailureTexts`. Only
+  `AddDDDToolkitLocalization` reads it. An application that does not translate its failures gets no localizer from
+  a package, and its failures keep their own messages.
+- **Your texts come first.** The localizer asks your sources first, then every offer in the order it was made,
+  then the toolkit's own messages. So a reader gets your text for a package's code, whether you added it before or
+  after the package's registration.
+- **An offer needs no `AddLocalization()`.** The localizer reads an offer from the package's assembly and its
+  satellite assemblies, by the name of the marker type. The folder of your own resources does not matter.
+  [The check](#checking-that-everything-is-translated) reads an offer like any other source, under the name of its
+  resx.
 
 ## A sample in two languages
 
-The Tenancy sample (`Examples/Tenancy`) answers in English or Dutch, by the request's `Accept-Language` header.
-It is the pieces above put together:
+The Tenancy sample (`Examples/Tenancy`) answers in English or Dutch, by the request's `Accept-Language` header. It
+combines the parts above:
 
-- **The texts are beside the codes.** Each module keeps a marker class with its two resource files next to
-  the refusals they translate: `Aggregates/Projects/ProjectFailures.resx` and `.nl.resx` beside
-  `ProjectRefusals.cs`. The table keeps its English, so the domain reads no resource; the neutral file repeats
-  it, and a test holds the two equal.
-- **Each module registers its own.** The module's entry calls its application project's registration, and
-  that calls `AddDDDToolkitLocalization(texts => texts.AddResource<ProjectFailures>())`. The Tenants module adds
-  the package's `TenancyFailures` and the texts of the rules the application added. The host calls
-  `AddLocalization()` and adds the texts of the codes it answers itself, first.
-- **A code has one text.** Inspections passes three of Projects' codes on, and has no text of its own for
+- **The texts are next to the codes.** Each module keeps a marker class with its two resource files next to the
+  refusals they translate: `Aggregates/Projects/ProjectFailures.resx` and `.nl.resx` next to `ProjectRefusals.cs`.
+  The table in `ProjectRefusals` keeps the English, so the domain reads no resource. The neutral resx repeats that
+  English, and a test checks that the two are equal.
+- **Each module registers its own texts.** The module's entry calls the registration of its application project,
+  which calls `AddDDDToolkitLocalization(texts => texts.AddResource<ProjectFailures>())`. The Tenants module adds
+  the package's `TenancyFailures` and the texts of the rules that the application added. The host calls
+  `AddLocalization()`, and first adds the texts of the codes that the host answers itself.
+- **A code has one text.** Inspections passes three of the codes of Projects on, and has no text of its own for
   them.
-- **The host chooses the language per request**, from the header and from nothing else
-  (`Host/Languages/RequestLanguages.cs`), with `app.UseRequestLocalization()` after tenant selection and
-  before authorization.
-- **The exception handler names the language.** `RefusalProblems` opens
-  `CultureScope.Use(RequestLanguages.LanguageOf(httpContext))` around what it phrases, for the reason given
-  under [Texts outside a request](#texts-outside-a-request).
-- **GraphQL follows.** The sample's gateway at `/graphql` comes after the same middleware, so the `message`
-  of a refusal, in a mutation's payload or as a query's error, is in the request's language too.
-- **The UI has a switch.** It keeps the language in its session, shows its own pages from `UiTexts.resx` in
-  that language, named with every lookup, and sends it as `Accept-Language` with every call.
+- **The host picks the language per request**, from the header and nothing else
+  (`Host/Languages/RequestLanguages.cs`). It calls `app.UseRequestLocalization()` after tenant selection and before
+  authorization.
+- **The exception handler passes the language.** `RefusalProblems` opens
+  `CultureScope.Use(RequestLanguages.LanguageOf(httpContext))` around the text it writes, for the reason under
+  [Texts outside a request](#texts-outside-a-request).
+- **GraphQL follows.** The sample's gateway at `/graphql` runs after the same middleware. So the `message` of a
+  refusal, in a mutation's payload or as a query's error, is in the request's language too.
+- **The UI has a switch.** The UI keeps the language in its session. It shows its own pages from `UiTexts.resx` in
+  that language, passing the language with every lookup, and sends it as `Accept-Language` with every call.
 
-Tests keep it whole (`Tests/Examples.Tenancy.Tests/Host/Languages`): every code the host can
-answer has a text in both languages, through the localizer the host registered; an entry of one file is an
-entry of the other, with the same placeholders; and no Dutch text has a word for the reader. A scenario sends
-the same refused request twice and reads it in Dutch and in English, and another reads one refusal, for a
-caller without a seat, from a route and from GraphQL.
+Tests in `Tests/Examples.Tenancy.Tests/Host/Languages` check that:
 
-The Dutch says what is the case or what is needed, never "je" or "u": which of the two fits is an
-application's choice, and a text without either is right in both.
+- every code that the host can answer has a text in both languages, through the localizer that the host
+  registered;
+- every entry of one file is in the other file, with the same placeholders;
+- no Dutch text addresses the reader.
+
+One scenario sends the same refused request twice, and reads the answer in Dutch and in English. Another scenario
+reads one refusal, for a caller without a seat, from a route and from GraphQL.
+
+The Dutch texts state what is the case or what is needed, without "je" or "u". The choice between the two belongs
+to the application, and a text without either fits both.
 
 ## The toolkit's own messages
 
-The toolkit writes seven messages itself, and ships them in English and Dutch:
+The toolkit writes eight messages itself, and ships them in English and Dutch:
 
 | Code | Where it comes from | Placeholders |
 | --- | --- | --- |
-| `Unspecified` | a `Validate()` that returned `false` without saying why | `{ValueObject}` |
-| `ValueObjectValidator` | `MustBeValid()` in `DDDToolkit.FluentValidation` | `{PropertyName}`, `{ValueObject}` |
-| `access.refused` | `ToolkitRefusals.Refused`: a save that a row level security policy or a guard of the database denied, refused by `DDDToolkit.EntityFramework`; and a request that lets one caller or another through (`AccessRequirement.Any`, `[OrOwn]`) and met neither, whose argument `Reasons` lists each way's own code and arguments | none |
-| `access.role-not-allowed` | `ToolkitRefusals.RoleNotAllowed`: a token whose role is on no list of the host's, refused by `DDDToolkit.EntityFramework.Postgres` before anything runs for it | `{Role}` |
-| `access.not-signed-in` | `ToolkitRefusals.NotSignedIn`: a request that requires a signed-in user (`AccessRequirement.SignedIn()`), sent by anybody else | none |
-| `access.system-only` | `ToolkitRefusals.SystemOnly`: what only the application's own work may do, past the door: Tenancy's use cases that only system work calls, and a handler that only system work may run, reached by a user or by work nobody began a caller for | none |
-| `access.not-own` | `ToolkitRefusals.NotOwn`: a request about the caller's own (`AccessRequirement.Own(value)`, `[Own]`) that names a value the caller does not have | none |
+| `Unspecified` | A `Validate()` that returned `false` without a reason. | `{ValueObject}` |
+| `ValueObjectValidator` | `MustBeValid()` in `DDDToolkit.FluentValidation`. | `{PropertyName}`, `{ValueObject}` |
+| `access.refused` | `ToolkitRefusals.Refused`, in two cases. `DDDToolkit.EntityFramework` makes it when a row level security (RLS) policy or a guard of the database refuses a save. A request that lets one caller or another through (`AccessRequirement.Any`, `[OrOwn]`) makes it when the caller is neither. Its argument `Reasons` then lists the code and the arguments of each case. | none |
+| `access.role-not-allowed` | `ToolkitRefusals.RoleNotAllowed`. `DDDToolkit.EntityFramework.Postgres` makes it for a token whose role is on none of the host's lists, before anything runs for it. | `{Role}` |
+| `access.not-signed-in` | `ToolkitRefusals.NotSignedIn`. A request requires a caller who signed in (`AccessRequirement.SignedIn()`), and the caller did not sign in, or is system work. | none |
+| `access.system-only` | `ToolkitRefusals.SystemOnly`. Only system work may do this, and the caller is not system work. That includes work that nobody started a caller for. Tenancy's use cases that only system work calls make it, and so does a handler that only system work may run. | none |
+| `access.not-own` | `ToolkitRefusals.NotOwn`. A request about the caller's own (`AccessRequirement.Own(value)`, `[Own]`) names a value that the caller does not have. | none |
+| `access.not-found` | `ToolkitRefusals.NotFound`. A request about the owner of an aggregate (`AccessRequirement.OwnerOf`, or `[Own]` or `[OrOwn]` on the id of an aggregate with an `[Owner]`) names an aggregate with no row for the caller. The row does not exist, or RLS or a query filter hides it from the caller. | none |
 
-They are asked last, so a key of the same name in your own resx overrides them, and adding another
-language is adding those seven keys to it. A refusal of one way or another is phrased by its own code, `access.refused`;
-a client that shows each reason phrases each of `Reasons` by its code the same way.
+The localizer asks these messages last. So a key with the same name in your own resx overrides them. To add
+another language, add these eight keys to your resx for that language. A refusal of a request that lets one
+caller or another through is translated by its own code, `access.refused`. A client that shows each reason
+translates each entry of `Reasons` by its code, the same way.
 
-Override them in every language you support, not only in your neutral resx. `IStringLocalizer` falls
-back from `SharedFailures.nl.resx` to `SharedFailures.resx` before the toolkit is asked at all, so an
-override in the neutral file alone gives Dutch readers your English text instead of the toolkit's
-Dutch. The check below reports exactly that.
+Override a message in every language you support. `IStringLocalizer` falls back from `SharedFailures.nl.resx` to
+`SharedFailures.resx` before the localizer asks the toolkit. So an override in the neutral file alone gives Dutch
+readers your English text instead of the toolkit's Dutch text. [The check](#checking-that-everything-is-translated)
+reports this case as `Hidden`.
 
 ## Checking that everything is translated
 
-`FailureTranslations` checks that every failure you expect is translated in every language you support,
-so a missing translation fails a test instead of reaching a user:
+`FailureTranslations` checks that every failure you expect has a translation in every language you support. A
+missing translation then fails a test before a reader sees it:
 
 ```csharp
 [Fact]
@@ -485,32 +514,32 @@ public void Every_failure_is_translated_in_every_language()
         .Verify();
 ```
 
-`localizer` is the one the application registers, taken from a service provider built the way the
-application builds it. The check follows each key through each source the way the localizer does at
-run time, one language level at a time (`nl-NL`, then `nl`, then the neutral resx), and `Verify()`
-throws with a report:
+`localizer` is the localizer that the application registers, from a service provider built the way the
+application builds it. The check follows each key through each source as the localizer does at run time, one
+language level at a time: `nl-NL`, then `nl`, then the neutral resx. `Verify()` throws
+`MissingFailureTranslationsException` with a report, by language and then by key:
 
 ```text
 3 failure translations are missing or hidden:
 
-  de     Order.OverCreditLimit            fallsback: readers get SharedFailures.resx's neutral (en) text.
   nl     Nobody.Knows                     missing: no source knows it, so readers get the domain's own message.
   nl     ValueObjectValidator             hidden: SharedFailures.resx has it only in its neutral (en) resx, which
                                           wins over the toolkit's nl text. Add it to the nl resx too.
+  de     Order.OverCreditLimit            fallsback: readers get SharedFailures.resx's neutral (en) text.
 ```
 
 | Problem | Meaning |
 | --- | --- |
 | `Missing` | No source knows the key, so readers get the domain's own message. |
-| `FallsBack` | Nothing translates it into this language, so readers get your neutral text or the toolkit's English. |
-| `Hidden` | The toolkit translates it, but your neutral resx wins first. |
+| `FallsBack` | No source translates the key into this language, so readers get your neutral text or the toolkit's English. |
+| `Hidden` | The toolkit translates the key, but your neutral resx answers first. |
 
-Invariants are found for you: every `IInvariant` in the assemblies you name is created and asked for
-its code, and either of its two keys counts. Codes your value objects report and FluentValidation's
-codes are strings in your code, so name the ones you expect with `Codes(...)`.
+`Invariants(...)` finds the invariants for you. It creates every `IInvariant` in the assemblies you name, and asks
+each one for its code. Either of the two keys of an invariant counts. The codes of your value objects and of
+FluentValidation are strings in your code, so name the ones you expect with `Codes(...)`.
 
-`Findings()` returns the same report as a list, for a test that wants to assert something narrower,
-and nothing here needs a test framework, so the same check works at startup in development:
+`Findings()` returns the same report as a list, for a test that asserts something narrower. The check needs no
+test framework, so it also works at start-up in development:
 
 ```csharp
 if (app.Environment.IsDevelopment())

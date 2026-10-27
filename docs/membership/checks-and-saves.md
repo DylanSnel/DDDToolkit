@@ -11,7 +11,7 @@ expert hold.
 
 ## Requirements that combine
 
-Membership adds two requirements to [the vocabulary](../access-requirements.md#the-vocabulary):
+Membership adds two requirements to [the vocabulary](../access-requirements.md#requirements-and-their-attributes):
 
 | On the request | The call | For |
 |---|---|---|
@@ -25,7 +25,7 @@ registers its check for the same request interface, and each check decides its o
 and anybody with the permission can take any member off. With `[RequiresPermission(DocumentPermissions.Share)]`, the
 request `LeaveDocument([OnResource] DocumentId Document, [OrOwn] UserId Member)` gets this requirement:
 `Any(All(Own(request.Member), MemberAccess.Sees(DocumentPermissions.Share, request.Document)), MemberAccess.On(DocumentPermissions.Share, request.Document))`
-([Yours, or the permission](../access-requirements.md#yours-or-the-permission)).
+([Yours, or the permission](../access-requirements.md#the-callers-own-or-a-permission)).
 
 The diagram shows the two ways through when Leo sends `LeaveDocument`. Purple: the request. Green: let through. Red:
 refused.
@@ -133,7 +133,7 @@ var permissions = await db.Documents.Where(document => ids.Contains(document.Id)
 
 - `[SeenWith]` refuses nobody for lacking the permission. The reach in the query is the filter. So `[SeenWith]` goes
   on queries only. On a Mediator command or a plain `IRequest` it is [DDD00082](../diagnostics.md#ddd00082). With
-  another dispatcher, a [test](../access-requirements.md#holding-it-with-a-test) checks it.
+  another dispatcher, a [test](../access-requirements.md#testing-the-requirements) checks it.
 - A caller who did not sign in reaches nothing. The check refuses that caller with `documents.not-permitted`, and no
   statement is sent.
 - With Tenancy, the check first refuses a caller without an active seat in the tenant, with Tenancy's code:

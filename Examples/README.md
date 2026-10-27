@@ -307,7 +307,7 @@ One queue rather than one per module, because Supabase ships pgmq 1.5.1, and the
 turned on by `supabase/migrations/20260925090000_enable_queues.sql`, a migration written by hand next to
 the exported ones; the build's export leaves a file it did not write alone. In the Supabase dashboard the
 queue is under Integrations, Queues, where its messages can be watched as the scenarios run. See
-[Transports](../docs/transports.md#when-a-module-becomes-its-own-deployable-pgmq) for what each pgmq
+[Transports](../docs/transports.md#postgres-queues-pgmq) for what each pgmq
 version supports.
 
 ### On SQL Server

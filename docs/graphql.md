@@ -1,17 +1,21 @@
 # GraphQL
 
-`DDDToolkit.HotChocolate` makes a domain model built with the toolkit printable as a GraphQL schema.
-Without it a strongly typed id becomes an object type with a `value` field, the validation bookkeeping
-on your value objects becomes public API, a method on an aggregate becomes a field that any query can
-run, and a client has to know that an `OrderId` is a wrapper. With it an `OrderId` is a `UUID`, the
-bookkeeping and the methods are gone, and every domain event shares one interface.
+`DDDToolkit.HotChocolate` adapts a domain model built with the toolkit to a HotChocolate GraphQL schema. Without
+the package, HotChocolate publishes the model as it finds it:
 
-This page starts with ids, which every schema needs first, then the conventions every schema gets,
-errors, in the response and in a mutation's payload, a permission on a field, Relay, and paging by an
-id. After that come the parts for larger systems: a field for one schema only, one schema over several
-modules, and pushing events to subscribed clients. How the generated bindings work is at the end. For a
-whole schema to read beside this page, the [Tenancy sample](tenancy/the-sample.md#graphql-in-the-sample) is the
-reference for GraphQL; the shop sample's schema is older, and still writes by hand what HotChocolate now
+- A strongly typed id becomes an object type with a `value` field. A client has to know that an `OrderId` wraps a
+  `Guid`.
+- The validation bookkeeping of value objects becomes public API.
+- A method on an aggregate becomes a field that any query can run.
+
+With the package, an `OrderId` is a `UUID` in the schema. The bookkeeping fields and the method fields are removed,
+and every domain event implements one `DomainEvent` interface.
+
+This page covers, in order: ids, the conventions every schema gets, errors in the response and in a mutation's
+payload, a permission on a field, Relay, and paging by an id. Then come the parts for larger systems: a field for one
+schema only, one schema over several modules, and pushing events to subscribed clients. The last sections show how
+the generated bindings work. The [Tenancy sample](tenancy/the-sample.md#graphql-in-the-sample) is the reference
+schema to read next to this page. The shop sample's schema is older, and writes by hand what HotChocolate now
 generates.
 
 ## Install
@@ -20,16 +24,15 @@ generates.
 dotnet add package Temp.DDDToolkit.HotChocolate --prerelease
 ```
 
-The package brings its own source generator, so referencing it is the whole of the build-time setup.
-It depends on `HotChocolate.AspNetCore`, so you do not add HotChocolate separately.
+The package contains its own source generator, so the package reference is the only build-time setup. The package
+depends on `HotChocolate.AspNetCore`, so you do not add HotChocolate separately.
 
-It asks for HotChocolate 16.6.9 or later. HotChocolate's packages are released together and an
-application has one version of them all, so a HotChocolate package you reference yourself takes the
-version of the others.
+The package requires HotChocolate 16.6.9 or later. HotChocolate releases all its packages together, and an
+application uses one version of all of them. Reference any other HotChocolate package at that same version.
 
 ## Register
 
-Two kinds of call, both on the `IRequestExecutorBuilder`:
+Two kinds of call on the `IRequestExecutorBuilder` set up the toolkit:
 
 ```csharp
 using DDDToolkit.HotChocolate;
@@ -44,46 +47,53 @@ builder.Services
     .AddTypes();                     // HotChocolate's: your queries and mutations, see below
 ```
 
-`AddDDDToolkitTypes()` registers the conventions, and there is one call for the whole schema. Calling
-it twice produces the same schema as calling it once. It does four things, each explained further
-down:
+`AddDDDToolkitTypes()` registers the conventions. A schema calls it once, and a second call changes nothing. The
+call does four things, each explained further down:
 
-- It removes `[Internal]` members, the toolkit's bookkeeping, through the
-  `IgnoreInternalFieldsInterceptor`. See
+- `IgnoreInternalFieldsInterceptor` removes `[Internal]` members, the toolkit's bookkeeping. See
   [Internal members are removed from the schema](#internal-members-are-removed-from-the-schema).
-- It removes the fields HotChocolate would make of a domain type's methods. See
-  [Domain types publish their data, not their behaviour](#domain-types-publish-their-data-not-their-behaviour).
-- It adds the `DomainEvent` interface type. See [The DomainEvent interface](#the-domainevent-interface).
-- In a Fusion source schema, and only there, it marks value objects `@shareable`. See
+- `DomainBehaviourFieldsInterceptor` removes the fields that HotChocolate makes from the methods of a domain type.
+  See [Methods of domain types are removed](#methods-of-domain-types-are-removed).
+- The call adds the `DomainEvent` interface type. See [The DomainEvent interface](#the-domainevent-interface).
+- In a Fusion source schema, and only there, the call marks value objects `@shareable`. See
   [Value objects in a Fusion source schema](#value-objects-in-a-fusion-source-schema).
 
-`Add{Module}GraphQlRuntimeBindings()` registers the scalar bindings, the type converters and the Relay
-node id serializers, and makes every struct identifier a key a paged list can be ordered by
-([Paging by an id](#paging-by-an-id)). There is one call per assembly that declares identifiers or single
-value objects. The method is generated into the namespace `{AssemblyName}.GraphQl`, on a static class named
-`HotChocolateExtensions`. The `{Module}` part is the module the assembly declares, so a project with
-`<DDD_Module>Ordering</DDD_Module>` or `[assembly: Module("Ordering")]` gets `AddOrderingGraphQlRuntimeBindings`.
-A project that is no module takes it from its `DDD_Module` where it has one, and otherwise from its assembly
-name; see
-[DDD_Module, and the package that brings it](modules.md#ddd_module-and-the-package-that-brings-it).
-Two assemblies of one module share the name, and an assembly's method calls the ones of the module's
-other assemblies it references, so a schema makes one call for the module. An assembly that declares
-neither an identifier nor a single value object gets no method at all, unless it is a module's project
-that binds the identifiers of the module's other projects: see
-[Bound by a project that does not declare it](#bound-by-a-project-that-does-not-declare-it).
+`Add{Module}GraphQlRuntimeBindings()` is generated. For the ids and single value objects of an assembly, it
+registers:
 
-The order of the two is not significant: the calls only record configuration, and the schema is built
-afterwards. The order above reads in the direction of the dependency, from conventions to your types.
+- the scalar bindings,
+- the type converters,
+- the Relay node id serializers,
+- a cursor key serializer for every struct identifier, so a paged list can be ordered by that identifier
+  ([Paging by an id](#paging-by-an-id)).
 
-A project with a class of fields that belongs to one schema only, marked `[GraphQLSchema]`, has those classes
-registered by the same `Add{Module}GraphQlRuntimeBindings()`, for the schema the builder builds and for no other.
-The schema calls nothing more, and such a project gets the method even when it declares no identifier. See
+The generator writes one such method per assembly that declares identifiers or single value objects. The method is
+in the namespace `{AssemblyName}.GraphQl`, on a static class named `HotChocolateExtensions`. The `{Module}` part is
+the module that the assembly declares. A project with `<DDD_Module>Ordering</DDD_Module>` or
+`[assembly: Module("Ordering")]` gets `AddOrderingGraphQlRuntimeBindings`. A project that is not a module takes the
+name from its `DDD_Module` property if it has one, and otherwise from its assembly name. See
+[DDD_Module, and the package that brings it](modules.md#the-module-name-in-generated-code).
+
+Two assemblies of one module get methods with the same name. Each method calls the methods of the module's other
+assemblies that its assembly references. So a schema makes one call per module.
+
+An assembly that declares no identifier and no single value object gets no method, with two exceptions:
+
+- A module's project that binds the identifiers of the module's other projects
+  ([Binding ids from other projects](#binding-ids-from-other-projects)).
+- A project with a class of fields for one schema only (below).
+
+The order of the calls does not matter. Each call records configuration, and HotChocolate builds the schema
+afterwards. The example orders the calls from the conventions to your types.
+
+A class of fields for one schema only is marked `[GraphQLSchema]`. The same `Add{Module}GraphQlRuntimeBindings()`
+registers such a class, only for the schema that the builder builds. The host calls no other method. A project with
+such a class gets the method even when it declares no identifier. See
 [A field for one schema only](#a-field-for-one-schema-only).
 
-`AddTypes()` is HotChocolate's, not the toolkit's. Its own generator writes it for a project that names it,
-and it registers the project's GraphQL types, its data loaders and its operations. An operation is a static
-method that says what it is, with `[Query]`, `[Mutation]` or `[Subscription]`, and the examples on this page
-are written that way:
+`AddTypes()` comes from HotChocolate. HotChocolate's own generator writes it for a project that names it. The method
+registers the project's GraphQL types, data loaders and operations. An operation is a static method marked
+`[Query]`, `[Mutation]` or `[Subscription]`. The examples on this page use operations:
 
 ```csharp
 [assembly: HotChocolate.Module("Types")]   // names the generated method: AddTypes()
@@ -96,14 +106,14 @@ public static class OrderQueries
 }
 ```
 
-`[Service]` marks a parameter that is injected. HotChocolate does not ask for it; it is written so a reader
-sees at once which parameters are the field's arguments. Write HotChocolate's `Module` attribute with its
-namespace in a project that also declares the toolkit's [`[assembly: Module]`](modules.md): the two have
-one name.
+`[Service]` marks a parameter that HotChocolate injects. HotChocolate does not require the attribute. The examples
+use it so a reader sees which parameters are the field's arguments. In a project that also declares the toolkit's
+[`[assembly: Module]`](modules.md), write HotChocolate's `Module` attribute with its namespace. The two attributes
+have the same name.
 
-## What a typed id looks like in the schema
+## Typed ids in the schema
 
-Take an id and a field that returns it:
+An example id, and a field that returns it:
 
 ```csharp
 [EntityId<Guid>("TST")]
@@ -121,7 +131,7 @@ public static class TicketQueries
 }
 ```
 
-Without the runtime bindings, HotChocolate binds by convention and sees a struct with public members:
+Without the runtime bindings, HotChocolate binds the struct by convention and publishes its public members:
 
 ```graphql
 type Query {
@@ -134,7 +144,7 @@ type TicketId {
 }
 ```
 
-With the generated bindings registered, the id collapses into the scalar it wraps:
+With the generated bindings registered, the id becomes the scalar it wraps:
 
 ```graphql
 type Query {
@@ -142,10 +152,11 @@ type Query {
 }
 ```
 
-That is the work of the bindings method you registered. The generator wrote three lines into it for
-`TicketId`:
+The generator wrote three lines for `TicketId` into the bindings method:
 
-```csharp title="BindingExtensions.g.cs, shortened"
+**`BindingExtensions.g.cs`**, shortened
+
+```csharp
 public static IRequestExecutorBuilder AddOrderingGraphQlRuntimeBindings(this IRequestExecutorBuilder builder)
 {
     // ...
@@ -156,18 +167,19 @@ public static IRequestExecutorBuilder AddOrderingGraphQlRuntimeBindings(this IRe
 }
 ```
 
-The first line prints `TicketId` as `UUID`. The second registers a converter between `TicketId` and
-`Guid`, so a value can cross the boundary in either direction. The third lets a `TicketId` be the key
-inside a Relay node id; see [Relay node ids](#relay-node-ids). The two classes they name are generated
-into `TicketId` as well, and [How the bindings work](#how-the-bindings-work) shows them.
+- `BindRuntimeType` prints `TicketId` as `UUID`.
+- `AddTypeConverter` registers a converter between `TicketId` and `Guid`, in both directions.
+- `AddNodeIdValueSerializer` lets a `TicketId` be the key inside a Relay node id ([Relay node ids](#relay-node-ids)).
 
-Note that the prefix is not part of the wire format. `TicketId.Create(guid).ToString()` is
-`"TST_..."`, and the same id serializes as the bare `Guid`. The prefix belongs to `ToString` and
-`Parse`; see [Prefixes](identifiers.md#prefixes).
+The generator also writes the two classes that these lines name into `TicketId`.
+[How the bindings work](#how-the-bindings-work) shows them.
+
+The prefix is not part of the wire format. `TicketId.Create(guid).ToString()` returns `"TST_..."`, and the same id
+serializes as the bare `Guid`. Only `ToString` and `Parse` use the prefix. See [Prefixes](identifiers.md#prefixes).
 
 ### Struct ids, class ids and always-valid twins
 
-All three bind to the same scalar.
+All three bind to the same scalar:
 
 | Declaration | Schema type |
 |---|---|
@@ -175,12 +187,12 @@ All three bind to the same scalar.
 | `[EntityId<Guid>] partial record PersonId` | `UUID` |
 | the generated `ValidPersonId` twin | `UUID` |
 
-The twin is handled by the same `ChangeTypeProvider` as the type it derives from: one provider carries
-the conversions for both. See [The always-valid twin](value-objects.md#the-always-valid-twin) for what
-the twin is for. A struct id has no twin, so its provider carries one pair of conversions.
-[How the bindings work](#how-the-bindings-work) shows the extra binding a twin gets.
+The twin uses the `ChangeTypeProvider` of the type it derives from. That provider contains the conversions for both
+types. [The always-valid twin](value-objects.md#the-always-valid-twin) explains what the twin is for. A struct id has
+no twin, so its provider contains one pair of conversions. [How the bindings work](#how-the-bindings-work) shows the
+extra binding that a twin gets.
 
-Nullability and lists follow from the CLR type, as they do for any other runtime type:
+Nullability and lists follow from the CLR type, as for any other runtime type:
 
 ```graphql
 cat: UUID!
@@ -188,13 +200,13 @@ nullableCat: UUID
 cats: [UUID!]!
 ```
 
-`CatId?` prints as `UUID` and serializes as `null` when absent, so an optional id stays off the heap
-and still reads correctly on the wire.
+`CatId?` prints as `UUID` and serializes as `null` when it has no value. An optional struct id is therefore not
+allocated on the heap, and still serializes correctly.
 
 ### Arguments and input objects
 
-The binding is on the runtime type, not on a direction, so the same mapping applies to input. An id
-used as an argument is declared as the scalar and arrives at the resolver as the id:
+The binding applies to the runtime type in both directions, so the same mapping applies to input. A resolver
+declares an id argument with the id type. The schema shows the scalar, and the resolver receives the id:
 
 ```csharp
 [Query]
@@ -209,16 +221,15 @@ describeTicketId(id: UUID!): String!
 { describeTicketId(id: "44444444-4444-4444-4444-444444444444") }
 ```
 
-That returns `"TST_44444444-4444-4444-4444-444444444444"`, which only a real `TicketId` can produce; a
-`string` argument would come back without the prefix. Literals and variables both work, and a variable
-is declared with the scalar:
+This query returns `"TST_44444444-4444-4444-4444-444444444444"`. Only a real `TicketId` adds the prefix. A `string`
+argument would return the value without it. Literals and variables both work. Declare a variable with the scalar:
 
 ```graphql
 query Echo($id: UUID!) { echoCatId(id: $id) }
 ```
 
-Input objects work the same way. A plain class with typed id properties is published with the id
-fields already collapsed:
+Input objects work the same way. HotChocolate publishes a plain class with typed id properties, with the ids as
+scalars:
 
 ```csharp
 public sealed class SeatReservation
@@ -238,8 +249,8 @@ input SeatReservationInput {
 
 ## The default scalar mapping
 
-When a type carries no `[GraphQLType<T>]`, the generator picks the schema type from the CLR type it
-wraps:
+When a type has no `[GraphQLType<T>]` attribute, the generator picks the schema type from the CLR type that the id
+or value object wraps:
 
 | Wrapped CLR type | HotChocolate type | Schema type |
 |---|---|---|
@@ -257,20 +268,23 @@ wraps:
 | `TimeOnly` | `LocalTimeType` | `LocalTime` |
 | `Guid` | `UuidType` | `UUID` |
 
-Wrap anything else and no `BindRuntimeType` line is generated. The converter is still registered, but
-the type is published by convention, as an object type with a `value` field. Name a schema type
-yourself if that is not what you want.
+For any other wrapped type, the generator writes no `BindRuntimeType` line. The converter is still registered, but
+HotChocolate publishes the type by convention, as an object type with a `value` field. To get another schema type,
+name it yourself (next section).
 
-Two rows in that table are not an exact match of runtime types, and it is worth knowing which.
-`DateTimeType` has a runtime type of `DateTimeOffset`, and `FloatType` has a runtime type of `double`.
-So an id or single value object over `DateTime` or over `float` leans on HotChocolate's own conversion
-between those pairs rather than on anything the toolkit does. Neither pairing is covered by the
-toolkit's tests. The other eleven rows match exactly, and `Guid`, `int` and `string` are exercised end
-to end.
+In two rows, the wrapped type differs from the runtime type of the HotChocolate type:
+
+- `DateTimeType` has the runtime type `DateTimeOffset`. An id or single value object over `DateTime` relies on
+  HotChocolate's conversion between `DateTime` and `DateTimeOffset`.
+- `FloatType` has the runtime type `double`. An id or single value object over `float` relies on HotChocolate's
+  conversion between `float` and `double`.
+
+The toolkit does not perform these conversions, and its tests do not cover these two pairs. In the other eleven
+rows, the runtime types match. The tests run `Guid`, `int` and `string` end to end.
 
 ### Naming the schema type yourself
 
-`[GraphQLType<TSchemaType>]` overrides the default for one type:
+`[GraphQLType<TSchemaType>]` replaces the default for one type:
 
 ```csharp
 using DDDToolkit.Abstractions.Attributes;
@@ -285,10 +299,12 @@ public partial record EmailAddress
 }
 ```
 
-The generator reads it and emits the binding it names, for the value object and for its always-valid
+The generator reads the attribute and binds the named schema type, for the value object and for its always-valid
 twin:
 
-```csharp title="BindingExtensions.g.cs, shortened"
+**`BindingExtensions.g.cs`**, shortened
+
+```csharp
 builder.BindRuntimeType<EmailAddress, EmailAddressType>();
 builder.BindRuntimeType<ValidEmailAddress, EmailAddressType>();
 builder.AddTypeConverter<EmailAddress.ChangeTypeProvider>();
@@ -298,11 +314,10 @@ builder.AddTypeConverter<EmailAddress.ChangeTypeProvider>();
 email: EmailAddress!
 ```
 
-Without the attribute that field would be `String!`. `EmailAddressType` comes from
-`HotChocolate.Types.Scalars`, which you reference yourself; the toolkit does not bring it in.
+Without the attribute, this field would be `String!`. `EmailAddressType` comes from `HotChocolate.Types.Scalars`.
+Reference that package yourself, because the toolkit does not bring it in.
 
-The attribute applies to identifiers as well as to single value objects, and to struct declarations as
-well as to records:
+The attribute works on identifiers and on single value objects, declared as structs or as records:
 
 ```csharp
 [EntityId<string>("USR")]
@@ -313,21 +328,24 @@ public readonly partial record struct LoginId
 }
 ```
 
-`TSchemaType` is constrained to `HotChocolate.Types.ITypeDefinition`. This attribute is the toolkit's
-own, in `DDDToolkit.HotChocolate.Attributes`, and is not HotChocolate's `GraphQLTypeAttribute`, which
-annotates individual members and arguments instead of a type.
+`TSchemaType` must implement `HotChocolate.Types.ITypeDefinition`. The attribute is the toolkit's, in
+`DDDToolkit.HotChocolate.Attributes`. HotChocolate's `GraphQLTypeAttribute` is a different attribute. It annotates
+single members and arguments.
 
 ## Internal members are removed from the schema
 
-The toolkit marks its bookkeeping with `[Internal]`, and `IgnoreInternalFieldsInterceptor` keeps every
-such member out of the schema. It covers object types, input object types and interface types, so a
-member stays hidden whether it is read or written. Covering interfaces matters too: a field kept on an
-interface but dropped from an implementing object would make the schema invalid.
+The toolkit marks its bookkeeping members with `[Internal]`. `IgnoreInternalFieldsInterceptor` removes every such
+member from the schema. The interceptor works on object types, input object types and interface types, so a hidden
+member can be neither read nor written. Interface types need the same treatment. If a field stays on an interface
+and is removed from an object that implements the interface, the schema is invalid.
 
-In practice this hides `IsValid`, `IsValidated`, `EnsureValidated` and the FluentValidation
-integration's `Errors` on value objects, `DomainEvents` on an aggregate root, and
-`GetInvariantViolations()` and `GetOwnInvariantViolations()` on every entity. It does not hide
-anything you did not mark. `Id` and `Version` stay, because they are API:
+The interceptor hides these members:
+
+- `IsValid`, `IsValidated`, `EnsureValidated` and the FluentValidation integration's `Errors` on value objects.
+- `DomainEvents` on an aggregate root.
+- `GetInvariantViolations()` and `GetOwnInvariantViolations()` on every entity.
+
+The interceptor hides nothing that is not marked. `Id` and `Version` stay, because they are part of the API:
 
 ```graphql
 type Ticket {
@@ -338,25 +356,25 @@ type Ticket {
 }
 ```
 
-Asking for a hidden field is a validation error, not an empty result: the field is not in the schema at
-all, so a query naming it comes back with an `errors` array that names the field.
+A query that asks for a hidden field fails validation. The field does not exist in the schema, so the response has
+an `errors` array that names the field:
 
 ```graphql
 { issuedTicket { domainEvents { eventId } } }
 ```
 
-A type that only a hidden member mentioned, such as FluentValidation's `ValidationFailure`, stays out
-of the schema as well; [Why it removes fields instead of flagging them](#why-it-removes-fields-instead-of-flagging-them)
+A type that only a hidden member referenced, such as FluentValidation's `ValidationFailure`, is also left out of
+the schema. [Why internal fields are removed instead of flagged](#why-internal-fields-are-removed-instead-of-flagged)
 explains how.
 
 See [Hiding members](value-objects.md#hiding-members) for what `[Internal]` means elsewhere, and
 [Optimistic concurrency](entities-and-aggregates.md#optimistic-concurrency) for `Version`.
 
-## Domain types publish their data, not their behaviour
+## Methods of domain types are removed
 
-HotChocolate binds implicitly unless a type says otherwise: every public property and every public
-method that returns something becomes a field, and a method's parameters become its arguments. For a
-domain type that publishes its behaviour. A `Money` with `Plus(Money)` and `Times(int)` would come out as
+By default HotChocolate binds implicitly. Every public property, and every public method that returns a value,
+becomes a field. A method's parameters become the field's arguments. For a domain type, this publishes the type's
+behaviour. A `Money` with `Plus(Money)` and `Times(int)` would print as:
 
 ```graphql
 type Money {
@@ -367,13 +385,13 @@ type Money {
 }
 ```
 
-with a `MoneyInput` in the schema only because `plus` needs one. On an aggregate it is worse: a method
-that changes state and returns a result would become a field, and run inside an ordinary query. Neither
-GraphQL nor HotChocolate can tell a method with side effects from one without.
+The schema would also contain a `MoneyInput`, only because `plus` needs one. On an aggregate the result is worse. A
+method that changes state and returns a result would become a field, and an ordinary query would run it. GraphQL and
+HotChocolate cannot tell a method with side effects from a method without them.
 
-So `AddDDDToolkitTypes()` registers `DomainBehaviourFieldsInterceptor`, which removes the fields that
-come from the methods of an entity, an aggregate or a value object, on every object type bound by
-convention:
+`AddDDDToolkitTypes()` therefore registers `DomainBehaviourFieldsInterceptor`. On every object type bound by
+convention, the interceptor removes the fields that come from the methods of an entity, an aggregate or a value
+object:
 
 ```graphql
 type Money {
@@ -382,20 +400,22 @@ type Money {
 }
 ```
 
-Properties stay, computed ones included, so a value that belongs in the schema is best made a property.
-A type declared with `BindFieldsExplicitly()` is left alone and publishes exactly what it lists, a
-method among them if you name one. Fields added by a type extension stay as well. Methods named with
-`descriptor.Field(...)` on a type that still binds by convention are removed with the rest, because
-HotChocolate records them the same way as the ones it found itself; declare that type explicitly.
+- Properties stay, computed properties included. Make a value that belongs in the schema a property.
+- A type declared with `BindFieldsExplicitly()` does not change. It publishes the fields it lists, including a
+  method if you name one.
+- Fields that a type extension adds stay.
+- A method named with `descriptor.Field(...)`, on a type that still binds by convention, is removed with the
+  others. HotChocolate records such a field in the same way as the fields it found itself. Declare that type with
+  `BindFieldsExplicitly()` instead.
 
-Like `[Internal]`, the fields are removed during discovery, so a type that only a method's argument
-mentioned, such as `MoneyInput`, never enters the schema.
+As with `[Internal]`, the interceptor removes the fields during discovery. A type that only a method's argument
+referenced, such as `MoneyInput`, therefore never enters the schema.
 
 ## Failures as GraphQL errors
 
-Without help, a resolver that throws `InvalidValueObjectException`, `InvariantViolationException` or
-`RefusalException` reaches the client as "Unexpected Execution Error", with no code and no way to tell which field or
-which rule it was. `AddDDDToolkitErrors()` fixes that:
+Without the toolkit, a resolver that throws `InvalidValueObjectException`, `InvariantViolationException` or
+`RefusalException` returns "Unexpected Execution Error" to the client. The error has no code and does not say which
+field or which rule failed. `AddDDDToolkitErrors()` registers an error filter that fixes this:
 
 ```csharp
 services
@@ -404,7 +424,7 @@ services
     .AddDDDToolkitErrors();
 ```
 
-Each failure becomes an error of its own, with the code in `extensions.code`:
+Each failure becomes a separate error, with its code in `extensions.code`:
 
 ```json
 {
@@ -427,26 +447,29 @@ Each failure becomes an error of its own, with the code in `extensions.code`:
 | `InvariantViolationException` | one per `InvariantViolation`, children included | `code`, `entity`, `entityId`, `arguments` |
 | `RefusalException` | one | `code`, `kind`, `arguments`, and `field` when the refusal names the input it is about (`RefusalException.FieldArgument`) |
 
-The rejected value itself is never sent back; it may be a password. Every other error passes through
-untouched.
+The error never contains the rejected value, because that value may be a password. The filter passes every other
+error through unchanged.
 
-The message is phrased in the reader's language when the application registered an
-`IFailureLocalizer`, by calling `AddDDDToolkitLocalization()` from `DDDToolkit.Localization`, and is the
-domain's own sentence otherwise. The language is the request's UI culture, so put
-`app.UseRequestLocalization(...)` before `app.MapGraphQL()`. See [Localization](localization.md).
+The message is in the reader's language when the application registered an `IFailureLocalizer`, by calling
+`AddDDDToolkitLocalization()` from `DDDToolkit.Localization`. Without a localizer, the message is the text that the
+domain wrote. The language is the request's UI culture, so call `app.UseRequestLocalization(...)` before
+`app.MapGraphQL()`. See [Localization](localization.md).
 
-For mutations there is a better place for a failure than the top of the response; see
-[Typed errors in mutation payloads](#typed-errors-in-mutation-payloads), which this filter stays beside.
-A refusal's `kind` is spelled the way the schema spells its enums, `NOT_PERMITTED` unless the schema chose
-otherwise; see [Enum values, spelled your way](#enum-values-spelled-your-way).
+A mutation has a better place for a failure than the top of the response:
+[Typed errors in mutation payloads](#typed-errors-in-mutation-payloads). The error filter works next to the mutation
+conventions. A refusal's `kind` uses the schema's enum spelling, `NOT_PERMITTED` unless the schema chose another
+spelling. See [Spelling of enum values](#spelling-of-enum-values).
 
 ## Typed errors in mutation payloads
 
-An error at the top of the response is the right answer to a query that could not be answered. For a
-mutation it is a poor one. A refused command is an ordinary outcome, the client has to find it in `errors`
-by its path, and nothing in the schema says which errors a mutation can have.
-`AddDDDToolkitMutationConventions()` turns on HotChocolate's mutation conventions for every mutation and
-puts what the use case threw in the mutation's own payload, as types the schema declares:
+A top-level error suits a query that could not be answered. It suits a mutation less well:
+
+- A refused command is a normal outcome.
+- The client has to find the error in `errors` by its path.
+- The schema does not say which errors a mutation can return.
+
+`AddDDDToolkitMutationConventions()` turns on HotChocolate's mutation conventions for every mutation. It puts the
+exception that the use case threw into the mutation's payload, as types that the schema declares:
 
 ```csharp
 services
@@ -457,8 +480,7 @@ services
     .AddTypes();
 ```
 
-A resolver declares nothing about errors. It takes its arguments, calls the use case and returns what
-changed:
+A resolver declares nothing about errors. It takes its arguments, calls the use case and returns what changed:
 
 ```csharp
 public static class OrderMutations
@@ -470,8 +492,8 @@ public static class OrderMutations
 }
 ```
 
-The conventions give the field one input object and a payload, and the toolkit gives every payload the
-same four error types:
+The conventions give the field one input object and a payload. The toolkit gives every payload the same four error
+types:
 
 ```graphql
 type Mutation {
@@ -547,21 +569,22 @@ type ConcurrencyConflictError implements CodedError {
 }
 ```
 
-In the schema each of these types, each of their fields and each value of `RefusalKind` also has a description
-for the client that reads it, left out above. The toolkit gives them itself. HotChocolate would otherwise describe
-a type from the XML documentation beside its assembly, which is written for the C# reader, and which one build
-has there and another does not: the source schemas of one gateway would then describe a type they share
-differently. So every schema with the conventions describes them alike, whether it reads XML documentation or
-not. Your own types are described from your XML documentation, as HotChocolate describes any type.
+The schema also has a description for each of these types, each of their fields and each value of `RefusalKind`.
+The listing above leaves the descriptions out. The toolkit writes these descriptions itself, for the client that
+reads the schema. Otherwise HotChocolate would describe a type from the XML documentation next to its assembly. That
+documentation is written for C# readers, and one build has the file while another build does not. The source
+schemas of one gateway would then describe a shared type differently. With the toolkit's descriptions, every schema
+with the conventions describes these types in the same way. HotChocolate describes your own types from your XML
+documentation, as usual.
 
-| Thrown | In `errors` | Reads as |
+| Thrown | In `errors` | Content |
 | --- | --- | --- |
-| `RefusalException` | `RefusalError` | the refusal's code and kind. `field` is its `Field` argument (`RefusalException.FieldArgument`), the input a form puts the message under |
-| `InvalidValueObjectException` | `InvalidValuesError` | code `invalid-value`, and one `ValueFailure` per `ValidationError`, each with the property it belongs to |
-| `InvariantViolationException` | `BrokenRulesError` | the code, message and arguments of the first violation, and every violation in `violations`, children included |
-| `ConcurrencyConflictException` | `ConcurrencyConflictError` | code `concurrency-conflict`: somebody else changed it first, or the [expected version](entity-framework.md#the-version-the-client-saw) is not the stored one |
+| `RefusalException` | `RefusalError` | The refusal code and the kind. `field` is the refusal's `Field` argument (`RefusalException.FieldArgument`). A form shows the message under that input. |
+| `InvalidValueObjectException` | `InvalidValuesError` | Code `invalid-value`, and one `ValueFailure` per `ValidationError`, each with its property. |
+| `InvariantViolationException` | `BrokenRulesError` | The code, message and arguments of the first violation, and every violation in `violations`, children included. |
+| `ConcurrencyConflictException` | `ConcurrencyConflictError` | Code `concurrency-conflict`. Another request changed the row first, or the [expected version](entity-framework.md#the-version-the-client-saw) differs from the stored version. |
 
-A client reads any of them through the interface, and asks for more where it wants more:
+A client reads every error type through the interface, and asks for more fields where it needs them:
 
 ```graphql
 mutation {
@@ -592,10 +615,17 @@ mutation {
 }
 ```
 
-A command that went through answers `errors: null` and its result. How a refusal gets from the use case
-into the payload: the conventions take the arguments out of the input object, the resolver calls the use
-case, and what it throws is matched, by its exact type, to the error type that is made of it. The
-message is phrased last, when the client's selection reaches the field.
+A command that succeeds returns `errors: null` and its result.
+
+The diagram shows how a refusal travels from the use case into the payload:
+
+1. The conventions take the arguments out of the input object, and the resolver calls the use case.
+2. The use case throws.
+3. The conventions match the exception, by its exact type, to an error type, and create the error with
+   `CreateErrorFrom`.
+4. The localizer phrases the message last, when the client's selection reaches the field.
+
+Red: the exception. Purple: the step that turns the exception into a typed error.
 
 ```mermaid
 sequenceDiagram
@@ -608,10 +638,14 @@ sequenceDiagram
     Client->>Conventions: orderCancel(input)
     Conventions->>Resolver: id, reason
     Resolver->>UseCase: cancel the order
-    UseCase--xResolver: throws RefusalException
-    Resolver--xConventions: the exception
-    Conventions->>Conventions: CreateErrorFrom, by exact type
-    Note over Conventions: payload with no order and one RefusalError
+    rect rgba(201, 60, 60, 0.14)
+        UseCase--xResolver: throws RefusalException
+        Resolver--xConventions: the exception
+    end
+    rect rgba(91, 46, 201, 0.14)
+        Conventions->>Conventions: CreateErrorFrom, by exact type
+        Note over Conventions: payload: no order,<br/>one RefusalError
+    end
     Conventions->>Localizer: message, in the request's language
     Localizer-->>Conventions: the translation
     Conventions-->>Client: payload with the typed error
@@ -635,8 +669,8 @@ app.UseRequestLocalization("en", "nl");   // before MapGraphQL: the message is i
 app.MapGraphQL();
 ```
 
-An exception of your own gets an error type of your own, on the mutations that can throw it. It
-implements `ICodedError`, which is the schema's interface for errors:
+For an exception of your own, write an error type and add it with `[Error<T>]` to the mutations that can throw the
+exception. The error type implements `ICodedError`, the schema's interface for errors:
 
 ```csharp
 public sealed class OutOfStockError : ICodedError
@@ -664,42 +698,43 @@ public static class OrderMutations
 
 </details>
 
-What to know about it:
+How the mutation conventions behave:
 
-- **The message is phrased when the field is resolved**, by the `IFailureLocalizer` the application
-  registered, in the request's language, and is the domain's own sentence when there is none. An
-  `InvalidValuesError` and a `ConcurrencyConflictError` are looked up under their codes, `invalid-value`
-  and `concurrency-conflict`, the way a refusal is looked up under its own, so their translations go in the
-  same resources. See [Localization](localization.md).
-- **Arguments are a list of names and values as text**, because GraphQL has no type for a map of anything:
-  a string as it is, `true` or `false`, a number the way JSON writes it whatever the culture, and anything
-  else, such as an id, as its own text. The value that was rejected is never among them.
-- **HotChocolate matches an error type by the exception's exact type.** A class derived from
-  `RefusalException` is therefore not a typed error: it passes the conventions by and reaches the client as
-  a top-level coded error, through `AddDDDToolkitErrors()`. Throw `RefusalException` itself, with a code.
-- **Queries are not touched.** A refused query answers a top-level error with `extensions.code`, as
+- **The message is phrased when the field is resolved.** The `IFailureLocalizer` that the application registered
+  phrases the message in the request's language. Without a localizer, the message is the text that the domain wrote.
+  The localizer looks up an `InvalidValuesError` and a `ConcurrencyConflictError` under their codes,
+  `invalid-value` and `concurrency-conflict`, as it looks up a refusal under its refusal code. Put their
+  translations in the same resources. See [Localization](localization.md).
+- **Arguments are a list of names and text values.** GraphQL has no type for a map of mixed values. A string stays
+  as it is. A boolean is `true` or `false`. A number is written as JSON writes it, in every culture. Any other value,
+  such as an id, is its text. The rejected value is never in the list.
+- **HotChocolate matches an error type by the exception's exact type.** A class derived from `RefusalException` is
+  therefore not a typed error. It passes the conventions and reaches the client as a top-level coded error, through
+  `AddDDDToolkitErrors()`. Throw `RefusalException` itself, with a refusal code. A class derived from
+  `InvalidValueObjectException` or `InvariantViolationException` also arrives as a top-level coded error. A class
+  derived from `ConcurrencyConflictException` arrives as a top-level error without a code.
+- **Queries do not change.** A refused query returns a top-level error with `extensions.code`, as described
   [above](#failures-as-graphql-errors).
-- **`CodedError` is the interface of every error type of the schema**, your own included. HotChocolate adds
-  the interface's fields to an error type that lacks them, so a type that does not implement `ICodedError`
-  builds, and fails when it is answered.
-- **The schema declares what the errors are made of** (`RefusalKind`, `FailureArgument`, `ValueFailure`,
-  `RuleViolation`) as soon as the conventions are on, whether or not it has a mutation. `RefusalKind` is
-  also the type of the `kind` a refused query carries.
-- Calling it twice is harmless. In a Fusion source schema the error types are `@shareable`; see
-  [The conventions in a composed schema](#the-conventions-in-a-composed-schema).
+- **`CodedError` is the interface of every error type in the schema**, your own types included. HotChocolate adds
+  the interface's fields to an error type that lacks them. An error type that does not implement `ICodedError`
+  therefore builds, and then fails at run time when a mutation returns it.
+- **The schema declares the types that the errors use** (`RefusalKind`, `FailureArgument`, `ValueFailure`,
+  `RuleViolation`) as soon as the conventions are on, also in a schema without mutations. `RefusalKind` is also the
+  type of the `kind` in a refused query's extensions.
+- A second call of `AddDDDToolkitMutationConventions()` changes nothing. In a Fusion source schema the error types
+  are `@shareable`. See [The conventions in a composed schema](#the-conventions-in-a-composed-schema).
 
 ### A check in front of every mutation
 
-A check that runs before any mutation, such as "the caller's account is not suspended", is a field
-middleware that a type interceptor adds, and it refuses by throwing a `RefusalException` like a use case
-does. Where its refusal arrives depends on where the middleware was added, because the conventions wrap
-each mutation field in a middleware of their own, and only what is thrown inside that one becomes a typed
-error:
+A check that runs before every mutation, such as "the caller is not suspended", is a field middleware that
+a type interceptor adds. The check refuses by throwing a `RefusalException`, as a use case does. The conventions wrap
+each mutation field in their own middleware, and only an exception thrown inside that middleware becomes a typed
+error. So the place where the interceptor adds the check decides where the refusal arrives:
 
-| Added in | Lands |
+| Added in | Result |
 | --- | --- |
-| `OnBeforeCompleteMutationField`, the hook an interceptor is handed each mutation field in | inside the conventions: a `RefusalError` in the payload |
-| `OnBeforeCompleteType` of the mutation type, put first in the field's middleware | outside the conventions: a top-level coded error, and no payload |
+| `OnBeforeCompleteMutationField`, the hook that passes an interceptor each mutation field | Inside the conventions. The client gets a `RefusalError` in the payload. |
+| `OnBeforeCompleteType` of the mutation type, first in the field's middleware | Outside the conventions. The client gets a top-level coded error and no payload. |
 
 ```csharp
 public sealed class AccountGate : TypeInterceptor
@@ -715,10 +750,10 @@ public sealed class AccountGate : TypeInterceptor
 
 ## A permission on a field
 
-What a caller may read is decided where it is read: a query answers what the caller may see and says
-nothing about the rest. A field can be another matter. The caller sees the product and may not see what it
-costs, a client should be able to read that rule in the schema, and a caller that asks anyway should be
-told. That is HotChocolate's own `[Authorize]`, with a permission as its policy:
+Usually the query decides what a caller may read. The query returns what the caller may see and leaves out the
+rest. A single field can need its own rule. For example, the caller may see a product but not its cost. A client
+should be able to read that rule in the schema, and a caller who asks for the cost anyway should get a refusal.
+HotChocolate's `[Authorize]` attribute does this, with a permission as its policy:
 
 ```csharp
 [ObjectType<ProductOverview>]
@@ -730,9 +765,9 @@ internal static partial class ProductType
 }
 ```
 
-HotChocolate does not know who holds a permission, and neither does the toolkit. The module does, for its own
-types: it writes one small class per type whose fields carry a rule, an `IFieldPermissions<TParent>`, and
-`AddDDDToolkitPermissionAuthorization()` has HotChocolate ask it:
+HotChocolate and the toolkit do not know who holds a permission. The module knows. For each type that has a field
+under a rule, the module writes a small class that implements `IFieldPermissions<TParent>`.
+`AddDDDToolkitPermissionAuthorization()` registers an authorization handler that calls this class:
 
 ```csharp
 internal sealed class ProductFieldPermissions : IFieldPermissions<ProductOverview>
@@ -752,7 +787,7 @@ builder.Services
     .AddDDDToolkitPermissionAuthorization();
 ```
 
-A caller that holds the permission on the first product and not on the second gets:
+A caller who holds the permission on the first product and not on the second gets this response:
 
 ```json
 {
@@ -765,48 +800,55 @@ A caller that holds the permission on the first product and not on the second ge
 }
 ```
 
-- **The rule is in the schema**: `cost: Decimal @authorize(policy: "catalog.costs.view")`, in a module's
-  source schema and in the schema a gateway composes of it. A rule on a property of the record itself is a
-  line in the type class's `Configure`: `descriptor.Field(product => product.Sku).Authorize(CatalogPermissions.ViewSkus)`.
-- **A refused field answers the refusal the module gave.** The field is `null`, the object and its other
-  fields stay, and `errors` has one entry at the field's path with the refusal's code, kind and arguments,
-  shaped by [`AddDDDToolkitErrors()`](#failures-as-graphql-errors) as a refused query is. Give the same
-  refusal the module's access check gives for that permission, and a client reads one code either way. The
-  resolver does not run. A field under a rule has to be nullable: a refused field that is never null takes
-  its parent with it.
-- **A batch of parents costs one question.** The permission is asked once for every parent, and the parents of a
-  list are asked side by side, so an `IFieldPermissions` that awaits a data loader keyed by the parent asks once
-  for each batch the loader sends, which is the page as a rule. One that reads on its own asks once per row.
-- **A rule on a field guards that field, and nothing else that answers the same value.** Above, the cost is
-  read by the field's own resolver, which a refusal keeps from running, so nothing gives it away. When the
-  value is part of the record a query already answers, a route that writes that record, or another field over
-  it, answers the value without asking. Then hold the rule where the data is read: the query leaves the value
-  out, as `null`, for a caller who does not hold the permission, and the attribute declares the rule and gives the
-  refusal. The Tenancy sample does so for a crew member's roles and a role's permissions
+- **The schema shows the rule.** The field prints as `cost: Decimal @authorize(policy: "catalog.costs.view")`, in
+  the module's source schema and in the schema that a gateway composes from it. For a property of the record itself,
+  add the rule in the type class's `Configure`:
+  `descriptor.Field(product => product.Sku).Authorize(CatalogPermissions.ViewSkus)`.
+- **A refused field returns the module's refusal.** The field is `null`, and the object and its other fields stay.
+  `errors` has one entry at the field's path, with the refusal code, the kind and the arguments.
+  [`AddDDDToolkitErrors()`](#failures-as-graphql-errors) shapes this entry as it shapes a refused query. Return the
+  same refusal that the module's access check returns for that permission. A client then reads one refusal code in both
+  cases. The resolver does not run. A field under a rule must be nullable, because a refused non-null field makes
+  its parent `null` too.
+- **The check runs once per batch of parents.** The handler checks the permission for every parent, and checks the
+  parents of a list in parallel. An `IFieldPermissions` that awaits a data loader keyed by the parent therefore runs
+  one query for each batch that the loader sends, usually one per page. An implementation that reads by itself runs
+  one query per row.
+- **A rule on a field protects that field only.** In the example, the field's own resolver reads the cost, and a
+  refusal stops that resolver. So nothing else returns the cost. When the value is part of a record that a query
+  already returns, another route returns the value without a check: a route that writes that record, or another
+  field over the record. In that case, apply the rule where the data is read. The query returns `null` for the value
+  when the caller lacks the permission. The attribute declares the rule and returns the refusal. The Tenancy sample
+  does this for a crew member's roles and for a role's permissions
   ([GraphQL in the sample](tenancy/the-sample.md#graphql-in-the-sample)).
-- **What nobody can answer is refused, never allowed.** A parent whose type has no `IFieldPermissions`
-  registered, a field without a parent (a `[Query]` method), a rule that names roles, and a rule applied
-  after the resolver or during validation each answer an error that says what is missing, with
-  HotChocolate's code for a policy that does not exist, `AUTH_POLICY_NOT_FOUND`:
+- **A rule that nobody can check is refused.** In these cases the field returns an error that says what is missing,
+  with HotChocolate's code for a missing policy, `AUTH_POLICY_NOT_FOUND`:
+  - The parent's type has no registered `IFieldPermissions`.
+  - The field has no parent (a `[Query]` method).
+  - The rule names roles.
+  - The rule applies after the resolver or during validation.
+
+  An example message:
   `The permission 'catalog.costs.view' on 'Product.cost' has nobody to answer for it: no IFieldPermissions<ProductOverview> is registered.`
-  An `[Authorize]` without a policy answers HotChocolate's `AUTH_NO_DEFAULT_POLICY`. The parent's own type
-  is asked first, then the types it derives from, so one `IFieldPermissions` for a base record answers for the
-  records derived from it.
-- **An application has one authorization handler**, in its own services, for all its schemas.
-  `AddDDDToolkitPermissionAuthorization()` replaces another, such as the one HotChocolate's ASP.NET Core policies
-  register, and a registration after it replaces this one. In a modular application call it on every
-  source schema: that is how each gets the `@authorize` directive.
-- **It stands beside the request's own check, never in its place.** A resolver still sends a query that
-  answers only what the caller may see. The rule refuses out loud what a caller that sees the object asked
-  for and may not have.
-- **Put the rule on the field.** HotChocolate applies a rule on a type to every field that returns the
-  type, so it would be asked about the objects those fields belong to.
+  An `[Authorize]` without a policy returns HotChocolate's `AUTH_NO_DEFAULT_POLICY`. The handler looks for an
+  `IFieldPermissions` of the parent's own type first, and then of the types that type derives from. One
+  `IFieldPermissions` for a base record therefore covers the records derived from it.
+- **An application has one authorization handler** for all its schemas, in the application's services.
+  `AddDDDToolkitPermissionAuthorization()` replaces another handler, such as the one that HotChocolate's ASP.NET Core
+  policies register. A handler registered later replaces this one. In a modular application, call
+  `AddDDDToolkitPermissionAuthorization()` on every source schema. That call gives each schema the `@authorize`
+  directive.
+- **The rule adds to the request's access check.** A resolver still sends a query that returns only what the caller
+  may see. The field rule adds a refusal when a caller who may see the object asks for a field that the caller may
+  not read.
+- **Put the rule on the field.** HotChocolate applies a rule on a type to every field that returns the type. The
+  handler would then be called for the objects that those fields belong to.
 
-## Enum values, spelled your way
+## Spelling of enum values
 
-GraphQL's custom is `NOT_PERMITTED`, and HotChocolate writes enum values that way. An application whose
-REST API and database say `not_permitted` would rather have one spelling everywhere. It is the host's
-choice, made once for the schema:
+HotChocolate writes enum values in upper snake case, such as `NOT_PERMITTED`, as GraphQL convention has it. An
+application whose REST API and database use `not_permitted` can use that one spelling everywhere. The host chooses
+the spelling once for the schema:
 
 ```csharp
 services
@@ -824,30 +866,32 @@ enum RefusalKind {
 }
 ```
 
-`AddDDDToolkitEnumValues` spells the values of the application's enums, in answers, arguments and
-variables. `LowerSnakeCase` is what `JsonNamingPolicy.SnakeCaseLower` writes, the policy a host gives the
-enum converter of its REST JSON (`new JsonStringEnumConverter(JsonNamingPolicy.SnakeCaseLower)`), so the
-two APIs agree by construction. `UpperSnakeCase` is HotChocolate's own.
+`AddDDDToolkitEnumValues` spells the values of the application's enums in responses, arguments and variables:
 
-`AddDDDToolkitErrors()` spells the `kind` in a refused query's extensions as the schema spells its enums,
-from that one call, whichever of the two comes first: `not_permitted` here, and `NOT_PERMITTED` in a schema
-that does not call `AddDDDToolkitEnumValues`. So a client reads one spelling of `RefusalKind` whether it
-arrives there or in a mutation's `RefusalError`.
+- `LowerSnakeCase` is what `JsonNamingPolicy.SnakeCaseLower` writes. A host gives that policy to the enum converter
+  of its REST JSON (`new JsonStringEnumConverter(JsonNamingPolicy.SnakeCaseLower)`), so both APIs use the same
+  spelling.
+- `UpperSnakeCase` is HotChocolate's default spelling.
 
-- A member that carries `[GraphQLName]` keeps that name.
-- A member whose lower spelling would be `true`, `false` or `null` is refused when the schema is built:
-  GraphQL reads those three as literals, so no document could name the value. Give it a `[GraphQLName]`.
-- HotChocolate's own enums keep HotChocolate's spelling. Its directives know their values by it: a source
-  schema that printed `@serializeAs(type: string)` would not compose.
-- It registers HotChocolate's default naming conventions with this one change, XML documentation
-  included. A schema that has naming conventions of its own overrides `GetEnumValueName` there instead.
-- In a composed schema every source schema needs the same spelling; see
+`AddDDDToolkitErrors()` spells the `kind` in a refused query's extensions as the schema spells its enums. The order
+of the two calls does not matter. With the call above, `kind` is `not_permitted`. In a schema without
+`AddDDDToolkitEnumValues`, `kind` is `NOT_PERMITTED`. A client therefore reads one spelling of `RefusalKind`, in a
+query's extensions and in a mutation's `RefusalError`.
+
+- A member with `[GraphQLName]` keeps that name.
+- A member whose lower spelling would be `true`, `false` or `null` fails the schema build. GraphQL reads those three
+  words as literals, so no document could name the value. Give the member a `[GraphQLName]`.
+- HotChocolate's own enums keep HotChocolate's spelling, because HotChocolate's directives use that spelling. A
+  source schema that printed `@serializeAs(type: string)` would not compose.
+- The call registers HotChocolate's default naming conventions with this one change, XML documentation included. A
+  schema with naming conventions of its own overrides `GetEnumValueName` there instead.
+- In a composed schema, every source schema needs the same spelling. See
   [The conventions in a composed schema](#the-conventions-in-a-composed-schema).
 
 ## Relay node ids
 
-HotChocolate's global object identification works with the toolkit's identifiers as they are. Make a
-type a node the way HotChocolate documents it, with the identifier itself as the id:
+HotChocolate's global object identification works with the toolkit's identifiers without changes. Make a type a
+node as HotChocolate documents it, with the identifier as the id:
 
 ```csharp
 builder.Services
@@ -867,75 +911,81 @@ public sealed class OrderType : ObjectType<Order>
 }
 ```
 
-The bindings method is generated once per project that declares identifiers, and in the example shop
-`OrderId` is declared in Ordering's contracts project. Both projects are Ordering, so both methods are
-`AddOrderingGraphQlRuntimeBindings()`, and the module's calls the contracts' one: the single call above
-registers `OrderId` whichever of the two projects the schema is built in. Why the example gives a module's
-contract a project of its own is explained in [Module contracts](module-contracts.md#a-project-of-its-own).
+The generator writes one bindings method per project that declares identifiers. In the example shop, `OrderId` is
+declared in Ordering's contracts project. Both projects belong to the module Ordering, so both methods are called
+`AddOrderingGraphQlRuntimeBindings()`, and the module's method calls the contracts project's method. The single call
+above therefore registers `OrderId` in either of the two projects.
+[Module contracts](module-contracts.md#a-separate-contracts-project) explains why the example gives a module's contract a
+separate project.
 
-`id` prints as `ID!` and carries a node id such as `T3JkZXI6ERER…`, `node(id:)` finds the order again,
-and an argument declared `[ID<Order>] OrderId id` arrives as the `OrderId` inside the node id. Another
-type that points at an order can publish the reference as a node id of the owner's type, with
-`descriptor.Field(shipment => shipment.Order).ID("Order")`, without referencing `Order` at all.
+With this registration:
 
-What makes that possible is one generated class per identifier. HotChocolate writes a node id through
-an `INodeIdValueSerializer` for the id's runtime type, and it has serializers for `Guid`, `string`,
-`int`, `long` and `short` but not for a type it has never seen, so an `OrderId` would fail with *No
-serializer registered*. The generator therefore adds a nested `NodeIdValueSerializer` to every
-identifier over one of those five, and `Add{Module}GraphQlRuntimeBindings()` registers it:
+- `id` prints as `ID!` and contains a node id such as `T3JkZXI6ERER…`.
+- `node(id:)` finds the order again.
+- An argument declared `[ID<Order>] OrderId id` receives the `OrderId` inside the node id.
+- Another type that points at an order can publish the reference as a node id of type `Order`, with
+  `descriptor.Field(shipment => shipment.Order).ID("Order")`, without a reference to the `Order` class.
 
-```csharp title="BindingExtensions.g.cs, shortened"
+One generated class per identifier makes this work. HotChocolate writes a node id through an
+`INodeIdValueSerializer` for the id's runtime type. HotChocolate has serializers for `Guid`, `string`, `int`, `long`
+and `short`, and none for other types, so an `OrderId` would fail with *No serializer registered*. The generator
+therefore adds a nested `NodeIdValueSerializer` to every identifier over one of those five types, and
+`Add{Module}GraphQlRuntimeBindings()` registers it:
+
+**`BindingExtensions.g.cs`**, shortened
+
+```csharp
 builder.AddNodeIdValueSerializer<OrderId.NodeIdValueSerializer>();
 ```
 
-It derives from HotChocolate's `CompositeNodeIdValueSerializer<OrderId>` and writes the wrapped value
-with HotChocolate's own helpers. The node id is therefore byte for byte the one HotChocolate writes for
-the bare `Guid`: `Order:` followed by the value. Any HotChocolate server reads it, and so does a Fusion
-gateway, which routes `node(id:)` by the type name in front and never looks at the value. A single value
-object gets no serializer, because it is not an identity. [How the bindings work](#how-the-bindings-work)
-shows the generated class.
+The serializer derives from HotChocolate's `CompositeNodeIdValueSerializer<OrderId>`, and writes the wrapped value
+with HotChocolate's helpers. The node id is therefore byte for byte the node id that HotChocolate writes for the bare
+`Guid`: `Order:` followed by the value. Any HotChocolate server reads it. A Fusion gateway reads it too. The gateway
+routes `node(id:)` by the type name at the start, and does not read the value. A single value object gets no
+serializer, because it is not an identity. [How the bindings work](#how-the-bindings-work) shows the generated class.
 
-Do not use HotChocolate's own `AddNodeIdValueSerializerFrom<OrderId>()` for a toolkit identifier. Its
-generator reads the members of the type, and an identifier's `Value` is written by the toolkit's
-generator; source generators do not see each other's output, so it finds no member and emits a
-serializer that writes nothing and reads every node id back as an empty id. It compiles without a
-warning.
+Do not use HotChocolate's `AddNodeIdValueSerializerFrom<OrderId>()` for a toolkit identifier. HotChocolate's
+generator reads the members of the type. The toolkit's generator writes an identifier's `Value`, and source
+generators do not see each other's output. HotChocolate's generator therefore finds no member. It writes a
+serializer that writes nothing and reads every node id back as an empty id. The code compiles, and the toolkit
+reports the call with diagnostic [DDD00032](diagnostics.md#ddd00032), a warning.
 
-## Bound by a project that does not declare it
+## Binding ids from other projects
 
-The nested `ChangeTypeProvider` and `NodeIdValueSerializer` are written into the project that declares
-the identifier, and only when that project references this package. A module split into projects by
-layer (see [A module in layers](modules.md#a-module-in-layers)) declares its identifiers in a domain or
-contracts project that does not: `DDDToolkit.HotChocolate` depends on `HotChocolate.AspNetCore`, and a
-contracts project is referenced by every module that reads it, so the reference would carry ASP.NET Core
-into all of them. The module's API project, which builds its schema, binds those identifiers instead:
+The generator writes the nested `ChangeTypeProvider` and `NodeIdValueSerializer` into the project that declares the
+identifier, and only when that project references this package. A module split into projects by layer
+([A module in layers](modules.md#a-module-in-layers)) declares its identifiers in a domain or contracts project
+without this package. The reason is the dependency. `DDDToolkit.HotChocolate` depends on `HotChocolate.AspNetCore`.
+Every module that reads a contracts project references that project, so the package there would add ASP.NET Core to
+all those modules. Instead, the module's API project, which builds the schema, binds those identifiers.
+
+The diagram shows where the API project's bindings come from. Purple: the API project, which writes the bindings.
+Grey: the projects without HotChocolate.
 
 ```mermaid
 flowchart LR
-    subgraph own ["Ordering.Domain and Ordering.Contracts, no HotChocolate"]
-        OwnIds["OrderId, EmailAddress<br/>implement ISingleValue"]
-    end
-    subgraph other ["Shipping.Contracts, no HotChocolate"]
-        PublishedIds["ShipmentId<br/>published with ModuleContract"]
-    end
-    subgraph api ["Ordering.Api, HotChocolate"]
-        Bindings["AddOrderingGraphQlRuntimeBindings()<br/>a scalar, a converter and a node id serializer for each"]
-    end
-    OwnIds --> Bindings
-    PublishedIds --> Bindings
+    own["<b>Ordering.Domain, Ordering.Contracts</b><br/><small>OrderId, EmailAddress · no HotChocolate</small>"]
+    other["<b>Shipping.Contracts</b><br/><small>ShipmentId, a ModuleContract · no HotChocolate</small>"]
+    api["<b>Ordering.Api</b><br/><small>AddOrderingGraphQlRuntimeBindings():<br/>a scalar, a converter and a node id serializer each</small>"]
+    own -->|"same module"| api
+    other -->|"published by another module"| api
+    classDef strong fill:#5b2ec933,stroke:#5b2ec9,stroke-width:2px
+    classDef muted fill:none,stroke:#9a9ab5,stroke-dasharray:4 3,color:#9a9ab5
+    class api strong
+    class own,other muted
 ```
 
 <details>
 <summary>Show the code: what Ordering.Api registers</summary>
 
-Every project of the module declares the module's name, which is how the generator knows whose
-identifiers they are:
+Every project of the module declares the module's name. The generator uses that name to find the module's
+identifiers:
 
 ```csharp
 [assembly: Module("Ordering")]
 ```
 
-The API project declares no identifier, and still gets the method:
+The API project declares no identifier and still gets the method:
 
 ```csharp
 using Ordering.Api.GraphQl;   // generated
@@ -949,15 +999,16 @@ builder.Services
 
 </details>
 
-Every identifier, single value object and always-valid twin implements `ISingleValue<TSelf, TValue>`,
-which names the value and the way back from it (see
-[Identifiers](identifiers.md#stored-by-a-project-that-does-not-declare-it)), and the package has one
-provider and one serializer for all of them, in `DDDToolkit.HotChocolate.Types`:
-`SingleValueChangeTypeProvider<T, TValue>` and `SingleValueNodeIdSerializer<T, TValue>`. The generated
-`Add{Module}GraphQlRuntimeBindings()` of a project that references the package registers them for the
-types of other projects:
+Every identifier, single value object and always-valid twin implements `ISingleValue<TSelf, TValue>`. That interface
+names the value and the way to create the type from the value
+([Identifiers](identifiers.md#an-identifier-stored-by-another-project)). The package has one provider and one
+serializer for all these types, in `DDDToolkit.HotChocolate.Types`: `SingleValueChangeTypeProvider<T, TValue>` and
+`SingleValueNodeIdSerializer<T, TValue>`. In a project that references the package, the generated
+`Add{Module}GraphQlRuntimeBindings()` registers them for the types of other projects:
 
-```csharp title="BindingExtensions.g.cs of Ordering.Api, shortened"
+**`BindingExtensions.g.cs` of Ordering.Api**, shortened
+
+```csharp
 builder.BindRuntimeType<EmailAddress, StringType>();
 builder.AddTypeConverter<SingleValueChangeTypeProvider<EmailAddress, string>>();
 builder.BindRuntimeType<OrderId, UuidType>();
@@ -967,40 +1018,47 @@ builder.BindRuntimeType<ValidEmailAddress, StringType>();
 builder.AddTypeConverter<SingleValueChangeTypeProvider<ValidEmailAddress, string>>();
 ```
 
-Which types those are:
+The method binds these types:
 
-- **Every identifier and single value object of the module's other projects**: the projects that declare
-  the same `[assembly: Module]`.
-- **The published ones of the other modules it references**, marked `[ModuleContract]` or public in a
-  [contracts project](modules.md#a-contracts-project). They are the only ones the module may name
-  ([DDD00022](diagnostics.md#ddd00022)), so they are the only ones its schema can show.
-- **Not a type that has a nested provider.** Its project references the package and binds it in its own
-  `Add{Module}GraphQlRuntimeBindings()`. A project of the same module that references it calls that method
-  from its own, and does not bind again what it bound; another module's, the schema still calls.
-- **Not a type of an assembly that declares no module**, such as a package or a shared kernel: no
-  module's bindings can speak for it. A project that declares no module itself binds only its own.
-- **Not a type the project cannot name**: an `internal` one, or one over a value declared in an assembly
-  the project does not reference. Generated code that names it would not compile.
+- **Every identifier and single value object of the module's other projects**: the projects that declare the same
+  `[assembly: Module]`.
+- **The published types of the other modules that the project references**: types marked `[ModuleContract]`, or
+  public types in a [contracts project](modules.md#a-contracts-project). A module may name only these types of
+  another module ([DDD00022](diagnostics.md#ddd00022)), so its schema can show only these.
 
-Each of them is bound as its own project would bind it. It prints as the
-[default scalar](#the-default-scalar-mapping) of its value, and a value without one gets the converter
-only. An always-valid twin has a binding and a provider of its own, since nothing nested in its parent
-converts it, and is still built through its validating constructor. An identifier over `Guid`, `string`,
-`int`, `long` or `short` gets a node id serializer that writes exactly what
-[the nested one](#relay-node-ids) writes, so a node id stays the same whichever project binds the
-identifier.
+The method skips these types:
 
-`[GraphQLType<T>]`, from [Naming the schema type yourself](#naming-the-schema-type-yourself), is
-declared in this package, so a type that carries it is declared in a project that references the
-package, and normally has its nested provider. Where such a project takes the package without its
-generator, the type is bound here like the others, to the schema type it names. A schema type the
-project cannot name is not written: the type gets the converter only, and the binding is yours to add.
+- **A type with a nested provider.** The type's project references the package and binds the type in its own
+  `Add{Module}GraphQlRuntimeBindings()`. A project of the same module that references that project calls that
+  method from its own method, and does not bind the type again. For a type in another module's project, the schema
+  calls that module's method.
+- **A type of an assembly that declares no module**, such as a package or a shared kernel. No module's bindings can
+  bind such a type. A project that declares no module binds only its own types.
+- **A type that the project cannot name**: an `internal` type, or a type over a value declared in an assembly that
+  the project does not reference. Generated code that names such a type would not compile.
 
-Two modules that show the same published identifier each bind it. In one schema over both, HotChocolate
-is told the same scalar, converter and serializer twice, and the schema is the one it would be with one.
+Each bound type gets the binding that its own project would give it:
 
-Where a schema shows a type nothing binds, such as a shared kernel's `CountryCode`, the same two classes
-bind it by hand:
+- The type prints as the [default scalar](#the-default-scalar-mapping) of its value. A value without a default
+  scalar gets the converter only.
+- An always-valid twin gets its own binding and provider, because no class nested in its parent converts it. The
+  provider still creates the twin through its validating constructor.
+- An identifier over `Guid`, `string`, `int`, `long` or `short` gets a node id serializer that writes the same node
+  id as [the nested serializer](#relay-node-ids). A node id is therefore the same in whichever project binds the
+  identifier.
+
+`[GraphQLType<T>]` ([Naming the schema type yourself](#naming-the-schema-type-yourself)) is declared in this package.
+A type with that attribute is therefore declared in a project that references the package, and normally has a nested
+provider. When such a project takes the package without its generator, the API project binds the type like the
+others, to the named schema type. If the API project cannot name that schema type, the method writes no binding. The
+type then gets the converter only, and you add the binding yourself.
+
+When two modules show the same published identifier, each module binds it. In one schema over both modules,
+HotChocolate receives the same scalar, converter and serializer twice. The schema is the same as with one
+registration.
+
+When a schema shows a type that no generated method binds, such as a shared kernel's `CountryCode`, bind it by hand
+with the same two classes:
 
 ```csharp
 builder.Services
@@ -1009,14 +1067,14 @@ builder.Services
     .AddTypeConverter<SingleValueChangeTypeProvider<CountryCode, string>>();
 ```
 
-A project that references the package keeps its nested classes and its own method, so nothing changes
-for an application that does not split its modules.
+A project that references the package keeps its nested classes and its own method. An application that does not
+split its modules into layers sees no change.
 
 ## Paging by an id
 
-HotChocolate pages an Entity Framework query with `ToPageAsync`: the list is ordered by keys that
-together are unique, and the cursor of a row is those keys. An identifier is the natural last key, and it
-is one as it is:
+HotChocolate pages an Entity Framework query with `ToPageAsync`. The query orders the list by keys that are unique
+together, and a row's cursor contains those keys. An identifier is the natural last key, and works as a key without
+changes:
 
 ```csharp
 Page<Order> page = await context.Orders
@@ -1025,47 +1083,52 @@ Page<Order> page = await context.Orders
     .ToPageAsync(paging, cancellationToken);       // paging: HotChocolate's PagingArguments
 ```
 
-HotChocolate writes each key into the cursor with a serializer for the key's type, and it has one for a
-`Guid` or a `string` and none for a type it has never seen: ordering by an `OrderId` fails with "The key
-type `Ordering.OrderId` is not supported." The package has the serializer,
-`SingleValueCursorKeySerializer<T, TValue>` in `DDDToolkit.HotChocolate.Paging`, and the generated
-`Add{Module}GraphQlRuntimeBindings()` registers it for every struct identifier it binds, the project's own
-and those [of other projects](#bound-by-a-project-that-does-not-declare-it):
+HotChocolate writes each key into the cursor with a serializer for the key's type. HotChocolate has serializers for
+`Guid` and `string`, and none for unknown types. Ordering by an `OrderId` therefore fails with "The key type
+`Ordering.OrderId` is not supported." The package contains the serializer, `SingleValueCursorKeySerializer<T, TValue>`
+in `DDDToolkit.HotChocolate.Paging`. The generated `Add{Module}GraphQlRuntimeBindings()` registers it for every
+struct identifier that the method binds, the project's own and those
+[of other projects](#binding-ids-from-other-projects):
 
-```csharp title="BindingExtensions.g.cs, shortened"
+**`BindingExtensions.g.cs`**, shortened
+
+```csharp
 // The struct ids, as keys HotChocolate's paging can order a list by: OrderBy(x => x.Id) in front of ToPageAsync.
 SingleValueCursorKeySerializer<OrderId, Guid>.Register();
 ```
 
-- **The page after a cursor compares the column itself.** The id's own `CompareTo` is what Entity
-  Framework translates, so the statement is
-  `WHERE "PlacedAt" < @value OR ("PlacedAt" = @value AND "Id" > @value2) ORDER BY "PlacedAt" DESC, "Id" LIMIT @p`.
-- **The cursor of an identifier is the cursor of its value.** The serializer hands the value to the one
-  HotChocolate has for it. Ordering by `(Guid)order.Id`, the identifier's own operator, needs no
-  registration and gives the same cursors, with the column cast in the statement; a list paged that way
-  keeps its cursors when it orders by the identifier.
-- **It is registered when the bindings are added, not when the schema is built.** HotChocolate keeps its
-  serializers in one list for the process, so a REST route that pages by the same query has them from the
-  first request. A host without a schema, or a test of the read side alone, registers an identifier itself:
-  `SingleValueCursorKeySerializer<OrderId, Guid>.Register()`. Registering it again does nothing.
+- **The next page compares the column itself.** Entity Framework translates the id's `CompareTo`, so the statement
+  is `WHERE "PlacedAt" < @value OR ("PlacedAt" = @value AND "Id" > @value2) ORDER BY "PlacedAt" DESC, "Id" LIMIT @p`.
+- **An identifier's cursor is the cursor of its value.** The serializer passes the value to HotChocolate's
+  serializer for the value's type. Ordering by `(Guid)order.Id`, with the identifier's conversion operator, needs no
+  registration and gives the same cursors, with a cast of the column in the statement. A list paged that way keeps
+  its cursors when it changes to ordering by the identifier.
+- **The registration happens when the bindings are added, before the schema is built.** HotChocolate keeps its
+  serializers in one list per process. A REST route that pages the same query can therefore use them from the first
+  request. A host without a schema, or a test of the read side alone, registers an identifier itself:
+  `SingleValueCursorKeySerializer<OrderId, Guid>.Register()`. A second registration does nothing.
 - **Struct identifiers only.** Paging needs a key that compares to itself, and a generated `record struct`
-  identifier does. A class identifier does not, and is not registered. Neither is an identifier over a value
-  HotChocolate's paging has no serializer for.
-- **A cursor that is not this list's is yours to refuse.** The paging library reads what a client sends
-  leniently, in three ways: a text that is no cursor is answered an empty page; a cursor of a list ordered
-  by other keys fails inside the read, a `FormatException` out of `ToPageAsync` where a value is not of its
-  key's type; and a cursor of this list with a head written into it, which says how many pages to skip and
-  what the list's total is, is believed. Check the marker against the query's own keys before paging, and
-  refuse it with a code of your own, as the Tenancy sample does for all three:
+  identifier does. A class identifier does not, and is not registered. An identifier over a value without a
+  HotChocolate paging serializer is not registered either.
+- **Refuse a cursor that belongs to another list.** The paging library reads a client's cursor leniently, in three
+  ways:
+  - A text that is not a cursor returns an empty page.
+  - A cursor of a list ordered by other keys fails inside the read. `ToPageAsync` throws a `FormatException` when a
+    value does not match its key's type.
+  - A cursor of this list with an edited head is trusted. The head says how many pages to skip and how many rows
+    the list has.
+
+  Check the cursor against the query's keys before paging, and refuse it with your own refusal code. The Tenancy sample
+  does this for all three cases:
   [A marker that is not the list's cursor](tenancy/sample/who-may-do-what.md#invalid-cursors).
 
-`ToPageAsync` is HotChocolate's, in `GreenDonut.Data.EntityFramework`, which the project that holds the
-context references, on its own or through `HotChocolate.Data.EntityFramework`. This package does not: the
-serializer needs only what HotChocolate itself brings.
+`ToPageAsync` is HotChocolate's, in `GreenDonut.Data.EntityFramework`. The project that holds the context references
+that package, directly or through `HotChocolate.Data.EntityFramework`. This package does not reference it, because
+the serializer needs only what HotChocolate itself brings.
 
 ## The DomainEvent interface
 
-`AddDDDToolkitTypes()` registers one type of its own: a GraphQL interface over `IDomainEvent`.
+`AddDDDToolkitTypes()` registers one GraphQL type: an interface over `IDomainEvent`.
 
 ```graphql
 "Something that happened in the domain."
@@ -1079,16 +1142,15 @@ interface DomainEvent {
 }
 ```
 
-The interface puts no event into the schema; which events a client can see is up to the fields and
-types you declare. You expose events on purpose, for a reader that wants to know what happened rather
-than what is: an order's history on a back-office screen, say.
+The interface adds no event to the schema. The fields and types that you declare decide which events a client can
+see. Expose events on purpose, for a reader who wants to know what happened rather than the current state. An
+example is an order's history on a back-office screen.
 
-Without the interface, each event type
-is an object type unrelated to the others, so a field that returns several kinds of event needs a union
-you declare yourself, and a union has no fields in common: the client needs a fragment per event type
-even to read when each one happened. With it, a resolver can return `IReadOnlyList<IDomainEvent>`,
-which prints as `[DomainEvent!]!`, and any event type you expose implements the interface
-automatically, because it implements `IDomainEvent`:
+Without the interface, each event type is an object type unrelated to the others. A field that returns several
+kinds of event then needs a union that you declare. A union has no shared fields, so a client needs a fragment per
+event type even to read when each event happened. With the interface, a resolver can return
+`IReadOnlyList<IDomainEvent>`, which prints as `[DomainEvent!]!`. HotChocolate adds the interface to every event type
+that you expose, because the event class implements `IDomainEvent`:
 
 ```graphql
 type TicketIssued implements DomainEvent {
@@ -1099,51 +1161,58 @@ type TicketIssued implements DomainEvent {
 }
 ```
 
-`eventId` and `occurredAt` come straight from the event. `eventType` is a resolver, and it gives a
-client a discriminator without a fragment per concrete type:
+`eventId` and `occurredAt` come from the event. `eventType` is a resolver. It gives a client a discriminator without
+a fragment per concrete type:
 
 ```graphql
 { latestEvent { ... on DomainEvent { eventType } } }
 ```
 
-Exposing a domain event is a field you decided on, answering a query from a reader you chose. It is not
-how anybody else learns what happened. Another module reads an integration event, and a subscribed
-client is pushed the contract, never the domain event, for the reasons in
-[It publishes the contract, never the domain event](#it-publishes-the-contract-never-the-domain-event).
+A domain event in the schema is a field that you chose to add, for a reader that you chose. Other parts of the
+system learn about events in other ways. Another module reads an integration event. A subscribed client receives the
+published contract, for the reasons in [The payload is the published contract](#the-payload-is-the-published-contract).
 
-Be aware of what `eventType` currently returns. It resolves to the CLR type name of the event, so
-`TicketIssued` returns `"TicketIssued"`, not its stored name `ordering.ticket-issued`, and
-`[DomainEventName]` does not change it. If you rename the class, the value changes with it. Treat `eventType` as a hint for
-building a client, not as the stable wire name; the stable name is
+`eventType` returns the CLR type name of the event. `TicketIssued` returns `"TicketIssued"`, and the stored name
+`ordering.ticket-issued` is not used. `[DomainEventName]` does not change the value, and renaming the class does.
+Use `eventType` as a hint when you build a client. The stable name is
 [`DomainEventName.For<T>()`](domain-events.md#stable-names).
 
 ## A field for one schema only
 
-An application may serve two schemas that differ: the one every user is offered at `/graphql`, and one at
-`/admin/graphql` for the people who administer it, with fields that read other people's data. HotChocolate serves
-both: each schema is registered under a name, `AddGraphQLServer("admin")`, and each endpoint serves one,
-`MapGraphQL("/admin/graphql", "admin")`. What it does not do is put a field in one of them and not in the other.
-Its generator registers everything it finds in a project, every `[Query]` method and every `[ObjectType<T>]` class,
-in one method, and every schema that calls that method gets all of it.
+An application may serve two different schemas. One schema is for every caller, at `/graphql`. The other is for
+administrators, at `/admin/graphql`, with fields that read other people's data. HotChocolate serves both. Each schema
+is registered under a name, `AddGraphQLServer("admin")`, and each endpoint serves one schema,
+`MapGraphQL("/admin/graphql", "admin")`. HotChocolate cannot put a field in one schema and leave it out of the
+other. HotChocolate's generator registers everything it finds in a project, every `[Query]` method and every
+`[ObjectType<T>]` class, in one method. Every schema that calls that method gets all of it.
 
-`[GraphQLSchema]`, on a class of fields in the API project, says which schema the class belongs to:
+`[GraphQLSchema]`, on a class of fields in the API project, names the schema that the class belongs to.
+
+The diagram shows two schemas built from the same two calls. Purple: the class marked for the admin schema. Green:
+the schema that gets the class's field.
 
 ```mermaid
 flowchart TB
     subgraph api ["The module's API project"]
-        Own["SeatsQueries<br/>[Query] overviewOfMine"]
-        Type["SeatType<br/>[ObjectType]"]
-        Admin["SeatsAdminQueries<br/>[GraphQLSchema] admin<br/>seatGrants"]
+        own["<b>SeatsQueries</b><br/><small>[Query] overviewOfMine</small>"]
+        type["<b>SeatType</b><br/><small>[ObjectType]</small>"]
+        admin["<b>SeatsAdminQueries</b><br/><small>[GraphQLSchema] admin · seatGrants</small>"]
     end
-    Own --> Types["AddTenantsTypes()<br/>HotChocolate's, the same for every schema"]
-    Type --> Types
-    Admin --> Bindings["AddTenantsGraphQlRuntimeBindings()<br/>the toolkit's, by the schema's name"]
-    Types --> User["schema user"]
-    Types --> AdminSchema["schema admin"]
-    Bindings -->|ids| User
-    Bindings -->|ids and seatGrants| AdminSchema
-    User --> UserEndpoint["/graphql"]
-    AdminSchema --> AdminEndpoint["/admin/graphql"]
+    types["<b>AddTenantsTypes()</b><br/><small>HotChocolate's · the same in every schema</small>"]
+    bindings["<b>AddTenantsGraphQlRuntimeBindings()</b><br/><small>the toolkit's · by the schema's name</small>"]
+    user["<b>schema user</b><br/><small>/graphql</small>"]
+    adminSchema["<b>schema admin</b><br/><small>/admin/graphql · has seatGrants</small>"]
+    own --> types
+    type --> types
+    admin --> bindings
+    types --> user
+    types --> adminSchema
+    bindings -->|ids| user
+    bindings -->|"ids and seatGrants"| adminSchema
+    classDef strong fill:#5b2ec933,stroke:#5b2ec9,stroke-width:2px
+    classDef good fill:#1f8a5b26,stroke:#1f8a5b
+    class admin strong
+    class adminSchema good
 ```
 
 <details>
@@ -1174,9 +1243,11 @@ app.MapGraphQL("/graphql", "user").RequireAuthorization();
 app.MapGraphQL("/admin/graphql", "admin").RequireAuthorization("Administrators");
 ```
 
-What the toolkit's generator writes into the bindings for it, shortened:
+The toolkit's generator writes the marked class into the bindings method:
 
-```csharp title="AddTenantsGraphQlRuntimeBindings(), generated"
+**`AddTenantsGraphQlRuntimeBindings()`**, generated, shortened
+
+```csharp
 public static IRequestExecutorBuilder AddTenantsGraphQlRuntimeBindings(this IRequestExecutorBuilder builder)
 {
     builder.BindRuntimeType<SeatId, UuidType>();   // and the module's other ids, for every schema
@@ -1196,89 +1267,100 @@ public static IRequestExecutorBuilder AddTenantsGraphQlRuntimeBindings(this IReq
 
 </details>
 
-Both schemas are made of the same two calls, as every schema is. HotChocolate's `AddTenantsTypes()` registers what
-its generator found, in both. The toolkit's `AddTenantsGraphQlRuntimeBindings()` binds the module's ids as scalars,
-in both, and registers the classes marked for the schema whose name the builder has: for `"admin"` the fields of
-`SeatsAdminQueries`, for `"user"` nothing more. So `seatGrants` is a field of the admin schema, and a document that
-asks `/graphql` for it is refused when it is validated, before anything runs. Marking a class asks nothing of the
-host: there is no other method to call, and none to forget.
+Both schemas use the same two calls, as every schema does:
 
-- **A class without the attribute is in every schema**, as it always was. The types, and the fields every caller is
-  offered, need no mark; only what one schema has and the others have not is marked. A project that marks nothing
-  gets exactly the bindings it had.
-- **A marked class says what its methods are**: `[GraphQLSchema("admin", OperationType.Query)]`, and each public
-  static method is a field of that schema's `Query`, as a `[Query]` method is; `OperationType.Mutation` and
-  `OperationType.Subscription` make the others. HotChocolate binds such a method the way it binds a `[Query]` method its
-  generator found, so `[Service]` parameters, a data loader, a `CancellationToken` and the attributes it reads off a
-  method, `[Lookup]` and `[Cost]` among them, work as there. A method marked `[GraphQLIgnore]` or `[DataLoader]` is no
-  field, and neither is the stream a subscription names with `[Subscribe(With = ...)]`. A class of two schemas
-  carries the attribute twice.
-- **It carries nothing HotChocolate's generator registers**: no `[Query]` on its methods, no `[QueryType]` or
-  `[ExtendObjectType]` on the class. Any of those would put it into every schema after all, and
-  [DDD00062](diagnostics.md#ddd00062) refuses it. It refuses as well what would lose a field without a word: an
-  instance method, a class with no field, and two methods that would be one field, such as two overloads.
-- **A schema's name is one the classes and the host agree on**, as a Fusion source schema's is. Put it in a constant
-  both can read. HotChocolate's default schema, `AddGraphQLServer()`, is called `_Default`. To give one schema
-  something the other must not have, name both, and mark the classes of each.
-- **What is marked are root fields**, of `Query`, `Mutation` or `Subscription`. A field of one schema on a type
-  every schema shows, such as a seat's grants on `Seat`, is registered by hand in the schema that has it, as the
-  shop sample adds `product` to `OrderLine` for its gateway's schema alone
-  ([One schema over a modular monolith](#one-schema-over-a-modular-monolith), `AddOrderingProductStub`), or is
-  answered by a root field of its own, as `seatGrants(seatId:)` is.
-- **A type goes where a field takes it.** A record that only a marked field answers, with no type class of its own,
-  is in the schemas where such a field is, and nowhere else: HotChocolate infers it from the field. A type class,
-  `[ObjectType<T>]`, is HotChocolate's generator's to register, in every schema; a record only one schema shows needs
-  none, or is shown by every schema without a field that answers it.
-- **The schema decides who is offered a field, not who may use it.** A field sends its request, and the request's
-  access check refuses whoever does not hold what it requires, at either endpoint. An endpoint may ask more of its
-  callers, `MapGraphQL("/admin/graphql", "admin").RequireAuthorization(...)`: that keeps the administration's schema,
-  its introspection included, from callers who have no business with it.
+- HotChocolate's `AddTenantsTypes()` registers what HotChocolate's generator found, in both schemas.
+- The toolkit's `AddTenantsGraphQlRuntimeBindings()` binds the module's ids as scalars in both schemas. It also
+  registers the classes marked for the builder's schema name: for `"admin"` the fields of `SeatsAdminQueries`, for
+  `"user"` no extra class.
 
-With [one schema over a modular monolith](#one-schema-over-a-modular-monolith), the two are gateways: the attribute
-says which schema a class belongs to, and a gateway which schemas form one endpoint. The
-[Tenancy sample](tenancy/the-sample.md#graphql-in-the-sample) serves its administration that way:
+`seatGrants` is therefore a field of the admin schema only. A document that asks `/graphql` for `seatGrants` fails
+validation, before any resolver runs. Marking a class adds no work for the host, because there is no extra method to
+call or to forget.
+
+- **A class without the attribute is in every schema**, as before. Types, and fields that every caller is offered,
+  need no mark. Mark only what one schema has and the others do not. A project that marks nothing gets the same
+  bindings as before.
+- **A marked class says what its methods are.** With `[GraphQLSchema("admin", OperationType.Query)]`, each public
+  static method is a field of that schema's `Query`, like a `[Query]` method. `OperationType.Mutation` and
+  `OperationType.Subscription` make mutation and subscription fields. HotChocolate binds such a method like a
+  `[Query]` method that its generator found. `[Service]` parameters, a data loader, a `CancellationToken` and method
+  attributes such as `[Lookup]` and `[Cost]` therefore work as usual. These methods are not fields: a method marked
+  `[GraphQLIgnore]` or `[DataLoader]`, and the stream method that a subscription names with
+  `[Subscribe(With = ...)]`. A class of two schemas has the attribute twice.
+- **A marked class has nothing that HotChocolate's generator registers.** It has no `[Query]` on its methods, and no
+  `[QueryType]` or `[ExtendObjectType]` on the class. Any of these would put the class into every schema.
+  Diagnostic [DDD00062](diagnostics.md#ddd00062) reports them as an error, with the full list. DDD00062 also reports
+  a class that would lose a field without a message: an instance method, a class with no field, and two methods that
+  would become one field, such as two overloads.
+- **The class and the host must use the same schema name**, as with a Fusion source schema. Put the name in a
+  constant that both can read. HotChocolate's default schema, `AddGraphQLServer()`, is called `_Default`. To give one
+  schema something that the other must not have, name both schemas and mark the classes of each.
+- **Only root fields can be marked**: fields of `Query`, `Mutation` or `Subscription`. A field of one schema on a
+  type that every schema shows, such as a seat's grants on `Seat`, has two options:
+  - Register the field by hand in the schema that has it. The shop sample does this to add `product` to `OrderLine`
+    for its gateway's schema only
+    ([One schema over a modular monolith](#one-schema-over-a-modular-monolith), `AddOrderingProductStub`).
+  - Return the data from a root field of its own, as `seatGrants(seatId:)` does.
+- **A type appears where a field returns it.** A record that only a marked field returns, with no type class, is in
+  the schemas that have such a field and in no other schema. HotChocolate infers the type from the field. A type
+  class, `[ObjectType<T>]`, is registered by HotChocolate's generator in every schema. So a record that only one
+  schema shows needs no type class. With a type class, every schema shows the type, also a schema with no field that
+  returns it.
+- **The schema decides who is offered a field. The request's access check decides who may use it.** A field sends
+  its request, and the request's access check refuses every caller who lacks what the request requires, at either
+  endpoint. An endpoint can require more of its callers, with
+  `MapGraphQL("/admin/graphql", "admin").RequireAuthorization(...)`. That keeps the administration schema, including
+  its introspection, away from callers who do not need it.
+
+With [one schema over a modular monolith](#one-schema-over-a-modular-monolith), the two schemas are gateways. The
+attribute says which schema a class belongs to. A gateway says which schemas form one endpoint. The
+[Tenancy sample](tenancy/the-sample.md#graphql-in-the-sample) serves its administration this way:
 [Several gateways](#several-gateways).
 
 ## One schema over a modular monolith
 
-HotChocolate Fusion puts a gateway in front of several GraphQL services and composes their schemas,
-each one a source schema, into one. `DDDToolkit.HotChocolate.Fusion.InMemory` makes the modules of a
-monolith what Fusion makes services: each module serves a GraphQL source schema of its own, and a
-Fusion gateway inside the application composes them into one schema and answers every query by calling
-them directly, in memory, with no HTTP.
+HotChocolate Fusion puts a gateway in front of several GraphQL services. The gateway composes their schemas, each
+one a source schema, into one schema. `DDDToolkit.HotChocolate.Fusion.InMemory` applies this to the modules of a
+monolith:
+
+- Each module serves its own GraphQL source schema.
+- A Fusion gateway inside the application composes the source schemas into one schema.
+- The gateway calls the modules in memory, with no HTTP.
 
 ```bash
 dotnet add package Temp.DDDToolkit.HotChocolate.Fusion.InMemory --prerelease
 ```
 
-**It needs HotChocolate Fusion 16.6.9 or later**, the version `DDDToolkit.HotChocolate` asks for too. The
-package declares it, so NuGet refuses an older HotChocolate rather than a gateway that fails at run time.
+**The package requires HotChocolate Fusion 16.6.9 or later**, the same version as `DDDToolkit.HotChocolate`. The
+package declares this dependency, so NuGet refuses an older HotChocolate. Without the declaration, the gateway would
+fail at run time.
 
-How the example shop's `Product` comes together. No module references another's classes; they agree
-on a type name and a key:
+The diagram shows how the example shop composes its `Product`. No module references another module's classes. The
+modules agree on a type name and a key. Purple: the one `Product` that a client sees.
 
 ```mermaid
 flowchart LR
-    subgraph catalog ["Catalog's source schema"]
-        CatalogProduct["Product: sku, name, price"]
-    end
-    subgraph inventory ["Inventory's source schema"]
-        InventoryProduct["Product: sku, stock"]
-    end
-    subgraph ordering ["Ordering's source schema"]
-        Line["OrderLine: product, a Product by its sku"]
-    end
-    catalog --> Gateway["Fusion gateway, in the application"]
-    inventory --> Gateway
-    ordering --> Gateway
-    Gateway --> Client["one Product: sku, name, price, stock"]
+    catalog["<b>Catalog's source schema</b><br/><small>Product: sku, name, price</small>"]
+    inventory["<b>Inventory's source schema</b><br/><small>Product: sku, stock</small>"]
+    ordering["<b>Ordering's source schema</b><br/><small>OrderLine: product, by its sku</small>"]
+    gateway["<b>Fusion gateway</b><br/><small>in the application</small>"]
+    client["<b>Product</b><br/><small>sku, name, price, stock</small>"]
+    catalog --> gateway
+    inventory --> gateway
+    ordering --> gateway
+    gateway --> client
+    classDef strong fill:#5b2ec933,stroke:#5b2ec9,stroke-width:2px
+    class client strong
 ```
 
 <details>
 <summary>Show the code: Inventory's Product and Ordering's reference to one</summary>
 
-Inventory declares its own `Product`, keyed on the SKU, with the one field it knows, and an internal
-lookup the gateway fetches it by:
+Inventory declares a `Product` type keyed on the SKU, with the one field that Inventory knows, `stock`. An internal
+lookup lets the gateway fetch the product:
+
+**[`Inventory/Api/GraphQL/ProductStock.cs`](../Examples/Modules/Inventory/Examples.Webshop.Inventory/Api/GraphQL/ProductStock.cs)**
 
 ```csharp
 public sealed record InventoryProduct(string Sku);
@@ -1308,13 +1390,13 @@ public static class ProductStockQueries
 }
 ```
 
-*[`Inventory/Api/GraphQL/ProductStock.cs`](../Examples/Modules/Inventory/Examples.Webshop.Inventory/Api/GraphQL/ProductStock.cs)*
+Ordering knows only the SKU on an order line, and declares that the SKU identifies a `Product`. Only a schema that a
+gateway composes needs this part, so the host calls `AddOrderingProductStub` for that schema. The part is written by
+hand, because HotChocolate's generator registers what it finds in every schema of the project. A root field for one
+schema can be marked instead ([A field for one schema only](#a-field-for-one-schema-only)). A field on a type, such
+as `product` on `OrderLine`, is registered by hand like this:
 
-Ordering knows only the SKU on a line, and says that it is a `Product`. This part is for a schema a gateway
-composes and for no other, so a host asks for it, and it is described by hand: what HotChocolate's
-generator finds in a project, it registers in every schema the project is part of. A root field of one schema
-only can be marked instead ([A field for one schema only](#a-field-for-one-schema-only)); a field on a type,
-as `product` is on `OrderLine`, is registered by hand like this.
+**[`Ordering/Api/GraphQL/ProductStub.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/Api/GraphQL/ProductStub.cs)**
 
 ```csharp
 public sealed record ProductStub(string Sku);
@@ -1339,11 +1421,9 @@ public static IRequestExecutorBuilder AddOrderingProductStub(this IRequestExecut
     }));
 ```
 
-*[`Ordering/Api/GraphQL/ProductStub.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/Api/GraphQL/ProductStub.cs)*
-
 </details>
 
-Two modules can each declare their own `Product`, keyed on the same field, and a client sees one:
+Two modules can each declare a `Product` with the same key field. A client sees one `Product`:
 
 ```csharp
 // Catalog's source schema: the product's name and price, and the lookup it is fetched by
@@ -1363,60 +1443,57 @@ app.MapInMemoryFusionGateway();                // /graphql
 #                                   └─ Catalog ─────────┘ └─ Inventory ─────┘
 ```
 
-A module's GraphQL is then the same code in the monolith and as a service behind a Fusion gateway, and
-the modules still know nothing of each other's classes: they agree on a type's name and its key.
-`Examples/ModularMonolith.*` register every module this way; see the examples' README.
+A module's GraphQL code is the same in the monolith and in a separate service behind a Fusion gateway. The modules
+do not reference each other's classes. They share only a type's name and its key. `Examples/ModularMonolith.*`
+register every module this way (see the examples' README).
 
-That is the application's one gateway, of every schema it registers. An application that serves more than one
-surface, a user's and an administration's, names a gateway per surface and lists the schemas of each:
-[Several gateways](#several-gateways). Every gateway is an endpoint, so what the host requires of its callers it
-puts on it as on a route, and a tool such as GraphQL Codegen reads its schema with a key of the application's:
-[Reading the schema from a tool](#reading-the-schema-from-a-tool).
+`AddInMemoryFusionGateway()` without a name registers one gateway over every schema that the application registers.
+An application with more than one surface, such as one for every caller and one for administrators, names a gateway per
+surface and lists the schemas of each ([Several gateways](#several-gateways)). Every gateway is an endpoint. The host
+adds requirements for its callers as it does on a route. A tool such as GraphQL Codegen reads the schema with the
+application's schema key ([Reading the schema from a tool](#reading-the-schema-from-a-tool)).
 
-Three things it takes care of, all found the hard way and shown in
-`Tests/Spikes/DDDToolkit.Spikes.FusionInProcess`:
+The package handles four problems of the in-memory setup. The spike in `Tests/Spikes/DDDToolkit.Spikes.FusionInProcess`
+shows the first two:
 
-- **The gateway has a service container of its own**, inside the application. HotChocolate and Fusion
-  each register themselves as the one `IRequestExecutorProvider` of a container: the endpoint asks it for
-  the gateway, and HotChocolate's in-memory connector asks it for the modules, so with
-  `AddGraphQLGatewayServer().AddInMemorySchema(...)` and more than one source schema one of the two loses
-  ("The requested schema '_Default' does not exist"). The package hands the gateway the modules
-  explicitly, through the same public classes `AddInMemorySchema` uses.
-- **A composition that fails does not hang.** The in-memory connector reports a composition error only
-  to observers subscribed at that moment and does not try again, and the gateway then waits for a schema
-  forever. The package hands the composer no source schema until it is listening, so the application's
-  start fails as soon as the composer refuses the source schemas, with every error it found and not only
-  the first. Where nothing
-  is reported at all, the start gives up after `InMemoryFusionGatewayOptions.CompositionTimeout` (thirty
-  seconds).
-- **Relay spans the modules**: `node(id:)` is answered by whichever module owns the type in the id.
-- **Two lookups of one module, each for several keys, are both answered.** When one answer names the seats
-  and the roles of a list of crews, the gateway asks their owner for both at the same step, as one batch of
-  two requests, each with a set of variables per key. HotChocolate's in-memory client (16.6.6 and 16.6.7)
-  reads the variables of the second such request from where the first one's begin, and every field the batch
-  was to fill answers "Unexpected Execution Error". The package sends the requests of such a batch one after
-  the other; every other batch goes to the client as it is.
+- **The gateway has its own service container inside the application.** HotChocolate and Fusion each register
+  themselves as the single `IRequestExecutorProvider` of a container. The endpoint asks that provider for the
+  gateway, and HotChocolate's in-memory connector asks it for the modules. With
+  `AddGraphQLGatewayServer().AddInMemorySchema(...)` and more than one source schema, one of the two lookups fails
+  ("The requested schema '_Default' does not exist"). The package passes the modules to the gateway explicitly,
+  through the public classes that `AddInMemorySchema` uses.
+- **A failed composition stops the start.** HotChocolate's in-memory connector reports a composition error only to
+  the observers subscribed at that moment, and does not retry. The gateway would then wait for a schema forever. The
+  package passes no source schema to the composer until the package listens for the result. The application's start
+  therefore fails as soon as the composer refuses the source schemas, with every error that the composer found. If
+  nothing is reported, the start fails after `InMemoryFusionGatewayOptions.CompositionTimeout` (30 seconds).
+- **Relay works across modules.** The module that owns the type in a node id answers `node(id:)`.
+- **Two lookups of one module, each for several keys, both return results.** Example: one response names the seats
+  and the roles of a list of crews. The gateway sends both lookups to their owner in the same step, as one batch of
+  two requests, each with one set of variables per key. HotChocolate's in-memory client (16.6.6 and 16.6.7) reads
+  the variables of the second request from where the first request's variables begin. Every field that the batch
+  should fill then returns "Unexpected Execution Error". The package sends the requests of such a batch one after the
+  other. It passes every other batch to the client unchanged.
 
-And one rule that is Fusion's, not the package's: every source schema's root query type must be called
-`Query`. A method marked `[Query]` is a field of `Query` already; `AddQueryType<CatalogQuery>()` names the
-type `CatalogQuery`, and composition refuses it.
+One rule comes from Fusion: every source schema's root query type must be called `Query`. A method marked `[Query]`
+is already a field of `Query`. `AddQueryType<CatalogQuery>()` names the type `CatalogQuery`, and composition refuses
+it.
 
-### What a module's resolver runs in
+### How the gateway calls a module
 
-The gateway calls a module's source schema in memory, and it is worth knowing what that call carries,
-because it is less than an HTTP request and more than nothing:
+The gateway calls a module's source schema in memory. That call carries less than an HTTP request:
 
-- **A scope of the application, made for the call.** The gateway hands a source schema no services, and
-  the source schema makes a scope of the application's container for each call. It is not the HTTP
-  request's scope: a scoped service that middleware filled in is another instance in a resolver, so
-  nothing reaches a resolver through one.
-- **What is ambient stays ambient.** The call is awaited in the request's own flow, so what the host's
-  middleware made ambient before the gateway is there in a resolver, in a lookup the gateway calls in
-  another module, and in a data loader: the caller `Callers.Begin` made current, and the culture request
-  localization set. Such middleware is in the pipeline, which runs before every endpoint, the gateway's among
-  them.
-- **The fields of a query run side by side.** With a scope per resolver each field gets its own scoped
-  services, and so its own `DbContext`:
+- **A scope of the application, created for the call.** The gateway passes no services to a source schema. The
+  source schema creates a scope of the application's container for each call. This scope is not the HTTP request's
+  scope. A scoped service that middleware filled is a different instance in a resolver, so a scoped service cannot
+  carry values from middleware to a resolver.
+- **Ambient values stay available.** The gateway awaits the call in the request's async flow. Values that the host's
+  middleware made ambient before the gateway are therefore available in a resolver, in a lookup that the gateway
+  calls in another module, and in a data loader. Examples are the caller that `Callers.Begin` made current, and the
+  culture that request localization set. Such middleware runs in the pipeline before every endpoint, the gateway
+  included.
+- **The fields of a query run in parallel.** With a scope per resolver, each field gets its own scoped services, and
+  so its own `DbContext`:
 
   ```csharp
   graphql.ModifyOptions(options =>
@@ -1426,13 +1503,12 @@ because it is less than an HTTP request and more than nothing:
   });
   ```
 
-- **Each mutation field is a call of its own.** A document with two mutations reaches the source schema as
-  two calls, one after the other, the second starting after the first has ended. With the request's scope
-  for mutations, as above, that is a scope per mutation field: each command has its own unit of work.
-- **Lookups for one answer arrive together.** When an answer names twenty products, the module that owns
-  their stock gets one call, and a data loader behind its lookup gets the twenty keys together, as a rule in
-  one batch.
-- **A gateway is an endpoint**, so it requires of its callers what a route would, the same way:
+- **Each mutation field is a separate call.** A document with two mutations reaches the source schema as two calls.
+  The second call starts after the first call has ended. With the request scope for mutations, as above, each
+  mutation field gets its own scope. Each command therefore has its own unit of work.
+- **Lookups for one response arrive together.** When a response names twenty products, the module that owns their
+  stock gets one call. A data loader behind its lookup usually gets the twenty keys in one batch.
+- **A gateway is an endpoint.** Require something of its callers as you would on a route:
 
   ```csharp
   app.UseAuthentication();
@@ -1440,23 +1516,23 @@ because it is less than an HTTP request and more than nothing:
   app.MapInMemoryFusionGateway("/graphql", "user").RequireAuthorization();   // a token, or 401
   ```
 
-  Mapping a gateway by name answers the endpoint's builder. The one gateway of every schema,
-  `AddInMemoryFusionGateway()` without a name, is mapped by name as well when it requires something:
+  `MapInMemoryFusionGateway` with a name returns the endpoint's builder. The gateway over every schema,
+  `AddInMemoryFusionGateway()` without a name, is also mapped by name when it requires something:
   `MapInMemoryFusionGateway("/graphql", InMemoryFusionGateway.DefaultName).RequireAuthorization()`. A group's
-  requirements and prefix reach a gateway mapped in it as they reach its routes: in `MapGroup("/api")` it answers at
-  `/api/graphql`, its schema file at `/api/graphql/schema.graphql`. A tool that only reads the schema has no
-  token, and reads it with a key instead: [Reading the schema from a tool](#reading-the-schema-from-a-tool).
+  requirements and prefix apply to a gateway mapped in the group, as to the group's routes. In `MapGroup("/api")` the
+  gateway answers at `/api/graphql`, and its schema file is at `/api/graphql/schema.graphql`. A tool that only reads
+  the schema has no token, and sends a key instead
+  ([Reading the schema from a tool](#reading-the-schema-from-a-tool)).
 
-- **A source schema that never finishes building holds the start.** `CompositionTimeout` bounds the gateway's
-  own wait for the composed schema. HotChocolate builds every source schema when the application starts, in
-  a hosted service registered before the gateway's, with no timeout: a schema that waits in
-  `ConfigureSchemaAsync` for something that does not come keeps the application from starting, however short
-  the timeout is.
+- **A source schema that never finishes building blocks the start.** `CompositionTimeout` limits only the gateway's
+  wait for the composed schema. HotChocolate builds every source schema at application start, in a hosted service
+  that is registered before the gateway's, with no timeout. A schema that waits in `ConfigureSchemaAsync` for
+  something that never arrives keeps the application from starting, whatever the timeout.
 
 ### The conventions in a composed schema
 
-The host gives every module's schema the same conventions, in one place, so that the schemas cannot
-disagree about a type they all declare:
+The host gives every module's schema the same conventions, in one place. The schemas then cannot disagree about a
+type that they all declare:
 
 ```csharp
 static IRequestExecutorBuilder AddHostConventions(this IRequestExecutorBuilder graphql) => graphql
@@ -1470,68 +1546,67 @@ builder.Services.AddGraphQLServer("catalog").AddSourceSchemaDefaults().AddHostCo
 builder.Services.AddGraphQLServer("inventory").AddSourceSchemaDefaults().AddHostConventions()...;
 ```
 
-- **The error types are shared.** Every module with the mutation conventions declares the same
-  `RefusalError`, `InvalidValuesError`, `BrokenRulesError` and `ConcurrencyConflictError`, and to the
-  gateway each is one type that several schemas return. In a source schema the toolkit marks them
-  `@shareable`, as it does value objects, and the gateway's schema has each of them once.
-- **One spelling.** An enum two modules declare, such as `RefusalKind`, is one type to the gateway, and
-  the composer wants every schema to define every value of it. Modules that spell differently do not
-  compose, and the application's start says so: "The enum type 'RefusalKind' in schema 'catalog' must
-  define the value 'NOT_PERMITTED'."
-- **Failures cross the gateway whole.** A refused mutation answers its `RefusalError` in the payload, and a
-  refused query its top-level error with `extensions.code`, `kind`, `arguments` and, where the refusal names
-  an input, `field`, in the request's language either way. So does the refusal of
-  [a field under a permission](#a-permission-on-a-field).
-- **Every field of an entity but its key may be null**, in every module's schema, so a reference its owner
-  answers nothing for reaches the client without an error. See
-  [Types over your own records](#types-over-your-own-records).
+- **The error types are shared.** Every module with the mutation conventions declares the same `RefusalError`,
+  `InvalidValuesError`, `BrokenRulesError` and `ConcurrencyConflictError`. To the gateway, each is one type that
+  several schemas return. In a source schema the toolkit marks these types `@shareable`, as it does value objects.
+  The gateway's schema has each of them once.
+- **One spelling.** An enum that two modules declare, such as `RefusalKind`, is one type to the gateway. The composer
+  requires every schema to define every value of that enum. Modules with different spellings do not compose, and the
+  application's start fails with a message like "The enum type 'RefusalKind' in schema 'catalog' must define the
+  value 'NOT_PERMITTED'."
+- **Failures pass through the gateway unchanged.** A refused mutation returns its `RefusalError` in the payload. A
+  refused query returns its top-level error with `extensions.code`, `kind`, `arguments` and, when the refusal names
+  an input, `field`. Both are in the request's language. The refusal of
+  [a field under a permission](#a-permission-on-a-field) passes through in the same way.
+- **Every field of an entity except its key may be null**, in every module's schema. A reference for which the owner
+  returns nothing therefore reaches the client without an error. See
+  [Types over application records](#types-over-application-records).
 
 ### References between modules
 
-A module names another module's entity by its key and nothing else, and the gateway fetches the rest from
-the owner. What that takes, and what a client sees when the owner has nothing to say:
+A module refers to another module's entity by its key only. The gateway fetches the other fields from the owner.
+The rules, and what a client sees when the owner returns nothing:
 
-- **Declare the key on both sides**, with `[EntityKey("id")]`. A key is inferred only from a lookup that
-  answers one nullable object, so the owner's lookup answers `Product?`, and a type other modules refer to
-  does not leave its key to inference.
-- **A lookup that exists for the gateway alone is internal.** Mark it `[Lookup]` and `[Internal]`
-  (HotChocolate's, from `HotChocolate.Types.Composite`): the gateway resolves references through it, the
-  composed schema has no such field, and a client that asks for it is refused when its document is
-  validated, before any module is called. A lookup stays public only when a client has a use for it on
-  its own. The module's own printed schema shows it as `@lookup @internal`.
-- **A lookup answers nothing for what the caller may not read**, exactly as for what is not there, so
-  the two cannot be told apart. Internal or not, it reads the way every other query of the module does,
-  with the same check of what the caller may see.
-- **A reference field is nullable, and what "nothing" looks like depends on what was asked.** The
-  reference exists because the module that named it gave its key; the owner only fills it in. When the
-  owner's lookup answers nothing:
+- **Declare the key on both sides**, with `[EntityKey("id")]`. HotChocolate infers a key only from a lookup that
+  returns one nullable object, so the owner's lookup returns `Product?`. A type that other modules refer to declares
+  its key explicitly.
+- **Make a lookup internal when only the gateway uses it.** Mark it `[Lookup]` and `[Internal]` (HotChocolate's
+  attributes, from `HotChocolate.Types.Composite`). The gateway resolves references through the lookup, and the
+  composed schema has no such field. A client that asks for the lookup fails validation, before any module is
+  called. Keep a lookup public only when a client needs it. The module's printed schema shows an internal lookup as
+  `@lookup @internal`.
+- **A lookup returns nothing for a row that the caller may not read**, as for a row that does not exist. The client
+  cannot tell the two cases apart. An internal lookup reads like every other query of the module, with the same
+  check of what the caller may see.
+- **A reference field is nullable.** The module that named the reference provided its key. The owner only adds
+  fields. When the owner's lookup returns nothing, the result depends on what the client asked for:
 
-  | The client asked the reference for | It gets |
+  | The client asked the reference for | Result |
   | --- | --- |
-  | its key alone | `{ id }`, from the module that named it; the owner is not asked |
-  | fields of the owner that may be null | an object with the key and those fields `null`, and no error |
-  | a field the owner declares as never null | `null` for the reference, one error at that field ("Cannot return null for non-nullable field", `HC0018`), and the rest of the answer stands |
+  | its key only | `{ id }`, from the module that named it. The owner is not called. |
+  | fields of the owner that may be null | An object with the key and those fields `null`, and no error. |
+  | a field that the owner declares non-null | `null` for the reference, and one error at that field ("Cannot return null for non-nullable field", `HC0018`). The rest of the response stays. |
 
-  A reference field that could not be null would take its parent with it. An application that wants
-  "nothing to read" to arrive without an entry in `errors` declares the fields other modules reach
-  through a reference as nullable: `AddDDDToolkitEntityNullability()` does that for every entity at once,
-  see [Types over your own records](#types-over-your-own-records).
-- **A mutation that takes an expected version answers the new one.** A client sends the version it read as
-  an argument, `expectedVersion`, where a route takes `If-Match`; the use case hands it to
-  [`ExpectVersion`](entity-framework.md#the-version-the-client-saw), and a stale one is a
-  `ConcurrencyConflictError` in the payload. A mutation that answers what it changed, read after the save,
-  gives the client the version its next change takes without a second request.
-- **A schema that names a node writes node ids.** With Relay, the module that owns the node type turns on
-  global object identification with `MarkNodeFieldAsLookup`, and a module that only refers to the node,
-  with `[ID("Project")]` on the key, calls `AddGlobalObjectIdentification(registerNodeInterface: false)`.
-  Without it that module writes the bare key, which the owner cannot read as a node id.
+  A non-null reference field would make its parent `null` too. To return "nothing to read" without an entry in
+  `errors`, declare the fields that other modules reach through a reference as nullable.
+  `AddDDDToolkitEntityNullability()` does that for every entity at once. See
+  [Types over application records](#types-over-application-records).
+- **A mutation that takes an expected version returns the new version.** A client sends the version it read as an
+  argument, `expectedVersion`, where a route takes `If-Match`. The use case passes the version to
+  [`ExpectVersion`](entity-framework.md#the-version-the-client-saw), and a stale version returns a
+  `ConcurrencyConflictError` in the payload. A mutation that returns what it changed, read after the save, gives the
+  client the version for its next change without a second request.
+- **A schema that names a node writes node ids.** With Relay, the module that owns the node type turns on global
+  object identification with `MarkNodeFieldAsLookup`. A module that only refers to the node, with `[ID("Project")]`
+  on the key, calls `AddGlobalObjectIdentification(registerNodeInterface: false)`. Without that call, the module
+  writes the bare key, and the owner cannot read a bare key as a node id.
 
-### Types over your own records
+### Types over application records
 
-A module's GraphQL type needs no record of its own. HotChocolate's `[ObjectType<T>]` declares it over the
-record the module's application layer already answers, so nothing is mapped: the record's properties are
-the fields, and a static method beside them is a field the record does not have, resolved only when a
-client asks for it.
+A module's GraphQL type needs no separate record. HotChocolate's `[ObjectType<T>]` declares the type over the record
+that the module's application layer already returns, so nothing is mapped. The record's properties are the fields.
+A static method in the type class adds a field that the record does not have. HotChocolate resolves that field only
+when a client asks for it.
 
 ```csharp
 // Catalog's application layer: what its queries answer. Nothing here knows of GraphQL.
@@ -1550,12 +1625,11 @@ internal static partial class ProductType
 }
 ```
 
-The record says a name is never null, and it is right about itself. As a field of an entity that other
-modules refer to it is wrong: the gateway has to leave the name empty when Catalog answers nothing for a
-product, and [a field that is never null turns that into an error](#references-between-modules). Saying so
-per field would be a line for every field of every entity, on types that were meant to need none.
-`AddDDDToolkitEntityNullability()`, among the host's conventions, says it once: every field of an object
-type with a key may be null, except the key.
+The record declares `Name` as non-null, which is correct for the record. For a field of an entity that other modules
+refer to, non-null is wrong. When Catalog returns nothing for a product, the gateway has to leave the name empty, and
+[a non-null field turns that into an error](#references-between-modules). Declaring each field nullable by hand
+would take a line for every field of every entity. `AddDDDToolkitEntityNullability()`, in the host's conventions,
+makes every field of an object type with a key nullable, except the key:
 
 ```graphql
 type Product @key(fields: "id") {
@@ -1566,34 +1640,33 @@ type Product @key(fields: "id") {
 }
 ```
 
-A client that reaches a product Catalog does not answer, through an order line of another module, gets
-`{ "id": "…", "name": null, "sku": null }` and no entry in `errors`. A field under
-[a permission](#a-permission-on-a-field) is nullable by the same call, as a field that can be
-refused has to be.
+A client may reach a product through another module's order line, when Catalog returns nothing for that product.
+The client then gets `{ "id": "…", "name": null, "sku": null }` and no entry in `errors`. A field under
+[a permission](#a-permission-on-a-field) becomes nullable through the same call, as a field that can be refused must
+be.
 
-- **An entity is an object type that carries a key**: the `@key` the module's own printed schema shows on
-  it. `[EntityKey("id")]` on the type class or the record puts it there, and it is what a type other
-  modules refer to declares anyway.
-- **The fields named in the key stay as declared.** A key of several fields, `"sku warehouse { id }"`,
-  keeps `sku` and `warehouse`.
-- **Only the outermost null is allowed**: `[Price!]!` becomes `[Price!]`, a list that may be absent, of
-  prices that are whole.
-- **A type without a key is not touched**, and neither is a type that is only its key, which is what a
-  module has of another module's entity. So every source schema gets the call.
-- **It does not matter how the field's type was written down**: inferred from the record, declared by a
-  resolver of the type class, or named with `Type<T>()`.
-- **An interface the entity implements is not changed.** A field the two share has to be nullable in the
-  interface as well, or HotChocolate refuses the schema when it is built.
-- `null` now means "not there, or not yours to see". Say so in the type's description: it is the one
-  thing the schema no longer says.
+- **An entity is an object type with a key**, the `@key` that the module's printed schema shows on it.
+  `[EntityKey("id")]` on the type class or on the record adds the key. A type that other modules refer to declares a
+  key anyway.
+- **The fields in the key keep their declared nullability.** With a key of several fields,
+  `"sku warehouse { id }"`, `sku` and `warehouse` stay as declared.
+- **Only the outer type becomes nullable.** `[Price!]!` becomes `[Price!]`. The list may be absent, and each price
+  in it is complete.
+- **A type without a key does not change.** A type that has only its key, which is what a module has of another
+  module's entity, does not change either. Every source schema can therefore make the call.
+- **The way the field's type was declared does not matter.** The type may be inferred from the record, declared by
+  a resolver of the type class, or named with `Type<T>()`.
+- **An interface that the entity implements does not change.** A field that the entity shares with the interface
+  must be nullable in the interface as well. Otherwise HotChocolate refuses the schema when it builds it.
+- `null` now means "not there, or not visible to you". Write that in the type's description, because the schema no
+  longer shows it.
 
 ### A module that keeps its GraphQL types internal
 
-A module that exports one type, its entry, can keep everything of its GraphQL internal: the classes of its
-operations, the records they answer, the data loaders and the registration. HotChocolate's generated
-registration finds an internal class's `[Query]` and `[Mutation]` methods and an internal data loader as it
-finds public ones. An object type it infers from a public class only, so each internal record is registered
-by name:
+A module that exports one type, its entry point, can keep all its GraphQL code internal: the operation classes, the
+records they return, the data loaders and the registration. HotChocolate's generated registration finds the `[Query]`
+and `[Mutation]` methods of an internal class, and an internal data loader, as it finds public ones. HotChocolate
+infers an object type only from a public class, so register each internal record by name:
 
 ```csharp
 [assembly: HotChocolate.Module("DepotTypes")]
@@ -1604,15 +1677,15 @@ internal static IRequestExecutorBuilder AddDepotSchema(this IRequestExecutorBuil
     .AddObjectType<DepotOutput>();         // internal record: registered, since it is not inferred
 ```
 
-The generated `AddDepotTypes()` is public, on a public class of the module's project, whatever the classes it
-registers are. It adds types to a schema, which is no way into the module. The fields of `Query` are in the
-order of their classes' names, then as they are written.
+The generated `AddDepotTypes()` is public, on a public class of the module's project, also when the classes it
+registers are internal. The method adds types to a schema, and gives no other access to the module. The fields of
+`Query` are ordered by the names of their classes, and within a class in the order they are written.
 
-### Your schemas in a test
+### Testing your schemas
 
-What a client is offered, and what the gateways compose by, should not change by accident.
-`InMemoryFusionSchemas`, a singleton `AddInMemoryFusionGateway` registers, prints both, for a test that
-compares each with a committed file:
+A test can check that the schema a client sees, and the schemas that the gateways compose, do not change by
+accident. `InMemoryFusionSchemas` is a singleton that `AddInMemoryFusionGateway` registers. It prints both kinds of
+schema, for a test that compares each with a committed file:
 
 ```csharp
 [Fact]
@@ -1633,56 +1706,76 @@ public async Task The_schemas_are_the_committed_ones()
 }
 ```
 
-`PrintGatewayAsync(name)` is a gateway's composed schema as its endpoint serves it for `?sdl`: one `Product`,
-and no trace of how it is put together; an application with one gateway prints it with `PrintGatewayAsync()`.
-`PrintSourceAsync(name)` is one module's schema with the directives the gateways compose by (`@key`, `@lookup`,
-`@internal`, `@shareable`), which is where a changed key or a type that stopped being shared shows.
-`SourceSchemaNamesOf(gateway)` says which schemas one gateway composes. Source schemas print as soon as the
-application is built; a gateway's needs it to be mapped, and source schemas that compose, and says which of the two
-is missing otherwise.
+- `PrintGatewayAsync(name)` prints a gateway's composed schema, as its endpoint serves it for `?sdl`. It shows one
+  `Product`, with no sign of how the gateway composed it. An application with one gateway calls
+  `PrintGatewayAsync()` without a name.
+- `PrintSourceAsync(name)` prints one module's schema, with the directives that the gateways compose by (`@key`,
+  `@lookup`, `@internal`, `@shareable`). A changed key, or a type that is no longer shared, shows here.
+- `SourceSchemaNamesOf(gateway)` returns the schemas that one gateway composes.
+
+Source schemas print as soon as the application is built. A gateway's schema prints only when the gateway is mapped
+and its source schemas compose. Otherwise the call fails, and the message says which of the two is missing.
 
 ### Several gateways
 
-An application that serves more than one surface, the one every user is offered and an administration's, names a
-gateway per surface and lists the source schemas each composes. A schema may be in more than one gateway:
+An application with more than one surface, such as one for every caller and one for administrators, names a gateway
+per surface and lists the source schemas that each gateway composes. A schema can be in more than one gateway.
+
+The diagram shows the Tenancy sample's two gateways and the schemas that each composes. Purple: the gateways, with
+their endpoints.
 
 ```mermaid
 flowchart LR
-    Tenants["tenants"] --> User["gateway user"]
-    Admin["admin<br/>tenants and seatGrants"] --> Office["gateway admin"]
-    Projects["projects"] --> User
-    Projects --> Office
-    Inspections["inspections"] --> User
-    Inspections --> Office
-    User --> UserEndpoint["/graphql<br/>a token"]
-    Office --> AdminEndpoint["/admin/graphql<br/>a seat"]
+    tenants["<b>tenants</b>"]
+    admin["<b>admin</b><br/><small>tenants and seatGrants</small>"]
+    projects["<b>projects</b>"]
+    inspections["<b>inspections</b>"]
+    user["<b>gateway user</b><br/><small>/graphql · requires a token</small>"]
+    office["<b>gateway admin</b><br/><small>/admin/graphql · requires a seat</small>"]
+    tenants --> user
+    projects --> user
+    inspections --> user
+    admin --> office
+    projects --> office
+    inspections --> office
+    classDef strong fill:#5b2ec933,stroke:#5b2ec9,stroke-width:2px
+    class user,office strong
 ```
 
-[`[GraphQLSchema]`](#a-field-for-one-schema-only) says which schema a class of fields belongs to; a gateway says
-which schemas form one endpoint. In the Tenancy sample, Tenancy registers its schema twice from the same calls, the
-second time under `"admin"` and so with the classes marked for it, and the administration's gateway composes that
-one, in the place of the user's Tenancy, with the same modules the user's gateway composes. Its clients get
-everything a user gets, and another person's roles besides, in one schema; the user's gateway has nothing of it.
+[`[GraphQLSchema]`](#a-field-for-one-schema-only) says which schema a class of fields belongs to. A gateway says
+which schemas form one endpoint. In the Tenancy sample, Tenancy registers its schema twice with the same calls. The
+second registration is named `"admin"`, so it also gets the classes marked for `"admin"`. The administration gateway
+composes the `admin` schema in place of `tenants`, with the same other modules as the `user` gateway. Its clients get
+everything that the `user` gateway offers, plus other people's roles, in one schema. The `user` gateway has none of the
+admin fields.
 
-- **Each gateway composes the schemas listed for it, and no other**, on its own: the user's never sees the
-  administration's types, and a document that names one of its fields is refused when it is read, before anything
-  runs. A name listed that no schema is registered under fails the mapping, with the names there are; `"Admin"`
-  beside `AddGraphQLServer("admin")` is such a name, since names are compared as they are written.
-- **Every schema a gateway lists is a source schema**: `AddSourceSchemaDefaults()`, an administration's too. A
-  lookup the gateway resolves another module's references through is in each of a module's source schemas that a
-  gateway composes with those modules, so a class of lookups marked for one schema is marked for both.
-- **Each gateway has options of its own.** The bounds of a request, in `ConfigureGateway`, are given to each, and
-  each says who reads its schema, `SchemaReaders` ([Reading the schema from a tool](#reading-the-schema-from-a-tool)).
-- **The application starts when every gateway has a composed schema.** One whose schemas do not compose fails the
-  start with the composer's reason, and names the gateway; one that is registered and not mapped fails it too.
-- **A name is the gateway's own.** Registering a second gateway under a name fails at once, and mapping a name no
-  gateway has fails with the names there are. A gateway mapped at two paths is one gateway.
-- **The one gateway of every schema stays.** `AddInMemoryFusionGateway()`, with no name and no list, composes every
-  schema the application registers; it is `InMemoryFusionGateway.DefaultName` among the gateways. Beside named
-  ones it would compose theirs too, so an application with several names them all.
+- **Each gateway composes only the schemas listed for it.** The `user` gateway never sees the administration's types.
+  A document that names one of their fields fails when the gateway reads it, before anything runs. A listed name
+  without a registered schema fails the mapping, and the message lists the registered names. Names are compared
+  case-sensitively, so `"Admin"` next to `AddGraphQLServer("admin")` fails.
+- **Every schema that a gateway lists is a source schema**, with `AddSourceSchemaDefaults()`, an administration
+  schema too. A gateway resolves references to a module through that module's lookups. A module's lookups must
+  therefore be in each of the module's source schemas that a gateway composes with other modules. A class of lookups
+  marked for one schema is marked for both.
+- **Each gateway has its own options.** Request limits, in `ConfigureGateway`, are set per gateway. Each gateway also
+  sets who may read its schema, with `SchemaReaders`
+  ([Reading the schema from a tool](#reading-the-schema-from-a-tool)).
+- **The application starts when every gateway has a composed schema.** A gateway whose schemas do not compose fails
+  the start with the composer's reason and the gateway's name. A gateway that is registered and not mapped also
+  fails the start.
+- **A gateway's name is unique.** Registering a second gateway under the same name fails at once. Mapping a name that
+  no gateway has fails, and the message lists the names that exist. A gateway mapped at two paths is still one
+  gateway.
+- **The gateway over every schema still exists.** `AddInMemoryFusionGateway()`, with no name and no list, composes
+  every schema that the application registers. Its name among the gateways is `InMemoryFusionGateway.DefaultName`.
+  Next to named gateways it would also compose their schemas, so an application with several gateways names all of
+  them.
 
 <details>
 <summary>Show the code: a module with two schemas, and a host with two gateways</summary>
+
+The sample's files are [`Program.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Program.cs) and
+[`SampleGateways.cs`](../Examples/Tenancy/Examples.Tenancy.Host/GraphQL/SampleGateways.cs).
 
 ```csharp
 // Tenants.Api/GraphQL/TenantsGraphQL.cs
@@ -1703,78 +1796,88 @@ app.MapInMemoryFusionGateway("/graphql", "user").RequireAuthorization();
 app.MapInMemoryFusionGateway("/admin/graphql", "admin").RequireAuthorization("seat-required");
 ```
 
-*[`Program.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Program.cs), [`SampleGateways.cs`](../Examples/Tenancy/Examples.Tenancy.Host/GraphQL/SampleGateways.cs)*
-
 </details>
 
-A schema that is not a source schema stays HotChocolate's to serve, `MapGraphQL("/admin/graphql", "admin")`, with
-nothing of the other modules in it: a type another module owns is not fetched for it, and the schema key below does
-not reach it.
+HotChocolate serves a schema that is not a source schema, with `MapGraphQL("/admin/graphql", "admin")`. Such a
+schema contains nothing of the other modules. No gateway fetches another module's types for it, and the schema key
+below does not apply to it.
 
 ### Reading the schema from a tool
 
 GraphQL Codegen, the Relay compiler's schema download and a build step that writes `schema.graphql` read a schema
-without a user: an introspection query, or the schema file at `{path}?sdl` and `{path}/schema.graphql` (behind a
-group's prefix, for a gateway mapped in a group). A gateway that requires a token would refuse them, so a tool sends
-the application's schema key instead, in the `X-GraphQL-Schema-Key` header:
+without a signed-in caller. They send an introspection query, or download the schema file at `{path}?sdl` or
+`{path}/schema.graphql`. For a gateway mapped in a group, the path includes the group's prefix. A gateway that
+requires a token would refuse these tools. A tool therefore sends the application's schema key instead, in the
+`X-GraphQL-Schema-Key` header.
+
+The diagram shows a tool that reads the schema with the key. Green: the steps that the key allows.
 
 ```mermaid
 sequenceDiagram
     participant Tool as Codegen
     participant Auth as Authorization
     participant Gateway as The gateway
-    Tool->>Auth: __schema, with the key
-    Note over Auth: no token: refused,<br/>then: only the schema?<br/>the key? let through
-    Auth->>Gateway: the request
-    Note over Gateway: introspection<br/>allowed for it
-    Gateway-->>Tool: the schema
+    Tool->>Auth: __schema, with the key, no token
+    Note over Auth: no token: refused
+    rect rgba(31, 138, 91, 0.14)
+        Note over Auth: before the refusal is sent:<br/>only the schema? the key?<br/>then let through
+        Auth->>Gateway: the request
+        Note over Gateway: introspection allowed<br/>for this request
+        Gateway-->>Tool: the schema
+    end
 ```
 
-The endpoint's authorization refuses the tool, as it refuses any request without a token. Before that refusal is
-answered, the gateway looks at the request: if it reads the schema and nothing else, and carries the key, it goes on
-to the gateway, which allows introspection for that one request. Anything else is answered as the endpoint answers
-it. In Development the key is not needed: a developer's codegen reads the schema of the application on their machine
-as it is. That is the default, and a gateway's `SchemaReaders` say otherwise where the host wants otherwise (below).
+The endpoint's authorization refuses the tool, as it refuses any request without a token. Before the refusal is
+sent, the gateway checks the request. If the request reads only the schema and carries the key, the request goes on
+to the gateway. The gateway allows introspection for that one request. Every other request gets the endpoint's usual
+response. In Development the key is not needed, so a developer's codegen reads the schema of the application on the
+developer's machine. That is the default. A gateway's `SchemaReaders` option changes it (below).
 
-| The request, by default | In Development | Elsewhere, with the key | Elsewhere, without it |
+| The request, by default | In Development | Elsewhere, with the key | Elsewhere, without the key |
 | --- | --- | --- | --- |
-| reads the schema, without a token | answered | answered | refused: 401 where the endpoint requires a token |
-| reads the schema, with a token | answered | answered | the file 403, introspection an error that names the header |
-| asks for anything else | as the endpoint requires | as the endpoint requires: the key opens nothing else | as the endpoint requires |
+| reads the schema, without a token | returns the schema | returns the schema | refused, with 401 when the endpoint requires a token |
+| reads the schema, with a token | returns the schema | returns the schema | the file returns 403. Introspection returns an error that names the header. |
+| asks for anything else | as the endpoint requires | as the endpoint requires. The key opens nothing else. | as the endpoint requires |
 
-- **Only the schema.** A request reads the schema when it is the schema file, or when every operation of its
-  document asks `__schema`, `__type` or `__typename` at its root, fragments included. One that could be read two
-  ways is not: a JSON property twice, a persisted operation, a batch, a field aliased `__schema`, a query string on
-  a post, a socket, a body that is no text. Those are the endpoint's to decide.
-- **Elsewhere nobody reads the schema without the key**, a signed-in user neither: the schema of an application in
-  production is its tools' to read. The gateway refuses introspection to whoever does not read the schema, and the
-  schema file too, which HotChocolate hands to whoever reaches it: every `GET` that asks for the file, whatever
-  operation it carries besides, since whether HotChocolate runs that operation first depends on server options a
-  host may change (`EnableGetRequests`, `EnforceGetRequestsPreflightHeader`).
-- **The host says who reads a gateway's schema**, with `SchemaReaders` in the gateway's options:
-  `DevelopmentOrKey`, the default; `KeyOnly`, the key in Development as well, for a host that runs in Development
-  where others than its developers reach it; `Everyone`, for a public API whose schema is no secret, past the
-  endpoint's authorization too; or `Nobody`, key or not, where the schema is read from the committed file. One
-  setting decides the authorization, introspection and the file alike, so a schema is never readable one way and
-  refused the other: `DisableIntrospection` in `ConfigureGateway` does not overrule it.
-- **The key is configuration, never code**: `GraphQL:SchemaKey`. A host on a developer's machine runs in Development
-  and needs none. A deployed host reads it from its own configuration, the environment variable `GraphQL__SchemaKey`
-  or its secret store, and the tool reads the same secret from its own environment, a CI secret or an untracked
-  `.env` file: one secret, given to both. It has at least 32 characters, or the mapping fails: a key that can be
-  guessed opens the schema to whoever guesses it. Without one, nothing reads the schema outside Development by
-  default.
-- **It is compared in constant time and never logged.** A wrong key is logged as a warning, with the path it was sent
-  to and nothing of either key, and the request is answered as one without a key.
-- **It passes the endpoint's authorization** through the application's `IAuthorizationMiddlewareResultHandler`, which
-  `AddInMemoryFusionGateway` wraps for as long as the host's own lives, a scoped one per request, so a handler the
-  host registered first, one that answers a refusal its own way, still answers every other refusal. One registered
-  after `AddInMemoryFusionGateway` would replace it; mapping a gateway by name then fails and says to register it
-  first. `MapInMemoryFusionGateway()` without a name maps an endpoint that requires nothing, which no refusal reaches,
-  so the order is no matter there.
-- **Gateways only.** A plain schema the host maps with `MapGraphQL` does not take the key: HotChocolate lets one
-  interceptor per schema allow introspection for a request, and a plain schema's is the host's, while a gateway's
-  container is the package's own. An administration schema that should take it is served through a gateway, as
-  above.
+- **Only the schema.** A request reads the schema when it asks for the schema file, or when every operation of its
+  document asks only for `__schema`, `__type` or `__typename` at its root, fragments included. A request that could
+  be read in two ways does not count. Examples are a JSON property given twice, a persisted operation, a batch, a
+  field aliased `__schema`, a query string on a POST, a socket, and a body that is not text. The endpoint decides
+  about such requests.
+- **Outside Development, nobody reads the schema without the key**, a signed-in caller included. In production only
+  the application's tools read its schema. The gateway refuses introspection to every request that does not only
+  read the schema. It also refuses the schema file without the key. HotChocolate would otherwise serve that file to
+  every `GET` that asks for it, whatever other operation the request carries. Whether HotChocolate runs that
+  operation first depends on server options that a host may change (`EnableGetRequests`,
+  `EnforceGetRequestsPreflightHeader`).
+- **The host sets who reads a gateway's schema**, with `SchemaReaders` in the gateway's options:
+  - `DevelopmentOrKey`: the default.
+  - `KeyOnly`: the key is required in Development as well. Use it for a host that runs in Development where people
+    other than its developers can reach it.
+  - `Everyone`: for a public API whose schema is not secret. Schema requests also pass the endpoint's authorization.
+  - `Nobody`: no request reads the schema, with or without the key. Clients use the committed file.
+
+  One setting controls the authorization, introspection and the file. A schema is therefore never readable in one
+  way and refused in another. `DisableIntrospection` in `ConfigureGateway` does not override the setting.
+- **The key comes from configuration**, the setting `GraphQL:SchemaKey`. Do not put it in code. A host on a
+  developer's machine runs in Development and needs no key. A deployed host reads the key from its configuration,
+  such as the environment variable `GraphQL__SchemaKey` or its secret store. The tool reads the same secret from its
+  environment, such as a CI secret or an untracked `.env` file. Give the same secret to both. The key has at least 32
+  characters, or the mapping fails, because a short key can be guessed. Without a key, nothing reads the schema
+  outside Development by default.
+- **The key is compared in constant time and never logged.** A wrong key is logged as a warning, with the path it
+  was sent to and without either key. The request is then handled as a request without a key.
+- **The key passes the endpoint's authorization** through the application's `IAuthorizationMiddlewareResultHandler`.
+  `AddInMemoryFusionGateway` wraps the host's handler and keeps its lifetime, so a scoped handler is still created
+  per request. A handler that the host registered first, for example one that formats refusals in its own way, still
+  handles every other refusal. A handler registered after `AddInMemoryFusionGateway` would replace the wrapper.
+  Mapping a gateway by name then fails, and the message says to register the handler first.
+  `MapInMemoryFusionGateway()` without a name maps an endpoint that requires nothing. No refusal reaches that
+  endpoint, so the order does not matter there.
+- **Gateways only.** A plain schema that the host maps with `MapGraphQL` does not accept the key. HotChocolate lets
+  one interceptor per schema allow introspection for a request. In a plain schema, that interceptor belongs to the
+  host. A gateway's container belongs to the package. To let an administration schema accept the key, serve it
+  through a gateway, as above.
 
 <details>
 <summary>Show the code: the key, GraphQL Codegen, the Relay compiler and a public schema</summary>
@@ -1824,24 +1927,24 @@ builder.Services.AddInMemoryFusionGateway("public", ["catalog"], options => opti
 
 </details>
 
-The [Tenancy sample](tenancy/the-sample.md#graphql-in-the-sample) maps both of its gateways with `RequireAuthorization`;
-`GraphQLSchemaKeyTests` runs its host in Production and downloads each gateway's schema with the key, the way a build
-server would, and is refused without it.
+The [Tenancy sample](tenancy/the-sample.md#graphql-in-the-sample) maps both its gateways with
+`RequireAuthorization`. `GraphQLSchemaKeyTests` runs the sample's host in Production. The test downloads each
+gateway's schema with the key, as a build server would, and checks that a download without the key is refused.
 
 ## Value objects in a Fusion source schema
 
-A Fusion gateway composes one schema out of the source schemas of several services, and a field belongs
-to one of them unless it is marked `@shareable`: the gateway has to know who answers it. An entity has an
-owner, and other services add fields to it by its key. A value object has neither owner nor identity.
-`Money` in Catalog's prices and `Money` in Payments' amounts are the same type, and any service that
-holds one gives the same answer for it, which is exactly what `@shareable` says. Without it, composition
-refuses the second service that returns a `Money`:
+A Fusion gateway composes one schema from the source schemas of several services. A field belongs to one source
+schema unless it is marked `@shareable`, because the gateway must know which service resolves it. An entity has an
+owner, and other services add fields to it by its key. A value object has no owner and no identity. `Money` in
+Catalog's prices and `Money` in Payments' amounts are the same type. Every service that holds a `Money` returns the
+same fields for it, and `@shareable` declares that. Without the directive, composition refuses the second service
+that returns a `Money`:
 
 ```
 The field 'Money.amount' in schema 'payments' must be shareable.
 ```
 
-So in a source schema `AddDDDToolkitTypes()` marks every value object type `@shareable`:
+In a source schema, `AddDDDToolkitTypes()` therefore marks every value object type `@shareable`:
 
 ```csharp
 builder.Services
@@ -1857,34 +1960,32 @@ type Money @shareable {
 }
 ```
 
-A schema without `AddSourceSchemaDefaults()` gets no directive. Entities stay unshared: a service that
-adds to another's entity declares a stub of it, keyed on its id, the way `Examples/Microservices.*` do
-for `Order`.
+A schema without `AddSourceSchemaDefaults()` gets no directive. Entities are not shared. A service that adds fields
+to another service's entity declares a stub of the entity, keyed on its id, as `Examples/Microservices.*` do for
+`Order`.
 
 ## Pushing integration events to subscribers
 
-`GraphQlSubscriptionSink` is an [integration event](integration-events.md) sink that publishes to
-HotChocolate's `ITopicEventSender`, so a message leaving the outbox reaches the clients holding a socket
-right now.
+`GraphQlSubscriptionSink` is an [integration event](integration-events.md) sink that publishes to HotChocolate's
+`ITopicEventSender`. A message that leaves the outbox reaches the clients that hold a socket at that moment.
 
-**It is a different thing from the other sinks, and worth being blunt about.** The in-process module sink
-is how one module tells another that something happened. pgmq is how a module tells another deployable the
-same thing. Both are integration: durable, retried, and the receiver gets the message whether or not it was
-running at the time.
+This sink differs from the other sinks. The in-process module sink tells another module that something happened.
+pgmq tells another deployable the same thing. Both are integration. The message is durable and retried, and the
+receiver gets the message even if the receiver was not running at the time.
 
-A subscription is none of that:
+A subscription has none of these properties:
 
-- **Not durable.** Nothing is stored. A payload with no subscriber is dropped.
-- **Only the connected.** A client that reconnects has missed what happened while it was away, and has to
-  re-read the state it cares about.
-- **No acknowledgement.** The sink returns once the topic accepted the payload. Whether a socket survived
-  long enough to deliver it is not knowable from there.
+- **Not durable.** Nothing is stored. A payload without a subscriber is dropped.
+- **Connected clients only.** A client that reconnects has missed what happened while it was away. The client must
+  read the state it needs again.
+- **No acknowledgement.** The sink returns once the topic accepted the payload. The sink cannot know whether a socket
+  stayed open long enough to deliver it.
 
-So use it to keep a screen in step with the server. Never as the path by which some other part of the
-system learns that an order was placed. If a browser missing an update would be a bug in your data rather
-than a stale view, this is the wrong mechanism.
+Use the sink to keep a screen in step with the server. Do not use it to tell other parts of the system that an
+order was placed. If a browser that misses an update would show wrong data, and not only a stale view, use another
+mechanism.
 
-### Registering it
+### Registering the subscription sink
 
 ```csharp
 builder.Services
@@ -1925,73 +2026,71 @@ public static class OrderSubscriptions
 subscription { orderPlaced { orderId total } }
 ```
 
-Nothing is pushed until the map names it. That is the point: a subscription payload is part of your schema,
-and a schema is a deliberate list rather than whatever happened to be published.
+The sink pushes nothing until the map names the contract. A subscription payload is part of your schema, and the
+schema lists only what you chose to publish.
 
-### It publishes the contract, never the domain event
+### The payload is the published contract
 
-This is not tidiness. A subscription payload is a schema type. It is declared on the subscription field, it
-is resolved through the schema, and the schema's own authorisation decides what the client may see, field
-by field. `[Internal]` members are already gone, and an `[Authorize]` on a field still applies.
+A subscription payload is a schema type. It is declared on the subscription field and resolved through the schema.
+The schema's authorization decides what the client may see, field by field. `[Internal]` members are already
+removed, and an `[Authorize]` on a field still applies.
 
-Broadcast the domain event instead and you are pushing your internal record, with your identifiers and
-whatever you last added to it, to whoever is holding a socket. The contract is the list of things you
-decided to say out loud, and it is the same contract the other modules read, so there is one published
-shape rather than two.
+If the sink broadcast the domain event instead, it would push your internal record, with your identifiers and every
+field you added since, to every client with a socket. The contract lists what you decided to publish. Other modules
+read the same contract, so there is one published shape.
 
-No upcasting happens on this path, and that is deliberate. An upcaster catches a reader up with a payload
-written before it was deployed. A subscription payload was produced seconds ago by this process, against
-this schema. If the map does not name the message's name **and version**, it is simply not pushed.
+This path does no upcasting. An upcaster updates a payload that was written before the reader was deployed. A
+subscription payload was produced seconds ago, by this process, against this schema. If the map does not name the
+message's name **and version**, the sink does not push the message.
 
 ### Scoping a topic
 
-A constant topic is a firehose that every subscriber sees. Build the topic from the message to scope it,
-usually to one aggregate:
+A constant topic reaches every subscriber. To scope a topic, usually to one aggregate, build it from the message:
 
 ```csharp
 map.Publish<OrderPlacedV2>(message => $"order:{message.AggregateId}");
 ```
 
-Returning `null` from the factory drops that one occurrence.
+When the factory returns `null`, the sink drops that one message.
 
-A topic string is not authorisation. It decides who is woken; the subscription field decides who is allowed
-to subscribe and what they then see. Put the `[Authorize]` on the field.
+A topic is not authorization. The topic decides which subscribers the sink notifies. The subscription field decides
+who may subscribe and what they see. Put the `[Authorize]` on the field.
 
-### Transports
+### Subscription transports
 
-`AddInMemorySubscriptions()` is enough for a single process. HotChocolate also ships transports
-for Postgres, Redis, RabbitMQ and NATS, for when more than one server is holding sockets and the server
-that published is not the server the client is connected to. The toolkit's sink goes through
-`ITopicEventSender` and does not care which of them is registered.
+`AddInMemorySubscriptions()` works for a single process. HotChocolate also has transports for Postgres, Redis,
+RabbitMQ and NATS. Use one of them when more than one server holds sockets, so the server that publishes is not
+always the server that the client is connected to. The toolkit's sink sends through `ITopicEventSender` and works
+with any of these transports.
 
-The Postgres one is worth knowing about if you are already on Postgres. It rides `LISTEN` and `NOTIFY`, so
-several servers share subscriptions with no extra infrastructure at all: no Redis, no broker, nothing new to
-run or pay for. Combined with the [pgmq sink](transports.md#when-a-module-becomes-its-own-deployable-pgmq),
-a Postgres deployment can carry both the durable path and the live path without another service.
+The Postgres transport uses `LISTEN` and `NOTIFY`. Several servers share subscriptions with no extra infrastructure:
+no Redis and no broker to run or pay for. With the [pgmq sink](transports.md#postgres-queues-pgmq), a Postgres
+deployment carries both the durable path and the live path without another service.
 
-`Tests/DDDToolkit.HotChocolate.Tests/SubscriptionSinkTests.cs` runs the whole thing against the real
-in-memory transport, including a client subscribing through the schema and receiving what the outbox
-published.
+`Tests/DDDToolkit.HotChocolate.Tests/SubscriptionSinkTests.cs` runs the sink against the real in-memory transport,
+including a client that subscribes through the schema and receives what the outbox published.
 
 ## What this package does not do
 
-It maps identifiers and single value objects onto scalars, and identifiers into Relay node ids. It does
-not make any type a node: `ImplementsNode()` is yours to call. A multi-property `[ValueObject]` stays the
-object type HotChocolate would infer, less its methods, and it generates no queries, mutations or
-resolvers. The schema is still yours to write.
+The package maps identifiers and single value objects to scalars, and identifiers into Relay node ids. It does not
+make a type a node. Call `ImplementsNode()` yourself. A `[ValueObject]` with several properties stays the object type
+that HotChocolate infers, without its methods. The package generates no queries, mutations or resolvers. You write
+the schema.
 
-That includes subscriptions. The sink publishes a contract to a topic; the subscription field, its
-arguments and its authorisation are yours, and so is the choice of transport.
+The same applies to subscriptions. The sink publishes a contract to a topic. You write the subscription field, its
+arguments and its authorization, and you choose the transport.
 
 ## How the bindings work
 
-Two generated pieces turn an id into a scalar, and a third makes it a node id.
+Two generated parts turn an id into a scalar. A third part makes the id a node id.
 
-For every identifier and single value object, the generator emits a nested `ChangeTypeProvider` class
-implementing `HotChocolate.Utilities.IChangeTypeProvider`. It converts the object to its wrapped value
-and back, and declines every other pair:
+For every identifier and single value object, the generator writes a nested `ChangeTypeProvider` class that
+implements `HotChocolate.Utilities.IChangeTypeProvider`. The provider converts the object to its wrapped value and
+back, and declines every other pair of types:
 
-```csharp title="TicketId.HotChocolate.g.cs, shortened"
+**`TicketId.HotChocolate.g.cs`**, shortened
+
+```csharp
 readonly partial record struct TicketId
 {
     public sealed class ChangeTypeProvider : IChangeTypeProvider
@@ -2019,7 +2118,7 @@ readonly partial record struct TicketId
 }
 ```
 
-Asked directly, it answers like this:
+Called directly, the provider returns these results:
 
 ```csharp
 var provider = new TicketId.ChangeTypeProvider();
@@ -2030,10 +2129,12 @@ provider.TryCreateConverter(typeof(Guid), typeof(TicketId), root, out var fromVa
 provider.TryCreateConverter(typeof(TicketId), typeof(string), root, out var other);   // false
 ```
 
-The registration method then binds the runtime type to a schema type and registers that provider. This
-is the method for a project that declares, among others, `EmailAddress`, `PersonId` and `TicketId`:
+The registration method binds each runtime type to a schema type and registers its provider. This is the method
+for a project that declares `EmailAddress`, `PersonId` and `TicketId`, among others:
 
-```csharp title="BindingExtensions.g.cs, shortened"
+**`BindingExtensions.g.cs`**, shortened
+
+```csharp
 namespace Ordering.Domain.GraphQl;
 
 public static class HotChocolateExtensions
@@ -2062,19 +2163,22 @@ public static class HotChocolateExtensions
 }
 ```
 
-The binding decides how the type is printed. The converter decides how a value moves across the
-boundary in either direction. A type with an always-valid twin, such as the class id `PersonId`, gets a
-second binding for the twin, and its provider carries a second pair of conversions, between
-`ValidPersonId` and `Guid`. `EmailAddress` is bound to the schema type its `[GraphQLType<T>]` names,
-and gets no node id serializer, because it is a single value object and not an identity. The last line
-is not the schema's: it makes the struct identifier `TicketId` a key a paged list can be ordered by, and
-the class identifier `PersonId` gets none. See [Paging by an id](#paging-by-an-id).
+- The binding decides how the schema prints the type.
+- The converter moves a value across the boundary in both directions.
+- A type with an always-valid twin, such as the class id `PersonId`, gets a second binding for the twin. Its
+  provider contains a second pair of conversions, between `ValidPersonId` and `Guid`.
+- `EmailAddress` is bound to the schema type that its `[GraphQLType<T>]` names. It gets no node id serializer,
+  because it is a single value object and not an identity.
+- The last line is not part of the schema. It makes the struct identifier `TicketId` a key that a paged list can be
+  ordered by. The class identifier `PersonId` gets no such line. See [Paging by an id](#paging-by-an-id).
 
-The third piece is the `NodeIdValueSerializer`, generated into every identifier over `Guid`, `string`,
-`int`, `long` or `short`. It writes the wrapped value into a Relay node id and reads it back out;
-[Relay node ids](#relay-node-ids) says why the toolkit writes it rather than HotChocolate:
+The third part is the `NodeIdValueSerializer`, generated into every identifier over `Guid`, `string`, `int`, `long`
+or `short`. It writes the wrapped value into a Relay node id and reads it back.
+[Relay node ids](#relay-node-ids) explains why the toolkit writes this serializer instead of HotChocolate:
 
-```csharp title="TicketId.HotChocolate.g.cs, shortened"
+**`TicketId.HotChocolate.g.cs`**, shortened
+
+```csharp
 readonly partial record struct TicketId
 {
     // ...
@@ -2103,29 +2207,27 @@ readonly partial record struct TicketId
 }
 ```
 
-`TryFormatIdPart` and `TryParseIdPart` are HotChocolate's own helpers, which is why the node id has
-exactly the format HotChocolate gives a bare `Guid`.
+`TryFormatIdPart` and `TryParseIdPart` are HotChocolate's helpers. The node id therefore has the same format that
+HotChocolate gives a bare `Guid`.
 
-An identifier declared in a project without this package has none of the three pieces nested in it.
-The project that builds the schema registers `SingleValueChangeTypeProvider<T, TValue>` and
-`SingleValueNodeIdSerializer<T, TValue>` for it, which do the same through `ISingleValue`; see
-[Bound by a project that does not declare it](#bound-by-a-project-that-does-not-declare-it).
+An identifier declared in a project without this package has none of the three nested parts. The project that builds
+the schema registers `SingleValueChangeTypeProvider<T, TValue>` and `SingleValueNodeIdSerializer<T, TValue>` for the
+identifier. These classes do the same through `ISingleValue`. See
+[Binding ids from other projects](#binding-ids-from-other-projects).
 
-## Why it removes fields instead of flagging them
+## Why internal fields are removed instead of flagged
 
-`IgnoreInternalFieldsInterceptor` takes `[Internal]` members out of the schema by removing their
-fields. HotChocolate offers a per-field ignore flag at type completion, and using only that is not
-enough.
+`IgnoreInternalFieldsInterceptor` takes `[Internal]` members out of the schema by removing their fields. HotChocolate
+also has a per-field ignore flag, set at type completion. That flag alone is not enough.
 
-A field is dropped from the printed schema when it is flagged, but the types it refers to have already
-been registered by then. Discovery walks the fields to work out what each one depends on, so flagging
-the FluentValidation integration's `Errors` at completion still leaves `ValidationFailure` and its
-`Severity` enum registered as schema types that no field can reach.
+A flagged field is left out of the printed schema. By type completion, however, HotChocolate has already registered
+the types that the field refers to. Discovery walks the fields to find what each field depends on. If the
+interceptor only flagged the FluentValidation integration's `Errors` at completion, `ValidationFailure` and its
+`Severity` enum would stay registered as schema types that no field reaches.
 
-So the interceptor removes the fields in `OnBeforeRegisterDependencies`, during type discovery and
-before dependencies are computed. It still flags in `OnBeforeCompleteType`, for anything internal that
-appeared after discovery, such as a merged type extension.
+The interceptor therefore removes the fields in `OnBeforeRegisterDependencies`, during type discovery and before
+HotChocolate computes the dependencies. It also flags fields in `OnBeforeCompleteType`, for internal members that
+appear after discovery, such as a merged type extension.
 
-The visible effect is that the schema contains no type that exists only because a hidden field
-mentioned it. `ValidationFailure` and `Severity` are absent, and so is the `ValidPersonName` twin that
-a value object's `[Internal]` `ToValid()` would otherwise have pulled in.
+As a result, the schema has no type that only a hidden field referenced. `ValidationFailure` and `Severity` are
+absent. So is the `ValidPersonName` twin that a value object's `[Internal]` `ToValid()` would otherwise add.

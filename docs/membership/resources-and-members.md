@@ -147,7 +147,7 @@ public static class FilingModule
 - The generator writes `AddDocumentMembership` and `AddDocumentMemberAccess`, and names them after the resource.
 - `HasMembers` adds two tables, `DocumentShares` and `DocumentShareRoles`. Add a migration for them.
 - Without `RequireExplicitCallers()`, work that names no caller runs as the application, which holds every
-  permission. With it, that work [fails](../row-level-security.md#fail-closed-callers).
+  permission. With it, that work [fails](../row-level-security.md#requiring-explicit-callers).
 
 **A request and its handler.** `[OnResource]` marks the document the permission is held on. `[ExpectedVersion]` marks
 the version the caller read. The generator writes `MemberAccess.On("documents.share", request.Document,
@@ -196,7 +196,7 @@ public sealed class DocumentHandlers(
 - **The checks must run before the handler.** The behavior generated for an `[AccessRequests]` interface runs them,
   or your dispatcher calls `AccessChecks<IFilingRequest>.RequireAsync(request)` ([Access requirements](../access-requirements.md)).
   With the behavior, `AddDocumentMemberAccess` also adds a start-up check. A host without the behavior in its
-  pipeline does not start ([When nothing asks the checks](../access-requirements.md#when-nothing-asks-the-checks)).
+  pipeline does not start ([When nothing asks the checks](../access-requirements.md#handlers-reached-without-the-access-check)).
 - **`[OnResource]` goes on the id of a resource with members.** On any other id it is
   [DDD00081](../diagnostics.md#ddd00081). For a requirement computed from the request's values, implement
   `RequiredAccess` instead ([Requirements that combine](checks-and-saves.md#requirements-that-combine)).

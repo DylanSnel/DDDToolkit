@@ -133,7 +133,7 @@ module against these rules. Projects' schema is the example:
 - **A field contains no logic.** It sends the request that the route of its feature sends. A mutation returns what it
   changed.
 - **A type is the application's record.** It is declared over the record that a query returns, with
-  [`[ObjectType<T>]`](../../graphql.md#types-over-your-own-records). Nothing is copied or mapped.
+  [`[ObjectType<T>]`](../../graphql.md#types-over-application-records). Nothing is copied or mapped.
 - **Missing data returns `null` without an error.** `project(id:)` and `node(id:)` return `null` for a project that is
   missing or out of sight. A reference that its owner does not resolve, such as another tenant's seat, returns its id
   with every other field `null`. So every field except the key of `Seat`, `OrganizationUnit`, `Role` and `Project` is

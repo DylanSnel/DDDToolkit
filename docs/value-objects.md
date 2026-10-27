@@ -1,18 +1,22 @@
 # Value objects
 
-An email address passed around as a `string` can be any string. Every method that receives one has to
-decide whether to trust it, a customer's email and a supplier's name can be swapped without the
-compiler noticing, and the rule for what makes an email address valid ends up copied wherever
-somebody remembered it.
+An email address passed around as a `string` can be any string. This causes three problems:
 
-A value object gives the value a type of its own. It has no identity: two instances with the same
-contents are the same thing, the way two ten-euro notes are the same amount. It carries its own rules,
-so they live in one place, and a method can say in its signature that it wants a valid one.
+- Every method that receives the string must decide whether to trust it.
+- The compiler cannot see when code swaps a customer's email address and a supplier's name.
+- The rule for a valid email address is copied to every place where somebody remembered it.
 
-The toolkit has two kinds: one for a single wrapped value, such as an email address, and one for a
-cluster of properties, such as an address or an amount of money. This page starts with both, then
-adds validation, the always-valid twin and changing a value, and ends with storage and the other
-integrations.
+A value object gives the value its own type. A value object has no identity. Two value objects with the same contents
+are equal, the way two ten-euro notes are the same amount. The value object carries its rules, so the rules live in
+one place. A method can ask for a valid value in its signature.
+
+The toolkit has two kinds of value object:
+
+- `[SingleValueObject<T>]` wraps one value, such as an email address.
+- `[ValueObject]` holds several properties, such as an address or an amount of money.
+
+This page shows both kinds, then validation, the always-valid twin and changing a value. It ends with storage and the
+other integrations.
 
 ## A single value
 
@@ -24,11 +28,13 @@ public partial record EmailAddress
 }
 ```
 
-The record has to be `partial`, so the generator can add to it. It derives the record from
-`SingleValueObject<string>`, which supplies the `Value` property, and writes the equality over it, the
+The record must be `partial`, so the generator can add to it. The generator derives the record from
+`SingleValueObject<string>`, which supplies the `Value` property. It writes the equality over `Value`, the
 constructors and `ToValid()`:
 
-```csharp title="EmailAddress.g.cs, shortened"
+**EmailAddress.g.cs, shortened**
+
+```csharp
 partial record EmailAddress : SingleValueObject<string>, IValidatable<ValidEmailAddress>
 {
     public virtual bool Equals(EmailAddress? other)
@@ -52,7 +58,7 @@ partial record EmailAddress : SingleValueObject<string>, IValidatable<ValidEmail
 }
 ```
 
-`ToValid()` and `ValidEmailAddress` come up under [validation](#the-always-valid-twin). Using it:
+[The always-valid twin](#the-always-valid-twin) explains `ToValid()` and `ValidEmailAddress`. Using the value object:
 
 ```csharp
 var email = EmailAddress.Create("dylan@example.com");
@@ -61,10 +67,10 @@ email.Value;                                              // "dylan@example.com"
 email == EmailAddress.Create("dylan@example.com");        // true: same contents, same value
 ```
 
-Constructors are `protected`, so expose a factory like `Create` above. That keeps one obvious entry
-point and leaves room to validate.
+The constructors are `protected`, so expose a factory such as `Create` above. A factory gives callers one entry point,
+and it is a place to add validation later.
 
-## Several properties
+## A value with several properties
 
 ```csharp
 [ValueObject]
@@ -79,10 +85,12 @@ public partial record PersonName
 }
 ```
 
-Equality is generated from the properties, in declaration order: two names are equal when the first
-and the last name match.
+The generator writes the equality over the properties, in declaration order. Two names are equal when the first names
+are equal and the last names are equal.
 
-```csharp title="PersonName.g.cs, shortened"
+**PersonName.g.cs, shortened**
+
+```csharp
 partial record PersonName : ValueObject, IValidatable<ValidPersonName>
 {
     [Internal]
@@ -102,16 +110,15 @@ partial record PersonName : ValueObject, IValidatable<ValidPersonName>
 }
 ```
 
-Add a property and it is in `GetEqualityComponents()` at the next build. There is no list of members to
-keep in step by hand, which is the part of a hand-written value object that goes wrong.
+Add a property, and the next build adds it to `GetEqualityComponents()`. Nobody keeps a list of members up to date by
+hand. In a hand-written value object, that list is the part that goes wrong.
 
-Properties you declare yourself are `{ get; protected init; }`. Anything else reports
-[DDD00010](diagnostics.md#ddd00010) or [DDD00011](diagnostics.md#ddd00011), and a code fix turns it
-into `protected init`. The short reason is that a value is set when it is made and never changed
-afterwards; the long one is in [Why `with` is closed to callers](#why-with-is-closed-to-callers).
+Properties you declare yourself must be `{ get; protected init; }`. Any other accessor reports
+[DDD00010](diagnostics.md#ddd00010) or [DDD00011](diagnostics.md#ddd00011), and a code fix changes the accessor to
+`protected init`. Code sets a value when it creates the value, and nothing changes the value afterwards.
+[Why `with` is closed to callers](#why-with-is-closed-to-callers) has the full reason.
 
-A value object with little behaviour can be a positional record instead, and the generator takes care
-of the properties:
+A value object with little behavior can be a positional record. The generator takes care of its properties:
 
 ```csharp
 [ValueObject]
@@ -120,7 +127,7 @@ public partial record Money(decimal Amount, string Currency);
 
 ### Leaving a property out of equality
 
-Not every property is part of what the value *is*. Mark the ones that are not with `[DontCompare]`:
+Some properties are not part of what the value is. Mark them with `[DontCompare]`:
 
 ```csharp
 [ValueObject]
@@ -141,15 +148,15 @@ public partial record PersonName
 }
 ```
 
-Now two names are equal when the first and last name match, regardless of middle names. The generated
-`GetEqualityComponents()` is the same as above: the marked properties are simply not in it.
-`[DontCompare]` on a computed property such as `FullName` is good practice even though it derives
-from compared properties: it documents the intent and keeps the equality components minimal. On a
-positional record, write it as `[property: DontCompare]` on the parameter.
+Two names are now equal when the first and last names are equal, whatever the middle names are. The generated
+`GetEqualityComponents()` is the same as above, without the marked properties. Mark a computed property such as
+`FullName` with `[DontCompare]` too, even though it is computed from compared properties. The attribute documents the
+intent and keeps the equality components small. On a positional record, write `[property: DontCompare]` on the
+parameter.
 
 ## Validation
 
-Override `Validate()` and the result is cached in `IsValid`:
+Override `Validate()`. The result is cached in `IsValid`:
 
 ```csharp
 [SingleValueObject<string>]
@@ -168,16 +175,17 @@ email.IsValidated;    // true, validation has run
 email.EnsureValidated();   // throws InvalidValueObjectException
 ```
 
-Creating an invalid value is allowed. A value object that came from a form or a request is often
-invalid, and the place that made it is rarely the place that should decide what to do about that. What
-the toolkit guarantees is that you can always ask, and that the [always-valid twin](#the-always-valid-twin)
-below can only hold a value that passed.
+Code can create an invalid value. A value object made from a form or a request is often invalid, and the code that
+creates it is rarely the code that should decide what to do about it. The toolkit guarantees two things:
 
-`IsValid`, `IsValidated` and `Validate` are marked `[Internal]`, so they stay out of your database
-tables, your JSON and your GraphQL schema.
+- You can always ask whether a value is valid.
+- The [always-valid twin](#the-always-valid-twin) can only hold a value that passed.
 
-A `bool` says no without saying why. There is a second overload for that, and it is the one to reach
-for when a caller has to be told what went wrong:
+`IsValid`, `IsValidated` and `Validate` are marked `[Internal]`, so they stay out of your database tables, your JSON
+and your GraphQL schema.
+
+A `bool` gives no reason. The second overload of `Validate` reports reasons. Use it when a caller needs to know what
+went wrong:
 
 ```csharp
 [SingleValueObject<string>]
@@ -195,43 +203,58 @@ public partial record EmailAddress
 }
 ```
 
-A run that adds nothing is a pass. Both overloads run, and both have to be happy: the value is valid
-when `Validate()` returned `true` and no failure was added. Override whichever suits the rule; most
-types override one. With `DDDToolkit.FluentValidation` referenced, both are generated for you and you
-write rules instead; see [With FluentValidation](#with-fluentvalidation).
+A run that adds no failure passes. Both overloads run. The value is valid only when `Validate()` returned `true` and
+`Validate(ValidationErrorBuilder)` added no failure. Override the overload that suits the rule. Most types override
+one of the two. With `DDDToolkit.FluentValidation` referenced, the generator writes both overloads and you write rules
+instead. See [With FluentValidation](#with-fluentvalidation).
 
 ## The always-valid twin
 
-Every value object record gets a generated twin named `Valid<Name>`:
+The generator writes a twin for every value object record, named `Valid<Name>`:
 
 ```csharp
 EmailAddress candidate = EmailAddress.Create(userInput);
 ValidEmailAddress confirmed = candidate.ToValid();   // throws if invalid
 ```
 
-The point is to make validity visible in signatures. A method taking `ValidEmailAddress` cannot
-receive an unvalidated one, so the check happens once at the boundary instead of defensively
-everywhere:
+The twin makes validity visible in signatures. A method that takes `ValidEmailAddress` cannot receive an unchecked
+email address. So the check happens once, at the boundary, and the code behind the boundary does not check again:
 
 ```csharp
 public Task SendWelcome(ValidEmailAddress address)   // no re-validation needed
 ```
 
+The diagram shows the ways from input to the twin. Purple is the twin, green is code that receives the twin, red is
+the failures, and grey is input from outside your code:
+
 ```mermaid
 flowchart LR
-    Input["a form, a request, a file"] --> Plain["EmailAddress: may be invalid"]
-    Plain -->|"ToValid(), throws when invalid"| Valid["ValidEmailAddress: always valid"]
-    Plain -->|"TryToValid(out valid, out errors)"| Valid
-    Plain -->|"TryToValid, false"| Errors["the failures, for the caller"]
-    Valid -->|"accepted wherever an EmailAddress is"| Use["SendWelcome(ValidEmailAddress)"]
-    Valid -->|"With(...), the copy is validated"| Valid
+    input["<b>Input</b><br/><small>a form, a request, a file</small>"]
+    plain["<b>EmailAddress</b><br/><small>may be invalid</small>"]
+    valid["<b>ValidEmailAddress</b><br/><small>always valid</small>"]
+    errors["<b>The failures</b><br/><small>returned to the caller</small>"]
+    use["<b>SendWelcome(ValidEmailAddress)</b><br/><small>checks nothing again</small>"]
+    input --> plain
+    plain -->|"ToValid(), throws when invalid"| valid
+    plain -->|"TryToValid, true"| valid
+    plain -->|"TryToValid, false"| errors
+    valid -->|"accepted wherever an EmailAddress is"| use
+    valid -->|"With(...) validates the copy"| valid
+    classDef strong fill:#5b2ec933,stroke:#5b2ec9,stroke-width:2px
+    classDef good fill:#1f8a5b26,stroke:#1f8a5b
+    classDef muted fill:none,stroke:#9a9ab5,stroke-dasharray:4 3,color:#9a9ab5
+    classDef bad fill:#c93c3c24,stroke:#c93c3c
+    class valid strong
+    class use good
+    class errors bad
+    class input muted
 ```
 
 <details>
 <summary>Show the code: checking once, at the boundary</summary>
 
-The endpoint turns what it was sent into the twin, or into a refusal. Everything behind it takes the
-twin, and never checks again:
+The endpoint turns the request into the twin, or it refuses the request. The code behind the endpoint takes the twin
+and does not check again:
 
 ```csharp
 app.MapPost("/subscribers", (SubscribeRequest body) =>
@@ -251,10 +274,12 @@ See [Failure handling](#failure-handling).
 
 </details>
 
-The generator writes the twin next to the value object. Every way into it validates first, so there
-is no way to hold a `ValidEmailAddress` that was not checked:
+The generator writes the twin next to the value object. Every constructor of the twin validates, so code cannot hold a
+`ValidEmailAddress` that was not checked:
 
-```csharp title="EmailAddress.g.cs, shortened"
+**EmailAddress.g.cs, shortened**
+
+```csharp
 public partial record ValidEmailAddress : EmailAddress, IAlwaysValid
 {
     public ValidEmailAddress(EmailAddress value) : base(value)
@@ -272,18 +297,16 @@ public partial record ValidEmailAddress : EmailAddress, IAlwaysValid
 }
 ```
 
-The twin is made with the record's copy constructor, so it holds everything the original held:
-get-only properties, `protected` ones, private fields and `[Internal]` state alike. The twin derives
-from the original, so it is accepted anywhere the original is expected. It
-implements `IAlwaysValid`, and both JSON integrations refuse to deserialize it directly: deserializing
-straight into a twin would let invalid data enter through a type that promises the opposite.
-Deserialize the base type and call `ToValid()`.
+The twin is made with the record's copy constructor. So the twin holds everything the original held: get-only
+properties, `protected` properties, private fields and `[Internal]` state. The twin derives from the original, so
+code accepts a twin wherever it expects the original. The twin implements `IAlwaysValid`, and both JSON integrations
+refuse to deserialize it directly. Deserializing into a twin would let invalid data in through a type that promises
+valid data. Deserialize the base type and call `ToValid()`.
 
-For the same reason, [`With`](#changing-a-value-with) on a twin validates the copy and throws when
-it is invalid, rather than handing back a twin that does not keep its promise.
+For the same reason, [`With`](#changing-a-value-with) on a twin validates the copy and throws when the copy is
+invalid. So `With` never returns a twin that breaks the twin's promise.
 
-A twin is never equal to a plain value, even one with the same components, and that holds from
-either side:
+A twin is never equal to a plain value, even when the components are the same. This holds from both sides:
 
 ```csharp
 Money plain = new(8m, "EUR");
@@ -294,36 +317,37 @@ twin == plain                  // false
 twin == new Money(8m, "EUR").ToValid()   // true: twin to twin compares the components
 ```
 
-Equality between a twin and a plain value could not be `true` in both directions. The twin is a derived
-record, and the compiler writes the `Equals(Money?)` that answers for it, which only accepts a
-`ValidMoney`. The compiler does not allow that member to be replaced. So the generated equality also
-compares the runtime type, the way the compiler's own record equality does, and the answer is the same
-whichever side is asked. To compare a twin with a plain value, compare twin to twin (call `ToValid()`
-on the other side) or compare the components. Hash codes do not include the type, so a twin and a plain
-value with the same components hash alike; that is allowed, and harmless.
+Equality between a twin and a plain value cannot be `true` in both directions. The twin is a derived record. For a
+derived record, the compiler writes the twin's `Equals(Money?)`, and that method only accepts a `ValidMoney`. The
+compiler does not let code replace that member. So the generated equality also compares the runtime type, as the
+compiler's record equality does, and both sides give the same answer. To compare a twin with a plain value, compare
+twin to twin (call `ToValid()` on the plain value), or compare the components. The hash code does not include the
+type. So a twin and a plain value with the same components have the same hash code, which is allowed and causes no
+harm.
 
 > [!NOTE]
-> **Why the twin rules out `sealed` and structs.** `ValidEmailAddress` derives from `EmailAddress`,
-> and three things rest on that. A twin is accepted anywhere the original is, so a signature can ask
-> for `ValidEmailAddress` while the rest of the code carries on with `EmailAddress`. The twin is built
-> by the record's copy constructor, which the compiler makes `protected` on a record that is not
-> sealed and `private` on one that is. And `With` is virtual, so the twin's override validates a copy
-> even when the twin is held as its base type.
+> **Why a value object cannot be sealed or a struct.** `ValidEmailAddress` derives from `EmailAddress`. Three things
+> depend on that:
 >
-> A sealed record cannot be derived from, which is [DDD00013](diagnostics.md#ddd00013), and neither
-> can a struct, which is why a value object has to be a reference record
-> ([DDD00001](diagnostics.md#ddd00001)). A twin that wrapped the value instead of deriving from it
-> would lose all three, and around a struct it could not even keep its promise: `default` and every
-> element of a new array skip the constructor, and the check with it. The same goes for
+> - Code accepts a twin wherever it accepts the original. So a signature can ask for `ValidEmailAddress` while the
+>   rest of the code uses `EmailAddress`.
+> - The twin is built with the record's copy constructor. The compiler makes that constructor `protected` on a record
+>   that is not sealed, and `private` on a sealed record.
+> - `With` is virtual. So the twin's override validates the copy, even when code holds the twin as its base type.
+>
+> A sealed record cannot be derived from ([DDD00013](diagnostics.md#ddd00013)), and neither can a struct. So a value
+> object must be a reference record ([DDD00001](diagnostics.md#ddd00001)). A twin that wrapped the value, instead of
+> deriving from it, would lose all three. Around a struct, such a twin could not keep its promise. `default` and every
+> element of a new array skip the constructor, and so they skip the check. The same holds for
 > [struct identifiers](identifiers.md#struct-or-record), which have no twin.
 
 ## Failure handling
 
-`ToValid()` throws. That is right when an invalid value is a bug, and wrong when it is an ordinary
-answer. An endpoint validating a request body should reply with a refusal, not a 500, and a validation
-pass over a whole request wants every failure at once rather than the first one to throw.
+`ToValid()` throws. Throwing is right when an invalid value is a bug. It is wrong when an invalid value is a normal
+answer. An endpoint that validates a request body should answer with a refusal (a 400) instead of an error (a 500).
+A validation pass over a request should collect every failure, and an exception stops at the first one.
 
-So there is a second way in, and it never throws.
+So the toolkit has a second way in, which never throws.
 
 ### TryToValid
 
@@ -336,42 +360,42 @@ if (candidate.TryToValid(out ValidEmailAddress? email, out var errors))
 }
 else
 {
-    // errors says why, in full
+    // errors lists every failure
 }
 ```
 
-There is a shorter overload, `TryToValid(out var email)`, for a caller that only needs to know whether
-it worked. And there is `TryValidate(out var errors)` for a value object you do not intend to convert,
-such as one nested inside another.
+A shorter overload, `TryToValid(out var email)`, suits a caller that only needs to know whether the conversion
+worked. `TryValidate(out var errors)` checks a value object without converting it, for example a value object nested
+inside another one.
 
-Both work the same for `[ValueObject]`, `[SingleValueObject<T>]` and `[EntityId<T>] partial record`.
-Struct identifiers have neither, and neither do they need it: they are well formed by construction and
-have no twin to convert to.
+Both methods work the same for `[ValueObject]`, `[SingleValueObject<T>]` and `[EntityId<T>] partial record`. Struct
+identifiers have neither method, and they need neither. A struct identifier is well formed by construction and has no
+twin to convert to.
 
-They are extension methods, not generated members: `TryToValid` on the generated
-`IValidatable<TValid>` interface, so the twin type is inferred at the call site, and `TryValidate` on
-`ValueObject`, since it converts nothing and needs no twin. Nothing new lands on your types, so
-nothing new turns up in an Entity Framework model or a GraphQL schema.
+Both methods are extension methods. The generator adds no member for them. `TryToValid` extends the generated
+`IValidatable<TValid>` interface, so the compiler infers the twin type at the call site. `TryValidate` extends
+`ValueObject`, because it converts nothing and needs no twin. No new member lands on your types, so nothing new turns
+up in an Entity Framework model or a GraphQL schema.
 
 ### What a failure looks like
 
-Failures are `ValidationError`, which is the toolkit's own shape and needs no FluentValidation:
+A failure is a `ValidationError`. This is the toolkit's type, and it needs no FluentValidation:
 
 | Member | Meaning |
 | --- | --- |
 | `Message` | What is wrong, in words you could show a user. |
-| `PropertyName` | The property it belongs to, or `null` for the whole value. |
-| `Code` | A stable code to branch on, so you never match on text. |
+| `PropertyName` | The property the failure belongs to, or `null` for the whole value. |
+| `Code` | A stable code to branch on, so code never matches on the message. |
 | `AttemptedValue` | The value that was rejected, when the rule reported one. |
 | `Arguments` | The values the message was built from, by name, such as `MaxLength`. Never `null`. |
 
-The failures are the ones your `Validate(ValidationErrorBuilder)` added. A `Validate()` that returns
-`false` without describing itself produces one failure carrying `ValidationError.UnspecifiedCode`, so
-a caller is never handed an empty list that reads like a pass. With FluentValidation referenced you
-get one of these per `ValidationFailure` instead; see [With FluentValidation](#with-fluentvalidation).
+The failures are the ones your `Validate(ValidationErrorBuilder)` added. A `Validate()` that returns `false` without
+describing the failure produces one failure with the code `ValidationError.UnspecifiedCode`. So a caller never
+receives an empty list that looks like a pass. With FluentValidation referenced, you get one `ValidationError` per
+`ValidationFailure` instead. See [With FluentValidation](#with-fluentvalidation).
 
-`ValidationErrors` on the value object itself holds the same list. Reading it runs the rules if
-nothing has run them yet, exactly as reading `IsValid` does.
+`ValidationErrors` on the value object holds the same list. Reading it runs the rules if they have not run yet, as
+reading `IsValid` does.
 
 ### Returning a refusal from an endpoint
 
@@ -387,13 +411,12 @@ app.MapPost("/subscribers", (SubscribeRequest body) =>
 });
 ```
 
-`ToErrorDictionary()` groups the failures by property name and keeps the messages, which is the shape
-`Results.ValidationProblem` and `ModelStateDictionary` expect. The client gets a 400 it can read field
-by field, and nothing was thrown.
+`ToErrorDictionary()` groups the failures by property name and keeps the messages. `Results.ValidationProblem` and
+`ModelStateDictionary` expect this shape. The client gets a 400 response it can read field by field, and nothing is
+thrown.
 
-To answer with every failure in the request rather than the first, collect them. `Prefixed()` puts a
-value object's failures back under the field they came from, because `Value` and `Street` say nothing
-about where they sat in the body:
+To answer with every failure in the request, collect the failures. `Prefixed()` puts a value object's failures under
+the field they came from. A failure on `Value` or `Street` alone does not say where it was in the request body:
 
 ```csharp
 var errors = new List<ValidationError>();
@@ -416,30 +439,29 @@ if (errors.Count > 0)
 return Results.Ok(subscribers.Add(email!, shipTo!));
 ```
 
-The two `!` are the one wart. The compiler knows `email` is not null inside the `if`, but not that it
-is set by the time you reach the last line.
+The last line needs the two `!` operators. The compiler knows that `email` is not null inside its `if`, but it cannot
+prove that `email` and `shipTo` are set on the last line.
 
-### Which one to reach for
+### Which method to use
 
 | Situation | Use |
 | --- | --- |
-| The value came from outside and may be junk | `TryToValid` |
-| You are collecting failures across a request | `TryToValid` plus `Prefixed` |
-| The value was already validated at the boundary | take `ValidEmailAddress` in the signature |
-| An invalid value here would be a bug | `ToValid()` and let it throw |
+| The value came from outside and may be invalid | `TryToValid` |
+| You collect failures across a request | `TryToValid` plus `Prefixed` |
+| The value was already validated at the boundary | `ValidEmailAddress` in the signature |
+| An invalid value here would be a bug | `ToValid()`, and let it throw |
 
-`InvalidValueObjectException` now carries `Errors` and `ObjectType`, so the throwing path says why as
-well. That is for the log line, not for control flow.
+`InvalidValueObjectException` carries `Errors` and `ObjectType`, so the throwing path also says why. Read them in a
+log line. For control flow, use `TryToValid`.
 
 ### Why not a Result type
 
-The obvious move would be to ship a `Result<T>`. The toolkit deliberately does not. Teams already use
-FluentResults, ErrorOr, OneOf or something of their own, and a result type is infectious: once the
-toolkit returns one, it turns up in every signature that touches a value object, and a codebase with
-one result type ends up with two.
+The toolkit does not ship a `Result<T>`. Teams already use FluentResults, ErrorOr, OneOf or a type of their own. A
+result type also spreads. If the toolkit returned one, it would appear in every signature that touches a value object.
+A codebase with its own result type would then have two.
 
-What the toolkit ships instead is the Try pattern. It hands you the value and the failures, and you
-put them in whatever you already use. If that is a `Result<T>`, wrapping the call takes one line.
+The toolkit uses the Try pattern instead. A Try method gives you the value and the failures, and you put them in the
+type you already use. Wrapping the call in a `Result<T>` takes one line:
 
 ```csharp
 public static Result<ValidEmailAddress> ToResult(this EmailAddress email)
@@ -448,29 +470,33 @@ public static Result<ValidEmailAddress> ToResult(this EmailAddress email)
         : Result.Fail(errors.Select(e => e.Message));
 ```
 
-The same goes for a command that is refused rather than a value that is invalid. An aggregate method or
-a use case that will not do what it was asked throws `RefusalException`: a stable `Code`, a `Kind` (the
-request is invalid, not permitted, names something that is not found, or conflicts with the state it
-met) and the `Arguments` its message was built from. It is not an invariant violation, because nothing
-changed; it is the answer "no, and here is why", which an edge maps to a status from `Kind` and
-translates by `Code`, and which a `Result<T>` can wrap in one `catch` if that is what you use.
+The same holds for a command that is refused. An aggregate method or a use case that refuses a request throws
+`RefusalException`. The exception carries:
 
-### What this does not do
+- a stable `Code`;
+- a `Kind`, which says that the request is invalid (`Invalid`), is not permitted (`NotPermitted`), names something
+  that does not exist (`NotFound`), or conflicts with the current state (`Conflict`);
+- the `Arguments` that the message was built from.
 
-- There is no `Result<T>`, on purpose. See above.
-- There is no async validation. `Validate` is synchronous, so a rule cannot call a database.
-- There are no severities. A failure is a failure; there are no warnings.
-- `Message` is whatever your rule wrote. To show it in the reader's language, branch on `Code`, or
-  let [`DDDToolkit.Localization`](localization.md) phrase it from `Code` and `Arguments`.
-- Nothing validates across value objects. A rule sees one value object, never the request around it.
-  That is what a containing validator is for, and
-  [`MustBeValid()`](fluent-validation.md#a-value-object-in-a-request-validator) folds a value object into one.
+A refusal is not an invariant violation, because nothing changed. The edge of the application maps `Kind` to a status
+code and translates the message by `Code`. A `Result<T>` can wrap a refusal with one `catch`.
+
+### Limits of validation
+
+- The toolkit has no `Result<T>`, on purpose. See above.
+- Validation is synchronous. `Validate` cannot call a database.
+- Failures have no severity. There are no warnings.
+- `Message` is the text your rule wrote. To show it in the reader's language, branch on `Code`, or let
+  [`DDDToolkit.Localization`](localization.md) phrase the message from `Code` and `Arguments`.
+- A rule sees one value object. No rule sees the request around it. A validator for the whole request checks across
+  value objects, and [`MustBeValid()`](fluent-validation.md#a-value-object-in-a-request-validator) adds a value
+  object's rules to such a validator.
 
 ## Changing a value: `With`
 
-A value object is never changed in place. To get a different value, you make a copy with some
-properties replaced. Every `[ValueObject]` has a generated `With(...)` for that: name the properties
-to replace and leave the rest out. For a `Money` that carries an optional note:
+Code never changes a value object in place. To get a different value, code makes a copy with some properties
+replaced. Every `[ValueObject]` has a generated `With(...)` method for this. Name the properties to replace, and leave
+out the others. Take a `Money` with an optional note:
 
 ```csharp
 [ValueObject]
@@ -479,12 +505,12 @@ public partial record Money(decimal Amount, string Currency, [property: DontComp
 
 ```csharp
 var converted = money.With(amount: 12.50m, currency: "USD");
-var cleared = money.With(note: null);   // null is a value too; leaving note out keeps it
+var cleared = money.With(note: null);   // sets Note to null; leaving note out keeps it
 ```
 
-On `Money`, `With` hands back a copy that is judged afresh, like any new value; ask `IsValid` or call
-`ToValid()`. On `ValidMoney`, the copy is validated before anyone can hold on to it, and an invalid
-copy throws `InvalidValueObjectException` on the line that asked for it:
+On `Money`, `With` returns a copy that is judged afresh, like any new value. Ask `IsValid` or call `ToValid()`. On
+`ValidMoney`, `With` validates the copy before it returns the copy. An invalid copy throws
+`InvalidValueObjectException` on the line that asked for it:
 
 ```csharp
 ValidMoney valid = money.ToValid();
@@ -492,9 +518,11 @@ valid.With(amount: 5);    // a ValidMoney
 valid.With(amount: -1);   // throws here
 ```
 
-What the generator writes for the two-property `Money(decimal Amount, string Currency)` and its twin:
+The generator writes this for the two-property `Money(decimal Amount, string Currency)` and its twin:
 
-```csharp title="Money.g.cs, shortened"
+**Money.g.cs, shortened**
+
+```csharp
 partial record Money
 {
     [Internal]
@@ -512,14 +540,12 @@ public partial record ValidMoney : Money, IAlwaysValid
 }
 ```
 
-A method runs after all the new values are in place, which is the one thing C#'s own `with` expression
-cannot offer; [below](#why-with-is-closed-to-callers) is why that matters. It is also what makes value
-objects easy to test, where copying a valid value and changing one property is the natural way to
-build a case.
+`With` is a method, so code runs after all the new values are in place. C#'s `with` expression cannot do this.
+[Why `with` is closed to callers](#why-with-is-closed-to-callers) explains why that matters. `With` also makes value
+objects easy to test. To build a test case, copy a valid value and change one property.
 
-The base method makes the copy and the twin's constructor validates it. That is the same constructor
-`ToValid()` uses. `With` is virtual, so code that only knows about `Money` still ends up in the twin's
-override when it is handed a twin:
+The base method makes the copy, and the twin's constructor validates the copy. `ToValid()` uses the same constructor.
+`With` is virtual. So code that only knows `Money` still calls the twin's override when it receives a twin:
 
 ```csharp
 static Money Discount(Money money) => money.With(amount: money.Amount - 100);
@@ -527,18 +553,18 @@ static Money Discount(Money money) => money.With(amount: money.Amount - 100);
 Discount(valid);   // throws: the discounted twin would not be valid
 ```
 
-A few details:
+Details:
 
-- The parameters are `Optional<T>`, a small struct in `DDDToolkit.BaseTypes` that tells "not given"
-  apart from "given as `null`". An ordinary optional parameter cannot, and a nullable property needs
-  both. A value converts to it implicitly, so you never write the type.
-- `With` covers the properties that have a setter and are not `[Internal]`. Computed properties are
-  not parameters.
-- `With` is marked `[Internal]`, and `[GraphQLIgnore]` when HotChocolate is referenced. HotChocolate
-  otherwise publishes public methods as fields, and it cannot turn `Optional<T>` into an input type,
-  so the whole schema would fail to build.
-- If the value object declares a member named `With` itself, nothing is generated, so an existing
-  method keeps working.
+- The parameters are `Optional<T>`, a small struct in `DDDToolkit.BaseTypes`. It tells "not given" apart from "given
+  as `null`". An ordinary optional parameter cannot tell the two apart, and a nullable property needs both. A value
+  converts to `Optional<T>` implicitly, so you never write the type.
+- `With` has a parameter for each property that has a setter and is not `[Internal]`. Computed properties have no
+  parameter.
+- `With` is marked `[Internal]`, and `[GraphQLIgnore]` when the project references HotChocolate. Without
+  `[GraphQLIgnore]`, HotChocolate publishes public methods as fields. HotChocolate cannot turn `Optional<T>` into an
+  input type, so the schema would fail to build.
+- If the value object declares a member named `With`, the generator writes no `With`. An existing method keeps
+  working.
 
 ### Why `with` is closed to callers
 
@@ -548,52 +574,49 @@ A record comes with `with`, which copies a value and changes some of its propert
 var moved = address with { City = "Utrecht" };
 ```
 
-For a value object that is exactly the operation you want. It is also a way to create a value that
-never went past anything that checks it. That is why properties are `protected init`: `with` only
-compiles inside the value object and its twin, and everybody else uses `With(...)`. This section
-explains why neither leaving `with` open nor adding a check to it works. You do not need it to use
-the toolkit; it is here for the reader who wonders why the obvious design was not chosen.
+For a value object, `with` is the right operation. It is also a way to create a value that no check has seen. So the
+properties are `protected init`. With `protected init`, `with` compiles only inside the value object and its twin.
+Other code uses `With(...)`. This section explains why the toolkit neither leaves `with` open nor adds a check to it.
+You do not need this section to use the toolkit.
 
 #### What `with` does, step by step
 
 `money with { Amount = -1 }` compiles to three steps:
 
-1. **Clone.** The record's hidden, compiler-generated clone method is called. It is virtual, so the
-   copy has the *runtime* type of `money`, whatever the type of the variable.
-2. **Copy constructor.** The clone method runs the copy constructor, which copies every field from
-   the original.
-3. **Init accessors.** Only now are the new values assigned, one property at a time, in the order
-   they are written between the braces.
+1. **Clone.** The code calls the record's hidden clone method, which the compiler generates. The method is virtual,
+   so the copy has the *runtime* type of `money`, whatever the type of the variable.
+2. **Copy constructor.** The clone method runs the copy constructor, which copies every field of the original.
+3. **Init accessors.** The new values are assigned now, one property at a time, in the order they are written between
+   the braces.
 
-Nothing of yours runs after step 3. C# has no hook for "the `with` expression is done", so no code
-can look at the finished copy before the caller gets it.
+No code of yours runs after step 3. C# has no hook for "the `with` expression is done", so no code can check the
+finished copy before the caller gets it.
 
-#### On a plain value object this is harmless
+#### `with` on a plain value object
 
-The copy constructor of `ValueObject` clears the cached verdict. A copy made by `with` has never been
-judged, and the first time something reads `IsValid` or `ValidationErrors`, or calls `ToValid()`,
-the rules run on its new contents:
+The copy constructor of `ValueObject` clears the cached result of validation. So a copy made by `with` has not been
+validated. The first time code reads `IsValid` or `ValidationErrors`, or calls `ToValid()`, the rules run on the
+copy's new contents:
 
 ```csharp
 var copy = money with { Amount = -1 };   // inside the type, where it is allowed
 copy.IsValid;                            // false: judged afresh
 ```
 
-A `Money` is allowed to be invalid; that is what `IsValid` is for. So `with` on the plain type does
-not lie to anyone.
+A `Money` may be invalid, and `IsValid` reports it. So `with` on the plain type misleads no one.
 
-#### On the always-valid twin it breaks the one promise the twin makes
+#### `with` on the always-valid twin
 
-A `ValidMoney` exists to say "this was checked" in a signature, so the code that receives it does not
-check again. `with` on a twin produces another twin, holding whatever values were put in:
+A `ValidMoney` says "this value was checked" in a signature, so the code that receives it does not check again.
+`with` on a twin produces another twin, holding whatever values were assigned:
 
 ```csharp
 ValidMoney valid = money.ToValid();
 var copy = valid with { Amount = -1 };   // a ValidMoney and IAlwaysValid, with Amount -1
 ```
 
-This does not only happen when someone writes `with` on a `ValidMoney` on purpose. Step 1 above
-copies the runtime type, so ordinary code that knows nothing about twins does it too:
+This also happens when nobody writes `with` on a `ValidMoney`. Step 1 above copies the runtime type, so ordinary code
+that knows nothing about twins makes such a copy too:
 
 ```csharp
 static Money Discount(Money money) => money with { Amount = money.Amount - 100 };
@@ -601,49 +624,50 @@ static Money Discount(Money money) => money with { Amount = money.Amount - 100 }
 var result = Discount(valid);   // a ValidMoney, holding -90
 ```
 
-Passing a twin where a `Money` is expected is normal, because it *is* a `Money`. The code in
-`Discount` is reasonable, and yet `result is ValidMoney` is true for a value that is not valid.
-`result.IsValid` does say `false`, since the verdict was cleared, but code that trusts the type never
-asks.
+Passing a twin where code expects a `Money` is normal, because a twin is a `Money`. The code in `Discount` is
+reasonable. Yet `result is ValidMoney` is true for a value that is not valid. `result.IsValid` returns `false`,
+because the copy constructor cleared the cached result. But code that trusts the type does not ask.
 
-#### Why the copy cannot be checked at the `with`
+#### Why `with` cannot check the copy
 
-- **In the copy constructor:** too early. It runs in step 2, before the new values arrive, so it sees
-  the old, valid values.
-- **In each init accessor:** these see half-changed objects. `with { Amount = 5, Currency = "USD" }`
-  sets `Amount` while `Currency` still holds the old value, and a rule about the pair, such as "this
-  amount is allowed in this currency", would fail on a combination nobody asked for.
-- **Throwing from the twin's copy constructor, always:** that makes every `with` on a twin fail,
-  including `Discount` above when its result is perfectly valid.
-- **Checking later, when a property of the copy is first read:** possible, but the exception is then
-  thrown wherever the copy happens to be used, which can be far from the line that made it. The
-  stack trace points at the reader, not at the cause.
-- **Protecting only the twin**, by declaring its properties again as `protected init`: that stops
-  `valid with { ... }`, but not `Discount`, which goes through `Money`'s own properties.
+Each place where a check could run has a problem:
 
-None of these is acceptable for a type whose job is to be trustworthy, so the toolkit makes the
-situation impossible instead. With `protected init`, `with` only compiles inside the value object and
-its twin:
+- **In the copy constructor.** This is too early. The copy constructor runs in step 2, before the new values arrive,
+  so it sees the old, valid values.
+- **In each init accessor.** An accessor sees a half-changed object. `with { Amount = 5, Currency = "USD" }` sets
+  `Amount` while `Currency` still holds the old value. A rule about the pair, such as "this amount is allowed in this
+  currency", would fail on a combination nobody asked for.
+- **An exception from the twin's copy constructor, always.** Then every `with` on a twin fails, including `Discount`
+  above when its result is valid.
+- **A check later, when code first reads a property of the copy.** This is possible, but the exception is then thrown
+  wherever the copy is used, which can be far from the line that made it. The stack trace points at the code that
+  reads the copy instead of the code that made it.
+- **Protection on the twin only**, by declaring its properties again as `protected init`. That stops
+  `valid with { ... }`. It does not stop `Discount`, which goes through `Money`'s properties.
+
+None of these is acceptable for a type that must be trustworthy. So the toolkit makes the situation impossible. With
+`protected init`, `with` compiles only inside the value object and its twin:
 
 ```csharp
 money with { Amount = -1 };   // outside the type: CS0272, the init accessor is inaccessible
 ```
 
-The generated code of the value object and its twin still uses `with`. That code is written to
-check what it produces, and `With(...)` is how everybody else gets the same operation with the check
-included.
+The generated code of the value object and its twin still uses `with`. That code checks what it produces.
+`With(...)` gives all other code the same operation, with the check included.
 
 ## Positional records
 
-A positional record turns each parameter into a property, and that property is always `public init`.
-C# has no syntax to ask for anything else. Left as it is, it would open `with` to every caller again.
+A positional record turns each parameter into a property, and that property is always `public init`. C# has no syntax
+for another accessor. Left as it is, the property would open `with` to every caller again.
 
-C# has one way around it. When a property with a parameter's name is declared anywhere in the
-record, in any of its partial parts, the compiler does not synthesize one for that parameter. The
-generator uses that: it declares each positional property itself, as `protected init`, with an
-initializer that reads the parameter. For `record Money(decimal Amount, string Currency)`:
+C# has one way around this. When any partial part of the record declares a property with a parameter's name, the
+compiler does not create a property for that parameter. The generator uses this rule. It declares each positional
+property itself, as `protected init`, with an initializer that reads the parameter. For
+`record Money(decimal Amount, string Currency)`:
 
-```csharp title="Money.g.cs, shortened"
+**Money.g.cs, shortened**
+
+```csharp
 partial record Money : ValueObject, IValidatable<ValidMoney>
 {
     [JsonInclude]
@@ -663,12 +687,13 @@ partial record Money : ValueObject, IValidatable<ValidMoney>
 }
 ```
 
-`= Amount` reads the constructor parameter, not the property, so the primary constructor still fills
-the properties. The parameterless constructor chains to the primary one, because in a positional
-record every other constructor has to. `[JsonInclude]` is there because System.Text.Json cannot reach a
-`protected init` on its own: without it the value would deserialize as its defaults, and a value
-object in a domain event would come out of the outbox empty. It is left out when the project does
-not reference System.Text.Json, and not repeated when the parameter already carries it.
+- `= Amount` reads the constructor parameter. So the primary constructor still fills the properties.
+- The parameterless constructor chains to the primary constructor, because in a positional record every other
+  constructor must.
+- `[JsonInclude]` is there because System.Text.Json cannot set a `protected init` property by itself. Without it, the
+  value would deserialize with default values, and a value object in a domain event would come out of the outbox
+  empty. The generator leaves `[JsonInclude]` out when the project does not reference System.Text.Json, and does not
+  repeat it when the parameter already carries it.
 
 | What the positional record gives you | After generation |
 |---|---|
@@ -678,15 +703,13 @@ not reference System.Text.Json, and not repeated when the parameter already carr
 | `money with { Amount = 1 }` outside the type | does not compile (CS0272) |
 | `money.With(amount: 1)` | generated, see [`With`](#changing-a-value-with) |
 
-Attributes aimed at the property, such as `[property: DontCompare]`, only work while the compiler
-synthesizes the property. The generator copies them onto the property it declares, so they still
-apply. The compiler does not know that and warns that the attribute is ignored (CS0657). A
-suppressor in the toolkit removes that warning, but only when the attribute really did arrive on the
-property.
+Attributes aimed at the property, such as `[property: DontCompare]`, only work while the compiler creates the
+property. The generator copies them onto the property it declares, so they still apply. The compiler does not know
+this, and it warns that the attribute is ignored (CS0657). A suppressor in the toolkit removes that warning, but only
+when the attribute did arrive on the property.
 
-A property you declare yourself takes the place of the synthesized one, as it always does in a
-record, and the generator leaves it alone. Use that when a parameter needs something the generated
-declaration does not do:
+A property you declare yourself replaces the created one, as in any record, and the generator leaves it alone. Use
+this when a parameter needs something that the generated declaration does not do:
 
 ```csharp
 [ValueObject]
@@ -696,35 +719,34 @@ public partial record Money(decimal Amount, string Currency)
 }
 ```
 
-Such a property is checked like any other declared one, so it needs `protected init` too, and a
-`[property: ...]` attribute on its parameter is lost; the CS0657 warning then stays to tell you.
+The analyzer checks such a property like any other declared property, so it needs `protected init` too. A
+`[property: ...]` attribute on its parameter is lost, and the CS0657 warning stays to tell you.
 
 ## Hiding members
 
-`[Internal]` marks a member as infrastructure. It is excluded from equality, from Entity Framework
-mapping, from the Newtonsoft contract resolver and from the GraphQL schema.
+`[Internal]` marks a member as infrastructure. The toolkit leaves the member out of equality, the Entity Framework
+mapping, the Newtonsoft contract resolver and the GraphQL schema.
 
 ```csharp
 [Internal]
 public string CacheKey => $"{FirstName}:{LastName}";
 ```
 
-Use it for anything an outside observer should not see. `[DontCompare]` is narrower: the member stays
-visible and persisted, it simply does not take part in equality.
+Use `[Internal]` for anything an outside observer should not see. `[DontCompare]` does less. A `[DontCompare]` member
+stays visible and stored, and only equality ignores it.
 
 ## Entity Framework
 
-Everything above works without a database. Once you store value objects, reference
-`DDDToolkit.EntityFramework` and its generator adds the mapping:
+Everything above works without a database. To store value objects, reference `DDDToolkit.EntityFramework`. Its
+generator adds the mapping:
 
-- `[SingleValueObject<T>]` and identifiers get a generated `ValueConverter`, so an `EmailAddress` is
-  stored as a plain `string` column. `Add<Module>Converters` registers them all; see
-  [Entity Framework](entity-framework.md).
-- `[ValueObject]` records are annotated `[ComplexType]`, so their properties are stored inline in the
-  owning table rather than in a table of their own.
+- `[SingleValueObject<T>]` and identifiers get a generated `ValueConverter`, so an `EmailAddress` is stored as a plain
+  `string` column. `Add<Module>Converters` registers all the converters. See [Entity Framework](entity-framework.md).
+- `[ValueObject]` records get `[ComplexType]`, so their properties are stored as columns of the owning table. They get
+  no table of their own.
 
-A single value object can say how wide its column is. `ColumnLength` becomes `HaveMaxLength` in the
-generated configuration:
+A single value object can set the width of its column. `ColumnLength` becomes `HaveMaxLength` in the generated
+configuration:
 
 ```csharp
 [SingleValueObject<string>(ColumnLength: MaxLength)]
@@ -736,10 +758,12 @@ public partial record EmailAddress
 }
 ```
 
-The generator writes a converter into the record, for it and for its twin, and one registration per
-type in the project's `Add<Module>Converters`, where the length ends up:
+The generator writes a converter into the record, for the record and for its twin. It writes one registration per
+type into the project's `Add<Module>Converters`, and the length goes into that registration:
 
-```csharp title="EmailAddress.Converter.g.cs, shortened"
+**EmailAddress.Converter.g.cs, shortened**
+
+```csharp
 partial record EmailAddress
 {
     public sealed class EmailAddressConverter : ValueConverter<EmailAddress, string>
@@ -751,18 +775,22 @@ partial record EmailAddress
 }
 ```
 
-```csharp title="ConverterExtensions.g.cs, shortened"
+**ConverterExtensions.g.cs, shortened**
+
+```csharp
 modelConfigurationBuilder.Properties<EmailAddress>().HaveConversion<EmailAddress.EmailAddressConverter>().HaveMaxLength(255);
 modelConfigurationBuilder.DefaultTypeMapping<EmailAddress>().HasConversion<EmailAddress.EmailAddressConverter>().HasMaxLength(255);
 ```
 
-`ColumnLength` has no effect on validation and none at all without the Entity Framework package. A
-constant such as `MaxLength` lets a validation rule use the same number.
+`ColumnLength` has no effect on validation, and no effect at all without the Entity Framework package. A constant
+such as `MaxLength` lets a validation rule use the same number.
 
-A `[ValueObject]` gets no converter. Its generated part only carries the attribute that tells Entity
-Framework to store its properties as columns of the owner:
+A `[ValueObject]` gets no converter. Its generated part only carries the attribute that tells Entity Framework to
+store its properties as columns of the owner:
 
-```csharp title="PersonName.EntityFramework.g.cs"
+**PersonName.EntityFramework.g.cs**
+
+```csharp
 [ComplexType]
 partial record PersonName
 {
@@ -776,8 +804,8 @@ partial record ValidPersonName
 
 ## With FluentValidation
 
-If you write rules with FluentValidation, reference `DDDToolkit.FluentValidation` and write a value
-object's rules as a validator instead of a `Validate()` override:
+If you write rules with FluentValidation, reference `DDDToolkit.FluentValidation`. Write a value object's rules as a
+validator instead of a `Validate()` override:
 
 ```csharp
 [SingleValueObject<string>]
@@ -792,16 +820,14 @@ public partial record EmailAddress
 }
 ```
 
-The generator writes the rest, and `IsValid`, `TryToValid()` and the twin run your rules.
-`MustBeValid()` folds a value object into the validator you write for a request. See
-[FluentValidation](fluent-validation.md).
+The generator writes the rest. `IsValid`, `TryToValid()` and the twin run your rules. `MustBeValid()` adds a value
+object's rules to the validator you write for a request. See [FluentValidation](fluent-validation.md).
 
 ## Requirements
 
-The declaration must be a `partial record` that is not sealed. A class or struct carrying
-`[ValueObject]` or `[SingleValueObject<T>]` reports [DDD00001](diagnostics.md#ddd00001); a
-non-partial declaration reports [DDD00005](diagnostics.md#ddd00005).
+The declaration must be a `partial record` that is not sealed. A class or struct with `[ValueObject]` or
+`[SingleValueObject<T>]` reports [DDD00001](diagnostics.md#ddd00001). A sealed record reports
+[DDD00013](diagnostics.md#ddd00013). A declaration without `partial` reports [DDD00005](diagnostics.md#ddd00005).
 
-The properties of a `[ValueObject]` record you declare yourself must be `{ get; protected init; }`;
-the ones a [positional record](#positional-records) declares through its parameters are taken care
-of by the generator.
+The properties you declare on a `[ValueObject]` record must be `{ get; protected init; }`. The generator takes care of
+the properties that a [positional record](#positional-records) declares through its parameters.

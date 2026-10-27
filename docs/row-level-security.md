@@ -1,29 +1,29 @@
 # Row level security
 
-Postgres's row level security decides, for every query, which rows the caller gets to see and change,
-from policies on the tables. It does not apply to the tables' owner, and an application usually logs in
-as the owner, so the policies guard whatever else reaches the database and not the application.
-`DDDToolkit.EntityFramework.Postgres` changes that: every connection a context opens runs as the caller,
-so the policies decide what the application sees too. And the policies themselves can be written in C#,
-next to the aggregate they guard, as rules the generator turns into SQL when the code compiles.
+Postgres row level security (RLS) filters every query through policies on the tables. The policies decide which rows
+a caller may read and change. Postgres does not apply a table's policies to the table's owner. An application usually
+connects as the owner. So by default the policies hold back other clients, and never the application's queries.
 
-The policies are the last of three questions between a caller and a row: [How a request is
-checked](how-a-request-is-checked.md) puts this page beside the requirement a request states and the checks that hold
-the caller to it, in the order a request meets them.
+`DDDToolkit.EntityFramework.Postgres` changes this. Every connection that a context opens runs as the current caller,
+so the policies also apply to the application's queries. You can write the policies in C#, as rules next to the
+aggregate they guard. The generator turns each rule into SQL when the code compiles.
 
-This page is about Postgres, any Postgres. [Supabase](supabase.md#row-level-security-for-your-own-queries)
-has the same thing with Supabase's roles and `auth` functions, and its build writes the policies into
-`supabase/migrations` for you.
+The policies are the last of three checks between a caller and a row. [How a request is
+checked](how-a-request-is-checked.md) shows all three in the order a request meets them: the requirement that a
+request states, the checks that hold the caller to it, and the policies.
+
+This page covers any Postgres database. [Supabase](supabase.md#row-level-security-for-your-own-queries) works the
+same way with Supabase's roles and `auth` functions, and its build writes the policies into `supabase/migrations`.
 
 ## Install
 
 ```bash
 dotnet add package Temp.DDDToolkit.EntityFramework.Postgres --prerelease
-dotnet add package Temp.DDDToolkit.EntityFramework --prerelease            # the toolkit's own, which UseDDDToolkit is
+dotnet add package Temp.DDDToolkit.EntityFramework --prerelease            # contains UseDDDToolkit
 ```
 
-The package works on its own, for any context, and with the rest of the toolkit. The examples here use the
-toolkit, `DDDToolkit.EntityFramework`, as an application of the toolkit does.
+The package works alone, for any context, and with the rest of the toolkit. The examples on this page use the
+toolkit's `DDDToolkit.EntityFramework`, as an application built on the toolkit does.
 
 ## Running queries as the caller
 
@@ -36,49 +36,58 @@ builder.Services.AddDbContext<OrderingContext>((provider, options) => options
     .UseDDDToolkit(provider));
 ```
 
-The registration is all there is to switch on. `UseDDDToolkit`, the call that wires a context for the toolkit,
-puts the interceptor on every context on Postgres once row level security is registered, after the toolkit's
-own interceptors, so no context needs a call of its own and a module added later runs as its caller like the
-others ([`UseDDDToolkit`](entity-framework.md#usedddtoolkit)). A context whose provider is set later, further
-down the callback or in `OnConfiguring`, gets the interceptor as well, which passes it over at every use where it
-turns out not to be on Postgres.
+The `AddPostgresRowLevelSecurity()` registration is the only switch. `UseDDDToolkit` configures a context for the
+toolkit ([`UseDDDToolkit`](entity-framework.md#usedddtoolkit)). Once RLS is registered, `UseDDDToolkit` adds the
+RLS interceptor to every context on Postgres, after the toolkit's interceptors. So no context needs a call of its
+own, and a module that you add later also runs as its caller. A context whose provider is set later, further down the
+callback or in `OnConfiguring`, also gets the interceptor. At each use, the interceptor skips a context that turns out
+not to be on Postgres.
 
-Every time the context opens a connection, the interceptor sets a role and the caller's token claims on
-it, the way PostgREST does for each request, in one statement. Through a pooler that hands each
-transaction another server connection it sets them per transaction instead:
-[How the settings travel](#how-the-settings-travel).
-
-Two contexts take it otherwise. One without the toolkit, this package on its own, takes it with
-`options.UseNpgsql(connectionString).UsePostgresRowLevelSecurity(provider)`. One that should run as the role the
-application logged in as, while the others run as their caller, is configured with `UseDDDToolkitCore(provider)`,
-the toolkit's base alone, and the `Use...` calls of what else it wants: that call is the decision, and the
-[start-up check](#a-login-that-owns-nothing) takes it as meant. Such a context does what the login role may:
-where that role owns and holds nothing, as the start-up check `postgres.login-role-owns-nothing` holds a host to,
-the database refuses its first command, and it reads past the policies only where the login role owns the
-tables, in a host that skips that check with a reason. A chain written out as before,
-`UseDDDToolkit(provider).UsePostgresRowLevelSecurity(provider)`, still works and gives the interceptor once.
+Each time the context opens a connection, the interceptor sets a role and the caller's token claims on the
+connection, in one statement. PostgREST does the same for each request:
 
 ```sql
 SELECT set_config('role', 'authenticated', false), set_config('request.jwt.claims', '{"sub":"…"}', false), …
 ```
 
+A pooler that hands each transaction a different server connection needs the settings per transaction instead
+([Settings per connection or per transaction](#settings-per-connection-or-per-transaction)).
+
+Some contexts need a different call:
+
+- **A context without the toolkit** uses this package alone:
+  `options.UseNpgsql(connectionString).UsePostgresRowLevelSecurity(provider)`.
+- **A context that runs as the login role**, while the other contexts run as their caller, uses
+  `UseDDDToolkitCore(provider)` with the `Use...` calls of the other parts it needs. `UseDDDToolkitCore` adds only the
+  toolkit's base. The [start-up check](#a-login-that-owns-nothing) accepts this call as intended. The context can do
+  what the login role may do:
+  - Where the login role owns and holds nothing, as the start-up check `postgres.login-role-owns-nothing` requires,
+    the database refuses the context's first command.
+  - The context reads past the policies only where the login role owns the tables. That happens only in a host that
+    turns off that check with a reason.
+- **The older chain** `UseDDDToolkit(provider).UsePostgresRowLevelSecurity(provider)` still works, and adds the
+  interceptor once.
+
 | The caller | Runs as | `ddd.caller_id()` |
 |---|---|---|
-| A signed-in user | `authenticated`, with their token's claims; the role its [token role](#token-roles) is mapped to when the token carries one of its own | the user's id |
+| A signed-in user | `authenticated`, with the token's claims. When the token carries a role of its own, the role that its [token role](#token-roles) maps to. | the user's id |
 | A request without a user | `anon`, with the claims `{"role":"anon"}` | `null` |
-| The application's own work inside a scope, `Caller.SystemIn("projects")` | [`ddd_system_in`](#the-scoped-system-role), with the claims `{"role":"ddd_system_in","scope":"projects"}` | `null` |
-| No request at all: a hosted service of your own | `SystemRole`, or the role the application logged in as; nobody at all where the host [requires explicit callers](#fail-closed-callers), whose own pollers begin the system caller for their bookkeeping only | `null` |
-| Code inside `using (Callers.Begin(caller))` | that caller, whatever the request says | the caller's |
+| System work inside a scope, `Caller.SystemIn("projects")` | [`ddd_system_in`](#the-scoped-system-role), with the claims `{"role":"ddd_system_in","scope":"projects"}` | `null` |
+| No request, such as a hosted service of yours | `SystemRole`, or else the role the application logged in as. Where the host [requires explicit callers](#requiring-explicit-callers), there is no caller and the work fails. The toolkit's pollers start the system caller for their bookkeeping only. | `null` |
+| Code inside `using (Callers.Begin(caller))` | that caller, whatever the request says | the caller's id |
 
-The roles are PostgREST's by default; `AddPostgresRowLevelSecurity(options => ...)` changes them.
+The roles are PostgREST's by default. Change them with `AddPostgresRowLevelSecurity(options => ...)`.
 
-**Who is calling** is the toolkit's `Caller`, and an `ICallerAccessor` says which one it is at this
-moment. A host registers the accessor that knows its callers: `AddSupabaseJwtBearer` from
-`DDDToolkit.Auth.Supabase.AspNetCore` answers from the request, and `DDDToolkit.Auth.Supabase.AzureFunctions`
-from the invocation. Without one, the answer is whatever `Callers.Begin` made current, or the system
-outside any, which is what a worker service or a test wants. A caller comes from the claims of a
-validated token, `Callers.FromClaims(claims)`, or is made in code, `Caller.User(id)`, in which case the
-database sees its id and role and no other claims.
+**The current caller** is a toolkit `Caller`. An `ICallerAccessor` returns the current caller. A host registers the
+accessor that knows its callers:
+
+- `AddSupabaseJwtBearer` from `DDDToolkit.Auth.Supabase.AspNetCore` reads the caller from the request.
+- `DDDToolkit.Auth.Supabase.AzureFunctions` reads the caller from the function invocation.
+- Without an accessor, the caller is the one that `Callers.Begin` made current, or else the system. A worker
+  service or a test needs this.
+
+A caller comes from the claims of a validated token, with `Callers.FromClaims(claims)`, or you make it in code, with
+`Caller.User(id)`. For a caller made in code, the database sees its id and role and no other claims.
 
 ```csharp
 // a job queued on a user's behalf, with the claims of the token that queued it
@@ -88,39 +97,48 @@ using (Callers.Begin(Callers.FromClaims(job.Claims)))
 }
 ```
 
-`Callers.Begin` follows `await` and `Task.Run` the way an `AsyncLocal` does, and a caller begun in code
-wins over the request's. The same works the other way round, for a step a request takes on the
-application's behalf: `Callers.Begin(Caller.System)`.
+`Callers.Begin` flows across `await` and `Task.Run`, as an `AsyncLocal` does. A caller started in code wins over the
+request's caller. This also works the other way. A step that a request takes on the application's behalf starts
+`Callers.Begin(Caller.System)`.
 
-**Background work** runs as `SystemRole`, or, left unset, as the role the application logged in as,
-which as the owner sees every row. For an application that should not be able to see everything by
-accident, log in as a role of its own that may do nothing but switch roles, and set `SystemRole` to a
-role with `BYPASSRLS`. A query outside a request that nobody meant to run as the system then fails
-instead of seeing every row. Stricter still is a `SystemRole` that holds the toolkit's own tables and
-nothing else: see [A login that owns nothing](#a-login-that-owns-nothing). On Supabase that is the default:
-`AddSupabaseRowLevelSecurity` runs background work as `ddd_system`, which the exported access files make, unless
-the project's `SupabaseRowAccessRoles` says otherwise ([Supabase](supabase.md#privileges-forced-policies-and-the-bookkeeping-role)).
+**Background work** runs as `SystemRole`. When `SystemRole` is not set, background work runs as the role the
+application logged in as. That role is usually the owner, and the owner sees every row. To keep the application from
+seeing every row by accident:
 
-### How the settings travel
+1. Log in as a separate role that may only switch roles.
+2. Set `SystemRole` to a role with `BYPASSRLS`.
 
-The role, the claims and the [settings of your own](#settings-of-your-own) live on the server for as long
-as the host says, in `PostgresRowLevelSecurityOptions.Scope`. Nothing guesses it from the connection
-string:
+Then a query outside a request that was not meant to run as the system fails, and does not see every row. Stricter
+still is a `SystemRole` that holds only the toolkit's tables ([A login that owns nothing](#a-login-that-owns-nothing)).
+On Supabase this is the default. `AddSupabaseRowLevelSecurity` runs background work as `ddd_system`, a role that the
+exported access files make, unless the project's `SupabaseRowAccessRoles` names another role
+([Supabase](supabase.md#privileges-forced-policies-and-the-bookkeeping-role)).
 
-| Scope | They last | Right for |
+### Settings per connection or per transaction
+
+The role, the claims and the [custom settings](#custom-connection-settings) stay on the server for as long as
+`PostgresRowLevelSecurityOptions.Scope` says. The interceptor does not guess the scope from the connection string.
+
+| Scope | The settings last | Use it for |
 |---|---|---|
-| `Connection`, the default | as long as the connection is open | a direct connection, and a pooler that keeps one server connection per client connection, such as Supabase's session pooler |
-| `Transaction` | one transaction | a pooler that hands each transaction whichever server connection is free: PgBouncer in transaction mode, Supabase's transaction pooler |
+| `Connection`, the default | as long as the connection is open | a direct connection, or a pooler that keeps one server connection per client connection, such as Supabase's session pooler |
+| `Transaction` | one transaction | a pooler that hands each transaction any free server connection, such as PgBouncer in transaction mode or Supabase's transaction pooler |
 
-**Per connection.** The settings are set on the connection when a context opens it, because Entity
-Framework opens a connection for each query outside a transaction, and cost one round trip each time.
-Npgsql clears them with `DISCARD ALL` before the pooled connection is used again. Three ways of
-connecting would let them reach somebody else, and the interceptor refuses them before connecting:
-`No Reset On Close`, which skips that reset; `Multiplexing`, which shares a connection between callers at
-once; and Supabase's transaction pooler on port 6543, which hands each transaction whichever server
-connection is free. When the statement fails, a role the login role may not switch to for one, the
-connection is closed with it, and the next query opens it and tries again rather than running as the
-login role.
+#### Connection scope
+
+- The interceptor sets the settings when a context opens the connection. Entity Framework opens a connection for
+  each query outside a transaction, so each opened connection costs one round trip.
+- Npgsql clears the settings with `DISCARD ALL` before a pooled connection is used again.
+- Three connection options would let the settings reach another caller. The interceptor refuses them before it
+  connects:
+  - `No Reset On Close`, which skips the reset.
+  - `Multiplexing`, which shares one connection between several callers at the same time.
+  - Supabase's transaction pooler, a `*.pooler.supabase.com` host on port 6543. It hands each transaction any free
+    server connection.
+- When the statement fails, for example because the login role may not switch to the role, the interceptor closes
+  the connection. The next query opens the connection and tries again. The query never runs as the login role.
+
+In the diagram, the purple band is the one statement that sets the caller:
 
 ```mermaid
 sequenceDiagram
@@ -128,14 +146,16 @@ sequenceDiagram
     participant Interceptor
     participant Postgres
     Context->>Interceptor: opens a connection
-    Interceptor->>Postgres: one statement, for the session, with the role, the claims and the settings
+    rect rgba(91, 46, 201, 0.15)
+    Interceptor->>Postgres: one statement with the role,<br/>the claims and the settings
+    end
     Context->>Postgres: a query
-    Context->>Postgres: SaveChanges, in a transaction when it needs one
+    Context->>Postgres: SaveChanges, in a transaction<br/>when it needs one
     Context->>Interceptor: begins a transaction
-    Note over Interceptor: the connection carries this caller already, so nothing is sent
+    Note over Interceptor: the connection has this caller,<br/>so nothing is sent
     Context->>Postgres: BEGIN, queries and saves, COMMIT
     Context->>Postgres: closes the connection
-    Note over Postgres: the pool's reset takes everything off
+    Note over Postgres: the pool's reset clears the settings
 ```
 
 <details>
@@ -152,23 +172,27 @@ builder.Services.AddPostgresRowLevelSecurity();   // Scope is RowLevelSecuritySc
 
 </details>
 
-**Per transaction.** A transaction pooler gives a client a server connection for one transaction and then
-hands it to the next client as it is, so a setting made for a session reaches whoever comes next. In
-`Transaction` scope nothing is ever set for a session:
+#### Transaction scope
 
-- **A command outside a transaction** gets `RESET ROLE; CALL "ddd".use_caller(@role, @claims, @names, @values);`
-  written in front of its text. Npgsql sends both together and Postgres runs them as one transaction, so
-  the settings apply to that command and end with it, at no round trip. The reset takes off a role some
-  other client left on the server connection, so that the call is always made by the role the application
-  logged in as.
-- **A transaction** a context begins, or is handed with `UseTransaction`, gets the settings once, as its
-  first statement, `SELECT set_config('role', $1, true), …`, and so does a `TransactionScope` the
-  connection is enlisted in. From there on the transaction runs as that one caller.
-- **A save always runs in a transaction.** The commands of a save cannot carry the call in front: Entity
-  Framework reads how many rows each statement changed, in order, and would take a save for a concurrency
-  conflict after it was written. So the interceptor sets the context's `AutoTransactionBehavior` to
-  `Always` before every save, whatever it was, and leaves it there.
+A transaction pooler gives a client a server connection for one transaction. Then it hands that server connection
+to the next client unchanged. So a setting made for a session would reach the next client. In `Transaction` scope
+the interceptor never sets anything for a session:
+
+- **A command outside a transaction** gets
+  `RESET ROLE; CALL "ddd".use_caller(@__ddd_role, @__ddd_claims, @__ddd_names, @__ddd_values);` in front of its text.
+  Npgsql sends both together, and Postgres runs them as one transaction. So the settings apply to that command and
+  end with it, with no extra round trip. `RESET ROLE` removes any role that another client left on the server
+  connection. So the role the application logged in as always makes the call.
+- **A transaction** that a context begins, or receives with `UseTransaction`, gets the settings once, as its first
+  statement: `SELECT set_config('role', $1, true), …`. A `TransactionScope` that the connection is enlisted in gets
+  the same. The transaction then runs as that caller until it ends.
+- **A save always runs in a transaction.** The commands of a save cannot carry the call in front. Entity Framework
+  reads how many rows each statement changed, in order. With the call in front, it would read a save that was
+  written as a concurrency conflict. So before every save, the interceptor sets the context's
+  `AutoTransactionBehavior` to `Always`, whatever the value was, and leaves it there.
 - **Opening a connection** sends nothing.
+
+In the diagram, the purple bands are the statements that set the caller:
 
 ```mermaid
 sequenceDiagram
@@ -179,16 +203,22 @@ sequenceDiagram
     Context->>Interceptor: opens a connection
     Note over Interceptor: nothing is sent
     Context->>Interceptor: a query, outside<br/>a transaction
+    rect rgba(91, 46, 201, 0.15)
     Interceptor->>Pooler: the call and the query,<br/>in one round trip
-    Pooler->>Postgres: one transaction, on<br/>whichever server<br/>connection is free
+    end
+    Pooler->>Postgres: one transaction, on<br/>any free server connection
     Note over Postgres: the settings end<br/>with the transaction
     Context->>Interceptor: SaveChanges
-    Note over Interceptor: this save runs<br/>in a transaction
+    Note over Interceptor: the save runs<br/>in a transaction
     Context->>Pooler: BEGIN
+    rect rgba(91, 46, 201, 0.15)
     Interceptor->>Postgres: the role, the claims and the<br/>settings, for this transaction
+    end
     Context->>Postgres: the commands of the save, COMMIT
     Context->>Interceptor: begins a transaction<br/>of its own
+    rect rgba(91, 46, 201, 0.15)
     Interceptor->>Postgres: the same statement, once
+    end
     Context->>Postgres: queries and saves, COMMIT
 ```
 
@@ -211,82 +241,91 @@ grant execute on procedure ddd.use_caller(text, text, text[], text[]) to app;
 
 </details>
 
-What the scope asks of an application:
+What `Transaction` scope needs from an application:
 
-- **The procedure `ddd.use_caller`.** `PostgresRowAccess.SetupScript()` makes it, and so does every script
-  of policies and every exported access file, so a database that has the policies has it. It runs as its
-  caller and is taken from `PUBLIC`: only the role the application logs in as may call it, since whoever
-  could call it could say who they are. A login role that did not run the script needs the two grants
+- **The procedure `ddd.use_caller`.** `PostgresRowAccess.SetupScript()` makes it. Every script of policies and every
+  exported access file also makes it, so a database with the policies has the procedure. The procedure runs as its
+  caller, and its `EXECUTE` privilege is revoked from `PUBLIC`. Only the role the application logs in as may call it,
+  because anyone who can call it can say who they are. A login role that did not run the script needs the two grants
   above.
-- **Named parameters.** Entity Framework names every parameter. A command built by hand with a positional
-  one, `$1`, is refused outside a transaction: it cannot be mixed with the caller's.
-- **No transaction control and no role in SQL of your own.** A command is refused when one of its
-  statements begins with `BEGIN`, `START TRANSACTION`, `COMMIT`, `END`, `ROLLBACK`, `ABORT`,
-  `PREPARE TRANSACTION`, `SET ROLE`, `RESET ROLE`, `SET SESSION AUTHORIZATION`,
-  `RESET SESSION AUTHORIZATION`, `RESET ALL` or `DISCARD`: it would end the transaction the settings live
-  in, or change the role itself, and every statement after it would run as the login role. Only the first
-  words of a statement count, so `CASE … END` is fine, and so are savepoints, `ROLLBACK TO` included.
-  Begin, commit and roll back through the context. This catches a mistake, not an attack: a statement can
-  hide the same in a function it calls.
-- **Through the pooler,** `No Reset On Close=true`, since the reset Npgsql sends before a connection is
-  used again is a session's, and a transaction pooler would run it on whichever server connection is
-  free, and `Max Auto Prepare=0`, since a prepared statement lives on one server connection. Both are
-  allowed in this scope; `Multiplexing` is still refused. Run migrations, and statements that cannot run
-  inside a transaction, through a session pooler or a direct connection.
-- **Transactions the context knows about.** A transaction begun on the connection itself and never handed
-  to the context is one neither Entity Framework nor the interceptor can see: a command the context sends
-  inside it carries the call, and the rest of that transaction then runs as that caller.
+- **Named parameters.** Entity Framework names every parameter. Outside a transaction, the interceptor refuses a
+  command that has a parameter without a name, such as a command built by hand with `$1`. Such a parameter cannot be
+  mixed with the caller's parameters.
+- **No transaction control and no role changes in your SQL.** The interceptor refuses a command when one of its
+  statements begins with `BEGIN`, `START TRANSACTION`, `COMMIT`, `END`, `ROLLBACK`, `ABORT`, `PREPARE TRANSACTION`,
+  `SET ROLE`, `RESET ROLE`, `SET SESSION AUTHORIZATION`, `RESET SESSION AUTHORIZATION`, `RESET ALL` or `DISCARD`.
+  Such a statement would end the transaction that holds the settings, or change the role. Every later statement
+  would then run as the login role.
+  - Only the first words of a statement count. So `CASE … END` passes, and so do savepoints, including
+    `ROLLBACK TO`.
+  - Begin, commit and roll back through the context.
+  - This check catches mistakes. It does not stop an attack, because a statement can do the same inside a function
+    it calls.
+- **Two connection string options for the pooler.**
+  - Set `No Reset On Close=true`. Npgsql's reset before reusing a connection is for a session, and a transaction
+    pooler would run it on any free server connection.
+  - Set `Max Auto Prepare=0`. A prepared statement lives on one server connection.
+  - This scope allows both options. `Multiplexing` is still refused.
+  - Run migrations, and statements that cannot run inside a transaction, through a session pooler or a direct
+    connection.
+- **Transactions that the context knows about.** Neither Entity Framework nor the interceptor sees a transaction that
+  was begun on the connection and never handed to the context. A command that the context sends inside such a
+  transaction carries the call. The rest of that transaction then runs as that caller.
 
-When a statement that sets the caller fails in this scope, nothing is left half set: a command outside a
-transaction fails with its call, in the same round trip, and a transaction whose first statement failed
-is rolled back and never handed to the context.
+When a statement that sets the caller fails in this scope, no setting is left half done:
 
-In both scopes the statement empties `request.jwt.claim.sub`, `request.jwt.claim.role`,
-`request.jwt.claim.email` and `request.jwt.claim`. Supabase's `auth.uid()`, `auth.role()`, `auth.email()`
-and `auth.jwt()` read those before the claims, so a value that something else left on the server
-connection, a pooler that does not reset it for one, would otherwise decide who the statement runs as.
+- A command outside a transaction fails together with its call, in the same round trip.
+- A transaction whose first statement failed is rolled back, and is never handed to the context.
 
-### Fail-closed callers
+In both scopes, the statement empties `request.jwt.claim.sub`, `request.jwt.claim.role`, `request.jwt.claim.email`
+and `request.jwt.claim`. Supabase's `auth.uid()`, `auth.role()`, `auth.email()` and `auth.jwt()` read those
+settings before the claims. Without this step, a value that something else left on the server connection, such as a
+pooler that does not reset it, would decide who the statement runs as.
 
-Outside a request and outside any caller, the answer is the system, which on most databases is the
-tables' owner, past every policy. That is what a 3.x host gets, and it means work that nobody said
-anything about runs with the application's whole power. On Supabase the system runs as `ddd_system`
-unless the project says otherwise, which reaches the toolkit's bookkeeping alone, so there such work is
-refused on a module's tables rather than let past them. A host that would rather have such work fail
-everywhere, before it reaches the database, says so once:
+### Requiring explicit callers
+
+Outside a request and outside any caller, the current caller is the system. On most databases the system runs as
+the tables' owner, which passes every policy. A 3.x host gets this by default. So work that never states a caller
+runs as system work, and passes every policy. On Supabase the system runs as `ddd_system`, unless the project names
+another role. `ddd_system` reaches only the toolkit's bookkeeping tables, so on Supabase the database refuses such
+work on a module's tables. A host that wants such work to fail everywhere, before it reaches the database, adds one
+line:
 
 ```csharp
 builder.Services.RequireExplicitCallers();
 ```
 
-Then an accessor that knows no caller throws `NoCallerException` instead of answering the system, so
-the first query of work that never said who it runs as fails before it connects. `AmbientCallerAccessor`,
-the Supabase accessor for ASP.NET Core outside a request, and `GetSupabaseCaller()` in Azure Functions
-outside an HTTP trigger all do. An accessor of your own that answers the system by itself is refused by
-the interceptor all the same: the system is the caller only inside `Callers.Begin(Caller.System)`. A
-request still has its caller: its user, or `anon`.
+With this line:
 
-The toolkit's own work says who it runs as. Reading, marking and deleting outbox rows, receiving from a
-transport, checking the migrations and preparing a sample's database are the application's own
-bookkeeping, and run as `Caller.System`. The handlers it calls are not: they run with no caller, inside
-`Callers.BeginNone()`, until something begins one for them.
+- An accessor that knows no caller throws `NoCallerException` and does not return the system. So the first query of
+  work that never stated its caller fails before it connects. `AmbientCallerAccessor`, the Supabase accessor for
+  ASP.NET Core outside a request, and `GetSupabaseCaller()` in Azure Functions outside an HTTP trigger all throw.
+- The interceptor refuses the system caller when your own accessor returns it by itself. The system is the caller
+  only inside `Callers.Begin(Caller.System)`.
+- A request still has its caller: its user, or `anon`.
+
+The toolkit's own work states its caller. Reading, marking and deleting outbox rows, receiving from a transport,
+checking the migrations and preparing a sample's database are bookkeeping. They run as `Caller.System`. The handlers
+that this work calls run with no caller, inside `Callers.BeginNone()`, until something starts a caller for them.
 
 | Work | Without `RequireExplicitCallers` | With it |
 |---|---|---|
-| The outbox processor's, retention's and a transport's bookkeeping | whoever is current, the system outside any caller | `Caller.System` |
-| Turning an event into the contract it is published as, and a sink of your own | whoever is current | `Caller.System`, with the bookkeeping: read only what the event's own module publishes |
-| A module's integration event handlers, their inbox read and save | what the module's [scopes](integration-events.md#who-the-handlers-run-as) begin, or whoever is current when it has none | what the module's scopes begin; a module with none does not run them |
-| A domain event handler the outbox dispatches in process | whoever is current | nobody: it begins its own caller, or its first query throws |
+| The bookkeeping of the outbox processor, of retention and of a transport | the current caller, or the system outside any caller | `Caller.System` |
+| Turning an event into the contract it is published as, and a sink of yours | the current caller | `Caller.System`, with the bookkeeping. It reads only what the event's module publishes. |
+| A module's integration event handlers, with their inbox read and save | the caller that the module's [scopes](integration-events.md#who-the-handlers-run-as) start, or the current caller when the module has no scopes | the caller that the module's scopes start. A module without scopes does not run its handlers. |
+| A domain event handler that the outbox dispatches in process | the current caller | no caller. The handler starts its own caller, or its first query throws. |
 | The start-up migrations check | `Caller.System` | `Caller.System` |
 
-A domain event handler dispatched in process saves its own work. A change it leaves unsaved on the
-outbox processor's context would be saved with the processed mark, as the system, so with the option the
-message fails instead and the change is dropped. With `DeliverInTransaction` the processor's context holds
-a transaction begun as the system, so such a handler works on a context of its own; a transaction you
-begin on the processor's context yourself is joined, and has to be begun as the system too.
+A domain event handler that the outbox dispatches in process saves its own work:
 
-A module says what its handlers run as where it registers them, with a scope around each delivery:
-a scoped system caller its policies hold, or, written down on purpose, the system itself.
+- The handler may leave a change unsaved on the outbox processor's context. That change would be saved with the
+  processed mark, as the system. With `RequireExplicitCallers`, the message fails instead, and the change is dropped.
+- With `DeliverInTransaction`, the processor's context holds a transaction begun as the system. So such a handler
+  works on a separate context.
+- A transaction that you begin on the processor's context yourself is joined. Begin it as the system too.
+
+A module states what its handlers run as where it registers them, with a scope around each delivery. The scope is a
+scoped system caller that the module's policies hold, or, chosen on purpose, the system itself:
 
 ```csharp
 services.AddModuleIntegrationEvents<ShippingContext>(module => module
@@ -299,32 +338,41 @@ services.AddModuleIntegrationEvents<ShippingContext>(module => module
     .Handle<OrderPlacedV1, BookShipment>());
 ```
 
-A caller that leaked into a request, begun by middleware that forgot to end it, would win over the
-request's own. `context.GetSupabaseCaller()` is the request's caller whatever is ambient, so a host can make
-it current at the start of every request: `using (Callers.Begin(context.GetSupabaseCaller()))`.
+Middleware that starts a caller and forgets to end it leaks that caller into the next request, and the leaked caller
+wins over the request's caller. `context.GetSupabaseCaller()` returns the request's caller, whatever the ambient
+caller is. So a host can make that caller current at the start of every request:
+`using (Callers.Begin(context.GetSupabaseCaller()))`.
 
 ### Token roles
 
-A token says which role it is for, in its `role` claim. PostgREST switches to whatever role that claim
-names. The interceptor does not: the claim picks the database role only through a list the host wrote, so
-a token that names the system's role, the login role or any other role the database happens to have runs
-as none of them.
+A token names its role in its `role` claim. PostgREST switches to whatever role that claim names. The interceptor
+maps the claim to a database role only through a list that the host writes. So a token that names the system's role,
+the login role, or any other role in the database never runs as that role.
+
+The interceptor checks the rows of this table from top to bottom:
 
 | The token's `role` claim | Runs as |
 |---|---|
-| `authenticated`, or no claim at all | `UserRole`, with the token's claims |
-| a role in `TokenRoles` | the role it is mapped to, with the token's claims |
-| `UserRole` or `AnonymousRole` by its own name, or `anon` | that role, with the token's claims |
-| anything else | nothing: the caller is refused with `access.role-not-allowed` |
+| an entry in `TokenRoles` | the role that the entry maps to, with the token's claims |
+| `authenticated`, `UserRole` by its name, or no claim | `UserRole`, with the token's claims |
+| `anon`, or `AnonymousRole` by its name | `AnonymousRole`, with the token's claims |
+| anything else | no role. The caller is refused with `access.role-not-allowed`. |
 
-The refusal is a `RefusalException` of the kind "not permitted", `ToolkitRefusals.RoleNotAllowed`, whose
-argument `Role` is the role the token carried. It is thrown before the context connects, and before the
-next command when the caller changed on an open connection, so no statement runs for that caller as any
-role. An edge answers it like any other refusal, usually with a 403. A role is matched as the token spells
-it, and a `role` claim that is not text, a list of roles say, is a role on no list rather than no claim.
+`TokenRoles` comes first, so a map entry for `authenticated` or `anon` wins over the rows below it.
 
-A host whose identity provider gives some of its users a role of their own, analysts who look across every
-customer's tickets say, maps that role to a database role:
+The refusal for a role on no list:
+
+- It is a `RefusalException` of the kind "not permitted", `ToolkitRefusals.RoleNotAllowed`. Its argument `Role` is
+  the role in the token.
+- The interceptor throws it before the context connects. When the caller changes on an open connection, it throws
+  before the next command. So no statement runs for that caller, as any role.
+- An edge answers it like any other refusal, usually with a 403.
+- The interceptor matches a role as the token spells it.
+- A `role` claim that is JSON `null` counts as no claim. A `role` claim of another type that is not text, such as a
+  list of roles, counts as a role on no list.
+
+Some identity providers give some users a role of their own, for example analysts who read every customer's tickets.
+The host maps that role to a database role:
 
 ```csharp
 builder.Services.AddPostgresRowLevelSecurity(options =>
@@ -333,9 +381,9 @@ builder.Services.AddPostgresRowLevelSecurity(options =>
 });
 ```
 
-A user whose token carries `analyst` then runs as `desk_analyst`. The claims are still the token's own, so
-`ddd.caller_role()` answers `analyst` and `ddd.caller_id()` the user's id. A rule names the role by the
-token role, never by the database role, so no role name is baked into a compiled module:
+A user whose token carries `analyst` then runs as `desk_analyst`. The claims stay the token's claims, so
+`ddd.caller_role()` returns `analyst` and `ddd.caller_id()` returns the user's id. A rule names the token role, never
+the database role, so no database role name is compiled into a module:
 
 ```csharp
 public static class DeskRoles
@@ -350,33 +398,41 @@ public static partial class AnalystsReadEveryTicket
 }
 ```
 
-An attribute takes constants, which is what `TokenPrefix` is for; `RowAccessRoles.Token("analyst")` gives the
-same name where a call will do, in a contribution for one. A script resolves it through the roles it is
-written with, `RowAccessExport.Roles`, and `RowAccessRoleNames.From(options)` carries the map. A rule for a
-token role those roles do not map is refused when the script is written, naming the rule: its policy
-would be for a role no query runs as. The Supabase export takes the map from a
-[build property](supabase.md#roles-and-caller-functions-of-your-own).
+- An attribute takes only constants, so use `RowAccessRoles.TokenPrefix` there. Where a method call works, such as in
+  a contribution, `RowAccessRoles.Token("analyst")` returns the same name.
+- A script resolves the name through the roles it is written with, `RowAccessExport.Roles`.
+  `RowAccessRoleNames.From(options)` carries the map.
+- When those roles do not map the token role, the script refuses the rule when it is written, and names the rule. The
+  rule's policy would be for a role that no query runs as.
+- The Supabase export takes the map from a [build property](supabase.md#custom-roles-and-caller-functions).
 
-**The mapped role is held to its policies like the [scoped system role](#the-scoped-system-role).**
-`SetupScript(options)` makes it `NOLOGIN NOINHERIT` and grants it to the login role, and a script whose
-policies name it makes it where the database does not have it. Both fail when a role of that name exists
-that can log in, can bypass row level security or is a superuser, that has the privileges of a role that
-owns tables, or whose privileges the user's or the anonymous caller's role has. The scoped system role's
-own check takes the mapped roles in: none of them may have its privileges, or the holder of a token would
-do the application's own work. The options refuse a map to `SystemRole`, to the scoped system role or to
-`AnonymousRole` where they are registered. Like the other roles, a mapped role needs privileges on your
-tables before its policies let it near a row:
+#### Checks on a mapped role
+
+The mapped role is held to its policies, like the [scoped system role](#the-scoped-system-role).
+`SetupScript(options)` makes it `NOLOGIN NOINHERIT` and grants it to the login role. A script whose policies name the
+role creates it where the database does not have it. Both fail when a role of that name exists and one of these
+holds:
+
+- It can log in, it can bypass RLS, or it is a superuser.
+- It has the privileges of a role that owns tables.
+- The user's role or the anonymous caller's role has its privileges.
+
+The scoped system role's check includes the mapped roles. No mapped role may have the scoped system role's
+privileges, or the holder of a token would do system work. The options refuse a map to `SystemRole`, to
+the scoped system role or to `AnonymousRole`, where those roles are registered.
+
+Like the other roles, a mapped role needs privileges on your tables before its policies let it reach a row:
 
 ```sql
 grant usage on schema desk to desk_analyst;
 grant select on all tables in schema desk to desk_analyst;
 ```
 
-**A mapped role is kept apart from the other callers in both directions.** The user's and the anonymous
-caller's role may not have its privileges, and it may not have theirs. Both scripts fail for a mapped role
-that has the privileges of `UserRole` or `AnonymousRole`: the holder of an analyst's token would be a
-signed-in user as well, or an anonymous caller with an identity, and get every policy and every privilege
-written for them.
+**A mapped role is kept apart from the other callers in both directions.** The user's role and the anonymous
+caller's role may not have its privileges, and the mapped role may not have theirs. Both scripts fail for a mapped
+role that has the privileges of `UserRole` or `AnonymousRole`. Otherwise the holder of an analyst's token would also
+be a signed-in user, or an anonymous caller with an identity. That holder would get every policy and every
+privilege written for those callers.
 
 ```sql
 grant authenticated to desk_analyst with inherit true;   -- Postgres 16 and later
@@ -387,97 +443,98 @@ grant authenticated to desk_analyst with inherit true;   -- Postgres 16 and late
 revoke authenticated from desk_analyst;
 ```
 
-What analysts share with signed-in users is said by the rules instead: a rule for both names both,
-`To = [RowAccessRoles.User, DeskRoles.Analyst]`, and each role is given its own privileges. What counts is
-having the privileges, which is what `pg_has_role(..., 'USAGE')` answers: a membership that hands nothing
-on, `with inherit false`, is not refused. Before Postgres 16 a grant has no such option and the role's own
-`INHERIT` decides for all of its memberships, so there the check fails for a mapped role somebody made
-`INHERIT` and granted one of the two, and not for the `NOINHERIT` one the scripts make.
+To give analysts what signed-in users get, write it in the rules. A rule for both names both roles,
+`To = [RowAccessRoles.User, DeskRoles.Analyst]`, and each role gets its own privileges.
 
-A token role may also be mapped to `UserRole` itself, for a provider that calls its signed-in users
-`member`: it is then that role, and nothing is made or checked for it.
+The check looks at whether a role has the privileges, which `pg_has_role(..., 'USAGE')` returns. A role grant that
+passes nothing on, `with inherit false`, is not refused. Before Postgres 16 a role grant has no such option, and the
+role's `INHERIT` attribute decides for all the roles granted to it. So before Postgres 16 the check fails for a
+mapped role that someone made `INHERIT` and granted one of the two roles. It passes for the `NOINHERIT` role that the
+scripts make.
 
-**A role on no list.** `UnknownTokenRole.Refuse` is the default. With `UnknownTokenRole.Anonymous` such a
-caller runs as an anonymous one instead: `AnonymousRole`, with an anonymous caller's claims,
-`{"role":"anon"}`, so the database sees no user and `ddd.caller_id()` is `null`. A module's
-[settings](#settings-of-your-own) are asked for `Caller.Anonymous` too, so one made
-from the user's id or claims is what it is for a request without a user. In C# the caller is still the
-user the token names, so a rule asked in C# may allow what the policies then refuse. Choose it for a host
-that would rather show such a caller what everybody may see than refuse it.
+A token role may also map to `UserRole` itself, for a provider that calls its signed-in users `member`. Such a token
+then runs as `UserRole`, and nothing is made or checked for the mapping.
 
-The interceptor reads the roles once, when it is built: a change to the options afterwards reaches no
-connection.
+#### A role on no list
+
+`UnknownTokenRole.Refuse` is the default. With `UnknownTokenRole.Anonymous`, a caller whose role is on no list runs
+as an anonymous caller: `AnonymousRole`, with the claims `{"role":"anon"}`. The database sees no user, and
+`ddd.caller_id()` is `null`. The interceptor asks a module's [custom settings](#custom-connection-settings) for
+`Caller.Anonymous` too. So a setting derived from the user's id or claims gets the value for a request without a
+user. In C# the caller is still the user that the token names. So a rule checked in C# may allow what the policies
+then refuse. Choose this option for a host that prefers to show such a caller what everybody may see, instead of
+refusing the caller.
+
+The interceptor reads the roles once, when it is built. A later change to the options reaches no connection.
 
 > [!IMPORTANT]
-> A token whose role is neither `authenticated` nor one the host listed used to run as `UserRole`,
-> whatever it said. It is now refused. A host whose tokens carry a role of their own maps it in
-> `TokenRoles`, to `UserRole` where those users are ordinary signed-in users.
+> A token whose role was neither `authenticated` nor a role that the host listed used to run as `UserRole`. Such a
+> token is now refused. A host whose tokens carry a role of their own maps that role in `TokenRoles`, to `UserRole`
+> where those users are ordinary signed-in users.
 
 ### A caller that changes on an open connection
 
-A connection can stay open over more than one caller: one opened with `OpenConnection()`, or a
-transaction's. Before every command, and before a transaction begins, the interceptor works the role,
-the claims and the settings out again and compares them with what it set on the connection:
+A connection can stay open across several callers, for example a connection opened with `OpenConnection()`, or the
+connection of a transaction. Before every command, and before a transaction begins, the interceptor computes the
+role, the claims and the settings again. It compares them with what it set on the connection:
 
-- outside a transaction, a change is set first, with the same statement, which costs one round trip when
-  the caller changed and none when it did not;
-- inside a transaction, it is not set: a transaction runs as one caller, and a setting made inside it
-  would be undone by its rollback. With `RequireExplicitCallers` the command is refused with an
-  `InvalidOperationException` that names both callers; without it a warning is logged, once per
-  connection, and the transaction goes on as the caller it began with.
+- Outside a transaction, the interceptor sets a change first, with the same statement. This costs one round trip
+  when the caller changed, and none when it did not.
+- Inside a transaction, the interceptor does not set a change. A transaction runs as one caller, and a rollback
+  would undo a setting made inside it. With `RequireExplicitCallers`, the command is refused with an
+  `InvalidOperationException` that names both callers. Without it, a warning is logged once per connection, and the
+  transaction continues as the caller it began with.
 
-Begin the caller before the transaction, or run the other caller's work on a context of its own.
+Start the caller before the transaction, or run the other caller's work on a separate context.
 
-A connection opened inside a `TransactionScope` sets the caller inside that transaction. When the scope
-rolls back, the setting goes with it, and the interceptor sets the caller again before the connection's
-next command. A transaction you begin with SQL of your own, `BEGIN` in a command, is not one the
-interceptor sees, and neither is one begun on the connection itself and never handed to the context.
+A connection opened inside a `TransactionScope` sets the caller inside that transaction. When the scope rolls back,
+the setting is rolled back too. The interceptor then sets the caller again before the connection's next command.
+The interceptor does not see a transaction that your SQL begins with `BEGIN`. It also does not see a transaction
+that was begun on the connection and never handed to the context.
 
-Where the settings last one transaction, the same holds inside a transaction: the caller it began with is
-the caller it runs as, and a change is refused or logged. Outside one there is nothing to compare, since
-every command carries the caller there is when it is sent.
+In `Transaction` scope the same holds inside a transaction. The transaction runs as the caller it began with, and a
+change is refused or logged. Outside a transaction there is nothing to compare, because every command carries the
+caller of the moment it is sent.
 
 ### A connection you pass in
 
-A context can be given a connection it did not open, `UseNpgsql(connection)`, and a transaction it did
-not begin, `Database.UseTransaction(transaction)`. What a connection carries is remembered for the whole
-process, not per interceptor, so it does not matter which context, or which instance of the interceptor,
-set it:
+A context can receive a connection it did not open, with `UseNpgsql(connection)`, and a transaction it did not
+begin, with `Database.UseTransaction(transaction)`. The interceptor records what a connection carries once per
+process, shared by every interceptor. So it does not matter which context, or which instance of the interceptor, set the
+caller:
 
-- **A connection another context opened** carries that context's caller into the next one, which compares
-  it with the current caller as it would on one it opened itself, and sends nothing when they agree.
-- **A connection nobody set a caller on,** one opened by hand, gets the caller before the context's first
-  command on it, which costs that one round trip, once. Closed and opened again by the code that owns it,
-  it carries nothing, and gets the caller again.
-- **A connection nobody set a caller on, with a transaction already open on it,** handed over with
-  `UseTransaction` or opened inside a `TransactionScope`, cannot be given one safely: what is set for a
-  session inside a transaction is undone by its rollback, and whatever ran in it before ran as the login
-  role. With `RequireExplicitCallers` the command is refused with an `InvalidOperationException` that says
-  what to change. Without it a warning is logged, once per connection, and the command runs as the role the
-  connection carries.
-- **In `Transaction` scope** a command outside a transaction carries its call whoever opened the
-  connection, and a transaction handed over with `UseTransaction` gets the settings at that moment, for
-  the rest of it.
+- **A connection that another context opened** brings that context's caller. The next context compares that caller
+  with the current caller, as on a connection it opened itself, and sends nothing when they match.
+- **A connection without a caller**, such as a connection opened by hand, gets the caller before the context's first
+  command on it. This costs one round trip, once. When the code that owns the connection closes and reopens it, the
+  connection carries no caller and gets the caller again.
+- **A connection without a caller that already has an open transaction** cannot get a caller safely. Such a
+  connection is one handed over with `UseTransaction`, or one opened inside a `TransactionScope`. A rollback undoes a
+  session setting made inside a transaction, and everything that ran in the transaction before ran as the login role.
+  With `RequireExplicitCallers`, the command is refused with an `InvalidOperationException` that says what to change.
+  Without it, a warning is logged once per connection, and the command runs as the role that the connection carries.
+- **In `Transaction` scope**, a command outside a transaction carries its call, whoever opened the connection. A
+  transaction handed over with `UseTransaction` gets the settings at that moment, for the rest of the transaction.
 
-Two contexts that work in one transaction both have to be told of it: begin it on one and hand it to the
-other with `UseTransaction`. The second then finds the caller the transaction began with and runs as it,
-and a different caller by then is refused, as inside any transaction. What is set for one transaction is
-marked on the server, so a context asks the server rather than trust what it remembers of a transaction
-object: once, when it is handed the transaction, or before every command when it uses the connection
-without having been handed it.
+Two contexts that work in one transaction must both know of the transaction. Begin it on one context and hand it to
+the other with `UseTransaction`. The second context then finds the caller that the transaction began with, and runs
+as that caller. A different caller at that point is refused, as inside any transaction. The interceptor marks on the
+server what it set for a transaction. So a context asks the server, and does not trust what it remembers of a
+transaction object. It asks once when it receives the transaction. It asks before every command when it uses the
+connection without having received the transaction.
 
 > [!NOTE]
-> Where the login role [owns nothing](#a-login-that-owns-nothing), a command on a connection without a
-> caller fails with Postgres's `42501`, permission denied, and no word about why. The interceptor either
-> gives such a connection its caller or refuses the command with a message that names the three ways
-> out: open the connection through a context, begin the transaction after a context opened it, or take
-> the connection from [`CallerConnections`](#sql-of-your-own).
+> Where the login role [owns nothing](#a-login-that-owns-nothing), a command on a connection without a caller fails
+> with Postgres's `42501` (`permission denied`) and gives no reason. The interceptor either gives such a connection its
+> caller, or refuses the command with a message that names three fixes: open the connection through a context, begin
+> the transaction after a context opened the connection, or take the connection from
+> [`CallerConnections`](#raw-sql).
 
-### Settings of your own
+### Custom connection settings
 
-A module whose policies need more than the caller, the team a request chose, for one, puts it on the
-connection next to the role and the claims, in the same statement, so it costs no round trip of its own.
-It names its settings, and gives their values for each caller:
+A module's policies may need more than the caller, for example the team that a request chose. The module puts such a
+value on the connection next to the role and the claims. The value goes in the same statement, so it costs no extra
+round trip. The module names its settings, and returns their values for each caller:
 
 ```csharp
 public sealed class TeamSetting : IRowLevelSecuritySettings
@@ -492,10 +549,14 @@ services.AddPostgresRowLevelSecurity();
 services.AddRowLevelSecuritySettings<TeamSetting>();
 ```
 
-A policy reads it with `current_setting('teams.current', true)`. Every name a module declares is set every
-time, to its value or to `''` when `For` leaves it out, so a pooled connection never keeps an earlier
-caller's value; a name it did not declare fails the connection. The names are checked when the
-interceptor is built: `prefix.name` in lower case, none of PostgREST's `request.*`, and one owner each.
+- A policy reads the setting with `current_setting('teams.current', true)`.
+- The interceptor sets every declared name each time, to its value, or to `''` when `For` leaves the name out. So a
+  pooled connection never keeps an earlier caller's value.
+- A name that the class did not declare fails the connection.
+- The interceptor checks the names when it is built. A name is `prefix.name` in lower case. It is not one of
+  PostgREST's `request.*` names. Only one class may declare it.
+
+In the diagram, purple is the custom setting and green is the result:
 
 ```mermaid
 sequenceDiagram
@@ -505,18 +566,22 @@ sequenceDiagram
     participant Settings as TeamSetting
     participant Postgres
     Request->>Interceptor: a query opens a connection
-    Interceptor->>Accessor: who is calling
+    Interceptor->>Accessor: who is calling?
     Accessor-->>Interceptor: the request's user
+    rect rgba(91, 46, 201, 0.15)
     Interceptor->>Settings: values for this caller
     Settings-->>Interceptor: teams.current = north
-    Interceptor->>Postgres: one statement with the role, the claims and teams.current
+    end
+    Interceptor->>Postgres: one statement with the role,<br/>the claims and teams.current
     Interceptor->>Postgres: the query
-    Postgres->>Postgres: the policy asks the claims and the setting
+    Postgres->>Postgres: the policy reads the claims<br/>and the setting
+    rect rgba(31, 138, 91, 0.15)
     Postgres-->>Request: the rows the policy allows
+    end
 ```
 
 <details>
-<summary>Show the code: the policy that asks both</summary>
+<summary>Show the code: the policy that reads both</summary>
 
 ```sql
 CREATE POLICY "A team sees its notebooks" ON "teams"."Notebooks" FOR SELECT TO authenticated
@@ -526,16 +591,16 @@ CREATE POLICY "A team sees its notebooks" ON "teams"."Notebooks" FOR SELECT TO a
 
 </details>
 
-A setting is the application's word, not the caller's: any statement on the application's connection can
-set it to anything, as it can the role. A policy that can derive what it needs from the verified claims,
-and use the setting only to choose among what those allow, stays right when the application's own code
-sets a wrong value.
+The application sets a custom setting, and the caller does not. Any statement on the application's connection can
+set the setting to any value, as it can set the role. So write the policy to derive what it needs from the verified
+claims, and to use the setting only to choose among what the claims allow. Then the policy stays correct when the
+application's code sets a wrong value.
 
 ### A statement timeout per caller
 
-Postgres applies the settings stored on a role, `alter role authenticated set statement_timeout = '8s'`,
-when that role logs in, not when a session switches to it. A caller's statements therefore run under the
-timeout of the role the application logged in as, whatever the caller's own role says. Say the timeout per
+Postgres applies the settings stored on a role, such as `alter role authenticated set statement_timeout = '8s'`,
+when that role logs in. Postgres does not apply them when a session switches to the role. So a caller's statements
+run under the timeout of the role the application logged in as, whatever the caller's role says. Set the timeout per
 kind of caller instead:
 
 ```csharp
@@ -546,29 +611,32 @@ builder.Services.AddPostgresRowLevelSecurity(options =>
 });
 ```
 
-It travels in the statement that sets the caller, so it costs no round trip, and a statement that runs
-longer is cancelled by Postgres with `57014`, `query_canceled`. A kind left out gets the login role's own
-again, its reset value, read in the same statement: a timeout never outlives the caller it was set for,
-on a connection that stays open over several callers as little as on a pooled one. Where the settings
-last one transaction the timeout is the transaction's, and a kind without one sets nothing. A user whose
-[token role](#token-roles) is on no list and who runs as an anonymous caller gets the anonymous caller's.
-A timeout is at least a millisecond. With no timeout configured, the statement is what it always was.
+- The timeout goes in the statement that sets the caller, so it costs no round trip.
+- Postgres cancels a statement that runs longer, with `57014`, `query_canceled`.
+- A kind without a timeout gets the login role's timeout again, its reset value, which the same statement reads. So
+  a timeout never outlives the caller it was set for. This holds on a connection that stays open across several
+  callers, and on a pooled connection.
+- In `Transaction` scope the timeout lasts one transaction, and a kind without a timeout sets nothing.
+- A user whose [token role](#token-roles) is on no list, and who runs as an anonymous caller, gets the anonymous
+  caller's timeout.
+- A timeout is at least one millisecond.
+- With no timeout configured, the statement is unchanged.
 
-### SQL of your own
+### Raw SQL
 
-SQL sent through a context, `context.Database.SqlQuery`, `ExecuteSql` and `FromSql`, goes through the
-interceptor like any query, in both scopes. SQL sent past Entity Framework, a command on
-`context.Database.GetDbConnection()`, does not, and what it runs as differs between the scopes:
+SQL sent through a context, with `context.Database.SqlQuery`, `ExecuteSql` and `FromSql`, goes through the
+interceptor like any query, in both scopes. SQL sent past Entity Framework, as a command on
+`context.Database.GetDbConnection()`, does not go through the interceptor. The role it runs as depends on the scope:
 
 | Scope | A command on `GetDbConnection()` runs as |
 |---|---|
-| `Connection` | the caller the connection carries, for as long as the context holds it open |
-| `Transaction` | the login role, since nothing lives on a session, unless it runs inside a transaction the context began or was handed |
+| `Connection` | the caller that the connection carries, for as long as the context keeps the connection open |
+| `Transaction` | the login role, because nothing is set on the session. Inside a transaction that the context began or received, the command runs as that transaction's caller. |
 
-For SQL a module sends without a context, a report read with a data reader or a bulk copy, take the
-connection from `CallerConnections`, which sets the caller with the interceptor's own statement, refuses
-what the interceptor refuses, and brings the [statement timeout](#a-statement-timeout-per-caller) and the
-[settings of your own](#settings-of-your-own) along:
+A module may send SQL without a context, such as a report read with a data reader, or a bulk copy. For that SQL,
+take the connection from `CallerConnections`. `CallerConnections` sets the caller with the interceptor's statement,
+and refuses what the interceptor refuses. It also sets the [statement timeout](#a-statement-timeout-per-caller) and
+the [custom settings](#custom-connection-settings):
 
 ```csharp
 builder.Services.AddCallerConnections(provider => provider.GetRequiredService<NpgsqlDataSource>());
@@ -582,28 +650,27 @@ public sealed class OrderExport(CallerConnections connections)
 
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
-        command.CommandText = """SELECT "Id", "Total" FROM ordering."Orders" """;   // the caller's orders, by the policies
+        command.CommandText = """SELECT "Id", "Total" FROM ordering."Orders" """;   // the policies return only the caller's orders
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         // ...
     }
 }
 ```
 
-- `BeginTransactionAsync` works in both scopes: an open connection, a transaction on it, and the caller
-  set for that transaction alone. The connection is the transaction's, and yours to dispose with it.
-- `OpenAsync` gives an open connection with the caller set for its session, and is refused in
-  `Transaction` scope, where a session must carry nothing.
-- **One caller per connection.** The caller is the one there is when the connection is opened. Dispose it
-  before the caller changes.
-- A context handed such a connection, or such a transaction, [finds the caller there](#a-connection-you-pass-in)
-  and sends nothing of its own.
+- `BeginTransactionAsync` works in both scopes. It returns a transaction on an open connection, with the caller set
+  for that transaction only. The connection belongs to the transaction. Dispose the connection with the transaction.
+- `OpenAsync` returns an open connection with the caller set for its session. It is refused in `Transaction` scope,
+  where a session must carry nothing.
+- **One caller per connection.** The caller is the one that is current when the connection opens. Dispose the
+  connection before the caller changes.
+- A context that receives such a connection, or such a transaction, [finds the caller
+  there](#a-connection-you-pass-in) and sends no statement of its own.
 
 ### With a context pool
 
-A context pool, `AddPooledDbContextFactory` or `AddDbContextPool`, builds a context's options once and
-hands one instance to one caller after another. Nothing of row level security is kept on a context or
-read while the options are built, so the call is the one above, with the provider the pool's callback is
-handed:
+A context pool, `AddPooledDbContextFactory` or `AddDbContextPool`, builds a context's options once. It hands one
+instance to one caller after another. RLS keeps nothing on a context, and reads nothing while the
+options are built. So the call is the same as above, with the provider that the pool's callback receives:
 
 ```csharp
 builder.Services.AddPooledDbContextFactory<OrderingContext>((provider, options) => options
@@ -612,50 +679,51 @@ builder.Services.AddPooledDbContextFactory<OrderingContext>((provider, options) 
 builder.Services.AddScopedFromPool<OrderingContext>();
 ```
 
-- **Read at every use:** who is calling, the role and the claims that follow from it, and the values of
-  every `IRowLevelSecuritySettings`. The interceptor asks when a connection opens, before every command
-  and before a transaction begins, so each rental runs as its own caller, whoever held the instance
-  before. A settings class of your own keeps to the same rule: `For(caller)` works its values out each
-  time, and keeps nothing per connection or per context.
-- **Reset between renters:** a context that goes back to the pool closes its connection and keeps the
-  connection object. What was set on the server connection Npgsql clears before that connection is used
-  again, and the interceptor sets the role, the claims and the settings anew on the next open, whatever
-  it remembered of the last. Where the settings last one transaction there is nothing to reset: a
-  transaction a context left open is rolled back when the context goes back, and the settings with it.
+- **Read at every use:** the current caller, the role and the claims that follow from it, and the values of every
+  `IRowLevelSecuritySettings`. The interceptor reads them when a connection opens, before every command, and before
+  a transaction begins. So each rental runs as its own caller, whoever used the instance before. A settings class of
+  yours follows the same rule. `For(caller)` computes its values each time, and keeps nothing per connection or per
+  context.
+- **Reset between renters:** a context that returns to the pool closes its connection and keeps the connection
+  object. Npgsql clears the server connection's settings before the connection is used again. The interceptor sets
+  the role, the claims and the settings again on the next open, whatever it remembered of the last one. In
+  `Transaction` scope there is nothing to reset. A transaction that a context left open is rolled back when the
+  context returns to the pool, and the settings end with it.
 
-A context pool is not a bound on connections. A context holds a connection only while a command runs,
-while it has a transaction, or between `OpenConnection()` and `CloseConnection()`, and a context that
-waits in the pool holds none. The bound is the data source's, so budget it there:
+A context pool does not limit connections. A context holds a connection only while a command runs, while it has a
+transaction, or between `OpenConnection()` and `CloseConnection()`. A context that waits in the pool holds no
+connection. The data source sets the limit, so plan the connections there:
 
-- **Say the limits.** Give every data source its `Maximum Pool Size`, `Minimum Pool Size`,
-  `Connection Idle Lifetime`, `Connection Lifetime`, `Timeout` and `Application Name` in its connection
-  string, rather than leaving Npgsql's defaults to decide.
-- **More readers than connections wait.** A read that needs a connection when none is free waits up to
-  `Timeout` seconds, and then fails with Npgsql's exception for an exhausted pool. It does not hang.
-- **Never wait for a second connection while you hold one.** Code that has a transaction open, or a
-  connection it opened by hand, and then runs a query on another context needs two at once. With a
-  small pool, two requests that do so each hold one and wait for the other until `Timeout`. Without such
-  nesting a data source of one connection still completes everything, one piece of work at a time.
-- **Size for the widest request.** `Maximum Pool Size` is at least the number of reads one request runs
-  side by side, so that a request never queues behind itself, and every instance of the application,
-  with its pollers and its listeners, stays within what the database, or the pooler in front of it,
-  allows.
+- **Set the limits.** Give every data source its `Maximum Pool Size`, `Minimum Pool Size`,
+  `Connection Idle Lifetime`, `Connection Lifetime`, `Timeout` and `Application Name` in its connection string. Do
+  not rely on Npgsql's defaults.
+- **Extra readers wait.** A read that needs a connection when none is free waits up to `Timeout` seconds. Then it
+  fails with Npgsql's exception for an exhausted pool. It does not hang.
+- **Do not wait for a second connection while you hold one.** Code that has an open transaction, or a connection it
+  opened by hand, and then runs a query on another context needs two connections at once. With a small pool, two
+  requests that do this each hold one connection and wait for the other until `Timeout`. Without such nesting, a data
+  source of one connection still completes all work, one piece at a time.
+- **Size for the widest request.** `Maximum Pool Size` is at least the number of reads that one request runs in
+  parallel, so a request never waits for itself. All instances of the application, with their pollers and
+  listeners, stay within what the database, or the pooler in front of it, allows.
 
-[Contexts from a pool](entity-framework.md#contexts-from-a-pool) has the registration, and what Entity
-Framework resets when a context goes back.
+[Contexts from a pool](entity-framework.md#contexts-from-a-pool) has the registration, and what Entity Framework
+resets when a context returns to the pool.
 
-## A Postgres of your own
+## Setup on Postgres without Supabase
 
-A Supabase project has the roles and the functions a policy asks about the caller. A Postgres of your
-own has neither until `PostgresRowAccess.SetupScript()` makes them: `anon` and `authenticated`, and
-`ddd_system_in`, the [scoped system role](#the-scoped-system-role), all three granted to the role the
-application logs in as so it may switch to them, and with them the role of every
-[token role](#token-roles) the options it is given map; `ddd.caller_id()`, `ddd.caller_role()` and
-`ddd.caller_claims()`, which read the claims the interceptor set;
-`ddd.written_in_this_transaction(xmin)`, which the policies of an aggregate's entities ask; and the
-procedure `ddd.use_caller`, which sets a caller for one transaction where the
-[settings travel per transaction](#how-the-settings-travel), and which only the login role may call. It
-can run again, so it belongs in an early migration:
+A Supabase project has the roles and the functions that a policy uses to read the caller. A Postgres database
+without Supabase has neither until `PostgresRowAccess.SetupScript()` makes them:
+
+- The roles `anon`, `authenticated` and `ddd_system_in`, the [scoped system role](#the-scoped-system-role). The script
+  grants all three to the role the application logs in as, so that role may switch to them. The script also makes
+  the role of every [token role](#token-roles) that the given options map.
+- `ddd.caller_id()`, `ddd.caller_role()` and `ddd.caller_claims()`, which read the claims that the interceptor set.
+- `ddd.written_in_this_transaction(xmin)`, which the policies of an aggregate's entities call.
+- The procedure `ddd.use_caller`, which sets a caller for one transaction in
+  [`Transaction` scope](#settings-per-connection-or-per-transaction). Only the login role may call it.
+
+The script can run more than once, so put it in an early migration:
 
 ```csharp
 public partial class RowLevelSecurity : Migration
@@ -672,33 +740,35 @@ public partial class RowLevelSecurity : Migration
 }
 ```
 
-The grants give the two roles the tables; the policies then decide which rows. A script of policies
-can write them instead, table by table and command by command, from the policies it holds:
-[Privileges from the policies](#privileges-from-the-policies). `ddd.caller_id()` is
-`null` for a token whose `sub` is not a `uuid`, so a rule about a user matches nobody rather than failing
-every query; `Caller.UserId` is `null` for it too.
+The grants give the two roles the tables. The policies then decide which rows. A script of policies can write the
+grants instead, per table and per command, from the policies it holds
+([Privileges from the policies](#privileges-from-the-policies)).
 
-Those grants take in the module's outbox and inbox tables as well, which have no policies, so a caller
-could read every pending message. A caller's save only adds outbox rows, and the toolkit reads, marks and
-deletes them as the system; an inbox is read and added to by whoever a module's handlers run as, never by
-a request. Take the rest back:
+`ddd.caller_id()` is `null` for a token whose `sub` is not a `uuid`. So a rule about a user matches nobody, and does
+not fail every query. `Caller.UserId` is `null` for such a token too.
+
+The grants above also cover the module's outbox and inbox tables. Those tables have no policies, so a caller could
+read every pending message. A caller's save only adds outbox rows, and the toolkit reads, marks and deletes them as
+the system. An inbox is read and written by the caller that a module's handlers run as, and never by a request.
+Revoke the rest:
 
 ```sql
 revoke select, update, delete on ordering."OutboxMessages" from anon, authenticated;
 revoke all on ordering."InboxMessages" from anon, authenticated;
 ```
 
-The role that runs `SetupScript()` owns the `ddd` schema, its functions and its procedure. When somebody
-else runs it, `SetupScript(loginRole: "app")`, and the application's migrations then run as `app`, the
-policy scripts leave those objects alone while they are as the policies need them. When an upgrade of the
-toolkit changes `ddd.written_in_this_transaction` or `ddd.use_caller`, or brings a role the setup makes,
-such as `ddd_system_in`, `app` cannot replace what it does not own, and may not be allowed to create a
-role: run the new version's `SetupScript()` first, as the role that ran it before. It makes and grants
-what is missing, and the scripts then leave it as it is.
+The role that runs `SetupScript()` owns the `ddd` schema, its functions and its procedure. Another role can run the
+script with `SetupScript(loginRole: "app")`, while the application's migrations run as `app`. The policy scripts
+then leave those objects alone, as long as the objects are as the policies need them. A toolkit upgrade may change
+`ddd.written_in_this_transaction` or `ddd.use_caller`, or add a role that the setup makes, such as `ddd_system_in`.
+`app` cannot replace objects it does not own, and may not be allowed to create a role. So first run the new
+version's `SetupScript()`, as the role that ran it before. That run makes and grants what is missing, and the
+policy scripts then leave it as it is.
 
 ## Row access rules written in C#
 
-A rule is a static method on a class of its own, marked with the aggregate it guards and what it allows:
+A rule is a static method on a class of its own. An attribute on the class names the aggregate that the rule guards,
+and what the rule allows:
 
 ```csharp
 [RowAccess<Order>(RowOperations.Read | RowOperations.Change)]
@@ -709,22 +779,35 @@ public static partial class ACustomerSeesTheirOrders
 }
 ```
 
-When the class compiles, the generator translates `Allows` into SQL and writes it into the class as
-`RowAccessSql`. The rule stays an ordinary method as well, so a handler, a test or a screen asks the same
-rule in C#: `ACustomerSeesTheirOrders.Allows(order, caller)`.
+When the class compiles, the generator translates `Allows` into SQL and writes the SQL into the class as
+`RowAccessSql`. The rule is still an ordinary method. So a handler, a test or a screen calls the same rule in C#:
+`ACustomerSeesTheirOrders.Allows(order, caller)`.
+
+In the diagram, purple is the rule and green is where the rule is used:
 
 ```mermaid
 flowchart LR
-    Rule["ACustomerSeesTheirOrders.Allows<br/>in C#"] -->|"the generator,<br/>when it compiles"| Template["RowAccessSql:<br/>SQL with the columns<br/>still to fill in"]
-    Template --> Script["PostgresRowAccess.Script:<br/>columns from the<br/>Entity Framework model"]
-    Script --> Policies["CREATE POLICY<br/>on the aggregate's tables"]
-    Rule -->|"called directly"| Handler["a handler, a test"]
+    rule["<b>ACustomerSeesTheirOrders.Allows</b><br/><small>in C#</small>"]
+    template["<b>RowAccessSql</b><br/><small>SQL with the columns still to fill in</small>"]
+    script["<b>PostgresRowAccess.Script</b><br/><small>columns from the Entity Framework model</small>"]
+    policies["<b>CREATE POLICY</b><br/><small>on the aggregate's tables</small>"]
+    handler["<b>A handler or a test</b><br/><small>calls Allows directly</small>"]
+    rule -->|"the generator,<br/>at compile time"| template
+    template --> script
+    script --> policies
+    rule -->|"a direct call"| handler
+    classDef strong fill:#5b2ec933,stroke:#5b2ec9,stroke-width:2px
+    classDef good fill:#1f8a5b26,stroke:#1f8a5b
+    class rule strong
+    class policies,handler good
 ```
 
 <details>
 <summary>Show the code: what the generator writes into the rule, and what the script makes of it</summary>
 
-```csharp title="ACustomerSeesTheirOrders.RowAccess.g.cs, shortened"
+**ACustomerSeesTheirOrders.RowAccess.g.cs** (shortened)
+
+```csharp
 partial class ACustomerSeesTheirOrders
 {
     public const string RowAccessSql = "(({col:PlacedBy} IS NULL) OR ({col:PlacedBy} IS NOT DISTINCT FROM {caller:uid}))";
@@ -748,7 +831,7 @@ CREATE POLICY "A customer sees their orders (select) for authenticated" ON "orde
     USING (("PlacedBy" IS NULL) OR ("PlacedBy" IS NOT DISTINCT FROM (SELECT "ddd".caller_id())));
 -- and one for anon, and one per role for UPDATE
 
--- OrderLine belongs to the aggregate: it is read with its Orders, and written as the rules let a caller write its Orders.
+-- OrderLine belongs to the aggregate. A caller reads a line with its order, and writes a line as the rules let the caller write the order.
 CREATE POLICY "OrderLine (select) for authenticated" ON "ordering"."OrderLine" FOR SELECT TO authenticated
     USING (EXISTS (SELECT 1 FROM "ordering"."Orders" parent WHERE parent."Id" = "ordering"."OrderLine"."OrderId"));
 -- and one for anon, and one per role for INSERT, UPDATE and DELETE
@@ -756,7 +839,29 @@ CREATE POLICY "OrderLine (select) for authenticated" ON "ordering"."OrderLine" F
 
 </details>
 
-What the generator translates, and into what:
+More about rules:
+
+- **Entities follow their aggregate.** A rule is on the root. The tables of the aggregate's entities, such as an
+  order's lines, get policies of their own that check the root. A caller reads a line when it may read the order. A
+  caller writes a line when the order's write rules allow it ([Policies on entity tables](#policies-on-entity-tables)).
+- **Roles.** A rule is for signed-in users and for callers without a user, unless `To` says otherwise:
+  `[RowAccess<Order>(RowOperations.Read, To = [RowAccessRoles.User])]`. Several rules on one aggregate add up. A row
+  that one of them allows is allowed. Each policy is for one role
+  ([One policy per command and role](#one-policy-per-command-and-role)).
+- **A stricter permission for some columns.** A rule with `Columns = [nameof(Order.Status)]` checks a change of those
+  columns only, next to the rules for the row. Use it for a column whose change needs more than a change of the row
+  needs ([Column rules](#column-rules)).
+- **Build errors.** [DDD00038](diagnostics.md#ddd00038) to [DDD00041](diagnostics.md#ddd00041),
+  [DDD00051](diagnostics.md#ddd00051) and [DDD00052](diagnostics.md#ddd00052) are the rules that the generator
+  enforces:
+  - the class's shape, and the columns that a column rule names,
+  - what the generator can translate,
+  - that the type is an aggregate root,
+  - that a rule reads the aggregate's entities through an access function,
+  - that a rule asks for a set once per statement,
+  - that a function's name has an owner.
+
+### What the generator translates
 
 | In `Allows` | In the policy |
 |---|---|
@@ -768,23 +873,25 @@ What the generator translates, and into what:
 | `caller.Role == "authenticated"` | `"ddd".caller_role() IS NOT DISTINCT FROM 'authenticated'` |
 | `order.Due < DateTimeOffset.UtcNow` | `coalesce("Due" < now(), FALSE)` |
 
-`==` keeps C#'s meaning. Between two values C# says cannot be null, an enum, a number, a flag, a `Guid`
-or an id that is a struct, it is SQL's `=`, which an index can answer. Where either side can be null it
-is C#'s equality, nulls included: `IS NOT DISTINCT FROM`, which no index answers. A comparison that SQL
-would leave unknown is false, as it is in C#, except one with a
-[scalar question](#set-shaped-questions), which has no C# answer. `DateTimeOffset.UtcNow` and
-`DateTime.UtcNow` are the database's `now()`, the time its transaction began. Compare it with a column of
-type `timestamp with time zone`, which is what Npgsql makes of a `DateTime` or a `DateTimeOffset` by
-default: against a `timestamp without time zone`, Postgres turns `now()` into the time of the session's
-time zone, which a caller of the Data API can choose. The caller functions are wrapped in `(SELECT ...)` in
-the policy itself, so Postgres asks them once per query rather than once per row. Column names come from the
-Entity Framework model when the policies are written, so renaming a property or its column changes the
-policy with it. A value object stored inline is its columns, and a typed id's `.Value` is the id's column.
+- `==` keeps its C# meaning. Between two values that C# says cannot be null (an enum, a number, a flag, a `Guid`, or
+  an id that is a struct), `==` becomes SQL's `=`, which an index can answer. Where either side can be null, `==`
+  becomes C#'s equality with nulls, `IS NOT DISTINCT FROM`, which no index answers.
+- A comparison that SQL would leave unknown is false, as in C#. The exception is a comparison with a
+  [scalar question](#database-only-questions), which has no C# answer.
+- `DateTimeOffset.UtcNow` and `DateTime.UtcNow` become the database's `now()`, the time its transaction began.
+  Compare `now()` with a column of type `timestamp with time zone`. Npgsql makes that type of a `DateTime` or a
+  `DateTimeOffset` by default. Against a `timestamp without time zone`, Postgres converts `now()` to the time in the
+  session's time zone, and a caller of the Data API can choose that time zone.
+- The policy wraps the caller functions in `(SELECT ...)`. So Postgres calls them once per query, and not once per
+  row.
+- Column names come from the Entity Framework model when the policies are written. Renaming a property or its
+  column changes the policy too.
+- A value object stored inline is its columns. A typed id's `.Value` is the id's column.
 
-What the database cannot check is a compile error on that expression: a method call such as
-`order.Team.StartsWith("n")`, a local variable, anything about another aggregate. A question only the
-database can answer is asked through an [access function](#asking-the-aggregates-entities-access-functions)
-or a [set-shaped question](#set-shaped-questions). For the rest, `Sql.Call<T>` and `Sql.Raw<T>` write SQL
+An expression that the database cannot check is a compile error. Examples are a method call such as
+`order.Team.StartsWith("n")`, a local variable, and anything about another aggregate. For a question that only the
+database can answer, use an [access function](#access-functions) or a
+[set-shaped access function](#set-shaped-access-functions). For the rest, `Sql.Call<T>` and `Sql.Raw<T>` write SQL
 into the rule:
 
 ```csharp
@@ -793,67 +900,50 @@ public static bool Allows(Order order, Caller caller)
        || Sql.Call<bool>("support.is_agent", caller.UserId);
 ```
 
-The arguments are translated like the rest; the function is yours to create in a migration. A rule that
-uses either is the database's only: called in C#, it throws, because C# cannot run the SQL.
-
-**Entities follow their aggregate.** A rule is on the root. The tables of the aggregate's entities, an
-order's lines, get policies of their own that ask the root: a caller reads a line when it may read the
-order, and writes one when the order's write rules let it; see
-[The aggregate's entities](#the-aggregates-entities).
-
-**Roles.** A rule is for signed-in users and callers without a user unless `To` says otherwise:
-`[RowAccess<Order>(RowOperations.Read, To = [RowAccessRoles.User])]`. Several rules on one aggregate add
-up: a row one of them allows is allowed. Each policy is for one role; see
-[One policy per command and role](#one-policy-per-command-and-role).
-
-**A stricter permission for one column.** A rule with `Columns = [nameof(Order.Status)]` holds a change of those
-columns alone, beside the rules for the row, for a column whose change takes more than changing the row does;
-see [Column rules](#column-rules).
-
-[DDD00038](diagnostics.md#ddd00038) to [DDD00041](diagnostics.md#ddd00041), [DDD00051](diagnostics.md#ddd00051)
-and [DDD00052](diagnostics.md#ddd00052) are the rules the generator enforces: the class's shape and the
-columns a column rule names, what it can translate, that the type is an aggregate root, that a rule asks an
-access function about the aggregate's entities, that a set is asked once per statement, and that a function's
-name has an owner.
+The generator translates the arguments like the rest of the rule. You create the function in a migration. A rule
+that uses `Sql.Call` or `Sql.Raw` works only in the database. Called in C#, it throws, because C# cannot run the SQL.
 
 ### One policy per command and role
 
-Every policy a script writes is for one command and one role, and a table gets at most one policy for
-each pair: the rules that let a role do one thing to a table are asked in one policy, their conditions
-OR-ed together. Postgres ORs a table's permissive policies anyway, so nothing is allowed that the rules on
-their own would not allow. What it gives is one place per table, command and role that says who may do
-what, which is also what Supabase's performance advisor asks for.
+Every policy that a script writes is for one command and one role. A table gets at most one policy for each pair.
+The rules that let a role run one command on a table are combined in one policy, with their conditions joined by
+`OR`. Postgres joins a table's permissive policies with `OR` anyway, so the combined policy allows nothing that the
+rules alone would not allow. The result is one place per table, command and role that says who may do what.
+Supabase's performance advisor asks for the same.
 
-| Rules that grant a role a command | The policy |
+| Rules that grant a role a command | The policy's name |
 |---|---|
-| one | named after the rule, the command and the role: `"A customer has their orders (select) for anon"` |
-| several | named after the table: `"Orders (select) for authenticated"`, with a comment above it naming the rules |
+| one | the rule, the command and the role: `"A customer has their orders (select) for anon"` |
+| several | the table: `"Orders (select) for authenticated"`, with a comment above the policy that names the rules |
 
-So a policy's name changes when another rule starts or stops granting the same command to the same role.
-A test or a script of your own that looks a policy up does better to ask for its table, command and role
-than for its name.
+So a policy's name changes when another rule starts or stops granting the same command to the same role. A test or a
+script of yours that looks up a policy should look it up by table, command and role.
+
+In the diagram, purple is the one policy that combines both rules:
 
 ```mermaid
 flowchart LR
-    Customer["ACustomerHasTheirOrders<br/>Read and Change, no To"]
-    Auditors["AuditorsSeeEveryOrder<br/>Read, To = User"]
+    customer["<b>ACustomerHasTheirOrders</b><br/><small>Read and Change, no To</small>"]
+    auditors["<b>AuditorsSeeEveryOrder</b><br/><small>Read, To = User</small>"]
     subgraph Reading["SELECT on Orders"]
-        SelectAnon["A customer has their orders<br/>(select) for anon"]
-        SelectUser["Orders (select) for authenticated<br/>asks both rules"]
+        selectAnon["<b>A customer has their orders</b><br/><small>(select) for anon</small>"]
+        selectUser["<b>Orders</b><br/><small>(select) for authenticated · both rules</small>"]
     end
     subgraph Changing["UPDATE on Orders"]
-        UpdateAnon["A customer has their orders<br/>(update) for anon"]
-        UpdateUser["A customer has their orders<br/>(update) for authenticated"]
+        updateAnon["<b>A customer has their orders</b><br/><small>(update) for anon</small>"]
+        updateUser["<b>A customer has their orders</b><br/><small>(update) for authenticated</small>"]
     end
-    Customer --> SelectAnon
-    Customer --> SelectUser
-    Auditors --> SelectUser
-    Customer --> UpdateAnon
-    Customer --> UpdateUser
+    customer --> selectAnon
+    customer --> selectUser
+    auditors --> selectUser
+    customer --> updateAnon
+    customer --> updateUser
+    classDef strong fill:#5b2ec933,stroke:#5b2ec9,stroke-width:2px
+    class selectUser strong
 ```
 
 <details>
-<summary>Show the code: the two rules, and the policy that asks both</summary>
+<summary>Show the code: the two rules, and the policy that combines both</summary>
 
 ```csharp
 [RowAccess<Order>(RowOperations.Read | RowOperations.Change)]
@@ -879,22 +969,20 @@ CREATE POLICY "Orders (select) for authenticated" ON "ordering"."Orders" FOR SEL
 
 </details>
 
-A policy you wrote yourself, permissive or restrictive, is never merged into these: a script only ever
-drops and makes the policies it made, found by their comment. A restrictive policy of yours on the same
-table still holds every caller it names to its own condition as well, and so does a
-[restrictive rule](#rules-that-only-narrow-restrictive).
+A script never merges a policy that you wrote by hand, permissive or restrictive, into these policies. A script
+drops and makes only the policies it made, which it finds by their comment. A restrictive policy of yours on the same
+table still holds every caller it names to its condition. So does a [restrictive rule](#restrictive-rules).
 
-The types of a hierarchy that Entity Framework maps to one table share its policies, and those of their
-entities' tables, in the same way. A rule about a type derived in the hierarchy holds for that type's rows,
-and those of the types derived from it, only: its condition also asks the table's discriminator, so a rule
-about priority orders says nothing about the other orders in the table.
+The types of a hierarchy that Entity Framework maps to one table share that table's policies in the same way, and the
+policies of their entities' tables. A rule about a derived type holds only for that type's rows and for the rows of
+the types derived from it. Its condition also checks the table's discriminator. So a rule about priority orders says
+nothing about the other orders in the table.
 
-**Roles by what they are for.** `To` names roles through `RowAccessRoles`: `User` for a signed-in user,
-`Anonymous` for a caller without one, and `SystemIn` for the [scoped system role](#the-scoped-system-role).
-A rule compiles with the symbols, and a script writes the roles they stand for, so a module's rules suit
-every host whatever it calls its roles. `RowAccessRoleNames.Default` is `authenticated`, `anon` and
-`ddd_system_in`; `RowAccessRoleNames.From(options)` takes the roles the interceptor switches to with those
-options:
+**Roles by purpose.** `To` names roles through `RowAccessRoles`: `User` for a signed-in user, `Anonymous` for a
+caller without a user, and `SystemIn` for the [scoped system role](#the-scoped-system-role). A rule compiles with
+these symbols, and a script writes the roles that they stand for. So a module's rules fit every host, whatever the
+host calls its roles. `RowAccessRoleNames.Default` is `authenticated`, `anon` and `ddd_system_in`.
+`RowAccessRoleNames.From(options)` takes the roles that the interceptor switches to with those options:
 
 ```csharp
 var sql = PostgresRowAccess.Script(context, rules, accessFunctions, new RowAccessExport
@@ -904,29 +992,36 @@ var sql = PostgresRowAccess.Script(context, rules, accessFunctions, new RowAcces
 });
 ```
 
-A role's own name in `To` works as well, and is written as it is spelled, in double quotes where Postgres
-would otherwise fold it to lower case. `PUBLIC` is refused, in any spelling: it is every role there is, the
-application's own included. So is a name with a `$`, which a script cannot write into the blocks it puts
-role names in, and one longer than the 63 bytes of a name Postgres keeps. The Supabase build takes the
-roles and the caller functions from two properties of the project; see
-[Supabase](supabase.md#roles-and-caller-functions-of-your-own).
+`To` also takes a role's database name. The script writes the name as it is spelled, in double quotes where Postgres
+would otherwise fold it to lower case. The script refuses these names:
 
-### Rules that only narrow: `Restrictive`
+- `PUBLIC`, in any spelling. `PUBLIC` is every role, including the application's.
+- A name with a `$`. A script cannot write such a name into the blocks that hold role names.
+- A name longer than 63 bytes, the most that Postgres keeps of a name.
 
-Postgres has two kinds of policy. A **permissive** policy says "this is also allowed": a table's permissive policies
-are OR-ed, so a row passes when one of them allows it. A **restrictive** policy says "only if": it is AND-ed with
-every permissive one, so a row passes only when it allows the row as well. Every rule above is permissive.
-`Restrictive = true` makes a rule restrictive. It takes away from what the other policies allow, yours and a
-package's alike, and never allows anything itself.
+The Supabase build takes the roles and the caller functions from two project properties
+([Supabase](supabase.md#custom-roles-and-caller-functions)).
 
-Take an organization that every seat of its tenant reads, by a package's policy, and an application that lets only
-its employees read it:
+### Restrictive rules
+
+Postgres has two kinds of policy:
+
+- A **permissive** policy adds rows. Postgres joins a table's permissive policies with `OR`, so a row passes when one
+  of them allows it.
+- A **restrictive** policy narrows. Postgres joins it with `AND` to every permissive policy, so a row passes only
+  when the restrictive policy also allows it.
+
+Every rule above is permissive. `Restrictive = true` makes a rule restrictive. A restrictive rule narrows what the
+other policies allow, yours and a package's alike. It allows nothing by itself.
+
+For example, a package's policy lets every seat of a tenant read the tenant's organization. An application lets only
+its employees read the organization:
 
 | Who reads | The package's policy, permissive | The rule, restrictive: an employee | Reads the organization |
 |---|---|---|---|
 | an employee of the tenant | yes | yes | yes |
 | an external seat of the same tenant | yes | no | no |
-| a seat of another tenant | no | yes | no: a restrictive rule grants nothing |
+| a seat of another tenant | no | yes | no. A restrictive rule allows nothing by itself. |
 
 ```csharp
 [RowAccess<Organization>(RowOperations.Read, Restrictive = true)]
@@ -944,112 +1039,133 @@ CREATE POLICY "Only employees read the organization (select) for authenticated" 
 -- and the same on the units, and on the closure of the tree, which follows the organization
 ```
 
-- **A policy of its own.** A restrictive rule is never merged with your other rules: each command and role gets a
-  policy named after it, beside the permissive one.
-- **It reaches the aggregate.** Its policy is on the aggregate's table and on the tables of its entities, so
-  narrowing what is read of an organization narrows its units. Where a package says a table follows an aggregate,
-  as Tenancy says of the closure of the tree, it reaches that table as well, with a condition that may ask about the
-  caller alone, since that table holds no row of the aggregate to read.
-- **The roles it narrows.** A rule that names no role narrows those of the signed-in and the anonymous caller that
-  something lets use the table: on Tenancy's organization, the signed-in user alone. Where nothing lets anyone use
-  the table there is nothing to narrow, and the script refuses the rule, naming it.
-- **Not what runs past the policies.** Functions that run as their owner read whatever they read, and the scoped
-  system role is narrowed only where the rule names it in `To`. So a package's own work keeps working:
-  [Tenancy's](tenancy/postgres.md#restrictive-rules), with every use case, under a rule that keeps a seat
-  out of the organization.
-- **Not with `Columns`.** A column rule is a trigger, not a policy: a rule with both is refused.
+- **A separate policy.** A script never merges a restrictive rule with your other rules. Each command and role gets
+  a policy named after the restrictive rule, next to the permissive policy.
+- **It covers the aggregate.** Its policy is on the aggregate's table and on the tables of the aggregate's entities.
+  So narrowing who reads an organization also narrows who reads its units. A package can declare that a table
+  follows an aggregate, as Tenancy declares for the closure of the tree. The rule then covers that table too. There
+  the condition may check only the caller, because that table holds no row of the aggregate.
+- **The roles it narrows.** A rule that names no role narrows the signed-in caller's role and the anonymous caller's
+  role, where something lets them use the table. On Tenancy's organization, that is the signed-in user only. Where no
+  role may use the table, there is nothing to narrow, and the script refuses the rule and names it.
+- **Work past the policies is not narrowed.** Functions that run as their owner read what they read. The scoped
+  system role is narrowed only where the rule names it in `To`. So a package's work keeps working.
+  [Tenancy's](tenancy/postgres.md#restrictive-rules) use cases all keep working while a rule keeps a seat out of the
+  organization.
+- **Not with `Columns`.** A column rule is a trigger, and a restrictive rule is a policy. A rule with both is
+  refused.
 
-A rule without `Restrictive` only adds. Beside a package's policy that already lets a role read every row of a
-table, it would change nothing, so Tenancy refuses one on its organization and its roles, whose reads are no default,
-rather than let it look like a restriction.
+A rule without `Restrictive` only adds rows. Next to a package's policy that already lets a role read every row of a
+table, such a rule changes nothing. So Tenancy refuses such a rule on its organization and on its roles, whose reads
+are not defaults. The rule would look like a restriction and restrict nothing.
 
 ### The scoped system role
 
-`RowAccessRoles.SystemIn`, `ddd_system_in` unless you configure another, is the role the application's own
-work runs as when it should stay inside the policies: a scoped system caller, `Caller.SystemIn(scope)`. It
-can neither log in nor bypass row level security, so the rows it reads and writes are those its policies
-allow, as for a user. Its claims carry its scope, `{"role":"ddd_system_in","scope":"projects"}`, so a
-policy can tell one module's work from another's with `(SELECT ddd.caller_claims()) ->> 'scope'`. A scope
-is lower case letters, digits, `_` and `-`, such as the module's name. A script whose policies are for it
-makes sure of that, in its prelude:
+`RowAccessRoles.SystemIn` is the role that system work runs as when the work must stay inside the policies. That
+work is a scoped system caller, `Caller.SystemIn(scope)`. The role is `ddd_system_in` unless you configure another
+role.
 
-- it makes the role, `NOLOGIN NOINHERIT`, where the database does not have it. That needs a role that may
-  create roles; where the migrations run as one that may not, run `SetupScript()` first, as the role that
-  may, and the scripts then find the role made;
-- it fails when a role of that name exists that can log in, bypass row level security or is a superuser,
-  or that has the privileges of a role that owns tables, because Postgres does not hold an owner to row
-  level security, so the policies would hold nothing back;
-- it fails when the user's or the anonymous caller's role has the scoped role's privileges, or the role
-  of a mapped [token role](#token-roles) has, because a policy for a role applies to every role that has
-  its privileges, so every caller would get the policies meant for the application's own work;
-- it grants the role to the role running the script, unless that one may switch to it already. Since
-  Postgres 16 the role that creates a role may administer it but not switch to it until it grants itself
-  the role.
+- The role cannot log in, and cannot bypass RLS. So it reads and writes only the rows that its
+  policies allow, as a user does.
+- Its claims carry its scope: `{"role":"ddd_system_in","scope":"projects"}`. A policy tells one module's work from
+  another's with `(SELECT ddd.caller_claims()) ->> 'scope'`.
+- A scope is lower case letters, digits, `_` and `-`, such as the module's name.
 
-Like `anon` and `authenticated`, the role needs privileges on your tables before its policies let it read
-or write a row:
+A script whose policies are for this role checks the role in its prelude:
+
+- The script creates the role, `NOLOGIN NOINHERIT`, where the database does not have it. This needs a role that may
+  create roles. Where the migrations run as a role that may not, first run `SetupScript()` as a role that may. The
+  scripts then find the role.
+- The script fails when a role of that name exists that can log in, can bypass RLS or is a superuser. It also fails
+  when that role has the privileges of a role that owns tables. Postgres does not apply RLS to an owner, so the
+  policies would hold nothing back.
+- The script fails when the user's role, the anonymous caller's role, or the role of a mapped
+  [token role](#token-roles) has the scoped role's privileges. A policy for a role applies to every role that has the
+  role's privileges. So every caller would get the policies meant for system work.
+- The script grants the role to the role that runs the script, unless that role may already switch to it. Since
+  Postgres 16, the role that creates a role may administer it, but may switch to it only after granting itself the
+  role.
+
+Like `anon` and `authenticated`, the role needs privileges on your tables before its policies let it read or write a
+row:
 
 ```sql
 grant usage on schema ordering to ddd_system_in;
 grant select, insert, update, delete on all tables in schema ordering to ddd_system_in;
 ```
 
-As for the other two roles, take back what it does not need on the module's outbox and inbox tables,
-which have no policies: it adds outbox rows, and reads and adds the inbox rows of the handlers that run as
-it.
+As for the other two roles, revoke what the role does not need on the module's outbox and inbox tables, which have no
+policies. The role adds outbox rows. It reads and adds the inbox rows of the handlers that run as the role:
 
 ```sql
 revoke select, update, delete on ordering."OutboxMessages" from ddd_system_in;
 revoke update, delete on ordering."InboxMessages" from ddd_system_in;
 ```
 
-A login role other than the one that runs the migrations needs a grant of its own:
-`grant ddd_system_in to app;`. `SetupScript()` makes the role the same way, refuses one the prelude would
-refuse, and grants it to the login role. `PostgresRowLevelSecurityOptions.SystemInRole` names it; `null`
-leaves it out of the setup, and a scoped system caller then fails before its query connects, rather than
-running as another role. A rule for `RowAccessRoles.SystemIn` still gets its policies then:
-`RowAccessRoleNames.From(options)` writes them for `ddd_system_in`, and the script makes that role where it is
-missing. Leave such rules out where the application has no scoped system role.
+- A login role other than the one that runs the migrations needs its own grant: `grant ddd_system_in to app;`.
+- `SetupScript()` makes the role in the same way, refuses a role that the prelude would refuse, and grants the role
+  to the login role.
+- `PostgresRowLevelSecurityOptions.SystemInRole` names the role. `null` leaves the role out of the setup. A scoped
+  system caller then fails before its query connects, and never runs as another role.
+- A rule for `RowAccessRoles.SystemIn` still gets its policies when `SystemInRole` is `null`.
+  `RowAccessRoleNames.From(options)` writes them for `ddd_system_in`, and the script creates that role where it is
+  missing. Leave such rules out where the application has no scoped system role.
 
-### The aggregate's entities
+### Policies on entity tables
 
-Each table of an aggregate's entities gets one policy per command and role that a rule of the root
-grants, named after the table, the command and the role: `"OrderLine (insert) for anon"`. Each asks the
-root's rules about the root row the entity belongs to:
+Each table of an aggregate's entities gets one policy per command and role that a rule of the root grants. The
+policy is named after the table, the command and the role: `"OrderLine (insert) for anon"`. Each policy checks the
+root's rules against the root row that the entity belongs to:
 
 | On the entity's table | Allowed when |
 |---|---|
-| `SELECT` | the caller may read the row the entity belongs to, which answers under its own policies |
-| `INSERT` | a `Change` rule allows the root row, or a `Create` rule does and the running transaction wrote that row |
+| `SELECT` | the caller may read the root row. The root row's own policies decide that. |
+| `INSERT` | a `Change` rule allows the root row, or a `Create` rule allows it and the current transaction wrote that row |
 | `UPDATE` | a `Change` rule allows the root row |
 | `DELETE` | a `Change` or a `Remove` rule allows the root row |
 
-So an aggregate is visible whole or not at all, and Entity Framework never loads half of one. And a caller
-whose rules only let it read an order cannot add, change or remove its lines, whether it tries through
-Entity Framework, with SQL of its own or through the Data API. An entity of an entity, a line's parts, is
-read with its line and written under the order's rules, which its policies reach by going up through the
-line to the order. A command no rule grants a role gets no policy for that role, and Postgres refuses it.
+- A caller sees all of an aggregate or none of it. Entity Framework never loads half an aggregate.
+- A caller whose rules only let it read an order cannot add, change or remove the order's lines. This holds through
+  Entity Framework, through your SQL, and through the Data API.
+- An entity of an entity, such as a line's parts, is read with its line and written under the order's rules. Its
+  policies reach the order through the line.
+- A command that no rule grants to a role gets no policy for that role, and Postgres refuses the command.
+
+In the diagram, purple is the command, green is allowed and red is refused:
 
 ```mermaid
 flowchart TD
-    Command["A caller's command<br/>on an order line"] --> Readable{"Does the caller<br/>read the line's order?"}
-    Readable -->|"yes, a SELECT"| Allowed["Allowed"]
-    Readable -->|"yes, a write"| Change{"Does a Change rule<br/>allow the order?"}
-    Readable -->|no| Refused["Refused: an insert fails,<br/>an update or a delete<br/>changes no row"]
-    Change -->|yes| Allowed
-    Change -->|"no, an INSERT"| Create{"Does a Create rule<br/>allow the order, and did<br/>this transaction write it?"}
-    Change -->|"no, a DELETE"| Remove{"Does a Remove rule<br/>allow the order?"}
-    Change -->|"no, an UPDATE"| Refused
-    Create -->|yes| Allowed
-    Create -->|no| Refused
-    Remove -->|yes| Allowed
-    Remove -->|no| Refused
+    command["<b>A caller's command</b><br/><small>on an order line</small>"]
+    readable{"Does the caller read<br/>the line's order?"}
+    change{"Does a Change rule<br/>allow the order?"}
+    create{"Does a Create rule allow<br/>the order, and did this<br/>transaction write it?"}
+    remove{"Does a Remove rule<br/>allow the order?"}
+    allowed["<b>Allowed</b>"]
+    refused["<b>Refused</b><br/><small>an insert fails, an update or<br/>a delete changes no row</small>"]
+    command --> readable
+    readable -->|"yes, a SELECT"| allowed
+    readable -->|"yes, a write"| change
+    readable -->|no| refused
+    change -->|yes| allowed
+    change -->|"no, an INSERT"| create
+    change -->|"no, a DELETE"| remove
+    change -->|"no, an UPDATE"| refused
+    create -->|yes| allowed
+    create -->|no| refused
+    remove -->|yes| allowed
+    remove -->|no| refused
+    classDef strong fill:#5b2ec933,stroke:#5b2ec9,stroke-width:2px
+    classDef good fill:#1f8a5b26,stroke:#1f8a5b
+    classDef bad fill:#c93c3c24,stroke:#c93c3c
+    class command strong
+    class allowed good
+    class refused bad
 ```
 
 <details>
 <summary>Show the code: the order's rules, and two of the policies they give its lines</summary>
 
-The rules are on the order; nothing mentions its lines:
+The rules are on the order. No rule mentions the lines:
 
 ```csharp
 [RowAccess<Order>(RowOperations.Read | RowOperations.Change)]
@@ -1066,7 +1182,8 @@ public static partial class NobodyOrdersForSomebodyElse
 }
 ```
 
-Reading a line asks whether the caller reads its order; adding one asks the order's rules about the order:
+The policy for reading a line checks whether the caller reads the line's order. The policy for adding a line checks
+the order's rules against the order:
 
 ```sql
 CREATE POLICY "OrderLine (select) for authenticated" ON "ordering"."OrderLine" FOR SELECT TO authenticated
@@ -1080,37 +1197,42 @@ CREATE POLICY "OrderLine (insert) for authenticated" ON "ordering"."OrderLine" F
 
 </details>
 
-The `Create` case lets a caller who may place an order, but not change one, add the lines of the order
-it is placing in the same save. Later in the same transaction, only SQL of your own can add more: when
-a save adds a line to an order, the toolkit bumps the order's version, and that is an update, which needs
-`Change`. The policy asks `ddd.written_in_this_transaction(xmin)` about the order's row, which is true when
-the running transaction wrote the row's current version, inside a savepoint or not. Right after its drop,
-every script makes that function, and the `ddd` schema it lives in, when they are missing or differ.
+The `Create` case lets a caller who may place an order, but may not change one, add the order's lines in the same
+save. Later in the same transaction, only your own SQL can add more lines. When a save adds a line to an order, the
+toolkit increments the order's version. That is an update, which needs `Change`.
+
+The policy calls `ddd.written_in_this_transaction(xmin)` for the order's row. The function returns true when the
+current transaction wrote the row's current version, inside a savepoint or not. Right after its drop step, every
+script creates this function, and the `ddd` schema it lives in, when they are missing or differ.
 
 > [!NOTE]
-> The function asks whether the transaction *wrote* the root row, not whether it inserted it. A root row
-> the same transaction updated counts as well, whatever updated it: an `UPDATE` policy you wrote by
-> hand, a trigger, a `SECURITY DEFINER` function, a foreign key's `ON UPDATE CASCADE` or
-> `ON DELETE SET NULL`, which run as the table's owner, or work the application did earlier in that
-> transaction as another caller. The rules' own policies are not such a way: a caller with only a `Create`
-> rule cannot make an existing order count by updating it, because the update needs a `Change` rule and
-> so changes no row. An `UPDATE` policy of your own on the root therefore also lets its callers add
-> entities wherever a `Create` rule holds. And the policy reads the root as the caller, so a caller who may
-> create a root but not read it cannot add its entities: whoever may create an aggregate should also be
-> allowed to read it.
+> The function returns true for a root row that the transaction wrote, whether the transaction inserted or updated
+> the row. Any update counts, whatever made it:
+>
+> - an `UPDATE` policy that you wrote by hand,
+> - a trigger, or a `SECURITY DEFINER` function,
+> - a foreign key's `ON UPDATE CASCADE` or `ON DELETE SET NULL`, which run as the table's owner,
+> - work that the application did earlier in that transaction as another caller.
+>
+> The rules' policies cannot cause such an update. A caller with only a `Create` rule cannot make an existing order
+> count by updating it, because the update needs a `Change` rule, and so the update changes no row. An `UPDATE` policy
+> of yours on the root therefore also lets its callers add entities wherever a `Create` rule holds.
+>
+> The policy also reads the root row as the caller. So a caller who may create a root but may not read it cannot add
+> its entities. Whoever may create an aggregate should also be allowed to read it.
 
-A root row so old that Postgres has frozen it, written more than two billion transactions earlier, keeps
-the id of the transaction that wrote it, and that id can pass for a recent one. Adding an entity to such a
-row with only a `Create` rule then fails with an error instead of the usual refusal, or, when that old id
-matches a transaction running at that moment, is allowed.
+Postgres freezes a row that was written more than two billion transactions earlier. A frozen root row keeps the id of
+the transaction that wrote it, and that id can look like the id of a recent transaction. Adding an entity to such a
+row with only a `Create` rule then fails with an error, instead of the usual refusal. When the old id matches a
+transaction that is running at that moment, the insert is allowed.
 
-### Asking the aggregate's entities: access functions
+### Access functions
 
-Whether the caller is one of a project's members is a question about the project's entities, and a rule
-cannot ask it itself. The tables of the entities have policies that ask the aggregate's table whether
-their row is visible, so a policy on the aggregate's table that read them would ask itself, and Postgres
-stops the query with infinite recursion ([DDD00041](diagnostics.md#ddd00041)). Put the question in an
-access function, written the way a rule is, and let the rules call it:
+Whether the caller is one of a project's members is a question about the project's entities. A rule cannot ask it
+directly. The entity tables have policies that check the aggregate's table to see whether their row is visible. A
+policy on the aggregate's table that read the entity tables would call itself, and Postgres stops the query with
+infinite recursion ([DDD00041](diagnostics.md#ddd00041)). Put the question in an access function, written like a
+rule, and call the access function from the rules:
 
 ```csharp
 [AccessFunction<Project>("projects.is_member")]
@@ -1127,9 +1249,12 @@ public static partial class MembersWorkOnTheirProjects
 }
 ```
 
-The function becomes one SQL function. It runs as its owner, `SECURITY DEFINER`, so it reads the members
-without their policies, and with an empty search path, so nothing in the caller's session changes what it
-reads. The rule asks it about the row:
+The access function becomes one SQL function:
+
+- It runs as its owner, `SECURITY DEFINER`, so it reads the members without their policies.
+- It runs with an empty search path, so nothing in the caller's session changes what it reads.
+
+The rule calls the function for the row:
 
 ```sql
 CREATE OR REPLACE FUNCTION projects.is_member(uuid) RETURNS boolean
@@ -1144,35 +1269,41 @@ CREATE POLICY "Members work on their projects (select) for authenticated" ON "pr
 -- and the same for anon, and for UPDATE
 ```
 
-**It is made once.** Only the context that maps `Project` writes the function, however many modules see
-the class that declares it, and it writes it before the policies that call it. A later script replaces it
-in place, so the policies of other modules that call it keep working, and drops the functions the context
-no longer declares, once nothing asks them. Two functions that would be one in the database, one
-`schema.name`, are refused, whether one context writes both or two contexts write one each.
+**One context writes the function.** Only the context that maps `Project` writes the function, however many modules
+see the class that declares it. That context writes the function before the policies that call it.
 
-**Only the roles that ask it may run it.** The script revokes the function from `PUBLIC`, takes back every
-other grant on it but its owner's, what a schema's default privileges gave and what an earlier script
-granted alike, and grants it to the roles of the policies that ask it: `anon` and `authenticated` above. A
-function no policy asks is executed by nobody but its owner, a superuser and the functions that run as
-their owner. A script of one context knows only that context's policies: where a policy of another module
-asks the function for a role of its own, write the contexts together with `PostgresRowAccess.Scripts`, as
-the Supabase build does, or grant it yourself after the script.
+- A later script replaces the function in place, so other modules' policies that call it keep working.
+- The script drops the functions that the context no longer declares, once nothing calls them.
+- Two functions with the same `schema.name` in the database are refused, whether one context writes both or two
+  contexts write one each.
 
-**Its parameters and what it returns are fixed.** Postgres cannot change either with `CREATE OR REPLACE`,
-and cannot drop a function that other modules' policies call short of dropping those policies with it. To
-change them, give the function a new name. The old one stays while a policy of another module still asks
-it, and the context's next script drops it once none does. The Supabase export refuses the change against
-a module's newest access file and says so; a script of your own has no history to compare with.
+**Only the roles that call the function may run it.** The script:
 
-**Asked by a permission.** The generator adds `Name` and an `Allows` that takes the aggregate's permission, for a rule
-that holds a project's id rather than the project: `ProjectMembership.Allows(task.ProjectId)` becomes
-`projects.is_member("ProjectId")`. Only the database can answer that one; called in C#, it throws
-`DatabaseOnlyException`. Where C# holds the project, `ProjectMembership.Allows(project, caller)` answers in
-memory, because the members are loaded with the project.
+- revokes the function from `PUBLIC`,
+- takes back every other grant on it except its owner's, including grants from a schema's default privileges and
+  grants from an earlier script,
+- grants it to the roles of the policies that call it, `anon` and `authenticated` above.
 
-**Other modules** see only the Projects module's contracts, which cannot hold the definition, since it
-reads the module's own aggregate. So the contracts publish it by its key, and the definition takes its
-name from there:
+Only its owner, a superuser and functions that run as their owner can run a function that no policy calls. A script
+for one context knows only that context's policies. When another module's policy calls the function for a different
+role, write the contexts together with `PostgresRowAccess.Scripts`, as the Supabase build does. Or grant the function
+yourself after the script.
+
+**Its parameters and its return type are fixed.** Postgres cannot change either with `CREATE OR REPLACE`. Postgres
+also cannot drop a function that other modules' policies call without dropping those policies. To change the
+parameters or the return type, give the function a new name. The old function stays while another module's policy
+still calls it. The context's next script drops it once no policy does. The Supabase export compares the change with
+the module's newest access file, refuses the change and says why. A script of yours has no history to compare with.
+
+**Called with an id.** A rule may hold a project's id and not the project. For such a rule, the generator adds `Name`
+and an `Allows` overload that takes the aggregate's id. `ProjectMembership.Allows(task.ProjectId)` becomes
+`projects.is_member("ProjectId")`. Only the database can answer this overload. Called in C#, it throws
+`DatabaseOnlyException`. Where C# holds the project, `ProjectMembership.Allows(project, caller)` answers in memory,
+because the members are loaded with the project.
+
+**Other modules** see only the Projects module's contracts. The contracts cannot hold the definition, because the
+definition reads the module's aggregate. So the contracts publish the function for the aggregate's id type, and the
+definition takes its name from the contract:
 
 ```csharp
 // Projects.Contracts
@@ -1195,21 +1326,21 @@ public static partial class ProjectMembersWorkOnItsTasks
 }
 ```
 
-The function's name is written once, and the permission is typed: a rule cannot pass a task's id where a
-project's is asked. The Supabase build writes the access file of the module that owns a function before
-the files of the modules that call it, and refuses a rule that asks a function no module defines.
+The function's name is written once, and the id is typed. A rule cannot pass a task's id where a project's id is
+expected. The Supabase build writes the access file of the module that owns a function before the files of the
+modules that call it. It refuses a rule that calls a function that no module defines.
 
-`Sql.Call` stays for functions defined outside C#, in a migration of your own: an existing
-`extras.can_export("Id")`, say. The build does not look for those among the access functions; they are
-yours. It writes the name as you give it, without quotes, which Postgres reads in lower case:
-`Sql.Call<bool>("Tenancy.my_check", ...)` asks `tenancy.my_check`. A function of your own in a schema with
-capitals is asked with `Sql.Raw<bool>`, whose SQL names the schema in double quotes,
-`Sql.Raw<bool>("\"Tenancy\".my_check(\"Id\")")`, or is written as an access function named
-[relative to its module](#names-relative-to-the-module), whose schema the export writes in double quotes, as it
-writes [every schema it names](#schema-names).
+`Sql.Call` stays for functions defined outside C#, in a migration of yours, such as an existing
+`extras.can_export("Id")`. The build does not look for those among the access functions. It writes the name as you
+give it, without quotes, and Postgres reads such a name in lower case. So `Sql.Call<bool>("Tenancy.my_check", ...)`
+calls `tenancy.my_check`. To call a function of yours in a schema with capitals, do one of these:
 
-`Any` is over the aggregate's own collections, with or without a condition. Inside an `Any`, the entity may be
-asked about its own entities in the same way, as deep as the model goes:
+- Use `Sql.Raw<bool>`, whose SQL names the schema in double quotes: `Sql.Raw<bool>("\"Tenancy\".my_check(\"Id\")")`.
+- Write the function as an access function with a name [relative to its module](#function-names-relative-to-the-module).
+  The export writes that schema in double quotes, as it writes [every schema it names](#schema-names).
+
+`Any` runs over the aggregate's own collections, with or without a condition. Inside an `Any`, the rule may check the
+entity's own entities in the same way, as deep as the model goes:
 
 ```csharp
 [AccessFunction<Ticket>("desk.reacted_to_comment")]
@@ -1221,15 +1352,15 @@ public static partial class ReactedToComment
 }
 ```
 
-The inner question becomes an `EXISTS` inside the outer one, joined to the comment it is asked of, and may read
-that comment, its own reaction, the caller and the function's parameters. What it may not ask from in there is
-one of the aggregate's own collections again, `ticket.Watchers.Any(...)` inside `ticket.Comments.Any(...)`:
-that is DDD00039, and the two belong side by side, joined with `&&` or `||`. A row rule itself reads no
-collection at all, an entity's entities included: it asks an access function (DDD00041).
+- The inner `Any` becomes an `EXISTS` inside the outer one, joined to the comment it checks.
+- The inner `Any` may read that comment, its own reaction, the caller and the function's parameters.
+- The inner `Any` may not read another of the aggregate's collections, such as `ticket.Watchers.Any(...)` inside
+  `ticket.Comments.Any(...)`. That is DDD00039. Put the two side by side instead, joined with `&&` or `||`.
+- A row rule reads no collection at all, including an entity's entities. It calls an access function (DDD00041).
 
-**More than the aggregate.** `Allows` may take more after the caller: a `string`, `bool`, `int`, `long`,
-`Guid` or an id, each a parameter of the SQL function after the permission. The generator adds them to
-`Allows(permission, ...)` as well, and a rule passes them along:
+**More parameters.** `Allows` may take more parameters after the caller: a `string`, `bool`, `int`, `long`, `Guid`
+or an id. Each one becomes a parameter of the SQL function, after the aggregate's id. The generator also adds them to
+the `Allows` overload that takes the id, and a rule passes them along:
 
 ```csharp
 [AccessFunction<Project>("projects.has_role")]
@@ -1243,15 +1374,15 @@ public static partial class ProjectRoles
 // projects.has_role("Id", 'lead') and projects.has_role("ProjectId", 'lead') in their policies
 ```
 
-The function is `projects.has_role(uuid, text)`. A contract publishes one like it by declaring its question,
-`static partial bool Allows(ProjectId permission, string role);`, which the generator implements.
+The function is `projects.has_role(uuid, text)`. A contract publishes a function like it by declaring the method,
+`static partial bool Allows(ProjectId key, string role);`, and the generator writes its body.
 
-### Set-shaped questions
+### Set-shaped access functions
 
-An access function asked about one row runs once for every row a query looks at. Where the question is
-"which of these may the caller see", it is cheaper to ask it the other way round: once per statement, for
-the set of permissions it allows, and let Postgres find those rows through the permission's index. A set-shaped question
-answers with an `AccessSet<T>`, which a rule asks with `Contains`:
+An access function that checks one row runs once for every row that a query looks at. For the question "which of
+these may the caller see", the other direction is cheaper. The function runs once per statement and returns the set
+of ids it allows. Postgres then finds those rows through the index on the id. A set-shaped access function returns an
+`AccessSet<T>`, and a rule checks the set with `Contains`:
 
 ```csharp
 [AccessFunction<Ticket>("tickets_i_watch", Shape = AccessFunctionShape.Set)]
@@ -1268,18 +1399,28 @@ public static partial class WatchersReadTheTicketsTheyWatch
 }
 ```
 
-With `Shape = AccessFunctionShape.Set` the generator adds `Ids(...)`, which takes the function's own
-parameters, in place of `Allows(permission, ...)`, and the policy asks the set once:
+With `Shape = AccessFunctionShape.Set`, the generator adds `Ids(...)` in place of the `Allows` overload that takes an
+id. `Ids(...)` takes the function's own parameters. The policy calls the set once.
+
+In the diagram, purple is the rule and green is the index scan that it leads to:
 
 ```mermaid
 flowchart TD
-    Rule["TicketsIWatch.Ids().Contains(ticket.Id)"] -->|"the generator"| Policy["Id = ANY (ARRAY(SELECT desk.tickets_i_watch()))"]
-    Policy -->|"once per statement"| Set["InitPlan: the ids of the tickets the caller watches"]
-    Set -->|"then"| Scan["Index scan on the permission: those tickets and no others"]
+    rule["<b>TicketsIWatch.Ids().Contains(ticket.Id)</b><br/><small>the rule</small>"]
+    policy["<b>Id = ANY (ARRAY(SELECT desk.tickets_i_watch()))</b><br/><small>the policy</small>"]
+    set["<b>InitPlan</b><br/><small>the ids of the tickets the caller watches</small>"]
+    scan["<b>Index scan on the id</b><br/><small>those tickets and no others</small>"]
+    rule -->|"the generator"| policy
+    policy -->|"once per statement"| set
+    set -->|"then"| scan
+    classDef strong fill:#5b2ec933,stroke:#5b2ec9,stroke-width:2px
+    classDef good fill:#1f8a5b26,stroke:#1f8a5b
+    class rule strong
+    class scan good
 ```
 
 <details>
-<summary>Show the code: the function the export writes, and the policy that asks it</summary>
+<summary>Show the code: the function that the export writes, and the policy that calls it</summary>
 
 ```sql
 CREATE OR REPLACE FUNCTION "desk".tickets_i_watch() RETURNS SETOF uuid
@@ -1295,15 +1436,19 @@ CREATE POLICY "Watchers read the tickets they watch (select) for authenticated" 
 
 </details>
 
-`= ANY (ARRAY(SELECT ...))` is the form on purpose. Postgres runs the `ARRAY(SELECT ...)` as an InitPlan,
-before it reads the table, and looks the ids up in the permission's index. The same question written
-`"Id" IN (SELECT ...)` stays a filter in a policy: a hashed SubPlan, checked against every row the scan
-reads, with no index condition to narrow it. The toolkit's own tests read both plans from `EXPLAIN`. A
-function whose whole question is whether one of the aggregate's entities is so, as above, reads the
-entities' table alone, `SELECT DISTINCT e1."TicketId" FROM ... e1`, so its work grows with what the caller
-holds, not with the number of tickets; in the tests, on 5,000 tickets, it reads about half the buffers of the same question
-asked from the tickets' table. A question about the entities of those entities starts from the same table and
-asks theirs inside it, so the tickets' table is still never read:
+The policy uses the form `= ANY (ARRAY(SELECT ...))` on purpose:
+
+- Postgres runs `ARRAY(SELECT ...)` as an InitPlan, before it reads the table. It then looks the ids up in the index
+  on the id.
+- The same question written as `"Id" IN (SELECT ...)` stays a filter in a policy. It becomes a hashed SubPlan that is
+  checked against every row the scan reads, with no index condition to narrow the scan.
+- The toolkit's tests read both plans from `EXPLAIN`.
+
+A function whose only question is about one of the aggregate's entities, as above, reads only the entities' table:
+`SELECT DISTINCT e1."TicketId" FROM ... e1`. So its work grows with what the caller holds, and not with the number of
+tickets. In the tests, on 5,000 tickets, it reads about half the buffers of the same question asked from the tickets'
+table. A question about the entities of those entities starts from the same table and checks their tables inside it.
+So the tickets' table is still never read:
 
 ```csharp
 [AccessFunction<Ticket>("desk.tickets_i_reacted_in", Shape = AccessFunctionShape.Set)]
@@ -1322,11 +1467,12 @@ CREATE OR REPLACE FUNCTION desk.tickets_i_reacted_in() RETURNS SETOF uuid
 $function$;
 ```
 
-A set-shaped function needs an aggregate whose permission is one column.
+A set-shaped function needs an aggregate whose id is one column.
 
-**Questions of your own.** A question the database answers that is not about one aggregate, the ids of
-what the caller follows, say, is declared in an `[AccessFunctions]` class, without a body, which the
-generator writes:
+#### Database-only questions
+
+Some questions that the database answers are not about one aggregate, such as the ids of what the caller follows.
+Declare such a question in an `[AccessFunctions]` class, as a method without a body. The generator writes the body:
 
 ```csharp
 [AccessFunctions]
@@ -1345,31 +1491,37 @@ public static partial class Questions
 //   "Team" = (SELECT "projects".caller_team())
 ```
 
-An `[AccessSet]` question answers with a set, an `[AccessScalar]` one with a value, and called in C# either
-throws `DatabaseOnlyException`. Their parameters are strings, numbers, flags, `Guid`s, ids, or a type
-parameter constrained to `IEntityId`, for a question over ids a package does not know. The SQL function
-is the one of that name: an access function's, or one a package writes into your migrations. A question
-named with its schema, `extras.caller_team`, is a function of your own, which the policy calls as it is,
-as `Sql.Call` does.
+- An `[AccessSet]` question returns a set. An `[AccessScalar]` question returns a value. Called in C#, either one
+  throws `DatabaseOnlyException`.
+- The parameters are strings, numbers, flags, `Guid`s, ids, or a type parameter constrained to `IEntityId`, for a
+  question over ids that a package does not know.
+- The SQL function is the function of that name. It is an access function, or a function that a package writes into
+  your migrations.
+- A question named with its schema, such as `extras.caller_team`, is a function of yours. The policy calls it as
+  written, as `Sql.Call` does.
 
-**A set is asked once, so its arguments do not read the row.** Only the value compared with the set, the
-argument of `Contains`, may be a column; the question's own arguments are constants, the caller, or the
-enclosing access function's parameters. An argument that read the row would make the set different for
-every row, and the database would ask it once per row after all
-([DDD00051](diagnostics.md#ddd00051)). A scalar question may take a column, and is then asked per row.
+**The arguments of a set do not read the row.** The database asks for a set once per statement. Only the value
+compared with the set, the argument of `Contains`, may be a column. The question's own arguments are constants, the
+caller, or the parameters of the enclosing access function. An argument that read the row would make the set
+different for every row, and the database would ask for the set once per row after all
+([DDD00051](diagnostics.md#ddd00051)). A scalar question may take a column, and is then asked once per row.
 
-**A scalar question and null.** A question such as `CallerTeam()` answers `NULL` for a caller it does not
-know, and such a caller must pass no condition built on it. So a comparison with a scalar question is
-SQL's own, `a = b`, `a <> b`, `a < b`, whatever C# says of their nullability: unknown for such a caller,
-which a policy counts as no. A ticket without a team is not the team of a caller without one, and a team is
-not "another team" than one nobody knows. The comparison stays unknown under `!`, too, so
-`!(ticket.Team == Questions.CallerTeam())` lets such a caller through no more than `==` does. There is no C#
-answer to keep here, since the question throws in C#.
+**A scalar question and null.** A question such as `CallerTeam()` returns `NULL` for a caller it does not know. Such
+a caller must pass no condition built on that question. So a comparison with a scalar question uses SQL's operators,
+`a = b`, `a <> b` and `a < b`, whatever C# says about the nullability of the two sides. For such a caller the
+comparison is unknown, and a policy counts unknown as no:
 
-**A row of the caller's own.** An `[AccessRow]` question answers with one row of a table, the caller's, and a rule
-reads a field of it as it reads a column. The method takes no parameters and returns the class the table is mapped
-to, or a type parameter constrained to `class`; the function of its name returns `SETOF` that table. It is asked
-once per statement, for the field the rule reads:
+- A ticket without a team is not in the team of a caller without one.
+- A team is not "another team" than a team nobody knows.
+- The comparison stays unknown under `!`. So `!(ticket.Team == Questions.CallerTeam())` lets such a caller through no
+  more than `==` does.
+
+There is no C# behavior to match here, because the question throws in C#.
+
+**A row of the caller.** An `[AccessRow]` question returns one row of a table, the caller's row. A rule reads a field
+of that row as it reads a column. The method takes no parameters, and returns the class that the table is mapped to,
+or a type parameter constrained to `class`. The function of that name returns `SETOF` that table. The database asks
+the question once per statement, for the field that the rule reads:
 
 ```csharp
 [AccessFunctions]
@@ -1383,20 +1535,22 @@ public static partial class Questions
 //   "Region" = (SELECT q1."Region" FROM "projects".caller_profile() q1)
 ```
 
-The class must be mapped to a table by the model of the context the policy is written for, which is where the column
-names come from; a rule of another context is refused when its script is written. No row is no caller: every field
-is null, and passes no condition. Tenancy offers one, the calling seat's own row:
-`TenancyRowAccess.CallerSeat<Seat>().Kind == SeatKind.Employee`.
+- The model of the context that the policy is written for must map the class to a table. The column names come from
+  that model. A rule of another context is refused when its script is written.
+- When the function returns no row, every field is null, and the caller passes no condition built on a field.
+- Tenancy offers one such question, the calling seat's row:
+  `TenancyRowAccess.CallerSeat<Seat>().Kind == SeatKind.Employee`.
 
-### Names relative to the module
+### Function names relative to the module
 
-A module's schema is the host's choice, so a module does not have to write it into its function names. A
-name without a schema is relative to its owner: `tickets_i_watch` in the Desk module is
-`desk/tickets_i_watch`, and the export creates the function in the schema of the context that maps the
-aggregate, its default schema or else the aggregate table's, whatever the host called it. The owner is
-the module the declaring assembly names with `[assembly: Module("Desk")]`, written as a module's name is
-in a migration's file name, or the `Owner` of the class's `[AccessFunctions]`, which a package that
-declares no module uses:
+The host chooses a module's schema, so a module does not have to write the schema into its function names. A name
+without a schema is relative to its owner. `tickets_i_watch` in the Desk module is `desk/tickets_i_watch`. The export
+creates the function in the schema of the context that maps the aggregate: that context's default schema, or else the
+schema of the aggregate's table, whatever the host called it. The owner is one of these:
+
+- the module that the declaring assembly names with `[assembly: Module("Desk")]`, written as a module's name is
+  written in a migration's file name,
+- the `Owner` of the class's `[AccessFunctions]`, which a package that declares no module uses.
 
 ```csharp
 [AccessFunction<Ticket>("tickets_i_watch", Shape = AccessFunctionShape.Set)]
@@ -1404,40 +1558,59 @@ declares no module uses:
 public static partial class TicketsIWatch { ... }
 ```
 
-A name with neither a schema nor an owner is [DDD00052](diagnostics.md#ddd00052). `schema.name` keeps
-working as it did, and a name with a slash, `projects/is_member`, is taken as it is, which is how a
-definition in one module matches a contract another publishes. A contract's generated `Name` is the name it
-was declared with, a relative one made logical: `[AccessFunctionContract<ProjectId>("is_member")]` in Projects'
-contracts has the `Name` `projects/is_member`, and `ProjectMembers` above has `projects.is_member`. Either way
-`[AccessFunction<Project>(ProjectMembers.Name)]` defines it wherever it lives.
+- A name with neither a schema nor an owner is [DDD00052](diagnostics.md#ddd00052).
+- `schema.name` keeps working as before.
+- A name with a slash, such as `projects/is_member`, is taken as written. A definition in one module matches a
+  contract that another module publishes this way.
+- A contract's generated `Name` is the name it was declared with, with a relative name made logical.
+  `[AccessFunctionContract<ProjectId>("is_member")]` in Projects' contracts has the `Name` `projects/is_member`.
+  `ProjectMembers` above has `projects.is_member`. Either way, `[AccessFunction<Project>(ProjectMembers.Name)]`
+  defines the function wherever it lives.
 
-A rule asks the function by its logical name, `{fn:desk/tickets_i_watch}` in its SQL, and a script writes
-the name the function has in the database. It knows the functions of its own context;
-`PostgresRowAccess.Scripts` and the Supabase build know those of every context, so a rule of one module may
-ask a function another module defines. For a script of one context whose rules ask another's, hand it the
-names with `RowAccessExport.FunctionNames`, from `PostgresRowAccess.FunctionNamesOf(contexts, functions)`.
-A rule that asks a logical name nothing defines is refused when its script is written, naming the rule.
+A rule calls the function by its logical name, `{fn:desk/tickets_i_watch}` in its SQL. A script writes the name that
+the function has in the database:
 
-The schema a relative name lands in is the context's default schema, or else its aggregate table's, and the
-script writes it in double quotes, as it writes [every schema](#schema-names): `"desk".tickets_i_watch()`. The
-function's own name is the module's, and is written as it is. A name with its schema is SQL as you write it,
-which Postgres reads in lower case: `Desk.tickets_i_watch` is `desk.tickets_i_watch`, a function of another
-schema than `"Desk"`. So a function in a schema with capitals is named relative to its module instead.
+- A script knows the functions of its own context. `PostgresRowAccess.Scripts` and the Supabase build know the
+  functions of every context. So a rule of one module may call a function that another module defines.
+- A script of one context whose rules call another context's functions needs their names. Pass them in
+  `RowAccessExport.FunctionNames`, from `PostgresRowAccess.FunctionNamesOf(contexts, functions)`.
+- A rule that calls a logical name that nothing defines is refused when its script is written. The refusal names the
+  rule.
+
+A relative name lands in the context's default schema, or else in the schema of its aggregate's table. The script
+writes the schema in double quotes, as it writes [every schema](#schema-names): `"desk".tickets_i_watch()`. The
+function's own name is the module's choice, and the script writes it as given. A name with its schema is SQL as you
+write it, and Postgres reads it in lower case. So `Desk.tickets_i_watch` is `desk.tickets_i_watch`, a function in a
+different schema than `"Desk"`. Name a function in a schema with capitals relative to its module instead.
 
 ### Schema names
 
-The toolkit writes every schema it names in double quotes: a module's, Tenancy's and Membership's, the one the
-migration history is in, and its own, `ddd`. That holds for the access files, the setup script and the
-statement the interceptor sends; for a function, a table, a grant, a trigger and a comment alike; and for what
-the start-up checks say, so a fix they name runs as it is written. Postgres keeps a name in double quotes as it
-is written, so the SQL names the schema Entity Framework made, whatever the model calls it, and nothing has to
-decide whether a name needs the quotes: any name Entity Framework takes works.
+The toolkit writes every schema that it names in double quotes:
+
+- a module's schema, Tenancy's and Membership's, the schema of the migration history, and the toolkit's `ddd`,
+- in the access files, the setup script, and the statement that the interceptor sends,
+- for a function, a table, a grant, a trigger and a comment,
+- in the messages of the start-up checks, so a fix that a check names runs as written.
+
+Postgres keeps a name in double quotes as written. So the SQL names the schema that Entity Framework made,
+whatever the model calls it. No code has to decide whether a name needs the quotes, and any name that Entity
+Framework accepts works.
+
+In the diagram, purple is the model's schema and green is the schema that the SQL reaches:
 
 ```mermaid
 flowchart LR
-    Model["The model's schema<br/>desk, Desk, Help_Desk, order"] -->|"every statement<br/>names it in double quotes"| Sql["the functions, policies,<br/>triggers and grants"]
-    Sql -->|"Postgres keeps<br/>the name as written"| Schema["the schema<br/>Entity Framework made"]
-    Sql -.->|"a lookup compares<br/>the name, unquoted"| Kept["what the catalog keeps:<br/>Help_Desk, tickets_i_watch"]
+    model["<b>The model's schema</b><br/><small>desk, Desk, Help_Desk, order</small>"]
+    sql["<b>The toolkit's SQL</b><br/><small>functions, policies, triggers, grants</small>"]
+    schema["<b>The schema</b><br/><small>as Entity Framework made it</small>"]
+    kept["<b>The catalog's names</b><br/><small>Help_Desk, tickets_i_watch</small>"]
+    model -->|"every statement names it<br/>in double quotes"| sql
+    sql -->|"Postgres keeps the name<br/>as written"| schema
+    sql -.->|"a lookup compares<br/>the unquoted name"| kept
+    classDef strong fill:#5b2ec933,stroke:#5b2ec9,stroke-width:2px
+    classDef good fill:#1f8a5b26,stroke:#1f8a5b
+    class model strong
+    class schema good
 ```
 
 | The context says | The script writes |
@@ -1447,22 +1620,27 @@ flowchart LR
 | `HasDefaultSchema("Help_Desk")` | `"Help_Desk".tickets_i_watch()`, `"Help_Desk"."Tickets"` |
 | `HasDefaultSchema("order")` | `"order".tickets_i_watch()`, `"order"."Tickets"` |
 
-The names inside the schema are written as before: a table as Entity Framework names it, `"Tickets"`, and a
-function by its own name, `tickets_i_watch`. Where a script finds what an earlier one made, to drop it, keep it
-or take its grants back, it compares the schema and the name the catalog keeps, as strings,
-`('Help_Desk', 'tickets_i_watch')`. Only a schema longer than the 63 bytes Postgres keeps of a name is
-refused: Postgres would cut it, and the script would no longer find what it made there. A statement of a
-contribution names a function of its own the same way, with `RowAccessModel.Schema(context.Model)`.
+- The names inside the schema are written as before. A table is written as Entity Framework names it, `"Tickets"`. A
+  function is written by its own name, `tickets_i_watch`.
+- To find what an earlier script made, for dropping it, keeping it or taking its grants back, a script compares the
+  schema and the name that the catalog keeps, as strings: `('Help_Desk', 'tickets_i_watch')`.
+- A schema longer than the 63 bytes that Postgres keeps of a name is refused. Postgres would cut the name, and the
+  script would no longer find what it made there.
+- A statement of a contribution names a function of its own in the same way, with
+  `RowAccessModel.Schema(context.Model)`.
 
-What the toolkit does not name is written as it was given. A function you name with its schema, an access
-function declared `schema.name`, a `Sql.Call`, a caller function or a `RowAccessExport.FunctionNames` given
-by hand, is SQL of your own. Postgres's own `pg_catalog` and the functions of Supabase and pgmq,
-`auth.uid()` and `pgmq.send(...)`, are written as their makers document them. The SQL Entity Framework
-writes, the migrations and a context's queries, names a schema as Entity Framework does, in double quotes
-only where Postgres needs them. The one line of the Supabase export's in a migration's file, the
-`ENABLE ROW LEVEL SECURITY` of a table it creates, is the toolkit's, and quotes the schema as every other
-statement of the toolkit's does: `ALTER TABLE "desk"."Tickets" ENABLE ROW LEVEL SECURITY;`. The prose of these
-pages names a function without the quotes, `ddd.caller_id()`: it is the same function.
+The toolkit writes the names that it does not choose as they were given:
+
+- A function that you name with its schema is SQL of yours. This covers an access function declared `schema.name`,
+  a `Sql.Call`, a caller function, and a `RowAccessExport.FunctionNames` entry written by hand.
+- Postgres's `pg_catalog` and the functions of Supabase and pgmq, such as `auth.uid()` and `pgmq.send(...)`, are
+  written as their makers document them.
+- The SQL that Entity Framework writes, the migrations and a context's queries, names a schema as Entity Framework
+  does, in double quotes only where Postgres needs them.
+- The Supabase export writes one line into a migration's file, the `ENABLE ROW LEVEL SECURITY` of a table that the
+  migration creates. That line is the toolkit's, and quotes the schema like every other statement of the toolkit:
+  `ALTER TABLE "desk"."Tickets" ENABLE ROW LEVEL SECURITY;`.
+- The prose of these pages names a function without the quotes, such as `ddd.caller_id()`. It is the same function.
 
 <details>
 <summary>Show the code: a module in "Help_Desk"</summary>
@@ -1487,73 +1665,93 @@ CREATE POLICY "Watchers read the tickets they watch (select) for authenticated" 
 
 </details>
 
-### A resource's access, asked by its id
+### Resource access contracts
 
-A package that keeps a resource's access writes the functions that answer it, and names them itself: the
-[Membership package](membership/postgres.md#the-five-functions) writes, for each resource with members, the
-resources the caller sees and those it holds a permission on, under names it takes from the resource's rules. A rule
-should not have to repeat those names, and a module that asks about another module's resource should not even
-know them. So it asks by the resource's id. An `[AccessFunctionContract]`, above, is for a function your module
-defines itself and names; this contract is for a set a package answers:
+A package that keeps a resource's access writes the functions that answer it, and names those functions itself. For
+each resource with members, the [Membership package](membership/postgres.md#the-five-functions) writes functions that
+return the resources the caller sees and the resources the caller holds a permission on. It takes their names from
+the resource's rules. A rule should not repeat those names, and a module that checks another module's resource should
+not need to know them. So the rule asks by the resource's id. An `[AccessFunctionContract]`, above, is for a function
+that your module defines and names. A `[ResourceAccessContract]` is for a set that a package returns.
+
+In the diagram, purple is the contract and green is the policy that the export writes:
 
 ```mermaid
 flowchart LR
-    Contract["ProjectsISee<br/>a contract of ProjectId:<br/>the projects seen"] -->|"the generator"| Rule["the rule's SQL<br/>asks the set by<br/>ProjectId and seen"]
-    Rule -->|"the export"| Policy["the policy asks<br/>projects.projects_i_see()"]
-    Answer["the Membership contribution<br/>projects_i_see answers<br/>seen for ProjectId"] -->|"says so"| Policy
+    contract["<b>ProjectsISee</b><br/><small>contract of ProjectId: the projects seen</small>"]
+    rule["<b>The rule's SQL</b><br/><small>the set by ProjectId and Seen</small>"]
+    answer["<b>The Membership contribution</b><br/><small>projects_i_see returns Seen for ProjectId</small>"]
+    policy["<b>The policy</b><br/><small>calls projects.projects_i_see()</small>"]
+    contract -->|"the generator"| rule
+    rule -->|"the export"| policy
+    answer -->|"declares the set"| policy
+    classDef strong fill:#5b2ec933,stroke:#5b2ec9,stroke-width:2px
+    classDef good fill:#1f8a5b26,stroke:#1f8a5b
+    class contract strong
+    class policy good
 ```
 
-The contract is one line, in the contracts of the module that owns the resource. It names the resource's id and
-the set, and no function: `ResourceAccessSet.Seen` publishes `Ids()`, the resources the caller sees, and
-`ResourceAccessSet.HeldOn` publishes `Ids(string permission)`, those the caller holds the permission on.
-`ResourceAccessSet.FellowMembers` publishes the members of the resources the caller is a member of, the people it
-works with: their ids are no resource's, so that contract declares its `Ids` itself, with the id its members are
-known by, `public static partial AccessSet<SeatId> Ids();`. A rule asks it as it
-asks any set, with `Contains`, once per statement. The generator writes the set into the rule's SQL by the id's
-full name and the set, and the export writes the policy with the function a contribution says answers that set
-for the resource with that id. The Membership package says so of the two functions it writes for each resource,
-so listing its contribution is all a host does.
+The contract is one line, in the contracts of the module that owns the resource. It names the resource's id and the
+set, and no function:
 
-- **The name is said in one place, or in none.** The functions take their names from the resource's rules; a
-  database that already has names of its own keeps them in the rules, `functions:`, and nothing else changes. A
-  rule says neither.
-- **Another module asks the owning module's contract**, which references nothing but the id: the asking module
-  knows neither the resource's aggregate nor the package that answers. The owning module's rules ask the same
-  contract, so a question has one name in every module. And only the owning module declares one: a contract of
-  an id whose assembly declares another module is [DDD00038](diagnostics.md#ddd00038), so what a module
-  publishes of its resources stays its own to say. Any project of that module may declare it, its contracts
-  being the place where other modules can see it.
-- **Refused where nothing answers.** A rule that asks a set no contribution of the export answers, because the
-  host does not list the resource's membership, say, is refused when its access file is written, naming the
-  rule and the resource. So is one written without the context that keeps the resource, a script of one
-  context or an export of one module: the message says to write them together, or to hand the script the
-  other context's names. One function answers a set for a resource: two that say so, in one context or in two,
-  are refused, naming both.
-- **SQL of your own asks the same way.** A contract's generated `Name` is the set's name, so a contribution of
-  yours asks `{fn:...}` with `ProjectsWhereIHold.Name` in it, as the sample's `UnitChangesWithItsPermissions` does.
-- **A package of your own** says which set a function answers with `Answers` on its `ContributedFunction`,
+| Set | The contract publishes | Returns |
+|---|---|---|
+| `ResourceAccessSet.Seen` | `Ids()` | the resources the caller sees |
+| `ResourceAccessSet.HeldOn` | `Ids(string permission)` | the resources the caller holds the permission on |
+| `ResourceAccessSet.FellowMembers` | `Ids()`, which the contract declares itself with the id that its members are known by: `public static partial AccessSet<SeatId> Ids();` | the members of the resources the caller is a member of, the people the caller works with. Their ids are not a resource's ids. |
+
+A rule checks the set as it checks any set, with `Contains`, once per statement. The generator writes the set into
+the rule's SQL by the id's full name and the set. The export writes the policy with the function that a contribution
+declares for that set and that id. The Membership package declares this for the two functions it writes for each
+resource, so a host only lists its contribution.
+
+- **The function's name is set in one place, or nowhere.** The functions take their names from the resource's
+  rules. A database that already has its own names keeps them in the rules, under `functions:`, and nothing else
+  changes. A rule names no function.
+- **Another module calls the owning module's contract.** The contract references only the id. So the calling
+  module knows neither the resource's aggregate nor the package that returns the set. The owning module's rules call
+  the same contract, so a question has one name in every module.
+- **Only the owning module declares a contract.** A contract of an id whose assembly declares another module is
+  [DDD00038](diagnostics.md#ddd00038). So only the owning module publishes what it shares of its resources. Any
+  project of that module may declare the contract. Its contracts project is the place where other modules can see
+  it.
+- **Refused when no function returns the set.** A rule that asks for a set that no contribution of the export
+  returns is refused when its access file is written. That happens, for example, when the host does not list the
+  Membership contribution for the resource. The refusal names the rule and the resource. A rule written without the
+  context that keeps the resource is refused too, such as in a script of one context or an export of one module. The
+  message says to write them together, or to give the script the other context's names. One function returns a set
+  for a resource.
+  Two functions that declare the same set, in one context or in two, are refused, and the refusal names both.
+- **SQL of yours calls a set the same way.** A contract's generated `Name` is the set's name. So a contribution of
+  yours writes `{fn:...}` with `ProjectsWhereIHold.Name` in it, as the sample's `UnitChangesWithItsPermissions` does.
+- **A package of yours** declares which set a function returns with `Answers` on its `ContributedFunction`:
   `new ResourceAccessAnswer(typeof(TId), ResourceAccessSet.Seen)`. Such a function returns `SETOF` the id's type,
-  or the members' for `FellowMembers`, and takes nothing for the resources seen and the members, or the permission
-  as `text` for those it is held on; anything else is refused when the script is written.
-- **A rule that asks a module that asks back.** A read rule on Tenancy's seats that asks who works on the same
-  projects asks a function of the projects' module, whose functions ask Tenancy's in turn, who the calling seat is.
-  Postgres refuses a policy that asks a function that does not exist yet, so neither file could run first. The
-  export writes Tenancy's file first all the same, with a function of Tenancy's own, of the same name, that asks the
-  projects' one by its name when it runs: it is made with Postgres' check of a function's body turned off for it
-  alone, and the policy asks it. So the rule is written as any other, and nothing of it is yours to arrange. Only a
-  function a package writes is asked that way; two modules whose own access functions ask each other's are still
-  refused, naming the circle.
+  or `SETOF` the members' id type for `FellowMembers`. It takes no parameters for the resources seen and for the
+  members. It takes the permission as `text` for the resources that a permission is held on. Any other shape is
+  refused when the script is written.
+- **Two modules that call each other.** A read rule on Tenancy's seats may check who works on the same projects. That
+  rule calls a function of the projects' module, whose functions call Tenancy's functions to find the calling seat.
+  Postgres refuses a policy that calls a function that does not exist yet, so neither file could run first. The
+  export still writes Tenancy's file first. It writes a Tenancy function with the same name that calls the projects'
+  function by name at run time. Postgres's check of a function's body is turned off for that function only, and the
+  policy calls it. So you write the rule like any other, and you arrange nothing. Only a function that a package
+  writes is called this way. Two modules whose own access functions call each other are still refused, and the
+  refusal names the cycle.
 
-A contract that declares its `Ids` itself, to document it, gets that one implemented. Its key is the id of the
-resource's aggregate: one declared with `[EntityId<Guid>]`, as a module's contracts declare it, or, in the
-project that declares the aggregate, the id the toolkit writes beside an aggregate root declared with a value,
-`BoardId` for `[AggregateRoot<Guid>] public partial class Board`, or an id a package's switch writes into the
-project, `OrganizationUnitId` beside `[assembly: GenerateTenancyIds]` in a contracts project
-([Modules split by layer](tenancy/your-module.md#modules-split-by-layer)). A contract of another shape is
-[DDD00038](diagnostics.md#ddd00038).
+A contract that declares its `Ids` itself, for documentation, gets that declaration implemented. The contract's id is
+the id of the resource's aggregate. That id is one of these:
+
+- an id declared with `[EntityId<Guid>]`, as a module's contracts declare it,
+- in the project that declares the aggregate, the id that the generator writes next to an aggregate root declared
+  with a value: `BoardId` for `[AggregateRoot<Guid>] public partial class Board`,
+- an id that a package's switch writes into the project: `OrganizationUnitId` next to
+  `[assembly: GenerateTenancyIds]` in a contracts project
+  ([Modules split by layer](tenancy/your-module.md#modules-split-by-layer)).
+
+A contract of another shape is [DDD00038](diagnostics.md#ddd00038).
 
 <details>
-<summary>Show the code: Projects' contracts, a rule of each module that asks them, and the policy the export writes</summary>
+<summary>Show the code: Projects' contracts, a rule of each module that calls them, and the policy that the export writes</summary>
 
 ```csharp
 // Projects.Contracts, the module's contracts project: what other modules may ask, a line each
@@ -1563,14 +1761,14 @@ public static partial class ProjectsISee;
 [ResourceAccessContract<ProjectId>(ResourceAccessSet.HeldOn)]
 public static partial class ProjectsWhereIHold;
 
-// Projects.Infrastructure: the module's own rule asks its contract
+// Projects.Infrastructure: the module's own rule calls its contract
 [RowAccess<Project>(RowOperations.Read, To = [RowAccessRoles.User])]
 public static partial class SeatsSeeTheProjectsTheyReach
 {
     public static bool Allows(Project project, Caller caller) => ProjectsISee.Ids().Contains(project.Id);
 }
 
-// Inspections.Infrastructure: another module's rule asks the same, by the project's id it stores
+// Inspections.Infrastructure: another module's rule calls the same contract, with the project id it stores
 [RowAccess<Inspection>(RowOperations.Create, To = [RowAccessRoles.User])]
 public static partial class SeatsRecordWhereTheyMay
 {
@@ -1580,7 +1778,7 @@ public static partial class SeatsRecordWhereTheyMay
 }
 ```
 
-The rule's SQL as the generator writes it, and its policy as the export writes it, with the name the projects'
+The rule's SQL as the generator writes it, and its policy as the export writes it, with the name that the projects'
 rules give the function:
 
 ```sql
@@ -1597,17 +1795,24 @@ CREATE POLICY "Seats record where they may (insert) for authenticated" ON "inspe
 
 ### Column rules
 
-A policy is asked of a row and a command, and never of a column: Postgres cannot tell it which columns a
-statement changes. Where every change to a row takes the same permission, that is all a rule needs. Where one column
-takes a stricter permission than the rest of the row, the policy for `UPDATE` has to let through whoever holds any of
-the permissions, and whoever holds one of them then changes every column. A project shows it: renaming one takes the
-permission to edit it, closing it the permission to close it, its crew the permission to manage the crew and its owner the permission to
-name owners, and a project that is moved has to pass at the unit it arrives at, where the permission to open projects
-is what the move asks. So the policy that lets a seat change a project asks for any of those permissions. A seat that
-only manages the crew, or only opens projects at the unit, could rename the project with a statement of its own,
-past the check in front of the handler.
+Postgres checks a policy per row and per command, and never per column. Postgres cannot tell a policy which columns a
+statement changes. Where every change to a row needs the same permission, a rule needs nothing more. Where one column
+needs a stricter permission than the rest of the row, the policy for `UPDATE` must let through whoever holds any of
+the permissions. A caller who holds one of them can then change every column.
 
-`Columns` on a rule makes it a column rule: one condition more, for a change of those columns alone.
+A project shows the problem:
+
+- Renaming a project needs the permission to edit it.
+- Closing a project needs the permission to close it.
+- Changing its crew needs the permission to manage the crew.
+- Changing its owner needs the permission to name owners.
+- A project that moves must pass at the unit it moves to, where the move needs the permission to open projects.
+
+So the policy that lets a seat change a project accepts any of those permissions. A seat that only manages the crew,
+or only opens projects at the unit, could rename the project with an SQL statement of its own. That statement would
+bypass the access check before the handler.
+
+`Columns` on a rule makes it a column rule. A column rule adds one more condition, for a change of those columns only:
 
 ```csharp
 [RowAccess<Project>(RowOperations.Change, To = [RowAccessRoles.User], Columns = [nameof(Project.State)])]
@@ -1617,27 +1822,46 @@ public static partial class StateChangesWithTheClosePermission
 }
 ```
 
-It is written where the other rules are, beside your infrastructure, and nothing about it goes on the aggregate.
-The script writes it as a trigger rather than a policy, before an update of the columns it holds, that asks the
-rule and refuses the statement when the answer is no:
+You write a column rule next to the other rules, in your infrastructure. Nothing about it goes on the aggregate. The
+script writes a column rule as a trigger. The trigger runs before an update of the columns that the rule holds,
+checks the rule, and refuses the statement when the rule says no.
+
+In the diagram, purple is the update, green is a change that goes ahead, grey is a row that stays unchanged, and red
+is a refusal:
 
 ```mermaid
 flowchart TB
-    Update["An UPDATE<br/>of a project"] --> Policy{"May the caller<br/>change the row?"}
-    Policy -->|no| Untouched["Not changed:<br/>the statement<br/>skips the row"]
-    Policy -->|"yes, the policy<br/>for UPDATE says"| Held{"Changes a column<br/>a rule holds?"}
-    Held -->|no| Check["The policy checks<br/>the new row"]
-    Held -->|"yes, as a role<br/>a caller runs as"| Rule{"A column rule<br/>for the role<br/>allows it?"}
-    Held -->|"yes, as the application's<br/>own work or the owner"| Check
-    Rule -->|"yes, before<br/>and after"| Check
-    Rule -->|no| Refused["Refused: 42501,<br/>the statement fails"]
+    update["<b>An UPDATE</b><br/><small>of a project</small>"]
+    policy{"May the caller<br/>change the row?"}
+    untouched["<b>Not changed</b><br/><small>the statement skips the row</small>"]
+    held{"Does it change a column<br/>that a rule holds?"}
+    rule{"Does a column rule<br/>for the role allow it?"}
+    check["<b>The policy checks the new row</b>"]
+    refused["<b>Refused</b><br/><small>42501, the statement fails</small>"]
+    update --> policy
+    policy -->|no| untouched
+    policy -->|"yes, the policy<br/>for UPDATE allows it"| held
+    held -->|no| check
+    held -->|"yes, as a role<br/>that a caller runs as"| rule
+    held -->|"yes, as system work<br/>or as the owner"| check
+    rule -->|"yes, before<br/>and after"| check
+    rule -->|no| refused
+    classDef strong fill:#5b2ec933,stroke:#5b2ec9,stroke-width:2px
+    classDef good fill:#1f8a5b26,stroke:#1f8a5b
+    classDef muted fill:none,stroke:#9a9ab5,stroke-dasharray:4 3,color:#9a9ab5
+    classDef bad fill:#c93c3c24,stroke:#c93c3c
+    class update strong
+    class check good
+    class untouched muted
+    class refused bad
 ```
 
 <details>
-<summary>Show the code: two column rules of a project, and the trigger one of them becomes</summary>
+<summary>Show the code: two column rules of a project, and the trigger that one of them becomes</summary>
 
-The project's rule for changing it asks for any permission that changes one, on the project or, for the permission to open
-projects, at its unit; the two column rules hold the columns whose commands ask a stricter one:
+The project's change rule accepts any permission that changes a project. It checks each permission on the project,
+and the permission to open projects at the project's unit. The two column rules hold the columns whose commands need
+a stricter permission:
 
 ```csharp
 [RowAccess<Project>(RowOperations.Change, To = [RowAccessRoles.User])]
@@ -1664,8 +1888,8 @@ public static partial class StateChangesWithTheClosePermission
 }
 ```
 
-What the script writes for the state, shortened. The rule reads the row's key alone, so the row as it is about
-to be is asked only where the permission changes:
+What the script writes for the state, shortened. The rule reads only the row's id. So the trigger checks the new row
+only when the id changes:
 
 ```sql
 CREATE OR REPLACE FUNCTION "projects".projects_state_column_rule() RETURNS trigger
@@ -1691,67 +1915,68 @@ CREATE TRIGGER projects_state_column_rule BEFORE UPDATE OF "State" ON "projects"
 COMMENT ON TRIGGER projects_state_column_rule ON "projects"."Projects" IS 'DDDToolkit column rule';
 ```
 
-A script of your own writes the same from `RowAccessRule.ForColumns<Project>("State changes with the close permission",
+A script of yours writes the same from `RowAccessRule.ForColumns<Project>("State changes with the close permission",
 [nameof(Project.State)], StateChangesWithTheClosePermission.RowAccessSql, RowAccessRoles.User)`. A column rule's
-`RowAccessSql` starts with `{columns}`, which `ForColumns` takes and `RowAccessRule.For` refuses: as a rule
-about whole rows, it would let whoever it allows change every column. An export of a version without column
-rules stops at the placeholder it does not know, and asks for the same version of the toolkit's packages
-everywhere, rather than write such a policy.
+`RowAccessSql` starts with `{columns}`. `ForColumns` accepts that placeholder, and `RowAccessRule.For` refuses it. As
+a rule about whole rows, the column rule would let whoever it allows change every column. An export from a toolkit
+version without column rules stops at the placeholder that it does not know. It asks for the same version of the
+toolkit's packages everywhere, and does not write such a policy.
 
 </details>
 
-- **The row's own rules still decide first.** The trigger only fires for a row the policy for `UPDATE` lets the
-  caller change, and the policy still checks the new row after it. A column rule lets nobody change anything a
-  rule for the row does not let them change: it narrows that, for its columns.
-- **It is asked as a rule for `UPDATE` is,** of the row as it was and of the row as it is about to be, and both
-  have to say yes. A rule that reads nothing of the row but its key, as a set-shaped question about the row's id
-  does, answers the same of both while the key stays what it was, which every change Entity Framework makes
-  does, so it is asked once per changed row rather than twice.
-- **It is asked once per changed row, not once per statement.** A policy asks a set once per statement; a
-  trigger runs for each row whose held column changes, and asks the set again for each. Entity Framework's saves
-  change one row per statement, so for them a column rule costs the set asked once more. A statement that
-  changes a held column of many rows, an `ExecuteUpdate` or a Data API `PATCH` with a filter, asks the set once
-  for each of them.
-- **Its SQL runs in the trigger, with an empty search path.** Every name the toolkit writes carries its schema.
-  A function the rule calls with `Sql.Call` names its schema too, `"public.is_agent"`, or `"pg_catalog.lower"`
-  for one of Postgres's own, which [DDD00038](diagnostics.md#ddd00038) holds it to: in a policy Postgres finds a
-  name when the policy is made, in a trigger only as it runs. The SQL of a `Sql.Raw` names every table and
-  function with its schema as well, and cannot read the row's columns by name, which a trigger knows only as
-  the row before and after; read the row in C# instead.
-- **Several column rules on one column add up:** a change one of them allows is allowed, as the rules of a row
-  do. The columns the same rules hold share one trigger, so a statement that changes several of them asks the
-  rules once.
-- **The roles a caller's statement runs as are held:** the roles the column rules are for, the signed-in user's
-  and the anonymous caller's, every [token role](#token-roles) you map, and any other role a policy lets change
-  the table. A held role that none of the column's rules is for may not change the column, as a role that no
-  rule grants a command may not run it. The application's own work is not held: the
-  [scoped system role](#the-scoped-system-role) and the bookkeeping role pass, unless a column rule names the
-  role in `To`, and so do the tables' owner and a role that may bypass row level security, which no policy holds
+- **The row's rules still decide first.** The trigger fires only for a row that the policy for `UPDATE` lets the
+  caller change. The policy still checks the new row after the trigger. A column rule never lets a caller change
+  something that a rule for the row does not allow. It narrows that rule, for its columns.
+- **It is checked as a rule for `UPDATE` is checked**, against the row before the change and the row after it. Both
+  must pass. A rule that reads only the row's id, such as a set-shaped check of the row's id, gives the same answer
+  for both while the id stays the same. Every change that Entity Framework makes keeps the id. So such a rule is
+  checked once per changed row.
+- **It is checked once per changed row.** A policy asks for a set once per statement. A trigger runs for each row
+  whose held column changes, and asks for the set again for each of those rows. Entity Framework's saves change one
+  row per statement, so for them a column rule costs one more query of the set. A statement that changes a held
+  column of many rows, such as an `ExecuteUpdate` or a Data API `PATCH` with a filter, asks for the set once for each
+  of those rows.
+- **Its SQL runs in the trigger, with an empty search path.** Every name that the toolkit writes carries its schema.
+  A function that the rule calls with `Sql.Call` must name its schema too, such as `"public.is_agent"`, or
+  `"pg_catalog.lower"` for a Postgres function. [DDD00038](diagnostics.md#ddd00038) enforces this. In a policy,
+  Postgres resolves a name when the policy is created. In a trigger, Postgres resolves a name only when the trigger
+  runs. The SQL of a `Sql.Raw` must also name every table and function with its schema. That SQL cannot read the
+  row's columns by name, because a trigger knows the row only as the row before and after the change. Read the row
+  in C# instead.
+- **Several column rules on one column add up.** A change that one of them allows is allowed, as with the rules of a
+  row. The columns that the same rules hold share one trigger. So a statement that changes several of those columns
+  checks the rules once.
+- **The trigger holds the roles that callers' statements run as.** These are the roles that the column rules are
+  for, the signed-in user's role and the anonymous caller's role, every [token role](#token-roles) that you map, and
+  any other role that a policy lets change the table. A held role that none of the column's rules is for may not
+  change the column. In the same way, a role that no rule grants a command may not run that command. System work is
+  not held. The [scoped system role](#the-scoped-system-role) and the bookkeeping role pass, unless a column rule
+  names the role in `To`. The tables' owner and a role that may bypass RLS also pass, because no policy holds them
   either.
-- **A value object is every column it is stored in:** `Columns = [nameof(Project.Planned)]` holds both columns of
-  the planned range, and `"Planned.From"` the one. A property of a value object is named with a dot, which
-  `nameof` does not write. A collection of values stored in the row, such as a list of strings kept as an array,
-  is its one column.
-- **It is found the way a policy is:** the trigger carries a comment, and the drop at the start of every script,
-  and of every migration of a module with rules, takes it away with the policies. A rule taken out loses its
-  trigger with the next script, and a migration may drop or change a column a column rule holds, which the
-  trigger would otherwise stand in the way of.
-- **The refusal is the database's, and the caller is told `access.refused`:** `42501`,
+- **A value object is every column it is stored in.** `Columns = [nameof(Project.Planned)]` holds both columns of the
+  planned range, and `"Planned.From"` holds one of them. Name a property of a value object with a dot, which `nameof`
+  does not write. A collection of values stored in the row, such as a list of strings kept as an array, is its one
+  column.
+- **A script finds the trigger the way it finds a policy.** The trigger carries a comment. The drop at the start of
+  every script, and of every migration of a module with rules, removes the trigger with the policies. So a rule that
+  you remove loses its trigger with the next script. A migration may also drop or change a column that a column rule
+  holds, which the trigger would otherwise block.
+- **The database refuses, and the caller gets the refusal code `access.refused`.** The trigger raises `42501`,
   `insufficient_privilege`, with a message that names the rule, the trigger's name as the constraint, and the
-  toolkit's hint, as every access guard the toolkit writes refuses. Through Entity Framework the save is refused as one
-  a policy refuses is: a `RefusalException` with the code `access.refused`, and a warning that names the
-  trigger. See [When the database refuses](#when-the-database-refuses).
-- **It holds a field of yours on a package's class as well.** A package that ships a class you derive from, Tenancy's
-  seat say, writes the policies of its table itself and guards its own columns there, and nothing you add. Its
-  table is one the package [keeps to itself](#policies-a-package-ships), where a rule that would add a policy is
-  refused; a column rule adds none, so it is taken there like anywhere else. A read rule is taken there too where
-  the package made the read a [default](#policies-a-package-ships), as Tenancy did for who reads the seats
-  ([Who reads the seats](tenancy/postgres.md#default-read-policies-for-seats-and-invitations)).
+  toolkit's hint. Every access guard that the toolkit writes refuses this way. Through Entity Framework, the save is
+  refused like a save that a policy refuses: a `RefusalException` with the refusal code `access.refused`, and a
+  warning that names the trigger ([When the database refuses](#when-the-database-refuses)).
+- **It also holds a field of yours on a package's class.** A package can ship a class that you derive from, such as
+  Tenancy's seat. Such a package writes the policies of its table itself. It guards its own columns there, and
+  nothing that you add. Its table is one that the package [keeps to itself](#policies-a-package-ships), where a rule
+  that would add a policy is refused. A column rule adds no policy, so the script accepts it there like anywhere else.
+  A read rule is also accepted there, where the package made the read a [default](#policies-a-package-ships). Tenancy
+  did this for reading the seats ([Who reads the seats](tenancy/postgres.md#default-read-policies-for-seats-and-invitations)).
 
-The policy on Tenancy's seats lets a seat change its own row, and a seat that manages seats or grants anywhere in
-the tenant change any seat's row, since every save of a seat writes its version. A job title you add to your seat
-class is as writable as that, because the package decides nothing about it. Whether to hold it, and to what, is
-yours to say, with the permission your command that changes it asks:
+The policy on Tenancy's seats lets a seat change its own row. It also lets a seat that manages seats or grants
+anywhere in the tenant change any seat's row, because every save of a seat writes the seat's version. So a job title
+that you add to your seat class is as writable as the row, because the package knows nothing about the job title. You
+decide whether to hold it. Hold it to the permission that your command for changing it requires:
 
 ```csharp
 [RowAccess<Seat>(RowOperations.Change, To = [RowAccessRoles.User], Columns = [nameof(Seat.JobTitle)])]
@@ -1761,35 +1986,41 @@ public static partial class JobTitlesChangeWithTheSeatsPermission
 }
 ```
 
-A seat that gives roles at one unit may then still write every seat's row, and none of their job titles. The sample
-holds a seat's name the same way, to the rule of its own command that renames one, the seat itself or a seat that
-manages seats for the whole tenant, and leaves its job title as writable as the row. See
-[What the database guards on a seat](tenancy/postgres.md#who-may-change-a-seats-columns).
+A seat that gives roles at one unit can then still write every seat's row, and none of the job titles. The sample
+holds a seat's name in the same way, with the rule of its rename command: the seat itself, or a seat that manages
+seats for the whole tenant. The sample leaves the job title as writable as the row
+([What the database guards on a seat](tenancy/postgres.md#who-may-change-a-seats-columns)).
 
-[DDD00038](diagnostics.md#ddd00038) reports a column rule for another operation than `Change`, which are about
-whole rows; a name in `Columns` that is no property of the aggregate or of a value object it holds, or is a
-collection of its entities, whose rows follow the rules for the aggregate's row; and a `Sql.Call` without a
-schema. A property the model stores in no column of the aggregate's table, one it ignores, is refused when the
-script is written, naming the rule.
+[DDD00038](diagnostics.md#ddd00038) reports:
 
-A column rule asks one question of the row before and after the change. A rule that asks something else of each,
-as moving a project does, the permission to edit it where it was and the permission to open projects where it goes, is a
-trigger of your own, written as a [contribution](#policies-a-package-ships): the sample's `UnitChangesWithItsPermissions`.
-The owner column of a resource whose members the [Membership package](membership/postgres.md#who-writes-the-member-rows)
-keeps is held by the package's own lock, which it writes from the permission its rules name for naming an owner.
+- a column rule for an operation other than `Change`, because the other operations are about whole rows,
+- a name in `Columns` that is not a property of the aggregate or of a value object that the aggregate holds,
+- a name in `Columns` that is a collection of the aggregate's entities, whose rows follow the rules for the
+  aggregate's row,
+- a `Sql.Call` without a schema.
+
+A property that the model stores in no column of the aggregate's table, such as an ignored property, is refused when
+the script is written. The refusal names the rule.
+
+A column rule asks one question of the row before the change and of the row after it. Some changes need a different
+question for each. Moving a project needs the permission to edit it where it was, and the permission to open projects
+where it goes. Write such a check as a trigger of yours, in a [contribution](#policies-a-package-ships), as the
+sample's `UnitChangesWithItsPermissions` does. For a resource whose members the
+[Membership package](membership/postgres.md#who-writes-the-member-rows) keeps, the package holds the owner column with
+a lock of its own. The package writes that lock from the permission that the resource's rules name for naming an
+owner.
 
 ### Policies a package ships
 
-A package, or a module of your own, can have tables that are not your aggregates, or SQL whose names
-depend on your model: the schema you gave its tables, the column types of your ids. `[RowAccess]` rules
-cannot cover those, so such a package writes its row level security itself, as a row access contribution:
-a class the script asks, for every context, what it writes there.
+A package, or a module of yours, can have tables that are not your aggregates. It can also have SQL whose names
+depend on your model, such as the schema you gave its tables, or the column types of your ids. `[RowAccess]` rules
+cannot cover those. So such a package writes its RLS itself, as a row access contribution. A row access contribution
+is a class that the script calls for every context, to get the SQL to write there.
 
-A package declares itself a contributor with `[assembly: RowAccessContribution]`, and from then on
-referencing the package is your consent: its SQL goes into the migrations of every application that
-references it, directly or through a module, and you write no line and no class for it. A package such as
-[Tenancy on Postgres](tenancy/postgres.md) does not work without its policies in the database, so there
-is nothing to choose.
+A package declares itself a contributor with `[assembly: RowAccessContribution]`. From then on, referencing the
+package is your consent. Its SQL goes into the migrations of every application that references the package, directly
+or through a module. You write no line and no class for it. A package such as [Tenancy on Postgres](tenancy/postgres.md)
+does not work without its policies in the database, so there is nothing to choose.
 
 ```csharp
 // In the package: an audit trail, whose entries are read by who wrote them. Every application that
@@ -1827,46 +2058,70 @@ public sealed class AuditRowAccess : IRowAccessContribution
 }
 ```
 
-SQL that is your application's own, a trigger one of your modules writes, is a contribution as well, and you
-list it in the project that runs the export: `[assembly: UseRowAccessContribution(typeof(UnitChangesWithItsPermissions))]`.
-That is the line for your own classes only. A module declares its class with `[assembly: RowAccessContribution]`
-as a package does, and because its assembly declares a module, that is an offer rather than a write: nothing
-is written until the exporting project lists it, and the build warns until it does,
-[DDD00069](diagnostics.md#ddd00069). So a forgotten line is heard, while your database only gets the SQL of
-your own you said it gets. On a Postgres of your own, hand every contribution to the script in
-`RowAccessExport.Contributions`.
+SQL that belongs to your application, such as a trigger that one of your modules writes, is a contribution too. List
+it in the project that runs the export: `[assembly: UseRowAccessContribution(typeof(UnitChangesWithItsPermissions))]`.
+That line is for your own classes only.
 
-#### What a package's SQL is written from
+- A module declares its class with `[assembly: RowAccessContribution]`, as a package does. The module's assembly
+  declares a module, so this declaration is only an offer. Nothing is written until the exporting project lists the
+  class.
+- The build warns until the exporting project lists the class ([DDD00069](diagnostics.md#ddd00069)). So a forgotten
+  line shows up, and your database gets only the SQL of yours that you chose.
+- On a Postgres database without Supabase, pass every contribution to the script in `RowAccessExport.Contributions`.
 
-The build makes a package's contribution in the project that runs the export, before your application
-starts, so it has none of your services. What the SQL depends on that only your application knows, your
-catalogue or a resource's rules, the package takes in its class's constructor, and each parameter says with
-`[FromApplication]` which attribute you mark the value with. You mark a static property or field, where you
-declare the value anyway, and the build finds it in the exporting project and every project it references:
+#### Values a package takes from your application
+
+The build makes a package's contribution in the project that runs the export, before your application starts. So the
+contribution has none of your services. Some values that the SQL depends on are known only to your application, such
+as your catalogue or a resource's rules. The package takes those values in its class's constructor. Each parameter
+says with `[FromApplication]` which attribute you mark the value with. You mark a static property or field, where you
+declare the value anyway. The build finds the marked member in the exporting project and in every project that the
+exporting project references.
+
+In the diagram, purple is the member that you mark and green is the class that the export calls:
 
 ```mermaid
 flowchart TB
-    Reference["the exporting project<br/>references the package"] --> Declared["[assembly: RowAccessContribution]<br/>in the package"]
-    Declared --> Constructor["its constructor:<br/>[FromApplication(typeof(Plans))]"]
-    Constructor --> Marked["your member<br/>marked [Plans]"]
-    Marked --> Written["a class written into<br/>DDDToolkit.RowAccessContributionsOfPackages.g.cs"]
-    Written --> Export["the export asks it<br/>for every context"]
+    reference["<b>The exporting project</b><br/><small>references the package</small>"]
+    declared["<b>[assembly: RowAccessContribution]</b><br/><small>in the package</small>"]
+    constructor["<b>The constructor</b><br/><small>[FromApplication(typeof(PlansAttribute))]</small>"]
+    marked["<b>Your member</b><br/><small>marked [Plans]</small>"]
+    written["<b>A generated class</b><br/><small>in DDDToolkit.RowAccessContributionsOfPackages.g.cs</small>"]
+    export["<b>The export</b><br/><small>calls the class for every context</small>"]
+    reference --> declared
+    declared --> constructor
+    constructor --> marked
+    marked --> written
+    written --> export
+    classDef strong fill:#5b2ec933,stroke:#5b2ec9,stroke-width:2px
+    classDef good fill:#1f8a5b26,stroke:#1f8a5b
+    class marked strong
+    class written good
 ```
 
-A parameter is found in one of three ways. Exactly one member marked, the usual case: two are an error,
-[DDD00071](diagnostics.md#ddd00071), since the build will not guess which one your application runs with,
-and none is the parameter's default where it has one, or else a warning,
-[DDD00054](diagnostics.md#ddd00054), and the package's SQL is not written. Every member marked, for a
-parameter that says `Every = true`: an array of all of them, in the order of their names, none an empty one.
-And once for each member marked with a generic attribute, for a generic contribution: the build makes it once
-for every member so marked, closed over the type the mark is written with. A member of another type than the
-parameter takes, or one that is not static, is [DDD00071](diagnostics.md#ddd00071). Of a library, the
-exporting project sees what is public and nothing else, so a member a library marks that is internal, or
-declared in an internal class, is not found at all, and the export would go on as if nothing were marked.
-That one is reported where it is declared instead, by the library's own build,
-[DDD00070](diagnostics.md#ddd00070), for every mark whose attribute says it is one with `[ApplicationMark]`, as
-Tenancy's and Membership's do. A member marked in a project the exporting project does not reference is not
-found either: mark it where that project sees it.
+The build fills a parameter in one of three ways:
+
+- **One marked member.** This is the usual case.
+  - Two marked members are an error, [DDD00071](diagnostics.md#ddd00071). The build does not guess which one your
+    application runs with.
+  - With no marked member, the parameter gets its default value, where it has one. Otherwise the build reports the
+    warning [DDD00054](diagnostics.md#ddd00054), and does not write the package's SQL.
+- **Every marked member**, for a parameter with `Every = true`. The parameter gets an array of all of them, in the
+  order of their names. With no marked member, the array is empty.
+- **Once for each member marked with a generic attribute**, for a generic contribution. The build makes the
+  contribution once for every such member, closed over the type that the mark is written with.
+
+More rules for marked members:
+
+- A member of a type other than the parameter's type, or a member that is not static, is
+  [DDD00071](diagnostics.md#ddd00071).
+- The exporting project sees only the public parts of a library. So it does not find a member that a library marks
+  when the member is internal, or is declared in an internal class. The export would then continue as if nothing were
+  marked. So the library's own build reports such a mark where it is declared, as
+  [DDD00070](diagnostics.md#ddd00070). It does this for every mark whose attribute is marked `[ApplicationMark]`, as
+  Tenancy's and Membership's attributes are.
+- A member marked in a project that the exporting project does not reference is not found either. Mark the member
+  where the exporting project sees it.
 
 <details>
 <summary>Show the code: a package that takes your plans, and what the build writes for it</summary>
@@ -1889,7 +2144,9 @@ public static class ShopPlans
 }
 ```
 
-```csharp title="DDDToolkit.RowAccessContributionsOfPackages.g.cs, in the project that runs the export"
+**DDDToolkit.RowAccessContributionsOfPackages.g.cs**, in the project that runs the export
+
+```csharp
 namespace DDDToolkit.EntityFramework.Supabase.Generated
 {
     /// The row access contribution Shop.Plans.PlanRowAccess, which Shop.Plans writes into the migrations of
@@ -1912,18 +2169,18 @@ namespace DDDToolkit.EntityFramework.Supabase.Generated
 
 </details>
 
-The class is written into a file of its own, `DDDToolkit.RowAccessContributionsOfPackages.g.cs`, among the
-exporting project's generated files, with a comment that names every member it was made from. It hands the
-export the package's class through `IPackageRowAccessContribution`, so the comment above what it writes in the
+The build writes the class into a file of its own, `DDDToolkit.RowAccessContributionsOfPackages.g.cs`, among the
+exporting project's generated files. A comment in the file names every member that the class was made from. The class
+passes the package's class to the export through `IPackageRowAccessContribution`. So the comment above the SQL in the
 access file names the package's class and the package's assembly, without a version:
-`-- Written by the row access contribution Shop.Plans.PlanRowAccess in Shop.Plans.` Neither a release of
-your application nor a release of the package that writes the same SQL makes an access file stale; a package
-whose SQL changed writes a new one, because the SQL differs.
+`-- Written by the row access contribution Shop.Plans.PlanRowAccess in Shop.Plans.` A new release of your
+application, or of the package, that writes the same SQL makes no access file stale. A package whose SQL changed
+writes a new access file, because the SQL differs.
 
 #### Leaving a package's SQL out
 
-For the rare application that must not write a package's SQL, because it writes those policies itself or a
-context's database is not the package's to write, say so in the project that runs the export:
+A rare application must not write a package's SQL, because it writes those policies itself, or because a context's
+database is not the package's to write. Declare this in the project that runs the export:
 
 ```csharp
 // None of it: the application writes the package's policies itself.
@@ -1933,28 +2190,41 @@ context's database is not the package's to write, say so in the project that run
 [assembly: LeaveOutRowAccessContribution(typeof(AuditRowAccess), Context = typeof(ArchiveContext))]
 ```
 
-A generic contribution is left out with its open type, every closing of it, or with one closing. To write a
-package's SQL with a class of your own instead, leave the package's out and list yours with
-`[assembly: UseRowAccessContribution]`. Listing yours without leaving the package's out would write the SQL
-twice, which [DDD00072](diagnostics.md#ddd00072) stops at build time: that is what an application still
-has that once handed a package its data through a class of its own. Take the line and the class out, and
-mark what the class handed over. What is left out is checked by nothing else: a package's start-up checks
-still expect its SQL wherever the application uses the package. A line that leaves nothing out, because it
-names no contribution a package writes or its `Context` is no class derived from `DbContext`, is a warning,
-[DDD00073](diagnostics.md#ddd00073), rather than a line that reads as if it did.
+- Leave out a generic contribution with its open type, for every closing of it, or with one closed type.
+- To write a package's SQL with a class of yours instead, leave the package's contribution out, and list yours with
+  `[assembly: UseRowAccessContribution]`. Listing yours without leaving the package's out would write the SQL twice.
+  [DDD00072](diagnostics.md#ddd00072) stops that at build time. An application has this pair when it once passed
+  data to a package through a class of its own. Remove the line and the class, and mark the values that the class
+  passed.
+- Nothing else checks what you leave out. A package's start-up checks still expect its SQL wherever the application
+  uses the package.
+- A line that leaves nothing out is a warning, [DDD00073](diagnostics.md#ddd00073). That happens when the line names
+  no contribution that a package writes, or when its `Context` is not a class derived from `DbContext`.
 
-A contribution may be asked about a context several times in one export, so it answers from the model
-and what it was made with, the same every time.
+An export may call a contribution for the same context several times. So a contribution returns the same answer each
+time, from the model and from the values it was made with.
 
-What a contribution answers for a context goes into that context's script, with a comment above each part
-that names the contribution, its assembly and the assembly's version:
+#### What a contribution writes
+
+What a contribution returns for a context goes into that context's script. A comment above each part names the
+contribution, its assembly and the assembly's version.
+
+In the diagram, the script's parts are in the order they run, and purple marks the parts where a contribution's SQL
+goes:
 
 ```mermaid
 flowchart TD
-    Drop["The drop: the previous policies come off"] --> Prelude["The prelude: what the policies ask"]
-    Prelude --> Functions["The functions, each after those it asks, granted to the roles that ask it"]
-    Functions --> Policies["The policies, one permissive policy per table, command and role, restrictive ones apart"]
-    Policies --> Statements["The contributions' statements: triggers and their functions"]
+    drop["<b>The drop</b><br/><small>the previous policies come off</small>"]
+    prelude["<b>The prelude</b><br/><small>what the policies need</small>"]
+    functions["<b>The functions</b><br/><small>each after the functions it calls, granted to the roles that call it</small>"]
+    policies["<b>The policies</b><br/><small>one permissive policy per table, command and role, restrictive ones separate</small>"]
+    statements["<b>The contributions' statements</b><br/><small>triggers and their functions</small>"]
+    drop --> prelude
+    prelude --> functions
+    functions --> policies
+    policies --> statements
+    classDef strong fill:#5b2ec933,stroke:#5b2ec9,stroke-width:2px
+    class functions,policies,statements strong
 ```
 
 <details>
@@ -1984,154 +2254,223 @@ COMMENT ON POLICY "Entries are read by who wrote them (select) for authenticated
 
 </details>
 
-- **Functions** are created in the default schema of the context the contribution answered for, or in
-  `public` when it has none, as `LANGUAGE sql` with `SET search_path = ''`, so their bodies name everything
-  with its schema. Unlike an access function's, the schema is not a table's: a contribution may write for
-  several tables. It is any schema Entity Framework takes, written in double quotes as
-  [every schema](#schema-names) is: `"tenancy".caller_seat()`, `"Tenancy".caller_seat()`.
-  `SecurityDefiner` is false unless the contribution says otherwise. Rules and other contributions ask one
-  by its logical name, `{fn:audit/entries_i_wrote}`, with the contribution's `Owner`, and a script writes
-  it after the functions it asks. It carries the context's function comment, so the next script keeps it
-  while the contribution still writes it, replacing it in place, and drops it once it does not. One that
-  answers a resource's access says which set with `Answers`, and rules ask it by the resource's id rather than
-  by its name: [a resource's access, asked by its id](#a-resources-access-asked-by-its-id).
-  It returns a type, `SETOF` a type, or rows of named columns, `TABLE ("TicketId" uuid, "DueAt" timestamp with
-  time zone)`. Those names are the function's own, the same in every application whatever its tables call
-  their columns, which is what lets a package map a function's rows for the modules that read them.
-- **A function folded into the query that asks it.** A function that answers rows for other queries to
-  read, as a view would, can say `Inlinable: true`. Postgres folds a set-returning SQL function into the
-  calling query only when it runs as its caller, is `STABLE` or `IMMUTABLE`, is not `STRICT`, is one
-  `SELECT`, and has no `SET` clause, so the script writes such a function without `SET search_path = ''`,
-  and refuses one that runs as its owner, is `VOLATILE`, or is not one `SELECT`. The plan then reads the
-  tables the function reads, with their indexes and with the caller's policies on them, where a function
-  kept apart answers every row it may before the query narrows them. What it gives up is the pinned search
-  path. That is safe for a function that runs as its caller: it has only the caller's rights, and its body
-  names every table, function and type with its schema, as every contributed function's must, so nothing in
-  it is looked up along the caller's path. A function that runs as its owner always keeps the empty path.
-- **Who may run a function** is its `GrantTo`, and no other role but its owner: every other grant on it,
-  a schema's default privileges' included, is taken back. A policy for any other role that asks it is
-  refused, naming the rule and the function: a rule without `To` is for `anon` as well, so a function kept
-  for signed-in users makes such a rule say `To = [RowAccessRoles.User]`. The same goes for a policy that
-  asks it through an access function, which runs as its owner and so asks it for whoever the policy is
-  for. A function granted to no role is a helper for the functions that run as their owner, access
-  functions among them. A contributed function that runs as its caller may ask only functions granted to
-  every role it is granted to.
-- **Policies** are named like a rule's, `"<name> (select) for authenticated"`, and carry the rules'
-  comment, so the next script drops them. A permissive one is merged with the rules' and other
-  contributions' permissive policies for the same table, command and role, as Postgres would OR them
-  anyway; a restrictive one is a policy of its own and narrows whatever the others allow. Two policies of
-  one name on a table are refused, naming both. Every table a contributed policy names gets row level
-  security.
-- **Tables a contribution keeps to itself**, its `ExclusiveTables`, get row level security and policies
-  from it alone: a rule, or another contribution, that would add one is refused, naming both, but for a rule
-  that takes the place of a default read, below. A [column rule](#column-rules) adds no policy, and holds a
-  column of such a table all the same: a field the application added to the package's class, say. Nor does a
-  [restrictive rule](#rules-that-only-narrow-restrictive) take anything from it: it only narrows.
-- **Tables that follow an aggregate**, its `Following`, a map from a table to the aggregate it belongs with though
-  it is no entity of it: a restrictive rule on the aggregate narrows that table too, with a condition about the
-  caller alone. Tenancy says so of the closure of the tree, which follows the organization.
-- **A default read.** Who may see which rows is often your application's choice rather than the package's, so a
-  contribution may mark what a role reads a default: a permissive policy for `SELECT` with
-  `Default = new ContributedDefault(Kept, Within)`. Without a rule of yours about it, the script writes it as it
-  is. A `[RowAccess]` rule of yours about the aggregate on that table, that allows `Read` to the same role, takes
-  its place: the script writes your rule held to `Within`, what the package keeps every caller to, such as the
-  tenant, and beside `Kept`, the rows the package's own work reads whatever your rule says, and the comment above
-  the policy names the rule, the default it replaced and the contribution. On a table the contribution keeps to
-  itself that is the one rule taken: a rule that allows anything but `Read`, or whose `To` names a role the
-  default is not for, is refused, saying what the contribution lets a rule replace. A rule there without `To` is
-  for the roles of the default, rather than for signed-in users and anonymous callers as elsewhere, so you write
-  it in its usual form and a role the table is closed to stays closed. It replaces the read of the aggregate's own
-  table alone; the tables of its entities keep the policies of the contribution that keeps them, and a rule whose
-  aggregate has an entity table no contribution keeps is refused, naming it. Tenancy's seats are the example
-  ([Who reads the seats](tenancy/postgres.md#default-read-policies-for-seats-and-invitations)).
-- **Statements** come last, one statement each, and can run again: triggers and the functions they run.
-  A statement's function gets no grants from the script, so only a trigger's may be `SECURITY DEFINER`,
-  since nobody can call a trigger function on its own, and it says `SET search_path = ''`, since the
-  schemas of a caller's session would otherwise decide what it runs with its owner's rights. Any other
-  function that runs as its owner is a `ContributedFunction`.
-- In all of these, `{fn:owner/name}` and `{caller:uid}`, `{caller:role}`, `{caller:claims}`,
-  `{caller:signedin}` and `{caller:claim:path}` are filled in as they are in a rule, with the export's
-  caller functions; write a brace itself as `{{` or `}}`. `RowAccessModel` writes the names from the model,
-  each in double quotes, so it means them as the model spells them: `Table`, `Column`, `ColumnType`, `Stored`
-  for a value as its column stores it, `EntityTablesOf` for the tables of an aggregate's entities and the way
-  up to its own, `Schema` for the schema a statement makes a trigger's function in,
-  `$"{RowAccessModel.Schema(context.Model)}.entry_is_kept()"`, or for any other schema by its name,
-  `RowAccessModel.Schema("audit")`, both in double quotes as the script writes [every schema](#schema-names),
-  and `Literal`. `Refusal` writes the statement a
-  trigger refuses with, so a save it refuses is answered as one a policy refuses is: see
-  [When the database refuses](#when-the-database-refuses).
+**Functions**
 
-A context whose only row access is a contribution gets a script, and a Supabase access file, all the same.
+- The script creates them in the default schema of the context that the contribution answered for, or in `public`
+  when the context has none. An access function's schema is a table's schema. A contribution's function has the
+  context's schema, because a contribution may write for several tables. The schema is any schema that Entity
+  Framework accepts, written in double quotes like [every schema](#schema-names): `"tenancy".caller_seat()`,
+  `"Tenancy".caller_seat()`.
+- They are `LANGUAGE sql` with `SET search_path = ''`, so their bodies name everything with its schema.
+- `SecurityDefiner` is false unless the contribution sets it.
+- Rules and other contributions call a function by its logical name, `{fn:audit/entries_i_wrote}`, with the
+  contribution's `Owner`. A script writes a function after the functions it calls.
+- A function carries the context's function comment. So the next script keeps the function while the contribution
+  still writes it, and replaces it in place. The script drops the function once the contribution stops writing it.
+- A function that returns a resource's access declares its set with `Answers`. Rules then call it by the resource's
+  id ([Resource access contracts](#resource-access-contracts)).
+- A function returns a type, `SETOF` a type, or rows of named columns, such as
+  `TABLE ("TicketId" uuid, "DueAt" timestamp with time zone)`. Those column names belong to the function. They are
+  the same in every application, whatever its tables call their columns. So a package can map a function's rows for
+  the modules that read them.
+
+**Inlining a function into the query that calls it**
+
+- A function that returns rows for other queries to read, as a view would, can set `Inlinable: true`.
+- Postgres folds a set-returning SQL function into the calling query only when the function runs as its caller, is
+  `STABLE` or `IMMUTABLE`, is not `STRICT`, is one `SELECT`, and has no `SET` clause. So the script writes such a
+  function without `SET search_path = ''`. It refuses one that runs as its owner, is `VOLATILE`, or is not one
+  `SELECT`.
+- The plan then reads the tables that the function reads, with their indexes and with the caller's policies on them.
+  A function that is not folded returns every row it may before the query narrows the rows.
+- An inlined function has no pinned search path. That is safe for a function that runs as its caller. It has only
+  the caller's privileges, and its body names every table, function and type with its schema, as every contributed
+  function's body must. So nothing in it is looked up along the caller's search path.
+- A function that runs as its owner always keeps the empty search path.
+
+**Who may run a function**
+
+- Its `GrantTo` roles and its owner may run it. The script takes back every other grant on it, including grants from
+  a schema's default privileges.
+- A policy for any other role that calls the function is refused, and the refusal names the rule and the function. A
+  rule without `To` is also for `anon`. So for a function granted to signed-in users only, such a rule says
+  `To = [RowAccessRoles.User]`.
+- The same holds for a policy that calls the function through an access function. The access function runs as its
+  owner, and so calls the function for whoever the policy is for.
+- A function granted to no role is a helper for the functions that run as their owner, including access functions.
+- A contributed function that runs as its caller may call only functions that are granted to every role it is granted
+  to.
+
+**Policies**
+
+- A contributed policy is named like a rule's policy, `"<name> (select) for authenticated"`, and carries the rules'
+  comment. So the next script drops it.
+- A permissive contributed policy is merged with the permissive policies of the rules and of other contributions for
+  the same table, command and role. Postgres would join them with `OR` anyway.
+- A restrictive contributed policy is a separate policy, and narrows whatever the others allow.
+- Two policies with the same name on one table are refused, and the refusal names both.
+- Every table that a contributed policy names gets RLS.
+
+**Tables a contribution keeps to itself**, its `ExclusiveTables`
+
+- Such a table gets RLS and policies from that contribution only. A rule or another contribution that would add a
+  policy is refused, and the refusal names both. The exception is a rule that replaces a default read, below.
+- A [column rule](#column-rules) adds no policy. It holds a column of such a table anyway, such as a field that the
+  application added to the package's class.
+- A [restrictive rule](#restrictive-rules) takes nothing from such a table either, because it only narrows.
+
+**Tables that follow an aggregate**, its `Following`
+
+- `Following` maps a table to the aggregate that it belongs with, though the table is not an entity of that
+  aggregate.
+- A restrictive rule on the aggregate narrows that table too, with a condition about the caller only.
+- Tenancy declares this for the closure of the tree, which follows the organization.
+
+**A default read**
+
+Often your application decides who sees which rows, and the package does not. So a contribution may mark what a role
+reads as a default: a permissive policy for `SELECT` with `Default = new ContributedDefault(Kept, Within)`.
+
+- Without a rule of yours about it, the script writes the default as it is.
+- A `[RowAccess]` rule of yours about the aggregate on that table, which allows `Read` to the same role, replaces the
+  default. The script limits your rule to `Within`, which the package keeps every caller to, such as the tenant. It
+  adds `Kept` next to your rule, the rows that the package's own work reads whatever your rule says. The comment above
+  the policy names the rule, the default that it replaced, and the contribution.
+- On a table that the contribution keeps to itself, such a rule is the only rule accepted. A rule that allows
+  anything other than `Read`, or whose `To` names a role that the default is not for, is refused. The refusal says
+  what the contribution lets a rule replace.
+- On such a table, a rule without `To` is for the roles of the default, and not for signed-in users and anonymous
+  callers as elsewhere. So you write the rule in its usual form, and a role that the table is closed to stays closed.
+- The rule replaces the read of the aggregate's table only. The tables of its entities keep the policies of the
+  contribution that keeps them. A rule whose aggregate has an entity table that no contribution keeps is refused, and
+  the refusal names the table.
+- Tenancy's seats are the example ([Who reads the seats](tenancy/postgres.md#default-read-policies-for-seats-and-invitations)).
+
+**Statements**
+
+- Statements come last, one statement each, and must be able to run again. They are triggers and the functions that
+  the triggers run.
+- The script gives a statement's function no grants. So only a trigger's function may be `SECURITY DEFINER`, because
+  nobody can call a trigger function directly.
+- Such a function says `SET search_path = ''`. Otherwise the schemas of a caller's session would decide what the
+  function runs with its owner's privileges.
+- Any other function that runs as its owner is a `ContributedFunction`.
+
+**Placeholders and model names**
+
+- In all of these, `{fn:owner/name}`, `{caller:uid}`, `{caller:role}`, `{caller:claims}`, `{caller:signedin}` and
+  `{caller:claim:path}` are filled in as in a rule, with the export's caller functions. Write a literal brace as `{{`
+  or `}}`.
+- `RowAccessModel` writes names from the model, each in double quotes, so it means them as the model spells them:
+  - `Table`, `Column` and `ColumnType`,
+  - `Stored`, for a value as its column stores it,
+  - `EntityTablesOf`, for the tables of an aggregate's entities and the path up to the aggregate's table,
+  - `Schema`, for the schema that a statement creates a trigger's function in,
+    `$"{RowAccessModel.Schema(context.Model)}.entry_is_kept()"`, or for any other schema by its name,
+    `RowAccessModel.Schema("audit")`. Both are in double quotes, as the script writes [every schema](#schema-names).
+  - `Literal`,
+  - `Refusal`, for the statement that a trigger refuses with. A save that such a trigger refuses is then answered like
+    a save that a policy refuses ([When the database refuses](#when-the-database-refuses)).
+
+A context whose only row access is a contribution still gets a script, and a Supabase access file.
 
 ### When the database refuses
 
-The check in front of a handler refuses first, with your own code and the permission that is missing. The database
-refuses only what that check let through: a caller that lost a permission between the check and the save, a handler
-that skipped its check, a rule the database holds more strictly than C# asks it. `UseDDDToolkit` answers each
-of those the same way. The save throws a `RefusalException` with the code `access.refused`, a refusal of the
-kind "not permitted": a 403 from a route and a `RefusalError` from a GraphQL mutation. A line is logged as
-well: information where the caller's rights changed between the check and the save, which the toolkit tells by
-asking the request's check again, and a warning where C# and the database disagree
-([When the policies refuse what C# allowed](#when-the-policies-refuse-what-c-allowed)).
+The access check before a handler refuses first, with your refusal code and the missing permission. The database
+refuses only what that check let through:
 
-An update or a delete whose row a policy hides fails with no error at all: the statement finds no row, as when
-somebody else changed it first. That case is told apart by reading the row again, as
-[`AggregateVersionInterceptor`](entity-framework.md) does, and is answered with the same refusal.
+- a caller that lost a permission between the check and the save,
+- a handler that skipped its check,
+- a rule that the database holds more strictly than C# checks it.
 
-- **A policy's refusal is known by where Postgres raised it, not by its words.** With every error Postgres sends
-  the name of the function in its own source that raised it, and that name is never translated. A new row a
-  policy refuses is refused by `ExecWithCheckOptions`, which raises nothing else as `42501`, so a server set to
-  answer in Dutch with `lc_messages` is read as one that answers in English. Only the table the warning names
-  comes from the message: the one it quotes, or, where it cannot be read, the one table the save wrote.
-- **An access guard marks its refusal.** An access guard is a trigger that holds who may change what, as a
-  policy holds who may write a row. Every `RAISE` of PL/pgSQL comes from the same function of Postgres, whatever
-  it is about, and a missing privilege is `42501` too. So an access guard says it is one: SQLSTATE `42501`, its
-  own name as the constraint, and the hint `ddd:access.refused`. Every access guard the toolkit writes does: the
-  trigger of a [column rule](#column-rules), the Membership package's lock on an owner column, and Tenancy's
-  triggers on what a seat is, on a seat's status, on what a role's pack gave it and on who changed a row.
-- **It stays `42501`, with a hint, rather than a code of the toolkit's own.** `42501` is what every tool already
-  reads as "not allowed": the Data API answers it with a 403, and a pgTAP test that expects a refusal expects it.
-  To those a code of the toolkit's own would be a failure of another kind. The hint of a `RAISE` is the
-  trigger's own text: Postgres hands it on as written and never translates it. Postgres gives some errors of its
-  own a hint, in the server's language, but never this one, and only this exact hint counts, so the mark means
-  the same whatever language the server answers in.
-- **Anything else is the failure it is.** A missing privilege, a role the policies hold that reads with
-  `row_security` off, a trigger that raises without the hint, a check that fails: each is the application's own
-  set-up, or a rule that holds whoever writes, and ends the request as a failure of the server, where somebody
-  will see it. The message of the second names row level security in so many words, which is why words decide
-  nothing. The toolkit's triggers that hold what may never be, whoever writes, are no access guards and raise
-  codes of their own. Tenancy's checks of a tenant's last administrator, of the rights and the paths, and of the
-  rows that stay fixed raise `check_violation`; an [event log](entity-framework.md#an-event-log)'s guard raises `55000`. Tenancy's store answers the last administrator
-  with a refusal of its own.
-- **Only a save is answered.** `DatabaseRefusalInterceptor` sees what a `SaveChanges` threw. A statement of your
-  own, an `ExecuteUpdate`, an `ExecuteDelete` or SQL, is no save: an access guard's refusal of it reaches you as
-  the `PostgresException` itself. `DatabaseRefusal.From(exception)` reads it as it reads a save's, if you want to
-  answer it with `access.refused` too.
-- **The caller is told `access.refused`, and no more.** Not which guard refused, nor its message. The check in
-  C# is where a refusal is specific, with the permission that is missing, in the reader's language. When the database
-  refuses what that check let through, the two disagree, and the fix is in the check or in the rule, unless the
-  caller's rights changed in between, which the toolkit tells by asking the request's check again
+`UseDDDToolkit` answers each case the same way. The save throws a `RefusalException` with the refusal code
+`access.refused`, a refusal of the kind "not permitted". A route answers it with 403, and a GraphQL mutation with a
+`RefusalError`. A line is also logged:
+
+- information, where the caller's permissions changed between the check and the save. The toolkit detects this by
+  running the request's access check again.
+- a warning, where C# and the database disagree
+  ([When the policies refuse what C# allowed](#when-the-policies-refuse-what-c-allowed)).
+
+An update or a delete whose row a policy hides fails with no error at all. The statement finds no row, as when
+somebody else changed the row first. [`AggregateVersionInterceptor`](entity-framework.md) reads the row again to tell
+the two cases apart, and answers a hidden row with the same refusal.
+
+- **The toolkit recognizes a policy's refusal by where Postgres raised it.** With every error, Postgres sends the
+  name of the function in its source code that raised the error. That name is never translated. A new row that a
+  policy refuses is refused by `ExecWithCheckOptions`, which raises nothing else as `42501`. So a server set to answer
+  in Dutch with `lc_messages` is read the same as a server that answers in English. Only the table that the warning
+  names comes from the message: the table that the message quotes, or, where the message cannot be read, the one
+  table that the save wrote.
+- **An access guard marks its refusal.** An access guard is a trigger that controls who may change what, as a policy
+  controls who may write a row. Every PL/pgSQL `RAISE` comes from the same Postgres function, whatever it is about,
+  and a missing privilege is `42501` too. So an access guard marks itself with SQLSTATE `42501`, its own name as the
+  constraint, and the hint `ddd:access.refused`. Every access guard that the toolkit writes does this:
+  - the trigger of a [column rule](#column-rules),
+  - the Membership package's lock on an owner column,
+  - Tenancy's triggers on what a seat is, on a seat's status, on the permissions that a role got from its starter
+    role (the code calls a starter role a *pack*), and on who changed a row.
+- **The guard keeps `42501` with a hint, and gets no code of the toolkit's own.** Every tool already reads `42501` as
+  "not allowed". The Data API answers it with 403, and a pgTAP test that expects a refusal expects `42501`. To those
+  tools, a toolkit-specific code would look like a different kind of failure. The hint of a `RAISE` is the trigger's
+  own text. Postgres passes it on as written, and never translates it. Postgres gives some of its own errors a hint,
+  in the server's language, but never this hint, and only this exact hint counts. So the mark means the same thing in
+  any server language.
+- **Any other error is reported as the failure it is.** Examples are a missing privilege, a role held to the policies
+  that reads with `row_security` off, a trigger that raises without the hint, and a failed check. Each one is a fault
+  in the application's setup, or a rule that holds every writer. Each one ends the request as a server failure, where
+  somebody will see it. The message for a role that reads with `row_security` off names RLS explicitly. That is why
+  the message text decides nothing. The toolkit's triggers that enforce what may never happen, whoever writes, are
+  not access guards, and raise their own codes:
+  - Tenancy's checks of a tenant's last administrator, of the rights rows (`SeatRights`) and the paths, and of the
+    rows that stay fixed raise `check_violation`.
+  - An [event log](entity-framework.md#an-event-log)'s guard raises `55000`.
+  - Tenancy's store answers the last-administrator check with a refusal of its own.
+- **Only a save is answered.** `DatabaseRefusalInterceptor` sees what a `SaveChanges` threw. A statement of yours,
+  such as an `ExecuteUpdate`, an `ExecuteDelete` or SQL, is not a save. An access guard's refusal of such a statement
+  reaches you as the `PostgresException` itself. To answer it with `access.refused` too, read it with
+  `DatabaseRefusal.From(exception)`, as for a save.
+- **The caller gets `access.refused`, and nothing more.** The caller does not learn which guard refused, or the
+  guard's message. The access check in C# is where a refusal is specific, with the missing permission, in the
+  reader's language. When the database refuses what that check let through, the two disagree. The fix is in the check
+  or in the rule, unless the caller's permissions changed in between. The toolkit detects that case by running the
+  request's access check again
   ([When the policies refuse what C# allowed](#when-the-policies-refuse-what-c-allowed)). The log line names the
-  guard for whoever runs the application, and the refusal keeps the database's error as its inner exception. A guard's name belongs to the schema: it changes when a table or a rule does, and has no text in any
-  language, so it would make a poor code for a client to branch on.
-- **Your own trigger refuses the same way.** From C#, in a [contribution](#policies-a-package-ships),
-  `RowAccessModel.Refusal(guard, message)` writes the statement. By hand it is one line. A trigger that should not
-  be answered as a refusal leaves the hint out. `DatabaseRefusal.From(exception)` reads what refused for a
-  translation of your own: `GuardRefused`, with the guard's name as `Constraint`.
+  guard for whoever runs the application. The refusal keeps the database's error as its inner exception. A guard's
+  name belongs to the schema. It changes when a table or a rule changes, and it has no text in any language. So it
+  would be a poor code for a client to branch on.
+- **A trigger of yours refuses the same way.** From C#, in a [contribution](#policies-a-package-ships),
+  `RowAccessModel.Refusal(guard, message)` writes the statement. By hand, the statement is one line. A trigger that
+  should not be answered as a refusal leaves the hint out. For your own translation, `DatabaseRefusal.From(exception)`
+  reads what refused: `GuardRefused`, with the guard's name as `Constraint`.
+
+In the diagram, purple is the failed save, red is a refusal, and grey is a failure that is not a refusal:
 
 ```mermaid
 flowchart LR
-    Failed["A save fails"] --> Code{"What did<br/>Postgres say?"}
-    Code -->|"42501, hint<br/>ddd:access.refused"| Guard["An access guard: access.refused,<br/>the log line names it"]
-    Code -->|"42501 from<br/>ExecWithCheckOptions"| Policy["A policy: access.refused"]
-    Code -->|"23505 on an index<br/>with RefusesAs"| Index["The index's own refusal"]
-    Code -->|"anything else"| Other["The failure as it was: a 500"]
+    failed["<b>A save fails</b>"]
+    code{"What did<br/>Postgres send?"}
+    guard["<b>An access guard</b><br/><small>access.refused, the log line names it</small>"]
+    policy["<b>A policy</b><br/><small>access.refused</small>"]
+    index["<b>A unique index with RefusesAs</b><br/><small>the index's own refusal</small>"]
+    other["<b>Any other failure</b><br/><small>as it was: a 500</small>"]
+    failed --> code
+    code -->|"42501 with the hint<br/>ddd:access.refused"| guard
+    code -->|"42501 from<br/>ExecWithCheckOptions"| policy
+    code -->|"23505 on an index<br/>with RefusesAs"| index
+    code -->|"anything else"| other
+    classDef strong fill:#5b2ec933,stroke:#5b2ec9,stroke-width:2px
+    classDef muted fill:none,stroke:#9a9ab5,stroke-dasharray:4 3,color:#9a9ab5
+    classDef bad fill:#c93c3c24,stroke:#c93c3c
+    class failed strong
+    class guard,policy,index bad
+    class other muted
 ```
 
 <details>
-<summary>Show the code: a trigger of your own that refuses as the toolkit's access guards do</summary>
+<summary>Show the code: a trigger of yours that refuses as the toolkit's access guards do</summary>
 
-By hand, in a migration of your own: a signed-in user's pallet keeps its number.
+By hand, in a migration of yours. The trigger keeps a signed-in user from changing a pallet's number:
 
 ```sql
 CREATE OR REPLACE FUNCTION depot.pallets_number_stays() RETURNS trigger
@@ -2176,7 +2515,7 @@ warn: The database refused a save the application allowed: the guard pallets_num
       C# and the guards disagree.
 ```
 
-A statement of your own is no save, so its refusal reaches you as the database's exception, read the same way:
+A statement of yours is not a save. Its refusal reaches you as the database's exception, which you read the same way:
 
 ```csharp
 try
@@ -2194,14 +2533,19 @@ catch (PostgresException failure) when (DatabaseRefusal.From(failure)?.Kind == D
 
 ### Writing the policies
 
-`PostgresRowAccess.Script(context, rules, accessFunctions)` returns the SQL for one context: it first drops
-every policy an earlier script made on the context's tables, and every trigger of a
-[column rule](#column-rules), found by the comment each one carries, then makes what its policies ask, the
-`ddd` schema and `ddd.written_in_this_transaction` with the grants on them, and the scoped system role when a
-policy is for it, wherever the database does not have them as they should be, drops the functions the context
-no longer writes, and then makes its functions, each after those it asks and granted to the roles that ask it,
-the policies again, and the column rules' triggers. So the latest script says what the rules are now, a rule
-taken out disappears with it, and a policy you wrote by hand is left alone.
+`PostgresRowAccess.Script(context, rules, accessFunctions)` returns the SQL for one context. The script runs these
+steps in order:
+
+1. It drops every policy that an earlier script made on the context's tables, and every trigger of a
+   [column rule](#column-rules). It finds them by the comment that each one carries.
+2. It makes what its policies need, wherever the database does not have it as it should be: the `ddd` schema and
+   `ddd.written_in_this_transaction` with their grants, and the scoped system role when a policy is for that role.
+3. It drops the functions that the context no longer writes.
+4. It makes its functions, each after the functions it calls, and grants each function to the roles that call it.
+5. It makes the policies again, and the column rules' triggers.
+
+So the latest script states the current rules. A rule that you remove disappears with the next script, and a policy
+that you wrote by hand stays.
 
 ```csharp
 var sql = PostgresRowAccess.Script(context,
@@ -2210,36 +2554,42 @@ var sql = PostgresRowAccess.Script(context,
 ]);
 ```
 
-Given a `RowAccessExport` as well, it writes the roles and the caller functions the export names: which
-roles the rules' symbolic roles become, and how a policy asks about the caller. Without one, they are
-`RowAccessRoleNames.Default` and the toolkit's `ddd` functions. The export's `Contributions` are the
-[policies packages ship](#policies-a-package-ships).
+With a `RowAccessExport` as well, the script writes the roles and the caller functions that the export names. The
+roles are what the rules' symbolic roles become. The caller functions are how a policy reads the caller. Without an
+export, the script uses `RowAccessRoleNames.Default` and the toolkit's `ddd` functions. The export's `Contributions`
+are the [policies that packages ship](#policies-a-package-ships).
 
-A script of one context grants its access functions to the roles of that context's own policies, and to no
-other role. If a policy of another module asks one of them, through a contract, for a role this context's
-policies are not for, write the contexts with `Scripts` below, or add a `GRANT EXECUTE` of your own after
-the script: the next script takes it back.
+A script of one context grants its access functions to the roles of that context's policies only. Another module's
+policy may call one of these functions, through a contract, for a role that this context's policies are not for. Then
+write the contexts with `Scripts`, below, or add a `GRANT EXECUTE` of yours after the script. The next script takes
+that grant back.
 
-For several modules, `PostgresRowAccess.Scripts(contexts, rules, accessFunctions, export)` returns each
-context with its script, in the order to run them: a context before every context whose rules, access
-functions or contributions ask a function it defines, because a policy or a function that asks one is
-refused while it does not exist, and otherwise in the order given. Contexts that ask each other's functions
-are refused, naming them. Each script knows where the functions of every context live, so a rule may ask
-another module's function by its [logical name](#names-relative-to-the-module), and grants each of its
-access functions to the roles of every context's policies that ask it.
+For several modules, `PostgresRowAccess.Scripts(contexts, rules, accessFunctions, export)` returns each context with
+its script, in the order to run them:
 
-Put the SQL it returns into a migration when the rules change, and when an upgrade of the toolkit changes
-what it writes, as text rather than as the call: a migration renders nothing when it runs later, on a
-database that is only as far as that migration. That
-is what the Supabase build does by itself, into `supabase/migrations`, from every rule of every module the
-host references; see [Supabase](supabase.md#row-access-rules-in-the-build).
+- A context comes before every context whose rules, access functions or contributions call a function that it
+  defines. Postgres refuses a policy or a function that calls a function that does not exist yet.
+- Otherwise the contexts keep the order given.
+- Contexts that call each other's functions are refused, and the refusal names them.
+- Each script knows where the functions of every context live. So a rule may call another module's function by its
+  [logical name](#function-names-relative-to-the-module).
+- Each script grants each of its access functions to the roles of every context's policies that call it.
+
+Put the returned SQL into a migration when the rules change, and when a toolkit upgrade changes what the script
+writes. Put it in as text, and do not call the script from the migration. A migration that runs later, on a database
+that is only as far as that migration, must run the SQL of its own time. The Supabase build does this by itself, into
+`supabase/migrations`, from every rule of every module that the host references
+([Supabase](supabase.md#row-access-rules-in-the-build)).
 
 ### Privileges from the policies
 
-A policy decides which rows a command touches; a privilege decides whether the command runs at all.
-Granted by hand, the two drift apart: a privilege beyond the policies turns a refusal into an empty
-answer, and a privilege short of them turns a rule that allows into `permission denied`.
-`RowAccessExport.WriteGrants` has the script write the privileges from the very policies it holds:
+A policy decides which rows a command touches. A privilege decides whether the command runs at all. When you grant
+privileges by hand, the two drift apart:
+
+- A privilege beyond the policies turns a refusal into an empty result.
+- A missing privilege turns a rule that allows into `permission denied`.
+
+`RowAccessExport.WriteGrants` makes the script write the privileges from the policies it holds:
 
 ```csharp
 var sql = PostgresRowAccess.Script(context, rules, accessFunctions, new RowAccessExport
@@ -2249,8 +2599,8 @@ var sql = PostgresRowAccess.Script(context, rules, accessFunctions, new RowAcces
 });
 ```
 
-After the policies, the script takes back every privilege on each table it wrote policies for, and then
-gives a role each command a permissive policy for that role allows, and `USAGE` on the tables' schemas:
+After the policies, the script takes back every privilege on each table that it wrote policies for. It then gives each
+role the commands that a permissive policy for that role allows, and `USAGE` on the tables' schemas:
 
 ```sql
 GRANT USAGE ON SCHEMA "ordering" TO authenticated;
@@ -2260,79 +2610,86 @@ GRANT SELECT, INSERT, DELETE ON TABLE "ordering"."Orders" TO authenticated;
 GRANT UPDATE ("Status", "Total_Amount", "Version") ON TABLE "ordering"."Orders" TO authenticated;
 ```
 
-- **What is taken back** is what any of the script's roles could hold: the user's, the anonymous caller's
-  and the scoped system role, the role of every mapped [token role](#token-roles), the bookkeeping role of
-  [a login that owns nothing](#a-login-that-owns-nothing), and `PUBLIC`. A grant of your own to one of
-  them on such a table is gone after the next script. A grant to any other role stays, and so does every
-  privilege on a table without a rule, which is not the script's to give or take. A role a rule names as
-  the database spells it, `To = ["reporting"]`, is such another role: it is given what its policies allow
-  and keeps what it held before, so a rule of its own that you narrow leaves a privilege for you to take
-  back.
-- **A restrictive policy gives nothing.** It only narrows what a permissive one allows.
-- **`UPDATE` is granted per column**: every column but those of a key, those Entity Framework refuses or
-  ignores a change of once the row is saved, and those the database computes. So what C# would not change,
-  the database does not let change either. A column of JSON is granted as a whole.
-- **A role that may add rows** gets `USAGE` on the sequences the table's columns own.
-- **A role the policies let change or remove rows of a table and not read them** is refused when the
-  script is written, with the role and the table. Entity Framework finds the row it changes by reading it,
-  and Postgres asks the privilege to read for that, so such a rule could never run.
+- **What the script takes back** is what any of the script's roles could hold: the user's role, the anonymous
+  caller's role, the scoped system role, the role of every mapped [token role](#token-roles), the bookkeeping role of
+  [a login that owns nothing](#a-login-that-owns-nothing), and `PUBLIC`.
+  - A grant of yours to one of these roles on such a table is gone after the next script.
+  - A grant to any other role stays. Every privilege on a table without a rule also stays, because that table is not
+    the script's to manage.
+  - A role that a rule names by its database name, such as `To = ["reporting"]`, is such another role. The script
+    gives it what its policies allow, and the role keeps what it held before. So when you narrow such a rule, take
+    back the old privilege yourself.
+- **A restrictive policy gives no privilege.** It only narrows what a permissive policy allows.
+- **`UPDATE` is granted per column.** The grant covers every column except key columns, columns that Entity
+  Framework refuses or ignores a change of once the row is saved, and columns that the database computes. So the
+  database refuses a change that C# would not make. A JSON column is granted as a whole.
+- **A role that may add rows** gets `USAGE` on the sequences that the table's columns own.
+- **A role that the policies let change or remove rows of a table, but not read them,** is refused when the script is
+  written. The refusal names the role and the table. Entity Framework finds the row it changes by reading it, and
+  Postgres requires the read privilege for that. So such a rule could never run.
 
-A column that never changes once its row is saved says so in the model:
+A column that never changes after its row is saved says so in the model:
 
 ```csharp
 builder.Property(order => order.CustomerId).IsFixedAfterInsert();
 ```
 
-Entity Framework then throws when a save would change it, and the script leaves the column out of the
-`UPDATE` grant, so a statement that goes around Entity Framework is refused as well, with SQLSTATE
-`42501`. `IsFixedAfterInsert()` is in `DDDToolkit.EntityFramework`, and means the same on every provider;
-only Postgres has the privilege to match.
+Entity Framework then throws when a save would change the column. The script leaves the column out of the `UPDATE`
+grant, so a statement that bypasses Entity Framework is refused too, with SQLSTATE `42501`. `IsFixedAfterInsert()` is
+in `DDDToolkit.EntityFramework`, and means the same on every provider. Only Postgres has the matching privilege.
 
-The toolkit's own tables have no policies, and get what their use asks. An outbox table takes `INSERT`
-from the user's role, the scoped system role and every role the policies let write a table of the context,
-because a save writes the event's row in the same transaction; an
-[event log](entity-framework.md#an-event-log) does the same. An inbox table gives `SELECT` and `INSERT` to
-the scoped system role, which is what the handlers of integration events run as. Nobody else reads a
-pending message, so the `revoke` statements written by hand in
-[A Postgres of your own](#a-postgres-of-your-own) and [The scoped system role](#the-scoped-system-role)
-are not needed next to it.
+The toolkit's tables have no policies, and get the privileges that their use needs:
 
-A privilege is the only lock on those tables, so there a script takes back more than its own roles hold.
-It finds, where it runs, every role that holds a privilege on them, and takes it back from each that
-cannot log in and is held to row level security: the bookkeeping role of an earlier script after
-`SystemRole` changed, the role of a token role since unmapped, which the login role may still switch to.
-Left alone are the tables' owner and a role that can log in, bypasses row level security or is a
-superuser: a script refuses a bookkeeping role, a scoped system role or the role of a token role that is
-one, so what such a role holds there you gave it, the role your own background work runs as for one.
+- An outbox table gets `INSERT` from the user's role, from the scoped system role, and from every role that the
+  policies let write a table of the context. A save writes the event's row in the same transaction. An
+  [event log](entity-framework.md#an-event-log) gets the same.
+- An inbox table gives `SELECT` and `INSERT` to the scoped system role, which the handlers of integration events run
+  as.
 
-`WriteGrants` is off by default, and a script without it is byte for byte what it was. The Supabase build
-writes the privileges unless the project sets `SupabaseRowAccessGrants` to `None`; see
-[Supabase](supabase.md#privileges-forced-policies-and-the-bookkeeping-role). `anon` and `authenticated` have
-to exist where the script runs, as they do on Supabase and after `SetupScript()`; the script makes the other
-roles it names.
+Nobody else reads a pending message. So with `WriteGrants` you do not need the `revoke` statements written by hand in
+[Setup on Postgres without Supabase](#setup-on-postgres-without-supabase) and in
+[The scoped system role](#the-scoped-system-role).
+
+A privilege is the only protection on those tables. So on those tables, a script takes back more than its own roles
+hold. Where the script runs, it finds every role that holds a privilege on them. It takes the privilege back from each
+such role that cannot log in and is held to RLS. Examples are the bookkeeping role of an earlier script after
+`SystemRole` changed, and the role of a token role that is no longer mapped, which the login role may still switch to.
+The script leaves alone the tables' owner, and a role that can log in, bypasses RLS or is a superuser. A script
+refuses a bookkeeping role, a scoped system role or the role of a token role with one of those attributes. So you gave
+such a role what it holds on those tables, for example the role that your own background work runs as.
+
+`WriteGrants` is off by default. A script without it is byte for byte the same as before. The Supabase build writes
+the privileges unless the project sets `SupabaseRowAccessGrants` to `None`
+([Supabase](supabase.md#privileges-forced-policies-and-the-bookkeeping-role)). `anon` and `authenticated` must exist
+where the script runs, as they do on Supabase and after `SetupScript()`. The script makes the other roles that it
+names.
 
 ### A login that owns nothing
 
-A statement that reaches the application's connection can always go back to the role that logged in:
-Postgres checks a change of role against the session's user, not against the role that is current. So
-whatever the login role owns or holds is outside every policy, for whoever manages to send a statement. A
-login role that holds nothing leaves such a statement the roles it may switch to, each held to its
-policies and its privileges, and nothing besides.
+A statement that reaches the application's connection can always switch back to the role that logged in. Postgres
+checks a role change against the session's user, and not against the current role. So whatever the login role owns
+or holds is outside every policy, for anyone who manages to send a statement. A login role that holds nothing leaves
+such a statement only the roles it may switch to. Each of those roles is held to its policies and its privileges.
 
-That takes three things. The migrations run as another role, which owns the tables. The application logs
-in as a role that owns nothing, holds no privilege on a table, and gets the roles it switches to without
-inheriting them. A migration makes the role, without a login or a password, since a migration is kept in a
-repository and a password is not; whoever deploys turns the login on once, as the database's owner, with a
-secret of that deployment. On Supabase the build writes that migration from the role's name, set in the
-project that exports beside the roles the policies are written for. It writes it after every other file, and a
-new one whenever those roles change; see
-[The role the application logs in as](supabase.md#the-role-the-application-logs-in-as).
+This takes three things:
+
+1. The migrations run as another role, which owns the tables.
+2. The application logs in as a role that owns nothing, holds no privilege on a table, and gets the roles it switches
+   to without inheriting them.
+3. A migration creates that role without a login and without a password, because a migration is kept in a
+   repository and a password must not be. Whoever deploys turns on the login once, as the database's owner, with a
+   secret of that deployment.
+
+On Supabase the build writes that migration from the role's name. You set the name in the exporting project, next to
+the roles that the policies are written for. The build writes the migration after every other file, and writes a new
+one whenever those roles change
+([The role the application logs in as](supabase.md#the-role-the-application-logs-in-as)).
 
 ```xml
 <SupabaseLoginRole>app</SupabaseLoginRole>
 ```
 
-Without that build, the migration is yours to write. The deployment's one statement is yours either way:
+Without that build, you write the migration. The deployment's one statement is yours either way:
 
 ```sql
 -- In a migration, or written by the Supabase build
@@ -2343,73 +2700,86 @@ grant anon, authenticated, ddd_system_in to app;
 alter role app with login password '...';
 ```
 
-And the system caller, which was the login role itself, gets a role of its own for the one thing it still
-has to do: the toolkit's bookkeeping, which reads, marks and deletes outbox rows, cleans the inbox and
-asks which migrations ran.
+The system caller used to run as the login role. It now gets a separate role for the one thing it still does, the
+toolkit's bookkeeping. The bookkeeping reads, marks and deletes outbox rows, cleans the inbox, and reads which
+migrations ran:
 
 ```csharp
 builder.Services.AddPostgresRowLevelSecurity(options => options.SystemRole = "ddd_system");
 ```
 
-On Supabase nothing says it: `ddd_system` is the bookkeeping role `AddSupabaseRowLevelSecurity` and the export
-both take unless `SupabaseRowAccessRoles` names another
-([Roles and caller functions of your own](supabase.md#roles-and-caller-functions-of-your-own)).
+On Supabase no line is needed. `ddd_system` is the bookkeeping role that `AddSupabaseRowLevelSecurity` and the export
+both use, unless `SupabaseRowAccessRoles` names another role
+([Roles and caller functions of your own](supabase.md#custom-roles-and-caller-functions)).
 
-`RowAccessRoleNames.From(options)` carries that role as `System`, and a script written with it and
-`WriteGrants` makes sure of it, in its prelude and its privileges:
+`RowAccessRoleNames.From(options)` carries that role as `System`. A script written with it and with `WriteGrants`
+checks the role in its prelude and in its privileges:
 
-- it makes the role, `NOLOGIN NOINHERIT` and without `BYPASSRLS`, where the database does not have it, and
-  grants it to the role running the script;
-- it fails when a role of that name can log in, bypass row level security or is a superuser, has the
-  privileges of a role that owns tables, or is granted to a role callers run as; and it is refused when it
-  is written if the role is the user's, the anonymous caller's, the scoped system role or the role of a
-  token role, because the bookkeeping role is a role of its own;
-- it gives the role `SELECT` and `DELETE` on the outbox table and `UPDATE` on the four columns that say how
-  a delivery went, `Attempts`, `LastError`, `NextAttemptAt` and `ProcessedAt`, so the bookkeeping cannot
-  rewrite an event that is still to be delivered; every command on the inbox table; `SELECT` on the
-  migration history where the database keeps one; and, on an event log that lets old rows go, `DELETE` and
-  `SELECT` on the columns that find them.
+- The script creates the role, `NOLOGIN NOINHERIT` and without `BYPASSRLS`, where the database does not have it. It
+  grants the role to the role that runs the script.
+- The script fails when a role of that name can log in, bypass RLS or is a superuser, has the privileges of a role
+  that owns tables, or is granted to a role that callers run as.
+- The script is refused when it is written if the bookkeeping role is the user's role, the anonymous caller's role,
+  the scoped system role or the role of a token role. The bookkeeping role must be a separate role.
+- The script gives the role:
+  - `SELECT` and `DELETE` on the outbox table, and `UPDATE` on the four columns that record a delivery: `Attempts`,
+    `LastError`, `NextAttemptAt` and `ProcessedAt`. So the bookkeeping cannot rewrite an event that is still to be
+    delivered.
+  - every command on the inbox table,
+  - `SELECT` on the migration history, where the database keeps one,
+  - on an event log that deletes old rows, `DELETE`, and `SELECT` on the columns that find those rows.
 
-The login role needs the grant too, in a migration after the script: `grant ddd_system to app;`, which
-the Supabase build writes into the login role's file, with the bookkeeping role the project maps, `ddd_system`
-unless it names another.
-Where the [settings travel per transaction](#how-the-settings-travel), it needs the procedure that sets them
-as well: `grant usage on schema ddd to app;` and
-`grant execute on procedure ddd.use_caller(text, text, text[], text[]) to app;`, which no file of the build
-writes.
+The login role needs the grant too, in a migration after the script: `grant ddd_system to app;`. The Supabase build
+writes that grant into the login role's file, with the bookkeeping role that the project maps, `ddd_system` unless it
+names another. In [`Transaction` scope](#settings-per-connection-or-per-transaction), the login role also needs the
+procedure that sets the settings: `grant usage on schema ddd to app;` and
+`grant execute on procedure ddd.use_caller(text, text, text[], text[]) to app;`. No file of the build writes these
+two grants.
 
-System work that reads a module's own tables now fails with `permission denied`, which is the point: it
-runs as a [scoped system caller](#the-scoped-system-role) instead, inside the policies. Where the
-bookkeeping role itself has to reach a table, write the rule for `RowAccessRoles.System`, `@system`: the
-role gets the policy, and with `WriteGrants` the privilege. A script that names the role without one
-configured is refused, naming it.
+System work that reads a module's tables now fails with `permission denied`. This is intended. Such work runs as a
+[scoped system caller](#the-scoped-system-role) instead, inside the policies. Where the bookkeeping role itself must
+reach a table, write the rule for `RowAccessRoles.System`, which is `@system`. The role then gets the policy, and with
+`WriteGrants` the privilege. A script that names `@system` while no bookkeeping role is configured is refused. The
+message names `@system` and says how to configure the role.
 
 > [!NOTE]
-> A host whose system caller runs as a role that bypasses row level security, Supabase's `service_role`
-> for one, has no bookkeeping role. Its scripts are what they were for as long as they write no
-> privileges and no rule is for `RowAccessRoles.System`, also where a rule or a grant spells that role's
-> name out. With `WriteGrants`, write them with `RowAccessRoleNames.From(options) with { System = null }`:
-> a role that bypasses the policies is refused as a bookkeeping role when the script runs. On Supabase,
-> `system=service_role` in `SupabaseRowAccessRoles` says it once, for the export and for the host.
+> A host whose system caller runs as a role that bypasses RLS, such as Supabase's `service_role`, has no bookkeeping
+> role. Its scripts stay the same as long as they write no privileges and no rule is for `RowAccessRoles.System`. This
+> also holds where a rule or a grant spells that role's name out. With `WriteGrants`, write the scripts with
+> `RowAccessRoleNames.From(options) with { System = null }`, because a role that bypasses the policies is refused as
+> a bookkeeping role when the script runs. On Supabase, `system=service_role` in `SupabaseRowAccessRoles` sets this
+> once, for the export and for the host.
 
-Three checks say at start-up, before the first request, whether the database and the context are as this
-relies on. `AddPostgresRowLevelSecurity`, and so `AddSupabaseRowLevelSecurity`, registers them, with the check of
-the functions [below](#forcing-row-level-security), as [start-up checks](startup-checks.md) over every context the
-host registers on Postgres, and the host runs them with one call, before the server binds its port:
+#### Start-up checks
+
+Three checks verify at start-up, before the first request, that the database and the context are set up as this
+page describes. A fourth check covers the functions ([Forcing row level security](#forcing-row-level-security)).
+`AddPostgresRowLevelSecurity`, and so `AddSupabaseRowLevelSecurity`, registers the checks as
+[start-up checks](startup-checks.md) over every context that the host registers on Postgres. The host runs them with
+one call, before the server binds its port:
 
 ```csharp
 builder.Services.AddPostgresRowLevelSecurity();
 builder.Services.RunStartupChecks();
 ```
 
-They are `postgres.login-role-may-switch-to-callers`, `postgres.login-role-owns-nothing` and
-`postgres.row-level-security-wired`, each named by a constant of `PostgresRowAccessChecks`. On Supabase,
-`AddSupabaseRowLevelSecurity` brings one more before the switch, `supabase.roles-match-access-files`, which compares
-the roles the host switches to with the ones the exported access files record they were written for
-([Roles and caller functions of your own](supabase.md#roles-and-caller-functions-of-your-own)). A host turns one off
-only by name and with a reason in its code, as [Turning a check off](startup-checks.md#turning-a-check-off) shows,
-and the login role's checks are the last it should want to. A host that runs them by hand, from a class of its own,
-calls the methods behind them, the switch first:
+| Start-up check | Method, to run it by hand | What it checks |
+|---|---|---|
+| `postgres.login-role-may-switch-to-callers` | `EnsureLoginRoleMaySwitchToCallersAsync` | The login role may switch to every role that the interceptor switches to. |
+| `postgres.login-role-owns-nothing` | `EnsureLoginRoleOwnsNothingAsync` | The login role owns and holds nothing. |
+| `postgres.row-level-security-wired` | `EnsureRowLevelSecurityWired` | The context runs its commands through the RLS interceptor. |
+| `postgres.definer-owners-bypass` | `EnsureDefinerOwnersBypassAsync` | Every function that runs as its owner is owned by a role that bypasses RLS ([Forcing row level security](#forcing-row-level-security)). |
+
+- Each check name is a constant on `PostgresRowAccessChecks`.
+- On Supabase, `AddSupabaseRowLevelSecurity` adds one more check that runs before the switch check:
+  `supabase.roles-match-access-files`. It compares the roles that the host switches to with the roles that the
+  exported access files record they were written for
+  ([Roles and caller functions of your own](supabase.md#custom-roles-and-caller-functions)).
+- A host turns a check off only by name, and with a reason in its code
+  ([Turning a check off](startup-checks.md#turning-a-check-off)). The login role's checks are the last that a host
+  should turn off.
+
+A host that runs the checks by hand, from a class of its own, calls the methods behind them, the switch check first:
 
 ```csharp
 await PostgresRowAccessChecks.EnsureLoginRoleMaySwitchToCallersAsync(context, cancellationToken);
@@ -2417,158 +2787,205 @@ await PostgresRowAccessChecks.EnsureLoginRoleOwnsNothingAsync(context, cancellat
 PostgresRowAccessChecks.EnsureRowLevelSecurityWired(context);
 ```
 
-The first asks whether the role the application logged in as may switch to every role the context's
-interceptor switches to: the user's, the anonymous caller's, the scoped system role, `SystemRole`, and the
-role of every mapped token role. A role is switched to when a caller of its kind connects, not when the
-application starts, so a grant left out passes the start and fails the first request of that caller: a token
-role nobody holds while testing, or the background work. The scoped system role is asked about where it exists:
-Supabase's access files make it only where a rule is for it or the grants are written, as they are unless the
-project turns that off, and no policy can be for a role that does not exist, so an application without one does
-no scoped system work and starts. Where the settings travel per transaction, it also
-asks whether the login role may call `ddd.use_caller`. It asks as the login role itself, on the context's
-connection opened past the interceptor, since the system caller's role is one of those it asks about; so it
-comes before every check that runs as the system caller, `EnsureSupabaseMigrationsAppliedAsync` among them, and
-the runner runs it in a stage of its own, before them. It
-throws naming the login role, and each role it may not switch to, or that does not exist, with the `GRANT` that
-fixes it, and the pair of `SupabaseRowAccessRoles` that maps the role, the fix for a host whose Supabase build
-writes the login role's migration: that file grants what the property maps, so there a missing role is a missing
-pair.
+**The switch check**, `postgres.login-role-may-switch-to-callers`:
 
-The second reads the catalogs on the context's own connection and throws unless the role the application
-logged in as owns no table, view, sequence, function or schema among the schemas of the context's model
-and `ddd`, holds no privilege on their tables and may create nothing in those schemas, of its own or
-through `PUBLIC`, has the privileges of no role it is a member of without switching to it, and is neither
-a superuser nor a role that bypasses row level security. Nor may it create roles or replicate, each a way past
-the policies that a statement takes as the login role itself: before Postgres 16 a role that may create roles
-grants itself any role that is not a superuser, and a role that may replicate reads every change to every
-table from a replication slot. A role it may switch to is one statement away, so
-the check also names each such role that is a superuser, bypasses row level security, or owns a table, a
-function or a schema there: a login role granted the role that owns the tables holds nothing and reaches
-everything. A login role that owns the database is `pg_database_owner`, which owns the schema `public`:
-where the context's tables are in `public`, it is named the same way, and the fix is another owner for the
-database. The role the system caller runs as is not asked whether it bypasses, since a host that names a
-bypassing `SystemRole`, Supabase's `service_role` for one, chose that. The exception names the login role
-and every finding with the statement that fixes it. A login role that owns a schema there made it, so it is
-the role the migrations run as: then the one finding is that, with the one fix, to log in as a role of its
-own and keep that one for the migrations. The third opens nothing: it throws unless the context runs its commands
-through the row level security interceptor, without which every command runs as the login role, and is
-refused outright where that role holds nothing. `UseDDDToolkit` gives every context on Postgres the interceptor,
-so what it finds is a context wired some other way: without the toolkit, or with the toolkit's interceptors
-added by hand. A context given the toolkit's base alone, `UseDDDToolkitCore`, passes: that call is how an
-application says a context runs as the login role, and its options keep that it was made. As a start-up check it
-runs first, with the checks that read the services: a context without the interceptor would fail the other two
-without saying why.
+- It checks that the login role may switch to every role that the context's interceptor switches to: the user's role,
+  the anonymous caller's role, the scoped system role, `SystemRole`, and the role of every mapped token role.
+- The interceptor switches to a role when a caller of that kind connects, and not when the application starts. So a
+  missing grant passes the start, and fails the first request of that caller. Examples are a token role that nobody
+  holds while testing, and the background work.
+- It checks the scoped system role only where the role exists. Supabase's access files make that role only where a
+  rule is for it, or where the grants are written, as they are unless the project turns that off. No policy can be
+  for a role that does not exist. So an application without the role does no scoped system work, and starts.
+- In `Transaction` scope, it also checks that the login role may call `ddd.use_caller`.
+- It runs as the login role itself, on the context's connection opened past the interceptor, because the system
+  caller's role is one of the roles it checks. So it must run before every check that runs as the system caller,
+  including `EnsureSupabaseMigrationsAppliedAsync`. The runner runs it in a separate stage, before those checks.
+- It throws with a message that names the login role, and each role that the login role may not switch to or that
+  does not exist, with the `GRANT` that fixes it. The message also names the `SupabaseRowAccessRoles` pair that maps
+  the role. That is the fix for a host whose Supabase build writes the login role's migration. That file grants what
+  the property maps, so there a missing role means a missing pair.
+
+**The ownership check**, `postgres.login-role-owns-nothing`, reads the catalogs on the context's connection. It throws
+unless all of these hold for the login role:
+
+- It owns no table, view, sequence, function or schema in the schemas of the context's model and in `ddd`.
+- It holds no privilege on their tables, and may create nothing in those schemas, by itself or through `PUBLIC`.
+- It does not have the privileges of a role that it is a member of without switching to that role.
+- It is not a superuser, and does not bypass RLS.
+- It may not create roles, and may not replicate. Each of these is a way past the policies that a statement takes as
+  the login role itself. Before Postgres 16, a role that may create roles can grant itself any role that is not a
+  superuser. A role that may replicate reads every change to every table from a replication slot.
+
+More about the ownership check:
+
+- A role that the login role may switch to is one statement away. So the check also names each such role that is a
+  superuser, bypasses RLS, or owns a table, a function or a schema in those schemas. A login role that is granted the
+  role that owns the tables holds nothing itself, and still reaches everything.
+- A login role that owns the database is `pg_database_owner`, which owns the schema `public`. Where the context's
+  tables are in `public`, the check names this in the same way. The fix is another owner for the database.
+- The check does not ask whether the system caller's role bypasses RLS. A host that names a bypassing `SystemRole`,
+  such as Supabase's `service_role`, chose that.
+- The exception names the login role and every finding, each with the statement that fixes it.
+- A login role that owns a schema there created that schema, so it is the role that the migrations run as. The check
+  then reports only that finding. The fix is to log in as a separate role, and to keep this role for the migrations.
+
+**The wiring check**, `postgres.row-level-security-wired`, opens no connection. It throws unless the context runs its
+commands through the RLS interceptor. Without the interceptor, every command runs as the login role, and is refused
+outright where that role holds nothing.
+
+- `UseDDDToolkit` gives every context on Postgres the interceptor. So the check finds contexts that are wired another
+  way: without the toolkit, or with the toolkit's interceptors added by hand.
+- A context configured with only the toolkit's base, `UseDDDToolkitCore`, passes. That call is how an application
+  says that a context runs as the login role, and the context's options record that call.
+- As a start-up check, the wiring check runs first, with the checks that read the services. A context without the
+  interceptor would fail the other two checks without saying why.
 
 ### Forcing row level security
 
-Postgres exempts a table's owner from the table's policies, so whoever reaches the owning role reads and
-writes every row. `RowAccessExport.ForceRowLevelSecurity` writes `FORCE ROW LEVEL SECURITY` after every
-`ENABLE` of a script, on the tables of the rules, of the aggregates' entities and of the contributions:
+Postgres exempts a table's owner from the table's policies. So whoever reaches the owning role reads and writes every
+row. `RowAccessExport.ForceRowLevelSecurity` writes `FORCE ROW LEVEL SECURITY` after every `ENABLE` in a script, on
+the tables of the rules, of the aggregates' entities and of the contributions:
 
 ```sql
 ALTER TABLE "ordering"."Orders" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "ordering"."Orders" FORCE ROW LEVEL SECURITY;
 ```
 
-The owner is then held to the policies like any other role, and no policy is for it, so it reads no row
-and writes none. The only way past the policies is a role with `BYPASSRLS`, or a superuser: a migration
-that moves data runs as one.
+The owner is then held to the policies like any other role. No policy is for the owner, so the owner reads no row and
+writes none. The only ways past the policies are a role with `BYPASSRLS` and a superuser. A migration that moves data
+runs as one of these.
 
 > [!IMPORTANT]
-> The [access functions](#asking-the-aggregates-entities-access-functions) run as their owner, so that
-> they answer without the policies of the tables they read. On a forced table that only holds while the
-> owner may bypass row level security. A function owned by any other role reads the tables under that
-> role's policies, finds no row, and answers that nobody may do anything, without a word.
+> The [access functions](#access-functions) run as their owner, so they answer without the policies of the tables
+> they read. On a forced table, this works only while the owner may bypass RLS. A function owned by any other role
+> reads the tables under that role's policies, and finds no row. It then answers that nobody may do anything, and
+> raises no error.
 
-The start-up check `postgres.definer-owners-bypass`, which `AddPostgresRowLevelSecurity` brings with the three
-above, checks it, and `PostgresRowAccessChecks.EnsureDefinerOwnersBypassAsync(context, cancellationToken)` does
-the same by hand: it throws unless every function that runs as its owner, in the schemas of the context's model
-and in `ddd`, is owned by a role that bypasses row level security or is a superuser, and names each
-function, its owner and the fix. While no table in those schemas is forced it passes, whoever owns the
-functions, so it can stand next to the three checks above in a host that forces nothing yet. On Supabase the
-migrations run as `postgres`, which may.
+The start-up check `postgres.definer-owners-bypass` checks this. `AddPostgresRowLevelSecurity` registers it with the
+three checks above. `PostgresRowAccessChecks.EnsureDefinerOwnersBypassAsync(context, cancellationToken)` runs the same
+check by hand.
 
-It is off by default, and a script without it is byte for byte what it was: on a Postgres of your own the
-application often logs in as the tables' owner, which may not bypass row level security, and its own work runs
-as that owner, for which no policy is written. The Supabase build forces the policies unless the project sets
-`SupabaseForceRowLevelSecurity` to `false`, since there the owner is `postgres`, which may bypass them; see
-[Supabase](supabase.md#privileges-forced-policies-and-the-bookkeeping-role). Turning it off again does not
-take the force off a table that has it: `ALTER TABLE … NO FORCE ROW LEVEL SECURITY` does, in a migration
-of your own. A [contribution](#policies-a-package-ships) that turns row level security on in a statement
-of its own reads the flag from the export it is handed.
+- The check throws unless every function that runs as its owner, in the schemas of the context's model and in `ddd`,
+  is owned by a role that bypasses RLS or is a superuser.
+- It names each such function, its owner and the fix.
+- While no table in those schemas is forced, the check passes, whoever owns the functions. So it can run next to the
+  three other checks in a host that forces nothing yet.
+- On Supabase the migrations run as `postgres`, which may bypass RLS.
+
+`ForceRowLevelSecurity` is off by default. A script without it is byte for byte the same as before. On a Postgres
+database without Supabase, the application often logs in as the tables' owner, which may not bypass RLS. The system
+work of such an application runs as that owner, and no policy is written for the owner. The Supabase build forces RLS
+unless the project sets `SupabaseForceRowLevelSecurity` to `false`. There the owner is `postgres`, which may bypass
+RLS ([Supabase](supabase.md#privileges-forced-policies-and-the-bookkeeping-role)).
+
+- Turning the option off again does not remove the force from a table. Run
+  `ALTER TABLE … NO FORCE ROW LEVEL SECURITY` in a migration of yours for that.
+- A [contribution](#policies-a-package-ships) that turns on RLS in a statement of its own reads the flag from the
+  export that it receives.
 
 ## When the policies refuse what C# allowed
 
-Under row level security a command is checked twice: by the application, before its handler runs, and by the
-policies, when its statements reach the database. When the policies refuse what the application let through,
-`UseDDDToolkit` refuses the save with `access.refused` (`ToolkitRefusals.Refused`), a refusal of the kind "not
-permitted", which the Tenancy sample answers with 403, with what the save threw as its inner exception. It
-shows in two ways. An insert, or an update whose new row a policy rejects, fails with Postgres's `42501`. An
-update or a delete of a row a policy hides from the statement finds no row, exactly as a save that lost a race
-to another one does, so
-`AggregateVersionInterceptor` reads the row again first: a row somebody changed or removed is the
-`ConcurrencyConflictException` it always was, and only a row still there as the save left it is a refusal. The
-caller is told no more than that the database refused the change.
+With RLS, a command is checked twice: by the access check, before its handler runs, and by the policies, when its
+statements reach the database. When the policies refuse what the access check let through, `UseDDDToolkit` refuses
+the save with the refusal code `access.refused` (`ToolkitRefusals.Refused`). It is a refusal of the kind "not
+permitted", which the Tenancy sample answers with 403. The refusal carries what the save threw as its inner
+exception. The refusal shows up in two ways:
 
-Somebody else may need to hear more, and what depends on why the policies refused. There are two reasons:
+- An insert, or an update whose new row a policy rejects, fails with Postgres's `42501`.
+- An update or a delete of a row that a policy hides from the statement finds no row. A save that lost a race to
+  another save looks the same. So `AggregateVersionInterceptor` reads the row again first. A row that somebody
+  changed or removed gives the usual `ConcurrencyConflictException`. Only a row that is still as the save left it is
+  a refusal.
 
-- **The caller's rights changed between the check and the save.** A permission was taken from a role the caller holds,
-  a grant was revoked, the caller's seat was suspended: in the milliseconds between the request's access check and
-  its save, or in the seconds a slow handler takes. The check and the policies agreed, each at the moment it was
-  asked, and nothing needs fixing: an information line says what happened, with no stack trace. A change of rights
-  that changes the very row the save is about ends the same way: taking a crew role off a project in the Tenancy
-  sample moves the project's version, but the handler loads the project as it is when it runs, so the save goes
-  ahead and the policies refuse it. Only a request that names the version it read (`ExpectVersion`) loses the race
-  instead, a `ConcurrencyConflictException` that the sample answers with 409, and the policies are not asked.
-- **The policies refuse what C# allows.** A rule is held in two places that do not hold it alike, or a handler
-  changes something its request's check never asked about. A retry gets the same answer, and a developer should
-  look: a warning says so.
+The caller learns only that the database refused the change.
 
-To tell the two apart, the toolkit asks the request's access check again, as the same caller, now. The request
-is in hand for the flow of work that handles it, with the check it passed
-([`RequestInHand`](access-requirements.md#asking-its-check-again)), and a save its handler makes runs in that
-flow. Asked again, the check refuses: the rights changed. It still lets the caller through: the policies and C#
-disagree. Where nothing passed a check in that flow, a handler called directly, work outside any request, or a
-request anyone may send (`AccessRequirement.AllowAnonymous()`), there is nothing to ask, and the application let
-through what the policies do not without asking anything: that is a warning too.
+Other people may need more detail, and that detail depends on why the policies refused. There are two reasons:
 
-A [guard](#when-the-database-refuses) that refuses a statement, a trigger that raises `42501` with the toolkit's
-hint, is told apart the same way, and each line names it: `The guard projects_owner_stays refused a save after
-the access check of ChangeProjectOwner (MemberAccess<ProjectId>.On) let the caller through.`, or, as a warning,
-`... the guard projects_owner_stays on projects.Projects. C# and the guards disagree.` The table goes with it
+- **The caller's permissions changed between the access check and the save.** For example, a permission was removed
+  from a role that the caller holds, a grant was revoked, or the caller's seat was suspended. This can happen in the
+  milliseconds between the request's access check and its save, or in the seconds that a slow handler takes. The
+  access check and the policies agreed, each at the moment it ran, and nothing needs fixing. An information line says
+  what happened, with no stack trace.
+  - A change of permissions that also changes the row the save is about ends the same way. In the Tenancy sample,
+    taking a crew role off a project increments the project's version. But the handler loads the project as it is
+    when the handler runs, so the save goes ahead, and the policies refuse it.
+  - Only a request that names the version it read (`ExpectVersion`) loses the race instead. It gets a
+    `ConcurrencyConflictException`, which the sample answers with 409, and the policies are not reached.
+- **The policies refuse what C# allows.** A rule is held in two places that do not hold it the same way, or a
+  handler changes something that its request's access check never checked. A retry gets the same answer, and a
+  developer should look. A warning says so.
+
+To tell the two apart, the toolkit runs the request's access check again, as the same caller, at that moment. The
+request is in hand for the flow of work that handles it, with the access check it passed
+([`RequestInHand`](access-requirements.md#asking-the-check-again)). A save that the request's handler makes runs in
+that flow.
+
+- When the access check now refuses, the caller's permissions changed.
+- When the access check still lets the caller through, the policies and C# disagree.
+- Where no access check passed in that flow, there is nothing to run again. Examples are a handler called directly,
+  work outside any request, and a request that anyone may send (`AccessRequirement.AllowAnonymous()`). The
+  application then let through what the policies refuse without checking anything. That is a warning too.
+
+A [guard](#when-the-database-refuses) that refuses a statement, a trigger that raises `42501` with the toolkit's hint,
+is told apart in the same way. Each line names the guard: `The guard projects_owner_stays refused a save after the
+access check of ChangeProjectOwner (MemberAccess<ProjectId>.On) let the caller through.`, or, as a warning,
+`... the guard projects_owner_stays on projects.Projects. C# and the guards disagree.` The line also names the table,
 where the database named one or the save wrote one.
 
-Nothing is written for it. `AccessChecks<TRequests>.RequireAsync` puts every request it lets through in hand,
-with its check, in the flow of the method that awaited it: the behavior the generator writes, or a dispatcher of
-your own written with `async` and `await` ([asking the checks without Mediator](access-requirements.md#asking-the-checks-without-mediator)).
-The lines are written through the context's logger factory under the category of `DatabaseRefusalInterceptor`,
-and name the request and its requirement by their types, never their values; a warning carries what the save
-threw. The check is asked again only for a save the policies refused, and only when a logger listens: one more
-check, which every other save does without. Asked again, a check keeps nothing for a handler (`Checked<T>`), so
-nothing of that second asking stays behind.
+You write nothing for this. `AccessChecks<TRequests>.RequireAsync` puts every request that it lets through in hand,
+with its access check, in the flow of the method that awaited it. That method is the behavior that the generator
+writes, or a dispatcher of yours written with `async` and `await`
+([asking the checks without Mediator](access-requirements.md#asking-the-checks-without-mediator)).
 
-What is asked again is the requirement the request declared. A rule a handler checks itself, past what its
-request declared, is not part of it. Nor is what a package's use case asks past it: a request handed to one of
-Tenancy's use cases declares what the use case asks first, `TenancyAccess.InTenant()` say, and the use case asks
-the rest itself. A change of rights against either is still a warning, and the warning names the requirement
-that was asked again, so it shows how little that one asked. A save made after the handler returned, by a pipeline behavior around the access
-behavior, runs outside the handler's flow and finds no check to ask: the warning without a request. A check that
-gives no answer the second time leaves the warning too, and the warning says why: its connection gone, say, or a
-`ConcurrencyConflictException` because what the request is about moved on from the version it named, which says
-nothing about the caller's rights.
+- The lines are written through the context's logger factory, under the category of `DatabaseRefusalInterceptor`.
+- They name the request and its requirement by their types, never by their values.
+- A warning includes what the save threw.
+- The access check runs again only for a save that the policies refused, and only when a logger listens. That is one
+  extra access check, and every other save skips it.
+- An access check that runs again keeps nothing for a handler (`Checked<T>`). So nothing of the second run stays
+  behind.
+
+What runs again is the requirement that the request declared:
+
+- A rule that a handler checks itself, beyond what its request declared, is not part of the requirement.
+- What a package's use case checks beyond the requirement is not part of it either. A request handed to one of
+  Tenancy's use cases declares what the use case checks first, such as `TenancyAccess.InTenant()`, and the use case
+  checks the rest itself.
+- A change of permissions against either one still gives a warning. The warning names the requirement that ran
+  again, so it shows how little that requirement checked.
+- A save made after the handler returned, by a pipeline behavior around the access behavior, runs outside the
+  handler's flow, and finds no access check to run. It gives the warning without a request.
+- An access check that gives no answer the second time also gives the warning, and the warning says why. For
+  example, the check's connection is gone. Or the check throws a `ConcurrencyConflictException` because the subject
+  of the request moved on from the version that the request named, which says nothing about the caller's
+  permissions.
+
+In the diagram, purple is the refusal, green is the information line and red is the warning:
 
 ```mermaid
 flowchart TB
-    Refused["the policies or a guard<br/>refuse a save"] --> Passed{"did the request<br/>pass an access<br/>check?"}
-    Passed -- "no" --> Warning["warning:<br/>C# and the policies<br/>disagree"]
-    Passed -- "yes" --> Again{"asked again,<br/>now"}
-    Again -- "refuses" --> Information["information:<br/>the caller's rights<br/>changed meanwhile"]
-    Again -- "lets through" --> Warning
-    Again -- "fails" --> Warning
+    refused["<b>The policies or a guard refuse a save</b>"]
+    passed{"Did the request pass<br/>an access check?"}
+    again{"Run the access<br/>check again, now"}
+    information["<b>Information</b><br/><small>the caller's permissions changed in between</small>"]
+    warning["<b>Warning</b><br/><small>C# and the policies disagree</small>"]
+    refused --> passed
+    passed -- "no" --> warning
+    passed -- "yes" --> again
+    again -- "refuses" --> information
+    again -- "lets through" --> warning
+    again -- "fails" --> warning
+    classDef strong fill:#5b2ec933,stroke:#5b2ec9,stroke-width:2px
+    classDef good fill:#1f8a5b26,stroke:#1f8a5b
+    classDef bad fill:#c93c3c24,stroke:#c93c3c
+    class refused strong
+    class information good
+    class warning bad
 ```
 
 <details>
-<summary>Show the code: the three lines, and a rename in the Tenancy sample that loses its permission on the way</summary>
+<summary>Show the code: the three log lines, and a rename in the Tenancy sample that loses its permission before the save</summary>
 
 ```text
 info: DDDToolkit.EntityFramework.Interceptors.DatabaseRefusalInterceptor
@@ -2584,11 +3001,12 @@ warn: DDDToolkit.EntityFramework.Interceptors.DatabaseRefusalInterceptor
       The database refused a save the application allowed: projects.Projects. C# and the policies disagree.
 ```
 
-In the [Tenancy sample](../Examples/README.md#the-tenancy-sample), Vic renames a project as its crew lead. Between his request's
-check and its save, the tenant's roles manager leaves the crew lead's role giving nothing but `projects.view`.
-The project's row did not change, so the handler loads what was checked, renames it, and saves; the policy on
-`projects.Projects`, which reads the role's permissions as they are now, finds no permission of Vic's that writes the row and
-leaves the statement no row. The request is answered 403 `access.refused`, and the first line above is logged:
+In the [Tenancy sample](../Examples/README.md#the-tenancy-sample), Vic renames a project as its crew lead. Between his
+request's access check and its save, the tenant's roles manager changes the crew lead's role to give only
+`projects.view`. The project's row did not change. So the handler loads what was checked, renames it, and saves. The
+policy on `projects.Projects` reads the role's permissions as they are now. It finds no permission of Vic's that
+writes the row, and leaves the statement no row to change. The request gets 403 with the refusal code
+`access.refused`, and the first line above is logged:
 
 ```csharp
 // RequestPipelineTests.A_permission_taken_from_a_crew_role_since_the_check_is_refused_by_the_database_and_logged_as_a_change_of_rights
@@ -2598,7 +3016,7 @@ await renamed.ShouldBeRefusedAsync(HttpStatusCode.Forbidden, ToolkitRefusals.Ref
 logs.Entries.Single(entry => entry.Category == typeof(DatabaseRefusalInterceptor).FullName).Level.Should().Be(LogLevel.Information);
 ```
 
-Code of your own that writes past Entity Framework, and meets a refusal of the policies itself, asks the same:
+Code of yours that writes past Entity Framework, and meets a refusal of the policies itself, checks the same way:
 
 ```csharp
 if (RequestInHand.Current is { } inHand && !await inHand.StillPassesAsync(cancellationToken))
@@ -2611,9 +3029,9 @@ if (RequestInHand.Current is { } inHand && !await inHand.StillPassesAsync(cancel
 
 ## Where to look next
 
-- [How a request is checked](how-a-request-is-checked.md), which follows one request from its attribute through the
-  checks to the policies of the rows it touches, with the caller on the connection in between.
-- [Supabase](supabase.md#row-level-security-for-your-own-queries) for Supabase Auth's tokens, and the build
-  that writes the policies.
-- [Designing aggregates](aggregate-design.md), because a policy is about an aggregate, not a row.
-- [Diagnostics](diagnostics.md#ddd00038) for the build errors about a rule.
+- [How a request is checked](how-a-request-is-checked.md) follows one request from its attribute through the access
+  check to the policies of the rows it touches, with the caller on the connection in between.
+- [Supabase](supabase.md#row-level-security-for-your-own-queries) covers Supabase Auth's tokens, and the build that
+  writes the policies.
+- [Designing aggregates](aggregate-design.md) explains why a policy covers a whole aggregate.
+- [Diagnostics](diagnostics.md#ddd00038) lists the build errors about a rule.

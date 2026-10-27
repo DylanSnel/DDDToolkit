@@ -64,7 +64,7 @@ public static partial class PeopleIShareWith
   the resource named.
 - **The contract's id** is declared, or it is the id the toolkit writes for `[AggregateRoot<Guid>]` in the declaring
   project. Contracts belong to the owning module. Rules of other modules call them
-  ([A resource's access, asked by its id](../row-level-security.md#a-resources-access-asked-by-its-id)).
+  ([A resource's access, asked by its id](../row-level-security.md#resource-access-contracts)).
 - **`FellowMembers` reads the member rows alone.** An owner without a current member row finds nobody by owning. A
   read rule on another table can call it. One example is a read rule on
   [Tenancy's seats](../tenancy/postgres.md#restrictive-rules) that lets a seat read the people on its
