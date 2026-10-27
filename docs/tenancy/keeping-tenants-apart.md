@@ -106,7 +106,7 @@ A module that sees only your ids calls [`TenancyWork`](reference/callers.md#tena
   bypass the policies; they decide what it reaches ([The scoped system role](../row-level-security.md#the-scoped-system-role)).
 - The scope says whose work it is: Tenancy's (`tenancy`) for work that calls its use cases; the module's name for a
   module's own work in a tenant, and for its work on its resources with members
-  ([Who holds a permission](../membership.md#who-holds-a-permission)).
+  ([Who holds a permission](../membership/permissions-and-roles.md#who-holds-a-permission)).
 
 ### A scope, never a requirement
 

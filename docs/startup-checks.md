@@ -100,7 +100,7 @@ made otherwise. They read the catalogs of the database and change nothing.
 | `tenancy.system-reads-across-tenants` | `TenancyPostgresChecks.SystemReadsAcrossTenantsCheck` | `AddTenancyPostgres` | Database | The few reads across tenants answer, with nothing past the policies |
 | `tenancy.policies-in-place` | `TenancyPostgresChecks.PoliciesInPlaceCheck` | `AddTenancyPostgres` | Database | The policies, functions and the index on a tenant's root are the ones the catalogue writes ([Setting it up](tenancy/postgres.md#setting-it-up)) |
 | `tenancy.unknown-stored-permissions` | `TenancyChecks.UnknownStoredPermissionsCheck` | `AddTenancy` | Database | Logs a permission a role holds that the catalogue has lost, and refuses nothing |
-| `membership.functions-in-place` | `MembershipPostgresChecks.FunctionsInPlaceCheck` | `AddMembershipPostgres` | Database | The functions and the lock of every resource's membership are written from its rules ([On Postgres](membership.md#on-postgres-the-second-lock)) |
+| `membership.functions-in-place` | `MembershipPostgresChecks.FunctionsInPlaceCheck` | `AddMembershipPostgres` | Database | The functions and the lock of every resource's membership are written from its rules ([On Postgres](membership/postgres.md#on-postgres-the-second-lock)) |
 | `pgmq.extension-installed` | `PgmqQueue.ExtensionInstalledCheck` | `AddPgmqSink`, `AddPgmqConsumer` | Database | Every database a sink or a consumer uses has pgmq, with topics where they are used ([Transports](transports.md#queues-creation-and-the-missing-extension)) |
 
 Each name is a public constant, the one in the table, so a host turns a check off by the constant rather than by a
@@ -248,5 +248,5 @@ were made from once the host has started, is one ([Packs after provisioning](ten
 - [Access requirements](access-requirements.md#when-nothing-asks-the-checks), for the check of the access behaviors.
 - [Row level security](row-level-security.md#a-login-that-owns-nothing), for what the login role's checks ask.
 - [Supabase](supabase.md#checking-at-start-up), for the migrations' check and the login role the build writes.
-- [Tenancy](tenancy/postgres.md#setting-it-up) and [Membership](membership.md#on-postgres-the-second-lock), for what their
+- [Tenancy](tenancy/postgres.md#setting-it-up) and [Membership](membership/postgres.md#on-postgres-the-second-lock), for what their
   checks of the database hold you to.

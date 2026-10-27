@@ -247,8 +247,8 @@ stands for, and what a request that computes its requirement writes:
 | a caller who works in the tenant | `[InTenant]`, of [Tenancy](tenancy/who-may-do-what.md#what-a-request-requires-of-its-caller) | `TenancyAccess.InTenant()` | a seat in the tenant the request was sent for, and system work there | the caller's own reason, such as `tenancy.not-seated` |
 | a permission for the whole tenant | `[RequiresPermission(permission)]` | `TenancyAccess.AtTenant(permission)` | whoever holds the permission at the tenant's root now | `tenancy.not-permitted`, naming the permission |
 | a permission at a unit | `[RequiresPermission(permission)]`, `[AtUnit]` on the unit | `TenancyAccess.AtUnit(permission, unit)` | whoever holds the permission at that unit now, there or above it | `tenancy.not-permitted`, with the permission and the unit |
-| a permission on a resource | `[RequiresPermission(permission)]`, `[OnResource]` on the resource, `[ExpectedVersion]` on the version read, of [Membership](membership.md#a-document-and-the-people-it-is-shared-with) | `MemberAccess.On(permission, resource, expectedVersion)` | whoever holds the permission on it, through its members or from above | the resource's `not-found` or `not-permitted` |
-| a query that shows the resources a permission is held on | `[SeenWith<TResourceId>(permission)]`, of [Membership](membership.md#inside-your-own-statements) | `MemberAccess.SeenWith<TResourceId>(permission)` | every caller who signed in, and system work: the query's own statement leaves out what the caller does not hold the permission on | the caller's own reason where it is nobody; the resource's `not-permitted`, naming the permission, for a caller who did not sign in |
+| a permission on a resource | `[RequiresPermission(permission)]`, `[OnResource]` on the resource, `[ExpectedVersion]` on the version read, of [Membership](membership/resources-and-members.md#a-document-and-the-people-it-is-shared-with) | `MemberAccess.On(permission, resource, expectedVersion)` | whoever holds the permission on it, through its members or from above | the resource's `not-found` or `not-permitted` |
+| a query that shows the resources a permission is held on | `[SeenWith<TResourceId>(permission)]`, of [Membership](membership/checks-and-saves.md#inside-your-own-statements) | `MemberAccess.SeenWith<TResourceId>(permission)` | every caller who signed in, and system work: the query's own statement leaves out what the caller does not hold the permission on | the caller's own reason where it is nobody; the resource's `not-permitted`, naming the permission, for a caller who did not sign in |
 | one of the application's operators, on a query | `[RequiresOperator]` | `TenancyAccess.RequiresOperator()` | a signed-in user with an [operator's token role](tenancy/operators-and-history.md#operators) | `tenancy.operators-only` |
 | the caller's own, or a permission | `[RequiresPermission(permission)]`, `[OrOwn]` on the member that names it | `AccessRequirement.Any(AccessRequirement.Own(seat), ...)` | the caller the member names, and whoever holds the permission | one `access.refused`, with `access.not-own` and the permission's reason |
 | the caller's own alone | `[OwnOnly]`, `[Own]` on the member that names it | `AccessRequirement.Own(seat)` | the caller the member names | `access.not-own` |
@@ -756,12 +756,12 @@ flowchart LR
   caller's own on a resource with the owner in the place of the value: `Any(All(OwnerOf(member), Sees(permission, resource)),
   On(permission, resource))`, and the handler still finds the aggregate on that resource.
 - **The owner of a resource with members holds its permissions already.** On a resource of
-  [Membership](membership.md)'s the property marked `[Owner]` names the member that owns it, who holds every
+  [Membership](membership/overview.md)'s the property marked `[Owner]` names the member that owns it, who holds every
   permission said for the owner by owning it. So `[OrOwn]` on the resource's own id, beside `[OnResource]` and a
   permission the owner holds, lets through nobody the permission does not: the warning
   [DDD00096](diagnostics.md#ddd00096) says to take it off. It stays for a permission declared `Owner = false`.
 - **One owner, of a type with an own.** Several owners of one aggregate are members: a resource with members, which
-  [Membership](membership.md) keeps, with the permissions each member's roles give. `[Owner]` twice on one aggregate, on an
+  [Membership](membership/overview.md) keeps, with the permissions each member's roles give. `[Owner]` twice on one aggregate, on an
   entity inside it or on a type that is no aggregate root is [DDD00087](diagnostics.md#ddd00087). On a type nothing
   could say the caller's own of it is [DDD00088](diagnostics.md#ddd00088): where it is declared, for a `string`, a class
   or an enum, and at the request, where the requests' project sees no handle of the owner's type. An owner that may be
@@ -780,7 +780,7 @@ Beside `[OnResource]` the caller's own way through is held to the resource, as t
 alone would let a seat send any project's id with its own seat; so the own way also asks Membership's
 `MemberAccess.Sees(permission, resource, version)`: the caller sees the resource, whether or not it holds the permission there.
 The resource's check reads it in one statement, refuses one the caller does not see with its `not-found`, compares the
-version `[ExpectedVersion]` names, and keeps what the [expert hold](membership.md#the-expert-hold) holds the save to,
+version `[ExpectedVersion]` names, and keeps what the [expert hold](membership/checks-and-saves.md#the-expert-hold) holds the save to,
 as on the permission's way, so a save under `UseMemberHolds` is held to what the door read whichever way the caller came
 through. A package names that case with `OwnAlternative` on its `[PermissionMarker]`; Tenancy's `[AtUnit]` names none.
 
@@ -1025,7 +1025,7 @@ with the `IAccessCheck` that does:
 | the owner of an aggregate | `[OrOwn]`, `[OwnOnly]` with `[Own]` on the id of an aggregate that marks its owner `[Owner]`, `AccessRequirement.OwnerOf(id)`, of the core | nothing more on Entity Framework, whose `AddDDDToolkitEntityFramework` registers what reads the owner; the caller's own of the owner's type as in the row above |
 | several cases at once, or one of several | stacked attributes, `AccessRequirement.All(...)` and `Any(...)`, of the core | nothing: the set asks each case of the check that decides it |
 | a tenant: a seat in it, a permission for the whole of it or at a unit, operators | `[InTenant]`, `[RequiresPermission(permission)]` with `[AtUnit]` or without a marker, `[RequiresOperator]`: `TenancyAccess.InTenant()` and the rest of `TenancyRequirement`'s cases, of [Tenancy](tenancy/who-may-do-what.md#what-a-request-requires-of-its-caller) | `services.AddTenancyAccess<...>()`, for each module |
-| a resource with members: a permission held on it | `[RequiresPermission(permission)]` with `[OnResource]`, `[SeenWith<TResourceId>(permission)]`: `MemberAccess.On(permission, resource)` and `SeenWith`, of [Membership](membership.md#a-document-and-the-people-it-is-shared-with) | `services.AddDocumentMemberAccess<IFilingRequest>()`, generated for each resource |
+| a resource with members: a permission held on it | `[RequiresPermission(permission)]` with `[OnResource]`, `[SeenWith<TResourceId>(permission)]`: `MemberAccess.On(permission, resource)` and `SeenWith`, of [Membership](membership/resources-and-members.md#a-document-and-the-people-it-is-shared-with) | `services.AddDocumentMemberAccess<IFilingRequest>()`, generated for each resource |
 | something only your module knows | a record of your own | `services.AddAccessCheck<IBillingRequest, BillingAccessCheck>()` |
 
 A check of your own is two methods. `Decides` says whether a requirement is one of its cases, and only looks
@@ -1105,7 +1105,7 @@ check, `TakeFor(request)` in the handler, which hands out what the request's lat
 for a request that passed no check that keeps a `T`. A request is found by reference, so declare it as a class
 or a record class. What a check keeps is kept with the [request in hand](#the-request-in-hand) as well, where
 code that is not handed the request finds it: that is how the Membership package's
-[expert hold](membership.md#the-expert-hold) holds a save to what its check read, with no line in the handler.
+[expert hold](membership/checks-and-saves.md#the-expert-hold) holds a save to what its check read, with no line in the handler.
 Where the cases of a [combination](#requirements-that-combine) each keep a `T`, a permission on each of two documents say,
 each is kept, in the order the cases were asked: `TakeAllFor(request)` hands them all out, `TakeFor` refuses to
 guess which one of several the handler means, and `Checked<T>.TryFindInHand(each => ..., out var kept)` finds the one

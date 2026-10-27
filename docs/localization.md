@@ -396,7 +396,7 @@ services.AddFailureTexts<MembershipFailures>(rules.Codes.TextKeys);
 services.AddDDDToolkitLocalization(o => o.AddResource<SharedFailures>());
 ```
 
-[Membership](membership.md) offers its texts this way, once for each resource you register, under that
+[Membership](membership/overview.md) offers its texts this way, once for each resource you register, under that
 resource's codes.
 
 - **An offer changes nothing by itself.** `AddFailureTexts` is in the core package and registers a

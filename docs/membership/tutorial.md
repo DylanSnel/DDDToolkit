@@ -285,7 +285,7 @@ dotnet build Harbor.slnx
 
 Look in the domain project's **Dependencies → Analyzers** for `Board.Members.g.cs`: one line, the member list.
 
-> **Going further.** What is written, and when it is not: [The member list is written for you](../membership.md#the-member-list-is-written-for-you).
+> **Going further.** What is written, and when it is not: [The member list is written for you](resources-and-members.md#the-member-list-is-written-for-you).
 
 ## Step 2: the permissions and the rules
 
@@ -419,7 +419,7 @@ dotnet build Harbor.slnx
   role may give it.
 
 > **Going further.** Every setting of a permission, `Implies` and `Retired` among them:
-> [The settings of a permission](../membership.md#the-settings-of-a-permission).
+> [The settings of a permission](permissions-and-roles.md#the-settings-of-a-permission).
 
 ## Step 3: where it is stored
 
@@ -572,7 +572,7 @@ dotnet ef migrations add Boards --project src/Modules/Boards/Harbor.Boards.Infra
 - The migration creates the schema `boards` with four tables: `Boards`, `BoardPeople` (the members, named after the
   board and its collection), `BoardMemberRoles` and `BoardRoles`. No table of Tenancy's.
 
-> **Going further.** Your own table and column names: [Several kinds of resource](../membership.md#several-kinds-of-resource).
+> **Going further.** Your own table and column names: [Several kinds of resource](resources-and-members.md#several-kinds-of-resource).
 
 ## Step 4: the database's own rules
 
@@ -761,7 +761,7 @@ Build again: `dotnet build Harbor.slnx`. The policies reach the database with th
 - Leave the locks out, and the start-up check says so as a warning: the member rows then follow whatever your rule
   for changing a board allows.
 
-> **Going further.** Everything the lock holds and leaves to you: [Who writes the member rows](../membership.md#who-writes-the-member-rows).
+> **Going further.** Everything the lock holds and leaves to you: [Who writes the member rows](postgres.md#who-writes-the-member-rows).
 
 ## Step 5: the module's registration and the host
 
@@ -1304,7 +1304,7 @@ Content-Type: application/json
    Rhea holds it at North: until step 8 a permission on a board is held on the board alone.
 
 > **Going further.** A command that names the version its caller read, `[ExpectedVersion]`, and what holds a change
-> between the check and the save: [From the check to the save](../membership.md#from-the-check-to-the-save).
+> between the check and the save: [From the check to the save](checks-and-saves.md#from-the-check-to-the-save).
 
 ## Step 7: members
 
@@ -1713,8 +1713,8 @@ rollback;
 The second statement is refused by the lock's trigger, with the hint `ddd:access.refused`: Leo may change the board,
 and not its owner. A member row he adds by hand is refused the same way, by the lock's policy on `BoardPeople`.
 
-> **Going further.** A role the tenant makes itself, renames or archives: [Roles a customer makes](../membership.md#roles-a-customer-makes).
-> A rule of your own, such as "never for longer than you hold it yourself": [Who may give a role](../membership.md#who-may-give-a-role-is-yours-to-decide).
+> **Going further.** A role the tenant makes itself, renames or archives: [Roles a customer makes](permissions-and-roles.md#roles-a-customer-makes).
+> A rule of your own, such as "never for longer than you hold it yourself": [Who may give a role](permissions-and-roles.md#who-may-give-a-role-is-yours-to-decide).
 
 ## Step 8: reach from above
 
@@ -1887,8 +1887,8 @@ Build the host, `npx supabase migration up --local`, and start the host again.
    board nor its owner: `boards.members.manage` reaches it from the root.
 
 > **Going further.** A command that moves a board, and the trigger that holds the unit to its permissions:
-> [Who writes the member rows](../membership.md#who-writes-the-member-rows). Reach from above without Tenancy:
-> [Beside an organization](../membership.md#beside-an-organization).
+> [Who writes the member rows](postgres.md#who-writes-the-member-rows). Reach from above without Tenancy:
+> [An organization of your own](beside-an-organization.md#an-organization-of-your-own).
 
 ## What you built
 
@@ -1901,4 +1901,5 @@ Build the host, `npx supabase migration up --local`, and start the host again.
 | 7 | Starter roles, and members added by the owner, in a role that counts on that board alone |
 | 8 | A permission held in the organization reaching every board below it |
 
-Next: every detail of every part is in the [reference](../membership.md).
+Next: every detail of every part is in the topic pages, from [Resources and members](resources-and-members.md) on,
+and every class and method in the [API reference](reference/resource-and-members.md).

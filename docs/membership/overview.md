@@ -1,6 +1,7 @@
 ---
 title: Membership
 sidebar_label: Overview
+slug: /membership
 ---
 
 # Membership
@@ -157,22 +158,31 @@ Most have a default, so the smallest application decides only where the roles co
 
 | Choice | The default | What you can do instead |
 |---|---|---|
-| Where the roles come from | No default: the rules say it. | `Roles.Fixed([...])`: in code, the same for everybody. `Roles.Custom(starters: [...])`: rows the tenant keeps and changes, as in the tutorial. `Roles.External(...)`: roles kept elsewhere, such as Tenancy's own ([Beside an organization](../membership.md#beside-an-organization)). |
-| Who may add a member, give a role, name an owner | Yours, per command: the package has no permission of its own for it. | Require a permission on the board, as the tutorial's `boards.members.manage`, and write any further rule in the handler ([Who may give a role](../membership.md#who-may-give-a-role-is-yours-to-decide)). |
+| Where the roles come from | No default: the rules say it. | `Roles.Fixed([...])`: in code, the same for everybody. `Roles.Custom(starters: [...])`: rows the tenant keeps and changes, as in the tutorial. `Roles.External(...)`: roles kept elsewhere, such as Tenancy's own ([Beside an organization](beside-an-organization.md#beside-an-organization)). |
+| Who may add a member, give a role, name an owner | Yours, per command: the package has no permission of its own for it. | Require a permission on the board, as the tutorial's `boards.members.manage`, and write any further rule in the handler ([Who may give a role](permissions-and-roles.md#who-may-give-a-role-is-yours-to-decide)). |
 | What the owner holds | Every permission on the board. | `Owner = false` on a permission the owner should not hold by owning. |
 | What every member holds | Nothing, by being a member. | `EveryMember = true` on one permission, usually the one that sees the board. Reach from above needs it. |
 | What a role may give | Every permission on the board. | `InRoles = false` keeps one out of every role. `otherPermissions` lets permissions of other modules in. |
-| The lock on the member rows and the owner | None: whoever your rules let change a board writes them, and the start-up check warns. | `LocksMembers = true` and `LocksOwner = true` on the permission your commands require ([Who writes the member rows](../membership.md#who-writes-the-member-rows)). |
+| The lock on the member rows and the owner | None: whoever your rules let change a board writes them, and the start-up check warns. | `LocksMembers = true` and `LocksOwner = true` on the permission your commands require ([Who writes the member rows](postgres.md#who-writes-the-member-rows)). |
 | Reach from above | Off: the members and the owner only. | `reachFromAbove: true`, and `[At]` on the property that says where a board hangs. |
 | Who a member is | Follows from the member id: the caller's seat for Tenancy's seat id, the user id for an id over a `Guid`. | `members: MemberSource.Claim(...)`, a claim of the token, or `MemberSource.Resolved(...)`, an id you resolve. |
-| System work | Work in the module's own scope, `boards`, holds every permission on every board. | `systemScopes: [...]` names others, `[]` none ([System work](../membership.md#system-work)). |
-| The name in codes and functions | The class's name made plural: `boards.not-found`, `boards_i_see`. | `[Members("...")]` on the class ([Names](../membership.md#names)). |
-| A save tied to its check | Off: the check, the load by id, the version, the board's rules and RLS hold a change. | `UseMemberHolds` on the context ([The expert hold](../membership.md#the-expert-hold)). |
-| With or without Tenancy | Works alone: members are your users. | With Tenancy's Entity Framework package in the project, members are seats and the join is generated ([With Tenancy](../membership.md#with-tenancy)). |
+| System work | Work in the module's own scope, `boards`, holds every permission on every board. | `systemScopes: [...]` names others, `[]` none ([System work](checks-and-saves.md#system-work)). |
+| The name in codes and functions | The class's name made plural: `boards.not-found`, `boards_i_see`. | `[Members("...")]` on the class ([Names](resources-and-members.md#names)). |
+| A save tied to its check | Off: the check, the load by id, the version, the board's rules and RLS hold a change. | `UseMemberHolds` on the context ([The expert hold](checks-and-saves.md#the-expert-hold)). |
+| With or without Tenancy | Works alone: members are your users. | With Tenancy's Entity Framework package in the project, members are seats and the join is generated ([With Tenancy](beside-an-organization.md#with-tenancy)). |
 
 ## Where to go next
 
 - **Build it:** the [tutorial](tutorial.md), step by step, on the Harbor application.
-- **Look something up:** the [reference](../membership.md), with every detail of every part.
+- **Look something up:** a page per topic, each with every detail of its part:
+  - [Resources and members](resources-and-members.md): the packages, a whole resource without Tenancy, the member
+    list, names, several kinds of resource.
+  - [Permissions and roles](permissions-and-roles.md): the settings of a permission, who holds one, who may give a
+    role, roles a customer makes.
+  - [Checks and saves](checks-and-saves.md): requirements that combine, from the check to the save, lists, system
+    work, the expert hold.
+  - [On Postgres](postgres.md): the functions, the lock on the member rows, the start-up check.
+  - [Beside an organization](beside-an-organization.md): with Tenancy, or an organization of your own.
+  - [Design and limits](design.md): why each piece is yours to write, what it does not do.
 - **Every class and method:** the [API reference](reference/resource-and-members.md).
 - **The organization around it:** [Tenancy](../tenancy/overview.md).

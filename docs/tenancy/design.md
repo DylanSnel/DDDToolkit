@@ -23,7 +23,7 @@ Three choices keep access data small and questions fast
 
 ## What it does not do
 
-- **Decide access to your resources**: their module does, or [Membership](../membership.md#with-tenancy) for a
+- **Decide access to your resources**: their module does, or [Membership](../membership/beside-an-organization.md#with-tenancy) for a
   resource with members.
 - **Give a module names**: the directory answers those, by id ([Names](names-and-languages.md#names)).
 - **Publish integration events or create tables**: your module's.

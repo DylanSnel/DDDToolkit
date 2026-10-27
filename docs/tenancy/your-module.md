@@ -99,7 +99,7 @@ flowchart TB
 - "A project of its module" is one of the same module that this project references.
 - A written class takes the id of a declared class it shares one with: an organization written beside your
   `ShopTenant` over `ShopTenantId` is declared over `ShopTenantId`.
-- Every generator writes for written classes what it writes for declared ones, a [Membership](../membership.md)
+- Every generator writes for written classes what it writes for declared ones, a [Membership](../membership/overview.md)
   member list over a written `SeatId` included. Projects above see them as they see yours.
 
 <details>
