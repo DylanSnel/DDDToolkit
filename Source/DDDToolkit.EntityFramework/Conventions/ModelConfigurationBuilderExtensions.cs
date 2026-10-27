@@ -24,6 +24,7 @@ public static class ModelConfigurationBuilderExtensions
     ///   <item><see cref="InternalMemberConvention"/>: members marked <c>[Internal]</c> are never mapped.</item>
     ///   <item><see cref="KeyPartConvention"/>: properties marked <c>[KeyPart]</c> join the primary key ahead of <c>Id</c>, and the foreign key of every owned type below it. Types without key parts are not touched.</item>
     ///   <item><see cref="IndexRefusalConvention"/>: an index that says what it refuses with (<c>RefusesAs</c>) is checked: it is unique, and its message names only properties the entity type maps.</item>
+    ///   <item>The conventions of the packages the context's assembly references (<see cref="ModelConventionAttribute"/>): what a package maps of the classes declared with its templates, such as the members of a resource, where the context mapped nothing of it by hand. Before the key parts, so what they map is keyed as the rest is.</item>
     /// </list>
     /// The converters stay a separate, generated call because they are produced per assembly; the
     /// conventions are the same for every context.
@@ -34,6 +35,7 @@ public static class ModelConfigurationBuilderExtensions
 
         configurationBuilder.Conventions.Add(static _ => new InternalMemberConvention());
         configurationBuilder.Conventions.Add(static _ => new ReadOnlyCollectionConvention());
+        configurationBuilder.Conventions.Add(static services => new PackageConventions(services));
         configurationBuilder.Conventions.Add(static _ => new AggregateRootVersionConvention());
         configurationBuilder.Conventions.Add(static _ => new KeyPartConvention());
         configurationBuilder.Conventions.Add(static _ => new IndexRefusalConvention());

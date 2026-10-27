@@ -99,7 +99,7 @@ internal static class MembershipReference
                     new(
                         "Questions",
                         [new(Membership, Folder: "Access/Questions")],
-                        Lead: ["IMemberQuestions", "MemberQuestions", "MemberHold", "MemberVia", "MemberReach", "MemberPermissionReach"]),
+                        Lead: ["MembershipAccessManager", "MembershipAccessManagerExtensions", "MemberHold", "MemberVia", "MemberReach", "IMembershipStorage"]),
                     new(
                         "Requirements",
                         [new(Membership, Folder: "Access/RequiredAccess")],
@@ -130,7 +130,7 @@ internal static class MembershipReference
                 [
                     new("Registration", [new(EntityFramework, Folder: "Registration")], Lead: ["MembershipEntityFrameworkServiceCollectionExtensions"]),
                     new("Mapping", [new(EntityFramework, Folder: "Mapping")], Lead: ["MembershipEntityTypeBuilderExtensions", "MemberTableNames"]),
-                    new("Queries", [new(EntityFramework, Folder: "Access/Queries")], Lead: ["MemberQueryableExtensions"]),
+                    new("Queries", [new(EntityFramework, Folder: "Access/Queries")], Lead: ["MemberQueryableExtensions", "PermissionOn"]),
                     new("Answered by the application", [new(EntityFramework, Folder: "Access/Ports")]),
                 ]),
             new(

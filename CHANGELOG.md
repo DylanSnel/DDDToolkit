@@ -539,6 +539,17 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 #### Entity Framework and row level security
 
+- **A package maps its classes by convention: `[assembly: ModelConvention(typeof(...))]`.** A package names a model
+  convention of its own on its assembly, an `IModelFinalizingConvention` with a constructor without parameters, and a
+  context that calls `AddDDDToolkitConventions()` applies it to its model with no call of the package's: the toolkit
+  finds the conventions named by the context's assembly and every assembly it references, directly or through another,
+  once for each assembly, so `dotnet ef` and the Supabase export build the model the application runs with. A package
+  convention runs when the model is finished, after `OnModelCreating`, and before the key parts, so what a context says
+  by hand wins. Membership's is the first (see Membership).
+- **`context.ScopeOf()`.** The services of the scope a context was bound to for the rental it is in, by `BindToScope`
+  or by `AddScopedFromPool`, or `null`: what a package asks first for the application's scoped services about a
+  statement of that context, as Membership's queries on a resource's set do.
+
 - **The owner of an aggregate is read with nothing written.** `AddDDDToolkitEntityFramework` registers
   `IAggregateOwners<TId>` for every id, so a host on Entity Framework writes nothing for a request about an
   aggregate's owner: the context that maps the aggregate is found among the registered ones the first time such a
@@ -1904,6 +1915,22 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 #### Membership
 
+- **Queries on the resource's own set: `db.Boards.WhereIHold(BoardPermissions.View)`.** The boards the caller holds a
+  permission on, as part of a query of your own, one statement and never a list of ids fetched first. On the set the
+  query finds its context; a query that does not start at a set hands it over, `query.WhereIHold(permission, db)`.
+  Several permissions at once are an overload, `db.Boards.WhereIHold([BoardPermissions.Edit, BoardPermissions.Archive])`,
+  which answers pairs of resource and permission (`PermissionOn<Board>`: `Resource`, `Permission`) for the resources
+  the caller sees, for a list that shows what may be done with each row. The rules, and what they ask of the
+  application, come from the services the context was made with: the scope it is bound to, or the services its
+  options were built with, which for `AddDbContext` are the scope's; a context of a pool or a factory that a query
+  asks the application's scoped services through is bound to the scope first, `context.BindToScope(scope)`.
+- **Mapping by convention.** A context that calls `AddDDDToolkitConventions()` maps a resource's collection of a
+  `[Member<...>]` class as `HasMembers(row => row.People)` maps it, and a `[CustomRole<...>]` class as `IsCustomRole()`
+  maps it, with no call in the context. A hand-written `HasMembers` or `IsCustomRole` still works and wins, for table
+  names of your own (`MemberTableNames`), and a members collection the context ignores stays ignored. Whose a custom
+  role is and the two unique indexes over it, (tenant, name) and (tenant, starter role), stay the context's until
+  Tenancy's `[OfTenant]` marker says it.
+
 - **A member list makes a new row's id with `TId.Create()`.** `MemberList` takes no id factory any more,
   `new(members, owner, codes)`, and asks `ICreatableEntityId<TId>` of the member class's own id. The generated list is
   written for any row id with a `Create()`, one over a `long` that declares it included, and DDD00059 says when the
@@ -2807,6 +2834,23 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ### Changed
 
+- **Membership: `MembershipAccessManager<Board>` answers what the current caller may do on the resources of one
+  kind.** Your code takes `MembershipAccessManager<Board>`, generic over the resource alone, which the resource's
+  registration adds per scope. Its questions take the resource, and an overload of each takes its id, for a caller
+  that has only the id, as a request does: `HoldAsync`, `RequireAsync` and `ViaAsync` with a permission, and
+  `PermissionsOnAsync` with several resources and permissions; an answer names the resource as it was asked about,
+  `MemberHold<Board>` for a board and `MemberHold<BoardId>` for an id, and `PermissionsOnAsync` keys by the boards or
+  by the ids it was given. `Rules`, `RequireCaller()`, `Reach(permission)` and the new `ReachSeen()`, the reach of
+  what the caller sees, stay on it as the lower level for a statement of your own (`Within`, `Reached`).
+  - **Breaking.** `IMemberQuestions<TResourceId>` and the static `MemberQuestions` are gone: take
+    `MembershipAccessManager<TResource>`, and ask `access.RequireAsync(id, ...)` and `access.ViaAsync(id, ...)` on it.
+    `MemberQuestions.MostResources` is `MembershipAccessManager.MostResources`. `db.Boards.Within(questions.Reach(p))`
+    is `db.Boards.WhereIHold(p)`. `PermissionReach(permissions)`, `MemberPermissionReach<TResourceId>` and
+    `PermissionsOn(reach)` are gone: ask `WhereIHold(permissions)`, which answers the resource in each pair rather
+    than its id. `MemberReach<TResourceId>` is `MemberReach<TResource>`, and `MemberHold<TResourceId>` is
+    `MemberHold<TResource>`, of the resource or its id. What a storage answers is `IMembershipStorage<TResource,
+    TResourceId>`, which an application never takes; `MemberAccessCheck<TResource, TResourceId>` takes the access
+    manager.
 - **Tenancy: `TenancyAccessManager` answers who acts, in which tenant, and begins the work that is not the caller's
   own.** Your code takes `TenancyAccessManager`, a class the generator writes closed over your ids, with no type
   argument: in the global namespace of the project that declares Tenancy's classes, and in the root namespace of a

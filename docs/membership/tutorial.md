@@ -1154,12 +1154,11 @@ not see it yet.
 
 - **Hidden boards**: for a board the caller does not see, the answer is `404`, `boards.not-found`. An id that is not a
   board gets the same answer, so a caller cannot find out that a board exists.
-- **Reach**: `IMemberQuestions<BoardId>.Reach(permission)` returns a `MemberReach<BoardId>`. It describes the boards
-  the caller holds the permission on, and runs no query by itself. `Within(reach)` adds it to an Entity Framework
-  query, so the list is one SQL statement. The code never loads the ids first.
+- **The boards I hold a permission on**: `db.Boards.WhereIHold(permission)` adds the boards the caller holds the
+  permission on to an Entity Framework query, so the list is one SQL statement. The code never loads the ids first.
 - **Repository**: the handlers load and save boards through `IBoardRepository`. The interface is in the application
-  project, and the infrastructure project implements it. The handler passes the reach to the repository, because
-  `Within` is part of an Entity Framework query.
+  project, and the infrastructure project implements it. The repository asks `WhereIHold`, because it is part of an
+  Entity Framework query.
 - **The owner is the caller**: the handler gets the caller's tenant and seat from `ITenancy` with `RequireTenant()`.
   The create rule of step 4 makes the database check the same.
 
@@ -1180,7 +1179,7 @@ public interface IBoardRepository
 
     Task<Board?> FindAsync(BoardId id, CancellationToken cancellationToken);
 
-    Task<IReadOnlyList<Board>> ListAsync(MemberReach<BoardId> reach, CancellationToken cancellationToken);
+    Task<IReadOnlyList<Board>> ListVisibleAsync(CancellationToken cancellationToken);
 
     Task SaveAsync(CancellationToken cancellationToken);
 }
@@ -1189,8 +1188,8 @@ public interface IBoardRepository
 **`Harbor.Boards.Infrastructure/Persistence/BoardRepository.cs`**
 
 ```csharp {18}
-using DDDToolkit.Supporting.Membership.Access;
 using DDDToolkit.Supporting.Membership.EntityFramework;
+using Harbor.Boards.Application.Access;
 using Harbor.Boards.Application.Boards;
 using Harbor.Boards.Contracts.ValueObjects;
 using Harbor.Boards.Domain.Aggregates.Boards;
@@ -1205,8 +1204,8 @@ internal sealed class BoardRepository(BoardsContext db) : IBoardRepository
     public Task<Board?> FindAsync(BoardId id, CancellationToken cancellationToken)
         => db.Boards.SingleOrDefaultAsync(board => board.Id == id, cancellationToken);
 
-    public async Task<IReadOnlyList<Board>> ListAsync(MemberReach<BoardId> reach, CancellationToken cancellationToken)
-        => await db.Boards.Within(reach).OrderBy(board => board.Name).ToListAsync(cancellationToken);
+    public async Task<IReadOnlyList<Board>> ListVisibleAsync(CancellationToken cancellationToken)
+        => await db.Boards.WhereIHold(BoardPermissions.View).OrderBy(board => board.Name).ToListAsync(cancellationToken);
 
     public Task SaveAsync(CancellationToken cancellationToken) => db.SaveChangesAsync(cancellationToken);
 }
@@ -1316,20 +1315,19 @@ contains.
 
 **`Harbor.Boards.Application/Boards/ListBoards/ListBoards.cs`**
 
-```csharp {3-4,12-13}
+```csharp {3-4,12}
 namespace Harbor.Boards.Application.Boards.ListBoards;
 
 [SeenWith<BoardId>(BoardPermissions.View)]
 public sealed record ListBoards : IQuery<IReadOnlyList<BoardListing>>, IBoardsRequest;
 
-public sealed class ListBoardsHandler(IMemberQuestions<BoardId> questions, IBoardRepository boards)
+public sealed class ListBoardsHandler(IBoardRepository boards)
     : IQueryHandler<ListBoards, IReadOnlyList<BoardListing>>
 {
     public async ValueTask<IReadOnlyList<BoardListing>> Handle(ListBoards query, CancellationToken cancellationToken)
     {
-        // The boards the caller holds boards.view on, as part of the query: never the ids first.
-        var seen = questions.Reach(BoardPermissions.View);
-        var found = await boards.ListAsync(seen, cancellationToken);
+        // The boards the caller holds boards.view on, as part of the repository's query: never the ids first.
+        var found = await boards.ListVisibleAsync(cancellationToken);
         return [.. found.Select(board => new BoardListing(board.Id, board.Name, board.UnitId, board.OwnerSeatId))];
     }
 }
@@ -1410,7 +1408,7 @@ public static class BoardsModule
 - `MemberOverviews.From(...)` puts the members in the standard order: the owner first, then by the start of each
   membership. It runs no query.
 - `board.Version`: the board's version, which every save that changes the board or its members raises.
-- `Within(reach)` adds the boards Rhea holds `boards.view` on as a subquery, in the same statement.
+- `WhereIHold(BoardPermissions.View)` adds the boards Rhea holds `boards.view` on as a subquery, in the same statement.
 
 ### Try it
 

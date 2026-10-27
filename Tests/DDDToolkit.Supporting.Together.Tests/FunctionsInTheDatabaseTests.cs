@@ -44,7 +44,7 @@ public abstract class FunctionsInTheDatabaseTests(CampusPostgresServer postgres)
             {
                 var heldInCSharp = await campus.Services.AsAsync(asking.Person, asking.College, async provider =>
                 {
-                    var reach = provider.GetRequiredService<IMemberQuestions<CourseId>>().Reach(permission);
+                    var reach = provider.GetRequiredService<MembershipAccessManager<Course>>().Reach(permission);
                     return await provider.Campus().Courses.Within(reach).Select(course => course.Id.Value).ToListAsync(Cancellation);
                 });
                 var held = data.CoursesHeldBy(asking, permission).Select(id => id.Value).ToList();
@@ -79,7 +79,7 @@ public abstract class FunctionsInTheDatabaseTests(CampusPostgresServer postgres)
             {
                 var heldInCSharp = await campus.Services.AsAsync(asking.Person, asking.College, async provider =>
                 {
-                    var reach = provider.GetRequiredService<IMemberQuestions<LabId>>().Reach(permission);
+                    var reach = provider.GetRequiredService<MembershipAccessManager<Lab>>().Reach(permission);
                     return await provider.Campus().Labs.Within(reach).Select(lab => lab.Id.Value).ToListAsync(Cancellation);
                 });
                 var held = data.LabsHeldBy(asking, permission).Select(id => id.Value).ToList();

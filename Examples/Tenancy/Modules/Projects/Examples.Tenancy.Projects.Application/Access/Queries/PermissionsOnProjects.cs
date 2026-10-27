@@ -73,7 +73,7 @@ public sealed class PermissionsOnProjectsHandler(IProjectReads reads, ProjectAcc
         }
 
         // One order, the same every time: the projects by their ids' value, each one's permissions by their text.
-        var held = await reading.PermissionsOnAsync(projects, access.PermissionsReachFor(permissions), cancellationToken);
+        var held = await reading.PermissionsOnAsync(projects, access.KnownPermissions(permissions), cancellationToken);
         return new ProjectPermissionSets(
             atRoot,
             [.. held.OrderBy(project => project.Key.Value).Select(project => new ProjectPermissionSet(project.Key, [.. project.Value.Order(StringComparer.Ordinal)]))]);

@@ -47,7 +47,7 @@ public sealed class AbilitiesOnProjectsHandler(IProjectReads reads, ProjectAcces
         // so whether there is one is answered inside the statement that reads the permissions.
         var standing = await reading.StandingOnAsync(
             projects,
-            access.PermissionsReachFor(ProjectAbilities.Permissions),
+            access.KnownPermissions(ProjectAbilities.Permissions),
             access.TenancyIn(reading).UnitsWhereIHold(MoveProjectToUnit.DestinationPermission),
             cancellationToken);
 

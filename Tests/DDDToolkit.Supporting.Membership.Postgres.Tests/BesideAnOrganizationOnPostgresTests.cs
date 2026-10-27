@@ -30,7 +30,7 @@ public sealed class BesideAnOrganizationOnPostgresTests(FilingPostgres postgres)
             // The crates the caller is on, and those it sees: on a crate, or holding the permission that sees where it stands.
             var seenInCSharp = await depot.Services.AsAsync(person.Caller, async provider =>
             {
-                var see = provider.GetRequiredService<IMemberQuestions<CrateId>>().PermissionReach([]).See;
+                var see = provider.GetRequiredService<MembershipAccessManager<Crate>>().ReachSeen();
                 return await provider.GetRequiredService<DepotContext>().Crates.Within(see).Select(crate => crate.Id.Value).ToListAsync(Cancellation);
             });
             var seen = data.CratesSeenBy(person).Select(id => id.Value).ToList();
@@ -42,7 +42,7 @@ public sealed class BesideAnOrganizationOnPostgresTests(FilingPostgres postgres)
             {
                 var heldInCSharp = await depot.Services.AsAsync(person.Caller, async provider =>
                 {
-                    var reach = provider.GetRequiredService<IMemberQuestions<CrateId>>().Reach(permission);
+                    var reach = provider.GetRequiredService<MembershipAccessManager<Crate>>().Reach(permission);
                     return await provider.GetRequiredService<DepotContext>().Crates.Within(reach).Select(crate => crate.Id.Value).ToListAsync(Cancellation);
                 });
                 var held = data.CratesHeldBy(person, permission).Select(id => id.Value).ToList();
@@ -77,7 +77,7 @@ public sealed class BesideAnOrganizationOnPostgresTests(FilingPostgres postgres)
             {
                 var heldInCSharp = await depot.Services.AsAsync(person.Caller, async provider =>
                 {
-                    var reach = provider.GetRequiredService<IMemberQuestions<PalletId>>().Reach(permission);
+                    var reach = provider.GetRequiredService<MembershipAccessManager<Pallet>>().Reach(permission);
                     return await provider.GetRequiredService<DepotContext>().Pallets.Within(reach).Select(pallet => pallet.Id.Value).ToListAsync(Cancellation);
                 });
                 var held = data.PalletsHeldBy(person, permission).Select(id => id.Value).ToList();
@@ -238,7 +238,7 @@ public sealed class BesideAnOrganizationOnPostgresTests(FilingPostgres postgres)
         commands.Reset();
         var labels = await depot.Services.AsAsync(data.Eli.Caller, async provider =>
         {
-            var seen = provider.GetRequiredService<IMemberQuestions<CrateId>>().Reach(CratePermissions.See);
+            var seen = provider.GetRequiredService<MembershipAccessManager<Crate>>().Reach(CratePermissions.See);
             return await provider.GetRequiredService<DepotContext>().Crates.Within(seen).OrderBy(crate => crate.Label).Select(crate => crate.Label).ToListAsync(Cancellation);
         });
         labels.Should().Equal("Rice", "Tea");

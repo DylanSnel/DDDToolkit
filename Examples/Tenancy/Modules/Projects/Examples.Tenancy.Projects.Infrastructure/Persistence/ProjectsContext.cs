@@ -31,8 +31,9 @@ namespace Examples.Tenancy.Projects.Infrastructure.Persistence;
 /// <item><b>The crew.</b> The domain project references no Entity Framework, so nothing on its classes says how
 /// they are stored. The crew is the Membership package's, and <c>HasMembers</c> maps it, under the tables and the
 /// column it has always had: the members owned by their project, a member's roles owned by the member, each in a
-/// table of its own, and the unit a project hangs at as where a permission held above reaches it. <c>IsCustomRole</c>
-/// maps the package's part of a project role; whose a role is, and that a name is used once in a tenant, are
+/// table of its own, and the unit a project hangs at as where a permission held above reaches it. The package maps
+/// the crew by itself as well, under names of its own; <c>HasMembers</c> is here for the names, and wins. It maps the
+/// package's part of a project role with no call here; whose a role is, and that a name is used once in a tenant, are
 /// said here.</item>
 /// </list>
 /// Table names carry the module's name where Tenancy's could be meant: a crew member's table says whose it is
@@ -143,10 +144,8 @@ public sealed class ProjectsContext(DbContextOptions<ProjectsContext> options) :
         {
             role.ToTable(ProjectRolesTable);
 
-            // The package's part of a role: its name, what it is for, its permissions, its status, and the starter role it came from.
-            role.IsCustomRole();
-
-            // This module's: whose a role is. A name is used once in a tenant, and a tenant has each starter role
+            // The package's part of a role, its name, what it is for, its permissions, its status and the starter role it
+            // came from, is mapped by the package's convention, with no call here. This module's: whose a role is. A name is used once in a tenant, and a tenant has each starter role
             // once, which also keeps two set-ups of one tenant at the same moment apart.
             role.ScopeToTenant(row => row.TenantId);
             role.HasIndex(row => new { row.TenantId, row.Name })

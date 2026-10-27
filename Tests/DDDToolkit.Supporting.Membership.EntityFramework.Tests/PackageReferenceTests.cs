@@ -71,7 +71,7 @@ public sealed class PackageReferenceTests
             "IRolesWithPermission`2",
             "MemberFound`1",
             "MemberHoldDbContextOptionsExtensions",
-            "MemberPermissionOn`1",
+            "PermissionOn`1",
             "MemberMapping",
             "MemberQueryableExtensions",
             "MemberTableNames",

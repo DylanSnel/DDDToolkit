@@ -134,12 +134,12 @@ public sealed class CampusServices : IDisposable
         });
 
     /// <summary>The access questions about courses, asked as <paramref name="person"/> in a college.</summary>
-    public Task<T> CoursesAsync<T>(CampusPerson person, string? college, Func<IMemberQuestions<CourseId>, Task<T>> ask)
-        => AsAsync(person, college, provider => ask(provider.GetRequiredService<IMemberQuestions<CourseId>>()));
+    public Task<T> CoursesAsync<T>(CampusPerson person, string? college, Func<MembershipAccessManager<Course>, Task<T>> ask)
+        => AsAsync(person, college, provider => ask(provider.GetRequiredService<MembershipAccessManager<Course>>()));
 
     /// <summary>The access questions about labs, asked as <paramref name="person"/> in a college.</summary>
-    public Task<T> LabsAsync<T>(CampusPerson person, string? college, Func<IMemberQuestions<LabId>, Task<T>> ask)
-        => AsAsync(person, college, provider => ask(provider.GetRequiredService<IMemberQuestions<LabId>>()));
+    public Task<T> LabsAsync<T>(CampusPerson person, string? college, Func<MembershipAccessManager<Lab>, Task<T>> ask)
+        => AsAsync(person, college, provider => ask(provider.GetRequiredService<MembershipAccessManager<Lab>>()));
 
     /// <summary>Runs <paramref name="work"/> as system work outside any tenant, in a scope of its own: what provisions a college.</summary>
     public async Task<T> BySystemAsync<T>(Func<IServiceProvider, Task<T>> work)

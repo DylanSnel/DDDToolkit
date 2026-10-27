@@ -9,8 +9,9 @@ using Microsoft.Extensions.DependencyInjection;
 namespace DDDToolkit.Supporting.Membership.EntityFramework;
 
 /// <summary>
-/// The access questions of one kind of resource, answered from the context that maps it:
-/// <see cref="IMemberQuestions{TResourceId}"/> for a resource stored with Entity Framework.
+/// The access questions of one kind of resource, answered from the context that maps it: what the access manager of a
+/// resource stored with Entity Framework reads through (<see cref="IMembershipStorage{TResource, TResourceId}"/>), and the
+/// queries on the resource's own set (<c>db.Boards.WhereIHold(permission)</c>).
 /// </summary>
 /// <remarks>
 /// <para>
@@ -39,7 +40,7 @@ namespace DDDToolkit.Supporting.Membership.EntityFramework;
 /// context, holds on every context, and takes nothing from a reading on a context of its own.
 /// </para>
 /// </remarks>
-internal sealed class EfMemberQuestions<TContext, TResource, TResourceId, TMember, TId, TMemberId, TRoleId> : IMemberQuestions<TResourceId>
+internal sealed class EfMemberQuestions<TContext, TResource, TResourceId, TMember, TId, TMemberId, TRoleId> : IMembershipStorage<TResource, TResourceId>, IMemberQueries<TResource>
     where TContext : DbContext
     where TResource : AggregateRoot<TResourceId>
     where TResourceId : struct, IEntityId, IEquatable<TResourceId>
@@ -102,7 +103,7 @@ internal sealed class EfMemberQuestions<TContext, TResource, TResourceId, TMembe
     }
 
     /// <inheritdoc />
-    public MemberReach<TResourceId> Reach(string permission)
+    public MemberReach<TResource> Reach(string permission)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(permission);
 
@@ -110,11 +111,24 @@ internal sealed class EfMemberQuestions<TContext, TResource, TResourceId, TMembe
     }
 
     /// <inheritdoc />
-    public MemberPermissionReach<TResourceId> PermissionReach(IReadOnlyCollection<string> permissions)
+    public MemberReach<TResource> ReachSeen() => See(Ask());
+
+    /// <inheritdoc />
+    public IQueryable<TResource> WhereIHold(IQueryable<TResource> resources, string permission, DbContext context)
     {
+        ArgumentNullException.ThrowIfNull(resources);
+        ArgumentException.ThrowIfNullOrWhiteSpace(permission);
+
+        return ReachFor(permission, Ask()).Within(resources, context);
+    }
+
+    /// <inheritdoc />
+    public IQueryable<PermissionOn<TResource>> WhereIHold(IQueryable<TResource> resources, IReadOnlyCollection<string> permissions, DbContext context)
+    {
+        ArgumentNullException.ThrowIfNull(resources);
         ArgumentNullException.ThrowIfNull(permissions);
 
-        return PermissionReachFor(Distinct(permissions), Ask());
+        return PermissionReachFor(Distinct(permissions), Ask()).Pairs(resources, context);
     }
 
     /// <inheritdoc />
@@ -153,10 +167,10 @@ internal sealed class EfMemberQuestions<TContext, TResource, TResourceId, TMembe
         ArgumentNullException.ThrowIfNull(permissions);
 
         var about = resources.Distinct().ToList();
-        if (about.Count > MemberQuestions.MostResources)
+        if (about.Count > MembershipAccessManager.MostResources)
         {
             throw new ArgumentException(
-                "Which permissions are held is asked about at most " + MemberQuestions.MostResources + " different resources at once, and these are "
+                "Which permissions are held is asked about at most " + MembershipAccessManager.MostResources + " different resources at once, and these are "
                 + about.Count + ". A use case that takes the ids from a request refuses its caller before it asks.",
                 nameof(resources));
         }

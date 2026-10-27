@@ -18,8 +18,8 @@ public sealed class TwoResourcesInOneContextTests
         using var scope = filing.Services.Provider.CreateScope();
         var provider = scope.ServiceProvider;
 
-        provider.GetRequiredService<IMemberQuestions<DocumentId>>().Rules.Should().BeSameAs(DocumentMembership.Rules);
-        provider.GetRequiredService<IMemberQuestions<FolderId>>().Rules.Should().BeSameAs(FolderMembership.Rules);
+        provider.GetRequiredService<MembershipAccessManager<Document>>().Rules.Should().BeSameAs(DocumentMembership.Rules);
+        provider.GetRequiredService<MembershipAccessManager<Folder>>().Rules.Should().BeSameAs(FolderMembership.Rules);
 
         provider.GetServices<MembershipRegistration>().Should().BeEquivalentTo(
         [

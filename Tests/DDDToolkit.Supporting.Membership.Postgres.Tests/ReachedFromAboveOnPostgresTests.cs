@@ -29,7 +29,7 @@ public sealed class ReachedFromAboveOnPostgresTests(FilingPostgres postgres)
             (await session.ListAsync<Guid>("SELECT id FROM desk.documents_i_see() AS id")).Should().BeEquivalentTo(seen, "of what " + name + " sees");
             (await desk.AsAsync(TestCallers.User(user), async provider =>
             {
-                var see = provider.GetRequiredService<IMemberQuestions<DocumentId>>().PermissionReach([]).See;
+                var see = provider.GetRequiredService<MembershipAccessManager<Document>>().ReachSeen();
                 return await provider.GetRequiredService<DeskContext>().Documents.Within(see).Select(document => document.Id.Value).ToListAsync(Cancellation);
             })).Should().BeEquivalentTo(seen, "of what " + name + " sees, asked in the application");
 
@@ -41,7 +41,7 @@ public sealed class ReachedFromAboveOnPostgresTests(FilingPostgres postgres)
                 (await session.ListAsync<Guid>("SELECT id FROM desk.documents_where_i_hold($1) AS id", permission)).Should().BeEquivalentTo(held, because);
                 (await desk.AsAsync(TestCallers.User(user), async provider =>
                 {
-                    var reach = provider.GetRequiredService<IMemberQuestions<DocumentId>>().Reach(permission);
+                    var reach = provider.GetRequiredService<MembershipAccessManager<Document>>().Reach(permission);
                     return await provider.GetRequiredService<DeskContext>().Documents.Within(reach).Select(document => document.Id.Value).ToListAsync(Cancellation);
                 })).Should().BeEquivalentTo(held, because + ", asked in the application");
             }
@@ -70,7 +70,7 @@ public sealed class ReachedFromAboveOnPostgresTests(FilingPostgres postgres)
             (await session.ListAsync<Guid>("SELECT id FROM wardens.plots_i_see() AS id")).Should().BeEquivalentTo(seen, "of what " + person + " sees");
             (await gardens.AsAsync(person.Caller, async provider =>
             {
-                var see = provider.GetRequiredService<IMemberQuestions<PlotId>>().PermissionReach([]).See;
+                var see = provider.GetRequiredService<MembershipAccessManager<Plot>>().ReachSeen();
                 return await provider.GetRequiredService<WardensContext>().Plots.Within(see).Select(plot => plot.Id.Value).ToListAsync(Cancellation);
             })).Should().BeEquivalentTo(seen, "of what " + person + " sees, asked in the application");
 
@@ -82,7 +82,7 @@ public sealed class ReachedFromAboveOnPostgresTests(FilingPostgres postgres)
                 (await session.ListAsync<Guid>("SELECT id FROM wardens.plots_where_i_hold($1) AS id", permission)).Should().BeEquivalentTo(held, because);
                 (await gardens.AsAsync(person.Caller, async provider =>
                 {
-                    var reach = provider.GetRequiredService<IMemberQuestions<PlotId>>().Reach(permission);
+                    var reach = provider.GetRequiredService<MembershipAccessManager<Plot>>().Reach(permission);
                     return await provider.GetRequiredService<WardensContext>().Plots.Within(reach).Select(plot => plot.Id.Value).ToListAsync(Cancellation);
                 })).Should().BeEquivalentTo(held, because + ", asked in the application");
             }
@@ -91,7 +91,7 @@ public sealed class ReachedFromAboveOnPostgresTests(FilingPostgres postgres)
         // And what the SQLite suite pins of it: through a role read from its row; from above, by somebody on
         // no plot; both ways at once; nothing through a role put away; and nobody for whom the host does not count.
         Task<MemberHold<PlotId>?> HoldAsync(GardenPerson person, PlotId plot, string permission)
-            => gardens.AsAsync(person.Caller, provider => provider.GetRequiredService<IMemberQuestions<PlotId>>().HoldAsync(plot, permission, Cancellation));
+            => gardens.AsAsync(person.Caller, provider => provider.GetRequiredService<MembershipAccessManager<Plot>>().HoldAsync(plot, permission, Cancellation));
 
         (await HoldAsync(data.Cy, data.Beans, PlotPermissions.Water))!.Via.Should().Be(MemberVia.Members);
         (await HoldAsync(gardens.Ranger, data.Leeks, PlotPermissions.Water))!.Via.Should().Be(MemberVia.Above);
@@ -322,7 +322,7 @@ public sealed class ReachedFromAboveOnPostgresTests(FilingPostgres postgres)
                 .Select(document => document.Id)];
 
         public Task<MemberHold<DocumentId>?> HoldAsync(UserId user, DocumentId document, string permission)
-            => AsAsync(TestCallers.User(user), provider => provider.GetRequiredService<IMemberQuestions<DocumentId>>().HoldAsync(document, permission, Cancellation));
+            => AsAsync(TestCallers.User(user), provider => provider.GetRequiredService<MembershipAccessManager<Document>>().HoldAsync(document, permission, Cancellation));
 
         public async Task<T> AsAsync<T>(Caller caller, Func<IServiceProvider, Task<T>> ask)
         {

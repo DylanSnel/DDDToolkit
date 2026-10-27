@@ -132,7 +132,7 @@ public class MembershipDocsExampleTests
 
         var documentIdType = emitted.Type("Filing.DocumentId");
         services.Should().Contain(descriptor => descriptor.ServiceType == emitted.Type("Filing.FilingContext"), "the context the questions and the handlers ask for is registered, by the page's own line");
-        services.Should().Contain(descriptor => descriptor.ServiceType == typeof(IMemberQuestions<>).MakeGenericType(documentIdType));
+        services.Should().Contain(descriptor => descriptor.ServiceType == typeof(MembershipAccessManager<>).MakeGenericType(emitted.Type("Filing.Document")));
         services.Should().Contain(descriptor => descriptor.ServiceType == typeof(MemberAccessCheck<,>).MakeGenericType(emitted.Type("Filing.Document"), documentIdType));
         services.Should().Contain(descriptor => descriptor.ServiceType == typeof(DDDToolkit.Access.AccessChecks<>).MakeGenericType(emitted.Type("Filing.IFilingRequest")));
         services.Should().Contain(descriptor => descriptor.ServiceType == typeof(FailureTexts), "the texts come with the registration, with no line of the page's");

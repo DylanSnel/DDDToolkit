@@ -187,7 +187,7 @@ public sealed class MemberQuestionsTests
 
         var seen = await filing.Services.AsAsync(hal, async provider =>
         {
-            var reach = provider.GetRequiredService<IMemberQuestions<DocumentId>>().PermissionReach([]).See;
+            var reach = provider.GetRequiredService<MembershipAccessManager<Document>>().ReachSeen();
             return await provider.GetRequiredService<FilingContext>().Documents.Within(reach).Select(document => document.Id).ToListAsync(Cancellation);
         });
         seen.Should().Equal(notes);
@@ -224,7 +224,7 @@ public sealed class MemberQuestionsTests
             {
                 var reached = await filing.Services.AsAsync(TestCallers.User(user), async provider =>
                 {
-                    var reach = provider.GetRequiredService<IMemberQuestions<DocumentId>>().Reach(permission);
+                    var reach = provider.GetRequiredService<MembershipAccessManager<Document>>().Reach(permission);
                     return await provider.GetRequiredService<FilingContext>().Documents.Within(reach).Select(document => document.Id).ToListAsync(Cancellation);
                 });
 
@@ -238,7 +238,7 @@ public sealed class MemberQuestionsTests
             {
                 var reached = await filing.Services.AsAsync(TestCallers.Staff(staff), async provider =>
                 {
-                    var reach = provider.GetRequiredService<IMemberQuestions<FolderId>>().Reach(permission);
+                    var reach = provider.GetRequiredService<MembershipAccessManager<Folder>>().Reach(permission);
                     return await provider.GetRequiredService<FilingContext>().Folders.Within(reach).Select(folder => folder.Id).ToListAsync(Cancellation);
                 });
 
@@ -259,7 +259,7 @@ public sealed class MemberQuestionsTests
 
         var seen = await filing.Services.AsAsync(hal, async provider =>
         {
-            var reach = provider.GetRequiredService<IMemberQuestions<DocumentId>>().PermissionReach([]).See;
+            var reach = provider.GetRequiredService<MembershipAccessManager<Document>>().ReachSeen();
             return await provider.GetRequiredService<FilingContext>().Documents.Within(reach).CountAsync(Cancellation);
         });
         seen.Should().Be(0);
@@ -301,7 +301,7 @@ public sealed class MemberQuestionsTests
         // Asked about a list, nobody is refused: the statement the reach goes into answers nothing.
         var listed = await filing.Services.AsAsync(Caller.Anonymous, async provider =>
         {
-            var reach = provider.GetRequiredService<IMemberQuestions<DocumentId>>().Reach(DocumentPermissions.View);
+            var reach = provider.GetRequiredService<MembershipAccessManager<Document>>().Reach(DocumentPermissions.View);
             return await provider.GetRequiredService<FilingContext>().Documents.Within(reach).ToListAsync(Cancellation);
         });
         listed.Should().BeEmpty();
@@ -323,7 +323,7 @@ public sealed class MemberQuestionsTests
 
         var all = await filing.Services.AsAsync(system, async provider =>
         {
-            var reach = provider.GetRequiredService<IMemberQuestions<FolderId>>().Reach(FolderPermissions.Shred);
+            var reach = provider.GetRequiredService<MembershipAccessManager<Folder>>().Reach(FolderPermissions.Shred);
             reach.Everything.Should().BeTrue();
             return await provider.GetRequiredService<FilingContext>().Folders.Within(reach).Select(folder => folder.Id).ToListAsync(Cancellation);
         });
@@ -352,7 +352,7 @@ public sealed class MemberQuestionsTests
 
             var listed = await filing.Services.AsAsync(scoped, async provider =>
             {
-                var reach = provider.GetRequiredService<IMemberQuestions<DocumentId>>().Reach(DocumentPermissions.View);
+                var reach = provider.GetRequiredService<MembershipAccessManager<Document>>().Reach(DocumentPermissions.View);
                 reach.Everything.Should().BeFalse();
                 return await provider.GetRequiredService<FilingContext>().Documents.Within(reach).CountAsync(Cancellation);
             });
