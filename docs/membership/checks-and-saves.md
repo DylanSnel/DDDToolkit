@@ -154,7 +154,7 @@ var permissions = await db.Documents.Where(document => ids.Contains(document.Id)
 
 ## System work
 
-- **`Caller.System`**, the application itself, holds every permission on every resource.
+- **`Caller.System`**, system work, holds every permission on every resource.
 - **`Caller.SystemIn("filing")`** is nobody's member. It holds every permission where the rules let its scope
   through, and nothing elsewhere.
 - **By default, the rules let the module's own scope through**, for example `filing` for the module `Filing`
@@ -194,7 +194,7 @@ A save that changes a resource with members, or one of its members or roles, the
 | the resource the check read, at that version | saved |
 | that resource, changed since the check, whether or not a version was named | 409, whatever changed |
 | a resource that no check of the request read: a handler called directly, a transport that bypasses the pipeline, a save after the handling returned, or another resource than the request names | refused with `InvalidOperationException`. Nothing is saved. |
-| another resource, as the application's own work begun by trusted code (`Callers.Begin(Caller.System)`, or a scope the rules name) | saved. A resource the check read is still tied to its version. |
+| another resource, as system work begun by trusted code (`Callers.Begin(Caller.System)`, or a scope the rules name) | saved. A resource the check read is still tied to its version. |
 | a new resource | saved |
 
 - **The hold finds the check through [the request in hand](../access-requirements.md#the-request-in-hand).**
@@ -216,7 +216,7 @@ A save that changes a resource with members, or one of its members or roles, the
   `UseDDDToolkit` or `UseDDDToolkitCore`. Otherwise the context is refused when it is built. Calling
   `UseMemberHolds` twice adds the hold once.
 - **The hold runs after the domain event handlers.** A domain event handler that changes another resource with
-  members is refused, unless it begins the application's own work.
+  members is refused, unless it begins system work.
 - **The hold costs no extra statement.** It adds a 409 for a change the caller's rights did not depend on, such as a
   move to a place where the caller still holds the permission. It also refuses a handler reached around its checks.
   When the hold is off, it does nothing.

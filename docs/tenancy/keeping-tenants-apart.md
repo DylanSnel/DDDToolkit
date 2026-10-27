@@ -120,7 +120,7 @@ A module that sees only your ids, and not your classes, calls the same methods o
 
 ### The scoped system caller
 
-- Neither caller is `Caller.System`. `Caller.System` stands for the application itself, and row level security lets
+- Neither caller is `Caller.System`. `Caller.System` stands for system work, and row level security lets
   it past every policy. On Postgres the scoped caller runs as a database role that cannot bypass the policies, and
   the policies decide which rows it reaches
   ([The scoped system role](../row-level-security.md#the-scoped-system-role)).

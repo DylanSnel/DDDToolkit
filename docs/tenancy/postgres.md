@@ -935,7 +935,7 @@ project first.
 - **RLS stops your queries that forget a condition.** A query as a seat with `IgnoreQueryFilters()`, `FromSql`,
   `ExecuteUpdate` or a missing filter sees and changes only that seat's tenant. The query cannot:
   - give or take away a role at a unit the seat does not manage, or move a placement or a grant;
-  - widen a subtree through the closure table, or make its unit a root;
+  - widen the set of units below a unit through the closure table, or make its unit a root;
   - read another seat's rights, or write a right;
   - change a seat's id, identity or tenant;
   - give a suspended seat its grants back, or take another seat's grants away through its status;

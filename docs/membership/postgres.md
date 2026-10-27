@@ -150,7 +150,7 @@ from the marks:
   `NameAndPlanChangeWithTheEditPermission` does. The owner column stays under the lock.
 - **The lock policies are restrictive.** They narrow what your rules allow and grant nothing on their own. They apply
   to every database role that may call the functions. Work in a scope the rules do not name writes no member row and
-  names no owner. The application itself and the table owner are not checked.
+  names no owner. System work and the table owner are not checked.
 - **Without either mark**, the member rows follow your rule for changing the resource, and the start-up check warns
   for each resource. That is safe when your rule admits only those who may change the members and the owner, or when
   no caller reaches the database past your application. `LocksMembers` without `LocksOwner` leaves a gap. A caller who
@@ -181,7 +181,7 @@ functions it gives its permissions. Each writer is checked as follows:
   role belongs to, from the token or from a function of yours. Your rules also keep the resources a caller may change
   inside the same customer. Callers that change members need to read the roles they give and the roles on the rows
   they change, archived roles too.
-- **The application's own work** and the table owner are not checked. A row written before the lock existed is not
+- **System work** and the table owner are not checked. A row written before the lock existed is not
   checked again. A query over your scope columns finds such rows.
 
 The package writes no policy for the role table. Give the table row access rules

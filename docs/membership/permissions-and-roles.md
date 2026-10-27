@@ -100,7 +100,7 @@ folder.Admit(command.Staff, command.Role, MemberPeriod.Between(now, command.Unti
 ```
 
 - **[`MemberHold.Until`](reference/use-cases.md#until)** is the first moment the caller no longer holds the
-  permission, as things stand now. It is `null` for the owner, for the application's own work, and when the
+  permission, as things stand now. It is `null` for the owner, for system work, and when the
   permission is not held.
   - Through membership alone, `Until` is the end of the membership.
   - Through a role, `Until` is the end of the last role that gives the permission now, or the end of the membership

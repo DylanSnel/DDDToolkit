@@ -68,7 +68,7 @@ project roles that each tenant makes from three starter roles.
   before anything is read, with Tenancy's code: `tenancy.not-seated`, `tenancy.seat-suspended` or
   `tenancy.tenant-required`. This applies to lists (`[SeenWith]`) as well. A suspended seat reaches nothing, whatever
   rows name it.
-- **The application's own work is nobody's member.** It holds every permission where the rules let its scope
+- **System work is nobody's member.** It holds every permission where the rules let its scope
   through. So Tenancy's own work, in the `tenancy` scope, holds nothing on a board
   ([System work](checks-and-saves.md#system-work)).
 - **A new member's seat must be active in the caller's tenant.** Otherwise `MemberAdmission` refuses with
