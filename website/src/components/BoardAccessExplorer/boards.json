@@ -1,0 +1,109 @@
+{
+  "$comment": "Harbor Works at the end of docs/membership/tutorial.md, as docs/membership/overview.md draws it, for the explorer under Who holds a permission on a board. Tests/DDDToolkit.Analyzers.Tests/Docs/BoardAccessExplorerDocsTests.cs holds every name here to the overview, the tutorial and the code.",
+  "tutorial": "/docs/membership/tutorial",
+  "units": [
+    { "id": "harbor-works", "name": "Harbor Works", "parent": null },
+    { "id": "north", "name": "North", "parent": "harbor-works" },
+    { "id": "north-coast", "name": "North Coast", "parent": "north" },
+    { "id": "south-bay", "name": "South Bay", "parent": "harbor-works" }
+  ],
+  "organizationRoles": [
+    { "name": "Administrator", "every": true, "permissions": [] },
+    { "name": "Area manager", "every": false, "permissions": ["tenancy.units.manage"] },
+    { "name": "Board keeper", "every": false, "permissions": ["boards.create", "boards.view"] }
+  ],
+  "permissions": [
+    {
+      "name": "boards.view",
+      "constant": "View",
+      "description": "See a board and who is on it",
+      "owner": true,
+      "everyMember": true,
+      "inRoles": true,
+      "fromAbove": true,
+      "request": { "name": "SeeBoard", "route": "GET /boards/{board}" }
+    },
+    {
+      "name": "boards.edit",
+      "constant": "Edit",
+      "description": "Change a board",
+      "owner": true,
+      "everyMember": false,
+      "inRoles": true,
+      "fromAbove": true,
+      "request": { "name": "RenameBoard", "route": "PUT /boards/{board}/name" }
+    },
+    {
+      "name": "boards.members.manage",
+      "constant": "ManageMembers",
+      "description": "Say who is on a board, and in which role",
+      "owner": true,
+      "everyMember": false,
+      "inRoles": false,
+      "fromAbove": true,
+      "request": { "name": "AddMember", "route": "POST /boards/{board}/members" }
+    }
+  ],
+  "boardRoles": [{ "name": "editor", "permissions": ["boards.view", "boards.edit"] }],
+  "callers": [
+    {
+      "id": "ada",
+      "name": "Ada",
+      "system": null,
+      "placedAt": "harbor-works",
+      "grants": [{ "role": "Administrator", "unit": "harbor-works" }]
+    },
+    {
+      "id": "rhea",
+      "name": "Rhea",
+      "system": null,
+      "placedAt": "north",
+      "grants": [
+        { "role": "Area manager", "unit": "north" },
+        { "role": "Board keeper", "unit": "north" }
+      ]
+    },
+    {
+      "id": "leo",
+      "name": "Leo",
+      "system": null,
+      "placedAt": "north",
+      "grants": []
+    },
+    {
+      "id": "system",
+      "name": "System work",
+      "system": "boards",
+      "placedAt": null,
+      "grants": []
+    }
+  ],
+  "boards": [
+    {
+      "id": "crane",
+      "name": "Crane schedule",
+      "unit": "north",
+      "owner": "rhea",
+      "members": [{ "caller": "leo", "roles": ["editor"] }]
+    },
+    {
+      "id": "quay",
+      "name": "Quay plan",
+      "unit": "north-coast",
+      "owner": "ada",
+      "members": []
+    }
+  ],
+  "refusals": {
+    "notFound": { "code": "boards.not-found", "status": 404 },
+    "notPermitted": { "code": "boards.not-permitted", "status": 403 }
+  },
+  "tried": [
+    { "caller": "rhea", "board": "crane", "permission": "boards.members.manage", "step": "Step 7: members", "item": 5, "status": 204, "code": null },
+    { "caller": "leo", "board": "crane", "permission": "boards.edit", "step": "Step 7: members", "item": 6, "status": 204, "code": null },
+    { "caller": "leo", "board": "crane", "permission": "boards.members.manage", "step": "Step 7: members", "item": 7, "status": 403, "code": "boards.not-permitted" },
+    { "caller": "ada", "board": "crane", "permission": "boards.view", "step": "Step 8: reach from above", "item": 1, "status": 200, "code": null },
+    { "caller": "rhea", "board": "quay", "permission": "boards.edit", "step": "Step 8: reach from above", "item": 5, "status": 403, "code": "boards.not-permitted" },
+    { "caller": "ada", "board": "crane", "permission": "boards.members.manage", "step": "Step 8: reach from above", "item": 6, "status": 204, "code": null }
+  ]
+}

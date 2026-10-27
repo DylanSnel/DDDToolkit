@@ -1,0 +1,495 @@
+/* The reach explorer, in the site's colours (src/css/custom.css): its card, border, muted text and primary colour.
+   A unit takes the three states the docs' diagrams use (see .docusaurus-mermaid-container .node.strong and its
+   siblings): purple where a grant is, green where a grant reaches, grey and dashed elsewhere. A state is never told
+   by colour alone: every unit has a word beside it, and the answer has a mark and a code. */
+
+.explorer {
+  --ex-pass: #17784c;
+  --ex-refuse: #b8321d;
+  --ex-line: color-mix(in srgb, var(--ddd-muted) 70%, var(--ddd-card));
+  margin: 1.5rem 0 2.5rem;
+  padding: 1.25rem;
+  border: 1px solid var(--ddd-border);
+  border-radius: 0.9rem;
+  background: color-mix(in srgb, var(--ifm-color-primary) 3%, var(--ddd-card));
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+  min-width: 0;
+}
+
+:global(html[data-theme='dark']) .explorer {
+  --ex-pass: #4fcf90;
+  --ex-refuse: #ff8b7b;
+}
+
+/* A docs page spaces the items of its lists (.markdown li + li); the explorer's lists set their own spacing. */
+.explorer :is(ul, ol) > li + li {
+  margin-top: 0;
+}
+
+.header {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.eyebrow {
+  margin: 0;
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ifm-color-primary);
+}
+
+.title {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--ifm-heading-color);
+}
+
+.lede {
+  margin: 0;
+  color: var(--ddd-muted);
+  font-size: 0.95rem;
+}
+
+/* ---------------------------------------------------------------- the choices */
+
+.controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.9rem;
+}
+
+.group {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.legend {
+  padding: 0;
+  margin-bottom: 0.4rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ddd-muted);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.choice {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  cursor: pointer;
+}
+
+/* The radio button stays in the page for the keyboard and for screen readers; its face is what is drawn. */
+.choice input,
+.unit input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  margin: 0;
+  cursor: inherit;
+}
+
+.face {
+  display: grid;
+  width: 100%;
+  padding: 0.3rem 0.85rem;
+  border: 1px solid var(--ddd-border);
+  border-radius: 999px;
+  background: var(--ddd-card);
+  color: var(--ifm-font-color-base);
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.faceTitle {
+  font-size: 0.9rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.mono .faceTitle {
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.8rem;
+}
+
+.choice:hover .face {
+  border-color: color-mix(in srgb, var(--ifm-color-primary) 55%, var(--ddd-border));
+}
+
+.choice input:checked + .face {
+  border-color: var(--ifm-color-primary);
+  background: color-mix(in srgb, var(--ifm-color-primary) 12%, var(--ddd-card));
+}
+
+.choice input:focus-visible + .face,
+.check input:focus-visible {
+  outline: 2px solid var(--ifm-color-primary);
+  outline-offset: 2px;
+}
+
+.who {
+  margin: -0.4rem 0 0;
+  font-size: 0.85rem;
+  color: var(--ddd-muted);
+}
+
+.toggle {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.toggle .who {
+  margin: 0;
+}
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.check input {
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  accent-color: var(--ifm-color-primary);
+}
+
+.check.disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* ---------------------------------------------------------------- the key and the trees */
+
+.key {
+  list-style: none;
+  margin: 0 0 0.6rem;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 1rem;
+  font-size: 0.8rem;
+  color: var(--ddd-muted);
+}
+
+.key li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.swatch {
+  width: 0.95rem;
+  height: 0.7rem;
+  border-radius: 0.2rem;
+}
+
+.tenants {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  gap: 0.75rem;
+  align-items: start;
+}
+
+.tenant {
+  min-width: 0;
+  padding: 0.75rem 0.85rem 0.85rem;
+  border: 1px solid var(--ddd-border);
+  border-radius: 0.65rem;
+  background: var(--ddd-card);
+}
+
+.tenantName {
+  margin: 0 0 0.5rem;
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.tenantKind {
+  margin-right: 0.3rem;
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ddd-muted);
+}
+
+.roots,
+.children {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.children {
+  padding-left: 1.6rem;
+}
+
+.branch {
+  position: relative;
+  margin: 0;
+}
+
+.children > .branch {
+  padding-top: 0.5rem;
+}
+
+/* The line from the unit above to this one: down from under the unit above, then across. */
+.children > .branch::before {
+  content: '';
+  position: absolute;
+  left: -1rem;
+  top: 0;
+  width: 0.85rem;
+  height: 2rem;
+  border-left: 2px solid var(--ex-line);
+  border-bottom: 2px solid var(--ex-line);
+  border-bottom-left-radius: 0.45rem;
+}
+
+/* The same line on to the next unit at this level. */
+.children > .branch:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  left: -1rem;
+  top: 0;
+  bottom: 0;
+  border-left: 2px solid var(--ex-line);
+}
+
+.children > .branch.reached::before {
+  border-color: color-mix(in srgb, var(--ddd-good) 70%, var(--ddd-card));
+}
+
+.unit {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: 100%;
+  cursor: pointer;
+}
+
+.node {
+  display: grid;
+  gap: 0.05rem;
+  min-width: 9.5rem;
+  max-width: 100%;
+  padding: 0.35rem 0.75rem;
+  border-radius: 0.5rem;
+  transition: box-shadow 0.15s ease;
+}
+
+.nodeName {
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.nodeNote {
+  font-size: 0.75rem;
+  line-height: 1.3;
+  color: var(--ddd-muted);
+  overflow-wrap: anywhere;
+}
+
+.granted .swatch,
+.node.granted {
+  border: 2px solid var(--ifm-color-primary);
+  background: color-mix(in srgb, var(--ifm-color-primary) 22%, var(--ddd-card));
+}
+
+.reached .swatch,
+.node.reached {
+  border: 1px solid color-mix(in srgb, var(--ddd-good) 70%, var(--ddd-card));
+  background: color-mix(in srgb, var(--ddd-good) 16%, var(--ddd-card));
+}
+
+.muted .swatch,
+.node.muted {
+  border: 1px dashed var(--ex-line);
+  background: var(--ddd-card);
+}
+
+.node.muted .nodeName {
+  color: var(--ddd-muted);
+}
+
+.node.granted .nodeNote,
+.node.reached .nodeNote {
+  color: var(--ifm-font-color-base);
+}
+
+.unit:hover .node {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ifm-color-primary) 35%, transparent);
+}
+
+.unit input:checked + .node {
+  box-shadow: 0 0 0 2px var(--ddd-card), 0 0 0 4px var(--ifm-font-color-base);
+}
+
+.unit input:focus-visible + .node {
+  outline: 2px solid var(--ifm-color-primary);
+  outline-offset: 5px;
+}
+
+.pin {
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--ifm-font-color-base);
+}
+
+/* ---------------------------------------------------------------- what the grant gives */
+
+.summary {
+  margin: 0;
+  display: grid;
+  border: 1px solid var(--ddd-border);
+  border-radius: 0.65rem;
+  background: var(--ddd-card);
+  overflow: hidden;
+}
+
+/* A label and its value side by side where the explorer is wide enough, the value below the label where it is not. */
+.summaryRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem 1rem;
+  padding: 0.5rem 0.85rem;
+  font-size: 0.88rem;
+}
+
+.summaryRow + .summaryRow {
+  border-top: 1px solid var(--ddd-border);
+}
+
+.summaryRow dt {
+  flex: 0 0 12rem;
+  margin: 0;
+  font-weight: 600;
+  color: var(--ddd-muted);
+  overflow-wrap: anywhere;
+}
+
+.summaryRow dd {
+  flex: 1 1 16rem;
+  margin: 0;
+  min-width: 0;
+}
+
+/* ---------------------------------------------------------------- the answer */
+
+.verdict {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.15rem 0.8rem;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--ddd-border);
+  border-left: 4px solid var(--ex-state);
+  border-radius: 0.65rem;
+  background: color-mix(in srgb, var(--ex-state) 9%, var(--ddd-card));
+}
+
+.pass {
+  --ex-state: var(--ex-pass);
+}
+
+.refuse {
+  --ex-state: var(--ex-refuse);
+}
+
+.light {
+  grid-row: span 2;
+  width: 0.8rem;
+  height: 0.8rem;
+  border-radius: 50%;
+  background: var(--ex-state);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--ex-state) 22%, transparent);
+}
+
+.verdictBig {
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--ex-state);
+  overflow-wrap: anywhere;
+}
+
+.verdictSmall {
+  font-size: 0.85rem;
+  color: var(--ddd-muted);
+  overflow-wrap: anywhere;
+}
+
+.reasons {
+  grid-column: 2;
+  display: grid;
+  gap: 0.3rem;
+  margin-top: 0.45rem;
+  font-size: 0.9rem;
+}
+
+.reasons p {
+  margin: 0;
+}
+
+.tried {
+  color: var(--ddd-muted);
+}
+
+@media (max-width: 640px) {
+  .explorer {
+    padding: 0.9rem;
+  }
+
+  .reasons {
+    grid-column: 1 / -1;
+  }
+
+  .children {
+    padding-left: 1.3rem;
+  }
+
+  .children > .branch::before,
+  .children > .branch:not(:last-child)::after {
+    left: -0.85rem;
+  }
+
+  .children > .branch::before {
+    width: 0.7rem;
+  }
+
+  .node {
+    min-width: 8rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .face,
+  .node {
+    transition: none;
+  }
+}

@@ -142,6 +142,16 @@ A caller holds a permission on a board in five cases. One query checks all five:
 A caller who holds none of these does not see the board, and gets `boards.not-found`, the same answer as for a
 board that does not exist. A caller who sees the board but lacks the permission gets `boards.not-permitted`.
 
+<div data-interactive="BoardAccessExplorer">
+
+> [!TIP]
+> On the [docs site](https://dylansnel.github.io/DDDToolkit/docs/membership#who-holds-a-permission-on-a-board) this
+> section has an explorer. Pick Ada, Rhea, Leo or system work, a board and a permission. The explorer answers each of
+> the five ways with yes or no and why. It then gives the answer to the tutorial's request: let through,
+> `boards.not-found` or `boards.not-permitted`.
+
+</div>
+
 ## Reach from above: a permission held at the board's unit
 
 With reach from above, a permission held in the organization counts on the boards below it. At the end of the

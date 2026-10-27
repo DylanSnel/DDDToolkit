@@ -119,6 +119,8 @@ permissions at North and at North Coast, but not at South Bay or at the root.
 
 In the diagram, purple is the grant, green is reached, and grey is not reached:
 
+<div data-interactive="ReachExplorer">
+
 ```mermaid
 flowchart TD
     root["<b>Harbor Works</b><br/><small>the root · not reached</small>"]
@@ -135,6 +137,13 @@ flowchart TD
     class coast good
     class root,south muted
 ```
+
+> [!TIP]
+> On the [docs site](https://dylansnel.github.io/DDDToolkit/docs/tenancy#reach-a-grant-covers-the-units-below-it)
+> this diagram is an explorer. Pick Ada, Rhea or Tove from the [tutorial](tutorial.md#what-we-build) and a
+> permission, and the units show where that person holds it. Pick a unit to see one request there and its answer.
+
+</div>
 
 Ada's role is granted at the root, so it covers every unit. The docs call this holding a permission **at the
 tenant**.
