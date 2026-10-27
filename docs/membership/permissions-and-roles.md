@@ -78,15 +78,16 @@ also has no rule about who gives what to whom. Each of your commands requires th
   [`ShareDocument`](resources-and-members.md#a-document-and-the-people-it-is-shared-with) requires
   `documents.share`. A caller with that permission shares with anyone, in any role, for any period. The owner holds
   it by owning. A member holds it when a role gives it.
-- **Write any further rule in the handler**, over what `IMemberQuestions` returns in one statement. This handler
-  refuses to put staff on a folder for longer than the caller holds `folders.staff`:
+- **Write any further rule in the handler**, over what the resource's access manager returns in one statement. The
+  handler takes `MembershipAccessManager<Folder>`, and asks about the folder it loaded. This handler refuses to put
+  staff on a folder for longer than the caller holds `folders.staff`:
 
 ```csharp
 [RequiresPermission("folders.staff")]
 public sealed record AdmitStaff([OnResource] FolderId Folder, StaffCode Staff, NamedRole Role, DateTimeOffset? Until, [ExpectedVersion] long? ExpectedVersion = null) : IFilingRequest;
 
-// In the handler:
-var hold = await questions.RequireAsync(command.Folder, "folders.staff", cancellationToken);   // IMemberQuestions<FolderId>
+// In the handler, with the folder loaded. folderAccess is the MembershipAccessManager<Folder> the handler takes.
+var hold = await folderAccess.RequireAsync(folder, "folders.staff", cancellationToken);
 if (hold.Until is { } mine && (command.Until is not { } theirs || theirs > mine))
 {
     throw new RefusalException("folders.longer-than-held", RefusalKind.NotPermitted,
@@ -121,8 +122,9 @@ folder.Admit(command.Staff, command.Role, MemberPeriod.Between(now, command.Unti
 | `Roles.External(...)` | the id in the store that keeps it | whoever keeps the roles | what you [return](beside-an-organization.md#three-settings-of-the-rules) |
 
 A custom role is given on one resource and counts there alone. The tutorial writes the role class
-([step 1](tutorial.md#step-1-the-board-its-members-and-its-roles)), its mapping and unique indexes
-([step 3](tutorial.md#step-3-where-it-is-stored)) and the starter roles ([step 7](tutorial.md#step-7-members)).
+([step 1](tutorial.md#step-1-the-board-its-members-and-its-roles)), leaves its mapping and unique indexes to the
+conventions ([step 3](tutorial.md#step-3-where-it-is-stored)), and makes the starter roles
+([step 7](tutorial.md#step-7-members)).
 
 ### Starter roles
 
@@ -130,8 +132,9 @@ A custom role is given on one resource and counts there alone. The tutorial writ
   tenant, a customer of yours, or the whole application. `StarterRoles.Missing(rules, existing)` returns the starter
   roles a scope does not have yet, as drafts for your constructor.
 - **Each starter role is made once.** `StarterRoles.Missing` recognises a role that was made from a starter role by
-  its `MadeFrom` value. A renamed or archived role keeps that value, so it is not made again. The unique index over
-  your scope column and `MadeFrom` stops two requests at the same moment from both making it.
+  its `MadeFrom` value. A renamed or archived role keeps that value, so it is not made again. A unique index over the
+  scope column and `MadeFrom` stops two requests at the same moment from both making it
+  ([Which customer a role belongs to](#which-customer-a-role-belongs-to)).
 - **No starter role is reserved for the owner.** The owner holds no role. A customer may rename, archive and change
   every starter role. A scope with no roles still has resources and owners.
 
@@ -158,8 +161,10 @@ role.Archive(BoardMembership.Rules);
 - **A name is trimmed and has 1 to 120 characters.** A description has at most 1000. Both are refused with
   `boards.role-name-invalid`, which names the field. `Rename` takes both values as they should be, so `null` clears
   the description.
-- **A unique name is your index** over your columns and `Name`. `RefusesAs` gives it your code, for example
-  `HasIndex(row => new { row.TenantId, row.Name }).IsUnique().RefusesAs("boards.role-name-taken", "Another role is called {Name} already.")`.
+- **A name is unique through a unique index** over the scope column and `Name`
+  ([Which customer a role belongs to](#which-customer-a-role-belongs-to)). `RefusesAs` on that index gives a second
+  role with the same name your refusal code, for example
+  `role.HasIndex(row => new { row.TenantId, row.Name }).RefusesAs("boards.role-name-taken", "Another role is called {Name} already.")`.
 - **An archived role** gives nothing from then on, and nobody can give it again. It can no longer be changed
   (`boards.role-archived`). It stays on the members that hold it, so what they held keeps a name. Roles are never
   deleted.
@@ -170,13 +175,29 @@ role.Archive(BoardMembership.Rules);
 
 ### Which customer a role belongs to
 
-- **The customer column is yours.** The package has no customer or tenant column. Add the column, set it in your
-  constructor, and keep customers apart with a query filter (with Tenancy, `ScopeToTenant`) or a
-  [row access rule](../row-level-security.md#row-access-rules-written-in-c).
+- **The customer column is yours.** The package has no customer or tenant column. Add the column and set it in your
+  constructor.
+- **With Tenancy, mark the column `[OfTenant]`**, as the tutorial's `BoardRole` does. The marker comes from
+  `Supporting.Tenancy.Abstractions`. Tenancy's convention then adds the tenant filter and the save check. Membership's
+  mapping adds two unique indexes: the tenant and `Name`, and the tenant and `MadeFrom`. Entity Framework names them
+  `IX_BoardRoles_TenantId_Name` and `IX_BoardRoles_TenantId_MadeFrom`. No Membership package references Tenancy. The
+  mapping finds the marker by its type name.
+- **A customer of another kind**, such as a garden, gets no index from the package. Keep customers apart with a query
+  filter or a [row access rule](../row-level-security.md#row-access-rules-written-in-c), and declare the two indexes
+  in your context. The convention still maps the role:
+
+  ```csharp
+  modelBuilder.Entity<PlotRole>(role =>
+  {
+      role.HasIndex(row => new { row.GardenId, row.Name }).IsUnique().RefusesAs("plots.role-name-taken", "Another role is called {Name} already.");
+      role.HasIndex(row => new { row.GardenId, row.MadeFrom }).IsUnique();
+  });
+  ```
+
 - **The admission reads through the request's context**, so your filter applies. Another customer's role does not
   exist there. Your filter also applies where a role's permissions are read
   ([Access in your own queries](checks-and-saves.md#access-in-your-own-queries)).
-- **Without customers**, there is one set of roles. The two unique indexes then cover `Name` alone and `MadeFrom`
+- **Without customers**, there is one set of roles. Declare the two unique indexes over `Name` alone and `MadeFrom`
   alone.
 - **To find roles another way**, register your own `IMemberRoles<TResourceId, TRoleId>` before the resource.
 - **The roles are read where they are stored.** A subquery over your role table runs inside the statement that reads

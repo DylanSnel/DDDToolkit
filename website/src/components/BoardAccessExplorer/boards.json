@@ -84,7 +84,10 @@
       "name": "Crane schedule",
       "unit": "north",
       "owner": "rhea",
-      "members": [{ "caller": "leo", "roles": ["editor"] }]
+      "members": [
+        { "caller": "leo", "roles": ["editor"] },
+        { "caller": "ada", "roles": ["editor"] }
+      ]
     },
     {
       "id": "quay",

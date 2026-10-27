@@ -173,6 +173,10 @@ An application declares one member class for each kind of resource it has member
 - `TRoleId`: What a role is known by: [`NamedRole`](#namedrole) when the roles are the ones the resource's rules declare, or the id of the application's own roles, a `readonly partial record struct` marked `[EntityId<T>]`: that of its role class for this resource ([`CustomRoleAttribute<TRoleId, TResource>`](#customroleattributetroleid-tresource)), or of roles it keeps elsewhere.
 - `TResource`: The resource the members are of: the application's aggregate that holds them.
 
+**Remarks**
+
+Membership's Entity Framework package maps the resource's collection of this class, through `AddDDDToolkitConventions()`, as `HasMembers` does: the template names that convention. A model that maps the class without that package in the application is refused while it is built.
+
 ### `MemberEntity.OneHoldPerRole`
 
 ```csharp
@@ -850,7 +854,7 @@ public override void WriteAsPropertyName(
 
 ## The resource
 
-What the resource's own class says, or has written onto it: its name, its codes, its owner and where it hangs. `[Owner]` and `[At]` are the toolkit's, from `DDDToolkit.Abstractions`, and say what they say for every package that reads them.
+What the resource's own class says, or has written onto it: its name, its codes, its owner and where it hangs. `[At]` is Membership's, from `DDDToolkit.Supporting.Membership.Abstractions`. `[Owner]` is the toolkit's, from `DDDToolkit.Abstractions`, and says what it says for every package that reads it.
 
 ### `IMembershipResource`
 
@@ -955,9 +959,9 @@ The check reads that one column of that one row, as the caller, so row level sec
 public sealed class AtAttribute : Attribute
 ```
 
-Namespace `DDDToolkit.Abstractions.Attributes`.
+Namespace `DDDToolkit.Supporting.Membership`.
 
-Marks the property of an aggregate root that says where it hangs: the unit of an organization a board belongs to, the bay a crate stands in. A fact about what the aggregate is, said in the domain beside its `[Owner]`, and no rule about who may do what with it:
+Marks the property of an aggregate root that says where it hangs: the unit of an organization a board belongs to, the bay a crate stands in. It is a fact about what the aggregate is, said in the domain beside its `[Owner]`. It is no rule about who may do what with it:
 
 ```csharp
 [AggregateRoot<BoardId>]
@@ -969,11 +973,13 @@ public sealed partial class Board
 }
 ```
 
-Whether a permission held there reaches the aggregate is the policy's to say: the rules of a resource with members say it with `reachFromAbove`, and read where it hangs from this property. The name pairs with the levels of a permission, `[AtUnit]` and `[AtTenant]`: a permission held at a unit reaches what hangs at it.
+Whether a permission held there reaches the aggregate is the policy's to say. The rules of a resource with members say it with `reachFromAbove`, and read where it hangs from this property. The name pairs with the level a permission is held at, `[AtUnit]`. A permission held at a unit reaches what hangs at it.
 
 **Remarks**
 
-One per aggregate root, on the root itself, of the id of the place: never nullable, since an aggregate that hangs nowhere could not be reached from above. Two, or a nullable one, is DDD00097; rules that reach a resource from above whose class marks none is DDD00098.
+One per aggregate root, on the root itself, of the id of the place. It is never nullable, since an aggregate that hangs nowhere could not be reached from above. Two, or a nullable one, is DDD00097. Rules that reach a resource from above whose class marks none are DDD00098. Membership's generator reports both, and ships in Membership's package.
+
+The marker is in a package of its own, with no Entity Framework and nothing else of Membership's. Membership's own package references it, so a project with Membership has the marker as well.
 
 ## Custom role
 
@@ -1192,6 +1198,12 @@ The class is the application's: it adds what only it knows, the customer a role 
 
 - `TRoleId`: The role class's id, a `readonly partial record struct` marked `[EntityId<T>]`: what a member holds a role by.
 - `TResource`: The resource the roles are of: the application's aggregate whose members hold them.
+
+**Remarks**
+
+Membership's Entity Framework package maps the class, through `AddDDDToolkitConventions()`, as `IsCustomRole` does: the template names that convention. A model that maps the class without that package in the application is refused while it is built.
+
+A class that marks the organization its rows are of, with the marker the organization's package gives a domain class for it, gets two unique indexes from that mapping: a name once in an organization, and a starter role once in an organization. A customer of another kind is the application's own column, and its indexes are the application's to declare.
 
 ### `CustomRoleDraft`
 

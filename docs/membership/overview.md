@@ -30,8 +30,11 @@ application keeps the board itself, its names, and the rule for who may add whom
 - **Rules for the member list**: a person is on the list once, holds each role once, and the owner cannot be removed.
 - **The check before a handler**: does the caller hold this permission on this board? If not, the handler does not
   run.
-- **Lists in one query**: the boards a caller may see become a subquery of your own query. Your code does not fetch
-  a list of ids first.
+- **Lists in one query**: `db.Boards.WhereIHold(BoardPermissions.View)` makes the boards a caller holds a permission
+  on a subquery of your own query. Your code does not fetch a list of ids first.
+- **Questions in a handler**: `MembershipAccessManager<Board>` returns how the caller holds a permission on a board,
+  and which permissions the caller holds on several boards. Use it for a rule of your own or for the buttons of a
+  screen.
 - **Reach from above**, with an organization: a permission held at the unit where a board hangs, or above it, counts
   on the board.
 - **On Postgres**: functions that your row level security (RLS) policies call, and a lock on the member rows.
@@ -48,24 +51,26 @@ application keeps the board itself, its names, and the rule for who may add whom
 
 - **Without Tenancy**: a member is one of your users, identified by the user id in its token.
 - **With Tenancy**: a member is a **seat**. A board then belongs to one tenant, and a suspended seat loses access to
-  every board. The code that connects the two packages is generated into your project; neither package references
-  the other.
+  every board. The generator writes the code that connects the two packages into your project. Neither package
+  references the other.
 - Everything else works the same. The tutorial uses Tenancy, because Harbor has it.
 
 ## How the classes connect
 
-The classes of a board with members, and how they connect. The board (purple) is your aggregate:
+The classes of a board with members, and how they connect. The board (purple) is your aggregate. The access manager
+is the package's service, which your handlers take:
 
 - a board has many members;
 - a member holds roles, each for a period;
 - each role is one of the tenant's board roles;
-- the rules read your permissions, and create the board roles from your starter roles.
+- the rules read your permissions, and create the board roles from your starter roles;
+- the access manager answers questions about the caller and boards, by the rules.
 
 ```mermaid
 classDiagram
     direction TB
     class Board {
-        TenantId
+        TenantId, marked OfTenant
         UnitId, marked At
         OwnerSeatId, marked Owner
         People
@@ -89,7 +94,7 @@ classDiagram
         EndsAt
     }
     class BoardRole {
-        TenantId
+        TenantId, marked OfTenant
         Name
         Permissions
         MadeFrom
@@ -103,12 +108,18 @@ classDiagram
         where the roles come from
         reach from above
     }
+    class MembershipAccessManager~Board~ {
+        HoldAsync()
+        RequireAsync()
+        PermissionsOnAsync()
+    }
     Board *-- BoardMember : many members, in People
     Board ..> MemberList : changes members through
     BoardMember *-- MemberRole : many roles, each for a period
     MemberRole --> BoardRole : of one role
     MembershipRules ..> BoardPermissions : reads
     MembershipRules ..> BoardRole : creates from starter roles
+    MembershipAccessManager ..> MembershipRules : answers by
     class Board:::strong
     classDef strong fill:#5b2ec933,stroke:#5b2ec9,stroke-width:2px
 ```
@@ -124,6 +135,7 @@ classDiagram
 | **Custom role** (`BoardRole`) | A role stored as a row of the tenant. The tenant can rename it and change its permissions. A **starter role** is one every tenant gets a copy of. | The tenant's editor, made from the starter role `editor` |
 | **Permission** and its **level** | One thing a caller may do, as a string, with the level where the check asks for it: on one resource (`[On<Board>]`), at a unit (`[AtUnit]`), or for the whole tenant (`[AtTenant]`). | `boards.edit` on a board, `boards.create` at North |
 | **Rules** (`MembershipRules`) | One declaration per kind of resource: where the roles come from, and whether a permission held above reaches the resource. The C# check and the database functions read the same rules. | `BoardMembership.Rules` |
+| **Access manager** (`MembershipAccessManager<Board>`) | The service your handlers ask what the current caller holds on one kind of resource. Each question takes the resource, or its id. | `PermissionsOnAsync([board], ...)`, for the buttons of a board's screen |
 | **Reach from above** | A permission held at the unit where a resource hangs (`[At]`), or above it, counts on the resource for a caller who is not a member. | Ada's Administrator role at the root reaches every board |
 | **Lock** | A database check: only a caller who holds the permission you mark can change a member row or the owner column. | Only a caller with `boards.members.manage` can write Crane schedule's member rows |
 
@@ -155,15 +167,15 @@ board that does not exist. A caller who sees the board but lacks the permission 
 ## Reach from above: a permission held at the board's unit
 
 With reach from above, a permission held in the organization counts on the boards below it. At the end of the
-tutorial, Harbor has two boards. Units are square; boards are purple and rounded, with a dotted line to the unit
-where they hang:
+tutorial, Harbor has two boards. Units are square and show the roles granted there. Boards are purple and rounded,
+with a dotted line to the unit where they hang, and show their owner and their members with their roles:
 
 ```mermaid
 flowchart TD
     root["<b>Harbor Works</b><br/><small>Ada: Administrator</small>"]
     north["<b>North</b><br/><small>Rhea: Area manager<br/>and Board keeper</small>"]
     coast["<b>North Coast</b>"]
-    crane("<b>Crane schedule</b><br/><small>owner: Rhea<br/>Leo: editor</small>")
+    crane("<b>Crane schedule</b><br/><small>owner: Rhea<br/>Leo: editor<br/>Ada: editor</small>")
     quay("<b>Quay plan</b><br/><small>owner: Ada</small>")
     root --> north --> coast
     north -.- crane
@@ -176,7 +188,7 @@ flowchart TD
 |---|---|---|
 | Leo | Crane schedule | He is a member. He holds no permission in the organization. |
 | Rhea | Crane schedule and Quay plan | She owns Crane schedule. Her `boards.view` at North reaches Quay plan at North Coast. |
-| Ada | both boards | Her role at the root reaches every board in the tenant. |
+| Ada | both boards | Her role at the root reaches every board in the tenant. She is also an editor on Crane schedule. |
 
 ## What your application decides
 
@@ -195,6 +207,7 @@ Most choices have a default. The smallest application decides only where the rol
 | System work | System work in the module's scope, `boards`, holds every permission on every board. | `systemScopes: [...]` names other scopes, `[]` none ([System work](checks-and-saves.md#system-work)). |
 | The name in refusal codes and functions | The class name in the plural: `boards.not-found`, `boards_i_see`. | `[Members("...")]` on the class ([Names](resources-and-members.md#names)). |
 | A save tied to its check | Off. The check, the load by id, the version, the board's rules and RLS protect a change. | `UseMemberHolds` on the context ([The expert hold](checks-and-saves.md#the-expert-hold)). |
+| How the tables are mapped | By convention. A context with `AddDDDToolkitConventions()` maps a resource's members and a custom role class. A role class with `[OfTenant]` also gets a unique index on the tenant and the name, and one on the tenant and the starter role. | `HasMembers(...)` and `IsCustomRole()` in `OnModelCreating`, for table names of your own ([Several kinds of resource](resources-and-members.md#several-kinds-of-resource)). |
 | With or without Tenancy | Works without: members are your users. | Add Tenancy's Entity Framework package to the project: members become seats, and the connecting code is generated ([With Tenancy](beside-an-organization.md#with-tenancy)). |
 
 ## Where to go next
@@ -205,8 +218,8 @@ Most choices have a default. The smallest application decides only where the rol
     names, several kinds of resource.
   - [Permissions and roles](permissions-and-roles.md): the settings of a permission, who holds one, who may give a
     role, roles a tenant makes.
-  - [Checks and saves](checks-and-saves.md): combined requirements, from the check to the save, lists, system work,
-    the expert hold.
+  - [Checks and saves](checks-and-saves.md): combined requirements, from the check to the save, the access manager
+    and your own queries, system work, the expert hold.
   - [Postgres](postgres.md): the functions, the lock on the member rows, the start-up check.
   - [Beside an organization](beside-an-organization.md): with Tenancy, or with an organization of your own.
   - [Design and limits](design.md): why you write each piece yourself, and what Membership does not do.
