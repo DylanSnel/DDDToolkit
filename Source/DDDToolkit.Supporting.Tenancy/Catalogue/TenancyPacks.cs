@@ -14,7 +14,7 @@ public static class TenancyPacks
 {
     /// <summary>
     /// The permission of <see cref="DefaultAdministrators"/>: the pack its roles remember they came from, and what
-    /// <c>TenantToProvision.RoleIds</c> and <c>ProvisionedTenant.RolesByPack</c> name it by.
+    /// <c>TenantToProvision.RoleIds</c> names it by.
     /// </summary>
     public const string DefaultAdministratorsKey = "administrator";
 

@@ -39,7 +39,7 @@ public sealed record RenameSeat([OrOwn] SeatId Seat, string? DisplayName) : ICom
 /// unit of work. Who may rename which seat its requirement said at the door.
 /// </summary>
 /// <param name="store">The unit of work Tenancy's aggregates are loaded and saved in.</param>
-public sealed class RenameSeatHandler(TenancyUseCases.IStore store) : ICommandHandler<RenameSeat>
+public sealed class RenameSeatHandler(TenancyStore store) : ICommandHandler<RenameSeat>
 {
     /// <inheritdoc />
     /// <exception cref="Exceptions.RefusalException">

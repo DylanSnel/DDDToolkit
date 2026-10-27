@@ -66,7 +66,7 @@ public sealed class FailClosedScenarios(SampleHosts sample) : IClassFixture<Samp
         TenancyCallers.Ambient.Should().BeNull("nothing in this test began a Tenancy caller");
 
         await using var scope = host.Services.CreateAsyncScope();
-        var seats = scope.ServiceProvider.GetRequiredService<TenancyUseCases.SeatCommands>();
+        var seats = scope.ServiceProvider.GetRequiredService<SeatManager>();
 
         var suspend = () => seats.SuspendAsync(Harbor.SeatOf(DemoPeople.Leo), Cancellation);
 
@@ -97,7 +97,7 @@ public sealed class FailClosedScenarios(SampleHosts sample) : IClassFixture<Samp
             (await RefusedAsync(() => tenancy.Seats.IgnoreQueryFilters().CountAsync(Cancellation))).Should().Be(PostgresErrorCodes.InsufficientPrivilege);
 
             // A Tenancy command refuses it, and so does the save check under a module's own write.
-            var suspend = () => scope.ServiceProvider.GetRequiredService<TenancyUseCases.SeatCommands>().SuspendAsync(Harbor.SeatOf(DemoPeople.Leo), Cancellation);
+            var suspend = () => scope.ServiceProvider.GetRequiredService<SeatManager>().SuspendAsync(Harbor.SeatOf(DemoPeople.Leo), Cancellation);
             (await suspend.Should().ThrowAsync<RefusalException>()).Which.Code.Should().Be(TenancyRefusals.NotSeated);
 
             // It finds no project to change, so one is put before it: loaded as harbor's own work, which reads

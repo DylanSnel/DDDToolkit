@@ -23,13 +23,13 @@ public sealed record MakeGrant(SeatId Seat, [AtUnit] OrganizationUnitId Unit, Ro
 
 /// <summary>Handles <see cref="MakeGrant"/> with the Tenancy package's use case, which checks the caller, decides and saves.</summary>
 /// <param name="seats">The package's use cases that change a seat.</param>
-public sealed class MakeGrantHandler(TenancyUseCases.SeatCommands seats) : ICommandHandler<MakeGrant>
+public sealed class MakeGrantHandler(SeatManager seats) : ICommandHandler<MakeGrant>
 {
     /// <inheritdoc />
     /// <exception cref="Exceptions.RefusalException">What the package's use case refuses, with its code.</exception>
     public async ValueTask<Unit> Handle(MakeGrant command, CancellationToken cancellationToken)
     {
-        await seats.GrantAsync(command.Seat, command.Unit, command.Role, command.Until, command.Reason, cancellationToken);
+        await seats.GrantAsync(command.Seat, command.Role, command.Unit, command.Until, command.Reason, cancellationToken);
         return Unit.Value;
     }
 }

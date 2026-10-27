@@ -161,7 +161,7 @@ public abstract class CrossSeatQuestionTests(TenancyPostgres postgres, TenancyNa
         // before anything is written for the trigger to refuse.
         var last = await RefusedAsync(TenancyRefusals.LastAdmin, () => As(Ada, scoped => scoped.Seats().SuspendAsync(Ada.Seat, Cancellation)));
         last.InnerException.Should().BeNull("the use case refused it, not the database");
-        await RefusedAsync(TenancyRefusals.LastAdmin, () => As(Ada, scoped => scoped.Seats().RevokeAsync(Ada.Seat, HarborRoot, HarborRoles.Administrator, Cancellation)));
+        await RefusedAsync(TenancyRefusals.LastAdmin, () => As(Ada, scoped => scoped.Seats().RevokeAsync(Ada.Seat, HarborRoles.Administrator, HarborRoot, Cancellation)));
         await RefusedAsync(TenancyRefusals.LastAdmin, () => As(Ada, scoped => scoped.Roles().ArchiveAsync(HarborRoles.Administrator, Cancellation)));
 
         // With a second administrator she may.
@@ -278,9 +278,9 @@ public abstract class CrossSeatQuestionTests(TenancyPostgres postgres, TenancyNa
         // Oli managed units for all of Harbor until an hour ago, by the database's clock.
         await using (var seeding = new TenancyServices(database))
         {
-            var desk = await seeding.BySystemIn(Harbor, scoped => scoped.Roles().CreateAsync("Units desk", "Keeps the tree", [TenancyPermissions.UnitsManage], Cancellation));
+            var desk = (await seeding.BySystemIn(Harbor, scoped => scoped.Roles().CreateAsync("Units desk", "Keeps the tree", [TenancyPermissions.UnitsManage], Cancellation))).Id;
             await seeding.BySystemIn(Harbor, scoped => scoped.Seats().PlaceAsync(Oli.Seat, HarborRoot, primary: false, Cancellation));
-            await seeding.BySystemIn(Harbor, scoped => scoped.Seats().GrantAsync(Oli.Seat, HarborRoot, desk, now.AddHours(-1), reason: null, Cancellation, now.AddDays(-3)));
+            await seeding.BySystemIn(Harbor, scoped => scoped.Seats().GrantAsync(Oli.Seat, desk, HarborRoot, now.AddHours(-1), reason: null, Cancellation, now.AddDays(-3)));
         }
 
         // The application's clock is two hours behind: what a grant that ends between the use case's check and the
@@ -318,7 +318,7 @@ public abstract class CrossSeatQuestionTests(TenancyPostgres postgres, TenancyNa
                          databaseKeepsRights: false))
         {
             var catalogue = composed.Provider.GetRequiredService<TenancyCatalogue>();
-            var reaches = await composed.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.GetRequiredService<HostTenancy.IStore>()
+            var reaches = await composed.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.GetRequiredService<ITenancyStore<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId>>()
                 .RightsAMoveChangesAsync(Harbor, Ada.Seat, North, South, catalogue.AccessManagingPermissions, now, Cancellation));
             expected = [.. reaches.Select(reach =>
                 $"{reach.UnitId.Value} {reach.Permission} {reach.EndsAt?.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.ffffff", System.Globalization.CultureInfo.InvariantCulture) ?? "no end"} {reach.Parent.Value} {(reach.OfCaller ? "true" : "false")}")];
@@ -652,13 +652,13 @@ public abstract class CrossSeatQuestionTests(TenancyPostgres postgres, TenancyNa
         await using var services = new TenancyServices(database);
         await services.BySystemIn(Harbor, async scoped =>
         {
-            var seat = (await scoped.GetRequiredService<HostTenancy.IStore>().FindSeatAsync(person.Seat, Cancellation))!;
+            var seat = (await scoped.GetRequiredService<ITenancyStore<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId>>().FindSeatAsync(person.Seat, Cancellation))!;
             if (seat.Placements.All(placement => placement.UnitId != unit))
             {
                 await scoped.Seats().PlaceAsync(person.Seat, unit, primary: false, Cancellation);
             }
         });
-        await services.BySystemIn(Harbor, scoped => scoped.Seats().GrantAsync(person.Seat, unit, role, until, reason: null, Cancellation));
+        await services.BySystemIn(Harbor, scoped => scoped.Seats().GrantAsync(person.Seat, role, unit, until, reason: null, Cancellation));
     }
 
     /// <summary>Runs <paramref name="command"/>, expecting the use case to refuse it with <paramref name="code"/>.</summary>

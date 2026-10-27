@@ -35,7 +35,7 @@ public abstract class StoreTests(TestDatabases databases) : IAsyncLifetime
 
         await _services.BySeat(harbor.Tenant, harbor.AdminSeat, async services =>
         {
-            var store = services.GetRequiredService<HostTenancy.IStore>();
+            var store = services.GetRequiredService<ITenancyStore<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId>>();
 
             (await store.FindSeatAsync(orchard.AdminSeat, TestContext.Current.CancellationToken)).Should().BeNull();
             (await store.FindRoleAsync(orchard.AdministratorRole, TestContext.Current.CancellationToken)).Should().BeNull();
@@ -47,7 +47,7 @@ public abstract class StoreTests(TestDatabases databases) : IAsyncLifetime
         await Refused.WithCodeAsync(TenancyRefusals.SeatNotFound, () => _services.BySeat(harbor.Tenant, harbor.AdminSeat, services =>
             services.Seats().SuspendAsync(orchard.AdminSeat, TestContext.Current.CancellationToken)));
         await Refused.WithCodeAsync(TenancyRefusals.RoleNotFound, () => _services.BySeat(harbor.Tenant, harbor.AdminSeat, services =>
-            services.Seats().GrantAsync(harbor.AdminSeat, harbor.RootUnit, orchard.AdministratorRole, until: null, reason: null, TestContext.Current.CancellationToken)));
+            services.Seats().GrantAsync(harbor.AdminSeat, orchard.AdministratorRole, harbor.RootUnit, until: null, reason: null, TestContext.Current.CancellationToken)));
     }
 
     [Fact]
@@ -63,7 +63,7 @@ public abstract class StoreTests(TestDatabases databases) : IAsyncLifetime
         // Grace has no placement and no permission: whoever works in a tenant reads its seats, for the directory's answers.
         await _services.BySeat(harbor.Tenant, grace, async services =>
         {
-            var store = services.GetRequiredService<HostTenancy.IStore>();
+            var store = services.GetRequiredService<ITenancyStore<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId>>();
 
             _services.Commands.Reset();
             var all = await store.ListSeatsAsync(harbor.Tenant, only: null, TestContext.Current.CancellationToken);
@@ -103,7 +103,7 @@ public abstract class StoreTests(TestDatabases databases) : IAsyncLifetime
 
         await _services.BySeat(harbor.Tenant, harbor.AdminSeat, async services =>
         {
-            var me = await services.Directory().WhoAmIAsync(TestContext.Current.CancellationToken);
+            var me = await services.Seats().WhoAmIAsync(TestContext.Current.CancellationToken);
             me.Seat.Rename("changed by the application");
 
             (me.Seat.Id, me.Seat.DisplayName).Should().Be((harbor.AdminSeat, "changed by the application"));
@@ -111,7 +111,7 @@ public abstract class StoreTests(TestDatabases databases) : IAsyncLifetime
             (await services.TenancyContext().SaveChangesAsync(TestContext.Current.CancellationToken)).Should().Be(0, "a later save in the same scope writes nothing done to it");
         });
 
-        var again = await _services.BySeat(harbor.Tenant, harbor.AdminSeat, services => services.Directory().WhoAmIAsync(TestContext.Current.CancellationToken));
+        var again = await _services.BySeat(harbor.Tenant, harbor.AdminSeat, services => services.Seats().WhoAmIAsync(TestContext.Current.CancellationToken));
         again.Seat.DisplayName.Should().Be("Ada");
     }
 
@@ -123,7 +123,7 @@ public abstract class StoreTests(TestDatabases databases) : IAsyncLifetime
 
         await _services.BySystemIn(harbor.Tenant, async services =>
         {
-            var store = services.GetRequiredService<HostTenancy.IStore>();
+            var store = services.GetRequiredService<ITenancyStore<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId>>();
 
             _services.Commands.Reset();
             var organization = (await store.ReadOrganizationAsync(harbor.Tenant, TestContext.Current.CancellationToken))!;
@@ -136,7 +136,7 @@ public abstract class StoreTests(TestDatabases databases) : IAsyncLifetime
             (await services.TenancyContext().SaveChangesAsync(TestContext.Current.CancellationToken)).Should().Be(0);
 
             // And the directory's units are those.
-            (await services.Directory().ListUnitsAsync(TestContext.Current.CancellationToken)).Single(unit => unit.Unit.Id == north).Unit.CostCentre.Should().Be("NL-002");
+            (await services.Organization().ListUnitsAsync(TestContext.Current.CancellationToken)).Single(unit => unit.Unit.Id == north).Unit.CostCentre.Should().Be("NL-002");
             services.TenancyContext().ChangeTracker.Entries().Should().BeEmpty("the directory reads, and tracks nothing it hands out");
         });
     }
@@ -149,7 +149,7 @@ public abstract class StoreTests(TestDatabases databases) : IAsyncLifetime
 
         await _services.BySystemIn(harbor.Tenant, async services =>
         {
-            var store = services.GetRequiredService<HostTenancy.IStore>();
+            var store = services.GetRequiredService<ITenancyStore<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId>>();
 
             var tenant = (await store.FindTenantAsync(harbor.Tenant, TestContext.Current.CancellationToken))!;
             tenant.Status.Should().Be(TenantStatus.Active);
@@ -176,8 +176,8 @@ public abstract class StoreTests(TestDatabases databases) : IAsyncLifetime
         (await _services.StoredPathsAsync(harbor.Tenant)).Should().ContainSingle();
         _services.Database.CountRows("TenancyAccessRevisions").Should().Be(1);
 
-        var overview = await _services.BySeat(harbor.Tenant, harbor.AdminSeat, services => services.Directory().WhoAmIAsync(TestContext.Current.CancellationToken));
-        overview.Tenant.Slug.Should().Be("harbor");
+        var overview = await _services.BySeat(harbor.Tenant, harbor.AdminSeat, services => services.Seats().WhoAmIAsync(TestContext.Current.CancellationToken));
+        overview.Tenant.Slug.Value.Should().Be("harbor");
         overview.Permissions.Should().OnlyContain(reach => reach.AtTenant).And.HaveCount(catalogue.LivePermissions.Count);
     }
 
@@ -197,7 +197,7 @@ public abstract class StoreTests(TestDatabases databases) : IAsyncLifetime
         await services.BySystemIn(harbor.Tenant, async scoped =>
         {
             services.Commands.Reset();
-            var seat = (await scoped.GetRequiredService<HostTenancy.IStore>().FindSeatAsync(grace, TestContext.Current.CancellationToken))!;
+            var seat = (await scoped.GetRequiredService<ITenancyStore<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId>>().FindSeatAsync(grace, TestContext.Current.CancellationToken))!;
             services.Commands.Commands.Should().ContainSingle("the seat, its placements and their grants come back together");
 
             seat.Placements.Select(placement => (placement.UnitId, placement.IsPrimary, Roles: placement.Grants.Select(grant => grant.RoleId).Order().ToArray()))
@@ -232,8 +232,8 @@ public abstract class StoreTests(TestDatabases databases) : IAsyncLifetime
     {
         var harbor = await _services.ProvisionAsync("harbor");
 
-        var seat = await _services.BySystemIn(harbor.Tenant, services =>
-            services.Seats().AddSeatAsync(Guid.NewGuid(), TestContext.Current.CancellationToken, configure: added => added.Welcome()));
+        var seat = (await _services.BySystemIn(harbor.Tenant, services =>
+            services.Seats().AddAsync(Guid.NewGuid(), TestContext.Current.CancellationToken, configure: added => added.Welcome()))).Id;
 
         await using var scope = _services.Scope();
         var welcomed = await scope.ServiceProvider.TenancyContext().Set<OutboxMessage>().AsNoTracking()
@@ -290,21 +290,21 @@ public abstract class StoreTests(TestDatabases databases) : IAsyncLifetime
                     changed.RoleId.Value, string.Join(" ", changed.Added), string.Join(" ", changed.Removed), changed.By!.Value.Seat?.Value)))));
 
         var operatorIdentity = Guid.NewGuid();
-        HostTenancy.ProvisionedTenant harbor;
+        ProvisionedTenant harbor;
         await using (var scope = services.Scope())
         using (TenancyWork.BeginOperator<TenantId, SeatId>(operatorIdentity))
         {
-            harbor = await scope.ServiceProvider.Tenants().ProvisionAsync(
-                new HostTenancy.TenantToProvision("harbor", "Harbor Works", TenantShape.Hierarchical, "Harbor", Guid.NewGuid()),
+            harbor = await scope.ServiceProvider.Tenants().ProvisionWithIdsAsync(scope.ServiceProvider.GetRequiredService<TenancyCatalogue>(),
+                new TenantToProvision("harbor", "Harbor Works", TenantShape.Hierarchical, "Harbor", Guid.NewGuid()),
                 TestContext.Current.CancellationToken);
         }
 
         var watcher = harbor.RolesByPack[HostCatalogue.WatcherPack];
         var grace = await services.SeatAtAsync(harbor, "Grace", harbor.RootUnit);
         await services.RunAsync(HostCaller.SystemIn(harbor.Tenant, harbor.AdminSeat), scoped =>
-            scoped.Seats().GrantAsync(grace, harbor.RootUnit, harbor.RolesByPack[HostCatalogue.OperatorPack], until: null, reason: null, TestContext.Current.CancellationToken));
+            scoped.Seats().GrantAsync(grace, harbor.RolesByPack[HostCatalogue.OperatorPack], harbor.RootUnit, until: null, reason: null, TestContext.Current.CancellationToken));
         await services.BySeat(harbor.Tenant, harbor.AdminSeat, scoped =>
-            scoped.Seats().GrantAsync(grace, harbor.RootUnit, watcher, until: null, reason: null, TestContext.Current.CancellationToken));
+            scoped.Seats().GrantAsync(grace, watcher, harbor.RootUnit, until: null, reason: null, TestContext.Current.CancellationToken));
         await services.BySeat(harbor.Tenant, harbor.AdminSeat, scoped =>
             scoped.Roles().SetPermissionsAsync(watcher, [HostCatalogue.WidgetCreate, HostCatalogue.WidgetChange], TestContext.Current.CancellationToken));
 
@@ -329,7 +329,7 @@ public abstract class StoreTests(TestDatabases databases) : IAsyncLifetime
         // SQLite's own lower case stops at ASCII, and a database's may follow its collation: the name is compared as
         // it was normalized before it was stored.
         await _services.BySystemIn(harbor.Tenant, async services =>
-            (await services.GetRequiredService<HostTenancy.IStore>().RoleNameTakenAsync(harbor.Tenant, "élan", except: null, TestContext.Current.CancellationToken))
+            (await services.GetRequiredService<ITenancyStore<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId>>().RoleNameTakenAsync(harbor.Tenant, "élan", except: null, TestContext.Current.CancellationToken))
                 .Should().BeTrue());
         await Refused.WithCodeAsync(TenancyRefusals.RoleNameTaken, () => _services.BySystemIn(harbor.Tenant, services =>
             services.Roles().CreateAsync("ÉLAN", "Shouts", [HostCatalogue.WidgetRead], TestContext.Current.CancellationToken)));
@@ -356,10 +356,10 @@ public abstract class StoreTests(TestDatabases databases) : IAsyncLifetime
         // The application once declared a permission, gave it to a role, and granted the role.
         using var before = await databases.ServicesAsync(collection => collection.AddTenancyPermissions([new Permission(PolishPermission, "Widgets", "Polish widgets")]));
         var harbor = await before.ProvisionAsync("harbor");
-        var polisher = await before.BySystemIn(harbor.Tenant, services =>
-            services.Roles().CreateAsync("Polisher", "Polishes widgets", [PolishPermission, HostCatalogue.WidgetRead], TestContext.Current.CancellationToken));
+        var polisher = (await before.BySystemIn(harbor.Tenant, services =>
+            services.Roles().CreateAsync("Polisher", "Polishes widgets", [PolishPermission, HostCatalogue.WidgetRead], TestContext.Current.CancellationToken))).Id;
         var grace = await before.SeatAtAsync(harbor, "Grace", harbor.RootUnit);
-        await before.BySystemIn(harbor.Tenant, services => services.Seats().GrantAsync(grace, harbor.RootUnit, polisher, until: null, reason: null, TestContext.Current.CancellationToken));
+        await before.BySystemIn(harbor.Tenant, services => services.Seats().GrantAsync(grace, polisher, harbor.RootUnit, until: null, reason: null, TestContext.Current.CancellationToken));
         (await before.StoredRightsAsync(grace)).Select(right => right.Permission).Should().Contain(PolishPermission);
 
         // A later version of it removed the permission from the code instead of retiring it.
@@ -374,7 +374,7 @@ public abstract class StoreTests(TestDatabases databases) : IAsyncLifetime
         // The role keeps the permission, and it gives no rights: a new holder gets no row for it, and an old one loses
         // its row the next time its rights are written.
         var lin = await after.SeatAtAsync(harbor, "Lin", harbor.RootUnit);
-        await after.BySystemIn(harbor.Tenant, services => services.Seats().GrantAsync(lin, harbor.RootUnit, polisher, until: null, reason: null, TestContext.Current.CancellationToken));
+        await after.BySystemIn(harbor.Tenant, services => services.Seats().GrantAsync(lin, polisher, harbor.RootUnit, until: null, reason: null, TestContext.Current.CancellationToken));
         (await after.StoredRightsAsync(lin)).Select(right => right.Permission).Should().Equal(HostCatalogue.WidgetRead);
 
         await after.BySystemIn(harbor.Tenant, services => services.Seats().SuspendAsync(grace, TestContext.Current.CancellationToken));
@@ -406,7 +406,7 @@ public abstract class StoreTests(TestDatabases databases) : IAsyncLifetime
         // Asked by a seat, with the rights the save's to write and every seat's to read: the store reads them itself.
         var (pairs, reaches) = await _services.BySeat(harbor.Tenant, grace, async services =>
         {
-            var store = services.GetRequiredService<HostTenancy.IStore>();
+            var store = services.GetRequiredService<ITenancyStore<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId>>();
             _services.Commands.Reset();
             var answered = (
                 await store.AdministratorsAsync(harbor.Tenant, now.AddMinutes(1), TestContext.Current.CancellationToken),

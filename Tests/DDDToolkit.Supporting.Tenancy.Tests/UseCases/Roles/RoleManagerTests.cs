@@ -6,7 +6,7 @@ namespace DDDToolkit.Supporting.Tenancy.Tests;
 /// access added to a role, taken out of it or archived with it by an administrator alone. A change of permissions
 /// reaches every seat holding the role when it is saved.
 /// </summary>
-public class RoleCommandsTests
+public class RoleManagerTests
 {
     private static readonly DateTimeOffset Now = FixedClock.Start;
 
@@ -15,20 +15,20 @@ public class RoleCommandsTests
     {
         var harness = Harness.OfHarbor();
         var operatorRole = harness.RoleFromPack(HostCatalogue.OperatorPack);
-        var desk = await harness.BySystemWork(h => h.Roles.CreateAsync("Grant desk", "Gives people their roles", [TenancyPermissions.GrantsManage], default));
+        var desk = (await harness.BySystemWork(h => h.Roles.CreateAsync("Grant desk", "Gives people their roles", [TenancyPermissions.GrantsManage], default))).Id;
         var clerk = await harness.SeatAt("Fay", harness.Harbor.North);
-        await harness.BySystemWork(h => h.Seats.GrantAsync(clerk, harness.Harbor.North, desk, null, null, default));
+        await harness.BySystemWork(h => h.Seats.GrantAsync(clerk, desk, harness.Harbor.North, null, null, default));
         var holder = await harness.SeatAt("Bert", harness.Harbor.North);
         var newcomer = await harness.SeatAt("Di", harness.Harbor.North);
 
-        await harness.As(clerk, h => h.Seats.GrantAsync(holder, harness.Harbor.North, operatorRole, null, null, default));
+        await harness.As(clerk, h => h.Seats.GrantAsync(holder, operatorRole, harness.Harbor.North, null, null, default));
         await harness.As(harness.Administrator, h => h.Roles.SetPermissionsAsync(operatorRole, [HostCatalogue.WidgetChange, HostCatalogue.WidgetCreate, TenancyPermissions.UnitsManage], default));
 
         var give = await Refused.WithCodeAsync(TenancyRefusals.GrantExceedsOwn,
-            () => harness.As(clerk, h => h.Seats.GrantAsync(newcomer, harness.Harbor.North, operatorRole, null, null, default)));
+            () => harness.As(clerk, h => h.Seats.GrantAsync(newcomer, operatorRole, harness.Harbor.North, null, null, default)));
         give.Arguments["Missing"].Should().Be(TenancyPermissions.UnitsManage);
         await Refused.WithCodeAsync(TenancyRefusals.GrantExceedsOwn,
-            () => harness.As(clerk, h => h.Seats.RevokeAsync(holder, harness.Harbor.North, operatorRole, default)));
+            () => harness.As(clerk, h => h.Seats.RevokeAsync(holder, operatorRole, harness.Harbor.North, default)));
 
         harness.Store.Seat(holder).Placements.Single().Grants.Single().RoleId.Should().Be(operatorRole, "the holder keeps the role");
         harness.Store.SavedRights.Should().Contain(right => right.SeatId == holder && right.Permission == TenancyPermissions.UnitsManage, "and gains what it grants now");
@@ -104,7 +104,7 @@ public class RoleCommandsTests
             () => harness.As(supervisor, h => h.Roles.CreateAsync("Clerk", "Files widgets", [HostCatalogue.WidgetChange], default)));
         refusal.Arguments["Permission"].Should().Be(TenancyPermissions.RolesManage);
 
-        var clerk = await harness.As(harness.Administrator, h => h.Roles.CreateAsync(" Clerk ", "Files widgets", [HostCatalogue.WidgetChange], default));
+        var clerk = (await harness.As(harness.Administrator, h => h.Roles.CreateAsync(" Clerk ", "Files widgets", [HostCatalogue.WidgetChange], default))).Id;
 
         var role = harness.Store.Role(clerk);
         role.Name.Should().Be("Clerk");
@@ -120,7 +120,7 @@ public class RoleCommandsTests
     {
         var harness = Harness.OfHarbor();
         var other = harness.Seed(2, "quarry");
-        var clerk = await harness.As(harness.Administrator, h => h.Roles.CreateAsync("Clerk", string.Empty, [HostCatalogue.WidgetRead], default));
+        var clerk = (await harness.As(harness.Administrator, h => h.Roles.CreateAsync("Clerk", string.Empty, [HostCatalogue.WidgetRead], default))).Id;
 
         var refusal = await Refused.WithCodeAsync(TenancyRefusals.RoleNameTaken,
             () => harness.As(harness.Administrator, h => h.Roles.CreateAsync("clerk", string.Empty, [HostCatalogue.WidgetRead], default)));
@@ -149,9 +149,9 @@ public class RoleCommandsTests
         harness.Store.Role(administrators).Holds(TenancyPermissions.AdministratorPermission).Should().BeTrue();
 
         // A second administrator, through a role of its own, lets the pack's role lose the permission.
-        var keepers = await harness.As(harness.Administrator, h => h.Roles.CreateAsync("Keepers", string.Empty, [TenancyPermissions.RolesManage, TenancyPermissions.SeatsManage], default));
+        var keepers = (await harness.As(harness.Administrator, h => h.Roles.CreateAsync("Keepers", string.Empty, [TenancyPermissions.RolesManage, TenancyPermissions.SeatsManage], default))).Id;
         var keeper = await harness.SeatAt("Cy", harness.Harbor.Root);
-        await harness.As(harness.Administrator, h => h.Seats.GrantAsync(keeper, harness.Harbor.Root, keepers, null, null, default));
+        await harness.As(harness.Administrator, h => h.Seats.GrantAsync(keeper, keepers, harness.Harbor.Root, null, null, default));
 
         await harness.As(harness.Administrator, h => h.Roles.SetPermissionsAsync(administrators, [HostCatalogue.WidgetRead, TenancyPermissions.SeatsManage], default));
 

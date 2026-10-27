@@ -37,7 +37,7 @@ public sealed class PooledContextTests
         });
 
         // A seat added, placed and given a role by Harbor's administrator, through the use cases.
-        var grace = await AsHarborsAdministrator(scoped => scoped.Seats().AddSeatAsync(Guid.NewGuid(), Cancellation, configure: seat => seat.Rename("Grace")));
+        var grace = (await AsHarborsAdministrator(scoped => scoped.Seats().AddAsync(Guid.NewGuid(), Cancellation, configure: seat => seat.Rename("Grace")))).Id;
         await AsHarborsAdministrator(async scoped =>
         {
             await scoped.Seats().PlaceAsync(grace, north, primary: true, Cancellation);
@@ -45,7 +45,7 @@ public sealed class PooledContextTests
         });
         await AsHarborsAdministrator(async scoped =>
         {
-            await scoped.Seats().GrantAsync(grace, north, operators, until: null, reason: null, Cancellation);
+            await scoped.Seats().GrantAsync(grace, operators, north, until: null, reason: null, Cancellation);
             return true;
         });
 
@@ -132,7 +132,7 @@ public sealed class PooledContextTests
     {
         // A database with a tenant in it, made by services of the usual kind.
         using var database = new SqliteDatabase();
-        HostTenancy.ProvisionedTenant harbor;
+        ProvisionedTenant harbor;
         using (var usual = new TestServices(database: database))
         {
             harbor = await usual.ProvisionAsync("harbor");

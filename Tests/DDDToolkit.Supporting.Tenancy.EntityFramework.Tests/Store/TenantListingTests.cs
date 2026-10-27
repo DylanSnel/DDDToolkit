@@ -5,12 +5,12 @@ using Microsoft.Extensions.DependencyInjection;
 namespace DDDToolkit.Supporting.Tenancy.EntityFramework.Tests;
 
 /// <summary>
-/// The tenants' directory over a database: an operator reads every tenant by slug, a page at a time, each page in
+/// The tenants' listing over a database: an operator reads every tenant by slug, a page at a time, each page in
 /// one statement that looks past the tenant filter and counts the active seats where the rows are. Who may ask is
 /// decided before the store is reached; what an operator's database role may read is the policies' to say, and is
 /// proven on Postgres under them.
 /// </summary>
-public abstract class TenantDirectoryTests(TestDatabases databases) : IAsyncLifetime
+public abstract class TenantListingTests(TestDatabases databases) : IAsyncLifetime
 {
     private const string OperatorRole = "operator";
 
@@ -48,16 +48,16 @@ public abstract class TenantDirectoryTests(TestDatabases databases) : IAsyncLife
 
         _services.Commands.Count.Should().Be(1, "a page is one statement, the seats counted where they are");
         _services.Commands.Sent[0].TenancyCaller!.Kind.Should().Be(TenancyCallerKind.Nobody, "an operator acts in no tenant, and the read looks past the tenant filter");
-        first.Items.Should().Equal(
-            new HostTenancy.TenantListing(anvil.Tenant, "anvil", "Anvil Works", TenantStatus.Active, ActiveSeats: 1),
-            new HostTenancy.TenantListing(harbor.Tenant, "harbor", "Harbor Works", TenantStatus.Active, ActiveSeats: 2));
+        first.Items.Select(Listed).Should().Equal(
+            (anvil.Tenant, "anvil", "Anvil Works", TenantStatus.Active, 1),
+            (harbor.Tenant, "harbor", "Harbor Works", TenantStatus.Active, 2));
         first.Next.Should().NotBeNull();
 
         _services.Commands.Reset();
         var second = await PageAsync(first.Next, size: 2);
 
         _services.Commands.Count.Should().Be(1);
-        second.Items.Should().Equal(new HostTenancy.TenantListing(orchard.Tenant, "orchard", "Orchard Works", TenantStatus.Suspended, ActiveSeats: 1));
+        second.Items.Select(Listed).Should().Equal((orchard.Tenant, "orchard", "Orchard Works", TenantStatus.Suspended, 1));
         second.Next.Should().BeNull();
 
         // No identity and no name of a seat is read: the statement names neither column.
@@ -74,31 +74,35 @@ public abstract class TenantDirectoryTests(TestDatabases databases) : IAsyncLife
         using (Callers.Begin(Caller.User(Guid.NewGuid())))
         using (TenancyCallers.Begin(HostCaller.InSeat(harbor.Tenant, harbor.AdminSeat)))
         {
-            await Refused.WithCodeAsync(TenancyRefusals.OperatorsOnly, () => scope.ServiceProvider.GetRequiredService<HostTenancy.TenantDirectory>().ListAsync(null, 10, Cancellation));
+            await Refused.WithCodeAsync(TenancyRefusals.OperatorsOnly, () => scope.ServiceProvider.GetRequiredService<TenantManager>().ListAsync(null, 10, Cancellation));
         }
 
         await using (var scope = _services.Scope())
         using (TenancyWork.BeginSystemIn<TenantId, SeatId>(harbor.Tenant))
         {
-            await Refused.WithCodeAsync(TenancyRefusals.OperatorsOnly, () => scope.ServiceProvider.GetRequiredService<HostTenancy.TenantDirectory>().ListAsync(null, 10, Cancellation));
+            await Refused.WithCodeAsync(TenancyRefusals.OperatorsOnly, () => scope.ServiceProvider.GetRequiredService<TenantManager>().ListAsync(null, 10, Cancellation));
         }
 
         _services.Commands.Commands.Should().BeEmpty("neither a tenant's administrator nor system work in a tenant is an operator");
     }
 
-    private async Task<HostTenancy.TenantDirectoryPage> PageAsync(string? after, int size)
+    private async Task<TenantManager.TenantPage> PageAsync(string? after, int size)
     {
         await using var scope = _services.Scope();
         using (Callers.Begin(Caller.User(Odette, OperatorRole)))
         using (TenancyCallers.Begin(HostCaller.Nobody(TenancyRefusals.NotSeated)))
         {
-            return await scope.ServiceProvider.GetRequiredService<HostTenancy.TenantDirectory>().ListAsync(after, size, Cancellation);
+            return await scope.ServiceProvider.GetRequiredService<TenantManager>().ListAsync(after, size, Cancellation);
         }
     }
+
+    /// <summary>What a listing shows of a tenant: its id, slug, name, status and active seats.</summary>
+    private static (TenantId, string, string, TenantStatus, int) Listed(TenantManager.TenantListing listing)
+        => (listing.Tenant.Id, listing.Tenant.Slug.Value, listing.Name, listing.Tenant.Status, listing.ActiveSeats);
 }
 
-/// <summary>The tenants' directory, on SQLite in memory.</summary>
-public sealed class TenantDirectoryTestsOnSqlite() : TenantDirectoryTests(TestDatabases.Sqlite);
+/// <summary>The tenants' listing, on SQLite in memory.</summary>
+public sealed class TenantListingTestsOnSqlite() : TenantListingTests(TestDatabases.Sqlite);
 
-/// <summary>The tenants' directory, on Postgres, as the tables' owner with no row level security: the Entity Framework layer on Npgsql.</summary>
-public sealed class TenantDirectoryTestsOnPostgres(PostgresDatabases postgres) : TenantDirectoryTests(postgres);
+/// <summary>The tenants' listing, on Postgres, as the tables' owner with no row level security: the Entity Framework layer on Npgsql.</summary>
+public sealed class TenantListingTestsOnPostgres(PostgresDatabases postgres) : TenantListingTests(postgres);

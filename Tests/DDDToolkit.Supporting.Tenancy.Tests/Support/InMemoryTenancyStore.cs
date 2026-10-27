@@ -25,8 +25,8 @@ namespace DDDToolkit.Supporting.Tenancy.Tests.Support;
 /// </list>
 /// </summary>
 public sealed class InMemoryTenancyStore
-    : HostTenancy.IStore,
-      HostTenancy.IInvitationStore<HostInvitation, InvitationId>,
+    : ITenancyStore<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId>,
+      IInvitationStore<HostInvitation, InvitationId, TenantId, OrganizationUnitId, RoleId, SeatId>,
       ITenancyReadSource<TenantId, SeatId, OrganizationUnitId, RoleId>,
       IQueryExecutor
 {
@@ -175,7 +175,7 @@ public sealed class InMemoryTenancyStore
 
     // ---------------------------------------------------------------- IStore
 
-    ITenancyReadSource<TenantId, SeatId, OrganizationUnitId, RoleId> HostTenancy.IStore.Reads
+    ITenancyReadSource<TenantId, SeatId, OrganizationUnitId, RoleId> ITenancyStore<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId>.Reads
     {
         get
         {
@@ -184,7 +184,7 @@ public sealed class InMemoryTenancyStore
         }
     }
 
-    IQueryExecutor HostTenancy.IStore.Queries
+    IQueryExecutor ITenancyStore<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId>.Queries
     {
         get
         {
@@ -226,21 +226,19 @@ public sealed class InMemoryTenancyStore
         return Task.FromResult(_seats.TryGetValue(id, out var seat) && Visible(seat.TenantId) ? LoadedCopy(seat) : null);
     }
 
-    public Task<IReadOnlyList<HostTenancy.TenantListing>> ListTenantsAsync(string? afterSlug, int take, CancellationToken cancellationToken)
+    public Task<IReadOnlyList<TenantManager.TenantListing>> ListTenantsAsync(string? afterSlug, int take, CancellationToken cancellationToken)
     {
-        // Across tenants, as the store's own does: who may ask is the use case's to say.
+        // Across tenants, as the store's own does: who may ask is the manager's to say.
         Record(nameof(ListTenantsAsync));
-        IReadOnlyList<HostTenancy.TenantListing> tenants =
+        IReadOnlyList<TenantManager.TenantListing> tenants =
         [
             .. _tenants.Values
                 .Where(tenant => afterSlug is null || string.CompareOrdinal(tenant.Slug.Value, afterSlug) > 0)
                 .OrderBy(tenant => tenant.Slug.Value, StringComparer.Ordinal)
                 .Take(take)
-                .Select(tenant => new HostTenancy.TenantListing(
-                    tenant.Id,
-                    tenant.Slug.Value,
+                .Select(tenant => new TenantManager.TenantListing(
+                    Copies.Of(tenant),
                     _organizations[tenant.Id].Name,
-                    tenant.Status,
                     _seats.Values.Count(seat => seat.TenantId == tenant.Id && seat.Status == SeatStatus.Active))),
         ];
         return Task.FromResult(tenants);
@@ -364,13 +362,13 @@ public sealed class InMemoryTenancyStore
         return Task.FromResult(open);
     }
 
-    public Task<HostTenancy.InvitationOfToken<InvitationId>?> FindByDigestAsync(byte[] digest, CancellationToken cancellationToken)
+    public Task<InvitationOfToken<InvitationId, TenantId, SeatId>?> FindByDigestAsync(byte[] digest, CancellationToken cancellationToken)
     {
         // Across tenants, as the store's own does: the token is what names the tenant. Ids alone are answered.
         Record(nameof(FindByDigestAsync));
         return Task.FromResult(
             _digests.TryGetValue(Convert.ToHexString(digest), out var id) && _invitations.TryGetValue(id, out var invitation)
-                ? new HostTenancy.InvitationOfToken<InvitationId>(invitation.TenantId, invitation.Id, invitation.IssuedBy)
+                ? new InvitationOfToken<InvitationId, TenantId, SeatId>(invitation.TenantId, invitation.Id, invitation.IssuedBy)
                 : null);
     }
 

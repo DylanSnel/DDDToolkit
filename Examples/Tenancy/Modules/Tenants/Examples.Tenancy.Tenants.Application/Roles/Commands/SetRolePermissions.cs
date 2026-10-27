@@ -18,7 +18,7 @@ public sealed record SetRolePermissions(RoleId Role, IReadOnlyList<string> Permi
 
 /// <summary>Handles <see cref="SetRolePermissions"/> with the Tenancy package's use case, which checks the caller, decides and saves.</summary>
 /// <param name="roles">The package's use cases that change a role.</param>
-public sealed class SetRolePermissionsHandler(TenancyUseCases.RoleCommands roles) : ICommandHandler<SetRolePermissions>
+public sealed class SetRolePermissionsHandler(RoleManager roles) : ICommandHandler<SetRolePermissions>
 {
     /// <inheritdoc />
     /// <exception cref="Exceptions.RefusalException">What the package's use case refuses, with its code.</exception>

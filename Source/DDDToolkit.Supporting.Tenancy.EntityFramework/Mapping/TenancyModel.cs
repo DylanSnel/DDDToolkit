@@ -60,7 +60,7 @@ public static class TenancyModel
     /// <para>
     /// The rows of the read model carry what an access rule reads and no text that is shown to people, so a module
     /// whose model passes cannot show what a seat, a unit or a role is called from its own queries: it answers
-    /// ids, and the names are the directory's. Assert it in a test over every module's model, built for each
+    /// ids, and the names are for Tenancy's managers to answer. Assert it in a test over every module's model, built for each
     /// database the application runs on:
     /// </para>
     /// <code>

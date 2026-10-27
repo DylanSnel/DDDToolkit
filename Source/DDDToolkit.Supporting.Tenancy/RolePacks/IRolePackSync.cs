@@ -9,7 +9,7 @@ namespace DDDToolkit.Supporting.Tenancy;
 /// </code>
 /// <para>
 /// It visits the active and the suspended tenants, one after the other, and in each runs
-/// <c>RoleCommands.FollowPacksAsync</c> as Tenancy's system work in that tenant: it begins that work itself, so
+/// <c>RoleManager.FollowPacksAsync</c> as Tenancy's system work in that tenant: it begins that work itself, so
 /// whoever calls it needs no caller of its own, and what it may do in a tenant is what system work there may.
 /// The events it raises name the system as who made the change. Each tenant is a unit of work of its own: a
 /// tenant whose sync fails is named in the report and left for the next run, and the others go on. A tenant

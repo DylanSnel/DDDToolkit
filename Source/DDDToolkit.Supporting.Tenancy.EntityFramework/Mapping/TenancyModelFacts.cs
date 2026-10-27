@@ -179,7 +179,7 @@ internal sealed class TenancyModelFacts
             {
                 findings.Add(
                     $"{entityType.DisplayName()} has the property {property.Name}, which is no part of Tenancy's read model. The rows carry access facts only: "
-                    + "ids, permissions, periods and statuses, and never a name. Ask the directory for names, by id.");
+                    + "ids, permissions, periods and statuses, and never a name. Ask Tenancy's managers for names, by id.");
             }
 
             foreach (var navigation in entityType.GetNavigations().Cast<IReadOnlyNavigationBase>().Concat(entityType.GetSkipNavigations()))

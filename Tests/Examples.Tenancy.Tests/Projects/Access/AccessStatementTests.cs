@@ -505,7 +505,7 @@ public sealed class AccessStatementTests(SampleHosts hosts) : IClassFixture<Samp
         // Juno holds no role in the organization: whoever works in the tenant reads its names.
         using (AsSeatOf(DemoPeople.Juno))
         {
-            foreach (var padding in new[] { 0, TenancyUseCases.TenancyDirectory.MostIds - Harbor.Seats.Count - 1 })
+            foreach (var padding in new[] { 0, SeatManager.MostIds - Harbor.Seats.Count - 1 })
             {
                 await using var scope = sample.Services.CreateAsyncScope();
                 var sender = scope.ServiceProvider.GetRequiredService<ISender>();

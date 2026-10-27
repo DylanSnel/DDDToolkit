@@ -199,7 +199,7 @@ public partial class RefusalTableTests
         var ada = harness.Administrator;
         var watcher = harness.RoleFromPack(HostCatalogue.WatcherPack);
         var tooLong = new string('x', 1001);
-        var tooMany = Enumerable.Range(0, HostTenancy.TenancyDirectory.MostIds + 1).Select(_ => SeatId.CreateSequential()).ToArray();
+        var tooMany = Enumerable.Range(0, SeatManager.MostIds + 1).Select(_ => SeatId.CreateSequential()).ToArray();
 
         async Task<IReadOnlyDictionary<string, object?>> Refusing(string code, Func<Harness, Task> act)
             => (await Refused.WithCodeAsync(code, () => harness.BySystemWork(act))).Arguments;
@@ -217,19 +217,19 @@ public partial class RefusalTableTests
         // Each code through a use case, as a caller meets it. A name is refused under one code for five inputs.
         var thrown = new List<(string Code, string Field, IReadOnlyDictionary<string, object?> Arguments)>
         {
-            (TenancyRefusals.NameInvalid, "name", await Refusing(TenancyRefusals.NameInvalid, h => h.Tenants.RenameOrganizationAsync(" ", default))),
+            (TenancyRefusals.NameInvalid, "name", await Refusing(TenancyRefusals.NameInvalid, h => h.Organization.RenameAsync(" ", default))),
             (TenancyRefusals.NameInvalid, "name", await Refusing(TenancyRefusals.NameInvalid, h => h.Organization.RenameUnitAsync(harness.Harbor.North, " ", default))),
             (TenancyRefusals.NameInvalid, "name", await Refusing(TenancyRefusals.NameInvalid, h => h.Roles.CreateAsync(" ", "Files widgets", [], default))),
             (TenancyRefusals.NameInvalid, "description", await Refusing(TenancyRefusals.NameInvalid, h => h.Roles.CreateAsync("Clerk", tooLong, [], default))),
-            (TenancyRefusals.NameInvalid, "reason", await Refusing(TenancyRefusals.NameInvalid, h => h.Seats.GrantAsync(ada, root, watcher, until: null, tooLong, default))),
+            (TenancyRefusals.NameInvalid, "reason", await Refusing(TenancyRefusals.NameInvalid, h => h.Seats.GrantAsync(ada, watcher, root, until: null, tooLong, default))),
             (TenancyRefusals.NameInvalid, "reason", await Refusing(TenancyRefusals.NameInvalid, h => h.Tenants.SuspendAsync(tooLong, default))),
-            (TenancyRefusals.InvalidPeriod, "until", await Refusing(TenancyRefusals.InvalidPeriod, h => h.Seats.GrantAsync(ada, root, watcher, until: h.Clock.Now, reason: null, default))),
+            (TenancyRefusals.InvalidPeriod, "until", await Refusing(TenancyRefusals.InvalidPeriod, h => h.Seats.GrantAsync(ada, watcher, root, until: h.Clock.Now, reason: null, default))),
             (TenancyRefusals.ReasonRequired, "reason", await Refusing(TenancyRefusals.ReasonRequired, h => h.Tenants.CloseAsync(" ", default))),
             (TenancyRefusals.UnknownPermission, "permissions", await Refusing(TenancyRefusals.UnknownPermission, h => h.Roles.CreateAsync("Clerk", "Files widgets", ["widget.polish"], default))),
-            (TenancyRefusals.IdentityRequired, "identity", await Refusing(TenancyRefusals.IdentityRequired, h => h.Seats.AddSeatAsync(Guid.Empty, default))),
-            (TenancyRefusals.TooManyIds, "ids", await Refusing(TenancyRefusals.TooManyIds, h => h.Directory.SeatsByIdAsync(tooMany, default))),
-            (TenancyRefusals.PageSizeInvalid, "size", await RefusingAnOperator(TenancyRefusals.PageSizeInvalid, h => h.TenantDirectory.ListAsync(after: null, size: 0, default))),
-            (TenancyRefusals.CursorInvalid, "after", await RefusingAnOperator(TenancyRefusals.CursorInvalid, h => h.TenantDirectory.ListAsync(after: "not a marker", size: 50, default))),
+            (TenancyRefusals.IdentityRequired, "identity", await Refusing(TenancyRefusals.IdentityRequired, h => h.Seats.AddAsync(Guid.Empty, default))),
+            (TenancyRefusals.TooManyIds, "ids", await Refusing(TenancyRefusals.TooManyIds, h => h.Seats.ByIdAsync(tooMany, default))),
+            (TenancyRefusals.PageSizeInvalid, "size", await RefusingAnOperator(TenancyRefusals.PageSizeInvalid, h => h.Tenants.ListAsync(after: null, size: 0, default))),
+            (TenancyRefusals.CursorInvalid, "after", await RefusingAnOperator(TenancyRefusals.CursorInvalid, h => h.Tenants.ListAsync(after: "not a marker", size: 50, default))),
             (TenancyRefusals.AddressInvalid, "address", await Refusing(TenancyRefusals.AddressInvalid, h => h.Invitations.IssueAsync("nobody", root, watcher, null, null, default))),
             (TenancyRefusals.InvitationLifetime, "lifetime", await Refusing(TenancyRefusals.InvitationLifetime, h => h.Invitations.IssueAsync("wren@example.test", root, watcher, null, TimeSpan.FromMinutes(1), default))),
             (TenancyRefusals.InvitationGrantEndsFirst, "grantUntil", await Refusing(TenancyRefusals.InvitationGrantEndsFirst, h => h.Invitations.IssueAsync("wren@example.test", root, watcher, h.Clock.Now.AddDays(1), null, default))),
@@ -237,7 +237,7 @@ public partial class RefusalTableTests
 
         // A slug is a value object, so a wrong one is a validation failure with the same code, and it names its input too.
         var slug = (await FluentActions.Awaiting(() => harness.Run(HostCaller.System, h => h.Tenants.ProvisionAsync(
-                new HostTenancy.TenantToProvision("-wharf", "Wharf", TenantShape.Flat, "Wharf", Guid.NewGuid()), default)))
+                new TenantToProvision("-wharf", "Wharf", TenantShape.Flat, "Wharf", Guid.NewGuid()), default)))
             .Should().ThrowAsync<InvalidValueObjectException>()).Which.Errors.Should().ContainSingle().Which;
         slug.Code.Should().Be(TenancyRefusals.InvalidSlug);
         thrown.Add((TenancyRefusals.InvalidSlug, "slug", slug.Arguments));

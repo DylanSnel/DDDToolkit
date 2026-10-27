@@ -46,22 +46,18 @@ public sealed class Harness
     /// <summary>The packs' texts in a tenant's language, as an application registers them; none unless a test sets them.</summary>
     public IRolePackTexts? PackTexts { get; set; }
 
-    public HostTenancy.TenantCommands Tenants => new(Store, Catalogue, Clock, PackTexts);
+    /// <summary>The tenants, whose list asks the toolkit's own caller: the one <c>Callers.Begin</c> made current.</summary>
+    public TenantManager Tenants => new(Store, Catalogue, Clock, Options, new DDDToolkit.Access.AmbientCallerAccessor(), PackTexts);
 
-    public HostTenancy.OrganizationCommands Organization => new(Store, Catalogue, Clock);
+    public OrganizationManager Organization => new(Store, Catalogue, Clock);
 
-    public HostTenancy.SeatCommands Seats => new(Store, Catalogue, Clock);
+    public SeatManager Seats => new(Store, Catalogue, Clock);
 
-    public HostTenancy.RoleCommands Roles => new(Store, Catalogue, Clock);
-
-    public HostTenancy.TenancyDirectory Directory => new(Store, Catalogue, Clock);
+    public HostRoleManager Roles => new(Store, Catalogue, Clock);
 
     /// <summary>The invitations, which ask the toolkit's own caller who accepts: the one <c>Callers.Begin</c> made current.</summary>
-    public HostTenancy.InvitationCommands<HostInvitation, InvitationId> Invitations
+    public InvitationManager Invitations
         => new(Store, Store, Catalogue, Options, InvitationOptions, new DDDToolkit.Access.AmbientCallerAccessor(), Clock);
-
-    /// <summary>The tenants' directory, which asks the toolkit's own caller: the one <c>Callers.Begin</c> made current.</summary>
-    public HostTenancy.TenantDirectory TenantDirectory => new(Store, Options, new DDDToolkit.Access.AmbientCallerAccessor());
 
     /// <summary>Harbor, saved, with the catalogue given or the host's.</summary>
     public static Harness OfHarbor(TenancyCatalogue? catalogue = null)
@@ -124,7 +120,7 @@ public sealed class Harness
     /// Tenancy caller: the toolkit's caller is all there is, as in a request, in a new unit of work. The new seat is
     /// given <paramref name="displayName"/> in the use case's callback, as the host application names its seats.
     /// </summary>
-    public async Task<HostTenancy.AcceptedInvitation> Accept(Guid identity, string token, string? displayName = "Wren", string? verifiedAddress = null)
+    public async Task<InvitationManager.AcceptedInvitation> Accept(Guid identity, string token, string? displayName = "Wren", string? verifiedAddress = null)
     {
         using (DDDToolkit.Access.Callers.Begin(DDDToolkit.Abstractions.Access.Caller.User(identity)))
         {
@@ -140,7 +136,7 @@ public sealed class Harness
     /// </summary>
     public async Task<SeatId> SeatAt(string displayName, OrganizationUnitId unit, params string[] packs)
     {
-        var seat = await BySystemWork(harness => harness.Seats.AddSeatAsync(Guid.NewGuid(), default, configure: added => added.Rename(displayName)));
+        var seat = (await BySystemWork(harness => harness.Seats.AddAsync(Guid.NewGuid(), default, configure: made => made.Rename(displayName)))).Id;
         await BySystemWork(harness => harness.Seats.PlaceAsync(seat, unit, primary: true, default));
         foreach (var pack in packs)
         {
@@ -156,5 +152,5 @@ public sealed class Harness
 
     /// <summary>Grants a seat of Harbor the role of a pack at a unit where it is placed, by system work.</summary>
     public Task Grant(SeatId seat, OrganizationUnitId unit, string pack, DateTimeOffset? until = null, DateTimeOffset? from = null)
-        => BySystemWork(harness => harness.Seats.GrantAsync(seat, unit, RoleFromPack(pack), until, reason: null, default, from));
+        => BySystemWork(harness => harness.Seats.GrantAsync(seat, RoleFromPack(pack), unit, until, reason: null, default, from));
 }

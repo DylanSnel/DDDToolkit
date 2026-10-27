@@ -1,3 +1,4 @@
+using Examples.Tenancy.Tenants.Application.Invitations;
 using Examples.Tenancy.Tenants.Application.Invitations.Commands;
 using HotChocolate;
 using HotChocolate.Types;
@@ -22,7 +23,7 @@ internal static class InvitationsMutations
     /// invitation's token, and it says nothing of whether the address had an account.
     /// </summary>
     [Mutation]
-    public static async Task<TenancyUseCases.IssuedInvitation<InvitationId>> PersonInviteAsync(
+    public static async Task<IssuedInvitationListing> PersonInviteAsync(
         string address,
         OrganizationUnitId unitId,
         RoleId roleId,

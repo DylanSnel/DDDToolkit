@@ -11,7 +11,7 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 /// parameters. They run as their caller, so what a caller may read of Tenancy's tables decides their rows: a
 /// seat its own rights and the rest of its tenant, system work in a tenant all of that tenant. A status is
 /// answered as the name of its enum member. They answer access facts only, exactly the columns listed here:
-/// none answers what a seat, a unit or a role is called, which the directory answers by id.
+/// none answers what a seat, a unit or a role is called, which Tenancy's managers answer by id.
 /// </para>
 /// <para>
 /// The next three answer a seat what it may learn of other seats' rights, the one after them what the units it asks

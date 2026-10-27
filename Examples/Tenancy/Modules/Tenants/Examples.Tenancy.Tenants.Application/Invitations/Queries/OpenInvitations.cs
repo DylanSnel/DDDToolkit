@@ -13,14 +13,14 @@ namespace Examples.Tenancy.Tenants.Application.Invitations.Queries;
 /// was issued.
 /// </remarks>
 [InTenant]
-public sealed record OpenInvitations : IQuery<IReadOnlyList<TenancyUseCases.OpenInvitation<InvitationId>>>, ITenantsRequest;
+public sealed record OpenInvitations : IQuery<IReadOnlyList<OpenInvitationListing>>, ITenantsRequest;
 
 /// <summary>Answers <see cref="OpenInvitations"/> from the Tenancy package, which checks the caller and reads.</summary>
 /// <param name="reads">Where Tenancy is read.</param>
-public sealed class OpenInvitationsHandler(ITenancyReads reads) : IQueryHandler<OpenInvitations, IReadOnlyList<TenancyUseCases.OpenInvitation<InvitationId>>>
+public sealed class OpenInvitationsHandler(ITenancyReads reads) : IQueryHandler<OpenInvitations, IReadOnlyList<OpenInvitationListing>>
 {
     /// <inheritdoc />
     /// <exception cref="Exceptions.RefusalException">What the package refuses, with its code.</exception>
-    public async ValueTask<IReadOnlyList<TenancyUseCases.OpenInvitation<InvitationId>>> Handle(OpenInvitations query, CancellationToken cancellationToken)
-        => await reads.OpenInvitationsAsync(cancellationToken);
+    public async ValueTask<IReadOnlyList<OpenInvitationListing>> Handle(OpenInvitations query, CancellationToken cancellationToken)
+        => [.. (await reads.OpenInvitationsAsync(cancellationToken)).Select(OpenInvitationListing.From)];
 }

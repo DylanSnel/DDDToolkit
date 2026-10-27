@@ -13,21 +13,21 @@ namespace DDDToolkit.Analyzers.Common;
 /// <summary>
 /// Closes the generic classes packages name with <c>[assembly: TemplateFacade]</c> over the classes a project
 /// declares with their templates, as a class of the project's own, named as the package's class is without its type
-/// parameters, that derives from it: Tenancy's <c>TenancyUseCases&lt;...&gt;</c> gives <c>TenancyUseCases</c>, and
-/// every project that references the project writes <c>TenancyUseCases.SeatCommands</c> rather than nine type
-/// arguments.
+/// parameters, that derives from it: Tenancy's <c>SeatManager&lt;...&gt;</c> gives <c>SeatManager</c>, and
+/// every project that references the project takes a <c>SeatManager</c> rather than writing nine type arguments.
 /// <para>
-/// <b>A name, not a second type.</b> C# finds a type nested in a class through every class that derives from it,
-/// so <c>TenancyUseCases.SeatOverview</c> is the package's own nested type, closed over the module's classes: the
-/// type the package's registration added to the container, the one reflection and the compiler's messages show,
-/// with the package's documentation. The class is abstract with a private constructor: nothing makes one, and
-/// nothing derives from it.
+/// <b>The package's own types.</b> C# finds a type nested in a class through every class that derives from it,
+/// so <c>SeatManager.SeatOverview</c> is the package's own nested type, closed over the module's classes: the one
+/// reflection and the compiler's messages show, with the package's documentation. The package's class decides what the
+/// application's is: a sealed class the container makes for a class that is not abstract, a sealed record the
+/// application's code makes for a record, and an abstract class with a private constructor, a name alone, for an
+/// abstract class.
 /// </para>
 /// <para>
 /// <b>Why not a global alias.</b> An alias holds in the project that declares it and no further, so it would be
 /// written into every project, each one paying for the work on every edit. And a generator's output is seen by the
 /// compiler but not by the project's other generators: HotChocolate's, reading
-/// <c>[ObjectType&lt;TenancyUseCases.PermissionReach&gt;]</c> in an API project, would find no such name and write code
+/// <c>[ObjectType&lt;SeatManager.PermissionReach&gt;]</c> in an API project, would find no such name and write code
 /// that does not compile. The class is written once, in the project that declares the classes, and reaches every
 /// project above it through the reference, where the generators read it like any other type. A class of its own
 /// that wrapped the package's could not do this either: the records nested in the package's class are the package's,
@@ -37,10 +37,10 @@ namespace DDDToolkit.Analyzers.Common;
 /// <b>Not in the project that writes it.</b> There the same holds for the class itself: it is a generator's output,
 /// so another generator of that project does not see it, in an attribute or in a method's signature, whose types
 /// it reads from the code as written. Mediator's writes the name as it is spelled, which compiles; HotChocolate's
-/// does not know the type, and writes <c>typeof(TenancyUseCases.RoleSummary?)</c> for a resolver that may answer
+/// does not know the type, and writes <c>typeof(SeatManager.SeatOverview?)</c> for a resolver that may answer
 /// nothing, which does not. A module split by layer names the records in such code in its API project, above the
 /// domain project, where all is well. A module of one project keeps an alias of exactly that name there,
-/// <c>global using TenancyUseCases = ...;</c>, which every generator of that project reads; the generator then
+/// <c>global using SeatManager = ...;</c>, which every generator of that project reads; the generator then
 /// stands back for it, and nothing else changes.
 /// </para>
 /// <para>
@@ -56,7 +56,7 @@ namespace DDDToolkit.Analyzers.Common;
 /// <b>Its name.</b> The package's class's, without the type parameters: the one name the package's documentation
 /// uses, whatever the module is called, and no clash with the package's class, which C# tells apart by its type
 /// parameters. The project that declares the classes may give it another with
-/// <c>[assembly: TemplateFacadeName("TenancyUseCases", "CustomersTenancy")]</c>, which names the class by the
+/// <c>[assembly: TemplateFacadeName("SeatManager", "CustomersSeatManager")]</c>, which names the class by the
 /// package's name for it, or by its full name where two packages' classes share one; a module whose classes are split
 /// over two projects may say it in either, and the project that writes the class reads it in the projects of its
 /// module it takes classes from. The class is written once, so every project that sees it calls it the same. It is
@@ -386,6 +386,13 @@ internal static class TemplateFacades
                 continue;
             }
 
+            // A class over a template an application may leave out is for the projects that have its class: one without
+            // gets nothing and hears nothing.
+            if (OnlyWithOf(type) is { } only && takes.FirstOrDefault(take => take.Key == only) is { } optional && CandidatesFor(optional).Count == 0)
+            {
+                continue;
+            }
+
             // A line of this project names the class; so does one in a project of its module it takes classes from: a
             // module whose classes are split over two projects says it beside the module in either, and the class is
             // written in the second. A second name for one class changes nothing, and is told.
@@ -643,6 +650,7 @@ internal static class TemplateFacades
             {
                 Namespace = space,
                 IsService = !type.IsAbstract,
+                IsRecord = type.IsRecord,
                 Constructors = constructors.ToEquatableArray(),
             },
             Diagnostic: null);
@@ -823,10 +831,10 @@ internal static class TemplateFacades
             ? "the one '" + written.ContainingAssembly.Name + "' has for the module " + module
             : "the one '" + written.ContainingAssembly.Name + "' has";
 
-    /// <summary>The line that names a class, written out: <c>[assembly: TemplateFacadeName("TenancyUseCases", "CustomersTenancyUseCases")]</c>.</summary>
+    /// <summary>The line that names a class, written out: <c>[assembly: TemplateFacadeName("SeatManager", "CustomersSeatManager")]</c>.</summary>
     private static string NameLine(string facade, string name) => "[assembly: TemplateFacadeName(\"" + facade + "\", \"" + name + "\")]";
 
-    /// <summary>The package's class as the application writes it in a typeof: <c>TenancyUseCases&lt;,,,,,,,,&gt;</c>, with its namespace.</summary>
+    /// <summary>The package's class as the application writes it in a typeof: <c>SeatManager&lt;,,,,,,,,&gt;</c>, with its namespace.</summary>
     private static string OpenName(INamedTypeSymbol type) => FullName(type) + "<" + new string(',', type.Arity - 1) + ">";
 
     /// <summary>The package's class with its namespace and the classes it is nested in, without type parameters: what a line names where two packages' classes share a name.</summary>
@@ -1082,6 +1090,18 @@ internal static class TemplateFacades
         return asked.ToArray();
     }
 
+    /// <summary>
+    /// The template the package's <c>[assembly: TemplateFacade(typeof(...), OnlyWith = ...)]</c> names for the class, as
+    /// a template's key is written; null when it names none.
+    /// </summary>
+    private static string? OnlyWithOf(INamedTypeSymbol type)
+        => TemplateRegistrations.OnlyWithIn(
+            type.ContainingAssembly.GetAttributes(),
+            KnownTypes.TemplateFacadeAttribute,
+            attribute => attribute.ConstructorArguments.Length == 1
+                         && attribute.ConstructorArguments[0].Value is INamedTypeSymbol named
+                         && SymbolEqualityComparer.Default.Equals(named.OriginalDefinition, type.OriginalDefinition));
+
     private static bool InAGenericType(INamedTypeSymbol type)
     {
         for (var outer = type.ContainingType; outer is not null; outer = outer.ContainingType)
@@ -1134,7 +1154,7 @@ internal static class TemplateFacades
 }
 
 /// <summary>What one class a package asks for comes to in a project: the file the generator writes, or what is said instead.</summary>
-/// <param name="Name">What the class is called, <c>TenancyUseCases</c>.</param>
+/// <param name="Name">What the class is called, <c>SeatManager</c>.</param>
 /// <param name="File">The file, or null when the class is not written.</param>
 /// <param name="Diagnostic">
 /// What is said: DDD00065 for why the class is not written, DDD00075 for two classes of one name, DDD00076 for a line
@@ -1143,8 +1163,8 @@ internal static class TemplateFacades
 internal sealed record FacadeOutcome(string Name, FacadeFile? File, DiagnosticInfo? Diagnostic);
 
 /// <summary>One class a project gets: the file the generator writes.</summary>
-/// <param name="HintName">The file's name, <c>TenancyUseCases.TemplateFacade.g.cs</c>.</param>
-/// <param name="Name">What the class is called, <c>TenancyUseCases</c>.</param>
+/// <param name="HintName">The file's name, <c>SeatManager.TemplateFacade.g.cs</c>.</param>
+/// <param name="Name">What the class is called, <c>SeatManager</c>.</param>
 /// <param name="IsPublic">Whether it is public; otherwise internal, as far as an internal class it is closed over reaches.</param>
 /// <param name="BaseType">The package's class closed over the application's, fully qualified.</param>
 /// <param name="Summary">What it is closed over, for its documentation, escaped for XML.</param>
@@ -1156,6 +1176,9 @@ internal sealed record FacadeFile(string HintName, string Name, bool IsPublic, s
 
     /// <summary>Whether it is a class the container makes, sealed with constructors, rather than a name alone.</summary>
     public bool IsService { get; init; }
+
+    /// <summary>Whether it is a record the application's code makes, sealed with constructors, rather than a class the container makes.</summary>
+    public bool IsRecord { get; init; }
 
     /// <summary>The constructors of a class the container makes.</summary>
     public EquatableArray<FacadeConstructor> Constructors { get; init; } = EquatableArray<FacadeConstructor>.Empty;

@@ -51,7 +51,7 @@ public static class TenancyModelBuilderExtensions
     /// <para>
     /// The views of the read model carry access facts only, here as in a module's model: ids, permissions, periods,
     /// statuses, a unit's parent, and a role's pack and permissions. What a seat, a unit or a role is called is read
-    /// from the tables themselves, by the directory (<c>TenancyDirectory</c>), which answers names by id.
+    /// from the tables themselves, by the managers' reads, which answer names by id.
     /// </para>
     /// <para>
     /// Pass the context's <c>Database</c> as well, <c>modelBuilder.AddTenancy(database: Database)</c>, and two
@@ -205,7 +205,7 @@ public static class TenancyModelBuilderExtensions
     /// <para>
     /// The rows are access facts: ids, permissions, periods, statuses, a unit's parent, and a role's pack and permissions. None
     /// has a name, so a module that maps them cannot show what a seat, a unit or a role is called: it answers
-    /// ids, and whoever shows them asks Tenancy's directory for the names, by id.
+    /// ids, and whoever shows them asks Tenancy's managers for the names, by id.
     /// <see cref="TenancyModel.ReadsBeyondAccessFacts"/> finds a module's model that maps more of Tenancy's than
     /// these rows.
     /// </para>
@@ -279,7 +279,7 @@ public static class TenancyModelBuilderExtensions
     /// </para>
     /// <para>
     /// As with the views, the rows are access facts and none has a name: the functions answer no column a seat, a
-    /// unit or a role is called by, and names are asked of Tenancy's directory, by id.
+    /// unit or a role is called by, and names are asked of Tenancy's managers, by id.
     /// </para>
     /// <para>
     /// Use it where the database keeps the rights (<see cref="TenancyStoreOptions.DatabaseKeepsRights"/>); on

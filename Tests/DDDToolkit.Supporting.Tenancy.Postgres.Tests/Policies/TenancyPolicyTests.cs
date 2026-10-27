@@ -430,12 +430,12 @@ public abstract class TenancyPolicyTests(TenancyPostgres postgres, TenancyNaming
                 async Task<object[]> ReadAsync(TenancyServices over)
                     => await over.BySeat(person.Identity, Harbor, person.Seat, async scoped => new object[]
                     {
-                        (await scoped.Directory().WhoAmIAsync(Cancellation)) with { AsOf = default },
-                        (await scoped.Directory().ListSeatsAsync(Cancellation))
+                        (await scoped.Seats().WhoAmIAsync(Cancellation)) with { AsOf = default },
+                        (await scoped.Seats().ListAsync(Cancellation))
                             .Select(seat => new { seat.Id, seat.Identity, seat.Status, seat.DisplayName, Placements = seat.Placements.Select(placement => new { placement.UnitId, placement.IsPrimary }).ToList() })
                             .ToList(),
-                        await scoped.Directory().ListRolesAsync(Cancellation),
-                        await scoped.Directory().ListUnitsAsync(Cancellation),
+                        await scoped.Roles().ListAsync(Cancellation),
+                        await scoped.Organization().ListUnitsAsync(Cancellation),
                     });
 
                 var read = await ReadAsync(services);

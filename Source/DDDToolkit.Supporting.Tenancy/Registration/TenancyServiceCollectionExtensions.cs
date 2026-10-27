@@ -19,15 +19,15 @@ namespace DDDToolkit.Supporting.Tenancy;
 public static class TenancyServiceCollectionExtensions
 {
     /// <summary>
-    /// Registers the catalogue, the access manager, tenant selection and the use cases, everything except the store and
+    /// Registers the catalogue, the access manager, tenant selection and the managers, everything except the store and
     /// the seat directory.
     /// <list type="bullet">
     /// <item>The catalogue is built once, from <see cref="TenancyOptions{TTenantId, TSeatId, TUnitId, TRoleId}.Catalogue"/>,
     /// or from none when it is not set, and every <see cref="PermissionContribution"/>, the first time it is asked
     /// for; resolve it at start-up to have a catalogue that does not hold together stop the application there.</item>
     /// <item>The access manager, <see cref="TenancyAccessManager{TTenantId, TSeatId, TUnitId, TRoleId}"/>, selection and the
-    /// use cases are made per scope. The storage package's <c>AddTenancy</c> registers the application's own
-    /// <c>TenancyAccessManager</c> beside it. Selection is registered without its id types as well, <see cref="ITenantSelection"/>,
+    /// managers are made per scope. The storage package's <c>AddTenancy</c> registers the application's own
+    /// <c>TenancyAccessManager</c>, <c>TenantManager</c>, <c>OrganizationManager</c>, <c>SeatManager</c> and <c>RoleManager</c> beside them. Selection is registered without its id types as well, <see cref="ITenantSelection"/>,
     /// the same instance, unless a host registered its own before: that one stays.</item>
     /// <item>The toolkit's caller accessor a host registered before stays; otherwise the ambient caller is read.</item>
     /// <item>What the caller's own seat is, for a request about it (<c>[OrOwn] SeatId Seat</c>, <c>TenancyAccess.Own(seat)</c>):
@@ -73,8 +73,8 @@ public static class TenancyServiceCollectionExtensions
         services.AddSingleton(new TenancyOperatorTokenRoles(options.OperatorTokenRoles));
         services.TryAddSingleton(TimeProvider.System);
 
-        // Who is calling, for the one use case that asks the toolkit's own caller: the tenants' directory, which is
-        // an operator's. A host that knows its callers registered its own already.
+        // Who is calling, for the reads and the commands that ask the toolkit's own caller: the operators' tenant list and
+        // accepting an invitation. A host that knows its callers registered its own already.
         services.TryAddSingleton<ICallerAccessor, AmbientCallerAccessor>();
         services.AddSingleton(serviceProvider => TenancyCatalogue.Build(
             options.Catalogue ?? new ApplicationCatalogue(),
@@ -91,21 +91,21 @@ public static class TenancyServiceCollectionExtensions
         // own already, and that one stays.
         services.TryAddScoped<ITenantSelection>(serviceProvider => serviceProvider.GetRequiredService<TenantSelection<TTenantId, TSeatId>>());
 
-        services.AddScoped<TenancyUseCases<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>.TenantCommands>();
-        services.AddScoped<TenancyUseCases<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>.OrganizationCommands>();
-        services.AddScoped<TenancyUseCases<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>.SeatCommands>();
-        services.AddScoped<TenancyUseCases<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>.RoleCommands>();
-        services.AddScoped<TenancyUseCases<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>.TenancyDirectory>();
-        services.AddScoped<TenancyUseCases<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>.TenantDirectory>();
+        // The managers, closed over the application's classes. The storage package's AddTenancy registers the application's
+        // own beside them, the classes the generator writes, which code takes.
+        services.TryAddScoped<TenantManager<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>>();
+        services.TryAddScoped<OrganizationManager<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>>();
+        services.TryAddScoped<SeatManager<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>>();
+        services.TryAddScoped<RoleManager<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>>();
 
         return services;
     }
 
     /// <summary>
-    /// Registers the invitation use cases, closed over the application's invitation class, for an application
+    /// Registers the invitation manager, closed over the application's invitation class, for an application
     /// that invites people into a tenant: everything of invitations except their store, which the storage package
     /// registers; that package calls this itself. Call it after <see cref="AddTenancyCore"/>, which registers what
-    /// the use cases share: the catalogue, the options, the clock and who is calling.
+    /// the managers share: the catalogue, the options, the clock and who is calling.
     /// </summary>
     /// <param name="services">The service collection.</param>
     /// <param name="configure">Changes how long an invitation stays open, which has defaults; leave it out to keep them.</param>
@@ -141,7 +141,7 @@ public static class TenancyServiceCollectionExtensions
         }
 
         services.AddSingleton(options);
-        services.AddScoped<TenancyUseCases<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>.InvitationCommands<TInvitation, TInvitationId>>();
+        services.TryAddScoped<InvitationManager<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId, TInvitation, TInvitationId>>();
         return services;
     }
 

@@ -26,13 +26,13 @@ public class OperatorTests
     }
 
     /// <summary>Asks for a page as <paramref name="caller"/>, the way a request does: nobody to Tenancy, whoever it is to the toolkit.</summary>
-    private static async Task<HostTenancy.TenantDirectoryPage> Page(Harness harness, Caller? caller, string? after = null, int size = 50)
+    private static async Task<TenantManager.TenantPage> Page(Harness harness, Caller? caller, string? after = null, int size = 50)
     {
         using (caller is null ? null : Callers.Begin(caller))
         using (TenancyCallers.Begin(HostCaller.Nobody(TenancyRefusals.NotSeated)))
         {
             harness.Store.BeginUnitOfWork();
-            return await harness.TenantDirectory.ListAsync(after, size, default);
+            return await harness.Tenants.ListAsync(after, size, default);
         }
     }
 
@@ -92,22 +92,23 @@ public class OperatorTests
 
         // By slug, whatever order the tenants were made in, and a page holds what it was asked to.
         var first = await Page(harness, odette, size: 2);
-        first.Items.Select(tenant => tenant.Slug).Should().Equal("anvil", "harbor");
+        first.Items.Select(tenant => tenant.Tenant.Slug.Value).Should().Equal("anvil", "harbor");
         first.Next.Should().NotBeNull("a tenant comes after these two");
 
         var second = await Page(harness, odette, first.Next, size: 2);
-        second.Items.Select(tenant => tenant.Slug).Should().Equal("quarry");
+        second.Items.Select(tenant => tenant.Tenant.Slug.Value).Should().Equal("quarry");
         second.Next.Should().BeNull("the last page has nothing after it");
 
         // A page that ends on the last tenant says so as well: no empty page follows it.
         var whole = await Page(harness, odette, size: 3);
-        whole.Items.Select(tenant => tenant.Slug).Should().Equal("anvil", "harbor", "quarry");
+        whole.Items.Select(tenant => tenant.Tenant.Slug.Value).Should().Equal("anvil", "harbor", "quarry");
         whole.Next.Should().BeNull();
 
         // Each with its organization's name, its status, and how many of its seats are active: Ada and Bert, not Cy.
-        var harbor = whole.Items.Single(tenant => tenant.Slug == "harbor");
-        harbor.Should().Be(new HostTenancy.TenantListing(harness.Tenant, "harbor", "Harbor Works", TenantStatus.Active, ActiveSeats: 2));
-        whole.Items.Single(tenant => tenant.Slug == "quarry").Should().Be(new HostTenancy.TenantListing(new TenantId(2), "quarry", "Harbor Works", TenantStatus.Active, ActiveSeats: 1));
+        var harbor = whole.Items.Single(tenant => tenant.Tenant.Slug.Value == "harbor");
+        (harbor.Tenant.Id, harbor.Tenant.Slug.Value, harbor.Name, harbor.Tenant.Status, harbor.ActiveSeats).Should().Be((harness.Tenant, "harbor", "Harbor Works", TenantStatus.Active, 2));
+        var quarry = whole.Items.Single(tenant => tenant.Tenant.Slug.Value == "quarry");
+        (quarry.Tenant.Id, quarry.Name, quarry.Tenant.Status, quarry.ActiveSeats).Should().Be((new TenantId(2), "Harbor Works", TenantStatus.Active, 1));
         harness.Store.Seat(bert).Status.Should().Be(SeatStatus.Active);
 
         // The marker is the directory's own: it names no tenant to whoever holds it, and the same one gives the same page.
@@ -121,7 +122,7 @@ public class OperatorTests
         var harness = ThreeTenants();
         var odette = Caller.User(Odette, OperatorRole);
 
-        HostTenancy.TenantDirectory.MostPerPage.Should().Be(200);
+        TenantManager.MostPerPage.Should().Be(200);
         foreach (var size in new[] { 0, -1, 201, int.MaxValue })
         {
             var refusal = await Refused.WithCodeAsync(TenancyRefusals.PageSizeInvalid, () => Page(harness, odette, size: size));
@@ -152,7 +153,7 @@ public class OperatorTests
 
         // A marker for a slug no tenant has is still a marker: the page starts after where that tenant would be.
         var first = await Page(harness, odette, size: 1);
-        (await Page(harness, odette, first.Next)).Items.Select(tenant => tenant.Slug).Should().Equal("harbor", "quarry");
+        (await Page(harness, odette, first.Next)).Items.Select(tenant => tenant.Tenant.Slug.Value).Should().Equal("harbor", "quarry");
     }
 
     [Fact]

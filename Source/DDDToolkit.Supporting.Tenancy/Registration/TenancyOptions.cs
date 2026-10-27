@@ -45,7 +45,7 @@ public sealed class TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId>
     /// <para>
     /// An operator holds no seat. Its token role is never one of <see cref="TenantSelectionOptions.SeatedTokenRoles"/>,
     /// so tenant selection answers nobody for it whatever tenant the request names, and registration refuses a
-    /// role that is on both lists. An operator reads: the tenants, through <c>TenantDirectory</c>, and on Postgres
+    /// role that is on both lists. An operator reads: the tenants, through <c>TenantManager</c>, and on Postgres
     /// whatever the policies of its own database role let it read. It changes nothing itself: what it asks for is
     /// carried out by system work that names it (<see cref="TenancyWork.BeginOperator"/> and
     /// <see cref="TenancyWork.BeginOperatorIn"/>).

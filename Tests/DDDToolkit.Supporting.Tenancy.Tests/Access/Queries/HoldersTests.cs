@@ -79,21 +79,21 @@ public class HoldersTests
         // tenant only.
         foreach (var permission in new[] { TenancyPermissions.GrantsManage, TenancyPermissions.SeatsManage, TenancyPermissions.UnitsManage })
         {
-            var desk = await _harness.BySystemWork(h => h.Roles.CreateAsync("Desk for " + permission, string.Empty, [permission], default));
+            var desk = (await _harness.BySystemWork(h => h.Roles.CreateAsync("Desk for " + permission, string.Empty, [permission], default))).Id;
             var keeper = await _harness.SeatAt("Keeper of " + permission, South);
-            await _harness.BySystemWork(h => h.Seats.GrantAsync(keeper, South, desk, until: null, reason: null, default));
+            await _harness.BySystemWork(h => h.Seats.GrantAsync(keeper, desk, South, until: null, reason: null, default));
             Holders(_harness.SeatCaller(keeper), HostCatalogue.WidgetRead, South).Should().Equal([di], "{0} is held at South, and Ada's grant is at the root", permission);
             Holders(_harness.SeatCaller(keeper), HostCatalogue.WidgetRead, NorthCoast).Should().BeEmpty("{0} is held at South alone", permission);
         }
 
-        var roles = await _harness.BySystemWork(h => h.Roles.CreateAsync("Roles desk", string.Empty, [TenancyPermissions.RolesManage], default));
+        var roles = (await _harness.BySystemWork(h => h.Roles.CreateAsync("Roles desk", string.Empty, [TenancyPermissions.RolesManage], default))).Id;
         var below = await _harness.SeatAt("Ed", North);
-        await _harness.BySystemWork(h => h.Seats.GrantAsync(below, North, roles, until: null, reason: null, default));
+        await _harness.BySystemWork(h => h.Seats.GrantAsync(below, roles, North, until: null, reason: null, default));
         Holders(_harness.SeatCaller(below), HostCatalogue.WidgetRead, NorthCoast).Should().BeEmpty("the role permission held below the root changes no role");
         Holders(_harness.SeatCaller(below), TenancyPermissions.RolesManage, NorthCoast).Should().Equal(below);
 
         var whole = await _harness.SeatAt("Fay", _harness.Harbor.Root);
-        await _harness.BySystemWork(h => h.Seats.GrantAsync(whole, _harness.Harbor.Root, roles, until: null, reason: null, default));
+        await _harness.BySystemWork(h => h.Seats.GrantAsync(whole, roles, _harness.Harbor.Root, until: null, reason: null, default));
         Holders(_harness.SeatCaller(whole), HostCatalogue.WidgetRead, NorthCoast).Should().BeEquivalentTo([ada, bert, cy]);
 
         // A permission that manages access held only in the past, or only later, reads nobody's grants now.

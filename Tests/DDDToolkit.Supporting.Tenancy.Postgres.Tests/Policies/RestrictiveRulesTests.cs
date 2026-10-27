@@ -103,15 +103,15 @@ public sealed class RestrictiveRulesTests(TenancyPostgres postgres)
     {
         var database = await ForcedAsync();
         await using var services = new TenancyServices(database);
-        var lark = await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.Seats().AddSeatAsync(Lark, Cancellation, configure: seat =>
+        var lark = (await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.Seats().AddAsync(Lark, Cancellation, configure: seat =>
         {
             seat.Rename("Lark");
             seat.MarkExternal();
-        }));
+        }))).Id;
 
         // Asked by id, the unit her work is at is named, through Tenancy's function that runs as its owner, and for
         // the ids asked alone; another tenant's is left out as before.
-        var named = await services.BySeat(Lark, Harbor, lark, scoped => scoped.Directory().UnitsByIdAsync([NorthPier, OrchardRoot], Cancellation));
+        var named = await services.BySeat(Lark, Harbor, lark, scoped => scoped.Organization().UnitsByIdAsync([NorthPier, OrchardRoot], Cancellation));
         named.Select(unit => (unit.Id, unit.Name, unit.Path, unit.Depth)).Should().Equal((NorthPier, "North Pier", "Harbor / North / North Pier", 3));
 
         // While what she reads of the tables themselves is nothing.
@@ -122,7 +122,7 @@ public sealed class RestrictiveRulesTests(TenancyPostgres postgres)
         }
 
         // And the list of the units she reads is empty: the rule keeps her out of the organization.
-        (await services.BySeat(Lark, Harbor, lark, scoped => scoped.Directory().ListUnitsAsync(Cancellation))).Should().BeEmpty();
+        (await services.BySeat(Lark, Harbor, lark, scoped => scoped.Organization().ListUnitsAsync(Cancellation))).Should().BeEmpty();
     }
 
     [Fact]
@@ -135,23 +135,23 @@ public sealed class RestrictiveRulesTests(TenancyPostgres postgres)
         // Oli is placed at North Pier, an Operator there: his overview names the unit through Tenancy's function, as
         // the directory names a unit by its id, and the tenant by its name through the function the picker reads,
         // while the organization itself is what the rule keeps from him.
-        var overview = await services.BySeat(Oli.Identity, Harbor, Oli.Seat, scoped => scoped.Directory().WhoAmIAsync(Cancellation));
+        var overview = await services.BySeat(Oli.Identity, Harbor, Oli.Seat, scoped => scoped.Seats().WhoAmIAsync(Cancellation));
 
-        overview.Tenant.Name.Should().Be("Harbor Works", "as the tenant picker names it");
+        overview.TenantName.Should().Be("Harbor Works", "as the tenant picker names it");
         await using (var oli = await AsCaller.PersonAsync(database, Oli.Identity, Harbor, Cancellation))
         {
             (await oli.ScalarAsync<long>("SELECT count(*) FROM tenancy.\"Organizations\"", Cancellation)).Should().Be(0, "the organizations stay closed to him");
         }
 
-        (await services.BySeat(Oli.Identity, Harbor, Oli.Seat, scoped => scoped.Directory().SeatOverviewAsync(Oli.Seat, Cancellation))).Tenant.Name
+        (await services.BySeat(Oli.Identity, Harbor, Oli.Seat, scoped => scoped.Seats().OverviewAsync(Oli.Seat, Cancellation))).TenantName
             .Should().Be("Harbor Works", "his overview asked by id is the same");
         overview.Units.Select(unit => unit.Path).Should().Equal("Harbor / North / North Pier");
         overview.Permissions.Should().NotBeEmpty().And.OnlyContain(reach => !reach.AtTenant && reach.Reaches.Select(unit => unit.Id).SequenceEqual(new[] { NorthPier }));
-        (await services.BySeat(Oli.Identity, Harbor, Oli.Seat, scoped => scoped.Directory().ListUnitsAsync(Cancellation))).Should().BeEmpty();
+        (await services.BySeat(Oli.Identity, Harbor, Oli.Seat, scoped => scoped.Organization().ListUnitsAsync(Cancellation))).Should().BeEmpty();
 
         // Ada is an employee, and her overview reads the organization as before.
-        var ada = await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.Directory().WhoAmIAsync(Cancellation));
-        ada.Tenant.Name.Should().Be("Harbor Works");
+        var ada = await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.Seats().WhoAmIAsync(Cancellation));
+        ada.TenantName.Should().Be("Harbor Works");
         ada.Permissions.Should().Contain(reach => reach.AtTenant && reach.Reaches.Count == 4);
     }
 

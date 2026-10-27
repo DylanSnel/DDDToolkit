@@ -112,12 +112,12 @@ public class TenancyWorkTests
     {
         var harness = new Harness(New.Catalogue());
 
-        HostTenancy.ProvisionedTenant provisioned;
+        ProvisionedTenant provisioned;
         using (TenancyWork.BeginSystem<TenantId, SeatId>())
         {
             harness.Store.BeginUnitOfWork();
-            provisioned = await harness.Tenants.ProvisionAsync(
-                new HostTenancy.TenantToProvision("harbor", "Harbor Works", TenantShape.Hierarchical, "Harbor Works", Guid.NewGuid()),
+            provisioned = await harness.Tenants.ProvisionWithIdsAsync(harness.Catalogue,
+                new TenantToProvision("harbor", "Harbor Works", TenantShape.Hierarchical, "Harbor Works", Guid.NewGuid()),
                 TestContext.Current.CancellationToken);
         }
 
@@ -134,12 +134,12 @@ public class TenancyWorkTests
     {
         // Every use case, as the application runs them: system work begun with TenancyWork, a person as their seat.
         var harness = new Harness(New.Catalogue());
-        HostTenancy.ProvisionedTenant harbor;
+        ProvisionedTenant harbor;
         using (TenancyWork.BeginSystem<TenantId, SeatId>())
         {
             harness.Store.BeginUnitOfWork();
-            harbor = await harness.Tenants.ProvisionAsync(
-                new HostTenancy.TenantToProvision("harbor", "Harbor Works", TenantShape.Flat, "Harbor Works", Guid.NewGuid()),
+            harbor = await harness.Tenants.ProvisionWithIdsAsync(harness.Catalogue,
+                new TenantToProvision("harbor", "Harbor Works", TenantShape.Flat, "Harbor Works", Guid.NewGuid()),
                 TestContext.Current.CancellationToken);
         }
 
@@ -148,33 +148,33 @@ public class TenancyWorkTests
         var watchers = harbor.RolesByPack[HostCatalogue.WatcherPack];
 
         await BySystemIn(harness, tenant, h => h.Tenants.ChangeShapeAsync(TenantShape.Hierarchical, roleIds: null, language: null, default));
-        await BySystemIn(harness, tenant, h => h.Tenants.RenameOrganizationAsync("Harbor Works Ltd", default));
-        var north = await BySystemIn(harness, tenant, h => h.Organization.AddUnitAsync(root, "North", default));
-        var south = await BySystemIn(harness, tenant, h => h.Organization.AddUnitAsync(root, "South", default));
-        var coast = await BySystemIn(harness, tenant, h => h.Organization.AddUnitAsync(north, "Coast", default));
+        await BySystemIn(harness, tenant, h => h.Organization.RenameAsync("Harbor Works Ltd", default));
+        var north = (await BySystemIn(harness, tenant, h => h.Organization.AddUnitAsync(root, "North", default))).Id;
+        var south = (await BySystemIn(harness, tenant, h => h.Organization.AddUnitAsync(root, "South", default))).Id;
+        var coast = (await BySystemIn(harness, tenant, h => h.Organization.AddUnitAsync(north, "Coast", default))).Id;
         await BySystemIn(harness, tenant, h => h.Organization.RenameUnitAsync(coast, "North Coast", default));
         await BySystemIn(harness, tenant, h => h.Organization.MoveUnitAsync(coast, south, default));
 
-        var grace = await BySystemIn(harness, tenant, h => h.Seats.AddSeatAsync(Guid.NewGuid(), default, configure: seat => seat.Rename("Grace")));
+        var grace = (await BySystemIn(harness, tenant, h => h.Seats.AddAsync(Guid.NewGuid(), default, configure: seat => seat.Rename("Grace")))).Id;
         await BySystemIn(harness, tenant, h => h.Seats.PlaceAsync(grace, north, primary: true, default));
         await BySystemIn(harness, tenant, h => h.Seats.PlaceAsync(grace, south, primary: false, default));
         await BySystemIn(harness, tenant, h => h.Seats.MakePrimaryAsync(grace, south, default));
-        await BySystemIn(harness, tenant, h => h.Seats.GrantAsync(grace, south, watchers, until: null, reason: null, default));
+        await BySystemIn(harness, tenant, h => h.Seats.GrantAsync(grace, watchers, south, until: null, reason: null, default));
 
-        var clerks = await BySystemIn(harness, tenant, h => h.Roles.CreateAsync("Clerk", "Files widgets", [HostCatalogue.WidgetCreate], default));
+        var clerks = (await BySystemIn(harness, tenant, h => h.Roles.CreateAsync("Clerk", "Files widgets", [HostCatalogue.WidgetCreate], default))).Id;
         await BySystemIn(harness, tenant, h => h.Roles.RenameAsync(clerks, "Filing clerk", "Files widgets", default));
         await BySystemIn(harness, tenant, h => h.Roles.SetPermissionsAsync(clerks, [HostCatalogue.WidgetCreate, HostCatalogue.WidgetRead], default));
-        await BySystemIn(harness, tenant, h => h.Seats.GrantAsync(grace, south, clerks, until: null, reason: null, default));
+        await BySystemIn(harness, tenant, h => h.Seats.GrantAsync(grace, clerks, south, until: null, reason: null, default));
 
         // A person, as their seat: the directory and a command.
         var administrator = HostCaller.InSeat(tenant, harbor.AdminSeat);
         using (Callers.Begin(Caller.User(Guid.NewGuid())))
         {
-            await harness.Run(administrator, h => h.Directory.WhoAmIAsync(default));
-            await harness.Run(administrator, h => h.Directory.ListSeatsAsync(default));
-            await harness.Run(administrator, h => h.Directory.ListRolesAsync(default));
-            await harness.Run(administrator, h => h.Directory.ListUnitsAsync(default));
-            await harness.Run(administrator, h => h.Seats.RevokeAsync(grace, south, clerks, default));
+            await harness.Run(administrator, h => h.Seats.WhoAmIAsync(default));
+            await harness.Run(administrator, h => h.Seats.ListAsync(default));
+            await harness.Run(administrator, h => h.Roles.ListAsync(default));
+            await harness.Run(administrator, h => h.Organization.ListUnitsAsync(default));
+            await harness.Run(administrator, h => h.Seats.RevokeAsync(grace, clerks, south, default));
         }
 
         await BySystemIn(harness, tenant, h => h.Roles.ArchiveAsync(clerks, default));

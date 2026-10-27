@@ -2,49 +2,62 @@ namespace DDDToolkit.Abstractions.Attributes;
 
 /// <summary>
 /// Gives an application one name for a generic class this assembly ships, closed over the application's own
-/// classes, so no project of the application writes the class's type arguments. A package whose use cases are
-/// nested in one class generic over the application's classes declares
+/// classes, so no project of the application writes the class's type arguments. A package whose manager is generic
+/// over the application's classes declares
 /// <code>
-/// [assembly: TemplateFacade(typeof(TenancyUseCases&lt;,,,,,,,,&gt;))]
+/// [assembly: TemplateFacade(typeof(SeatManager&lt;,,,,,,,,&gt;))]
 ///
-/// public abstract partial class TenancyUseCases&lt;
+/// public class SeatManager&lt;
 ///     [TemplateType(typeof(TenantAggregateAttribute&lt;&gt;), Take = TemplateArgumentKind.Type)] TTenant,
 ///     [TemplateType(typeof(TenantAggregateAttribute&lt;&gt;))] TTenantId, ...&gt;
 /// </code>
 /// and the project that declares the application's classes with those templates gets
 /// <code>
-/// public abstract class TenancyUseCases : global::Acme.Tenancy.TenancyUseCases&lt;global::Shop.Domain.ShopTenant, global::Shop.Contracts.TenantId, ...&gt;
+/// public sealed class SeatManager : global::Acme.Tenancy.SeatManager&lt;global::Shop.Domain.ShopTenant, global::Shop.Contracts.TenantId, ...&gt;
 /// {
-///     private TenancyUseCases() { }
+///     public SeatManager(...) : base(...) { }
 /// }
 /// </code>
 /// in the global namespace, so every project that references it, the module's application and API projects and the
-/// host among them, takes a <c>TenancyUseCases.SeatCommands</c> and answers a <c>TenancyUseCases.SeatOverview</c>.
+/// host among them, takes a <c>SeatManager</c> and answers a <c>SeatManager.SeatOverview</c>.
 /// <para>
 /// <b>Named as your class is.</b> The application's class has the name of the generic class, without its type
 /// parameters: the one name the application reads in your documentation, and no clash with your class, which C# tells
-/// apart by its type parameters. Name the generic class for what it holds, then, as Tenancy's <c>TenancyUseCases</c>
+/// apart by its type parameters. Name the generic class for what it holds, then, as Tenancy's <c>SeatManager</c>
 /// is. An application with two modules that each declare your classes gets two classes of that name, and is told so
 /// (DDD00075): it names one of them with <see cref="TemplateFacadeNameAttribute"/>, in the project that declares
 /// that module's classes.
 /// </para>
 /// <para>
-/// <b>A name, not a second type.</b> C# finds a type nested in a class through every class that derives from it,
-/// so <c>TenancyUseCases.SeatOverview</c> is the package's own <c>TenancyUseCases&lt;...&gt;.SeatOverview</c>: what the
-/// container registered, what reflection sees and what the compiler reports, with the package's documentation.
-/// The class itself is never made, and nothing derives from it. C# finds a static member the same way, so what is
-/// generic over the classes and is called rather than named can go on the same class: a call the compiler binds even
-/// in the project the class is written into.
+/// <b>The package's own types.</b> C# finds a type nested in a class through every class that derives from it,
+/// so <c>SeatManager.SeatOverview</c> is the package's own <c>SeatManager&lt;...&gt;.SeatOverview</c>: what reflection
+/// sees and what the compiler reports, with the package's documentation. C# finds a static member the same way.
+/// </para>
+/// <para>
+/// <b>Three kinds of class.</b> What the application gets follows the package's class.
+/// <list type="bullet">
+/// <item>A class that is not abstract is a service: the application's class is sealed, and has each public
+/// constructor of the package's class, so the container makes it. The package's registration registers it: a type
+/// parameter of a <see cref="TemplateRegistrationAttribute"/> method that carries this attribute,
+/// <c>[TemplateFacade(typeof(SeatManager&lt;,,,,,,,,&gt;))] TSeatManager</c>, is filled with the class the project gets
+/// for that type, or sees in a project of its module below it, closed over the same classes and ids as the method.
+/// Where there is none, it is filled with the package's class itself, closed over them.</item>
+/// <item>A record that is not sealed is a record your code makes and hands to the package's methods, as Tenancy's
+/// <c>TenantToProvision</c> is: the application's record is sealed, and has each public constructor of the package's
+/// record, so <c>new TenantToProvision(...)</c> needs no type argument.</item>
+/// <item>An abstract class is a name alone: the application's class is abstract too, with a private constructor, and
+/// nothing makes one or derives from it. Its nested types and static members are named through it.</item>
+/// </list>
 /// </para>
 /// <para>
 /// <b>Why a class, and not a global alias.</b> An alias holds in the project that declares it and no further, so it
 /// would have to be written into every project, and a generator's alias is seen by the compiler but not by the
-/// other generators of the project: HotChocolate's, reading <c>[ObjectType&lt;TenancyUseCases.PermissionReach&gt;]</c>,
+/// other generators of the project: HotChocolate's, reading <c>[ObjectType&lt;SeatManager.SeatOverview&gt;]</c>,
 /// would not know the name. A class is written once, where the classes are declared, and reaches every project
 /// above it, and the generators there, through the reference. In the project that declares the classes the class
 /// is a generator's output too, so the other generators there do not see it: a module of one project that names the
-/// records in another library's attributes or in a GraphQL resolver keeps an alias of exactly that name there,
-/// <c>global using TenancyUseCases = ...;</c>, and gets no class.
+/// nested records in another library's attributes or in a GraphQL resolver keeps an alias of exactly that name there,
+/// <c>global using SeatManager = ...;</c>, and gets no class.
 /// </para>
 /// <para>
 /// <b>Which classes.</b> A project gets the class when it declares a class with one of the type's templates. Each
@@ -52,7 +65,8 @@ namespace DDDToolkit.Abstractions.Attributes;
 /// its template the project declares, or, when it declares none, the one the projects of its module that it
 /// references declare. A template with no class or several leaves the project without one, as does a class that
 /// does not meet the type's constraints; the project hears why, DDD00065, as information, since a module whose
-/// classes are split over two projects gets the class in the second.
+/// classes are split over two projects gets the class in the second. A class over a template an application may
+/// leave out says so with <see cref="OnlyWith"/>.
 /// </para>
 /// <para>
 /// <b>What the application wrote stays.</b> A project that has a type or a namespace of the name in the global
@@ -64,21 +78,6 @@ namespace DDDToolkit.Abstractions.Attributes;
 /// another module is no such thing: the two would meet in the projects that see both, so it is DDD00075.
 /// </para>
 /// <para>
-/// <b>A class the container makes.</b> A package's class that is not abstract, as Tenancy's
-/// <c>TenancyAccessManager&lt;TTenantId, TSeatId, TUnitId, TRoleId&gt;</c> is, is a service: the application's class
-/// is sealed rather than abstract, and has each public constructor of the package's class, so the container makes it.
-/// <code>
-/// public sealed class TenancyAccessManager : global::Acme.Tenancy.TenancyAccessManager&lt;global::Shop.Contracts.TenantId, ...&gt;
-/// {
-///     public TenancyAccessManager(global::Acme.Tenancy.TenancyCatalogue catalogue) : base(catalogue) { }
-/// }
-/// </code>
-/// The package's registration registers it: a type parameter of a <see cref="TemplateRegistrationAttribute"/> method
-/// that carries this attribute, <c>[TemplateFacade(typeof(TenancyAccessManager&lt;,,,&gt;))] TAccessManager</c>, is filled with
-/// the class the project gets for that type, or sees in a project of its module below it, closed over the same
-/// classes and ids as the method. Where there is none, it is filled with the package's class itself, closed over them.
-/// </para>
-/// <para>
 /// <b>For a module that sees only the ids.</b> A class whose type parameters all take ids is written as well into a
 /// project that says which of its ids are the package's with a line marked <see cref="TemplateIdsAttribute"/>,
 /// <c>[assembly: TenancyIds&lt;TenantId, SeatId, OrganizationUnitId, RoleId&gt;]</c>. It is written into that project's root
@@ -88,10 +87,10 @@ namespace DDDToolkit.Abstractions.Attributes;
 /// </para>
 /// </summary>
 /// <param name="type">
-/// The open generic class, <c>typeof(TenancyUseCases&lt;,,,,,,,,&gt;)</c>, not nested in a generic type. Every one
-/// of its type parameters carries <see cref="TemplateTypeAttribute"/>, since the class the application gets leaves
-/// none open. It is abstract rather than static, with a protected constructor, so that class can derive from it; or it
-/// is neither abstract nor sealed, with public constructors, for a class the container makes.
+/// The open generic class, <c>typeof(SeatManager&lt;,,,,,,,,&gt;)</c>, not nested in a generic type. Every one of its
+/// type parameters carries <see cref="TemplateTypeAttribute"/>, since the class the application gets leaves none open.
+/// It is neither abstract nor sealed, with public constructors, for a class the container makes or a record your code
+/// makes; or it is abstract rather than static, with a protected constructor, for a name alone.
 /// </param>
 /// <remarks>
 /// A type this attribute names that the generator cannot use is passed over without a word: that is the package's
@@ -104,4 +103,14 @@ public sealed class TemplateFacadeAttribute(Type type) : Attribute
 {
     /// <summary>The open generic class the application's class derives from, closed over its classes.</summary>
     public Type Type { get; } = type;
+
+    /// <summary>
+    /// The template of a class an application may leave out, such as Tenancy's invitation,
+    /// <c>typeof(InvitationAggregateAttribute&lt;&gt;)</c>. The class is written only where a class is declared with that
+    /// template, in the project or in a project of its module it references. A project without one gets no class and
+    /// hears nothing. One of the type's <see cref="TemplateTypeAttribute"/>s names the same template. Left out, the class
+    /// is written wherever one of its templates has a class, and a missing one is DDD00065. Only the assembly attribute
+    /// reads it.
+    /// </summary>
+    public Type? OnlyWith { get; set; }
 }

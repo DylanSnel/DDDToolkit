@@ -16,7 +16,7 @@ public abstract class PermissionSetQueryTests(TestDatabases databases) : IAsyncL
     private static readonly string[] Keys = [HostCatalogue.WidgetChange, TenancyPermissions.UnitsManage, TenancyPermissions.RolesManage];
 
     private TestServices _services = null!;
-    private HostTenancy.ProvisionedTenant _harbor = null!;
+    private ProvisionedTenant _harbor = null!;
     private OrganizationUnitId _north;
     private OrganizationUnitId _south;
     private OrganizationUnitId _coast;

@@ -388,13 +388,13 @@ public sealed partial class SourceTreeTests
     }
 
     /// <summary>
-    /// Tenancy's use cases are nested in one class generic over the Tenants module's five classes and four ids. The
-    /// toolkit's generator closes it over them in the domain project that declares them, as <c>TenancyUseCases</c>,
-    /// which every project above it sees, so no file of the sample, nor of these tests, closes it again: an alias
-    /// written by hand is the nine types once more, in every project that names a use case.
+    /// Tenancy's managers are generic over the Tenants module's classes and ids. The toolkit's generator closes each over
+    /// them in the domain project that declares them, as <c>SeatManager</c> and the others, which every project above it
+    /// sees, so no file of the sample, nor of these tests, closes one again: an alias written by hand is the nine types
+    /// once more, in every project that takes a manager.
     /// </summary>
     [Fact]
-    public void No_file_of_the_sample_or_of_these_tests_closes_Tenancys_use_cases_itself()
+    public void No_file_of_the_sample_or_of_these_tests_closes_Tenancys_managers_itself()
     {
         var root = SampleLayout.RepositoryRoot();
         string[] folders = [Path.Combine(root, "Examples", "Tenancy"), DirectoryOfProject(TheseTests)];
@@ -404,7 +404,7 @@ public sealed partial class SourceTreeTests
             .Where(file => !file.Contains("/bin/", StringComparison.Ordinal) && !file.Contains("/obj/", StringComparison.Ordinal))
             .ToDictionary(file => file, file => File.ReadAllText(Path.Combine(root, file)));
 
-        files.Where(file => file.Value.Contains("TenancyUseCases.", StringComparison.Ordinal)).Select(file => file.Key)
+        files.Where(file => NamesTenancysManagers().IsMatch(file.Value)).Select(file => file.Key)
             .Should().Contain(
                 [
                     "Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Application/Seats/Commands/SuspendTenantSeat.cs",
@@ -412,25 +412,25 @@ public sealed partial class SourceTreeTests
                     "Examples/Tenancy/Examples.Tenancy.Host/Seeding/DemoSeeder.cs",
                     $"Tests/{TheseTests}/Infrastructure/SampleTenants.cs",
                 ],
-                "the scan reads the projects that name the use cases: the application's, the API's, the host's and these tests'");
-        files.Where(file => ClosesTenancysUseCases().IsMatch(file.Value)).Select(file => file.Key)
-            .Should().BeEmpty("every project that sees the module's classes sees TenancyUseCases, and names the use cases through it");
+                "the scan reads the projects that take the managers: the application's, the API's, the host's and these tests'");
+        files.Where(file => ClosesTenancysManagers().IsMatch(file.Value)).Select(file => file.Key)
+            .Should().BeEmpty("every project that sees the module's classes sees SeatManager and the others, and takes them as they are");
 
-        // What a name nested in it stands for is the package's own type, closed over the module's classes and ids:
-        // the type the container registered. The class itself is the domain project's, and is only that name.
-        typeof(TenancyUseCases).Assembly.Should().BeSameAs(typeof(Tenant).Assembly);
-        (typeof(TenancyUseCases).IsAbstract && typeof(TenancyUseCases).Namespace is null).Should().BeTrue();
+        // The class is the domain project's, sealed for the container to make, and derives from the package's own,
+        // closed over the module's classes and ids: what a name nested in it stands for is the package's own type.
+        typeof(SeatManager).Assembly.Should().BeSameAs(typeof(Tenant).Assembly);
+        (typeof(SeatManager).IsSealed && typeof(SeatManager).Namespace is null).Should().BeTrue();
         Type[] module =
         [
             typeof(Tenant), typeof(TenantId), typeof(Examples.Tenancy.Tenants.Domain.Organization), typeof(OrganizationUnit),
             typeof(OrganizationUnitId), typeof(Seat), typeof(SeatId), typeof(Examples.Tenancy.Tenants.Domain.Role), typeof(RoleId),
         ];
-        typeof(TenancyUseCases).BaseType!.GetGenericTypeDefinition().Should().Be(typeof(DDDToolkit.Supporting.Tenancy.UseCases.TenancyUseCases<,,,,,,,,>));
-        typeof(TenancyUseCases).BaseType!.GetGenericArguments().Should().Equal(module);
+        typeof(SeatManager).BaseType!.GetGenericTypeDefinition().Should().Be(typeof(DDDToolkit.Supporting.Tenancy.UseCases.SeatManager<,,,,,,,,>));
+        typeof(SeatManager).BaseType!.GetGenericArguments().Should().Equal(module);
 
         // Reflection writes a type nested in a generic class with the outer class's type arguments as its own.
-        typeof(TenancyUseCases.SeatCommands).DeclaringType.Should().Be(typeof(DDDToolkit.Supporting.Tenancy.UseCases.TenancyUseCases<,,,,,,,,>));
-        typeof(TenancyUseCases.SeatCommands).GetGenericArguments().Should().Equal(module);
+        typeof(SeatManager.PermissionReach).DeclaringType.Should().Be(typeof(DDDToolkit.Supporting.Tenancy.UseCases.SeatManager<,,,,,,,,>));
+        typeof(SeatManager.PermissionReach).GetGenericArguments().Should().Equal(module);
     }
 
     /// <summary>
@@ -526,12 +526,16 @@ public sealed partial class SourceTreeTests
     [GeneratedRegex(@"^(?:public|internal)\s+(?:(?:static|sealed|abstract|partial|readonly)\s+)*(?:class|record\s+struct|record|interface|enum|struct)\s+(?<name>\w+)", RegexOptions.Multiline)]
     private static partial Regex TypeDeclaration();
 
+    /// <summary>A file that takes one of Tenancy's managers, by the name the generator gave it.</summary>
+    [GeneratedRegex(@"\b(?:TenantManager|OrganizationManager|SeatManager|RoleManager|InvitationManager)\b")]
+    private static partial Regex NamesTenancysManagers();
+
     /// <summary>
-    /// Tenancy's use cases closed over types: <c>TenancyUseCases&lt;</c> and a type's name. What a test compares with,
-    /// the open <c>TenancyUseCases&lt;,,,,,,,,&gt;</c>, closes it over nothing.
+    /// One of Tenancy's managers closed over types: <c>SeatManager&lt;</c> and a type's name. What a test compares with,
+    /// the open <c>SeatManager&lt;,,,,,,,,&gt;</c>, closes it over nothing.
     /// </summary>
-    [GeneratedRegex(@"TenancyUseCases<\s*[\w.]")]
-    private static partial Regex ClosesTenancysUseCases();
+    [GeneratedRegex(@"\b(?:TenantManager|OrganizationManager|SeatManager|RoleManager|InvitationManager|TenantToProvision)<\s*[\w.]")]
+    private static partial Regex ClosesTenancysManagers();
 
     /// <summary>
     /// A call of Tenancy's that names one of its ids where a closed form of it exists: system work or the current

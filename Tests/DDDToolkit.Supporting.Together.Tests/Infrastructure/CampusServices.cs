@@ -205,13 +205,13 @@ public sealed class CampusServices : IDisposable
 /// <summary>What a test resolves from a scope, by name.</summary>
 public static class ScopedServices
 {
-    public static TenancyUseCases.TenantCommands Tenants(this IServiceProvider services) => services.GetRequiredService<TenancyUseCases.TenantCommands>();
+    public static TenantManager Tenants(this IServiceProvider services) => services.GetRequiredService<TenantManager>();
 
-    public static TenancyUseCases.OrganizationCommands Organization(this IServiceProvider services) => services.GetRequiredService<TenancyUseCases.OrganizationCommands>();
+    public static OrganizationManager Organization(this IServiceProvider services) => services.GetRequiredService<OrganizationManager>();
 
-    public static TenancyUseCases.SeatCommands Seats(this IServiceProvider services) => services.GetRequiredService<TenancyUseCases.SeatCommands>();
+    public static SeatManager Seats(this IServiceProvider services) => services.GetRequiredService<SeatManager>();
 
-    public static TenancyUseCases.RoleCommands Roles(this IServiceProvider services) => services.GetRequiredService<TenancyUseCases.RoleCommands>();
+    public static RoleManager Roles(this IServiceProvider services) => services.GetRequiredService<RoleManager>();
 
     public static CampusContext Campus(this IServiceProvider services) => services.GetRequiredService<CampusContext>();
 }

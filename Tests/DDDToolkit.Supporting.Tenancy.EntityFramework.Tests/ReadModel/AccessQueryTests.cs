@@ -17,7 +17,7 @@ public abstract class AccessQueryTests(TestDatabases databases) : IAsyncLifetime
     private readonly FixedClock _clock = new();
     private TestServices _services = null!;
 
-    private HostTenancy.ProvisionedTenant _harbor = null!;
+    private ProvisionedTenant _harbor = null!;
     private OrganizationUnitId _north;
     private OrganizationUnitId _south;
     private OrganizationUnitId _coast;

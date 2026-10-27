@@ -18,7 +18,7 @@ namespace Examples.Tenancy.Tenants.Api.Directory.GraphQL;
 /// of the query; the caller is the one the request's flow carries. An id the directory leaves out, of another
 /// tenant or of nothing at all, is missing from the answer, and is nothing to whoever asked for it.
 /// <para>
-/// One question to the directory takes no more than <c>TenancyDirectory.MostIds</c> ids and refuses more, so a
+/// One question to the directory takes no more than <c>SeatManager.MostIds</c> ids and refuses more, so a
 /// wider page of references is asked in parts.
 /// </para>
 /// </remarks>
@@ -32,7 +32,7 @@ internal static class DirectoryDataLoaders
         CancellationToken cancellationToken)
     {
         var seats = new Dictionary<SeatId, SeatListing>();
-        foreach (var part in ids.Chunk(TenancyUseCases.TenancyDirectory.MostIds))
+        foreach (var part in ids.Chunk(SeatManager.MostIds))
         {
             foreach (var seat in await sender.Send(new SeatsById(part), cancellationToken))
             {
@@ -51,7 +51,7 @@ internal static class DirectoryDataLoaders
         CancellationToken cancellationToken)
     {
         var units = new Dictionary<OrganizationUnitId, UnitName>();
-        foreach (var part in ids.Chunk(TenancyUseCases.TenancyDirectory.MostIds))
+        foreach (var part in ids.Chunk(SeatManager.MostIds))
         {
             foreach (var unit in await sender.Send(new OrganizationUnitsById(part), cancellationToken))
             {
@@ -70,7 +70,7 @@ internal static class DirectoryDataLoaders
         CancellationToken cancellationToken)
     {
         var roles = new Dictionary<RoleId, RoleListing>();
-        foreach (var part in ids.Chunk(TenancyUseCases.TenancyDirectory.MostIds))
+        foreach (var part in ids.Chunk(SeatManager.MostIds))
         {
             foreach (var listed in await sender.Send(new RolesById(part), cancellationToken))
             {

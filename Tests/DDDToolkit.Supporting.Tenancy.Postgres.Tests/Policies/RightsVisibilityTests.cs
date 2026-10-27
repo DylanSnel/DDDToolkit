@@ -80,7 +80,7 @@ public abstract class RightsVisibilityTests(TenancyPostgres postgres, TenancyNam
         await using var services = new TenancyServices(database);
         var (own, other) = await services.BySeat(Oli.Identity, Harbor, Oli.Seat, async scoped =>
         {
-            var store = scoped.GetRequiredService<HostTenancy.IStore>();
+            var store = scoped.GetRequiredService<ITenancyStore<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId>>();
             return ((await store.FindSeatAsync(Oli.Seat, Cancellation))!, (await store.FindSeatAsync(Seth.Seat, Cancellation))!);
         });
         own.Placements.SelectMany(placement => placement.Grants).Should().ContainSingle();
@@ -109,7 +109,7 @@ public abstract class RightsVisibilityTests(TenancyPostgres postgres, TenancyNam
         await using var services = new TenancyServices(database);
         var (ada, eve) = await services.BySeat(Oli.Identity, Harbor, Oli.Seat, async scoped =>
         {
-            var store = scoped.GetRequiredService<HostTenancy.IStore>();
+            var store = scoped.GetRequiredService<ITenancyStore<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId>>();
             return ((await store.FindSeatAsync(Ada.Seat, Cancellation))!, (await store.FindSeatAsync(Eve.Seat, Cancellation))!);
         });
         ada.Placements.Should().ContainSingle("where a seat is placed, every member reads").Which.Grants.Should().BeEmpty();
@@ -137,7 +137,7 @@ public abstract class RightsVisibilityTests(TenancyPostgres postgres, TenancyNam
 
         // Every command he may give there finds what it needs: Seth's seat comes with his Supervisor grant at North.
         await using var services = new TenancyServices(database);
-        var seth = await services.BySeat(Hiro.Identity, Harbor, Hiro.Seat, scoped => scoped.GetRequiredService<HostTenancy.IStore>().FindSeatAsync(Seth.Seat, Cancellation));
+        var seth = await services.BySeat(Hiro.Identity, Harbor, Hiro.Seat, scoped => scoped.GetRequiredService<ITenancyStore<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId>>().FindSeatAsync(Seth.Seat, Cancellation));
         seth!.Placements.SelectMany(placement => placement.Grants).Should().ContainSingle().Which.RoleId.Should().Be(HarborRoles.Supervisor);
     }
 
@@ -280,7 +280,7 @@ public abstract class RightsVisibilityTests(TenancyPostgres postgres, TenancyNam
         await using var services = new TenancyServices(database);
         await services.BySystemIn(Harbor, scoped => scoped.Organization().AddUnitAsync(NorthPier, "Shed", Cancellation, shed));
         await services.BySystemIn(Harbor, scoped => scoped.Seats().PlaceAsync(watcher.Seat, shed, primary: false, Cancellation));
-        await services.BySystemIn(Harbor, scoped => scoped.Seats().GrantAsync(watcher.Seat, shed, HarborRoles.Watcher, until: null, reason: null, Cancellation));
+        await services.BySystemIn(Harbor, scoped => scoped.Seats().GrantAsync(watcher.Seat, HarborRoles.Watcher, shed, until: null, reason: null, Cancellation));
         return shed;
     }
 

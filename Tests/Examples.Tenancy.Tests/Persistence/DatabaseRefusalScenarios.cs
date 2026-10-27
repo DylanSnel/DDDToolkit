@@ -93,8 +93,8 @@ public sealed class DatabaseRefusalScenarios(SampleHosts sample) : IClassFixture
         using (SampleAccess.Manager.BeginSystem())
         {
             await using var scope = host.Services.CreateAsyncScope();
-            await scope.ServiceProvider.GetRequiredService<TenancyUseCases.TenantCommands>().ProvisionAsync(
-                new TenancyUseCases.TenantToProvision(
+            await scope.ServiceProvider.GetRequiredService<TenantManager>().ProvisionAsync(
+                new TenantToProvision(
                     slug,
                     name,
                     TenantShape.Flat,

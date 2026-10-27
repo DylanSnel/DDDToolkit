@@ -63,7 +63,7 @@ public sealed class SeatGrantsHandler(ITenancyReads reads) : IQueryHandler<SeatG
     /// </exception>
     public async ValueTask<IReadOnlyList<SeatGrant>> Handle(SeatGrants query, CancellationToken cancellationToken)
     {
-        var overview = await reads.AskDirectoryAsync(directory => directory.SeatOverviewAsync(query.Seat, cancellationToken));
+        var overview = await reads.AskAsync((SeatManager seats) => seats.OverviewAsync(query.Seat, cancellationToken));
 
         // The placements and grants are the seat's own; the path and the role's name are what the package read beside
         // them, and whether a grant applies is asked at the moment the overview holds for. A role a filter on the role

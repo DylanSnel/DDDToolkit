@@ -13,7 +13,7 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// </summary>
 /// <remarks>
 /// For queries only: an operator changes nothing itself, and what an operator asks for is carried out by system work
-/// that names the operator, <c>TenancyUseCases.BeginOperator(identity)</c>. On a message of the Mediator library that
+/// that names the operator, <c>TenantManager.BeginOperator(identity)</c>. On a message of the Mediator library that
 /// is no query, a command or a plain request, it is DDD00082. The toolkit's generator turns it into <c>TenancyAccess.RequiresOperator()</c> at compile time, in the
 /// module's request interface (<c>[AccessRequests]</c>, declared <c>partial</c>). For the same reason it is no module's
 /// default on that interface, which a command that says nothing would take as well (DDD00089).

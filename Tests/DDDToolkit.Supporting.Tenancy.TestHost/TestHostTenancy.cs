@@ -40,7 +40,7 @@ public static class TestHostTenancy
         // and its context.
         services.AddTenancyAccess<IHostRequest, TestTenancyContext>();
 
-        // Generated like AddTenancy, closed over this project's classes: the invitation class and its id are named.
-        return services.AddTenancyInvitations<HostInvitation, InvitationId, TestTenancyContext>(invitations);
+        // Generated like AddTenancy, closed over this project's classes, the invitation class among them.
+        return services.AddTenancyInvitations<TestTenancyContext>(invitations);
     }
 }

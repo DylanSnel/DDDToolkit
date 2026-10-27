@@ -33,7 +33,7 @@ public sealed class RolesByIdHandler(ITenancyReads reads, TenancyAccessManager t
     public async ValueTask<IReadOnlyList<RoleListing>> Handle(RolesById query, CancellationToken cancellationToken)
     {
         // The directory first: it refuses a caller who may not ask, and a question with too many ids.
-        var roles = await reads.AskDirectoryAsync(directory => directory.RolesByIdAsync(query.Ids, cancellationToken));
+        var roles = await reads.AskAsync(async (RoleManager manager) => RoleListing.Judged(await manager.ByIdAsync(query.Ids, cancellationToken), manager));
         return roles.Count == 0
             ? []
             : RoleListing.From(roles, withKeys: await AtTenantPermission.IsHeldAsync(tenancy, reads, RoleListing.ManageRolesPermission, cancellationToken));

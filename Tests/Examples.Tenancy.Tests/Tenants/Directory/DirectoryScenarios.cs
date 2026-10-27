@@ -130,7 +130,7 @@ public sealed class DirectoryScenarios(SampleHosts sample) : IClassFixture<Sampl
     public async Task More_ids_than_a_question_takes_are_refused()
     {
         using var juno = await sample.ClientAsync("juno", Harbor.Slug);
-        var most = TenancyUseCases.TenancyDirectory.MostIds;
+        var most = SeatManager.MostIds;
         var tooMany = Enumerable.Range(0, most + 1).Select(_ => Guid.NewGuid()).ToArray();
 
         foreach (var route in new[] { "/tenancy/directory/seats", "/tenancy/directory/units", "/tenancy/directory/roles" })

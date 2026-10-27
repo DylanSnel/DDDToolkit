@@ -1,18 +1,19 @@
 namespace DDDToolkit.Abstractions.Attributes;
 
 /// <summary>
-/// Gives the class a package's use cases are named through, the template facade the package asks for with
+/// Gives a class the generator writes for a package, the template facade the package asks for with
 /// <see cref="TemplateFacadeAttribute"/>, a name of the application's own, in the project that declares the classes it
 /// is closed over. Put it beside the module's other declarations, <c>[assembly: Module]</c> or a package's switch; it
 /// is in <c>DDDToolkit.Abstractions.Attributes</c>, as <c>[assembly: Module]</c> is:
 /// <code>
 /// using DDDToolkit.Abstractions.Attributes;
 ///
-/// [assembly: TemplateFacadeName("TenancyUseCases", "CustomersTenancy")]
+/// [assembly: TemplateFacadeName("SeatManager", "CustomersSeatManager")]
 /// </code>
-/// and the class the generator writes there is <c>CustomersTenancy</c> instead of <c>TenancyUseCases</c>, the name of
-/// the package's generic class it is called after otherwise. Every project above it names the use cases by that
-/// name, <c>CustomersTenancy.SeatCommands</c>, and writes nothing.
+/// and the class the generator writes there is <c>CustomersSeatManager</c> instead of <c>SeatManager</c>, the name of
+/// the package's generic class it is called after otherwise. Every project above it takes the class by that name,
+/// <c>CustomersSeatManager</c>, and writes nothing. A package that asks for several classes, as Tenancy does, gets one
+/// line per class to name.
 /// <para>
 /// <b>When.</b> Rarely: the package's name is the one its documentation uses. Two modules of one application that
 /// each declare a package's classes get two classes of that name, which meet in every project that sees both, the
@@ -30,8 +31,8 @@ namespace DDDToolkit.Abstractions.Attributes;
 /// </summary>
 /// <param name="facade">
 /// The class to name, as the package calls it: the name of its generic class without the type parameters,
-/// <c>"TenancyUseCases"</c>. Where two packages' classes of one name meet in the project, the one with its namespace,
-/// <c>"DDDToolkit.Supporting.Tenancy.UseCases.TenancyUseCases"</c>, tells them apart.
+/// <c>"SeatManager"</c>. Where two packages' classes of one name meet in the project, the one with its namespace,
+/// <c>"DDDToolkit.Supporting.Tenancy.UseCases.SeatManager"</c>, tells them apart.
 /// </param>
 /// <param name="name">The name the class gets: a name a class can have, in the global namespace, that no namespace or type there has.</param>
 [AttributeUsage(AttributeTargets.Assembly, AllowMultiple = true, Inherited = false)]

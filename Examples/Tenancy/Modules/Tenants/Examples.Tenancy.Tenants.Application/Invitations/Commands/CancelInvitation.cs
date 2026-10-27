@@ -41,8 +41,8 @@ public sealed record CancelInvitation(InvitationId Invitation) : ICommand, ITena
 /// <param name="kept">Where an invitation is found, to read and forget the account it kept.</param>
 /// <param name="accounts">The accounts people sign in with, or <see langword="null"/> in a host that makes none.</param>
 public sealed class CancelInvitationHandler(
-    TenancyUseCases.InvitationCommands<Invitation, InvitationId> invitations,
-    TenancyUseCases.IInvitationStore<Invitation, InvitationId> kept,
+    InvitationManager invitations,
+    InvitationStore kept,
     IIdentityAccounts? accounts = null)
     : ICommandHandler<CancelInvitation>
 {

@@ -1,4 +1,5 @@
 using DDDToolkit.Supporting.Tenancy.Catalogue;
+using Examples.Tenancy.Tenants.Domain;
 
 namespace Examples.Tenancy.Tenants.Application.Roles;
 
@@ -38,17 +39,23 @@ public sealed record RoleListing(
     public const string ManageRolesPermission = TenancyPermissions.RolesManage;
 
     /// <summary>
-    /// <paramref name="roles"/>, in the order the directory answered them, each with its permissions only when
+    /// <paramref name="roles"/>, in the order the role manager answered them, each with its permissions only when
     /// <paramref name="withKeys"/>.
     /// </summary>
-    /// <param name="roles">The roles, as the package's directory answered them.</param>
+    /// <param name="roles">The roles, as the package's role manager answered them, each with whether it manages access.</param>
     /// <param name="withKeys">Whether the caller holds <see cref="ManageRolesPermission"/> for the whole tenant.</param>
-    internal static IReadOnlyList<RoleListing> From(IReadOnlyList<TenancyUseCases.RoleSummary> roles, bool withKeys)
-        => [.. roles.Select(role => new RoleListing(
-            role.Id,
-            role.Name,
-            role.FromPack,
-            role.Status,
-            withKeys ? role.Permissions : null,
-            role.ManagesAccess))];
+    internal static IReadOnlyList<RoleListing> From(IReadOnlyList<(Role Role, bool ManagesAccess)> roles, bool withKeys)
+        => [.. roles.Select(each => new RoleListing(
+            each.Role.Id,
+            each.Role.Name,
+            each.Role.FromPack,
+            each.Role.Status,
+            withKeys ? each.Role.Permissions : null,
+            each.ManagesAccess))];
+
+    /// <summary>The roles, each with whether it manages access, as the role manager <paramref name="manager"/> says.</summary>
+    /// <param name="roles">The roles the role manager answered.</param>
+    /// <param name="manager">The role manager that answered them.</param>
+    internal static IReadOnlyList<(Role Role, bool ManagesAccess)> Judged(IReadOnlyList<Role> roles, RoleManager manager)
+        => [.. roles.Select(role => (role, manager.ManagesAccess(role)))];
 }

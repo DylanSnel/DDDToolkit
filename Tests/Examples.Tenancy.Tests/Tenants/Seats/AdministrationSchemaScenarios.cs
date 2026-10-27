@@ -177,10 +177,10 @@ public sealed class AdministrationSchemaScenarios(SampleHosts sample) : IClassFi
 
             // The package's overview the handler selects from: Maud holds every permission of Tenancy at the root, and what
             // Rhea reads of her holds none, since the grant that gives them is above North. Her own is whole.
-            var maud = await reads.AskDirectoryAsync(directory => directory.SeatOverviewAsync(Harbor.SeatOf(DemoPeople.Maud), Cancellation));
+            var maud = await reads.AskAsync((SeatManager seats) => seats.OverviewAsync(Harbor.SeatOf(DemoPeople.Maud), Cancellation));
             maud.Units.Should().ContainSingle().Which.Id.Should().Be(Harbor.Root, "where a seat is placed every member reads");
             maud.Permissions.Should().BeEmpty();
-            var own = await reads.AskDirectoryAsync(directory => directory.SeatOverviewAsync(Harbor.SeatOf(DemoPeople.Rhea), Cancellation));
+            var own = await reads.AskAsync((SeatManager seats) => seats.OverviewAsync(Harbor.SeatOf(DemoPeople.Rhea), Cancellation));
             own.Permissions.Select(permission => permission.Permission).Should().Contain(SeatGrants.RequiredPermission);
         }
     }

@@ -95,13 +95,13 @@ public sealed class SeatColumnsTests(TenancyPostgres postgres)
         using (TenancyWork.BeginSystem<TenantId, SeatId>())
         {
             await services.InScopeAsync(scoped => scoped.Tenants().ProvisionAsync(
-                new HostTenancy.TenantToProvision("dock", "Dock Works", TenantShape.Flat, "Dock", first, TenantId: dock, ConfigureFirstSeat: seat => seat.ChangeJobTitle("Dock master")),
+                new TenantToProvision("dock", "Dock Works", TenantShape.Flat, "Dock", first, TenantId: dock, ConfigureFirstSeat: seat => seat.ChangeJobTitle("Dock master")),
                 Cancellation));
         }
 
         var imported = SeatId.CreateSequential();
         var person = Guid.NewGuid();
-        await services.BySystemIn(Harbor, scoped => scoped.Seats().AddSeatAsync(person, Cancellation, imported, seat => seat.Rename("Imported")));
+        await services.BySystemIn(Harbor, scoped => scoped.Seats().AddAsync(person, Cancellation, imported, seat => seat.Rename("Imported")));
         (await services.BySystemIn(dock, scoped => scoped.TenancyContext().Set<HostSeat>().CountAsync(seat => seat.Identity == first, Cancellation))).Should().Be(1);
         (await services.BySystemIn(Harbor, scoped => scoped.TenancyContext().Set<HostSeat>().CountAsync(seat => seat.Id == imported && seat.Identity == person, Cancellation))).Should().Be(1);
 
@@ -173,8 +173,8 @@ public sealed class SeatColumnsTests(TenancyPostgres postgres)
         // Every save of a seat writes its version: a grant and a placement as much as a status. So the policy on the
         // seats asks the grants permission as well: Hiro gives Oli a role at North Pier and takes it away again, which changes
         // Oli's row each time.
-        await WritesOlisRowAsync(Hiro, seats => seats.GrantAsync(Oli.Seat, NorthPier, HarborRoles.Watcher, until: null, reason: null, Cancellation));
-        await WritesOlisRowAsync(Hiro, seats => seats.RevokeAsync(Oli.Seat, NorthPier, HarborRoles.Watcher, Cancellation));
+        await WritesOlisRowAsync(Hiro, seats => seats.GrantAsync(Oli.Seat, HarborRoles.Watcher, NorthPier, until: null, reason: null, Cancellation));
+        await WritesOlisRowAsync(Hiro, seats => seats.RevokeAsync(Oli.Seat, HarborRoles.Watcher, NorthPier, Cancellation));
 
         // The policy asks the grants permission held anywhere, not at the seat's units, on purpose: it is all that lets the
         // application's own commands write the row, and holding it to the units would decide for the application which
@@ -193,7 +193,7 @@ public sealed class SeatColumnsTests(TenancyPostgres postgres)
         await WritesOlisRowAsync(Eve, seats => seats.WithdrawAsync(Oli.Seat, North, Cancellation));
 
         // Hiro takes away his own Grants desk: the save takes his permission with it, and the row is his own all the same.
-        await services.BySeat(Hiro.Identity, Harbor, Hiro.Seat, scoped => scoped.Seats().RevokeAsync(Hiro.Seat, North, GrantsDesk, Cancellation));
+        await services.BySeat(Hiro.Identity, Harbor, Hiro.Seat, scoped => scoped.Seats().RevokeAsync(Hiro.Seat, GrantsDesk, North, Cancellation));
 
         // A seat that manages neither writes no other seat's row, the version included: the row is not its to find.
         // Hiro, his desk taken away, is one now.
@@ -209,7 +209,7 @@ public sealed class SeatColumnsTests(TenancyPostgres postgres)
         }
 
         // Runs a use case as the seat of the caller, and says that it wrote Oli's row: his version went up.
-        async Task WritesOlisRowAsync(Person caller, Func<HostTenancy.SeatCommands, Task> act)
+        async Task WritesOlisRowAsync(Person caller, Func<SeatManager, Task> act)
         {
             var before = await OlisVersionAsync();
             await services.BySeat(caller.Identity, Harbor, caller.Seat, scoped => act(scoped.Seats()));
@@ -258,7 +258,7 @@ public sealed class SeatColumnsTests(TenancyPostgres postgres)
         await using var services = new TenancyServices(database);
         var retitling = await FluentActions.Awaiting(() => services.BySeat(Hiro.Identity, Harbor, Hiro.Seat, async scoped =>
             {
-                var store = scoped.GetRequiredService<HostTenancy.IStore>();
+                var store = scoped.GetRequiredService<ITenancyStore<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId>>();
                 var sue = (await store.FindSeatAsync(Sue.Seat, Cancellation))!;
                 sue.ChangeJobTitle("Foreman");
                 await store.SaveAsync(Cancellation);

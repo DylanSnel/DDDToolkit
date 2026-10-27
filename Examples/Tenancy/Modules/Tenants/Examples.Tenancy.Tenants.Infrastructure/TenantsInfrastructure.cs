@@ -94,10 +94,10 @@ public static class TenantsInfrastructure
             options.OperatorTokenRoles.UnionWith(OperatorTokenRoles);
         });
 
-        // Invitations, generated like AddTenancy and closed over the module's classes: the invitation class and
-        // its id are named. Their use cases, and the store that keeps an invitation apart from its token's digest.
-        // An invitation stays open for the package's seven days.
-        services.AddTenancyInvitations<Invitation, InvitationId, TenantsContext>();
+        // Invitations, generated like AddTenancy and closed over the module's classes, the invitation class among them:
+        // their manager, and the store that keeps an invitation apart from its token's digest. An invitation stays open
+        // for the package's seven days.
+        services.AddTenancyInvitations<TenantsContext>();
 
         // What a request of this module requires of its caller is one of Tenancy's cases, and the package's check
         // decides them: added for the module's request interface, generated like AddTenancy and closed over the

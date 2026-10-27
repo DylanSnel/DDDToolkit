@@ -21,7 +21,7 @@ public sealed class TenantSeatsHandler(ITenancyReads reads) : IQueryHandler<Tena
     /// <exception cref="Exceptions.RefusalException">The caller's own refusal when it is nobody.</exception>
     public async ValueTask<IReadOnlyList<SeatListing>> Handle(TenantSeats query, CancellationToken cancellationToken)
     {
-        var seats = await reads.AskDirectoryAsync(directory => directory.ListSeatsAsync(cancellationToken));
+        var seats = await reads.AskAsync((SeatManager manager) => manager.ListAsync(cancellationToken));
         return SeatListing.ByName(seats.Select(seat => new SeatListing(seat.Id, seat.DisplayName, seat.Status)));
     }
 }

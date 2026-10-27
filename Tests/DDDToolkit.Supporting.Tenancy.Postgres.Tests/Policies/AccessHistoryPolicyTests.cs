@@ -112,7 +112,7 @@ public abstract class AccessHistoryPolicyTests(TenancyPostgres postgres, Tenancy
 
         // Ada gives Oli a role, puts a permission into a role and renames a unit: three saves by a person, each through the
         // policies on Tenancy's tables and on the history.
-        await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.Seats().GrantAsync(Oli.Seat, NorthPier, HarborRoles.Watcher, until: null, reason: null, Cancellation));
+        await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.Seats().GrantAsync(Oli.Seat, HarborRoles.Watcher, NorthPier, until: null, reason: null, Cancellation));
         await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.Roles().SetPermissionsAsync(GrantsDesk, [TenancyPermissions.GrantsManage, TenancyPermissions.SeatsManage], Cancellation));
         await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.Organization().RenameUnitAsync(South, "Southside", Cancellation));
 

@@ -122,7 +122,7 @@ internal sealed class SourceFolders
         var own = _paths.GetValueOrDefault(MetadataName(type)) ?? [];
 
         // A nested type without a method body, such as an interface, has no record of its own: the compiler names its
-        // file among those of the outermost type, and it is the one named after it, as TenancyUseCases.IInvitationStore.cs is.
+        // file among those of the outermost type, and it is the one named after it, as a file named Outer.Nested.cs is.
         if (own.Count == 0 && type.ContainingType is not null)
         {
             var outermost = type;

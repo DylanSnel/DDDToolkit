@@ -21,7 +21,7 @@ public class RegistrationTests
     {
         var services = AddTenancyCore(new ServiceCollection(), configure: null);
         services.AddSingleton(provider => new InMemoryTenancyStore(provider.GetRequiredService<TenancyCatalogue>()));
-        services.AddSingleton<HostTenancy.IStore>(provider => provider.GetRequiredService<InMemoryTenancyStore>());
+        services.AddSingleton<ITenancyStore<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId>>(provider => provider.GetRequiredService<InMemoryTenancyStore>());
         services.AddScoped<ISeatDirectory<TenantId, SeatId>, ListedSeats>();
 
         await using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
@@ -30,12 +30,12 @@ public class RegistrationTests
 
         await using var scope = provider.CreateAsyncScope();
         var store = provider.GetRequiredService<InMemoryTenancyStore>();
-        HostTenancy.ProvisionedTenant provisioned;
+        ProvisionedTenant provisioned;
         using (TenancyCallers.Begin(HostCaller.System))
         {
             store.BeginUnitOfWork();
-            provisioned = await scope.ServiceProvider.GetRequiredService<HostTenancy.TenantCommands>().ProvisionAsync(
-                new HostTenancy.TenantToProvision("harbor", "Harbor", TenantShape.Flat, "Head office", Guid.NewGuid()),
+            provisioned = await scope.ServiceProvider.GetRequiredService<CoreTenantManager>().ProvisionWithIdsAsync(scope.ServiceProvider.GetRequiredService<TenancyCatalogue>(),
+                new TenantToProvision("harbor", "Harbor", TenantShape.Flat, "Head office", Guid.NewGuid()),
                 TestContext.Current.CancellationToken);
         }
 
@@ -143,16 +143,16 @@ public class RegistrationTests
         var clock = new FixedClock();
         services.AddSingleton<TimeProvider>(clock);
         AddTenancyCore(services, EveryOption);
-        services.AddScoped<HostTenancy.IStore>(provider => new InMemoryTenancyStore(provider.GetRequiredService<TenancyCatalogue>()));
+        services.AddScoped<ITenancyStore<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId>>(provider => new InMemoryTenancyStore(provider.GetRequiredService<TenancyCatalogue>()));
         services.AddScoped<ISeatDirectory<TenantId, SeatId>, ListedSeats>();
         using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
         using var scope = provider.CreateScope();
 
-        scope.ServiceProvider.GetRequiredService<HostTenancy.TenantCommands>().Should().NotBeNull();
-        scope.ServiceProvider.GetRequiredService<HostTenancy.OrganizationCommands>().Should().NotBeNull();
-        scope.ServiceProvider.GetRequiredService<HostTenancy.SeatCommands>().Should().NotBeNull();
-        scope.ServiceProvider.GetRequiredService<HostTenancy.RoleCommands>().Should().NotBeNull();
-        scope.ServiceProvider.GetRequiredService<HostTenancy.TenancyDirectory>().Catalogue.Knows(TenancyPermissions.RolesManage).Should().BeTrue();
+        scope.ServiceProvider.GetRequiredService<CoreTenantManager>().Should().NotBeNull();
+        scope.ServiceProvider.GetRequiredService<CoreOrganizationManager>().Should().NotBeNull();
+        scope.ServiceProvider.GetRequiredService<CoreSeatManager>().Should().NotBeNull();
+        scope.ServiceProvider.GetRequiredService<CoreRoleManager>().Should().NotBeNull();
+        scope.ServiceProvider.GetRequiredService<TenancyCatalogue>().Knows(TenancyPermissions.RolesManage).Should().BeTrue();
         scope.ServiceProvider.GetRequiredService<TenantSelection<TenantId, SeatId>>().Should().NotBeNull();
         scope.ServiceProvider.GetRequiredService<ITenantSelection>().Should().BeSameAs(
             scope.ServiceProvider.GetRequiredService<TenantSelection<TenantId, SeatId>>(),
@@ -169,7 +169,7 @@ public class RegistrationTests
         var own = new OwnSelection();
         services.AddScoped<ITenantSelection>(_ => own);
         AddTenancyCore(services, EveryOption);
-        services.AddScoped<HostTenancy.IStore>(provider => new InMemoryTenancyStore(provider.GetRequiredService<TenancyCatalogue>()));
+        services.AddScoped<ITenancyStore<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId>>(provider => new InMemoryTenancyStore(provider.GetRequiredService<TenancyCatalogue>()));
         services.AddScoped<ISeatDirectory<TenantId, SeatId>, ListedSeats>();
         using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
         using var scope = provider.CreateScope();

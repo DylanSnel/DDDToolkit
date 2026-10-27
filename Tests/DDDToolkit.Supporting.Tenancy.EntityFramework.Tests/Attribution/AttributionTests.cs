@@ -23,7 +23,7 @@ public abstract class AttributionTests(TestDatabases databases) : IAsyncLifetime
     private static readonly Guid Odette = Guid.NewGuid();
 
     private TestServices _services = null!;
-    private HostTenancy.ProvisionedTenant _harbor = null!;
+    private ProvisionedTenant _harbor = null!;
     private SeatId _grace;
     private SeatId _lin;
 

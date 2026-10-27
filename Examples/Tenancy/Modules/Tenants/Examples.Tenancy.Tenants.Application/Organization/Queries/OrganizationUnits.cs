@@ -23,7 +23,7 @@ public sealed class OrganizationUnitsHandler(ITenancyReads reads) : IQueryHandle
     /// <exception cref="Exceptions.RefusalException">The caller's own refusal when it is nobody.</exception>
     public async ValueTask<IReadOnlyList<UnitListing>> Handle(OrganizationUnits query, CancellationToken cancellationToken)
     {
-        var units = await reads.AskDirectoryAsync(directory => directory.ListUnitsAsync(cancellationToken));
+        var units = await reads.AskAsync((OrganizationManager manager) => manager.ListUnitsAsync(cancellationToken));
         return [.. units.Select(found => new UnitListing(found.Unit.Id, found.Unit.ParentId, found.Unit.Name, found.Unit.Kind, found.Unit.Status, found.Path, found.Depth))];
     }
 }

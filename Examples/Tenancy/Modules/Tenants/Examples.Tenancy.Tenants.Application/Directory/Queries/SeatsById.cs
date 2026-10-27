@@ -29,7 +29,7 @@ public sealed class SeatsByIdHandler(ITenancyReads reads) : IQueryHandler<SeatsB
     /// </exception>
     public async ValueTask<IReadOnlyList<SeatListing>> Handle(SeatsById query, CancellationToken cancellationToken)
     {
-        var seats = await reads.AskDirectoryAsync(directory => directory.SeatsByIdAsync(query.Ids, cancellationToken));
+        var seats = await reads.AskAsync((SeatManager manager) => manager.ByIdAsync(query.Ids, cancellationToken));
         return SeatListing.ByName(seats.Select(seat => new SeatListing(seat.Id, seat.DisplayName, seat.Status)));
     }
 }

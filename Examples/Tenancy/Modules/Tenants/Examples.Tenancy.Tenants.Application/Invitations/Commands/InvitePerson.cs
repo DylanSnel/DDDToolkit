@@ -25,7 +25,7 @@ namespace Examples.Tenancy.Tenants.Application.Invitations.Commands;
 /// <param name="Until">When that role ends, later than the invitation itself, or <see langword="null"/> for no end.</param>
 [RequiresPermission(TenancyPermissions.SeatsManage)]
 public sealed record InvitePerson(string Address, OrganizationUnitId Unit, RoleId Role, DateTimeOffset? Until)
-    : ICommand<TenancyUseCases.IssuedInvitation<InvitationId>>, ITenantsRequest
+    : ICommand<IssuedInvitationListing>, ITenantsRequest
 {
 }
 
@@ -77,16 +77,16 @@ public sealed record InvitePerson(string Address, OrganizationUnitId Unit, RoleI
 /// </param>
 /// <param name="page">Where an invitation is accepted, or <see langword="null"/> in a host that names no page.</param>
 public sealed class InvitePersonHandler(
-    TenancyUseCases.InvitationCommands<Invitation, InvitationId> invitations,
-    TenancyUseCases.IInvitationStore<Invitation, InvitationId> kept,
-    TenancyUseCases.IStore store,
+    InvitationManager invitations,
+    InvitationStore kept,
+    TenancyStore store,
     IIdentityAccounts? accounts = null,
     InvitationPage? page = null)
-    : ICommandHandler<InvitePerson, TenancyUseCases.IssuedInvitation<InvitationId>>
+    : ICommandHandler<InvitePerson, IssuedInvitationListing>
 {
     /// <inheritdoc />
     /// <exception cref="Exceptions.RefusalException">What the package's use case refuses, with its code.</exception>
-    public async ValueTask<TenancyUseCases.IssuedInvitation<InvitationId>> Handle(InvitePerson command, CancellationToken cancellationToken)
+    public async ValueTask<IssuedInvitationListing> Handle(InvitePerson command, CancellationToken cancellationToken)
     {
         var issued = await invitations.IssueAsync(command.Address, command.Unit, command.Role, command.Until, lifetime: null, cancellationToken);
 
@@ -102,10 +102,10 @@ public sealed class InvitePersonHandler(
                 // way the answer below is the same.
                 var account = await accounts.InviteByEmailAsync(address, leadsTo, cancellationToken) is IdentityAccountOutcome.Created made
                     ? made.Identity
-                    : await MailedAgainAsync(accounts, issued.Id, address, leadsTo, cancellationToken);
+                    : await MailedAgainAsync(accounts, issued.Invitation.Id, address, leadsTo, cancellationToken);
 
                 // The package saved the invitation when it issued it; what the application adds is saved after.
-                if (account is { } own && await kept.FindAsync(issued.Id, cancellationToken) is { } invitation)
+                if (account is { } own && await kept.FindAsync(issued.Invitation.Id, cancellationToken) is { } invitation)
                 {
                     invitation.KeepAccount(own);
                     await store.SaveAsync(cancellationToken);
@@ -114,12 +114,12 @@ public sealed class InvitePersonHandler(
             catch
             {
                 // Not on the request's token: a caller that stopped waiting still leaves no invitation behind.
-                await invitations.CancelAsync(issued.Id, CancellationToken.None);
+                await invitations.CancelAsync(issued.Invitation.Id, CancellationToken.None);
                 throw;
             }
         }
 
-        return issued;
+        return new IssuedInvitationListing(issued.Invitation.Id, issued.Token, issued.Invitation.ExpiresAt);
     }
 
     /// <summary>

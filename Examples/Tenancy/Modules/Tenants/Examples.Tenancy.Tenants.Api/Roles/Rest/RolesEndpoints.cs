@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 using Examples.Tenancy.Tenants.Application.Roles;
 using Examples.Tenancy.Tenants.Application.Roles.Commands;
 using Examples.Tenancy.Tenants.Application.Roles.Queries;
+using Examples.Tenancy.Tenants.Application.Seats;
 using Mediator;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -61,7 +62,7 @@ internal static class RolesEndpoints
     /// always read of its own. Whether a role manages access says who may give it: only someone who holds its
     /// permissions that do, or whoever manages grants where the seat is placed.
     /// </summary>
-    internal static object Describe(TenancyUseCases.RoleSummary role) => new
+    internal static object Describe(RoleOfMine role) => new
     {
         role.Id,
         role.Name,

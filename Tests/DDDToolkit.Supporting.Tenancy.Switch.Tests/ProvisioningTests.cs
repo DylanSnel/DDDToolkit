@@ -1,5 +1,6 @@
 using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.Supporting.Tenancy;
+using DDDToolkit.Supporting.Tenancy.Catalogue;
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -11,10 +12,10 @@ namespace Shop;
 
 /// <summary>
 /// An application of one project that writes <c>[assembly: GenerateTenancyClasses]</c> and no class or id of Tenancy's:
-/// it compiles, it creates its tables, and it provisions a tenant through the package's use case, on a SQLite database
+/// it compiles, it creates its tables, and it provisions a tenant through the package's tenant manager, on a SQLite database
 /// in memory. What the tenant, its organization, its root, its roles and its first seat are stored as is read back
-/// from that database. The system work it is done in is begun through the class the use cases are named through,
-/// closed over the ids the switch wrote, and no line here names one of them.
+/// from that database. The system work it is done in is begun through the access manager the generator wrote, closed
+/// over the ids the switch wrote, and no line here writes a type argument.
 /// </summary>
 public sealed class ProvisioningTests : IDisposable
 {
@@ -40,34 +41,39 @@ public sealed class ProvisioningTests : IDisposable
     [Fact]
     public async Task A_tenant_is_provisioned_through_the_classes_and_ids_the_switch_wrote()
     {
-        TenancyUseCases.ProvisionedTenant provisioned;
+        // The ids are made here, as an import makes them, so the test knows them: the tenant manager returns the tenant.
+        var root = OrganizationUnitId.Create();
+        var adminSeat = SeatId.Create();
+        IReadOnlyDictionary<string, RoleId> roles;
+        Tenant provisioned;
         await using (var scope = _services.CreateAsyncScope())
         using (scope.ServiceProvider.GetRequiredService<TenancyAccessManager>().BeginSystem())
         {
-            provisioned = await scope.ServiceProvider.GetRequiredService<TenancyUseCases.TenantCommands>().ProvisionAsync(
-                new TenancyUseCases.TenantToProvision("acme", "Acme Works", TenantShape.Flat, "Acme", Guid.NewGuid()),
+            roles = scope.ServiceProvider.GetRequiredService<TenancyCatalogue>().PacksFor(TenantShape.Flat).ToDictionary(pack => pack.Key, _ => RoleId.Create());
+            provisioned = await scope.ServiceProvider.GetRequiredService<TenantManager>().ProvisionAsync(
+                new TenantToProvision("acme", "Acme Works", TenantShape.Flat, "Acme", Guid.NewGuid(), RootId: root, AdminSeatId: adminSeat, RoleIds: roles),
                 TestContext.Current.CancellationToken);
         }
 
         await using var read = _services.CreateAsyncScope();
-        using var inTheTenant = read.ServiceProvider.GetRequiredService<TenancyAccessManager>().BeginSystemIn(provisioned.Tenant);
+        using var inTheTenant = read.ServiceProvider.GetRequiredService<TenancyAccessManager>().BeginSystemIn(provisioned.Id);
         var context = read.ServiceProvider.GetRequiredService<ShopContext>();
 
         var tenant = await context.Set<Tenant>().SingleAsync(TestContext.Current.CancellationToken);
-        tenant.Id.Should().Be(provisioned.Tenant);
+        tenant.Id.Should().Be(provisioned.Id);
         tenant.Slug.Value.Should().Be("acme");
         tenant.IsActive.Should().BeTrue();
 
         var organization = await context.Set<Organization>().SingleAsync(TestContext.Current.CancellationToken);
-        organization.Id.Should().Be(provisioned.Tenant, "an organization shares its tenant's id");
-        organization.Units.Should().ContainSingle().Which.Id.Should().Be(provisioned.RootUnit);
+        organization.Id.Should().Be(provisioned.Id, "an organization shares its tenant's id");
+        organization.Units.Should().ContainSingle().Which.Id.Should().Be(root);
 
         var seat = await context.Set<Seat>().SingleAsync(TestContext.Current.CancellationToken);
-        seat.Id.Should().Be(provisioned.AdminSeat);
+        seat.Id.Should().Be(adminSeat);
         seat.Status.Should().Be(SeatStatus.Active, "a seat the switch wrote is the package's, with nothing of the application's added: no name either");
 
         (await context.Set<Role>().Select(static role => role.Id).ToListAsync(TestContext.Current.CancellationToken))
-            .Should().BeEquivalentTo(provisioned.RolesByPack.Values);
+            .Should().BeEquivalentTo(roles.Values);
     }
 
     [Fact]
@@ -82,7 +88,7 @@ public sealed class ProvisioningTests : IDisposable
         typeof(Tenant).Assembly.GetType("Shop.OrganizationId").Should().BeNull("an organization shares its tenant's id");
         typeof(Tenant).Assembly.GetType("Shop.Invitation").Should().BeNull("the invitation is the class an application may leave out, and the switch leaves it out");
 
-        typeof(TenancyUseCases).BaseType!.GetGenericArguments().Should().Equal(
+        typeof(SeatManager).BaseType!.GetGenericArguments().Should().Equal(
             typeof(Tenant), typeof(TenantId), typeof(Organization), typeof(OrganizationUnit), typeof(OrganizationUnitId), typeof(Seat), typeof(SeatId), typeof(Role), typeof(RoleId));
     }
 }

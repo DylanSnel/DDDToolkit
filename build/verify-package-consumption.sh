@@ -29,8 +29,8 @@
 #      inside Membership's packages and write nothing in the host; Tenancy's generator, which ships inside
 #      Tenancy's package and writes the module's list of permissions where its [Permissions] class is, and
 #      the modules' lists into the host, and nothing into the infrastructure project; the toolkit's, which
-#      writes Tenancy's use cases closed over the classes, TenancyUseCases, into the domain project alone, for
-#      the host to name them through; and the packages carry their Dutch texts. Its module is declared by
+#      writes Tenancy's managers closed over the classes, SeatManager and the others, into the domain project
+#      alone, for the host to name them by; and the packages carry their Dutch texts. Its module is declared by
 #      DDD_Module, from a Directory.Build.props, and not by a file in either project: the package's targets
 #      declare it, and its generator writes the attribute.
 #   6. The Supabase export of that application runs in its host, also when SupabaseMigrationsExport is
@@ -520,24 +520,24 @@ expect_module SupportingDomains/Domain Press
 expect_module SupportingDomains/Infrastructure Press
 expect_module SupportingDomains/Host ""
 
-# Tenancy's use cases closed over the classes, TenancyUseCases, are written by the toolkit's generator into the domain
-# project that declares the classes, and into no project above it: those see that one, and PressSeats in the host
-# names the directory through it, so the host does not compile without it.
-tenancy_use_cases() {
-  find "$work/package-consumers/SupportingDomains/$1/obj" -path '*generated*' -name 'TenancyUseCases.TemplateFacade.g.cs'
+# Tenancy's managers closed over the classes, SeatManager and the others, are written by the toolkit's generator into
+# the domain project that declares the classes, and into no project above it: those see that one, and PressSeats in
+# the host takes the SeatManager, so the host does not compile without it.
+tenancy_seat_manager() {
+  find "$work/package-consumers/SupportingDomains/$1/obj" -path '*generated*' -name 'SeatManager.TemplateFacade.g.cs'
 }
-if [ -z "$(tenancy_use_cases Domain)" ]; then
-  echo "FAILED: SupportingDomains/Domain: the toolkit's generator wrote no TenancyUseCases, which the host names Tenancy's use cases through." >&2
+if [ -z "$(tenancy_seat_manager Domain)" ]; then
+  echo "FAILED: SupportingDomains/Domain: the toolkit's generator wrote no SeatManager, which the host takes." >&2
   exit 1
 fi
 for project in Infrastructure Host; do
-  if [ -n "$(tenancy_use_cases "$project")" ]; then
-    echo "FAILED: SupportingDomains/$project: TenancyUseCases was written again above the domain project, which already has it." >&2
+  if [ -n "$(tenancy_seat_manager "$project")" ]; then
+    echo "FAILED: SupportingDomains/$project: SeatManager was written again above the domain project, which already has it." >&2
     exit 1
   fi
 done
 
-echo "    SupportingDomains/Domain: TenancyUseCases, which the host names Tenancy's use cases through"
+echo "    SupportingDomains/Domain: SeatManager and Tenancy's other managers, which the host takes"
 
 # Where each generator ships, and the Dutch texts of both domains, which nothing in a build reads.
 expect_in_package "${prefix}DDDToolkit.Supporting.Membership" analyzers/dotnet/cs/DDDToolkit.Supporting.Membership.Analyzers.dll

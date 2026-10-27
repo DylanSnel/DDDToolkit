@@ -59,7 +59,7 @@ internal static class OrganizationEndpoints
     }
 
     /// <summary>A unit where a seat's overview points at one: its id and its path from the root.</summary>
-    internal static object Describe(TenancyUseCases.UnitRef unit) => new { unit.Id, unit.Path };
+    internal static object Describe(SeatManager.UnitRef unit) => new { unit.Id, unit.Path };
 
     /// <summary>A unit asked for by id, by name: its id, its name, its path from the root and its depth.</summary>
     internal static object Describe(UnitName unit) => new { unit.Id, unit.Name, unit.Path, unit.Depth };

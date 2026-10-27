@@ -32,7 +32,7 @@ public abstract class TenancyFailureTests(TenancyPostgres postgres, TenancyNamin
         using (TenancyWork.BeginSystem<TenantId, SeatId>())
         {
             refusal = (await FluentActions.Awaiting(() => services.InScopeAsync(scoped => scoped.Tenants().ProvisionAsync(
-                    new HostTenancy.TenantToProvision("harbor", "Second Harbor", TenantShape.Flat, "Second", Guid.NewGuid(), TenantId: new TenantId(40)),
+                    new TenantToProvision("harbor", "Second Harbor", TenantShape.Flat, "Second", Guid.NewGuid(), TenantId: new TenantId(40)),
                     Cancellation)))
                 .Should().ThrowAsync<RefusalException>()).Which;
         }
@@ -93,11 +93,11 @@ public abstract class TenancyFailureTests(TenancyPostgres postgres, TenancyNamin
 
         // System work of another module's scope is system work to the use cases, which let it through; the
         // policies let it read Tenancy's tables and write none of them. A new row is refused in so many words.
-        var adding = await FluentActions.Awaiting(() => services.BySystemIn(
+        var adding = (await FluentActions.Awaiting(() => services.BySystemIn(
                 Harbor,
-                scoped => scoped.Seats().AddSeatAsync(Guid.NewGuid(), Cancellation, configure: seat => seat.Rename("Zed")),
+                scoped => scoped.Seats().AddAsync(Guid.NewGuid(), Cancellation, configure: seat => seat.Rename("Zed")),
                 scope: "widgets"))
-            .Should().ThrowAsync<RefusalException>();
+            .Should().ThrowAsync<RefusalException>());
 
         adding.Which.Code.Should().Be(ToolkitRefusals.Refused);
         adding.Which.Kind.Should().Be(RefusalKind.NotPermitted);
@@ -158,7 +158,7 @@ public abstract class TenancyFailureTests(TenancyPostgres postgres, TenancyNamin
         // that his primary placement. The aggregate, which cannot see it, makes North Pier primary.
         var refusal = await FluentActions.Awaiting(() => services.BySystemIn(Harbor, async scoped =>
             {
-                var store = scoped.GetRequiredService<HostTenancy.IStore>();
+                var store = scoped.GetRequiredService<ITenancyStore<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId>>();
                 var seth = (await store.FindSeatAsync(Seth.Seat, Cancellation))!;
 
                 await using (var other = await AsCaller.SystemInAsync(database, Harbor, TenancyWork.SystemScope, Cancellation))
@@ -192,7 +192,7 @@ public abstract class TenancyFailureTests(TenancyPostgres postgres, TenancyNamin
         // Past the use case, which would have refused it first: Harbor's one administrator gives up the role.
         var refusal = await FluentActions.Awaiting(() => services.BySystemIn(Harbor, async scoped =>
             {
-                var store = scoped.GetRequiredService<HostTenancy.IStore>();
+                var store = scoped.GetRequiredService<ITenancyStore<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId>>();
                 var ada = (await store.FindSeatAsync(Ada.Seat, Cancellation))!;
                 ada.Revoke(HarborRoot, HarborRoles.Administrator);
                 await store.SaveAsync(Cancellation);
@@ -223,7 +223,7 @@ public abstract class TenancyFailureTests(TenancyPostgres postgres, TenancyNamin
                     Permission = TestHost.HostCatalogue.WidgetRead,
                     StartsAt = DateTimeOffset.UtcNow,
                 });
-                await scoped.GetRequiredService<HostTenancy.IStore>().SaveAsync(Cancellation);
+                await scoped.GetRequiredService<ITenancyStore<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId>>().SaveAsync(Cancellation);
             }))
             .Should().ThrowAsync<Exception>();
 

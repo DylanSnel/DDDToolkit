@@ -30,7 +30,7 @@ public sealed class OrganizationUnitsByIdHandler(ITenancyReads reads) : IQueryHa
     /// </exception>
     public async ValueTask<IReadOnlyList<UnitName>> Handle(OrganizationUnitsById query, CancellationToken cancellationToken)
     {
-        var units = await reads.AskDirectoryAsync(directory => directory.UnitsByIdAsync(query.Ids, cancellationToken));
+        var units = await reads.AskAsync((OrganizationManager manager) => manager.UnitsByIdAsync(query.Ids, cancellationToken));
         return [.. units.Select(unit => new UnitName(unit.Id, unit.Name, unit.Path, unit.Depth))];
     }
 }

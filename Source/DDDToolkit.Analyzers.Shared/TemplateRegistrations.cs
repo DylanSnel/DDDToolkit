@@ -497,6 +497,13 @@ internal static class TemplateRegistrations
                 : DefinitionFactory.ReferencedSources(compilation, take.MetadataName, cancellationToken).Select(source => new Candidate(source, anchor.Type.Location)).ToList();
         }
 
+        // A method over a template an application may leave out is for the projects that have its class, and says
+        // nothing elsewhere.
+        if (LeftOut(method, takes, position => candidates[position]?.Count))
+        {
+            return null;
+        }
+
         return Closing(
             method,
             takes,
@@ -508,6 +515,63 @@ internal static class TemplateRegistrations
             facades,
             compilation,
             cancellationToken);
+    }
+
+    /// <summary>
+    /// Whether a method marked <c>[TemplateRegistration(OnlyWith = ...)]</c> finds no class of that template: then it is
+    /// not for this project, and says nothing. False for a method without it.
+    /// </summary>
+    /// <param name="method">The method.</param>
+    /// <param name="takes">What its type parameters take.</param>
+    /// <param name="found">How many classes were found for the type parameter at a position.</param>
+    private static bool LeftOut(IMethodSymbol method, Take?[] takes, Func<int, int?> found)
+    {
+        if (OnlyWithOf(method, KnownTypes.TemplateRegistrationAttribute) is not { } only)
+        {
+            return false;
+        }
+
+        for (var position = 0; position < takes.Length; position++)
+        {
+            if (takes[position]?.Key == only && found(position) is null or 0)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// The template an attribute of <paramref name="attributeName"/> on <paramref name="symbol"/> names with
+    /// <c>OnlyWith</c>, as a <see cref="Take.Key"/> is written; null when it names none.
+    /// </summary>
+    internal static string? OnlyWithOf(ISymbol symbol, string attributeName)
+        => OnlyWithIn(symbol.GetAttributes(), attributeName, static _ => true);
+
+    /// <summary>
+    /// The template the first of <paramref name="attributes"/> of <paramref name="attributeName"/> that
+    /// <paramref name="matches"/> names with <c>OnlyWith</c>, as a <see cref="Take.Key"/> is written; null when it names none.
+    /// </summary>
+    internal static string? OnlyWithIn(ImmutableArray<AttributeData> attributes, string attributeName, Func<AttributeData, bool> matches)
+    {
+        foreach (var attribute in attributes)
+        {
+            if (attribute.AttributeClass is not { } attributeClass || !EntityDeclarations.Is(attributeClass, attributeName) || !matches(attribute))
+            {
+                continue;
+            }
+
+            foreach (var named in attribute.NamedArguments)
+            {
+                if (named.Key == "OnlyWith" && named.Value.Value is INamedTypeSymbol template)
+                {
+                    return template.OriginalDefinition.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                }
+            }
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -575,7 +639,7 @@ internal static class TemplateRegistrations
             line ??= fromLines.Select(static source => source.LineLocation).FirstOrDefault(static where => where is not null);
         }
 
-        if (!anchored && (!named || unfilled))
+        if ((!anchored && (!named || unfilled)) || LeftOut(method, takes, position => sources[position]?.Count))
         {
             return null;
         }

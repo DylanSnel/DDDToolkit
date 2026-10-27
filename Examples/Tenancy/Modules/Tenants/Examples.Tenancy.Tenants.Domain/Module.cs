@@ -18,9 +18,10 @@
 // and the other modules store them from there, without a reference to the Tenancy package. The switch finds them
 // there and takes them, so the organization is declared over the contracts' TenantId, the role over its RoleId.
 //
-// With the classes complete, the generator also writes TenancyUseCases here: Tenancy's use cases closed over them,
-// named as the package's class is, which every project above names a use case through. This is the one module with
-// Tenancy's classes, so the name is free. A second one would meet this one's in the host, DDD00075, and would get a
-// name of its own in its domain project, beside its switch: [assembly: TemplateFacadeName("TenancyUseCases", "...")],
-// with using DDDToolkit.Abstractions.Attributes at the top of that file, where the attribute is.
+// With the classes complete, the generator also writes Tenancy's managers here, closed over them: TenantManager,
+// OrganizationManager, SeatManager, RoleManager and InvitationManager, named as the package's classes are, which every
+// project above takes. This is the one module with Tenancy's classes, so the names are free. A second one would meet
+// this one's in the host, DDD00075, and would give its own a name each in its domain project, beside its switch:
+// [assembly: TemplateFacadeName("SeatManager", "...")], with using DDDToolkit.Abstractions.Attributes at the top of that
+// file, where the attribute is.
 [assembly: GenerateTenancyClasses]

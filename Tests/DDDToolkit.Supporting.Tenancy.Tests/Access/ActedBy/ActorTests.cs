@@ -288,31 +288,31 @@ public class ActorTests
         var watcher = harness.RoleFromPack(HostCatalogue.WatcherPack);
 
         // Every command a seat gives, as Harbor's administrator.
-        await harness.As(ada, use => use.Tenants.RenameOrganizationAsync("Harbor Yards", Cancellation));
-        var east = await harness.As(ada, use => use.Organization.AddUnitAsync(harbor.Root, "East", Cancellation));
+        await harness.As(ada, use => use.Organization.RenameAsync("Harbor Yards", Cancellation));
+        var east = (await harness.As(ada, use => use.Organization.AddUnitAsync(harbor.Root, "East", Cancellation))).Id;
         await harness.As(ada, use => use.Organization.RenameUnitAsync(east, "Far East", Cancellation));
         await harness.As(ada, use => use.Organization.MoveUnitAsync(east, harbor.North, Cancellation));
         await harness.As(ada, use => use.Organization.ArchiveUnitAsync(east, Cancellation));
 
-        var polisher = await harness.As(ada, use => use.Roles.CreateAsync("Polisher", "Polishes widgets", [HostCatalogue.WidgetRead], Cancellation));
+        var polisher = (await harness.As(ada, use => use.Roles.CreateAsync("Polisher", "Polishes widgets", [HostCatalogue.WidgetRead], Cancellation))).Id;
         await harness.As(ada, use => use.Roles.RenameAsync(polisher, "Buffer", "Buffs widgets", Cancellation));
         await harness.As(ada, use => use.Roles.SetPermissionsAsync(polisher, [HostCatalogue.WidgetCreate], Cancellation));
         await harness.As(ada, use => use.Roles.ArchiveAsync(polisher, Cancellation));
 
-        var ben = await harness.As(ada, use => use.Seats.AddSeatAsync(Guid.NewGuid(), Cancellation, configure: added => added.Rename("Ben")));
+        var ben = (await harness.As(ada, use => use.Seats.AddAsync(Guid.NewGuid(), Cancellation, configure: added => added.Rename("Ben")))).Id;
         await harness.As(ada, use => use.Seats.PlaceAsync(ben, harbor.North, primary: true, Cancellation));
         await harness.As(ada, use => use.Seats.PlaceAsync(ben, harbor.South, primary: false, Cancellation));
         await harness.As(ada, use => use.Seats.MakePrimaryAsync(ben, harbor.South, Cancellation));
-        await harness.As(ada, use => use.Seats.GrantAsync(ben, harbor.South, watcher, until: null, reason: null, Cancellation));
-        await harness.As(ada, use => use.Seats.RevokeAsync(ben, harbor.South, watcher, Cancellation));
-        await harness.As(ada, use => use.Seats.GrantAsync(ben, harbor.North, watcher, until: null, reason: null, Cancellation));
+        await harness.As(ada, use => use.Seats.GrantAsync(ben, watcher, harbor.South, until: null, reason: null, Cancellation));
+        await harness.As(ada, use => use.Seats.RevokeAsync(ben, watcher, harbor.South, Cancellation));
+        await harness.As(ada, use => use.Seats.GrantAsync(ben, watcher, harbor.North, until: null, reason: null, Cancellation));
         await harness.As(ada, use => use.Seats.WithdrawAsync(ben, harbor.North, Cancellation));
         await harness.As(ada, use => use.Seats.SuspendAsync(ben, Cancellation));
         await harness.As(ada, use => use.Seats.ReactivateAsync(ben, Cancellation));
         await harness.As(ada, use => use.Seats.DeactivateAsync(ben, Cancellation));
 
         var withdrawn = await harness.As(ada, use => use.Invitations.IssueAsync("lark@example.test", harbor.North, watcher, null, null, Cancellation));
-        await harness.As(ada, use => use.Invitations.CancelAsync(withdrawn.Id, Cancellation));
+        await harness.As(ada, use => use.Invitations.CancelAsync(withdrawn.Invitation.Id, Cancellation));
         var invited = await harness.As(ada, use => use.Invitations.IssueAsync("wren@example.test", harbor.North, watcher, null, null, Cancellation));
 
         var bySeat = harness.Store.SavedEvents.ToList();
@@ -326,12 +326,12 @@ public class ActorTests
         var before = bySeat.Count + forTheIssuer.Count;
 
         // A tenant's own life is the application's work: provisioned by the system, ...
-        HostTenancy.ProvisionedTenant quay;
+        ProvisionedTenant quay;
         using (TenancyWork.BeginSystem<TenantId, SeatId>())
         {
             harness.Store.BeginUnitOfWork();
-            quay = await harness.Tenants.ProvisionAsync(
-                new HostTenancy.TenantToProvision("quay", "Quay Works", TenantShape.Flat, "Quay", Guid.NewGuid()),
+            quay = await harness.Tenants.ProvisionWithIdsAsync(harness.Catalogue,
+                new TenantToProvision("quay", "Quay Works", TenantShape.Flat, "Quay", Guid.NewGuid()),
                 Cancellation);
         }
 
@@ -345,7 +345,7 @@ public class ActorTests
                 Packs = [.. HostCatalogue.Application.Packs.Select(pack => pack.Key == HostCatalogue.WatcherPack ? pack with { Permissions = [HostCatalogue.WidgetCreate] } : pack)],
             },
             []);
-        await harness.BySystemWork(use => new HostTenancy.RoleCommands(use.Store, later, use.Clock).FollowPacksAsync(Cancellation));
+        await harness.BySystemWork(use => new HostRoleManager(use.Store, later, use.Clock).FollowPacksAsync(Cancellation));
         var followed = harness.Store.SavedEvents.Skip(before + bySystem.Count).ToList();
         followed.Should().ContainSingle().Which.Should().BeOfType<RoleFollowedItsPack<TenantId, RoleId, SeatId>>();
         followed.Should().OnlyContain(raised => ByOf(raised) == TenancyActor<SeatId>.OfSystem(TenancyWork.SystemScope));
@@ -385,7 +385,7 @@ public class ActorTests
         var before = harness.Store.SavedEvents.Count;
 
         await harness.As(harness.Administrator, use => use.Seats.GrantAsync(
-            ben, harness.Harbor.North, harness.RoleFromPack(HostCatalogue.WatcherPack), until: null, reason: null, Cancellation));
+            ben, harness.RoleFromPack(HostCatalogue.WatcherPack), harness.Harbor.North, until: null, reason: null, Cancellation));
 
         var granted = harness.Store.SavedEvents.Skip(before).Should().ContainSingle()
             .Which.Should().BeOfType<OrganizationRoleGranted<TenantId, SeatId, OrganizationUnitId, RoleId>>().Which;
@@ -407,11 +407,11 @@ public class ActorTests
         using (TenancyWork.BeginSystemIn(harness.Tenant, (SeatId?)ada))
         {
             harness.Store.BeginUnitOfWork();
-            await harness.Seats.GrantAsync(ben, harness.Harbor.North, watcher, until: null, reason: null, Cancellation);
+            await harness.Seats.GrantAsync(ben, watcher, harness.Harbor.North, until: null, reason: null, Cancellation);
 
             // On the very seat it acts for, the grant keeps nobody, and the event still says whom the work was for.
             harness.Store.BeginUnitOfWork();
-            await harness.Seats.GrantAsync(ada, harness.Harbor.Root, watcher, until: null, reason: null, Cancellation);
+            await harness.Seats.GrantAsync(ada, watcher, harness.Harbor.Root, until: null, reason: null, Cancellation);
         }
 
         var granted = harness.Store.SavedEvents.Skip(before).Cast<OrganizationRoleGranted<TenantId, SeatId, OrganizationUnitId, RoleId>>().ToList();
@@ -448,7 +448,7 @@ public class ActorTests
         {
             harness.Store.BeginUnitOfWork();
             await harness.Tenants.ProvisionAsync(
-                new HostTenancy.TenantToProvision("harbor", "Harbor Works", TenantShape.Hierarchical, "Harbor Works", Guid.NewGuid()),
+                new TenantToProvision("harbor", "Harbor Works", TenantShape.Hierarchical, "Harbor Works", Guid.NewGuid()),
                 Cancellation);
         }
 
@@ -501,17 +501,17 @@ public class ActorTests
     public async Task Provisioning_for_an_operator_is_recorded_as_that_operator()
     {
         var harness = new Harness(New.Catalogue());
-        var command = new HostTenancy.TenantToProvision("harbor", "Harbor Works", TenantShape.Hierarchical, "Harbor Works", Guid.NewGuid());
+        var command = new TenantToProvision("harbor", "Harbor Works", TenantShape.Hierarchical, "Harbor Works", Guid.NewGuid());
 
-        HostTenancy.ProvisionedTenant provisioned;
+        ProvisionedTenant provisioned;
         using (TenancyWork.BeginOperator<TenantId, SeatId>(Odette))
         {
             harness.Store.BeginUnitOfWork();
-            provisioned = await harness.Tenants.ProvisionAsync(command, TestContext.Current.CancellationToken);
+            provisioned = await harness.Tenants.ProvisionWithIdsAsync(harness.Catalogue, command, TestContext.Current.CancellationToken);
         }
 
         // It saves as system work in the tenant it makes, as any provisioning does, and still as the operator's act.
-        var save = harness.Store.Observed.Single(call => call.Name == nameof(HostTenancy.IStore.SaveAsync));
+        var save = harness.Store.Observed.Single(call => call.Name == nameof(ITenancyStore<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId>.SaveAsync));
         save.Tenancy!.Kind.Should().Be(TenancyCallerKind.SystemInTenant);
         save.Tenancy.TenantId.Should().Be(provisioned.Tenant);
         save.Tenancy.Actor!.ToActedBy().Should().Be(new ActedBy("operator", Odette.ToString("D")));
@@ -528,7 +528,7 @@ public class ActorTests
             await other.Tenants.ProvisionAsync(command, TestContext.Current.CancellationToken);
         }
 
-        other.Store.Observed.Single(call => call.Name == nameof(HostTenancy.IStore.SaveAsync)).Tenancy!.Actor!.ToActedBy()
+        other.Store.Observed.Single(call => call.Name == nameof(ITenancyStore<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId>.SaveAsync)).Tenancy!.Actor!.ToActedBy()
             .Should().Be(new ActedBy("system", "tenancy"));
     }
 }

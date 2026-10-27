@@ -94,7 +94,7 @@ public abstract class RolePackSyncTests(TestDatabases databases) : IAsyncLifetim
             [])));
 
     /// <summary>The permissions of a tenant's role made from <paramref name="pack"/>, as saved.</summary>
-    private Task<List<string>> KeysAsync(HostTenancy.ProvisionedTenant tenant, string pack)
+    private Task<List<string>> KeysAsync(ProvisionedTenant tenant, string pack)
         => _services.BySystemIn(tenant.Tenant, async services =>
             (await services.TenancyContext().Set<HostRole>().SingleAsync(role => role.Id == tenant.RolesByPack[pack], Cancellation)).Permissions.ToList());
 

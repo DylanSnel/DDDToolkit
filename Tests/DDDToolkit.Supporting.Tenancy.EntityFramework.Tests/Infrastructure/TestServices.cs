@@ -126,10 +126,11 @@ public sealed class TestServices : IDisposable
     public AsyncServiceScope Scope() => Provider.CreateAsyncScope();
 
     /// <summary>
-    /// Provisions a tenant through the use cases, as system work outside any tenant: a tenant, its organization
-    /// with the root, a role per pack and a first administrator, whom the host names in its callback.
+    /// Provisions a tenant through the tenant manager, with ids the test keeps, as system work outside any tenant: a
+    /// tenant, its organization with the root, a role per pack and a first administrator, whom the host names in its
+    /// callback.
     /// </summary>
-    public async Task<HostTenancy.ProvisionedTenant> ProvisionAsync(
+    public async Task<ProvisionedTenant> ProvisionAsync(
         string slug,
         TenantShape shape = TenantShape.Hierarchical,
         Guid? administrator = null,
@@ -138,8 +139,9 @@ public sealed class TestServices : IDisposable
         await using var scope = Scope();
         using (TenancyWork.BeginSystem<TenantId, SeatId>())
         {
-            return await scope.ServiceProvider.GetRequiredService<HostTenancy.TenantCommands>().ProvisionAsync(
-                new HostTenancy.TenantToProvision(
+            return await scope.ServiceProvider.GetRequiredService<TenantManager>().ProvisionWithIdsAsync(
+                scope.ServiceProvider.GetRequiredService<TenancyCatalogue>(),
+                new TenantToProvision(
                     slug,
                     Capitalized(slug) + " Works",
                     shape,
@@ -151,18 +153,18 @@ public sealed class TestServices : IDisposable
     }
 
     /// <summary>Adds a unit, as system work in the tenant, with the application's fields set by <paramref name="configure"/>.</summary>
-    public Task<OrganizationUnitId> AddUnitAsync(TenantId tenant, OrganizationUnitId parent, string name, Action<HostUnit>? configure = null)
-        => BySystemIn(tenant, services => services.Organization().AddUnitAsync(parent, name, CancellationToken.None, configure: configure));
+    public async Task<OrganizationUnitId> AddUnitAsync(TenantId tenant, OrganizationUnitId parent, string name, Action<HostUnit>? configure = null)
+        => (await BySystemIn(tenant, services => services.Organization().AddUnitAsync(parent, name, CancellationToken.None, configure: configure))).Id;
 
     /// <summary>Adds a seat, as system work in the tenant, with the name the host shows it by set in the use case's callback.</summary>
-    public Task<SeatId> AddSeatAsync(TenantId tenant, Guid identity, string displayName)
-        => BySystemIn(tenant, services => services.Seats().AddSeatAsync(identity, CancellationToken.None, configure: seat => seat.Rename(displayName)));
+    public async Task<SeatId> AddSeatAsync(TenantId tenant, Guid identity, string displayName)
+        => (await BySystemIn(tenant, services => services.Seats().AddAsync(identity, CancellationToken.None, configure: seat => seat.Rename(displayName)))).Id;
 
     /// <summary>
     /// A new seat, added, placed at <paramref name="unit"/> as its primary placement and granted there the role
     /// of each pack, by system work, one command at a time.
     /// </summary>
-    public async Task<SeatId> SeatAtAsync(HostTenancy.ProvisionedTenant tenant, string displayName, OrganizationUnitId unit, params string[] packs)
+    public async Task<SeatId> SeatAtAsync(ProvisionedTenant tenant, string displayName, OrganizationUnitId unit, params string[] packs)
     {
         var seat = await AddSeatAsync(tenant.Tenant, Guid.NewGuid(), displayName);
         await BySystemIn(tenant.Tenant, services => services.Seats().PlaceAsync(seat, unit, primary: true, CancellationToken.None));
@@ -175,8 +177,8 @@ public sealed class TestServices : IDisposable
     }
 
     /// <summary>Grants a seat the role of a pack at a unit where it is placed, by system work.</summary>
-    public Task GrantAsync(HostTenancy.ProvisionedTenant tenant, SeatId seat, OrganizationUnitId unit, string pack, DateTimeOffset? until = null, DateTimeOffset? from = null)
-        => BySystemIn(tenant.Tenant, services => services.Seats().GrantAsync(seat, unit, tenant.RolesByPack[pack], until, reason: null, CancellationToken.None, from));
+    public Task GrantAsync(ProvisionedTenant tenant, SeatId seat, OrganizationUnitId unit, string pack, DateTimeOffset? until = null, DateTimeOffset? from = null)
+        => BySystemIn(tenant.Tenant, services => services.Seats().GrantAsync(seat, tenant.RolesByPack[pack], unit, until, reason: null, CancellationToken.None, from));
 
     /// <summary>Runs <paramref name="act"/> as <paramref name="caller"/>, in a scope of its own.</summary>
     public async Task<T> RunAsync<T>(ITenancyCaller caller, Func<IServiceProvider, Task<T>> act)
@@ -212,7 +214,7 @@ public sealed class TestServices : IDisposable
     /// Accepts an invitation as a person signed in with <paramref name="identity"/>, in a scope of its own: the
     /// toolkit's caller is the user, and no Tenancy caller is begun, as in a request that names no tenant.
     /// </summary>
-    public async Task<HostTenancy.AcceptedInvitation> AcceptAsync(Guid identity, string token, string? displayName = "Wren", string? verifiedAddress = null)
+    public async Task<InvitationManager.AcceptedInvitation> AcceptAsync(Guid identity, string token, string? displayName = "Wren", string? verifiedAddress = null)
     {
         await using var scope = Scope();
         using (DDDToolkit.Access.Callers.Begin(DDDToolkit.Abstractions.Access.Caller.User(identity)))
@@ -287,18 +289,16 @@ public sealed class TestServices : IDisposable
 /// <summary>What a test resolves from a scope, by name.</summary>
 public static class ScopedServices
 {
-    public static HostTenancy.TenantCommands Tenants(this IServiceProvider services) => services.GetRequiredService<HostTenancy.TenantCommands>();
+    public static TenantManager Tenants(this IServiceProvider services) => services.GetRequiredService<TenantManager>();
 
-    public static HostTenancy.OrganizationCommands Organization(this IServiceProvider services) => services.GetRequiredService<HostTenancy.OrganizationCommands>();
+    public static OrganizationManager Organization(this IServiceProvider services) => services.GetRequiredService<OrganizationManager>();
 
-    public static HostTenancy.SeatCommands Seats(this IServiceProvider services) => services.GetRequiredService<HostTenancy.SeatCommands>();
+    public static SeatManager Seats(this IServiceProvider services) => services.GetRequiredService<SeatManager>();
 
-    public static HostTenancy.RoleCommands Roles(this IServiceProvider services) => services.GetRequiredService<HostTenancy.RoleCommands>();
+    public static HostRoleManager Roles(this IServiceProvider services) => services.GetRequiredService<HostRoleManager>();
 
-    public static HostTenancy.TenancyDirectory Directory(this IServiceProvider services) => services.GetRequiredService<HostTenancy.TenancyDirectory>();
-
-    public static HostTenancy.InvitationCommands<HostInvitation, InvitationId> Invitations(this IServiceProvider services)
-        => services.GetRequiredService<HostTenancy.InvitationCommands<HostInvitation, InvitationId>>();
+    public static InvitationManager Invitations(this IServiceProvider services)
+        => services.GetRequiredService<InvitationManager>();
 
     /// <summary>The access manager the test host's code takes: the class the generator wrote into the test host.</summary>
     public static TenancyAccessManager Access(this IServiceProvider services) => services.GetRequiredService<TenancyAccessManager>();

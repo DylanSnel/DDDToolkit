@@ -102,7 +102,7 @@ public abstract class DatabaseKeepsRightsTests(TenancyPostgres postgres, Tenancy
 
         // Through the use case it is the same: the command's save leaves the rights written.
         await using var services = new TenancyServices(database);
-        await services.BySeat(Hiro.Identity, Harbor, Hiro.Seat, scoped => scoped.Seats().GrantAsync(Oli.Seat, NorthPier, HarborRoles.Watcher, until: null, reason: null, Cancellation));
+        await services.BySeat(Hiro.Identity, Harbor, Hiro.Seat, scoped => scoped.Seats().GrantAsync(Oli.Seat, HarborRoles.Watcher, NorthPier, until: null, reason: null, Cancellation));
         await using var owner = await AsCaller.OwnerAsync(database, Cancellation);
         (await owner.ListAsync<string>("SELECT \"Permission\" FROM tenancy.\"SeatRights\" WHERE \"SeatId\" = $1 AND \"RoleId\" = $2", Cancellation, Oli.Seat.Value, HarborRoles.Watcher.Value))
             .Should().Equal("widget.read");
@@ -115,7 +115,7 @@ public abstract class DatabaseKeepsRightsTests(TenancyPostgres postgres, Tenancy
         await using var services = new TenancyServices(database);
         var before = await RightsAsync(database);
 
-        await services.BySeat(Hiro.Identity, Harbor, Hiro.Seat, scoped => scoped.Seats().RevokeAsync(Oli.Seat, NorthPier, HarborRoles.Operator, Cancellation));
+        await services.BySeat(Hiro.Identity, Harbor, Hiro.Seat, scoped => scoped.Seats().RevokeAsync(Oli.Seat, HarborRoles.Operator, NorthPier, Cancellation));
 
         var after = await RightsAsync(database);
         after.Should().NotContain(right => right.StartsWith(Oli.Seat.Value.ToString(), StringComparison.Ordinal));
@@ -208,7 +208,7 @@ public abstract class DatabaseKeepsRightsTests(TenancyPostgres postgres, Tenancy
         await TenancyPostgresChecks.EnsurePoliciesAreInPlaceAsync(services.Provider, Cancellation);
 
         // A role given from now on gives no right for it, though the role still holds it.
-        await services.BySeat(Hiro.Identity, Harbor, Hiro.Seat, scoped => scoped.Seats().GrantAsync(Hiro.Seat, North, HarborRoles.Operator, until: null, reason: null, Cancellation));
+        await services.BySeat(Hiro.Identity, Harbor, Hiro.Seat, scoped => scoped.Seats().GrantAsync(Hiro.Seat, HarborRoles.Operator, North, until: null, reason: null, Cancellation));
         await using (var owner = await AsCaller.OwnerAsync(database, Cancellation))
         {
             (await owner.ScalarAsync<bool>("SELECT 'widget.create' = ANY (\"Permissions\") FROM tenancy.\"Roles\" WHERE \"Id\" = $1", Cancellation, HarborRoles.Operator.Value)).Should().BeTrue();

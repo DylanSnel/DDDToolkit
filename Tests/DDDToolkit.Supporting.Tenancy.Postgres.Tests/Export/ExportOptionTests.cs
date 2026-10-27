@@ -74,7 +74,7 @@ public sealed class ExportOptionTests(TenancyPostgres postgres)
         await using var services = new TenancyServices(database);
         await TenancySeed.SeedAsync(services, await TenancySeed.DatabaseNowAsync(database.ConnectionString, Cancellation), Cancellation);
         await EveryUseCase.RunAsync(services, Cancellation);
-        (await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.Directory().WhoAmIAsync(Cancellation))).Seat.Id.Should().Be(Ada.Seat);
+        (await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.Seats().WhoAmIAsync(Cancellation))).Seat.Id.Should().Be(Ada.Seat);
 
         await using var owner = await AsCaller.OwnerAsync(database, Cancellation);
         async Task<bool> MayAsync(string role, string table, string privilege)
