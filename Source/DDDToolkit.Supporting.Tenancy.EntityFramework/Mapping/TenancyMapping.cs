@@ -202,7 +202,7 @@ internal static class TenancyMapping
     /// <summary>
     /// The roles' table. A tenant's role names are unique ignoring case, through the normalized name the save
     /// fills in, rather than through the name, which a case-sensitive collation would compare exactly. What its
-    /// pack gave a role is the table's alone, a column that may be empty: a role made by hand has no pack, and a
+    /// starter role gave a role is the table's alone, a column that may be empty: a role made by hand has no starter role, and a
     /// role stored before the column was there remembers nothing yet.
     /// </summary>
     internal static void Roles<TRole, TRoleId, TTenantId>(EntityTypeBuilder<TRole> role, TenancyTableNames tables)
@@ -217,7 +217,7 @@ internal static class TenancyMapping
         Refuses(role.HasIndex(nameof(RoleAggregate<TRoleId, TTenantId>.TenantId), NormalizedNameColumn).IsUnique(), TenancyRefusals.RoleNameTaken);
         role.Property(row => row.Name).HasMaxLength(RoleAggregate<TRoleId, TTenantId>.MaxNameLength);
         role.Property(row => row.Description).HasMaxLength(RoleAggregate<TRoleId, TTenantId>.MaxDescriptionLength);
-        role.PrimitiveCollection(row => row.PermissionsFromPack);
+        role.PrimitiveCollection(row => row.PermissionsFromStarterRole);
         RoleColumns<TRoleId, TTenantId>(role);
         role.ScopeToTenant(row => row.TenantId);
     }
@@ -522,13 +522,13 @@ internal static class TenancyMapping
         => AsName(column(nameof(SeatRow<TTenantId, TSeatId>.Status)));
 
     /// <summary>
-    /// The columns a role and its row share: the pack, the status and the permissions. The name is the table's alone.
+    /// The columns a role and its row share: the starter role, the status and the permissions. The name is the table's alone.
     /// </summary>
     private static void RoleColumns<TRoleId, TTenantId>(EntityTypeBuilder role)
         where TRoleId : struct, IEntityId, IEquatable<TRoleId>
         where TTenantId : struct, IEntityId, IEquatable<TTenantId>
     {
-        role.Property(nameof(RoleRow<TTenantId, TRoleId>.FromPack)).HasMaxLength(RolePack.MaxKeyLength);
+        role.Property(nameof(RoleRow<TTenantId, TRoleId>.FromStarterRole)).HasMaxLength(StarterRole.MaxKeyLength);
         AsName(role.Property(nameof(RoleRow<TTenantId, TRoleId>.Status)));
         role.PrimitiveCollection(nameof(RoleRow<TTenantId, TRoleId>.Permissions));
     }

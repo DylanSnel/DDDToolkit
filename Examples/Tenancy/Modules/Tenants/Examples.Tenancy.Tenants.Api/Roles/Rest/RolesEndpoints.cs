@@ -66,7 +66,7 @@ internal static class RolesEndpoints
     {
         role.Id,
         role.Name,
-        role.FromPack,
+        role.FromStarterRole,
         role.Status,
         role.Permissions,
         role.ManagesAccess,
@@ -81,7 +81,7 @@ internal static class RolesEndpoints
     {
         listed.Id,
         listed.Name,
-        listed.FromPack,
+        listed.FromStarterRole,
         listed.Status,
         listed.Permissions,
         listed.ManagesAccess,

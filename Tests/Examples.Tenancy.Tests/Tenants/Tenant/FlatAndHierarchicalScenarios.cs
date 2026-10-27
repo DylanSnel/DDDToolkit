@@ -70,20 +70,20 @@ public sealed class FlatAndHierarchicalScenarios(SampleHosts sample) : IClassFix
         using var reshaped = await tove.PostAsJsonAsync("/tenancy/shape", new { shape = "hierarchical" }, Cancellation);
         var after = await tove.GetFromJsonAsync<JsonElement>("/tenancy/roles", Cancellation);
 
-        // The area manager's pack and the access admin's are seeded for a hierarchical tenant only: a flat one has
+        // The area manager's starter role and the access admin's are seeded for a hierarchical tenant only: a flat one has
         // only its root to manage, and one administrator's role that holds every permission.
-        before.EnumerateArray().Select(role => role.GetProperty("fromPack").GetString())
+        before.EnumerateArray().Select(role => role.GetProperty("fromStarterRole").GetString())
             .Should().BeEquivalentTo(SampleCatalogue.TenantAdmin, SampleCatalogue.CrewLead, SampleCatalogue.Surveyor, SampleCatalogue.Observer, SampleCatalogue.PeopleOffice);
         reshaped.StatusCode.Should().Be(HttpStatusCode.NoContent);
-        var manager = after.EnumerateArray().Should().ContainSingle(role => role.GetProperty("fromPack").GetString() == SampleCatalogue.AreaManager).Which;
+        var manager = after.EnumerateArray().Should().ContainSingle(role => role.GetProperty("fromStarterRole").GetString() == SampleCatalogue.AreaManager).Which;
         manager.GetProperty("name").GetString().Should().Be("Area manager");
         manager.GetProperty("status").GetString().Should().Be("active");
         manager.GetProperty("permissions").EnumerateArray().Select(permission => permission.GetString()).Should().Contain([ProjectPermissionNames.Open, ProjectPermissionNames.ChangeOwner]);
 
-        // The role of the administrators' pack seeded for the new shape is there too, with the permissions that pack lists,
+        // The role of the administrators' starter role seeded for the new shape is there too, with the permissions that starter role lists,
         // and nobody holds it: Tove keeps the flat tenant's role, which holds every permission, and gives the new one to
         // whom she chooses.
-        var accessAdmin = after.EnumerateArray().Should().ContainSingle(role => role.GetProperty("fromPack").GetString() == SampleCatalogue.AccessAdmin).Which;
+        var accessAdmin = after.EnumerateArray().Should().ContainSingle(role => role.GetProperty("fromStarterRole").GetString() == SampleCatalogue.AccessAdmin).Which;
         accessAdmin.GetProperty("permissions").EnumerateArray().Select(permission => permission.GetString())
             .Should().Contain([TenancyPermissions.RolesManage, ProjectPermissionNames.ManageCrew, ProjectPermissionNames.View]).And.NotContain([ProjectPermissionNames.Edit, ProjectPermissionNames.Close]);
         var me = await tove.GetFromJsonAsync<JsonElement>("/me", Cancellation);

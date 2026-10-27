@@ -103,7 +103,7 @@ public abstract class ModelTests(TestDatabases databases) : IAsyncLifetime
         Column(role, "NormalizedName").GetMaxLength().Should().Be(120);
         Column(role, "NormalizedName").IsNullable.Should().BeFalse("a role saved without it fails rather than escapes the unique index");
         Column(role, "Description").GetMaxLength().Should().Be(1000);
-        Column(role, "FromPack").GetMaxLength().Should().Be(64);
+        Column(role, "FromStarterRole").GetMaxLength().Should().Be(64);
         Named(Column(role, "Status"));
         Column(role, "Permissions").IsPrimitiveCollection.Should().BeTrue("a role's permissions are one column: JSON on SQLite, a text array on Postgres");
         Column(role, "Version").IsConcurrencyToken.Should().BeTrue();

@@ -30,11 +30,11 @@ namespace DDDToolkit.Supporting.Tenancy.UseCases;
 /// <param name="TenantId">The tenant's id, for imports and seeding; a new one otherwise.</param>
 /// <param name="RootId">The root's id, for imports and seeding; a new one otherwise.</param>
 /// <param name="AdminSeatId">The first seat's id, for imports and seeding; a new one otherwise.</param>
-/// <param name="RoleIds">The ids of the roles copied from the packs, by pack key; the others get new ids.</param>
+/// <param name="RoleIds">The ids of the roles copied from the starter roles, by starter role key; the others get new ids.</param>
 /// <param name="Language">
-/// The language the tenant's roles are named in: each pack's name and description are asked of the
-/// application's <see cref="IRolePackTexts"/> in it. <see langword="null"/>, or an application that
-/// registered no texts, keeps the catalogue's own; the default administrators' pack, which the package adds,
+/// The language the tenant's roles are named in: each starter role's name and description are asked of the
+/// application's <see cref="IStarterRoleTexts"/> in it. <see langword="null"/>, or an application that
+/// registered no texts, keeps the catalogue's own; the default administrators' starter role, which the package adds,
 /// falls back to the package's own texts in it, English or Dutch. The package keeps no language itself:
 /// where the tenant remembers its language is a field of the application's tenant class, set in
 /// <paramref name="ConfigureTenant"/>.

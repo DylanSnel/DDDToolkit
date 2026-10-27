@@ -20,10 +20,10 @@ public class PermissionSetQuestionTests
         _store.Seed(_harbor.Aggregates);
     }
 
-    private HostSeat SeatAt(OrganizationUnitId unit, string pack, DateTimeOffset? until = null)
+    private HostSeat SeatAt(OrganizationUnitId unit, string starterRole, DateTimeOffset? until = null)
     {
         var seat = _harbor.NewSeat();
-        var role = _harbor.RolesByPack[pack];
+        var role = _harbor.RolesByStarterRole[starterRole];
         seat.Place(unit, primary: true, Now, placedBy: null);
         seat.Grant(unit, role.Id, role.Facts, GrantPeriod.Between(Now, until), null, null);
         _store.Seed(seat);
@@ -45,7 +45,7 @@ public class PermissionSetQuestionTests
     [Fact]
     public void WhereIHold_answers_each_permission_at_every_unit_it_reaches()
     {
-        var supervisor = As(SeatAt(_harbor.North, HostCatalogue.SupervisorPack));
+        var supervisor = As(SeatAt(_harbor.North, HostCatalogue.SupervisorStarterRole));
         string[] permissions = [HostCatalogue.WidgetChange, TenancyPermissions.UnitsManage, TenancyPermissions.RolesManage];
 
         Ask(supervisor, queries => queries.UnitsWhereIHold(permissions).ToArray()).Should().BeEquivalentTo(
@@ -71,7 +71,7 @@ public class PermissionSetQuestionTests
     [Fact]
     public void WhereIHold_counts_a_grant_only_inside_its_period()
     {
-        var watcher = As(SeatAt(_harbor.South, HostCatalogue.WatcherPack, until: Now.AddDays(1)));
+        var watcher = As(SeatAt(_harbor.South, HostCatalogue.WatcherStarterRole, until: Now.AddDays(1)));
 
         Ask(watcher, queries => queries.UnitsWhereIHold([HostCatalogue.WidgetRead]).ToArray()).Should().Equal(Pair(_harbor.South, HostCatalogue.WidgetRead));
 
@@ -103,10 +103,10 @@ public class PermissionSetQuestionTests
             HostCatalogue.Application with
             {
                 Permissions = [.. HostCatalogue.Permissions.Select(permission => permission.Name == HostCatalogue.WidgetCreate ? permission with { Retired = true } : permission)],
-                Packs = [.. HostCatalogue.Application.Packs.Select(pack => pack with { Permissions = [.. pack.Permissions.Where(permission => permission != HostCatalogue.WidgetCreate)] })],
+                StarterRoles = [.. HostCatalogue.Application.StarterRoles.Select(starterRole => starterRole with { Permissions = [.. starterRole.Permissions.Where(permission => permission != HostCatalogue.WidgetCreate)] })],
             },
             []);
-        var operatorSeat = As(SeatAt(_harbor.South, HostCatalogue.OperatorPack));
+        var operatorSeat = As(SeatAt(_harbor.South, HostCatalogue.OperatorStarterRole));
         string[] permissions = [HostCatalogue.WidgetCreate, HostCatalogue.WidgetChange];
 
         Ask(operatorSeat, queries => queries.UnitsWhereIHold(permissions).ToArray(), retired)
@@ -153,23 +153,23 @@ public class PermissionSetQuestionTests
     {
         var other = new HarborBuilder().Tenant(2, "quarry").Build();
         _store.Seed(other.Aggregates);
-        var watcher = As(SeatAt(_harbor.South, HostCatalogue.WatcherPack));
+        var watcher = As(SeatAt(_harbor.South, HostCatalogue.WatcherStarterRole));
         string[] permissions = [HostCatalogue.WidgetRead, HostCatalogue.WidgetCreate, TenancyPermissions.RolesManage];
 
         var pairs = Ask(watcher, queries => queries.RolesWithPermission(permissions).ToArray());
 
         // A seat is answered about its tenant's roles whatever it holds itself, as it is for one permission.
-        RoleId Role(string pack) => _harbor.RolesByPack[pack].Id;
+        RoleId Role(string starterRole) => _harbor.RolesByStarterRole[starterRole].Id;
         pairs.Should().BeEquivalentTo(
             new RoleWithPermission<RoleId>[]
             {
-                new(Role(HostCatalogue.AdministratorPack), HostCatalogue.WidgetRead), new(Role(HostCatalogue.AdministratorPack), HostCatalogue.WidgetCreate),
-                new(Role(HostCatalogue.AdministratorPack), TenancyPermissions.RolesManage),
-                new(Role(HostCatalogue.SupervisorPack), HostCatalogue.WidgetRead), new(Role(HostCatalogue.SupervisorPack), HostCatalogue.WidgetCreate),
-                new(Role(HostCatalogue.OperatorPack), HostCatalogue.WidgetRead), new(Role(HostCatalogue.OperatorPack), HostCatalogue.WidgetCreate),
-                new(Role(HostCatalogue.WatcherPack), HostCatalogue.WidgetRead),
+                new(Role(HostCatalogue.AdministratorStarterRole), HostCatalogue.WidgetRead), new(Role(HostCatalogue.AdministratorStarterRole), HostCatalogue.WidgetCreate),
+                new(Role(HostCatalogue.AdministratorStarterRole), TenancyPermissions.RolesManage),
+                new(Role(HostCatalogue.SupervisorStarterRole), HostCatalogue.WidgetRead), new(Role(HostCatalogue.SupervisorStarterRole), HostCatalogue.WidgetCreate),
+                new(Role(HostCatalogue.OperatorStarterRole), HostCatalogue.WidgetRead), new(Role(HostCatalogue.OperatorStarterRole), HostCatalogue.WidgetCreate),
+                new(Role(HostCatalogue.WatcherStarterRole), HostCatalogue.WidgetRead),
             });
-        pairs.Select(pair => pair.Role).Should().NotIntersectWith(other.RolesByPack.Values.Select(role => role.Id), "no role of another tenant");
+        pairs.Select(pair => pair.Role).Should().NotIntersectWith(other.RolesByStarterRole.Values.Select(role => role.Id), "no role of another tenant");
 
         foreach (var permission in permissions)
         {
@@ -178,7 +178,7 @@ public class PermissionSetQuestionTests
         }
 
         // An archived role grants nothing.
-        var archived = _harbor.RolesByPack[HostCatalogue.OperatorPack];
+        var archived = _harbor.RolesByStarterRole[HostCatalogue.OperatorStarterRole];
         archived.Archive<SeatId>();
         _store.Seed(archived);
         Ask(watcher, queries => queries.RolesWithPermission(permissions).Select(pair => pair.Role).ToArray()).Should().NotContain(archived.Id);
@@ -189,7 +189,7 @@ public class PermissionSetQuestionTests
     {
         var other = new HarborBuilder().Tenant(2, "quarry").Build();
         _store.Seed(other.Aggregates);
-        var watcher = As(SeatAt(_harbor.South, HostCatalogue.WatcherPack));
+        var watcher = As(SeatAt(_harbor.South, HostCatalogue.WatcherStarterRole));
 
         Ask(watcher, queries => queries.UnitsUnder(_harbor.Root).ToArray()).Should().BeEquivalentTo([_harbor.Root, _harbor.North, _harbor.NorthCoast, _harbor.South]);
         Ask(watcher, queries => queries.UnitsUnder(_harbor.North).ToArray())

@@ -274,31 +274,31 @@ services.AddDDDToolkitLocalization(options => options.AddResource<TenancyFailure
 
 ### Roles in the tenant's language
 
-The catalogue declares each starter role (pack) once, with one name and one description. A tenant's roles are
-copies of the packs. To give a Dutch tenant Dutch role names, implement `IRolePackTexts` over your resources and
+The catalogue declares each starter role once, with one name and one description. A tenant's roles are
+copies of the packs. To give a Dutch tenant Dutch role names, implement `IStarterRoleTexts` over your resources and
 register it:
 
 ```csharp
-public sealed class ShopPackTexts(IStringLocalizer<ShopPacks> texts) : IRolePackTexts
+public sealed class ShopStarterRoleTexts(IStringLocalizer<ShopStarterRoles> texts) : IStarterRoleTexts
 {
-    public (string Name, string Description)? For(RolePack pack, CultureInfo culture)
+    public (string Name, string Description)? For(StarterRole starterRole, CultureInfo culture)
     {
         using (CultureScope.Use(culture))
         {
-            var name = texts[pack.Key + ".name"];
-            return name.ResourceNotFound ? null : (name.Value, texts[pack.Key + ".description"].Value);
+            var name = texts[starterRole.Key + ".name"];
+            return name.ResourceNotFound ? null : (name.Value, texts[starterRole.Key + ".description"].Value);
         }
     }
 }
 
-services.AddSingleton<IRolePackTexts, ShopPackTexts>();
+services.AddSingleton<IStarterRoleTexts, ShopStarterRoleTexts>();
 ```
 
 - The use cases call `For` each time they make a role from a pack, with the language you pass:
   - `TenantToProvision.Language` at provisioning. Keep the same language on your tenant class in `ConfigureTenant`
     ([How your classes add behaviour](your-module.md#how-your-classes-add-behaviour)).
   - The `language` argument of `ChangeShapeAsync`, when a change of shape copies the packs the tenant lacks.
-- The role gets the catalogue's texts when no language is passed, when no `IRolePackTexts` is registered, or when
+- The role gets the catalogue's texts when no language is passed, when no `IStarterRoleTexts` is registered, or when
   `For` returns `null`.
 - The texts are chosen once. After that the role belongs to the tenant and can be renamed like any role. A tenant
   that changes language keeps its role names. A role that
@@ -313,7 +313,7 @@ uses the package's texts. Tenancy adds this role when you declare no administrat
 
 - The role is named Administrator in English and Beheerder in Dutch. A language the package does not ship gets the
   English name. A tenant without a language gets Administrator.
-- Your `IRolePackTexts` is asked first, with the pack key `administrator`.
+- Your `IStarterRoleTexts` is asked first, with the pack key `administrator`.
 - While `TenancyCatalogue.Build` adds the default role, it refuses a pack of yours named Administrator or
-  Beheerder. `Build` does not see the names your `IRolePackTexts` returns. So Beheerder from your texts collides at
+  Beheerder. `Build` does not see the names your `IStarterRoleTexts` returns. So Beheerder from your texts collides at
   provisioning, like any two packs with the same name.

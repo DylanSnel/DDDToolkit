@@ -19,10 +19,10 @@ public sealed class SampleWithoutDatabaseTests
 {
     /// <summary>
     /// The hosted services of the host that ask the database something for as long as it runs: each module's
-    /// outbox poller, the seeding, and Tenancy's sync of the role packs, which reads every tenant once the host has
+    /// outbox poller, the seeding, and Tenancy's sync of the starter roles, which reads every tenant once the host has
     /// started. One more is a decision: it is left out of the host these tests read, so no test without a container
     /// starts it. The start-up checks are not among them: they are the toolkit's one runner, which stays, with every
-    /// check turned off. The sync is the package's own, and named by its name: <c>services.SyncRolePacks()</c>
+    /// check turned off. The sync is the package's own, and named by its name: <c>services.SyncStarterRoles()</c>
     /// registers it, and the host names nothing else of it.
     /// </summary>
     private static readonly Type[] AskTheDatabase =
@@ -31,7 +31,7 @@ public sealed class SampleWithoutDatabaseTests
         typeof(OutboxBackgroundService<ProjectsContext>),
         typeof(OutboxBackgroundService<InspectionsContext>),
         typeof(DemoSeeder),
-        typeof(DDDToolkit.Supporting.Tenancy.IRolePackSync).Assembly.GetType("DDDToolkit.Supporting.Tenancy.RolePackSyncService", throwOnError: true)!,
+        typeof(DDDToolkit.Supporting.Tenancy.IStarterRoleSync).Assembly.GetType("DDDToolkit.Supporting.Tenancy.StarterRoleSyncService", throwOnError: true)!,
     ];
 
     [Fact]

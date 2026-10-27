@@ -23,7 +23,7 @@ public sealed class PooledContextTests
         var harbor = await services.ProvisionAsync("harbor");
         var orchard = await services.ProvisionAsync("orchard");
         var north = await services.AddUnitAsync(harbor.Tenant, harbor.RootUnit, "North");
-        var operators = harbor.RolesByPack[HostCatalogue.OperatorPack];
+        var operators = harbor.RolesByStarterRole[HostCatalogue.OperatorStarterRole];
 
         // Every command in a scope of its own, whose context is one of the pool's.
         var rented = new List<DbContext>();

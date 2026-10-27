@@ -6,12 +6,12 @@ using Microsoft.Extensions.DependencyInjection;
 namespace DDDToolkit.Supporting.Tenancy.Tests;
 
 /// <summary>
-/// A role made from a pack is named in the language the application passes, when it has texts for the pack in
-/// that language: at provisioning, and when a change of shape copies the packs the tenant has no copy of yet.
+/// A role made from a starter role is named in the language the application passes, when it has texts for the starter role in
+/// that language: at provisioning, and when a change of shape copies the starter roles the tenant has no copy of yet.
 /// The texts are chosen once; afterwards the role is the tenant's, like any other. A translated name is checked
 /// like any role's name.
 /// </summary>
-public class RolePackTextsTests
+public class StarterRoleTextsTests
 {
     private static readonly CultureInfo Dutch = CultureInfo.GetCultureInfo("nl");
 
@@ -21,33 +21,33 @@ public class RolePackTextsTests
     private static Task<ProvisionedTenant> Provision(Harness harness, TenantToProvision command)
         => harness.Run(HostCaller.System, h => h.Tenants.ProvisionWithIdsAsync(h.Catalogue, command, default));
 
-    /// <summary>The host's four packs in Dutch.</summary>
-    private static PackTexts DutchTexts() => new PackTexts()
-        .In("nl", HostCatalogue.AdministratorPack, "Hoofdgebruiker", "Regelt de tenant")
-        .In("nl", HostCatalogue.SupervisorPack, "Afdelingshoofd", "Leidt een deel van de organisatie")
-        .In("nl", HostCatalogue.OperatorPack, "Bediener", "Werkt met widgets")
-        .In("nl", HostCatalogue.WatcherPack, "Toeschouwer", "Bekijkt widgets");
+    /// <summary>The host's four starter roles in Dutch.</summary>
+    private static StarterRoleTexts DutchTexts() => new StarterRoleTexts()
+        .In("nl", HostCatalogue.AdministratorStarterRole, "Hoofdgebruiker", "Regelt de tenant")
+        .In("nl", HostCatalogue.SupervisorStarterRole, "Afdelingshoofd", "Leidt een deel van de organisatie")
+        .In("nl", HostCatalogue.OperatorStarterRole, "Bediener", "Werkt met widgets")
+        .In("nl", HostCatalogue.WatcherStarterRole, "Toeschouwer", "Bekijkt widgets");
 
     [Fact]
-    public async Task A_tenant_provisioned_in_a_language_gets_its_packs_in_that_language()
+    public async Task A_tenant_provisioned_in_a_language_gets_its_starter_roles_in_that_language()
     {
-        var harness = new Harness(New.Catalogue()) { PackTexts = DutchTexts() };
+        var harness = new Harness(New.Catalogue()) { StarterRoleTexts = DutchTexts() };
 
         var provisioned = await Provision(harness, Harbor(TenantShape.Hierarchical, Dutch));
 
         var roles = harness.Store.RolesOf(provisioned.Tenant);
-        roles.Select(role => (role.FromPack, role.Name, role.Description)).Should().BeEquivalentTo(
+        roles.Select(role => (role.FromStarterRole, role.Name, role.Description)).Should().BeEquivalentTo(
         [
-            (HostCatalogue.AdministratorPack, "Hoofdgebruiker", "Regelt de tenant"),
-            (HostCatalogue.SupervisorPack, "Afdelingshoofd", "Leidt een deel van de organisatie"),
-            (HostCatalogue.OperatorPack, "Bediener", "Werkt met widgets"),
-            (HostCatalogue.WatcherPack, "Toeschouwer", "Bekijkt widgets"),
+            (HostCatalogue.AdministratorStarterRole, "Hoofdgebruiker", "Regelt de tenant"),
+            (HostCatalogue.SupervisorStarterRole, "Afdelingshoofd", "Leidt een deel van de organisatie"),
+            (HostCatalogue.OperatorStarterRole, "Bediener", "Werkt met widgets"),
+            (HostCatalogue.WatcherStarterRole, "Toeschouwer", "Bekijkt widgets"),
         ]);
 
-        // Only the texts differ: the permissions are the pack's, and the first seat holds the administrators' role.
+        // Only the texts differ: the permissions are the starter role's, and the first seat holds the administrators' role.
         foreach (var role in roles)
         {
-            role.Permissions.Should().Equal(harness.Catalogue.Packs.Single(pack => pack.Key == role.FromPack).Permissions);
+            role.Permissions.Should().Equal(harness.Catalogue.StarterRoles.Single(starterRole => starterRole.Key == role.FromStarterRole).Permissions);
         }
 
         harness.Store.Role(provisioned.AdministratorRole).Name.Should().Be("Hoofdgebruiker");
@@ -58,21 +58,21 @@ public class RolePackTextsTests
     public async Task A_role_keeps_the_texts_it_was_made_with()
     {
         var texts = DutchTexts();
-        var harness = new Harness(New.Catalogue()) { PackTexts = texts };
+        var harness = new Harness(New.Catalogue()) { StarterRoleTexts = texts };
         var provisioned = await Provision(harness, Harbor(TenantShape.Hierarchical, Dutch));
         var administrator = HostCaller.InSeat(provisioned.Tenant, provisioned.AdminSeat);
-        var watcher = provisioned.RolesByPack[HostCatalogue.WatcherPack];
+        var watcher = provisioned.RolesByStarterRole[HostCatalogue.WatcherStarterRole];
 
         // The application's texts change afterwards, and the tenant renames a role itself.
-        texts.In("nl", HostCatalogue.OperatorPack, "Machinist", "Bedient widgets");
+        texts.In("nl", HostCatalogue.OperatorStarterRole, "Machinist", "Bedient widgets");
         await harness.Run(administrator, h => h.Roles.RenameAsync(watcher, "Bezoeker", "Volgt widgets", default));
 
-        harness.Store.Role(provisioned.RolesByPack[HostCatalogue.OperatorPack]).Name.Should().Be("Bediener", "the texts were chosen once, when the role was made");
-        harness.Store.Role(watcher).Name.Should().Be("Bezoeker", "a role made from a pack is the tenant's own afterwards");
+        harness.Store.Role(provisioned.RolesByStarterRole[HostCatalogue.OperatorStarterRole]).Name.Should().Be("Bediener", "the texts were chosen once, when the role was made");
+        harness.Store.Role(watcher).Name.Should().Be("Bezoeker", "a role made from a starter role is the tenant's own afterwards");
     }
 
     [Fact]
-    public async Task Without_pack_texts_the_catalogue_names_stay()
+    public async Task Without_starter_role_texts_the_catalogue_names_stay()
     {
         var catalogueNames = new[] { "Administrator", "Supervisor", "Operator", "Watcher" };
 
@@ -83,56 +83,56 @@ public class RolePackTextsTests
 
         // Texts registered, and no language: nothing is asked.
         var texts = DutchTexts();
-        var silent = new Harness(New.Catalogue()) { PackTexts = texts };
+        var silent = new Harness(New.Catalogue()) { StarterRoleTexts = texts };
         var second = await Provision(silent, Harbor(TenantShape.Hierarchical, language: null));
         silent.Store.RolesOf(second.Tenant).Select(role => role.Name).Should().BeEquivalentTo(catalogueNames);
         texts.Asked.Should().BeEmpty("without a language there is no culture to ask the texts in");
 
-        // Texts for one pack only, and a language the application has none in: the others keep the catalogue's.
-        var partly = new Harness(New.Catalogue()) { PackTexts = new PackTexts().In("nl", HostCatalogue.WatcherPack, "Toeschouwer", "Bekijkt widgets") };
+        // Texts for one starter role only, and a language the application has none in: the others keep the catalogue's.
+        var partly = new Harness(New.Catalogue()) { StarterRoleTexts = new StarterRoleTexts().In("nl", HostCatalogue.WatcherStarterRole, "Toeschouwer", "Bekijkt widgets") };
         var third = await Provision(partly, Harbor(TenantShape.Hierarchical, Dutch));
         partly.Store.RolesOf(third.Tenant).Select(role => role.Name).Should().BeEquivalentTo("Administrator", "Supervisor", "Operator", "Toeschouwer");
 
-        var german = new Harness(New.Catalogue()) { PackTexts = texts };
+        var german = new Harness(New.Catalogue()) { StarterRoleTexts = texts };
         var fourth = await Provision(german, Harbor(TenantShape.Hierarchical, CultureInfo.GetCultureInfo("de")));
         german.Store.RolesOf(fourth.Tenant).Select(role => (role.Name, role.Description)).Should().Contain(("Watcher", "Looks at widgets"));
     }
 
     [Fact]
-    public async Task The_texts_are_asked_for_each_pack_of_the_shape_in_the_language_passed()
+    public async Task The_texts_are_asked_for_each_starter_role_of_the_shape_in_the_language_passed()
     {
         var texts = DutchTexts();
-        var harness = new Harness(New.Catalogue()) { PackTexts = texts };
+        var harness = new Harness(New.Catalogue()) { StarterRoleTexts = texts };
 
         var provisioned = await Provision(harness, Harbor(TenantShape.Flat, CultureInfo.GetCultureInfo("nl-BE")));
 
         texts.Asked.Should().BeEquivalentTo(
         [
-            (HostCatalogue.AdministratorPack, "nl-BE"), (HostCatalogue.OperatorPack, "nl-BE"), (HostCatalogue.WatcherPack, "nl-BE"),
+            (HostCatalogue.AdministratorStarterRole, "nl-BE"), (HostCatalogue.OperatorStarterRole, "nl-BE"), (HostCatalogue.WatcherStarterRole, "nl-BE"),
         ], "a flat tenant gets no supervisor, and the culture reaches the application as it was passed");
         harness.Store.RolesOf(provisioned.Tenant).Select(role => role.Name).Should().BeEquivalentTo("Hoofdgebruiker", "Bediener", "Toeschouwer");
     }
 
     [Fact]
-    public async Task A_shape_change_copies_new_packs_in_the_language_passed()
+    public async Task A_shape_change_copies_new_starter_roles_in_the_language_passed()
     {
-        var harness = new Harness(New.Catalogue()) { PackTexts = DutchTexts() };
+        var harness = new Harness(New.Catalogue()) { StarterRoleTexts = DutchTexts() };
         var provisioned = await Provision(harness, Harbor(TenantShape.Flat, language: null));
         var administrator = HostCaller.InSeat(provisioned.Tenant, provisioned.AdminSeat);
 
         await harness.Run(administrator, h => h.Tenants.ChangeShapeAsync(TenantShape.Hierarchical, roleIds: null, Dutch, default));
 
         var roles = harness.Store.RolesOf(provisioned.Tenant);
-        roles.Should().ContainSingle(role => role.FromPack == HostCatalogue.SupervisorPack)
+        roles.Should().ContainSingle(role => role.FromStarterRole == HostCatalogue.SupervisorStarterRole)
             .Which.Should().Match<HostRole>(role => role.Name == "Afdelingshoofd" && role.Description == "Leidt een deel van de organisatie");
-        roles.Where(role => role.FromPack != HostCatalogue.SupervisorPack).Select(role => role.Name)
+        roles.Where(role => role.FromStarterRole != HostCatalogue.SupervisorStarterRole).Select(role => role.Name)
             .Should().BeEquivalentTo(["Administrator", "Operator", "Watcher"], "the roles the tenant had keep their names");
     }
 
     [Fact]
     public async Task A_shape_change_without_a_language_copies_the_catalogues_names()
     {
-        var harness = new Harness(New.Catalogue()) { PackTexts = DutchTexts() };
+        var harness = new Harness(New.Catalogue()) { StarterRoleTexts = DutchTexts() };
         var provisioned = await Provision(harness, Harbor(TenantShape.Flat, Dutch));
         var administrator = HostCaller.InSeat(provisioned.Tenant, provisioned.AdminSeat);
 
@@ -142,11 +142,11 @@ public class RolePackTextsTests
     }
 
     [Fact]
-    public async Task Two_packs_translated_alike_are_refused_as_a_taken_name()
+    public async Task Two_starter_roles_translated_alike_are_refused_as_a_taken_name()
     {
-        // The catalogue keeps its own names apart; a translation can still give two packs one name, in any case.
-        var texts = DutchTexts().In("nl", HostCatalogue.WatcherPack, "BEDIENER", "Bekijkt widgets");
-        var harness = new Harness(New.Catalogue()) { PackTexts = texts };
+        // The catalogue keeps its own names apart; a translation can still give two starter roles one name, in any case.
+        var texts = DutchTexts().In("nl", HostCatalogue.WatcherStarterRole, "BEDIENER", "Bekijkt widgets");
+        var harness = new Harness(New.Catalogue()) { StarterRoleTexts = texts };
 
         var harbor = new TenantId(101);
         var refusal = await Refused.WithCodeAsync(TenancyRefusals.RoleNameTaken, () => Provision(harness, Harbor(TenantShape.Hierarchical, Dutch) with { TenantId = harbor }));
@@ -157,9 +157,9 @@ public class RolePackTextsTests
     }
 
     [Fact]
-    public async Task A_new_pack_translated_as_a_role_the_tenant_has_is_refused_at_a_shape_change()
+    public async Task A_new_starter_role_translated_as_a_role_the_tenant_has_is_refused_at_a_shape_change()
     {
-        var harness = new Harness(New.Catalogue()) { PackTexts = DutchTexts().In("nl", HostCatalogue.SupervisorPack, "bediener", "Leidt een deel van de organisatie") };
+        var harness = new Harness(New.Catalogue()) { StarterRoleTexts = DutchTexts().In("nl", HostCatalogue.SupervisorStarterRole, "bediener", "Leidt een deel van de organisatie") };
         var provisioned = await Provision(harness, Harbor(TenantShape.Flat, Dutch));
         var administrator = HostCaller.InSeat(provisioned.Tenant, provisioned.AdminSeat);
 
@@ -177,8 +177,8 @@ public class RolePackTextsTests
     [InlineData("Hoofdgebruiker", null, null, null)]
     public async Task A_translated_text_is_checked_like_any_roles(string? name, string? description, string? what, string? field)
     {
-        var texts = DutchTexts().In("nl", HostCatalogue.AdministratorPack, name!, description!);
-        var harness = new Harness(New.Catalogue()) { PackTexts = texts };
+        var texts = DutchTexts().In("nl", HostCatalogue.AdministratorStarterRole, name!, description!);
+        var harness = new Harness(New.Catalogue()) { StarterRoleTexts = texts };
 
         if (what is null)
         {
@@ -199,14 +199,14 @@ public class RolePackTextsTests
     {
         var name = new Harness(New.Catalogue())
         {
-            PackTexts = DutchTexts().In("nl", HostCatalogue.WatcherPack, new string('k', HostRole.MaxNameLength + 1), "Bekijkt widgets"),
+            StarterRoleTexts = DutchTexts().In("nl", HostCatalogue.WatcherStarterRole, new string('k', HostRole.MaxNameLength + 1), "Bekijkt widgets"),
         };
         (await Refused.WithCodeAsync(TenancyRefusals.NameInvalid, () => Provision(name, Harbor(TenantShape.Flat, Dutch))))
             .Arguments["What"].Should().Be("role-name");
 
         var description = new Harness(New.Catalogue())
         {
-            PackTexts = DutchTexts().In("nl", HostCatalogue.WatcherPack, "Toeschouwer", new string('k', HostRole.MaxDescriptionLength + 1)),
+            StarterRoleTexts = DutchTexts().In("nl", HostCatalogue.WatcherStarterRole, "Toeschouwer", new string('k', HostRole.MaxDescriptionLength + 1)),
         };
         var provisioned = await Provision(description, Harbor(TenantShape.Flat, language: null));
         var refusal = await Refused.WithCodeAsync(TenancyRefusals.NameInvalid,
@@ -246,51 +246,51 @@ public class RolePackTextsTests
             return [.. store.RolesOf(new TenantId(7)).Select(role => role.Name)];
         }
 
-        (await RoleNamesWith(services => services.AddSingleton<IRolePackTexts>(DutchTexts())))
+        (await RoleNamesWith(services => services.AddSingleton<IStarterRoleTexts>(DutchTexts())))
             .Should().BeEquivalentTo("Hoofdgebruiker", "Bediener", "Toeschouwer");
         (await RoleNamesWith(_ => { }))
             .Should().BeEquivalentTo(["Administrator", "Operator", "Watcher"], "an application that registers no texts gets the catalogue's, as before there were any");
     }
 
     [Fact]
-    public async Task The_default_administrators_pack_is_named_by_the_package_in_dutch_unless_the_application_names_it()
+    public async Task The_default_administrators_starter_role_is_named_by_the_package_in_dutch_unless_the_application_names_it()
     {
-        var catalogue = TenancyCatalogue.Build(HostCatalogue.Application with { Packs = [] }, []);
+        var catalogue = TenancyCatalogue.Build(HostCatalogue.Application with { StarterRoles = [] }, []);
 
-        async Task<(string Name, string Description)> AdministratorsIn(CultureInfo? language, IRolePackTexts? texts = null)
+        async Task<(string Name, string Description)> AdministratorsIn(CultureInfo? language, IStarterRoleTexts? texts = null)
         {
-            var harness = new Harness(catalogue) { PackTexts = texts };
+            var harness = new Harness(catalogue) { StarterRoleTexts = texts };
             var provisioned = await Provision(harness, Harbor(TenantShape.Flat, language));
             var role = harness.Store.Role(provisioned.AdministratorRole);
             return (role.Name, role.Description);
         }
 
-        var english = (TenancyPacks.DefaultAdministrators.Name, TenancyPacks.DefaultAdministrators.Description);
+        var english = (TenancyStarterRoles.DefaultAdministrators.Name, TenancyStarterRoles.DefaultAdministrators.Description);
         var dutch = ("Beheerder", "Heeft elk recht: beheert de organisatie, de mensen en hun toegang");
 
-        // The application registered no texts: the package ships the pack's name in Dutch, as it ships its refusals.
+        // The application registered no texts: the package ships the starter role's name in Dutch, as it ships its refusals.
         (await AdministratorsIn(Dutch)).Should().Be(dutch);
         (await AdministratorsIn(CultureInfo.GetCultureInfo("nl-BE"))).Should().Be(dutch, "a regional culture falls back to its language");
         (await AdministratorsIn(CultureInfo.GetCultureInfo("de"))).Should().Be(english, "a language the package does not ship gets the catalogue's English");
         (await AdministratorsIn(language: null)).Should().Be(english, "without a language nothing is translated");
 
-        // The application's texts come first, by the pack's key; where they have none for it, the package's stand.
-        (await AdministratorsIn(Dutch, new PackTexts().In("nl", TenancyPacks.DefaultAdministratorsKey, "Hoofdbeheerder", "Regelt alles")))
+        // The application's texts come first, by the starter role's key; where they have none for it, the package's stand.
+        (await AdministratorsIn(Dutch, new StarterRoleTexts().In("nl", TenancyStarterRoles.DefaultAdministratorsKey, "Hoofdbeheerder", "Regelt alles")))
             .Should().Be(("Hoofdbeheerder", "Regelt alles"));
-        (await AdministratorsIn(CultureInfo.GetCultureInfo("de"), new PackTexts().In("de", TenancyPacks.DefaultAdministratorsKey, "Verwalter", "Verwaltet alles")))
+        (await AdministratorsIn(CultureInfo.GetCultureInfo("de"), new StarterRoleTexts().In("de", TenancyStarterRoles.DefaultAdministratorsKey, "Verwalter", "Verwaltet alles")))
             .Should().Be(("Verwalter", "Verwaltet alles"), "the application names it in a language the package does not ship");
         var asked = DutchTexts();
         (await AdministratorsIn(Dutch, asked)).Should().Be(dutch);
-        asked.Asked.Should().Equal([(TenancyPacks.DefaultAdministratorsKey, "nl")], "the application is asked about the pack like any other");
+        asked.Asked.Should().Equal([(TenancyStarterRoles.DefaultAdministratorsKey, "nl")], "the application is asked about the starter role like any other");
     }
 
     [Fact]
-    public async Task A_pack_of_the_applications_own_under_the_default_permission_keeps_the_applications_texts()
+    public async Task A_starter_role_of_the_applications_own_under_the_default_permission_keeps_the_applications_texts()
     {
-        // The application declares an administrators' pack keyed as the default is: it is the application's, and the
+        // The application declares an administrators' starter role keyed as the default is: it is the application's, and the
         // package has no texts for it.
         var catalogue = TenancyCatalogue.Build(
-            HostCatalogue.Application with { Packs = [new RolePack(TenancyPacks.DefaultAdministratorsKey, "Harbor master", "Runs the harbor", [], Administers: true)] },
+            HostCatalogue.Application with { StarterRoles = [new StarterRole(TenancyStarterRoles.DefaultAdministratorsKey, "Harbor master", "Runs the harbor", [], Administers: true)] },
             []);
         var harness = new Harness(catalogue);
 
@@ -302,7 +302,7 @@ public class RolePackTextsTests
     [Fact]
     public void The_package_ships_the_default_administrators_texts_in_english_and_dutch()
     {
-        var resources = new ResourceManager("DDDToolkit.Supporting.Tenancy.TenancyPackTexts", typeof(TenancyFailures).Assembly);
+        var resources = new ResourceManager("DDDToolkit.Supporting.Tenancy.TenancyStarterRoleTexts", typeof(TenancyFailures).Assembly);
         Dictionary<string, string> Resx(CultureInfo culture)
             => resources.GetResourceSet(culture, createIfNotExists: true, tryParents: false)!
                 .Cast<DictionaryEntry>()
@@ -313,34 +313,34 @@ public class RolePackTextsTests
 
         english.Should().Equal(new Dictionary<string, string>
         {
-            ["administrator.name"] = TenancyPacks.DefaultAdministrators.Name,
-            ["administrator.description"] = TenancyPacks.DefaultAdministrators.Description,
-        }, "the English texts are the pack's own, as the catalogue declares it");
+            ["administrator.name"] = TenancyStarterRoles.DefaultAdministrators.Name,
+            ["administrator.description"] = TenancyStarterRoles.DefaultAdministrators.Description,
+        }, "the English texts are the starter role's own, as the catalogue declares it");
         dutch.Keys.Should().BeEquivalentTo(english.Keys, "every text has a Dutch one under the same name");
         dutch.Values.Should().OnlyContain(text => !string.IsNullOrWhiteSpace(text)).And.NotIntersectWith(english.Values);
     }
 
-    /// <summary>Pack texts from a table, by language and pack: what an application reads from its own resources.</summary>
-    private sealed class PackTexts : IRolePackTexts
+    /// <summary>Starter role texts from a table, by language and starter role: what an application reads from its own resources.</summary>
+    private sealed class StarterRoleTexts : IStarterRoleTexts
     {
-        private readonly Dictionary<(string Language, string Pack), (string Name, string Description)> _texts = [];
-        private readonly List<(string Pack, string Culture)> _asked = [];
+        private readonly Dictionary<(string Language, string StarterRole), (string Name, string Description)> _texts = [];
+        private readonly List<(string StarterRole, string Culture)> _asked = [];
 
-        /// <summary>Every pack the use cases asked for, with the culture they asked in.</summary>
-        public IReadOnlyList<(string Pack, string Culture)> Asked => _asked;
+        /// <summary>Every starter role the use cases asked for, with the culture they asked in.</summary>
+        public IReadOnlyList<(string StarterRole, string Culture)> Asked => _asked;
 
-        /// <summary>Sets the texts of a pack in a language, replacing what was there.</summary>
-        public PackTexts In(string language, string pack, string name, string description)
+        /// <summary>Sets the texts of a starter role in a language, replacing what was there.</summary>
+        public StarterRoleTexts In(string language, string starterRole, string name, string description)
         {
-            _texts[(language, pack)] = (name, description);
+            _texts[(language, starterRole)] = (name, description);
             return this;
         }
 
         /// <inheritdoc />
-        public (string Name, string Description)? For(RolePack pack, CultureInfo culture)
+        public (string Name, string Description)? For(StarterRole starterRole, CultureInfo culture)
         {
-            _asked.Add((pack.Key, culture.Name));
-            return _texts.TryGetValue((culture.TwoLetterISOLanguageName, pack.Key), out var texts) ? texts : null;
+            _asked.Add((starterRole.Key, culture.Name));
+            return _texts.TryGetValue((culture.TwoLetterISOLanguageName, starterRole.Key), out var texts) ? texts : null;
         }
     }
 }

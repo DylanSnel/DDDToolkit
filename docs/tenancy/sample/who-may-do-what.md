@@ -248,7 +248,7 @@ still sees Pier 7, because he is on its crew.
 
 ## The organization's roles
 
-The catalogue declares seven starter roles (**packs** in the code). Each tenant's roles start as copies of the packs
+The catalogue declares seven starter roles. Each tenant's roles start as copies of the packs
 that are seeded for the tenant's shape.
 
 | Pack | Permissions | Manages access | Seeded for |

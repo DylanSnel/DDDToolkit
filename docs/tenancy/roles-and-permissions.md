@@ -12,8 +12,7 @@ permissions, choose the roles a new tenant starts with, or decide who may give r
   and a role contains several.
 - **Role**: a named set of permissions, stored per tenant. A **grant** gives a role to a **seat** (one person's place
   in one tenant) at a **unit** (a place in the tenant's organization tree).
-- **Starter role**: a role that every new tenant gets a copy of. The code calls it a **pack** (`RolePack`), and so do
-  some headings on this page.
+- **Starter role**: a role that every new tenant gets a copy of (`StarterRole` in the code).
 
 ## What the catalogue is for
 
@@ -23,7 +22,7 @@ The **catalogue** is every permission the application knows. It combines Tenancy
 
 | Part | What it sets | Default |
 |---|---|---|
-| `Packs` | The starter roles, which shape of tenant (flat or hierarchical) gets each one, and what the first administrator holds | Tenancy's administrators' starter role only ([The administrators' pack](#the-administrators-pack)) |
+| `StarterRoles` | The starter roles, which shape of tenant (flat or hierarchical) gets each one, and what the first administrator holds | Tenancy's administrators' starter role only ([The administrators' pack](#the-administrators-pack)) |
 | `Permissions` | Permissions that belong to no module | None |
 | `AccessManagingPermissions` | Permissions declared elsewhere, for example by a module, that manage access in your application | Only the permissions marked where they are declared ([Which permissions manage access](#which-permissions-manage-access)) |
 | `ContainAccessManagingPermissions` | Whether a seat may give a permission that manages access only where the seat holds that permission | On ([Containment, on or off](#containment-on-or-off)) |
@@ -128,7 +127,7 @@ builder.Services.AddTenancyPermissionsOfModules();
 
 ## Starter roles
 
-- A tenant's roles start as copies of the starter roles in `Packs`. After that, the copies belong to the tenant,
+- A tenant's roles start as copies of the starter roles in `StarterRoles`. After that, the copies belong to the tenant,
   which can rename and change them.
 - `SeededFor` selects the tenants. Without `SeededFor`, every tenant gets a copy. With a shape, only tenants of that
   shape get a copy, whether they were provisioned with that shape or changed to it later. A role has no shape.
@@ -137,7 +136,7 @@ builder.Services.AddTenancyPermissionsOfModules();
 - A seat that holds `tenancy.roles.manage` for the whole tenant can put any permission into any role. An
   **administrator** is an active seat, placed at the root, that holds `tenancy.roles.manage` there through a grant
   with no end.
-- [`RolePack`](reference/catalogue.md#rolepack) lists every member.
+- [`StarterRole`](reference/catalogue.md#rolepack) lists every member.
 
 ## The administrators' pack
 
@@ -146,7 +145,7 @@ access, so its holder can give the next role. You do not need to declare it:
 
 | You declare | Result |
 |---|---|
-| No pack with `Administers: true` | Tenancy adds `TenancyPacks.DefaultAdministrators`. Its key is `administrator`, its name is Administrator, it is seeded for every shape, and it holds every live permission. |
+| No pack with `Administers: true` | Tenancy adds `TenancyStarterRoles.DefaultAdministrators`. Its key is `administrator`, its name is Administrator, it is seeded for every shape, and it holds every live permission. |
 | One pack with `Administers: true` and no `SeededFor`, or one administrators' pack for each shape | Tenancy uses your pack and adds no default. |
 | Administrators' packs that leave a shape without one, give a shape two, or use `SeedOnProvision: false` | `TenancyCatalogue.Build` refuses the catalogue and names the fix. |
 | No administrators' pack, and a pack of yours with the key `administrator`, or named Administrator or Beheerder (names compared ignoring case) | `Build` refuses the pack. Rename it, or make it the administrators' pack with `Administers: true`. |
@@ -155,9 +154,9 @@ access, so its holder can give the next role. You do not need to declare it:
 - The default pack lists no permissions, so it holds every live permission. This includes a permission that a module
   adds later. Tenants that have the role get the new permission at the next sync. So the smallest application
   declares no catalogue.
-- A tenant provisioned in Dutch gets the role as Beheerder. Tenancy first looks up the name in your `IRolePackTexts`,
+- A tenant provisioned in Dutch gets the role as Beheerder. Tenancy first looks up the name in your `IStarterRoleTexts`,
   by the key `administrator` ([Roles in the tenant's language](names-and-languages.md#roles-in-the-tenants-language)).
-- On Postgres, `pack_permissions('administrator')` returns every live permission, the same set as the running
+- On Postgres, `starter_role_permissions('administrator')` returns every live permission, the same set as the running
   catalogue.
 
 <details>
@@ -168,15 +167,15 @@ access, so its holder can give the next role. You do not need to declare it:
 // administrators' role, given to its first seat
 services.AddTenancy<ShopTenancyContext>();
 
-// Permissions the application owns itself, and still no pack: the default administrators' role holds them too
+// Permissions the application owns itself, and still no starter role: the default administrators' role holds them too
 public static ApplicationCatalogue Application { get; } = new(Permissions: ShopPermissions.All);
 
-// A provisioned tenant names the role by the pack's key
-var administrators = provisioned.RolesByPack[TenancyPacks.DefaultAdministratorsKey];
+// A provisioned tenant names the role by the starter role's key
+var administrators = provisioned.RolesByStarterRole[TenancyStarterRoles.DefaultAdministratorsKey];
 
-// Administrators of your own, one seeded for each shape of tenant, and a pack that every tenant gets
+// Administrators of your own, one seeded for each shape of tenant, and a starter role that every tenant gets
 public static ApplicationCatalogue Application { get; } = new(
-    Packs:
+    StarterRoles:
     [
         new("owner", "Owner", "Runs the shop", [], SeededFor: TenantShape.Flat, Administers: true),
         new("head-office", "Head office", "Runs every branch", [], SeededFor: TenantShape.Hierarchical, Administers: true),
@@ -210,11 +209,11 @@ When you drop your own administrators' pack and use the default, no tenant chang
 ## Packs after provisioning
 
 A tenant keeps the roles that its starter roles created, whatever you change in the starter roles later. When the host
-runs `SyncRolePacks()`, those roles follow their starter roles, in every tenant. What a tenant changed itself stays.
+runs `SyncStarterRoles()`, those roles follow their starter roles, in every tenant. What a tenant changed itself stays.
 
 ### How a role follows its pack
 
-A role made from a starter role stores what the starter role gave it, in `PermissionsFromPack`. The sync compares
+A role made from a starter role stores what the starter role gave it, in `PermissionsFromStarterRole`. The sync compares
 that list with the starter role as your catalogue builds it now:
 
 | A permission | The sync |
@@ -224,7 +223,7 @@ that list with the starter role as your catalogue builds it now:
 | that the tenant removed while the starter role still has it | leaves it out |
 | that the tenant added and the starter role never had | leaves it in |
 
-[`FollowPack`](reference/aggregates.md#followpacktenancycatalogue-tenancyactortseatid) covers the cases that the
+[`FollowStarterRole`](reference/aggregates.md#followpacktenancycatalogue-tenancyactortseatid) covers the cases that the
 comparison cannot tell apart. The cases you are likely to meet:
 
 - When following would take `tenancy.roles.manage` from the tenant's last administrators, the sync leaves the role as
@@ -245,21 +244,21 @@ the tenant.
 
 ```csharp
 builder.Services.RunStartupChecks();
-builder.Services.SyncRolePacks();   // once the host has started, every tenant's roles follow their packs
+builder.Services.SyncStarterRoles();   // once the host has started, every tenant's roles follow their starter roles
 ```
 
-- `SyncRolePacks()` is not a start-up check, because a start-up check changes nothing. The sync runs once per start,
+- `SyncStarterRoles()` is not a start-up check, because a start-up check changes nothing. The sync runs once per start,
   in the background. It starts after the start-up checks and after every hosted service has started, so a seeding of
-  yours is done. The host serves requests while the sync runs. Calling `SyncRolePacks()` twice runs the sync once.
-- In each active or suspended tenant, the sync runs `RoleCommands.FollowPacksAsync` as Tenancy's system work, in
+  yours is done. The host serves requests while the sync runs. Calling `SyncStarterRoles()` twice runs the sync once.
+- In each active or suspended tenant, the sync runs `RoleCommands.FollowStarterRolesAsync` as Tenancy's system work, in
   Tenancy's scope. On Postgres it runs under the policies.
 - The sync saves once per tenant, after taking the tenant's access revision. So a second run, or a second host that
   starts at the same time, changes nothing more. When another change of the tenant's access commits first, the sync
   reads the tenant again, for at most three attempts.
 - The sync logs a tenant that fails as an error, and tries that tenant again at the next start.
 - To sync from a deployment step or an operator's endpoint, leave out the call and run
-  [`IRolePackSync`](reference/catalogue.md#irolepacksync) yourself. `AddTenancy` registers it. An operator who syncs
-  one tenant runs [`FollowPacksAsync`](reference/use-cases.md#followpacksasynccancellationtoken) in that tenant, and
+  [`IStarterRoleSync`](reference/catalogue.md#irolepacksync) yourself. `AddTenancy` registers it. An operator who syncs
+  one tenant runs [`FollowStarterRolesAsync`](reference/use-cases.md#followpacksasynccancellationtoken) in that tenant, and
   the events record the operator.
 
 <details>
@@ -267,20 +266,20 @@ builder.Services.SyncRolePacks();   // once the host has started, every tenant's
 
 ```csharp
 // A deployment step, or an operator's endpoint for every tenant
-var report = await services.GetRequiredService<IRolePackSync>().SyncAsync(cancellationToken);
+var report = await services.GetRequiredService<IStarterRoleSync>().SyncAsync(cancellationToken);
 if (!report.Succeeded)
 {
     foreach (var (tenant, error) in report.Failed)
     {
-        logger.LogError(error, "The roles of tenant {Tenant} did not follow their packs", tenant);
+        logger.LogError(error, "The roles of tenant {Tenant} did not follow their starter roles", tenant);
     }
 }
 
 // One tenant, for an operator. The events record the operator.
 using (TenancyWork.BeginOperatorIn<TenantId, SeatId>(tenant, operatorIdentity))
 {
-    var followed = await roles.FollowPacksAsync(cancellationToken);   // roles: TenancyUseCases.RoleCommands
-    // followed.Changed, followed.KeptForAnAdministrator, followed.WithoutTheirPack
+    var followed = await roles.FollowStarterRolesAsync(cancellationToken);   // roles: TenancyUseCases.RoleCommands
+    // followed.Changed, followed.KeptForAnAdministrator, followed.WithoutTheirStarterRole
 }
 ```
 
@@ -288,7 +287,7 @@ using (TenancyWork.BeginOperatorIn<TenantId, SeatId>(tenant, operatorIdentity))
 
 ### Telling the tenant's administrators
 
-- Each role that changes raises [`RoleFollowedItsPack`](reference/aggregates.md#rolefolloweditspackttenantid-troleid-tseatid).
+- Each role that changes raises [`RoleFollowedItsStarterRole`](reference/aggregates.md#rolefolloweditspackttenantid-troleid-tseatid).
   The event has `Added`, `Removed`, the permissions among them that manage access (`ManagingAccess`), and `By`.
 - The package sends no message. `AddTenancyEventLog` stores the event in the
   [access history](operators-and-history.md#access-history), where the tenant's administrators can read it.
@@ -302,25 +301,25 @@ using (TenancyWork.BeginOperatorIn<TenantId, SeatId>(tenant, operatorIdentity))
 ```csharp
 // The contract, in the module that publishes it
 [IntegrationEvent]
-public sealed record RoleFollowedItsPackV1(long TenantId, Guid RoleId, string Pack, string[] Added, string[] Removed, string[] ManagingAccess);
+public sealed record RoleFollowedItsStarterRoleV1(long TenantId, Guid RoleId, string StarterRole, string[] Added, string[] Removed, string[] ManagingAccess);
 
 // Tenancy's outbox. Map the event before AddTenancyDomainEvents, which keeps every event without a mapping off the sinks.
 options.UseOutbox<ShopTenancyContext>(outbox => outbox
-    .PublishAs<RoleFollowedItsPack<TenantId, RoleId, SeatId>, RoleFollowedItsPackV1>(followed => new RoleFollowedItsPackV1(
-        followed.TenantId.Value, followed.RoleId.Value, followed.Pack, [.. followed.Added], [.. followed.Removed], [.. followed.ManagingAccess]))
+    .PublishAs<RoleFollowedItsStarterRole<TenantId, RoleId, SeatId>, RoleFollowedItsStarterRoleV1>(followed => new RoleFollowedItsStarterRoleV1(
+        followed.TenantId.Value, followed.RoleId.Value, followed.StarterRole, [.. followed.Added], [.. followed.Removed], [.. followed.ManagingAccess]))
     .AddTenancyDomainEvents()
     .KeepEventLog(log => log.AddTenancyEventLog()));
 
 // Where your application sends mail. Your code finds the tenant's administrators and their addresses.
 public sealed class TellTheAdministrators(IShopAdministrators administrators, IMailer mailer)
-    : IIntegrationEventHandler<RoleFollowedItsPackV1>
+    : IIntegrationEventHandler<RoleFollowedItsStarterRoleV1>
 {
-    public async Task HandleAsync(RoleFollowedItsPackV1 followed, IntegrationEventMessage message, CancellationToken cancellationToken)
+    public async Task HandleAsync(RoleFollowedItsStarterRoleV1 followed, IntegrationEventMessage message, CancellationToken cancellationToken)
     {
         // One line per change that happened
         string?[] lines =
         [
-            $"The role made from the pack {followed.Pack} changed with the application.",
+            $"The role made from the starter role {followed.StarterRole} changed with the application.",
             followed.Added.Length > 0 ? $"It gained {string.Join(", ", followed.Added)}." : null,
             followed.Removed.Length > 0 ? $"It lost {string.Join(", ", followed.Removed)}." : null,
             followed.ManagingAccess.Length > 0 ? $"It changes who may manage access: {string.Join(", ", followed.ManagingAccess)}." : null,
@@ -337,9 +336,9 @@ public sealed class TellTheAdministrators(IShopAdministrators administrators, IM
 
 </details>
 
-### The PermissionsFromPack column
+### The PermissionsFromStarterRole column
 
-- `PermissionsFromPack` is a column on the roles table. Add it with a migration of yours. The column is nullable.
+- `PermissionsFromStarterRole` is a column on the roles table. Add it with a migration of yours. The column is nullable.
   Rows where it is null follow as described in [How a role follows its pack](#how-a-role-follows-its-pack).
 - On Postgres the export protects the column ([What the policies check](postgres.md#what-the-policies-check)). No seat
   changes it. Nobody changes the pack a role came from. A role that a seat adds names no pack, or is an exact copy of
@@ -405,7 +404,7 @@ lists every parameter and refusal.
 ```csharp
 // The sample's host marks two of its Projects module's permissions
 public static ApplicationCatalogue Application { get; } = new(
-    Packs: [/* ... */],
+    StarterRoles: [/* ... */],
     AccessManagingPermissions: [ProjectPermissionNames.ChangeOwner, ProjectPermissionNames.ManageCrew]);
 
 // A permission of your own, marked where it is declared
@@ -562,7 +561,7 @@ public static class ShopCatalogue
 {
     [TenancyCatalogue]
     public static ApplicationCatalogue Application { get; } = new(
-        Packs: [/* ... */],
+        StarterRoles: [/* ... */],
         AccessManagingPermissions: [ProjectPermissionNames.ChangeOwner, ProjectPermissionNames.ManageCrew],
         ContainAccessManagingPermissions: false);
 }

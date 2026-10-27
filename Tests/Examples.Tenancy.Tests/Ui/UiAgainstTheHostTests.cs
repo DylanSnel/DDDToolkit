@@ -43,7 +43,7 @@ public sealed class UiAgainstTheHostTests(SampleHosts sample) : IClassFixture<Sa
         me.Seat.DisplayName.Should().Be("Rhea");
         me.Placements.Should().ContainSingle().Which.Unit.Path.Should().Be("Harbor Works / North");
         me.Placements[0].Grants.Should().ContainSingle().Which.Should().Match<GrantInfo>(grant => grant.Role == "Area manager" && grant.AppliesNow && grant.EndsAt == null);
-        me.Roles.Should().ContainSingle().Which.FromPack.Should().Be(SampleCatalogue.AreaManager);
+        me.Roles.Should().ContainSingle().Which.FromStarterRole.Should().Be(SampleCatalogue.AreaManager);
         me.Permissions.Single(permission => permission.Permission == ProjectPermissionNames.View).Reaches.Select(unit => unit.Path)
             .Should().BeEquivalentTo(new[] { "Harbor Works / North", "Harbor Works / North / North Coast", "Harbor Works / North / North Inland" });
 
@@ -149,10 +149,10 @@ public sealed class UiAgainstTheHostTests(SampleHosts sample) : IClassFixture<Sa
         var (api, _) = await SignInAsync("hana");
 
         var roles = (await api.TenantRolesAsync(Cancellation)).Value!;
-        roles.Where(role => role.ManagesAccess).Select(role => role.FromPack)
+        roles.Where(role => role.ManagesAccess).Select(role => role.FromStarterRole)
             .Should().BeEquivalentTo(new[] { SampleCatalogue.AccessAdmin, SampleCatalogue.AreaManager, SampleCatalogue.CrewLead, SampleCatalogue.PeopleOffice });
         var me = (await api.WhoAmIAsync(Cancellation)).Value!;
-        me.Roles.Should().ContainSingle().Which.Should().Match<RoleInfo>(role => role.FromPack == SampleCatalogue.PeopleOffice && role.ManagesAccess);
+        me.Roles.Should().ContainSingle().Which.Should().Match<RoleInfo>(role => role.FromStarterRole == SampleCatalogue.PeopleOffice && role.ManagesAccess);
         var permissions = (await api.PermissionCatalogueAsync(Cancellation)).Value!.Permissions;
         permissions.Single(permission => permission.Name == ProjectPermissionNames.ChangeOwner).ManagesAccess.Should().BeTrue();
         permissions.Single(permission => permission.Name == ProjectPermissionNames.ManageCrew).ManagesAccess.Should().BeTrue();

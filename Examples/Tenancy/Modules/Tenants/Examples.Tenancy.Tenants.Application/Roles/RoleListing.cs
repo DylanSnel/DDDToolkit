@@ -17,7 +17,7 @@ namespace Examples.Tenancy.Tenants.Application.Roles;
 /// </remarks>
 /// <param name="Id">The role.</param>
 /// <param name="Name">Its name.</param>
-/// <param name="FromPack">The pack it was copied from, or <see langword="null"/> for a role the tenant made.</param>
+/// <param name="FromStarterRole">The starter role it was copied from, or <see langword="null"/> for a role the tenant made.</param>
 /// <param name="Status">Whether it can still be given.</param>
 /// <param name="Permissions">
 /// The permissions it brings, or <see langword="null"/> for a caller who does not hold <see cref="ManageRolesPermission"/>:
@@ -30,7 +30,7 @@ namespace Examples.Tenancy.Tenants.Application.Roles;
 public sealed record RoleListing(
     RoleId Id,
     string Name,
-    string? FromPack,
+    string? FromStarterRole,
     RoleStatus Status,
     IReadOnlyList<string>? Permissions,
     bool ManagesAccess)
@@ -48,7 +48,7 @@ public sealed record RoleListing(
         => [.. roles.Select(each => new RoleListing(
             each.Role.Id,
             each.Role.Name,
-            each.Role.FromPack,
+            each.Role.FromStarterRole,
             each.Role.Status,
             withKeys ? each.Role.Permissions : null,
             each.ManagesAccess))];

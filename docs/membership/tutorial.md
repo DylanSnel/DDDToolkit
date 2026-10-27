@@ -857,7 +857,7 @@ and policies.
   seat id type comes from the member class.
 - **Ada's role lacks the new permissions.** Her Administrator role is a copy of Tenancy's default administrators'
   pack. The copy was made when Harbor Works was provisioned, before boards existed. That pack holds every permission
-  in the catalogue. `SyncRolePacks()` in the host adds the board permissions to her role when the host starts. Changes
+  in the catalogue. `SyncStarterRoles()` in the host adds the board permissions to her role when the host starts. Changes
   that the tenant made to its roles stay.
 
 **What this looks like on a request.** Step 7 writes this request and its handler. You do not write it now; it shows
@@ -1085,7 +1085,7 @@ builder.Services.AddSupabaseRowLevelSecurity();
 builder.Services.AddTenancyModule(database);
 builder.Services.AddBoardsModule(database);
 builder.Services.AddTenancyPermissionsOfModules();
-builder.Services.SyncRolePacks();
+builder.Services.SyncStarterRoles();
 builder.Services.AddSupabaseMigrations();
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<RefusalsAsProblems>();
@@ -1133,7 +1133,7 @@ dotnet sln Harbor.slnx add --solution-folder src/Modules/Boards src/Modules/Boar
    log shows:
 
    ```text
-   The role packs are synced in 2 tenants: 2 roles followed their packs, ...
+   The starter roles are synced in 2 tenants: 2 roles followed their starter roles, ...
    ```
 
    The Administrator role of both tenants now holds the board permissions: Ada's in Harbor Works and Tove's in

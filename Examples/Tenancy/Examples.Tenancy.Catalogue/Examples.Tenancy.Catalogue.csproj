@@ -9,7 +9,7 @@
   <!--
     The application's permission catalogue, and the starter project roles of its tenants' crews, in a project of
     its own because two programs need them: the host, which runs with them, and the program that exports the
-    database's policies, which are written from them. It is no module and declares none: its packs name the
+    database's policies, which are written from them. It is no module and declares none: its starter roles name the
     modules' keys, which their contracts and application projects publish, and it knows nothing of how any module
     is stored. The keys themselves it does not list: each module marks its own list with [TenancyPermissions].
 
@@ -19,7 +19,7 @@
     reference them, so this project references neither.
   -->
   <ItemGroup>
-    <!-- The keys the packs name, the projects' rules and their crew members, and each module's own part of the catalogue. -->
+    <!-- The keys the starter roles name, the projects' rules and their crew members, and each module's own part of the catalogue. -->
     <ProjectReference Include="..\Modules\Projects\Examples.Tenancy.Projects.Application\Examples.Tenancy.Projects.Application.csproj" />
     <ProjectReference Include="..\Modules\Inspections\Examples.Tenancy.Inspections.Application\Examples.Tenancy.Inspections.Application.csproj" />
     <ProjectReference Include="..\..\..\Source\DDDToolkit.Supporting.Tenancy\DDDToolkit.Supporting.Tenancy.csproj" />

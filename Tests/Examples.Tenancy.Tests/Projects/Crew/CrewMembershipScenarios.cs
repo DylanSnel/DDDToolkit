@@ -263,13 +263,13 @@ public sealed class CrewMembershipScenarios(SampleHosts sample) : IClassFixture<
     [InlineData(SampleCatalogue.CrewLead)]
     [InlineData(SampleCatalogue.Surveyor)]
     [InlineData(SampleCatalogue.Observer)]
-    public async Task A_role_of_the_organization_cannot_go_on_a_crew(string pack)
+    public async Task A_role_of_the_organization_cannot_go_on_a_crew(string starterRole)
     {
         await using var host = await sample.StartAsync();
         using var leo = await host.ClientAsync("leo", Harbor.Slug);
-        var role = Harbor.Roles[pack];
+        var role = Harbor.Roles[starterRole];
 
-        // Not to somebody on the crew: a crew holds project roles, whatever pack a role of the organization was
+        // Not to somebody on the crew: a crew holds project roles, whatever starter role a role of the organization was
         // copied from, its name included.
         using (var given = await leo.GiveCrewRoleAsync(PierSeven, Harbor.SeatOf(DemoPeople.Vic), role.Value))
         {

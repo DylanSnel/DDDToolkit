@@ -310,7 +310,7 @@ The read model has six row types, all access facts. A module's model can map not
 | `SeatRight` | tenant, seat, unit, role, permission, the grant's start and end | |
 | `OrganizationUnitPath` | tenant, the unit above, a unit at or below it, and the number of levels between them | |
 | `OrganizationUnitRow` | id, tenant, parent, status | the name, and the fields of your unit class |
-| `RoleRow` | id, tenant, the starter role (pack) it was copied from, status, permissions | the name |
+| `RoleRow` | id, tenant, the starter role it was copied from, status, permissions | the name |
 | `PlacementRow` | seat, unit, whether it is the primary placement | |
 | `SeatRow` | id, tenant, status | the identity, and the fields of your seat class, such as a name |
 

@@ -166,9 +166,9 @@ public sealed class SampleApiTests
     {
         using var stub = new StubApi(request => request.PathAndQuery == "/tenancy/roles"
             ? StubApi.Response(HttpStatusCode.OK, """
-                [{"id":"e0000000-0000-4000-8000-000000000106","name":"People office","fromPack":"people-office","status":"active","permissions":["tenancy.grants.manage"],"managesAccess":true},
-                 {"id":"e0000000-0000-4000-8000-000000000105","name":"Observer","fromPack":"observer","status":"active","permissions":["projects.view"]},
-                 {"id":"e0000000-0000-4000-8000-000000000103","name":"Crew lead","fromPack":"crew-lead","status":"archived","permissions":[]}]
+                [{"id":"e0000000-0000-4000-8000-000000000106","name":"People office","fromStarterRole":"people-office","status":"active","permissions":["tenancy.grants.manage"],"managesAccess":true},
+                 {"id":"e0000000-0000-4000-8000-000000000105","name":"Observer","fromStarterRole":"observer","status":"active","permissions":["projects.view"]},
+                 {"id":"e0000000-0000-4000-8000-000000000103","name":"Crew lead","fromStarterRole":"crew-lead","status":"archived","permissions":[]}]
                 """)
             : StubApi.Response(HttpStatusCode.OK, """{"permissions":[{"permission":"projects.owner.change","module":"Projects","description":"Name a project's owner","retired":false,"managesAccess":true}]}"""));
         var api = new SampleApi(stub.Client(), SignedIn());

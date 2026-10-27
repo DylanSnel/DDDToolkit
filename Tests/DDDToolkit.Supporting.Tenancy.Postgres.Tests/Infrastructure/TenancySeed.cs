@@ -184,7 +184,7 @@ public static class TenancySeed
                     TenantId: tenant,
                     RootId: root,
                     AdminSeatId: administrator.Seat,
-                    RoleIds: roles.ByPack,
+                    RoleIds: roles.ByStarterRole,
                     ConfigureFirstSeat: seat => seat.Rename(administrator.Name)),
                 cancellationToken));
         }
@@ -225,7 +225,7 @@ public static class TenancySeed
         public SeatId Seat { get; } = TenancySeed.Seat(100 + Number);
     }
 
-    /// <summary>The roles a tenant is provisioned with, one per pack of the TestHost, with fixed ids.</summary>
+    /// <summary>The roles a tenant is provisioned with, one per starter role of the TestHost, with fixed ids.</summary>
     public sealed record Roles(int Tenant)
     {
         public RoleId Administrator { get; } = Role(Tenant, 1);
@@ -236,12 +236,12 @@ public static class TenancySeed
 
         public RoleId Watcher { get; } = Role(Tenant, 4);
 
-        public IReadOnlyDictionary<string, RoleId> ByPack => new Dictionary<string, RoleId>(StringComparer.Ordinal)
+        public IReadOnlyDictionary<string, RoleId> ByStarterRole => new Dictionary<string, RoleId>(StringComparer.Ordinal)
         {
-            [HostCatalogue.AdministratorPack] = Administrator,
-            [HostCatalogue.SupervisorPack] = Supervisor,
-            [HostCatalogue.OperatorPack] = Operator,
-            [HostCatalogue.WatcherPack] = Watcher,
+            [HostCatalogue.AdministratorStarterRole] = Administrator,
+            [HostCatalogue.SupervisorStarterRole] = Supervisor,
+            [HostCatalogue.OperatorStarterRole] = Operator,
+            [HostCatalogue.WatcherStarterRole] = Watcher,
         };
     }
 }

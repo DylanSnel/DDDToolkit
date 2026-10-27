@@ -276,11 +276,11 @@ public static class PolicyMatrix
         yield return new("SeatRights", "DELETE", "no one, its own", OliCaller, "DELETE FROM tenancy.\"SeatRights\"" + OliOperates, Expectation.NoRows);
 
         // Roles: read by the tenant's members; added with the role or settings permission for the whole tenant, changed with the
-        // role permission for the whole tenant. A role made by hand names no pack and remembers nothing a pack gave it; one that
-        // names a pack is a copy of it, which remembers exactly the pack's permissions. Which pack a role was made from stays,
-        // and what the pack gave it no seat writes: a sync of the packs compares the pack with it.
-        const string AddRole = "INSERT INTO tenancy.\"Roles\" (\"Id\", \"NormalizedName\", \"Version\", \"TenantId\", \"Name\", \"Description\", \"FromPack\", \"Status\", \"Permissions\") VALUES (gen_random_uuid(), 'CLERK', 0, 1, 'Clerk', '', NULL, 'Active', ARRAY['widget.read'])";
-        const string CopyPack = "INSERT INTO tenancy.\"Roles\" (\"Id\", \"NormalizedName\", \"Version\", \"TenantId\", \"Name\", \"Description\", \"FromPack\", \"Status\", \"Permissions\", \"PermissionsFromPack\") VALUES (gen_random_uuid(), 'LOOKOUT', 0, 1, 'Lookout', '', {0}, 'Active', ARRAY[{1}], {2})";
+        // role permission for the whole tenant. A role made by hand names no starter role and remembers nothing a starter role gave it; one that
+        // names a starter role is a copy of it, which remembers exactly the starter role's permissions. Which starter role a role was made from stays,
+        // and what the starter role gave it no seat writes: a sync of the starter roles compares the starter role with it.
+        const string AddRole = "INSERT INTO tenancy.\"Roles\" (\"Id\", \"NormalizedName\", \"Version\", \"TenantId\", \"Name\", \"Description\", \"FromStarterRole\", \"Status\", \"Permissions\") VALUES (gen_random_uuid(), 'CLERK', 0, 1, 'Clerk', '', NULL, 'Active', ARRAY['widget.read'])";
+        const string CopyStarterRole = "INSERT INTO tenancy.\"Roles\" (\"Id\", \"NormalizedName\", \"Version\", \"TenantId\", \"Name\", \"Description\", \"FromStarterRole\", \"Status\", \"Permissions\", \"PermissionsFromStarterRole\") VALUES (gen_random_uuid(), 'LOOKOUT', 0, 1, 'Lookout', '', {0}, 'Active', ARRAY[{1}], {2})";
         const string DescribeWatcher = "UPDATE tenancy.\"Roles\" SET \"Description\" = 'Looks on' WHERE \"Id\" = {Watcher}";
         const string Watched = "ARRAY['widget.read']";
         yield return new("Roles", "SELECT", "a seat of the tenant", OliCaller, "SELECT count(*) FROM tenancy.\"Roles\" WHERE \"TenantId\" = 1", Expectation.Rows);
@@ -288,23 +288,23 @@ public static class PolicyMatrix
         yield return new("Roles", "INSERT", "roles for the whole tenant", AdaCaller, AddRole, Expectation.Rows);
         yield return new("Roles", "INSERT", "roles and settings below the root", HiroNorth, AddRole, Expectation.Refused);
         yield return new("Roles", "INSERT", "without the permissions", OliCaller, AddRole, Expectation.Refused);
-        yield return new("Roles", "INSERT", "settings for the whole tenant, a copy of a pack", HiroSettings, Args(CopyPack, "'watcher'", "'widget.read'", Watched), Expectation.Rows);
-        yield return new("Roles", "INSERT", "settings for the whole tenant, a copy of a pack, its permissions in another order", HiroSettings, Args(CopyPack, "'operator'", "'widget.read', 'widget.create', 'widget.change'", "ARRAY['widget.create', 'widget.read', 'widget.change']"), Expectation.Rows);
-        yield return new("Roles", "INSERT", "settings for the whole tenant, permissions of no pack", HiroSettings, AddRole, Expectation.Refused);
-        yield return new("Roles", "INSERT", "settings for the whole tenant, more permissions than its pack", HiroSettings, Args(CopyPack, "'watcher'", "'widget.read', 'tenancy.roles.manage'", Watched), Expectation.Refused);
-        yield return new("Roles", "INSERT", "settings for the whole tenant, fewer permissions than its pack", HiroSettings, Args(CopyPack, "'operator'", "'widget.change'", "ARRAY['widget.change', 'widget.read', 'widget.create']"), Expectation.Refused);
-        yield return new("Roles", "INSERT", "settings for the whole tenant, a pack the catalogue does not have", HiroSettings, Args(CopyPack, "'lookouts'", "'widget.read'", Watched), Expectation.Refused);
-        yield return new("Roles", "INSERT", "settings for the whole tenant, a copy that remembers nothing of its pack", HiroSettings, Args(CopyPack, "'watcher'", "'widget.read'", "NULL"), Expectation.Refused);
-        yield return new("Roles", "INSERT", "settings for the whole tenant, a copy that remembers more than its pack gave", HiroSettings, Args(CopyPack, "'watcher'", "'widget.read'", "ARRAY['widget.read', 'tenancy.roles.manage']"), Expectation.Refused);
-        yield return new("Roles", "INSERT", "roles for the whole tenant, a copy of a pack", AdaCaller, Args(CopyPack, "'watcher'", "'widget.read'", Watched), Expectation.Rows);
-        yield return new("Roles", "INSERT", "roles for the whole tenant, naming a pack it is no copy of", AdaCaller, Args(CopyPack, "'watcher'", "'widget.read', 'widget.create'", Watched), Expectation.Refused);
-        yield return new("Roles", "INSERT", "roles for the whole tenant, by hand, remembering what a pack gave", AdaCaller, Args(CopyPack, "NULL", "'widget.read'", Watched), Expectation.Refused);
+        yield return new("Roles", "INSERT", "settings for the whole tenant, a copy of a starter role", HiroSettings, Args(CopyStarterRole, "'watcher'", "'widget.read'", Watched), Expectation.Rows);
+        yield return new("Roles", "INSERT", "settings for the whole tenant, a copy of a starter role, its permissions in another order", HiroSettings, Args(CopyStarterRole, "'operator'", "'widget.read', 'widget.create', 'widget.change'", "ARRAY['widget.create', 'widget.read', 'widget.change']"), Expectation.Rows);
+        yield return new("Roles", "INSERT", "settings for the whole tenant, permissions of no starter role", HiroSettings, AddRole, Expectation.Refused);
+        yield return new("Roles", "INSERT", "settings for the whole tenant, more permissions than its starter role", HiroSettings, Args(CopyStarterRole, "'watcher'", "'widget.read', 'tenancy.roles.manage'", Watched), Expectation.Refused);
+        yield return new("Roles", "INSERT", "settings for the whole tenant, fewer permissions than its starter role", HiroSettings, Args(CopyStarterRole, "'operator'", "'widget.change'", "ARRAY['widget.change', 'widget.read', 'widget.create']"), Expectation.Refused);
+        yield return new("Roles", "INSERT", "settings for the whole tenant, a starter role the catalogue does not have", HiroSettings, Args(CopyStarterRole, "'lookouts'", "'widget.read'", Watched), Expectation.Refused);
+        yield return new("Roles", "INSERT", "settings for the whole tenant, a copy that remembers nothing of its starter role", HiroSettings, Args(CopyStarterRole, "'watcher'", "'widget.read'", "NULL"), Expectation.Refused);
+        yield return new("Roles", "INSERT", "settings for the whole tenant, a copy that remembers more than its starter role gave", HiroSettings, Args(CopyStarterRole, "'watcher'", "'widget.read'", "ARRAY['widget.read', 'tenancy.roles.manage']"), Expectation.Refused);
+        yield return new("Roles", "INSERT", "roles for the whole tenant, a copy of a starter role", AdaCaller, Args(CopyStarterRole, "'watcher'", "'widget.read'", Watched), Expectation.Rows);
+        yield return new("Roles", "INSERT", "roles for the whole tenant, naming a starter role it is no copy of", AdaCaller, Args(CopyStarterRole, "'watcher'", "'widget.read', 'widget.create'", Watched), Expectation.Refused);
+        yield return new("Roles", "INSERT", "roles for the whole tenant, by hand, remembering what a starter role gave", AdaCaller, Args(CopyStarterRole, "NULL", "'widget.read'", Watched), Expectation.Refused);
         yield return new("Roles", "UPDATE", "roles for the whole tenant", AdaCaller, DescribeWatcher, Expectation.Rows);
         yield return new("Roles", "UPDATE", "roles below the root", HiroNorth, DescribeWatcher, Expectation.NoRows);
         yield return new("Roles", "UPDATE", "holding no such permission", OliCaller, DescribeWatcher, Expectation.NoRows);
-        yield return new("Roles", "UPDATE", "roles for the whole tenant, its permissions and not what its pack gave it", AdaCaller, "UPDATE tenancy.\"Roles\" SET \"Permissions\" = ARRAY['widget.read', 'widget.create'] WHERE \"Id\" = {Watcher}", Expectation.Rows);
-        yield return new("Roles", "UPDATE", "roles for the whole tenant, what its pack gave it", AdaCaller, "UPDATE tenancy.\"Roles\" SET \"PermissionsFromPack\" = ARRAY['widget.read', 'widget.create'] WHERE \"Id\" = {Watcher}", Expectation.Refused);
-        yield return new("Roles", "UPDATE", "roles for the whole tenant, the pack it was made from", AdaCaller, "UPDATE tenancy.\"Roles\" SET \"FromPack\" = 'operator' WHERE \"Id\" = {Watcher}", Expectation.Fixed);
+        yield return new("Roles", "UPDATE", "roles for the whole tenant, its permissions and not what its starter role gave it", AdaCaller, "UPDATE tenancy.\"Roles\" SET \"Permissions\" = ARRAY['widget.read', 'widget.create'] WHERE \"Id\" = {Watcher}", Expectation.Rows);
+        yield return new("Roles", "UPDATE", "roles for the whole tenant, what its starter role gave it", AdaCaller, "UPDATE tenancy.\"Roles\" SET \"PermissionsFromStarterRole\" = ARRAY['widget.read', 'widget.create'] WHERE \"Id\" = {Watcher}", Expectation.Refused);
+        yield return new("Roles", "UPDATE", "roles for the whole tenant, the starter role it was made from", AdaCaller, "UPDATE tenancy.\"Roles\" SET \"FromStarterRole\" = 'operator' WHERE \"Id\" = {Watcher}", Expectation.Fixed);
         yield return new("Roles", "DELETE", "no one", AdaCaller, "DELETE FROM tenancy.\"Roles\" WHERE \"Id\" = {Watcher}", Expectation.NoRows);
 
         // The access revision: a counter, read and taken by whoever has a seat, of any status, in the tenant the connection

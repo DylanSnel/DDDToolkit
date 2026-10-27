@@ -14,8 +14,8 @@ namespace DDDToolkit.Supporting.Tenancy.UseCases;
 /// changed it, the one the unit of work keeps.
 /// </para>
 /// <para>
-/// Each change needs <see cref="TenancyPermissions.RolesManage"/> for the whole tenant. Following the packs the roles
-/// were made from, once the application changed them, is system work's alone (<see cref="FollowPacksAsync"/>). A holder
+/// Each change needs <see cref="TenancyPermissions.RolesManage"/> for the whole tenant. Following the starter roles the roles
+/// were made from, once the application changed them, is system work's alone (<see cref="FollowStarterRolesAsync"/>). A holder
 /// of that permission may put any live permission into any role, permissions it does not hold included. That is on
 /// purpose: it is the administrator's permission, and an administrator can give themselves anything already. One
 /// exception: an administrator alone, holding it at the root with no end, changes which permissions that manage
@@ -68,7 +68,7 @@ public class RoleManager<
 
     // ------------------------------------------------------------------ commands
 
-    /// <summary>Makes a role by hand; it comes from no pack.</summary>
+    /// <summary>Makes a role by hand; it comes from no starter role.</summary>
     /// <param name="name">Its name, unique in the tenant, ignoring case.</param>
     /// <param name="description">What it is for.</param>
     /// <param name="permissions">The permissions it grants; the permissions they imply are added.</param>
@@ -217,16 +217,16 @@ public class RoleManager<
         => ArchiveAsync(IdOf(role), cancellationToken);
 
     /// <summary>
-    /// Every active role of the caller's tenant that was made from a pack follows that pack, as the catalogue the
-    /// application runs with builds it now (<see cref="RoleAggregate{TRoleId, TTenantId}.FollowPack{TSeatId}"/>):
-    /// a permission the pack gained since is added, a permission it lost is taken out, and what the tenant changed itself stays.
-    /// Each role whose permissions change raises <see cref="RoleFollowedItsPack{TTenantId, TRoleId, TSeatId}"/>, and the
+    /// Every active role of the caller's tenant that was made from a starter role follows that starter role, as the catalogue the
+    /// application runs with builds it now (<see cref="RoleAggregate{TRoleId, TTenantId}.FollowStarterRole{TSeatId}"/>):
+    /// a permission the starter role gained since is added, a permission it lost is taken out, and what the tenant changed itself stays.
+    /// Each role whose permissions change raises <see cref="RoleFollowedItsStarterRole{TTenantId, TRoleId, TSeatId}"/>, and the
     /// change reaches every seat that holds the role at the save, the one save of the command.
     /// <para>
-    /// System work in the tenant alone runs it, as <c>services.SyncRolePacks()</c> does for every tenant once
-    /// the host has started, through <see cref="IRolePackSync"/>; an operator's command marked <c>[Operator]</c> runs it for
+    /// System work in the tenant alone runs it, as <c>services.SyncStarterRoles()</c> does for every tenant once
+    /// the host has started, through <see cref="IStarterRoleSync"/>; an operator's command marked <c>[Operator]</c> runs it for
     /// one tenant, as operator work there, and the events name the operator. No
-    /// seat runs it: what a pack holds is the application's decision, permissions that manage access included, and an
+    /// seat runs it: what a starter role holds is the application's decision, permissions that manage access included, and an
     /// administrator changes a role with <see cref="SetPermissionsAsync(TRoleId, IReadOnlyCollection{string}, CancellationToken)"/>.
     /// </para>
     /// <para>
@@ -238,18 +238,18 @@ public class RoleManager<
     /// </para>
     /// </summary>
     /// <param name="cancellationToken">Cancels the work.</param>
-    /// <returns>The roles that changed, the roles kept for an administrator, and the roles whose pack is gone.</returns>
+    /// <returns>The roles that changed, the roles kept for an administrator, and the roles whose starter role is gone.</returns>
     /// <exception cref="Exceptions.RefusalException"><c>access.system-only</c> for a seat.</exception>
     /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>
-    public async Task<PacksFollowed> FollowPacksAsync(CancellationToken cancellationToken)
+    public async Task<StarterRolesFollowed> FollowStarterRolesAsync(CancellationToken cancellationToken)
     {
         var gate = Gate();
-        var tenantId = gate.RequireSystemInTenant("A tenant's roles are made to follow their packs");
+        var tenantId = gate.RequireSystemInTenant("A tenant's roles are made to follow their starter roles");
         await gate.SerializeAsync(tenantId, cancellationToken).ConfigureAwait(false);
 
         var roles = (await store.ListRolesAsync(tenantId, cancellationToken).ConfigureAwait(false))
-            .Where(role => role.FromPack is not null && role.Status == RoleStatus.Active)
-            .OrderBy(role => role.FromPack, StringComparer.Ordinal)
+            .Where(role => role.FromStarterRole is not null && role.Status == RoleStatus.Active)
+            .OrderBy(role => role.FromStarterRole, StringComparer.Ordinal)
             .ToArray();
 
         // Everything is decided before a role changes, so a refusal leaves nothing for a later save to write. The
@@ -283,14 +283,14 @@ public class RoleManager<
             following.Add(role);
         }
 
-        // A role whose permissions changed raised its event. One that saves only what it remembers of its pack, or its permissions
+        // A role whose permissions changed raised its event. One that saves only what it remembers of its starter role, or its permissions
         // in the order a role keeps them, is saved without one: the same permissions are no change to tell anyone about.
         var changed = new List<TRoleId>();
         var saves = false;
         foreach (var role in following)
         {
             var before = role.Permissions.ToHashSet(StringComparer.Ordinal);
-            if (role.FollowPack(catalogue, gate.By))
+            if (role.FollowStarterRole(catalogue, gate.By))
             {
                 saves = true;
                 if (!before.SetEquals(role.Permissions))
@@ -305,7 +305,7 @@ public class RoleManager<
             await store.SaveAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        return new PacksFollowed(changed, kept, gone);
+        return new StarterRolesFollowed(changed, kept, gone);
     }
 
     // ------------------------------------------------------------------ reads
@@ -368,25 +368,25 @@ public class RoleManager<
     // ------------------------------------------------------------------ the records it answers
 
     /// <summary>
-    /// What following the packs did in one tenant (<see cref="FollowPacksAsync"/>). A role that follows
-    /// its pack already, one made by hand and one that is archived are in none of the lists.
+    /// What following the starter roles did in one tenant (<see cref="FollowStarterRolesAsync"/>). A role that follows
+    /// its starter role already, one made by hand and one that is archived are in none of the lists.
     /// </summary>
     /// <param name="Changed">
-    /// The roles whose permissions changed, each with a <see cref="RoleFollowedItsPack{TTenantId, TRoleId, TSeatId}"/> raised.
+    /// The roles whose permissions changed, each with a <see cref="RoleFollowedItsStarterRole{TTenantId, TRoleId, TSeatId}"/> raised.
     /// </param>
     /// <param name="KeptForAnAdministrator">
-    /// The roles left as they were, permissions and record, because following their pack would take the administrator permission
+    /// The roles left as they were, permissions and record, because following their starter role would take the administrator permission
     /// from the tenant's last administrators. Each follows at a later run, once the tenant has an administrator
     /// through another role.
     /// </param>
-    /// <param name="WithoutTheirPack">
-    /// The roles made from a pack the catalogue no longer has. They keep their permissions, and follow the pack again if
+    /// <param name="WithoutTheirStarterRole">
+    /// The roles made from a starter role the catalogue no longer has. They keep their permissions, and follow the starter role again if
     /// the application declares it again under the same permission.
     /// </param>
-    public sealed record PacksFollowed(
+    public sealed record StarterRolesFollowed(
         IReadOnlyList<TRoleId> Changed,
         IReadOnlyList<TRoleId> KeptForAnAdministrator,
-        IReadOnlyList<TRoleId> WithoutTheirPack);
+        IReadOnlyList<TRoleId> WithoutTheirStarterRole);
 
     // ------------------------------------------------------------------ helpers
 

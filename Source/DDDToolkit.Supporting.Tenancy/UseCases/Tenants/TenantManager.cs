@@ -26,14 +26,14 @@ namespace DDDToolkit.Supporting.Tenancy.UseCases;
 /// </para>
 /// </summary>
 /// <param name="store">Where the tenant is loaded and saved.</param>
-/// <param name="catalogue">The packs a new tenant is given.</param>
+/// <param name="catalogue">The starter roles a new tenant is given.</param>
 /// <param name="clock">What "now" is.</param>
 /// <param name="options">Which token roles are operators', for the tenants an operator lists.</param>
 /// <param name="callers">Who is calling, as the toolkit says: the operator that lists the tenants.</param>
-/// <param name="packTexts">
-/// The packs' names and descriptions in a tenant's language, when the application registered some;
-/// otherwise every role made from a pack gets the catalogue's texts, but the role of the default
-/// administrators' pack, which the package adds, gets the package's own texts in that language, English or
+/// <param name="starterRoleTexts">
+/// The starter roles' names and descriptions in a tenant's language, when the application registered some;
+/// otherwise every role made from a starter role gets the catalogue's texts, but the role of the default
+/// administrators' starter role, which the package adds, gets the package's own texts in that language, English or
 /// Dutch.
 /// </param>
 public class TenantManager<
@@ -51,7 +51,7 @@ public class TenantManager<
     TimeProvider clock,
     TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId> options,
     ICallerAccessor callers,
-    IRolePackTexts? packTexts = null)
+    IStarterRoleTexts? starterRoleTexts = null)
     where TTenant : TenantAggregate<TTenantId>
     where TOrganization : OrganizationAggregate<TTenantId, TUnit, TUnitId>
     where TUnit : OrganizationUnitEntity<TUnitId>
@@ -72,14 +72,14 @@ public class TenantManager<
 
     /// <summary>
     /// Provisions a tenant, in one save: the tenant, its organization with the root, a role copied from
-    /// every pack seeded for its shape, and a first seat for the administrator's identity, placed at the root and
-    /// granted the administrators' role there with no end. That role holds what the administrators' pack seeded for
-    /// the shape holds, which is every live permission unless the pack lists its own. The tenant is active when the save
+    /// every starter role seeded for its shape, and a first seat for the administrator's identity, placed at the root and
+    /// granted the administrators' role there with no end. That role holds what the administrators' starter role seeded for
+    /// the shape holds, which is every live permission unless the starter role lists its own. The tenant is active when the save
     /// is done.
     /// <para>
-    /// The roles are named as the catalogue names its packs, or, with a language and an <see cref="IRolePackTexts"/>
-    /// registered, in that language. The role of <see cref="TenancyPacks.DefaultAdministrators"/>, for an application
-    /// that declares no administrators' pack, is named in that language by the application's texts, or else by the
+    /// The roles are named as the catalogue names its starter roles, or, with a language and an <see cref="IStarterRoleTexts"/>
+    /// registered, in that language. The role of <see cref="TenancyStarterRoles.DefaultAdministrators"/>, for an application
+    /// that declares no administrators' starter role, is named in that language by the application's texts, or else by the
     /// package's own, in English or Dutch. The fields the application added to its tenant, unit and seat classes are set
     /// by the command's callbacks, before the tenant is activated and in the same save.
     /// </para>
@@ -101,11 +101,11 @@ public class TenantManager<
     /// <returns>The new tenant, active.</returns>
     /// <exception cref="Exceptions.RefusalException">
     /// <c>access.system-only</c> for a seat, <c>tenancy.slug-taken</c>, <c>tenancy.role-name-taken</c> when two
-    /// packs are named alike in the tenant's language, and what the aggregates refuse: an invalid name, a pack's
+    /// starter roles are named alike in the tenant's language, and what the aggregates refuse: an invalid name, a starter role's
     /// translated one included, or an empty identity.
     /// </exception>
     /// <exception cref="Exceptions.InvalidValueObjectException">The slug does not follow <see cref="TenantSlug.Pattern"/>.</exception>
-    /// <exception cref="ArgumentException">The command's role ids name a pack the tenant is not given, or give one id twice.</exception>
+    /// <exception cref="ArgumentException">The command's role ids name a starter role the tenant is not given, or give one id twice.</exception>
     /// <exception cref="InvalidOperationException">The caller is system work in a tenant rather than outside any.</exception>
     public async Task<TTenant> ProvisionAsync(
         TenantToProvision<TTenant, TTenantId, TUnit, TUnitId, TSeat, TSeatId, TRoleId> command,
@@ -116,8 +116,8 @@ public class TenantManager<
         var gate = Gate();
         gate.RequireSystemOutsideTenants();
 
-        var packs = catalogue.PacksFor(command.Shape).ToArray();
-        RequireSeededPacks(command.RoleIds, packs, command.Shape);
+        var starterRoles = catalogue.StarterRolesFor(command.Shape).ToArray();
+        RequireSeededStarterRoles(command.RoleIds, starterRoles, command.Shape);
 
         var slug = TenantSlug.Create(command.Slug).ToValid();
         var tenantId = command.TenantId ?? TTenantId.Create();
@@ -128,24 +128,24 @@ public class TenantManager<
         var by = gate.By ?? TenancyActor<TSeatId>.OfSystem(TenancyWork.SystemScope);
         using (TenancyWork.BeginSystemInAs(tenantId, by))
         {
-            return await ProvisionInAsync(command, tenantId, slug, packs, gate.Now, by, cancellationToken).ConfigureAwait(false);
+            return await ProvisionInAsync(command, tenantId, slug, starterRoles, gate.Now, by, cancellationToken).ConfigureAwait(false);
         }
     }
 
     /// <summary>
-    /// Changes a flat tenant into a hierarchical one, and gives it a copy of every pack seeded for the new shape
+    /// Changes a flat tenant into a hierarchical one, and gives it a copy of every starter role seeded for the new shape
     /// it has no copy of yet. No grant changes: who held what at the root still does. Where the two shapes have
-    /// administrators' packs of their own, the tenant gets the role of the pack seeded for the new shape with
-    /// the permissions that pack holds, and nobody is given it: the administrators keep the role they have, and give
+    /// administrators' starter roles of their own, the tenant gets the role of the starter role seeded for the new shape with
+    /// the permissions that starter role holds, and nobody is given it: the administrators keep the role they have, and give
     /// the new one as they see fit.
     /// </summary>
     /// <param name="to">The new shape.</param>
-    /// <param name="roleIds">The ids of the new roles, by pack key, for imports and seeding; the rest get new ids.</param>
+    /// <param name="roleIds">The ids of the new roles, by starter role key, for imports and seeding; the rest get new ids.</param>
     /// <param name="language">
     /// The language the new roles are named in, usually the tenant's, which the application keeps: each
-    /// pack's texts are asked of the application's <see cref="IRolePackTexts"/> in it. <see langword="null"/>,
+    /// starter role's texts are asked of the application's <see cref="IStarterRoleTexts"/> in it. <see langword="null"/>,
     /// or an application that registered no texts, keeps the catalogue's own; the default administrators'
-    /// pack, which the package adds, gets the package's own texts in that language, English or Dutch, where
+    /// starter role, which the package adds, gets the package's own texts in that language, English or Dutch, where
     /// the application's have none for it. The roles the tenant has already keep their names.
     /// </param>
     /// <param name="cancellationToken">Cancels the work.</param>
@@ -154,9 +154,9 @@ public class TenantManager<
     /// <c>tenancy.not-permitted</c> without <see cref="TenancyPermissions.SettingsManage"/> for the whole tenant,
     /// <c>tenancy.shape-change</c>, <c>tenancy.tenant-state</c> for a closed tenant,
     /// <c>tenancy.role-name-taken</c> when a role of the tenant, or another new role, already has a new
-    /// role's name, <c>tenancy.name-invalid</c> for a pack's translated name or description.
+    /// role's name, <c>tenancy.name-invalid</c> for a starter role's translated name or description.
     /// </exception>
-    /// <exception cref="ArgumentException"><paramref name="roleIds"/> names a pack of no role that would be made, or gives one id twice.</exception>
+    /// <exception cref="ArgumentException"><paramref name="roleIds"/> names a starter role of no role that would be made, or gives one id twice.</exception>
     public async Task<TTenant> ChangeShapeAsync(
         TenantShape to,
         IReadOnlyDictionary<string, TRoleId>? roleIds,
@@ -172,17 +172,17 @@ public class TenantManager<
         tenant.RequireShapeChange(to);
 
         var copied = (await store.ListRolesAsync(tenantId, cancellationToken).ConfigureAwait(false))
-            .Select(role => role.FromPack)
+            .Select(role => role.FromStarterRole)
             .OfType<string>()
             .ToHashSet(StringComparer.Ordinal);
-        var missing = catalogue.PacksFor(to).Where(pack => !copied.Contains(pack.Key)).ToArray();
-        RequireSeededPacks(roleIds, missing, to);
+        var missing = catalogue.StarterRolesFor(to).Where(starterRole => !copied.Contains(starterRole.Key)).ToArray();
+        RequireSeededStarterRoles(roleIds, missing, to);
 
         var added = new List<TRole>();
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var pack in missing)
+        foreach (var starterRole in missing)
         {
-            var draft = DraftOf(pack, language);
+            var draft = DraftOf(starterRole, language);
             var name = draft.Name?.Trim() ?? string.Empty;
             // A blank name is the role's to refuse, as invalid, when it is made below.
             if (name.Length > 0
@@ -309,7 +309,7 @@ public class TenantManager<
         TenantToProvision<TTenant, TTenantId, TUnit, TUnitId, TSeat, TSeatId, TRoleId> command,
         TTenantId tenantId,
         ValidTenantSlug slug,
-        RolePack[] packs,
+        StarterRole[] starterRoles,
         DateTimeOffset now,
         TenancyActor<TSeatId> by,
         CancellationToken cancellationToken)
@@ -324,22 +324,22 @@ public class TenantManager<
         var organization = TenancyInstances.NewOrganization<TOrganization, TTenantId, TUnit, TUnitId, TSeatId>(
             tenantId, command.Name, rootId, command.RootName, by);
 
-        // The catalogue keeps its packs' own names apart. Names in another language are the application's,
+        // The catalogue keeps its starter roles' own names apart. Names in another language are the application's,
         // so they are held apart here, the way a role made by hand is held apart from the others.
         var roles = new Dictionary<string, TRole>(StringComparer.Ordinal);
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var pack in packs)
+        foreach (var starterRole in starterRoles)
         {
-            var role = NewRoleFrom(DraftOf(pack, command.Language), tenantId, command.RoleIds, catalogue, by);
+            var role = NewRoleFrom(DraftOf(starterRole, command.Language), tenantId, command.RoleIds, catalogue, by);
             if (!names.Add(role.Name))
             {
                 throw TenancyRefusals.Refuse(TenancyRefusals.RoleNameTaken, ("Name", role.Name));
             }
 
-            roles[pack.Key] = role;
+            roles[starterRole.Key] = role;
         }
 
-        var administrators = roles[catalogue.AdministratorPackFor(command.Shape).Key];
+        var administrators = roles[catalogue.AdministratorStarterRoleFor(command.Shape).Key];
         var seatId = command.AdminSeatId ?? TSeatId.Create();
         var seat = TenancyInstances.NewSeat<TSeat, TSeatId, TTenantId, TUnitId, TRoleId>(seatId, tenantId, command.AdminIdentity, by);
         seat.Place(rootId, primary: true, now, placedBy: null, by);
@@ -380,26 +380,26 @@ public class TenantManager<
     private TenancyGate<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId> Gate() => new(store, catalogue, clock);
 
     /// <summary>
-    /// What a role copied from <paramref name="pack"/> starts as. It holds the permissions the catalogue built the
-    /// pack with, the administrators' role too: every live permission for a pack that lists none, and for one that
-    /// lists permissions those and no others. Its name and description are the application's texts for the pack in
+    /// What a role copied from <paramref name="starterRole"/> starts as. It holds the permissions the catalogue built the
+    /// starter role with, the administrators' role too: every live permission for a starter role that lists none, and for one that
+    /// lists permissions those and no others. Its name and description are the application's texts for the starter role in
     /// <paramref name="language"/> when it has some, and the catalogue's otherwise. The default
-    /// administrators' pack, which the application did not declare, has the package's texts in between: a
+    /// administrators' starter role, which the application did not declare, has the package's texts in between: a
     /// tenant in Dutch gets it in Dutch, as it gets the package's refusals.
     /// </summary>
-    private RoleDraft DraftOf(RolePack pack, CultureInfo? language)
-        => language is not null && (packTexts?.For(pack, language) ?? PackageTextsOf(pack, language)) is { } texts
-            ? new RoleDraft(texts.Name, texts.Description, pack.Permissions, pack.Key)
-            : new RoleDraft(pack.Name, pack.Description, pack.Permissions, pack.Key);
+    private RoleDraft DraftOf(StarterRole starterRole, CultureInfo? language)
+        => language is not null && (starterRoleTexts?.For(starterRole, language) ?? PackageTextsOf(starterRole, language)) is { } texts
+            ? new RoleDraft(texts.Name, texts.Description, starterRole.Permissions, starterRole.Key)
+            : new RoleDraft(starterRole.Name, starterRole.Description, starterRole.Permissions, starterRole.Key);
 
-    /// <summary>The package's texts for its own pack, the default administrators' one, in <paramref name="language"/>; none for the application's packs.</summary>
-    private (string Name, string Description)? PackageTextsOf(RolePack pack, CultureInfo language)
-        => catalogue.HasDefaultAdministrators && string.Equals(pack.Key, TenancyPacks.DefaultAdministratorsKey, StringComparison.Ordinal)
-            ? TenancyPackTexts.DefaultAdministratorsIn(language)
+    /// <summary>The package's texts for its own starter role, the default administrators' one, in <paramref name="language"/>; none for the application's starter roles.</summary>
+    private (string Name, string Description)? PackageTextsOf(StarterRole starterRole, CultureInfo language)
+        => catalogue.HasDefaultAdministrators && string.Equals(starterRole.Key, TenancyStarterRoles.DefaultAdministratorsKey, StringComparison.Ordinal)
+            ? TenancyStarterRoleTexts.DefaultAdministratorsIn(language)
             : null;
 
     /// <summary>
-    /// A role made from the <paramref name="draft"/> of a pack, with the id given for the pack or a new one.
+    /// A role made from the <paramref name="draft"/> of a starter role, with the id given for the starter role or a new one.
     /// The role checks the draft's name and description as it checks any role's.
     /// </summary>
     private static TRole NewRoleFrom(
@@ -409,15 +409,15 @@ public class TenantManager<
         TenancyCatalogue catalogue,
         TenancyActor<TSeatId>? by)
     {
-        var id = roleIds is not null && roleIds.TryGetValue(draft.FromPack!, out var given) ? given : TRoleId.Create();
+        var id = roleIds is not null && roleIds.TryGetValue(draft.FromStarterRole!, out var given) ? given : TRoleId.Create();
         return TenancyInstances.NewRole<TRole, TRoleId, TTenantId, TSeatId>(id, tenant, draft, catalogue, by);
     }
 
     /// <summary>
-    /// Ids given by pack key name only packs a role is about to be made from, since a typo would otherwise be
+    /// Ids given by starter role key name only starter roles a role is about to be made from, since a typo would otherwise be
     /// ignored, and give each id once, since two roles would otherwise share it.
     /// </summary>
-    private static void RequireSeededPacks(IReadOnlyDictionary<string, TRoleId>? roleIds, IReadOnlyCollection<RolePack> packs, TenantShape shape)
+    private static void RequireSeededStarterRoles(IReadOnlyDictionary<string, TRoleId>? roleIds, IReadOnlyCollection<StarterRole> starterRoles, TenantShape shape)
     {
         if (roleIds is null)
         {
@@ -425,13 +425,13 @@ public class TenantManager<
         }
 
         var unknown = roleIds.Keys
-            .Where(packKey => !packs.Any(pack => string.Equals(pack.Key, packKey, StringComparison.Ordinal)))
+            .Where(starterRoleKey => !starterRoles.Any(starterRole => string.Equals(starterRole.Key, starterRoleKey, StringComparison.Ordinal)))
             .ToArray();
         if (unknown.Length > 0)
         {
             throw new ArgumentException(
                 "Role ids are given for " + string.Join(", ", unknown) + ", but no role of a " + shape.ToString().ToLowerInvariant()
-                + " tenant is made from such a pack here. Packs: " + string.Join(", ", packs.Select(pack => pack.Key)) + ".",
+                + " tenant is made from such a starter role here. Starter roles: " + string.Join(", ", starterRoles.Select(starterRole => starterRole.Key)) + ".",
                 nameof(roleIds));
         }
 

@@ -32,12 +32,12 @@ public abstract class ConcurrencyTests(TestDatabases databases) : IAsyncLifetime
         return ValueTask.CompletedTask;
     }
 
-    private RoleId Operator => _harbor.RolesByPack[HostCatalogue.OperatorPack];
+    private RoleId Operator => _harbor.RolesByStarterRole[HostCatalogue.OperatorStarterRole];
 
     /// <summary>The table of the access revisions, as the provider's SQL names it.</summary>
     private string Revisions => _services.Database.TenancyTable("TenancyAccessRevisions");
 
-    private RoleId Supervisor => _harbor.RolesByPack[HostCatalogue.SupervisorPack];
+    private RoleId Supervisor => _harbor.RolesByStarterRole[HostCatalogue.SupervisorStarterRole];
 
     private RoleId Administrator => _harbor.AdministratorRole;
 
@@ -46,7 +46,7 @@ public abstract class ConcurrencyTests(TestDatabases databases) : IAsyncLifetime
     {
         await BuildHarborAsync();
         var ada = _harbor.AdminSeat;
-        var beth = await _services.SeatAtAsync(_harbor, "Beth", _harbor.RootUnit, HostCatalogue.AdministratorPack);
+        var beth = await _services.SeatAtAsync(_harbor, "Beth", _harbor.RootUnit, HostCatalogue.AdministratorStarterRole);
         (await AdministratorsAsync()).Should().BeEquivalentTo([ada, beth]);
 
         // Each sees the other administrator, so each passes the last-administrator rule on its own.
@@ -62,7 +62,7 @@ public abstract class ConcurrencyTests(TestDatabases databases) : IAsyncLifetime
     public async Task The_revision_is_read_before_any_check()
     {
         await BuildHarborAsync();
-        await _services.GrantAsync(_harbor, _grace, _north, HostCatalogue.OperatorPack);
+        await _services.GrantAsync(_harbor, _grace, _north, HostCatalogue.OperatorStarterRole);
 
         // Right after Grace's command reads the revision, system work takes her operator role away. Her checks
         // still pass on what she holds as a supervisor, and read what was committed: nothing they see is wrong.
@@ -268,7 +268,7 @@ public abstract class ConcurrencyTests(TestDatabases databases) : IAsyncLifetime
         _north = await _services.AddUnitAsync(_harbor.Tenant, _harbor.RootUnit, "North");
         _south = await _services.AddUnitAsync(_harbor.Tenant, _harbor.RootUnit, "South");
         _coast = await _services.AddUnitAsync(_harbor.Tenant, _north, "Coast");
-        _grace = await _services.SeatAtAsync(_harbor, "Grace", _north, HostCatalogue.SupervisorPack);
+        _grace = await _services.SeatAtAsync(_harbor, "Grace", _north, HostCatalogue.SupervisorStarterRole);
         _lin = await _services.SeatAtAsync(_harbor, "Lin", _north);
         await _services.BySystemIn(_harbor.Tenant, services => services.Seats().PlaceAsync(_lin, _coast, primary: false, TestContext.Current.CancellationToken));
     }

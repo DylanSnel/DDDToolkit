@@ -4,7 +4,7 @@ using Mediator;
 namespace Examples.Tenancy.Tenants.Application.Roles.Commands;
 
 /// <summary>
-/// Makes a role by hand, from no pack.
+/// Makes a role by hand, from no starter role.
 /// </summary>
 /// <remarks>
 /// It requires <c>tenancy.roles.manage</c> for the whole tenant. The package's use case asks for that permission again, and

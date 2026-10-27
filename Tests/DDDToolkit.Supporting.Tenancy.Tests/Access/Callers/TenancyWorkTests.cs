@@ -145,7 +145,7 @@ public class TenancyWorkTests
 
         var tenant = harbor.Tenant;
         var root = harbor.RootUnit;
-        var watchers = harbor.RolesByPack[HostCatalogue.WatcherPack];
+        var watchers = harbor.RolesByStarterRole[HostCatalogue.WatcherStarterRole];
 
         await BySystemIn(harness, tenant, h => h.Tenants.ChangeShapeAsync(TenantShape.Hierarchical, roleIds: null, language: null, default));
         await BySystemIn(harness, tenant, h => h.Organization.RenameAsync("Harbor Works Ltd", default));

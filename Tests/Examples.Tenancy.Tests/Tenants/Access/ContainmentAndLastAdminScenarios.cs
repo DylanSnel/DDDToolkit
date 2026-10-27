@@ -224,7 +224,7 @@ public sealed class ContainmentAndLastAdminScenarios(SampleHosts sample) : IClas
         var toveSeat = Harbor.SeatOf(DemoPeople.Tove).Value;
         var south = Harbor.UnitNamed("South").Value;
 
-        // The access admin's role holds every permission that manages access, so Ada can grant every other pack.
+        // The access admin's role holds every permission that manages access, so Ada can grant every other starter role.
         using (var placed = await ada.PostAsJsonAsync($"/tenancy/seats/{toveSeat}/placements", new { unitId = south, primary = false }, Cancellation))
         {
             placed.StatusCode.Should().Be(HttpStatusCode.NoContent);

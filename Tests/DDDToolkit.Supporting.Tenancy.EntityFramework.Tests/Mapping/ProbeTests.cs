@@ -213,7 +213,7 @@ public abstract class ProbeTests(TestDatabases databases) : IAsyncLifetime
                 .Where(role => role.Permissions.Contains(HostCatalogue.WidgetRead))
                 .Select(role => role.Id)
                 .ToList();
-            expected.Should().HaveCountGreaterThan(1, "several packs hold the permission, so the question has something to tell apart");
+            expected.Should().HaveCountGreaterThan(1, "several starter roles hold the permission, so the question has something to tell apart");
 
             var holders = widgets.Set<RoleRow<TenantId, RoleId>>().Where(role => role.Permissions.Contains(HostCatalogue.WidgetRead)).Select(role => role.Id);
             translated(holders.ToQueryString());

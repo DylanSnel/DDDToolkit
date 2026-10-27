@@ -131,14 +131,14 @@ public sealed class StartupTests(SampleHosts sample) : IClassFixture<SampleHosts
         // Tenancy's generator collected into the host. The program that exports has no host, and Tenancy's package
         // builds it there from what the sample marks: the part marked [TenancyCatalogue] and every list marked
         // [TenancyPermissions]. Policies written from another catalogue than the host's would let other grants
-        // through than the application gives, so the two are held to the same permissions, packs and containment.
+        // through than the application gives, so the two are held to the same permissions, starter roles and containment.
         var running = (await sample.SharedAsync()).Services.GetRequiredService<TenancyCatalogue>();
         var exported = ExportedMarks.Tenancy().Catalogue;
 
         exported.Permissions.Select(permission => (permission.Name, permission.ManagesAccess, permission.Retired))
             .Should().BeEquivalentTo(running.Permissions.Select(permission => (permission.Name, permission.ManagesAccess, permission.Retired)));
-        exported.Packs.Select(pack => (pack.Key, Keys: string.Join(",", pack.Permissions.Order(StringComparer.Ordinal)), pack.Administers))
-            .Should().BeEquivalentTo(running.Packs.Select(pack => (pack.Key, Keys: string.Join(",", pack.Permissions.Order(StringComparer.Ordinal)), pack.Administers)));
+        exported.StarterRoles.Select(starterRole => (starterRole.Key, Keys: string.Join(",", starterRole.Permissions.Order(StringComparer.Ordinal)), starterRole.Administers))
+            .Should().BeEquivalentTo(running.StarterRoles.Select(starterRole => (starterRole.Key, Keys: string.Join(",", starterRole.Permissions.Order(StringComparer.Ordinal)), starterRole.Administers)));
         exported.ContainAccessManagingPermissions.Should().Be(running.ContainAccessManagingPermissions);
     }
 

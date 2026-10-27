@@ -453,7 +453,7 @@ public static class TenancyPostgresChecks
     /// its access history where the context maps one; the units' table has the unique index that keeps a tenant's
     /// organization to a single root; the functions
     /// written from the catalogue, which say which permissions manage access, which of them a seat hands on only where it
-    /// holds them, which permissions a copy of each pack holds and which permissions are live, answer as the catalogue the
+    /// holds them, which permissions a copy of each starter role holds and which permissions are live, answer as the catalogue the
     /// application runs with does, so a database written with containment on for an application that turned it off,
     /// or the other way round, is refused and said to be so; the store leaves the rights to
     /// the database (<see cref="TenancyStoreOptions.DatabaseKeepsRights"/>), and the trigger that writes them is
@@ -625,7 +625,7 @@ public static class TenancyPostgresChecks
                     catalogue.ContainAccessManagingPermissions
                         ? "the permissions a seat hands on only where it holds them are those that manage access, " + string.Join(", ", catalogue.AccessManagingPermissions)
                         : "no permission is handed on only where a seat holds it, since ApplicationCatalogue.ContainAccessManagingPermissions is off"),
-                (TenancySql.PackPermissions, TenancySql.PackPermissionsBody(catalogue), "the packs are " + string.Join(", ", catalogue.Packs.Select(pack => pack.Key)) + ", with the permissions the catalogue gives them"),
+                (TenancySql.StarterRolePermissions, TenancySql.StarterRolePermissionsBody(catalogue), "the starter roles are " + string.Join(", ", catalogue.StarterRoles.Select(starterRole => starterRole.Key)) + ", with the permissions the catalogue gives them"),
                 (TenancySql.PermissionIsLive, TenancySql.PermissionIsLiveBody(catalogue), "the live permissions are " + string.Join(", ", catalogue.LivePermissions)),
             ];
 

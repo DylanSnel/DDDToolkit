@@ -31,8 +31,8 @@ internal static partial class RoleType
     /// <summary>Its name.</summary>
     public static string GetName([Parent] RoleListing listed) => listed.Name;
 
-    /// <summary>The pack it was copied from, or nothing for a role the tenant made.</summary>
-    public static string? GetFromPack([Parent] RoleListing listed) => listed.FromPack;
+    /// <summary>The starter role it was copied from, or nothing for a role the tenant made.</summary>
+    public static string? GetFromStarterRole([Parent] RoleListing listed) => listed.FromStarterRole;
 
     /// <summary>Whether it can still be given.</summary>
     public static RoleStatus GetStatus([Parent] RoleListing listed) => listed.Status;

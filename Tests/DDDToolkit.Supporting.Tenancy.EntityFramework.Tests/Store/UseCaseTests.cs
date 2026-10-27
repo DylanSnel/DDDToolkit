@@ -29,7 +29,7 @@ public sealed class UseCaseTests : IDisposable
 
     public void Dispose() => _services.Dispose();
 
-    private RoleId Operator => _harbor.RolesByPack[HostCatalogue.OperatorPack];
+    private RoleId Operator => _harbor.RolesByStarterRole[HostCatalogue.OperatorStarterRole];
 
     [Fact]
     public async Task Grants_are_positional_except_for_roles_that_manage_access()
@@ -47,7 +47,7 @@ public sealed class UseCaseTests : IDisposable
         await Refused.WithCodeAsync(TenancyRefusals.NotPermitted, () => AsGrace(services =>
             services.Seats().GrantAsync(_lin, Operator, _south, until: null, reason: null, TestContext.Current.CancellationToken)));
         await Refused.WithCodeAsync(TenancyRefusals.StartSystemOnly, () => AsGrace(services =>
-            services.Seats().GrantAsync(_lin, _harbor.RolesByPack[HostCatalogue.WatcherPack], _coast, until: null, reason: null, TestContext.Current.CancellationToken, from: _clock.Now)));
+            services.Seats().GrantAsync(_lin, _harbor.RolesByStarterRole[HostCatalogue.WatcherStarterRole], _coast, until: null, reason: null, TestContext.Current.CancellationToken, from: _clock.Now)));
 
         await AsGrace(services => services.Seats().RevokeAsync(_lin, Operator, _coast, TestContext.Current.CancellationToken));
         (await KeysAsync(_lin)).Should().BeEmpty();
@@ -61,7 +61,7 @@ public sealed class UseCaseTests : IDisposable
             services.Seats().GrantAsync(_lin, Operator, _coast, until: null, reason: null, TestContext.Current.CancellationToken));
         (await KeysAsync(_lin)).Should().HaveCount(3);
         var supervisor = await Refused.WithCodeAsync(TenancyRefusals.GrantExceedsOwn, () => _services.BySeat(_harbor.Tenant, nell, services =>
-            services.Seats().GrantAsync(_lin, _harbor.RolesByPack[HostCatalogue.SupervisorPack], _coast, until: null, reason: null, TestContext.Current.CancellationToken)));
+            services.Seats().GrantAsync(_lin, _harbor.RolesByStarterRole[HostCatalogue.SupervisorStarterRole], _coast, until: null, reason: null, TestContext.Current.CancellationToken)));
         supervisor.Arguments["Missing"].Should().Be(TenancyPermissions.SeatsManage + ", " + TenancyPermissions.UnitsManage);
     }
 
@@ -69,9 +69,9 @@ public sealed class UseCaseTests : IDisposable
     public async Task A_role_that_manages_access_is_granted_for_no_longer_than_the_granter_holds_those_permissions()
     {
         await BuildHarborAsync();
-        var supervisors = _harbor.RolesByPack[HostCatalogue.SupervisorPack];
+        var supervisors = _harbor.RolesByStarterRole[HostCatalogue.SupervisorStarterRole];
         var hal = await _services.SeatAtAsync(_harbor, "Hal", _north);
-        await _services.GrantAsync(_harbor, hal, _north, HostCatalogue.SupervisorPack, until: _clock.Now.AddDays(7));
+        await _services.GrantAsync(_harbor, hal, _north, HostCatalogue.SupervisorStarterRole, until: _clock.Now.AddDays(7));
 
         await Refused.WithCodeAsync(TenancyRefusals.GrantExceedsOwn, () => _services.BySeat(_harbor.Tenant, hal, services =>
             services.Seats().GrantAsync(_lin, supervisors, _coast, until: null, reason: null, TestContext.Current.CancellationToken)));
@@ -120,10 +120,10 @@ public sealed class UseCaseTests : IDisposable
 
         // An administrator whose grant ends does not count.
         var cy = await _services.SeatAtAsync(_harbor, "Cy", root);
-        await _services.GrantAsync(_harbor, cy, root, HostCatalogue.AdministratorPack, until: _clock.Now.AddDays(30));
+        await _services.GrantAsync(_harbor, cy, root, HostCatalogue.AdministratorStarterRole, until: _clock.Now.AddDays(30));
         await Refused.WithCodeAsync(TenancyRefusals.LastAdmin, () => BySystem(services => services.Seats().SuspendAsync(ada, TestContext.Current.CancellationToken)));
 
-        var beth = await _services.SeatAtAsync(_harbor, "Beth", root, HostCatalogue.AdministratorPack);
+        var beth = await _services.SeatAtAsync(_harbor, "Beth", root, HostCatalogue.AdministratorStarterRole);
         await _services.BySeat(_harbor.Tenant, beth, services => services.Seats().RevokeAsync(ada, administrators, root, TestContext.Current.CancellationToken));
 
         (await _services.StoredRightsAsync(ada)).Should().BeEmpty();
@@ -153,7 +153,7 @@ public sealed class UseCaseTests : IDisposable
     {
         await BuildHarborAsync();
         var hal = await _services.SeatAtAsync(_harbor, "Hal", _north);
-        await _services.GrantAsync(_harbor, hal, _north, HostCatalogue.SupervisorPack, until: _clock.Now.AddHours(1));
+        await _services.GrantAsync(_harbor, hal, _north, HostCatalogue.SupervisorStarterRole, until: _clock.Now.AddHours(1));
         await _services.BySeat(_harbor.Tenant, hal, services => services.Organization().AddUnitAsync(_north, "Bay", TestContext.Current.CancellationToken));
         var stored = await _services.StoredRightsAsync(hal);
 
@@ -188,7 +188,7 @@ public sealed class UseCaseTests : IDisposable
         var desk = (await BySystem(services => services.Roles().CreateAsync("Seat desk", "Keeps the list of people", [TenancyPermissions.SeatsManage], TestContext.Current.CancellationToken))).Id;
         var oli = await _services.SeatAtAsync(_harbor, "Oli", _harbor.RootUnit);
         await BySystem(services => services.Seats().GrantAsync(oli, desk, _harbor.RootUnit, until: null, reason: null, TestContext.Current.CancellationToken));
-        await _services.GrantAsync(_harbor, _lin, _coast, HostCatalogue.WatcherPack);
+        await _services.GrantAsync(_harbor, _lin, _coast, HostCatalogue.WatcherStarterRole);
 
         var refusal = await Refused.WithCodeAsync(TenancyRefusals.GrantExceedsOwn, () => _services.BySeat(_harbor.Tenant, oli, services =>
             services.Seats().SuspendAsync(_grace, TestContext.Current.CancellationToken)));
@@ -204,7 +204,7 @@ public sealed class UseCaseTests : IDisposable
     {
         await BuildHarborAsync();
         await BySystem(services => services.Seats().PlaceAsync(_grace, _south, primary: false, TestContext.Current.CancellationToken));
-        await _services.GrantAsync(_harbor, _grace, _south, HostCatalogue.SupervisorPack, until: _clock.Now.AddDays(7));
+        await _services.GrantAsync(_harbor, _grace, _south, HostCatalogue.SupervisorStarterRole, until: _clock.Now.AddDays(7));
         var pier = (await AsGrace(services => services.Organization().AddUnitAsync(_south, "Pier", TestContext.Current.CancellationToken))).Id;
 
         var refusal = await Refused.WithCodeAsync(TenancyRefusals.GrantExceedsOwn, () => AsGrace(services =>
@@ -220,7 +220,7 @@ public sealed class UseCaseTests : IDisposable
     {
         await BuildHarborAsync();
         var hal = await _services.SeatAtAsync(_harbor, "Hal", _harbor.RootUnit);
-        await _services.GrantAsync(_harbor, hal, _harbor.RootUnit, HostCatalogue.AdministratorPack, until: _clock.Now.AddDays(7));
+        await _services.GrantAsync(_harbor, hal, _harbor.RootUnit, HostCatalogue.AdministratorStarterRole, until: _clock.Now.AddDays(7));
 
         var refusal = await Refused.WithCodeAsync(TenancyRefusals.GrantExceedsOwn, () => _services.BySeat(_harbor.Tenant, hal, services =>
             services.Organization().MoveUnitAsync(_coast, _south, TestContext.Current.CancellationToken)));
@@ -237,8 +237,8 @@ public sealed class UseCaseTests : IDisposable
     public async Task Withdrawing_a_placement_takes_its_rights()
     {
         await BuildHarborAsync();
-        await _services.GrantAsync(_harbor, _lin, _coast, HostCatalogue.WatcherPack);
-        await _services.GrantAsync(_harbor, _lin, _south, HostCatalogue.OperatorPack);
+        await _services.GrantAsync(_harbor, _lin, _coast, HostCatalogue.WatcherStarterRole);
+        await _services.GrantAsync(_harbor, _lin, _south, HostCatalogue.OperatorStarterRole);
 
         await AsGrace(services => services.Seats().WithdrawAsync(_lin, _coast, TestContext.Current.CancellationToken));
 
@@ -292,8 +292,8 @@ public sealed class UseCaseTests : IDisposable
 
         (await BySystem(services => services.Seats().ListAsync(TestContext.Current.CancellationToken))).Select(seat => seat.DisplayName)
             .Should().BeEquivalentTo(["Ada", "Grace", "Lin"]);
-        (await BySystem(services => services.Roles().ListAsync(TestContext.Current.CancellationToken))).Select(role => role.FromPack)
-            .Should().BeEquivalentTo(_harbor.RolesByPack.Keys);
+        (await BySystem(services => services.Roles().ListAsync(TestContext.Current.CancellationToken))).Select(role => role.FromStarterRole)
+            .Should().BeEquivalentTo(_harbor.RolesByStarterRole.Keys);
     }
 
     [Fact]
@@ -301,7 +301,7 @@ public sealed class UseCaseTests : IDisposable
     {
         await BuildHarborAsync();
         var orchard = await _services.ProvisionAsync("orchard", administratorName: "Odette");
-        var supervisor = _harbor.RolesByPack[HostCatalogue.SupervisorPack];
+        var supervisor = _harbor.RolesByStarterRole[HostCatalogue.SupervisorStarterRole];
 
         // Lin is placed at Coast and at South and holds no role: every name of the tenant is Lin's to read all the same.
         await _services.BySeat(_harbor.Tenant, _lin, async services =>
@@ -348,7 +348,7 @@ public sealed class UseCaseTests : IDisposable
     public async Task A_flat_tenant_grows_units_once_its_shape_changes()
     {
         var flat = await _services.ProvisionAsync("meadow", TenantShape.Flat);
-        flat.RolesByPack.Should().NotContainKey(HostCatalogue.SupervisorPack, "the supervisors' pack is for hierarchical tenants");
+        flat.RolesByStarterRole.Should().NotContainKey(HostCatalogue.SupervisorStarterRole, "the supervisors' starter role is for hierarchical tenants");
 
         await Refused.WithCodeAsync(TenancyRefusals.FlatTenant, () => _services.BySeat(flat.Tenant, flat.AdminSeat, services =>
             services.Organization().AddUnitAsync(flat.RootUnit, "East", TestContext.Current.CancellationToken)));
@@ -358,7 +358,7 @@ public sealed class UseCaseTests : IDisposable
             services.Organization().AddUnitAsync(flat.RootUnit, "East", TestContext.Current.CancellationToken))).Id;
 
         (await _services.BySeat(flat.Tenant, flat.AdminSeat, services => services.Roles().ListAsync(TestContext.Current.CancellationToken)))
-            .Select(role => role.FromPack).Should().Contain(HostCatalogue.SupervisorPack);
+            .Select(role => role.FromStarterRole).Should().Contain(HostCatalogue.SupervisorStarterRole);
         (await _services.StoredPathsAsync(flat.Tenant)).Should().Contain(path => path.AncestorId == flat.RootUnit && path.DescendantId == east && path.Distance == 1);
     }
 
@@ -408,7 +408,7 @@ public sealed class UseCaseTests : IDisposable
     public async Task A_tenant_provisioned_in_a_language_is_saved_with_its_roles_in_it_and_the_applications_own_fields()
     {
         var dutch = CultureInfo.GetCultureInfo("nl");
-        using var services = new TestServices(configure: registered => registered.AddSingleton<IRolePackTexts>(new DutchPacks()));
+        using var services = new TestServices(configure: registered => registered.AddSingleton<IStarterRoleTexts>(new DutchStarterRoles()));
 
         var polder = await services.RunAsync(HostCaller.System, scoped => scoped.Tenants().ProvisionWithIdsAsync(
             scoped.GetRequiredService<TenancyCatalogue>(),
@@ -423,8 +423,8 @@ public sealed class UseCaseTests : IDisposable
         // Read again, by a scope of its own: one save wrote the roles' texts and the application's columns.
         await services.BySeat(polder.Tenant, polder.AdminSeat, async scoped =>
         {
-            (await scoped.Roles().ListAsync(TestContext.Current.CancellationToken)).Select(role => (role.Name, role.FromPack)).Should().Equal(
-                ("Bediener", HostCatalogue.OperatorPack), ("Hoofdgebruiker", HostCatalogue.AdministratorPack), ("Toeschouwer", HostCatalogue.WatcherPack));
+            (await scoped.Roles().ListAsync(TestContext.Current.CancellationToken)).Select(role => (role.Name, role.FromStarterRole)).Should().Equal(
+                ("Bediener", HostCatalogue.OperatorStarterRole), ("Hoofdgebruiker", HostCatalogue.AdministratorStarterRole), ("Toeschouwer", HostCatalogue.WatcherStarterRole));
             (await scoped.TenancyContext().Set<HostTenant>().AsNoTracking().SingleAsync(TestContext.Current.CancellationToken)).IsDemo.Should().BeTrue();
             (await scoped.TenancyContext().Set<HostSeat>().AsNoTracking().SingleAsync(TestContext.Current.CancellationToken)).JobTitle.Should().Be("Dijkgraaf");
             (await scoped.TenancyContext().Set<HostOrganization>().AsNoTracking().SingleAsync(TestContext.Current.CancellationToken)).Root.CostCentre.Should().Be("PO-001");
@@ -447,18 +447,18 @@ public sealed class UseCaseTests : IDisposable
         (await services.ProvisionAsync("molen", TenantShape.Flat)).Tenant.Should().NotBe(polder.Tenant);
     }
 
-    /// <summary>The host's packs in Dutch, as an application would read them from its own resources.</summary>
-    private sealed class DutchPacks : IRolePackTexts
+    /// <summary>The host's starter roles in Dutch, as an application would read them from its own resources.</summary>
+    private sealed class DutchStarterRoles : IStarterRoleTexts
     {
-        public (string Name, string Description)? For(RolePack pack, CultureInfo culture)
+        public (string Name, string Description)? For(StarterRole starterRole, CultureInfo culture)
             => culture.TwoLetterISOLanguageName != "nl"
                 ? null
-                : pack.Key switch
+                : starterRole.Key switch
                 {
-                    HostCatalogue.AdministratorPack => ("Hoofdgebruiker", "Regelt de tenant"),
-                    HostCatalogue.SupervisorPack => ("Afdelingshoofd", "Leidt een deel van de organisatie"),
-                    HostCatalogue.OperatorPack => ("Bediener", "Werkt met widgets"),
-                    HostCatalogue.WatcherPack => ("Toeschouwer", "Bekijkt widgets"),
+                    HostCatalogue.AdministratorStarterRole => ("Hoofdgebruiker", "Regelt de tenant"),
+                    HostCatalogue.SupervisorStarterRole => ("Afdelingshoofd", "Leidt een deel van de organisatie"),
+                    HostCatalogue.OperatorStarterRole => ("Bediener", "Werkt met widgets"),
+                    HostCatalogue.WatcherStarterRole => ("Toeschouwer", "Bekijkt widgets"),
                     _ => null,
                 };
     }
@@ -469,7 +469,7 @@ public sealed class UseCaseTests : IDisposable
         _north = await _services.AddUnitAsync(_harbor.Tenant, _harbor.RootUnit, "North");
         _south = await _services.AddUnitAsync(_harbor.Tenant, _harbor.RootUnit, "South");
         _coast = await _services.AddUnitAsync(_harbor.Tenant, _north, "Coast");
-        _grace = await _services.SeatAtAsync(_harbor, "Grace", _north, HostCatalogue.SupervisorPack);
+        _grace = await _services.SeatAtAsync(_harbor, "Grace", _north, HostCatalogue.SupervisorStarterRole);
         _lin = await _services.SeatAtAsync(_harbor, "Lin", _coast);
         await BySystem(services => services.Seats().PlaceAsync(_lin, _south, primary: false, TestContext.Current.CancellationToken));
     }

@@ -34,7 +34,7 @@ public abstract class ReadFunctionTests(TenancyPostgres postgres, TenancyNaming 
     {
         [TenancyFunctionNames.CallerPermissions] = "TABLE(\"TenantId\" bigint, \"SeatId\" uuid, \"UnitId\" uuid, \"RoleId\" uuid, \"Permission\" text, \"StartsAt\" timestamp with time zone, \"EndsAt\" timestamp with time zone)",
         [TenancyFunctionNames.TenantPlacements] = "TABLE(\"SeatId\" uuid, \"UnitId\" uuid, \"IsPrimary\" boolean, \"TenantId\" bigint)",
-        [TenancyFunctionNames.TenantRoles] = "TABLE(\"Id\" uuid, \"TenantId\" bigint, \"FromPack\" text, \"Status\" text, \"Permissions\" text[])",
+        [TenancyFunctionNames.TenantRoles] = "TABLE(\"Id\" uuid, \"TenantId\" bigint, \"FromStarterRole\" text, \"Status\" text, \"Permissions\" text[])",
         [TenancyFunctionNames.TenantSeats] = "TABLE(\"Id\" uuid, \"TenantId\" bigint, \"Status\" text)",
         [TenancyFunctionNames.TenantUnitPaths] = "TABLE(\"TenantId\" bigint, \"AncestorId\" uuid, \"DescendantId\" uuid, \"Distance\" integer)",
         [TenancyFunctionNames.TenantUnits] = "TABLE(\"Id\" uuid, \"TenantId\" bigint, \"ParentId\" uuid, \"Status\" text)",
@@ -311,7 +311,7 @@ public abstract class ReadFunctionTests(TenancyPostgres postgres, TenancyNaming 
                     ('{yard}', '{yard}', 7, 0), ('{shed}', '{shed}', 7, 0), ('{yard}', '{shed}', 7, 1);
                 INSERT INTO tenancy."Seats" ("Id", "Version", "TenantId", "Identity", "DisplayName", "Kind", "Status") VALUES
                     ('{amy}', 0, 7, gen_random_uuid(), 'Amy', 0, 0), ('{bert}', 0, 7, gen_random_uuid(), 'Bert', 0, 1), ('{cy}', 0, 7, gen_random_uuid(), 'Cy', 0, 2);
-                INSERT INTO tenancy."Roles" ("Id", "NormalizedName", "Version", "TenantId", "Name", "Description", "FromPack", "Status", "Permissions") VALUES
+                INSERT INTO tenancy."Roles" ("Id", "NormalizedName", "Version", "TenantId", "Name", "Description", "FromStarterRole", "Status", "Permissions") VALUES
                     ('{keeper}', 'KEEPER', 0, 7, 'Keeper', '', NULL, 'active', ARRAY['widget.read']),
                     ('{lookout}', 'LOOKOUT', 0, 7, 'Lookout', '', NULL, 'archived', ARRAY['widget.read']);
                 """,
@@ -323,7 +323,7 @@ public abstract class ReadFunctionTests(TenancyPostgres postgres, TenancyNaming 
         {
             (await owner.ListAsync<string>("SELECT \"Id\"::text || ' ' || \"Status\" FROM tenancy.tenant_seats()", Cancellation))
                 .Should().BeEquivalentTo($"{amy} Active", $"{bert} Suspended", $"{cy} Deactivated");
-            (await owner.ListAsync<string>("SELECT \"Id\"::text || ' ' || \"Status\" FROM tenancy.tenant_roles_with_permissions()", Cancellation))
+            (await owner.ListAsync<string>("SELECT \"Id\"::text || ' ' || \"Status\" FROM tenancy.tenant_role_rows()", Cancellation))
                 .Should().BeEquivalentTo($"{keeper} Active", $"{lookout} Archived");
             (await owner.ListAsync<string>("SELECT \"Id\"::text || ' ' || \"Status\" FROM tenancy.tenant_units()", Cancellation))
                 .Should().BeEquivalentTo($"{shed} Archived", $"{yard} Active");
@@ -379,7 +379,7 @@ public abstract class ReadFunctionTests(TenancyPostgres postgres, TenancyNaming 
             (await oli.ListAsync<Guid>("SELECT u.\"Id\" FROM tenancy.tenant_units() u", Cancellation)).Should().BeEquivalentTo([HarborRoot.Value, North.Value, NorthPier.Value, South.Value]);
             (await oli.ListAsync<long>("SELECT DISTINCT \"TenantId\" FROM tenancy.tenant_unit_paths()", Cancellation)).Should().Equal(Harbor.Value);
             (await oli.ScalarAsync<long>("SELECT count(*) FROM tenancy.tenant_unit_paths()", Cancellation)).Should().Be(8, "each unit with itself, three below the root, and North Pier below North");
-            (await oli.ListAsync<Guid>("SELECT r.\"Id\" FROM tenancy.tenant_roles_with_permissions() r", Cancellation)).Should().BeEquivalentTo(
+            (await oli.ListAsync<Guid>("SELECT r.\"Id\" FROM tenancy.tenant_role_rows() r", Cancellation)).Should().BeEquivalentTo(
                 [HarborRoles.Administrator.Value, GrantsDesk.Value, HarborRoles.Operator.Value, HarborRoles.Supervisor.Value, HarborRoles.Watcher.Value]);
             (await oli.ScalarAsync<long>("SELECT count(*) FROM tenancy.tenant_placements()", Cancellation)).Should().Be(7, "Seth is placed twice");
             (await oli.ListAsync<long>("SELECT DISTINCT \"TenantId\" FROM tenancy.tenant_placements()", Cancellation)).Should().Equal(Harbor.Value);
@@ -578,7 +578,7 @@ public abstract class ReadFunctionTests(TenancyPostgres postgres, TenancyNaming 
         }
 
         Line("Units", (await queries.Units().ToListAsync(Cancellation)).Select(unit => $"{unit.Id} of {unit.TenantId} under {unit.ParentId} {unit.Status}"));
-        Line("Roles", (await queries.Roles().ToListAsync(Cancellation)).Select(role => $"{role.Id} of {role.TenantId} from {role.FromPack} {role.Status} [{string.Join(' ', role.Permissions.Order(StringComparer.Ordinal))}]"));
+        Line("Roles", (await queries.Roles().ToListAsync(Cancellation)).Select(role => $"{role.Id} of {role.TenantId} from {role.FromStarterRole} {role.Status} [{string.Join(' ', role.Permissions.Order(StringComparer.Ordinal))}]"));
         Line("Seats", (await queries.Seats().ToListAsync(Cancellation)).Select(seat => $"{seat.Id} of {seat.TenantId} {seat.Status}"));
 
         // The rows the questions are worked out from, read as sets: the seat's own rights, which is all of them it

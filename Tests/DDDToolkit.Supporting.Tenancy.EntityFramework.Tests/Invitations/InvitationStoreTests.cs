@@ -31,7 +31,7 @@ public abstract class InvitationStoreTests(TestDatabases databases) : IAsyncLife
 
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
-    private RoleId Watcher => _harbor.RolesByPack[HostCatalogue.WatcherPack];
+    private RoleId Watcher => _harbor.RolesByStarterRole[HostCatalogue.WatcherStarterRole];
 
     public async ValueTask InitializeAsync()
     {
@@ -142,7 +142,7 @@ public abstract class InvitationStoreTests(TestDatabases databases) : IAsyncLife
     {
         var issued = await IssueAsync();
         var elsewhere = await _services.BySystemIn(_meadow.Tenant, services =>
-            services.Invitations().IssueAsync("lark@example.test", _meadow.RootUnit, _meadow.RolesByPack[HostCatalogue.WatcherPack], null, null, Cancellation));
+            services.Invitations().IssueAsync("lark@example.test", _meadow.RootUnit, _meadow.RolesByStarterRole[HostCatalogue.WatcherStarterRole], null, null, Cancellation));
 
         DbContext? acceptors = null;
         await using (var scope = _services.Scope())
@@ -178,7 +178,7 @@ public abstract class InvitationStoreTests(TestDatabases databases) : IAsyncLife
     {
         var harbors = await IssueAsync();
         var meadows = await _services.BySystemIn(_meadow.Tenant, services =>
-            services.Invitations().IssueAsync("lark@example.test", _meadow.RootUnit, _meadow.RolesByPack[HostCatalogue.WatcherPack], null, null, Cancellation));
+            services.Invitations().IssueAsync("lark@example.test", _meadow.RootUnit, _meadow.RolesByStarterRole[HostCatalogue.WatcherStarterRole], null, null, Cancellation));
 
         var forAda = await _services.BySeat(_harbor.Tenant, _harbor.AdminSeat, services => services.Invitations().ListOpenAsync(Cancellation));
         var forMeadow = await _services.BySystemIn(_meadow.Tenant, services => services.Invitations().ListOpenAsync(Cancellation));

@@ -82,13 +82,13 @@ else
     {
         <div class="table-responsive">
             <table class="table table-sm">
-                <thead><tr><th>@T["common.role"]</th><th>@T["whoami.from-pack"]</th><th>@T["common.status"]</th><th>@T["whoami.manages-access"]</th><th>@T["whoami.permissions"]</th></tr></thead>
+                <thead><tr><th>@T["common.role"]</th><th>@T["whoami.from-starter-role"]</th><th>@T["common.status"]</th><th>@T["whoami.manages-access"]</th><th>@T["whoami.permissions"]</th></tr></thead>
                 <tbody>
                     @foreach (var role in me.Roles)
                     {
                         <tr>
                             <td>@role.Name</td>
-                            <td><code>@role.FromPack</code></td>
+                            <td><code>@role.FromStarterRole</code></td>
                             <td>@role.Status</td>
                             <td>@(role.ManagesAccess ? T["common.yes"] : T["common.no"])</td>
                             <td><div class="permissions">@foreach (var key in role.PermissionsShown) { <code>@key</code> }</div></td>

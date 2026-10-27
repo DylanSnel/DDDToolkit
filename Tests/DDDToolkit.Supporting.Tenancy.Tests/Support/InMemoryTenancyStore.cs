@@ -622,7 +622,7 @@ public sealed class InMemoryTenancyStore
                 {
                     Id = role.Id,
                     TenantId = role.TenantId,
-                    FromPack = role.FromPack,
+                    FromStarterRole = role.FromStarterRole,
                     Status = role.Status,
                     Permissions = role.Permissions,
                 }),

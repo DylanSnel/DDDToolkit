@@ -99,7 +99,7 @@ public abstract class IndexRefusalTests(TestDatabases databases) : IAsyncLifetim
         // Nothing of the refused saves was written.
         _services.Database.CountRows("Tenants").Should().Be(2, "harbor and the orchard that got there first");
         _services.Database.CountRows("Seats").Should().Be(4, "an administrator each, grace and the one Bert");
-        _services.Database.CountRows("Roles").Should().Be(harbor.RolesByPack.Count * 2 + 1, "each tenant's roles and the one Élan");
+        _services.Database.CountRows("Roles").Should().Be(harbor.RolesByStarterRole.Count * 2 + 1, "each tenant's roles and the one Élan");
     }
 
     [Fact]

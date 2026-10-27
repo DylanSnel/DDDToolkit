@@ -8,9 +8,9 @@
 // is shown by in its tenant and a job title, and the invitation the account it made. A class declared here always
 // wins, and the switch writes no second one.
 //
-// The role written is the package's whole: each tenant's roles start as copies of the catalogue's packs and are the
-// tenant's own to rename, give other permissions and archive, and a role made from a pack remembers what the pack gave it, so it
-// follows the pack when the host syncs the packs: a permission the pack gains later reaches it, and what the tenant changed
+// The role written is the package's whole: each tenant's roles start as copies of the catalogue's starter roles and are the
+// tenant's own to rename, give other permissions and archive, and a role made from a starter role remembers what the starter role gave it, so it
+// follows the starter role when the host syncs the starter roles: a permission the starter role gains later reaches it, and what the tenant changed
 // in it stays. It is a role of the organization: given at a unit, it counts for every unit below it. A role a
 // project's crew holds is not one of these: it is a project role, kept by the Projects module beside its projects.
 //

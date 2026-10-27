@@ -80,13 +80,13 @@ public sealed partial class ShopSeat
    ```csharp
    services
        .AddTenancy<ShopTenancyContext>(options =>
-           options.Catalogue = ShopCatalogue.Application)   // optional: packs, permissions of its own, permissions that manage access
+           options.Catalogue = ShopCatalogue.Application)   // optional: starter roles, permissions of its own, permissions that manage access
        .AddDbContext<ShopTenancyContext>((serviceProvider, options) => options
            .UseNpgsql(connectionString)
            .UseDDDToolkit(serviceProvider));
    ```
 
-   A pack of the catalogue is `new RolePack(permission, name, description, permissions)`. `SeededFor: TenantShape.Hierarchical`
+   A pack of the catalogue is `new StarterRole(permission, name, description, permissions)`. `SeededFor: TenantShape.Hierarchical`
    gives a copy only to a tenant of that shape, provisioned so or changed to it; left out, every tenant gets one.
    It filters seeding and is no property of the role: a role has no shape. Declare no administrators' pack and
    every tenant gets Tenancy's own; declare one (`Administers: true`) and declare one for every shape, a single
@@ -227,12 +227,12 @@ public sealed partial class ShopSeat
   export read one value. On Postgres export and apply the access files after changing it:
   `tenancy.policies-in-place` refuses a database written the other way round.
 - **Packs after provisioning.** A tenant's roles start as copies of the catalogue's packs, and are the
-  tenant's own to rename and to give other permissions. `builder.Services.SyncRolePacks()` in the host, beside
+  tenant's own to rename and to give other permissions. `builder.Services.SyncStarterRoles()` in the host, beside
   `RunStartupChecks()` and not a check, since it changes roles, makes every role made from a pack follow it
   once the host has started, tenant by tenant as system work: what the pack gained is added, what it lost is
-  taken out, what the tenant changed itself stays, and each role that changes raises `RoleFollowedItsPack`,
-  which the access history keeps. It needs the roles' nullable `PermissionsFromPack` column: add a migration. A host
-  that syncs from a deployment step runs `IRolePackSync` instead; one tenant is `RoleCommands.FollowPacksAsync`.
+  taken out, what the tenant changed itself stays, and each role that changes raises `RoleFollowedItsStarterRole`,
+  which the access history keeps. It needs the roles' nullable `PermissionsFromStarterRole` column: add a migration. A host
+  that syncs from a deployment step runs `IStarterRoleSync` instead; one tenant is `RoleCommands.FollowStarterRolesAsync`.
 - **A refusal is a `RefusalException` with a code**: `tenancy.not-permitted`, `tenancy.not-seated`,
   `tenancy.grant-exceeds-own`, `tenancy.last-admin`. Branch on `Code`, never on the message. A refusal
   about one input names it in its `Field` argument. A class of codes makes its refusal with `Refuse`,

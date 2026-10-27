@@ -7,7 +7,7 @@ using Microsoft.AspNetCore.Routing;
 namespace Examples.Tenancy.Tenants.Api.Catalogue.Rest;
 
 /// <summary>
-/// The permission catalogue over HTTP: the permissions and the role packs the application knows. The route sends the one
+/// The permission catalogue over HTTP: the permissions and the starter roles the application knows. The route sends the one
 /// query of the application project's <c>Catalogue</c> feature.
 /// </summary>
 /// <remarks>
@@ -39,14 +39,14 @@ internal static class CatalogueEndpoints
             permission.Retired,
             permission.ManagesAccess,
         }),
-        packs = catalogue.Packs.Select(pack => new
+        starterRoles = catalogue.StarterRoles.Select(starterRole => new
         {
-            pack.Key,
-            pack.Name,
-            pack.Description,
-            pack.Permissions,
-            pack.SeededFor,
-            pack.Administers,
+            starterRole.Key,
+            starterRole.Name,
+            starterRole.Description,
+            starterRole.Permissions,
+            starterRole.SeededFor,
+            starterRole.Administers,
         }),
     };
 }

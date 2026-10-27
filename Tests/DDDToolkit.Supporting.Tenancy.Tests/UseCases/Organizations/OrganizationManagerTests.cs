@@ -12,7 +12,7 @@ public class OrganizationManagerTests
     public async Task Adding_needs_units_manage_at_the_parent()
     {
         var harness = Harness.OfHarbor();
-        var watcher = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.WatcherPack);
+        var watcher = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.WatcherStarterRole);
 
         var refusal = await Refused.WithCodeAsync(TenancyRefusals.NotPermitted,
             () => harness.As(watcher, h => h.Organization.AddUnitAsync(harness.Harbor.North, "North Bay", default)));
@@ -36,7 +36,7 @@ public class OrganizationManagerTests
     public async Task A_supervisor_adds_below_their_region_only()
     {
         var harness = Harness.OfHarbor();
-        var supervisor = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.SupervisorPack);
+        var supervisor = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.SupervisorStarterRole);
 
         await harness.As(supervisor, h => h.Organization.AddUnitAsync(harness.Harbor.North, "North Bay", default));
         await harness.As(supervisor, h => h.Organization.AddUnitAsync(harness.Harbor.NorthCoast, "Pier", default));
@@ -51,7 +51,7 @@ public class OrganizationManagerTests
     public async Task Renaming_a_unit_needs_the_permission_at_the_unit()
     {
         var harness = Harness.OfHarbor();
-        var supervisor = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.SupervisorPack);
+        var supervisor = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.SupervisorStarterRole);
 
         await harness.As(supervisor, h => h.Organization.RenameUnitAsync(harness.Harbor.NorthCoast, "North Shore", default));
         await harness.As(supervisor, h => h.Organization.RenameUnitAsync(harness.Harbor.North, "Northern Region", default));
@@ -67,8 +67,8 @@ public class OrganizationManagerTests
     public async Task Moving_needs_the_permission_at_both_parents()
     {
         var harness = Harness.OfHarbor();
-        var north = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.SupervisorPack);
-        var south = await harness.SeatAt("Cy", harness.Harbor.South, HostCatalogue.SupervisorPack);
+        var north = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.SupervisorStarterRole);
+        var south = await harness.SeatAt("Cy", harness.Harbor.South, HostCatalogue.SupervisorStarterRole);
         var northBay = (await harness.As(north, h => h.Organization.AddUnitAsync(harness.Harbor.North, "North Bay", default))).Id;
 
         await harness.As(north, h => h.Organization.MoveUnitAsync(harness.Harbor.NorthCoast, northBay, default));
@@ -110,7 +110,7 @@ public class OrganizationManagerTests
     public async Task Archiving_a_unit_needs_the_permission_at_its_parent()
     {
         var harness = Harness.OfHarbor();
-        var supervisor = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.SupervisorPack);
+        var supervisor = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.SupervisorStarterRole);
 
         await Refused.WithCodeAsync(TenancyRefusals.NotPermitted, () => harness.As(supervisor, h => h.Organization.ArchiveUnitAsync(harness.Harbor.North, default)));
 
@@ -192,7 +192,7 @@ public class OrganizationManagerTests
     {
         var harness = Harness.OfHarbor();
         var keepers = (await harness.BySystemWork(h => h.Roles.CreateAsync("Tree keeper", "Shapes the tree", [TenancyPermissions.UnitsManage], default))).Id;
-        var bert = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.SupervisorPack);
+        var bert = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.SupervisorStarterRole);
         await harness.Place(bert, harness.Harbor.South);
         await harness.BySystemWork(h => h.Seats.GrantAsync(bert, keepers, harness.Harbor.South, null, null, default));
         var pier = (await harness.As(bert, h => h.Organization.AddUnitAsync(harness.Harbor.South, "South Pier", default))).Id;
@@ -215,9 +215,9 @@ public class OrganizationManagerTests
     public async Task A_move_gives_the_moving_seat_no_permission_for_longer_than_it_holds_it_at_the_unit()
     {
         var harness = Harness.OfHarbor();
-        var bert = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.SupervisorPack);
+        var bert = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.SupervisorStarterRole);
         await harness.Place(bert, harness.Harbor.South);
-        await harness.Grant(bert, harness.Harbor.South, HostCatalogue.SupervisorPack, until: FixedClock.Start.AddDays(7));
+        await harness.Grant(bert, harness.Harbor.South, HostCatalogue.SupervisorStarterRole, until: FixedClock.Start.AddDays(7));
         var pier = (await harness.As(bert, h => h.Organization.AddUnitAsync(harness.Harbor.South, "South Pier", default))).Id;
 
         var refusal = await Refused.WithCodeAsync(TenancyRefusals.GrantExceedsOwn,
@@ -243,9 +243,9 @@ public class OrganizationManagerTests
     {
         var harness = Harness.OfHarbor();
         var bert = await harness.SeatAt("Bert", harness.Harbor.Root);
-        await harness.Grant(bert, harness.Harbor.Root, HostCatalogue.SupervisorPack, until: FixedClock.Start.AddDays(30));
+        await harness.Grant(bert, harness.Harbor.Root, HostCatalogue.SupervisorStarterRole, until: FixedClock.Start.AddDays(30));
         await harness.Place(bert, harness.Harbor.South);
-        await harness.Grant(bert, harness.Harbor.South, HostCatalogue.SupervisorPack, from: FixedClock.Start.AddDays(1));
+        await harness.Grant(bert, harness.Harbor.South, HostCatalogue.SupervisorStarterRole, from: FixedClock.Start.AddDays(1));
 
         var refusal = await Refused.WithCodeAsync(TenancyRefusals.GrantExceedsOwn,
             () => harness.As(bert, h => h.Organization.MoveUnitAsync(harness.Harbor.NorthCoast, harness.Harbor.South, default)),
@@ -263,8 +263,8 @@ public class OrganizationManagerTests
     {
         var harness = Harness.OfHarbor();
         var temporary = await harness.SeatAt("Bert", harness.Harbor.Root);
-        await harness.Grant(temporary, harness.Harbor.Root, HostCatalogue.AdministratorPack, until: FixedClock.Start.AddDays(7));
-        await harness.SeatAt("Di", harness.Harbor.North, HostCatalogue.SupervisorPack);
+        await harness.Grant(temporary, harness.Harbor.Root, HostCatalogue.AdministratorStarterRole, until: FixedClock.Start.AddDays(7));
+        await harness.SeatAt("Di", harness.Harbor.North, HostCatalogue.SupervisorStarterRole);
         var pier = (await harness.As(harness.Administrator, h => h.Organization.AddUnitAsync(harness.Harbor.South, "South Pier", default))).Id;
         var supervisors = string.Join(", ", TenancyPermissions.GrantsManage, TenancyPermissions.SeatsManage, TenancyPermissions.UnitsManage);
 
@@ -282,10 +282,10 @@ public class OrganizationManagerTests
         organization.FindUnit(pier)!.ParentId.Should().Be(harness.Harbor.South);
 
         // Watcher manages no access, so its permissions follow a move as freely as the role is given.
-        var ed = await harness.SeatAt("Ed", harness.Harbor.South, HostCatalogue.WatcherPack);
+        var ed = await harness.SeatAt("Ed", harness.Harbor.South, HostCatalogue.WatcherStarterRole);
         var east = (await harness.As(harness.Administrator, h => h.Organization.AddUnitAsync(harness.Harbor.Root, "East", default))).Id;
         await harness.Place(ed, east);
-        await harness.Grant(ed, east, HostCatalogue.WatcherPack);
+        await harness.Grant(ed, east, HostCatalogue.WatcherStarterRole);
         await harness.As(temporary, h => h.Organization.MoveUnitAsync(pier, east, default));
         harness.Store.Organization(harness.Tenant).FindUnit(pier)!.ParentId.Should().Be(east);
 
@@ -294,22 +294,22 @@ public class OrganizationManagerTests
     }
 
     [Fact]
-    public async Task A_listing_administrator_moves_a_unit_unless_the_move_gives_it_a_permission_its_pack_does_not_list()
+    public async Task A_listing_administrator_moves_a_unit_unless_the_move_gives_it_a_permission_its_starter_role_does_not_list()
     {
-        // The same tenant twice: Ada's pack lists its permissions, with none to work with widgets, or lists nothing.
-        async Task<(Harness Harness, OrganizationUnitId Pier)> HarborWith(TenancyCatalogue catalogue, params string[] packsOfDi)
+        // The same tenant twice: Ada's starter role lists its permissions, with none to work with widgets, or lists nothing.
+        async Task<(Harness Harness, OrganizationUnitId Pier)> HarborWith(TenancyCatalogue catalogue, params string[] starterRolesOfDi)
         {
             var harness = Harness.OfHarbor(catalogue);
-            await harness.SeatAt("Di", harness.Harbor.North, packsOfDi);
+            await harness.SeatAt("Di", harness.Harbor.North, starterRolesOfDi);
             var pier = (await harness.As(harness.Administrator, h => h.Organization.AddUnitAsync(harness.Harbor.South, "South Pier", default))).Id;
             return (harness, pier);
         }
 
-        var (listing, pier) = await HarborWith(New.ListingCatalogue(), HostCatalogue.SupervisorPack, New.KeeperPack);
+        var (listing, pier) = await HarborWith(New.ListingCatalogue(), HostCatalogue.SupervisorStarterRole, New.KeeperStarterRole);
         var ada = listing.Administrator;
 
         // Under North the pier becomes Di's to supervise and to hand widgets out at, and away from it that ends.
-        // Those are permissions that manage access, and Ada's pack has to list every one of them, so she holds each at
+        // Those are permissions that manage access, and Ada's starter role has to list every one of them, so she holds each at
         // the root for good: no move is refused her over what it gives or takes away from someone else.
         await listing.As(ada, h => h.Organization.MoveUnitAsync(pier, listing.Harbor.North, default));
         await listing.As(ada, h => h.Organization.MoveUnitAsync(pier, listing.Harbor.South, default));
@@ -318,7 +318,7 @@ public class OrganizationManagerTests
         // What a move would give herself counts as it does for every seat. As an operator at North she would
         // work with the widgets of the pier once it hangs there, and her role at the root holds no such permission.
         await listing.Place(ada, listing.Harbor.North);
-        await listing.Grant(ada, listing.Harbor.North, HostCatalogue.OperatorPack);
+        await listing.Grant(ada, listing.Harbor.North, HostCatalogue.OperatorStarterRole);
 
         var refusal = await Refused.WithCodeAsync(TenancyRefusals.GrantExceedsOwn,
             () => listing.As(ada, h => h.Organization.MoveUnitAsync(pier, listing.Harbor.North, default)));
@@ -326,10 +326,10 @@ public class OrganizationManagerTests
         refusal.Arguments["Role"].Should().BeNull();
         listing.Store.Organization(listing.Tenant).FindUnit(pier)!.ParentId.Should().Be(listing.Harbor.South);
 
-        // An administrator whose pack lists nothing holds every permission at the root, and moves any unit.
-        var (unlisted, otherPier) = await HarborWith(New.Catalogue(), HostCatalogue.SupervisorPack);
+        // An administrator whose starter role lists nothing holds every permission at the root, and moves any unit.
+        var (unlisted, otherPier) = await HarborWith(New.Catalogue(), HostCatalogue.SupervisorStarterRole);
         await unlisted.Place(unlisted.Administrator, unlisted.Harbor.North);
-        await unlisted.Grant(unlisted.Administrator, unlisted.Harbor.North, HostCatalogue.OperatorPack);
+        await unlisted.Grant(unlisted.Administrator, unlisted.Harbor.North, HostCatalogue.OperatorStarterRole);
 
         await unlisted.As(unlisted.Administrator, h => h.Organization.MoveUnitAsync(otherPier, unlisted.Harbor.North, default));
         unlisted.Store.Organization(unlisted.Tenant).FindUnit(otherPier)!.ParentId.Should().Be(unlisted.Harbor.North);

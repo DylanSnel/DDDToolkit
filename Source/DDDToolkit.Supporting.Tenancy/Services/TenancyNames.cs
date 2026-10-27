@@ -17,10 +17,10 @@ namespace DDDToolkit.Supporting.Tenancy;
 /// </summary>
 internal static class TenancyNames
 {
-    /// <summary>The longest role name, shared by the role and the catalogue's packs, which roles are made from.</summary>
+    /// <summary>The longest role name, shared by the role and the catalogue's starter roles, which roles are made from.</summary>
     public const int MaxRoleNameLength = 120;
 
-    /// <summary>The longest role description, shared by the role and the catalogue's packs.</summary>
+    /// <summary>The longest role description, shared by the role and the catalogue's starter roles.</summary>
     public const int MaxRoleDescriptionLength = 1000;
 
     /// <summary>
@@ -29,8 +29,8 @@ internal static class TenancyNames
     /// </summary>
     public const int MaxPermissionLength = 128;
 
-    /// <summary>The longest pack key, which a role made from the pack keeps in a column of this length.</summary>
-    public const int MaxPackKeyLength = 64;
+    /// <summary>The longest starter role key, which a role made from the starter role keeps in a column of this length.</summary>
+    public const int MaxStarterRoleKeyLength = 64;
 
     /// <summary>The token for a tenant's name, which is its organization's.</summary>
     public const string TenantNameToken = "tenant-name";

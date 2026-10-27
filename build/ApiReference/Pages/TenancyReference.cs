@@ -63,12 +63,12 @@ internal static class TenancyReference
                 ]),
             new(
                 "catalogue.md",
-                "Catalogue and role packs",
-                "The permissions the modules declare, the catalogue the host builds from them, the role packs a tenant's roles "
-                + "start from, and the sync that keeps those roles following their packs.",
+                "Catalogue and starter roles",
+                "The permissions the modules declare, the catalogue the host builds from them, the starter roles a tenant's roles "
+                + "start from, and the sync that keeps those roles following their starter roles.",
                 [
-                    new("Catalogue", [new(Tenancy, Folder: "Catalogue")], Lead: ["ApplicationCatalogue", "Permission", "RolePack", "TenancyCatalogue", "TenancyPermissions", "TenancyPacks"]),
-                    new("Role packs", [new(Tenancy, Folder: "RolePacks")]),
+                    new("Catalogue", [new(Tenancy, Folder: "Catalogue")], Lead: ["ApplicationCatalogue", "Permission", "StarterRole", "TenancyCatalogue", "TenancyPermissions", "TenancyStarterRoles"]),
+                    new("Starter roles", [new(Tenancy, Folder: "StarterRoles")]),
                 ]),
             new(
                 "callers.md",
@@ -117,7 +117,7 @@ internal static class TenancyReference
                     new("Attribution", [new(EntityFramework, Folder: "Attribution")]),
                     new("History", [new(EntityFramework, Folder: "History")]),
                     new("Invitations", [new(EntityFramework, Folder: "Invitations")]),
-                    new("Role packs", [new(EntityFramework, Folder: "RolePacks")]),
+                    new("Starter roles", [new(EntityFramework, Folder: "StarterRoles")]),
                     new("Start-up checks", [new(EntityFramework, Folder: "Checks")]),
                 ]),
             new(

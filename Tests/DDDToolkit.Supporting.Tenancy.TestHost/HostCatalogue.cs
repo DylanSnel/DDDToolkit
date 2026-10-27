@@ -3,7 +3,7 @@ using DDDToolkit.Supporting.Tenancy.Catalogue;
 namespace DDDToolkit.Supporting.Tenancy.TestHost;
 
 /// <summary>
-/// The application's part of the catalogue: its keys and its packs. Widgets stand in for whatever the
+/// The application's part of the catalogue: its keys and its starter roles. Widgets stand in for whatever the
 /// application's own module works on.
 /// </summary>
 public static class HostCatalogue
@@ -17,17 +17,17 @@ public static class HostCatalogue
     /// <summary>Create widgets.</summary>
     public const string WidgetCreate = "widget.create";
 
-    /// <summary>The administrators' pack, for every shape.</summary>
-    public const string AdministratorPack = "host-admin";
+    /// <summary>The administrators' starter role, for every shape.</summary>
+    public const string AdministratorStarterRole = "host-admin";
 
     /// <summary>Runs a part of the organization; hierarchical tenants only.</summary>
-    public const string SupervisorPack = "supervisor";
+    public const string SupervisorStarterRole = "supervisor";
 
     /// <summary>Works with widgets.</summary>
-    public const string OperatorPack = "operator";
+    public const string OperatorStarterRole = "operator";
 
     /// <summary>Looks at widgets.</summary>
-    public const string WatcherPack = "watcher";
+    public const string WatcherStarterRole = "watcher";
 
     /// <summary>The application's own keys.</summary>
     public static IReadOnlyList<Permission> Permissions { get; } =
@@ -39,14 +39,14 @@ public static class HostCatalogue
 
     /// <summary>What the application passes as <c>TenancyOptions.Catalogue</c>.</summary>
     public static ApplicationCatalogue Application { get; } = new(
-        Packs:
+        StarterRoles:
         [
-            new(AdministratorPack, "Administrator", "Runs the tenant", [], Administers: true, Order: 10),
-            new(SupervisorPack, "Supervisor", "Runs a part of the organization",
+            new(AdministratorStarterRole, "Administrator", "Runs the tenant", [], Administers: true, Order: 10),
+            new(SupervisorStarterRole, "Supervisor", "Runs a part of the organization",
                 [WidgetChange, WidgetCreate, TenancyPermissions.UnitsManage, TenancyPermissions.SeatsManage, TenancyPermissions.GrantsManage],
                 SeededFor: TenantShape.Hierarchical, Order: 20),
-            new(OperatorPack, "Operator", "Works with widgets", [WidgetChange, WidgetCreate], Order: 30),
-            new(WatcherPack, "Watcher", "Looks at widgets", [WidgetRead], Order: 40),
+            new(OperatorStarterRole, "Operator", "Works with widgets", [WidgetChange, WidgetCreate], Order: 30),
+            new(WatcherStarterRole, "Watcher", "Looks at widgets", [WidgetRead], Order: 40),
         ],
         Permissions: Permissions);
 }

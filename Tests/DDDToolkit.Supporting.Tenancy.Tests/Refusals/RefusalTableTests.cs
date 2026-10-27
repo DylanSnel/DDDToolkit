@@ -198,7 +198,7 @@ public partial class RefusalTableTests
         var harness = Harness.OfHarbor();
         var root = harness.Harbor.Root;
         var ada = harness.Administrator;
-        var watcher = harness.RoleFromPack(HostCatalogue.WatcherPack);
+        var watcher = harness.RoleFromStarterRole(HostCatalogue.WatcherStarterRole);
         var tooLong = new string('x', 1001);
         var tooMany = Enumerable.Range(0, SeatManager.MostIds + 1).Select(_ => SeatId.CreateSequential()).ToArray();
 

@@ -53,7 +53,7 @@ SQL that an attacker runs on your connection ([What row level security covers](#
    public static class ShopCatalogue
    {
        [TenancyCatalogue]
-       public static ApplicationCatalogue Application { get; } = new(Packs: [...]);
+       public static ApplicationCatalogue Application { get; } = new(StarterRoles: [...]);
    }
    ```
 
@@ -239,7 +239,7 @@ app.Use(async (context, next) =>
 
 The access file writes `caller_seat()` like this:
 
-**20261026210726_access.tenants.ddd.sql**
+**20261027164316_access.tenants.ddd.sql**
 
 ```sql
 CREATE OR REPLACE FUNCTION "tenancy".caller_seat() RETURNS uuid
@@ -518,7 +518,7 @@ The policies and your rules call these SQL functions:
 | `units_named(ids)` | The units of the seat's tenant among the ids, with name, path from the root and depth. Only signed-in users may run it. | Owner | `TenancyDirectory.UnitsByIdAsync` |
 | `permission_manages_access(permission)` | Whether your catalogue marks the permission as managing access. | Caller | `TenancyCatalogue.ManagesAccess` |
 | `permission_is_contained(permission)` | Whether a seat hands the permission on only where it holds it. True for permissions that manage access, while [containment](roles-and-permissions.md#containment-on-or-off) is on. | Caller | `ContainAccessManagingPermissions` |
-| `pack_permissions(pack)` | The permissions a copy of that starter role holds, implied ones included. Null for an unknown pack. | Caller | `TenancyCatalogue.Packs` |
+| `starter_role_permissions(starter_role)` | The permissions a copy of that starter role holds, implied ones included. Null for an unknown pack. | Caller | `TenancyCatalogue.StarterRoles` |
 | `permission_is_live(permission)` | Whether your catalogue has the permission live. No caller may run it. | Caller | The owner-run functions, the rights trigger |
 
 [Who reads Tenancy's tables](#who-reads-tenancys-tables) lists the other functions with their readers.
@@ -570,7 +570,7 @@ public async Task<List<string>> VisibleProjectsAsync(CancellationToken cancellat
 | `caller_permissions()` | The rights the caller may read. For a seat, its own rights. For system work in a tenant, the rights of that tenant. | `"TenantId"`, `"SeatId"`, `"UnitId"`, `"RoleId"`, `"Permission"`, `"StartsAt"`, `"EndsAt"` |
 | `tenant_unit_paths()` | The closure of the tenant's tree. | `"TenantId"`, `"AncestorId"`, `"DescendantId"`, `"Distance"` |
 | `tenant_units()` | The tenant's units. | `"Id"`, `"TenantId"`, `"ParentId"`, `"Status"` |
-| `tenant_roles_with_permissions()` | The tenant's roles, with the permissions as an array of text. | `"Id"`, `"TenantId"`, `"FromPack"`, `"Status"`, `"Permissions"` |
+| `tenant_role_rows()` | The tenant's roles, with the permissions as an array of text. | `"Id"`, `"TenantId"`, `"FromStarterRole"`, `"Status"`, `"Permissions"` |
 | `tenant_placements()` | Where the tenant's seats are placed. | `"SeatId"`, `"UnitId"`, `"IsPrimary"`, `"TenantId"` |
 | `tenant_seats()` | The seats the caller may read. That is every seat, or only the seats that a [read rule of yours](#default-read-policies-for-seats-and-invitations) lets through. | `"Id"`, `"TenantId"`, `"Status"` |
 
@@ -680,7 +680,7 @@ use cases. A signed-in user writes where the use case requires the permission:
   grants too.
 - Every change of a role, its permissions and archiving included, requires `tenancy.roles.manage` for the whole
   tenant.
-- A copy of a starter role names its pack and holds the permissions that `pack_permissions` returns for that pack.
+- A copy of a starter role names its pack and holds the permissions that `starter_role_permissions` returns for that pack.
   The copy keeps that list for the next [sync of the packs](roles-and-permissions.md#packs-after-provisioning). A
   settings manager adds only such copies. A role manager may also add a role made by hand, which names no pack.
 
@@ -741,10 +741,10 @@ trigger 6 only when the caller loses a permission between check and save. A use 
 | 1. An administrator remains (`tenancy_administrator_remains`) | An active or suspended tenant keeps an active seat with `tenancy.roles.manage` at the root, with no end date, through an active role. A closed tenant needs none. | At commit. One transaction per tenant runs the check at a time (at read committed, the default), so two transactions that each remove an administrator cannot both commit. |
 | 2. Rights backed by grants (`tenancy_rights_backed_by_grants`) | Every right comes from a grant of an active role that holds the permission, for the grant's period. | At commit |
 | 3. Paths follow the tree (`tenancy_paths_follow_the_tree`) | A unit's paths are the units above it plus the unit itself, in its tenant. | At commit |
-| 4. Rows keep what they are about (`tenancy_placement_is_fixed`, `tenancy_grant_is_fixed`, `tenancy_role_pack_is_fixed`) | A placement keeps its seat, unit and tenant. A grant keeps its seat, unit, role and giver. A role keeps its pack. A change would skip the checks that the policy makes on a new row. | As the row changes |
+| 4. Rows keep what they are about (`tenancy_placement_is_fixed`, `tenancy_grant_is_fixed`, `tenancy_role_starter_role_is_fixed`) | A placement keeps its seat, unit and tenant. A grant keeps its seat, unit, role and giver. A role keeps its pack. A change would skip the checks that the policy makes on a new row. | As the row changes |
 | 5. A seat's identity is fixed (`tenancy_seat_identity_is_fixed`) | Only Tenancy's system work in the seat's tenant changes the seat's id, identity and tenant. | As the row changes |
 | 6. A seat's status is managed (`tenancy_seat_status_is_managed`) | Only a seat with `tenancy.seats.manage` for the whole tenant changes the status. With containment on, that seat also holds every access-managing permission of each unended grant's role, at the grant's unit. Its own grants count. The rights follow the status, so this matches the rule for giving and taking away those grants. | As the row changes |
-| 7. A role follows its pack (`tenancy_role_follows_its_pack`) | No seat changes what a role's pack gave the role. Otherwise a sync could add what the pack never gave. | As the row changes |
+| 7. A role follows its pack (`tenancy_role_follows_its_starter_role`) | No seat changes what a role's pack gave the role. Otherwise a sync could add what the pack never gave. | As the row changes |
 
 Triggers 6 and 7 check seats only. System work and the tables' owner pass, so a migration can fill the pack column
 of older rows.
@@ -820,7 +820,7 @@ public static partial class NameChangesByTheSeatOrWithTheSeatsPermission
 
 The access file writes `seat_identity_is_fixed` like this, shortened:
 
-**20261026210726_access.tenants.ddd.sql**
+**20261027164316_access.tenants.ddd.sql**
 
 ```sql
 CREATE OR REPLACE FUNCTION "tenancy".seat_identity_is_fixed() RETURNS trigger

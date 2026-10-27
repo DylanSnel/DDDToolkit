@@ -12,25 +12,25 @@ public static class New
     /// <summary>Hand widgets to people: the one permission of the application that <see cref="ListingCatalogue"/> marks as managing access.</summary>
     public const string WidgetAssign = "widget.assign";
 
-    /// <summary>The pack of the role that hands widgets to people, in <see cref="ListingCatalogue"/>.</summary>
-    public const string KeeperPack = "keeper";
+    /// <summary>The starter role of the role that hands widgets to people, in <see cref="ListingCatalogue"/>.</summary>
+    public const string KeeperStarterRole = "keeper";
 
     /// <summary>
-    /// The host's catalogue with an administrators' pack that lists its permissions: Tenancy's own and
+    /// The host's catalogue with an administrators' starter role that lists its permissions: Tenancy's own and
     /// <see cref="WidgetAssign"/>, which is every permission that manages access, and none of the permissions to work with
-    /// widgets. <see cref="KeeperPack"/> is the pack that holds the marked permission, so there is a role besides the
+    /// widgets. <see cref="KeeperStarterRole"/> is the starter role that holds the marked permission, so there is a role besides the
     /// supervisor's and the administrators' own that only a holder of its permission gives.
     /// </summary>
     public static TenancyCatalogue ListingCatalogue()
         => TenancyCatalogue.Build(
             HostCatalogue.Application with
             {
-                Packs =
+                StarterRoles =
                 [
-                    .. HostCatalogue.Application.Packs.Select(pack => pack.Administers
-                        ? pack with { Permissions = [.. TenancyPermissions.All.Select(permission => permission.Name), WidgetAssign] }
-                        : pack),
-                    new RolePack(KeeperPack, "Keeper", "Hands widgets to people", [WidgetAssign, HostCatalogue.WidgetRead], Order: 50),
+                    .. HostCatalogue.Application.StarterRoles.Select(starterRole => starterRole.Administers
+                        ? starterRole with { Permissions = [.. TenancyPermissions.All.Select(permission => permission.Name), WidgetAssign] }
+                        : starterRole),
+                    new StarterRole(KeeperStarterRole, "Keeper", "Hands widgets to people", [WidgetAssign, HostCatalogue.WidgetRead], Order: 50),
                 ],
                 Permissions = [.. HostCatalogue.Permissions, new Permission(WidgetAssign, "Widgets", "Hand widgets to people", Order: 40, ManagesAccess: true)],
             },
@@ -60,7 +60,7 @@ public static class New
 
 /// <summary>
 /// A hierarchical tenant, "Harbor Works", as provisioning leaves it: active, its organization with North,
-/// North Coast below it and South, a role copied from every pack seeded for its shape, and a first administrator
+/// North Coast below it and South, a role copied from every starter role seeded for its shape, and a first administrator
 /// placed at the root with the administrators' role, open-ended. Every event is drained, so a test sees only
 /// what it does itself.
 /// </summary>
@@ -105,12 +105,12 @@ public sealed class HarborBuilder
         var northCoast = organization.AddUnit<SeatId>(OrganizationUnitId.CreateSequential(), north, "North Coast", tenant.Shape).Id;
         var south = organization.AddUnit<SeatId>(OrganizationUnitId.CreateSequential(), root, "South", tenant.Shape).Id;
 
-        var roles = catalogue.PacksFor(tenant.Shape).ToDictionary(
-            pack => pack.Key,
-            pack => TenancyInstances.NewRole<HostRole, RoleId, TenantId, SeatId>(
-                RoleId.CreateSequential(), tenant.Id, new RoleDraft(pack.Name, pack.Description, pack.Permissions, pack.Key), catalogue));
+        var roles = catalogue.StarterRolesFor(tenant.Shape).ToDictionary(
+            starterRole => starterRole.Key,
+            starterRole => TenancyInstances.NewRole<HostRole, RoleId, TenantId, SeatId>(
+                RoleId.CreateSequential(), tenant.Id, new RoleDraft(starterRole.Name, starterRole.Description, starterRole.Permissions, starterRole.Key), catalogue));
 
-        var administratorRole = roles[catalogue.AdministratorPackFor(tenant.Shape).Key];
+        var administratorRole = roles[catalogue.AdministratorStarterRoleFor(tenant.Shape).Key];
         var administrator = New.Seat(tenant.Id.Value);
         administrator.Rename("Ada");
         administrator.Place(root, primary: true, _now, placedBy: null);
@@ -132,20 +132,20 @@ public sealed record Harbor(
     OrganizationUnitId North,
     OrganizationUnitId NorthCoast,
     OrganizationUnitId South,
-    IReadOnlyDictionary<string, HostRole> RolesByPack,
+    IReadOnlyDictionary<string, HostRole> RolesByStarterRole,
     HostSeat Administrator)
 {
-    /// <summary>The role copied from the administrators' pack.</summary>
-    public HostRole AdministratorRole => RolesByPack[HostCatalogue.AdministratorPack];
+    /// <summary>The role copied from the administrators' starter role.</summary>
+    public HostRole AdministratorRole => RolesByStarterRole[HostCatalogue.AdministratorStarterRole];
 
     /// <summary>What the use case would tell a seat about each of the tenant's roles.</summary>
-    public RoleFacts? FactsOf(RoleId role) => RolesByPack.Values.FirstOrDefault(candidate => candidate.Id == role)?.Facts;
+    public RoleFacts? FactsOf(RoleId role) => RolesByStarterRole.Values.FirstOrDefault(candidate => candidate.Id == role)?.Facts;
 
     /// <summary>Another active seat of the tenant, placed nowhere yet.</summary>
     public HostSeat NewSeat() => New.Seat(Tenant.Id.Value);
 
     /// <summary>Every aggregate, to seed a store with.</summary>
-    public object[] Aggregates => [Tenant, Organization, Administrator, .. RolesByPack.Values];
+    public object[] Aggregates => [Tenant, Organization, Administrator, .. RolesByStarterRole.Values];
 
     /// <summary>Drops every pending event, so a test sees only what it does itself.</summary>
     public void DrainEvents()
@@ -153,7 +153,7 @@ public sealed record Harbor(
         Tenant.DrainEvents();
         Organization.DrainEvents();
         Administrator.DrainEvents();
-        foreach (var role in RolesByPack.Values)
+        foreach (var role in RolesByStarterRole.Values)
         {
             role.DrainEvents();
         }

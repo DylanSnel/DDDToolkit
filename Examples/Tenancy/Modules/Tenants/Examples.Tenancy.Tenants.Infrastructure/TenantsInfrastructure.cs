@@ -36,7 +36,7 @@ public static class TenantsInfrastructure
 
     /// <summary>
     /// Registers how Tenancy is stored. The host says where its tables live and where what it publishes goes (see
-    /// <see cref="ModuleHost"/>), and passes the application's part of the catalogue: the packs a new tenant's
+    /// <see cref="ModuleHost"/>), and passes the application's part of the catalogue: the starter roles a new tenant's
     /// roles are copied from, and the permissions of other modules it marks as managing access. It is the application's
     /// data, so it lives in the composition root, not here; the other modules state their permissions themselves, on the
     /// <c>[Permissions]</c> classes they declare, and the host adds them all with
@@ -117,7 +117,7 @@ public static class TenantsInfrastructure
         {
             // What changes who may do what is kept in the access history as well, by the save that stores it in
             // the outbox, and each row says who made the change. A rename changes nobody's access, and is left out.
-            // A role that followed its pack, once the host's SyncRolePacks() found the pack changed, is among what is
+            // A role that followed its starter role, once the host's SyncStarterRoles() found the starter role changed, is among what is
             // kept: it is how the sample tells a tenant's administrators, who read it on the History page, with the
             // permissions that came in and went out. A host that mails them maps the event to a contract of its own.
             // An invitation's own events are stored and kept off the sinks like the rest, and are no part of the

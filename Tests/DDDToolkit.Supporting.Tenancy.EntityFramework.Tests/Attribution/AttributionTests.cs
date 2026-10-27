@@ -34,8 +34,8 @@ public abstract class AttributionTests(TestDatabases databases) : IAsyncLifetime
     {
         _services = await databases.ServicesAsync();
         _harbor = await _services.ProvisionAsync("harbor");
-        _grace = await _services.SeatAtAsync(_harbor, "Grace", _harbor.RootUnit, HostCatalogue.OperatorPack);
-        _lin = await _services.SeatAtAsync(_harbor, "Lin", _harbor.RootUnit, HostCatalogue.OperatorPack);
+        _grace = await _services.SeatAtAsync(_harbor, "Grace", _harbor.RootUnit, HostCatalogue.OperatorStarterRole);
+        _lin = await _services.SeatAtAsync(_harbor, "Lin", _harbor.RootUnit, HostCatalogue.OperatorStarterRole);
     }
 
     public ValueTask DisposeAsync()

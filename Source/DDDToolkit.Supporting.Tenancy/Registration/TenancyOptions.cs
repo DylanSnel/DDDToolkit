@@ -23,9 +23,9 @@ public sealed class TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId>
     where TRoleId : struct, IEntityId, IEquatable<TRoleId>
 {
     /// <summary>
-    /// What the application adds to the catalogue: role packs, permissions of its own and marks on permissions that manage
+    /// What the application adds to the catalogue: starter roles, permissions of its own and marks on permissions that manage
     /// access. Left unset, it adds none: the permissions are Tenancy's and what the modules contribute, and every tenant
-    /// starts with the default administrators' role (<see cref="TenancyPacks.DefaultAdministrators"/>).
+    /// starts with the default administrators' role (<see cref="TenancyStarterRoles.DefaultAdministrators"/>).
     /// </summary>
     public ApplicationCatalogue? Catalogue { get; set; }
 

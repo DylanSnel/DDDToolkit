@@ -43,11 +43,11 @@ public sealed class Harness
     /// <summary>The first administrator's seat.</summary>
     public SeatId Administrator => Harbor.Administrator.Id;
 
-    /// <summary>The packs' texts in a tenant's language, as an application registers them; none unless a test sets them.</summary>
-    public IRolePackTexts? PackTexts { get; set; }
+    /// <summary>The starter roles' texts in a tenant's language, as an application registers them; none unless a test sets them.</summary>
+    public IStarterRoleTexts? StarterRoleTexts { get; set; }
 
     /// <summary>The tenants, whose list asks the toolkit's own caller: the one <c>Callers.Begin</c> made current.</summary>
-    public TenantManager Tenants => new(Store, Catalogue, Clock, Options, new DDDToolkit.Access.AmbientCallerAccessor(), PackTexts);
+    public TenantManager Tenants => new(Store, Catalogue, Clock, Options, new DDDToolkit.Access.AmbientCallerAccessor(), StarterRoleTexts);
 
     public OrganizationManager Organization => new(Store, Catalogue, Clock);
 
@@ -76,8 +76,8 @@ public sealed class Harness
         return other;
     }
 
-    /// <summary>The role Harbor copied from a pack.</summary>
-    public RoleId RoleFromPack(string pack) => Harbor.RolesByPack[pack].Id;
+    /// <summary>The role Harbor copied from a starter role.</summary>
+    public RoleId RoleFromStarterRole(string starterRole) => Harbor.RolesByStarterRole[starterRole].Id;
 
     /// <summary>A seat of Harbor, as a caller.</summary>
     public HostCaller SeatCaller(SeatId seat) => HostCaller.InSeat(Tenant, seat);
@@ -131,16 +131,16 @@ public sealed class Harness
 
     /// <summary>
     /// A new seat of Harbor, added with <paramref name="displayName"/>, the host's own field, placed at
-    /// <paramref name="unit"/> as its primary placement and granted there the role of each pack, by system work, one
+    /// <paramref name="unit"/> as its primary placement and granted there the role of each starter role, by system work, one
     /// command at a time.
     /// </summary>
-    public async Task<SeatId> SeatAt(string displayName, OrganizationUnitId unit, params string[] packs)
+    public async Task<SeatId> SeatAt(string displayName, OrganizationUnitId unit, params string[] starterRoles)
     {
         var seat = (await BySystemWork(harness => harness.Seats.AddAsync(Guid.NewGuid(), default, configure: made => made.Rename(displayName)))).Id;
         await BySystemWork(harness => harness.Seats.PlaceAsync(seat, unit, primary: true, default));
-        foreach (var pack in packs)
+        foreach (var starterRole in starterRoles)
         {
-            await Grant(seat, unit, pack);
+            await Grant(seat, unit, starterRole);
         }
 
         return seat;
@@ -150,7 +150,7 @@ public sealed class Harness
     public Task Place(SeatId seat, OrganizationUnitId unit)
         => BySystemWork(harness => harness.Seats.PlaceAsync(seat, unit, primary: false, default));
 
-    /// <summary>Grants a seat of Harbor the role of a pack at a unit where it is placed, by system work.</summary>
-    public Task Grant(SeatId seat, OrganizationUnitId unit, string pack, DateTimeOffset? until = null, DateTimeOffset? from = null)
-        => BySystemWork(harness => harness.Seats.GrantAsync(seat, RoleFromPack(pack), unit, until, reason: null, default, from));
+    /// <summary>Grants a seat of Harbor the role of a starter role at a unit where it is placed, by system work.</summary>
+    public Task Grant(SeatId seat, OrganizationUnitId unit, string starterRole, DateTimeOffset? until = null, DateTimeOffset? from = null)
+        => BySystemWork(harness => harness.Seats.GrantAsync(seat, RoleFromStarterRole(starterRole), unit, until, reason: null, default, from));
 }

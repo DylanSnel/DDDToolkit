@@ -7,7 +7,7 @@ namespace Examples.Tenancy.Projects.Contracts.Permissions;
 /// </summary>
 /// <remarks>
 /// Published as constants, not as the catalogue's records: another module names a permission when it asks Projects a
-/// question, and the host names them when it builds the role packs. Neither needs to know how Projects
+/// question, and the host names them when it builds the starter roles. Neither needs to know how Projects
 /// describes them.
 /// </remarks>
 public static class ProjectPermissionNames

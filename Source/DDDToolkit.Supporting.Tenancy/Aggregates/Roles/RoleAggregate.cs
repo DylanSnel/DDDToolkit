@@ -12,14 +12,14 @@ namespace DDDToolkit.Supporting.Tenancy;
 /// <para>
 /// Its permissions come from the catalogue only, with the permissions they imply added, and are kept distinct and sorted.
 /// A permission the catalogue later retires, or no longer knows at all, may stay on the role; it grants nothing,
-/// and is only refused when someone adds it anew. A role made from a pack remembers which one in
-/// <see cref="FromPack"/>, and only when it is made.
+/// and is only refused when someone adds it anew. A role made from a starter role remembers which one in
+/// <see cref="FromStarterRole"/>, and only when it is made.
 /// </para>
 /// <para>
-/// A role made from a pack follows it (<see cref="FollowPack{TSeatId}"/>): it remembers what the pack gave it
-/// (<see cref="PermissionsFromPack"/>), so a permission the pack gains later is added to it, a permission the pack loses is taken out,
+/// A role made from a starter role follows it (<see cref="FollowStarterRole{TSeatId}"/>): it remembers what the starter role gave it
+/// (<see cref="PermissionsFromStarterRole"/>), so a permission the starter role gains later is added to it, a permission the starter role loses is taken out,
 /// and what the tenant changed itself stays as the tenant left it. The application runs that for every tenant
-/// with <c>services.SyncRolePacks()</c>; nothing else changes a role behind the tenant's back.
+/// with <c>services.SyncStarterRoles()</c>; nothing else changes a role behind the tenant's back.
 /// </para>
 /// <para>
 /// Whoever holds <see cref="TenancyPermissions.RolesManage"/> may put any permission into any role. That is on purpose:
@@ -58,8 +58,8 @@ public abstract partial class RoleAggregate<TRoleId, TTenantId>
     /// <summary>What the role is for.</summary>
     public string Description { get; private set; } = string.Empty;
 
-    /// <summary>The key of the pack the role was copied from, or <see langword="null"/> for a role made by hand. Set when it is made.</summary>
-    public string? FromPack { get; private set; }
+    /// <summary>The key of the starter role the role was copied from, or <see langword="null"/> for a role made by hand. Set when it is made.</summary>
+    public string? FromStarterRole { get; private set; }
 
     /// <summary>Whether the role is in use. An archived role grants nothing.</summary>
     public RoleStatus Status { get; private set; }
@@ -68,28 +68,28 @@ public abstract partial class RoleAggregate<TRoleId, TTenantId>
     public IReadOnlyList<string> Permissions { get; private set; } = [];
 
     /// <summary>
-    /// The permissions its pack gave the role, as the pack held them when the role was made from it or last followed it:
-    /// what the next <see cref="FollowPack{TSeatId}"/> compares the pack with, to tell a permission the pack gained or
-    /// lost from one the tenant added or took out itself. Expanded, distinct and in ordinal order: the pack's permissions,
+    /// The permissions its starter role gave the role, as the starter role held them when the role was made from it or last followed it:
+    /// what the next <see cref="FollowStarterRole{TSeatId}"/> compares the starter role with, to tell a permission the starter role gained or
+    /// lost from one the tenant added or took out itself. Expanded, distinct and in ordinal order: the starter role's permissions,
     /// whatever permissions the role was made with. <see langword="null"/> for a role made by hand, and for one made before
-    /// roles remembered it or from a pack the catalogue did not have then, which follows its pack as if the pack had
+    /// roles remembered it or from a starter role the catalogue did not have then, which follows its starter role as if the starter role had
     /// given it nothing yet.
     /// </summary>
-    public IReadOnlyList<string>? PermissionsFromPack { get; private set; }
+    public IReadOnlyList<string>? PermissionsFromStarterRole { get; private set; }
 
     /// <summary>This role's status and permissions as a snapshot, for a seat's rules.</summary>
     public RoleFacts Facts => new(Status == RoleStatus.Active, Permissions);
 
     /// <summary>
     /// What a constructor would do: gives a new instance its id, tenant, name, description and permissions, and
-    /// remembers the pack it came from, with that pack's permissions as the catalogue builds it as what the pack gave it;
+    /// remembers the starter role it came from, with that starter role's permissions as the catalogue builds it as what the starter role gave it;
     /// starts it active, and raises <see cref="RoleCreated{TTenantId, TRoleId, TSeatId}"/>. Called once, by
     /// <see cref="TenancyInstances"/>, right after the instance is made.
     /// <para>
-    /// The record is the pack's, not the draft's: provisioning drafts exactly the pack, but an import or a seeding
-    /// may make a role from a pack with permissions of its own, and those are the tenant's, which a later sync leaves as
-    /// they are. A draft that names a pack the catalogue does not have is remembered with no record, as a role
-    /// stored before roles remembered their pack's permissions is.
+    /// The record is the starter role's, not the draft's: provisioning drafts exactly the starter role, but an import or a seeding
+    /// may make a role from a starter role with permissions of its own, and those are the tenant's, which a later sync leaves as
+    /// they are. A draft that names a starter role the catalogue does not have is remembered with no record, as a role
+    /// stored before roles remembered their starter role's permissions is.
     /// </para>
     /// </summary>
     internal void InitializeNew<TSeatId>(TRoleId id, TTenantId tenantId, RoleDraft draft, TenancyCatalogue catalogue, TenancyActor<TSeatId>? by)
@@ -107,11 +107,11 @@ public abstract partial class RoleAggregate<TRoleId, TTenantId>
         Name = name;
         Description = description;
         Permissions = permissions;
-        FromPack = string.IsNullOrWhiteSpace(draft.FromPack) ? null : draft.FromPack.Trim();
-        PermissionsFromPack = PackPermissions(FromPack, catalogue);
+        FromStarterRole = string.IsNullOrWhiteSpace(draft.FromStarterRole) ? null : draft.FromStarterRole.Trim();
+        PermissionsFromStarterRole = StarterRolePermissions(FromStarterRole, catalogue);
         Status = RoleStatus.Active;
 
-        RaiseDomainEvent(new RoleCreated<TTenantId, TRoleId, TSeatId>(tenantId, id, FromPack, by));
+        RaiseDomainEvent(new RoleCreated<TTenantId, TRoleId, TSeatId>(tenantId, id, FromStarterRole, by));
     }
 
     /// <summary>Renames the role and describes it again. The same name and description change nothing and raise nothing.</summary>
@@ -206,38 +206,38 @@ public abstract partial class RoleAggregate<TRoleId, TTenantId>
     }
 
     /// <summary>
-    /// Follows the pack the role was made from, as <paramref name="catalogue"/> builds it now. What the pack gave
-    /// the role the last time (<see cref="PermissionsFromPack"/>) is compared with what the pack holds now: a permission the pack
+    /// Follows the starter role the role was made from, as <paramref name="catalogue"/> builds it now. What the starter role gave
+    /// the role the last time (<see cref="PermissionsFromStarterRole"/>) is compared with what the starter role holds now: a permission the starter role
     /// gained is added to the role, and a permission it lost is taken out. What the tenant changed itself stays: a permission it
-    /// took out of the role stays out while the pack still holds it, and a permission it added stays while the pack never
-    /// held it. The pack's permissions are remembered for the next time.
+    /// took out of the role stays out while the starter role still holds it, and a permission it added stays while the starter role never
+    /// held it. The starter role's permissions are remembered for the next time.
     /// <para>
     /// Four things the comparison cannot tell apart are settled this way. A permission the tenant added by hand that the
-    /// pack gains later is the pack's from then on, and goes when the pack loses it. A permission the tenant took out that
-    /// the pack loses, and gains again later, comes back as a permission the pack gained: once the pack lost it, the record
+    /// starter role gains later is the starter role's from then on, and goes when the starter role loses it. A permission the tenant took out that
+    /// the starter role loses, and gains again later, comes back as a permission the starter role gained: once the starter role lost it, the record
     /// no longer holds it, and the event names it, among the permissions that manage access when it manages access. A permission
     /// that is not live, retired or no longer known, is never taken out: it grants nothing, and retiring a permission
-    /// changes no role. And a role that has no record yet, made before roles remembered their pack's permissions, follows
-    /// as if the pack had given it nothing: it gets every permission the pack holds that it lacks, and loses none. A live
+    /// changes no role. And a role that has no record yet, made before roles remembered their starter role's permissions, follows
+    /// as if the starter role had given it nothing: it gets every permission the starter role holds that it lacks, and loses none. A live
     /// permission the role keeps brings the permissions it implies, as everywhere a role's permissions are set.
     /// </para>
     /// <para>
     /// A permission that manages access follows the same rule, whoever runs this: only the application's code puts a permission
-    /// in a pack. The event says which of the permissions that came in or went out manage access, so whoever is told
+    /// in a starter role. The event says which of the permissions that came in or went out manage access, so whoever is told
     /// about the change, the tenant's administrators say, can see it.
     /// </para>
     /// </summary>
     /// <typeparam name="TSeatId">The application's seat id, which the actor is closed over: a role does not know it by itself.</typeparam>
-    /// <param name="catalogue">The catalogue the pack is read from, as the application runs with it now.</param>
+    /// <param name="catalogue">The catalogue the starter role is read from, as the application runs with it now.</param>
     /// <param name="by">Who makes the change, for the event; <see langword="null"/> when nobody is named.</param>
     /// <returns>
-    /// Whether the role changed: its permissions, which raises <see cref="RoleFollowedItsPack{TTenantId, TRoleId, TSeatId}"/>,
-    /// or only what it remembers of its pack, or the order its permissions were stored in, which raises nothing.
-    /// <see langword="false"/> for a role made by hand, one whose pack the catalogue no longer has, and one that
-    /// follows its pack already.
+    /// Whether the role changed: its permissions, which raises <see cref="RoleFollowedItsStarterRole{TTenantId, TRoleId, TSeatId}"/>,
+    /// or only what it remembers of its starter role, or the order its permissions were stored in, which raises nothing.
+    /// <see langword="false"/> for a role made by hand, one whose starter role the catalogue no longer has, and one that
+    /// follows its starter role already.
     /// </returns>
     /// <exception cref="RefusalException"><c>tenancy.role-archived</c>: an archived role follows nothing.</exception>
-    public bool FollowPack<TSeatId>(TenancyCatalogue catalogue, TenancyActor<TSeatId>? by = null)
+    public bool FollowStarterRole<TSeatId>(TenancyCatalogue catalogue, TenancyActor<TSeatId>? by = null)
         where TSeatId : struct, IEntityId, IEquatable<TSeatId>
     {
         if (PermissionsAfterFollowing(catalogue) is not { } following)
@@ -245,15 +245,15 @@ public abstract partial class RoleAggregate<TRoleId, TTenantId>
             return false;
         }
 
-        var remembered = PermissionsFromPack is { } record && record.SequenceEqual(following.Remembered, StringComparer.Ordinal);
-        PermissionsFromPack = following.Remembered;
+        var remembered = PermissionsFromStarterRole is { } record && record.SequenceEqual(following.Remembered, StringComparer.Ordinal);
+        PermissionsFromStarterRole = following.Remembered;
 
         var before = Permissions;
         var sorted = following.Permissions.SequenceEqual(before, StringComparer.Ordinal);
         Permissions = following.Permissions;
 
         // The permissions are compared as sets: a row may hold them in another order than the role keeps them, a seat's copy
-        // of a pack for one, and only a permission that came in or went out is a change the event tells.
+        // of a starter role for one, and only a permission that came in or went out is a change the event tells.
         var added = following.Permissions.Except(before, StringComparer.Ordinal).ToArray();
         var removed = before.Except(following.Permissions, StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
         if (added.Length == 0 && removed.Length == 0)
@@ -261,10 +261,10 @@ public abstract partial class RoleAggregate<TRoleId, TTenantId>
             return !remembered || !sorted;
         }
 
-        RaiseDomainEvent(new RoleFollowedItsPack<TTenantId, TRoleId, TSeatId>(
+        RaiseDomainEvent(new RoleFollowedItsStarterRole<TTenantId, TRoleId, TSeatId>(
             TenantId,
             Id,
-            FromPack!,
+            FromStarterRole!,
             added,
             removed,
             added.Concat(removed).Where(catalogue.ManagesAccess).Order(StringComparer.Ordinal).ToArray(),
@@ -273,9 +273,9 @@ public abstract partial class RoleAggregate<TRoleId, TTenantId>
     }
 
     /// <summary>
-    /// The permissions <see cref="FollowPack{TSeatId}"/> would leave the role with, and what it would remember of its pack,
+    /// The permissions <see cref="FollowStarterRole{TSeatId}"/> would leave the role with, and what it would remember of its starter role,
     /// refused the same way and nothing changed: a use case decides on the role's future before it changes it.
-    /// <see langword="null"/> for a role with no pack to follow: made by hand, or made from a pack the catalogue no
+    /// <see langword="null"/> for a role with no starter role to follow: made by hand, or made from a starter role the catalogue no
     /// longer has.
     /// </summary>
     internal (IReadOnlyList<string> Permissions, IReadOnlyList<string> Remembered)? PermissionsAfterFollowing(TenancyCatalogue catalogue)
@@ -283,12 +283,12 @@ public abstract partial class RoleAggregate<TRoleId, TTenantId>
         ArgumentNullException.ThrowIfNull(catalogue);
         RequireActive();
 
-        if (PackPermissions(FromPack, catalogue) is not { } now)
+        if (StarterRolePermissions(FromStarterRole, catalogue) is not { } now)
         {
             return null;
         }
 
-        var given = PermissionsFromPack ?? [];
+        var given = PermissionsFromStarterRole ?? [];
 
         var held = new HashSet<string>(Permissions, StringComparer.Ordinal);
         held.UnionWith(now.Except(given, StringComparer.Ordinal));
@@ -304,15 +304,15 @@ public abstract partial class RoleAggregate<TRoleId, TTenantId>
     }
 
     /// <summary>
-    /// The permissions of the pack <paramref name="pack"/> as <paramref name="catalogue"/> builds it, distinct and in ordinal
-    /// order: what a role made from it remembers, whatever permissions it was made with. The pack as built holds live permissions
-    /// only, expanded; an administrators' pack that lists none, every live permission. <see langword="null"/> for no pack,
+    /// The permissions of the starter role <paramref name="starterRole"/> as <paramref name="catalogue"/> builds it, distinct and in ordinal
+    /// order: what a role made from it remembers, whatever permissions it was made with. The starter role as built holds live permissions
+    /// only, expanded; an administrators' starter role that lists none, every live permission. <see langword="null"/> for no starter role,
     /// or one the catalogue does not have.
     /// </summary>
-    private static string[]? PackPermissions(string? pack, TenancyCatalogue catalogue)
-        => pack is null
+    private static string[]? StarterRolePermissions(string? starterRole, TenancyCatalogue catalogue)
+        => starterRole is null
             ? null
-            : catalogue.Packs.FirstOrDefault(candidate => string.Equals(candidate.Key, pack, StringComparison.Ordinal)) is { } built
+            : catalogue.StarterRoles.FirstOrDefault(candidate => string.Equals(candidate.Key, starterRole, StringComparison.Ordinal)) is { } built
                 ? built.Permissions.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray()
                 : null;
 

@@ -135,7 +135,7 @@ internal sealed class TenancyGate<TTenant, TTenantId, TOrganization, TUnit, TUni
 
     /// <summary>
     /// Only system work in the tenant does <paramref name="work"/>: suspending, reactivating or closing it, or making
-    /// its roles follow their packs.
+    /// its roles follow their starter roles.
     /// </summary>
     /// <param name="work">What the use case does, as the start of a sentence that ends "by system work in that tenant".</param>
     /// <exception cref="Exceptions.RefusalException"><c>access.system-only</c> for a seat; the caller's own refusal for nobody.</exception>
@@ -362,7 +362,7 @@ internal sealed class TenancyGate<TTenant, TTenantId, TOrganization, TUnit, TUni
     /// System work in a tenant is not held to this. With containment off every permission follows a move as one that
     /// manages no access does, freely for everyone but the mover: the move still gives the mover nothing.
     /// <para>
-    /// An administrator whose role holds every live permission passes both parts wherever a unit goes. One whose pack
+    /// An administrator whose role holds every live permission passes both parts wherever a unit goes. One whose starter role
     /// lists its permissions holds every permission that manages access at the root, and so passes the second part; the
     /// first still counts a grant of its own below the root that gives it a permission its role at the root lacks.
     /// </para>

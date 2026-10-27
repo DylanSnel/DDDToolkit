@@ -53,7 +53,7 @@ public static class TenancyModelBuilderExtensions
     /// </para>
     /// <para>
     /// The views of the read model carry access facts only, here as in a module's model: ids, permissions, periods,
-    /// statuses, a unit's parent, and a role's pack and permissions. What a seat, a unit or a role is called is read
+    /// statuses, a unit's parent, and a role's starter role and permissions. What a seat, a unit or a role is called is read
     /// from the tables themselves, by the managers' reads, which answer names by id.
     /// </para>
     /// <para>
@@ -206,7 +206,7 @@ public static class TenancyModelBuilderExtensions
     /// modelBuilder.Entity&lt;Project&gt;().ScopeToTenant(project =&gt; project.TenantId);
     /// </code>
     /// <para>
-    /// The rows are access facts: ids, permissions, periods, statuses, a unit's parent, and a role's pack and permissions. None
+    /// The rows are access facts: ids, permissions, periods, statuses, a unit's parent, and a role's starter role and permissions. None
     /// has a name, so a module that maps them cannot show what a seat, a unit or a role is called: it answers
     /// ids, and whoever shows them asks Tenancy's managers for the names, by id.
     /// <see cref="TenancyModel.ReadsBeyondAccessFacts"/> finds a module's model that maps more of Tenancy's than

@@ -47,7 +47,7 @@ public static class TenancyPermissions
     /// <summary>
     /// Read the tenant's access history: which seat, role, grant or unit changed, when, and who changed it. Asked
     /// for tenant-wide. It manages no access, so a role that holds it is given like any other; an administrators'
-    /// pack that lists its permissions holds it, as it holds every permission of Tenancy's.
+    /// starter role that lists its permissions holds it, as it holds every permission of Tenancy's.
     /// </summary>
     public const string HistoryView = "tenancy.history.view";
 

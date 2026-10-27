@@ -68,7 +68,7 @@ internal static class TenancySql
 
     internal const string PermissionIsContained = "permission_is_contained";
 
-    internal const string PackPermissions = "pack_permissions";
+    internal const string StarterRolePermissions = "starter_role_permissions";
 
     internal const string UnitParent = "unit_parent";
 
@@ -109,9 +109,9 @@ internal static class TenancySql
 
     internal const string InvitationTermsAreFixed = "invitation_terms_are_fixed";
 
-    internal const string RolePackIsFixed = "role_pack_is_fixed";
+    internal const string RoleStarterRoleIsFixed = "role_starter_role_is_fixed";
 
-    internal const string RoleFollowsItsPack = "role_follows_its_pack";
+    internal const string RoleFollowsItsStarterRole = "role_follows_its_starter_role";
 
     /// <summary>The constraint names the triggers raise with, which a translation of failures reads.</summary>
     internal const string AdministratorRemainsConstraint = "tenancy_administrator_remains";
@@ -130,9 +130,9 @@ internal static class TenancySql
 
     internal const string InvitationTermsAreFixedConstraint = "tenancy_invitation_terms_are_fixed";
 
-    internal const string RolePackIsFixedConstraint = "tenancy_role_pack_is_fixed";
+    internal const string RoleStarterRoleIsFixedConstraint = "tenancy_role_starter_role_is_fixed";
 
-    internal const string RoleFollowsItsPackConstraint = "tenancy_role_follows_its_pack";
+    internal const string RoleFollowsItsStarterRoleConstraint = "tenancy_role_follows_its_starter_role";
 
     /// <summary>The trigger that writes the rights as a grant, a seat or a role is written.</summary>
     internal const string RightsFollowGrantsTrigger = "tenancy_rights_follow_grants";
@@ -152,11 +152,11 @@ internal static class TenancySql
 
     internal const string AttributionIsKept = "Who wrote a row first does not change.";
 
-    /// <summary>What the trigger on what a role's pack gave it tells a statement it refuses.</summary>
-    internal const string RoleFollowsItsPackRefusal = "What its pack gave a role is written as the role is made from the pack, and as Tenancy's own system work makes it follow the pack: by no seat.";
+    /// <summary>What the trigger on what a role's starter role gave it tells a statement it refuses.</summary>
+    internal const string RoleFollowsItsStarterRoleRefusal = "What its starter role gave a role is written as the role is made from the starter role, and as Tenancy's own system work makes it follow the starter role: by no seat.";
 
-    /// <summary>The property of a role that holds what its pack gave it, which a sync of the packs compares the pack with.</summary>
-    private const string PermissionsFromPackProperty = "PermissionsFromPack";
+    /// <summary>The property of a role that holds what its starter role gave it, which a sync of the starter roles compares the starter role with.</summary>
+    private const string PermissionsFromStarterRoleProperty = "PermissionsFromStarterRole";
 
     /// <summary>What the trigger on what a seat is tells a statement it refuses.</summary>
     internal const string SeatIdentityRefusal = "A seat keeps the id, the identity and the tenant it was made with: only Tenancy's system work in its tenant changes them.";
@@ -328,7 +328,7 @@ internal static class TenancySql
 
     /// <summary>
     /// Tenancy's functions: the questions about the caller, the sets rules ask, what the catalogue says of a permission or
-    /// a pack, the rows a module reads Tenancy through, the three that answer about other seats' rights, the
+    /// a starter role, the rows a module reads Tenancy through, the three that answer about other seats' rights, the
     /// one that writes a tenant's rights again, the three that read across tenants for system work, with the one
     /// that finds an invitation by its token's digest where the context maps invitations, and the five that take
     /// the tenant as an argument.
@@ -561,13 +561,13 @@ internal static class TenancySql
             GrantTo: callers,
             Volatility: "IMMUTABLE");
 
-        // The permissions a copy of each pack holds, from the same catalogue: what a settings manager's copy of a pack may
+        // The permissions a copy of each starter role holds, from the same catalogue: what a settings manager's copy of a starter role may
         // hold, and nothing more.
         yield return new ContributedFunction(
-            PackPermissions,
-            "pack text",
+            StarterRolePermissions,
+            "starter_role text",
             "text[]",
-            PackPermissionsBody(catalogue),
+            StarterRolePermissionsBody(catalogue),
             SecurityDefiner: false,
             GrantTo: callers,
             Volatility: "IMMUTABLE");
@@ -825,7 +825,7 @@ internal static class TenancySql
     /// that person read, are kept out by the tenant filter the rows carry in the module's model.
     /// </para>
     /// <para>
-    /// They answer access facts only: ids, permissions, periods, statuses, a unit's parent, and a role's pack and permissions.
+    /// They answer access facts only: ids, permissions, periods, statuses, a unit's parent, and a role's starter role and permissions.
     /// None answers what a seat, a unit or a role is called, so a module that reads Tenancy through them has no
     /// name to show, and asks the directory for one, by id.
     /// </para>
@@ -892,14 +892,14 @@ internal static class TenancySql
                 Answered.NameOf<UnitStatus>(units, "Status"),
             ]);
 
-        // Not the name. The pack and the permissions are what rules read of a role.
+        // Not the name. The starter role and the permissions are what rules read of a role.
         yield return (
             TenancyFunctionNames.TenantRoles,
             roles,
             [
                 Answered.AsStored(roles, "Id"),
                 Answered.AsStored(roles, "TenantId"),
-                Answered.Text(roles, "FromPack"),
+                Answered.Text(roles, "FromStarterRole"),
                 Answered.NameOf<RoleStatus>(roles, "Status"),
                 new Answered("Permissions", "text[]", PermissionsAsArray(roles)),
             ]);
@@ -1095,24 +1095,24 @@ internal static class TenancySql
         => contained ? ManagesAccessBody(catalogue) : "SELECT false";
 
     /// <summary>
-    /// The body of <c>pack_permissions(pack)</c>: the permissions, implied ones included, a role made from the pack of that permission
-    /// holds, as <paramref name="catalogue"/> expands them; null for a pack it does not have. A start-up check
+    /// The body of <c>starter_role_permissions(starter_role)</c>: the permissions, implied ones included, a role made from the starter role of that permission
+    /// holds, as <paramref name="catalogue"/> expands them; null for a starter role it does not have. A start-up check
     /// compares it with the function the database has.
     /// </summary>
-    internal static string PackPermissionsBody(TenancyCatalogue catalogue)
+    internal static string StarterRolePermissionsBody(TenancyCatalogue catalogue)
     {
-        if (catalogue.Packs.Count == 0)
+        if (catalogue.StarterRoles.Count == 0)
         {
             return "SELECT NULL::pg_catalog.text[]";
         }
 
         var body = new StringBuilder("SELECT CASE $1");
-        foreach (var pack in catalogue.Packs.OrderBy(pack => pack.Key, StringComparer.Ordinal))
+        foreach (var starterRole in catalogue.StarterRoles.OrderBy(starterRole => starterRole.Key, StringComparer.Ordinal))
         {
-            // A pack with no permissions is an empty array, written without braces: a brace in contributed SQL asks the
+            // A starter role with no permissions is an empty array, written without braces: a brace in contributed SQL asks the
             // script to fill something in.
-            var permissions = pack.Permissions.Order(StringComparer.Ordinal).Select(RowAccessModel.Literal);
-            body.Append(" WHEN ").Append(RowAccessModel.Literal(pack.Key)).Append(" THEN ")
+            var permissions = starterRole.Permissions.Order(StringComparer.Ordinal).Select(RowAccessModel.Literal);
+            body.Append(" WHEN ").Append(RowAccessModel.Literal(starterRole.Key)).Append(" THEN ")
                 .Append("ARRAY[").AppendJoin(", ", permissions).Append("]::pg_catalog.text[]");
         }
 
@@ -1129,7 +1129,7 @@ internal static class TenancySql
 
     /// <summary>
     /// The permissions of <paramref name="alias"/>'s role as a set of rows with one column, <c>k</c>, named <paramref name="name"/>:
-    /// the permissions it grants, or with <paramref name="property"/> another list of permissions of the role, such as what its pack gave it.
+    /// the permissions it grants, or with <paramref name="property"/> another list of permissions of the role, such as what its starter role gave it.
     /// </summary>
     private static string PermissionsOf(IEntityType roles, string alias, string name, string property = "Permissions")
         => PermissionsColumn(roles, property) switch
@@ -1172,25 +1172,25 @@ internal static class TenancySql
         => $"NOT EXISTS ({Managed(roles, table)} AND NOT ({TenancyTables.Own(table, "UnitId")} = ANY (ARRAY(SELECT {Fn(UnitsWhereIHold)}(managed.k)))))";
 
     /// <summary>
-    /// The role written is a copy of a pack of the catalogue: it names the pack, holds exactly its permissions, and
-    /// remembers exactly those as what the pack gave it, which the next sync of the packs compares the pack with.
+    /// The role written is a copy of a starter role of the catalogue: it names the starter role, holds exactly its permissions, and
+    /// remembers exactly those as what the starter role gave it, which the next sync of the starter roles compares the starter role with.
     /// </summary>
-    private static string CopyOfItsPack(IEntityType roles)
+    private static string CopyOfItsStarterRole(IEntityType roles)
     {
-        var pack = $"{Fn(PackPermissions)}({TenancyTables.Own(roles, "FromPack")})";
-        var packed = $"SELECT pg_catalog.unnest({pack})";
+        var starterRole = $"{Fn(StarterRolePermissions)}({TenancyTables.Own(roles, "FromStarterRole")})";
+        var listed = $"SELECT pg_catalog.unnest({starterRole})";
         string Exactly(string property)
         {
             var held = $"SELECT held.k FROM {PermissionsOf(roles, Q(roles), "held", property)}";
-            return $"NOT EXISTS ({held} EXCEPT {packed}) AND NOT EXISTS ({packed} EXCEPT {held})";
+            return $"NOT EXISTS ({held} EXCEPT {listed}) AND NOT EXISTS ({listed} EXCEPT {held})";
         }
 
-        return $"({pack} IS NOT NULL AND {Exactly("Permissions")} AND {TenancyTables.Own(roles, PermissionsFromPackProperty)} IS NOT NULL AND {Exactly(PermissionsFromPackProperty)})";
+        return $"({starterRole} IS NOT NULL AND {Exactly("Permissions")} AND {TenancyTables.Own(roles, PermissionsFromStarterRoleProperty)} IS NOT NULL AND {Exactly(PermissionsFromStarterRoleProperty)})";
     }
 
-    /// <summary>The role written is made by hand: it names no pack, and remembers nothing a pack gave it.</summary>
+    /// <summary>The role written is made by hand: it names no starter role, and remembers nothing a starter role gave it.</summary>
     private static string MadeByHand(IEntityType roles)
-        => $"({TenancyTables.Own(roles, "FromPack")} IS NULL AND {TenancyTables.Own(roles, PermissionsFromPackProperty)} IS NULL)";
+        => $"({TenancyTables.Own(roles, "FromStarterRole")} IS NULL AND {TenancyTables.Own(roles, PermissionsFromStarterRoleProperty)} IS NULL)";
 
     /// <summary>
     /// A column of the roles that holds permissions, their permissions by default, and how it is stored: an array, <c>text[]</c> on
@@ -1369,10 +1369,10 @@ internal static class TenancySql
         Add(rights, "A seat reads its own rights", "SELECT", Both(T(C(rights, "TenantId")), ownSeat(rights)), null);
 
         // A role's permissions that manage access change only with the role permission held for the whole tenant, which every
-        // change of a role asks here. A role manager adds a role made by hand, which names no pack, as the use case
-        // that makes a role does; a role that names a pack is added only as a copy of it, remembering exactly what
-        // the pack gave it, by a role or a settings manager, as the use case that changes a tenant's shape adds it.
-        // So no seat makes a role that a sync of the packs would give what its pack never gave it.
+        // change of a role asks here. A role manager adds a role made by hand, which names no starter role, as the use case
+        // that makes a role does; a role that names a starter role is added only as a copy of it, remembering exactly what
+        // the starter role gave it, by a role or a settings manager, as the use case that changes a tenant's shape adds it.
+        // So no seat makes a role that a sync of the starter roles would give what its starter role never gave it.
         var roleTenant = T(C(roles, "TenantId"));
         Add(roles, "Members read roles", "SELECT", roleTenant, null);
         Add(
@@ -1380,7 +1380,7 @@ internal static class TenancySql
             "Role and settings managers add roles",
             "INSERT",
             null,
-            Both(roleTenant, $"({Both(W(RolesPermission), MadeByHand(roles))} OR {Both($"({W(RolesPermission)} OR {W(SettingsPermission)})", CopyOfItsPack(roles))})"));
+            Both(roleTenant, $"({Both(W(RolesPermission), MadeByHand(roles))} OR {Both($"({W(RolesPermission)} OR {W(SettingsPermission)})", CopyOfItsStarterRole(roles))})"));
         Add(roles, "Role managers change roles", "UPDATE", Both(roleTenant, W(RolesPermission)), Both(roleTenant, W(RolesPermission)));
 
         // The revision is a counter every change of access takes, a seat's change of its own included: taking away
@@ -1824,7 +1824,7 @@ internal static class TenancySql
             yield return statement;
         }
 
-        foreach (var statement in PackTriggers(tenancy, schema))
+        foreach (var statement in StarterRoleTriggers(tenancy, schema))
         {
             yield return statement;
         }
@@ -2150,8 +2150,8 @@ internal static class TenancySql
 
     /// <summary>
     /// The rows that keep what they are about as they change, whoever writes: a placement its seat, unit and tenant,
-    /// a grant its seat, unit, role and the seat that gave it, and a role the pack it was made from, which a sync of
-    /// the packs makes it follow. Entity Framework never changes these; a query that did would move a row past the
+    /// a grant its seat, unit, role and the seat that gave it, and a role the starter role it was made from, which a sync of
+    /// the starter roles makes it follow. Entity Framework never changes these; a query that did would move a row past the
     /// checks its policy makes of a new one. What a seat is, its id, identity and tenant, Tenancy's system work in a
     /// tenant may change, so its trigger is an access guard of its own (<see cref="SeatIdentityTriggers"/>).
     /// </summary>
@@ -2161,7 +2161,7 @@ internal static class TenancySql
         [
             (tenancy.Placements, PlacementIsFixed, PlacementIsFixedConstraint, ["SeatId", "UnitId", "TenantId"], "A placement keeps its seat, its unit and its tenant."),
             (tenancy.Grants, GrantIsFixed, GrantIsFixedConstraint, ["SeatId", "UnitId", "RoleId", "GrantedBy"], "A grant keeps its seat, its unit, its role and the seat that gave it."),
-            (tenancy.Roles, RolePackIsFixed, RolePackIsFixedConstraint, ["FromPack"], "A role keeps the pack it was made from."),
+            (tenancy.Roles, RoleStarterRoleIsFixed, RoleStarterRoleIsFixedConstraint, ["FromStarterRole"], "A role keeps the starter role it was made from."),
         ];
 
         foreach (var (table, name, constraint, properties, message) in fixedRows)
@@ -2344,23 +2344,23 @@ internal static class TenancySql
     }
 
     /// <summary>
-    /// The trigger on what a role's pack gave it, which a sync of the packs compares the pack with to tell a permission the
-    /// pack gained or lost from one the tenant added or took out. The policy on the roles lets a seat that manages
-    /// roles for the whole tenant change the row, and its permissions with it; what the pack gave the role it does not
-    /// change: a seat that wrote it could have the next sync add to the role what the pack never gave it, or take out
-    /// what the tenant added. It is written when the role is made, as a copy of its pack (the policy on new roles), and
-    /// as Tenancy's own system work makes the role follow its pack, which the policies keep to Tenancy's scope.
+    /// The trigger on what a role's starter role gave it, which a sync of the starter roles compares the starter role with to tell a permission the
+    /// starter role gained or lost from one the tenant added or took out. The policy on the roles lets a seat that manages
+    /// roles for the whole tenant change the row, and its permissions with it; what the starter role gave the role it does not
+    /// change: a seat that wrote it could have the next sync add to the role what the starter role never gave it, or take out
+    /// what the tenant added. It is written when the role is made, as a copy of its starter role (the policy on new roles), and
+    /// as Tenancy's own system work makes the role follow its starter role, which the policies keep to Tenancy's scope.
     /// <para>
     /// Only a seat is held to it. System work and the tables' owner are no seat: the function that finds the calling
     /// seat answers them nothing, so a migration that fills the column for rows written before it was there passes.
     /// It refuses as a policy does, with <c>42501</c> and the toolkit's hint, since it holds who may.
     /// </para>
     /// </summary>
-    private static IEnumerable<string> PackTriggers(TenancyTables tenancy, string schema)
+    private static IEnumerable<string> StarterRoleTriggers(TenancyTables tenancy, string schema)
     {
         var roles = tenancy.Roles;
-        var function = $"{schema}.{RoleFollowsItsPack}";
-        var (column, store) = PermissionsColumn(roles, PermissionsFromPackProperty);
+        var function = $"{schema}.{RoleFollowsItsStarterRole}";
+        var (column, store) = PermissionsColumn(roles, PermissionsFromStarterRoleProperty);
         var changed = store == PermissionsStore.Json
             ? $"OLD.{column}::pg_catalog.jsonb IS DISTINCT FROM NEW.{column}::pg_catalog.jsonb"
             : $"OLD.{column} IS DISTINCT FROM NEW.{column}";
@@ -2371,15 +2371,15 @@ internal static class TenancySql
             "BEGIN\n" +
             "    -- System work and the tables' owner are no seat, and are not held to this.\n" +
             $"    IF (SELECT {Fn(CallerSeat)}()) IS NOT NULL THEN\n" +
-            $"        {RowAccessModel.Refusal(RoleFollowsItsPackConstraint, RoleFollowsItsPackRefusal)}\n" +
+            $"        {RowAccessModel.Refusal(RoleFollowsItsStarterRoleConstraint, RoleFollowsItsStarterRoleRefusal)}\n" +
             "    END IF;\n" +
             "    RETURN NEW;\n" +
             "END\n" +
             "$body$";
         yield return $"REVOKE ALL ON FUNCTION {function}() FROM PUBLIC";
-        yield return $"DROP TRIGGER IF EXISTS {RoleFollowsItsPackConstraint} ON {Q(roles)}";
+        yield return $"DROP TRIGGER IF EXISTS {RoleFollowsItsStarterRoleConstraint} ON {Q(roles)}";
         yield return
-            $"CREATE TRIGGER {RoleFollowsItsPackConstraint} BEFORE UPDATE OF {column} ON {Q(roles)}\n" +
+            $"CREATE TRIGGER {RoleFollowsItsStarterRoleConstraint} BEFORE UPDATE OF {column} ON {Q(roles)}\n" +
             $"    FOR EACH ROW WHEN ({changed})\n" +
             $"    EXECUTE FUNCTION {function}()";
     }

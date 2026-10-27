@@ -330,8 +330,8 @@ public static IServiceCollection AddLedger(this IServiceCollection services)
   second run would fail on.
 
 A check reads and changes nothing. Work that changes data at start-up has its own call next to
-`RunStartupChecks()`. For example, Tenancy's `SyncRolePacks()` updates every tenant's roles to the starter roles
-they were copied from, once the host has started. The code calls a starter role a *pack* (`RolePack`)
+`RunStartupChecks()`. For example, Tenancy's `SyncStarterRoles()` updates every tenant's roles to the starter roles
+they were copied from, once the host has started
 ([Starter roles after provisioning](tenancy/roles-and-permissions.md#packs-after-provisioning)).
 
 ## Where to look next

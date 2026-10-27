@@ -72,7 +72,7 @@ public sealed class SampleFactory : WebApplicationFactory<Program>
     /// <remarks>
     /// The host is given a connection string nothing answers, and what would use it at start-up is taken out or
     /// turned off: every hosted service of the sample, of the toolkit's Entity Framework package and of the supporting
-    /// domains, which are the seeding, the outbox pollers and Tenancy's sync of the role packs, are taken out, and the
+    /// domains, which are the seeding, the outbox pollers and Tenancy's sync of the starter roles, are taken out, and the
     /// start-up checks are turned off, with the reason, the way a host does without them. ASP.NET Core's own hosted services stay, and so does the in-memory gateway's
     /// check that the modules' schemas compose. Nothing else of the host is changed, so a request that needs a row
     /// fails here, which is what such a test should never send.
@@ -122,7 +122,7 @@ public sealed class SampleFactory : WebApplicationFactory<Program>
     /// <summary>
     /// Whether a registration is a hosted service of the sample, of the toolkit's Entity Framework package or of a
     /// supporting domain: those are the ones that ask the database something when the host starts, or keep asking
-    /// while it runs, Tenancy's sync of the role packs once the host has started among them.
+    /// while it runs, Tenancy's sync of the starter roles once the host has started among them.
     /// </summary>
     private static bool NeedsTheDatabaseAtStartUp(ServiceDescriptor descriptor)
     {

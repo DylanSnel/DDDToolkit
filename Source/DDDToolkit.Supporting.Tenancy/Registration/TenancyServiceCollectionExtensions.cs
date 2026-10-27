@@ -194,24 +194,24 @@ public static class TenancyServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Brings every tenant's roles up to the packs they were made from, in the background, once the host has
+    /// Brings every tenant's roles up to the starter roles they were made from, in the background, once the host has
     /// started: after its start-up checks, when it runs them, and after every hosted service has started. A role
-    /// made from a pack gets the permissions the pack gained since the role was made or last followed it, a module's new
-    /// permissions in an administrators' pack that lists none among them, and loses the permissions the pack lost; what the
+    /// made from a starter role gets the permissions the starter role gained since the role was made or last followed it, a module's new
+    /// permissions in an administrators' starter role that lists none among them, and loses the permissions the starter role lost; what the
     /// tenant changed itself stays. Each role that changes raises
-    /// <see cref="RoleFollowedItsPack{TTenantId, TRoleId, TSeatId}"/>, for the host to tell the tenant's
+    /// <see cref="RoleFollowedItsStarterRole{TTenantId, TRoleId, TSeatId}"/>, for the host to tell the tenant's
     /// administrators; the package sends no message itself.
     /// <code>
     /// builder.Services.RunStartupChecks();
-    /// builder.Services.SyncRolePacks();
+    /// builder.Services.SyncStarterRoles();
     /// </code>
     /// <para>
-    /// It runs <see cref="IRolePackSync"/>, which Tenancy's storage package registers with <c>AddTenancy</c>, once per
+    /// It runs <see cref="IStarterRoleSync"/>, which Tenancy's storage package registers with <c>AddTenancy</c>, once per
     /// start of the host, as Tenancy's system work in each tenant, one tenant after the other. A second run changes
     /// nothing, and so does a run on another instance of the host at the same time as this one: whichever commits
-    /// second finds the roles following their packs already. A tenant it cannot sync is logged and left for the next
+    /// second finds the roles following their starter roles already. A tenant it cannot sync is logged and left for the next
     /// start, and the host keeps serving meanwhile. A host that wants it elsewhere, in a deployment step or behind an
-    /// operator's endpoint, leaves this call out and runs <see cref="IRolePackSync"/> itself.
+    /// operator's endpoint, leaves this call out and runs <see cref="IStarterRoleSync"/> itself.
     /// </para>
     /// <para>
     /// It is a call of its own, and not a start-up check: a check reads and changes nothing, and stops a start that
@@ -221,11 +221,11 @@ public static class TenancyServiceCollectionExtensions
     /// </summary>
     /// <param name="services">The application's services.</param>
     /// <exception cref="ArgumentNullException"><paramref name="services"/> is null.</exception>
-    public static IServiceCollection SyncRolePacks(this IServiceCollection services)
+    public static IServiceCollection SyncStarterRoles(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, RolePackSyncService>());
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, StarterRoleSyncService>());
         return services;
     }
 }

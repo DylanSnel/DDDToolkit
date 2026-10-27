@@ -37,7 +37,7 @@
 #   6. The Supabase export of that application runs in its host, also when SupabaseMigrationsExport is
 #      given for the whole build, on the command line: every other project ignores it, with no crash and
 #      no warning. The host's SupabaseLoginRole reaches the export, which writes the login role's file.
-#      The application declares no administrators' pack, and the access file has Tenancy's default one. Tenancy's
+#      The application declares no administrators' starter role, and the access file has Tenancy's default one. Tenancy's
 #      and Membership's SQL is written because the infrastructure project references their Postgres packages,
 #      made in the host from the catalogue and the rules the domain project marks, with no line of the host's.
 #
@@ -660,15 +660,15 @@ if [ "$(find "$supabase_migrations" -name '*_access.press.ddd.sql' | wc -l | tr 
   exit 1
 fi
 
-# The house declares no administrators' pack, so the packaged catalogue adds Tenancy's own, and pack_permissions in
+# The house declares no administrators' starter role, so the packaged catalogue adds Tenancy's own, and starter_role_permissions in
 # the access file the export wrote from that catalogue answers its permissions: every live one, the manuscripts' included,
 # which the house never listed for it.
 if ! grep -qE "WHEN 'administrator' THEN ARRAY\[[^]]*'manuscripts\.edit'" "$supabase_migrations"/*_access.press.ddd.sql; then
-  echo "FAILED: the access files in $supabase_migrations have no pack_permissions answer for the default administrators' pack, 'administrator', holding the manuscripts' permissions." >&2
+  echo "FAILED: the access files in $supabase_migrations have no starter_role_permissions answer for the default administrators' starter role, 'administrator', holding the manuscripts' permissions." >&2
   exit 1
 fi
 
-echo "    SupportingDomains/Host: pack_permissions answers the default administrators' pack"
+echo "    SupportingDomains/Host: starter_role_permissions answers the default administrators' starter role"
 
 # The packages' contributions were made where the export runs, in the file named for them, from what the domain
 # project marks: Tenancy's from the catalogue, and one of Membership's for the manuscripts, closed over their editors.

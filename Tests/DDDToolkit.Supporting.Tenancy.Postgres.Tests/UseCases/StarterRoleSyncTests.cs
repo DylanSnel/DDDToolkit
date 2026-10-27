@@ -12,17 +12,17 @@ using static DDDToolkit.Supporting.Tenancy.Postgres.Tests.Infrastructure.Tenancy
 namespace DDDToolkit.Supporting.Tenancy.Postgres.Tests;
 
 /// <summary>
-/// The sync of the role packs on Postgres, with every policy forced on the tables' owner: the database lets its writes
+/// The sync of the starter roles on Postgres, with every policy forced on the tables' owner: the database lets its writes
 /// through, as Tenancy's own system work in each tenant, and keeps the rights of every holder of a role that changed;
 /// every other writer is held to the roles' guards as before; and two syncs at once change each role once.
 /// <para>
-/// Harbor's Operator role is stored as a version of the application made it whose operator's pack did not create
-/// widgets yet: without the permission, and remembering a pack without it. The application syncs with the pack as it is now.
+/// Harbor's Operator role is stored as a version of the application made it whose operator's starter role did not create
+/// widgets yet: without the permission, and remembering a starter role without it. The application syncs with the starter role as it is now.
 /// </para>
 /// </summary>
-public sealed class RolePackSyncTests(TenancyPostgres postgres)
+public sealed class StarterRoleSyncTests(TenancyPostgres postgres)
 {
-    private const string RoleFollowedItsPack = "tenancy.role-followed-its-pack";
+    private const string RoleFollowedItsStarterRole = "tenancy.role-followed-its-starter-role";
 
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
@@ -31,24 +31,24 @@ public sealed class RolePackSyncTests(TenancyPostgres postgres)
     {
         var database = await BehindAndForcedAsync();
         await using var services = new TenancyServices(database);
-        (await OlisPermissionsAsync(services)).Should().NotContain(HostCatalogue.WidgetCreate, "Oli is an Operator at North Pier, of the older pack");
+        (await OlisPermissionsAsync(services)).Should().NotContain(HostCatalogue.WidgetCreate, "Oli is an Operator at North Pier, of the older starter role");
 
-        var report = await services.Provider.GetRequiredService<IRolePackSync>().SyncAsync(Cancellation);
+        var report = await services.Provider.GetRequiredService<IStarterRoleSync>().SyncAsync(Cancellation);
 
         report.Failed.Should().BeEmpty();
-        report.Should().BeEquivalentTo(new { Tenants = 3, RolesChanged = 1, RolesKeptForAnAdministrator = 0, RolesWithoutTheirPack = 0 }, "Quay is suspended, and visited all the same");
+        report.Should().BeEquivalentTo(new { Tenants = 3, RolesChanged = 1, RolesKeptForAnAdministrator = 0, RolesWithoutTheirStarterRole = 0 }, "Quay is suspended, and visited all the same");
         var operatorRole = await services.BySystemIn(Harbor, scoped => scoped.TenancyContext().Set<HostRole>().AsNoTracking().SingleAsync(role => role.Id == HarborRoles.Operator, Cancellation));
         operatorRole.Permissions.Should().Equal(HostCatalogue.WidgetChange, HostCatalogue.WidgetCreate, HostCatalogue.WidgetRead);
-        operatorRole.PermissionsFromPack.Should().Equal(HostCatalogue.WidgetChange, HostCatalogue.WidgetCreate, HostCatalogue.WidgetRead);
+        operatorRole.PermissionsFromStarterRole.Should().Equal(HostCatalogue.WidgetChange, HostCatalogue.WidgetCreate, HostCatalogue.WidgetRead);
         (await OlisPermissionsAsync(services)).Should().Contain(HostCatalogue.WidgetCreate, "the database wrote the rights of every holder as the role changed");
 
         var kept = await FollowedAsync(services);
         var row = kept.Should().ContainSingle().Which;
         row.ActedByKind.Should().Be(TenancyActorKinds.System);
-        row.Payload.Should().ContainAll("\"Pack\":\"operator\"", "\"Added\":[\"widget.create\"]", "\"Removed\":[]", "\"ManagingAccess\":[]");
+        row.Payload.Should().ContainAll("\"StarterRole\":\"operator\"", "\"Added\":[\"widget.create\"]", "\"Removed\":[]", "\"ManagingAccess\":[]");
 
         // The next start of the host reads, and writes nothing.
-        var again = await services.Provider.GetRequiredService<IRolePackSync>().SyncAsync(Cancellation);
+        var again = await services.Provider.GetRequiredService<IStarterRoleSync>().SyncAsync(Cancellation);
         again.RolesChanged.Should().Be(0);
         (await FollowedAsync(services)).Should().HaveCount(1);
     }
@@ -57,23 +57,23 @@ public sealed class RolePackSyncTests(TenancyPostgres postgres)
     public async Task Every_other_writer_is_held_to_the_roles_guards_as_before()
     {
         var database = await BehindAndForcedAsync();
-        string Remembering(string role) => $"UPDATE tenancy.\"Roles\" SET \"PermissionsFromPack\" = ARRAY['widget.change', 'widget.create', 'widget.read'] WHERE \"Id\" = '{role}'";
+        string Remembering(string role) => $"UPDATE tenancy.\"Roles\" SET \"PermissionsFromStarterRole\" = ARRAY['widget.change', 'widget.create', 'widget.read'] WHERE \"Id\" = '{role}'";
         var operatorRole = HarborRoles.Operator.Value.ToString();
 
-        // The administrator changes a role's permissions, and nothing of what its pack gave it or which pack that was.
+        // The administrator changes a role's permissions, and nothing of what its starter role gave it or which starter role that was.
         await using (var ada = await AsCaller.PersonAsync(database, Ada.Identity, Harbor, Cancellation))
         {
             (await ada.ExecuteAsync($"UPDATE tenancy.\"Roles\" SET \"Permissions\" = ARRAY['widget.read'] WHERE \"Id\" = '{operatorRole}'", Cancellation)).Should().Be(1);
             var remembered = await FluentActions.Awaiting(() => ada.ExecuteAsync(Remembering(operatorRole), Cancellation)).Should().ThrowAsync<PostgresException>();
             remembered.Which.SqlState.Should().Be(PostgresErrorCodes.InsufficientPrivilege);
-            remembered.Which.ConstraintName.Should().Be("tenancy_role_follows_its_pack");
+            remembered.Which.ConstraintName.Should().Be("tenancy_role_follows_its_starter_role");
         }
 
         await using (var ada = await AsCaller.PersonAsync(database, Ada.Identity, Harbor, Cancellation))
         {
-            (await FluentActions.Awaiting(() => ada.ExecuteAsync($"UPDATE tenancy.\"Roles\" SET \"FromPack\" = 'watcher' WHERE \"Id\" = '{operatorRole}'", Cancellation))
+            (await FluentActions.Awaiting(() => ada.ExecuteAsync($"UPDATE tenancy.\"Roles\" SET \"FromStarterRole\" = 'watcher' WHERE \"Id\" = '{operatorRole}'", Cancellation))
                     .Should().ThrowAsync<PostgresException>())
-                .Which.ConstraintName.Should().Be("tenancy_role_pack_is_fixed");
+                .Which.ConstraintName.Should().Be("tenancy_role_starter_role_is_fixed");
         }
 
         // Another module's system work writes no role; Tenancy's own writes what a sync writes.
@@ -105,17 +105,17 @@ public sealed class RolePackSyncTests(TenancyPostgres postgres)
 
         // Two instances of the host: the second syncs while the first is saving what it decided in Harbor.
         await using var second = new TenancyServices(database);
-        RolePackSyncReport? other = null;
-        var firstSave = new FirstSave(async () => other = await second.Provider.GetRequiredService<IRolePackSync>().SyncAsync(Cancellation));
+        StarterRoleSyncReport? other = null;
+        var firstSave = new FirstSave(async () => other = await second.Provider.GetRequiredService<IStarterRoleSync>().SyncAsync(Cancellation));
         await using var first = new TenancyServices(database, contexts: options => options.AddInterceptors(firstSave));
 
-        var report = await first.Provider.GetRequiredService<IRolePackSync>().SyncAsync(Cancellation);
+        var report = await first.Provider.GetRequiredService<IStarterRoleSync>().SyncAsync(Cancellation);
 
         firstSave.Fired.Should().BeTrue("the second instance committed while the first was saving");
         other!.RolesChanged.Should().Be(1);
         report.Failed.Should().BeEmpty("a save that lost the race on the tenant's access revision is read again");
         report.RolesChanged.Should().Be(0, "read again, there was nothing left to change");
-        (await FollowedAsync(first)).Should().HaveCount(1, "the role followed its pack once");
+        (await FollowedAsync(first)).Should().HaveCount(1, "the role followed its starter role once");
         (await OlisPermissionsAsync(first)).Should().Contain(HostCatalogue.WidgetCreate);
     }
 
@@ -132,7 +132,7 @@ public sealed class RolePackSyncTests(TenancyPostgres postgres)
             (await owner.ExecuteAsync(
                     $"""
                     UPDATE tenancy."Roles"
-                    SET "Permissions" = pg_catalog.array_remove("Permissions", 'widget.create'), "PermissionsFromPack" = pg_catalog.array_remove("PermissionsFromPack", 'widget.create')
+                    SET "Permissions" = pg_catalog.array_remove("Permissions", 'widget.create'), "PermissionsFromStarterRole" = pg_catalog.array_remove("PermissionsFromStarterRole", 'widget.create')
                     WHERE "Id" = '{HarborRoles.Operator.Value}'
                     """,
                     Cancellation))
@@ -151,11 +151,11 @@ public sealed class RolePackSyncTests(TenancyPostgres postgres)
             .Select(right => right.Permission)
             .ToListAsync(Cancellation));
 
-    /// <summary>Harbor's history rows of a role that followed its pack: who acted, and what it says.</summary>
+    /// <summary>Harbor's history rows of a role that followed its starter role: who acted, and what it says.</summary>
     private static async Task<List<(string ActedByKind, string Payload)>> FollowedAsync(TenancyServices services)
     {
         var rows = await services.BySystemIn(Harbor, scoped => scoped.TenancyContext().Set<EventLogEntry>()
-            .Where(entry => entry.EventName == RoleFollowedItsPack)
+            .Where(entry => entry.EventName == RoleFollowedItsStarterRole)
             .Select(entry => new { entry.ActedByKind, entry.Payload })
             .ToListAsync(Cancellation));
         return [.. rows.Select(row => (row.ActedByKind, row.Payload))];

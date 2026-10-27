@@ -144,13 +144,13 @@ builder.Logging.AddFilter("Microsoft.EntityFrameworkCore.Update", LogLevel.Criti
 // says what puts it right. A module added later brings its own, and no class of the host lists them.
 builder.Services.RunStartupChecks();
 
-// Once the host has started, in the background: every tenant's roles made from a pack follow that pack as the
-// catalogue has it now. A permission a module brings later reaches the flat tenants' Tenant admin, whose pack lists
-// none and so holds every permission, and a permission added to a pack reaches every role made from it; what a tenant
+// Once the host has started, in the background: every tenant's roles made from a starter role follow that starter role as the
+// catalogue has it now. A permission a module brings later reaches the flat tenants' Tenant admin, whose starter role lists
+// none and so holds every permission, and a permission added to a starter role reaches every role made from it; what a tenant
 // changed in a role itself stays. It is a call of its own and not a check, since it changes the tenants' roles. Each
-// role whose permissions change raises RoleFollowedItsPack, which the Tenants module keeps in the access history,
+// role whose permissions change raises RoleFollowedItsStarterRole, which the Tenants module keeps in the access history,
 // where the tenant's administrators read it on the History page; the host logs what the run did.
-builder.Services.SyncRolePacks();
+builder.Services.SyncStarterRoles();
 
 // Hosted services start in the order they are added, all of them after the checks above. With
 // Sample:SeedAuthUsers on, the demonstration people are made users of Supabase Auth first, under the ids their

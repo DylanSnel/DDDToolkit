@@ -71,7 +71,7 @@ public partial class Order { }
 | [Tenancy](docs/tenancy/overview.md) | The first supporting domain: what it is for, what it does and does not do, and how its pieces connect |
 | [Tenancy: the tutorial](docs/tenancy/tutorial.md) | Tenancy built into an application step by step: why each step, the whole files, and what they do |
 | [Tenancy: your module](docs/tenancy/your-module.md) | The module that holds Tenancy: its packages, the model, your own classes and ids, the context and the registration, and calling its use cases |
-| [Tenancy: roles and permissions](docs/tenancy/roles-and-permissions.md) | The permission catalogue, the starter roles (packs) a new tenant gets and how they follow your changes, who may give a role, and containment |
+| [Tenancy: roles and permissions](docs/tenancy/roles-and-permissions.md) | The permission catalogue, the starter roles a new tenant gets and how they follow your changes, who may give a role, and containment |
 | [Tenancy: who may do what](docs/tenancy/who-may-do-what.md) | The questions a module asks Tenancy about its caller, what a request requires of its caller, and what a module reads of Tenancy |
 | [Tenancy: keeping tenants apart](docs/tenancy/keeping-tenants-apart.md) | The query filter and the save check that keep every read and save in the caller's tenant, and system work |
 | [Tenancy: names and languages](docs/tenancy/names-and-languages.md) | Turning the ids a module answers into names, how a seat is shown, and refusals and role names in the reader's language |

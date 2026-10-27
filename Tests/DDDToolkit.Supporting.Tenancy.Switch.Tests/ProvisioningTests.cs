@@ -49,7 +49,7 @@ public sealed class ProvisioningTests : IDisposable
         await using (var scope = _services.CreateAsyncScope())
         using (scope.ServiceProvider.GetRequiredService<TenancyAccessManager>().BeginSystem())
         {
-            roles = scope.ServiceProvider.GetRequiredService<TenancyCatalogue>().PacksFor(TenantShape.Flat).ToDictionary(pack => pack.Key, _ => RoleId.Create());
+            roles = scope.ServiceProvider.GetRequiredService<TenancyCatalogue>().StarterRolesFor(TenantShape.Flat).ToDictionary(starterRole => starterRole.Key, _ => RoleId.Create());
             provisioned = await scope.ServiceProvider.GetRequiredService<TenantManager>().ProvisionAsync(
                 new TenantToProvision("acme", "Acme Works", TenantShape.Flat, "Acme", Guid.NewGuid(), RootId: root, AdminSeatId: adminSeat, RoleIds: roles),
                 TestContext.Current.CancellationToken);

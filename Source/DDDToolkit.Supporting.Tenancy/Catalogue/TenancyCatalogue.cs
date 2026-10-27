@@ -4,8 +4,8 @@ using DDDToolkit.Exceptions;
 namespace DDDToolkit.Supporting.Tenancy.Catalogue;
 
 /// <summary>
-/// Every permission and role pack the application has, checked once and then only read: Tenancy's permissions and
-/// the default administrators' pack, the application's own permissions and packs, and what its modules contribute.
+/// Every permission and starter role the application has, checked once and then only read: Tenancy's permissions and
+/// the default administrators' starter role, the application's own permissions and starter roles, and what its modules contribute.
 /// <para>
 /// It lives in code, not in a table. <see cref="Build(ApplicationCatalogue, IEnumerable{Permission})"/> checks it
 /// as a whole and reports every problem at once, so a catalogue that does not hold together stops the application
@@ -34,14 +34,14 @@ public sealed partial class TenancyCatalogue
         IReadOnlyList<Permission> permissions,
         IReadOnlyList<string> livePermissions,
         IReadOnlyList<string> accessManagingPermissions,
-        IReadOnlyList<RolePack> packs,
+        IReadOnlyList<StarterRole> starterRoles,
         bool hasDefaultAdministrators,
         bool containAccessManagingPermissions)
     {
         Permissions = permissions;
         LivePermissions = livePermissions;
         AccessManagingPermissions = accessManagingPermissions;
-        Packs = packs;
+        StarterRoles = starterRoles;
         HasDefaultAdministrators = hasDefaultAdministrators;
         ContainAccessManagingPermissions = containAccessManagingPermissions;
 
@@ -66,18 +66,18 @@ public sealed partial class TenancyCatalogue
     public IReadOnlyList<string> AccessManagingPermissions { get; }
 
     /// <summary>
-    /// The role packs as built, their permissions expanded. An administrators' pack that lists no permissions holds
-    /// <see cref="LivePermissions"/>; one that lists permissions holds those, as any other pack does. When the application
-    /// declares no administrators' pack, <see cref="TenancyPacks.DefaultAdministrators"/> comes first, holding
+    /// The starter roles as built, their permissions expanded. An administrators' starter role that lists no permissions holds
+    /// <see cref="LivePermissions"/>; one that lists permissions holds those, as any other starter role does. When the application
+    /// declares no administrators' starter role, <see cref="TenancyStarterRoles.DefaultAdministrators"/> comes first, holding
     /// <see cref="LivePermissions"/>.
     /// </summary>
-    public IReadOnlyList<RolePack> Packs { get; }
+    public IReadOnlyList<StarterRole> StarterRoles { get; }
 
     /// <summary>
-    /// Whether the application declared no administrators' pack, so that <see cref="Packs"/> holds
-    /// <see cref="TenancyPacks.DefaultAdministrators"/>, added by
-    /// <see cref="Build(ApplicationCatalogue, IEnumerable{Permission})"/>. The pack of that permission is then the
-    /// package's, named in the languages the package ships; otherwise every pack is the application's.
+    /// Whether the application declared no administrators' starter role, so that <see cref="StarterRoles"/> holds
+    /// <see cref="TenancyStarterRoles.DefaultAdministrators"/>, added by
+    /// <see cref="Build(ApplicationCatalogue, IEnumerable{Permission})"/>. The starter role of that permission is then the
+    /// package's, named in the languages the package ships; otherwise every starter role is the application's.
     /// </summary>
     public bool HasDefaultAdministrators { get; }
 
@@ -93,7 +93,7 @@ public sealed partial class TenancyCatalogue
     /// <summary>
     /// Builds the catalogue of an application that adds nothing to it, from the modules' contributions alone, as
     /// the registration does when <c>TenancyOptions.Catalogue</c> is not set: Tenancy's permissions, the modules' permissions,
-    /// and <see cref="TenancyPacks.DefaultAdministrators"/> as the one pack. What an export that runs without the
+    /// and <see cref="TenancyStarterRoles.DefaultAdministrators"/> as the one starter role. What an export that runs without the
     /// registration builds the same catalogue with: <c>TenancyCatalogue.Build(TenancyPermissionsOfModules.All)</c>, the
     /// list Tenancy's generator writes into a project that composes the modules, from the lists they mark with
     /// <see cref="TenancyPermissionsAttribute"/>.
@@ -104,11 +104,11 @@ public sealed partial class TenancyCatalogue
 
     /// <summary>
     /// Builds the catalogue from the application's part and the modules' contributions, and checks it as a
-    /// whole. An application that declares no administrators' pack gets
-    /// <see cref="TenancyPacks.DefaultAdministrators"/>, for every shape.
+    /// whole. An application that declares no administrators' starter role gets
+    /// <see cref="TenancyStarterRoles.DefaultAdministrators"/>, for every shape.
     /// </summary>
     /// <param name="application">
-    /// The application's packs, permissions and marks. An application that adds none builds with
+    /// The application's starter roles, permissions and marks. An application that adds none builds with
     /// <see cref="Build(IEnumerable{Permission})"/>, which passes <c>new ApplicationCatalogue()</c>.
     /// </param>
     /// <param name="contributed">
@@ -126,16 +126,16 @@ public sealed partial class TenancyCatalogue
         var byName = declared.ToDictionary(permission => permission.Name, StringComparer.Ordinal);
         var marked = CheckMarks(declared, application.AccessManagingPermissions ?? [], byName, problems);
 
-        // Which permissions are live, and which of those manage access, is settled before the packs are looked at: an
-        // administrators' pack is built from the first and checked against the second.
+        // Which permissions are live, and which of those manage access, is settled before the starter roles are looked at: an
+        // administrators' starter role is built from the first and checked against the second.
         var live = declared.Where(permission => !permission.Retired).Select(permission => permission.Name).Order(StringComparer.Ordinal).ToArray();
         var managing = live.Where(marked.Contains).ToArray();
 
         CheckImplications(declared, byName, marked, problems);
-        // Whether the application declares an administrators' pack is read off what it declares, a pack refused
+        // Whether the application declares an administrators' starter role is read off what it declares, a starter role refused
         // for another reason included: once it declares one, it declares them for every shape.
-        var declaresAdministrators = (application.Packs ?? []).Any(pack => pack is { Administers: true });
-        var packs = CheckPacks(application.Packs ?? [], byName, live, managing, declaresAdministrators, problems);
+        var declaresAdministrators = (application.StarterRoles ?? []).Any(starterRole => starterRole is { Administers: true });
+        var starterRoles = CheckStarterRoles(application.StarterRoles ?? [], byName, live, managing, declaresAdministrators, problems);
 
         if (problems.Count > 0)
         {
@@ -146,7 +146,7 @@ public sealed partial class TenancyCatalogue
                 problems.Any(problem => problem.EndsWith(UnknownToTheCatalogue, StringComparison.Ordinal)) ? UnknownPermissionAdvice : null);
         }
 
-        // A mark the application lists shows on the permission itself, as a pack shows the permissions it was built with.
+        // A mark the application lists shows on the permission itself, as a starter role shows the permissions it was built with.
         var permissions = byName.Values
             .Select(permission => marked.Contains(permission.Name) && !permission.ManagesAccess ? permission with { ManagesAccess = true } : permission)
             .OrderBy(permission => permission.Module, StringComparer.Ordinal)
@@ -154,7 +154,7 @@ public sealed partial class TenancyCatalogue
             .ThenBy(permission => permission.Name, StringComparer.Ordinal)
             .ToArray();
 
-        return new TenancyCatalogue(permissions, live, managing, [.. packs], !declaresAdministrators, application.ContainAccessManagingPermissions);
+        return new TenancyCatalogue(permissions, live, managing, [.. starterRoles], !declaresAdministrators, application.ContainAccessManagingPermissions);
     }
 
     /// <summary>Whether the catalogue declares <paramref name="permission"/>, retired or not.</summary>
@@ -205,18 +205,18 @@ public sealed partial class TenancyCatalogue
     }
 
     /// <summary>
-    /// The packs a newly provisioned tenant of <paramref name="shape"/> gets a copy of, in their order: those seeded
-    /// on provision whose <see cref="RolePack.SeededFor"/> is that shape or every shape.
+    /// The starter roles a newly provisioned tenant of <paramref name="shape"/> gets a copy of, in their order: those seeded
+    /// on provision whose <see cref="StarterRole.SeededFor"/> is that shape or every shape.
     /// </summary>
-    public IEnumerable<RolePack> PacksFor(TenantShape shape)
-        => Packs.Where(pack => IsSeededFor(pack, shape)).OrderBy(pack => pack.Order);
+    public IEnumerable<StarterRole> StarterRolesFor(TenantShape shape)
+        => StarterRoles.Where(starterRole => IsSeededFor(starterRole, shape)).OrderBy(starterRole => starterRole.Order);
 
     /// <summary>
-    /// The pack the first administrator of a tenant of <paramref name="shape"/> is granted: the application's, or
-    /// <see cref="TenancyPacks.DefaultAdministrators"/> when it declares none.
+    /// The starter role the first administrator of a tenant of <paramref name="shape"/> is granted: the application's, or
+    /// <see cref="TenancyStarterRoles.DefaultAdministrators"/> when it declares none.
     /// </summary>
-    public RolePack AdministratorPackFor(TenantShape shape)
-        => PacksFor(shape).Single(pack => pack.Administers);
+    public StarterRole AdministratorStarterRoleFor(TenantShape shape)
+        => StarterRolesFor(shape).Single(starterRole => starterRole.Administers);
 
     /// <summary>
     /// Checks a permission that code is about to ask about. A permission the catalogue does not know is a mistake in code, not
@@ -237,12 +237,12 @@ public sealed partial class TenancyCatalogue
     }
 
     /// <summary>
-    /// Whether a tenant of <paramref name="shape"/> is given a copy of <paramref name="pack"/>: the pack is seeded on
+    /// Whether a tenant of <paramref name="shape"/> is given a copy of <paramref name="starterRole"/>: the starter role is seeded on
     /// provision, and seeded for that shape or for every shape. What provisioning and a change of shape copy, and
-    /// what the check of the administrators' packs counts, so the two never disagree.
+    /// what the check of the administrators' starter roles counts, so the two never disagree.
     /// </summary>
-    private static bool IsSeededFor(RolePack pack, TenantShape shape)
-        => pack.SeedOnProvision && (pack.SeededFor is null || pack.SeededFor == shape);
+    private static bool IsSeededFor(StarterRole starterRole, TenantShape shape)
+        => starterRole.SeedOnProvision && (starterRole.SeededFor is null || starterRole.SeededFor == shape);
 
     // ---------------------------------------------------------------- the checks Build makes
 
@@ -422,95 +422,95 @@ public sealed partial class TenancyCatalogue
     }
 
     /// <summary>
-    /// Pack keys are unique, not blank and at most <see cref="RolePack.MaxKeyLength"/> long; the names and descriptions of the roles made from them follow a
-    /// role's rules, and the names are unique ignoring case, as a tenant's role names are; every permission a pack
-    /// lists is known and not retired; an administrators' pack that lists permissions leaves out none an administrator
-    /// needs (<see cref="CheckAdministratorsPermissions"/>); and each shape has exactly one administrators' pack seeded for
-    /// it (<see cref="CheckAdministratorsSeededFor"/>). Returns the packs as built: their permissions expanded, and for an
-    /// administrators' pack that lists none, every live permission.
+    /// Starter role keys are unique, not blank and at most <see cref="StarterRole.MaxKeyLength"/> long; the names and descriptions of the roles made from them follow a
+    /// role's rules, and the names are unique ignoring case, as a tenant's role names are; every permission a starter role
+    /// lists is known and not retired; an administrators' starter role that lists permissions leaves out none an administrator
+    /// needs (<see cref="CheckAdministratorsPermissions"/>); and each shape has exactly one administrators' starter role seeded for
+    /// it (<see cref="CheckAdministratorsSeededFor"/>). Returns the starter roles as built: their permissions expanded, and for an
+    /// administrators' starter role that lists none, every live permission.
     /// <para>
-    /// An application that declares no administrators' pack at all gets <see cref="TenancyPacks.DefaultAdministrators"/>,
+    /// An application that declares no administrators' starter role at all gets <see cref="TenancyStarterRoles.DefaultAdministrators"/>,
     /// which gives every shape its one (<see cref="AddDefaultAdministrators"/>). One that declares an
-    /// administrators' pack declares them all: a shape it leaves without one is a mistake to report, not a gap
+    /// administrators' starter role declares them all: a shape it leaves without one is a mistake to report, not a gap
     /// to fill, since the application chose what its administrators hold and the default might hold more.
     /// </para>
     /// </summary>
-    private static List<RolePack> CheckPacks(
-        IReadOnlyList<RolePack> packs,
+    private static List<StarterRole> CheckStarterRoles(
+        IReadOnlyList<StarterRole> starterRoles,
         Dictionary<string, Permission> byName,
         string[] live,
         string[] managing,
         bool declaresAdministrators,
         List<string> problems)
     {
-        var result = new List<RolePack>();
+        var result = new List<StarterRole>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
         var names = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var pack in packs)
+        foreach (var starterRole in starterRoles)
         {
-            if (pack is null)
+            if (starterRole is null)
             {
-                problems.Add("The application declares a null pack.");
+                problems.Add("The application declares a null starter role.");
                 continue;
             }
 
-            if (string.IsNullOrWhiteSpace(pack.Key))
+            if (string.IsNullOrWhiteSpace(starterRole.Key))
             {
-                problems.Add("A pack has no key.");
+                problems.Add("A starter role has no key.");
                 continue;
             }
 
-            if (pack.Key.Length > RolePack.MaxKeyLength)
+            if (starterRole.Key.Length > StarterRole.MaxKeyLength)
             {
-                problems.Add("The pack '" + pack.Key + "' has a key longer than " + RolePack.MaxKeyLength + " characters.");
+                problems.Add("The starter role '" + starterRole.Key + "' has a key longer than " + StarterRole.MaxKeyLength + " characters.");
                 continue;
             }
 
-            if (!seen.Add(pack.Key))
+            if (!seen.Add(starterRole.Key))
             {
-                problems.Add("The pack '" + pack.Key + "' is declared more than once.");
+                problems.Add("The starter role '" + starterRole.Key + "' is declared more than once.");
                 continue;
             }
 
-            var name = pack.Name?.Trim() ?? string.Empty;
+            var name = starterRole.Name?.Trim() ?? string.Empty;
             if (name.Length == 0 || name.Length > TenancyNames.MaxRoleNameLength)
             {
-                problems.Add("The pack '" + pack.Key + "' has a name of " + name.Length + " characters; a role's name is 1 to "
+                problems.Add("The starter role '" + starterRole.Key + "' has a name of " + name.Length + " characters; a role's name is 1 to "
                              + TenancyNames.MaxRoleNameLength + ".");
             }
-            else if (!names.TryAdd(name, pack.Key))
+            else if (!names.TryAdd(name, starterRole.Key))
             {
-                problems.Add("The packs '" + names[name] + "' and '" + pack.Key + "' are both named '" + name
+                problems.Add("The starter roles '" + names[name] + "' and '" + starterRole.Key + "' are both named '" + name
                              + "', ignoring case; a tenant's roles have names of their own.");
             }
 
-            if ((pack.Description?.Trim().Length ?? 0) > TenancyNames.MaxRoleDescriptionLength)
+            if ((starterRole.Description?.Trim().Length ?? 0) > TenancyNames.MaxRoleDescriptionLength)
             {
-                problems.Add("The pack '" + pack.Key + "' has a description longer than " + TenancyNames.MaxRoleDescriptionLength + " characters.");
+                problems.Add("The starter role '" + starterRole.Key + "' has a description longer than " + TenancyNames.MaxRoleDescriptionLength + " characters.");
             }
 
-            if (pack.Administers && pack.Permissions is not { Count: > 0 })
+            if (starterRole.Administers && starterRole.Permissions is not { Count: > 0 })
             {
                 // It lists nothing, and so holds every live permission: one declared later comes with it, and reaches the
-                // roles made from the pack before at the next sync of the packs.
-                result.Add(pack with { Permissions = live });
+                // roles made from the starter role before at the next sync of the starter roles.
+                result.Add(starterRole with { Permissions = live });
                 continue;
             }
 
-            var expanded = Expand(pack.Permissions ?? [], byName, out var offenders);
+            var expanded = Expand(starterRole.Permissions ?? [], byName, out var offenders);
             foreach (var offender in offenders)
             {
-                problems.Add("The pack '" + pack.Key + "' lists '" + offender + "', which is "
+                problems.Add("The starter role '" + starterRole.Key + "' lists '" + offender + "', which is "
                              + (byName.ContainsKey(offender) ? "retired." : UnknownToTheCatalogue));
             }
 
-            if (pack.Administers)
+            if (starterRole.Administers)
             {
-                CheckAdministratorsPermissions(pack.Key, expanded, live, managing, problems);
+                CheckAdministratorsPermissions(starterRole.Key, expanded, live, managing, problems);
             }
 
-            result.Add(pack with { Permissions = expanded });
+            result.Add(starterRole with { Permissions = expanded });
         }
 
         if (!declaresAdministrators)
@@ -527,23 +527,23 @@ public sealed partial class TenancyCatalogue
     }
 
     /// <summary>
-    /// A tenant of <paramref name="shape"/> has exactly one administrators' pack seeded for it, the one its first
+    /// A tenant of <paramref name="shape"/> has exactly one administrators' starter role seeded for it, the one its first
     /// administrator is granted. The problem names the property to write, so the cure reads as the code that
-    /// makes it. With none, that is the <see cref="RolePack.SeedOnProvision"/> of a pack that would be seeded for
-    /// the shape but is declared unseeded, or else the <see cref="RolePack.SeededFor"/> of the pack the shape
+    /// makes it. With none, that is the <see cref="StarterRole.SeedOnProvision"/> of a starter role that would be seeded for
+    /// the shape but is declared unseeded, or else the <see cref="StarterRole.SeededFor"/> of the starter role the shape
     /// lacks. With more than one, it is keeping one of them, by seeding the others for another shape or declaring
-    /// them without <see cref="RolePack.Administers"/>; the second is the cure when there are more administrators'
-    /// packs than shapes.
+    /// them without <see cref="StarterRole.Administers"/>; the second is the cure when there are more administrators'
+    /// starter roles than shapes.
     /// </summary>
-    private static void CheckAdministratorsSeededFor(TenantShape shape, List<RolePack> packs, List<string> problems)
+    private static void CheckAdministratorsSeededFor(TenantShape shape, List<StarterRole> starterRoles, List<string> problems)
     {
-        var administrators = packs.Where(pack => pack.Administers && IsSeededFor(pack, shape)).Select(pack => pack.Key).ToArray();
+        var administrators = starterRoles.Where(starterRole => starterRole.Administers && IsSeededFor(starterRole, shape)).Select(starterRole => starterRole.Key).ToArray();
         if (administrators.Length == 1)
         {
             return;
         }
 
-        var problem = "A " + shape.ToString().ToLowerInvariant() + " tenant needs exactly one administrators' pack seeded for it, and has ";
+        var problem = "A " + shape.ToString().ToLowerInvariant() + " tenant needs exactly one administrators' starter role seeded for it, and has ";
         if (administrators.Length > 1)
         {
             problems.Add(problem + administrators.Length + ": " + string.Join(", ", administrators) + ". Keep one of them for it: seed the "
@@ -551,67 +551,67 @@ public sealed partial class TenancyCatalogue
             return;
         }
 
-        // An administrators' pack for this shape, or for every shape, that is declared unseeded is the one that is
-        // missing: declaring another as well would leave it in the catalogue, an administrators' pack no tenant gets.
-        var unseeded = packs
-            .Where(pack => pack.Administers && !pack.SeedOnProvision && (pack.SeededFor is null || pack.SeededFor == shape))
-            .Select(pack => "'" + pack.Key + "'")
+        // An administrators' starter role for this shape, or for every shape, that is declared unseeded is the one that is
+        // missing: declaring another as well would leave it in the catalogue, an administrators' starter role no tenant gets.
+        var unseeded = starterRoles
+            .Where(starterRole => starterRole.Administers && !starterRole.SeedOnProvision && (starterRole.SeededFor is null || starterRole.SeededFor == shape))
+            .Select(starterRole => "'" + starterRole.Key + "'")
             .ToArray();
         problems.Add(unseeded.Length switch
         {
-            0 => problem + "none. The default one, '" + TenancyPacks.DefaultAdministratorsKey + "', is added only when the application declares "
-                 + "no administrators' pack at all: declare one with SeededFor: TenantShape." + shape + " as well, or declare none.",
+            0 => problem + "none. The default one, '" + TenancyStarterRoles.DefaultAdministratorsKey + "', is added only when the application declares "
+                 + "no administrators' starter role at all: declare one with SeededFor: TenantShape." + shape + " as well, or declare none.",
             1 => problem + "none: " + unseeded[0] + " would be, but is declared with SeedOnProvision: false, and the default one, '"
-                 + TenancyPacks.DefaultAdministratorsKey + "', is not added in its place. Leave SeedOnProvision: false off it.",
+                 + TenancyStarterRoles.DefaultAdministratorsKey + "', is not added in its place. Leave SeedOnProvision: false off it.",
             _ => problem + "none: " + string.Join(", ", unseeded) + " would be, but are declared with SeedOnProvision: false, and the default "
-                 + "one, '" + TenancyPacks.DefaultAdministratorsKey + "', is not added in their place. Leave SeedOnProvision: false off one of them.",
+                 + "one, '" + TenancyStarterRoles.DefaultAdministratorsKey + "', is not added in their place. Leave SeedOnProvision: false off one of them.",
         });
     }
 
     /// <summary>
-    /// Puts <see cref="TenancyPacks.DefaultAdministrators"/> first among the packs, holding every live permission. Its key
+    /// Puts <see cref="TenancyStarterRoles.DefaultAdministrators"/> first among the starter roles, holding every live permission. Its key
     /// is its own, and so are its names, ignoring case, as a tenant's role names are: the catalogue's, and the one
-    /// the package gives it in each language it ships, Beheerder in Dutch. So a pack of the application's that has
-    /// the permission or any of the names is refused, with what to do about it. That pack is no administrators' pack, or
-    /// the default would not be added: it is renamed, or declared as the administrators' pack. A name the
-    /// application's own <see cref="IRolePackTexts"/> gives a pack is not known here, and is refused at
-    /// provisioning, as a clash between two of the application's own packs is.
+    /// the package gives it in each language it ships, Beheerder in Dutch. So a starter role of the application's that has
+    /// the permission or any of the names is refused, with what to do about it. That starter role is no administrators' starter role, or
+    /// the default would not be added: it is renamed, or declared as the administrators' starter role. A name the
+    /// application's own <see cref="IStarterRoleTexts"/> gives a starter role is not known here, and is refused at
+    /// provisioning, as a clash between two of the application's own starter roles is.
     /// </summary>
-    /// <param name="result">The application's packs as built; the default goes first.</param>
-    /// <param name="permissions">The permissions of the application's packs.</param>
-    /// <param name="names">The names of the application's packs, ignoring case, each with the key of its pack.</param>
+    /// <param name="result">The application's starter roles as built; the default goes first.</param>
+    /// <param name="permissions">The permissions of the application's starter roles.</param>
+    /// <param name="names">The names of the application's starter roles, ignoring case, each with the key of its starter role.</param>
     /// <param name="live">Every live permission, in ordinal order: what the default holds.</param>
-    /// <param name="problems">Where a pack that has the default's permission or name is reported.</param>
+    /// <param name="problems">Where a starter role that has the default's permission or name is reported.</param>
     private static void AddDefaultAdministrators(
-        List<RolePack> result,
+        List<StarterRole> result,
         HashSet<string> permissions,
         Dictionary<string, string> names,
         string[] live,
         List<string> problems)
     {
-        var fallback = TenancyPacks.DefaultAdministrators;
-        const string Added = "the default administrators' pack, added because the application declares no administrators' pack";
-        const string Fix = ", or declare it with Administers: true to make it the administrators' pack instead.";
+        var fallback = TenancyStarterRoles.DefaultAdministrators;
+        const string Added = "the default administrators' starter role, added because the application declares no administrators' starter role";
+        const string Fix = ", or declare it with Administers: true to make it the administrators' starter role instead.";
 
         if (permissions.Contains(fallback.Key))
         {
-            problems.Add("The pack '" + fallback.Key + "' has the permission of " + Added + ". Give the pack another permission" + Fix);
+            problems.Add("The starter role '" + fallback.Key + "' has the permission of " + Added + ". Give the starter role another permission" + Fix);
         }
 
         // The catalogue's name, which a tenant without a language gets, and the package's own in every language it
-        // ships: a pack named like any of them would be refused at provisioning, in a tenant of that language.
+        // ships: a starter role named like any of them would be refused at provisioning, in a tenant of that language.
         IEnumerable<(string Name, string InLanguage)> defaultNames =
         [
             (fallback.Name, string.Empty),
-            .. TenancyPackTexts.DefaultAdministratorsTranslations().Select(translation => (translation.Name, " in " + translation.Language.EnglishName)),
+            .. TenancyStarterRoleTexts.DefaultAdministratorsTranslations().Select(translation => (translation.Name, " in " + translation.Language.EnglishName)),
         ];
         foreach (var (defaultName, inLanguage) in defaultNames)
         {
             if (names.TryGetValue(defaultName, out var taking))
             {
-                var name = result.First(pack => string.Equals(pack.Key, taking, StringComparison.Ordinal)).Name.Trim();
-                problems.Add("The pack '" + taking + "' is named '" + name + "', and " + Added + ", is named '" + defaultName + "'" + inLanguage
-                             + "; a tenant's roles have names of their own, ignoring case. Give the pack another name" + Fix);
+                var name = result.First(starterRole => string.Equals(starterRole.Key, taking, StringComparison.Ordinal)).Name.Trim();
+                problems.Add("The starter role '" + taking + "' is named '" + name + "', and " + Added + ", is named '" + defaultName + "'" + inLanguage
+                             + "; a tenant's roles have names of their own, ignoring case. Give the starter role another name" + Fix);
             }
         }
 
@@ -619,19 +619,19 @@ public sealed partial class TenancyCatalogue
     }
 
     /// <summary>
-    /// An administrators' pack that lists its permissions holds, listed or implied by a permission it lists, every live permission of
+    /// An administrators' starter role that lists its permissions holds, listed or implied by a permission it lists, every live permission of
     /// Tenancy's own and every live permission that manages access. An administrator runs the tenant, which takes
     /// Tenancy's permissions, <see cref="TenancyPermissions.AdministratorPermission"/> among them, and gives every role, which takes
-    /// each permission that manages access: a role holding one is given only by a seat that holds it. A pack short of
+    /// each permission that manages access: a role holding one is given only by a seat that holds it. A starter role short of
     /// one would make tenants whose administrators cannot give one of their own roles, so each permission it leaves
-    /// out is a problem of its own. A retired permission is not asked for: it manages nothing, and no pack may list it.
+    /// out is a problem of its own. A retired permission is not asked for: it manages nothing, and no starter role may list it.
     /// </summary>
-    /// <param name="pack">The pack's key, for the problems.</param>
-    /// <param name="held">The permissions the pack lists, expanded.</param>
+    /// <param name="starterRole">The starter role's key, for the problems.</param>
+    /// <param name="held">The permissions the starter role lists, expanded.</param>
     /// <param name="live">Every live permission, in ordinal order.</param>
     /// <param name="managing">Every live permission that manages access.</param>
-    /// <param name="problems">Where a permission the pack leaves out is reported.</param>
-    private static void CheckAdministratorsPermissions(string pack, string[] held, string[] live, string[] managing, List<string> problems)
+    /// <param name="problems">Where a permission the starter role leaves out is reported.</param>
+    private static void CheckAdministratorsPermissions(string starterRole, string[] held, string[] live, string[] managing, List<string> problems)
     {
         var holds = held.ToHashSet(StringComparer.Ordinal);
         var manages = managing.ToHashSet(StringComparer.Ordinal);
@@ -642,7 +642,7 @@ public sealed partial class TenancyCatalogue
             var own = permission.StartsWith(TenancyPrefix, StringComparison.Ordinal);
             if ((own || manages.Contains(permission)) && !holds.Contains(permission))
             {
-                problems.Add("The administrators' pack '" + pack + "' lists permissions but not '" + permission + "', which "
+                problems.Add("The administrators' starter role '" + starterRole + "' lists permissions but not '" + permission + "', which "
                              + (own ? "is one of Tenancy's own" : "manages access")
                              + ": an administrator holds every permission that manages access, and Tenancy's own.");
             }

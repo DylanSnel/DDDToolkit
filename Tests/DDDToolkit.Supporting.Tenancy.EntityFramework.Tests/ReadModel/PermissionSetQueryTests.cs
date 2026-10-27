@@ -32,8 +32,8 @@ public abstract class PermissionSetQueryTests(TestDatabases databases) : IAsyncL
         _north = await _services.AddUnitAsync(_harbor.Tenant, _harbor.RootUnit, "North");
         _south = await _services.AddUnitAsync(_harbor.Tenant, _harbor.RootUnit, "South");
         _coast = await _services.AddUnitAsync(_harbor.Tenant, _north, "Coast");
-        _grace = await _services.SeatAtAsync(_harbor, "Grace", _north, HostCatalogue.SupervisorPack);
-        _lin = await _services.SeatAtAsync(_harbor, "Lin", _coast, HostCatalogue.OperatorPack);
+        _grace = await _services.SeatAtAsync(_harbor, "Grace", _north, HostCatalogue.SupervisorStarterRole);
+        _lin = await _services.SeatAtAsync(_harbor, "Lin", _coast, HostCatalogue.OperatorStarterRole);
 
         await _services.BySystemIn(_harbor.Tenant, async services =>
         {
@@ -109,8 +109,8 @@ public abstract class PermissionSetQueryTests(TestDatabases databases) : IAsyncL
                     new RoleWithPermission<RoleId>[]
                     {
                         new(_harbor.AdministratorRole, HostCatalogue.WidgetCreate), new(_harbor.AdministratorRole, TenancyPermissions.RolesManage),
-                        new(_harbor.RolesByPack[HostCatalogue.SupervisorPack], HostCatalogue.WidgetCreate),
-                        new(_harbor.RolesByPack[HostCatalogue.OperatorPack], HostCatalogue.WidgetCreate),
+                        new(_harbor.RolesByStarterRole[HostCatalogue.SupervisorStarterRole], HostCatalogue.WidgetCreate),
+                        new(_harbor.RolesByStarterRole[HostCatalogue.OperatorStarterRole], HostCatalogue.WidgetCreate),
                     });
 
                 _services.Commands.Reset();
@@ -141,7 +141,7 @@ public abstract class PermissionSetQueryTests(TestDatabases databases) : IAsyncL
         asLin.Under.Should().BeEquivalentTo(units, "the tree is the tenant's to read");
         asLin.UnderOther.Should().BeEmpty("a unit of another tenant answers nothing");
         asLin.Roles.Should().HaveCount(3 + 3, "the administrators hold all three permissions, the supervisors two, and the operators one")
-            .And.OnlyContain(pair => _harbor.RolesByPack.Values.Contains(pair.Role));
+            .And.OnlyContain(pair => _harbor.RolesByStarterRole.Values.Contains(pair.Role));
 
         var bySystem = await AskAsync(HostCaller.SystemIn(_harbor.Tenant));
         bySystem.Held.Should().BeEquivalentTo(units.SelectMany(unit => Keys.Select(permission => (unit, permission))), "system work holds every permission at every unit of its tenant");

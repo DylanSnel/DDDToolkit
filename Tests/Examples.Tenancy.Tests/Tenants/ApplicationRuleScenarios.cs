@@ -49,8 +49,8 @@ public sealed class ApplicationRuleScenarios(SampleHosts sample) : IClassFixture
             "projects.crew.manage",
         ]);
 
-        // And the administrators' pack that lists its permissions holds every one of them, or the host would not start.
-        host.Services.GetRequiredService<TenancyCatalogue>().Packs.Single(pack => pack.Key == SampleCatalogue.AccessAdmin).Permissions
+        // And the administrators' starter role that lists its permissions holds every one of them, or the host would not start.
+        host.Services.GetRequiredService<TenancyCatalogue>().StarterRoles.Single(starterRole => starterRole.Key == SampleCatalogue.AccessAdmin).Permissions
             .Should().Contain(host.Services.GetRequiredService<TenancyCatalogue>().AccessManagingPermissions);
 
         // Those permissions stay contained: the sample leaves the setting at its default, and its refusals that name the permissions

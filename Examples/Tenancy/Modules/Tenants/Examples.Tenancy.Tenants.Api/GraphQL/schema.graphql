@@ -130,7 +130,7 @@ type BrokenRulesError implements CodedError @shareable {
 
 type Catalogue {
   permissions: [Permission!]!
-  packs: [RolePack!]!
+  starterRoles: [StarterRole!]!
 }
 
 "A change that lost a race: somebody else changed the same thing after the caller read it, or the version the caller expected is not the one that is stored. Read again, and decide again."
@@ -308,7 +308,7 @@ type RefusalError implements CodedError @shareable {
 type Role @key(fields: "id") {
   id: UUID!
   name: String
-  fromPack: String
+  fromStarterRole: String
   status: RoleStatus
   permissions: [String!] @authorize(policy: "tenancy.roles.manage")
   managesAccess: Boolean
@@ -332,19 +332,10 @@ type RoleGrantPayload {
 type RoleOfMine {
   id: UUID!
   name: String!
-  fromPack: String
+  fromStarterRole: String
   status: RoleStatus!
   permissions: [String!]!
   managesAccess: Boolean!
-}
-
-type RolePack {
-  key: String!
-  permissions: [String!]!
-  name: String!
-  description: String!
-  seededFor: TenantShape
-  administers: Boolean!
 }
 
 type RolePermissionsSetPayload {
@@ -413,6 +404,15 @@ type SeatRenamePayload {
 type SeatSuspendPayload {
   seat: Seat
   errors: [SeatSuspendError!]
+}
+
+type StarterRole {
+  key: String!
+  permissions: [String!]!
+  name: String!
+  description: String!
+  seededFor: TenantShape
+  administers: Boolean!
 }
 
 type TenantDirectoryPage {

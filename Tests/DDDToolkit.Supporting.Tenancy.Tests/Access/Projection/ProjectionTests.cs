@@ -69,8 +69,8 @@ public class ProjectionTests
     {
         var harbor = new HarborBuilder().Build();
         var seat = harbor.NewSeat();
-        var operatorRole = harbor.RolesByPack[HostCatalogue.OperatorPack];
-        var watcher = harbor.RolesByPack[HostCatalogue.WatcherPack];
+        var operatorRole = harbor.RolesByStarterRole[HostCatalogue.OperatorStarterRole];
+        var watcher = harbor.RolesByStarterRole[HostCatalogue.WatcherStarterRole];
         var ends = Now.AddDays(30);
         seat.Place(harbor.North, primary: true, Now, placedBy: null);
         seat.Place(harbor.South, primary: false, Now, placedBy: null);
@@ -110,7 +110,7 @@ public class ProjectionTests
     {
         var harbor = new HarborBuilder().Build();
         var seat = harbor.NewSeat();
-        var watcher = harbor.RolesByPack[HostCatalogue.WatcherPack];
+        var watcher = harbor.RolesByStarterRole[HostCatalogue.WatcherStarterRole];
         seat.Place(harbor.North, primary: true, Now, placedBy: null);
         seat.Grant(harbor.North, watcher.Id, watcher.Facts, GrantPeriod.Open(Now), null, null);
 

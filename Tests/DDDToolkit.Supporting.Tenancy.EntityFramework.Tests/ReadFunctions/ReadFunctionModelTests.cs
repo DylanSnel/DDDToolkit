@@ -33,7 +33,7 @@ public sealed class ReadFunctionModelTests
         [typeof(SeatRight<TenantId, SeatId, OrganizationUnitId, RoleId>)] = ["TenantId", "SeatId", "UnitId", "RoleId", "Permission", "StartsAt", "EndsAt"],
         [typeof(OrganizationUnitPath<TenantId, OrganizationUnitId>)] = ["TenantId", "AncestorId", "DescendantId", "Distance"],
         [typeof(OrganizationUnitRow<TenantId, OrganizationUnitId>)] = ["Id", "TenantId", "ParentId", "Status"],
-        [typeof(RoleRow<TenantId, RoleId>)] = ["Id", "TenantId", "FromPack", "Status", "Permissions"],
+        [typeof(RoleRow<TenantId, RoleId>)] = ["Id", "TenantId", "FromStarterRole", "Status", "Permissions"],
         [typeof(PlacementRow<SeatId, OrganizationUnitId>)] = ["SeatId", "UnitId", "IsPrimary", "TenantId"],
         [typeof(SeatRow<TenantId, SeatId>)] = ["Id", "TenantId", "Status"],
     };
@@ -205,7 +205,7 @@ public sealed class ReadFunctionModelTests
                 .Should().Equal(functions.Model.FindEntityType(row)!.GetProperties().Select(property => property.Name), "{0} answers under the properties' names", name);
         }
 
-        functions.Set<RoleRow<TenantId, RoleId>>().ToQueryString().Should().Contain("\"FromPack\"").And.NotContain("frompack");
+        functions.Set<RoleRow<TenantId, RoleId>>().ToQueryString().Should().Contain("\"FromStarterRole\"").And.NotContain("frompack");
     }
 
     [Fact]

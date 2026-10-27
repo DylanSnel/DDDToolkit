@@ -127,7 +127,7 @@ public abstract class SaveCheckTests(TestDatabases databases) : IAsyncLifetime
             await Refused.WithCodeAsync(TenancyRefusals.NotSeated, () => context.SaveChangesAsync(TestContext.Current.CancellationToken));
         }
 
-        _services.Database.CountRows("Roles").Should().Be(harbor.RolesByPack.Count);
+        _services.Database.CountRows("Roles").Should().Be(harbor.RolesByStarterRole.Count);
     }
 
     [Fact]
@@ -158,7 +158,7 @@ public abstract class SaveCheckTests(TestDatabases databases) : IAsyncLifetime
         }
 
         _services.Database.CountRows("Tenants").Should().Be(1);
-        _services.Database.CountRows("Roles").Should().Be(harbor.RolesByPack.Count);
+        _services.Database.CountRows("Roles").Should().Be(harbor.RolesByStarterRole.Count);
         _services.Database.CountRows("Widgets").Should().Be(0);
     }
 
@@ -173,7 +173,7 @@ public abstract class SaveCheckTests(TestDatabases databases) : IAsyncLifetime
         _services.Database.CountRows("Seats").Should().Be(1);
         _services.Database.CountRows("SeatPlacements").Should().Be(1);
         _services.Database.CountRows("SeatRoleGrants").Should().Be(1);
-        _services.Database.CountRows("Roles").Should().Be(harbor.RolesByPack.Count);
+        _services.Database.CountRows("Roles").Should().Be(harbor.RolesByStarterRole.Count);
         _services.Database.CountRows("TenancyAccessRevisions").Should().Be(1);
 
         await using var scope = _services.Scope();

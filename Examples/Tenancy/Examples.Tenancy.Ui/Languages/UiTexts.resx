@@ -282,8 +282,8 @@
   <data name="whoami.roles.none" xml:space="preserve">
     <value>No organization roles. Crew roles on projects are shown with each project.</value>
   </data>
-  <data name="whoami.from-pack" xml:space="preserve">
-    <value>From pack</value>
+  <data name="whoami.from-starter-role" xml:space="preserve">
+    <value>From starter role</value>
   </data>
   <data name="whoami.manages-access" xml:space="preserve">
     <value>Manages access</value>

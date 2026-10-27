@@ -94,19 +94,19 @@ public static class EveryUseCase
         await As(Ada, scoped => scoped.Roles().SetPermissionsAsync(HarborRoles.Supervisor, [TenancyPermissions.UnitsManage, TenancyPermissions.SeatsManage, HostCatalogue.WidgetChange], cancellation));
         await As(Ada, scoped => scoped.Roles().ArchiveAsync(HarborRoles.Watcher, cancellation));
 
-        // The roles follow their packs, by system work in the tenant, once the application ships a catalogue whose
-        // supervisor's pack also reads the history: Harbor's Supervisor gains that permission, and keeps out what Ada took out.
+        // The roles follow their starter roles, by system work in the tenant, once the application ships a catalogue whose
+        // supervisor's starter role also reads the history: Harbor's Supervisor gains that permission, and keeps out what Ada took out.
         var later = TenancyCatalogue.Build(
             HostCatalogue.Application with
             {
-                Packs = [.. HostCatalogue.Application.Packs.Select(pack => pack.Key == HostCatalogue.SupervisorPack ? pack with { Permissions = [.. pack.Permissions, TenancyPermissions.HistoryView] } : pack)],
+                StarterRoles = [.. HostCatalogue.Application.StarterRoles.Select(starterRole => starterRole.Key == HostCatalogue.SupervisorStarterRole ? starterRole with { Permissions = [.. starterRole.Permissions, TenancyPermissions.HistoryView] } : starterRole)],
             },
             []);
         await services.BySystemIn(Harbor, scoped => new HostRoleManager(
                 scoped.GetRequiredService<ITenancyStore<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId>>(),
                 later,
                 scoped.GetRequiredService<TimeProvider>())
-            .FollowPacksAsync(cancellation));
+            .FollowStarterRolesAsync(cancellation));
 
         // The tenant: renamed by the administrator; suspended and started again by system work, which alone may.
         await As(Ada, scoped => scoped.Organization().RenameAsync("Harbor Group", cancellation));

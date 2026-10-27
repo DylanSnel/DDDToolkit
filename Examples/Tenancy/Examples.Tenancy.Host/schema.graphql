@@ -163,8 +163,8 @@ type BrokenRulesError implements CodedError {
 }
 
 type Catalogue {
-  packs: [RolePack!]!
   permissions: [Permission!]!
+  starterRoles: [StarterRole!]!
 }
 
 type ChangedBy {
@@ -549,7 +549,7 @@ type RefusalError implements CodedError {
 }
 
 type Role {
-  fromPack: String
+  fromStarterRole: String
   id: UUID!
   managesAccess: Boolean
   name: String
@@ -573,21 +573,12 @@ type RoleGrantPayload {
 }
 
 type RoleOfMine {
-  fromPack: String
+  fromStarterRole: String
   id: UUID!
   managesAccess: Boolean!
   name: String!
   permissions: [String!]!
   status: RoleStatus!
-}
-
-type RolePack {
-  administers: Boolean!
-  description: String!
-  key: String!
-  name: String!
-  permissions: [String!]!
-  seededFor: TenantShape
 }
 
 type RolePermissionsSetPayload {
@@ -656,6 +647,15 @@ type SeatRenamePayload {
 type SeatSuspendPayload {
   errors: [SeatSuspendError!]
   seat: Seat
+}
+
+type StarterRole {
+  administers: Boolean!
+  description: String!
+  key: String!
+  name: String!
+  permissions: [String!]!
+  seededFor: TenantShape
 }
 
 type TenantDirectoryPage {

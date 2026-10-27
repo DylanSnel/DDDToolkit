@@ -294,7 +294,7 @@ public class ActorTests
         var harness = Harness.OfHarbor();
         var harbor = harness.Harbor;
         var ada = harness.Administrator;
-        var watcher = harness.RoleFromPack(HostCatalogue.WatcherPack);
+        var watcher = harness.RoleFromStarterRole(HostCatalogue.WatcherStarterRole);
 
         // Every command a seat gives, as Harbor's administrator.
         await harness.As(ada, use => use.Organization.RenameAsync("Harbor Yards", Cancellation));
@@ -347,20 +347,20 @@ public class ActorTests
         var bySystem = harness.Store.SavedEvents.Skip(before).ToList();
         bySystem.Should().NotBeEmpty().And.OnlyContain(raised => ByOf(raised) == TenancyActor<SeatId>.OfSystem(TenancyWork.SystemScope));
 
-        // ... Harbor's roles follow a pack the application changed, as its work too, ...
+        // ... Harbor's roles follow a starter role the application changed, as its work too, ...
         var later = TenancyCatalogue.Build(
             HostCatalogue.Application with
             {
-                Packs = [.. HostCatalogue.Application.Packs.Select(pack => pack.Key == HostCatalogue.WatcherPack ? pack with { Permissions = [HostCatalogue.WidgetCreate] } : pack)],
+                StarterRoles = [.. HostCatalogue.Application.StarterRoles.Select(starterRole => starterRole.Key == HostCatalogue.WatcherStarterRole ? starterRole with { Permissions = [HostCatalogue.WidgetCreate] } : starterRole)],
             },
             []);
-        await harness.BySystemWork(use => new HostRoleManager(use.Store, later, use.Clock).FollowPacksAsync(Cancellation));
+        await harness.BySystemWork(use => new HostRoleManager(use.Store, later, use.Clock).FollowStarterRolesAsync(Cancellation));
         var followed = harness.Store.SavedEvents.Skip(before + bySystem.Count).ToList();
-        followed.Should().ContainSingle().Which.Should().BeOfType<RoleFollowedItsPack<TenantId, RoleId, SeatId>>();
+        followed.Should().ContainSingle().Which.Should().BeOfType<RoleFollowedItsStarterRole<TenantId, RoleId, SeatId>>();
         followed.Should().OnlyContain(raised => ByOf(raised) == TenancyActor<SeatId>.OfSystem(TenancyWork.SystemScope));
         bySystem.AddRange(followed);
 
-        // ... made a tree by its administrator, with the roles of the packs seeded for the new shape, ...
+        // ... made a tree by its administrator, with the roles of the starter roles seeded for the new shape, ...
         await harness.Run(HostCaller.InSeat(quay.Tenant, quay.AdminSeat), use => use.Tenants.ChangeShapeAsync(TenantShape.Hierarchical, roleIds: null, language: null, Cancellation));
 
         var byQuin = harness.Store.SavedEvents.Skip(before + bySystem.Count).ToList();
@@ -394,7 +394,7 @@ public class ActorTests
         var before = harness.Store.SavedEvents.Count;
 
         await harness.As(harness.Administrator, use => use.Seats.GrantAsync(
-            ben, harness.RoleFromPack(HostCatalogue.WatcherPack), harness.Harbor.North, until: null, reason: null, Cancellation));
+            ben, harness.RoleFromStarterRole(HostCatalogue.WatcherStarterRole), harness.Harbor.North, until: null, reason: null, Cancellation));
 
         var granted = harness.Store.SavedEvents.Skip(before).Should().ContainSingle()
             .Which.Should().BeOfType<OrganizationRoleGranted<TenantId, SeatId, OrganizationUnitId, RoleId>>().Which;
@@ -409,7 +409,7 @@ public class ActorTests
         var harness = Harness.OfHarbor();
         var ada = harness.Administrator;
         var ben = await harness.SeatAt("Ben", harness.Harbor.North);
-        var watcher = harness.RoleFromPack(HostCatalogue.WatcherPack);
+        var watcher = harness.RoleFromStarterRole(HostCatalogue.WatcherStarterRole);
         var before = harness.Store.SavedEvents.Count;
 
         // An import that acts for Ada. The system did it: Ada is who it was done for, and who the grant keeps.
@@ -461,7 +461,7 @@ public class ActorTests
                 Cancellation);
         }
 
-        // The tenant, its root, a role per pack, the first seat with its placement and its role, and the activation.
+        // The tenant, its root, a role per starter role, the first seat with its placement and its role, and the activation.
         harness.Store.SavedEvents.Select(raised => raised.GetType().GetGenericTypeDefinition()).Distinct().Should().BeEquivalentTo(
         [
             typeof(TenantProvisioned<,>), typeof(OrganizationUnitAdded<,,>), typeof(RoleCreated<,,>), typeof(SeatAdded<,>),
@@ -496,7 +496,7 @@ public class ActorTests
 
         // Through the use case the permissions are the same, and the caller is who changed them.
         var harness = Harness.OfHarbor();
-        var watcher = harness.RoleFromPack(HostCatalogue.WatcherPack);
+        var watcher = harness.RoleFromStarterRole(HostCatalogue.WatcherStarterRole);
         await harness.As(harness.Administrator, use => use.Roles.SetPermissionsAsync(watcher, [HostCatalogue.WidgetChange, TenancyPermissions.SeatsManage], Cancellation));
 
         var changedByAda = harness.Store.SavedEvents.Should().ContainSingle().Which.Should().BeOfType<RolePermissionsChanged<TenantId, RoleId, SeatId>>().Which;

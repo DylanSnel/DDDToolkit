@@ -30,9 +30,9 @@ public class HoldersTests
     public async Task SeatsHoldingAt_answers_active_holders_at_the_unit_and_above()
     {
         var ada = _harness.Administrator;
-        var bert = await _harness.SeatAt("Bert", North, HostCatalogue.SupervisorPack);
-        var cy = await _harness.SeatAt("Cy", NorthCoast, HostCatalogue.OperatorPack);
-        var di = await _harness.SeatAt("Di", South, HostCatalogue.WatcherPack);
+        var bert = await _harness.SeatAt("Bert", North, HostCatalogue.SupervisorStarterRole);
+        var cy = await _harness.SeatAt("Cy", NorthCoast, HostCatalogue.OperatorStarterRole);
+        var di = await _harness.SeatAt("Di", South, HostCatalogue.WatcherStarterRole);
         var asAda = _harness.SeatCaller(ada);
 
         // Ada holds every permission at the root, Bert the supervisor's at North, Cy the operator's at North Coast, Di the
@@ -47,7 +47,7 @@ public class HoldersTests
 
         // A seat that holds a permission twice over, at a unit and above it, is one holder.
         await _harness.Place(bert, NorthCoast);
-        await _harness.Grant(bert, NorthCoast, HostCatalogue.WatcherPack);
+        await _harness.Grant(bert, NorthCoast, HostCatalogue.WatcherStarterRole);
         Holders(asAda, HostCatalogue.WidgetRead, NorthCoast).Should().BeEquivalentTo([ada, bert, cy]);
 
         // The permission is one of the catalogue: a typo in code is told, as with every question.
@@ -58,9 +58,9 @@ public class HoldersTests
     public async Task A_seat_barred_from_others_grants_learns_only_about_itself()
     {
         var ada = _harness.Administrator;
-        var bert = await _harness.SeatAt("Bert", North, HostCatalogue.SupervisorPack);
-        var cy = await _harness.SeatAt("Cy", NorthCoast, HostCatalogue.OperatorPack);
-        var di = await _harness.SeatAt("Di", South, HostCatalogue.WatcherPack);
+        var bert = await _harness.SeatAt("Bert", North, HostCatalogue.SupervisorStarterRole);
+        var cy = await _harness.SeatAt("Cy", NorthCoast, HostCatalogue.OperatorStarterRole);
+        var di = await _harness.SeatAt("Di", South, HostCatalogue.WatcherStarterRole);
 
         // Cy works with widgets and manages nothing: where Cy holds the permission the answer is Cy, and where not, nobody,
         // whoever holds it there.
@@ -98,7 +98,7 @@ public class HoldersTests
 
         // A permission that manages access held only in the past, or only later, reads nobody's grants now.
         var former = await _harness.SeatAt("Gil", South);
-        await _harness.Grant(former, South, HostCatalogue.SupervisorPack, until: FixedClock.Start.AddHours(1));
+        await _harness.Grant(former, South, HostCatalogue.SupervisorStarterRole, until: FixedClock.Start.AddHours(1));
         Holders(_harness.SeatCaller(former), HostCatalogue.WidgetRead, South).Should().BeEquivalentTo([di, former], "while it lasts, Gil reads the grants at South");
         _harness.Clock.Advance(TimeSpan.FromHours(2));
         Holders(_harness.SeatCaller(former), HostCatalogue.WidgetRead, South).Should().BeEmpty();
@@ -108,8 +108,8 @@ public class HoldersTests
     public async Task System_work_learns_every_holder_in_its_tenant()
     {
         var ada = _harness.Administrator;
-        var bert = await _harness.SeatAt("Bert", North, HostCatalogue.SupervisorPack);
-        var cy = await _harness.SeatAt("Cy", NorthCoast, HostCatalogue.OperatorPack);
+        var bert = await _harness.SeatAt("Bert", North, HostCatalogue.SupervisorStarterRole);
+        var cy = await _harness.SeatAt("Cy", NorthCoast, HostCatalogue.OperatorStarterRole);
         var orchard = _harness.Seed(2, "orchard");
 
         Holders(_harness.SystemCaller(), HostCatalogue.WidgetRead, NorthCoast).Should().BeEquivalentTo([ada, bert, cy]);
@@ -131,11 +131,11 @@ public class HoldersTests
     {
         var ada = _harness.Administrator;
         var asAda = _harness.SeatCaller(ada);
-        var bert = await _harness.SeatAt("Bert", North, HostCatalogue.SupervisorPack);
+        var bert = await _harness.SeatAt("Bert", North, HostCatalogue.SupervisorStarterRole);
         var cy = await _harness.SeatAt("Cy", NorthCoast);
-        await _harness.Grant(cy, NorthCoast, HostCatalogue.OperatorPack, until: FixedClock.Start.AddDays(1));
+        await _harness.Grant(cy, NorthCoast, HostCatalogue.OperatorStarterRole, until: FixedClock.Start.AddDays(1));
         var di = await _harness.SeatAt("Di", NorthCoast);
-        await _harness.Grant(di, NorthCoast, HostCatalogue.WatcherPack, from: FixedClock.Start.AddDays(2));
+        await _harness.Grant(di, NorthCoast, HostCatalogue.WatcherStarterRole, from: FixedClock.Start.AddDays(2));
         Holders(asAda, HostCatalogue.WidgetRead, NorthCoast).Should().BeEquivalentTo([ada, bert, cy], "Di's grant has not started");
 
         // A seat that is suspended holds nothing, and holds it again once it is active.
@@ -149,14 +149,14 @@ public class HoldersTests
         Holders(asAda, HostCatalogue.WidgetRead, NorthCoast).Should().BeEquivalentTo([ada, bert, di], "Cy's grant has ended, and Di's has started");
 
         // An archived role gives nothing, and neither does a permission the catalogue has retired.
-        await _harness.BySystemWork(h => h.Roles.ArchiveAsync(_harness.RoleFromPack(HostCatalogue.WatcherPack), default));
+        await _harness.BySystemWork(h => h.Roles.ArchiveAsync(_harness.RoleFromStarterRole(HostCatalogue.WatcherStarterRole), default));
         Holders(asAda, HostCatalogue.WidgetRead, NorthCoast).Should().BeEquivalentTo([ada, bert]);
 
         var retired = TenancyCatalogue.Build(
             HostCatalogue.Application with
             {
                 Permissions = [.. HostCatalogue.Permissions.Select(permission => permission.Name == HostCatalogue.WidgetCreate ? permission with { Retired = true } : permission)],
-                Packs = [.. HostCatalogue.Application.Packs.Select(pack => pack with { Permissions = [.. pack.Permissions.Where(permission => permission != HostCatalogue.WidgetCreate)] })],
+                StarterRoles = [.. HostCatalogue.Application.StarterRoles.Select(starterRole => starterRole with { Permissions = [.. starterRole.Permissions.Where(permission => permission != HostCatalogue.WidgetCreate)] })],
             },
             []);
         Holders(asAda, HostCatalogue.WidgetCreate, NorthCoast).Should().BeEquivalentTo([ada, bert]);
@@ -170,8 +170,8 @@ public class HoldersTests
     [Fact]
     public async Task A_source_that_answers_for_itself_is_asked_for_a_seat_and_not_for_system_work()
     {
-        var bert = await _harness.SeatAt("Bert", North, HostCatalogue.SupervisorPack);
-        var cy = await _harness.SeatAt("Cy", NorthCoast, HostCatalogue.OperatorPack);
+        var bert = await _harness.SeatAt("Bert", North, HostCatalogue.SupervisorStarterRole);
+        var cy = await _harness.SeatAt("Cy", NorthCoast, HostCatalogue.OperatorStarterRole);
         var answering = new Answering(_harness.Store, [cy]);
 
         // A storage that shows a seat only its own rights says who holds the permission itself: the question passes its answer

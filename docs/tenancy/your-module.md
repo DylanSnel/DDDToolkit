@@ -31,7 +31,7 @@ The packages are published as `Temp.DDDToolkit.Supporting.Tenancy*`, like
 | **Organization** | The tree of **OrganizationUnits** | One root, no cycles, a depth of at most 32. A unit is archived and never deleted. |
 | **Seat** | A person in a tenant, with **Placements** at units and **RoleGrants** at each placement | One placement per unit, and one primary placement. Only active roles are granted. The seat's identity never changes. |
 | **Role** | A name and its **Permissions** | Only permissions from the catalogue. The permissions they imply are added. |
-| **Catalogue** | The permissions and the **RolePacks** (starter roles) | One administrators' pack per shape. Tenancy adds its own pack when you declare none. A permission is retired and never deleted. Permissions that manage access are marked. |
+| **Catalogue** | The permissions and the **starter roles** (`StarterRole`) | One administrators' pack per shape. Tenancy adds its own pack when you declare none. A permission is retired and never deleted. Permissions that manage access are marked. |
 
 - Tenant, Organization, Seat and Role are aggregates. They refer to each other by id.
 - The catalogue is not an aggregate. It is data in code: Tenancy's permissions, your modules' permissions, and an
@@ -85,7 +85,7 @@ The generator then writes every Tenancy class that the project does not declare,
 - Each type is public and in the project's root namespace. Its documentation comment says how to declare the type
   yourself.
 - The invitation is not written. Declaring the invitation class turns [invitations](invitations.md) on.
-- Each written class has every member of the package's class. For example, the role's `PermissionsFromPack` is a
+- Each written class has every member of the package's class. For example, the role's `PermissionsFromStarterRole` is a
   column, and your migration maps it like any other column
   ([Packs after provisioning](roles-and-permissions.md#packs-after-provisioning)).
 

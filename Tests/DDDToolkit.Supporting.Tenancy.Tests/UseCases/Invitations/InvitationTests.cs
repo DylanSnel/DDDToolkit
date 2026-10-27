@@ -33,12 +33,12 @@ public class InvitationTests
         Harness harness,
         SeatId? issuer = null,
         OrganizationUnitId? unit = null,
-        string pack = HostCatalogue.WatcherPack,
+        string starterRole = HostCatalogue.WatcherStarterRole,
         DateTimeOffset? grantUntil = null,
         TimeSpan? lifetime = null,
         string address = Address)
         => harness.As(issuer ?? harness.Administrator, use => use.Invitations.IssueAsync(
-            address, unit ?? harness.Harbor.North, harness.RoleFromPack(pack), grantUntil, lifetime, Cancellation));
+            address, unit ?? harness.Harbor.North, harness.RoleFromStarterRole(starterRole), grantUntil, lifetime, Cancellation));
 
     /// <summary>
     /// A seat that manages seats and grants for the whole tenant and nothing else: it may invite, and holds none of
@@ -71,7 +71,7 @@ public class InvitationTests
         invitation.TenantId.Should().Be(harness.Tenant);
         invitation.Address.Should().Be(Address);
         invitation.UnitId.Should().Be(harness.Harbor.North);
-        invitation.RoleId.Should().Be(harness.RoleFromPack(HostCatalogue.WatcherPack));
+        invitation.RoleId.Should().Be(harness.RoleFromStarterRole(HostCatalogue.WatcherStarterRole));
         invitation.GrantUntil.Should().Be(Now.AddDays(90));
         invitation.IssuedAt.Should().Be(Now);
         invitation.ExpiresAt.Should().Be(issued.Invitation.ExpiresAt);
@@ -89,7 +89,7 @@ public class InvitationTests
     public async Task Issuing_needs_seat_management_for_the_whole_tenant_and_grant_management_at_the_unit()
     {
         var harness = Harness.OfHarbor();
-        var supervisor = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.SupervisorPack);
+        var supervisor = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.SupervisorStarterRole);
         var seatsOnly = (await harness.BySystemWork(use => use.Roles.CreateAsync("Seat desk", "Adds seats", [TenancyPermissions.SeatsManage], Cancellation))).Id;
         var seatDesk = await harness.SeatAt("Cy", harness.Harbor.Root);
         await harness.BySystemWork(use => use.Seats.GrantAsync(seatDesk, seatsOnly, harness.Harbor.Root, until: null, reason: null, Cancellation));
@@ -115,7 +115,7 @@ public class InvitationTests
         var hana = await PeopleOffice(harness, until: Now.AddDays(30));
 
         // She holds neither widget permission, and manages grants for a month: the operators' role goes for good.
-        var issued = await Issue(harness, hana, pack: HostCatalogue.OperatorPack, grantUntil: null);
+        var issued = await Issue(harness, hana, starterRole: HostCatalogue.OperatorStarterRole, grantUntil: null);
 
         harness.Store.Invitation(issued.Invitation.Id).IssuedBy.Should().Be(hana);
     }
@@ -127,17 +127,17 @@ public class InvitationTests
         var hana = await PeopleOffice(harness);
 
         // The supervisors' role manages units too, which she does not hold.
-        var beyond = await Refused.WithCodeAsync(TenancyRefusals.GrantExceedsOwn, () => Issue(harness, hana, pack: HostCatalogue.SupervisorPack));
+        var beyond = await Refused.WithCodeAsync(TenancyRefusals.GrantExceedsOwn, () => Issue(harness, hana, starterRole: HostCatalogue.SupervisorStarterRole));
         beyond.Arguments["Missing"].Should().Be(TenancyPermissions.UnitsManage);
-        beyond.Arguments["Role"].Should().Be(harness.RoleFromPack(HostCatalogue.SupervisorPack));
+        beyond.Arguments["Role"].Should().Be(harness.RoleFromStarterRole(HostCatalogue.SupervisorStarterRole));
 
         // An administrator for thirty days holds every permission, and offers that role for no longer than that.
         var temporary = await harness.SeatAt("Tess", harness.Harbor.Root);
-        await harness.Grant(temporary, harness.Harbor.Root, HostCatalogue.AdministratorPack, until: Now.AddDays(30));
+        await harness.Grant(temporary, harness.Harbor.Root, HostCatalogue.AdministratorStarterRole, until: Now.AddDays(30));
 
-        await Refused.WithCodeAsync(TenancyRefusals.GrantExceedsOwn, () => Issue(harness, temporary, pack: HostCatalogue.SupervisorPack, grantUntil: null));
-        await Refused.WithCodeAsync(TenancyRefusals.GrantExceedsOwn, () => Issue(harness, temporary, pack: HostCatalogue.SupervisorPack, grantUntil: Now.AddDays(31)));
-        var issued = await Issue(harness, temporary, pack: HostCatalogue.SupervisorPack, grantUntil: Now.AddDays(30));
+        await Refused.WithCodeAsync(TenancyRefusals.GrantExceedsOwn, () => Issue(harness, temporary, starterRole: HostCatalogue.SupervisorStarterRole, grantUntil: null));
+        await Refused.WithCodeAsync(TenancyRefusals.GrantExceedsOwn, () => Issue(harness, temporary, starterRole: HostCatalogue.SupervisorStarterRole, grantUntil: Now.AddDays(31)));
+        var issued = await Issue(harness, temporary, starterRole: HostCatalogue.SupervisorStarterRole, grantUntil: Now.AddDays(30));
 
         harness.Store.Invitation(issued.Invitation.Id).GrantUntil.Should().Be(Now.AddDays(30));
         harness.Store.InvitationsOf(harness.Tenant).Should().ContainSingle("a refused invitation is not kept");
@@ -151,7 +151,7 @@ public class InvitationTests
         var retired = (await harness.BySystemWork(use => use.Roles.CreateAsync("Tally clerk", "Counts widgets", [HostCatalogue.WidgetRead], Cancellation))).Id;
         await harness.BySystemWork(use => use.Roles.ArchiveAsync(retired, Cancellation));
         await harness.BySystemWork(use => use.Organization.ArchiveUnitAsync(harness.Harbor.NorthCoast, Cancellation));
-        var watcher = harness.RoleFromPack(HostCatalogue.WatcherPack);
+        var watcher = harness.RoleFromStarterRole(HostCatalogue.WatcherStarterRole);
 
         Task<InvitationManager.IssuedInvitation> Offering(OrganizationUnitId unit, RoleId role)
             => harness.As(harness.Administrator, use => use.Invitations.IssueAsync(Address, unit, role, null, null, Cancellation));
@@ -264,7 +264,7 @@ public class InvitationTests
         placement.IsPrimary.Should().BeTrue();
         placement.PlacedBy.Should().Be(ada, "the issuer is who placed the seat");
         var grant = placement.Grants.Should().ContainSingle().Which;
-        grant.RoleId.Should().Be(harness.RoleFromPack(HostCatalogue.WatcherPack));
+        grant.RoleId.Should().Be(harness.RoleFromStarterRole(HostCatalogue.WatcherStarterRole));
         grant.StartsAt.Should().Be(Now.AddHours(3), "the grant starts when the invitation is accepted");
         grant.EndsAt.Should().Be(Now.AddDays(90));
         grant.GrantedBy.Should().Be(ada);
@@ -499,7 +499,7 @@ public class InvitationTests
     public async Task An_identity_with_a_seat_in_the_tenant_cannot_accept_so_nobody_invites_themself()
     {
         var harness = Harness.OfHarbor();
-        var issued = await Issue(harness, pack: HostCatalogue.SupervisorPack);
+        var issued = await Issue(harness, starterRole: HostCatalogue.SupervisorStarterRole);
 
         // The issuer's own identity, with the token it made itself.
         await Refused.WithCodeAsync(TenancyRefusals.IdentityHasSeat, () => harness.Accept(harness.Harbor.Administrator.Identity, issued.Token));
@@ -537,8 +537,8 @@ public class InvitationTests
     {
         var harness = Harness.OfHarbor();
         var temporary = since == "the issuer's hold ends sooner";
-        var hana = temporary ? await harness.SeatAt("Tess", harness.Harbor.Root, HostCatalogue.AdministratorPack) : await PeopleOffice(harness);
-        var issued = await Issue(harness, hana, pack: temporary ? HostCatalogue.SupervisorPack : HostCatalogue.WatcherPack);
+        var hana = temporary ? await harness.SeatAt("Tess", harness.Harbor.Root, HostCatalogue.AdministratorStarterRole) : await PeopleOffice(harness);
+        var issued = await Issue(harness, hana, starterRole: temporary ? HostCatalogue.SupervisorStarterRole : HostCatalogue.WatcherStarterRole);
         var office = harness.Store.Seat(hana).Placements.Single().Grants.Single().RoleId;
 
         switch (since)
@@ -555,12 +555,12 @@ public class InvitationTests
             case "the role came to manage access":
                 // The watchers' role is given a permission that manages access, which the issuer does not hold.
                 await harness.BySystemWork(use => use.Roles.SetPermissionsAsync(
-                    harness.RoleFromPack(HostCatalogue.WatcherPack), [HostCatalogue.WidgetRead, TenancyPermissions.UnitsManage], Cancellation));
+                    harness.RoleFromStarterRole(HostCatalogue.WatcherStarterRole), [HostCatalogue.WidgetRead, TenancyPermissions.UnitsManage], Cancellation));
                 break;
             default:
                 // An administrator for good when it issued the supervisors' role for good, and for a month since.
                 await harness.BySystemWork(use => use.Seats.RevokeAsync(hana, office, harness.Harbor.Root, Cancellation));
-                await harness.Grant(hana, harness.Harbor.Root, HostCatalogue.AdministratorPack, until: Now.AddDays(30));
+                await harness.Grant(hana, harness.Harbor.Root, HostCatalogue.AdministratorStarterRole, until: Now.AddDays(30));
                 break;
         }
 
@@ -593,7 +593,7 @@ public class InvitationTests
     public async Task An_invitation_system_work_issued_is_not_held_to_a_seat()
     {
         var harness = Harness.OfHarbor();
-        var supervisors = harness.RoleFromPack(HostCatalogue.SupervisorPack);
+        var supervisors = harness.RoleFromStarterRole(HostCatalogue.SupervisorStarterRole);
         var events = harness.Store.SavedEvents.Count;
 
         var issued = await harness.BySystemWork(use => use.Invitations.IssueAsync(Address, harness.Harbor.South, supervisors, null, null, Cancellation));
@@ -608,7 +608,7 @@ public class InvitationTests
         harness.Store.SavedEvents.Skip(events).Should().HaveCount(5).And.OnlyContain(one => ByOf(one) == TenancyActor<SeatId>.OfSystem(TenancyWork.SystemScope));
 
         // Issued for a seat, it keeps that seat as its issuer, and is still the system's: the seat's rights are not asked.
-        var watcher = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.WatcherPack);
+        var watcher = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.WatcherStarterRole);
         InvitationManager.IssuedInvitation forBert;
         using (TenancyWork.BeginSystemIn(harness.Tenant, (SeatId?)watcher))
         {
@@ -634,7 +634,7 @@ public class InvitationTests
         {
             "the tenant is suspended" => use.Tenants.SuspendAsync("unpaid", Cancellation),
             "the unit is archived" => use.Organization.ArchiveUnitAsync(harness.Harbor.NorthCoast, Cancellation),
-            _ => use.Roles.ArchiveAsync(harness.RoleFromPack(HostCatalogue.WatcherPack), Cancellation),
+            _ => use.Roles.ArchiveAsync(harness.RoleFromStarterRole(HostCatalogue.WatcherStarterRole), Cancellation),
         });
 
         await Refused.WithCodeAsync(code, () => harness.Accept(Wren, issued.Token));
@@ -673,8 +673,8 @@ public class InvitationTests
     public async Task Listing_shows_the_open_invitations_into_the_units_where_the_caller_manages_seats()
     {
         var harness = Harness.OfHarbor();
-        var supervisor = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.SupervisorPack);
-        var watcher = await harness.SeatAt("Cy", harness.Harbor.North, HostCatalogue.WatcherPack);
+        var supervisor = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.SupervisorStarterRole);
+        var watcher = await harness.SeatAt("Cy", harness.Harbor.North, HostCatalogue.WatcherStarterRole);
         var south = await Issue(harness, unit: harness.Harbor.South, address: "south@example.test", lifetime: TimeSpan.FromDays(3));
         var coast = await Issue(harness, unit: harness.Harbor.NorthCoast, address: "coast@example.test", lifetime: TimeSpan.FromDays(2), grantUntil: Now.AddDays(40));
         var north = await Issue(harness, unit: harness.Harbor.North, address: "north@example.test", lifetime: TimeSpan.FromDays(1));
@@ -694,7 +694,7 @@ public class InvitationTests
         forSystemWork.Select(invitation => invitation.Id).Should().Equal(forAda.Select(invitation => invitation.Id));
         forAda[1].Should().Match<HostInvitation>(invitation =>
             invitation.Id == coast.Invitation.Id && invitation.Address == "coast@example.test" && invitation.UnitId == harness.Harbor.NorthCoast
-            && invitation.RoleId == harness.RoleFromPack(HostCatalogue.WatcherPack) && invitation.GrantUntil == Now.AddDays(40)
+            && invitation.RoleId == harness.RoleFromStarterRole(HostCatalogue.WatcherStarterRole) && invitation.GrantUntil == Now.AddDays(40)
             && invitation.IssuedAt == Now && invitation.ExpiresAt == Now.AddDays(2) && invitation.IssuedBy == harness.Administrator && !invitation.IssuedAsSystem);
 
         // Another tenant's are not among them, whoever asks there.
@@ -707,8 +707,8 @@ public class InvitationTests
     public async Task Cancelling_needs_seat_management_at_the_unit_and_an_open_invitation()
     {
         var harness = Harness.OfHarbor();
-        var supervisor = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.SupervisorPack);
-        var watcher = await harness.SeatAt("Cy", harness.Harbor.North, HostCatalogue.WatcherPack);
+        var supervisor = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.SupervisorStarterRole);
+        var watcher = await harness.SeatAt("Cy", harness.Harbor.North, HostCatalogue.WatcherStarterRole);
         var quarry = harness.Seed(2, "quarry");
         var coast = await Issue(harness, unit: harness.Harbor.NorthCoast);
         var south = await Issue(harness, unit: harness.Harbor.South);
@@ -791,7 +791,7 @@ public class InvitationTests
             TenantId = harness.Tenant,
             InvitationId = issued.Invitation.Id,
             UnitId = harness.Harbor.North,
-            RoleId = harness.RoleFromPack(HostCatalogue.WatcherPack),
+            RoleId = harness.RoleFromStarterRole(HostCatalogue.WatcherStarterRole),
             ExpiresAt = Now.AddDays(7),
             IssuedBy = (SeatId?)harness.Administrator,
             By = (TenancyActor<SeatId>?)TenancyActor<SeatId>.OfSeat(harness.Administrator),
@@ -835,7 +835,7 @@ public class InvitationTests
 
         // Made by hand with lifetimes out of order, a use case still says what is wrong.
         (await FluentActions.Awaiting(() => harness.As(harness.Administrator, _ => broken.IssueAsync(
-                Address, harness.Harbor.North, harness.RoleFromPack(HostCatalogue.WatcherPack), null, null, Cancellation)))
+                Address, harness.Harbor.North, harness.RoleFromStarterRole(HostCatalogue.WatcherStarterRole), null, null, Cancellation)))
             .Should().ThrowAsync<InvalidOperationException>()).WithMessage("*lifetimes are out of order*");
 
         var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();

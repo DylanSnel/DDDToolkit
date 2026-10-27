@@ -9,7 +9,7 @@ using DDDToolkit.Supporting.Tenancy.Catalogue;
 namespace Examples.Tenancy.Catalogue;
 
 /// <summary>
-/// The application's part of the permission catalogue: the role packs a new tenant's roles of the organization are
+/// The application's part of the permission catalogue: the starter roles a new tenant's roles of the organization are
 /// copied from, and the permissions of a module it marks as managing access; and next to it the starter project roles every
 /// tenant's crews begin with.
 /// </summary>
@@ -23,23 +23,23 @@ namespace Examples.Tenancy.Catalogue;
 /// brings its own (<see cref="TenancyPermissions"/>), and every other module states its permissions next to the code that asks for
 /// them, once, on the list it marks with <c>[TenancyPermissions]</c>. Tenancy's generator collects those lists into
 /// the host, as <c>TenancyPermissionsOfModules</c>, and the export finds the same marked lists in the modules it
-/// references, so neither names a module's permissions, and a module that is added changes nothing here. The packs only
+/// references, so neither names a module's permissions, and a module that is added changes nothing here. The starter roles only
 /// name them. The catalogue is built and checked once, when the host starts, and a catalogue that does not hold
 /// together stops the start.
 /// <para>
-/// There are two administrators' packs, each seeded for one shape of tenant (<see cref="RolePack.SeededFor"/>),
+/// There are two administrators' starter roles, each seeded for one shape of tenant (<see cref="StarterRole.SeededFor"/>),
 /// and a tenant's first seat is granted the one seeded for its shape. A flat tenant has one unit and usually a
 /// handful of people, so its administrator does everything: <see cref="TenantAdmin"/> lists no permissions, and once
 /// built holds every live permission of the catalogue, the modules' included. A hierarchical tenant separates running
 /// access from doing the work: <see cref="AccessAdmin"/> lists its permissions, Tenancy's own and the ones that manage
 /// access, so its holder gives every role, names owners, manages crews and sees every project, and renames,
-/// closes and records on none. The catalogue refuses a listing administrators' pack that leaves out a permission that
-/// manages access, so marking another permission stops the host at start-up until this pack lists it. Either way nobody
+/// closes and records on none. The catalogue refuses a listing administrators' starter role that leaves out a permission that
+/// manages access, so marking another permission stops the host at start-up until this starter role lists it. Either way nobody
 /// but system work is needed to appoint, say, an area manager.
 /// </para>
 /// <para>
 /// There are two kinds of role, each kept where it belongs. A role of the organization is Tenancy's, copied from a
-/// pack here: granted at a unit, it reaches every project at that unit and below it. A project role is the
+/// starter role here: granted at a unit, it reaches every project at that unit and below it. A project role is the
 /// Projects module's, made from a starter role here (<see cref="ProjectRoles"/>): given on a project's crew, it
 /// counts on that project only, and gives only the permissions that act on a project. The crew lead's holds every one of
 /// them, and a project's owner holds them by owning the project, so the owner may do everything that acts on it.
@@ -48,10 +48,10 @@ namespace Examples.Tenancy.Catalogue;
 /// </para>
 /// <para>
 /// An area manager is appointed at an area of the organization. A crew lead, a surveyor and an observer are
-/// usually project roles, given on a crew, and are packs of the organization as well, for a tenant that grants
+/// usually project roles, given on a crew, and are starter roles of the organization as well, for a tenant that grants
 /// one at a unit: a surveyor at a site records on every project there. The area manager's and the access admin's
-/// packs are seeded for a hierarchical tenant only: a flat one has nothing but its root to manage, and gets them
-/// when it changes shape. The other packs name no shape, so every tenant gets them.
+/// starter roles are seeded for a hierarchical tenant only: a flat one has nothing but its root to manage, and gets them
+/// when it changes shape. The other starter roles name no shape, so every tenant gets them.
 /// </para>
 /// <para>
 /// Tenant admin, Access admin, Area manager, Crew lead and People office manage access. Two of Projects' permissions are marked as
@@ -79,34 +79,34 @@ namespace Examples.Tenancy.Catalogue;
 public static class SampleCatalogue
 {
     /// <summary>
-    /// The key of the administrators' pack of a flat tenant, which its first seat is granted at the root: every
+    /// The key of the administrators' starter role of a flat tenant, which its first seat is granted at the root: every
     /// permission there is.
     /// </summary>
     public const string TenantAdmin = "tenant-admin";
 
     /// <summary>
-    /// The key of the administrators' pack of a hierarchical tenant, which its first seat is granted at the root:
+    /// The key of the administrators' starter role of a hierarchical tenant, which its first seat is granted at the root:
     /// Tenancy's permissions and the permissions that manage access, and of the application's work only seeing projects.
     /// </summary>
     public const string AccessAdmin = "access-admin";
 
-    /// <summary>The key of the pack for running an area of the organization: its projects, units, seats and grants.</summary>
+    /// <summary>The key of the starter role for running an area of the organization: its projects, units, seats and grants.</summary>
     public const string AreaManager = "area-manager";
 
     /// <summary>
-    /// The key of the pack for leading a project's crew, and of the starter project role of the same name: a crew
+    /// The key of the starter role for leading a project's crew, and of the starter project role of the same name: a crew
     /// member in it holds what a project's owner holds by owning it, and records inspections besides.
     /// </summary>
     public const string CrewLead = "crew-lead";
 
-    /// <summary>The key of the pack for working on a project's site and recording what is found there, and of the starter project role of the same name.</summary>
+    /// <summary>The key of the starter role for working on a project's site and recording what is found there, and of the starter project role of the same name.</summary>
     public const string Surveyor = "surveyor";
 
-    /// <summary>The key of the pack for looking at a project and nothing more, and of the starter project role of the same name.</summary>
+    /// <summary>The key of the starter role for looking at a project and nothing more, and of the starter project role of the same name.</summary>
     public const string Observer = "observer";
 
     /// <summary>
-    /// The key of the pack for giving people their roles, and nothing else: whoever holds it at a unit gives any
+    /// The key of the starter role for giving people their roles, and nothing else: whoever holds it at a unit gives any
     /// role that manages no access to anyone placed there or below, without holding the role's permissions.
     /// </summary>
     public const string PeopleOffice = "people-office";
@@ -144,7 +144,7 @@ public static class SampleCatalogue
     public static MembershipRules ProjectRules => Projects.Rules;
 
     /// <summary>
-    /// The application's packs, and the permissions of a module it marks as managing access: naming a project's owner and
+    /// The application's starter roles, and the permissions of a module it marks as managing access: naming a project's owner and
     /// managing a crew, which Projects declares. What kind of unit a unit is, a company, a region, an area or a site,
     /// is not the catalogue's: no access rule reads it, so it is a field of the application's own unit class.
     /// </summary>
@@ -157,7 +157,7 @@ public static class SampleCatalogue
     /// </remarks>
     [TenancyCatalogue]
     public static ApplicationCatalogue Application { get; } = new(
-        Packs:
+        StarterRoles:
         [
             new(TenantAdmin, "Tenant admin", "Runs the tenant", [], SeededFor: TenantShape.Flat, Administers: true, Order: 10),
             new(

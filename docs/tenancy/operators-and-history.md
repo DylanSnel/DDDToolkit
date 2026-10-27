@@ -138,7 +138,7 @@ options.UseOutbox<ShopTenancyContext>(outbox => outbox
 | A unit | `tenancy.organization-unit-added`, `tenancy.organization-unit-moved`, `tenancy.organization-unit-archived` |
 | A seat | `tenancy.seat-added`, `tenancy.seat-suspended`, `tenancy.seat-reactivated`, `tenancy.seat-deactivated`, `tenancy.seat-placed`, `tenancy.seat-withdrawn`, `tenancy.primary-placement-changed` |
 | A seat's roles | `tenancy.organization-role-granted`, `tenancy.organization-role-revoked` |
-| A role | `tenancy.role-created`, `tenancy.role-permissions-changed`, `tenancy.role-archived`, `tenancy.role-followed-its-pack` |
+| A role | `tenancy.role-created`, `tenancy.role-permissions-changed`, `tenancy.role-archived`, `tenancy.role-followed-its-starter-role` |
 
 - A rename changes nobody's access. So the history leaves out `tenancy.organization-renamed`,
   `tenancy.organization-unit-renamed` and `tenancy.role-renamed`. The outbox still stores them.
@@ -150,7 +150,7 @@ options.UseOutbox<ShopTenancyContext>(outbox => outbox
 - Every Tenancy domain event ends with `By`, the [actor](#who-changed-a-row). So the events about a tenant, a unit
   or a role are closed over the seat id too (`TenantSuspended<TenantId, SeatId>`). An aggregate method you call
   yourself takes the actor as its last argument. With nobody to name, name the type: `tenant.Activate<SeatId>()`.
-- `RolePermissionsChanged` and `RoleFollowedItsPack` list the permissions `Added` and `Removed`, implied permissions
+- `RolePermissionsChanged` and `RoleFollowedItsStarterRole` list the permissions `Added` and `Removed`, implied permissions
   included.
 - The save that raised an event writes the event's row, so a rollback leaves no row. The row names the event's
   tenant (or the save's tenant) and who acted.

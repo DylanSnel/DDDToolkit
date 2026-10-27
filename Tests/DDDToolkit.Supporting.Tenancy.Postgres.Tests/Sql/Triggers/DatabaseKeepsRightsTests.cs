@@ -197,7 +197,7 @@ public abstract class DatabaseKeepsRightsTests(TenancyPostgres postgres, Tenancy
         var catalogue = HostCatalogue.Application with
         {
             Permissions = [.. HostCatalogue.Permissions.Select(permission => permission.Name == HostCatalogue.WidgetCreate ? permission with { Retired = true } : permission)],
-            Packs = [.. HostCatalogue.Application.Packs.Select(pack => pack with { Permissions = [.. pack.Permissions.Where(permission => permission != HostCatalogue.WidgetCreate)] })],
+            StarterRoles = [.. HostCatalogue.Application.StarterRoles.Select(starterRole => starterRole with { Permissions = [.. starterRole.Permissions.Where(permission => permission != HostCatalogue.WidgetCreate)] })],
         };
         foreach (var script in TenancyPostgres.AccessScripts(TenancyCatalogue.Build(catalogue, []), names: names))
         {

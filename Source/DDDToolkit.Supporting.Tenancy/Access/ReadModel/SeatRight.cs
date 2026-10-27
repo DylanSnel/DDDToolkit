@@ -7,7 +7,7 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 // them next to its own tables in one query. The aggregates stay the only way to change what they say.
 //
 // They carry what an access rule reads and nothing else: ids, permissions, periods, statuses, a unit's parent, and a
-// role's pack and permissions. They never carry a text that is shown to people: no unit's name, no role's name, and
+// role's starter role and permissions. They never carry a text that is shown to people: no unit's name, no role's name, and
 // nothing the application keeps on its seat class, such as the name it shows a seat by. A module that maps these
 // rows can therefore not lean on Tenancy for what it shows; names are the managers' to answer, by id
 // (SeatManager.ByIdAsync and the others), which answer the application's own seat whole, for the application to

@@ -38,8 +38,8 @@ public abstract class TenantListingTests(TestDatabases databases) : IAsyncLifeti
         var harbor = await _services.ProvisionAsync("harbor");
         var orchard = await _services.ProvisionAsync("orchard", TenantShape.Flat);
         var anvil = await _services.ProvisionAsync("anvil");
-        await _services.SeatAtAsync(harbor, "Grace", harbor.RootUnit, HostCatalogue.WatcherPack);
-        var sue = await _services.SeatAtAsync(harbor, "Sue", harbor.RootUnit, HostCatalogue.WatcherPack);
+        await _services.SeatAtAsync(harbor, "Grace", harbor.RootUnit, HostCatalogue.WatcherStarterRole);
+        var sue = await _services.SeatAtAsync(harbor, "Sue", harbor.RootUnit, HostCatalogue.WatcherStarterRole);
         await _services.BySystemIn(harbor.Tenant, services => services.Seats().SuspendAsync(sue, Cancellation));
         await _services.BySystemIn(orchard.Tenant, services => services.Tenants().SuspendAsync("Paused", Cancellation));
 

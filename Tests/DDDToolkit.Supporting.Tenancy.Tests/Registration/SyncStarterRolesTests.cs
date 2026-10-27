@@ -6,11 +6,11 @@ using Microsoft.Extensions.Logging;
 namespace DDDToolkit.Supporting.Tenancy.Tests;
 
 /// <summary>
-/// <c>services.SyncRolePacks()</c> runs the role pack sync once per start of the host, in the background, once the
+/// <c>services.SyncStarterRoles()</c> runs the starter role sync once per start of the host, in the background, once the
 /// host has started; a sync that fails is logged and the host goes on, and a host without a sync to run is told
 /// what to register.
 /// </summary>
-public class SyncRolePacksTests
+public class SyncStarterRolesTests
 {
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
@@ -18,7 +18,7 @@ public class SyncRolePacksTests
     public async Task The_sync_runs_once_the_host_has_started_and_once_however_often_it_is_asked_for()
     {
         var sync = new CountingSync();
-        var (hosted, lifetime, _) = Host(services => services.AddSingleton<IRolePackSync>(sync).SyncRolePacks().SyncRolePacks());
+        var (hosted, lifetime, _) = Host(services => services.AddSingleton<IStarterRoleSync>(sync).SyncStarterRoles().SyncStarterRoles());
 
         await hosted.StartAsync(Cancellation);
         await Task.Delay(50, Cancellation);
@@ -34,7 +34,7 @@ public class SyncRolePacksTests
     public async Task A_sync_that_fails_is_logged_and_the_host_goes_on()
     {
         var failing = new CountingSync(new InvalidOperationException("the database is away"));
-        var (hosted, lifetime, log) = Host(services => services.AddSingleton<IRolePackSync>(failing).SyncRolePacks());
+        var (hosted, lifetime, log) = Host(services => services.AddSingleton<IStarterRoleSync>(failing).SyncStarterRoles());
 
         await hosted.StartAsync(Cancellation);
         lifetime.Started();
@@ -46,8 +46,8 @@ public class SyncRolePacksTests
     [Fact]
     public async Task A_tenant_that_could_not_be_synced_is_logged_with_the_rest_of_the_report()
     {
-        var report = new RolePackSyncReport(3, 2, 1, 0, [("7", new InvalidOperationException("locked"))]);
-        var (hosted, lifetime, log) = Host(services => services.AddSingleton<IRolePackSync>(new CountingSync(report: report)).SyncRolePacks());
+        var report = new StarterRoleSyncReport(3, 2, 1, 0, [("7", new InvalidOperationException("locked"))]);
+        var (hosted, lifetime, log) = Host(services => services.AddSingleton<IStarterRoleSync>(new CountingSync(report: report)).SyncStarterRoles());
 
         await hosted.StartAsync(Cancellation);
         lifetime.Started();
@@ -55,16 +55,16 @@ public class SyncRolePacksTests
 
         report.Succeeded.Should().BeFalse();
         log.Select(entry => (entry.Level, entry.Message)).Should().BeEquivalentTo([
-            (LogLevel.Error, "The roles of tenant 7 could not follow their packs. The host's next start tries again."),
-            (LogLevel.Warning, "1 roles were left as they are, because following their packs would leave their tenants without an administrator. They follow once those tenants have another."),
-            (LogLevel.Information, "The role packs are synced in 3 tenants: 2 roles followed their packs, and 0 were made from packs the catalogue no longer has and kept their permissions."),
+            (LogLevel.Error, "The roles of tenant 7 could not follow their starter roles. The host's next start tries again."),
+            (LogLevel.Warning, "1 roles were left as they are, because following their starter roles would leave their tenants without an administrator. They follow once those tenants have another."),
+            (LogLevel.Information, "The starter roles are synced in 3 tenants: 2 roles followed their starter roles, and 0 were made from starter roles the catalogue no longer has and kept their permissions."),
         ]);
     }
 
     [Fact]
     public async Task A_host_without_a_sync_to_run_is_told_what_to_register()
     {
-        var (hosted, lifetime, _) = Host(services => services.SyncRolePacks());
+        var (hosted, lifetime, _) = Host(services => services.SyncStarterRoles());
 
         await hosted.StartAsync(Cancellation);
         lifetime.Started();
@@ -102,7 +102,7 @@ public class SyncRolePacksTests
             => log.Enqueue(new Entry(logLevel, formatter(state, exception), exception));
     }
 
-    private sealed class CountingSync(Exception? failure = null, RolePackSyncReport? report = null) : IRolePackSync
+    private sealed class CountingSync(Exception? failure = null, StarterRoleSyncReport? report = null) : IStarterRoleSync
     {
         private int _runs;
 
@@ -110,11 +110,11 @@ public class SyncRolePacksTests
 
         public TaskCompletionSource<bool> Ran { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public Task<RolePackSyncReport> SyncAsync(CancellationToken cancellationToken)
+        public Task<StarterRoleSyncReport> SyncAsync(CancellationToken cancellationToken)
         {
             Interlocked.Increment(ref _runs);
             Ran.TrySetResult(true);
-            return failure is null ? Task.FromResult(report ?? new RolePackSyncReport(0, 0, 0, 0, [])) : Task.FromException<RolePackSyncReport>(failure);
+            return failure is null ? Task.FromResult(report ?? new StarterRoleSyncReport(0, 0, 0, 0, [])) : Task.FromException<StarterRoleSyncReport>(failure);
         }
     }
 

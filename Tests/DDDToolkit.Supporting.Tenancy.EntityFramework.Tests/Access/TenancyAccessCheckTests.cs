@@ -51,8 +51,8 @@ public abstract class TenancyAccessCheckTests(TestDatabases databases) : IAsyncL
         // Harbor: Ada administers it. Seth supervises North, where he manages seats; Wes only looks at widgets.
         _harbor = await _services.ProvisionAsync("harbor");
         _north = await _services.AddUnitAsync(_harbor.Tenant, _harbor.RootUnit, "North");
-        _seth = await _services.SeatAtAsync(_harbor, "Seth", _north, HostCatalogue.SupervisorPack);
-        _wes = await _services.SeatAtAsync(_harbor, "Wes", _harbor.RootUnit, HostCatalogue.WatcherPack);
+        _seth = await _services.SeatAtAsync(_harbor, "Seth", _north, HostCatalogue.SupervisorStarterRole);
+        _wes = await _services.SeatAtAsync(_harbor, "Wes", _harbor.RootUnit, HostCatalogue.WatcherStarterRole);
         _services.Commands.Reset();
     }
 

@@ -50,20 +50,20 @@ public sealed partial class Role;
 public static class PressCatalogue
 {
     /// <summary>Heads an imprint: reads and edits its manuscripts.</summary>
-    public const string ImprintHeadPack = "imprint-head";
+    public const string ImprintHeadStarterRole = "imprint-head";
 
     /// <summary>
     /// What the application passes as <c>TenancyOptions.Catalogue</c>, marked so the export writes Tenancy's policies
     /// from it, with the module's permissions, which <see cref="ManuscriptPermissions"/> states: Tenancy on Postgres
     /// writes them because the infrastructure project references it, and the host gets nothing more to write. It
-    /// declares no administrators' pack, so the catalogue adds Tenancy's own,
-    /// <see cref="TenancyPacks.DefaultAdministrators"/>, which holds every permission for the whole house, and the
+    /// declares no administrators' starter role, so the catalogue adds Tenancy's own,
+    /// <see cref="TenancyStarterRoles.DefaultAdministrators"/>, which holds every permission for the whole house, and the
     /// access file the export writes has it.
     /// </summary>
     [TenancyCatalogue]
     public static ApplicationCatalogue Application { get; } = new(
-        Packs:
+        StarterRoles:
         [
-            new(ImprintHeadPack, "Head of imprint", "Heads an imprint", [ManuscriptPermissions.Read, ManuscriptPermissions.Edit], Order: 20),
+            new(ImprintHeadStarterRole, "Head of imprint", "Heads an imprint", [ManuscriptPermissions.Read, ManuscriptPermissions.Edit], Order: 20),
         ]);
 }

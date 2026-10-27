@@ -48,7 +48,7 @@ public sealed class OverviewOfMineHandler(ITenancyReads reads, RoleManager roles
                     .OrderByDescending(placement => placement.IsPrimary)
                     .ThenBy(placement => placement.Unit.Path, StringComparer.OrdinalIgnoreCase),
             ],
-            [.. overview.Roles.Select(role => new RoleOfMine(role.Id, role.Name, role.FromPack, role.Status, role.Permissions, roles.ManagesAccess(role)))],
+            [.. overview.Roles.Select(role => new RoleOfMine(role.Id, role.Name, role.FromStarterRole, role.Status, role.Permissions, roles.ManagesAccess(role)))],
             overview.Permissions);
     }
 }

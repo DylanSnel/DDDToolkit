@@ -85,8 +85,8 @@ public class OperatorTests
     public async Task The_directory_pages_by_slug_and_counts_active_seats()
     {
         var harness = ThreeTenants();
-        var bert = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.WatcherPack);
-        var cy = await harness.SeatAt("Cy", harness.Harbor.South, HostCatalogue.WatcherPack);
+        var bert = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.WatcherStarterRole);
+        var cy = await harness.SeatAt("Cy", harness.Harbor.South, HostCatalogue.WatcherStarterRole);
         await harness.BySystemWork(h => h.Seats.SuspendAsync(cy, default));
         var odette = Caller.User(Odette, OperatorRole);
 

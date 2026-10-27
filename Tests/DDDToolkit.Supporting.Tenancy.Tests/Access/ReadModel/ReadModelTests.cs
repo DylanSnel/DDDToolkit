@@ -11,7 +11,7 @@ public class ReadModelTests
 {
     /// <summary>
     /// Every row of the read model with its properties, in the order the class declares them: ids, permissions, periods,
-    /// statuses, a unit's parent, and a role's pack and permissions.
+    /// statuses, a unit's parent, and a role's starter role and permissions.
     /// <para>
     /// A property added to a row fails here, and that is the point. A text that is shown to people never comes
     /// back: no seat's display name, no unit's name or kind, no role's name. A module that could read one would
@@ -24,7 +24,7 @@ public class ReadModelTests
         [typeof(SeatRight<,,,>)] = ["TenantId", "SeatId", "UnitId", "RoleId", "Permission", "StartsAt", "EndsAt"],
         [typeof(OrganizationUnitPath<,>)] = ["TenantId", "AncestorId", "DescendantId", "Distance"],
         [typeof(OrganizationUnitRow<,>)] = ["Id", "TenantId", "ParentId", "Status"],
-        [typeof(RoleRow<,>)] = ["Id", "TenantId", "FromPack", "Status", "Permissions"],
+        [typeof(RoleRow<,>)] = ["Id", "TenantId", "FromStarterRole", "Status", "Permissions"],
         [typeof(PlacementRow<,>)] = ["SeatId", "UnitId", "IsPrimary"],
         [typeof(SeatRow<,>)] = ["Id", "TenantId", "Status"],
     };
@@ -54,7 +54,7 @@ public class ReadModelTests
     }
 
     [Fact]
-    public void No_read_row_has_a_text_but_a_permission_or_a_pack()
+    public void No_read_row_has_a_text_but_a_permission_or_a_starter_role()
     {
         var texts = Rows.Keys
             .SelectMany(row => PropertiesOf(row).Where(property => property.PropertyType == typeof(string)).Select(property => row.Name + "." + property.Name))
@@ -66,8 +66,8 @@ public class ReadModelTests
             .ToArray();
 
         texts.Should().BeEquivalentTo(
-            [typeof(SeatRight<,,,>).Name + ".Permission", typeof(RoleRow<,>).Name + ".FromPack"],
-            "a permission and a pack's key are identifiers of the catalogue; any other text would be one that is shown to people");
+            [typeof(SeatRight<,,,>).Name + ".Permission", typeof(RoleRow<,>).Name + ".FromStarterRole"],
+            "a permission and a starter role's key are identifiers of the catalogue; any other text would be one that is shown to people");
         lists.Should().BeEquivalentTo([typeof(RoleRow<,>).Name + ".Permissions"], "the only list of texts is a role's permissions");
     }
 }

@@ -77,36 +77,36 @@ public class TenantManagerTests
     }
 
     [Fact]
-    public async Task Packs_for_the_shape_are_copied_with_their_provenance()
+    public async Task Starter_roles_for_the_shape_are_copied_with_their_provenance()
     {
         var harness = new Harness(New.Catalogue());
 
         var hierarchical = await Provision(harness, Harbor());
         var flat = await Provision(harness, Harbor(TenantShape.Flat, "kiosk"));
 
-        hierarchical.RolesByPack.Keys.Should().BeEquivalentTo(
-            [HostCatalogue.AdministratorPack, HostCatalogue.SupervisorPack, HostCatalogue.OperatorPack, HostCatalogue.WatcherPack]);
-        flat.RolesByPack.Keys.Should().BeEquivalentTo(
-            [HostCatalogue.AdministratorPack, HostCatalogue.OperatorPack, HostCatalogue.WatcherPack], "the supervisor's pack is for trees only");
+        hierarchical.RolesByStarterRole.Keys.Should().BeEquivalentTo(
+            [HostCatalogue.AdministratorStarterRole, HostCatalogue.SupervisorStarterRole, HostCatalogue.OperatorStarterRole, HostCatalogue.WatcherStarterRole]);
+        flat.RolesByStarterRole.Keys.Should().BeEquivalentTo(
+            [HostCatalogue.AdministratorStarterRole, HostCatalogue.OperatorStarterRole, HostCatalogue.WatcherStarterRole], "the supervisor's starter role is for trees only");
 
-        foreach (var (pack, id) in hierarchical.RolesByPack)
+        foreach (var (starterRole, id) in hierarchical.RolesByStarterRole)
         {
             var role = harness.Store.Role(id);
-            var source = harness.Catalogue.Packs.Single(candidate => candidate.Key == pack);
-            role.FromPack.Should().Be(pack);
+            var source = harness.Catalogue.StarterRoles.Single(candidate => candidate.Key == starterRole);
+            role.FromStarterRole.Should().Be(starterRole);
             role.Name.Should().Be(source.Name);
             role.Permissions.Should().Equal(source.Permissions);
             role.TenantId.Should().Be(hierarchical.Tenant);
         }
 
         harness.Store.Role(hierarchical.AdministratorRole).Permissions.Should().Equal(harness.Catalogue.LivePermissions);
-        hierarchical.AdministratorRole.Should().Be(hierarchical.RolesByPack[HostCatalogue.AdministratorPack]);
+        hierarchical.AdministratorRole.Should().Be(hierarchical.RolesByStarterRole[HostCatalogue.AdministratorStarterRole]);
     }
 
     [Fact]
-    public async Task A_catalogue_that_declares_no_packs_makes_the_first_seat_an_administrator_all_the_same()
+    public async Task A_catalogue_that_declares_no_starter_roles_makes_the_first_seat_an_administrator_all_the_same()
     {
-        var catalogue = TenancyCatalogue.Build(HostCatalogue.Application with { Packs = [] }, [new Permission("gauges.read", "Gauges", "Read gauges")]);
+        var catalogue = TenancyCatalogue.Build(HostCatalogue.Application with { StarterRoles = [] }, [new Permission("gauges.read", "Gauges", "Read gauges")]);
         var harness = new Harness(catalogue);
 
         var provisionedAs = new Dictionary<string, TenantId>(StringComparer.Ordinal);
@@ -116,12 +116,12 @@ public class TenantManagerTests
             provisionedAs[slug] = provisioned.Tenant;
 
             // The one role the tenant gets is the default administrators', and the first seat is given it at the root.
-            provisioned.RolesByPack.Keys.Should().Equal([TenancyPacks.DefaultAdministratorsKey], "a {0} tenant gets the one pack there is", shape);
-            provisioned.AdministratorRole.Should().Be(provisioned.RolesByPack[TenancyPacks.DefaultAdministratorsKey]);
+            provisioned.RolesByStarterRole.Keys.Should().Equal([TenancyStarterRoles.DefaultAdministratorsKey], "a {0} tenant gets the one starter role there is", shape);
+            provisioned.AdministratorRole.Should().Be(provisioned.RolesByStarterRole[TenancyStarterRoles.DefaultAdministratorsKey]);
             var administrators = harness.Store.Role(provisioned.AdministratorRole);
             administrators.Name.Should().Be("Administrator");
-            administrators.Description.Should().Be(TenancyPacks.DefaultAdministrators.Description);
-            administrators.FromPack.Should().Be(TenancyPacks.DefaultAdministratorsKey);
+            administrators.Description.Should().Be(TenancyStarterRoles.DefaultAdministrators.Description);
+            administrators.FromStarterRole.Should().Be(TenancyStarterRoles.DefaultAdministratorsKey);
             administrators.Permissions.Should().Equal(catalogue.LivePermissions).And.Contain([TenancyPermissions.RolesManage, HostCatalogue.WidgetCreate, "gauges.read"]);
             var grant = harness.Store.Seat(provisioned.AdminSeat).Placements.Should().ContainSingle().Which.Grants.Should().ContainSingle().Which;
             grant.RoleId.Should().Be(provisioned.AdministratorRole);
@@ -140,7 +140,7 @@ public class TenantManagerTests
             await harness.Run(caller, h => h.Seats.GrantAsync(provisioned.AdminSeat, clerk, provisioned.RootUnit, until: null, reason: null, default));
         }
 
-        // A flat tenant that turns hierarchical has the one pack there is already: no role is added.
+        // A flat tenant that turns hierarchical has the one starter role there is already: no role is added.
         var kiosk = provisionedAs["kiosk"];
         var roles = harness.Store.RolesOf(kiosk).Count;
         await harness.Run(HostCaller.InSeat(kiosk, harness.Store.SeatsIn(kiosk).Single().Id),
@@ -150,7 +150,7 @@ public class TenantManagerTests
     }
 
     [Fact]
-    public async Task Provisioning_a_listing_pack_grants_its_permissions_only()
+    public async Task Provisioning_a_listing_starter_role_grants_its_permissions_only()
     {
         var catalogue = New.ListingCatalogue();
         var harness = new Harness(catalogue);
@@ -163,12 +163,12 @@ public class TenantManagerTests
 
         var provisioned = await Provision(harness, Harbor());
 
-        // The administrators' role is a copy of its pack, like every other: what the pack lists, and no live permission besides.
+        // The administrators' role is a copy of its starter role, like every other: what the starter role lists, and no live permission besides.
         var administrators = harness.Store.Role(provisioned.AdministratorRole);
-        administrators.FromPack.Should().Be(HostCatalogue.AdministratorPack);
-        administrators.Permissions.Should().Equal(listed).And.Equal(catalogue.AdministratorPackFor(TenantShape.Hierarchical).Permissions);
-        catalogue.LivePermissions.Should().Contain(widgets, "the permissions to work with widgets are live, and the pack leaves them out");
-        harness.Store.Role(provisioned.RolesByPack[New.KeeperPack]).Permissions.Should().Equal(New.WidgetAssign, HostCatalogue.WidgetRead);
+        administrators.FromStarterRole.Should().Be(HostCatalogue.AdministratorStarterRole);
+        administrators.Permissions.Should().Equal(listed).And.Equal(catalogue.AdministratorStarterRoleFor(TenantShape.Hierarchical).Permissions);
+        catalogue.LivePermissions.Should().Contain(widgets, "the permissions to work with widgets are live, and the starter role leaves them out");
+        harness.Store.Role(provisioned.RolesByStarterRole[New.KeeperStarterRole]).Permissions.Should().Equal(New.WidgetAssign, HostCatalogue.WidgetRead);
 
         // So the first administrator's rights are those permissions, at the root, and that is what the seat is answered.
         harness.Store.SavedRights.Where(right => right.SeatId == provisioned.AdminSeat)
@@ -189,7 +189,7 @@ public class TenantManagerTests
     }
 
     [Fact]
-    public async Task Provisioning_uses_given_role_ids_per_pack()
+    public async Task Provisioning_uses_given_role_ids_per_starter_role()
     {
         var harness = new Harness(New.Catalogue());
         var tenant = new TenantId(42);
@@ -203,19 +203,19 @@ public class TenantManagerTests
             TenantId = tenant,
             RootId = root,
             AdminSeatId = seat,
-            RoleIds = new Dictionary<string, RoleId> { [HostCatalogue.AdministratorPack] = administrators, [HostCatalogue.WatcherPack] = watchers },
+            RoleIds = new Dictionary<string, RoleId> { [HostCatalogue.AdministratorStarterRole] = administrators, [HostCatalogue.WatcherStarterRole] = watchers },
         });
 
         provisioned.Tenant.Should().Be(tenant);
         provisioned.RootUnit.Should().Be(root);
         provisioned.AdminSeat.Should().Be(seat);
         provisioned.AdministratorRole.Should().Be(administrators);
-        provisioned.RolesByPack[HostCatalogue.WatcherPack].Should().Be(watchers);
-        harness.Store.Role(watchers).FromPack.Should().Be(HostCatalogue.WatcherPack);
+        provisioned.RolesByStarterRole[HostCatalogue.WatcherStarterRole].Should().Be(watchers);
+        harness.Store.Role(watchers).FromStarterRole.Should().Be(HostCatalogue.WatcherStarterRole);
 
         await FluentActions.Awaiting(() => Provision(harness, Harbor(TenantShape.Flat, "kiosk") with
             {
-                RoleIds = new Dictionary<string, RoleId> { [HostCatalogue.SupervisorPack] = RoleId.CreateSequential() },
+                RoleIds = new Dictionary<string, RoleId> { [HostCatalogue.SupervisorStarterRole] = RoleId.CreateSequential() },
             }))
             .Should().ThrowAsync<ArgumentException>("a flat tenant gets no supervisor's role, so an id for one is a mistake")
             .WithMessage("*supervisor*");
@@ -298,7 +298,7 @@ public class TenantManagerTests
     public async Task Renaming_the_organization_needs_settings_manage_tenant_wide()
     {
         var harness = Harness.OfHarbor();
-        var supervisor = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.SupervisorPack);
+        var supervisor = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.SupervisorStarterRole);
 
         var refusal = await Refused.WithCodeAsync(TenancyRefusals.NotPermitted,
             () => harness.As(supervisor, h => h.Organization.RenameAsync("Bert's Harbor", default)));
@@ -313,7 +313,7 @@ public class TenantManagerTests
     }
 
     [Fact]
-    public async Task Changing_shape_seeds_the_missing_packs_with_given_ids_and_touches_no_grants()
+    public async Task Changing_shape_seeds_the_missing_starter_roles_with_given_ids_and_touches_no_grants()
     {
         var harness = new Harness(New.Catalogue());
         var provisioned = await Provision(harness, Harbor(TenantShape.Flat, "kiosk"));
@@ -325,13 +325,13 @@ public class TenantManagerTests
             h => h.Organization.AddUnitAsync(provisioned.RootUnit, "North", default)));
 
         await harness.Run(administrator, h => h.Tenants.ChangeShapeAsync(
-            TenantShape.Hierarchical, new Dictionary<string, RoleId> { [HostCatalogue.SupervisorPack] = supervisors }, language: null, default));
+            TenantShape.Hierarchical, new Dictionary<string, RoleId> { [HostCatalogue.SupervisorStarterRole] = supervisors }, language: null, default));
 
         harness.Store.Tenant(provisioned.Tenant).Shape.Should().Be(TenantShape.Hierarchical);
         var roles = harness.Store.RolesOf(provisioned.Tenant);
         roles.Should().HaveCount(4);
-        roles.Should().ContainSingle(role => role.FromPack == HostCatalogue.SupervisorPack).Which.Id.Should().Be(supervisors);
-        roles.Select(role => role.FromPack).Should().OnlyHaveUniqueItems("a pack the tenant has a copy of is not copied again");
+        roles.Should().ContainSingle(role => role.FromStarterRole == HostCatalogue.SupervisorStarterRole).Which.Id.Should().Be(supervisors);
+        roles.Select(role => role.FromStarterRole).Should().OnlyHaveUniqueItems("a starter role the tenant has a copy of is not copied again");
         harness.Store.Seat(provisioned.AdminSeat).Placements.SelectMany(placement => placement.Grants)
             .Should().BeEquivalentTo(grantsBefore);
 
@@ -340,31 +340,31 @@ public class TenantManagerTests
     }
 
     [Fact]
-    public async Task Changing_shape_copies_a_listing_administrators_pack_with_its_permissions_and_gives_it_to_nobody()
+    public async Task Changing_shape_copies_a_listing_administrators_starter_role_with_its_permissions_and_gives_it_to_nobody()
     {
         // A flat tenant's administrators hold every live permission; a hierarchical tenant's list theirs, Tenancy's own.
         string[] listed = [.. TenancyPermissions.All.Select(permission => permission.Name).Order(StringComparer.Ordinal)];
         var catalogue = TenancyCatalogue.Build(
             HostCatalogue.Application with
             {
-                Packs =
+                StarterRoles =
                 [
-                    .. HostCatalogue.Application.Packs.Select(pack => pack.Administers ? pack with { SeededFor = TenantShape.Flat } : pack),
-                    new RolePack("tree-admin", "Tree administrator", "Runs access across the tree", listed, SeededFor: TenantShape.Hierarchical, Administers: true, Order: 15),
+                    .. HostCatalogue.Application.StarterRoles.Select(starterRole => starterRole.Administers ? starterRole with { SeededFor = TenantShape.Flat } : starterRole),
+                    new StarterRole("tree-admin", "Tree administrator", "Runs access across the tree", listed, SeededFor: TenantShape.Hierarchical, Administers: true, Order: 15),
                 ],
             },
             []);
         var harness = new Harness(catalogue);
         var provisioned = await Provision(harness, Harbor(TenantShape.Flat, "kiosk"));
         var administrator = HostCaller.InSeat(provisioned.Tenant, provisioned.AdminSeat);
-        provisioned.RolesByPack.Keys.Should().NotContain("tree-admin", "that pack is for a hierarchical tenant");
+        provisioned.RolesByStarterRole.Keys.Should().NotContain("tree-admin", "that starter role is for a hierarchical tenant");
 
         await harness.Run(administrator, h => h.Tenants.ChangeShapeAsync(TenantShape.Hierarchical, roleIds: null, language: null, default));
 
-        // The tenant gets the role of the administrators' pack seeded for its new shape, with the permissions that pack lists.
+        // The tenant gets the role of the administrators' starter role seeded for its new shape, with the permissions that starter role lists.
         var roles = harness.Store.RolesOf(provisioned.Tenant);
-        var treeAdministrators = roles.Should().ContainSingle(role => role.FromPack == "tree-admin").Which;
-        treeAdministrators.Permissions.Should().Equal(listed).And.Equal(catalogue.AdministratorPackFor(TenantShape.Hierarchical).Permissions);
+        var treeAdministrators = roles.Should().ContainSingle(role => role.FromStarterRole == "tree-admin").Which;
+        treeAdministrators.Permissions.Should().Equal(listed).And.Equal(catalogue.AdministratorStarterRoleFor(TenantShape.Hierarchical).Permissions);
 
         // No grant changes. The first administrator keeps the role it was given, with every live permission, and the new
         // role is nobody's until someone gives it.
@@ -375,14 +375,14 @@ public class TenantManagerTests
     }
 
     [Fact]
-    public async Task One_role_id_for_two_packs_is_refused()
+    public async Task One_role_id_for_two_starter_roles_is_refused()
     {
         var harness = new Harness(New.Catalogue());
         var shared = RoleId.CreateSequential();
 
         await FluentActions.Awaiting(() => Provision(harness, Harbor() with
             {
-                RoleIds = new Dictionary<string, RoleId> { [HostCatalogue.OperatorPack] = shared, [HostCatalogue.WatcherPack] = shared },
+                RoleIds = new Dictionary<string, RoleId> { [HostCatalogue.OperatorStarterRole] = shared, [HostCatalogue.WatcherStarterRole] = shared },
             }))
             .Should().ThrowAsync<ArgumentException>().WithMessage("*more than once*operator, watcher*");
         harness.Store.SaveCount.Should().Be(0);

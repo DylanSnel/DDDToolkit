@@ -93,7 +93,7 @@ public class RegistrationTests
         catalogue.Knows("valves.turn").Should().BeTrue();
         catalogue.Knows(HostCatalogue.WidgetRead).Should().BeTrue();
         catalogue.Knows(TenancyPermissions.RolesManage).Should().BeTrue();
-        catalogue.Packs.Single(pack => pack.Administers).Permissions.Should().Contain(["gauges.read", "valves.turn"]);
+        catalogue.StarterRoles.Single(starterRole => starterRole.Administers).Permissions.Should().Contain(["gauges.read", "valves.turn"]);
         provider.GetRequiredService<TenancyCatalogue>().Should().BeSameAs(catalogue, "it is built once");
 
         var clash = new ServiceCollection().AddTenancyPermissions([new Permission("tenancy.everything", "Stray", "All of it")]);
@@ -133,7 +133,7 @@ public class RegistrationTests
 
         catalogue.LivePermissions.Should().BeEquivalentTo([.. TenancyPermissions.All.Select(permission => permission.Name), "gauges.read"]);
         catalogue.HasDefaultAdministrators.Should().BeTrue();
-        catalogue.Packs.Should().ContainSingle().Which.Permissions.Should().Equal(catalogue.LivePermissions);
+        catalogue.StarterRoles.Should().ContainSingle().Which.Permissions.Should().Equal(catalogue.LivePermissions);
     }
 
     [Fact]

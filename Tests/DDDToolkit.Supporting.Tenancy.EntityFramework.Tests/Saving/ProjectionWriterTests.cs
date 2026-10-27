@@ -62,9 +62,9 @@ public abstract class ProjectionWriterTests(TestDatabases databases) : IAsyncLif
         (await _services.StoredRightsAsync(grace)).Should().BeEmpty("a placement alone grants nothing");
 
         _services.Commands.Reset();
-        await _services.GrantAsync(harbor, grace, north, HostCatalogue.OperatorPack);
+        await _services.GrantAsync(harbor, grace, north, HostCatalogue.OperatorStarterRole);
 
-        var operatorRole = harbor.RolesByPack[HostCatalogue.OperatorPack];
+        var operatorRole = harbor.RolesByStarterRole[HostCatalogue.OperatorStarterRole];
         (await _services.StoredRightsAsync(grace)).Select(right => (right.TenantId, right.UnitId, right.RoleId, right.Permission, right.StartsAt, right.EndsAt))
             .Should().BeEquivalentTo(
             [
@@ -92,7 +92,7 @@ public abstract class ProjectionWriterTests(TestDatabases databases) : IAsyncLif
         {
             var context = services.TenancyContext();
             var seat = await context.Set<HostSeat>().SingleAsync(row => row.Id == grace, TestContext.Current.CancellationToken);
-            var role = await context.Set<HostRole>().SingleAsync(row => row.Id == harbor.RolesByPack[HostCatalogue.OperatorPack], TestContext.Current.CancellationToken);
+            var role = await context.Set<HostRole>().SingleAsync(row => row.Id == harbor.RolesByStarterRole[HostCatalogue.OperatorStarterRole], TestContext.Current.CancellationToken);
 
             seat.Grant(north, role.Id, role.Facts, GrantPeriod.Open(_clock.Now), grantedBy: null, reason: null);
             seat.ChangeJobTitle(new string('x', HostSeat.MaxJobTitleLength + 1));
@@ -107,7 +107,7 @@ public abstract class ProjectionWriterTests(TestDatabases databases) : IAsyncLif
         {
             var context = services.TenancyContext();
             var seat = await context.Set<HostSeat>().SingleAsync(row => row.Id == grace, TestContext.Current.CancellationToken);
-            var role = await context.Set<HostRole>().SingleAsync(row => row.Id == harbor.RolesByPack[HostCatalogue.OperatorPack], TestContext.Current.CancellationToken);
+            var role = await context.Set<HostRole>().SingleAsync(row => row.Id == harbor.RolesByStarterRole[HostCatalogue.OperatorStarterRole], TestContext.Current.CancellationToken);
             seat.Grant(north, role.Id, role.Facts, GrantPeriod.Open(_clock.Now), grantedBy: null, reason: null);
 
             await _services.BySystemIn(harbor.Tenant, async other =>
@@ -129,13 +129,13 @@ public abstract class ProjectionWriterTests(TestDatabases databases) : IAsyncLif
     {
         var harbor = await _services.ProvisionAsync("harbor");
         var north = await _services.AddUnitAsync(harbor.Tenant, harbor.RootUnit, "North");
-        var grace = await _services.SeatAtAsync(harbor, "Grace", north, HostCatalogue.OperatorPack, HostCatalogue.WatcherPack);
+        var grace = await _services.SeatAtAsync(harbor, "Grace", north, HostCatalogue.OperatorStarterRole, HostCatalogue.WatcherStarterRole);
         (await PermissionsAsync(grace)).Should().HaveCount(4);
 
         await _services.BySystemIn(harbor.Tenant, services =>
-            services.Seats().RevokeAsync(grace, harbor.RolesByPack[HostCatalogue.OperatorPack], north, TestContext.Current.CancellationToken));
+            services.Seats().RevokeAsync(grace, harbor.RolesByStarterRole[HostCatalogue.OperatorStarterRole], north, TestContext.Current.CancellationToken));
 
-        (await PermissionsAsync(grace)).Should().Equal((harbor.RolesByPack[HostCatalogue.WatcherPack], HostCatalogue.WidgetRead));
+        (await PermissionsAsync(grace)).Should().Equal((harbor.RolesByStarterRole[HostCatalogue.WatcherStarterRole], HostCatalogue.WidgetRead));
     }
 
     [Fact]
@@ -143,7 +143,7 @@ public abstract class ProjectionWriterTests(TestDatabases databases) : IAsyncLif
     {
         var harbor = await _services.ProvisionAsync("harbor");
         var north = await _services.AddUnitAsync(harbor.Tenant, harbor.RootUnit, "North");
-        var grace = await _services.SeatAtAsync(harbor, "Grace", north, HostCatalogue.OperatorPack);
+        var grace = await _services.SeatAtAsync(harbor, "Grace", north, HostCatalogue.OperatorStarterRole);
         var granted = await _services.StoredRightsAsync(grace);
         granted.Should().HaveCount(3);
 
@@ -161,11 +161,11 @@ public abstract class ProjectionWriterTests(TestDatabases databases) : IAsyncLif
         var harbor = await _services.ProvisionAsync("harbor");
         var north = await _services.AddUnitAsync(harbor.Tenant, harbor.RootUnit, "North");
         var south = await _services.AddUnitAsync(harbor.Tenant, harbor.RootUnit, "South");
-        var grace = await _services.SeatAtAsync(harbor, "Grace", north, HostCatalogue.OperatorPack);
-        var lin = await _services.SeatAtAsync(harbor, "Lin", south, HostCatalogue.OperatorPack, HostCatalogue.WatcherPack);
-        var hal = await _services.SeatAtAsync(harbor, "Hal", south, HostCatalogue.WatcherPack);
-        var operatorRole = harbor.RolesByPack[HostCatalogue.OperatorPack];
-        var watcherRole = harbor.RolesByPack[HostCatalogue.WatcherPack];
+        var grace = await _services.SeatAtAsync(harbor, "Grace", north, HostCatalogue.OperatorStarterRole);
+        var lin = await _services.SeatAtAsync(harbor, "Lin", south, HostCatalogue.OperatorStarterRole, HostCatalogue.WatcherStarterRole);
+        var hal = await _services.SeatAtAsync(harbor, "Hal", south, HostCatalogue.WatcherStarterRole);
+        var operatorRole = harbor.RolesByStarterRole[HostCatalogue.OperatorStarterRole];
+        var watcherRole = harbor.RolesByStarterRole[HostCatalogue.WatcherStarterRole];
         var untouched = await _services.StoredRightsAsync(hal);
 
         _services.Commands.Reset();
@@ -187,12 +187,12 @@ public abstract class ProjectionWriterTests(TestDatabases databases) : IAsyncLif
     {
         var harbor = await _services.ProvisionAsync("harbor");
         var north = await _services.AddUnitAsync(harbor.Tenant, harbor.RootUnit, "North");
-        var grace = await _services.SeatAtAsync(harbor, "Grace", north, HostCatalogue.OperatorPack, HostCatalogue.WatcherPack);
-        var lin = await _services.SeatAtAsync(harbor, "Lin", north, HostCatalogue.OperatorPack);
+        var grace = await _services.SeatAtAsync(harbor, "Grace", north, HostCatalogue.OperatorStarterRole, HostCatalogue.WatcherStarterRole);
+        var lin = await _services.SeatAtAsync(harbor, "Lin", north, HostCatalogue.OperatorStarterRole);
 
-        await _services.BySystemIn(harbor.Tenant, services => services.Roles().ArchiveAsync(harbor.RolesByPack[HostCatalogue.OperatorPack], TestContext.Current.CancellationToken));
+        await _services.BySystemIn(harbor.Tenant, services => services.Roles().ArchiveAsync(harbor.RolesByStarterRole[HostCatalogue.OperatorStarterRole], TestContext.Current.CancellationToken));
 
-        (await PermissionsAsync(grace)).Should().Equal((harbor.RolesByPack[HostCatalogue.WatcherPack], HostCatalogue.WidgetRead));
+        (await PermissionsAsync(grace)).Should().Equal((harbor.RolesByStarterRole[HostCatalogue.WatcherStarterRole], HostCatalogue.WidgetRead));
         (await PermissionsAsync(lin)).Should().BeEmpty("an archived role grants nothing, though it stays granted");
 
         await _services.BySystemIn(harbor.Tenant, async services =>
@@ -211,7 +211,7 @@ public abstract class ProjectionWriterTests(TestDatabases databases) : IAsyncLif
         {
             var context = services.TenancyContext();
             var seat = await context.Set<HostSeat>().SingleAsync(row => row.Id == grace, TestContext.Current.CancellationToken);
-            var role = await context.Set<HostRole>().SingleAsync(row => row.Id == harbor.RolesByPack[HostCatalogue.OperatorPack], TestContext.Current.CancellationToken);
+            var role = await context.Set<HostRole>().SingleAsync(row => row.Id == harbor.RolesByStarterRole[HostCatalogue.OperatorStarterRole], TestContext.Current.CancellationToken);
             var organization = await context.Set<HostOrganization>().SingleAsync(TestContext.Current.CancellationToken);
 
             seat.Grant(north, role.Id, role.Facts, GrantPeriod.Open(_clock.Now), grantedBy: null, reason: null);
@@ -241,7 +241,7 @@ public abstract class ProjectionWriterTests(TestDatabases databases) : IAsyncLif
             using (TenancyWork.BeginSystemIn<TenantId, SeatId>(harbor.Tenant))
             {
                 var seat = await context.Set<HostSeat>().SingleAsync(row => row.Id == grace, TestContext.Current.CancellationToken);
-                var role = await context.Set<HostRole>().SingleAsync(row => row.Id == harbor.RolesByPack[HostCatalogue.WatcherPack], TestContext.Current.CancellationToken);
+                var role = await context.Set<HostRole>().SingleAsync(row => row.Id == harbor.RolesByStarterRole[HostCatalogue.WatcherStarterRole], TestContext.Current.CancellationToken);
                 seat.Grant(north, role.Id, role.Facts, GrantPeriod.Open(_clock.Now), grantedBy: null, reason: null);
 
                 context.ChangeTracker.DetectChanges();
@@ -250,7 +250,7 @@ public abstract class ProjectionWriterTests(TestDatabases databases) : IAsyncLif
             }
         }
 
-        (await PermissionsAsync(grace)).Should().Equal((harbor.RolesByPack[HostCatalogue.WatcherPack], HostCatalogue.WidgetRead));
+        (await PermissionsAsync(grace)).Should().Equal((harbor.RolesByStarterRole[HostCatalogue.WatcherStarterRole], HostCatalogue.WidgetRead));
     }
 
     [Fact]
@@ -259,7 +259,7 @@ public abstract class ProjectionWriterTests(TestDatabases databases) : IAsyncLif
         var harbor = await _services.ProvisionAsync("harbor");
         var north = await _services.AddUnitAsync(harbor.Tenant, harbor.RootUnit, "North");
         var grace = await _services.SeatAtAsync(harbor, "Grace", north);
-        var operatorRole = harbor.RolesByPack[HostCatalogue.OperatorPack];
+        var operatorRole = harbor.RolesByStarterRole[HostCatalogue.OperatorStarterRole];
 
         // One scope, one context: the rows the first save wrote are tracked when the next ones run.
         await _services.BySystemIn(harbor.Tenant, async services =>
@@ -279,10 +279,10 @@ public abstract class ProjectionWriterTests(TestDatabases databases) : IAsyncLif
     {
         var harbor = await _services.ProvisionAsync("harbor");
         var north = await _services.AddUnitAsync(harbor.Tenant, harbor.RootUnit, "North");
-        var grace = await _services.SeatAtAsync(harbor, "Grace", north, HostCatalogue.OperatorPack);
-        var lin = await _services.SeatAtAsync(harbor, "Lin", north, HostCatalogue.OperatorPack);
-        var operatorRole = harbor.RolesByPack[HostCatalogue.OperatorPack];
-        var watcherRole = harbor.RolesByPack[HostCatalogue.WatcherPack];
+        var grace = await _services.SeatAtAsync(harbor, "Grace", north, HostCatalogue.OperatorStarterRole);
+        var lin = await _services.SeatAtAsync(harbor, "Lin", north, HostCatalogue.OperatorStarterRole);
+        var operatorRole = harbor.RolesByStarterRole[HostCatalogue.OperatorStarterRole];
+        var watcherRole = harbor.RolesByStarterRole[HostCatalogue.WatcherStarterRole];
 
         // Lin's seat is hidden from the application's reads, and the role both hold loses a permission.
         await _services.BySystemIn(harbor.Tenant, async services =>
@@ -352,8 +352,8 @@ public abstract class ProjectionWriterTests(TestDatabases databases) : IAsyncLif
 
         var harbor = await keeping.ProvisionAsync("harbor");
         var north = await keeping.AddUnitAsync(harbor.Tenant, harbor.RootUnit, "North");
-        var oli = await keeping.SeatAtAsync(harbor, "Oli", north, HostCatalogue.OperatorPack);
-        await keeping.BySystemIn(harbor.Tenant, services => services.Roles().SetPermissionsAsync(harbor.RolesByPack[HostCatalogue.OperatorPack], [HostCatalogue.WidgetRead], TestContext.Current.CancellationToken));
+        var oli = await keeping.SeatAtAsync(harbor, "Oli", north, HostCatalogue.OperatorStarterRole);
+        await keeping.BySystemIn(harbor.Tenant, services => services.Roles().SetPermissionsAsync(harbor.RolesByStarterRole[HostCatalogue.OperatorStarterRole], [HostCatalogue.WidgetRead], TestContext.Current.CancellationToken));
         await keeping.BySystemIn(harbor.Tenant, services => services.Seats().SuspendAsync(oli, TestContext.Current.CancellationToken));
 
         (await keeping.StoredRightsAsync()).Should().BeEmpty("the administrator's, the operator's and the role's holders' are all the database's to write");

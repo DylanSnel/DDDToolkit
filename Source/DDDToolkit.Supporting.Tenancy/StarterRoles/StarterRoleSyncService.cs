@@ -6,20 +6,20 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace DDDToolkit.Supporting.Tenancy;
 
 /// <summary>
-/// Runs <see cref="IRolePackSync"/> once, in the background, once the host has started: what
-/// <see cref="TenancyServiceCollectionExtensions.SyncRolePacks"/> registers.
+/// Runs <see cref="IStarterRoleSync"/> once, in the background, once the host has started: what
+/// <see cref="TenancyServiceCollectionExtensions.SyncStarterRoles"/> registers.
 /// </summary>
 /// <remarks>
 /// It waits for <see cref="IHostApplicationLifetime.ApplicationStarted"/>, so it runs after the host's start-up
 /// checks, which run before anything starts, and after every hosted service has started, a seeding of the host's
 /// own or the server that binds its port included; the host serves while it runs. A tenant it could not sync is
 /// logged as an error and left for the next start, and so is a sync that failed as a whole: the host keeps running
-/// either way, with the roles it had. A host that registered no <see cref="IRolePackSync"/> is a host composed
+/// either way, with the roles it had. A host that registered no <see cref="IStarterRoleSync"/> is a host composed
 /// wrong, and stops, saying so.
 /// </remarks>
-internal sealed class RolePackSyncService(IServiceProvider services, IHostApplicationLifetime lifetime, ILogger<RolePackSyncService>? logger = null) : BackgroundService
+internal sealed class StarterRoleSyncService(IServiceProvider services, IHostApplicationLifetime lifetime, ILogger<StarterRoleSyncService>? logger = null) : BackgroundService
 {
-    private readonly ILogger _logger = logger ?? NullLogger<RolePackSyncService>.Instance;
+    private readonly ILogger _logger = logger ?? NullLogger<StarterRoleSyncService>.Instance;
 
     /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -29,12 +29,12 @@ internal sealed class RolePackSyncService(IServiceProvider services, IHostApplic
             return;
         }
 
-        var sync = services.GetService<IRolePackSync>()
+        var sync = services.GetService<IStarterRoleSync>()
             ?? throw new InvalidOperationException(
-                "SyncRolePacks() runs the IRolePackSync Tenancy's storage registers, and none is registered. Call services.AddTenancy<TContext>(...) "
-                + "from Tenancy's Entity Framework package, or register an IRolePackSync of your own.");
+                "SyncStarterRoles() runs the IStarterRoleSync Tenancy's storage registers, and none is registered. Call services.AddTenancy<TContext>(...) "
+                + "from Tenancy's Entity Framework package, or register an IStarterRoleSync of your own.");
 
-        RolePackSyncReport report;
+        StarterRoleSyncReport report;
         try
         {
             report = await sync.SyncAsync(stoppingToken).ConfigureAwait(false);
@@ -45,27 +45,27 @@ internal sealed class RolePackSyncService(IServiceProvider services, IHostApplic
         }
         catch (Exception failure)
         {
-            _logger.LogError(failure, "The role packs could not be synced: no tenant's roles changed. The host's next start tries again.");
+            _logger.LogError(failure, "The starter roles could not be synced: no tenant's roles changed. The host's next start tries again.");
             return;
         }
 
         foreach (var (tenant, error) in report.Failed)
         {
-            _logger.LogError(error, "The roles of tenant {Tenant} could not follow their packs. The host's next start tries again.", tenant);
+            _logger.LogError(error, "The roles of tenant {Tenant} could not follow their starter roles. The host's next start tries again.", tenant);
         }
 
         if (report.RolesKeptForAnAdministrator > 0)
         {
             _logger.LogWarning(
-                "{Roles} roles were left as they are, because following their packs would leave their tenants without an administrator. They follow once those tenants have another.",
+                "{Roles} roles were left as they are, because following their starter roles would leave their tenants without an administrator. They follow once those tenants have another.",
                 report.RolesKeptForAnAdministrator);
         }
 
         _logger.LogInformation(
-            "The role packs are synced in {Tenants} tenants: {Changed} roles followed their packs, and {WithoutTheirPack} were made from packs the catalogue no longer has and kept their permissions.",
+            "The starter roles are synced in {Tenants} tenants: {Changed} roles followed their starter roles, and {WithoutTheirStarterRole} were made from starter roles the catalogue no longer has and kept their permissions.",
             report.Tenants,
             report.RolesChanged,
-            report.RolesWithoutTheirPack);
+            report.RolesWithoutTheirStarterRole);
     }
 
     /// <summary>Waits until the host has started; <see langword="false"/> when it stops first.</summary>

@@ -86,7 +86,7 @@ public sealed class DemoSeederTests(SampleHosts sample) : IClassFixture<SampleHo
             me.GetProperty("tenant").GetProperty("shape").GetString().Should().Be(tenant.Shape.OnTheWire());
             var grants = me.GetProperty("placements").EnumerateArray().Should().ContainSingle().Which.GetProperty("grants").EnumerateArray().ToList();
             grants.Select(grant => grant.GetProperty("roleId").GetGuid())
-                .Should().BeEquivalentTo(expected[tenant.Slug].Select(pack => tenant.Roles[pack].Value));
+                .Should().BeEquivalentTo(expected[tenant.Slug].Select(starterRole => tenant.Roles[starterRole].Value));
             grants.Should().Contain(grant => grant.GetProperty("roleId").GetGuid() == tenant.AdministratorsRole.Value);
             foreach (var grant in grants)
             {

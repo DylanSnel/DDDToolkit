@@ -54,8 +54,8 @@ public abstract class AccessQueryTests(TestDatabases databases) : IAsyncLifetime
     public async Task Who_holds_a_permission_at_a_unit_is_one_statement_and_composes()
     {
         await BuildHarborAsync();
-        var hal = await _services.SeatAtAsync(_harbor, "Hal", _south, HostCatalogue.WatcherPack);
-        var sue = await _services.SeatAtAsync(_harbor, "Sue", _coast, HostCatalogue.WatcherPack);
+        var hal = await _services.SeatAtAsync(_harbor, "Hal", _south, HostCatalogue.WatcherStarterRole);
+        var sue = await _services.SeatAtAsync(_harbor, "Sue", _coast, HostCatalogue.WatcherStarterRole);
         await _services.BySystemIn(_harbor.Tenant, services => services.Seats().SuspendAsync(sue, TestContext.Current.CancellationToken));
 
         // The administrator reads every grant of Harbor: she, Grace at North and Lin at Coast hold the permission at Coast. Sue,
@@ -114,14 +114,14 @@ public abstract class AccessQueryTests(TestDatabases databases) : IAsyncLifetime
     public async Task A_consumer_context_composes_the_questions_into_one_query()
     {
         await BuildHarborAsync();
-        var hal = await _services.SeatAtAsync(_harbor, "Hal", _south, HostCatalogue.WatcherPack);
+        var hal = await _services.SeatAtAsync(_harbor, "Hal", _south, HostCatalogue.WatcherStarterRole);
         await _services.BySystemIn(_harbor.Tenant, async services =>
         {
             var widgets = services.Widgets();
             widgets.Widgets.AddRange(
-                Widget(_south, "at South, for operators", _harbor.RolesByPack[HostCatalogue.OperatorPack]),
-                Widget(_south, "at South, for watchers", _harbor.RolesByPack[HostCatalogue.WatcherPack]),
-                Widget(_north, "at North, for operators", _harbor.RolesByPack[HostCatalogue.OperatorPack]));
+                Widget(_south, "at South, for operators", _harbor.RolesByStarterRole[HostCatalogue.OperatorStarterRole]),
+                Widget(_south, "at South, for watchers", _harbor.RolesByStarterRole[HostCatalogue.WatcherStarterRole]),
+                Widget(_north, "at North, for operators", _harbor.RolesByStarterRole[HostCatalogue.OperatorStarterRole]));
             await widgets.SaveChangesAsync(TestContext.Current.CancellationToken);
         });
 
@@ -158,8 +158,8 @@ public abstract class AccessQueryTests(TestDatabases databases) : IAsyncLifetime
         await _services.BySystemIn(_harbor.Tenant, services => services.Seats().PlaceAsync(hal, _south, primary: false, TestContext.Current.CancellationToken));
 
         // An import: a grant at North that ended yesterday, and one at South that starts tomorrow.
-        await _services.GrantAsync(_harbor, hal, _north, HostCatalogue.WatcherPack, until: _clock.Now.AddDays(-1), from: _clock.Now.AddDays(-10));
-        await _services.GrantAsync(_harbor, hal, _south, HostCatalogue.WatcherPack, from: _clock.Now.AddDays(1));
+        await _services.GrantAsync(_harbor, hal, _north, HostCatalogue.WatcherStarterRole, until: _clock.Now.AddDays(-1), from: _clock.Now.AddDays(-10));
+        await _services.GrantAsync(_harbor, hal, _south, HostCatalogue.WatcherStarterRole, from: _clock.Now.AddDays(1));
 
         (await ReadableWidgetsAsync(hal)).Should().BeEmpty("neither grant applies now");
 
@@ -179,7 +179,7 @@ public abstract class AccessQueryTests(TestDatabases databases) : IAsyncLifetime
     {
         await BuildHarborAsync();
         var hal = await _services.SeatAtAsync(_harbor, "Hal", _north);
-        await _services.GrantAsync(_harbor, hal, _north, HostCatalogue.SupervisorPack, until: _clock.Now.AddHours(1));
+        await _services.GrantAsync(_harbor, hal, _north, HostCatalogue.SupervisorStarterRole, until: _clock.Now.AddHours(1));
         var stored = await _services.StoredRightsAsync(hal);
 
         (await HoldsAtAsync(hal, TenancyPermissions.UnitsManage, _coast)).Should().BeTrue();
@@ -208,11 +208,11 @@ public abstract class AccessQueryTests(TestDatabases databases) : IAsyncLifetime
     public async Task RolesWithKey_reads_the_permissions_in_sql()
     {
         await BuildHarborAsync();
-        var watcher = _harbor.RolesByPack[HostCatalogue.WatcherPack];
+        var watcher = _harbor.RolesByStarterRole[HostCatalogue.WatcherStarterRole];
 
         var readers = await _services.BySystemIn(_harbor.Tenant, async services =>
             (await services.TenancyContext().Set<HostRole>().ToListAsync(TestContext.Current.CancellationToken)).Where(role => role.Holds(HostCatalogue.WidgetRead)).Select(role => role.Id).ToList());
-        readers.Should().HaveCount(4, "the administrators' role holds every permission, and the other packs read widgets")
+        readers.Should().HaveCount(4, "the administrators' role holds every permission, and the other starter roles read widgets")
             .And.Contain(watcher);
 
         await _services.BySeat(_harbor.Tenant, _lin, async services =>
@@ -239,7 +239,7 @@ public abstract class AccessQueryTests(TestDatabases databases) : IAsyncLifetime
         await _services.BySeat(_harbor.Tenant, _grace, async services =>
         {
             var queries = services.TenancyContext().Tenancy();
-            var supervisor = await services.TenancyContext().Set<HostRole>().SingleAsync(role => role.Id == _harbor.RolesByPack[HostCatalogue.SupervisorPack], TestContext.Current.CancellationToken);
+            var supervisor = await services.TenancyContext().Set<HostRole>().SingleAsync(role => role.Id == _harbor.RolesByStarterRole[HostCatalogue.SupervisorStarterRole], TestContext.Current.CancellationToken);
 
             (await queries.PermissionsIHoldAt(_coast).ToListAsync(TestContext.Current.CancellationToken)).Should().BeEquivalentTo(supervisor.Permissions, "what Grace holds at North reaches Coast");
             (await queries.PermissionsIHoldAt(_south).ToListAsync(TestContext.Current.CancellationToken)).Should().BeEmpty();
@@ -287,8 +287,8 @@ public abstract class AccessQueryTests(TestDatabases databases) : IAsyncLifetime
         _north = await _services.AddUnitAsync(_harbor.Tenant, _harbor.RootUnit, "North");
         _south = await _services.AddUnitAsync(_harbor.Tenant, _harbor.RootUnit, "South");
         _coast = await _services.AddUnitAsync(_harbor.Tenant, _north, "Coast");
-        _grace = await _services.SeatAtAsync(_harbor, "Grace", _north, HostCatalogue.SupervisorPack);
-        _lin = await _services.SeatAtAsync(_harbor, "Lin", _coast, HostCatalogue.OperatorPack);
+        _grace = await _services.SeatAtAsync(_harbor, "Grace", _north, HostCatalogue.SupervisorStarterRole);
+        _lin = await _services.SeatAtAsync(_harbor, "Lin", _coast, HostCatalogue.OperatorStarterRole);
 
         await _services.BySystemIn(_harbor.Tenant, async services =>
         {

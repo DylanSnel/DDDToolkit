@@ -116,7 +116,7 @@ public sealed class PermissionSetScenarios(SampleHosts sample) : IClassFixture<S
         ProjectId[] projects = [.. Harbor.Projects.Select(project => project.Id)];
 
         // Rhea holds permissions both ways. What the application does: it asks Tenancy's questions for all the permissions at
-        // once, packs the answers, still sets and not lists, and the port sends them with the projects as one
+        // once, starter roles the answers, still sets and not lists, and the port sends them with the projects as one
         // statement: the organization's permissions, the crew's and the permission that sees, put together where it runs. Asked
         // as a request asks: as the person, in her seat.
         using (Callers.Begin(Caller.User(DemoPeople.Rhea.Id)))

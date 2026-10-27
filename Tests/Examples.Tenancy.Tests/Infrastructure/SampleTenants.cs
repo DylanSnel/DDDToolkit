@@ -15,7 +15,7 @@ public static class SampleTenants
 
     /// <summary>
     /// Provisions a flat tenant with an administrator whose person has no sign-in here: the tenant, its root, its
-    /// administrator's seat and the roles of its packs, and nothing else. The ids are made here, as seeding makes them,
+    /// administrator's seat and the roles of its starter roles, and nothing else. The ids are made here, as seeding makes them,
     /// since the tenant manager answers the tenant alone.
     /// </summary>
     /// <param name="host">The host, started.</param>

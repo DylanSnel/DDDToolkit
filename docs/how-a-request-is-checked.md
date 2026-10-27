@@ -646,7 +646,7 @@ using (Callers.Begin(caller))
 }
 ```
 
-```sql title="20261026210726_access.tenants.ddd.sql, the caller's seat and tenant, shortened"
+```sql title="20261027164316_access.tenants.ddd.sql, the caller's seat and tenant, shortened"
 CREATE OR REPLACE FUNCTION "tenancy".system_tenant() RETURNS uuid
     LANGUAGE sql STABLE SET search_path = '' AS $function$
 SELECT nullif(pg_catalog.current_setting('tenancy.caller_tenant', true), '')::pg_catalog.uuid
@@ -742,7 +742,7 @@ The policies below are copied from the sample's export. The toolkit quotes schem
 insert policy on the units allows a new unit below a parent where the caller holds the permission that manages units.
 This is the same permission at the same unit that the check tested:
 
-```sql title="20261026210726_access.tenants.ddd.sql, the units' insert policy, shortened"
+```sql title="20261027164316_access.tenants.ddd.sql, the units' insert policy, shortened"
 CREATE POLICY "Unit managers add below their units (insert) for authenticated" ON "tenancy"."OrganizationUnits" FOR INSERT TO authenticated
     WITH CHECK (("TenantId" = (SELECT "tenancy".caller_tenant())) AND ("ParentId" = ANY (ARRAY(SELECT "tenancy".units_where_i_hold_permission('tenancy.units.manage')))));
 ```
@@ -760,7 +760,7 @@ In both cases Postgres refuses the statement with 42501, `permission denied`, be
 <details>
 <summary>Show the code: the policies and functions the export writes for the units, the seats, the crew and the audit log</summary>
 
-```sql title="20261026210726_access.tenants.ddd.sql, the units' other policies and the function they ask, shortened"
+```sql title="20261027164316_access.tenants.ddd.sql, the units' other policies and the function they ask, shortened"
 CREATE OR REPLACE FUNCTION "tenancy".units_where_i_hold_permission(permission text) RETURNS SETOF uuid
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
 SELECT DISTINCT p."DescendantId" FROM "tenancy"."SeatRights" r
@@ -781,7 +781,7 @@ CREATE POLICY "Closed to anonymous callers (all) for anon" ON "tenancy"."Organiz
     WITH CHECK (false);
 ```
 
-```sql title="20261026210726_access.tenants.ddd.sql, the seats and the name's column rule, shortened"
+```sql title="20261027164316_access.tenants.ddd.sql, the seats and the name's column rule, shortened"
 CREATE OR REPLACE FUNCTION "tenancy".holds_at_tenant(permission text) RETURNS boolean
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
 SELECT EXISTS (SELECT 1 FROM "tenancy"."SeatRights" r
@@ -813,7 +813,7 @@ CREATE TRIGGER seats_displayname_column_rule BEFORE UPDATE OF "DisplayName" ON "
     EXECUTE FUNCTION "tenancy".seats_displayname_column_rule();
 ```
 
-```sql title="20261026203139_access.projects.ddd.sql, the crew and the function it asks, shortened"
+```sql title="20261027164317_access.projects.ddd.sql, the crew and the function it asks, shortened"
 CREATE OR REPLACE FUNCTION "projects".projects_where_i_hold(text) RETURNS SETOF uuid
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
 SELECT holding.id FROM "projects".projects_as_member_with($1) AS holding(id)
@@ -970,7 +970,7 @@ using (TenancyUseCases.BeginSystem())                             // system work
 }                                                                 // the caller before it is current again
 ```
 
-```sql title="20261026210726_access.tenants.ddd.sql, the tenant the provisioning writes, shortened"
+```sql title="20261027164316_access.tenants.ddd.sql, the tenant the provisioning writes, shortened"
 CREATE POLICY "Tenancy work writes its tenant (insert) for ddd_system_in" ON "tenancy"."Tenants" FOR INSERT TO ddd_system_in
     WITH CHECK (("Id" = (SELECT "tenancy".system_tenant())) AND ((SELECT auth.jwt() ->> 'scope') = 'tenancy'));
 ```

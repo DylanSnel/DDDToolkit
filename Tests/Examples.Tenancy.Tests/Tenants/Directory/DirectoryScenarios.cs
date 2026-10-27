@@ -88,12 +88,12 @@ public sealed class DirectoryScenarios(SampleHosts sample) : IClassFixture<Sampl
             [Harbor.Roles[SampleCatalogue.Observer].Value, Harbor.Roles[SampleCatalogue.CrewLead].Value, Harbor.Roles[SampleCatalogue.AreaManager].Value]);
 
         roles.EnumerateArray()
-            .Select(role => (role.GetProperty("id").GetGuid(), role.Text("name"), role.Text("fromPack"), role.Text("status"), role.GetProperty("managesAccess").GetBoolean()))
+            .Select(role => (role.GetProperty("id").GetGuid(), role.Text("name"), role.Text("fromStarterRole"), role.Text("status"), role.GetProperty("managesAccess").GetBoolean()))
             .Should().Equal(
                 (Harbor.Roles[SampleCatalogue.AreaManager].Value, "Area manager", SampleCatalogue.AreaManager, "active", true),
                 (Harbor.Roles[SampleCatalogue.CrewLead].Value, "Crew lead", SampleCatalogue.CrewLead, "active", true),
                 (Harbor.Roles[SampleCatalogue.Observer].Value, "Observer", SampleCatalogue.Observer, "active", false));
-        roles[0].EnumerateObject().Select(property => property.Name).Should().Equal("id", "name", "fromPack", "status", "permissions", "managesAccess");
+        roles[0].EnumerateObject().Select(property => property.Name).Should().Equal("id", "name", "fromStarterRole", "status", "permissions", "managesAccess");
 
         // What a role lets its holder do is for whoever manages the tenant's roles. Vic does not, and is answered
         // no permissions at all, rather than an empty list, which would say the role brings none; Ada does.

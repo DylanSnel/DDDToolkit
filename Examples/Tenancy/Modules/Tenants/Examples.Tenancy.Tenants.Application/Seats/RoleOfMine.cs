@@ -6,8 +6,8 @@ namespace Examples.Tenancy.Tenants.Application.Seats;
 /// </summary>
 /// <param name="Id">The role.</param>
 /// <param name="Name">Its name in the tenant.</param>
-/// <param name="FromPack">The pack it was copied from, or <see langword="null"/> for a role the tenant made.</param>
+/// <param name="FromStarterRole">The starter role it was copied from, or <see langword="null"/> for a role the tenant made.</param>
 /// <param name="Status">Whether it is active, or archived and granting nothing.</param>
 /// <param name="Permissions">The permissions it grants.</param>
 /// <param name="ManagesAccess">Whether one of its live permissions manages access, as the role manager says.</param>
-public sealed record RoleOfMine(RoleId Id, string Name, string? FromPack, RoleStatus Status, IReadOnlyList<string> Permissions, bool ManagesAccess);
+public sealed record RoleOfMine(RoleId Id, string Name, string? FromStarterRole, RoleStatus Status, IReadOnlyList<string> Permissions, bool ManagesAccess);

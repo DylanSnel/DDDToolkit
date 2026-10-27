@@ -106,7 +106,7 @@ public interface ITenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId>
     IQueryable<OrganizationUnitRow<TTenantId, TUnitId>> Units();
 
     /// <summary>
-    /// The tenant's roles, archived ones included, as access facts, without a name: the pack each was copied
+    /// The tenant's roles, archived ones included, as access facts, without a name: the starter role each was copied
     /// from, its status and the permissions it grants. What a role is called is the directory's to answer, by id.
     /// </summary>
     /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>

@@ -41,9 +41,9 @@ public sealed class ProbeTests(TenancyPostgres postgres)
         var catalogue = TenancyPostgres.Catalogue;
         foreach (var permission in catalogue.LivePermissions)
         {
-            var expected = catalogue.PacksFor(TenantShape.Hierarchical).Count(pack => pack.Permissions.Contains(permission));
+            var expected = catalogue.StarterRolesFor(TenantShape.Hierarchical).Count(starterRole => starterRole.Permissions.Contains(permission));
             (await ScalarAsync<long>(connection, "SELECT count(*) FROM tenancy.\"Roles\" WHERE $1 = ANY (\"Permissions\")", permission))
-                .Should().Be(expected, "{0} is held by the roles of the packs that hold it", permission);
+                .Should().Be(expected, "{0} is held by the roles of the starter roles that hold it", permission);
         }
 
         (await ScalarAsync<long>(connection, "SELECT count(*) FROM tenancy.\"Roles\" WHERE 'widget.unknown' = ANY (\"Permissions\")")).Should().Be(0);
@@ -52,8 +52,8 @@ public sealed class ProbeTests(TenancyPostgres postgres)
         await using var services = new TenancyServices(database, rowLevelSecurity: false, databaseKeepsRights: false);
         using (TenancyWork.BeginSystemIn<TenantId, SeatId>(TenancySeed.Harbor))
         {
-            var stored = await services.InScopeAsync(scoped => scoped.TenancyContext().Set<HostRole>().ToDictionaryAsync(role => role.FromPack!, role => role.Permissions, Cancellation));
-            stored.Should().BeEquivalentTo(catalogue.PacksFor(TenantShape.Hierarchical).ToDictionary(pack => pack.Key, pack => pack.Permissions), options => options.WithStrictOrdering());
+            var stored = await services.InScopeAsync(scoped => scoped.TenancyContext().Set<HostRole>().ToDictionaryAsync(role => role.FromStarterRole!, role => role.Permissions, Cancellation));
+            stored.Should().BeEquivalentTo(catalogue.StarterRolesFor(TenantShape.Hierarchical).ToDictionary(starterRole => starterRole.Key, starterRole => starterRole.Permissions), options => options.WithStrictOrdering());
         }
     }
 
@@ -127,7 +127,7 @@ public sealed class ProbeTests(TenancyPostgres postgres)
         {
             var rights = model.Model.GetEntityTypes().Single(entity => entity.GetTableName() == "SeatRights");
             rights.FindProperty("Permission")!.GetColumnType().Should().Be($"character varying({Permission.MaxNameLength})");
-            model.Model.FindEntityType(typeof(HostRole))!.FindProperty(nameof(HostRole.FromPack))!.GetColumnType().Should().Be($"character varying({RolePack.MaxKeyLength})");
+            model.Model.FindEntityType(typeof(HostRole))!.FindProperty(nameof(HostRole.FromStarterRole))!.GetColumnType().Should().Be($"character varying({StarterRole.MaxKeyLength})");
         }
 
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Plain, Cancellation);
@@ -145,15 +145,15 @@ public sealed class ProbeTests(TenancyPostgres postgres)
             await command.ExecuteNonQueryAsync(Cancellation);
         }
 
-        async Task InsertRoleAsync(string pack)
+        async Task InsertRoleAsync(string starterRole)
         {
             await using var command = new NpgsqlCommand(
                 """
-                INSERT INTO tenancy."Roles" ("Id", "NormalizedName", "Version", "TenantId", "Name", "Description", "FromPack", "Status", "Permissions")
+                INSERT INTO tenancy."Roles" ("Id", "NormalizedName", "Version", "TenantId", "Name", "Description", "FromStarterRole", "Status", "Permissions")
                 VALUES (gen_random_uuid(), gen_random_uuid()::text, 1, 1, 'Packed', '', $1, 'Active', ARRAY['widget.read'])
                 """,
                 connection);
-            command.Parameters.Add(new NpgsqlParameter { Value = pack });
+            command.Parameters.Add(new NpgsqlParameter { Value = starterRole });
             await command.ExecuteNonQueryAsync(Cancellation);
         }
 
@@ -162,8 +162,8 @@ public sealed class ProbeTests(TenancyPostgres postgres)
                 .Should().ThrowAsync<PostgresException>())
             .Which.SqlState.Should().Be(PostgresErrorCodes.StringDataRightTruncation, "a permission one character too long is refused, not stored cut short");
 
-        await InsertRoleAsync(new string('p', RolePack.MaxKeyLength));
-        (await FluentActions.Awaiting(() => InsertRoleAsync(new string('p', RolePack.MaxKeyLength + 1)))
+        await InsertRoleAsync(new string('p', StarterRole.MaxKeyLength));
+        (await FluentActions.Awaiting(() => InsertRoleAsync(new string('p', StarterRole.MaxKeyLength + 1)))
                 .Should().ThrowAsync<PostgresException>())
             .Which.SqlState.Should().Be(PostgresErrorCodes.StringDataRightTruncation);
     }
@@ -446,7 +446,7 @@ public sealed class ProbeTests(TenancyPostgres postgres)
                     TenantId: TenancySeed.Harbor,
                     RootId: TenancySeed.HarborRoot,
                     AdminSeatId: TenancySeed.Ada.Seat,
-                    RoleIds: TenancySeed.HarborRoles.ByPack,
+                    RoleIds: TenancySeed.HarborRoles.ByStarterRole,
                     ConfigureFirstSeat: seat => seat.Rename(TenancySeed.Ada.Name)),
                 Cancellation));
         }

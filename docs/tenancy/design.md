@@ -35,7 +35,7 @@ Three choices keep the access data small and the checks fast
   when it is provisioned or changes shape. The [sync](roles-and-permissions.md#packs-after-provisioning) only updates
   the roles a tenant already has.
 - **Send a message about what the sync changed.** The [access history](operators-and-history.md#access-history)
-  keeps the sync's event, `tenancy.role-followed-its-pack`.
+  keeps the sync's event, `tenancy.role-followed-its-starter-role`.
 
 ## Upgrading from key to permission
 

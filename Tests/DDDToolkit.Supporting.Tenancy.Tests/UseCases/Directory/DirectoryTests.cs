@@ -17,9 +17,9 @@ public class DirectoryTests
     public async Task WhoAmI_hands_the_hosts_own_seat_with_the_paths_roles_and_permissions_that_are_not_on_it()
     {
         var harness = Harness.OfHarbor();
-        var bert = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.SupervisorPack);
+        var bert = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.SupervisorStarterRole);
         await harness.Place(bert, harness.Harbor.South);
-        await harness.Grant(bert, harness.Harbor.South, HostCatalogue.WatcherPack, until: Now.AddDays(7));
+        await harness.Grant(bert, harness.Harbor.South, HostCatalogue.WatcherStarterRole, until: Now.AddDays(7));
 
         var me = await harness.As(bert, h => h.Seats.WhoAmIAsync(default));
 
@@ -73,22 +73,22 @@ public class DirectoryTests
     public async Task An_overview_names_the_units_and_roles_of_the_seats_own_placements_and_grants_and_no_others()
     {
         var harness = Harness.OfHarbor();
-        var bert = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.WatcherPack);
+        var bert = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.WatcherStarterRole);
 
         var me = await harness.As(bert, h => h.Seats.WhoAmIAsync(default));
 
         me.Units.Select(unit => unit.Id).Should().Equal(harness.Harbor.North);
-        me.Roles.Select(role => role.Id).Should().Equal(harness.RoleFromPack(HostCatalogue.WatcherPack));
+        me.Roles.Select(role => role.Id).Should().Equal(harness.RoleFromStarterRole(HostCatalogue.WatcherStarterRole));
         FluentActions.Invoking(() => me.UnitOf(harness.Harbor.South)).Should().Throw<KeyNotFoundException>("the seat is not placed at South, so the overview read nothing of it");
-        FluentActions.Invoking(() => me.RoleOf(harness.RoleFromPack(HostCatalogue.SupervisorPack))).Should().Throw<KeyNotFoundException>();
+        FluentActions.Invoking(() => me.RoleOf(harness.RoleFromStarterRole(HostCatalogue.SupervisorStarterRole))).Should().Throw<KeyNotFoundException>();
     }
 
     [Fact]
     public async Task A_grant_whose_role_the_store_does_not_answer_is_still_shown_with_no_role_made_up()
     {
         var harness = Harness.OfHarbor();
-        var bert = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.SupervisorPack, HostCatalogue.WatcherPack);
-        var watcher = harness.RoleFromPack(HostCatalogue.WatcherPack);
+        var bert = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.SupervisorStarterRole, HostCatalogue.WatcherStarterRole);
+        var watcher = harness.RoleFromStarterRole(HostCatalogue.WatcherStarterRole);
 
         // A filter of the host's own on its role class, a soft delete say, hides the role; Bert's grant still names it.
         harness.Store.HiddenRoles.Add(watcher);
@@ -159,9 +159,9 @@ public class DirectoryTests
     public async Task Any_seats_overview_is_the_one_WhoAmI_answers_that_seat()
     {
         var harness = Harness.OfHarbor();
-        var bert = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.SupervisorPack);
+        var bert = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.SupervisorStarterRole);
         await harness.Place(bert, harness.Harbor.South);
-        await harness.Grant(bert, harness.Harbor.South, HostCatalogue.WatcherPack, until: Now.AddDays(7));
+        await harness.Grant(bert, harness.Harbor.South, HostCatalogue.WatcherStarterRole, until: Now.AddDays(7));
         var cy = await harness.SeatAt("Cy", harness.Harbor.South);
 
         var own = await harness.As(bert, h => h.Seats.WhoAmIAsync(default));
@@ -183,7 +183,7 @@ public class DirectoryTests
         // Cy holds no permission at all: the directory asks none, so who may ask about another seat is the request's to say,
         // and where no policy narrows the read, as here, the overview is the seat's whole.
         byCy.Permissions.Select(permission => permission.Permission).Should().Contain(TenancyPermissions.SeatsManage);
-        byCy.RoleOf(harness.RoleFromPack(HostCatalogue.WatcherPack))!.Name.Should().Be("Watcher");
+        byCy.RoleOf(harness.RoleFromStarterRole(HostCatalogue.WatcherStarterRole))!.Name.Should().Be("Watcher");
         byCy.UnitOf(harness.Harbor.South).Path.Should().Be("Harbor Works / South");
     }
 
@@ -214,9 +214,9 @@ public class DirectoryTests
     public async Task An_overviews_permissions_are_those_the_grants_it_read_give_and_none_of_a_seat_that_is_not_active()
     {
         var harness = Harness.OfHarbor();
-        var bert = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.SupervisorPack);
+        var bert = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.SupervisorStarterRole);
         await harness.Place(bert, harness.Harbor.South);
-        await harness.Grant(bert, harness.Harbor.South, HostCatalogue.WatcherPack);
+        await harness.Grant(bert, harness.Harbor.South, HostCatalogue.WatcherStarterRole);
 
         // A database that keeps the rights shows a seat only its own: the permissions come from the grants, not from those rows.
         harness.Store.KeepsOtherSeatsRights = true;
@@ -228,7 +228,7 @@ public class DirectoryTests
 
         // A filter of the host's own hides the Watcher's name, and not what its grant gives, as the rights the
         // questions decide by still hold it.
-        harness.Store.HiddenRoles.Add(harness.RoleFromPack(HostCatalogue.WatcherPack));
+        harness.Store.HiddenRoles.Add(harness.RoleFromStarterRole(HostCatalogue.WatcherStarterRole));
         var hidden = await harness.As(harness.Administrator, h => h.Seats.OverviewAsync(bert, default));
         hidden.Roles.Select(role => role.Name).Should().Equal("Supervisor");
         hidden.Permissions.Single(permission => permission.Permission == HostCatalogue.WidgetRead).GrantedAt.Select(unit => unit.Id).Should().Equal(harness.Harbor.North, harness.Harbor.South);
@@ -246,7 +246,7 @@ public class DirectoryTests
     public async Task An_overview_of_a_seat_a_read_rule_leaves_out_is_refused_as_one_of_another_tenant_is()
     {
         var harness = Harness.OfHarbor();
-        var bert = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.SupervisorPack);
+        var bert = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.SupervisorStarterRole);
         var cy = await harness.SeatAt("Cy", harness.Harbor.South);
 
         // A read rule of the host's own on its seat class leaves Bert out of what the caller reads: the lists leave
@@ -284,7 +284,7 @@ public class DirectoryTests
         var seats = await harness.As(bert, h => h.Seats.ListAsync(default));
         seats.Select(seat => seat.DisplayName).Should().BeEquivalentTo(["Ada", "Bert"]);
 
-        await harness.BySystemWork(h => h.Roles.ArchiveAsync(harness.RoleFromPack(HostCatalogue.WatcherPack), default));
+        await harness.BySystemWork(h => h.Roles.ArchiveAsync(harness.RoleFromStarterRole(HostCatalogue.WatcherStarterRole), default));
         var roles = await harness.As(bert, h => h.Roles.ListAsync(default));
         roles.Select(role => (role.Name, role.Status)).Should().Equal(
             ("Administrator", RoleStatus.Active), ("Operator", RoleStatus.Active), ("Supervisor", RoleStatus.Active), ("Watcher", RoleStatus.Archived));
@@ -294,7 +294,7 @@ public class DirectoryTests
     public async Task Roles_say_whether_they_manage_access()
     {
         var harness = Harness.OfHarbor();
-        var bert = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.SupervisorPack, HostCatalogue.WatcherPack);
+        var bert = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.SupervisorStarterRole, HostCatalogue.WatcherStarterRole);
 
         var roles = await harness.As(bert, h => h.Roles.ListAsync(default));
         var me = await harness.As(bert, h => h.Seats.WhoAmIAsync(default));
@@ -303,7 +303,7 @@ public class DirectoryTests
             ("Administrator", true), ("Operator", false), ("Supervisor", true), ("Watcher", false));
         me.Roles.Select(role => (role.Name, harness.Roles.ManagesAccess(role))).Should().Equal(("Supervisor", true), ("Watcher", false));
 
-        await harness.BySystemWork(h => h.Roles.ArchiveAsync(harness.RoleFromPack(HostCatalogue.SupervisorPack), default));
+        await harness.BySystemWork(h => h.Roles.ArchiveAsync(harness.RoleFromStarterRole(HostCatalogue.SupervisorStarterRole), default));
         var archived = await harness.As(bert, h => h.Roles.ListAsync(default));
         harness.Roles.ManagesAccess(archived.Single(role => role.Name == "Supervisor")).Should().BeFalse("an archived role grants nothing, so manages nothing");
         harness.Roles.ManagesAccess((await harness.As(bert, h => h.Seats.WhoAmIAsync(default))).Roles.Single(role => role.Name == "Supervisor")).Should().BeFalse();
@@ -417,9 +417,9 @@ public class DirectoryTests
         var harness = Harness.OfHarbor();
         var orchard = harness.Seed(2, "orchard");
         var bert = await harness.SeatAt("Bert", harness.Harbor.North);
-        var supervisor = harness.RoleFromPack(HostCatalogue.SupervisorPack);
-        var watcher = harness.RoleFromPack(HostCatalogue.WatcherPack);
-        var operators = harness.RoleFromPack(HostCatalogue.OperatorPack);
+        var supervisor = harness.RoleFromStarterRole(HostCatalogue.SupervisorStarterRole);
+        var watcher = harness.RoleFromStarterRole(HostCatalogue.WatcherStarterRole);
+        var operators = harness.RoleFromStarterRole(HostCatalogue.OperatorStarterRole);
         await harness.BySystemWork(h => h.Roles.ArchiveAsync(operators, default));
 
         var named = await harness.As(bert, h => h.Roles.ByIdAsync(
@@ -429,7 +429,7 @@ public class DirectoryTests
             (supervisor, "Supervisor", RoleStatus.Active, true),
             (watcher, "Watcher", RoleStatus.Active, false),
             (operators, "Operator", RoleStatus.Archived, false));
-        named[0].FromPack.Should().Be(HostCatalogue.SupervisorPack);
+        named[0].FromStarterRole.Should().Be(HostCatalogue.SupervisorStarterRole);
         named[0].Permissions.Should().Contain(TenancyPermissions.GrantsManage);
         harness.Store.Calls.Should().Equal(["ListRolesAsync"], "a tenant's roles are few: one read, and the ones asked for are picked from it");
     }

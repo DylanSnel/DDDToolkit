@@ -3012,6 +3012,49 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     `[Operator]`.
   - The sample's Projects module has an operator's command, `RenameTenantProject`, at
     `PUT /operations/tenants/{tenant}/projects/{project}/name` and as the mutation `tenantProjectRename`.
+- **Tenancy: a starter role is a starter role in the code too.** The docs called a role every new tenant gets a copy
+  of a starter role, and the code called it a pack. The code says starter role now: the types and their members, the
+  event and the name it is stored under, the catalogue's problems, the sync's log lines, and the SQL functions,
+  triggers and columns. Nobody uses the packages yet, so the old names are gone with no alias.
+  - **Breaking.** From 3.2.0-preview.5, was, now:
+    - `RolePack`: `StarterRole`; `TenancyPacks`: `TenancyStarterRoles`; `IRolePackTexts`: `IStarterRoleTexts`, whose
+      `For` takes `StarterRole starterRole`.
+    - `ApplicationCatalogue(Packs: ...)` and `ApplicationCatalogue.Packs`: `StarterRoles:` and `StarterRoles`;
+      `TenancyCatalogue.Packs`, `PacksFor(shape)` and `AdministratorPackFor(shape)`: `StarterRoles`,
+      `StarterRolesFor(shape)` and `AdministratorStarterRoleFor(shape)`.
+    - `services.SyncRolePacks()`: `services.SyncStarterRoles()`; `IRolePackSync`: `IStarterRoleSync`;
+      `RolePackSyncReport` and its `RolesWithoutTheirPack`: `StarterRoleSyncReport` and `RolesWithoutTheirStarterRole`.
+    - `RoleManager.FollowPacksAsync`: `FollowStarterRolesAsync`, which answers `RoleManager.StarterRolesFollowed`, was
+      `PacksFollowed`; its `WithoutTheirPack` is `WithoutTheirStarterRole`.
+    - A role's `FromPack`, `PermissionsFromPack` and `FollowPack(catalogue, by)`: `FromStarterRole`,
+      `PermissionsFromStarterRole` and `FollowStarterRole(catalogue, by)`; `FromPack` of `RoleDraft`, `RoleRow` and
+      `RoleCreated`: `FromStarterRole`.
+    - `RoleFollowedItsPack<TTenantId, TRoleId, TSeatId>`, stored as `tenancy.role-followed-its-pack`, and its `Pack`:
+      `RoleFollowedItsStarterRole<TTenantId, TRoleId, TSeatId>`, stored as `tenancy.role-followed-its-starter-role`,
+      and its `StarterRole`.
+    - The catalogue's problems and the sync's log lines say starter role where they said pack.
+    - Tenancy's SQL: `pack_permissions(pack)`: `starter_role_permissions(starter_role)`;
+      `tenant_roles_with_permissions()`: `tenant_role_rows()`, which answers `"FromStarterRole"` where it answered
+      `"FromPack"`; the triggers `tenancy_role_pack_is_fixed` and `tenancy_role_follows_its_pack`, and their
+      functions: `tenancy_role_starter_role_is_fixed` and `tenancy_role_follows_its_starter_role`. The export refuses
+      a function whose answer changed under the same name, so the read function has a new one. The access file drops
+      the functions it no longer writes, but not the old triggers (below).
+    - Tenancy's columns: `Roles."FromPack"` and `Roles."PermissionsFromPack"`: `"FromStarterRole"` and
+      `"PermissionsFromStarterRole"`.
+  - The Tenancy sample follows: the GraphQL type `RolePack` is `StarterRole`, the catalogue's field `packs` is
+    `starterRoles`, and a role's field `fromPack` is `fromStarterRole`, in the REST bodies as well; `PackOverview` is
+    `StarterRoleOverview`. The Tenants module has a migration, `StarterRolesRenamed`, and so has the Projects module,
+    whose model reads the roles through the renamed function and changes no table.
+  - **Upgrading.** Rebuild. Add one migration to the context that maps Tenancy's tables: Entity Framework writes it
+    as `RenameColumn` for `"FromPack"` and `"PermissionsFromPack"`, so no row is lost. On Postgres, add to it by hand
+    the drop of the two old triggers and their functions, which still fire on the renamed columns:
+    `DROP TRIGGER IF EXISTS tenancy_role_pack_is_fixed ON "tenancy"."Roles";`, then
+    `DROP FUNCTION IF EXISTS "tenancy".role_pack_is_fixed();`, and the same for `tenancy_role_follows_its_pack` and
+    `role_follows_its_pack()`. Add the stored name of the renamed event and the renamed members of the two events,
+    for the rows the event log and the outbox hold already: `"EventName"` from `tenancy.role-followed-its-pack` to
+    `tenancy.role-followed-its-starter-role`, `"Pack":` to `"StarterRole":` in its payload, and `"FromPack":` to
+    `"FromStarterRole":` in the payload of `tenancy.role-created`. The sample's `StarterRolesRenamed` does all of it.
+    Then let the export write the new access file after it.
 - **`UseDDDToolkit` keeps a context's migration history in its default schema.** A context whose model has a
   default schema, `modelBuilder.HasDefaultSchema("ordering")`, keeps its history in
   `ordering."__EFMigrationsHistory"` without its options naming it, so the modules that share a database each keep

@@ -79,22 +79,22 @@ public sealed class CampusScenario
             (Tom, InBirch, Birch, TomInBirch, true),
         ];
 
-        var pack = CampusCatalogue.Built.Packs.ToDictionary(each => each.Key, each => each.Permissions);
+        var starterRole = CampusCatalogue.Built.StarterRoles.ToDictionary(each => each.Key, each => each.Permissions);
         var everyPermission = CampusCatalogue.Built.LivePermissions;
         _heldInTheOrganization =
         [
             (AdaSeat, AlderRoot, everyPermission),
-            (DeeSeat, Science, pack[CampusCatalogue.DeanPack]),
-            (SueSeat, Science, pack[CampusCatalogue.DeanPack]),
+            (DeeSeat, Science, starterRole[CampusCatalogue.DeanStarterRole]),
+            (SueSeat, Science, starterRole[CampusCatalogue.DeanStarterRole]),
             (BeaSeat, BirchRoot, everyPermission),
         ];
 
         _tenantRolePermissions = new()
         {
-            [AlderDean] = pack[CampusCatalogue.DeanPack],
-            [AlderLabChief] = pack[CampusCatalogue.LabChiefPack],
-            [AlderDemonstrator] = pack[CampusCatalogue.LabDemonstratorPack],
-            [BirchLabChief] = pack[CampusCatalogue.LabChiefPack],
+            [AlderDean] = starterRole[CampusCatalogue.DeanStarterRole],
+            [AlderLabChief] = starterRole[CampusCatalogue.LabChiefStarterRole],
+            [AlderDemonstrator] = starterRole[CampusCatalogue.LabDemonstratorStarterRole],
+            [BirchLabChief] = starterRole[CampusCatalogue.LabChiefStarterRole],
         };
 
         // The roles of courses of each college: the starter roles the rules declare, made as the application makes them.
@@ -192,7 +192,7 @@ public sealed class CampusScenario
     /// <summary>Tom's seat in Birch: the same person, another seat.</summary>
     public SeatId TomInBirch { get; } = SeatId.CreateSequential();
 
-    /// <summary>Alder's role made from the dean's pack.</summary>
+    /// <summary>Alder's role made from the dean's starter role.</summary>
     public RoleId AlderDean { get; } = RoleId.CreateSequential();
 
     /// <summary>Alder's role for a lab's chief: what an owner of a lab holds.</summary>
@@ -257,9 +257,9 @@ public sealed class CampusScenario
                 AdminSeatId: AdaSeat,
                 RoleIds: new Dictionary<string, RoleId>
                 {
-                    [CampusCatalogue.DeanPack] = AlderDean,
-                    [CampusCatalogue.LabChiefPack] = AlderLabChief,
-                    [CampusCatalogue.LabDemonstratorPack] = AlderDemonstrator,
+                    [CampusCatalogue.DeanStarterRole] = AlderDean,
+                    [CampusCatalogue.LabChiefStarterRole] = AlderLabChief,
+                    [CampusCatalogue.LabDemonstratorStarterRole] = AlderDemonstrator,
                 }),
             cancellation));
         await services.BySystemAsync(provider => provider.Tenants().ProvisionAsync(
@@ -268,7 +268,7 @@ public sealed class CampusScenario
                 TenantId: Birch,
                 RootId: BirchRoot,
                 AdminSeatId: BeaSeat,
-                RoleIds: new Dictionary<string, RoleId> { [CampusCatalogue.LabChiefPack] = BirchLabChief }),
+                RoleIds: new Dictionary<string, RoleId> { [CampusCatalogue.LabChiefStarterRole] = BirchLabChief }),
             cancellation));
 
         await services.BySystemInAsync(Alder, provider => provider.Organization().AddUnitAsync(AlderRoot, "Science", cancellation, Science));

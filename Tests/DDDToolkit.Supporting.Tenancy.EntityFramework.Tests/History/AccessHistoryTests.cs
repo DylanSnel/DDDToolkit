@@ -81,7 +81,7 @@ public abstract class AccessHistoryTests(TestDatabases databases) : IAsyncLifeti
     {
         var harbor = await _services.ProvisionAsync("harbor");
         var ada = harbor.AdminSeat;
-        var watcher = harbor.RolesByPack[HostCatalogue.WatcherPack];
+        var watcher = harbor.RolesByStarterRole[HostCatalogue.WatcherStarterRole];
         Task AsAda(Func<IServiceProvider, Task> act) => _services.BySeat(harbor.Tenant, ada, act);
 
         var ben = (await _services.BySeat(harbor.Tenant, ada, services => services.Seats().AddAsync(Guid.NewGuid(), Cancellation, configure: seat => seat.Rename("Ben")))).Id;

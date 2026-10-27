@@ -14,7 +14,7 @@ public class RoleManagerTests
     public async Task A_role_that_gains_a_permission_that_manages_access_is_given_by_its_permissions_from_then_on()
     {
         var harness = Harness.OfHarbor();
-        var operatorRole = harness.RoleFromPack(HostCatalogue.OperatorPack);
+        var operatorRole = harness.RoleFromStarterRole(HostCatalogue.OperatorStarterRole);
         var desk = (await harness.BySystemWork(h => h.Roles.CreateAsync("Grant desk", "Gives people their roles", [TenancyPermissions.GrantsManage], default))).Id;
         var clerk = await harness.SeatAt("Fay", harness.Harbor.North);
         await harness.BySystemWork(h => h.Seats.GrantAsync(clerk, desk, harness.Harbor.North, null, null, default));
@@ -38,9 +38,9 @@ public class RoleManagerTests
     public async Task A_permission_that_manages_access_is_added_to_a_role_by_an_administrator_alone()
     {
         var harness = Harness.OfHarbor();
-        var watcher = harness.RoleFromPack(HostCatalogue.WatcherPack);
+        var watcher = harness.RoleFromStarterRole(HostCatalogue.WatcherStarterRole);
         var temporary = await harness.SeatAt("Bert", harness.Harbor.Root);
-        await harness.Grant(temporary, harness.Harbor.Root, HostCatalogue.AdministratorPack, until: Now.AddDays(7));
+        await harness.Grant(temporary, harness.Harbor.Root, HostCatalogue.AdministratorStarterRole, until: Now.AddDays(7));
 
         var refusal = await Refused.WithCodeAsync(TenancyRefusals.GrantExceedsOwn,
             () => harness.As(temporary, h => h.Roles.SetPermissionsAsync(watcher, [HostCatalogue.WidgetRead, TenancyPermissions.UnitsManage], default)),
@@ -54,18 +54,18 @@ public class RoleManagerTests
 
         await harness.As(harness.Administrator, h => h.Roles.SetPermissionsAsync(watcher, [HostCatalogue.WidgetRead, TenancyPermissions.UnitsManage], default));
         harness.Store.Role(watcher).Permissions.Should().Equal(TenancyPermissions.UnitsManage, HostCatalogue.WidgetRead);
-        await harness.BySystemWork(h => h.Roles.SetPermissionsAsync(harness.RoleFromPack(HostCatalogue.OperatorPack), [HostCatalogue.WidgetRead, TenancyPermissions.SeatsManage], default));
-        harness.Store.Role(harness.RoleFromPack(HostCatalogue.OperatorPack)).Holds(TenancyPermissions.SeatsManage).Should().BeTrue();
+        await harness.BySystemWork(h => h.Roles.SetPermissionsAsync(harness.RoleFromStarterRole(HostCatalogue.OperatorStarterRole), [HostCatalogue.WidgetRead, TenancyPermissions.SeatsManage], default));
+        harness.Store.Role(harness.RoleFromStarterRole(HostCatalogue.OperatorStarterRole)).Holds(TenancyPermissions.SeatsManage).Should().BeTrue();
     }
 
     [Fact]
     public async Task A_permission_that_manages_access_is_taken_out_of_a_role_or_archived_with_it_by_an_administrator_alone()
     {
         var harness = Harness.OfHarbor();
-        var supervisors = harness.RoleFromPack(HostCatalogue.SupervisorPack);
+        var supervisors = harness.RoleFromStarterRole(HostCatalogue.SupervisorStarterRole);
         var temporary = await harness.SeatAt("Bert", harness.Harbor.Root);
-        await harness.Grant(temporary, harness.Harbor.Root, HostCatalogue.AdministratorPack, until: Now.AddDays(7));
-        var lasting = await harness.SeatAt("Di", harness.Harbor.North, HostCatalogue.SupervisorPack);
+        await harness.Grant(temporary, harness.Harbor.Root, HostCatalogue.AdministratorStarterRole, until: Now.AddDays(7));
+        var lasting = await harness.SeatAt("Di", harness.Harbor.North, HostCatalogue.SupervisorStarterRole);
         var before = harness.Store.Role(supervisors).Permissions.ToArray();
 
         var removing = await Refused.WithCodeAsync(TenancyRefusals.GrantExceedsOwn,
@@ -84,8 +84,8 @@ public class RoleManagerTests
         // Permissions that manage no access, and roles that manage none, stay the temporary administrator's to change.
         await harness.As(temporary, h => h.Roles.SetPermissionsAsync(supervisors, [HostCatalogue.WidgetChange, TenancyPermissions.UnitsManage, TenancyPermissions.SeatsManage, TenancyPermissions.GrantsManage], default));
         harness.Store.Role(supervisors).Holds(HostCatalogue.WidgetCreate).Should().BeFalse();
-        await harness.As(temporary, h => h.Roles.ArchiveAsync(harness.RoleFromPack(HostCatalogue.WatcherPack), default));
-        harness.Store.Role(harness.RoleFromPack(HostCatalogue.WatcherPack)).Status.Should().Be(RoleStatus.Archived);
+        await harness.As(temporary, h => h.Roles.ArchiveAsync(harness.RoleFromStarterRole(HostCatalogue.WatcherStarterRole), default));
+        harness.Store.Role(harness.RoleFromStarterRole(HostCatalogue.WatcherStarterRole)).Status.Should().Be(RoleStatus.Archived);
 
         // The lasting administrator and system work do both.
         await harness.As(harness.Administrator, h => h.Roles.SetPermissionsAsync(supervisors, [HostCatalogue.WidgetChange, TenancyPermissions.SeatsManage, TenancyPermissions.GrantsManage], default));
@@ -98,7 +98,7 @@ public class RoleManagerTests
     public async Task Creating_needs_roles_manage_tenant_wide()
     {
         var harness = Harness.OfHarbor();
-        var supervisor = await harness.SeatAt("Bert", harness.Harbor.Root, HostCatalogue.SupervisorPack);
+        var supervisor = await harness.SeatAt("Bert", harness.Harbor.Root, HostCatalogue.SupervisorStarterRole);
 
         var refusal = await Refused.WithCodeAsync(TenancyRefusals.NotPermitted,
             () => harness.As(supervisor, h => h.Roles.CreateAsync("Clerk", "Files widgets", [HostCatalogue.WidgetChange], default)));
@@ -109,7 +109,7 @@ public class RoleManagerTests
         var role = harness.Store.Role(clerk);
         role.Name.Should().Be("Clerk");
         role.Permissions.Should().Equal(HostCatalogue.WidgetChange, HostCatalogue.WidgetRead);
-        role.FromPack.Should().BeNull("a role made by hand comes from no pack");
+        role.FromStarterRole.Should().BeNull("a role made by hand comes from no starter role");
         role.TenantId.Should().Be(harness.Tenant);
         await Refused.WithCodeAsync(TenancyRefusals.UnknownPermission,
             () => harness.As(harness.Administrator, h => h.Roles.CreateAsync("Pilot", string.Empty, ["widget.fly"], default)));
@@ -142,13 +142,13 @@ public class RoleManagerTests
     public async Task Removing_the_admin_permission_from_the_last_administrators_role_is_refused()
     {
         var harness = Harness.OfHarbor();
-        var administrators = harness.RoleFromPack(HostCatalogue.AdministratorPack);
+        var administrators = harness.RoleFromStarterRole(HostCatalogue.AdministratorStarterRole);
 
         await Refused.WithCodeAsync(TenancyRefusals.LastAdmin,
             () => harness.As(harness.Administrator, h => h.Roles.SetPermissionsAsync(administrators, [HostCatalogue.WidgetRead, TenancyPermissions.SeatsManage], default)));
         harness.Store.Role(administrators).Holds(TenancyPermissions.AdministratorPermission).Should().BeTrue();
 
-        // A second administrator, through a role of its own, lets the pack's role lose the permission.
+        // A second administrator, through a role of its own, lets the role made from the starter role lose the permission.
         var keepers = (await harness.As(harness.Administrator, h => h.Roles.CreateAsync("Keepers", string.Empty, [TenancyPermissions.RolesManage, TenancyPermissions.SeatsManage], default))).Id;
         var keeper = await harness.SeatAt("Cy", harness.Harbor.Root);
         await harness.As(harness.Administrator, h => h.Seats.GrantAsync(keeper, keepers, harness.Harbor.Root, null, null, default));
@@ -164,23 +164,23 @@ public class RoleManagerTests
     public async Task Archiving_the_last_administrators_role_is_refused()
     {
         var harness = Harness.OfHarbor();
-        var administrators = harness.RoleFromPack(HostCatalogue.AdministratorPack);
+        var administrators = harness.RoleFromStarterRole(HostCatalogue.AdministratorStarterRole);
 
         await Refused.WithCodeAsync(TenancyRefusals.LastAdmin, () => harness.As(harness.Administrator, h => h.Roles.ArchiveAsync(administrators, default)));
         await Refused.WithCodeAsync(TenancyRefusals.LastAdmin, () => harness.BySystemWork(h => h.Roles.ArchiveAsync(administrators, default)));
 
         harness.Store.Role(administrators).Status.Should().Be(RoleStatus.Active);
-        await harness.As(harness.Administrator, h => h.Roles.ArchiveAsync(harness.RoleFromPack(HostCatalogue.WatcherPack), default));
-        harness.Store.Role(harness.RoleFromPack(HostCatalogue.WatcherPack)).Status.Should().Be(RoleStatus.Archived);
+        await harness.As(harness.Administrator, h => h.Roles.ArchiveAsync(harness.RoleFromStarterRole(HostCatalogue.WatcherStarterRole), default));
+        harness.Store.Role(harness.RoleFromStarterRole(HostCatalogue.WatcherStarterRole)).Status.Should().Be(RoleStatus.Archived);
     }
 
     [Fact]
     public async Task Changed_permissions_reach_every_holder_at_the_next_save()
     {
         var harness = Harness.OfHarbor();
-        var operatorRole = harness.RoleFromPack(HostCatalogue.OperatorPack);
-        var north = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.OperatorPack);
-        var south = await harness.SeatAt("Cy", harness.Harbor.South, HostCatalogue.OperatorPack);
+        var operatorRole = harness.RoleFromStarterRole(HostCatalogue.OperatorStarterRole);
+        var north = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.OperatorStarterRole);
+        var south = await harness.SeatAt("Cy", harness.Harbor.South, HostCatalogue.OperatorStarterRole);
 
         await harness.As(harness.Administrator, h => h.Roles.SetPermissionsAsync(operatorRole, [HostCatalogue.WidgetRead, TenancyPermissions.UnitsManage], default));
 

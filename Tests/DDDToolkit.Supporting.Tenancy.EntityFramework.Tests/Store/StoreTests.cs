@@ -157,8 +157,8 @@ public abstract class StoreTests(TestDatabases databases) : IAsyncLifetime
             tenant.Shape.Should().Be(TenantShape.Hierarchical);
 
             (await store.FindOrganizationAsync(harbor.Tenant, TestContext.Current.CancellationToken))!.Root.Id.Should().Be(harbor.RootUnit);
-            (await store.ListRolesAsync(harbor.Tenant, TestContext.Current.CancellationToken)).Select(role => (role.Id, role.FromPack))
-                .Should().BeEquivalentTo(harbor.RolesByPack.Select(pair => (pair.Value, (string?)pair.Key)));
+            (await store.ListRolesAsync(harbor.Tenant, TestContext.Current.CancellationToken)).Select(role => (role.Id, role.FromStarterRole))
+                .Should().BeEquivalentTo(harbor.RolesByStarterRole.Select(pair => (pair.Value, (string?)pair.Key)));
 
             var administrator = (await store.FindSeatAsync(harbor.AdminSeat, TestContext.Current.CancellationToken))!;
             administrator.Placements.Should().ContainSingle().Which.Grants.Should().ContainSingle().Which.RoleId.Should().Be(harbor.AdministratorRole);
@@ -191,9 +191,9 @@ public abstract class StoreTests(TestDatabases databases) : IAsyncLifetime
             options.ConfigureWarnings(warnings => warnings.Throw(RelationalEventId.MultipleCollectionIncludeWarning))));
         var harbor = await services.ProvisionAsync("harbor");
         var north = await services.AddUnitAsync(harbor.Tenant, harbor.RootUnit, "North");
-        var grace = await services.SeatAtAsync(harbor, "Grace", north, HostCatalogue.OperatorPack, HostCatalogue.WatcherPack);
+        var grace = await services.SeatAtAsync(harbor, "Grace", north, HostCatalogue.OperatorStarterRole, HostCatalogue.WatcherStarterRole);
         await services.BySystemIn(harbor.Tenant, scoped => scoped.Seats().PlaceAsync(grace, harbor.RootUnit, primary: false, TestContext.Current.CancellationToken));
-        await services.GrantAsync(harbor, grace, harbor.RootUnit, HostCatalogue.WatcherPack);
+        await services.GrantAsync(harbor, grace, harbor.RootUnit, HostCatalogue.WatcherStarterRole);
 
         await services.BySystemIn(harbor.Tenant, async scoped =>
         {
@@ -204,8 +204,8 @@ public abstract class StoreTests(TestDatabases databases) : IAsyncLifetime
             seat.Placements.Select(placement => (placement.UnitId, placement.IsPrimary, Roles: placement.Grants.Select(grant => grant.RoleId).Order().ToArray()))
                 .Should().BeEquivalentTo(
                 [
-                    (north, true, new[] { harbor.RolesByPack[HostCatalogue.OperatorPack], harbor.RolesByPack[HostCatalogue.WatcherPack] }.Order().ToArray()),
-                    (harbor.RootUnit, false, new[] { harbor.RolesByPack[HostCatalogue.WatcherPack] }),
+                    (north, true, new[] { harbor.RolesByStarterRole[HostCatalogue.OperatorStarterRole], harbor.RolesByStarterRole[HostCatalogue.WatcherStarterRole] }.Order().ToArray()),
+                    (harbor.RootUnit, false, new[] { harbor.RolesByStarterRole[HostCatalogue.WatcherStarterRole] }),
                 ]);
         });
     }
@@ -215,7 +215,7 @@ public abstract class StoreTests(TestDatabases databases) : IAsyncLifetime
     {
         var harbor = await _services.ProvisionAsync("harbor");
         var north = await _services.AddUnitAsync(harbor.Tenant, harbor.RootUnit, "North");
-        await _services.SeatAtAsync(harbor, "Grace", north, HostCatalogue.OperatorPack);
+        await _services.SeatAtAsync(harbor, "Grace", north, HostCatalogue.OperatorStarterRole);
 
         await using var scope = _services.Scope();
         var names = await scope.ServiceProvider.TenancyContext().Set<OutboxMessage>().Select(message => message.EventName).ToListAsync(TestContext.Current.CancellationToken);
@@ -299,10 +299,10 @@ public abstract class StoreTests(TestDatabases databases) : IAsyncLifetime
                 TestContext.Current.CancellationToken));
         }
 
-        var watcher = harbor.RolesByPack[HostCatalogue.WatcherPack];
+        var watcher = harbor.RolesByStarterRole[HostCatalogue.WatcherStarterRole];
         var grace = await services.SeatAtAsync(harbor, "Grace", harbor.RootUnit);
         await services.RunAsync(HostCaller.SystemIn(harbor.Tenant, harbor.AdminSeat), scoped =>
-            scoped.Seats().GrantAsync(grace, harbor.RolesByPack[HostCatalogue.OperatorPack], harbor.RootUnit, until: null, reason: null, TestContext.Current.CancellationToken));
+            scoped.Seats().GrantAsync(grace, harbor.RolesByStarterRole[HostCatalogue.OperatorStarterRole], harbor.RootUnit, until: null, reason: null, TestContext.Current.CancellationToken));
         await services.BySeat(harbor.Tenant, harbor.AdminSeat, scoped =>
             scoped.Seats().GrantAsync(grace, watcher, harbor.RootUnit, until: null, reason: null, TestContext.Current.CancellationToken));
         await services.BySeat(harbor.Tenant, harbor.AdminSeat, scoped =>
@@ -347,7 +347,7 @@ public abstract class StoreTests(TestDatabases databases) : IAsyncLifetime
             refusal.InnerException.Should().BeOfType<DbUpdateException>();
         });
 
-        _services.Database.CountRows("Roles").Should().Be(harbor.RolesByPack.Count + 1);
+        _services.Database.CountRows("Roles").Should().Be(harbor.RolesByStarterRole.Count + 1);
     }
 
     [Fact]
@@ -393,13 +393,13 @@ public abstract class StoreTests(TestDatabases databases) : IAsyncLifetime
         var now = DateTimeOffset.UtcNow;
         var north = await _services.AddUnitAsync(harbor.Tenant, harbor.RootUnit, "North");
         var south = await _services.AddUnitAsync(harbor.Tenant, harbor.RootUnit, "South");
-        var second = await _services.SeatAtAsync(harbor, "Cy", harbor.RootUnit, HostCatalogue.AdministratorPack);
+        var second = await _services.SeatAtAsync(harbor, "Cy", harbor.RootUnit, HostCatalogue.AdministratorStarterRole);
         var temporary = await _services.SeatAtAsync(harbor, "Bert", harbor.RootUnit);
-        await _services.GrantAsync(harbor, temporary, harbor.RootUnit, HostCatalogue.AdministratorPack, until: now.AddDays(7));
-        var grace = await _services.SeatAtAsync(harbor, "Grace", north, HostCatalogue.SupervisorPack, HostCatalogue.WatcherPack);
-        var hal = await _services.SeatAtAsync(harbor, "Hal", south, HostCatalogue.OperatorPack);
+        await _services.GrantAsync(harbor, temporary, harbor.RootUnit, HostCatalogue.AdministratorStarterRole, until: now.AddDays(7));
+        var grace = await _services.SeatAtAsync(harbor, "Grace", north, HostCatalogue.SupervisorStarterRole, HostCatalogue.WatcherStarterRole);
+        var hal = await _services.SeatAtAsync(harbor, "Hal", south, HostCatalogue.OperatorStarterRole);
         var acting = await _services.SeatAtAsync(harbor, "Ivy", south);
-        await _services.GrantAsync(harbor, acting, south, HostCatalogue.SupervisorPack, until: now.AddDays(7));
+        await _services.GrantAsync(harbor, acting, south, HostCatalogue.SupervisorStarterRole, until: now.AddDays(7));
         var orchard = await _services.ProvisionAsync("orchard");
         var catalogue = TenancyCatalogue.Build(HostCatalogue.Application, []);
 

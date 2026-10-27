@@ -99,8 +99,8 @@ public static class TenancyInstances
 
     /// <summary>
     /// A new active role, its permissions expanded from the catalogue, with <see cref="RoleCreated{TTenantId, TRoleId, TSeatId}"/>
-    /// raised. A role made from a pack remembers the pack's permissions as the catalogue builds it, whatever permissions the draft
-    /// gives the role: an import's own permissions are the tenant's, and a later sync of the packs leaves them as they are.
+    /// raised. A role made from a starter role remembers the starter role's permissions as the catalogue builds it, whatever permissions the draft
+    /// gives the role: an import's own permissions are the tenant's, and a later sync of the starter roles leaves them as they are.
     /// </summary>
     /// <typeparam name="TRole">The application's role class.</typeparam>
     /// <typeparam name="TRoleId">The application's role id.</typeparam>
@@ -108,7 +108,7 @@ public static class TenancyInstances
     /// <typeparam name="TSeatId">The application's seat id, which the actor on the creation event is closed over.</typeparam>
     /// <param name="id">Its id.</param>
     /// <param name="tenantId">The tenant it belongs to.</param>
-    /// <param name="draft">Its name, description, permissions and the pack it comes from.</param>
+    /// <param name="draft">Its name, description, permissions and the starter role it comes from.</param>
     /// <param name="catalogue">The catalogue its permissions come from.</param>
     /// <param name="by">Who makes it, for its creation event; <see langword="null"/> when nobody is named.</param>
     /// <exception cref="Exceptions.RefusalException"><c>tenancy.name-invalid</c> or <c>tenancy.unknown-permission</c>.</exception>

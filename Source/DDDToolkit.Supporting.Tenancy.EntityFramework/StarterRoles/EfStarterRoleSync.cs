@@ -10,9 +10,9 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 
 /// <summary>
-/// <see cref="IRolePackSync"/> over Tenancy's context: the tenants to visit are read across tenants
+/// <see cref="IStarterRoleSync"/> over Tenancy's context: the tenants to visit are read across tenants
 /// (<see cref="TenancySystemReads.TenantsToSweepAsync{TTenant, TTenantId}"/>), and each tenant's roles follow their
-/// packs through <c>RoleManager.FollowPacksAsync</c>, as Tenancy's system work in that tenant, in a scope of its own.
+/// starter roles through <c>RoleManager.FollowStarterRolesAsync</c>, as Tenancy's system work in that tenant, in a scope of its own.
 /// </summary>
 /// <remarks>
 /// A tenant that another run, or an administrator, changed between this run's reading and its save fails on the
@@ -20,9 +20,9 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 /// what the other committed, and changes only what is still to change. Any other failure is the tenant's alone: it
 /// is reported, and the run goes on with the next tenant.
 /// </remarks>
-internal sealed class EfRolePackSync<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId, TContext>(
+internal sealed class EfStarterRoleSync<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId, TContext>(
     IServiceScopeFactory scopes,
-    ILogger<EfRolePackSync<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId, TContext>>? logger = null) : IRolePackSync
+    ILogger<EfStarterRoleSync<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId, TContext>>? logger = null) : IStarterRoleSync
     where TTenant : TenantAggregate<TTenantId>
     where TOrganization : OrganizationAggregate<TTenantId, TUnit, TUnitId>
     where TUnit : OrganizationUnitEntity<TUnitId>
@@ -40,7 +40,7 @@ internal sealed class EfRolePackSync<TTenant, TTenantId, TOrganization, TUnit, T
     private readonly ILogger _logger = (ILogger?)logger ?? NullLogger.Instance;
 
     /// <inheritdoc />
-    public async Task<RolePackSyncReport> SyncAsync(CancellationToken cancellationToken)
+    public async Task<StarterRoleSyncReport> SyncAsync(CancellationToken cancellationToken)
     {
         var tenants = await TenantsAsync(cancellationToken).ConfigureAwait(false);
 
@@ -54,13 +54,13 @@ internal sealed class EfRolePackSync<TTenant, TTenantId, TOrganization, TUnit, T
                 var followed = await FollowAsync(tenant, cancellationToken).ConfigureAwait(false);
                 changed += followed.Changed.Count;
                 kept += followed.KeptForAnAdministrator.Count;
-                gone += followed.WithoutTheirPack.Count;
+                gone += followed.WithoutTheirStarterRole.Count;
                 _logger.LogDebug(
-                    "Tenant {Tenant}: {Changed} roles followed their packs, {Kept} were kept for an administrator, {WithoutTheirPack} have no pack.",
+                    "Tenant {Tenant}: {Changed} roles followed their starter roles, {Kept} were kept for an administrator, {WithoutTheirStarterRole} have no starter role.",
                     tenant,
                     followed.Changed.Count,
                     followed.KeptForAnAdministrator.Count,
-                    followed.WithoutTheirPack.Count);
+                    followed.WithoutTheirStarterRole.Count);
             }
             catch (Exception failure) when (failure is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
             {
@@ -68,7 +68,7 @@ internal sealed class EfRolePackSync<TTenant, TTenantId, TOrganization, TUnit, T
             }
         }
 
-        return new RolePackSyncReport(tenants.Count, changed, kept, gone, failed);
+        return new StarterRoleSyncReport(tenants.Count, changed, kept, gone, failed);
     }
 
     /// <summary>
@@ -85,8 +85,8 @@ internal sealed class EfRolePackSync<TTenant, TTenantId, TOrganization, TUnit, T
         }
     }
 
-    /// <summary>One tenant's roles follow their packs, as Tenancy's system work in it, tried again on a lost race.</summary>
-    private async Task<RoleManager<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>.PacksFollowed> FollowAsync(
+    /// <summary>One tenant's roles follow their starter roles, as Tenancy's system work in it, tried again on a lost race.</summary>
+    private async Task<RoleManager<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>.StarterRolesFollowed> FollowAsync(
         TTenantId tenant,
         CancellationToken cancellationToken)
     {
@@ -100,7 +100,7 @@ internal sealed class EfRolePackSync<TTenant, TTenantId, TOrganization, TUnit, T
                     await using var scope = scopes.CreateAsyncScope();
                     var roles = scope.ServiceProvider
                         .GetRequiredService<RoleManager<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>>();
-                    return await roles.FollowPacksAsync(cancellationToken).ConfigureAwait(false);
+                    return await roles.FollowStarterRolesAsync(cancellationToken).ConfigureAwait(false);
                 }
             }
             catch (ConcurrencyConflictException) when (attempt < Attempts)

@@ -106,9 +106,9 @@ public sealed class DemoSeeder(IServiceScopeFactory scopes, IConfiguration confi
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
     /// <summary>
-    /// Provisions <paramref name="tenant"/> with its fixed ids: the tenant, its root, a role per pack seeded for its
+    /// Provisions <paramref name="tenant"/> with its fixed ids: the tenant, its root, a role per starter role seeded for its
     /// shape, and its administrator's seat, placed at the root and granted there the role of the administrators'
-    /// pack among them. The root's kind and the administrator's name are the application's own fields, so the
+    /// starter role among them. The root's kind and the administrator's name are the application's own fields, so the
     /// package hands the root and the first seat to callbacks that set them, in the save that provisions.
     /// <see langword="false"/> when its slug is taken.
     /// </summary>
@@ -221,7 +221,7 @@ public sealed class DemoSeeder(IServiceScopeFactory scopes, IConfiguration confi
         {
             await RunAsync<SeatManager>(seats => seats.GrantAsync(
                 tenant.SeatOf(grant.Person),
-                tenant.Roles[grant.Pack],
+                tenant.Roles[grant.StarterRole],
                 grant.Unit,
                 until: grant.Until is { } after ? now + after : null,
                 reason: null,

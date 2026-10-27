@@ -368,7 +368,7 @@ composed over several: [references/graphql.md](references/graphql.md). The mista
   directory, by id; a seat has no name of Tenancy's, only what the application keeps on its seat class.
 - Whether a command may run is asked when it runs, by the use case. A permission set only draws a screen.
 - A role a tenant got from a pack follows a pack you change later only where the host calls
-  `builder.Services.SyncRolePacks()`, beside `RunStartupChecks()` and not among the checks. Without it a permission
+  `builder.Services.SyncStarterRoles()`, beside `RunStartupChecks()` and not among the checks. Without it a permission
   added to a pack, or a module's new permissions, reach the tenants provisioned afterwards alone.
 - A row rule asks a resource with members by its id, through a one-line contract in the module that owns the
   id: `[ResourceAccessContract<ProjectId>(ResourceAccessSet.Seen)] public static partial class ProjectsISee;`,

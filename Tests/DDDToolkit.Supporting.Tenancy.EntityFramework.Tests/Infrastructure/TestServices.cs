@@ -127,7 +127,7 @@ public sealed class TestServices : IDisposable
 
     /// <summary>
     /// Provisions a tenant through the tenant manager, with ids the test keeps, as system work outside any tenant: a
-    /// tenant, its organization with the root, a role per pack and a first administrator, whom the host names in its
+    /// tenant, its organization with the root, a role per starter role and a first administrator, whom the host names in its
     /// callback.
     /// </summary>
     public async Task<ProvisionedTenant> ProvisionAsync(
@@ -162,23 +162,23 @@ public sealed class TestServices : IDisposable
 
     /// <summary>
     /// A new seat, added, placed at <paramref name="unit"/> as its primary placement and granted there the role
-    /// of each pack, by system work, one command at a time.
+    /// of each starter role, by system work, one command at a time.
     /// </summary>
-    public async Task<SeatId> SeatAtAsync(ProvisionedTenant tenant, string displayName, OrganizationUnitId unit, params string[] packs)
+    public async Task<SeatId> SeatAtAsync(ProvisionedTenant tenant, string displayName, OrganizationUnitId unit, params string[] starterRoles)
     {
         var seat = await AddSeatAsync(tenant.Tenant, Guid.NewGuid(), displayName);
         await BySystemIn(tenant.Tenant, services => services.Seats().PlaceAsync(seat, unit, primary: true, CancellationToken.None));
-        foreach (var pack in packs)
+        foreach (var starterRole in starterRoles)
         {
-            await GrantAsync(tenant, seat, unit, pack);
+            await GrantAsync(tenant, seat, unit, starterRole);
         }
 
         return seat;
     }
 
-    /// <summary>Grants a seat the role of a pack at a unit where it is placed, by system work.</summary>
-    public Task GrantAsync(ProvisionedTenant tenant, SeatId seat, OrganizationUnitId unit, string pack, DateTimeOffset? until = null, DateTimeOffset? from = null)
-        => BySystemIn(tenant.Tenant, services => services.Seats().GrantAsync(seat, tenant.RolesByPack[pack], unit, until, reason: null, CancellationToken.None, from));
+    /// <summary>Grants a seat the role of a starter role at a unit where it is placed, by system work.</summary>
+    public Task GrantAsync(ProvisionedTenant tenant, SeatId seat, OrganizationUnitId unit, string starterRole, DateTimeOffset? until = null, DateTimeOffset? from = null)
+        => BySystemIn(tenant.Tenant, services => services.Seats().GrantAsync(seat, tenant.RolesByStarterRole[starterRole], unit, until, reason: null, CancellationToken.None, from));
 
     /// <summary>Runs <paramref name="act"/> as <paramref name="caller"/>, in a scope of its own.</summary>
     public async Task<T> RunAsync<T>(ITenancyCaller caller, Func<IServiceProvider, Task<T>> act)

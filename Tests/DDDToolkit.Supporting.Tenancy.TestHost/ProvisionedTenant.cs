@@ -7,27 +7,27 @@ namespace DDDToolkit.Supporting.Tenancy.TestHost;
 
 /// <summary>
 /// The ids a tenant the tests provision was given: the tenant, its root, its first administrator's seat and the role of
-/// each pack. <c>TenantManager.ProvisionAsync</c> returns the tenant alone, so the tests pass these ids in, as an import
+/// each starter role. <c>TenantManager.ProvisionAsync</c> returns the tenant alone, so the tests pass these ids in, as an import
 /// or seeding does, and keep them (<see cref="ProvisioningWithIds"/>).
 /// </summary>
 /// <param name="Tenant">The tenant, and its organization.</param>
 /// <param name="RootUnit">The root unit.</param>
 /// <param name="AdminSeat">The first administrator's seat.</param>
-/// <param name="AdministratorRole">The role copied from the administrators' pack.</param>
-/// <param name="RolesByPack">Every role copied from a pack, by pack key.</param>
+/// <param name="AdministratorRole">The role copied from the administrators' starter role.</param>
+/// <param name="RolesByStarterRole">Every role copied from a starter role, by starter role key.</param>
 public sealed record ProvisionedTenant(
     TenantId Tenant,
     OrganizationUnitId RootUnit,
     SeatId AdminSeat,
     RoleId AdministratorRole,
-    IReadOnlyDictionary<string, RoleId> RolesByPack);
+    IReadOnlyDictionary<string, RoleId> RolesByStarterRole);
 
 /// <summary>Provisioning with fixed ids, the way an import or seeding does, so a test knows the ids it was given.</summary>
 public static class ProvisioningWithIds
 {
     /// <summary>
     /// Provisions <paramref name="command"/> with the ids it names, and new ones for those it leaves out: the tenant,
-    /// its root, the first seat and a role for every pack seeded for its shape.
+    /// its root, the first seat and a role for every starter role seeded for its shape.
     /// </summary>
     /// <param name="tenants">The tenant manager.</param>
     /// <param name="catalogue">The catalogue the tenant's roles are copied from.</param>
@@ -44,11 +44,11 @@ public static class ProvisioningWithIds
         ArgumentNullException.ThrowIfNull(catalogue);
         ArgumentNullException.ThrowIfNull(command);
 
-        // The ids the command gives stay, a pack the tenant is not given among them, which the manager refuses.
+        // The ids the command gives stay, a starter role the tenant is not given among them, which the manager refuses.
         var roles = new Dictionary<string, RoleId>(command.RoleIds ?? new Dictionary<string, RoleId>(), StringComparer.Ordinal);
-        foreach (var pack in catalogue.PacksFor(command.Shape))
+        foreach (var starterRole in catalogue.StarterRolesFor(command.Shape))
         {
-            roles.TryAdd(pack.Key, RoleId.Create());
+            roles.TryAdd(starterRole.Key, RoleId.Create());
         }
 
         var withIds = command with
@@ -64,7 +64,7 @@ public static class ProvisioningWithIds
             tenant.Id,
             withIds.RootId!.Value,
             withIds.AdminSeatId!.Value,
-            roles[catalogue.AdministratorPackFor(command.Shape).Key],
+            roles[catalogue.AdministratorStarterRoleFor(command.Shape).Key],
             roles);
     }
 }

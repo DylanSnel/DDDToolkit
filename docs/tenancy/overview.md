@@ -145,8 +145,8 @@ tenant**.
   `tenancy.units.manage`) and your modules'. A role can only contain permissions from the catalogue.
 - **Starter role**: a role every new tenant gets a copy of. The tenant can change its copy. The first person in a new
   tenant gets the administrators' starter role at the root. If you declare no starter roles, Tenancy adds one:
-  Administrator ([Administrators](roles-and-permissions.md#the-administrators-pack)). In the code a starter role is
-  called a **pack** (`RolePack`, the `pack_permissions` table).
+  Administrator ([Administrators](roles-and-permissions.md#the-administrators-pack)).
+  In the code it is a `StarterRole`.
 - **System work**: work that no person does, such as creating a tenant. Your code starts it with
   `using (TenancyUseCases.BeginSystem())`, and it ends with the `using` block.
 
@@ -158,7 +158,7 @@ Every choice has a default. An application that changes none of them works.
 |---|---|---|
 | The roles a new tenant starts with | One role, Administrator, with every permission. The tenant's first person gets it at the root. | Declare your own starter roles, and your own administrators' role ([Administrators](roles-and-permissions.md#the-administrators-pack)). |
 | Whether a tenant can make its own roles | Tenancy has the use cases (create, rename, change permissions, archive), but no request calls them. Tenants keep their starter roles. | Add a request for each use case you want, as the tutorial does, and give `tenancy.roles.manage` to the people who may use them. |
-| A starter role you change later | Existing tenants keep their copy as it was. | Call `services.SyncRolePacks()`. Existing copies then get your change, and changes a tenant made itself are kept ([Starter roles after provisioning](roles-and-permissions.md#packs-after-provisioning)). |
+| A starter role you change later | Existing tenants keep their copy as it was. | Call `services.SyncStarterRoles()`. Existing copies then get your change, and changes a tenant made itself are kept ([Starter roles after provisioning](roles-and-permissions.md#packs-after-provisioning)). |
 | Giving a permission that manages access | A seat can only give such a permission where it holds that permission itself. Rhea manages grants at North, so she cannot give herself the right to manage roles for the whole tenant. | Turn this off with `ContainAccessManagingPermissions: false` on your catalogue ([Containment](roles-and-permissions.md#containment-on-or-off)). |
 | The shape of a tenant | Chosen when the tenant is created: flat (only the root) or hierarchical (a tree of units). | A flat tenant can become hierarchical later. A hierarchical tenant cannot become flat again, because its units would have to be deleted. |
 | Who may read which seats | Tenancy's default read rule. | Your own read rule on your `Seat` class ([Who reads the seats](postgres.md#default-read-policies-for-seats-and-invitations)). |

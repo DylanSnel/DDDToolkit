@@ -44,10 +44,10 @@ public static class TenancyFunctionNames
 
     /// <summary>
     /// The roles, as rows of <see cref="Access.RoleRow{TTenantId, TRoleId}"/>: <c>"Id"</c>, <c>"TenantId"</c>,
-    /// <c>"FromPack"</c>, <c>"Status"</c> and <c>"Permissions"</c>, an array of text however the roles' table stores
+    /// <c>"FromStarterRole"</c>, <c>"Status"</c> and <c>"Permissions"</c>, an array of text however the roles' table stores
     /// them; never the name.
     /// </summary>
-    public const string TenantRoles = "tenant_roles_with_permissions";
+    public const string TenantRoles = "tenant_role_rows";
 
     /// <summary>
     /// Where seats are placed, as rows of <see cref="Access.PlacementRow{TSeatId, TUnitId}"/>: <c>"SeatId"</c>,

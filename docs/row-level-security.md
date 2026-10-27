@@ -2409,7 +2409,7 @@ the two cases apart, and answers a hidden row with the same refusal.
   - the trigger of a [column rule](#column-rules),
   - the Membership package's lock on an owner column,
   - Tenancy's triggers on what a seat is, on a seat's status, on the permissions that a role got from its starter
-    role (the code calls a starter role a *pack*), and on who changed a row.
+    role, and on who changed a row.
 - **The guard keeps `42501` with a hint, and gets no code of the toolkit's own.** Every tool already reads `42501` as
   "not allowed". The Data API answers it with 403, and a pgTAP test that expects a refusal expects `42501`. To those
   tools, a toolkit-specific code would look like a different kind of failure. The hint of a `RAISE` is the trigger's
