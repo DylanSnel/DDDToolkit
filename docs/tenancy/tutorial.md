@@ -482,6 +482,49 @@ needs.
 - A request without a requirement does not compile (error DDD00077). So a request cannot run unchecked because
   someone forgot its attribute.
 
+**What this looks like on a request.** Step 8 writes this request and its handler. You do not write it now; it
+shows what the interface and the behavior of this step do. The attribute says what the caller needs. The behavior
+checks it, and `Handle` runs only when the check passes:
+
+```csharp
+[RequiresPermission(TenancyPermissions.SeatsManage)]          // what the caller needs: tenancy.seats.manage
+public sealed record AddSeat(Guid Identity, OrganizationUnitId Unit)
+    : ICommand<SeatId>, ITenancyRequest;                      // ITenancyRequest: the behavior checks this request
+
+public sealed class AddSeatHandler(TenancyUseCases.SeatCommands seats) : ICommandHandler<AddSeat, SeatId>
+{
+    // Runs only for a caller who holds tenancy.seats.manage for the whole tenant.
+    public async ValueTask<SeatId> Handle(AddSeat command, CancellationToken cancellationToken)
+    {
+        var seat = await seats.AddSeatAsync(command.Identity, cancellationToken);
+        await seats.PlaceAsync(seat, command.Unit, primary: true, cancellationToken);
+        return seat;
+    }
+}
+```
+
+What happens when a route sends this request. Purple is the check this step registers, green is the path to the
+handler, red is the refusal:
+
+```mermaid
+flowchart LR
+    route["<b>POST /seats</b><br/><small>sends AddSeat</small>"]
+    check["<b>Access behavior</b><br/><small>does the caller hold<br/>tenancy.seats.manage?</small>"]
+    handler["<b>AddSeatHandler</b><br/><small>runs</small>"]
+    refused["<b>tenancy.not-permitted</b><br/><small>the handler does not run</small>"]
+    route --> check
+    check -- yes --> handler
+    check -- no --> refused
+    classDef strong fill:#5b2ec933,stroke:#5b2ec9,stroke-width:2px
+    classDef good fill:#1f8a5b26,stroke:#1f8a5b
+    classDef bad fill:#c93c3c24,stroke:#c93c3c
+    class check strong
+    class handler good
+    class refused bad
+```
+
+Step 5 turns a refusal into an HTTP response: `tenancy.not-permitted` becomes `403`.
+
 ### What you write
 
 **`Harbor.Tenancy.Application/Access/ITenancyRequest.cs`**
