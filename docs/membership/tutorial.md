@@ -854,6 +854,53 @@ and policies.
   in the catalogue. `SyncRolePacks()` in the host adds the board permissions to her role when the host starts. Changes
   that the tenant made to its roles stay.
 
+**What this looks like on a request.** Step 7 writes this request and its handler. You do not write it now; it shows
+what the checks of this step do. `[RequiresPermission(BoardPermissions.Edit)]` asks for `boards.edit`, and
+`[OnResource]` says on which board. Membership's check decides it, and `Handle` runs only when the check passes:
+
+```csharp
+[RequiresPermission(BoardPermissions.Edit)]                       // what the caller needs: boards.edit
+public sealed record RenameBoard([OnResource] BoardId Board, string Name)  // [OnResource]: on this board
+    : ICommand, IBoardsRequest;                                    // IBoardsRequest: the behavior checks it
+
+public sealed class RenameBoardHandler(IBoardRepository boards) : ICommandHandler<RenameBoard>
+{
+    // Runs only for a caller who holds boards.edit on this board.
+    public async ValueTask<Unit> Handle(RenameBoard command, CancellationToken cancellationToken)
+    {
+        var board = await boards.FindAsync(command.Board, cancellationToken)
+            ?? throw Board.Codes.Refuse(MembershipRefusals.NotFound);
+        board.Rename(command.Name);
+        await boards.SaveAsync(cancellationToken);
+        return Unit.Value;
+    }
+}
+```
+
+What happens when a route sends it. Purple is the check, green is the path to the handler, red are the refusals:
+
+```mermaid
+flowchart LR
+    route["<b>PUT /boards/{id}/name</b><br/><small>sends RenameBoard</small>"]
+    check["<b>Membership's check</b><br/><small>boards.edit on this board?</small>"]
+    handler["<b>RenameBoardHandler</b><br/><small>runs</small>"]
+    hidden["<b>boards.not-found</b><br/><small>the caller does not see the board</small>"]
+    lacks["<b>boards.not-permitted</b><br/><small>sees it, lacks boards.edit</small>"]
+    route --> check
+    check -- holds it --> handler
+    check -- does not see it --> hidden
+    check -- sees it only --> lacks
+    classDef strong fill:#5b2ec933,stroke:#5b2ec9,stroke-width:2px
+    classDef good fill:#1f8a5b26,stroke:#1f8a5b
+    classDef bad fill:#c93c3c24,stroke:#c93c3c
+    class check strong
+    class handler good
+    class hidden,lacks bad
+```
+
+A caller who does not see the board gets the same answer as for a board that does not exist, so nobody learns which
+boards exist.
+
 ### What you write
 
 **The module's request interface.** **Why:** this interface separates Boards' requests from other modules' requests,
