@@ -533,8 +533,11 @@ Keep containment on when clients can reach the database directly, for example th
 
 - System work in a tenant holds every permission in that tenant, with containment on or off.
 - To give a role that manages access when a condition of yours is met, such as a passed quiz, keep containment on.
-  Your handler checks the condition, then grants the role inside `TenancyUseCases.BeginSystemIn(tenant, seat)`. The
-  grant names no giver. Its event records the system, acting for that seat.
+  Your handler checks the condition, then grants the role inside `TenancyUseCases.BeginSystemIn(tenant)`. The
+  grant names no giver, and its event records the system with your reason ("passed Safety quiz").
+- Leave the acting seat out here. An acting seat is the person who asked for the work, such as the administrator who
+  starts an import. The seat that receives the role did not ask for it; as acting seat, the history would read
+  "system, for Leo", which looks as if Leo gave himself the role.
 - System work gives whatever it is told to give. So take the tenant and the seat from the caller, and refuse a caller
   that is not a seat. Take the role and the unit from your records. Never take any of the four from the request.
   Otherwise anyone who passes the quiz gets any role they name, including the administrators' role.
@@ -584,8 +587,9 @@ public sealed class QuizDesk(TenancyUseCases.SeatCommands seats, IQuizzes quizze
             throw QuizRefusals.Refuse(QuizRefusals.NotPassed);
         }
 
-        // An administrator set the quiz's role and unit when making the quiz.
-        using (TenancyUseCases.BeginSystemIn(tenant, seat))
+        // An administrator set the quiz's role and unit when making the quiz. No person asks for this grant, so
+        // the system work names no acting seat; the reason says why the role was given.
+        using (TenancyUseCases.BeginSystemIn(tenant))
         {
             await seats.GrantAsync(seat, quiz.Unit, quiz.Role, until: null, reason: "passed " + quiz.Name, cancellationToken);
         }
