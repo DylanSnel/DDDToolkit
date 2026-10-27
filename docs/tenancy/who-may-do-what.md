@@ -5,58 +5,74 @@ sidebar_label: Who may do what
 
 # Tenancy: who may do what
 
-What a module asks Tenancy about its caller, what a request requires of its caller, and which of Tenancy's rows a
-module may read. Read it when a module of yours decides access. The words are in the [overview](overview.md).
+How a module of yours decides access with Tenancy:
 
-## The questions Tenancy answers
+- the queries a module runs to find out what its caller may do;
+- what a request requires of its caller, checked before the handler runs;
+- which of Tenancy's rows a module may read.
 
-A module asks about the organization over its own context: `answers.Over(db)` gives the questions for the current
-caller, now. Each answer is a query that becomes a subquery of the module's own statement, not a list fetched first.
-Every member: [`ITenancyQuestions`](reference/questions.md#itenancyquestionsttenantid-tseatid-tunitid-troleid).
+The [overview](overview.md) defines the words: tenant, unit, seat, grant, role, permission, system work.
 
-| Question | Answers, for the caller |
+## Tenancy's queries
+
+A module takes `ITenancy<...>` in its constructor and calls `tenancy.In(db)` with the module's context. The call
+returns an `ITenancyQueries<...>` for the current caller at the current moment. Most of its members return an
+`IQueryable`. When you use such a member inside the module's LINQ query, Entity Framework runs the member's query as a
+subquery of that one SQL statement, so no list is fetched first. `HoldsAtTenantAsync` and `HoldsAtAsync` each run a
+separate statement and return a `bool`.
+[`ITenancyQueries`](reference/queries.md#itenancyqueriesttenantid-tseatid-tunitid-troleid) lists every member.
+
+| Query | What it returns for the caller |
 |---|---|
-| `UnitsWhereIHold(permission)` | the units where it holds the permission: where granted, and every unit below |
-| `WhereIHold(permissions)` | every pair of a unit and a permission held there, in one query |
-| `ReadableUnits()` | the units it is placed in, and every unit below: where it belongs, not what it may open |
-| `UnitsUnder(unit)` | the unit and every unit below it |
-| `HoldsAtTenantAsync(permission)` | whether it holds the permission at the root, so for the whole tenant |
-| `HoldsAtAsync(permission, unit)` | whether it holds the permission at the unit, granted there or above |
-| `PermissionsIHoldAt(unit)` | every permission it holds that reaches the unit |
-| `RolesWithPermission(permission)` | the tenant's active roles that grant the permission |
-| `RolePermissions(permissions)` | every pair of an active role and a permission it grants, in one query |
-| `SeatsHoldingPermissionAt(permission, unit)` | the active seats holding the permission there now, as far as the caller [may read their grants](postgres.md#who-reads-which-grants) |
-| `Units()`, `Roles()`, `Seats()` | the tenant's units, roles and seats as access facts, without a name |
-| `answers.Caller`, `answers.RequireTenant()` | who is asking, and the tenant it acts in |
+| `UnitsWhereIHold(permission)` | The units where a grant gives the caller the permission, and every unit below them. |
+| `WhereIHold(permissions)` | Every pair of a unit and a permission the caller holds there, in one query. |
+| `ReadableUnits()` | The units the caller is placed in, and every unit below them. A placement alone gives no permission. |
+| `UnitsUnder(unit)` | The unit and every unit below it. |
+| `HoldsAtTenantAsync(permission)` | `true` when the caller holds the permission at the root. A permission at the root covers the whole tenant. |
+| `HoldsAtAsync(permission, unit)` | `true` when the caller holds the permission at the unit, from a grant at the unit or above it. |
+| `PermissionsIHoldAt(unit)` | Every live permission the caller holds that reaches the unit. |
+| `RolesWithPermission(permission)` | The tenant's active roles that grant the permission. |
+| `RolePermissions(permissions)` | Every pair of an active role and a permission it grants, in one query. |
+| `SeatsHoldingPermissionAt(permission, unit)` | The active seats that hold the permission at the unit now. The result contains only seats whose grants the caller [may read](postgres.md#who-reads-which-grants). |
+| `Units()`, `Roles()`, `Seats()` | The tenant's units and roles, archived ones included, and the seats the caller may read. Each row holds access facts and no name. |
+| `tenancy.Caller`, `tenancy.RequireTenant()` | The caller, and the tenant the caller acts in. |
 
-- A grant counts from its start until its end, compared when asked: one that ended yesterday gives nothing today,
-  with nothing written.
+These rules apply to every query:
+
+- A grant counts from its start until its end. The query compares both with the current time, so a grant that ended
+  yesterday gives nothing today. Nothing is written to the database when a grant ends.
 - A suspended seat, an archived role and a retired permission give nothing.
-- A permission the catalogue does not know throws: a typo fails loudly.
-- System work in a tenant holds every permission there; asking from system work outside any tenant throws.
+- A permission that is not in the catalogue throws an `ArgumentException`. A typo fails at the first call.
+- System work in a tenant holds every permission in that tenant. A query from system work outside any tenant throws
+  an `InvalidOperationException`.
 
-Tenancy does not decide who may open a project: the module that owns projects does, from Tenancy's answer and its
-own teams. Modules ask Tenancy's package about the organization; work under a project asks the projects module:
+Tenancy has no rule about projects. The module that owns projects decides who may open a project, from Tenancy's
+query results and the teams it stores. A module with work under a project queries the projects module. In the
+diagram, purple marks the module that decides about projects:
 
 ```mermaid
 flowchart LR
     subgraph application ["your application"]
         direction TB
-        Tenancy["Shop.Tenants<br/>your classes, context and migrations"]
-        Projects["Projects<br/>projects, teams, roles on a project"]
-        Inspections["Inspections<br/>work under a project"]
+        tenants["<b>Shop.Tenants</b><br/><small>your classes, context and migrations</small>"]
+        projects["<b>Projects</b><br/><small>projects, teams, roles on a project</small>"]
+        inspections["<b>Inspections</b><br/><small>work under a project</small>"]
     end
-    Package["DDDToolkit.Supporting.Tenancy<br/>rules, use cases, the access questions"]
-    Tenancy -- "generated base classes" --> Package
-    Projects -- "units where I hold a permission,<br/>roles with a permission" --> Package
-    Inspections -- "may I open this project?" --> Projects
+    package["<b>DDDToolkit.Supporting.Tenancy</b><br/><small>rules, use cases, queries</small>"]
+    tenants -- "generated base classes" --> package
+    projects -- "UnitsWhereIHold,<br/>RolesWithPermission" --> package
+    inspections -- "may I open this project?" --> projects
+    classDef strong fill:#5b2ec933,stroke:#5b2ec9,stroke-width:2px
+    class projects strong
 ```
 
-**Mapping the read model.** The module's context maps Tenancy's rows next to its own tables:
+### Mapping the read model
+
+The module's context maps Tenancy's rows next to the module's tables:
 
 ```csharp
-// On Postgres the rows come from Tenancy's read functions, anywhere else from views over its tables.
-// The module sees Tenancy's ids, not its classes, so it names them.
+// On Postgres the rows come from Tenancy's read functions. On other databases they come from views over its tables.
+// The module sees Tenancy's ids and not its classes, so the call names the ids.
 if (Database.IsNpgsql())
 {
     modelBuilder.AddTenancyReadFunctions<TenantId, SeatId, OrganizationUnitId, RoleId>("tenancy");
@@ -69,40 +85,44 @@ else
 modelBuilder.Entity<Project>().ScopeToTenant(project => project.TenantId);
 ```
 
-- It needs Tenancy's tables in the module's database: one database with a schema per module, or one SQLite file.
-  Where they are apart, ask Tenancy's own context first and pass the answer in as a list.
+- The module's database must contain Tenancy's tables. Use one database with a schema per module, or one SQLite
+  file. When the databases are separate, query Tenancy's context first and pass the result into the module's query
+  as a list.
 - On Postgres with `DDDToolkit.Supporting.Tenancy.Postgres`, map the functions
-  ([modules read through functions](postgres.md#modules-read-through-functions)): the questions refuse a module's
-  context that maps the views there.
-- Where your classes are visible, the call without the four ids is generated.
-- A module whose resources have members leaves these questions to [Membership](../membership/overview.md), as the sample's
-  Projects module does.
+  ([modules read through functions](postgres.md#modules-read-through-functions)). On that database, `tenancy.In(db)`
+  throws for a module context that maps the views.
+- In a project that sees your classes, a generated overload of each call takes no ids.
+- A module whose resources have their own members queries [Membership](../membership/overview.md) instead. The
+  sample's Projects module works this way.
 
-## Permission sets for navigation, abilities for actions
+## Showing what a caller may do in a list
 
-A list that shows per row what the caller may do needs several permissions for many rows. `HoldsAtAsync` per row is
-a query per answer; `WhereIHold(permissions)` answers every pair in one query, inside the module's own statement:
+A list that shows, per row, what the caller may do needs several permissions for many rows. Calling `HoldsAtAsync`
+for each row runs one query per row and permission. `WhereIHold(permissions)` returns every pair of a unit and a
+permission in one query, inside the module's statement:
 
 ```csharp
-var tenancy = answers.Over(db);
-var held = tenancy.WhereIHold(["projects.edit", "projects.close"]);
+var queries = tenancy.In(db);
+var held = queries.WhereIHold(["projects.edit", "projects.close"]);
 
-// Each project with the permissions held where it hangs: one statement
+// Each project with the permissions the caller holds at the project's unit, in one SQL statement
 var abilities = await (
     from project in db.Projects
     join pair in held on project.UnitId equals pair.Unit
     select new { project.Id, pair.Permission }).ToListAsync(cancellationToken);
 ```
 
-- `RolePermissions(permissions)` does the same where rows are reached through a role, as a project's crew is.
-- A permission set draws the screen and decides nothing: by the time a button is pressed, a grant may have ended.
-  The use case asks again when the command runs.
+- `RolePermissions(permissions)` does the same for rows that a caller reaches through a role, such as a project's
+  crew.
+- Use the result to show buttons and menus. A grant can end between the list and the click, so the use case checks
+  the permission again when the command runs.
 
 ## What a request requires of its caller
 
-Every request states what it requires, checked before the handler runs. The mechanism is the toolkit's
-([Access requirements](../access-requirements.md), [How a request is checked](../how-a-request-is-checked.md));
-here are Tenancy's cases. The generator turns each attribute into the call beside it:
+Every request states what it requires of its caller, and a check tests it before the handler runs. The mechanism
+belongs to the toolkit core ([Access requirements](../access-requirements.md),
+[How a request is checked](../how-a-request-is-checked.md)). This section lists Tenancy's cases. The generator turns
+each attribute into the call in the comment beside it:
 
 ```csharp
 [AccessRequests]
@@ -115,83 +135,111 @@ public sealed record CloseTheBooks(int Year) : IBillingRequest;
 public sealed record OpenLedger(string Name, [AtUnit] OrganizationUnitId Unit) : IBillingRequest;
 ```
 
-| A request requires | Its attribute | Or, computed | Lets through | Refuses with |
+| A request requires | Its attribute | The same, computed | Lets through | Refuses with |
 |---|---|---|---|---|
-| a caller in the tenant | `[InTenant]` | `TenancyAccess.InTenant()` | a seat in the request's tenant; system work there | the caller's own reason, such as `tenancy.not-seated` |
-| a permission for the whole tenant | `[RequiresPermission(p)]` | `TenancyAccess.AtTenant(p)` | whoever holds it at the root now; system work in the tenant | `tenancy.not-permitted` |
-| a permission at a unit | `[RequiresPermission(p)]`, `[AtUnit]` on the unit | `TenancyAccess.AtUnit(p, unit)` | whoever holds it at the unit now, there or above; system work in the tenant | `tenancy.not-permitted`, with the unit |
+| a caller in the tenant | `[InTenant]` | `TenancyAccess.InTenant()` | a seat in the request's tenant, and system work in that tenant | the caller's refusal code, such as `tenancy.not-seated` |
+| a permission for the whole tenant | `[RequiresPermission(p)]` | `TenancyAccess.AtTenant(p)` | a caller who holds `p` at the root now, and system work in the tenant | `tenancy.not-permitted` |
+| a permission at a unit | `[RequiresPermission(p)]`, with `[AtUnit]` on the unit | `TenancyAccess.AtUnit(p, unit)` | a caller who holds `p` at the unit now, from a grant there or above, and system work in the tenant | `tenancy.not-permitted`, with the unit |
 | an operator, on a query | `[RequiresOperator]` | `TenancyAccess.RequiresOperator()` | an [operator](operators-and-history.md#operators) | `tenancy.operators-only`, also for seats and system work |
-| the caller's own seat, or a permission | `[RequiresPermission(p)]`, `[OrOwn]` on the seat | `AccessRequirement.Any(TenancyAccess.Own(seat), ...)` | the named seat if it is the caller's own; whoever holds `p` | one `access.refused`, with both reasons |
-| the caller's own seat alone | `[OwnOnly]`, `[Own]` on the seat | `TenancyAccess.Own(seat)` | that seat; not system work, which has no seat | `access.not-own` |
+| the caller's seat, or a permission | `[RequiresPermission(p)]`, with `[OrOwn]` on the seat | `AccessRequirement.Any(TenancyAccess.Own(seat), ...)` | the named seat when it is the caller's seat, and a caller who holds `p` | one `access.refused`, with both reasons |
+| the caller's seat only | `[OwnOnly]`, with `[Own]` on the seat | `TenancyAccess.Own(seat)` | the named seat when it is the caller's seat. System work has no seat, so it is refused. | `access.not-own` |
 
-- **Cost**: `AtTenant` and `AtUnit` read one statement each; the others read nothing. The cases in full:
-  [Requirements](reference/callers.md#requirements).
-- **The level** of a permission is declared once, on its constant, `[AtTenant]` or `[AtUnit]`
-  ([A module states its permissions once](roles-and-permissions.md#a-module-states-its-permissions-once)).
-- **`[AtUnit]`** is for a command that acts at a unit it names: one a package use case decides (placing a seat,
-  giving a role there), or one that makes something where nothing exists yet to hold a permission on (opening a
-  project there).
-- It marks a member of your unit id (your `[OrganizationUnit<TUnitId>]` class's). On another id it is
-  [DDD00081](../diagnostics.md#ddd00081), or, where a module sees only your ids, an `InvalidOperationException` when
-  sent; the sample's `AccessDeclarationTests` catches it by holding every request to its requirement.
-- **A unit the request may leave out**, `OrganizationUnitId?`, is computed:
-  `Unit is { } unit ? TenancyAccess.AtUnit(p, unit) : TenancyAccess.AtTenant(p)`, as the sample's `SeatGrants` does.
-- **The module's default**: `[AccessRequests, InTenant]` on the interface makes a request that states nothing
-  require a caller in the tenant ([A module's default](../access-requirements.md#a-modules-default)).
-- **The caller's own seat** is compared with the caller's seat in the request's tenant, which `AddTenancy` answers
-  (`ICallersOwn<TSeatId>`) from the verified identity, never from the request. The sample's `RenameSeat`: a seat
-  renames itself; `tenancy.seats.manage` for the whole tenant renames any.
-- `[OrOwn]` beside `[AtUnit]` is [DDD00085](../diagnostics.md#ddd00085): the caller would send a unit where it holds
-  the permission, for somebody else's seat. Other pairs that clash or add nothing:
-  [What goes together](../access-requirements.md#what-goes-together).
-- `[AllowAnonymous]` and `[SignedIn]` (a user with no seat yet) are the toolkit's
+- **Cost.** `AtTenant` and `AtUnit` each run one SQL statement. The other cases read nothing from the database.
+  [Requirements](reference/callers.md#requirements) lists every case in full.
+- **Level.** A permission's level is declared once, on its constant, with `[AtTenant]` or `[AtUnit]`
+  ([Declaring a module's permissions](roles-and-permissions.md#declaring-a-modules-permissions)).
+- **`[AtUnit]`** marks the unit of a command that acts at a unit it names. Two kinds of command need it. The first
+  kind calls a package use case that checks the unit, such as placing a seat or giving a role there. The second kind
+  creates something at a unit before anything exists there to hold a permission on, such as opening a project.
+- `[AtUnit]` goes on a member of your unit id type, the id of your `[OrganizationUnit<TUnitId>]` class. On a member
+  of another type it is [DDD00081](../diagnostics.md#ddd00081). A module that sees only your ids cannot get that
+  error. There, the check throws an `InvalidOperationException` when the request is sent. The sample's
+  `AccessDeclarationTests` catches this mistake by comparing every request with the requirement it should declare.
+- **An optional unit.** When the unit is an `OrganizationUnitId?`, compute the requirement:
+  `Unit is { } unit ? TenancyAccess.AtUnit(p, unit) : TenancyAccess.AtTenant(p)`. The sample's `SeatGrants` does
+  this.
+- **The module's default.** `[AccessRequests, InTenant]` on the module's interface makes every request that states
+  nothing require a caller in the tenant ([A module's default](../access-requirements.md#a-modules-default)).
+- **The caller's seat.** The check compares the named seat with the caller's seat in the request's tenant.
+  `AddTenancy` registers `ICallersOwn<TSeatId>`, which finds that seat from the caller's verified identity. The check
+  never reads the caller's seat from the request. Example: the sample's `RenameSeat` lets a seat rename itself, and
+  lets a caller with `tenancy.seats.manage` for the whole tenant rename any seat.
+- `[OrOwn]` together with `[AtUnit]` is [DDD00085](../diagnostics.md#ddd00085). With both, a caller could send a
+  unit where it holds the permission together with another person's seat.
+  [What goes together](../access-requirements.md#what-goes-together) lists the other pairs that clash or add nothing.
+- `[AllowAnonymous]` and `[SignedIn]` (a user who has no seat yet) belong to the toolkit core
   ([the vocabulary](../access-requirements.md#the-vocabulary)).
-- Cases combine in `AccessRequirement.All` and `Any`
-  ([Requirements that combine](../access-requirements.md#requirements-that-combine)): moving a seat takes the
-  permission at both units, `All(TenancyAccess.AtUnit(p, From), TenancyAccess.AtUnit(p, To))`, and the handler
-  moves it from `From` alone.
-- What is held on one thing a module keeps at a unit is that module's own case
-  ([What answers it](../access-requirements.md#what-answers-it)); [Membership](../membership/overview.md) ships such cases.
+- Combine cases with `AccessRequirement.All` and `Any`
+  ([Requirements that combine](../access-requirements.md#requirements-that-combine)). Example: moving a seat requires
+  the permission at both units, `All(TenancyAccess.AtUnit(p, From), TenancyAccess.AtUnit(p, To))`. The handler then
+  moves the seat from `From` and from no other unit.
+- A module can keep things at a unit and give permissions on each thing. A permission on one of those things is a
+  requirement case of that module ([What answers it](../access-requirements.md#what-answers-it)).
+  [Membership](../membership/overview.md) ships these cases.
 
-**A request handed to a package use case declares what that use case asks first.**
+### Requests that call a package use case
 
-- Giving a role, `MakeGrant` whose handler calls `SeatCommands.GrantAsync`:
-  `[RequiresPermission(TenancyPermissions.GrantsManage)]`, `[AtUnit]` on the unit. Making a role:
-  `[RequiresPermission(TenancyPermissions.RolesManage)]`. A query of the package's directory: `[InTenant]`.
-- Where that first question needs something read, the request declares `[InTenant]`: archiving a unit takes
-  `tenancy.units.manage` at its parent, which only the use case reads.
-- The use case asks again, whoever calls it, then what only it can read: who may give a role that manages access,
-  whether a move gives away what the caller could not, whether the tenant keeps an administrator. A caller it would
-  refuse first is refused at the door already, with the same code.
+A request whose handler calls a Tenancy use case declares the permission that the use case checks first. Examples:
 
-The checks a grant passes, in order: the door checks what the request names, the use case what only it can read, and
-on Postgres [the second lock](postgres.md) holds every saved row to the seat the use case runs as.
+- `MakeGrant`, whose handler calls `SeatCommands.GrantAsync`, declares
+  `[RequiresPermission(TenancyPermissions.GrantsManage)]` with `[AtUnit]` on the unit.
+- A request that makes a role declares `[RequiresPermission(TenancyPermissions.RolesManage)]`.
+- A query of the package's directory declares `[InTenant]`.
+
+When the use case's first check needs data from the database, the request declares `[InTenant]`. Example: archiving
+a unit requires `tenancy.units.manage` at the unit's parent, and only the use case loads the parent.
+
+The use case checks the permission again, whoever calls it. Then it runs the checks that need stored data:
+
+- whether the caller may give a role that manages access;
+- whether a move gives away what the caller could not give;
+- whether the tenant keeps an administrator.
+
+A caller that the use case's first check would refuse is refused before the handler runs, with the same code.
+
+The diagram shows the checks a grant passes, in order. The request check tests what the request names. The use case
+tests what it reads from the database. On Postgres, [row level security](postgres.md) then checks every saved row
+against the seat the use case runs as. Purple: the request. Red: refused. Green: saved.
 
 ```mermaid
 flowchart TB
-    Request["MakeGrant"] --> Door["its requirement:<br/>tenancy.grants.manage at the unit"]
-    Door -- "not held" --> NotPermitted["tenancy.not-permitted"]
-    Door -- "held" --> UseCase["the use case: the permission again,<br/>and what only it can read"]
-    UseCase -- "a role it may not give" --> Exceeds["tenancy.grant-exceeds-own"]
-    UseCase -- "saves, as the seat" --> Policies[("Tenancy's policies,<br/>on Postgres")]
+    request["<b>MakeGrant</b><br/><small>the request</small>"]
+    door{"tenancy.grants.manage<br/>at the unit?"}
+    useCase["<b>GrantAsync</b><br/><small>checks the permission again,<br/>then the stored grants</small>"]
+    notPermitted["<b>Refused</b><br/><small>tenancy.not-permitted</small>"]
+    exceeds["<b>Refused</b><br/><small>tenancy.grant-exceeds-own</small>"]
+    saved["<b>Grant saved</b><br/><small>on Postgres, row level security<br/>checks the row again</small>"]
+    request --> door
+    door -- "no" --> notPermitted
+    door -- "yes" --> useCase
+    useCase -- "a role the seat may not give" --> exceeds
+    useCase -- "allowed" --> saved
+    classDef strong fill:#5b2ec933,stroke:#5b2ec9,stroke-width:2px
+    classDef good fill:#1f8a5b26,stroke:#1f8a5b
+    classDef bad fill:#c93c3c24,stroke:#c93c3c
+    class request strong
+    class saved good
+    class notPermitted,exceeds bad
 ```
 
-### Who may ask, and what the work runs as
+### Requests that provision a tenant
 
-A tenant is provisioned by system work outside any tenant, which nobody holds a seat for. So who may send the request
-and what the work runs as are two decisions.
+System work outside any tenant provisions a tenant, and nobody holds a seat for that work. So a provisioning request
+involves two separate decisions: who may send the request, and what the work runs as.
 
-- The handler always begins the work itself, `TenancyUseCases.BeginSystem()`: the use case refuses a seat with
-  `access.system-only`. The caller gains nothing: the policies hold the work to the tenant it makes.
-- The requirement only changes where the handler finds the first administrator:
+- The handler always begins the system work itself, with `TenancyUseCases.BeginSystem()`. `ProvisionAsync` refuses
+  a seat with `access.system-only`.
+- The caller gains no rights from that system work. On Postgres, the policies let the work write only the tenant it
+  creates.
+- The requirement decides only where the handler gets the identity of the first administrator:
 
-| Who may send it | Its requirement | The first administrator |
+| Who may send the request | Its requirement | Where the first administrator comes from |
 |---|---|---|
-| a signed-in person registering an organization | `[SignedIn]` | the caller's own token, read before the system work begins; an anonymous sign-in is refused |
-| anyone, through a public form or a development route | `[AllowAnonymous]` | an address the form carries: the handler makes the account (`IIdentityAccounts.InviteByEmailAsync`) and provisions for its id |
-| a job or tool of the application (an import, the seeding) | none: trusted code begins the work and calls the use case | the job's own input |
+| a signed-in person who registers an organization | `[SignedIn]` | The caller's token, read before the system work begins. The handler refuses an anonymous sign-in. |
+| anyone, through a public form or a development route | `[AllowAnonymous]` | An e-mail address in the form. The handler creates the account with `IIdentityAccounts.InviteByEmailAsync` and provisions the tenant for the new account's id. |
+| a job or tool of the application, such as an import or the seeding | None. Trusted code begins the work and calls the use case. | The job's input. |
 
-An operator's request is none of these: system work that names the operator carries it out,
+An operator's request is a fourth case. System work that names the operator runs it, begun with
 `TenancyUseCases.BeginOperator(identity)` ([Operators](operators-and-history.md#operators)).
 
 ```csharp
@@ -203,7 +251,7 @@ public sealed class RegisterOrganizationHandler(TenancyUseCases.TenantCommands t
 {
     public async ValueTask<TenantId> Handle(RegisterOrganization command, CancellationToken cancellationToken)
     {
-        // Read before the system work begins: inside it, the caller is the system.
+        // Read the caller before the system work begins. Inside the system work, the caller is the system.
         var caller = callers.Current;
         if (caller.UserId is not { } administrator
             || string.Equals(caller.Claim("is_anonymous"), "true", StringComparison.OrdinalIgnoreCase))
@@ -224,8 +272,8 @@ public sealed class RegisterOrganizationHandler(TenancyUseCases.TenantCommands t
 }
 ```
 
-A public form's handler makes the account first. An address that has one is answered as if it had none, so the form
-tells nobody who has an account:
+A public form's handler creates the account first. When the address already has an account, the handler stops and
+returns the same response as for a new address. So the form does not reveal which addresses have an account:
 
 ```csharp
 var made = await accounts.InviteByEmailAsync(command.Address, signInRedirect: null, cancellationToken);
@@ -246,38 +294,45 @@ services.AddTenancyAccess<ITenantsRequest, ShopTenancyContext>();
 services.AddTenancyAccess<TenantId, SeatId, OrganizationUnitId, RoleId, IBillingRequest, BillingContext>();
 ```
 
-- It reads over that module's context, which maps the [read model](#what-a-module-reads-of-tenancy) or is Tenancy's;
-  on a context of its own where you registered `IDbContextFactory<TContext>`.
-- A request of a module without the check is stopped; the message names `AddTenancyAccess`.
-- The packages reference no dispatcher: call `AccessChecks<IBillingRequest>.RequireAsync` before the handlers, or use
+- The check runs its queries over the module's context. That context maps the
+  [read model](#what-a-module-reads-of-tenancy), or is Tenancy's context. When you registered
+  `IDbContextFactory<TContext>`, the check uses a separate context from that factory.
+- A request of a module without the check is stopped. The error message names `AddTenancyAccess`.
+- The packages reference no dispatcher. Call `AccessChecks<IBillingRequest>.RequireAsync` before the handlers, or use
   the [behavior generated for Mediator](../access-requirements.md#the-generated-behavior-with-mediator).
 
 ## What a module reads of Tenancy
 
-The read model is six rows of access facts. A module's model can map nothing else of Tenancy's:
+The read model has six row types, all access facts. A module's model can map nothing else of Tenancy's:
 
-| Row | Carries | Does not carry |
+| Row | Contains | Leaves out |
 |---|---|---|
 | `SeatRight` | tenant, seat, unit, role, permission, the grant's start and end | |
-| `OrganizationUnitPath` | tenant, the unit above, a unit at or below it, levels apart | |
-| `OrganizationUnitRow` | id, tenant, parent, status | its name and your unit class's fields |
-| `RoleRow` | id, tenant, the pack (starter role) it was copied from, status, permissions | its name |
+| `OrganizationUnitPath` | tenant, the unit above, a unit at or below it, and the number of levels between them | |
+| `OrganizationUnitRow` | id, tenant, parent, status | the name, and the fields of your unit class |
+| `RoleRow` | id, tenant, the starter role (pack) it was copied from, status, permissions | the name |
 | `PlacementRow` | seat, unit, whether it is the primary placement | |
-| `SeatRow` | id, tenant, status | its identity and your seat class's fields, such as a name |
+| `SeatRow` | id, tenant, status | the identity, and the fields of your seat class, such as a name |
 
-No row holds text shown to people, and no rule needs one: a module answers ids, and
-[names](names-and-languages.md#names) are asked of Tenancy.
+No row holds text that people see, and no access rule needs text. A module returns ids and gets the
+[names](names-and-languages.md#names) from Tenancy.
 
-**Holding a module to these rows.** `TenancyModel.ReadsBeyondAccessFacts(model)` reports, a sentence per finding, a
-type of the module's own on a Tenancy table, view or function, or a property added to a row, shadow ones included.
-Assert it is empty for every module's context, built per database you run on, as the sample's `ModuleModelTests` does:
+### Testing that a module reads only these rows
+
+`TenancyModel.ReadsBeyondAccessFacts(model)` returns one sentence per finding. It finds two kinds of mapping:
+
+- a type of the module mapped onto a Tenancy table, view or function;
+- a property added to one of the six rows, shadow properties included.
+
+Assert that the result is empty for every module's context, built for each database you run on. The sample's
+`ModuleModelTests` does this:
 
 ```csharp
 using var projects = new ProjectsContext(optionsForPostgres);
 TenancyModel.ReadsBeyondAccessFacts(projects.Model, schema: "tenancy").Should().BeEmpty();
 ```
 
-- It judges mappings, not SQL written by hand. Without the second lock, only your project references keep a module
-  from Tenancy's tables.
-- SQLite has no schemas and finds a table by its name alone: for a SQLite model, ask once more per schema the model
-  names (`schema: null` is its default schema).
+- The method checks mappings. It does not see SQL written by hand. Without row level security on Postgres, only your
+  project references keep a module away from Tenancy's tables.
+- SQLite has no schemas and finds a table by its name only. For a SQLite model, call the method once more for each
+  schema the model names. `schema: null` means the model's default schema.

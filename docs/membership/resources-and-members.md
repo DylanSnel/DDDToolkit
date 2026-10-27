@@ -5,39 +5,39 @@ sidebar_label: Resources and members
 
 # Membership: resources and members
 
-A resource, its member class, owner and member list, its names, and several kinds of resource. Read it when you add
-a resource with members; the [tutorial](tutorial.md) builds one beside Tenancy.
+Read this page when you add a resource with members. It covers the member class, the owner, the member list, the
+names, and several kinds of resource in one module. The [tutorial](tutorial.md) builds a resource beside Tenancy.
 
 ## The packages
 
 > [!NOTE]
-> Published as `Temp.DDDToolkit.Supporting.Membership`, `.EntityFramework` and `.Postgres`
-> ([the package ids](../migrating-to-3.md#the-package-ids)), as prereleases: names can still change.
+> The packages are published as `Temp.DDDToolkit.Supporting.Membership`, `.EntityFramework` and `.Postgres`
+> ([the package ids](../migrating-to-3.md#the-package-ids)). They are prereleases, so their names can still change.
 
 | Package | What it holds |
 |---|---|
-| `DDDToolkit.Supporting.Membership` | The templates, the member list (its generator writes it), the rules, the questions and requirements. No database. |
-| `DDDToolkit.Supporting.Membership.EntityFramework` | `HasMembers()`, `IsCustomRole()`, the registrations, the questions inside your statements, on any provider. Its generator writes the [join with Tenancy](beside-an-organization.md#with-tenancy). |
-| `DDDToolkit.Supporting.Membership.Postgres` | The functions your row access rules ask, the lock on the member rows, a start-up check ([On Postgres](postgres.md)). |
+| `DDDToolkit.Supporting.Membership` | The templates, the member list and the generator that writes it, the rules, the questions and the requirements. It has no database code. |
+| `DDDToolkit.Supporting.Membership.EntityFramework` | `HasMembers()`, `IsCustomRole()`, the registrations, and the questions inside your queries, on any provider. Its generator writes the [join with Tenancy](beside-an-organization.md#with-tenancy). |
+| `DDDToolkit.Supporting.Membership.Postgres` | The functions your row access rules call, the lock on the member rows, and a start-up check ([On Postgres](postgres.md)). |
 
-- **Needs nothing else**: no dispatcher, no Tenancy. Members are your users unless the rules say
-  [otherwise](beside-an-organization.md#beside-an-organization).
-- **One owner and nobody else** needs none of this: `[Owner]` on the aggregate, `[Own]` or `[OrOwn]` on the request
-  ([The owner of an aggregate](../access-requirements.md#the-owner-of-an-aggregate)).
+- **Membership needs no dispatcher and no Tenancy.** Members are your users unless the rules say
+  [otherwise](beside-an-organization.md#three-settings-of-the-rules).
+- **An aggregate with one owner and no other members needs none of this.** Mark the owner `[Owner]` on the aggregate,
+  and put `[Own]` or `[OrOwn]` on the request ([The owner of an aggregate](../access-requirements.md#the-owner-of-an-aggregate)).
 
 ## A document and the people it is shared with
 
-All there is to write for a resource whose members are your users: a document, the people it is shared with, and a
-command that shares it. It compiles as it stands, `using` lines left out.
+This example is all you write for a resource whose members are your users. A document is shared with users, and a
+command shares it. The code compiles as it stands. Only the `using` lines are left out.
 
-**The domain**: your aggregate, a one-line member class, and the owner marked `[Owner]`.
+**The domain.** You write the aggregate, a member class of one line, and the owner property, marked `[Owner]`.
 
 ```csharp
 [EntityId<Guid>] public readonly partial record struct UserId;
 [EntityId<Guid>] public readonly partial record struct DocumentId;
 [EntityId<Guid>] public readonly partial record struct DocumentShareId;
 
-// A member of a document: its row's id, who a member is, what a role is known by, and the resource
+// The member class: the row id, the member id, the role type, and the resource
 [Member<DocumentShareId, UserId, NamedRole, Document>]
 public sealed partial class DocumentShare;
 
@@ -47,11 +47,11 @@ public sealed partial class Document
     public Document(DocumentId id, UserId owner, DateTimeOffset now) : base(id)
     {
         OwnerId = owner;
-        Members.Open(now);                           // the owner is a member, for good, holding no role
+        Members.Open(now);                           // puts the owner on the list, with no end and no role
     }
 
     [Owner]
-    public UserId OwnerId { get; private set; }      // holds what the permissions give an owner, by owning
+    public UserId OwnerId { get; private set; }      // the owner holds the permissions marked for the owner
 
     public bool Archived { get; private set; }
 
@@ -59,21 +59,22 @@ public sealed partial class Document
 
     public void ShareWith(UserId user, NamedRole role, MemberPeriod period, DateTimeOffset now, UserId? by)
     {
-        if (Archived)                                // your own guard, in front of the member list
+        if (Archived)                                // your guard runs before the member list
         {
             throw new RefusalException("documents.archived", RefusalKind.Conflict, "The document is archived.");
         }
 
-        Members.Add(user, role, period, now, by);    // Members: written for you, over Shares
+        Members.Add(user, role, period, now, by);    // Members is generated over Shares
     }
 }
 ```
 
-- `Members`, the **member list**, is [written for you](#the-member-list-is-written-for-you), with the name
-  `documents` ([Names](#names)), the codes `Codes` (`documents.already-member` …) and the system-work scope `filing`.
+- `Members` is the **member list**. The generator writes it ([The generated member list](#the-generated-member-list)),
+  with the name `documents` ([Names](#names)), the codes in `Codes` (`documents.already-member` and the others), and
+  the system-work scope `filing`.
 
-**The permissions**, asked on one document (`[On<Document>]`), each with how it is held there
-([The settings of a permission](permissions-and-roles.md#the-settings-of-a-permission)):
+**The permissions.** Each permission is asked on one document (`[On<Document>]`). The attribute also says how the
+permission is held there ([The settings of a permission](permissions-and-roles.md#the-settings-of-a-permission)).
 
 ```csharp
 [Permissions]
@@ -90,12 +91,14 @@ public static class DocumentPermissions
 }
 ```
 
-- The owner holds all three by owning, a role may give each, every member holds `View`.
-- `LocksMembers`, `LocksOwner`: what your commands that change the members and hand the document on require; the
-  database holds direct statements to it ([Who writes the member rows](postgres.md#who-writes-the-member-rows)).
+- The owner holds all three permissions by owning the document. A role can give each of them. Every member holds
+  `View`.
+- `LocksMembers` and `LocksOwner` mark `Share` as the permission your commands require to change the members and to
+  hand the document on. On Postgres, the database then refuses a direct write to the member rows or the owner column
+  from a caller without `Share` ([Who writes the member rows](postgres.md#who-writes-the-member-rows)).
 
-**The rules**, read by the check in C# and by the database. `For<Document>` takes the name, codes and permissions
-from the type; what is left to say is the roles.
+**The rules.** The check in C# and the functions in the database read the same rules. `For<Document>` reads the name,
+the codes and the permissions from the type, so the rules only say where the roles come from.
 
 ```csharp
 public static class DocumentMembership
@@ -105,11 +108,12 @@ public static class DocumentMembership
 }
 ```
 
-- `Roles.Fixed`: in code, the same for every document. Or [`Roles.Custom`](permissions-and-roles.md#roles-a-customer-makes),
-  [`Roles.External`](beside-an-organization.md#beside-an-organization).
-- Who a member is follows from the member id: a `UserId` over a `Guid` is the caller's user id.
+- `Roles.Fixed` declares the roles in code, the same for every document. The other choices are
+  [`Roles.Custom`](permissions-and-roles.md#roles-a-customer-makes) and
+  [`Roles.External`](beside-an-organization.md#three-settings-of-the-rules).
+- Who a member is follows from the member id. A `UserId` over a `Guid` is compared with the caller's user id.
 
-**The wiring**:
+**The wiring.**
 
 ```csharp
 public sealed class FilingContext(DbContextOptions<FilingContext> options) : DbContext(options)
@@ -119,10 +123,10 @@ public sealed class FilingContext(DbContextOptions<FilingContext> options) : DbC
     protected override void ConfigureConventions(ModelConfigurationBuilder configuration)
     {
         configuration.AddDDDToolkitConventions();
-        configuration.AddFilingConverters();         // your ids, stored by the converters generated for your module
+        configuration.AddFilingConverters();         // stores your ids with the converters generated for your module
     }
 
-    // Both member tables, owned by the document; the owner is the property it marks [Owner]
+    // Maps both member tables, owned by the document. The owner is the property marked [Owner].
     protected override void OnModelCreating(ModelBuilder modelBuilder)
         => modelBuilder.Entity<Document>().HasMembers(document => document.Shares);
 }
@@ -132,21 +136,21 @@ public static class FilingModule
     public static IServiceCollection AddFiling(this IServiceCollection services, Action<DbContextOptionsBuilder> database)
     {
         services.AddDbContext<FilingContext>(database);                             // your context, on your provider
-        services.AddDocumentMembership<FilingContext>(DocumentMembership.Rules);    // the access questions of documents
-        services.AddDocumentMemberAccess<IFilingRequest>();                         // their check, for your requests
-        services.RequireExplicitCallers();                                          // work that says nothing about who it runs as fails
+        services.AddDocumentMembership<FilingContext>(DocumentMembership.Rules);    // the questions and the admission for documents
+        services.AddDocumentMemberAccess<IFilingRequest>();                         // the check for documents, on your requests
+        services.RequireExplicitCallers();                                          // work that names no caller fails
         return services.AddScoped<DocumentHandlers>();
     }
 }
 ```
 
-- `AddDocumentMembership` and `AddDocumentMemberAccess` are generated, named after the resource.
-- `HasMembers` adds two tables, `DocumentShares` and `DocumentShareRoles`: add a migration.
-- `RequireExplicitCallers()`: work that says nothing about who it runs as counts as the application, which holds every
-  permission. With it, such work [fails](../row-level-security.md#fail-closed-callers).
+- The generator writes `AddDocumentMembership` and `AddDocumentMemberAccess`, and names them after the resource.
+- `HasMembers` adds two tables, `DocumentShares` and `DocumentShareRoles`. Add a migration for them.
+- Without `RequireExplicitCallers()`, work that names no caller runs as the application, which holds every
+  permission. With it, that work [fails](../row-level-security.md#fail-closed-callers).
 
-**A request and its handler.** `[OnResource]` marks the document the permission is held on, `[ExpectedVersion]` the
-version the caller read; the generator writes `MemberAccess.On("documents.share", request.Document,
+**A request and its handler.** `[OnResource]` marks the document the permission is held on. `[ExpectedVersion]` marks
+the version the caller read. The generator writes `MemberAccess.On("documents.share", request.Document,
 request.ExpectedVersion)` into the partial interface.
 
 ```csharp
@@ -162,7 +166,7 @@ public sealed class DocumentHandlers(
     ICallerAccessor callers,
     TimeProvider clock)
 {
-    // Writing a document: whoever writes it owns it
+    // The caller who writes a document owns it
     public async Task<DocumentId> WriteAsync(CancellationToken cancellationToken)
     {
         var owner = new UserId(callers.Current.UserId!.Value);
@@ -172,15 +176,15 @@ public sealed class DocumentHandlers(
         return document.Id;
     }
 
-    // Sharing one: reached once the check let the request through
+    // Runs after the check let the request through
     public async Task HandleAsync(ShareDocument command, CancellationToken cancellationToken)
     {
         var role = new NamedRole(command.Role);                                      // "contributor"
         await admission.RequireRoleAsync(role, cancellationToken);                   // one of the roles the rules declare
 
         var document = await db.Documents.SingleOrDefaultAsync(row => row.Id == command.Document, cancellationToken)
-            ?? throw Document.Codes.Refuse(MembershipRefusals.NotFound);             // gone since the check
-        db.ExpectVersion(document, command.ExpectedVersion);                         // If-Match: a stale version is a 409
+            ?? throw Document.Codes.Refuse(MembershipRefusals.NotFound);             // deleted since the check
+        db.ExpectVersion(document, command.ExpectedVersion);                         // a stale If-Match version is a 409
 
         var now = clock.GetUtcNow();
         document.ShareWith(command.With, role, MemberPeriod.Between(now, command.Until), now, by: new UserId(callers.Current.UserId!.Value));
@@ -189,25 +193,27 @@ public sealed class DocumentHandlers(
 }
 ```
 
-- **Something asks the checks** before the handler: the behavior generated for an `[AccessRequests]` interface, or
-  `AccessChecks<IFilingRequest>.RequireAsync(request)` from your dispatcher ([Access requirements](../access-requirements.md)).
-  With the behavior, `AddDocumentMemberAccess` adds a start-up check that it is in the pipeline
-  ([When nothing asks the checks](../access-requirements.md#when-nothing-asks-the-checks)).
-- **`[OnResource]` on another id** than a resource with members' is [DDD00081](../diagnostics.md#ddd00081). A
-  requirement computed from the request's values answers `RequiredAccess` instead
-  ([Requirements that combine](checks-and-saves.md#requirements-that-combine)).
-- **The admission** asks what the member list cannot know: is the role one the rules declare (`RequireRoleAsync`),
-  and, where you registered an `IMemberDirectory` and an `IMemberRolePolicy`, is the new member known
-  (`RequireMemberAsync`) and may it hold the role ([`MemberAdmission`](reference/use-cases.md#memberadmissiontresourceid-tmemberid-troleid)).
-- **`ExpectVersion` after the load**: a change between the check and the load is a 409
+- **The checks must run before the handler.** The behavior generated for an `[AccessRequests]` interface runs them,
+  or your dispatcher calls `AccessChecks<IFilingRequest>.RequireAsync(request)` ([Access requirements](../access-requirements.md)).
+  With the behavior, `AddDocumentMemberAccess` also adds a start-up check. A host without the behavior in its
+  pipeline does not start ([When nothing asks the checks](../access-requirements.md#when-nothing-asks-the-checks)).
+- **`[OnResource]` goes on the id of a resource with members.** On any other id it is
+  [DDD00081](../diagnostics.md#ddd00081). For a requirement computed from the request's values, implement
+  `RequiredAccess` instead ([Requirements that combine](checks-and-saves.md#requirements-that-combine)).
+- **The admission checks what the member list cannot know.** `RequireRoleAsync` checks that the role exists for the
+  resource. With fixed roles, that means a role the rules declare. Where you registered an `IMemberDirectory`,
+  `RequireMemberAsync` checks that the new member is known and active. Where you registered an
+  `IMemberRolePolicy`, `RequireRoleAsync` also checks that a member may hold the role
+  ([`MemberAdmission`](reference/use-cases.md#memberadmissiontresourceid-tmemberid-troleid)).
+- **Call `ExpectVersion` after the load.** A change between the check and the load is then a 409
   ([From the check to the save](checks-and-saves.md#from-the-check-to-the-save)).
 
-### The member list is written for you
+### The generated member list
 
-`Members` is a private property the generator writes on the resource; write your methods and guards over it.
+The generator writes `Members` as a private property on the resource. Write your methods and guards over it.
 
 <details>
-<summary>Show the code: what the generator writes for the document</summary>
+<summary>Show the code the generator writes for the document</summary>
 
 ```csharp title="Document.Members.g.cs"
 partial class Document
@@ -217,7 +223,9 @@ partial class Document
 }
 ```
 
-```csharp title="Document.Membership.g.cs, shortened"
+**Document.Membership.g.cs, shortened**
+
+```csharp
 partial class Document : global::DDDToolkit.Supporting.Membership.IMembershipResource
 {
     public static global::DDDToolkit.Supporting.Membership.MembershipCodes Codes { get; } = global::DDDToolkit.Supporting.Membership.MembershipCodes.Under("documents");
@@ -230,14 +238,18 @@ partial class Document : global::DDDToolkit.Supporting.Membership.IMembershipRes
 
 </details>
 
-- **Written from three things**, each the only one of its kind, so nothing is guessed: the get-only `partial`
-  collection of the member class, the `[Owner]` property of the member id's type, and the static `MembershipCodes`
-  (written too, unless declared).
-- **A new member row's id** is made in code, `DocumentShareId.Create()`; a row keyed by a `long` declares its own
-  `Create()`.
-- **Not written**: [DDD00059](../diagnostics.md#ddd00059) says what stands in the way.
-- **Another shape** (codes in a class of their own, a collection called `Members`): declare the list yourself, and the
-  generator leaves the resource alone. `_shares` is the field behind `Shares`:
+- **The generator writes the list from three things on the resource.** Each must be the only one of its kind, so the
+  generator guesses nothing:
+  - the get-only `partial` collection of the member class, typed `IReadOnlyList<T>`, `IReadOnlyCollection<T>` or
+    `IEnumerable<T>`;
+  - the `[Owner]` property, of the member id's type;
+  - the static `MembershipCodes`, which the generator also writes unless you declare one.
+- **A new member row gets its id in code**, from `DocumentShareId.Create()`. The generator writes `Create()` for an
+  `[EntityId<Guid>]`. An id over any other type declares its own `Create()`.
+- **When the generator cannot write the list**, [DDD00059](../diagnostics.md#ddd00059) says what stands in the way.
+- **For another shape, declare the list yourself.** Two examples are codes in a class of their own, and a collection
+  called `Members`. The generator then writes no list. It still writes the name, the codes and the scope. `_shares` is
+  the field behind `Shares`:
 
 ```csharp
 private MemberList<DocumentShare, DocumentShareId, UserId, NamedRole> Members
@@ -246,50 +258,63 @@ private MemberList<DocumentShare, DocumentShareId, UserId, NamedRole> Members
 
 ### Names
 
-- **The class's name, made plural**: `Document` is `documents`, `CraneBoard` is `crane-boards`, `Category` is
-  `categories`. Only the last word, by the plain English rules.
-- **Written two ways**: dashes in codes (`crane-boards.already-member`), underscores in functions (`crane_boards_i_see`).
-- **Another plural**: `[Members("People")]` gives `people.already-member` and `people_i_see`, taken as written
-  (`People`, `CraneBoards` or `crane-boards`). A space or a leading digit is [DDD00091](../diagnostics.md#ddd00091).
-- **Renaming the class renames both**: clients read another code, and the next access file makes new functions; the
-  export says once which names went and came ([DDD00090](../diagnostics.md#ddd00090)). Keep the old name with
-  `[Members("Documents")]`.
-- **The system-work scope** is named after the module: `filing` for `Filing`
+- **A resource is named after its class, in the plural.** `Document` becomes `documents`, `CraneBoard` becomes
+  `crane-boards`, and `Category` becomes `categories`. Only the last word is made plural, by the plain English
+  rules. A word that ends in `s`, `x`, `z`, `ch` or `sh` takes `es`. A consonant and `y` become `ies`. Any other word
+  takes `s`.
+- **The name is written two ways.** Codes use dashes (`crane-boards.already-member`). Functions use underscores
+  (`crane_boards_i_see`).
+- **`[Members("People")]` sets another name.** It gives `people.already-member` and `people_i_see`. This name is not
+  made plural. Write it as a class name (`People`, `CraneBoards`) or in its final form (`crane-boards`). It may hold
+  letters and digits, with `-` or `_` between words. A space, any other symbol, or a digit at the start is
+  [DDD00091](../diagnostics.md#ddd00091).
+- **Renaming the class renames the codes and the functions.** Clients then read other codes, and the next access file
+  makes new functions. The export reports once which names went and which came
+  ([DDD00090](../diagnostics.md#ddd00090)). To keep the old name, write `[Members("Documents")]`.
+- **The system-work scope is named after the module**, for example `filing` for `Filing`
   ([System work](checks-and-saves.md#system-work)).
 
-## What the package keeps
+## Rules of the member list
 
-The member list refuses each of these before anything changes;
+The member list refuses each of the following before it changes anything.
 [`MemberList`](reference/resource-and-members.md#memberlisttmember-tid-tmemberid-troleid) lists every method and
 refusal.
 
-- **A member is on the list once, for a period.** An ended membership is over: the member comes back with a new one,
-  without the old roles. While one runs or is still to start, adding the member again is refused, whenever the new
-  one would start. `Add` and `GiveRole` take `now` for that.
-- **A member holds each role once, for a period of its own**, counting only while its membership does.
-- **One owner**: a member with no end and no role, put on the list by `Members.Open(now)`. It is not removed and gets
-  no role (`documents.owner-protected`) until another is named owner.
-- **`Members.NameOwner(member, formerOwner, now)`**: the new owner is a member from now, with no end and no role
-  (added, its roles gone, its end lifted, its start moved; handing on again restores none of it). The owner before
-  becomes `FormerOwner.StaysAs(role)` or `FormerOwner.Leaves`, with no default. The answer,
-  [`OwnerNamed`](reference/resource-and-members.md#ownernamedtmemberid-troleid), says what changed, `EndLifted` among
-  it, for a new owner who is to leave when they would have.
-- **Members live inside your aggregate**, under its one version, so `If-Match` covers them. The package raises no
-  events: raise yours from what the list answers.
-- **Refusals carry your codes**: `Document.Codes.Refuse(MembershipRefusals.NotFound)` is `documents.not-found`.
-  `With` renames a code, `WithMemberArgument("Staff")` the member's argument ([Refusals](reference/refusals.md)).
-- **Texts come with the registration**, English and Dutch, for your
-  [failure localizer](../localization.md#texts-a-packages-registration-offers); a text of your own is asked first.
-- **A net under code that changed the collection another way**: invariants of yours that call
+- **A member is on the list once, for a period.** A membership that has ended is over. The member comes back with a
+  new membership, without the old roles. While a membership runs or is still to start, adding the member again is
+  refused (`documents.already-member`), whatever start the new membership has. `Add` and `GiveRole` take `now` to
+  decide this.
+- **A period ends after it starts.** A period that ends at or before its start is refused
+  (`documents.invalid-period`).
+- **A member holds each role once, for a period of its own.** A role counts only while the membership counts.
+- **A resource has one owner.** `Members.Open(now)` puts the owner on the list, with no end and no role. The owner
+  cannot be removed and cannot get a role (`documents.owner-protected`) until somebody else is named owner.
+- **`Members.NameOwner(member, formerOwner, now)` names a new owner.** The new owner is a member from now on, with no
+  end and no role. The call adds the member if needed, drops the member's roles, lifts its end and moves its start to
+  now. Handing the resource on again restores none of this. Naming the current owner is refused
+  (`documents.already-owner`).
+- **You choose what happens to the former owner.** `FormerOwner.StaysAs(role)` keeps the former owner as a member in
+  that role. `FormerOwner.Leaves` takes the former owner off the list. There is no default.
+- **The result, [`OwnerNamed`](reference/resource-and-members.md#ownernamedtmemberid-troleid), lists every change.**
+  One of them is `EndLifted`, for a new owner who should still leave when the old membership would have ended.
+- **The members live inside your aggregate**, under its single version, so `If-Match` covers them. The package
+  raises no events. Raise your own events from the result each method returns.
+- **Refusals carry your codes.** `Document.Codes.Refuse(MembershipRefusals.NotFound)` gives `documents.not-found`.
+  `With` renames one code, and `WithMemberArgument("Staff")` renames the argument that carries the member
+  ([Refusals](reference/refusals.md)).
+- **The registration brings the texts**, in English and Dutch, for your
+  [failure localizer](../localization.md#texts-a-packages-registration-offers). A text of your own for the same code
+  is used first.
+- **Invariants catch code that changed the collection another way.** Write invariants that call
   [`OneMembershipPerMember()`](reference/resource-and-members.md#onemembershippermember) and `OwnerStays()`.
-- **A screen of members**: `MemberOverviews.From(...)`, the owner first, then by start
+- **For a screen of members**, `MemberOverviews.From(...)` lists the owner first, then the other members by start
   ([tutorial step 6](tutorial.md#step-6-open-a-board-see-it-list-them)).
 
 ## Several kinds of resource
 
 Each resource has its own member class, rules, `HasMembers` call, registrations, tables, codes, functions and
-questions; neither touches the other. The module's one request interface takes a check per resource, and a second
-resource changes no call that was there:
+questions. Two resources share none of these. The module keeps one request interface, which gets one check per
+resource. Adding a second resource changes none of the existing calls:
 
 ```csharp
 [Member<FolderMemberId, StaffCode, NamedRole, Folder>]
@@ -301,15 +326,17 @@ services.AddFolderMembership<FilingContext>(FolderMembership.Rules);
 services.AddFolderMemberAccess<IFilingRequest>();
 ```
 
-- **One member class per resource**: a second is [DDD00045](../diagnostics.md#ddd00045), one that names no aggregate
-  root of yours (a child entity included) [DDD00050](../diagnostics.md#ddd00050), reported on the member class, or as
-  [DDD00060](../diagnostics.md#ddd00060) in a domain project without the registrations.
-- **Your own table and column names**, passed to `HasMembers`:
+- **Each resource has one member class.** A second member class for the same resource is
+  [DDD00045](../diagnostics.md#ddd00045). A member class that names something other than one of your aggregate
+  roots, such as a child entity, is [DDD00050](../diagnostics.md#ddd00050). Both are reported on the member class. In
+  a domain project without the registrations, both mistakes are [DDD00060](../diagnostics.md#ddd00060).
+- **Pass your own table and column names to `HasMembers`:**
 
   ```csharp
   modelBuilder.Entity<Folder>().HasMembers(folder => folder.Staff,
       new MemberTableNames("FolderStaff", "FolderStaffRoles", MemberColumn: "StaffCode"));
   ```
 
-- **A composite key**: both tables are kept under the resource's whole key, its [`[KeyPart]`](../composite-keys.md)
-  parts under their own names. `HasKey` goes before `HasMembers`; after it, it is refused where the mapping is read.
+- **A composite key works.** Both tables use the resource's full key, with its [`[KeyPart]`](../composite-keys.md)
+  parts under their own names. Call `HasKey` before `HasMembers`. A key set after `HasMembers` is refused where the
+  mapping is read.

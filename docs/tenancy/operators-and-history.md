@@ -5,26 +5,29 @@ sidebar_label: Operators and history
 
 # Tenancy: operators and history
 
-Your own staff who look across tenants (operators), who wrote and changed each row, and the history of who changed
-access. Read it when support needs every tenant, or a tenant asks who changed what. The words are in the
-[overview](overview.md).
+This page covers operators (your staff who look across tenants), the record of who wrote and changed each row, and
+the history of who changed access. Read it when support needs to see every tenant, or when a tenant asks who
+changed what. The words are defined in the [overview](overview.md).
 
 ## Operators
 
-An operator is one of your own staff who looks across tenants, such as support. It **holds no seat** and **changes
-nothing itself**: it is no administrator of every tenant.
+An operator is a member of your staff who looks across tenants, for example in support. An operator **holds no
+seat** and **changes nothing directly**. So an operator is not an administrator of every tenant.
 
-- **Who is one**: a signed-in user whose token carries a role in
-  [`TenancyOptions.OperatorTokenRoles`](reference/use-cases.md#operatortokenroles), empty by default. Registration
-  refuses a token role that is also seated, and tenant selection answers nobody for an operator.
-- **What it reads**: [`TenantDirectory.ListAsync(after, size)`](reference/use-cases.md#listasyncstring-int-cancellationtoken),
-  every tenant by slug, 1 to 200 a page, with name, status and active seats, read as the operator. Anyone else is
-  refused with `tenancy.operators-only` before anything is read, as with
+- **Who is an operator.** A signed-in user is an operator when the user's token carries a role listed in
+  [`TenancyOptions.OperatorTokenRoles`](reference/use-cases.md#operatortokenroles). The list is empty by default.
+  Registration refuses a token role that is also a seated token role. Tenant selection returns nobody for an
+  operator, whatever tenant the request names.
+- **What an operator reads.**
+  [`TenantDirectory.ListAsync(after, size)`](reference/use-cases.md#listasyncstring-int-cancellationtoken) returns
+  every tenant by slug, 1 to 200 per page, with its name, status and number of active seats. The read runs as the
+  operator. Every other caller gets `tenancy.operators-only` before anything is read, as with
   [`[RequiresOperator]`](who-may-do-what.md#what-a-request-requires-of-its-caller) on a request of yours.
-- **It writes nothing.** Your module records what the operator asks for, and system work that names the operator
-  does it: `TenancyUseCases.BeginOperator(identity)` to provision, `BeginOperatorIn(tenant, identity)` in a tenant.
-  The work holds what system work holds; the operator is only [recorded](#who-changed-a-row).
-- The identity is the verified `sub` of the request that asked, never what a caller sends.
+- **An operator writes nothing.** Your module records what the operator asks for. System work that names the
+  operator then does the work. Use `TenancyUseCases.BeginOperator(identity)` to provision a tenant, and
+  `BeginOperatorIn(tenant, identity)` for work inside a tenant. The work holds what system work holds. The operator
+  is only [recorded](#who-changed-a-row) as the person the work was for.
+- The identity is the verified `sub` of the request that asked. Never take it from what a caller sends.
 
 ```csharp
 using (TenancyUseCases.BeginOperatorIn(tenant, operatorIdentity))
@@ -33,9 +36,9 @@ using (TenancyUseCases.BeginOperatorIn(tenant, operatorIdentity))
 }
 ```
 
-**On Postgres** an operator reads through a database role of its own. Map the token role to one
-(`PostgresRowLevelSecurityOptions.TokenRoles`, or `token:operator=<role>` in `SupabaseRowAccessRoles`), and mark the
-token roles you give Tenancy, so the export writes policies for the same ones:
+**On Postgres** an operator reads through a database role of its own. Map the token role to a database role, with
+`PostgresRowLevelSecurityOptions.TokenRoles` or with `token:operator=<role>` in `SupabaseRowAccessRoles`. Mark the
+token roles you give Tenancy with `[TenancyOperators]`, so the export writes policies for the same roles:
 
 ```csharp
 public static class ShopOperators
@@ -48,16 +51,17 @@ public static class ShopOperators
 options.OperatorTokenRoles.UnionWith(ShopOperators.TokenRoles);
 ```
 
-| On | The operators' role |
+| Table | What the operators' database role may do |
 |---|---|
-| Tenancy's tables, your entities on them, the access history | reads every row of every tenant; writes none |
-| A module's table kept to a tenant | reads what the module's rule for `RowAccessRoles.Token("operator")` admits; writes nothing, whatever a rule says |
+| Tenancy's tables, your classes on them, and the access history | Read every row of every tenant. Write no row. |
+| A module's table kept to a tenant | Read the rows that the module's rule for `RowAccessRoles.Token("operator")` allows. Write no row, whatever a rule says. |
 
-- The export refuses an operator token role without a database role of its own, or on the signed-in users' role:
-  either would open every tenant to callers who are no operators. A mapped token role nobody named an operator's
-  stays [closed out](postgres.md#what-the-policies-check).
-- `EnsurePoliciesAreInPlaceAsync` checks at start-up that the options and the mark agree; with the options alone, an
-  operator gets an empty directory.
+- The export refuses an operator token role without a database role of its own. It also refuses an operator token
+  role mapped to the signed-in users' role. Either one would open every tenant to callers who are not operators. A
+  mapped token role that nobody marked as an operator's role stays
+  [closed out](postgres.md#what-the-policies-check).
+- `EnsurePoliciesAreInPlaceAsync` checks at start-up that the options and the `[TenancyOperators]` mark agree. With
+  the options and no mark, an operator gets an empty directory.
 
 ## Who changed a row
 
@@ -67,47 +71,52 @@ An entity kept to a tenant can record who wrote each row first and who changed i
 modelBuilder.Entity<Project>(project =>
 {
     project.ScopeToTenant(row => row.TenantId);
-    project.RecordsWhoChanged<Project, SeatId>();   // in Tenancy's own module: project.RecordsWhoChanged()
+    project.RecordsWhoChanged<Project, SeatId>();   // in the module that declares your seat class: project.RecordsWhoChanged()
 });
 ```
 
-Six shadow columns ([`TenancyAttribution`](reference/entity-framework.md#tenancyattribution)), filled on every save
-from the Tenancy caller: all six on a new row, `ChangedBy…` on a changed one.
+`RecordsWhoChanged` adds six shadow columns ([`TenancyAttribution`](reference/entity-framework.md#tenancyattribution)).
+Every save fills them from the Tenancy caller. A new row gets all six. A changed row gets the three `ChangedBy…`
+columns.
 
 | Who acted | `…ByKind` | `…BySeat` | `…ByIdentity` |
 |---|---|---|---|
 | A seat | `seat` | the seat | |
 | An operator's system work (`BeginOperator`, `BeginOperatorIn`) | `operator` | | the operator's verified identity |
-| System work (`BeginSystemIn`), even for a seat | `system` | | |
+| System work (`BeginSystemIn`), also when it acts for a seat | `system` | | |
 | A link's token (`BeginTokenIn`) | `token` | | |
 
-- Ids, never a [name](names-and-languages.md#names); read one with
-  `EF.Property<SeatId?>(row, TenancyAttribution.ChangedBySeat)`. Who wrote first is fixed once the row exists.
-- A row whose own columns did not change keeps who changed it last; an aggregate with a version changes its row with
-  every change to its parts.
-- Adding them is your own migration. In a one-table hierarchy, call it on the root type: the first save refuses it
-  on a derived type alone, or without `ScopeToTenant`.
-- `AddTenancy` wraps the toolkit's `IActedByAccessor`, so an [event log](../entity-framework.md#an-event-log) records
-  these kinds too. Register your own before `AddTenancy`, as a singleton; one registered after replaces Tenancy's,
-  and `TenancyChecks.EnsureWired` refuses a context with the [access history](#access-history).
+- The columns hold ids and never a [name](names-and-languages.md#names). Read one with
+  `EF.Property<SeatId?>(row, TenancyAttribution.ChangedBySeat)`. The three `CreatedBy…` columns are fixed once the
+  row exists.
+- When only a row of one of the entity's parts changes, in another table, the entity's row keeps its `ChangedBy…`
+  values. An aggregate with a version changes its row with every change to its parts.
+- Adding the columns to an existing table needs a migration of yours. In a hierarchy stored in one table, call
+  `RecordsWhoChanged` on the root type. The first save refuses the call on a derived type alone, and refuses it
+  without `ScopeToTenant`.
+- `AddTenancy` wraps the toolkit's `IActedByAccessor`, so an [event log](../entity-framework.md#an-event-log)
+  records these kinds too. Register your own accessor before `AddTenancy`, as a singleton. An accessor registered
+  after `AddTenancy` replaces Tenancy's accessor. `TenancyChecks.EnsureWired` then refuses a context that keeps the
+  [access history](#access-history).
 
 > [!IMPORTANT]
-> `Caller.UserId` is always a token's verified `sub`; system work has none. Whom it acts for is only recorded, and
-> gives it no rights.
+> `Caller.UserId` is always the verified `sub` of a token. System work has no `UserId`. The person that system work
+> acts for is only recorded, and that record gives the work no rights.
 
-**On Postgres** a trigger holds callers to themselves:
+**On Postgres** a trigger checks the six columns on every write:
 
-- a signed-in user writes the kind `seat`, its own seat and no operator's identity; the scoped system role never
-  writes `seat`; neither changes who wrote first. A role that is no caller's (the tables' owner in a migration) is
-  not held.
-- A save fills the columns, so only a statement around the model is refused, such as an `ExecuteUpdate` of yours that
-  leaves another seat in `ChangedBySeat`: SQLSTATE `42501`
-  ([When the database refuses](../row-level-security.md#when-the-database-refuses)).
+- A signed-in user can write only the kind `seat`, the user's own seat, and no operator identity.
+- The scoped system role never writes the kind `seat`.
+- Neither role changes the `CreatedBy…` columns.
+- The trigger does not check a role that no caller uses, such as the tables' owner in a migration.
+- A save through the model fills the columns correctly. So the trigger refuses only a statement that goes around the
+  model, such as an `ExecuteUpdate` of yours that leaves another seat in `ChangedBySeat`. The error is SQLSTATE
+  `42501` ([When the database refuses](../row-level-security.md#when-the-database-refuses)).
 
 ## Access history
 
-Tenancy's events that change access can be kept in the toolkit's [event log](../entity-framework.md#an-event-log),
-each with its tenant on the row:
+Tenancy's events that change access can be kept in the toolkit's [event log](../entity-framework.md#an-event-log).
+Each row stores its tenant in a column:
 
 ```csharp
 // Tenancy's context
@@ -118,10 +127,10 @@ modelBuilder.AddTenancyEventLogTable(Database);   // the event log, with a Tenan
 // Where Tenancy is registered: keep the events that change access
 options.UseOutbox<ShopTenancyContext>(outbox => outbox
     .AddTenancyDomainEvents()
-    .KeepEventLog(log => log.AddTenancyEventLog()));   // both generated there, closed over your four ids
+    .KeepEventLog(log => log.AddTenancyEventLog()));   // both calls are generated into your project, closed over your four ids
 ```
 
-`AddTenancyEventLog` keeps, under the names the outbox stores them by:
+`AddTenancyEventLog` keeps these events, under the names the outbox stores them by:
 
 | About | Events kept |
 |---|---|
@@ -131,40 +140,45 @@ options.UseOutbox<ShopTenancyContext>(outbox => outbox
 | A seat's roles | `tenancy.organization-role-granted`, `tenancy.organization-role-revoked` |
 | A role | `tenancy.role-created`, `tenancy.role-permissions-changed`, `tenancy.role-archived`, `tenancy.role-followed-its-pack` |
 
-- Renames change nobody's access, so `tenancy.organization-renamed`, `tenancy.organization-unit-renamed` and
-  `tenancy.role-renamed` are left out (the outbox still stores them).
-- An event of yours that belongs in the history: one more `Keep<TEvent>()` beside the call. `KeepEventLog()` with
-  nothing chosen keeps every event of the context.
+- A rename changes nobody's access. So the history leaves out `tenancy.organization-renamed`,
+  `tenancy.organization-unit-renamed` and `tenancy.role-renamed`. The outbox still stores them.
+- To add an event of yours to the history, add one more `Keep<TEvent>()` next to the call. `KeepEventLog()` with
+  nothing chosen keeps every event of the context, renames included.
 
 **What a row holds**
 
-- Every Tenancy domain event ends with `By`, the [actor](#who-changed-a-row), so events about a tenant, unit or role
-  are closed over the seat id too (`TenantSuspended<TenantId, SeatId>`). An aggregate method you call yourself takes
-  it last; with nobody to name, name the type: `tenant.Activate<SeatId>()`.
-- `RolePermissionsChanged` and `RoleFollowedItsPack` name the permissions `Added` and `Removed`, implied ones
+- Every Tenancy domain event ends with `By`, the [actor](#who-changed-a-row). So the events about a tenant, a unit
+  or a role are closed over the seat id too (`TenantSuspended<TenantId, SeatId>`). An aggregate method you call
+  yourself takes the actor as its last argument. With nobody to name, name the type: `tenant.Activate<SeatId>()`.
+- `RolePermissionsChanged` and `RoleFollowedItsPack` list the permissions `Added` and `Removed`, implied permissions
   included.
-- A row is written in the save that raised its event, so a rollback leaves none. It names the event's tenant (or
-  the save's) and who acted.
-- The payload holds ids, permissions, dates, who acted and a few facts (a slug, a pack, a suspension's reason):
-  never what anything is called, or why a role was given.
+- The save that raised an event writes the event's row, so a rollback leaves no row. The row names the event's
+  tenant (or the save's tenant) and who acted.
+- The payload holds ids, permissions, dates, who acted and a few facts, such as a slug, a pack or the reason for a
+  suspension. It never holds what anything is called, or why a role was given.
 
-**Who reads it**: whoever holds **`tenancy.history.view`** for the whole tenant; it manages no access, and every
-administrators' starter role holds it. No query filter keeps the rows to a tenant (the toolkit's retention reads the
-table whole): code that reads them asks the permission and names the tenant.
+**Who reads the history**
 
-**On Postgres** its policies come with Tenancy's tables: map it in the context that calls `AddTenancy` (the export
-refuses it elsewhere).
+- A seat reads the history when it holds **`tenancy.history.view`** for the whole tenant. This permission manages
+  no access. Every administrators' starter role holds it.
+- No query filter limits the history's rows to a tenant, because the toolkit's retention reads the full table. So
+  code that reads the history checks the permission and filters by tenant itself.
+
+**On Postgres** the history's policies come with Tenancy's tables. Map the history in the context that calls
+`AddTenancy`. The export refuses the history in any other context.
 
 | Who | Reads | Adds |
 |---|---|---|
-| A signed-in user | its tenant's rows, with `tenancy.history.view` | rows about its own seat, in the tenant the connection names |
-| System work in a tenant | its tenant's rows | in Tenancy's own scope, never as a seat |
-| An operator's role | every row | nothing |
-| Your bookkeeping role, where the export writes privileges | every row | nothing; removes the rows the log's guard lets go |
+| A signed-in user | The tenant's rows, with `tenancy.history.view`. | Rows about the user's own seat, in the tenant the connection names. |
+| System work in a tenant | The tenant's rows. | Rows in Tenancy's scope, never as a seat. |
+| An operator's role | Every row. | Nothing. |
+| Your bookkeeping role, where the export writes privileges | Every row. | Nothing. It removes rows older than the log's `keepFor`, which the log's guard allows. |
 
-- The policies read a row's columns, never its payload: where the two differ, trust the columns.
-- Nobody changes a row, or removes one before its time: the log's [guard](../entity-framework.md#an-event-log)
-  refuses that for every role, the tables' owner included.
-- A seat that suspends or deactivates itself is still recorded: its seat counts in the transaction that wrote it.
+- The policies read a row's columns and never its payload. Where the two differ, trust the columns.
+- Nobody can change a row, or remove a row younger than `keepFor`. The log's
+  [guard](../entity-framework.md#an-event-log), a set of triggers, refuses this for every role, the tables' owner
+  included.
+- A seat that suspends or deactivates itself is still recorded, because its seat counts in the transaction that
+  wrote the row.
 
 The sample shows [the history as a list](sample/who-may-do-what.md#an-operator-who-changed-a-row-and-the-history-as-a-list).

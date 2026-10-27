@@ -5,36 +5,40 @@ sidebar_label: Roles and permissions
 
 # Tenancy: roles and permissions
 
-What a tenant's roles are made of, where they come from, and who may hand them on. Read it when you declare
+What a tenant's roles contain, where roles come from, and who may give them. Read this page when you declare
 permissions, choose the roles a new tenant starts with, or decide who may give roles.
 
-- **Permission**: one thing you may do, a string such as `orders.refund`. A request asks for one; a role gives some.
-- **Role**: a named set of permissions, kept per tenant. A **grant** gives a role to a **seat** (one person's place
+- **Permission**: one thing a caller may do, as a string such as `orders.refund`. A request requires one permission,
+  and a role contains several.
+- **Role**: a named set of permissions, stored per tenant. A **grant** gives a role to a **seat** (one person's place
   in one tenant) at a **unit** (a place in the tenant's organization tree).
-- **Starter role**: a role every new tenant gets a copy of; **pack** in the code (`RolePack`) and in some headings.
+- **Starter role**: a role that every new tenant gets a copy of. The code calls it a **pack** (`RolePack`), and so do
+  some headings on this page.
 
 ## What the catalogue is for
 
-The **catalogue** is every permission the application knows: Tenancy's (`tenancy.units.manage`), each module's
-([below](#a-module-states-its-permissions-once)), and what your `ApplicationCatalogue` adds. Every part is optional:
+The **catalogue** is every permission the application knows. It combines Tenancy's permissions
+(`tenancy.units.manage`), each module's permissions ([below](#declaring-a-modules-permissions)), and what your
+`ApplicationCatalogue` adds. Every part of `ApplicationCatalogue` is optional:
 
-| Part | What it decides | Default |
+| Part | What it sets | Default |
 |---|---|---|
-| `Packs` | The starter roles, which shape of tenant (flat or hierarchical) gets each, and what the first administrator holds | Tenancy's administrators' starter role alone ([The administrators' pack](#the-administrators-pack)) |
-| `Permissions` | Permissions that belong to no module | none |
-| `AccessManagingPermissions` | Permissions declared elsewhere, a module's say, that manage access in your application | only those marked where declared ([Which permissions manage access](#which-permissions-manage-access)) |
-| `ContainAccessManagingPermissions` | Whether a seat hands on a permission that manages access only where it holds it itself | on ([Containment, on or off](#containment-on-or-off)) |
+| `Packs` | The starter roles, which shape of tenant (flat or hierarchical) gets each one, and what the first administrator holds | Tenancy's administrators' starter role only ([The administrators' pack](#the-administrators-pack)) |
+| `Permissions` | Permissions that belong to no module | None |
+| `AccessManagingPermissions` | Permissions declared elsewhere, for example by a module, that manage access in your application | Only the permissions marked where they are declared ([Which permissions manage access](#which-permissions-manage-access)) |
+| `ContainAccessManagingPermissions` | Whether a seat may give a permission that manages access only where the seat holds that permission | On ([Containment, on or off](#containment-on-or-off)) |
 
-- No catalogue at all: leave `options.Catalogue` unset; Tenancy builds `new ApplicationCatalogue()`.
-- The Postgres export builds the catalogue without the host, from the part you mark `[TenancyCatalogue]`, or
-  `new ApplicationCatalogue()` when you mark none ([Setting it up](postgres.md#setting-it-up)).
-- A unit's kind decides nothing, so it is [yours to keep](your-module.md#the-kind-of-a-unit), on your unit class.
-- Every member: [`ApplicationCatalogue`](reference/catalogue.md#applicationcatalogue).
+- To use no catalogue, leave `options.Catalogue` unset. Tenancy then builds `new ApplicationCatalogue()`.
+- The Postgres export builds the catalogue without starting the host. It uses the part you mark `[TenancyCatalogue]`,
+  or `new ApplicationCatalogue()` when you mark none ([Setting it up](postgres.md#setting-it-up)).
+- A unit's kind plays no part in access. Keep the kind [on your unit class](your-module.md#the-kind-of-a-unit).
+- [`ApplicationCatalogue`](reference/catalogue.md#applicationcatalogue) lists every member.
 
-## A module states its permissions once
+## Declaring a module's permissions
 
-A module declares its permissions next to the code that asks for them: public constants of a static class marked
-`[Permissions]`, each with a **level** (where it is asked) and a `Description` (what it lets somebody do).
+A module declares its permissions next to the code that requires them. Each permission is a public constant of a
+static class marked `[Permissions]`. Each constant has a **level** and a `Description`. The level says where the
+permission is checked. The description says what the permission lets somebody do.
 
 **`Ordering.Application/OrderingPermissions.cs`**, in the module Ordering
 
@@ -50,37 +54,48 @@ public static class OrderingPermissions
 }
 ```
 
-| Level | Asked | Held by |
+| Level | Where it is checked | Who holds it |
 |---|---|---|
-| `[AtTenant]` | for the whole tenant: `TenancyAccess.AtTenant`, or `[RequiresPermission]` with no marker | a role granted at the root |
-| `[AtUnit]` | at a unit: `TenancyAccess.AtUnit`, or a request's `[AtUnit]` member | a role granted at that unit or above |
-| `[On<TResource>]`, [Membership's](../membership/permissions-and-roles.md#the-settings-of-a-permission) | on one resource with members | its owner, its members through their roles, and, where its rules say so, a role granted where it hangs |
+| `[AtTenant]` | For the whole tenant, by `TenancyAccess.AtTenant` or by `[RequiresPermission]` without a marker | A seat with a role granted at the root |
+| `[AtUnit]` | At a unit, by `TenancyAccess.AtUnit` or by a request's `[AtUnit]` member | A seat with a role granted at that unit or above it |
+| `[On<TResource>]`, [Membership's](../membership/permissions-and-roles.md#the-settings-of-a-permission) | On one resource with members | The resource's owner, its members through their roles, and a role granted at the resource's unit or above it, when the permission allows that (`FromAbove`) |
 
-- A permission asked both ways carries both levels; say each setting on one. At any level it is in the catalogue
-  under its module, so a role of the organization can hold it.
-- `Implies`: what holding it brings along. One hop: an implied permission implies nothing itself.
-- `Retired = true`: it grants nothing and goes into no role again, but no stored right breaks. Retire, never delete.
-  A permission declared and not retired is **live**.
-- `Description`: the English text a screen that puts permissions into roles shows. Left out, the constant's
-  `/// <summary>` is used; with neither, [DDD00099](../diagnostics.md#ddd00099) warns. Translate it under the
-  permission's name in a resx your [failure localizer](../localization.md) reads.
-- The class's rules: [DDD00092](../diagnostics.md#ddd00092).
+- A permission that is checked at more than one level carries each level. Put each setting on one of the levels. At
+  every level the permission is in the catalogue under its module, so a role of the organization can hold it.
+- `Implies` lists the permissions that come with this one. Implication goes one step. A permission that another
+  permission implies cannot imply anything itself.
+- `Retired = true` makes the permission grant nothing. No role can receive it again, and no stored grant breaks.
+  Retire a permission instead of deleting it. A permission that is declared and not retired is **live**.
+- `Description` is the English text that a screen for building roles shows. Without it, the constant's
+  `/// <summary>` is used. With neither, [DDD00099](../diagnostics.md#ddd00099) warns. Translate the description
+  under the permission's name, in a resx that your [failure localizer](../localization.md) reads.
+- [DDD00092](../diagnostics.md#ddd00092) lists the rules for the class.
 
-### How the permissions reach the host and the export
+### Collecting the permissions of every module
 
-Two programs need every module's permissions: the host, and the export that writes the Postgres policies without
-starting the host. Where to look when the two disagree about a permission:
+Two programs need every module's permissions. The first is the host. The second is the export, which writes the
+Postgres policies without starting the host. The diagram shows where each program gets the permissions. When the two
+programs disagree about a permission, follow it to find the cause. Purple: the one list that each module generates.
 
 ```mermaid
 flowchart LR
-    Module["each module's<br/>[Permissions] classes"] --> Declared["DeclaredPermissions.All,<br/>generated in the module"]
-    Declared --> Host["the host:<br/>AddTenancyPermissionsOfModules()"]
-    Declared --> Export["the export:<br/>Tenancy's contribution"]
-    Host --> Check{"start-up check on Postgres:<br/>the same catalogue?"}
-    Export --> Check
+    module["<b>[Permissions] classes</b><br/><small>in each module</small>"]
+    declared["<b>DeclaredPermissions.All</b><br/><small>generated in the module</small>"]
+    host["<b>The host</b><br/><small>AddTenancyPermissionsOfModules()</small>"]
+    export["<b>The export</b><br/><small>Tenancy's contribution</small>"]
+    check{"Start-up check on Postgres:<br/>the same catalogue?"}
+    module --> declared
+    declared --> host
+    declared --> export
+    host --> check
+    export --> check
+    classDef strong fill:#5b2ec933,stroke:#5b2ec9,stroke-width:2px
+    class declared strong
 ```
 
-**`Shop.Host/Program.cs`**: the one line you write
+The host needs one line:
+
+**`Shop.Host/Program.cs`**
 
 ```csharp
 using Shop.Host;   // the generated class is in the assembly's namespace, and a top-level Program.cs is in none
@@ -89,56 +104,61 @@ builder.Services.AddTenancyPermissionsOfModules();
 ```
 
 - **In a module's project** with a `[Permissions]` class, Tenancy's generator writes `DeclaredPermissions.All`,
-  marked `[TenancyPermissions]`: the module's only list. A list marked so by hand:
-  [DDD00095](../diagnostics.md#ddd00095).
-- **In a project that composes the modules**, every application that references Tenancy and every library that
-  references it and declares no module, it writes `TenancyPermissionsOfModules`, internal, in the namespace of the
-  assembly's name (`Shop.Host`), whatever `RootNamespace` says. Its `All` holds every module's list it finds there and
-  in the references, in the order of the lists' names; empty while none exists.
-- So no call names a module: a module you add reaches both programs at the next build.
-- A program of your own that builds the catalogue without the host calls
+  marked `[TenancyPermissions]`. That list is the module's only list. A list you mark `[TenancyPermissions]` by hand
+  is [DDD00095](../diagnostics.md#ddd00095).
+- **In a project that composes the modules**, the generator writes `TenancyPermissionsOfModules`. These projects are
+  every application that references Tenancy, and every library that references Tenancy and declares no module. The
+  class is internal and in the namespace of the assembly's name (`Shop.Host`), whatever `RootNamespace` says. Its
+  `All` contains every module list in the project and in its references, ordered by the lists' names. `All` is empty
+  while no module list exists.
+- So no call names a module. A module you add reaches both programs at the next build.
+- A program of yours that builds the catalogue without the host calls
   `TenancyCatalogue.Build(application, TenancyPermissionsOfModules.All)`. The Supabase export finds the lists itself.
 - A project declares a module with `DDD_Module` ([A module named by its folder](../modules.md#a-module-named-by-its-folder))
-  or `[assembly: Module]`; one that declares none lists its permissions under its assembly's name. So a library the
-  host and an export share, to compose the modules, sets no `DDD_Module`.
-- A one-project application that sets `DDD_Module`, as [Getting started](../getting-started.md) does, is module and
-  host at once, and registers its own permissions with the same call.
+  or `[assembly: Module]`. A project that declares no module lists its permissions under its assembly's name. So a
+  library that the host and an export share to compose the modules sets no `DDD_Module`.
+- A one-project application that sets `DDD_Module`, as [Getting started](../getting-started.md) does, is a module and
+  a host at once. It registers its permissions with the same call.
 
-| Mistake | What happens |
+| Mistake | Result |
 |---|---|
-| A module's list also added with `AddTenancyPermissions` (kept for permissions you add by hand) | The catalogue stops at start-up, naming the permissions and the call to take out |
-| The host lacks `AddTenancyPermissionsOfModules()` | A starter role naming a module's permission stops the catalogue at start-up; with none, the first question about a module's permission throws. Both messages name the fix |
-| The export references other modules than the host, or either adds permissions by hand | The start-up check on Postgres refuses the host ([Setting it up](postgres.md#setting-it-up)). The export may be the host itself |
+| A module's list is also added with `AddTenancyPermissions`, which exists for permissions you add by hand | Building the catalogue fails at start-up. The message names the permissions and the call to remove. |
+| The host does not call `AddTenancyPermissionsOfModules()` | When a starter role names a module's permission, building the catalogue fails at start-up. Otherwise the first query about a module's permission throws. Both messages name the fix. |
+| The export references other modules than the host, or either program adds permissions by hand | The start-up check on Postgres refuses to start the host ([Setting it up](postgres.md#setting-it-up)). The export can be the host itself. |
 
 ## Starter roles
 
-- A tenant's roles start as copies of the starter roles in `Packs`, the tenant's own from then on, to rename and
-  change.
-- `SeededFor` picks the tenants: left out, every tenant; set to a shape, only tenants of that shape, provisioned so
-  or changed to it later. A role has no shape.
-- A copy follows your later changes once the host syncs them ([Packs after provisioning](#packs-after-provisioning)).
-- Whoever holds `tenancy.roles.manage` for the whole tenant may put any permission into any role. So that makes an
-  **administrator**: an active seat, placed at the root, holding it there through a grant with no end.
-- Every member: [`RolePack`](reference/catalogue.md#rolepack).
+- A tenant's roles start as copies of the starter roles in `Packs`. After that, the copies belong to the tenant,
+  which can rename and change them.
+- `SeededFor` selects the tenants. Without `SeededFor`, every tenant gets a copy. With a shape, only tenants of that
+  shape get a copy, whether they were provisioned with that shape or changed to it later. A role has no shape.
+- A copy follows your later changes to its starter role once the host syncs them
+  ([Packs after provisioning](#packs-after-provisioning)).
+- A seat that holds `tenancy.roles.manage` for the whole tenant can put any permission into any role. An
+  **administrator** is an active seat, placed at the root, that holds `tenancy.roles.manage` there through a grant
+  with no end.
+- [`RolePack`](reference/catalogue.md#rolepack) lists every member.
 
 ## The administrators' pack
 
-A tenant's first seat gets the administrators' starter role, at the root. It holds the permissions that manage
-access, so its holder can give the next role. You need not declare one:
+A tenant's first seat gets the administrators' starter role at the root. That role holds the permissions that manage
+access, so its holder can give the next role. You do not need to declare it:
 
 | You declare | Result |
 |---|---|
-| No pack with `Administers: true` | Tenancy adds `TenancyPacks.DefaultAdministrators`: key `administrator`, named Administrator, for every shape, holding every live permission |
-| One with `Administers: true` and no `SeededFor`, or one seeded for each shape | Yours; no default |
-| Administrators' packs that leave a shape without one, give a shape two, or say `SeedOnProvision: false` | `TenancyCatalogue.Build` refuses, naming the fix |
-| No administrators' pack, and one of yours keyed `administrator` or named Administrator or Beheerder, ignoring case | Refused: rename it, or make it the administrators' pack with `Administers: true` |
+| No pack with `Administers: true` | Tenancy adds `TenancyPacks.DefaultAdministrators`. Its key is `administrator`, its name is Administrator, it is seeded for every shape, and it holds every live permission. |
+| One pack with `Administers: true` and no `SeededFor`, or one administrators' pack for each shape | Tenancy uses your pack and adds no default. |
+| Administrators' packs that leave a shape without one, give a shape two, or use `SeedOnProvision: false` | `TenancyCatalogue.Build` refuses the catalogue and names the fix. |
+| No administrators' pack, and a pack of yours with the key `administrator`, or named Administrator or Beheerder (names compared ignoring case) | `Build` refuses the pack. Rename it, or make it the administrators' pack with `Administers: true`. |
 
-- `HasDefaultAdministrators` on the built catalogue says which you have.
-- The default lists no permissions, so it holds every live permission, also one a module adds later: tenants that
-  have the role get it at the next sync. So the smallest application declares no catalogue at all.
-- A tenant provisioned in Dutch gets it as Beheerder; your `IRolePackTexts` is asked first, by the key
-  `administrator` ([Roles in the tenant's language](names-and-languages.md#roles-in-the-tenants-language)).
-- On Postgres, `pack_permissions('administrator')` answers every live permission, matching the running catalogue.
+- `HasDefaultAdministrators` on the built catalogue tells you which case applies.
+- The default pack lists no permissions, so it holds every live permission. This includes a permission that a module
+  adds later. Tenants that have the role get the new permission at the next sync. So the smallest application
+  declares no catalogue.
+- A tenant provisioned in Dutch gets the role as Beheerder. Tenancy first looks up the name in your `IRolePackTexts`,
+  by the key `administrator` ([Roles in the tenant's language](names-and-languages.md#roles-in-the-tenants-language)).
+- On Postgres, `pack_permissions('administrator')` returns every live permission, the same set as the running
+  catalogue.
 
 <details>
 <summary>Show the code: no catalogue, permissions of your own and no packs, and an administrators' pack for each shape</summary>
@@ -169,54 +189,57 @@ public static ApplicationCatalogue Application { get; } = new(
 
 ### What the administrators hold
 
-- A pack that lists no permissions holds every live permission.
-- One that lists permissions holds only those, for administrators who run access but not the modules' work. It must
-  list every one of Tenancy's permissions and every permission that manages access, or one that implies it; `Build`
-  refuses it otherwise, so marking another permission stops start-up until the pack lists it.
-- Either way an administrator gives every role, so appointing an area manager needs no system work (work no person
-  does, begun explicitly).
-- The list is where the role starts, not a wall: an administrator still puts any permission into any role.
+- An administrators' pack that lists no permissions holds every live permission.
+- A pack that lists permissions holds only those. Use it for administrators who run access but not the modules'
+  work. The list must contain every one of Tenancy's permissions and every permission that manages access, directly
+  or through a permission that implies it. Otherwise `Build` refuses the pack. So when you mark another permission as
+  managing access, start-up fails until the pack lists it.
+- In both cases an administrator can give every role. Appointing an area manager therefore needs no system work.
+- The list sets what the role starts with. An administrator can still put any permission into any role.
 
-### Moving an application to the default
+### Switching to the default administrators' pack
 
-Dropping your own administrators' pack for the default changes no tenant:
+When you drop your own administrators' pack and use the default, no tenant changes:
 
-- Each keeps the role its old pack gave, with its permissions and holders.
-- The default reaches a tenant only when it turns from flat to hierarchical, which copies every starter role
-  seeded for the new shape that it lacks, and gives the copies to nobody.
-- If the tenant still has a role named like the default, that copy is refused with `tenancy.role-name-taken`, and
-  the change of shape with it. Rename that role first.
+- Each tenant keeps the role that its old pack gave it, with the role's permissions and holders.
+- The default reaches a tenant only when the tenant changes from flat to hierarchical. That change copies every
+  starter role seeded for the new shape that the tenant lacks, and gives the copies to nobody.
+- When the tenant still has a role with the default's name, the copy is refused with `tenancy.role-name-taken`, and
+  the change of shape is refused too. Rename that role first.
 
 ## Packs after provisioning
 
-A tenant keeps the roles its starter roles made, whatever you change in them later, until the host runs
-`SyncRolePacks()`: then those roles follow their starter roles, in every tenant, keeping what the tenant changed.
+A tenant keeps the roles that its starter roles created, whatever you change in the starter roles later. When the host
+runs `SyncRolePacks()`, those roles follow their starter roles, in every tenant. What a tenant changed itself stays.
 
 ### How a role follows its pack
 
-A role made from a starter role remembers what that gave it, `PermissionsFromPack`. The sync compares that with the
-starter role as your catalogue builds it now:
+A role made from a starter role stores what the starter role gave it, in `PermissionsFromPack`. The sync compares
+that list with the starter role as your catalogue builds it now:
 
 | A permission | The sync |
 |---|---|
-| gained by the starter role | adds it |
-| lost by the starter role | takes it out |
-| taken out by the tenant, still in the starter role | leaves it out |
-| added by the tenant, never in the starter role | leaves it in |
+| that the starter role gained | adds it |
+| that the starter role lost | removes it |
+| that the tenant removed while the starter role still has it | leaves it out |
+| that the tenant added and the starter role never had | leaves it in |
 
-The cases a comparison cannot tell apart: [`FollowPack`](reference/aggregates.md#followpacktenancycatalogue-tenancyactortseatid).
-Those you are likely to meet:
+[`FollowPack`](reference/aggregates.md#followpacktenancycatalogue-tenancyactortseatid) covers the cases that the
+comparison cannot tell apart. The cases you are likely to meet:
 
-- A role whose change would take `tenancy.roles.manage` from the last administrators is left as it is, and logged,
-  until the tenant has an administrator through another role.
-- A role made before roles remembered their starter role gets every permission of it that it lacks, and loses none.
-- A permission no longer live stays, granting nothing. A role whose starter role is gone keeps its permissions, and
-  follows again once you declare one under the same key.
+- When following would take `tenancy.roles.manage` from the tenant's last administrators, the sync leaves the role as
+  it is and logs a warning. The role follows once the tenant has an administrator through another role.
+- A role made before roles stored their starter role's permissions gets every permission of the starter role that it
+  lacks, and loses none.
+- A permission that is no longer live stays on the role and grants nothing.
+- A role whose starter role is gone keeps its permissions. The role follows again once you declare a starter role
+  with the same key.
 
-Permissions that manage access follow too: only your code puts one in a starter role, so the sync, your
-application's work, may change them. The event lists them apart, for whoever tells the tenant.
+Permissions that manage access follow the same rule. Only your code puts a permission into a starter role, so the
+sync may add or remove permissions that manage access. The event lists those permissions separately, so you can tell
+the tenant.
 
-### Turning it on
+### Turning on the sync
 
 **`Shop.Host/Program.cs`**
 
@@ -225,16 +248,19 @@ builder.Services.RunStartupChecks();
 builder.Services.SyncRolePacks();   // once the host has started, every tenant's roles follow their packs
 ```
 
-- It is no start-up check, which changes nothing. It runs once per start, in the background, after the checks and
-  every hosted service have started (a seeding of yours is done). The host serves meanwhile.
-- In each active or suspended tenant it runs `RoleCommands.FollowPacksAsync` as Tenancy's system work, on Postgres
-  under the policies, in Tenancy's own scope. One save per tenant, after taking the tenant's access revision, so a
-  second run, or a second host starting at once, changes nothing more.
-- A tenant whose sync fails is logged, and tried again at the next start.
-- To sync from a deployment step or an operator's endpoint, leave the call out and run
-  [`IRolePackSync`](reference/catalogue.md#irolepacksync), which `AddTenancy` registers, yourself. An operator
-  syncing one tenant runs [`FollowPacksAsync`](reference/use-cases.md#followpacksasynccancellationtoken) in it,
-  recorded as the operator.
+- `SyncRolePacks()` is not a start-up check, because a start-up check changes nothing. The sync runs once per start,
+  in the background. It starts after the start-up checks and after every hosted service has started, so a seeding of
+  yours is done. The host serves requests while the sync runs. Calling `SyncRolePacks()` twice runs the sync once.
+- In each active or suspended tenant, the sync runs `RoleCommands.FollowPacksAsync` as Tenancy's system work, in
+  Tenancy's scope. On Postgres it runs under the policies.
+- The sync saves once per tenant, after taking the tenant's access revision. So a second run, or a second host that
+  starts at the same time, changes nothing more. When another change of the tenant's access commits first, the sync
+  reads the tenant again, for at most three attempts.
+- The sync logs a tenant that fails as an error, and tries that tenant again at the next start.
+- To sync from a deployment step or an operator's endpoint, leave out the call and run
+  [`IRolePackSync`](reference/catalogue.md#irolepacksync) yourself. `AddTenancy` registers it. An operator who syncs
+  one tenant runs [`FollowPacksAsync`](reference/use-cases.md#followpacksasynccancellationtoken) in that tenant, and
+  the events record the operator.
 
 <details>
 <summary>Show the code: running the sync yourself</summary>
@@ -250,7 +276,7 @@ if (!report.Succeeded)
     }
 }
 
-// One tenant, for an operator, whom the events then name
+// One tenant, for an operator. The events record the operator.
 using (TenancyWork.BeginOperatorIn<TenantId, SeatId>(tenant, operatorIdentity))
 {
     var followed = await roles.FollowPacksAsync(cancellationToken);   // roles: TenancyUseCases.RoleCommands
@@ -260,14 +286,14 @@ using (TenancyWork.BeginOperatorIn<TenantId, SeatId>(tenant, operatorIdentity))
 
 </details>
 
-### Telling the tenant
+### Telling the tenant's administrators
 
-- Each role that changes raises [`RoleFollowedItsPack`](reference/aggregates.md#rolefolloweditspackttenantid-troleid-tseatid),
-  with `Added`, `Removed`, those of them that manage access (`ManagingAccess`), and `By`.
-- The package sends no message. `AddTenancyEventLog` keeps the event in the
-  [access history](operators-and-history.md#access-history), where the tenant's administrators read it.
-- To mail them, publish it as an integration event of your own and handle that. A handler is delivered at least
-  once, so remember `message.MessageId` where a second mail would matter
+- Each role that changes raises [`RoleFollowedItsPack`](reference/aggregates.md#rolefolloweditspackttenantid-troleid-tseatid).
+  The event has `Added`, `Removed`, the permissions among them that manage access (`ManagingAccess`), and `By`.
+- The package sends no message. `AddTenancyEventLog` stores the event in the
+  [access history](operators-and-history.md#access-history), where the tenant's administrators can read it.
+- To e-mail the administrators, publish the event as an integration event of your own and handle that event. A
+  handler receives each message at least once. So store `message.MessageId` where a second e-mail would matter
   ([Integration events](../integration-events.md)).
 
 <details>
@@ -278,20 +304,20 @@ using (TenancyWork.BeginOperatorIn<TenantId, SeatId>(tenant, operatorIdentity))
 [IntegrationEvent]
 public sealed record RoleFollowedItsPackV1(long TenantId, Guid RoleId, string Pack, string[] Added, string[] Removed, string[] ManagingAccess);
 
-// Tenancy's outbox: mapped before AddTenancyDomainEvents, which keeps every event it has no mapping for off the sinks
+// Tenancy's outbox. Map the event before AddTenancyDomainEvents, which keeps every event without a mapping off the sinks.
 options.UseOutbox<ShopTenancyContext>(outbox => outbox
     .PublishAs<RoleFollowedItsPack<TenantId, RoleId, SeatId>, RoleFollowedItsPackV1>(followed => new RoleFollowedItsPackV1(
         followed.TenantId.Value, followed.RoleId.Value, followed.Pack, [.. followed.Added], [.. followed.Removed], [.. followed.ManagingAccess]))
     .AddTenancyDomainEvents()
     .KeepEventLog(log => log.AddTenancyEventLog()));
 
-// Where your application sends mail: who administers the tenant, and where to write to them, is yours to know
+// Where your application sends mail. Your code finds the tenant's administrators and their addresses.
 public sealed class TellTheAdministrators(IShopAdministrators administrators, IMailer mailer)
     : IIntegrationEventHandler<RoleFollowedItsPackV1>
 {
     public async Task HandleAsync(RoleFollowedItsPackV1 followed, IntegrationEventMessage message, CancellationToken cancellationToken)
     {
-        // A line for what happened, and none for what did not
+        // One line per change that happened
         string?[] lines =
         [
             $"The role made from the pack {followed.Pack} changed with the application.",
@@ -311,43 +337,51 @@ public sealed class TellTheAdministrators(IShopAdministrators administrators, IM
 
 </details>
 
-### The column it needs
+### The PermissionsFromPack column
 
-- `PermissionsFromPack`, on the roles' table, added by a migration of yours. Nullable: older rows follow as above.
-- On Postgres the export guards it ([What the policies check](postgres.md#what-the-policies-check)): no seat changes
-  it, nobody changes the pack a role came from, and a role a seat adds names no pack or is an exact copy of one.
+- `PermissionsFromPack` is a column on the roles table. Add it with a migration of yours. The column is nullable.
+  Rows where it is null follow as described in [How a role follows its pack](#how-a-role-follows-its-pack).
+- On Postgres the export protects the column ([What the policies check](postgres.md#what-the-policies-check)). No seat
+  changes it. Nobody changes the pack a role came from. A role that a seat adds names no pack, or is an exact copy of
+  one.
 
 ## Who may give a role
 
 A role **manages access** when it holds a permission that gives power over other people's access
-([Which permissions manage access](#which-permissions-manage-access)). Giving a role at a unit:
+([Which permissions manage access](#which-permissions-manage-access)). These rules apply when a seat gives a role at a
+unit:
 
-- **A role that manages no access**: `tenancy.grants.manage` at the unit is enough, without holding the role's
-  permissions. Its holder gives it to a seat placed there or below, for any period.
-- **To yourself**: for no longer than you hold `tenancy.grants.manage` there, else `tenancy.grant-exceeds-own`.
-  Nobody places themselves (`tenancy.self-assignment`), so this is only where someone else placed you.
-- **A role that manages access**: only from a seat holding each of its permissions that manage access at the unit,
-  for at least as long as the grant runs; its other permissions are not counted. Else `tenancy.grant-exceeds-own`,
-  whose `Missing` names what is lacking.
-- **Never to yourself**, a role that manages access: `tenancy.self-appointment`, decided first.
-- **Every grant**: an active role of the tenant, an active unit where the seat is placed, starting now (`from` is
-  for system work: `tenancy.start-system-only`). The last administrator stays (`tenancy.last-admin`).
-- **System work** in a tenant (work no person does, begun explicitly) is held to none of this.
+- **A role that manages no access.** A seat with `tenancy.grants.manage` at the unit may give the role, without
+  holding the role's permissions. The seat can give the role to any seat placed at the unit or below it, for any
+  period.
+- **A role for yourself.** A seat may give itself a role for no longer than it holds `tenancy.grants.manage` at the
+  unit. Otherwise the refusal is `tenancy.grant-exceeds-own`. Nobody can place themselves
+  (`tenancy.self-assignment`), so this rule applies only where another seat placed you.
+- **A role that manages access.** Only a seat that holds each of the role's access-managing permissions at the unit
+  may give the role, for at least as long as the grant runs. The role's other permissions do not count. Otherwise the
+  refusal is `tenancy.grant-exceeds-own`, and its `Missing` argument names what the seat lacks.
+- **A role that manages access, for yourself.** A seat can never give itself a role that manages access. The refusal
+  is `tenancy.self-appointment`, checked before the seat's permissions are compared.
+- **Every grant.** The role is an active role of the tenant. The unit is active, and the seat is placed there. The
+  grant starts now, and only system work may pass `from` (`tenancy.start-system-only`). The last administrator stays
+  (`tenancy.last-admin`).
+- **System work** in a tenant is exempt from all of these rules.
 
-The third and fourth rules are **containment**, on unless you turn it off
+The third and fourth rules are **containment**. Containment is on unless you turn it off
 ([Containment, on or off](#containment-on-or-off)).
 
-Example: in Harbor Works, Rhea holds Area manager at North, for good, with `tenancy.grants.manage` and
-`projects.crew.manage`, which manage access. At North Coast:
+Example: in Harbor Works, Rhea holds Area manager at North, with no end. The role contains `tenancy.grants.manage`
+and `projects.crew.manage`, and both manage access. At North Coast:
 
-- Observer, which manages no access: she gives it to Leo, and to herself.
-- Crew lead, which manages access through `projects.crew.manage`: to Leo, not to herself (`tenancy.self-appointment`).
-- Access admin: not even to Leo, since she lacks `tenancy.roles.manage` there, among others
-  (`tenancy.grant-exceeds-own`).
-- At South Bay she gives nothing: `tenancy.not-permitted`.
+- Observer manages no access. Rhea can give it to Leo and to herself.
+- Crew lead manages access through `projects.crew.manage`. Rhea can give it to Leo. She cannot give it to herself
+  (`tenancy.self-appointment`).
+- Access admin needs `tenancy.roles.manage` at North Coast, among other permissions, and Rhea lacks it. She cannot
+  give Access admin even to Leo (`tenancy.grant-exceeds-own`).
+- At South Bay, Rhea can give no role (`tenancy.not-permitted`).
 
 ```csharp
-// seats: TenancyUseCases.SeatCommands. It finds the calling seat itself, and decides as above before it saves.
+// seats: TenancyUseCases.SeatCommands. GrantAsync finds the calling seat and applies the rules above before it saves.
 try
 {
     await seats.GrantAsync(seat, unit, role, until: null, reason: null, cancellationToken);   // until: null, for good
@@ -358,13 +392,15 @@ catch (RefusalException refusal) when (refusal.Code == TenancyRefusals.GrantExce
 }
 ```
 
-Every parameter and refusal: [`SeatCommands.GrantAsync`](reference/use-cases.md#grantasynctseatid-tunitid-troleid-datetimeoffset-string-cancellationtoken-datetimeoffset).
+[`SeatCommands.GrantAsync`](reference/use-cases.md#grantasynctseatid-tunitid-troleid-datetimeoffset-string-cancellationtoken-datetimeoffset)
+lists every parameter and refusal.
 
 ### Which permissions manage access
 
-- All of Tenancy's do, except `tenancy.history.view`, which reads the
+- All of Tenancy's permissions manage access, except `tenancy.history.view`, which reads the
   [access history](operators-and-history.md#access-history).
-- Mark one you own with `ManagesAccess: true`; mark any other, a module's included, in `AccessManagingPermissions`:
+- Mark a permission you own with `ManagesAccess: true`. Mark any other permission, including a module's, in
+  `AccessManagingPermissions`:
 
 ```csharp
 // The sample's host marks two of its Projects module's permissions
@@ -376,11 +412,15 @@ public static ApplicationCatalogue Application { get; } = new(
 new Permission("widgets.assign", "Widgets", "Hand widgets to people", ManagesAccess: true);
 ```
 
-- Mark every permission only its holder should give: power over roles, grants, placements, seats or the tree;
-  deciding who works on what, or naming an owner; reaching credentials; letting support staff into a tenant.
-- One whose power reaches no further than roles that manage no access may stay unmarked.
-- A permission that manages no access may not imply one that does: `Build` refuses it.
-- Pin the set with a test of the built catalogue's `AccessManagingPermissions`, so a mark never changes unnoticed:
+- Mark every permission that only its holder should give. Examples:
+  - power over roles, grants, placements, seats or the tree;
+  - deciding who works on what, or naming an owner;
+  - access to credentials;
+  - letting support staff into a tenant.
+- A permission whose power reaches only roles that manage no access may stay unmarked.
+- A permission that manages no access may not imply a permission that does. `Build` refuses that catalogue.
+- Pin the set with a test of the built catalogue's `AccessManagingPermissions`. Then a mark cannot change without a
+  failing test:
 
 <details>
 <summary>Show the code: the sample's test of its marks</summary>
@@ -407,99 +447,114 @@ public async Task The_permissions_that_manage_access_are_exactly_these()
 
 </details>
 
-**A forgotten mark fails open:**
+**A forgotten mark gives access away.** Without its mark, a permission counts as one that manages no access:
 
-- Every grants manager gives an unmarked permission to anyone placed where they hold `tenancy.grants.manage`,
-  themselves included. Mark before anyone manages grants.
-- A module that gives permissions through grants of its own (a crew role, on one project) contains a marked one it
-  gives that way itself: the sample's crews give `projects.crew.manage` only from whoever manages that crew already.
-- Marks are read when a role is given or taken away, never against existing grants. After changing marks, restart
-  every instance before anyone grants again. A marked permission taken out of retirement is marked again.
+- Every grants manager can give the unmarked permission to anyone placed where the manager holds
+  `tenancy.grants.manage`, the manager included. Mark permissions before anyone manages grants.
+- A module that gives permissions through its own grants, such as a crew role on one project, must apply containment
+  to a marked permission itself. The sample's crews give `projects.crew.manage` only from a seat that already manages
+  that crew.
+- The marks are read when a role is given or taken away. They are never applied to existing grants. After changing
+  marks, restart every instance before anyone grants again. A marked permission that comes out of retirement is
+  marked again.
 
-### The other ways access changes hands
+### Other commands that change access
 
-Each follows the rule for giving. With containment on:
+Each of these commands follows the rule for giving a role. With containment on:
 
-| Change | The command asks | A role that manages access also needs |
+| Change | The command requires | A role that manages access also requires |
 |---|---|---|
-| Take a role away ([`RevokeAsync`](reference/use-cases.md#revokeasynctseatid-tunitid-troleid-cancellationtoken)) | `tenancy.grants.manage` at the unit | its permissions that manage access there, until at least the grant's end. A seat's own current grant counts as its hold, so it may take away its own roles |
-| Withdraw a placement and its grants ([`WithdrawAsync`](reference/use-cases.md#withdrawasynctseatid-tunitid-cancellationtoken)) | `tenancy.seats.manage` at the unit, plus `tenancy.grants.manage` when it has grants | the same, per grant |
-| Suspend, deactivate or reactivate a seat ([`SuspendAsync`](reference/use-cases.md#suspendasynctseatid-cancellationtoken)), which takes away or gives back its grants | `tenancy.seats.manage` for the whole tenant | the same, per grant not yet ended. A seat may suspend or deactivate itself, never reactivate itself |
-| Move a unit ([`MoveUnitAsync`](reference/use-cases.md#moveunitasynctunitid-tunitid-cancellationtoken)), which changes the grants that reach it | `tenancy.units.manage` at the old and the new parent | every such permission the move gives or takes from anyone, held by the mover at the unit until at least that grant's end. Always: the move gives the mover nothing it lacks there, or for longer |
-| Add or take out such a permission in a role, or archive a role that holds one ([`SetPermissionsAsync`](reference/use-cases.md#setpermissionsasynctroleid-ireadonlycollectionstring-cancellationtoken)) | `tenancy.roles.manage` for the whole tenant | an administrator: `tenancy.roles.manage` at the root, with no end |
+| Take a role away ([`RevokeAsync`](reference/use-cases.md#revokeasynctseatid-tunitid-troleid-cancellationtoken)) | `tenancy.grants.manage` at the unit | The role's access-managing permissions at the unit, until at least the grant's end. A seat's current grant counts as the seat's hold, so a seat can take away its own roles. |
+| Withdraw a placement and its grants ([`WithdrawAsync`](reference/use-cases.md#withdrawasynctseatid-tunitid-cancellationtoken)) | `tenancy.seats.manage` at the unit, plus `tenancy.grants.manage` when the placement has grants | The same, for each grant. |
+| Suspend, deactivate or reactivate a seat ([`SuspendAsync`](reference/use-cases.md#suspendasynctseatid-cancellationtoken)). This takes away or gives back the seat's grants. | `tenancy.seats.manage` for the whole tenant | The same, for each grant that has not ended. A seat can suspend or deactivate itself. A seat can never reactivate itself, because a suspended seat acts as nobody. |
+| Move a unit ([`MoveUnitAsync`](reference/use-cases.md#moveunitasynctunitid-tunitid-cancellationtoken)). This changes which grants reach the unit. | `tenancy.units.manage` at the old parent and at the new parent | Every access-managing permission that the move gives to anyone or takes from anyone, held by the mover at the unit until at least the end of that grant. Even with containment off, the move gives the mover nothing that the mover lacks at the unit, or for longer. |
+| Add or remove an access-managing permission in a role, or archive a role that holds one ([`SetPermissionsAsync`](reference/use-cases.md#setpermissionsasynctroleid-ireadonlycollectionstring-cancellationtoken)) | `tenancy.roles.manage` for the whole tenant | A caller who is an administrator, which means `tenancy.roles.manage` at the root with no end. |
 
-- The refusal is `tenancy.grant-exceeds-own`, naming what is lacking. The last administrator always stays.
-- Why only an administrator changes such a permission in a role: the change reaches every holder at once,
-  including those who gave the role to themselves. Look at who holds a role before you add to it.
-- `RoleGrant.GrantedBy` records who gave each grant; `RolePermissionsChanged` names what came in and went out.
+- The refusal is `tenancy.grant-exceeds-own`, and it names what the seat lacks. The last administrator always stays.
+- Only an administrator changes an access-managing permission in a role, because the change reaches every holder at
+  once. The holders include seats that gave themselves the role while it managed no access. Check who holds a role
+  before you add to it.
+- `RoleGrant.GrantedBy` records who gave each grant. `RolePermissionsChanged` names the permissions that were added
+  and removed.
 
-### What that means for a tenant
+### What grants managers can do
 
-- Trust `tenancy.grants.manage` with every role that manages no access where it is held, its holder's own included.
-- Grants managers can give each other roles, but a role that manages access (even one holding only
-  `tenancy.grants.manage`) never to themselves.
-- Tenancy knows one person per seat: someone who adds a seat for another account of their own gives it what they
-  could not give themselves, within containment.
+- A seat with `tenancy.grants.manage` can give every role that manages no access, at the units where it holds that
+  permission. This includes giving those roles to itself. Give `tenancy.grants.manage` only to seats you trust with
+  all of those roles.
+- Grants managers can give each other roles. A grants manager can never give itself a role that manages access, even
+  a role that holds only `tenancy.grants.manage`.
+- Tenancy knows one person per seat. A person who adds a seat for a second account of their own can give that seat
+  what they could not give themselves, within containment.
 
 ## Containment, on or off
 
-**Containment** is the rule above for permissions that manage access: a seat hands one on only where it holds it,
-for as long, and never to itself. You decide: `ContainAccessManagingPermissions` in your catalogue, on by default.
-Who may give your users what is a product choice; it does not keep your data sound.
+**Containment** is the rule above for permissions that manage access. A seat gives a permission that manages access
+only where the seat holds that permission, for no longer than it holds it, and never to itself. You set containment
+with `ContainAccessManagingPermissions` in your catalogue. It is on by default. Who may give your users which
+permission is a product decision. The rules that keep the access model consistent apply in both settings, and are
+listed below.
 
-Off, a role or permission that manages access goes as one that manages none: the third and fourth rules of
-[Who may give a role](#who-may-give-a-role) and the last column of [the other ways](#the-other-ways-access-changes-hands)
-no longer apply; on Postgres `permission_is_contained(permission)` answers false. Rhea then gives herself
-Administrator at North, and manages everything there and below.
+With containment off, a role or permission that manages access is treated like one that manages no access. The third
+and fourth rules of [Who may give a role](#who-may-give-a-role), and the last column of
+[Other commands that change access](#other-commands-that-change-access), no longer apply. On Postgres,
+`permission_is_contained(permission)` returns false. Rhea can then give herself Administrator at North, and manage
+everything at North and below.
 
-- So whoever holds a permission that manages access administers everything it reaches.
-- Turn it off when that is what you want, or when your own handlers decide who may give what.
+- So a seat with a permission that manages access administers everything that permission reaches.
+- Turn containment off when you want that, or when your handlers decide who may give what.
 
-Either way:
+In both settings:
 
-- A seat gives itself a role for no longer than it holds `tenancy.grants.manage` there, and a move gives the mover
+- A seat gives itself a role for no longer than it holds `tenancy.grants.manage` at the unit. A move gives the mover
   nothing.
-- Each command asks its permission where it acts: Rhea gives no role outside North and below.
-- The last administrator stays, in C# and in the database, and a seat keeps its identity and tenant
+- Each command checks its permission at the unit where it acts. Rhea gives no role outside North and the units below
+  North.
+- The last administrator stays, in C# and in the database. A seat keeps its identity and its tenant
   ([What the database guards on a seat](postgres.md#what-the-database-guards-on-a-seat)).
-- `AccessManagingPermissions` and `ManagesAccess` answer the same.
+- The catalogue's `AccessManagingPermissions` and `ManagesAccess` return the same results.
 
-### The one question that decides it
+### When to keep containment on
 
-Can your database be reached without your handlers, through Supabase's Data API say? Then leave it on:
+Keep containment on when clients can reach the database directly, for example through Supabase's Data API:
 
-- A client talking to the database directly goes past any rule of your handlers.
-- With containment on, the database still refuses it a role that manages access where it lacks that role's
-  permissions, any such role to itself, such an invitation, and stopping a seat whose such grants it could not take
-  away. Durations, role changes and moves are checked in C# alone ([What stays in C#](postgres.md#what-stays-in-c)).
-- With it off, a grants manager there hands out every role.
+- A client that talks to the database directly bypasses every rule in your handlers.
+- With containment on, the database still refuses a seat that:
+  - gives, changes or takes away a role that manages access at a unit where the seat lacks the role's
+    access-managing permissions;
+  - gives itself a role that manages access;
+  - breaks either of these rules through an invitation;
+  - changes the status of a seat whose access-managing grants it could not take away or give back.
+- Only the C# use cases check durations, changes to a role's permissions, and moves
+  ([What stays in C#](postgres.md#what-stays-in-c)).
+- With containment off, a grants manager at a unit can give every role there, also through the Data API.
 
-### System work is not held to it
+### Containment and system work
 
-- System work in a tenant holds every permission there, on or off.
-- So to give a role that manages access when a condition of yours is met, a quiz passed say, keep containment on:
-  your handler checks the condition, then grants inside `TenancyUseCases.BeginSystemIn(tenant, seat)`. The grant
-  names no giver; its event records the system, acting for that seat.
-- System work gives whatever it is told, so take the tenant and seat from the caller (refusing anything but a seat)
-  and the role and unit from your own records, never from the request: otherwise whoever passed gets whatever they
-  named, the administrators' role included.
+- System work in a tenant holds every permission in that tenant, with containment on or off.
+- To give a role that manages access when a condition of yours is met, such as a passed quiz, keep containment on.
+  Your handler checks the condition, then grants the role inside `TenancyUseCases.BeginSystemIn(tenant, seat)`. The
+  grant names no giver. Its event records the system, acting for that seat.
+- System work gives whatever it is told to give. So take the tenant and the seat from the caller, and refuse a caller
+  that is not a seat. Take the role and the unit from your records. Never take any of the four from the request.
+  Otherwise anyone who passes the quiz gets any role they name, including the administrators' role.
 
 ### The setting in the host and the export
 
-- The host reads it from `TenancyOptions.Catalogue`, the export from the same part, marked `[TenancyCatalogue]`
-  ([Setting it up](postgres.md#setting-it-up)), so the two cannot disagree.
-- On Postgres the policies on grants and invitations, and the trigger on a seat's status, ask
+- The host reads the setting from `TenancyOptions.Catalogue`. The export reads the setting from the same catalogue
+  part, marked `[TenancyCatalogue]` ([Setting it up](postgres.md#setting-it-up)). So the two cannot disagree.
+- On Postgres, the policies on grants and invitations, and the trigger on a seat's status, call
   `permission_is_contained`. The start-up check `tenancy.policies-in-place` refuses a database exported with the
-  other setting: after changing it, export the access files and apply them before the host starts.
-- Grants made while it was off stay when you turn it back on: containment is asked when a role is given or taken
-  away, never of existing grants.
+  other setting. After changing the setting, export the access files and apply them before the host starts.
+- Grants made while containment was off stay when you turn containment back on. Containment is checked when a role is
+  given or taken away, and never against existing grants.
 
 <details>
 <summary>Show the code: turning containment off, and a quiz handler that keeps it on</summary>
 
 ```csharp
-// Your part of the catalogue, with containment off: the host hands it to TenancyOptions.Catalogue, and the export
-// writes the policies from it because it is marked. Leave the last line out to keep containment on.
+// Your part of the catalogue, with containment off. The host passes it to TenancyOptions.Catalogue. The export
+// writes the policies from it because it is marked [TenancyCatalogue]. Leave out the last line to keep containment on.
 public static class ShopCatalogue
 {
     [TenancyCatalogue]
@@ -511,8 +566,9 @@ public static class ShopCatalogue
 ```
 
 ```csharp
-// Your own handler, with containment on. The request names the quiz and carries the answers. Who passed is the
-// caller, and what passing gives is the quiz's: system work gives whatever it is told, so a client chooses neither.
+// Your handler, with containment on. The request names the quiz and carries the answers. The seat that passed is
+// the caller, and the role and the unit come from the quiz. System work gives whatever it is told, so the client
+// chooses neither.
 public sealed class QuizDesk(TenancyUseCases.SeatCommands seats, IQuizzes quizzes)
 {
     public async Task PassAsync(QuizId quizId, QuizAnswers answers, CancellationToken cancellationToken)
@@ -528,7 +584,7 @@ public sealed class QuizDesk(TenancyUseCases.SeatCommands seats, IQuizzes quizze
             throw QuizRefusals.Refuse(QuizRefusals.NotPassed);
         }
 
-        // The role and the unit are the quiz's own, which an administrator set when making it.
+        // An administrator set the quiz's role and unit when making the quiz.
         using (TenancyUseCases.BeginSystemIn(tenant, seat))
         {
             await seats.GrantAsync(seat, quiz.Unit, quiz.Role, until: null, reason: "passed " + quiz.Name, cancellationToken);

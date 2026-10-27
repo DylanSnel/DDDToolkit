@@ -5,24 +5,54 @@ sidebar_label: Tutorial
 
 # Membership: the tutorial
 
-This tutorial adds a Boards module to the Harbor application, one step at a time. Each step says where we are, why
-this step comes now and what it achieves. Then it explains the idea, shows every file whole with the new lines
-highlighted, and says what those lines do.
-
-Read the [overview](overview.md) first: it says what a resource, a member, an owner, a role and reach from above are,
-and the steps use those words from the start.
+This tutorial adds a Boards module to the Harbor application, one step at a time. Read the [overview](overview.md)
+first. It explains the words the steps use: resource, member, owner, role and reach from above.
 
 ## Where we are: the Harbor app from the Tenancy tutorial
 
 The [Tenancy tutorial](../tenancy/tutorial.md) built Harbor. It has:
 
-- the tenant Harbor Works, with the units Harbor Works (the root), North, and North Coast below North;
+- the tenant Harbor Works, with the units Harbor Works (the root), North, North Coast below North, and South Bay;
 - Ada, Administrator at the root, and Rhea, Area manager at North. Leo has no seat yet;
+- a second tenant, Meadow Gardens, with Tove as its administrator. This tutorial does not use it;
 - a host on Supabase that runs every request as its caller.
 
-**What we build.** A module called Boards. A board belongs to the tenant, hangs at a unit, has an owner and members,
-and its members hold roles the tenant keeps. When it is done, Rhea opens a board at North and puts Leo on it as an
-editor; Leo edits that board and nothing else; Ada, at the root, reaches every board.
+## What we build
+
+A module called Boards. A board belongs to a tenant and hangs at a unit. It has one owner and members, and the
+members hold roles that the tenant keeps. At the end of the tutorial, Harbor Works has two boards. Units are square;
+boards are purple and rounded, with a dotted line to the unit where they hang:
+
+```mermaid
+flowchart TD
+    root["<b>Harbor Works</b><br/><small>Ada: Administrator</small>"]
+    north["<b>North</b><br/><small>Rhea: Area manager<br/>and Board keeper</small>"]
+    coast["<b>North Coast</b>"]
+    south["<b>South Bay</b>"]
+    crane("<b>Crane schedule</b><br/><small>owner: Rhea<br/>Leo: editor</small>")
+    quay("<b>Quay plan</b><br/><small>owner: Ada</small>")
+    root --> north --> coast
+    root --> south
+    north -.- crane
+    coast -.- quay
+    classDef strong fill:#5b2ec933,stroke:#5b2ec9,stroke-width:2px
+    class crane,quay strong
+```
+
+| Person | Sees | Can change | Why |
+|---|---|---|---|
+| Rhea | both boards | Crane schedule | She owns Crane schedule. Her `boards.view` at North reaches Quay plan; she holds no `boards.edit` there. |
+| Leo | Crane schedule | Crane schedule's name | He is a member with the role editor. |
+| Ada | both boards | both boards | Her Administrator role at the root reaches every board. |
+
+When it is done, you can try these with plain HTTP requests:
+
+- Rhea opens Crane schedule at North and adds Leo as an editor.
+- Leo renames Crane schedule. Adding a member gets him `403`: an editor does not hold `boards.members.manage`.
+- Rhea renames Quay plan and gets `403`: she sees it, but her roles give no `boards.edit` there.
+
+Each step says where we are, why the step comes now, and what it adds. It explains the idea, shows every file
+whole with the new lines highlighted, and lists what those lines do.
 
 The module gets the same five projects as Tenancy, one per layer:
 
@@ -49,42 +79,47 @@ src/
 
 ## Step 1: the board, its members and its roles
 
-**Where we are.** Harbor runs with one module, Tenancy. Nothing knows a board.
+**Where we are.** Harbor runs with one module, Tenancy. No code knows about boards yet.
 
-**Why now.** Everything later reads what the domain declares: the permissions name the board, the context maps it,
-the requests load it.
+**Why now.** Every later step uses the classes this step declares. The permissions name the board, the context maps
+it, and the requests load it.
 
-**What we want.** A board, its member class and its role class, with their ids, in two new projects that build with
-0 warnings.
+**What we want.** A board class, its member class and its role class, with their ids, in two new projects. The
+projects build with 0 warnings.
 
 ### The idea: a board, its members and its owner
 
-- **Resource**: the board. An ordinary aggregate root of yours: the package puts no parent class and no attribute on
-  it.
-- **Member**: a seat on the board, from a moment, until a moment or for good. You declare the member class in one
-  line, `[Member<...>]`, and the package's **template** gives it the rest: who, from when, until when, who added it,
-  the roles it holds. Its four types are its own row's id, who a member is, what a role is known by, and the board.
-- **Why a member is a seat**, Tenancy's `SeatId`, and not a user:
-  - a board belongs to one tenant, and so does a seat;
-  - a suspended seat is on no board any more;
-  - adding a member asks Tenancy whether the seat is active in this tenant;
-  - who "I" am on a board is the caller's seat. Nothing to write for it.
-- **Owner**: one property of the board, marked `[Owner]`. A fact of the board: whose it is. The owner is always a
-  member, cannot be taken off, and holds no role: it holds what the permissions give the owner (step 2).
-- **Member list**: the rules about the members, such as "on the board once" and "the owner stays". The generator
-  writes it onto your board as a private property, `Members`, over your collection `People` and the owner. Your
-  methods change the members only through it. `Members.Open(now)` puts the owner on the board.
-- **Custom role**: a role the tenant keeps as a row and may rename and change. Its template keeps the name, the
-  permissions and where it was made from. Whose role it is, `TenantId`, is yours: the package knows no tenant.
-- **The rules are handed in**: a role's permissions are checked against the rules (step 2), which live in the
-  application layer. The domain says what a board is, not who may do what with it.
-- **The name**: `boards`, the class's name made plural. A refusal reads `boards.already-member`, a function in the
-  database `boards_i_see`. `[Members("...")]` on the class chooses another.
+- **Resource**: the board. It is an ordinary aggregate root in your domain. Membership requires no base class and no
+  class attribute on it.
+- **Member**: a seat on the board for a period. The period starts at a moment and ends at a moment, or never. You
+  declare the member class in one line, `[Member<...>]`. Membership's **template** adds the rest: who the member is,
+  from when, until when, who added the member, and the roles the member holds. The four type arguments are the
+  member row's id type, the member's id type, the role's id type, and the board class.
+- **Why a member is a seat** (Tenancy's `SeatId`) instead of a user:
+  - a board belongs to one tenant, and a seat does too;
+  - a suspended seat loses access to every board;
+  - when you add a member, Membership checks with Tenancy that the seat is active in this tenant;
+  - the caller's seat is the caller's member identity on a board, so you write no code to find it.
+- **Owner**: one property of the board, marked `[Owner]`. It records whose board it is. The owner is always a member
+  and cannot be removed. The owner holds no role. Instead, each permission says whether the owner holds it (step 2).
+- **Member list**: the object that applies the rules about members, such as "a seat is on the board once" and "the
+  owner stays". The generator adds it to your board as a private property, `Members`. It works on your collection
+  `People` and on the owner property. Your methods change the members only through `Members`. `Members.Open(now)`
+  puts the owner on the board.
+- **Custom role**: a role stored as a row of the tenant. The tenant may rename it and change it. The role template
+  has the name, the permissions, and the starter role it was made from. You add the role's tenant, `TenantId`,
+  yourself, because Membership does not know about tenants.
+- **The rules are passed in**: the role checks its permissions against the rules (step 2). The rules live in the
+  application layer, and the role's constructor takes them. The domain describes what a board is. The application
+  layer decides who may do what with a board.
+- **The name**: Membership names the resource `boards`, the class name in the plural. Refusal codes start with it,
+  such as `boards.already-member`, and so do the database functions, such as `boards_i_see`. `[Members("...")]` on
+  the class sets another name.
 
 ### What you write
 
-**The package versions**, at the root. **Why:** the three Membership packages, and Tenancy's Entity Framework
-package, which Boards' context uses to read Tenancy's rows (step 3). Every version stays in one file.
+**The package versions**, at the root. **Why:** this adds the three Membership packages, and Tenancy's Entity
+Framework package. Boards' context uses that package to read Tenancy's rows (step 3). All versions stay in one file.
 
 **`Directory.Packages.props`**
 
@@ -112,8 +147,9 @@ package, which Boards' context uses to read Tenancy's rows (step 3). Every versi
 </Project>
 ```
 
-**The contracts project.** **Why:** another module may store a board's id, and step 4 adds the questions other
-modules' row rules may ask about boards. Only the toolkit, as in Tenancy's.
+**The contracts project.** **Why:** other modules may store a board's id. Step 4 adds the contracts that row access
+rules, including other modules' rules, use to ask about boards. Like Tenancy's contracts project, it references only
+the toolkit's core package.
 
 **`src/Modules/Boards/Harbor.Boards.Contracts/Harbor.Boards.Contracts.csproj`**
 
@@ -128,8 +164,8 @@ modules' row rules may ask about boards. Only the toolkit, as in Tenancy's.
 </Project>
 ```
 
-**The domain project.** **Why:** the member and role templates, and the generator that writes the member list. Of
-Tenancy it references the contracts only: a board stores Tenancy's ids, and may not change a seat.
+**The domain project.** **Why:** it gets the member and role templates, and the generator that writes the member
+list. From Tenancy, it references only the contracts project. A board stores Tenancy's ids and cannot change a seat.
 
 **`src/Modules/Boards/Harbor.Boards.Domain/Harbor.Boards.Domain.csproj`**
 
@@ -150,9 +186,9 @@ Tenancy it references the contracts only: a board stores Tenancy's ids, and may 
 </Project>
 ```
 
-**The three ids.** **Why:** a member row and a role row are rows with an id, and `[EntityId<Guid>]` writes `Create()`,
-with which the member list makes a new row's id in code. The board's id is published, so it is in the contracts; the
-other two stay in the domain.
+**The three ids.** **Why:** member rows and role rows each have an id. `[EntityId<Guid>]` writes `Create()`, and the
+member list calls it to make a new row's id in code. Other modules may use the board's id, so it goes in the
+contracts project. The other two ids stay in the domain project.
 
 **`Harbor.Boards.Contracts/ValueObjects/BoardId.cs`**
 
@@ -187,8 +223,8 @@ namespace Harbor.Boards.Domain.Aggregates.BoardRoles.ValueObjects;
 public readonly partial record struct BoardRoleId;
 ```
 
-**The member class.** **Why:** it is your class and your table; the one line says what a member is, and the template
-does the rest.
+**The member class.** **Why:** the member class and its table are yours. The attribute says what a member is, and the
+template adds the rest.
 
 **`Harbor.Boards.Domain/Aggregates/Boards/Entities/BoardMember.cs`**
 
@@ -205,8 +241,8 @@ namespace Harbor.Boards.Domain.Aggregates.Boards.Entities;
 public sealed partial class BoardMember;
 ```
 
-**The board.** **Why:** the members live inside it, loaded and saved with it under its one version. It reads no clock,
-so the constructor takes `now`.
+**The board.** **Why:** the members are part of the board aggregate. They are loaded and saved with the board, and a
+change to them raises the board's version. The board does not read a clock, so the constructor takes `now`.
 
 **`Harbor.Boards.Domain/Aggregates/Boards/Board.cs`**
 
@@ -243,8 +279,8 @@ public sealed partial class Board
 }
 ```
 
-**The role class.** **Why:** a role is a row of the tenant's, so it carries `TenantId`; the rules are handed in, so a
-role cannot give a permission they rule out.
+**The role class.** **Why:** a role belongs to a tenant, so it has a `TenantId`. The constructor takes the rules, so
+a role cannot give a permission that the rules do not allow in a role.
 
 **`Harbor.Boards.Domain/Aggregates/BoardRoles/BoardRole.cs`**
 
@@ -276,67 +312,77 @@ dotnet build Harbor.slnx
 
 ### What it does
 
-- `[Member<...>]`: the generator writes the other half of `BoardMember`, derived from the member template.
-- On `Board` it writes `Members`, over `People` and the property marked `[Owner]`, and `Codes`, the refusals under
-  `boards.`.
-- `Members.Open(now)`: the owner is on the board from now, for good, with no role.
-- `[CustomRole<...>]`: `BoardRole` derives from the role template, which checks a new role's name and permissions
-  against the rules handed in.
+- `[AggregateRoot<BoardId>]`: the toolkit's attribute for an aggregate root whose id type is `BoardId`. With it,
+  `Board` derives from the toolkit's `AggregateRoot<BoardId>`, which `: base(id)` calls. That base class has `Id` and
+  `Version`. The toolkit's Entity Framework package raises `Version` on every save that touches the board. A save
+  from a stale version throws a `ConcurrencyConflictException`.
+- `[Member<...>]`: the generator writes the other half of `BoardMember`, which derives from the member template.
+- `People`: a get-only `partial` property. The generator writes its body over a private list, and the member list
+  stores the members in that list.
+- On `Board`, the generator writes `Members`, which works on `People` and on the property marked `[Owner]`. It also
+  writes `Codes`, which makes refusals with codes that start with `boards.`.
+- `Members.Open(now)` puts the owner on the board from now, with no end and no role.
+- `[CustomRole<...>]`: `BoardRole` derives from the role template. The template checks a new role's name and
+  permissions against the rules passed to the constructor.
+- `CustomRoleDraft` holds what a new role is made from: a name, a description, the permissions, and the starter role
+  it is made from, if any. Step 7 gets drafts from the rules.
 
-Look in the domain project's **Dependencies → Analyzers** for `Board.Members.g.cs`: one line, the member list.
+The generated `Board.Members.g.cs` is in the domain project, under **Dependencies → Analyzers**. It holds one line:
+the member list.
 
 > **Going further.** What is written, and when it is not: [The member list is written for you](resources-and-members.md#the-member-list-is-written-for-you).
 
 ## Step 2: the permissions and the rules
 
-**Where we are.** The classes exist. Nothing says what may be done with a board.
+**Where we are.** The classes exist. No code says yet who may do what with a board.
 
-**Why now.** The rules read the permissions, and everything after reads the rules: the context (step 3), the database's
+**Why now.** The rules read the permissions, and the later steps read the rules: the context (step 3), the database
 functions (step 4) and every request (step 6).
 
-**What we want.** Five permissions, each declared once with where it is asked, and the rules in one declaration:
-roles the tenant keeps, starting from one called `editor`.
+**What we want.** Five permissions, each declared once with the level where it is checked. And the rules, in one
+declaration: each tenant has its own board roles, and starts with one role called `editor`.
 
 ### The idea: a permission has a level
 
-- **Permission**: a string a request asks for and a role gives, as in Tenancy.
-- **Level**: where it is asked. Three:
+- **Permission**: a string that a request requires and a role gives, as in Tenancy.
+- **Level**: where the permission is checked. There are three levels:
 
   | Level | Attribute | In Harbor |
   |---|---|---|
   | on one board | `[On<Board>]` | `boards.view`, `boards.edit`, `boards.members.manage` |
-  | at a unit | `[AtUnit]` | `boards.create`: there is no board yet, so it is asked where the board goes |
-  | for the whole tenant | `[AtTenant]` | `boards.roles.manage`: the tenant's roles of boards |
+  | at a unit | `[AtUnit]` | `boards.create`: the board does not exist yet, so the check is at the unit where the board will hang |
+  | for the whole tenant | `[AtTenant]` | `boards.roles.manage`: managing the tenant's board roles |
 
-- **On a board**, each permission also says how it is held there:
+- **On a board**, each permission also says who holds it there:
 
-  | Setting | Unless said | In Harbor |
+  | Setting | Default | In Harbor |
   |---|---|---|
-  | `Owner` | the owner holds it, by owning | all three |
-  | `EveryMember` | being a member gives nothing by itself | `boards.view`: being on a board is seeing it |
-  | `InRoles` | a role may give it | `boards.members.manage` says `false`: who is on a board, the owner says, not a role |
+  | `Owner` | on: the owner holds it | all three |
+  | `EveryMember` | off: being a member gives no permission by itself | `boards.view`: every member sees the board |
+  | `InRoles` | on: a role may give it | `boards.members.manage` sets `false`: no board role gives it, so the owner decides who is on a board |
 
-- **Rules**: one declaration per kind of resource, `MembershipRules.For<Board>(...)`. Made through the board's type,
-  they read its name, its codes and its permissions. What is left to say is where the roles come from.
-- **Where roles come from**, three ways:
+- **Rules**: one declaration per kind of resource, `MembershipRules.For<Board>(...)`. From the board's type, the rules
+  read the resource name, the refusal codes and the permissions. You only say where the roles come from.
+- **Where roles come from**: there are three kinds.
 
   | Kind | Who makes them | In code |
   |---|---|---|
   | Fixed | you, in code, the same for every tenant | `Roles.Fixed([...])` |
   | Custom | the tenant, as rows, at run time | `Roles.Custom(starters: [...])`, with a role class |
-  | External | something else that keeps roles, such as Tenancy | `Roles.External(...)` |
+  | External | another system that stores roles, such as Tenancy | `Roles.External(...)` |
 
-  Harbor's are custom. A **starter role** is one every tenant starts with, and then changes as its own: here
-  `editor`, with `boards.view` and `boards.edit`.
-- **Policy, not domain**: the permissions and the rules live in the application project. The domain says what a board
-  is; who may do what is the application's.
-- **Tenancy's catalogue**: Tenancy's generator lists every permission of a `[Permissions]` class, so a role of the
-  organization can hold `boards.create` at North. The host collects them in step 5.
+  Harbor's roles are custom. Every tenant starts with a copy of each **starter role**, and the tenant can change its
+  copy. Harbor has one starter role, `editor`, with `boards.view` and `boards.edit`.
+- **Application layer**: the permissions and the rules live in the application project. The domain project describes
+  what a board is. The application project decides who may do what.
+- **Tenancy's catalogue**: Tenancy's generator adds every permission of a `[Permissions]` class to Tenancy's
+  catalogue. So a Tenancy role can hold `boards.create` at North. The host collects these permissions in step 5.
 
 ### What you write
 
-**The application project.** **Why:** the requests come here, and Tenancy's core package brings the two levels Tenancy
-knows, `[AtUnit]` and `[AtTenant]`, and its answers about the caller (step 6).
+**The application project.** **Why:** the requests go in this project. Tenancy's core package brings the two levels
+Tenancy knows, `[AtUnit]` and `[AtTenant]`, and `ITenancy`, which returns the current caller's tenant and seat
+(step 6).
 
 **`src/Modules/Boards/Harbor.Boards.Application/Harbor.Boards.Application.csproj`**
 
@@ -354,8 +400,8 @@ knows, `[AtUnit]` and `[AtTenant]`, and its answers about the caller (step 6).
 </Project>
 ```
 
-**The permissions.** **Why:** each is named once: a request requires the constant, the rules read it, the database's
-functions are written from it. The description is what a screen that makes roles shows.
+**The permissions.** **Why:** each permission is declared once. A request requires the constant, the rules read it,
+and the export writes the database functions from it. A screen for making roles shows the description.
 
 **`Harbor.Boards.Application/Access/BoardPermissions.cs`**
 
@@ -387,8 +433,7 @@ public static class BoardPermissions
 }
 ```
 
-**The rules.** **Why:** one value that the check in C# and the database's functions both read, so they cannot
-disagree.
+**The rules.** **Why:** the C# check and the database functions both read this one value, so they always agree.
 
 **`Harbor.Boards.Application/Access/BoardMembership.cs`**
 
@@ -412,45 +457,50 @@ dotnet build Harbor.slnx
 
 ### What it does
 
-- `[Permissions]`: every public constant is a permission; the attribute on it is its level.
-- `MembershipRules.For<Board>`: the owner holds the three permissions on a board, every member holds `boards.view`,
-  and a role may give `boards.view` and `boards.edit`.
-- The rules are checked when they are made: a starter role with `boards.members.manage` would be refused, since no
-  role may give it.
+- `[Permissions]`: every public constant in the class is a permission. The attribute on the constant sets its level.
+- `Description`: the text a screen shows for the permission.
+- `MembershipRules.For<Board>`: the owner holds the three permissions on a board. Every member holds `boards.view`. A
+  role may give `boards.view` and `boards.edit`.
+- `new("editor", [...])`: a starter role, with its name and its permissions.
+- `MembershipRules.For` checks the rules when it runs, and throws for rules that contradict themselves. For example,
+  a starter role with `boards.members.manage` is refused, because no role may give that permission.
 
 > **Going further.** Every setting of a permission, `Implies` and `Retired` among them:
 > [The settings of a permission](permissions-and-roles.md#the-settings-of-a-permission).
 
 ## Step 3: where it is stored
 
-**Where we are.** The classes and the rules exist, in memory only.
+**Where we are.** The classes and the rules exist. Nothing stores boards yet.
 
-**Why now.** Before a request opens a board, there has to be somewhere to keep it. The database's functions of step 4
-are written from this model too.
+**Why now.** A request that opens a board must save it somewhere. The export also writes the database functions of
+step 4 from this model.
 
-**What we want.** A context for Boards with its tables in the schema `boards`, the first migration, and the rules
-marked for the export.
+**What we want.** A context for Boards with its tables in the schema `boards`, the first migration, and a mark on the
+rules for the export.
 
-### The idea: the members are mapped by one call, in your context
+### The idea: one call maps the members in your context
 
-- Boards has a context of its own, as Tenancy has, in its own schema.
-- `HasMembers(row => row.People)`: both member tables, the members and the roles each holds, owned by the board and
-  saved with it. The owner is the property marked `[Owner]`.
-- `IsCustomRole()`: the package's part of a role row: its name, description, permissions, status, and the starter role
-  it was made from (`MadeFrom`).
-- **Whose a role is, is yours**: two unique indexes of yours, a role's name once per tenant, and each starter role once
-  per tenant.
-- `ScopeToTenant`: Tenancy's tenant filter and save check, on the board and on the role, as on every row of a tenant.
-- `AddTenancyReadFunctions`: Tenancy's rows, the rights and the units, mapped through Tenancy's functions. So "does
-  Rhea hold `boards.create` at North" is part of this context's own query, and no table of Tenancy's is read. Boards
-  sees Tenancy's ids, not its classes, so it names the four ids.
-- **The mark**, `[MembershipRules<BoardMember>]`: the build cannot read the value a registration is called with, so the
-  mark says which rules are the board's. The export writes the board's functions in the database from them.
+- Boards has its own context and its own schema, like Tenancy.
+- `HasMembers(row => row.People)` maps the two member tables: the members, and the roles each member holds. The board
+  owns both tables, and they are saved with the board. The owner is the property marked `[Owner]`.
+- `IsCustomRole()` maps the columns Membership adds to a role row: name, description, permissions, status, and the
+  starter role the role was made from (`MadeFrom`).
+- **The role's tenant is yours to map**: you add two unique indexes. One allows each role name once per tenant. The
+  other allows each starter role once per tenant.
+- `ScopeToTenant` adds Tenancy's tenant filter and save check to the board and to the role, as for every class that
+  belongs to a tenant.
+- `AddTenancyReadFunctions` maps Tenancy's rows, the rights and the units, through Tenancy's database functions. So a
+  question such as "does Rhea hold `boards.create` at North" becomes part of this context's query. The query reads
+  no Tenancy table directly. Boards knows Tenancy's ids but not its classes, so the call names the four id types.
+- **The mark**, `[MembershipRules<BoardMember>]`: the build cannot read which rules a registration call receives. The
+  mark tells the build which rules belong to the board. The export writes the board's database functions from those
+  rules.
 
 ### What you write
 
-**The infrastructure project.** **Why:** Membership's Postgres package brings its Entity Framework package, and with
-Tenancy's Entity Framework package beside it, the generator writes what joins the two (step 5).
+**The infrastructure project.** **Why:** Membership's Postgres package brings Membership's Entity Framework package
+with it. Tenancy's Entity Framework package is referenced next to it. With both, the generator writes the code that
+joins Membership to Tenancy (step 5).
 
 **`src/Modules/Boards/Harbor.Boards.Infrastructure/Harbor.Boards.Infrastructure.csproj`**
 
@@ -479,8 +529,8 @@ Tenancy's Entity Framework package beside it, the generator writes what joins th
 </Project>
 ```
 
-**The context.** **Why:** the model is your context's to build: which collection is the member list, what the tables
-are called, and whose a role is.
+**The context.** **Why:** your context builds the model. It says which collection is the member list, what the tables
+are called, and which tenant a role belongs to.
 
 **`Harbor.Boards.Infrastructure/Persistence/BoardsContext.cs`**
 
@@ -537,8 +587,8 @@ public sealed class BoardsContext(DbContextOptions<BoardsContext> options) : DbC
 }
 ```
 
-**The rules, marked.** **Why:** the mark is what the export reads; without it the build warns, DDD00054, and writes
-no function for boards.
+**The rules, marked.** **Why:** the export reads the mark. Without it, the build gives warning DDD00054 and writes no
+functions for boards.
 
 **`Harbor.Boards.Application/Access/BoardMembership.cs`**
 
@@ -566,41 +616,47 @@ dotnet ef migrations add Boards --project src/Modules/Boards/Harbor.Boards.Infra
 
 ### What it does
 
-- `[SupabaseMigrations]`, `StoreDateTimeOffsetsAsUtc`: as in Tenancy's context. Periods are compared in SQL, so they
-  are stored as UTC.
-- `AddBoardsConverters()`: generated for the module. It stores Boards' ids and Tenancy's published ids as their `Guid`.
+- `[SupabaseMigrations]`, `StoreDateTimeOffsetsAsUtc`: the same as in Tenancy's context. The database functions
+  compare member periods in SQL, so the times are stored as UTC.
+- `AddTenancyReadFunctions<...>("tenancy")`: `"tenancy"` is the schema of Tenancy's functions, the schema of
+  Tenancy's context.
+- `AddBoardsConverters()` is generated for the module. It stores Boards' ids, and the Tenancy ids from Tenancy's
+  contracts, as their `Guid`.
 - The migration creates the schema `boards` with four tables: `Boards`, `BoardPeople` (the members, named after the
-  board and its collection), `BoardMemberRoles` and `BoardRoles`. No table of Tenancy's.
+  board and its collection), `BoardMemberRoles` and `BoardRoles`. It creates none of Tenancy's tables.
 
 > **Going further.** Your own table and column names: [Several kinds of resource](resources-and-members.md#several-kinds-of-resource).
 
 ## Step 4: the database's own rules
 
-**Where we are.** Boards has tables, and nothing says who may read or write them.
+**Where we are.** Boards has tables. No rule says yet who may read or write them.
 
-**Why now.** Harbor runs every query as its caller, under row level security (RLS). A table with no rule of yours is
-closed: Tenancy's policies on it only narrow, to the caller's tenant, so no seat reads a single board. The export of
-step 5 writes these rules as policies.
+**Why now.** Harbor runs every query as its caller, under row level security (RLS). Tenancy's policies on a table only
+narrow access to the caller's tenant. They allow nothing by themselves. So without a rule of yours, no seat can read
+any board. The export in step 5 writes your rules as policies.
 
-**What we want.** Who reads, opens and changes a board; who reads and writes a board role; and a lock on the members
-and the owner.
+**What we want.** Rules for who may read, open and change a board, and for who may read and write a board role. And a
+lock on the member rows and on the owner column.
 
 ### The idea: a rule in C#, a policy in the database
 
 - **Row access rule**: a static class with `[RowAccess<T>(...)]` and one method, `Allows(row, caller)`. Your
-  application never runs it: the export translates it into a policy, which Postgres applies to every query.
-- **What a policy asks about boards**: the functions Membership writes from the rules, by a board's id. A rule names
-  them through a **contract**, one line each, in the contracts project so other modules' rules may ask too:
+  application never calls this method. The export translates it into a policy, and Postgres applies the policy to
+  every query.
+- **Asking about boards**: a policy calls the functions that Membership writes from the rules. The functions take a
+  board's id. A rule refers to them through a **contract**: a one-line class in the contracts project, so other
+  modules' rules can use it too. Harbor uses two kinds:
   - `ResourceAccessSet.Seen`: the boards the caller sees;
   - `ResourceAccessSet.HeldOn`: the boards the caller holds a given permission on.
-- **What a policy asks about the organization**: Tenancy's questions, such as `TenancyRowAccess.UnitsWhereIHold(...)`
+- **Asking about the organization**: a rule calls Tenancy's functions, such as `TenancyRowAccess.UnitsWhereIHold(...)`
   and `CallerSeatId()`.
-- **A row knows no command.** The rule for changing a board lets through anyone who may edit it or manage its members
-  (adding a member raises the board's version). The check before the handler tells the two apart.
-- **The lock.** The member tables follow the board's rules, so Leo, who may edit a board, could write its member rows
-  by a statement of his own, or make himself its owner. `LocksMembers` and `LocksOwner` name the permission your
-  commands require for those; the package writes a policy on the member tables and a trigger on the owner column from
-  it.
+- **A policy cannot see the command.** Adding a member raises the board's version, so it updates the board row. So
+  the rule for changing a board allows anyone who may edit the board or manage its members. The check before the
+  handler tells the two commands apart.
+- **The lock.** The member tables follow the board's rules. Without a lock, Leo, who may edit a board, could write its
+  member rows with his own SQL statement, or make himself the owner. `LocksMembers` and `LocksOwner` mark the
+  permission your commands require for these changes. From that permission, Membership writes a policy on the member
+  tables and a trigger on the owner column.
 
 Harbor's rules:
 
@@ -614,7 +670,7 @@ Harbor's rules:
 
 ### What you write
 
-**The two contracts.** **Why:** a rule asks about boards by their id, and never by a function's name: the export
+**The two contracts.** **Why:** a rule asks about boards by their id and never names a database function. The export
 finds the function.
 
 **`Harbor.Boards.Contracts/RowAccess/BoardsISee.cs`**
@@ -643,8 +699,8 @@ namespace Harbor.Boards.Contracts.RowAccess;
 public static partial class BoardsWhereIHold;
 ```
 
-**The rules on boards.** **Why:** what a seat reads and changes of a board is your application's to say, and the
-package writes no policy of its own on your table.
+**The rules on boards.** **Why:** your application decides what a seat may read and change on a board. Membership
+writes no policy on your board table.
 
 **`Harbor.Boards.Infrastructure/Access/BoardRowRules.cs`**
 
@@ -685,8 +741,8 @@ public static partial class SeatsChangeTheBoardsTheyWorkOn
 }
 ```
 
-**The rules on board roles.** **Why:** a role's row decides what everybody who holds it may do, so who writes one is
-worth a rule in the database too.
+**The rules on board roles.** **Why:** a role row sets what every member with that role may do. So the database also
+limits who may write a role row.
 
 **`Harbor.Boards.Infrastructure/Access/BoardRoleRowRules.cs`**
 
@@ -715,8 +771,8 @@ public static partial class RoleManagersWriteBoardRoles
 }
 ```
 
-**The lock**, on the permission that says who is on a board. **Why:** it is the one your commands that change the
-members require (step 7), and naming an owner would need it too.
+**The lock**, on `boards.members.manage`. **Why:** your commands that change the members require this permission
+(step 7). A command that names a new owner would require it too.
 
 **`Harbor.Boards.Application/Access/BoardPermissions.cs`**
 
@@ -748,51 +804,60 @@ public static class BoardPermissions
 }
 ```
 
-Build again: `dotnet build Harbor.slnx`. The policies reach the database with the export, in step 5.
+Build again: `dotnet build Harbor.slnx`. In step 5, the export writes the policies and you apply them to the
+database.
 
 ### What it does
 
-- `To = [RowAccessRoles.User]`: the rule is for signed-in callers, the database role `authenticated`.
-- `BoardsISee.Ids().Contains(board.Id)`: becomes a subquery of the policy, asking the board's function once per
-  statement.
-- The create rule holds the database to what the command does: the owner is the caller's own seat.
-- `LocksMembers`: a member row is added, changed or removed only on a board the caller holds `boards.members.manage`
-  on. `LocksOwner`: the owner column changes only for such a caller.
-- Leave the locks out, and the start-up check says so as a warning: the member rows then follow whatever your rule
-  for changing a board allows.
+- `[ResourceAccessContract<BoardId>(...)]` on an empty `static partial class`: the generator adds the class's `Ids()`
+  method. `BoardsISee.Ids()` takes no argument. `BoardsWhereIHold.Ids(permission)` takes the permission.
+- `RowOperations`: the statements a rule allows. The values are `Read`, `Create`, `Change`, `Remove` and `All`.
+  Combine them with `|`, as the role rule does with `Create | Change`. Harbor has no `Remove` rule, so a signed-in
+  caller's `DELETE` on these tables removes no row.
+- `To = [RowAccessRoles.User]`: the rule is for signed-in callers, the database role `authenticated`. Another value
+  is `RowAccessRoles.Anonymous`, for callers without a user (`anon`).
+- `BoardsISee.Ids().Contains(board.Id)` becomes a subquery in the policy. The subquery calls the boards function once
+  per statement.
+- The create rule makes the database check the same thing as the command: the owner is the caller's seat.
+- `TenancyRowAccess.CallerTenant<TenantId>()`: the tenant of the caller's seat. `HoldsAtTenant(permission)`: whether
+  the caller's seat holds the permission now, at the root, so for the whole tenant.
+- `LocksMembers`: a member row is added, changed or removed only on a board where the caller holds
+  `boards.members.manage`. `LocksOwner`: only a caller with that permission on the board can change the owner column.
+- Without the locks, a start-up check logs a warning. The member rows then follow your rule for changing a board.
 
 > **Going further.** Everything the lock holds and leaves to you: [Who writes the member rows](postgres.md#who-writes-the-member-rows).
 
 ## Step 5: the module's registration and the host
 
-**Where we are.** The module builds. Nothing registers it, and the host does not know it.
+**Where we are.** The module builds. Nothing registers it, and the host does not reference it.
 
-**Why now.** The requests of step 6 need their check before each handler, and the database needs the new tables,
-functions and policies.
+**Why now.** The requests of step 6 need a check before each handler. The database needs the new tables, functions
+and policies.
 
-**What we want.** `AddBoardsModule(connectionString)`, called by the host, and the database brought up to date.
+**What we want.** `AddBoardsModule(connectionString)`, called by the host, and an up-to-date database.
 
 ### The idea: two packages check Boards' requests
 
-- **One interface per module**, as in Tenancy: every request of Boards implements `IBoardsRequest`, marked
-  `[AccessRequests]`, and the generator writes the behavior that runs the checks before each handler.
-- **Two checks decide the cases**, each registered for `IBoardsRequest`:
-  - Tenancy's: in the tenant, a permission at a unit, a permission for the whole tenant;
-  - Membership's: a permission on one board, and the boards a list shows.
+- **One interface per module**, as in Tenancy. Every request of Boards implements `IBoardsRequest`, which is marked
+  `[AccessRequests]`. The generator writes the behavior that runs the checks before each handler.
+- **Two checks**, both registered for `IBoardsRequest`, decide the requirements:
+  - Tenancy's check decides: in the tenant, a permission at a unit, and a permission for the whole tenant;
+  - Membership's check decides: a permission on one board, and which boards a list shows.
 
-  A requirement that no registered check decides lets nobody through.
-- **The join with Tenancy is written for you.** The project references both packages, so the generator writes
-  `AddBoardMembershipWithTenancy`: a member is the caller's seat, and a new member's seat must be active in the tenant.
-  Boards sees Tenancy's ids, not its classes, so it names three of them; the seat's follows from the member class.
-- **Ada's role lacks the new permissions.** Her Administrator role was copied from Tenancy's default administrators'
-  pack when Harbor Works was provisioned, before boards existed. That pack holds every permission there is, so
-  `SyncRolePacks()` in the host gives her role the board permissions when the host starts, and undoes nothing the
-  tenant changed itself.
+  When no registered check decides a requirement, the behavior refuses every caller.
+- **The generator joins Membership to Tenancy.** The project references both packages, so the generator writes
+  `AddBoardMembershipWithTenancy`. With it, the caller's seat is the caller's member identity, and a new member's seat
+  must be active in the tenant. Boards knows Tenancy's ids but not its classes, so the call names three id types. The
+  seat id type comes from the member class.
+- **Ada's role lacks the new permissions.** Her Administrator role is a copy of Tenancy's default administrators'
+  pack. The copy was made when Harbor Works was provisioned, before boards existed. That pack holds every permission
+  in the catalogue. `SyncRolePacks()` in the host adds the board permissions to her role when the host starts. Changes
+  that the tenant made to its roles stay.
 
 ### What you write
 
-**The module's request interface.** **Why:** what tells Boards' requests from another module's, so each module's
-checks decide only its own.
+**The module's request interface.** **Why:** this interface separates Boards' requests from other modules' requests,
+so each module's checks decide only that module's requests.
 
 **`Harbor.Boards.Application/Access/IBoardsRequest.cs`**
 
@@ -805,7 +870,7 @@ namespace Harbor.Boards.Application.Access;
 public partial interface IBoardsRequest : IRequireAccess;
 ```
 
-**`Harbor.Boards.Application/GlobalUsings.cs`**: what every request file of the module uses.
+**`Harbor.Boards.Application/GlobalUsings.cs`**: the namespaces every request file of the module uses.
 
 ```csharp
 global using DDDToolkit.Access;
@@ -820,7 +885,8 @@ global using Harbor.Tenancy.Contracts.ValueObjects;
 global using Mediator;
 ```
 
-**The application's registration.** **Why:** the behavior is generated beside `IBoardsRequest`, in this project.
+**The application's registration.** **Why:** the generator writes the behavior next to `IBoardsRequest`, in this
+project.
 
 **`Harbor.Boards.Application/BoardsApplication.cs`**
 
@@ -836,8 +902,8 @@ public static class BoardsApplication
 }
 ```
 
-**The infrastructure's registration.** **Why:** the context and both packages' checks run over the same database, so
-they are registered where the context is.
+**The infrastructure's registration.** **Why:** both packages' checks read through the board context, so they are
+registered next to it.
 
 **`Harbor.Boards.Infrastructure/BoardsInfrastructure.cs`**
 
@@ -875,8 +941,8 @@ public static class BoardsInfrastructure
 }
 ```
 
-**The API project and the module's entry.** **Why:** the host references this project and calls these two methods,
-and nothing else of Boards.
+**The API project and the module's entry.** **Why:** the host references only this project of Boards, and calls only
+these two methods.
 
 **`src/Modules/Boards/Harbor.Boards.Api/Harbor.Boards.Api.csproj`**
 
@@ -915,7 +981,8 @@ public static class BoardsModule
 }
 ```
 
-**The host.** **Why:** it references the module's entry, and its mediator is generated with Boards' handlers as well.
+**The host.** **Why:** the host now references Boards' API project, so the generated mediator includes Boards'
+handlers too.
 
 **`src/Harbor.Host/Harbor.Host.csproj`**
 
@@ -988,63 +1055,68 @@ dotnet sln Harbor.slnx add --solution-folder src/Modules/Boards src/Modules/Boar
 
 ### What it does
 
-- `AddTenancyAccess<..., IBoardsRequest, BoardsContext>()`: Tenancy's checks for Boards' requests, asked over this
-  context's read functions.
-- `AddBoardMembershipWithTenancy`: the boards' questions over this context, and the join with Tenancy.
-- `AddBoardMemberAccess<IBoardsRequest>()`: Membership's check, for Boards' requests.
-- `AddMembershipPostgres()`: a start-up check that the database's functions and lock were written from the rules the
-  host runs with.
-- `AddTenancyPermissionsOfModules()`, unchanged: it now lists Boards' five permissions as well.
+- `AddDDDToolkitEntityFramework()`: the same registration as in Tenancy's module, here without an outbox. Each call
+  adds to the same options.
+- `AddTenancyAccess<TenantId, SeatId, OrganizationUnitId, RoleId, IBoardsRequest, BoardsContext>()` registers
+  Tenancy's checks for Boards' requests. Outside the Tenancy module, the call names Tenancy's four id types, because
+  Boards does not see Tenancy's classes. The checks read through this context's read functions.
+- `AddBoardMembershipWithTenancy` registers Membership's queries about boards over this context, joined to Tenancy.
+- `AddBoardMemberAccess<IBoardsRequest>()` registers Membership's check for Boards' requests.
+- `AddMembershipPostgres()` adds a start-up check: the database functions and the lock must match the rules the host
+  runs with.
+- `AddTenancyPermissionsOfModules()` is unchanged. It now also registers Boards' five permissions.
 
 ### Run it
 
 1. Build the host: `dotnet build`. The export writes three files into `supabase/migrations`:
    - `<v>_Boards.boards.ddd.sql`: the migration of step 3;
-   - `<v>_access.tenancy.ddd.sql`: Tenancy's access file again, since its catalogue gained Boards' permissions;
+   - `<v>_access.tenancy.ddd.sql`: a new version of Tenancy's access file, because Tenancy's catalogue now has
+     Boards' permissions;
    - `<v>_access.boards.ddd.sql`: five functions for boards, the policies of step 4, and the lock.
 2. Apply them: `npx supabase migration up --local`.
-3. Run the host as in the Tenancy tutorial. The start-up checks pass, `membership.functions-in-place` among them, and
-   the log says:
+3. Run the host as in the Tenancy tutorial. The start-up checks pass, including `membership.functions-in-place`. The
+   log shows:
 
    ```text
    The role packs are synced in 1 tenants: 1 roles followed their packs, ...
    ```
 
-   That is Ada's Administrator, which now holds the board permissions.
+   Ada's Administrator role now holds the board permissions.
 
 ## Step 6: open a board, see it, list them
 
 **Where we are.** The module is registered and has no routes.
 
-**Why now.** Members need a board to be on.
+**Why now.** A member needs a board, so the board comes first.
 
-**What we want.** Rhea opens a board at North, sees it, and finds it in her list. Ada, who is not on it, does not see
-it yet.
+**What we want.** Rhea opens a board at North, sees it, and finds it in her list. Ada is not on the board, so she does
+not see it yet.
 
 ### The idea: three requirements, each on its request
 
-- Each request says what it requires, and the check before the handler holds it to that:
+- Each request states what it requires. The check before the handler enforces it:
 
   | Request | Requires | Checked by |
   |---|---|---|
-  | `OpenBoard` | `[RequiresPermission(boards.create)]`, with `[AtUnit]` on its unit | Tenancy: at that unit or above. There is no board yet to be a member of. |
-  | `SeeBoard` | `[RequiresPermission(boards.view)]`, with `[OnResource]` on its board | Membership: on that board |
-  | `ListBoards` | `[SeenWith<BoardId>(boards.view)]` | Membership: refuses nobody, and the list holds what the caller sees |
+  | `OpenBoard` | `[RequiresPermission(boards.create)]`, with `[AtUnit]` on its unit | Tenancy, at that unit or above. The board does not exist yet, so nobody is a member of it. |
+  | `SeeBoard` | `[RequiresPermission(boards.view)]`, with `[OnResource]` on its board | Membership, on that board |
+  | `ListBoards` | `[SeenWith<BoardId>(boards.view)]` | Membership. It refuses nobody. The list contains only the boards the caller sees. |
 
-- **A board the caller does not see does not exist for it**: `404`, `boards.not-found`, the same answer as for an id
-  that is no board. Nobody learns a board is there.
-- **Reach**: `IMemberQuestions<BoardId>.Reach(permission)` is the set of boards the caller holds a permission on, not
-  yet read. A query puts it in with `Within(reach)`, so a list is one statement, never ids fetched first.
-- **Repository**: the handlers load and save boards through `IBoardRepository`, an interface in the application
-  project, implemented in the infrastructure project. A reach goes into it, since `Within` is an Entity Framework
-  query.
-- **The owner is the caller**: the handler asks Tenancy's answers for the caller's tenant and seat, `RequireTenant()`.
-  The create rule of step 4 holds the database to the same.
+- **Hidden boards**: for a board the caller does not see, the answer is `404`, `boards.not-found`. An id that is not a
+  board gets the same answer, so a caller cannot find out that a board exists.
+- **Reach**: `IMemberQuestions<BoardId>.Reach(permission)` returns a `MemberReach<BoardId>`. It describes the boards
+  the caller holds the permission on, and runs no query by itself. `Within(reach)` adds it to an Entity Framework
+  query, so the list is one SQL statement. The code never loads the ids first.
+- **Repository**: the handlers load and save boards through `IBoardRepository`. The interface is in the application
+  project, and the infrastructure project implements it. The handler passes the reach to the repository, because
+  `Within` is part of an Entity Framework query.
+- **The owner is the caller**: the handler gets the caller's tenant and seat from `ITenancy` with `RequireTenant()`.
+  The create rule of step 4 makes the database check the same.
 
 ### What you write
 
-**The repository.** **Why:** the application project knows no Entity Framework; what it needs of storage, it says in
-an interface.
+**The repository.** **Why:** the application project does not reference Entity Framework. It declares what it needs
+from storage in an interface.
 
 **`Harbor.Boards.Application/Boards/IBoardRepository.cs`**
 
@@ -1090,7 +1162,7 @@ internal sealed class BoardRepository(BoardsContext db) : IBoardRepository
 }
 ```
 
-**`Harbor.Boards.Infrastructure/BoardsInfrastructure.cs`**: the repository registered.
+**`Harbor.Boards.Infrastructure/BoardsInfrastructure.cs`**: registers the repository.
 
 ```csharp {6,31}
 using DDDToolkit.EntityFramework;
@@ -1129,8 +1201,8 @@ public static class BoardsInfrastructure
 }
 ```
 
-**Opening a board.** **Why:** a permission at the unit, since the board does not exist yet; the caller becomes its
-owner.
+**Opening a board.** **Why:** the board does not exist yet, so the request requires a permission at the unit. The
+caller becomes the owner.
 
 **`Harbor.Boards.Application/Boards/OpenBoard/OpenBoard.cs`**
 
@@ -1159,7 +1231,8 @@ public sealed class OpenBoardHandler(
 }
 ```
 
-**Seeing one board.** **Why:** a permission on that board; the answer lists its members, the owner first.
+**Seeing one board.** **Why:** the request requires a permission on that board. The response lists the board's
+members, the owner first.
 
 **`Harbor.Boards.Application/Boards/SeeBoard/SeeBoard.cs`**
 
@@ -1188,7 +1261,8 @@ public sealed class SeeBoardHandler(IBoardRepository boards, TimeProvider clock)
 public sealed record BoardDetails(BoardId Id, string Name, OrganizationUnitId Unit, long Version, IReadOnlyList<MemberOverview<SeatId, BoardRoleId>> Members);
 ```
 
-**Listing the caller's boards.** **Why:** a list refuses nobody; the reach decides what is in it.
+**Listing the caller's boards.** **Why:** a list request refuses nobody. The reach decides which boards the list
+contains.
 
 **`Harbor.Boards.Application/Boards/ListBoards/ListBoards.cs`**
 
@@ -1213,7 +1287,7 @@ public sealed class ListBoardsHandler(IMemberQuestions<BoardId> questions, IBoar
 public sealed record BoardListing(BoardId Id, string Name, OrganizationUnitId Unit, SeatId Owner);
 ```
 
-**The routes.** **Why:** a route only sends its request; the check is on its way.
+**The routes.** **Why:** each route only sends its request. The behavior checks the request before the handler runs.
 
 **`Harbor.Boards.Api/Boards/Rest/BoardsEndpoints.cs`**
 
@@ -1248,7 +1322,7 @@ internal static class BoardsEndpoints
 }
 ```
 
-**`Harbor.Boards.Api/BoardsModule.cs`**: the module maps them.
+**`Harbor.Boards.Api/BoardsModule.cs`**: the module maps the routes.
 
 ```csharp {1,16}
 using Harbor.Boards.Api.Boards.Rest;
@@ -1272,18 +1346,26 @@ public static class BoardsModule
 
 ### What it does
 
-- `[AtUnit] Unit`: Rhea needs `boards.create` at that unit or above it, from a role of the organization.
-- `[OnResource] Board`: the check reads that board, and refuses a caller who does not see it, or sees it without the
-  permission, before the handler runs.
-- `Board.Codes.Refuse(MembershipRefusals.NotFound)`: the board is gone between the check and the load, refused under
-  the board's own code.
-- `MemberOverviews.From(...)`: the members in the one order every answer lists them in. It reads nothing.
-- `Within(reach)`: the boards Rhea holds `boards.view` on, as a subquery of this one statement.
+- `[AtUnit] Unit`: Rhea needs `boards.create` at that unit or above it, from a Tenancy role.
+- `ITenancy<TenantId, SeatId, OrganizationUnitId, RoleId>`: the same service as in step 10 of the Tenancy tutorial.
+  `RequireTenant()` returns the caller's `Tenant` and `Seat`. `Seat` can be `null` for system work in the tenant. In
+  Harbor only a seat opens a board, so the handler throws in that case.
+- `TimeProvider`: .NET's clock. Tenancy registers `TimeProvider.System` unless the host registered another one, such
+  as a fixed clock in a test. The handler passes `clock.GetUtcNow()` to the board, because the board reads no clock.
+- `BoardId.Create()` makes the new board's id in code, before the save.
+- `[OnResource] Board`: before the handler runs, the check reads that board. It refuses a caller who does not see the
+  board, and a caller who sees it without the permission.
+- `Board.Codes.Refuse(MembershipRefusals.NotFound)`: for a board deleted between the check and the load. The refusal
+  uses the board's code, `boards.not-found`.
+- `MemberOverviews.From(...)` puts the members in the standard order: the owner first, then by the start of each
+  membership. It runs no query.
+- `board.Version`: the board's version, which every save that changes the board or its members raises.
+- `Within(reach)` adds the boards Rhea holds `boards.view` on as a subquery, in the same statement.
 
 ### Try it
 
-Rhea holds no `boards.create` yet. Ada makes a role of the organization for it and gives it to Rhea at North, with the
-routes of the Tenancy tutorial:
+Rhea does not hold `boards.create` yet. Ada makes a Tenancy role with it and grants the role to Rhea at North. She uses
+the routes from the Tenancy tutorial:
 
 ```http
 POST /roles
@@ -1300,8 +1382,9 @@ Content-Type: application/json
 3. As Rhea: `POST /boards` at the root: `403`, `tenancy.not-permitted`, "You lack the permission boards.create."
 4. As Rhea: `GET /boards`: Crane schedule, with her seat as its owner.
 5. As Rhea: `GET /boards/<id>`: `version` 1, one member, Rhea, `isOwner: true`, no roles.
-6. As Ada: `GET /boards`: `[]`. `GET /boards/<id>`: `404`, `boards.not-found`. Ada holds `boards.view` at the root, and
-   Rhea holds it at North: until step 8 a permission on a board is held on the board alone.
+6. As Ada: `GET /boards`: `[]`. `GET /boards/<id>`: `404`, `boards.not-found`. Ada holds `boards.view` at the root,
+   and Rhea holds it at North. Until step 8, a permission held at a unit does not count on a board. Only the board's
+   owner and members hold permissions on it.
 
 > **Going further.** A command that names the version its caller read, `[ExpectedVersion]`, and what holds a change
 > between the check and the save: [From the check to the save](checks-and-saves.md#from-the-check-to-the-save).
@@ -1310,29 +1393,33 @@ Content-Type: application/json
 
 **Where we are.** Rhea owns a board and is alone on it. Leo has no seat.
 
-**Why now.** This is the point of Membership: access to one board through the people on it.
+**Why now.** This step shows the main feature of Membership: a person gets access to one board by being a member of
+it.
 
-**What we want.** Harbor Works gets its starter role, `editor`. Rhea puts Leo on her board as an editor. Leo edits that
-board, and may not say who else is on it.
+**What we want.** Harbor Works gets its starter role, `editor`. Rhea adds Leo to her board as an editor. Leo can edit
+that board, and may not add members to it.
 
 ### The idea: who may add a member, and what a role gives
 
-- **Starter roles are made per tenant**, when your application says so. `StarterRoles.Missing(rules, roles)` gives the
-  ones the tenant lacks; a role made from one before is not made again, even renamed. Here a request an administrator
-  sends once, requiring `boards.roles.manage` for the tenant. A real application sends it while it sets a tenant up.
-- **Who may add a member is yours.** The package has no permission of its own for it. Here: `boards.members.manage` on
-  the board, which the owner holds by owning, and no role can give.
-- **What the member list cannot know, the admission asks** (`MemberAdmission`), before anything changes:
-  - `RequireMemberAsync`: the seat is an active seat of this tenant. Tenancy answers.
-  - `RequireRoleAsync`: the role is one of this tenant's board roles, in use.
-- **The member list then keeps its rules**: a seat already on the board is refused, `409`, `boards.already-member`.
-- **A period**: `MemberPeriod.Open(now)` is from now, for good. `MemberPeriod.Between(now, until)` ends it.
-- **What a role gives**: `editor` gives `boards.view` and `boards.edit` on each board it is held on, and nothing else.
+- **Starter roles are made per tenant**, when your application decides. `StarterRoles.Missing(rules, roles)` returns
+  the starter roles the tenant does not have yet. A role made from a starter role before is not made again, even if
+  the tenant renamed it. In Harbor, an administrator sends a request once to make them. The request requires
+  `boards.roles.manage` for the tenant. A real application sends this request when it sets up a tenant.
+- **You decide who may add a member.** Membership has no built-in permission for it. Harbor uses
+  `boards.members.manage` on the board. The owner holds it, and no role can give it.
+- **`MemberAdmission` checks what the member list cannot know**, before anything changes:
+  - `RequireMemberAsync` checks with Tenancy that the seat is an active seat of this tenant.
+  - `RequireRoleAsync` checks that the role is one of this tenant's board roles and is active.
+- **The member list then applies its rules**: it refuses a seat that is already on the board with `409`,
+  `boards.already-member`.
+- **Period**: `MemberPeriod.Open(now)` starts now and has no end. `MemberPeriod.Between(now, until)` ends at `until`.
+- **What a role gives**: `editor` gives `boards.view` and `boards.edit` on each board where a member holds it. It
+  gives nothing else.
 
 ### What you write
 
-**The board's two methods.** **Why:** your own guard would go in front of the member list here, such as "a closed
-board takes no member"; the member list keeps the rest.
+**The board's two methods.** **Why:** a guard of your own goes here, before the call to the member list. An example
+is "a closed board takes no new members". The member list applies the other rules.
 
 **`Harbor.Boards.Domain/Aggregates/Boards/Board.cs`**
 
@@ -1377,7 +1464,8 @@ public sealed partial class Board
 }
 ```
 
-**The roles' repository.** **Why:** the same reason as the boards': the application project says what it needs.
+**The roles' repository.** **Why:** for the same reason as the boards' repository. The application project declares
+what it needs from storage.
 
 **`Harbor.Boards.Application/BoardRoles/IBoardRoleRepository.cs`**
 
@@ -1416,7 +1504,7 @@ internal sealed class BoardRoleRepository(BoardsContext db) : IBoardRoleReposito
 }
 ```
 
-**`Harbor.Boards.Infrastructure/BoardsInfrastructure.cs`**: the roles' repository registered.
+**`Harbor.Boards.Infrastructure/BoardsInfrastructure.cs`**: registers the roles' repository.
 
 ```csharp {6,33}
 using DDDToolkit.EntityFramework;
@@ -1457,8 +1545,8 @@ public static class BoardsInfrastructure
 }
 ```
 
-**Setting up the starter roles.** **Why:** the roles are the tenant's rows, so somebody has to make them once per
-tenant; the rules say which.
+**Setting up the starter roles.** **Why:** the roles are rows of the tenant, so a request must make them once per
+tenant. The rules say which roles to make.
 
 **`Harbor.Boards.Application/BoardRoles/SetUpBoardRoles/SetUpBoardRoles.cs`**
 
@@ -1490,7 +1578,7 @@ public sealed class SetUpBoardRolesHandler(
 }
 ```
 
-**Listing the roles.** **Why:** adding a member takes a role's id; any seat of the tenant may read them.
+**Listing the roles.** **Why:** adding a member needs a role's id. Any seat of the tenant may read the roles.
 
 **`Harbor.Boards.Application/BoardRoles/ListBoardRoles/ListBoardRoles.cs`**
 
@@ -1509,8 +1597,8 @@ public sealed class ListBoardRolesHandler(IBoardRoleRepository roles) : IQueryHa
 public sealed record BoardRoleListing(BoardRoleId Id, string Name, IReadOnlyList<string> Permissions);
 ```
 
-**Adding a member.** **Why:** your rule for who may, on the request; what the member list cannot know, from the
-admission; the change, through the board.
+**Adding a member.** **Why:** the request states who may add a member. The admission checks what the member list
+cannot know. The board makes the change.
 
 **`Harbor.Boards.Application/Boards/AddMember/AddMember.cs`**
 
@@ -1545,7 +1633,8 @@ public sealed class AddMemberHandler(
 }
 ```
 
-**Renaming a board.** **Why:** a command that a role can allow: `boards.edit`, which `editor` gives.
+**Renaming a board.** **Why:** this command requires `boards.edit`, which a role can give. The `editor` role gives
+it.
 
 **`Harbor.Boards.Application/Boards/RenameBoard/RenameBoard.cs`**
 
@@ -1598,7 +1687,8 @@ internal static class BoardRolesEndpoints
 }
 ```
 
-**`Harbor.Boards.Api/Boards/Rest/BoardsEndpoints.cs`**: a new name and a new member, beside the others.
+**`Harbor.Boards.Api/Boards/Rest/BoardsEndpoints.cs`**: adds routes to rename a board and to add a member, next to
+the others.
 
 ```csharp {1,4,7,26-35,42,44}
 using Harbor.Boards.Application.Boards.AddMember;
@@ -1648,7 +1738,7 @@ internal static class BoardsEndpoints
 }
 ```
 
-**`Harbor.Boards.Api/BoardsModule.cs`**: the roles' routes too.
+**`Harbor.Boards.Api/BoardsModule.cs`**: maps the roles' routes too.
 
 ```csharp {1,17}
 using Harbor.Boards.Api.BoardRoles.Rest;
@@ -1673,16 +1763,19 @@ public static class BoardsModule
 
 ### What it does
 
-- `StarterRoles.Missing(...)`: drafts for the starter roles the tenant lacks, told by `MadeFrom`, not by name.
-- `[OnResource] Board` with `boards.members.manage`: the owner may; a member may not, whatever role it holds.
-- `admission.RequireMemberAsync`, `RequireRoleAsync`: refused under the board's codes, `boards.member-not-active` and
+- `ICommand<int>`: the command returns the number of roles it made.
+- `StarterRoles.Missing(...)` returns a `CustomRoleDraft` for each starter role the tenant does not have. It compares
+  `MadeFrom`, so a renamed role still counts as made.
+- `[OnResource] Board` with `boards.members.manage`: the owner passes the check. A member fails it, whatever role the
+  member holds.
+- `admission.RequireMemberAsync` and `RequireRoleAsync` refuse with the board's codes, `boards.member-not-active` and
   `boards.role-not-for-members`.
-- `board.AddMember(...)`: the member list adds Leo, with the role for the same period, and refuses him a second time.
-- `addedBy`: the caller's seat, kept on the member row.
+- `board.AddMember(...)`: the member list adds Leo, with the role for the same period. It refuses him a second time.
+- `addedBy`: the caller's seat, stored on the member row. It is `null` when system work adds a member without a seat.
 
 ### Try it
 
-1. As Rhea: `POST /board-roles/starter`: `403`, `tenancy.not-permitted`: she lacks `boards.roles.manage`.
+1. As Rhea: `POST /board-roles/starter`: `403`, `tenancy.not-permitted`. She does not hold `boards.roles.manage`.
 2. As Ada: `POST /board-roles/starter`: `{ "made": 1 }`. Again: `{ "made": 0 }`.
 3. As Ada: `GET /board-roles`: `editor`, its id, `["boards.edit", "boards.view"]`. Keep the id.
 4. As Ada: `POST /seats` with `{ "identity": "d0000000-0000-4000-8000-000000000003", "unit": "<North's id>" }`: Leo's
@@ -1694,10 +1787,10 @@ public static class BoardsModule
 8. As Rhea: Leo again: `409`, `boards.already-member`.
 9. As Rhea: `GET /boards/<id>`: `version` 3, Rhea first as the owner, then Leo with `editor`.
 
-The lock of step 4, without the API. Open psql in the database, `docker exec -it supabase_db_harbor psql -U postgres`,
-and act as Leo the way the API sets up each connection
+You can test the lock of step 4 without the API. Open psql in the database with
+`docker exec -it supabase_db_harbor psql -U postgres`. Then act as Leo, the same way the API sets up each connection
 ([The caller on the connection](../how-a-request-is-checked.md#the-caller-on-the-connection)). The tenant id is the
-`tenant` that `POST /dev/tenants` answered in the Tenancy tutorial.
+`tenant` value that `POST /dev/tenants` returned in the Tenancy tutorial.
 
 ```sql
 begin;
@@ -1710,34 +1803,39 @@ update boards."Boards" set "OwnerSeatId" = '<Leo seat id>' where "Id" = '<board 
 rollback;
 ```
 
-The second statement is refused by the lock's trigger, with the hint `ddd:access.refused`: Leo may change the board,
-and not its owner. A member row he adds by hand is refused the same way, by the lock's policy on `BoardPeople`.
+The lock's trigger refuses the second statement with the hint `ddd:access.refused`. Leo may change the board but not
+its owner. If he inserts a member row by hand, the lock's policy on `BoardPeople` refuses that row too.
 
 > **Going further.** A role the tenant makes itself, renames or archives: [Roles a customer makes](permissions-and-roles.md#roles-a-customer-makes).
 > A rule of your own, such as "never for longer than you hold it yourself": [Who may give a role](permissions-and-roles.md#who-may-give-a-role-is-yours-to-decide).
 
 ## Step 8: reach from above
 
-**Where we are.** Leo works on Crane schedule. Ada, administrator at the root, sees no board. Rhea's `boards.view` at
-North gives her nothing on a board she does not own.
+**Where we are.** Leo is an editor on Crane schedule. Ada is administrator at the root and sees no board. Rhea holds
+`boards.view` at North, but it gives her nothing on a board she does not own.
 
-**Why now.** An organization's people act on what hangs in their part of it, without being put on each board. And a
-board whose owner leaves is still somebody's to hand on.
+**Why now.** People in an organization need access to the boards in their part of it, without being added to each
+board. And when a board's owner leaves, someone above must still be able to hand the board to a new owner.
 
-**What we want.** Ada reaches every board; Rhea every board at North and below; Leo still only his own.
+**What we want.** Ada reaches every board. Rhea reaches every board at North and below. Leo still reaches only the
+board he is a member of.
 
-### The idea: a permission held where a board hangs counts on it
+### The idea: a permission held at a board's unit counts on the board
 
-- `[At]` on the board's unit: a fact of the board, where it hangs.
-- `reachFromAbove: true`: a permission held at that unit, or above it, counts on the board. Tenancy answers where the
-  caller holds it, in C# and in the database's functions alike.
-- **Seen from above by the permission every member holds**: `boards.view`. Rules that reach from above without an
-  `EveryMember` permission are refused when they are made.
-- **`InRoles = false` does not cut what is held above.** It keeps a permission out of the board's roles. Ada's
-  Administrator holds `boards.members.manage` at the root, so she may say who is on any board.
-- **Members come first**: a caller that is on the board and holds the permission above holds it as a member.
-- **Where a board hangs now decides who reaches it**, so moving it would move it into somebody's reach. Harbor has no
-  command that moves a board, so the unit is fixed once the board is there: `IsFixedAfterInsert`.
+- `[At]` marks the property that holds the board's unit, where the board hangs. This is a fact about the board, so it
+  goes on the domain class.
+- `reachFromAbove: true`: a permission held at that unit, or above it, counts on the board. Tenancy returns where the
+  caller holds the permission, both in C# and in the database functions.
+- **Seeing from above**: a caller above sees a board through the permission every member holds, here `boards.view`.
+  `MembershipRules.For` throws for rules with `reachFromAbove` and no `EveryMember` permission.
+- **`FromAbove`**: on by default, so every permission on a board counts from above. A permission marked
+  `FromAbove = false` counts only for the owner and the members.
+- **`InRoles = false` limits only the board's roles.** A permission held above still counts. Ada's Administrator
+  role holds `boards.members.manage` at the root, so she may manage the members of any board.
+- **Members come first**: when a caller holds a permission both as a member and from above, Membership reports it as
+  held through membership.
+- **The unit decides who reaches the board**, so moving a board changes who can reach it. Harbor has no command that
+  moves a board, so `IsFixedAfterInsert` fixes the unit once the board is saved.
 
 ### What you write
 
@@ -1865,28 +1963,28 @@ public sealed class BoardsContext(DbContextOptions<BoardsContext> options) : DbC
 
 ### What it does
 
-- `[At]` and `reachFromAbove: true`: the board's functions ask Tenancy where the caller holds a permission, and count
-  the boards that hang there or below.
-- `IsFixedAfterInsert`: a save that changes a board's unit is refused, and the export leaves `UnitId` out of the
-  columns a caller may update.
-- The model of the tables did not change: no migration. The export writes a new `<v>_access.boards.ddd.sql`.
+- `[At]` and `reachFromAbove: true`: the boards functions ask Tenancy where the caller holds a permission. They then
+  include the boards that hang at those units or below them.
+- `IsFixedAfterInsert`: Entity Framework throws on a save that changes a board's unit. The export also leaves `UnitId`
+  out of the columns a caller may update.
+- The tables did not change, so there is no new migration. The export writes a new `<v>_access.boards.ddd.sql`.
 
 ### Run it
 
-Build the host, `npx supabase migration up --local`, and start the host again.
+Build the host, run `npx supabase migration up --local`, and start the host again.
 
 ### Try it
 
 1. As Ada: `GET /boards`: Crane schedule. `GET /boards/<id>`: `200`, with its members.
 2. As Ada: `POST /boards` with `{ "unit": "<North Coast's id>", "name": "Quay plan" }`: Ada owns it.
 3. As Rhea: `GET /boards`: Crane schedule and Quay plan. Her `boards.view` at North reaches North Coast.
-4. As Leo: `GET /boards`: Crane schedule only. He holds nothing in the organization.
+4. As Leo: `GET /boards`: Crane schedule only. He holds no permission in the organization.
 5. As Rhea: `PUT /boards/<Quay plan's id>/name`: `403`, `boards.not-permitted`, "Doing this needs the permission
-   boards.edit." Board keeper gives `boards.create` and `boards.view`, and nothing more.
-6. As Ada: `POST /boards/<Crane schedule's id>/members` with her own seat and `editor`: `204`. She is neither on the
-   board nor its owner: `boards.members.manage` reaches it from the root.
+   boards.edit." Board keeper gives only `boards.create` and `boards.view`.
+6. As Ada: `POST /boards/<Crane schedule's id>/members` with her own seat and `editor`: `204`. Ada is not a member or
+   the owner of the board. Her `boards.members.manage` at the root reaches it.
 
-> **Going further.** A command that moves a board, and the trigger that holds the unit to its permissions:
+> **Going further.** A command that moves a board, and a trigger that guards the unit column instead:
 > [Who writes the member rows](postgres.md#who-writes-the-member-rows). Reach from above without Tenancy:
 > [An organization of your own](beside-an-organization.md#an-organization-of-your-own).
 
@@ -1895,11 +1993,11 @@ Build the host, `npx supabase migration up --local`, and start the host again.
 | Step | What now works |
 |---|---|
 | 1-3 | A board with members, an owner and the tenant's roles, and its tables |
-| 4 | The database's own rules: who reads and changes a board, and the lock on its members |
-| 5 | The module registered, checked by Tenancy and Membership; Ada's role brought up to date |
-| 6 | Boards opened at a unit, seen and listed on a permission held on them |
-| 7 | Starter roles, and members added by the owner, in a role that counts on that board alone |
-| 8 | A permission held in the organization reaching every board below it |
+| 4 | Database rules for who reads and changes a board, and the lock on its members |
+| 5 | The module registered and checked by Tenancy and Membership, and Ada's role updated with the board permissions |
+| 6 | Opening a board at a unit, and seeing and listing boards by a permission held on them |
+| 7 | Starter roles, and members that the owner adds with a role that counts on that one board |
+| 8 | A permission held at a unit counting on every board at that unit and below it |
 
-Next: every detail of every part is in the topic pages, from [Resources and members](resources-and-members.md) on,
-and every class and method in the [API reference](reference/resource-and-members.md).
+Next: the topic pages describe each part in detail, starting with [Resources and members](resources-and-members.md).
+The [API reference](reference/resource-and-members.md) lists every class and method.

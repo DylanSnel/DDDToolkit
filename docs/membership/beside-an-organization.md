@@ -5,121 +5,143 @@ sidebar_label: Beside an organization
 
 # Membership: beside an organization
 
-Who a resource's members are, where their roles come from, and reach from above, beside Tenancy or an organization
-of your own. Read it when your resources belong to an organization's people.
+Read this page when your resources belong to the people of an organization. It covers who a resource's members are,
+where their roles come from, and reach from above, beside Tenancy or beside an organization of your own.
 
-## Beside an organization
+## Three settings of the rules
 
-The rules say three things apart from each other, and any choice of one goes with any of the others:
+The rules declare three things. Each setting is independent, so any choice for one goes with any choice for the
+others:
 
-| The rules say | Left out | Said, and what you answer |
+| The rules say | When left out | When set, and what you implement |
 |---|---|---|
-| **Who a member is** | follows from the member id: the user id for one over a `Guid`, the seat for [Tenancy's](#with-tenancy) | `members: MemberSource.Resolved(...)`, an id you resolve for the caller: `ICallerMember<TResourceId, TMemberId>` |
-| **Where the roles come from** | always said | `Roles.Fixed` or [`Roles.Custom`](permissions-and-roles.md#roles-a-customer-makes), nothing to answer; or `Roles.External(...)`, rows you keep: `IRolesWithPermission<TResourceId, TRoleId>`, `IMemberRoles<TResourceId, TRoleId>` |
-| **Whether something above reaches it** | nothing: members and owner alone | `reachFromAbove: ...`, an `EveryMember` permission, `[At]` on where the resource hangs: `IPlacesReached<TResourceId, TPlaceId>` |
+| **Who a member is** | It follows from the member id: the user id for an id over a `Guid`, the seat for [Tenancy's seat id](#with-tenancy). | `members: MemberSource.Resolved(...)` takes an id you resolve for the caller. You implement `ICallerMember<TResourceId, TMemberId>`. |
+| **Where the roles come from** | The rules always declare it. | `Roles.Fixed` or [`Roles.Custom`](permissions-and-roles.md#roles-a-customer-makes) need nothing from you. `Roles.External(...)` takes roles from rows you keep. You implement `IRolesWithPermission<TResourceId, TRoleId>` and `IMemberRoles<TResourceId, TRoleId>`. |
+| **Whether something above reaches the resource** | Nothing above reaches it. Only the members and the owner hold permissions on it. | `reachFromAbove: ...`, a permission marked `EveryMember`, and `[At]` on the property that says where the resource hangs. You implement `IPlacesReached<TResourceId, TPlaceId>`. |
 
-**Reach from above** lets whoever runs a part of the organization act on what hangs there without being put on each
-resource, and keeps a resource whose owner left somebody's to hand on
-([in Harbor](overview.md#reach-from-above-a-permission-held-where-a-board-hangs),
-[tutorial step 8](tutorial.md#step-8-reach-from-above)). Its rules:
+## Reach from above
 
-- **Seen from above by the permission every member holds.** Who holds it where the resource hangs, or above, sees the
-  resource as its members do, and holds there what else it holds above, but for `FromAbove = false`. Rules that reach
-  from above without an `EveryMember` permission are refused when made.
-- **A reach says where one permission is held, seen or not.** The questions answer only for what the caller sees; in
-  your own statement, put the reach that sees first: `db.Boards.Within(seen).Within(act)`.
-- **`InRoles = false` does not cut what is held above**, so an administrator at the root also says who is on a
-  resource, and hands it on.
-- **Members come first**: `Via` is `Members` for a caller that holds the permission both ways.
-- **`[At]`** marks the one property where the aggregate root hangs, never nullable
-  ([DDD00097](../diagnostics.md#ddd00097)); reach from above a class without one is [DDD00098](../diagnostics.md#ddd00098).
-- **Held from above for as long as it is seen**: only the organization knows until when, so `MemberHold.Until` is
-  `null` for a caller that sees the resource from above; for one that sees it as a member alone, the membership's end.
-- **Still one statement**: what you answer is a query over rows your context maps
-  ([on the context it runs on](checks-and-saves.md#inside-your-own-statements)).
+Reach from above lets the people who run a part of the organization act on what hangs there, without being added to
+each resource. It also keeps a resource reachable after its owner has left, so somebody can still hand the resource on
+([in Harbor](overview.md#reach-from-above-a-permission-held-at-the-boards-unit),
+[tutorial step 8](tutorial.md#step-8-reach-from-above)). These rules apply:
+
+- **The permission every member holds is the one that sees from above.** A caller who holds that permission where
+  the resource hangs, or above, sees the resource the way its members do. That caller also holds, on the resource,
+  every other permission it holds above, except the permissions marked `FromAbove = false`. Rules that reach from
+  above without an `EveryMember` permission are refused when they are made. So are rules whose `EveryMember`
+  permission is marked `FromAbove = false`.
+- **A reach covers one permission and ignores whether the caller sees the resource.** A caller who holds
+  `boards.edit` above a board, without the permission that sees, is inside the reach for `boards.edit` and still does
+  not see the board. `HoldAsync` and `PermissionsOnAsync` return results only for resources the caller sees. In your
+  own query, put the reach that sees first: `db.Boards.Within(seen).Within(act)`.
+- **`InRoles = false` does not limit what is held above.** So an administrator at the root can also decide who is on
+  a resource, and can hand it on.
+- **Members come first.** For a caller who holds the permission both as a member and from above, `Via` is
+  `Members`.
+- **`[At]`** marks the one property that says where the aggregate root hangs. The property is never nullable
+  ([DDD00097](../diagnostics.md#ddd00097)). Reach from above on a class without `[At]` is
+  [DDD00098](../diagnostics.md#ddd00098).
+- **A permission held from above lasts as long as the caller sees the resource.** The organization keeps the end of
+  that permission, outside Membership. So `MemberHold.Until` is `null` for a caller who sees the resource from
+  above. For a caller who sees the resource only as a member, `Until` is the end of the membership.
+- **Reach from above still runs in one statement.** What you return is a query over rows your context maps
+  ([on the context the query runs on](checks-and-saves.md#access-in-your-own-queries)).
 
 ## With Tenancy
 
-Neither package references the other. In a project that references both, Membership's generator writes, for each
-member class whose members are seats, the class that answers what the rules ask of Tenancy, and
-`Add{Resource}MembershipWithTenancy`. The tutorial uses it throughout: the member class over `SeatId`
-([step 1](tutorial.md#step-1-the-board-its-members-and-its-roles)), the context ([step 3](tutorial.md#step-3-where-it-is-stored)),
-the registration ([step 5](tutorial.md#step-5-the-modules-registration-and-the-host)), reach from above
-([step 8](tutorial.md#step-8-reach-from-above)). The [Tenancy sample](../tenancy/the-sample.md#who-may-do-what-in-the-sample)
-does it at scale: a project's crew, with project roles each tenant makes from three starter roles.
+The two packages do not reference each other. In a project that references both, Membership's generator writes two
+things for each member class whose members are seats: a class that returns what the rules need from Tenancy, and the
+registration `Add{Resource}MembershipWithTenancy`. The tutorial uses both throughout:
 
-### What the written class answers
+- the member class over `SeatId` ([step 1](tutorial.md#step-1-the-board-its-members-and-its-roles));
+- the context ([step 3](tutorial.md#step-3-where-it-is-stored));
+- the registration ([step 5](tutorial.md#step-5-the-modules-registration-and-the-host));
+- reach from above ([step 8](tutorial.md#step-8-reach-from-above)).
+
+The [Tenancy sample](../tenancy/the-sample.md#who-may-do-what-in-the-sample) uses them at scale: a project's crew, with
+project roles that each tenant makes from three starter roles.
+
+### What the generated class does
 
 - **A member is the caller's seat**, as Tenancy found it. A caller without an active seat in the tenant is refused
-  before anything is read, with Tenancy's code: `tenancy.not-seated`, `tenancy.seat-suspended`,
-  `tenancy.tenant-required`. A suspended seat reaches nothing, whatever rows name it.
-- **The application's own work is nobody's member**: it holds everything where the rules let its scope through, so
-  Tenancy's own work holds nothing on a board ([System work](checks-and-saves.md#system-work)).
-- **A new member's seat is active in the caller's tenant**, or `MemberAdmission` refuses, `boards.member-not-active`.
-  Tenancy answers from the seats the caller reads: all of the tenant's, unless a
-  [read rule on your seat class](../tenancy/postgres.md#who-reads-the-seats-a-default-you-may-replace) narrows them.
-- **A permission held at the resource's unit or above reaches it**, `Via` `Above`. Only a permission of Tenancy's
-  catalogue is held there, and a module's `[Permissions]` classes are in it
-  ([A module states its permissions once](../tenancy/roles-and-permissions.md#a-module-states-its-permissions-once)).
-  Asking about one marked `FromAbove = false` is no mistake: nobody holds it from above.
-- **A role given for a while** reaches until it ends; the hold does not name that moment, so a rule that needs it asks
-  Tenancy.
-- **The tenant's roles**, where the member class holds them: which in use give a permission, and whether a role is one.
-  An archived role gives nothing where it is still held.
-- **Rules that take a member from the token are refused** at start-up: a seat's id is over the same value as a user's,
-  so `MemberSource.CallerId` would read a user for a seat.
-- **A port you registered before stays.**
+  before anything is read, with Tenancy's code: `tenancy.not-seated`, `tenancy.seat-suspended` or
+  `tenancy.tenant-required`. This applies to lists (`[SeenWith]`) as well. A suspended seat reaches nothing, whatever
+  rows name it.
+- **The application's own work is nobody's member.** It holds every permission where the rules let its scope
+  through. So Tenancy's own work, in the `tenancy` scope, holds nothing on a board
+  ([System work](checks-and-saves.md#system-work)).
+- **A new member's seat must be active in the caller's tenant.** Otherwise `MemberAdmission` refuses with
+  `boards.member-not-active`. The class reads the seats the caller can read. That is every seat of the tenant, unless
+  a [read rule on your seat class](../tenancy/postgres.md#default-read-policies-for-seats-and-invitations) narrows them.
+- **A permission held at the resource's unit or above reaches the resource**, with `Via` set to `Above`. Only a
+  permission in Tenancy's catalogue can be held there. A module's `[Permissions]` classes are part of the catalogue
+  ([Declaring a module's permissions](../tenancy/roles-and-permissions.md#declaring-a-modules-permissions)).
+  Asking about a permission marked `FromAbove = false` is not an error. Nobody holds such a permission from above.
+- **A role given for a limited time** reaches the resource until the role ends. The hold does not name that moment,
+  so a rule that needs that moment reads it from Tenancy.
+- **The tenant's roles.** When the member class holds the tenant's roles, the class returns which roles in use give
+  a permission, and whether a role exists. An archived role gives nothing, even where it is still held.
+- **Rules that take the member from the token are refused** when you register: `MemberSource.CallerId` and
+  `MemberSource.Claim(...)`. A seat id is over the same type of value as a user id, so the registration would read a
+  user id as a seat id.
+- **A port you registered earlier is kept.**
 
-### The resource's roles, or the tenant's
+### Resource roles and tenant roles
 
-The organization's roles live in Tenancy, given at a unit and counting below it; a resource's own in Membership,
-counting on that resource alone. A member class that holds roles by Tenancy's role id holds the tenant's instead:
+The organization's roles live in Tenancy. They are given at a unit and count below it. A resource's own roles live in
+Membership and count on that resource alone. A member class that holds roles by Tenancy's role id holds the tenant's
+roles instead:
 
-| | The resource's own roles | The tenant's roles on the member list |
+| | Resource roles | Tenant roles on the member list |
 |---|---|---|
 | The member class | `[Member<BoardMemberId, SeatId, BoardRoleId, Board>]` | `[Member<LabTechnicianId, SeatId, RoleId, Lab>]` |
 | The rules say | `Roles.Custom(...)` | `Roles.External(TenancyFunctions.RolesWithPermission)` |
-| A role of the organization | reaches the resource from above | reaches it from above, and gives its permissions where given on the member list, cut to what a role may give |
+| A role of the organization | reaches the resource from above | reaches the resource from above, and also gives its permissions where it is given on the member list, limited to what a role may give |
 
-### Where it is written
+### Where the class is generated
 
-- **In the project that gets `Add{Resource}Membership`** (the member class's, or its module's that holds the context),
-  when it references Tenancy's Entity Framework package. Without Tenancy nothing is written.
-- **Only for seats**: the generator reads Tenancy's ids from your classes declared with its templates, in the project
-  or one it references. A member id that is not your `[SeatAggregate<SeatId>]`'s gets nothing.
-- **A module that knows the organization only by its ids**, as Boards does, cannot be told which are Tenancy's, nor
-  the seat's from another. Each of its member classes gets the registration, which takes the tenant's, unit's and
-  role's ids (the role's left out where members hold the tenant's roles); call it only for a resource whose members
-  are seats:
+- **In the project that gets `Add{Resource}Membership`.** That is the member class's project, or the project of its
+  module that holds the context. The project must reference Tenancy's Entity Framework package. Without Tenancy,
+  nothing is generated.
+- **Only for seats.** The generator reads Tenancy's ids from your classes declared with Tenancy's templates, in the
+  project or in a project it references. A member id that is not the id of your `[SeatAggregate<SeatId>]` class gets
+  nothing.
+- **A module that refers to the organization only by its ids**, as Boards does, sees none of Tenancy's classes. The
+  generator then cannot tell which ids are Tenancy's, or a seat id from another id. So each member class of that
+  module gets the registration. The registration takes the tenant, unit and role id types. The role id type is
+  left out where members hold the tenant's roles. Call the registration only for a resource whose members are seats:
 
   ```csharp
   services.AddBoardMembershipWithTenancy<BoardsContext, TenantId, OrganizationUnitId, RoleId>(BoardMembership.Rules);
   ```
 
-### What stays yours
+### What you still write
 
-- **The rules**: a resource of a tenant may take its members elsewhere, keep roles any of the three ways, or have no
-  reach from above. Tenancy's `CallerSeat` and `UnitsWhereIHold` functions are found without being named; the tenant's
-  roles are named, `Roles.External(TenancyFunctions.RolesWithPermission)`.
+- **The rules.** A resource of a tenant may take its members from elsewhere, keep roles any of the three ways, or
+  have no reach from above. Tenancy's `CallerSeat` and `UnitsWhereIHold` functions are found without being named. The
+  tenant's roles are named: `Roles.External(TenancyFunctions.RolesWithPermission)`.
 - **The context**, which maps Tenancy's rows beside the resource:
 
   | Database | Map with |
   |---|---|
-  | Postgres with `AddTenancyPostgres()`, which keeps the rights in the database | `AddTenancyReadFunctions<TenantId, SeatId, OrganizationUnitId, RoleId>("tenancy")` ([Modules read through functions](../tenancy/postgres.md#modules-read-through-functions)). `AddTenancyReadModel` is refused there. |
-  | one that does not keep them, such as SQLite | `AddTenancyReadModel<...>(...)`: views over Tenancy's tables |
+  | Postgres with `AddTenancyPostgres()`, which keeps the rights in the database | `AddTenancyReadFunctions<TenantId, SeatId, OrganizationUnitId, RoleId>("tenancy")` ([Read functions for modules](../tenancy/postgres.md#read-functions-for-modules)). `AddTenancyReadModel` is refused there. |
+  | a database that does not keep the rights, such as SQLite | `AddTenancyReadModel<...>(...)`, which maps views over Tenancy's tables |
 
-- **Where a resource hangs**: `[At]` on its unit.
-- **The tenant on your rows**: Membership knows none. `ScopeToTenant` keeps the resource and your role class to their
-  tenant; starter roles are made when you set a tenant up.
+- **Where a resource hangs.** Put `[At]` on its unit property.
+- **The tenant on your rows.** Membership stores no tenant. `ScopeToTenant` keeps the resource and your role class
+  inside their tenant. You make the starter roles when you set up a tenant.
 - **On Postgres**, the export writes Tenancy's contribution (from your `[TenancyCatalogue]`) and each resource's
-  together, so a resource's function finds Tenancy's in whatever schema; a name nothing defines is refused. What a
-  seat reads inside its tenant is your [row access rule](postgres.md#on-postgres-the-second-lock).
+  contribution together. So a resource's function finds Tenancy's functions in any schema. A function name that
+  nothing defines is refused. What a seat reads inside its tenant is your
+  [row access rule](postgres.md#the-five-functions).
 
 ## An organization of your own
 
-You answer the ports the rules need, in one class handed to the registration, which registers each port it implements
-for that resource. A port registered before stays; one that nobody answers is refused at start-up, naming what to
-register. A crate in a depot, with all three said:
+You implement the ports the rules need, in one class that you pass to the registration. The registration registers
+each port the class implements, for that resource. A port registered earlier is kept. A port that nothing implements
+is refused at start-up, with a message that names what to register. This example is a crate in a depot, with all
+three settings used:
 
 ```csharp
 // A member is a porter of the depot, and a role is one of the depot's
@@ -129,7 +151,7 @@ public sealed partial class CratePorter;
 [AggregateRoot<CrateId>]
 public sealed partial class Crate
 {
-    [At] public BayId BayId { get; private set; }               // where the crate stands: what reaches it from above
+    [At] public BayId BayId { get; private set; }               // the bay the crate stands in
     [Owner] public PorterId OwnerId { get; private set; }
     public partial IReadOnlyList<CratePorter> Porters { get; }
 }
@@ -139,7 +161,7 @@ public static class CratePermissions
 {
     [On<Crate>(EveryMember = true, Description = "See a crate")] public const string See = "crates.see";
     [On<Crate>(Description = "Pack a crate")] public const string Pack = "crates.pack";
-    [On<Crate>(Owner = false, InRoles = false, Description = "Move a crate")] public const string Move = "crates.move";   // held from above alone
+    [On<Crate>(Owner = false, InRoles = false, Description = "Move a crate")] public const string Move = "crates.move";   // held only from above
     [On<Crate>(Description = "Scrap a crate")] public const string Scrap = "crates.scrap";
 }
 
@@ -152,32 +174,32 @@ public static class DepotFunctions
 }
 
 public static MembershipRules Rules { get; } = MembershipRules.For<Crate>(
-    Roles.External(DepotFunctions.RolesWithPermission, otherPermissions: OtherPermissions.AllBut("depot.manage")),   // the depot's roles; not its own permission
+    Roles.External(DepotFunctions.RolesWithPermission, otherPermissions: OtherPermissions.AllBut("depot.manage")),   // the depot's roles, without the depot's own permission
     members: MemberSource.Resolved(DepotFunctions.CallerPorter),
     reachFromAbove: DepotFunctions.BaysWhereIHold);
 
-// OnModelCreating: the members; where a crate stands is its [At] property
+// OnModelCreating: map the members. Where a crate stands comes from its [At] property.
 modelBuilder.Entity<Crate>().HasMembers(crate => crate.Porters);
 
-// Services: the resource, with the class that answers for the depot
+// Services: the resource, with the class that implements the depot's ports
 services.AddCrateMembership<DepotContext, CratesInTheDepot>(CrateMembership.Rules);
 ```
 
-The class that answers for the depot:
+The class that implements the ports for the depot:
 
 ```csharp
 public sealed class CratesInTheDepot(DepotDesk desk, DepotContext db)
     : ICallerMember<CrateId, PorterId>, IMemberRoles<CrateId, DepotRoleId>,
       IRolesWithPermission<CrateId, DepotRoleId>, IPlacesReached<CrateId, BayId>
 {
-    // Who the caller is as a member, or nobody: from what you know of the caller already
+    // The caller's member id, or null. Uses only what is already known of the caller.
     public PorterId? Find(Caller caller) => desk.ActivePorterOf(caller);
 
-    // The roles that give a permission: a query, which goes into the statement that asks
+    // The roles that give a permission, as a query that runs inside the statement that asks
     public IQueryable<DepotRoleId> RolesWith(DbContext context, Caller caller, string permission)
         => context.Set<DepotRolePermission>().Where(given => given.Permission == permission).Select(given => given.RoleId);
 
-    // Where the caller holds a permission: each place it is held at, and every place below
+    // The places where the caller holds a permission, and every place below them
     public IQueryable<BayId> PlacesReached(DbContext context, Caller caller, string permission)
     {
         var user = caller.UserId;
@@ -189,27 +211,36 @@ public sealed class CratesInTheDepot(DepotDesk desk, DepotContext db)
                select path.BayId;
     }
 
-    // Which roles there are: what the admission asks before a role is given
+    // Whether a role exists. The admission calls this before a role is given.
     public async ValueTask<bool> ExistsAsync(DepotRoleId role, CancellationToken cancellationToken)
         => await db.Roles.AnyAsync(kept => kept.Id == role && kept.InUse, cancellationToken);
 }
 ```
 
-- **A member is who you say.** `Find` is asked about every signed-in caller and answers nobody for one that does not
-  count, whatever rows name it. It reads nothing: look the caller up where the request begins. `Require` refuses a
-  caller outright, before anything is read; by default it refuses nobody.
-- **Above is asked about everybody who signed in**, `Find`'s nobodies too, so say there as well whether the caller
-  still counts: answered from the user id alone, somebody you let go keeps what they held.
-- **A role gives a permission of the crate a role may give** (`InRoles`), or one `otherPermissions` lets through:
-  `AllBut("depot.manage")` lets every other module's but the depot's own; left out, none. Nothing from above is cut.
+- **You decide who a member is.** The package calls `Find` for every signed-in caller. Return `null` for a caller who
+  does not count, whatever rows name that caller. `Find` reads nothing from the database. Look the caller up once,
+  where the request begins. `Require` refuses a caller outright, before anything is read. By default `Require`
+  refuses nobody.
+- **The package calls `PlacesReached` for every signed-in caller**, including the callers `Find` returns `null` for.
+  So check there too whether the caller still counts. If you answer from the user id alone, somebody you let go keeps
+  what they held.
+- **A role gives a permission of the crate only where a role may give it** (`InRoles`), or where `otherPermissions`
+  lets it through. `AllBut("depot.manage")` lets through the permissions of every other module, except the depot's
+  own permission. Without `otherPermissions`, a role gives no permission of another module. Nothing held from above is
+  limited this way.
 
-### On Postgres
+### Your functions on Postgres
 
-The five functions ask yours, each by the `DatabaseFunction` the rules name (`owner/name`): one without parameters
-that answers the caller's member id or `NULL`, and two that take a permission and answer the role ids and the places.
-Define them in [a contribution of your own](../row-level-security.md#policies-a-package-ships), listed by the project
-that runs the export with `[assembly: UseRowAccessContribution(typeof(DepotRowAccess))]`. Shortened to the first
-function:
+The five functions call yours, each by the `DatabaseFunction` the rules name (`owner/name`). You write three
+functions:
+
+- one without parameters that returns the caller's member id, or `NULL`;
+- one that takes a permission and returns the role ids;
+- one that takes a permission and returns the places.
+
+Define them in [a contribution of your own](../row-level-security.md#policies-a-package-ships). The project that runs
+the export lists it with `[assembly: UseRowAccessContribution(typeof(DepotRowAccess))]`. The example is shortened to
+the first function:
 
 ```csharp
 public sealed class DepotRowAccess : IRowAccessContribution
@@ -233,7 +264,7 @@ public sealed class DepotRowAccess : IRowAccessContribution
                 new ContributedFunction(DepotFunctions.CallerPorter.Name, "", "uuid",
                     $"SELECT p.{id} FROM {RowAccessModel.Table(porters)} p WHERE p.{user} = {{caller:uid}} AND p.{active}",
                     SecurityDefiner: true),
-                // depot/roles_with_permission and depot/bays_where_i_hold: each takes the permission as text, and answers a set
+                // depot/roles_with_permission and depot/bays_where_i_hold: each takes the permission as text, and returns a set
             ],
             Policies: [],
             Statements: []);
@@ -241,13 +272,14 @@ public sealed class DepotRowAccess : IRowAccessContribution
 }
 ```
 
-- **Named once**, as a `DatabaseFunction` the rules and the contribution both read. The export refuses a name nothing
-  defines; the start-up check refuses functions written from rules that name others.
-- **Grant them to nobody**: the five run as their owner, so no caller needs yours, or can ask who it is or which roles
-  give what.
-- **Answer for the caller by a condition of your own**, its id or a claim, never by a policy: the five ask yours as
-  their owner, past your tables' policies, so "the caller's rows" would be everybody's. The two that take a
-  permission are never asked without one.
-- **A database that answers nothing itself names no function**: `MemberSource.Resolved()`, `Roles.External()`, and
-  `reachFromAbove: true`, whose place function follows from its type (only a package that keeps the places, such as
-  Tenancy, answers it).
+- **Name each function once**, as a `DatabaseFunction` that the rules and the contribution both read. The export
+  refuses a name that nothing defines. The start-up check refuses functions written from rules that name other
+  functions.
+- **Grant your functions to nobody.** The five functions run as their owner, so no caller needs yours. Without a
+  grant, no caller can ask who it is or which roles give what.
+- **Select the caller's rows with a condition of your own**, such as the caller's id or a claim. Do not rely on a
+  policy. The five functions call yours as their owner, past your tables' policies, so a policy that limits rows to
+  the caller has no effect there. The two functions that take a permission are never called without one.
+- **On a database without Membership's functions, the rules name no function.** Write `MemberSource.Resolved()`,
+  `Roles.External()` and `reachFromAbove: true`. With `true` on Postgres, the place function follows from the type
+  of the place. Only a package that keeps the places, such as Tenancy, provides that function.

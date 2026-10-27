@@ -42,6 +42,8 @@
   --ddd-code-inline-bg: #f1eefc;
   --ddd-code-inline-fg: #4c22b3;
   --docusaurus-highlighted-code-line-bg: rgba(109, 46, 211, 0.14);
+  --ddd-good: #1f8a5b;
+  --ddd-bad: #c93c3c;
 }
 
 html[data-theme='dark'] {
@@ -65,6 +67,8 @@ html[data-theme='dark'] {
   --ddd-code-inline-bg: #1c1a33;
   --ddd-code-inline-fg: #c9b6ff;
   --docusaurus-highlighted-code-line-bg: rgba(169, 139, 255, 0.22);
+  --ddd-good: #4fd1a1;
+  --ddd-bad: #ff8080;
 }
 
 body {
@@ -384,6 +388,56 @@ html[data-theme='dark'] .theme-code-block {
 .docusaurus-mermaid-container .edgeLabel {
   fill: var(--ddd-muted) !important;
   color: var(--ddd-muted) !important;
+}
+
+/* Mermaid gives some labels, such as a class diagram's "1" and "many", a box lower than their line height; the
+   text then loses its bottom. Letting it overflow the box shows it whole. */
+.docusaurus-mermaid-container foreignObject {
+  overflow: visible;
+}
+
+/* Four states a diagram marks its nodes with, as `class north strong`: what the diagram is about (strong),
+   what it lets through or reaches (good), what it leaves out (muted), what it refuses (bad). The diagram also
+   declares them with classDef, so GitHub colours them; these replace those colours with the site's, in both modes. */
+.docusaurus-mermaid-container .node.strong rect,
+.docusaurus-mermaid-container .node.strong polygon,
+.docusaurus-mermaid-container .node.strong path {
+  fill: color-mix(in srgb, var(--ifm-color-primary) 30%, var(--ddd-card)) !important;
+  stroke: var(--ifm-color-primary) !important;
+  stroke-width: 2px !important;
+}
+
+.docusaurus-mermaid-container .node.good rect,
+.docusaurus-mermaid-container .node.good polygon,
+.docusaurus-mermaid-container .node.good path {
+  fill: color-mix(in srgb, var(--ddd-good) 16%, var(--ddd-card)) !important;
+  stroke: color-mix(in srgb, var(--ddd-good) 70%, var(--ddd-card)) !important;
+}
+
+.docusaurus-mermaid-container .node.muted rect,
+.docusaurus-mermaid-container .node.muted polygon,
+.docusaurus-mermaid-container .node.muted path {
+  fill: var(--ddd-card) !important;
+  stroke: var(--ddd-border) !important;
+  stroke-dasharray: 4 3;
+}
+
+.docusaurus-mermaid-container .node.muted .nodeLabel,
+.docusaurus-mermaid-container .node.muted .label {
+  color: var(--ddd-muted) !important;
+  fill: var(--ddd-muted) !important;
+}
+
+.docusaurus-mermaid-container .node.bad rect,
+.docusaurus-mermaid-container .node.bad polygon,
+.docusaurus-mermaid-container .node.bad path {
+  fill: color-mix(in srgb, var(--ddd-bad) 14%, var(--ddd-card)) !important;
+  stroke: color-mix(in srgb, var(--ddd-bad) 65%, var(--ddd-card)) !important;
+}
+
+/* A second line in a node, <small>, says what the first names: North, then "granted here". */
+.docusaurus-mermaid-container .nodeLabel small {
+  color: var(--ddd-muted);
 }
 
 /* A link the diagram colours itself (linkStyle, as for what the analyzer refuses) keeps its colour. */

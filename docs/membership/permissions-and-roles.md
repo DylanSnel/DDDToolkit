@@ -5,67 +5,81 @@ sidebar_label: Permissions and roles
 
 # Membership: permissions and roles
 
-The settings of a permission, who holds one, who may give a role, and roles a customer makes. Read it when you
-declare permissions or write the commands that give roles. Levels and a first set:
-[tutorial step 2](tutorial.md#step-2-the-permissions-and-the-rules).
+Read this page when you declare permissions or write the commands that give roles. It covers the settings of a
+permission, who holds a permission, who may give a role, and roles a customer makes.
+[Tutorial step 2](tutorial.md#step-2-the-permissions-and-the-rules) introduces the levels and a first set of
+permissions.
 
 ## The settings of a permission
 
-A permission is a public constant of a static `[Permissions]` class; the attribute on it is its **level**:
-`[On<Document>]` on one document, and with Tenancy `[AtUnit]` and `[AtTenant]`. One class may mix levels. On a
-resource, `[On<T>]` also says how it is held:
+A permission is a public constant in a static `[Permissions]` class. The attribute on the constant is its **level**,
+which says where the permission is asked:
 
-| Setting | Default | Set it |
+- `[On<Document>]` asks it on one document.
+- `[AtUnit]` and `[AtTenant]` ask it at a unit or for the tenant. They come with Tenancy.
+
+One class may mix levels. On a resource, `[On<T>]` also says how the permission is held:
+
+| Setting | Default | Change it |
 |---|---|---|
-| `Owner` | the owner holds it by owning | `false`: the owner holds it only as anybody would, from above say; for one such as naming another owner |
-| `EveryMember` | being a member gives nothing | `true`: every member holds it, whatever its roles; usually the one that sees. One at most |
-| `InRoles` | a role may give it | `false`: only the owner and reach from above hold it; for one a customer must never hand out |
-| `LocksMembers` | locks nothing | `true`: what your commands that change the members require; the database holds the member rows to it ([Who writes the member rows](postgres.md#who-writes-the-member-rows)). One at most |
-| `LocksOwner` | locks nothing | `true`: what your command that hands the resource on requires; the database holds the owner column to it. One at most |
-| `FromAbove` | reaches from above, where the rules allow | `false`: held where the resource hangs, it gives nothing on it ([Beside an organization](beside-an-organization.md#beside-an-organization)) |
+| `Owner` | The owner holds the permission by owning the resource. | Set `false` when the owner should hold it only the way anybody else does, through a role or from above. Use it for a permission such as naming another owner. |
+| `EveryMember` | Being a member gives nothing. | Set `true` to let every member hold it, whatever their roles. This is usually the permission that sees the resource. One permission at most. |
+| `InRoles` | A role may give it. | Set `false` when only the owner and reach from above may hold it. Use it for a permission a customer must never hand out. A fixed role that lists it is refused when the rules are made. |
+| `LocksMembers` | It locks nothing. | Set `true` on the permission your commands require to change the members. On Postgres, a policy then lets only callers with this permission write the member rows ([Who writes the member rows](postgres.md#who-writes-the-member-rows)). One permission at most. |
+| `LocksOwner` | It locks nothing. | Set `true` on the permission your command requires to hand the resource on. On Postgres, a trigger then lets only callers with this permission change the owner column. One permission at most. |
+| `FromAbove` | The permission reaches from above, where the rules allow reach from above. | Set `false` when holding it where the resource hangs should give nothing on the resource ([Reach from above](beside-an-organization.md#reach-from-above)). When the rules reach from above, the `EveryMember` permission must keep `FromAbove = true`. |
 
-Every level also takes:
+Every level also takes these settings:
 
-- **`Description`**: what it lets somebody do, the English text an administrator reads where roles are made.
-  Without it the constant's `/// <summary>` is used, documentation file or not; neither is
-  [DDD00099](../diagnostics.md#ddd00099), a warning. Translations go in a resx under the permission's name
-  ([Localization](../localization.md)).
-- **`Implies`**: what holding it brings with it, so a role with only this one does what those allow too.
-- **`Retired = true`**: nobody holds it, yet roles that list it keep it and no stored right breaks. A permission is
-  retired, never deleted.
+- **`Description`** says what the permission lets somebody do. An administrator reads this English text where roles
+  are made. Without it, the constant's `/// <summary>` is used, with or without a documentation file. A permission
+  with neither is [DDD00099](../diagnostics.md#ddd00099), a warning. A retired permission needs neither.
+  Translations go in a resx under the permission's name ([Localization](../localization.md)).
+- **`Implies`** lists the permissions that come with this one. A role with only this permission also does what the
+  implied permissions allow. It works one step deep. An implied permission implies nothing further.
+- **`Retired = true`** means that nobody holds the permission and no role gets it again. Roles that list it keep
+  it, so no stored right breaks. Retire a permission instead of deleting it.
 
-| Mistake | Reported |
+| Mistake | Reported as |
 |---|---|
-| A `[Permissions]` class that is not static, a constant without a level, a permission declared twice | [DDD00092](../diagnostics.md#ddd00092) |
-| `[On<T>]` on what is no resource with members; two permissions that say `EveryMember`, `LocksMembers` or `LocksOwner` | [DDD00093](../diagnostics.md#ddd00093) |
-| Rules for a resource no permission is declared on | [DDD00094](../diagnostics.md#ddd00094), where they are made |
+| A `[Permissions]` class that is not static, a constant without a level, or a permission declared twice | [DDD00092](../diagnostics.md#ddd00092) |
+| `[On<T>]` on a type that is not a resource with members, or two permissions marked `EveryMember`, `LocksMembers` or `LocksOwner` | [DDD00093](../diagnostics.md#ddd00093) |
+| Rules for a resource with no permission declared on it | [DDD00094](../diagnostics.md#ddd00094), where the rules are made |
+| A locking permission that nobody could hold: not the owner, not every member, no role and nothing above | An `ArgumentException` when the rules are made |
 
 ## Who holds a permission
 
-The five ways are in the [overview](overview.md#who-holds-a-permission-on-a-board). What follows from them:
+The five ways a caller holds a permission are listed in the
+[overview](overview.md#who-holds-a-permission-on-a-board). These rules follow from them:
 
-- **The owner holds no role**: it holds the permissions marked for the owner. So `[OrOwn]` beside `[OnResource]`,
-  for a permission the owner holds, adds nothing ([DDD00096](../diagnostics.md#ddd00096)).
-- **A role gives what it lists** only where a role may give it: `InRoles`, or another module's permission that
-  `otherPermissions` lets through.
-- **Refusals come in one order**: the caller's own when it is nobody; `not-found` for a resource it does not see,
-  exactly as for one that does not exist; `not-permitted`, naming the permission; the version last.
-- **Who the caller is as a member** follows from the member id: the token's user id for an id over a `Guid`, the seat
-  for Tenancy's seat id. Otherwise the rules say it: `members: MemberSource.Claim("app_metadata.staff")`, or
-  `MemberSource.Resolved(...)` for an id [you resolve](beside-an-organization.md#an-organization-of-your-own).
-- **A caller who did not sign in** is nobody's member and holds nothing from above; nothing is read for it. Nor does a
-  token without that id or claim reach a resource, unless something above does.
+- **The owner holds no role.** The owner holds the permissions marked for the owner. So `[OrOwn]` beside
+  `[OnResource]` adds nothing for a permission the owner holds ([DDD00096](../diagnostics.md#ddd00096)).
+- **A role gives the permissions it lists only where a role may give them.** Those are the permissions marked
+  `InRoles`, and permissions of other modules that `otherPermissions` lets through.
+- **Refusals come in a fixed order:**
+  1. the caller's own refusal, when the caller is nobody;
+  2. `not-found` for a resource the caller does not see, the same as for a resource that does not exist;
+  3. `not-permitted`, naming the permission;
+  4. a version conflict, 409, last.
+- **Who the caller is as a member follows from the member id.** For an id over a `Guid`, the member is the user id
+  of the token. For Tenancy's seat id, the member is the caller's seat. For other ids, the rules name the source.
+  `members: MemberSource.Claim("app_metadata.staff")` reads a claim of the token, for an id over a text. A claim
+  under `user_metadata` is refused, because users write that part of the token themselves.
+  `MemberSource.Resolved(...)` takes an id [you resolve](beside-an-organization.md#an-organization-of-your-own).
+- **A caller who did not sign in is nobody's member** and holds nothing from above. Nothing is read for that caller.
+  A token without the member id or the claim reaches no resource either, unless a permission held above reaches it.
 
-## Who may give a role is yours to decide
+## Who may give a role
 
-Adding a member, giving or taking a role and naming another owner have no permission of the package's, and no rule
-about who gives what to whom: each of your commands requires what you choose.
+The package has no permission of its own for adding a member, giving or taking a role, or naming another owner. It
+also has no rule about who gives what to whom. Each of your commands requires the permission you choose.
 
-- **Usually a permission on the resource**, as `documents.share` on
-  [`ShareDocument`](resources-and-members.md#a-document-and-the-people-it-is-shared-with): whoever holds it shares
-  with anyone, in any role, for any period. The owner holds it by owning; a member when a role gives it.
-- **A further rule goes in the handler**, over what the questions answer in one statement. "Nobody gives a role for
-  longer than they hold the permission themselves":
+- **Usually the command requires a permission on the resource.**
+  [`ShareDocument`](resources-and-members.md#a-document-and-the-people-it-is-shared-with) requires
+  `documents.share`. A caller with that permission shares with anyone, in any role, for any period. The owner holds
+  it by owning. A member holds it when a role gives it.
+- **Write any further rule in the handler**, over what `IMemberQuestions` returns in one statement. This handler
+  refuses to put staff on a folder for longer than the caller holds `folders.staff`:
 
 ```csharp
 [RequiresPermission("folders.staff")]
@@ -85,20 +99,26 @@ var now = clock.GetUtcNow();
 folder.Admit(command.Staff, command.Role, MemberPeriod.Between(now, command.Until), now, by);
 ```
 
-- **[`MemberHold.Until`](reference/use-cases.md#until)**: the first moment the caller no longer holds the permission,
-  as things stand now. `null` for the owner and the application's own work. Through membership: its end. Through a
-  role: the end of the last role that gives it, or of the membership if sooner. From above:
-  [for as long as it is seen](beside-an-organization.md#beside-an-organization).
-- **`MemberHold.Via`** says how the caller holds it, for a rule about that.
-- **The package adds no rule**: not "no longer than your own hold", not "never to yourself".
+- **[`MemberHold.Until`](reference/use-cases.md#until)** is the first moment the caller no longer holds the
+  permission, as things stand now. It is `null` for the owner, for the application's own work, and when the
+  permission is not held.
+  - Through membership alone, `Until` is the end of the membership.
+  - Through a role, `Until` is the end of the last role that gives the permission now, or the end of the membership
+    if that comes sooner. A role that only starts later does not extend it.
+  - From above, the caller holds the permission
+    [for as long as the caller sees the resource](beside-an-organization.md#reach-from-above).
+- **`MemberHold.Via`** says how the caller holds the permission (`Members`, `Above` or `System`), for a rule that
+  depends on it.
+- **The package adds no rule of this kind.** Neither "no longer than your own hold" nor "never to yourself" is built
+  in.
 
 ## Roles a customer makes
 
-| The rules say | A member holds a role by | Made by | What it gives is read from |
+| The rules say | A member holds a role by | Who makes the roles | What a role gives is read from |
 |---|---|---|---|
-| `Roles.Fixed([...])` | its name, `NamedRole` | you, in code | the rules |
-| `Roles.Custom(...)` | your role class's id | a customer, at run time | the role's row, in your context |
-| `Roles.External(...)` | the id of what keeps it | whoever keeps it | what you [answer](beside-an-organization.md#beside-an-organization) |
+| `Roles.Fixed([...])` | its name, a `NamedRole` | you, in code | the rules |
+| `Roles.Custom(...)` | the id of your role class | a customer, while the application runs | the role's row, in your context |
+| `Roles.External(...)` | the id in the store that keeps it | whoever keeps the roles | what you [return](beside-an-organization.md#three-settings-of-the-rules) |
 
 A custom role is given on one resource and counts there alone. The tutorial writes the role class
 ([step 1](tutorial.md#step-1-the-board-its-members-and-its-roles)), its mapping and unique indexes
@@ -106,50 +126,61 @@ A custom role is given on one resource and counts there alone. The tutorial writ
 
 ### Starter roles
 
-- **What a scope begins with**, named in `Roles.Custom(starters: [...])`: a tenant, a customer of yours, or the whole
-  application. `StarterRoles.Missing(rules, existing)` gives those a scope lacks, for your constructor.
-- **Made once**: told by `MadeFrom`, not by name or status, so one renamed or archived is not made again. The unique
-  index over your scope column and `MadeFrom` keeps two requests at once apart.
-- **None is the owner's**: a customer may rename, archive and change each, and a scope with no roles still has
-  resources and owners.
+- **Starter roles are the roles a scope begins with.** You name them in `Roles.Custom(starters: [...])`. A scope is a
+  tenant, a customer of yours, or the whole application. `StarterRoles.Missing(rules, existing)` returns the starter
+  roles a scope does not have yet, as drafts for your constructor.
+- **Each starter role is made once.** `StarterRoles.Missing` recognises a role that was made from a starter role by
+  its `MadeFrom` value. A renamed or archived role keeps that value, so it is not made again. The unique index over
+  your scope column and `MadeFrom` stops two requests at the same moment from both making it.
+- **No starter role is reserved for the owner.** The owner holds no role. A customer may rename, archive and change
+  every starter role. A scope with no roles still has resources and owners.
 
 ### Changing a role
 
-Three operations, each answering what happened so you raise your own events:
+A role has three operations. Each returns what happened, so you can raise your own events:
 
 ```csharp
-bool renamed = role.Rename("Lead editor", "Edits and plans a board.", BoardMembership.Rules);              // both, as they are to be
+bool renamed = role.Rename("Lead editor", "Edits and plans a board.", BoardMembership.Rules);              // pass the name and the description as they should be
 RolePermissionsSet set = role.SetPermissions([BoardPermissions.View, BoardPermissions.Edit], BoardMembership.Rules);   // set.Added, set.Removed
 role.Archive(BoardMembership.Rules);
 ```
 
-- **Each takes the rules**: a row carries none, and they say what a role may give and its codes.
-- **Only permissions a role may give** (`InRoles`), or `boards.permission-not-for-members`, naming them. Asked again
-  where a role is read, so a permission later marked `InRoles = false` is given by no role, whatever its row holds.
-- **Another module's permissions** (an inspection's, on a project): `Roles.Custom(starters: [...], otherPermissions:
-  OtherPermissions.AllBut(...))` lets them through, except those named, those the resource's own classes declare at
-  another level, and those marked `InRoles = false` ([`OtherPermissions`](reference/rules.md#otherpermissions)).
-- **A name** is trimmed, 1 to 120 characters, a description at most 1000: `boards.role-name-invalid`, naming the field.
-  `Rename` takes both as they are to be: `null` clears the description.
-- **A unique name** is your index over your columns and `Name`, given your code with `RefusesAs`:
+- **Each operation takes the rules.** A role row does not store them. The rules say what a role may give, and which
+  codes it refuses with.
+- **A role gives only permissions a role may give** (`InRoles`). Other permissions are refused with
+  `boards.permission-not-for-members`, which names them. The rules are checked again whenever a role is read. So a
+  permission later marked `InRoles = false` is given by no role, whatever the row holds.
+- **Permissions of another module**, such as an inspection's permission on a project, need `otherPermissions`, as in
+  `Roles.Custom(starters: [...], otherPermissions: OtherPermissions.AllBut(...))`. This lets them through, except
+  the permissions named, the permissions the resource's own classes declare at another level, and the permissions
+  marked `InRoles = false` ([`OtherPermissions`](reference/rules.md#otherpermissions)). `OtherPermissions.All` names
+  no permission to leave out.
+- **A name is trimmed and has 1 to 120 characters.** A description has at most 1000. Both are refused with
+  `boards.role-name-invalid`, which names the field. `Rename` takes both values as they should be, so `null` clears
+  the description.
+- **A unique name is your index** over your columns and `Name`. `RefusesAs` gives it your code, for example
   `HasIndex(row => new { row.TenantId, row.Name }).IsUnique().RefusesAs("boards.role-name-taken", "Another role is called {Name} already.")`.
-- **An archived role** gives nothing from then on, is not given again, changes no more (`boards.role-archived`), and
-  stays on the members that hold it, so what they held keeps a name. Roles are never deleted.
-- **`MadeFrom` is fixed once written** (`IsFixedAfterInsert`): a save that changes it is refused, and the exported
-  privileges leave it out of `UPDATE`.
-- **Who may make, change or archive a role**: a requirement on your command, as for
-  [giving one](#who-may-give-a-role-is-yours-to-decide).
+- **An archived role** gives nothing from then on, and nobody can give it again. It can no longer be changed
+  (`boards.role-archived`). It stays on the members that hold it, so what they held keeps a name. Roles are never
+  deleted.
+- **`MadeFrom` cannot change after insert** (`IsFixedAfterInsert`). A save that changes it is refused, and the
+  exported privileges leave the column out of `UPDATE`.
+- **Who may make, change or archive a role** is a requirement on your command, the same as for
+  [giving one](#who-may-give-a-role).
 
-### Whose a role is
+### Which customer a role belongs to
 
-- **Yours**: the package knows no customer or tenant. Add the column, set it in your constructor, and keep customers
-  apart by a query filter (with Tenancy, `ScopeToTenant`) or a
+- **The customer column is yours.** The package has no customer or tenant column. Add the column, set it in your
+  constructor, and keep customers apart with a query filter (with Tenancy, `ScopeToTenant`) or a
   [row access rule](../row-level-security.md#row-access-rules-written-in-c).
-- **The admission reads through the request's context**, so your filter applies: another customer's role is no role
-  there. So it does where a role's permissions are read ([Inside your own statements](checks-and-saves.md#inside-your-own-statements)).
-- **Without customers**: one set of roles, the two unique indexes over `Name` and over `MadeFrom` alone.
-- **Found another way**: register your own `IMemberRoles<TResourceId, TRoleId>` before the resource.
-- **Read where it is kept**: a subquery over your role table, inside the statement that reads the members; on
-  Postgres the functions join it, with nothing of yours registered
+- **The admission reads through the request's context**, so your filter applies. Another customer's role does not
+  exist there. Your filter also applies where a role's permissions are read
+  ([Access in your own queries](checks-and-saves.md#access-in-your-own-queries)).
+- **Without customers**, there is one set of roles. The two unique indexes then cover `Name` alone and `MadeFrom`
+  alone.
+- **To find roles another way**, register your own `IMemberRoles<TResourceId, TRoleId>` before the resource.
+- **The roles are read where they are stored.** A subquery over your role table runs inside the statement that reads
+  the members. On Postgres the functions join the role table, and you register nothing
   ([in the database](postgres.md#roles-a-customer-makes-in-the-database)).
-- **A second resource** declares a role class, rules and mapping of its own; neither's roles are the other's.
+- **A second resource** declares its own role class, rules and mapping. The roles of one resource are no roles of the
+  other.

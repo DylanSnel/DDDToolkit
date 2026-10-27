@@ -5,50 +5,91 @@ sidebar_label: Tutorial
 
 # Tenancy: the tutorial
 
-This tutorial builds a small API for harbor companies with Tenancy, one step at a time. Each step says where we
-are, why this step comes now and what it achieves. Then it explains the idea, shows every file whole with the new
-lines highlighted, and says what those lines do.
+This tutorial builds a small API with Tenancy, one step at a time. Read the [overview](overview.md) first. It
+explains the words the steps use: tenant, unit, seat, role and grant.
 
-Read the [overview](overview.md) first: it says what a tenant, a unit, a seat, a role and a grant are, and the steps
-use those words from the start.
+## What we build
 
-The application is called **Harbor**. When it is done, a company signs up and becomes a tenant, its administrator
-adds units such as North and North Coast, gives people a seat, and gives them roles at units.
+The application is called **Harbor**: an API for harbor companies. Each company that signs up becomes a tenant.
+At the end of the tutorial, Harbor holds two tenants with these units and people. Purple marks a person; a dashed
+line goes to the unit where that person's role is granted.
+
+```mermaid
+flowchart TD
+    subgraph harbor ["Tenant: Harbor Works"]
+        hroot["<b>Harbor Works</b><br/><small>the root</small>"]
+        north["<b>North</b>"]
+        coast["<b>North Coast</b>"]
+        south["<b>South Bay</b>"]
+        hroot --> north --> coast
+        hroot --> south
+    end
+    subgraph meadow ["Tenant: Meadow Gardens"]
+        mroot["<b>Meadow Gardens</b><br/><small>the root</small>"]
+    end
+    ada(["<b>Ada</b><br/><small>Administrator</small>"])
+    rhea(["<b>Rhea</b><br/><small>Area manager</small>"])
+    tove(["<b>Tove</b><br/><small>Administrator</small>"])
+    ada -.-> hroot
+    rhea -.-> north
+    tove -.-> mroot
+    classDef strong fill:#5b2ec933,stroke:#5b2ec9,stroke-width:2px
+    class ada,rhea,tove strong
+```
+
+| Person | Seat in | Placed at | Role, granted at | Holds its permissions at |
+|---|---|---|---|---|
+| Ada | Harbor Works | Harbor Works | Administrator, at the root | every unit of Harbor Works |
+| Rhea | Harbor Works | North | Area manager, at North | North and North Coast |
+| Tove | Meadow Gardens | Meadow Gardens | Administrator, at the root | every unit of Meadow Gardens |
+
+When it is done, you can try these with plain HTTP requests:
+
+- Ada adds units and seats anywhere in Harbor Works.
+- Rhea adds a unit below North. Below South Bay she gets `403`: her grant does not reach it.
+- Ada asks for Meadow Gardens and is refused: she has no seat there.
+- Rhea asks which units she may manage, and gets North and North Coast.
+
+Each step says where we are, why the step comes now, and what it adds. It explains the idea, shows every file
+whole with the new lines highlighted, and lists what those lines do.
 
 ## Step 1: the module's projects and their packages
 
-**Where we are.** An empty solution with a host: an ASP.NET Core project that will run the application.
+**Where we are.** You have an empty solution with one project, the host. The host is an ASP.NET Core project that
+will run the application.
 
-**Why now.** Tenancy becomes a module of your application, like any module of yours. Every later step writes into
-the module's projects, so they come first.
+**Why now.** Tenancy becomes a module of your application, like your other modules. Every later step adds files to
+the module's projects, so the projects come first.
 
-**What we want.** A module called Tenancy, in five projects, each holding one layer and only the packages that layer
-needs.
+**What we want.** A module called Tenancy in five projects. Each project holds one layer and references only the
+packages that layer needs.
 
 ### The idea: a module in layers
 
-**Why a module.** A module has its own data and rules ([Modules](../modules.md)). Other modules use Tenancy only the
-way it allows: they ask who may do what, and cannot change a seat or a role themselves.
+**Why a module.** A module has its own data and rules ([Modules](../modules.md)). Other modules can ask Tenancy who
+may do what. They cannot change a seat or a role themselves.
 
-**Why layers.** Each layer has one job, and uses only the layer below it:
+**Why layers.** Each layer has one job and uses only the layer below it:
 
-- **domain**: the classes and their rules. No database, no HTTP, so you test the rules as plain C#.
+- **domain**: the classes and their rules. This layer has no database and no HTTP, so you can test the rules as
+  plain C#.
 - **application**: the requests and their handlers.
-- **infrastructure**: the database. The only layer that knows it.
-- **API**: the routes. The only project the host references.
+- **infrastructure**: the database. No other layer knows about the database.
+- **API**: the routes. The host references only this project.
 
 **Why a contracts project.**
 
-- Other modules store Tenancy's ids: a board keeps its `TenantId` and its owner's `SeatId`.
-- Referencing Tenancy's domain project for them would also hand out `Seat` and `Role`, to change past Tenancy's rules.
-- So the ids get a small project of their own, the only one other modules may reference. The analyzer warns when a
-  module uses more ([Module contracts](../module-contracts.md)).
+- Other modules store Tenancy's ids. For example, a board stores its `TenantId` and its owner's `SeatId`.
+- If another module referenced Tenancy's domain project for these ids, it would also get `Seat` and `Role`. It could
+  then change them without Tenancy's rules.
+- So the ids go in a small project of their own. Other modules may reference only this project. The analyzer warns
+  when a module uses more of another module ([Module contracts](../module-contracts.md)).
 
 **Why Postgres, on Supabase.**
 
 - Tenancy works on any Entity Framework database. Its checks run in C#, before your handler.
-- On Postgres it adds **row level security (RLS)**: a policy on each table that Postgres applies to every query, as
-  the caller. Even a query that skips your handlers gets only the caller's rows:
+- On Postgres, Tenancy also adds **row level security (RLS)**. RLS puts a policy on each table, and Postgres applies
+  that policy to every query, as the caller. A query that skips your handlers still gets only the caller's rows:
 
   ```sql
   -- Leo, a seat of Harbor Works, from any tool:
@@ -56,18 +97,19 @@ way it allows: they ask who may do what, and cannot change a seat or a role them
   -- only Harbor Works' seats come back
   ```
 
-- Supabase is Postgres with sign-in (Supabase Auth) and a local stack, so this tutorial can show RLS end to end.
+- Supabase is Postgres with sign-in (Supabase Auth) and a stack that runs on your machine. This tutorial uses it to
+  show RLS from the request to the database.
 - On another database you leave out the Postgres package and the Supabase steps. The C# checks stay the same.
 
-Harbor's Tenancy module therefore has five projects, one per layer:
+Harbor's Tenancy module has five projects: one for the contracts and one for each layer.
 
 | Project | What it holds | Tenancy's package in it |
 |---|---|---|
-| `Harbor.Tenancy.Contracts` | What other modules may use: the ids. | none, only the toolkit |
+| `Harbor.Tenancy.Contracts` | The ids, which other modules may use. | none (only the toolkit's core package) |
 | `Harbor.Tenancy.Domain` | The classes: tenant, organization, unit, seat, role. | `Supporting.Tenancy` |
-| `Harbor.Tenancy.Application` | The requests and their handlers. | none, it gets the domain's |
-| `Harbor.Tenancy.Infrastructure` | Where it is stored: the database context and its migrations. | `Supporting.Tenancy.Postgres` |
-| `Harbor.Tenancy.Api` | The routes, and the one call the host makes to add the module. | none |
+| `Harbor.Tenancy.Application` | The requests and their handlers. | none (it comes through the domain project) |
+| `Harbor.Tenancy.Infrastructure` | The database context and its migrations. | `Supporting.Tenancy.Postgres` |
+| `Harbor.Tenancy.Api` | The routes, and the method the host calls to add the module. | none |
 
 ```text
 Harbor.slnx
@@ -86,9 +128,9 @@ src/
 
 ### What you write
 
-**`Directory.Build.props`**, at the root. **Why:** the toolkit must know each project's module, to check what one
-module uses of another and to name generated code. The highlighted part derives it once, from the folder, so a new
-module needs nothing but its folder.
+**`Directory.Build.props`**, at the root. **Why:** the toolkit needs to know which module each project belongs to. It
+uses the module name to check what one module uses of another, and to name generated code. The highlighted lines
+take the module name from the folder, so a new module needs only a new folder.
 
 ```xml {8-11,13-16}
 <Project>
@@ -110,12 +152,12 @@ module needs nothing but its folder.
 </Project>
 ```
 
-- `DDD_Module` names the module. The toolkit writes `[assembly: Module("Tenancy")]` into each of the five projects
-  from it, so no project needs a file to say so.
-- `DDD_ModuleContracts` marks the contracts project as what other modules may use.
+- `DDD_Module` is the module's name. From it, the toolkit writes `[assembly: Module("Tenancy")]` into each of the five
+  projects. No project needs its own file for this.
+- `DDD_ModuleContracts` marks the contracts project as the project other modules may use.
 
-**`Directory.Packages.props`**, at the root. **Why:** every version in one file, so the toolkit's packages cannot drift
-apart. A prerelease version is written in full.
+**`Directory.Packages.props`**, at the root. **Why:** all package versions are in this one file, so the toolkit's
+packages always have the same version. Write a prerelease version in full, such as `3.2.0-preview.5`.
 
 ```xml {7-10}
 <Project>
@@ -137,8 +179,8 @@ apart. A prerelease version is written in full.
 </Project>
 ```
 
-**The five project files.** Each references only the layer below it, and has only the packages its layer needs:
-that is what keeps the database out of the domain. The comment at the top of each says what the project holds.
+**The five project files.** Each project references only the layer below it and only the packages its layer needs.
+This keeps the database out of the domain. The comment at the top of each file says what the project holds.
 
 **`src/Modules/Tenancy/Harbor.Tenancy.Contracts/Harbor.Tenancy.Contracts.csproj`**
 
@@ -227,13 +269,21 @@ that is what keeps the database out of the domain. The comment at the top of eac
 
 ### What it does
 
-- `Supporting.Tenancy` (domain): the templates, their rules and the generator. No database.
-- `Supporting.Tenancy.Postgres` (infrastructure): the Entity Framework mapping, which it brings along, plus the RLS
-  policies. On another database, reference `Supporting.Tenancy.EntityFramework` instead.
-- `EntityFramework.Supabase` (infrastructure): writes migrations and policies as SQL files for Supabase, and checks
-  them at start-up.
+- `Supporting.Tenancy` (domain) contains the templates, their rules and the generator. It has no database code.
+- `Supporting.Tenancy.Postgres` (infrastructure) contains the RLS policies. It references
+  `Supporting.Tenancy.EntityFramework`, the Entity Framework mapping, so you get both. On another database, reference
+  `Supporting.Tenancy.EntityFramework` instead.
+- `EntityFramework.Supabase` (infrastructure) writes the migrations and policies as SQL files for Supabase. At
+  start-up it checks that the database has them.
+- `Mediator.Abstractions` (application) is the Mediator library. Each request is a command or a query, and one
+  handler handles it. `Mediator.SourceGenerator` writes the mediator itself into the host, in step 5.
+- `Microsoft.EntityFrameworkCore.Design` (infrastructure) is what `dotnet ef` needs to make migrations.
+  `GenerateRuntimeConfigurationFiles` lets `dotnet ef` run the infrastructure project as its own startup project, so
+  migrations need no host.
+- `ManagePackageVersionsCentrally` turns on central package management: a `PackageReference` has no version, and the
+  version comes from `Directory.Packages.props`.
 
-Build the solution. It builds empty; step 2 adds the classes.
+Build the solution. The projects have no code yet. Step 2 adds the classes.
 
 ```powershell
 dotnet build Harbor.slnx
@@ -241,35 +291,35 @@ dotnet build Harbor.slnx
 
 ## Step 2: your classes
 
-**Where we are.** The module has its five projects and its packages, and no code.
+**Where we are.** The module has five projects with their packages, and no code.
 
-**Why now.** Everything Tenancy does works on its classes: a request creates a tenant, adds a unit, gives a seat a
-role. The classes have to exist before anything can use them.
+**Why now.** Every Tenancy request works on these classes. A request creates a tenant, adds a unit, or gives a seat a
+role. The classes must exist before any request can use them.
 
-**What we want.** A tenant, an organization, a unit, a role and a seat in the domain project, with their four ids in
-the contracts project. And the seat gets one field of Harbor's own: a job title.
+**What we want.** Five classes in the domain project: tenant, organization, unit, role and seat. Their four ids go in
+the contracts project. The seat gets one extra field for Harbor: a job title.
 
-### The idea: Tenancy's classes are templates, and yours are the real ones
+### The idea: your classes derive from Tenancy's templates
 
-- Tenancy ships a **template** for each class: an abstract parent with all its rules, such as "the last
-  administrator cannot be removed".
-- The class your application uses is **yours**: in your domain project, derived from the template. So it can carry
-  fields of your own, and your database stores it.
-- You declare a class yourself, or let **the switch** write it. This one line has the generator write every class you
-  did not declare:
+- Tenancy ships a **template** for each class. A template is an abstract parent class with the class's rules, such
+  as "the last administrator cannot be removed".
+- Your application uses **your own** class. It is in your domain project and derives from the template. You can add
+  fields to it, and your database stores it.
+- You can declare a class yourself, or let **the switch** write it. The switch is one line. With it, the generator
+  writes every class you did not declare:
 
   ```csharp
   [assembly: GenerateTenancyClasses]
   ```
 
-- A class you declare always wins. Harbor declares only `Seat`, for a job title.
-- An organization has no id of its own: it shares its tenant's.
+- When you declare a class, the generator does not write it. Harbor declares only `Seat`, to add the job title.
+- An organization has no id type of its own. It uses its tenant's id.
 
 ### What you write
 
-**The four ids**, in the contracts project, because other modules store them. **Why not a plain `Guid`:** a `SeatId`
-passed as a `TenantId` is a compile error, not a bug. `[EntityId<Guid>]` writes the rest: equality, parsing,
-`Create()`, storage.
+**The four ids**, in the contracts project, because other modules store them. **Why not a plain `Guid`:** with
+separate id types, passing a `SeatId` where a `TenantId` is expected is a compile error. `[EntityId<Guid>]` generates
+the rest: equality, parsing, `Create()` and storage.
 
 **`Harbor.Tenancy.Contracts/ValueObjects/TenantId.cs`**
 
@@ -282,9 +332,9 @@ namespace Harbor.Tenancy.Contracts.ValueObjects;
 public readonly partial record struct TenantId;
 ```
 
-`SeatId.cs`, `OrganizationUnitId.cs` and `RoleId.cs` are the same file with another name.
+`SeatId.cs`, `OrganizationUnitId.cs` and `RoleId.cs` are the same file, with `TenantId` replaced by their own name.
 
-**The switch**, in the domain project, where the classes belong.
+**The switch**, in the domain project, because the classes belong there.
 
 **`Harbor.Tenancy.Domain/Module.cs`**
 
@@ -294,8 +344,8 @@ using DDDToolkit.Supporting.Tenancy;
 [assembly: GenerateTenancyClasses]
 ```
 
-**The seat**, in the domain project. **Why declare it:** a field of your own (the job title) needs a class of your own.
-The attribute names the template and the id.
+**The seat**, in the domain project. **Why declare it:** to add a field (the job title), you need your own class. The
+attribute names the template and the id type.
 
 **`Harbor.Tenancy.Domain/Aggregates/Seats/Seat.cs`**
 
@@ -316,33 +366,35 @@ public sealed partial class Seat
 
 ### What it does
 
-- `[SeatAggregate<SeatId>]`: the generator writes the other half of the `partial` class, derived from the template.
-  `Seat` has everything a seat has, plus `JobTitle`.
-- The switch writes `Tenant`, `Organization`, `OrganizationUnit` and `Role`, and no `Seat`: you declared one.
-- It takes the ids from the contracts project instead of writing its own.
-- It also writes `TenancyUseCases`: Tenancy's use cases closed over your classes. Every later request uses it.
+- `[SeatAggregate<SeatId>]`: the generator writes the other half of the `partial` class, which derives from the
+  template. `Seat` has all of the template's members, plus `JobTitle`.
+- The switch writes `Tenant`, `Organization`, `OrganizationUnit` and `Role`. It does not write `Seat`, because you
+  declared it.
+- The switch uses the ids from the contracts project, so it writes no id types.
+- The switch also writes `TenancyUseCases`: Tenancy's use cases for your classes. Every later request uses it.
 
-Build again, and look in the domain project's **Dependencies → Analyzers** to see what was written.
+Build again. The generated files are in the domain project, under **Dependencies → Analyzers**.
 
 > **Going further.** A class of your own with rules: [How your classes add behaviour](your-module.md#how-your-classes-add-behaviour).
 > How an id makes a new one: [How a new id is made](your-module.md#how-a-new-id-is-made).
 
 ## Step 3: where it is stored
 
-**Where we are.** The classes exist, in memory only.
+**Where we are.** The classes exist, but nothing stores them yet.
 
-**Why now.** Before a request can create a tenant, there has to be somewhere to keep it.
+**Why now.** A request that creates a tenant must save the tenant somewhere.
 
-**What we want.** A database context for the module, its tables in their own schema, `tenancy`, and the first
+**What we want.** A database context for the module with its tables in their own schema, `tenancy`, and the first
 migration.
 
-### The idea: Tenancy's tables are mapped by one call, in your context
+### The idea: one call maps Tenancy's tables in your context
 
-- Tenancy has no database of its own. Its classes live in **your** context, beside the module's other data.
-- One call, `modelBuilder.AddTenancy(...)`, maps them all: tables, keys, indexes and the organization's tree. The
-  generator writes it for your classes, so it takes no type arguments.
-- `[SupabaseMigrations]` on the context: the migrations become SQL files for Supabase, and the host checks at start-up
-  that the database has them.
+- Tenancy has no database context of its own. Its classes are mapped in **your** context, next to the module's other
+  data.
+- One call, `modelBuilder.AddTenancy(...)`, maps all of them: tables, keys, indexes and the organization's tree. The
+  generator writes this method for your classes, so it takes no type arguments.
+- With `[SupabaseMigrations]` on the context, the migrations become SQL files for Supabase. At start-up, the host
+  checks that the database has them.
 
 ### What you write
 
@@ -383,46 +435,52 @@ public sealed class TenancyContext(DbContextOptions<TenancyContext> options) : D
 
 ### What it does
 
-- `[SupabaseMigrations]`: the build writes the design-time factory `dotnet ef` needs. From step 4 the host exports
-  each migration as a `.sql` file into `supabase/migrations`.
-- `Schema = "tenancy"`: Tenancy's tables in a schema of their own, apart from other modules'.
-- `AddTenancy(database: Database)`: maps the five classes. `database` says which database, for its own indexes.
-- `AddDomainEventOutbox`: Tenancy raises a domain event per change; the outbox saves them in the same transaction.
-- `AddDDDToolkitConventions`, `AddTenancyConverters`: Entity Framework does not know your id types; these store each
-  as its `Guid`.
-- `StoreDateTimeOffsetsAsUtc`: "which grants apply now" is asked in SQL. Moments stored as UTC compare on every
-  database.
+- `[SupabaseMigrations]`: the build writes the design-time factory that `dotnet ef` needs. From step 5 on, the host's
+  build exports each migration as a `.sql` file into `supabase/migrations`.
+- `Schema = "tenancy"`: Tenancy's tables go in their own schema, separate from the tables of other modules.
+- `AddTenancy(database: Database)` maps the five classes. It reads the database provider's name from `database` to
+  write filtered indexes. Without `database`, there are no filtered indexes.
+- `AddDomainEventOutbox`: Tenancy raises a domain event for each change. The outbox saves these events in the same
+  transaction as the change. `schema: Schema` puts the outbox table in the module's schema too.
+- `AddDDDToolkitConventions`, `AddTenancyConverters`: Entity Framework does not know your id types. These two calls
+  store each id as its `Guid`. The generator writes `AddTenancyConverters()` into the infrastructure project, named
+  after the module. It covers the ids of the module's domain and contracts projects.
+- `StoreDateTimeOffsetsAsUtc`: Tenancy checks in SQL which grants apply now. Times stored as UTC compare correctly on
+  every database.
 
-Make the first migration. The infrastructure project is its own startup project, through that factory:
+Create the first migration. The design-time factory lets the infrastructure project be its own startup project:
 
 ```powershell
 dotnet ef migrations add Tenancy --project src/Modules/Tenancy/Harbor.Tenancy.Infrastructure --startup-project src/Modules/Tenancy/Harbor.Tenancy.Infrastructure --output-dir Persistence/Migrations
 ```
 
-It creates the schema `tenancy` with, among others:
+The migration creates the schema `tenancy`. These are some of its tables:
 
 - a table per class: `Tenants`, `Organizations`, `OrganizationUnits`, `Seats`, `Roles`;
-- `SeatPlacements` and `SeatRoleGrants`;
-- `OrganizationUnitPaths`: each unit with every unit above it, so "everything below North" is one query.
+- `SeatPlacements` and `SeatRoleGrants`: the units where each seat is placed, and the roles it holds there;
+- `OrganizationUnitPaths`: one row for each pair of a unit and a unit above it, so "everything below North" is one
+  query.
 
 > **Going further.** Everything `AddTenancy` maps, and naming the tables yourself:
 > [The context and the registration](your-module.md#the-context-and-the-registration).
 
 ## Step 4: the module's registration
 
-**Where we are.** Classes and a context, and nothing that registers them.
+**Where we are.** The module has its classes and a context. Nothing registers them yet.
 
-**Why now.** The host needs one call to add the module, and every request needs its check before its handler.
+**Why now.** The host needs one method to call to add the module. Every request needs a check that runs before its
+handler.
 
-**What we want.** `AddTenancyModule(connectionString)`: everything the module needs, registered from its entry
-project.
+**What we want.** `AddTenancyModule(connectionString)`, in the module's API project, registers everything the module
+needs.
 
 ### The idea: the check before every handler
 
 - Every request of the module implements one interface, `ITenancyRequest`, marked `[AccessRequests]`.
-- The generator writes a pipeline behavior for it: before a handler runs, it checks what the request requires of
-  its caller (an attribute on the request, from step 6 on).
-- A request that states no requirement does not compile: a forgotten requirement never opens a door.
+- The generator writes a pipeline behavior for this interface. Before a handler runs, the behavior checks what the
+  request requires of its caller. From step 6 on, each request states this with an attribute.
+- A request without a requirement does not compile (error DDD00077). So a request cannot run unchecked because
+  someone forgot its attribute.
 
 ### What you write
 
@@ -437,7 +495,7 @@ namespace Harbor.Tenancy.Application.Access;
 public partial interface ITenancyRequest : IRequireAccess;
 ```
 
-**`Harbor.Tenancy.Application/GlobalUsings.cs`**: what every request file of the module uses.
+**`Harbor.Tenancy.Application/GlobalUsings.cs`**: the namespaces every request file of the module uses.
 
 ```csharp
 global using DDDToolkit.Access;
@@ -493,7 +551,7 @@ public static class TenancyInfrastructure
 }
 ```
 
-**`Harbor.Tenancy.Api/TenancyModule.cs`**: the only thing the host calls.
+**`Harbor.Tenancy.Api/TenancyModule.cs`**: the only class of the module that the host calls.
 
 ```csharp {11-12}
 using Harbor.Tenancy.Application;
@@ -517,32 +575,40 @@ public static class TenancyModule
 
 ### What it does
 
-- `AddTenancyAccessBehavior()`: generated for `ITenancyRequest`; runs the check before each handler.
-- `UseOutbox` + `AddTenancyDomainEvents()`: Tenancy's events are saved with the change, in one transaction.
-- `UseDDDToolkit(provider)`: every lock the host registered, on this context: the caller's database role on each
-  connection (RLS), and Tenancy's save check (no write into another tenant).
-- `AddTenancy<TenancyContext>()`: the use cases, closed over your classes, storing in this context.
-- `AddTenancyPostgres()`: the tenant of the request on every connection, for the RLS policies.
-- `AddTenancyAccess<ITenancyRequest, TenancyContext>()`: the checks the behavior asks, reading this context.
+- `IRequireAccess`: the toolkit's interface for a request that states what it requires of its caller. A module's own
+  request interface derives from it.
+- `partial`: the generator adds a `RequiredAccess` property to `ITenancyRequest`, with one line for each request.
+- `AddTenancyAccessBehavior()` is generated for `ITenancyRequest`. It registers the behavior that runs the check before
+  each handler.
+- `AddDDDToolkitEntityFramework(...)` registers the toolkit's Entity Framework services. `UseDDDToolkit` needs it.
+  Every module may call it, and each call adds to the same options.
+- `UseOutbox` and `AddTenancyDomainEvents()`: Tenancy's events are saved in the same transaction as the change.
+- `UseDDDToolkit(provider)` adds every part the host registered to this context. Here there are two. One sets the
+  caller's database role on each connection, for RLS. The other is Tenancy's save check, which refuses a write into
+  another tenant.
+- `AddTenancy<TenancyContext>()` registers the use cases for your classes. They save their data in this context.
+- `AddTenancyPostgres()` sets the request's tenant on every connection, so the RLS policies can read it.
+- `AddTenancyAccess<ITenancyRequest, TenancyContext>()` registers the checks that the behavior runs. The checks read
+  this context.
 
 ## Step 5: the host
 
-**Where we are.** A module with one entry, and nothing that runs it.
+**Where we are.** The module has one entry point, `TenancyModule`. Nothing runs it yet.
 
-**Why now.** Every later step sends a request; something has to receive it.
+**Why now.** Every later step sends a request, and the host receives it.
 
-**What we want.** An API that knows who calls, in which tenant, answers a refusal with the right status, and checks
+**What we want.** An API that knows the caller and the tenant, returns the right status code for a refusal, and checks
 the database before it starts.
 
 ### The idea: the caller, and the seat in the tenant
 
-- **Caller**: who sends the request, from the sign-in. Until the sign-in step, a development header stands in:
-  `X-Dev-User: <user id>`.
-- **Tenant**: the request names it, here with the header `Tenant: harbor`.
-- **Seat**: Tenancy looks up the caller's seat in that tenant. The rest of the request runs as that seat: the checks,
-  the use cases, and the database role (RLS).
-- **Refusal**: a rule that says no throws a `RefusalException` with a code (`tenancy.not-permitted`). The host turns
-  it into a status: 404, 403, 409 or 400.
+- **Caller**: who sends the request. In a real application the sign-in says who calls. This tutorial does not set up
+  sign-in, so a development header says who calls: `X-Dev-User: <user id>`.
+- **Tenant**: the request names the tenant. In Harbor it uses the header `Tenant: harbor`.
+- **Seat**: Tenancy looks up the caller's seat in that tenant. For the rest of the request, the checks, the use cases
+  and the database role (RLS) all use that seat.
+- **Refusal**: when a rule refuses a request, it throws a `RefusalException` with a code, such as
+  `tenancy.not-permitted`. The host turns the exception into a status code: 404, 403, 409 or 400.
 
 ### What you write
 
@@ -663,27 +729,42 @@ public sealed class RefusalsAsProblems : IExceptionHandler
 
 ### What it does
 
-- `AddSupabaseRowLevelSecurity()`: every query runs as the caller's database role, the one the policies are for.
-- `using Harbor.Host;`: the calls the toolkit generates into the host live in the host's own namespace.
-- `AddTenancyPermissionsOfModules()`: generated into the host: the permissions of every module it references.
-- `AddSupabaseMigrations()` and `RunStartupChecks()`: before the API serves anything, it checks that the database has
-  every migration and policy, and that the login role may become the callers' roles. A failed check names the fix.
-- `Callers.Begin` / `TenancyCallers.Begin`: who calls, and as which seat, for the rest of the request.
-- `SupabaseLoginRole`: the API logs in as `harbor_api`, a role that owns nothing, so RLS applies to it.
+- `SupabaseMigrationsExport`: `Write` makes each build write the SQL files that are missing. `Check` only compares
+  them and fails the build when one is missing, for a CI build.
+- `AddMediator(...)` registers the generated mediator. Mediator's default lifetime is singleton. The access behavior
+  and its checks are registered per scope, so the mediator must be `ServiceLifetime.Scoped`.
+- `AddSupabaseRowLevelSecurity()`: every query runs as the caller's database role. The RLS policies are written for
+  that role.
+- `using Harbor.Host;`: the toolkit generates methods into the host, in the host's namespace.
+- `AddTenancyPermissionsOfModules()` is generated into the host. It registers the permissions of every module the host
+  references.
+- `AddSupabaseMigrations()` and `RunStartupChecks()`: the start-up checks run before the API serves a request. They
+  check that the database has every migration and policy, and that the login role may switch to the callers' roles.
+  A failed check says how to fix the problem.
+- `AddProblemDetails()`, `AddExceptionHandler<RefusalsAsProblems>()` and `UseExceptionHandler()`: ASP.NET Core's
+  exception handling. `RefusalsAsProblems` handles a `RefusalException`. Any other exception becomes a `500`.
+- `Caller.User(user)` is a signed-in user with that id. `Caller.Anonymous` is a caller without a user.
+- `Callers.Begin` and `TenancyCallers.Begin` set the caller and the caller's seat for the rest of the request.
+- `ITenantSelection.ResolveAsync` looks up the caller's active seat in the tenant the `Tenant` header names. It throws
+  nothing. When there is no seat, it returns "nobody" with the refusal's code, such as `tenancy.not-seated`. A
+  request that needs a seat is then refused with that code.
+- `RefusalKind`: every refusal has one of four kinds. `NotFound` becomes `404`, `NotPermitted` `403`, `Conflict` `409`
+  and `Invalid` `400`. The response body holds the refusal's `code` and its message as `detail`.
+- `SupabaseLoginRole`: the API logs in as `harbor_api`. This role owns no tables, so RLS applies to it.
 
 ### Run it
 
 1. Start Supabase locally: `npx supabase init` once, then `npx supabase start`.
-2. Build the host: `dotnet build`. The export writes `supabase/migrations`: the Tenancy migration, the access file
-   (functions and policies) and the login role.
+2. Build the host with `dotnet build`. The export writes these into `supabase/migrations`: the Tenancy migration, the
+   access file (functions and policies) and the login role.
 3. Apply them: `npx supabase migration up --local`.
-4. Let the login role log in, locally only:
+4. Give the login role a login and a password. Do this locally only:
 
    ```powershell
    docker exec supabase_db_harbor psql -U postgres -c "ALTER ROLE harbor_api WITH LOGIN PASSWORD 'local-only'"
    ```
 
-   `harbor` is the `project_id` in `supabase/config.toml`.
+   In `supabase_db_harbor`, `harbor` is the `project_id` from `supabase/config.toml`.
 
 5. Run the host with the connection string:
 
@@ -692,46 +773,71 @@ public sealed class RefusalsAsProblems : IExceptionHandler
    dotnet run --project src/Harbor.Host
    ```
 
-The start-up checks pass, and the API runs, with no routes yet.
+The start-up checks pass and the API runs. It has no routes yet.
 
 ## Step 6: provisioning a tenant
 
-**Where we are.** A running API without routes, and no tenant.
+**Where we are.** The API runs. It has no routes and no tenant.
 
-**Why now.** Every other request works inside a tenant, so the first one creates one.
+**Why now.** Every other request works inside a tenant, so the first request creates a tenant.
 
-**What we want.** `POST /dev/tenants`: a tenant, its root unit, and Ada as its first seat, with the administrators'
-starter role at the root.
+**What we want.** `POST /dev/tenants` creates a tenant, its root unit, and Ada as its first seat. Ada gets the
+administrators' starter role at the root.
 
-### The idea: who may ask, and what the work runs as
+### The idea: who may send the request, and system work
 
-- **Who may send it**: an attribute on the request. `[SignedIn]`: anyone signed in, with or without a seat.
-- **What it runs as**: creating a tenant is no seat's work, since no seat exists yet. It is **system work**, and the
-  handler says so explicitly, for that one operation: `using (TenancyUseCases.BeginSystem())`.
-- Tenancy's provisioning refuses anything but system work, so a forgotten `BeginSystem` fails loudly.
+- **Who may send it**: an attribute on the request says this. `[SignedIn]` lets any signed-in caller send it, with or
+  without a seat.
+- **System work**: a seat cannot create a tenant, because the tenant has no seats yet. Creating a tenant is **system
+  work**. The handler starts system work with `using (TenancyUseCases.BeginSystem())`. It lasts until the `using`
+  ends.
+- `ProvisionAsync` refuses every caller except system work. A handler that forgets `BeginSystem()` gets a refusal on
+  its first request.
+- **The tenant's shape** is chosen when the tenant is created:
+
+  | Shape | The organization | Use it when |
+  |---|---|---|
+  | `TenantShape.Flat` | The root alone. Every seat is placed at the root. Adding a unit is refused with `tenancy.flat-tenant`. | The customer has no structure, such as a single shop. Every grant is at the root, so it counts for the whole tenant. |
+  | `TenantShape.Hierarchical` | A tree of units below the root. | The customer has regions, sites or departments, and people manage only their own part. |
+
+  Harbor creates hierarchical tenants, because step 8 adds North below the root. A flat tenant can become
+  hierarchical later, with `ChangeShapeAsync`, which requires `tenancy.settings.manage` for the whole tenant. A
+  hierarchical tenant cannot become flat again. Your starter roles can differ per shape
+  ([Starter roles](roles-and-permissions.md#starter-roles)).
+- **Who becomes the administrator**: the caller. A signed-in user creates a tenant for themselves. Creating a tenant
+  for someone else is work for your own staff, an [operator](operators-and-history.md#operators), who names the
+  administrator.
 
 ### What you write
 
 **`Harbor.Tenancy.Application/Tenants/ProvisionTenant/ProvisionTenant.cs`**
 
-```csharp {5,14,16-18}
+```csharp {5,9,15,17,19-26}
 using DDDToolkit.Supporting.Tenancy;
 
 namespace Harbor.Tenancy.Application.Tenants.ProvisionTenant;
 
 [SignedIn]
-public sealed record ProvisionTenant(string Slug, string Name, Guid Admin)
+public sealed record ProvisionTenant(string Slug, string Name)
     : ICommand<TenancyUseCases.ProvisionedTenant>, ITenancyRequest;
 
-public sealed class ProvisionTenantHandler(TenancyUseCases.TenantCommands tenants)
+public sealed class ProvisionTenantHandler(TenancyUseCases.TenantCommands tenants, ICallerAccessor callers)
     : ICommandHandler<ProvisionTenant, TenancyUseCases.ProvisionedTenant>
 {
     public async ValueTask<TenancyUseCases.ProvisionedTenant> Handle(ProvisionTenant command, CancellationToken cancellationToken)
     {
+        // The caller becomes the administrator. Read it before BeginSystem(), which makes the system the caller.
+        var admin = callers.Current.UserId ?? throw new InvalidOperationException("The caller has no user id.");
+
         using (TenancyUseCases.BeginSystem())
         {
             return await tenants.ProvisionAsync(
-                new TenancyUseCases.TenantToProvision(command.Slug, command.Name, TenantShape.Hierarchical, command.Name, command.Admin,
+                new TenancyUseCases.TenantToProvision(
+                    Slug: command.Slug,
+                    Name: command.Name,
+                    Shape: TenantShape.Hierarchical,
+                    RootName: command.Name,
+                    AdminIdentity: admin,
                     ConfigureFirstSeat: seat => seat.ChangeJobTitle("Harbor master")),
                 cancellationToken);
         }
@@ -756,18 +862,18 @@ internal static class DevelopmentEndpoints
     {
         routes.MapPost("/dev/tenants", async (NewTenant body, ISender sender, CancellationToken cancellationToken) =>
         {
-            var made = await sender.Send(new ProvisionTenant(body.Slug, body.Name, body.Admin), cancellationToken);
+            var made = await sender.Send(new ProvisionTenant(body.Slug, body.Name), cancellationToken);
             return Results.Ok(new { tenant = made.Tenant, root = made.RootUnit, adminSeat = made.AdminSeat });
         });
 
         return routes;
     }
 
-    public sealed record NewTenant(string Slug, string Name, Guid Admin);
+    public sealed record NewTenant(string Slug, string Name);
 }
 ```
 
-**`Harbor.Tenancy.Api/TenancyModule.cs`**: one more entry, for the host to call in development only.
+**`Harbor.Tenancy.Api/TenancyModule.cs`**: one more method, which the host calls in development only.
 
 ```csharp {1,19-20}
 using Harbor.Tenancy.Api.Development;
@@ -793,7 +899,7 @@ public static class TenancyModule
 }
 ```
 
-**`src/Harbor.Host/Program.cs`**: the development route, in Development only.
+**`src/Harbor.Host/Program.cs`**: maps the development route in the Development environment only.
 
 ```csharp {24-27}
 using DDDToolkit.EntityFramework.Supabase;
@@ -830,10 +936,23 @@ app.Run();
 ### What it does
 
 - `[SignedIn]`: the check lets any signed-in caller through, and refuses an anonymous one.
-- `BeginSystem()`: system work until the `using` ends; after it, the caller is who it was.
-- `ProvisionAsync`: the tenant, its organization with the root unit "Harbor Works", every starter role, and Ada's
-  seat at the root with the administrators' role, in one save.
-- `ConfigureFirstSeat`: a field of your own on the first seat, set in the same save.
+- `ICommand<T>` and `ICommandHandler<TCommand, T>`: Mediator's interfaces for a command that returns a `T`, and for
+  its handler. A query uses `IQuery<T>` and `IQueryHandler<TQuery, T>` instead (step 7).
+- `TenancyUseCases.TenantCommands`: Tenancy's use cases for tenants, generated for your classes in step 2.
+- `callers.Current.UserId`: the user id of the signed-in caller. The handler reads it before `BeginSystem()`, because
+  inside system work the caller is the system.
+- `BeginSystem()`: the code inside the `using` runs as system work. After the `using`, the caller is the same as
+  before.
+- `ProvisionAsync` writes all of this in one save: the tenant, its organization with the root unit "Harbor Works",
+  every starter role, and the caller's seat at the root with the administrators' role.
+- `Slug`: the tenant's short name, such as `harbor`. A request names its tenant by the slug, in the `Tenant` header.
+  A slug is 2 to 63 characters: lower case letters, digits and dashes, starting with a letter or a digit. A slug
+  that is in use is refused with `tenancy.slug-taken`.
+- `Name` and `RootName`: the tenant's name, and the name of its root unit. Harbor gives the root the tenant's name,
+  "Harbor Works".
+- `ConfigureFirstSeat` sets your own fields on the first seat, here the job title. They are written in the same save.
+- `ISender.Send` hands the request to the mediator. The mediator runs the access behavior and then the handler.
+- `ProvisionedTenant` holds the ids of the new tenant, its root unit and the administrator's seat.
 
 ### Try it
 
@@ -842,26 +961,37 @@ POST /dev/tenants
 X-Dev-User: d0000000-0000-4000-8000-000000000001
 Content-Type: application/json
 
-{ "slug": "harbor", "name": "Harbor Works", "admin": "d0000000-0000-4000-8000-000000000001" }
+{ "slug": "harbor", "name": "Harbor Works" }
 ```
 
-`200`, with the ids of the tenant, its root unit and Ada's seat. Keep the root's id for step 8.
+The response is `200`, with the ids of the tenant, its root unit and Ada's seat. Keep the root's id for step 8.
+
+Then create the second tenant, Meadow Gardens, with Tove as its administrator:
+
+```http
+POST /dev/tenants
+X-Dev-User: d0000000-0000-4000-8000-000000000004
+Content-Type: application/json
+
+{ "slug": "meadow", "name": "Meadow Gardens" }
+```
 
 ## Step 7: who am I
 
 **Where we are.** Harbor Works exists, with Ada as its administrator.
 
-**Why now.** Before Ada does anything, she should see what she is: it shows what the later steps change.
+**Why now.** Before Ada changes anything, she can look at her own seat. The later steps change what this request
+returns.
 
-**What we want.** `GET /me`: Ada's seat in the tenant the request names, where it is placed, its roles, and every
-permission it holds with where it reaches.
+**What we want.** `GET /me` returns Ada's seat in the tenant the request names: where the seat is placed, its roles,
+and each permission it holds with the units where that permission counts.
 
 ### The idea: the overview, and your own fields
 
-- `WhoAmIAsync()` answers the calling seat's **overview**: your `Seat` class whole, its units and roles by name, and
-  each permission with the units it reaches.
-- What leaves the API is yours: a record of your own, selected from the overview.
-- `[InTenant]`: any seat in the tenant may ask; a caller without one gets 403.
+- `WhoAmIAsync()` returns the calling seat's **overview**: your `Seat` object with all its fields, the names of its
+  units and roles, and each permission with the units it reaches.
+- The API returns a record type of your own, built from the overview. You decide which fields leave the API.
+- `[InTenant]`: any seat in the tenant may send the request. A caller without a seat in that tenant gets `403`.
 
 ### What you write
 
@@ -901,7 +1031,8 @@ public sealed record MyGrant(string Role, bool AppliesNow);
 public sealed record MyPermission(string Permission, bool AtTenant, IReadOnlyList<string> Reaches);
 ```
 
-**`Harbor.Tenancy.Api/Seats/Rest/SeatsEndpoints.cs`**: a route only sends the request; the check is on its way.
+**`Harbor.Tenancy.Api/Seats/Rest/SeatsEndpoints.cs`**: the route only sends the request. The behavior checks the
+request before the handler runs.
 
 ```csharp {13-14}
 using Harbor.Tenancy.Application.Seats.WhoAmI;
@@ -924,7 +1055,7 @@ internal static class SeatsEndpoints
 }
 ```
 
-**`Harbor.Tenancy.Api/TenancyModule.cs`**: the module maps it.
+**`Harbor.Tenancy.Api/TenancyModule.cs`**: the module maps the new route.
 
 ```csharp {2,17}
 using Harbor.Tenancy.Api.Development;
@@ -952,9 +1083,19 @@ public static class TenancyModule
 
 ### What it does
 
-- `overview.UnitOf(...)`, `overview.RoleOf(...)`: the names of the seat's own units and roles, read in the same query.
-- `grant.AppliesAt(overview.AsOf)`: whether a grant applies at the moment the overview holds for.
-- `permission.AtTenant`: held at the root, so for the whole tenant.
+- `IQuery<MyOverview>` and `IQueryHandler<WhoAmI, MyOverview>`: Mediator's interfaces for a query that returns a
+  `MyOverview`, and for its handler.
+- `TenancyUseCases.TenancyDirectory`: Tenancy's read use cases, such as `WhoAmIAsync` and `ListUnitsAsync` (step 8).
+- `overview.UnitOf(...)` and `overview.RoleOf(...)` look up the seat's units and roles in the overview. The overview
+  read them in the same query, so these calls run no query.
+- `Path`: the names of the unit and the units above it, the root first, joined with `" / "`. An example is
+  `Harbor Works / North`.
+- `Placements`: the units where the seat is placed. A seat can be placed at several units, at most once per unit. A
+  placement gives no permission by itself. The roles granted at it do.
+- `IsPrimary`: at most one placement of a seat is its primary one, for example the person's home unit. The first
+  seat's placement at the root is primary.
+- `grant.AppliesAt(overview.AsOf)` tells whether a grant applies at `AsOf`, the moment the overview describes.
+- `permission.AtTenant` is `true` when the seat holds the permission at the root, so in the whole tenant.
 
 ### Try it
 
@@ -964,24 +1105,33 @@ X-Dev-User: d0000000-0000-4000-8000-000000000001
 Tenant: harbor
 ```
 
-Ada's seat: placed at `Harbor Works`, with the role Administrator, and every permission `atTenant: true`, reaching
-`Harbor Works`. Without the `Tenant` header the request is refused: it needs a seat, and without a tenant there is none.
+The response shows Ada's seat. It is placed at `Harbor Works` with the role Administrator. Every permission has
+`atTenant: true` and reaches `Harbor Works`.
+
+The request needs a seat in the tenant it names. The tenant selection from step 5 refuses it in two cases:
+
+- without the `Tenant` header: `tenancy.tenant-required`;
+- with `Tenant: meadow`: `tenancy.not-seated`, because Ada has no seat in Meadow Gardens. A slug of a tenant that
+  does not exist gets the same answer, so a caller cannot find out which tenants exist.
 
 ## Step 8: a unit and a seat
 
-**Where we are.** A tenant with its root, and Ada.
+**Where we are.** Harbor Works has its root unit and one seat, Ada's.
 
-**Why now.** Roles are given at units, to seats. Both have to exist before step 9 gives one.
+**Why now.** Step 9 gives a seat a role at a unit. The unit and the seat must exist first.
 
-**What we want.** North below Harbor Works, Rhea's seat placed at North, and the list of units a seat reads.
+**What we want.** The units North and South Bay below Harbor Works, a seat for Rhea placed at North, and a request
+that lists the units a seat can read.
 
 ### The idea: a permission, and where it must be held
 
 - `[RequiresPermission(...)]`: the caller must hold that permission.
-- **Where**: without a marker, for the whole tenant. `[AtUnit]` on a parameter: at that unit, or above it.
-- Tenancy's use case checks again where it acts, and adds its own rules: the door is the first check, not the only one.
-- A rule only Harbor has, "no two units of one name below one parent", is Harbor's: a refusal of its own, in the
-  handler.
+- **Where**: without a marker, the caller must hold it for the whole tenant. With `[AtUnit]` on a parameter, the
+  caller must hold it at that unit or above it.
+- Tenancy's use case checks the permission again where it acts, and adds its own rules. So the check before the
+  handler is the first check, and the use case runs a second one.
+- Harbor has a rule of its own: "no two units with the same name below one parent". Harbor's handler checks this rule
+  and throws Harbor's own refusal.
 
 ### What you write
 
@@ -1016,7 +1166,7 @@ public sealed class AddUnitHandler(TenancyUseCases.OrganizationCommands organiza
 }
 ```
 
-**`Harbor.Tenancy.Application/Units/UnitRefusals.cs`**: Harbor's refusal, with a code a client reads.
+**`Harbor.Tenancy.Application/Units/UnitRefusals.cs`**: Harbor's refusal, with a code that a client can read.
 
 ```csharp {7,9-11}
 using DDDToolkit.Exceptions;
@@ -1104,7 +1254,7 @@ internal static class UnitsEndpoints
 }
 ```
 
-**`Harbor.Tenancy.Api/Seats/Rest/SeatsEndpoints.cs`**: `POST /seats` beside `GET /me`.
+**`Harbor.Tenancy.Api/Seats/Rest/SeatsEndpoints.cs`**: adds `POST /seats` next to `GET /me`.
 
 ```csharp {1,3,17-18,23}
 using Harbor.Tenancy.Application.Seats.AddSeat;
@@ -1133,7 +1283,7 @@ internal static class SeatsEndpoints
 }
 ```
 
-**`Harbor.Tenancy.Api/TenancyModule.cs`**: the module maps both.
+**`Harbor.Tenancy.Api/TenancyModule.cs`**: the module maps both groups of routes.
 
 ```csharp {3,18}
 using Harbor.Tenancy.Api.Development;
@@ -1162,38 +1312,59 @@ public static class TenancyModule
 
 ### What it does
 
-- `[AtUnit] Parent`: Ada needs `tenancy.units.manage` at the parent or above. She holds it at the root, so anywhere.
-- `AddUnitAsync`: the unit, and its place in the tree (`OrganizationUnitPaths`), in one save.
-- `ListUnitsAsync`: the units this seat reads: where it is placed, and everything below.
-- `AddSeatAsync` + `PlaceAsync`: a seat for a verified identity, placed at a unit. Adding needs `tenancy.seats.manage`
-  for the whole tenant.
+- `TenancyPermissions` holds the names of Tenancy's own permissions: `UnitsManage` is `tenancy.units.manage`,
+  `SeatsManage` is `tenancy.seats.manage`, and so on.
+- `[AtUnit] Parent`: Ada needs `tenancy.units.manage` at the parent unit or above it. She holds it at the root, so she
+  may add a unit anywhere.
+- `TenancyUseCases.OrganizationCommands` and `TenancyUseCases.SeatCommands`: Tenancy's use cases for units and for
+  seats.
+- `AddUnitAsync` writes the unit and its rows in `OrganizationUnitPaths` in one save.
+- `UnitStatus.Active`: a unit is `Active` or `Archived`. Nothing new is added to an archived unit, so Harbor's rule
+  compares names with active units only.
+- `new RefusalException(code, kind, message, arguments)`: `RefusalKind.Conflict` becomes `409` (step 5). The
+  arguments dictionary carries values a client may show, here the `Name`.
+- `ListUnitsAsync` returns the units this seat can read: the units where it is placed, and every unit below them.
+  `Depth` is how deep a unit is in the tree: the root has depth 1, North has depth 2.
+- `AddSeatAsync` adds a seat for a verified identity: the user id from the sign-in, here the `X-Dev-User` id. Adding a
+  seat needs `tenancy.seats.manage` for the whole tenant.
+- `PlaceAsync` places the seat at a unit. It needs `tenancy.seats.manage` at that unit. `primary: true` makes this
+  placement the seat's primary one.
 
 ### Try it
 
 As Ada (`X-Dev-User` Ada's id, `Tenant: harbor`):
 
 1. `POST /units` with `{ "parent": "<root id>", "name": "North" }`: `200`, North's id.
-2. The same again: `409`, `units.name-taken`. Harbor's rule.
+2. The same request again: `409`, `units.name-taken`, from Harbor's rule.
 3. `POST /seats` with `{ "identity": "d0000000-0000-4000-8000-000000000002", "unit": "<North's id>" }`: Rhea's seat.
-4. `GET /units`: Harbor Works, and `Harbor Works / North` below it.
+4. `POST /units` with `{ "parent": "<root id>", "name": "South Bay" }`: `200`.
+5. `GET /units`: Harbor Works, with `Harbor Works / North` and `Harbor Works / South Bay` below it.
 
 ## Step 9: a role at a unit
 
-**Where we are.** Rhea has a seat at North, and no role: she may do nothing yet.
+**Where we are.** Rhea has a seat at North and no role, so she may do nothing yet.
 
-**Why now.** This is the point of Tenancy: a permission given at one place, reaching below it and nowhere else.
+**Why now.** This step shows the main rule of Tenancy. A role granted at a unit gives its permissions at that unit and
+at every unit below it. It gives them nowhere else.
 
-**What we want.** Ada makes a role "Area manager" with `tenancy.units.manage`, and gives it to Rhea at North. Rhea
-may then add units below North, and not below the root.
+**What we want.** Ada makes a role "Area manager" with `tenancy.units.manage`, and grants it to Rhea at North. Rhea
+may then add units below North. She may not add units below the root or below South Bay.
 
-### The idea: a role of the tenant's own, granted at a unit
+### The idea: a tenant's own role, granted at a unit
 
-- **Making a role** is the tenant's own work, if your application offers it: here a request that requires
-  `tenancy.roles.manage` for the whole tenant.
-- **Granting** gives a role to a seat at a unit. It requires `tenancy.grants.manage` at that unit.
-- **Reach**: a grant at North counts at North and below ([overview](overview.md#reach-a-permission-counts-below-where-it-is-given)).
-- **Containment**: a seat gives a permission that manages access only where it holds it itself, and never to itself
-  ([what your application decides](overview.md#what-your-application-decides)).
+- **Making a role**: a tenant can make its own roles, if your application has a request for it. Harbor's request
+  requires `tenancy.roles.manage` for the whole tenant.
+- **Granting** gives a role to a seat at a unit. It requires `tenancy.grants.manage` at that unit. The seat must be
+  placed at that unit, so Rhea's placement at North (step 8) comes first.
+- **Reach**: a grant at North counts at North and at every unit below North ([overview](overview.md#reach-a-permission-counts-below-where-it-is-given)).
+- **Permissions that manage access** give power over other people's access. All five of Tenancy's own permissions
+  are marked so: `tenancy.settings.manage`, `tenancy.units.manage`, `tenancy.seats.manage`, `tenancy.grants.manage`
+  and `tenancy.roles.manage`.
+- **Containment**: a seat may grant a role with a permission that manages access only at a unit where the seat holds
+  that permission itself, for at least as long as the grant lasts. A seat never grants such a role to itself
+  ([what your application decides](overview.md#what-your-application-decides)). Containment is on unless your
+  application turns off `ContainAccessManagingPermissions`. Area manager holds `tenancy.units.manage`, so containment
+  applies here. Ada holds that permission at the root with no end, so her grant passes.
 
 ### What you write
 
@@ -1326,11 +1497,17 @@ public static class TenancyModule
 
 ### What it does
 
-- `CreateAsync`: refuses a permission the catalogue does not know (`tenancy.unknown-permission`) and a name the tenant
-  uses already (`tenancy.role-name-taken`).
-- `GrantAsync(..., until: null, ...)`: from now, for good. `until` would end it at a moment.
-- The check at the door asks `tenancy.grants.manage` at the unit; `GrantAsync` adds containment and "never to
-  yourself".
+- `TenancyUseCases.RoleCommands`: Tenancy's use cases for roles.
+- `CreateAsync` refuses a permission the catalogue does not know (`tenancy.unknown-permission`). It also refuses a
+  name the tenant already uses (`tenancy.role-name-taken`).
+- `GrantAsync(..., until: null, ...)`: the grant starts now and has no end. A value for `until` ends the grant at
+  that moment.
+- `reason: null`: a text of at most 500 characters that says why the role was granted. Tenancy stores it on the
+  grant. `null` stores no reason.
+- The check before the handler requires `tenancy.grants.manage` at the unit. `GrantAsync` checks this again and adds
+  the containment rules.
+- `ICommand` without a type argument is a command with no result. Its handler returns `Unit.Value`, Mediator's empty
+  result, and the route returns `204` with `Results.NoContent()`.
 
 ### Try it
 
@@ -1338,9 +1515,181 @@ public static class TenancyModule
    ["tenancy.units.manage"] }`.
 2. As Ada: `POST /grants` with Rhea's seat, North, and that role.
 3. As Rhea (`X-Dev-User` Rhea's id): `POST /units` below North, "North Coast": `200`.
-4. As Rhea: `POST /units` below the root: `403`, `tenancy.not-permitted`. Her grant reaches North and below only.
-5. As Rhea: `GET /me`: `tenancy.units.manage`, `atTenant: false`, reaching `Harbor Works / North` and
-   `Harbor Works / North / North Coast`.
+4. As Rhea: `POST /units` below South Bay: `403`, `tenancy.not-permitted`. Her grant reaches North and the units
+   below it, and South Bay is not below North.
+5. As Rhea: `GET /me`: the response lists `tenancy.units.manage` with `atTenant: false`, reaching
+   `Harbor Works / North` and `Harbor Works / North / North Coast`.
+
+## Step 10: the units a caller may manage
+
+**Where we are.** Rhea holds Area manager at North. For a request that requires `tenancy.units.manage` at a unit,
+the check lets her through at North and North Coast, and refuses her at other units.
+
+**Why now.** A screen needs to know these units before it sends a request. It shows the "Add unit" button only at the
+units where the caller may add one. Your code gets the list from Tenancy with a query.
+
+**What we want.** `GET /units/manageable`: the units where the caller holds `tenancy.units.manage`. Ada gets all four
+units of Harbor Works. Rhea gets North and North Coast.
+
+### The idea: Tenancy's queries, inside your own query
+
+- Your code reads the current caller through `ITenancy`. `tenancy.Caller` returns the caller.
+  `tenancy.RequireTenant()` returns the caller's tenant and seat.
+- `tenancy.In(db)` returns Tenancy's queries over a context. `UnitsWhereIHold(permission)` returns an `IQueryable`.
+  Entity Framework puts it into your own query as a subquery, so the database runs one statement.
+- The query needs the context, so it lives in the infrastructure layer. The application layer declares an interface
+  for it, `IUnitReads`, the same way as for a repository.
+- Another module can run the same query over its own context, once that context maps Tenancy's read model
+  ([Who may do what](who-may-do-what.md)).
+
+### What you write
+
+**`Harbor.Tenancy.Application/Units/IUnitReads.cs`**: the interface the application layer uses. It does not mention
+the database.
+
+```csharp {3,5,8}
+namespace Harbor.Tenancy.Application.Units;
+
+public interface IUnitReads
+{
+    Task<IReadOnlyList<ManageableUnit>> ManageableAsync(CancellationToken cancellationToken);
+}
+
+public sealed record ManageableUnit(OrganizationUnitId Id, string Name);
+```
+
+**`Harbor.Tenancy.Application/Units/ManageableUnits/ManageableUnits.cs`**
+
+```csharp {3-4,6,8-9}
+namespace Harbor.Tenancy.Application.Units.ManageableUnits;
+
+[InTenant]
+public sealed record ManageableUnits : IQuery<IReadOnlyList<ManageableUnit>>, ITenancyRequest;
+
+public sealed class ManageableUnitsHandler(IUnitReads units) : IQueryHandler<ManageableUnits, IReadOnlyList<ManageableUnit>>
+{
+    public async ValueTask<IReadOnlyList<ManageableUnit>> Handle(ManageableUnits query, CancellationToken cancellationToken)
+        => await units.ManageableAsync(cancellationToken);
+}
+```
+
+**`Harbor.Tenancy.Infrastructure/Persistence/UnitReads.cs`**: your query, with Tenancy's query inside it.
+
+```csharp {11,15-16,18-23}
+using DDDToolkit.Supporting.Tenancy.Access;
+using DDDToolkit.Supporting.Tenancy.Catalogue;
+using DDDToolkit.Supporting.Tenancy.EntityFramework;
+using Harbor.Tenancy.Application.Units;
+using Harbor.Tenancy.Contracts.ValueObjects;
+using Harbor.Tenancy.Domain;
+using Microsoft.EntityFrameworkCore;
+
+namespace Harbor.Tenancy.Infrastructure.Persistence;
+
+internal sealed class UnitReads(TenancyContext db, ITenancy<TenantId, SeatId, OrganizationUnitId, RoleId> tenancy) : IUnitReads
+{
+    public async Task<IReadOnlyList<ManageableUnit>> ManageableAsync(CancellationToken cancellationToken)
+    {
+        // Entity Framework puts this query into the one below, as a subquery.
+        var held = tenancy.In(db).UnitsWhereIHold(TenancyPermissions.UnitsManage);
+
+        return await db.Set<Organization>()
+            .SelectMany(organization => organization.Units)
+            .Where(unit => held.Contains(unit.Id))
+            .OrderBy(unit => unit.Name)
+            .Select(unit => new ManageableUnit(unit.Id, unit.Name))
+            .ToListAsync(cancellationToken);
+    }
+}
+```
+
+**`Harbor.Tenancy.Infrastructure/TenancyInfrastructure.cs`**: registers `UnitReads`.
+
+```csharp {5,26}
+using DDDToolkit.EntityFramework;
+using DDDToolkit.Supporting.Tenancy.EntityFramework;
+using DDDToolkit.Supporting.Tenancy.Postgres;
+using Harbor.Tenancy.Application.Access;
+using Harbor.Tenancy.Application.Units;
+using Harbor.Tenancy.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace Harbor.Tenancy.Infrastructure;
+
+public static class TenancyInfrastructure
+{
+    public static IServiceCollection AddTenancyInfrastructure(this IServiceCollection services, string connectionString)
+    {
+        services.AddDDDToolkitEntityFramework(options => options.UseOutbox<TenancyContext>(outbox =>
+            outbox.AddTenancyDomainEvents()));
+
+        services.AddDbContext<TenancyContext>((provider, options) => options
+            .UseNpgsql(connectionString)
+            .UseDDDToolkit(provider));
+
+        services.AddTenancy<TenancyContext>();
+        services.AddTenancyPostgres();
+        services.AddTenancyAccess<ITenancyRequest, TenancyContext>();
+        services.AddScoped<IUnitReads, UnitReads>();
+        return services;
+    }
+}
+```
+
+**`Harbor.Tenancy.Api/Units/Rest/UnitsEndpoints.cs`**: adds the new route next to the others.
+
+```csharp {3,22-23}
+using Harbor.Tenancy.Application.Units.AddUnit;
+using Harbor.Tenancy.Application.Units.ListUnits;
+using Harbor.Tenancy.Application.Units.ManageableUnits;
+using Harbor.Tenancy.Contracts.ValueObjects;
+using Mediator;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
+
+namespace Harbor.Tenancy.Api.Units.Rest;
+
+internal static class UnitsEndpoints
+{
+    public static IEndpointRouteBuilder MapUnitsEndpoints(this IEndpointRouteBuilder routes)
+    {
+        routes.MapGet("/units", async (ISender sender, CancellationToken cancellationToken)
+            => Results.Ok(await sender.Send(new ListUnits(), cancellationToken)));
+
+        routes.MapPost("/units", async (NewUnit body, ISender sender, CancellationToken cancellationToken)
+            => Results.Ok(new { unit = await sender.Send(new AddUnit(body.Parent, body.Name), cancellationToken) }));
+
+        routes.MapGet("/units/manageable", async (ISender sender, CancellationToken cancellationToken)
+            => Results.Ok(await sender.Send(new ManageableUnits(), cancellationToken)));
+
+        return routes;
+    }
+
+    public sealed record NewUnit(OrganizationUnitId Parent, string Name);
+}
+```
+
+### What it does
+
+- `ITenancy<TenantId, SeatId, OrganizationUnitId, RoleId>`: the four type arguments are your id types, so the
+  queries return your ids.
+- `tenancy.In(db)` returns Tenancy's queries for the current caller over `TenancyContext`, at the moment of the call.
+- `UnitsWhereIHold(TenancyPermissions.UnitsManage)` returns the units where a grant gives the caller the permission,
+  and every unit below them. A grant that has ended gives nothing.
+- `held.Contains(unit.Id)`: Entity Framework writes this as a subquery. The database runs one statement.
+- `db.Set<Organization>()`: Tenancy's query filter returns only the caller's tenant's organization, so the query sees
+  only that tenant's units. The units belong to the `Organization` aggregate, so the query reaches them through
+  `organization.Units`.
+- `AddScoped<IUnitReads, UnitReads>()`: one instance per request, like the context.
+- `[InTenant]`: any seat in the tenant may send the request. Each caller gets only the units that caller may manage,
+  so the request needs no permission.
+
+### Try it
+
+1. As Ada: `GET /units/manageable`: Harbor Works, North, North Coast and South Bay.
+2. As Rhea: `GET /units/manageable`: North and North Coast.
 
 ## What you built
 
@@ -1351,7 +1700,8 @@ public static class TenancyModule
 | 6 | A tenant, created as system work |
 | 7 | `GET /me`: what a seat is and holds |
 | 8 | Units and seats, behind permissions held at a unit |
-| 9 | A role of the tenant's own, granted at a unit, reaching below it |
+| 9 | A tenant's own role, granted at a unit, counting at that unit and below |
+| 10 | Tenancy's queries inside your own query: the units a caller may manage |
 
-Next: access to one thing, such as a board with its own members: the [Membership tutorial](../membership/tutorial.md)
-adds it to Harbor.
+Next, the [Membership tutorial](../membership/tutorial.md) adds boards to Harbor. A board has its own members, and
+membership gives access to that one board.

@@ -5,102 +5,125 @@ sidebar_label: Your module
 
 # Tenancy: your module
 
-The options, variants and edge cases of the module that holds Tenancy, the toolkit's first
-[supporting domain](../writing-a-supporting-domain.md): its packages, classes, ids, context and registration, and how
-your code names the use cases. The basic path is the [tutorial](tutorial.md); the words are in the
-[overview](overview.md).
+The module that holds Tenancy is the toolkit's first [supporting domain](../writing-a-supporting-domain.md). This
+page covers the module's options, variants and edge cases: its packages, classes, ids, context and registration, and
+how your code names the use cases. The [tutorial](tutorial.md) shows the basic path. The [overview](overview.md)
+defines the words.
 
 ## The packages
 
-| Package | What it holds | Where it goes |
+| Package | What it contains | Where it goes |
 |---|---|---|
-| `DDDToolkit.Supporting.Tenancy` | The model, its rules, its use cases and their generators. No database. | The domain project, which declares your classes; a contracts project with `[assembly: GenerateTenancyIds]` |
-| `DDDToolkit.Supporting.Tenancy.EntityFramework` | `AddTenancy()` for your context, the organization tree as a closure table, the access questions as Entity Framework queries. Every provider. | The infrastructure project, which has the context |
-| `DDDToolkit.Supporting.Tenancy.Postgres` | The same questions as SQL functions and row level security (RLS) policies, through the [export](../supabase.md). Brings the package above. | The infrastructure project, on Postgres |
+| `DDDToolkit.Supporting.Tenancy` | The model, its rules, its use cases and their generators. No database code. | The domain project, which declares your classes. Also a contracts project with `[assembly: GenerateTenancyIds]`. |
+| `DDDToolkit.Supporting.Tenancy.EntityFramework` | `AddTenancy()` for your context, the organization tree as a closure table, and Tenancy's queries as Entity Framework queries. It works with every provider. | The infrastructure project, which has the context |
+| `DDDToolkit.Supporting.Tenancy.Postgres` | Tenancy's queries as SQL functions, and row level security (RLS) policies, written by the [export](../supabase.md). It references the Entity Framework package. | The infrastructure project, on Postgres |
 
-They are published as `Temp.DDDToolkit.Supporting.Tenancy*`, like [every 3.x package](../migrating-to-3.md#the-package-ids),
-at the version of every other `Temp.DDDToolkit.*` package, and as prereleases for now (`--prerelease`): names can
-change until a release.
+The packages are published as `Temp.DDDToolkit.Supporting.Tenancy*`, like
+[every 3.x package](../migrating-to-3.md#the-package-ids). Their version is the version of every other
+`Temp.DDDToolkit.*` package. For now they are prereleases (`--prerelease`), and names can change until a release.
 
 ## The model
 
-| | Holds | Rules the package keeps |
+| | Contains | Rules the package enforces |
 |---|---|---|
-| **Tenant** | Its slug, status and shape | Status moves one way; closed is final. Shape goes only from flat to hierarchical. |
-| **Organization** | The tree of **OrganizationUnits** | One root, no cycles, depth at most 32. A unit is archived, never deleted. |
-| **Seat** | A person in a tenant: **Placements** at units, **RoleGrants** at each | One placement per unit, one primary. Only active roles are granted. The seat's person never changes. |
-| **Role** | A name and its **Permissions** | Only catalogue permissions, with the permissions they imply expanded. |
-| **Catalogue** | The permissions and the **RolePacks** (starter roles) | One administrators' pack per shape, Tenancy's own when you declare none. A permission is retired, never deleted. Permissions that manage access are marked. |
+| **Tenant** | Its slug, status and shape | A tenant goes from provisioned to active. It can be suspended and reactivated. A closed tenant stays closed. The shape changes only from flat to hierarchical. |
+| **Organization** | The tree of **OrganizationUnits** | One root, no cycles, a depth of at most 32. A unit is archived and never deleted. |
+| **Seat** | A person in a tenant, with **Placements** at units and **RoleGrants** at each placement | One placement per unit, and one primary placement. Only active roles are granted. The seat's identity never changes. |
+| **Role** | A name and its **Permissions** | Only permissions from the catalogue. The permissions they imply are added. |
+| **Catalogue** | The permissions and the **RolePacks** (starter roles) | One administrators' pack per shape. Tenancy adds its own pack when you declare none. A permission is retired and never deleted. Permissions that manage access are marked. |
 
-- Tenant, Organization, Seat and Role are aggregates, referring to each other by id.
-- The catalogue is data, not a class: Tenancy's permissions, your modules', and what your application adds, which
-  may be nothing ([What the catalogue is for](roles-and-permissions.md#what-the-catalogue-is-for)).
+- Tenant, Organization, Seat and Role are aggregates. They refer to each other by id.
+- The catalogue is not an aggregate. It is data in code: Tenancy's permissions, your modules' permissions, and an
+  optional part that your application adds
+  ([What the catalogue is for](roles-and-permissions.md#what-the-catalogue-is-for)).
 
-Rules that span aggregates live in the use cases, guarded against concurrent changes
+The use cases enforce the rules that involve more than one aggregate. These use cases first take the tenant's access
+revision, so two concurrent changes cannot both commit
 ([Who may give a role](roles-and-permissions.md#who-may-give-a-role)):
 
 - The last administrator of a tenant cannot be removed.
-- A role that manages access is given or taken away only by a seat that holds its access-managing permissions there,
-  for at least as long, and never by a seat to itself. The same holds for suspending, deactivating or reactivating a
-  seat that holds one, and for moving a unit away from it or under it.
-- Any other role: whoever holds `tenancy.grants.manage` at the unit it is given at.
+- While containment is on, only a seat that holds a role's access-managing permissions at the unit, for at least as
+  long as the grant runs, can give or take away a role that manages access. A seat never gives itself a role that manages access.
+- The containment rule also covers suspending, deactivating or reactivating a seat with a role that manages access.
+  It also covers moving a unit, because a move changes which grants reach the unit.
+- Any other role needs `tenancy.grants.manage` at the unit where it is given.
 
-## Adopting it, step by step
+## Adopting Tenancy step by step
 
 What a module needs, in order:
 
 | What | Basic path | Options and variants |
 |---|---|---|
 | The packages | [Step 1](tutorial.md#step-1-the-modules-projects-and-their-packages) | [The packages](#the-packages) |
-| Your classes and ids | [Step 2](tutorial.md#step-2-your-classes) | [The switch](#the-shortest-start-the-switch), [your own classes](#your-own-classes), [new ids](#how-a-new-id-is-made) |
-| A context of the module, a migration of your own | [Step 3](tutorial.md#step-3-where-it-is-stored) | [The context and the registration](#the-context-and-the-registration) |
-| The registration; a catalogue only when you need one | [Step 4](tutorial.md#step-4-the-modules-registration) | [The registration](#the-context-and-the-registration), [the catalogue](roles-and-permissions.md#a-module-states-its-permissions-once) |
-| Who is calling, per request: `ITenantSelection` | [Step 5](tutorial.md#step-5-the-host) | [How the tenant reaches a policy](postgres.md#how-the-tenant-reaches-a-policy) |
-| A tenant, provisioned as system work | [Step 6](tutorial.md#step-6-provisioning-a-tenant) | [System work](keeping-tenants-apart.md#system-work) |
-| Your own tables kept to a tenant: `ScopeToTenant` | | [Keeping tenants apart](keeping-tenants-apart.md) |
-| Asking in your modules | [Steps 7-8](tutorial.md#step-7-who-am-i) | [Who may do what](who-may-do-what.md), [names](names-and-languages.md#names) |
-| People managing access, through requests of your own | [Step 9](tutorial.md#step-9-a-role-at-a-unit) | [Who may give a role](roles-and-permissions.md#who-may-give-a-role) |
-| What else you need | | [Invitations](invitations.md), [languages](names-and-languages.md#languages), [operators](operators-and-history.md#operators), [who changed a row](operators-and-history.md#who-changed-a-row), [access history](operators-and-history.md#access-history), [packs you change later](roles-and-permissions.md#packs-after-provisioning) |
-| On Postgres, RLS under all of it | Steps 1-5 | [Setting it up](postgres.md#setting-it-up) |
+| Your classes and ids | [Step 2](tutorial.md#step-2-your-classes) | [Quick start](#quick-start), [your own classes](#your-own-classes), [new ids](#how-a-new-id-is-made) |
+| The module's context, and your migration | [Step 3](tutorial.md#step-3-where-it-is-stored) | [The context and the registration](#the-context-and-the-registration) |
+| The registration, and a catalogue when you need one | [Step 4](tutorial.md#step-4-the-modules-registration) | [The registration](#the-context-and-the-registration), [the catalogue](roles-and-permissions.md#declaring-a-modules-permissions) |
+| The caller of each request, through `ITenantSelection` | [Step 5](tutorial.md#step-5-the-host) | [How the tenant reaches a policy](postgres.md#how-the-tenant-reaches-a-policy) |
+| Provisioning a tenant as system work | [Step 6](tutorial.md#step-6-provisioning-a-tenant) | [System work](keeping-tenants-apart.md#system-work) |
+| Your tables scoped to a tenant, with `ScopeToTenant` | | [Keeping tenants apart](keeping-tenants-apart.md) |
+| Queries in your modules | [Steps 7-8](tutorial.md#step-7-who-am-i) | [Who may do what](who-may-do-what.md), [names](names-and-languages.md#names) |
+| Requests through which people manage access | [Step 9](tutorial.md#step-9-a-role-at-a-unit) | [Who may give a role](roles-and-permissions.md#who-may-give-a-role) |
+| Other features | | [Invitations](invitations.md), [languages](names-and-languages.md#languages), [operators](operators-and-history.md#operators), [who changed a row](operators-and-history.md#who-changed-a-row), [access history](operators-and-history.md#access-history), [packs you change later](roles-and-permissions.md#packs-after-provisioning) |
+| Row level security on Postgres | Steps 1-5 | [Setting it up](postgres.md#setting-it-up) |
 
 The [sample](the-sample.md#who-may-do-what-in-the-sample) is an application built this way.
 
-## The shortest start: the switch
+## Quick start
 
-One line in the project your classes belong to:
+Add one line to the project your classes belong to. The docs call this attribute the **switch**:
 
 ```csharp
 [assembly: GenerateTenancyClasses]
 ```
 
-It writes each of Tenancy's classes the project leaves out, as the package ships it:
+The generator then writes every Tenancy class that the project does not declare, as the package ships it:
 
 - `Tenant`, `Organization`, `OrganizationUnit`, `Role` and `Seat`, each declared with its template.
-- `TenantId`, `OrganizationUnitId`, `RoleId` and `SeatId`: `[EntityId<Guid>]` without a prefix, published with
-  `[ModuleContract]`. An organization shares its tenant's id: there is no `OrganizationId`.
-- Public, in the project's root namespace; each one's documentation says how to declare it yourself.
-- Not the invitation: declaring that class is what turns [invitations](invitations.md) on.
-- Each is the package's whole class: the role's `PermissionsFromPack` is a column your migration maps like any other
+- `TenantId`, `OrganizationUnitId`, `RoleId` and `SeatId`, each an `[EntityId<Guid>]` without a prefix and
+  published with `[ModuleContract]`. An organization uses its tenant's id, so there is no `OrganizationId`.
+- Each type is public and in the project's root namespace. Its documentation comment says how to declare the type
+  yourself.
+- The invitation is not written. Declaring the invitation class turns [invitations](invitations.md) on.
+- Each written class has every member of the package's class. For example, the role's `PermissionsFromPack` is a
+  column, and your migration maps it like any other column
   ([Packs after provisioning](roles-and-permissions.md#packs-after-provisioning)).
 
-How it decides, per class and per id, what to write; nothing you declare is replaced:
+The diagram shows how the generator decides, for each class and each id, what to write. It never replaces a type you
+declare. Purple: the switch. Green: written by the generator. Grey: your type, used as you wrote it.
 
 ```mermaid
 flowchart TB
-    Switch["[assembly:<br/>GenerateTenancyClasses]"] --> Class{"a class of the template,<br/>in this project or<br/>a project of its module?"}
-    Class -- "yes" --> Yours["yours,<br/>as you wrote it"]
-    Class -- "no" --> Written["written: Tenant,<br/>Organization, Role ..."]
-    Written --> Id{"a type of<br/>the id's name?"}
-    Id -- "yes" --> Taken["taken"]
-    Id -- "no" --> WrittenId["written: TenantId,<br/>RoleId ..."]
-    Yours & Taken & WrittenId --> Generators{{"every generator: base class,<br/>converters, AddTenancy(),<br/>TenancyUseCases"}}
+    theSwitch["<b>[assembly: GenerateTenancyClasses]</b><br/><small>the switch</small>"]
+    classQ{"Does this project, or a project<br/>of its module, declare the class?"}
+    yours["<b>Your class</b><br/><small>used as you wrote it</small>"]
+    written["<b>Class written</b><br/><small>Tenant, Organization, Role ...</small>"]
+    idQ{"Does a type with<br/>the id's name exist?"}
+    taken["<b>Your id</b><br/><small>used as you wrote it</small>"]
+    writtenId["<b>Id written</b><br/><small>TenantId, RoleId ...</small>"]
+    generators["<b>Every generator</b><br/><small>base class, converters,<br/>AddTenancy(), TenancyUseCases</small>"]
+    theSwitch --> classQ
+    classQ -- "yes" --> yours
+    classQ -- "no" --> written
+    written --> idQ
+    idQ -- "yes" --> taken
+    idQ -- "no" --> writtenId
+    yours --> generators
+    taken --> generators
+    writtenId --> generators
+    classDef strong fill:#5b2ec933,stroke:#5b2ec9,stroke-width:2px
+    classDef good fill:#1f8a5b26,stroke:#1f8a5b
+    classDef muted fill:none,stroke:#9a9ab5,stroke-dasharray:4 3,color:#9a9ab5
+    class theSwitch strong
+    class written,writtenId good
+    class yours,taken muted
 ```
 
-- "A project of its module" is one of the same module that this project references.
-- A written class takes the id of a declared class it shares one with: an organization written beside your
-  `ShopTenant` over `ShopTenantId` is declared over `ShopTenantId`.
-- Every generator writes for written classes what it writes for declared ones, a [Membership](../membership/overview.md)
-  member list over a written `SeatId` included. Projects above see them as they see yours.
+- "A project of its module" means a project of the same module that this project references.
+- A written class takes the id of a declared class that shares the id. Example: you declare `ShopTenant` over
+  `ShopTenantId`, so the written organization is declared over `ShopTenantId` too.
+- Every generator writes the same code for a written class as for a declared class. This includes a
+  [Membership](../membership/overview.md) member list over a written `SeatId`. Projects above see written classes in
+  the same way as declared ones.
 
 <details>
 <summary>Show the code: what the switch writes for a class and for an id</summary>
@@ -131,51 +154,61 @@ namespace Shop.Tenants;
 public readonly partial record struct RoleId;
 ```
 
-The base class, the constructor, the rules and the id's members come from the generators that write them for a
-declared class and id, in files of their own.
+Other generators write the base class, the constructor, the rules and the id's members in separate files, as they do
+for a declared class and id.
 
 </details>
 
-**A name the switch cannot use** is [DDD00066](../diagnostics.md#ddd00066), once, at the switch, and that class is
-not written:
+### Names the switch cannot use
 
-- a type of its name in the root namespace (yours or a referenced project's), or a namespace of that name (a folder
-  `Organization/` directly under the project);
-- for its id: a type of that name that is no entity id (mark it `[EntityId<T>]`), an id the generator writes for an
-  `[AggregateRoot<Guid>]` or `[Entity<Guid>]` class of yours, or two ids of one name.
-- A class that needs the one left out (a seat needs its role) is left out too, with no id for either; `AddTenancy()`
-  and `TenancyUseCases` stand back rather than report it again.
-- A class of yours in the way that should be the package's becomes it with the template:
-  `[RoleAggregate<RoleId>] public sealed partial class Role`.
+When the switch cannot use a name, it reports [DDD00066](../diagnostics.md#ddd00066) once, on the switch line, and
+does not write that class. This happens in these cases:
 
-**Seen only from the next project up:**
+- A type with the class's name exists in the root namespace, in your project or in a referenced project.
+- A namespace with the class's name exists, for example a folder `Organization/` directly under the project.
+- A type with the id's name exists and is not an entity id. Mark it `[EntityId<T>]`.
+- The generator already writes an id with that name for one of your `[AggregateRoot<Guid>]` or `[Entity<Guid>]`
+  classes.
+- Two types with the id's name exist.
 
-- Other generators of the switch's own project do not see the written classes: an `[ObjectType<Role>]` over a written
-  `Role` does not compile there, nor does a row access rule that names one. Put those in a project above, or declare
-  that class or id yourself, one line. A written id as the key of a
-  [resource access contract](../row-level-security.md#a-resources-access-asked-by-its-id) works in the same project.
-- Code outside the root namespace imports the written types with `global using Shop.Tenants;`: a file's using does
-  not reach the files the generators write for your classes.
+A class that needs a class the switch left out is left out too, and neither class gets an id. Example: a seat needs
+its role. `AddTenancy()` and `TenancyUseCases` are then not written either, and they report no second error.
 
-**In a module split by layer**, the ids go in the contracts project, which other modules reference:
-`[assembly: GenerateTenancyIds]` there, `[assembly: GenerateTenancyClasses]` in the domain project, which takes those
-ids. `GenerateTenancyIds` needs the contracts project to reference the Tenancy package; one that should not, as the
-sample's and the tutorial's, declares the four ids itself, one line each.
+When one of your classes is in the way and should become the package's class, add the template to it:
+`[RoleAggregate<RoleId>] public sealed partial class Role`.
+
+### Classes seen only from the next project up
+
+- Other generators in the switch's project do not see the written classes. So an `[ObjectType<Role>]` over a written
+  `Role` does not compile in that project, and neither does a row access rule that names a written class. Put that
+  code in a project above, or declare the class or id yourself in one line.
+- A written id works as the key of a
+  [resource access contract](../row-level-security.md#a-resources-access-asked-by-its-id) in the same project.
+- Code outside the root namespace imports the written types with `global using Shop.Tenants;`. A `using` in one file
+  does not reach the files that the generators write for your classes.
+
+### Modules split by layer
+
+In a module split by layer, the ids go in the contracts project, which other modules reference. Put
+`[assembly: GenerateTenancyIds]` in the contracts project and `[assembly: GenerateTenancyClasses]` in the domain
+project. The domain project then uses the ids from the contracts project. `GenerateTenancyIds` requires the contracts
+project to reference the Tenancy package. When the contracts project should not reference the package, declare the
+four ids there yourself, one line each. The sample and the tutorial do this.
 
 ## Your own classes
 
-Declare a class where it needs fields, rules or behaviour; the switch writes the rest. One seat of your own beside the
-switch is [tutorial step 2](tutorial.md#step-2-your-classes).
+Declare a class yourself when it needs fields, rules or behaviour. The switch writes the other classes.
+[Tutorial step 2](tutorial.md#step-2-your-classes) declares one seat class beside the switch.
 
-Without the switch you declare all five classes and four ids, with the names, key types and prefixes you choose. An
-id over anything but a `Guid` says how a new one is made ([How a new id is made](#how-a-new-id-is-made)):
+Without the switch, you declare all five classes and all four ids, with the names, key types and prefixes you choose.
+An id over any type other than `Guid` must say how a new id is made ([How a new id is made](#how-a-new-id-is-made)):
 
 ```csharp
 // Shop.Tenants.Contracts
 [EntityId<long>]
 public readonly partial record struct TenantId
 {
-    public static TenantId Create() => new(Snowflakes.Next());   // yours: a snowflake, or a number of a HiLo block
+    public static TenantId Create() => new(Snowflakes.Next());   // yours: a snowflake, or a number from a HiLo block
 }
 
 [EntityId<Guid>] public readonly partial record struct SeatId;
@@ -195,120 +228,129 @@ public sealed partial class ShopTenant
 [RoleAggregate<RoleId>] public sealed partial class ShopRole;
 ```
 
-The package's rules run for your classes before your own. Your classes, written or declared, are what Entity
-Framework maps ([Writing your own supporting domain](../writing-a-supporting-domain.md)).
+The package's rules run for your classes before your rules. Entity Framework maps your classes, written or declared
+([Writing your own supporting domain](../writing-a-supporting-domain.md)).
 
 ## How a new id is made
 
-Tenancy makes the id of every tenant, unit, seat, role and invitation it creates in code, before the save, by asking
-the id: `TSeatId.Create()`. So the change and its events know the id from the start; the database never makes one. A
-use case given an id (an import, seed data) uses that one.
+Tenancy creates the id of every tenant, unit, seat, role and invitation in code, before the save. It calls the static
+`Create()` of the id type, for example `TSeatId.Create()`. So the change and its events have the id from the start.
+The database never creates an id. A use case that receives an id, for an import or seed data, uses that id.
 
 | The id | Its `Create()` |
 |---|---|
-| `[EntityId<Guid>]`, the switch's included | Written by the generator: time-ordered, as `CreateSequential()` makes, which a database index keeps in order. One of your own wins. |
-| `[EntityId<long>]`, `<int>`, `<string>` | None: you declare it. For a `long`, a snowflake or a number of a HiLo block; for an `int`, which a 64-bit snowflake does not fit, the HiLo number. |
-| Written by hand, without `[EntityId<T>]` | Nothing from the generator: declare `Create()` and implement `ICreatableEntityId<TenantId>` yourself. |
+| `[EntityId<Guid>]`, including the switch's ids | Written by the generator. It makes a time-ordered id, the same as `CreateSequential()`, which keeps a database index in order. A `Create()` you write takes precedence. |
+| `[EntityId<long>]`, `<int>`, `<string>` | None. You declare it. For a `long`, use a snowflake or a number from a HiLo block. A 64-bit snowflake does not fit an `int`, so use the HiLo number there. |
+| An id written by hand, without `[EntityId<T>]` | Nothing from the generator. Declare `Create()` and implement `ICreatableEntityId<TenantId>` yourself. |
 
-- A class declared over an id without one is [DDD00067](../diagnostics.md#ddd00067) at build. Its code fix adds a
-  `Create()` that throws until you write its body.
-- Nothing is set in the registration: Entity Framework stores the id as a value the application gives
+- A class declared over an id without `Create()` is [DDD00067](../diagnostics.md#ddd00067) at build. Its code fix
+  adds a `Create()` that throws until you write the body.
+- The registration sets nothing for this. Entity Framework stores the id as a value that the application provides
   ([Ids the database never makes](../entity-framework.md#ids-the-database-never-makes)).
 
 ## The context and the registration
 
 The context is a plain `DbContext` of your module that calls `modelBuilder.AddTenancy(database: Database)`
-([tutorial step 3](tutorial.md#step-3-where-it-is-stored)); the registration is `services.AddTenancy<TContext>()`
-([step 4](tutorial.md#step-4-the-modules-registration)). What the tutorial leaves out:
+([tutorial step 3](tutorial.md#step-3-where-it-is-stored)). The registration is `services.AddTenancy<TContext>()`
+([step 4](tutorial.md#step-4-the-modules-registration)). The details the tutorial leaves out follow.
 
 **The context**
 
-- `Add{Module}Converters()` is named after your module: `AddTenantsConverters()` for a module Tenants
-  ([`Add{Module}Converters`](../entity-framework.md#adddddtoolkitconventions-and-addmoduleconverters)).
-- **Migrations** are yours, made from your model in the context's project. Their history is in the context's schema;
-  a design-time factory keeps it there with `UseDDDToolkitDesignTime()` after its provider
-  ([The migration history](../entity-framework.md#the-migration-history)). On Supabase, `[SupabaseMigrations]` writes
-  the factory ([Exporting as part of the build](../supabase.md#exporting-as-part-of-the-build)).
-- **Two rules the database holds too**, when `AddTenancy` is given `database`: one root per organization, one primary
-  placement per seat. Each is a filtered unique index on Postgres, SQLite and SQL Server; another provider, or no
-  `database`, gets neither. They refuse a write past the aggregates, such as your own SQL. With
-  [the second lock](postgres.md) the root index is required ([The index on a tenant's root](postgres.md#the-index-on-a-tenants-root)).
-- **Names**: tables `Tenants`, `Seats`, `SeatRoleGrants` and so on, and the two indexes after their tables, unless
-  you pass a `TenancyTableNames`. The rest follows your context's naming
+- `Add{Module}Converters()` is named after your module, for example `AddTenantsConverters()` for a module named
+  Tenants ([`Add{Module}Converters`](../entity-framework.md#adddddtoolkitconventions-and-addmoduleconverters)).
+- **Migrations.** You create the migrations from your model, in the context's project. Their history table is in the
+  context's schema. A design-time factory keeps the history there by calling `UseDDDToolkitDesignTime()` after its
+  provider ([The migration history](../entity-framework.md#the-migration-history)). On Supabase,
+  `[SupabaseMigrations]` writes the factory
+  ([Exporting as part of the build](../supabase.md#exporting-as-part-of-the-build)).
+- **Two rules in the database.** When `AddTenancy` receives `database`, it adds two filtered unique indexes. One
+  allows one root per organization. The other allows one primary placement per seat. Postgres, SQLite and SQL Server
+  get both indexes. Another provider, or a call without `database`, gets neither. The indexes refuse a write that
+  bypasses the aggregates, such as SQL you write. [Row level security on Postgres](postgres.md) requires the root
+  index ([The index on a tenant's root](postgres.md#the-index-on-a-tenants-root)).
+- **Names.** The tables are `Tenants`, `Seats`, `SeatRoleGrants` and so on. The two indexes are named after their
+  tables. Pass a `TenancyTableNames` to change these names. Every other name follows your context's naming
   ([Your own naming](postgres.md#your-own-naming) keeps a database in snake_case).
 
 **The registration**
 
 | Option, in `AddTenancy<TContext>(options => ...)` | Default | Set it when |
 |---|---|---|
-| `Catalogue` | None: Tenancy's and your modules' permissions, and the default administrators' role | You declare starter roles, permissions no module owns, or marks ([What the catalogue is for](roles-and-permissions.md#what-the-catalogue-is-for)) |
-| `TenantSelection.SeatedTokenRoles` | `authenticated` | Your tokens give people who hold seats another role |
+| `Catalogue` | None. The catalogue then holds Tenancy's permissions, your modules' permissions and the default administrators' role. | You declare starter roles, permissions that no module owns, or marks ([What the catalogue is for](roles-and-permissions.md#what-the-catalogue-is-for)) |
+| `TenantSelection.SeatedTokenRoles` | `authenticated` | Your tokens give people with seats another role |
 | `OperatorTokenRoles` | Empty | You have [operators](operators-and-history.md#operators) |
 
-All options: [`TenancyOptions`](reference/use-cases.md#tenancyoptionsttenantid-tseatid-tunitid-troleid).
+[`TenancyOptions`](reference/use-cases.md#tenancyoptionsttenantid-tseatid-tunitid-troleid) lists every option.
 
 - `services.AddTenancy<TContext>()` and `modelBuilder.AddTenancy()` are generated, closed over your classes and ids
   ([A registration closed over your classes](../writing-a-supporting-domain.md#a-registration-closed-over-your-classes)).
 - Both are internal to the project that declares your classes, or to a project of the same module that declares none,
-  such as the infrastructure project ([In a module split by layer](../writing-a-supporting-domain.md#in-a-module-split-by-layer)).
-  The module comes from `DDD_Module` ([A module named by its folder](../modules.md#a-module-named-by-its-folder)).
-- `AddTenancy` brings Tenancy's save check to every context `UseDDDToolkit` wires
+  such as the infrastructure project
+  ([In a module split by layer](../writing-a-supporting-domain.md#in-a-module-split-by-layer)). The module name comes
+  from `DDD_Module` ([A module named by its folder](../modules.md#a-module-named-by-its-folder)).
+- `AddTenancy` adds Tenancy's save check to every context that `UseDDDToolkit` wires
   ([Keeping tenants apart](keeping-tenants-apart.md)).
 
 ## Calling a use case
 
 Tenancy's use cases and their records are nested in one generic class,
 [`TenancyUseCases<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>`](reference/use-cases.md#tenancyusecasesttenant-ttenantid-torganization-tunit-tunitid-tseat-tseatid-trole-troleid).
-The generator closes it over your classes in the project that declares them, as `TenancyUseCases` without type
-parameters, in the global namespace, whatever your module is called. Every project that references that one names
-everything through it:
+In the project that declares your classes, the generator writes `TenancyUseCases` without type parameters, closed over
+your classes. The class is in the global namespace, whatever your module is called. Every project that references the
+declaring project names the use cases through `TenancyUseCases`:
 
-- **Services**, registered by `AddTenancy`, taken in a constructor: `TenancyUseCases.TenantCommands`,
+- **Services**, registered by `AddTenancy` and taken in a constructor: `TenancyUseCases.TenantCommands`,
   `.OrganizationCommands`, `.SeatCommands`, `.RoleCommands`, `.TenancyDirectory`.
-- **Records**: `TenancyUseCases.TenantToProvision`, `TenancyUseCases.SeatOverview` and the rest.
+- **Records**: `TenancyUseCases.TenantToProvision`, `TenancyUseCases.SeatOverview` and the others.
 - **Invitations**, with your invitation class and id: `TenancyUseCases.InvitationCommands<ShopInvitation, InvitationId>`.
-- **Static members**: `TenancyUseCases.BeginSystem()` and the rest ([Your ids, named once](#your-ids-named-once)).
+- **Static members**: `TenancyUseCases.BeginSystem()` and the others
+  ([Calls closed over your ids](#calls-closed-over-your-ids)).
 
-The first call most applications write provisions a tenant: [tutorial step 6](tutorial.md#step-6-provisioning-a-tenant).
+The first use case most applications call provisions a tenant
+([tutorial step 6](tutorial.md#step-6-provisioning-a-tenant)).
 
-C# finds a nested type through a derived class, so `TenancyUseCases.SeatCommands` is the package's own `SeatCommands`,
-the type `AddTenancy` registered. It is a class rather than a `global using` alias because an alias holds in its own
-project only, while a class reaches every project above and their generators read it.
+C# finds a nested type through a derived class. So `TenancyUseCases.SeatCommands` is the package's `SeatCommands`,
+the type that `AddTenancy` registered. `TenancyUseCases` is a class because a `global using` alias works only in its
+own project. A class reaches every project above, and the generators of those projects read it.
 
-**Naming it yourself**: one line in the project that declares the classes, beside `[assembly: Module]` or the switch.
-Every project above uses that name.
+### Another name for TenancyUseCases
+
+Add one line to the project that declares the classes, beside `[assembly: Module]` or the switch. Every project above
+uses the new name.
 
 ```csharp
 using DDDToolkit.Abstractions.Attributes;
 
-[assembly: TemplateFacadeName("TenancyUseCases", "ShopTenancy")]
+[assembly: TemplateFacadeName("TenancyUseCases", "ShopUseCases")]
 ```
 
-- Needed when two modules declare Tenancy's classes ([below](#two-modules-with-the-classes)); otherwise a matter of
-  taste. A **template facade** is the toolkit's word for this class: one a package asks for with
-  `[assembly: TemplateFacade]`.
-- The name must be one no namespace or type of yours in the global namespace has: `Shop`, the root of `Shop.*`
-  namespaces, is taken. A line that changes nothing is [DDD00076](../diagnostics.md#ddd00076).
+- You need this line when two modules declare Tenancy's classes ([below](#two-modules-with-tenancys-classes)).
+  Otherwise the line is optional. **Template facade** is the toolkit's term for a class like `TenancyUseCases`,
+  which a package requests with `[assembly: TemplateFacade]`.
+- The name must not be the name of a namespace or type of yours in the global namespace. For example, `Shop` is taken
+  when your namespaces start with `Shop.`. A line that changes nothing is [DDD00076](../diagnostics.md#ddd00076).
 
-**When it is not written, or stands back**
+### When TenancyUseCases is not written
 
-| Situation | What happens |
+| Situation | Result |
 |---|---|
-| A template with no class or several, or a class that does not meet what the use cases ask | No class, and [DDD00065](../diagnostics.md#ddd00065), as information on the first class: projects above would only see CS0246. Classes split over two projects of one module get it where they are complete. |
-| A type, namespace or alias named `TenancyUseCases` of yours in the global namespace | No class; yours stays. |
-| A project above with an alias of that name | CS0576: take the alias out. |
-| HotChocolate's generator in the declaring project | It does not see the class, one generator's output, and its code does not compile. A module of one project with GraphQL types over Tenancy's records keeps `global using TenancyUseCases = DDDToolkit.Supporting.Tenancy.UseCases.TenancyUseCases<...>;` there, which every generator reads; the class stands back for it. |
+| A template has no class or several classes, or a class does not meet the constraints of the use cases | No class is written. [DDD00065](../diagnostics.md#ddd00065) reports this as information on the first class, because projects above would see only CS0246. When a module's classes are split over two projects, the first project gets the message, and the second project, where the classes are complete, gets the class. |
+| A type, namespace or alias of yours named `TenancyUseCases` exists in the global namespace | No class is written. Your type stays. |
+| A project above has an alias with that name | CS0576. Remove the alias. |
+| HotChocolate's generator runs in the declaring project | HotChocolate's generator does not see the class, because the class is another generator's output, and its code does not compile. A module of one project with GraphQL types over Tenancy's records keeps `global using TenancyUseCases = DDDToolkit.Supporting.Tenancy.UseCases.TenancyUseCases<...>;` in that project. Every generator reads the alias, and the class is then not written. |
 
-### Two modules with the classes
+### Two modules with Tenancy's classes
 
-An application with two modules that declare Tenancy's classes (customers' tenants and partners') gets a
-`TenancyUseCases` in each module's domain project.
+An application can have two modules that declare Tenancy's classes, for example one for customers' tenants and one
+for partners' tenants. Each module's domain project then gets its own `TenancyUseCases`.
 
-- They meet in every project that references both, the host and your tests, where naming `TenancyUseCases` would be
-  CS0433. Such a project is told first, [DDD00075](../diagnostics.md#ddd00075), with the line that gives one of them
-  its own name, for the project where that module declares its classes.
-- A module whose domain project references the other's is told on its first Tenancy class: C# binds the name there
-  to its own class (CS0436), and no project above can name either (CS0433).
+- The two classes meet in every project that references both modules, such as the host and your tests. In those
+  projects, naming `TenancyUseCases` is CS0433. [DDD00075](../diagnostics.md#ddd00075) warns in each of those
+  projects, on the project file. The warning contains the line that gives one class another name, and names the project where that module declares its
+  classes.
+- When one module's domain project references the other module's domain project, the warning appears on the first
+  Tenancy class of the referencing project. In that project, C# binds the name to the project's own class (CS0436).
+  No project above can name either class (CS0433).
 
 **`Shop.Customers.Domain/Module.cs`**
 
@@ -326,49 +368,52 @@ using DDDToolkit.Supporting.Tenancy;
 ```csharp
 public sealed class Provisioning(CustomersTenancy.TenantCommands customers, TenancyUseCases.TenantCommands partners)
 {
-    // Customers' tenants through the name given, partners' through the package's.
+    // Customers' tenants through the new name, partners' tenants through the package's name.
 }
 ```
 
 The rest of these pages write `TenancyUseCases.`, as the sample does.
 
-## Your ids, named once
+## Calls closed over your ids
 
-Tenancy's calls that are generic over your ids come closed over them too, each kind as far as it can reach, so you
-write your ids only where you declare them:
+Tenancy's calls that are generic over your ids also come in a form closed over your ids. So you write your ids only
+where you declare them. The last column says where each closed form is available:
 
-| What | Generic over your ids | Closed over them | Where the closed form is |
+| What | Generic over your ids | Closed over your ids | Where the closed form is available |
 |---|---|---|---|
-| System work | `TenancyWork.BeginSystem<TenantId, SeatId>()` and the rest | `TenancyUseCases.BeginSystem()`, `BeginSystemIn(tenant)`, `BeginOperator`, `BeginOperatorIn`, `BeginTokenIn` | Every project that sees your classes: their module, the host, your tests |
-| The current caller | `TenancyCallers.Current<TenantId, SeatId>()` | `TenancyUseCases.CurrentCaller()` | The same |
-| Registrations | `outbox.AddTenancyDomainEvents<TenantId, SeatId, OrganizationUnitId, RoleId>()` and the rest | `outbox.AddTenancyDomainEvents()`, `log.AddTenancyEventLog()`, `modelBuilder.AddTenancyReadModel()` and the rest, beside `AddTenancy` | Internal to the project that declares your classes, or a project of their module that registers Tenancy; a test project that registers Tenancy itself writes the ids |
-| Tenant selection, for a host's middleware | `TenantSelection<TenantId, SeatId>` | `ITenantSelection`, which answers the caller without its ids | Every project |
+| System work | `TenancyWork.BeginSystem<TenantId, SeatId>()` and the others | `TenancyUseCases.BeginSystem()`, `BeginSystemIn(tenant)`, `BeginOperator`, `BeginOperatorIn`, `BeginTokenIn` | Every project that sees your classes: their module, the host, your tests |
+| The current caller | `TenancyCallers.Current<TenantId, SeatId>()` | `TenancyUseCases.CurrentCaller()` | The same projects |
+| Registrations | `outbox.AddTenancyDomainEvents<TenantId, SeatId, OrganizationUnitId, RoleId>()` and the others | `outbox.AddTenancyDomainEvents()`, `log.AddTenancyEventLog()`, `modelBuilder.AddTenancyReadModel()` and the others, beside `AddTenancy` | Internal to the project that declares your classes, or to a project of their module that registers Tenancy. A test project that registers Tenancy itself writes the ids. |
+| Tenant selection, for a host's middleware | `TenantSelection<TenantId, SeatId>` | `ITenantSelection`, which returns the caller without its ids | Every project |
 
-- **`ITenantSelection`** is the closed selection itself, per scope, unless your host registered one before. It
-  answers an `ITenancyCaller`, which `TenancyCallers.Begin` takes, so a host's middleware
-  ([tutorial step 5](tutorial.md#step-5-the-host)) reads the same in every application.
-- **Another module sees only your ids** (Billing, Projects), and the toolkit never takes an id for the tenant's by
-  its name. It writes them out where they are no arguments (`AddTenancyAccess`, `AddTenancyReadFunctions`), and C#
-  infers them where they are: `TenancyWork.BeginSystemIn(tenant, seat, "billing")`.
-- **Types keep their ids**: `ITenancyAnswers<...>`, `ITenancyQuestions<...>` and records such as
-  `SeatOfCaller<TenantId, SeatId>`, so a module that sees only the ids can take them. Name one once per project with
-  a `global using` alias.
-- **Three more name them, in the declaring project too**: `TenantSelection<TenantId, SeatId>.SeatsOfAsync` (a
-  person's seats for a tenant picker), `EfTenancyReadSource<TenantId, SeatId, OrganizationUnitId, RoleId>` (Tenancy's
-  rows for a reading of your own), and `TenancySystemReads.TenantsToSweepAsync<ShopTenant, TenantId>(...)`
-  ([Reads before any tenant is known](keeping-tenants-apart.md#reads-before-any-tenant-is-known)).
+- **`ITenantSelection`** is the closed selection, registered per scope, unless your host registered one before. It
+  returns an `ITenancyCaller`, which `TenancyCallers.Begin` takes. So a host's middleware
+  ([tutorial step 5](tutorial.md#step-5-the-host)) looks the same in every application.
+- **Another module sees only your ids** (Billing, Projects). The toolkit never picks an id type as the tenant's id
+  because of its name. Where the ids are not arguments, you write them out (`AddTenancyAccess`,
+  `AddTenancyReadFunctions`). Where they are arguments, C# infers them:
+  `TenancyWork.BeginSystemIn(tenant, seat, "billing")`.
+- **Some types always carry the ids**: `ITenancy<...>`, `ITenancyQueries<...>`, and records such as
+  `SeatOfCaller<TenantId, SeatId>`. A module that sees only the ids can use these types. Name each one once per
+  project with a `global using` alias.
+- **Three calls take the ids in every project**, the declaring project included:
+  - `TenantSelection<TenantId, SeatId>.SeatsOfAsync`, which returns a person's seats for a tenant picker;
+  - `EfTenancyReadSource<TenantId, SeatId, OrganizationUnitId, RoleId>`, which reads Tenancy's rows for a query of
+    yours;
+  - `TenancySystemReads.TenantsToSweepAsync<ShopTenant, TenantId>(...)`
+    ([Reads before any tenant is known](keeping-tenants-apart.md#reads-before-any-tenant-is-known)).
 
 <details>
 <summary>Show the code: the same calls where your classes are seen, and in another module</summary>
 
 ```csharp
-// The module that declares the classes, in its infrastructure project: closed over the four ids
+// In the infrastructure project of the module that declares the classes. Closed over the four ids.
 options.UseOutbox<ShopTenancyContext>(outbox => outbox
     .AddTenancyDomainEvents()
     .AddTenancyInvitationEvents<InvitationId>()       // the invitation's id: an application may have none
     .KeepEventLog(log => log.AddTenancyEventLog()));
 
-// Any project that sees TenancyUseCases: the host, a test
+// In any project that sees TenancyUseCases: the host, a test
 using (TenancyUseCases.BeginSystemIn(tenant, administrator))
 {
     await seeder.SeedAsync(cancellationToken);
@@ -376,7 +421,7 @@ using (TenancyUseCases.BeginSystemIn(tenant, administrator))
 
 var caller = TenancyUseCases.CurrentCaller();          // nobody outside any scope
 
-// Another module: written out where they are no arguments, inferred where they are
+// In another module. The ids are written out where they are not arguments, and inferred where they are.
 services.AddTenancyAccess<TenantId, SeatId, OrganizationUnitId, RoleId, IBillingRequest, BillingContext>();
 modelBuilder.AddTenancyReadFunctions<TenantId, SeatId, OrganizationUnitId, RoleId>("tenancy");
 
@@ -385,7 +430,7 @@ using (TenancyWork.BeginSystemIn(tenant, seat, "billing"))
     await invoices.SaveOnlyAsync(invoice, cancellationToken);
 }
 
-global using ShopAnswers = DDDToolkit.Supporting.Tenancy.Access.ITenancyAnswers<
+global using ShopTenancy = DDDToolkit.Supporting.Tenancy.Access.ITenancy<
     Shop.Contracts.TenantId, Shop.Contracts.SeatId, Shop.Contracts.OrganizationUnitId, Shop.Contracts.RoleId>;
 ```
 
@@ -393,18 +438,20 @@ global using ShopAnswers = DDDToolkit.Supporting.Tenancy.Access.ITenancyAnswers<
 
 ## How your classes add behaviour
 
-Your class is the package's class with your part added. There are no virtual members or hooks: a package rule always
-runs, and yours only add to it. Four ways to add:
+Your class is the package's class plus your additions. The package has no virtual members or hooks. A package rule
+always runs, and your code adds to it. You can add four things:
 
-- **Members**: fields and methods, stored with the class. Placements and grants stay the package's, changed through
-  its use cases only.
-- **Entities** of your own, mapped with the class, as in any aggregate.
-- **Rules**: a nested `IInvariant<T>` runs after the package's rules on every save, and refuses the save as theirs do.
-- **The package's domain events**: every change raises one (`tenancy.seat-suspended` and the rest), each saying
-  [who made the change](operators-and-history.md#access-history). Handle one in process with `AlsoDispatchInProcess`,
-  or [publish](#publishing-an-event) it; an unmapped event is stored and reaches no other module.
+- **Members.** Add fields and methods. Entity Framework stores them with the class. Placements and grants stay the
+  package's, and only the package's use cases change them.
+- **Entities.** Map entities of yours with the class, as in any aggregate.
+- **Rules.** A nested `IInvariant<T>` runs after the package's rules on every save. It refuses the save in the same
+  way as the package's rules.
+- **Handlers for the package's domain events.** Every change raises an event (`tenancy.seat-suspended` and the
+  others). Each event records [who made the change](operators-and-history.md#access-history). Handle an event in
+  process with `AlsoDispatchInProcess`, or [publish](#publishing-an-event) it. An event without a mapping is stored
+  and reaches no other module.
 
-The sample's unit adds a cost centre and a rule about its format.
+The sample's unit adds a cost centre and a rule for its format.
 
 **`OrganizationUnit.cs`**, in the domain project
 
@@ -416,7 +463,7 @@ public sealed partial class OrganizationUnit
 
     public void SetCostCentre(string? costCentre) => CostCentre = costCentre;
 
-    // Runs after the package's rules about names, parents and archiving, never instead of them.
+    // Runs after the package's rules about names, parents and archiving. It cannot replace them.
     public sealed partial class CostCentreFormat : IInvariant<OrganizationUnit>
     {
         public string Code => "tenants.unit.cost-centre";
@@ -432,10 +479,10 @@ public sealed partial class OrganizationUnit
 }
 ```
 
-### Setting your fields on what a use case makes
+### Setting your fields on a new tenant, root and seat
 
-A field of yours starts at its default. Set it on a new tenant, its root and its first seat through three callbacks
-of `TenantToProvision`:
+Your fields start at their default values. `TenantToProvision` has three callbacks that set them on the new tenant,
+its root unit and its first seat:
 
 ```csharp
 await tenants.ProvisionAsync(
@@ -451,17 +498,20 @@ await tenants.ProvisionAsync(
     cancellationToken);
 ```
 
-- They run in that order, each once its instance is made and before the tenant is activated: the root is in its
-  organization, the seat is placed at the root and holds the administrators' role.
-- What they set is written in the provisioning save; an event your class raises there leaves with the provisioning's.
-  A callback that throws stops the provisioning with nothing saved.
-- Later units: `AddUnitAsync`'s `configure` ([The kind of a unit](#the-kind-of-a-unit)). Later seats: `AddSeatAsync`'s
-  and an invitation's `AcceptAsync`'s ([How a seat is shown](names-and-languages.md#how-a-seat-is-shown)).
+- The callbacks run in that order. Each callback runs once its instance exists, and before the tenant is activated.
+  At that point the root is in its organization, and the seat is placed at the root and holds the administrators'
+  role.
+- The provisioning save writes what the callbacks set. An event that your class raises in a callback is saved with
+  the provisioning's events. When a callback throws, provisioning stops and nothing is saved.
+- For later units, use the `configure` callback of `AddUnitAsync` ([The kind of a unit](#the-kind-of-a-unit)). For
+  later seats, use the callbacks of `AddSeatAsync` and of an invitation's `AcceptAsync`
+  ([How a seat is shown](names-and-languages.md#how-a-seat-is-shown)).
 
 ### Publishing an event
 
-An event another module should hear is mapped in your Tenancy context's outbox before `AddTenancyDomainEvents`,
-which keeps the rest to itself; a mapping after it throws:
+To let another module receive one of Tenancy's events, map the event in the outbox of your Tenancy context, before
+`AddTenancyDomainEvents`. `AddTenancyDomainEvents` keeps every event without a mapping off the sinks, so a mapping
+after that call throws:
 
 ```csharp
 services.AddDDDToolkitEntityFramework(options => options.UseOutbox<ShopTenancyContext>(outbox => outbox
@@ -471,30 +521,45 @@ services.AddDDDToolkitEntityFramework(options => options.UseOutbox<ShopTenancyCo
 
 ### The kind of a unit
 
-Tenancy keeps no kind of unit: region, area or site decides nothing about access, so the package neither asks for a
-kind nor checks one. Keep it as a field of your unit class, an enum say, set in the callback of the use case that
-makes the unit.
+Tenancy stores no kind for a unit. Region, area or site plays no part in access, so the package neither requires nor
+checks a kind. Keep the kind as a field of your unit class, such as an enum. Set the field in the callback of the use
+case that creates the unit.
 
-What `AddUnitAsync` checks, in order, and where your callback runs, so you know what is saved when it throws:
+The diagram shows what `AddUnitAsync` checks, in order, and where your callback runs. So you can see what is saved
+when your callback throws. Purple: the call. Green: the unit is added. Red: refused, or not added.
 
 ```mermaid
 flowchart TB
-    Ask["AddUnitAsync<br/>(parent, name,<br/>configure)"] --> Permission{"tenancy.units.manage<br/>at the parent?"}
-    Permission -- no --> Refused(["refused,<br/>nothing saved"])
-    Permission -- yes --> Tree{"the tree<br/>takes it?"}
-    Tree -- "flat, archived parent,<br/>too deep, bad name" --> Refused
-    Tree -- yes --> Configure["configure(unit):<br/>your fields"]
-    Configure -- throws --> Nothing(["not added,<br/>nothing saved"])
-    Configure --> Save(["added, one save:<br/>the unit, your fields"])
+    addUnit["<b>AddUnitAsync</b><br/><small>parent, name, configure</small>"]
+    permission{"tenancy.units.manage<br/>at the parent?"}
+    tree{"Does the tree<br/>accept the unit?"}
+    configure["<b>configure(unit)</b><br/><small>sets your fields</small>"]
+    refused["<b>Refused</b><br/><small>nothing saved</small>"]
+    notAdded["<b>Not added</b><br/><small>nothing saved</small>"]
+    added["<b>Added</b><br/><small>one save: the unit and your fields</small>"]
+    addUnit --> permission
+    permission -- "no" --> refused
+    permission -- "yes" --> tree
+    tree -- "flat tenant, archived parent,<br/>too deep, invalid name" --> refused
+    tree -- "yes" --> configure
+    configure -- "throws" --> notAdded
+    configure -- "returns" --> added
+    classDef strong fill:#5b2ec933,stroke:#5b2ec9,stroke-width:2px
+    classDef good fill:#1f8a5b26,stroke:#1f8a5b
+    classDef bad fill:#c93c3c24,stroke:#c93c3c
+    class addUnit strong
+    class added good
+    class refused,notAdded bad
 ```
 
-- Your class's rules judge the field in that save. A unit whose callback threw is not added by a later save in the
-  same scope either. The root's kind goes through `ConfigureRoot`.
-- **Showing it**: [`ListUnitsAsync`](reference/use-cases.md#listunitsasynccancellationtoken) answers your own units,
-  whole, each as a `UnitInTree` with its path and depth beside it, so a plain `Select` shows your field.
-- **By id**: [`UnitsByIdAsync`](reference/use-cases.md#unitsbyidasyncireadonlycollectiontunitid-cancellationtoken)
-  answers a `NamedUnit` of name, path and depth: what another module's answer needs, for a seat that may not read the
-  rest of the unit.
+- Your class's rules check the field in that save. When the callback throws, a later save in the same scope does not
+  add the unit either. Set the root's kind through `ConfigureRoot`.
+- **Showing the kind.** [`ListUnitsAsync`](reference/use-cases.md#listunitsasynccancellationtoken) returns the units
+  the caller reads. Each unit is your unit class with all its fields, in a `UnitInTree` with its path and depth. A
+  plain `Select` shows your field.
+- **By id.** [`UnitsByIdAsync`](reference/use-cases.md#unitsbyidasyncireadonlycollectiontunitid-cancellationtoken)
+  returns a `NamedUnit` with the name, path and depth. A seat that may not read the rest of a unit still gets the
+  unit's name this way. Use it when another module shows units by id.
 
 <details>
 <summary>Show the code: a unit's kind as the application's own enum</summary>
@@ -510,18 +575,18 @@ public sealed partial class OrganizationUnit
     public void SetKind(UnitKind? kind) => Kind = kind;
 }
 
-// The command's handler: the use case adds the unit, the callback sets the kind, one save writes both
+// The command's handler. The use case adds the unit, the callback sets the kind, and one save writes both.
 public async ValueTask<OrganizationUnitId> Handle(AddOrganizationUnit command, CancellationToken cancellationToken)
     => await organization.AddUnitAsync(command.Parent, command.Name, cancellationToken, configure: unit => unit.SetKind(command.Kind));
 
-// The query's handler: the directory decides which units the caller reads; a plain select shows the kind
+// The query's handler. ListUnitsAsync returns the units the caller reads, and a plain Select shows the kind.
 var units = await directory.ListUnitsAsync(cancellationToken);
 return [.. units.Select(found => new UnitListing(found.Unit.Id, found.Unit.Name, found.Unit.Kind, found.Path, found.Depth))];
 
-// Stored by its name: one line in the context's ConfigureConventions
+// Store the kind by its name, with one line in the context's ConfigureConventions
 configurationBuilder.Properties<UnitKind>().HaveConversion<string>().HaveMaxLength(16);
 ```
 
 </details>
 
-The sample does all of it, storing the kind by a lower-case key with a converter of its own (`UnitKindKeyConverter`).
+The sample does all of this. It stores the kind by a lower-case key, with a converter it declares (`UnitKindKeyConverter`).

@@ -5,76 +5,111 @@ sidebar_label: Checks and saves
 
 # Membership: from the check to the save
 
-How a request on a resource is checked, what holds its change until the save, the questions inside your own
-statements, system work, and the expert hold. Read it when you write commands, lists, or work no person does.
+Read this page when you write commands, lists, or work that no person does. It covers how a request on a resource is
+checked, what stops a change between the check and the save, access inside your own queries, system work, and the
+expert hold.
 
 ## Requirements that combine
 
-Membership's two requirements, beside the rest of [the vocabulary](../access-requirements.md#the-vocabulary):
+Membership adds two requirements to [the vocabulary](../access-requirements.md#the-vocabulary):
 
 | On the request | The call | For |
 |---|---|---|
-| `[RequiresPermission(p)]`, `[OnResource]` on the resource, `[ExpectedVersion]` on the version read | `MemberAccess.On(p, resource, expectedVersion)` | a request on one resource |
-| `[SeenWith<TResourceId>(p)]` | `MemberAccess.SeenWith<TResourceId>(p)` | a list ([below](#inside-your-own-statements)) |
+| `[RequiresPermission(p)]`, with `[OnResource]` on the resource and `[ExpectedVersion]` on the version read | `MemberAccess.On(p, resource, expectedVersion)` | a request on one resource |
+| `[SeenWith<TResourceId>(p)]` | `MemberAccess.SeenWith<TResourceId>(p)` | a list ([Access in your own queries](#access-in-your-own-queries)) |
 
-They [combine](../access-requirements.md#requirements-that-combine) with the others; each package's check, registered
-for the same interface, decides its own cases.
+Both [combine](../access-requirements.md#requirements-that-combine) with the other requirements. Each package
+registers its check for the same request interface, and each check decides its own cases.
 
-- **The caller's own, or the permission**: `[OrOwn]` beside `[OnResource]`. A member leaves on its own, or anybody
-  with the permission takes it off: `LeaveDocument([OnResource] DocumentId Document, [OrOwn] UserId Member)` is
-  `Any(All(Own(request.Member), MemberAccess.Sees(permission, request.Document)), MemberAccess.On(permission, request.Document))`
-  ([Yours, or the permission](../access-requirements.md#yours-or-the-permission)).
-  - `MemberAccess.Sees`: the caller sees the document, holding the permission or not; like `On` it refuses
-    `documents.not-found`, compares the version and keeps the hold.
-  - Where a permission is marked `LocksMembers`, the database refuses that caller its own member row, so the handler
-    saves it as the application's own work ([The caller's own on a resource](../access-requirements.md#the-callers-own-on-a-resource)).
-- **Membership's and Tenancy's together**: moving a project takes edit on the project and open at the unit it goes
-  to, `All(MemberAccess.On(ProjectPermissionNames.Edit, Project, ExpectedVersion), TenancyAccess.AtUnit(ProjectPermissionNames.Open, To))`.
-- **The [expert hold](#the-expert-hold)** keeps a hold once the whole combination let the caller through, for the
-  cases it was let through by: `All(MemberAccess.On(p, From), MemberAccess.On(p, To))` keeps one per document.
+**The caller's own, or the permission.** Put `[OrOwn]` beside `[OnResource]`. A member can then leave a document,
+and anybody with the permission can take any member off. With `[RequiresPermission(DocumentPermissions.Share)]`, the
+request `LeaveDocument([OnResource] DocumentId Document, [OrOwn] UserId Member)` gets this requirement:
+`Any(All(Own(request.Member), MemberAccess.Sees(DocumentPermissions.Share, request.Document)), MemberAccess.On(DocumentPermissions.Share, request.Document))`
+([Yours, or the permission](../access-requirements.md#yours-or-the-permission)).
+
+The diagram shows the two ways through when Leo sends `LeaveDocument`. Purple: the request. Green: let through. Red:
+refused.
+
+```mermaid
+flowchart TD
+    req["<b>LeaveDocument</b><br/><small>Member = Leo</small>"]
+    own["<b>Leo is the caller</b><br/><small>and sees the document</small>"]
+    held["<b>The caller holds documents.share</b><br/><small>on the document</small>"]
+    ok["<b>Let through</b><br/><small>the handler runs</small>"]
+    no["<b>Refused</b><br/><small>not-found or not-permitted</small>"]
+    req --> own
+    own -->|yes| ok
+    own -->|no| held
+    held -->|yes| ok
+    held -->|no| no
+    classDef strong fill:#5b2ec933,stroke:#5b2ec9,stroke-width:2px
+    classDef good fill:#1f8a5b26,stroke:#1f8a5b
+    classDef bad fill:#c93c3c24,stroke:#c93c3c
+    class req strong
+    class ok good
+    class no bad
+```
+
+- `MemberAccess.Sees` requires that the caller sees the document, whether or not the caller holds the permission.
+  Like `On`, it refuses with `documents.not-found`, compares the version and keeps the hold.
+- Where a permission is marked `LocksMembers`, the database lets only callers with that permission write member
+  rows. A member without it cannot remove its own row. So the handler saves that change as the application's own
+  work ([The caller's own on a resource](../access-requirements.md#the-callers-own-on-a-resource)).
+
+**Membership and Tenancy together.** Moving a project requires edit on the project and open at the unit it moves to:
+`All(MemberAccess.On(ProjectPermissionNames.Edit, Project, ExpectedVersion), TenancyAccess.AtUnit(ProjectPermissionNames.Open, To))`.
+
+**Combined requirements and the expert hold.** The [expert hold](#the-expert-hold) keeps one hold for each case that
+let the caller through, once the full combination let the caller through. `All(MemberAccess.On(p, From),
+MemberAccess.On(p, To))` keeps one hold per document.
 
 ## From the check to the save
 
-Other requests go on between the check and the save. On the default path five things hold a change:
+Other requests can run between the check and the save. On the default path, five steps stop a change that is no
+longer allowed:
 
-| Step | Holds | Refused with |
+| Step | What it checks | Refused with |
 |---|---|---|
-| 1. The request's check | who: the permission held, then the version the caller named | `not-found`, `not-permitted`, 409 |
-| 2. The load by id, then `db.ExpectVersion(document, command.ExpectedVersion)` | the resource checked, still at the version named (none named: as it is) | 404 when gone, 409 |
-| 3. The save | the version it loaded | 409 |
-| 4. The aggregate's rules | the resource at any version: an archived document takes no member, the owner stays | your codes |
-| 5. The database, checking every row as the caller ([On Postgres](postgres.md)) | the write, for a caller that lost every permission that writes the resource | 403 `access.refused`; hidden by then: 404 at the load |
+| 1. The request's check | The caller holds the permission. Then, the version the caller named is the current one. | `not-found`, `not-permitted`, 409 |
+| 2. The load by id, then `db.ExpectVersion(document, command.ExpectedVersion)` | The checked resource still exists at the version named. With no version named, any version passes. | 404 when the resource is gone, 409 |
+| 3. The save | The resource is still at the version the handler loaded. | 409 |
+| 4. The aggregate's rules | Rules that apply at any version, such as "an archived document takes no member" and "the owner stays". | your codes |
+| 5. The database, which checks every row as the caller ([On Postgres](postgres.md)) | The write, for a caller who lost every permission that writes the resource. | 403 `access.refused`. A resource that is hidden by then is a 404 at the load. |
 
-The permission is about who, the version about what the caller read; a rule about how and until when the caller holds
-it goes [in the handler](permissions-and-roles.md#who-may-give-a-role-is-yours-to-decide). A rename of the Tenancy
-sample's projects, with a change between check and handler, on Postgres with the policies forced
-(`AccessHoldScenarios`):
+The permission is about who acts. The version is about what the caller read. A rule about how, and until when, the
+caller holds the permission goes [in the handler](permissions-and-roles.md#who-may-give-a-role).
+
+The Tenancy sample's tests (`AccessHoldScenarios`) rename a project after a change between the check and the
+handler. They run on Postgres, with the policies forced:
 
 | Between the check and the handler | The rename |
 |---|---|
-| the role that gave the permission is taken | 403 `access.refused`, from the database |
-| the reach from above is revoked, or the project moved out of reach | 404: none to load |
-| somebody else renamed it; the caller named its version | 409, at the load |
-| somebody else renamed it; the caller named no version | saved: the last write wins |
-| the project moved where the caller still holds the permission | saved |
+| The role that gave the permission is taken away. | 403 `access.refused`, from the database |
+| The reach from above is revoked, or the project moves out of reach. | 404, because the load finds nothing |
+| Somebody else renames the project, and the caller named its version. | 409, at the load |
+| Somebody else renames the project, and the caller named no version. | Saved. The last write wins. |
+| The project moves to a place where the caller still holds the permission. | Saved |
 
-What the default path does not do:
+The default path has three limits:
 
-- **Nothing finer than the policies.** One that lets any writing permission through lets through a caller that lost
-  the command's permission and kept another. Write the policy per permission where that matters.
-- **A handler reached around its checks** is held by the database alone, to what its caller may; a test holds that
-  whatever sends your requests asks the checks. A save as the application's own work is held by no row rule, so begin
-  it only for a request whose check passed: `RequestInHand.Current.Request` is that request
-  ([The request in hand](../access-requirements.md#the-request-in-hand)), as in the sample's `OwnPlaceOnTheCrew`.
-- **No tie between the save and the check's version**: for a caller that named none, the last write wins.
-  [The expert hold](#the-expert-hold) ties them.
+- **It checks nothing finer than the policies.** A policy that lets any writing permission through also lets
+  through a caller who lost the command's permission and kept another one. Where that matters, write the policy per
+  permission.
+- **When a handler is reached around its checks, only the database checks the write**, against what the caller may
+  do. Add a test that proves your request sender runs the checks. No row rule restricts a save that runs as the
+  application's own work. So begin that work only for a request whose check passed. `RequestInHand.Current.Request` is that
+  request ([The request in hand](../access-requirements.md#the-request-in-hand)). The sample's `OwnPlaceOnTheCrew`
+  does this.
+- **The save is not tied to the version the check read.** For a caller who named no version, the last write wins.
+  [The expert hold](#the-expert-hold) adds that tie.
 
-## Inside your own statements
+## Access in your own queries
 
-[`IMemberQuestions<DocumentId>`](reference/use-cases.md#imemberquestionstresourceid) answers about one resource
-(`HoldAsync`, `RequireAsync`, `ViaAsync`) or up to 200 (`PermissionsOnAsync`), each in one statement. For your own
-queries it hands out a **reach**, which goes into the query: a list is one statement, never ids fetched first
-([tutorial step 6](tutorial.md#step-6-open-a-board-see-it-list-them)). Two more forms:
+[`IMemberQuestions<DocumentId>`](reference/use-cases.md#imemberquestionstresourceid) has methods about one resource
+(`HoldAsync`, `RequireAsync`, `ViaAsync`) and a method about up to 200 resources (`PermissionsOnAsync`). Each method
+runs one statement. For your own queries, `Reach(permission)` returns a **reach**. You put the reach into your query,
+so a list runs as one statement and fetches no ids first ([tutorial step 6](tutorial.md#step-6-open-a-board-see-it-list-them)).
+Two more forms:
 
 ```csharp
 // Your own columns next to how a permission is held and until when
@@ -93,88 +128,98 @@ var permissions = await db.Documents.Where(document => ids.Contains(document.Id)
     .ToListAsync(cancellationToken);
 ```
 
-**A list declares `[SeenWith<DocumentId>(permission)]`**, since the checks
+**A list declares `[SeenWith<DocumentId>(permission)]`**, because the checks
 [fail closed](../access-requirements.md#what-answers-it):
 
-- It refuses nobody for want of the permission: the reach is the filter. So it goes on queries only: on a Mediator
-  command or plain `IRequest` it is [DDD00082](../diagnostics.md#ddd00082); with another dispatcher, a
-  [test](../access-requirements.md#holding-it-with-a-test) holds it.
-- A caller who did not sign in reaches nothing, so it is refused, `documents.not-permitted`, and no statement is sent.
-- With Tenancy it asks nothing of Tenancy: a caller who names no tenant gets an empty list, where a command is refused
-  with `tenancy.tenant-required`.
+- `[SeenWith]` refuses nobody for lacking the permission. The reach in the query is the filter. So `[SeenWith]` goes
+  on queries only. On a Mediator command or a plain `IRequest` it is [DDD00082](../diagnostics.md#ddd00082). With
+  another dispatcher, a [test](../access-requirements.md#holding-it-with-a-test) checks it.
+- A caller who did not sign in reaches nothing. The check refuses that caller with `documents.not-permitted`, and no
+  statement is sent.
+- With Tenancy, the check first refuses a caller without an active seat in the tenant, with Tenancy's code:
+  `tenancy.tenant-required` when the caller names no tenant, `tenancy.not-seated` or `tenancy.seat-suspended`. A
+  list is refused the same way as a command.
 
-**Which context the questions read on**:
+**Which context the questions run on:**
 
-- One of their own where you registered a factory (a pool with `AddScopedFromPool`), since a request's questions may
-  run side by side; otherwise the request's context.
-- The request's own when the resource or the custom role class has a query filter that reads a member of your
-  context, which a context made for one reading knows nothing of. A filter on what is around the work, as
-  [Tenancy's](../tenancy/keeping-tenants-apart.md), holds on every context.
-- A reach is data for any context. One that adds a query of its own (custom role rows,
-  [an answer of yours](beside-an-organization.md#an-organization-of-your-own)) is handed the context when it is not
-  the request's: `db.Crates.Within(reach, db)`.
+- With a registered context factory (for example a pool with `AddScopedFromPool`), each question runs on a context
+  of its own, because the questions of one request may run side by side. Without a factory, the questions run on the
+  request's context.
+- The questions run on the request's context when the resource or the custom role class has a query filter that
+  reads a member of your context. A context made for one reading does not know that member's value. A filter that
+  reads the ambient work, such as [Tenancy's](../tenancy/keeping-tenants-apart.md), works on every context.
+- A reach is data, so it works on any context. Some reaches add a subquery of their own, over custom role rows or
+  over [what you return](beside-an-organization.md#an-organization-of-your-own). On a context other than the
+  request's, pass that context as well: `db.Crates.Within(reach, db)`.
 
 ## System work
 
 - **`Caller.System`**, the application itself, holds every permission on every resource.
-- **`Caller.SystemIn("filing")`** is nobody's member: it holds every permission where the rules let its scope through,
-  nothing elsewhere.
-- **The rules let the module's own scope through** by default (`filing` for the module `Filing`,
-  [Names](resources-and-members.md#names)), so a seeding or a handler that saves as the application needs nothing said.
-- **`systemScopes`** replaces it: name the scopes, the module's own among them to keep it, or `[]` for none:
+- **`Caller.SystemIn("filing")`** is nobody's member. It holds every permission where the rules let its scope
+  through, and nothing elsewhere.
+- **By default, the rules let the module's own scope through**, for example `filing` for the module `Filing`
+  ([Names](resources-and-members.md#names)). So a seeding, or a handler that saves as the application, needs no
+  setting.
+- **`systemScopes` replaces the default.** Name the scopes, including the module's scope if you want to keep it, or
+  pass `[]` for none. A scope has lower case letters, digits, `_` and `-`, and each scope is named once:
 
   ```csharp
-  // The boards' own work, and the nightly import that fills them, which runs in a scope of its own
+  // The boards' own work, and the nightly import, which runs in its own scope
   public static MembershipRules Rules { get; } = MembershipRules.For<Board>(
       Roles.Custom(starters: [new("editor", [BoardPermissions.View, BoardPermissions.Edit])]),
       systemScopes: ["boards", "boards-import"]);
   ```
 
-- **Name a scope for the work it is**; never `tenancy`. That is the scope of every piece of work that calls Tenancy's
-  use cases (provisioning, placing a seat, a grant), and it would then do everything on every board.
-- **On Postgres** the scoped system role may ask the functions, and [the lock](postgres.md#who-writes-the-member-rows)
-  lets work in a scope the rules do not name write no member row.
+- **Name a scope after the work it does, and never use `tenancy`.** Every piece of work that calls Tenancy's use cases
+  (provisioning, placing a seat, a grant) runs in the `tenancy` scope. With `tenancy` in `systemScopes`, all of that
+  work would hold every permission on every board.
+- **On Postgres**, the scoped system role may call the functions. [The lock](postgres.md#who-writes-the-member-rows)
+  refuses member row writes from work in a scope the rules do not name.
 
 ## The expert hold
 
-The **expert hold** ties every save to its request's check, with one line on the context:
+The **expert hold** ties every save to the check of its request. You switch it on with one line on the context:
 
 ```csharp
 services.AddDbContext<FilingContext>((serviceProvider, options) => options
     .UseNpgsql(connectionString)
     .UseDDDToolkit(serviceProvider)
-    .UseMemberHolds(serviceProvider));             // every save of a document held to its request's check
+    .UseMemberHolds(serviceProvider));             // ties every save of a document to its request's check
 ```
 
-A save that changes a resource with members, or a member or role of one, is then held to what its request's check read:
+A save that changes a resource with members, or one of its members or roles, then has these results:
 
-| The save changes | Under the hold |
+| The save changes | Result |
 |---|---|
 | the resource the check read, at that version | saved |
-| that resource, changed since the check, version named or not | 409, whatever changed |
-| a resource no check of its request read: a handler called directly, a transport around the pipeline, a save after the handling returned, another resource than the request names | refused, `InvalidOperationException`; nothing is saved |
-| another resource, as the application's own work begun by trusted code (`Callers.Begin(Caller.System)`, a scope the rules name) | saved; a resource the check read stays held to its version |
+| that resource, changed since the check, whether or not a version was named | 409, whatever changed |
+| a resource that no check of the request read: a handler called directly, a transport that bypasses the pipeline, a save after the handling returned, or another resource than the request names | refused with `InvalidOperationException`. Nothing is saved. |
+| another resource, as the application's own work begun by trusted code (`Callers.Begin(Caller.System)`, or a scope the rules name) | saved. A resource the check read is still tied to its version. |
 | a new resource | saved |
 
-- **It finds the check through [the request in hand](../access-requirements.md#the-request-in-hand)**:
-  `AccessChecks.RequireAsync` puts the request in hand for the flow of work that asked, `MemberAccessCheck` keeps what
-  it read with it (`Checked<MemberHold<DocumentId>>`), and the save looks there. The handler passes nothing.
-- **The flow, not the scope**: a scope can handle several requests (GraphQL mutations, a query before a command); a
-  hold a query's check kept lets no handler called directly save.
-- **Ask the checks and run the handler in one `async` method**, as the generated behavior and
-  [a dispatcher of your own](../access-requirements.md#asking-the-checks-without-mediator) that awaits both do. A
-  helper that only asks the checks has the request in hand inside itself alone, so every later save is refused; a
-  non-`async` dispatcher that returns the chained task leaves it in hand for its caller.
-- **Save inside the access behavior**: register a unit of work after `Add{Module}AccessBehavior()`, not in
-  `MediatorOptions.PipelineBehaviors` (those run first). An endpoint does not save after `Send`.
-- **A second save** is held to the version the first left. A failed save counts for nothing: retried as loaded, it is
-  a 409 again.
-- **`Version` is a concurrency token**, or the first held save is refused. `UseMemberHolds` goes after `UseDDDToolkit`
-  (or `UseDDDToolkitCore`), or the context is refused where it is built; twice holds once.
-- **It runs after domain event handlers**: one that changes another resource with members is refused, unless it
-  begins the application's own work.
-- **It costs no statement**, and adds a 409 for a change the caller's rights did not depend on (a move to where the
-  caller still holds the permission) and a refusal for a handler reached around its checks. Off, it does nothing.
+- **The hold finds the check through [the request in hand](../access-requirements.md#the-request-in-hand).**
+  `AccessChecks.RequireAsync` puts the request in hand for the flow of work that called it. `MemberAccessCheck` keeps
+  what it read with the request (`Checked<MemberHold<DocumentId>>`). The save looks it up there. The handler passes
+  nothing.
+- **The hold follows the flow of work.** One scope can handle several requests, such as GraphQL mutations, or a query
+  before a command. A hold that a query's check kept lets no directly called handler save.
+- **Run the checks and the handler in one `async` method.** The generated behavior does this, and so does
+  [a dispatcher of your own](../access-requirements.md#asking-the-checks-without-mediator) that awaits both. A helper
+  that only runs the checks has the request in hand inside the helper alone, so every later save is refused. A
+  dispatcher without `async` that returns the chained task leaves the request in hand for its caller.
+- **Save inside the access behavior.** Register a unit of work after `Add{Module}AccessBehavior()`. Do not register
+  it in `MediatorOptions.PipelineBehaviors`, because those behaviors run first. An endpoint does not save after
+  `Send`.
+- **A second save** is tied to the version the first save left. A failed save counts for nothing. Retried with the
+  values as loaded, it is a 409 again.
+- **`Version` must be a concurrency token.** Otherwise the first held save is refused. `UseMemberHolds` goes after
+  `UseDDDToolkit` or `UseDDDToolkitCore`. Otherwise the context is refused when it is built. Calling
+  `UseMemberHolds` twice adds the hold once.
+- **The hold runs after the domain event handlers.** A domain event handler that changes another resource with
+  members is refused, unless it begins the application's own work.
+- **The hold costs no extra statement.** It adds a 409 for a change the caller's rights did not depend on, such as a
+  move to a place where the caller still holds the permission. It also refuses a handler reached around its checks.
+  When the hold is off, it does nothing.
 
-The Tenancy sample ships the default path; its tests switch the hold on through `ConfigureDbContext` and play the
+The Tenancy sample ships the default path. Its tests switch the hold on through `ConfigureDbContext` and run the
 races both ways (`AccessHoldScenarios`).
