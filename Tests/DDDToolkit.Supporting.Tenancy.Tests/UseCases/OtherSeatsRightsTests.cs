@@ -24,7 +24,7 @@ public class OtherSeatsRightsTests
         await Refused.WithCodeAsync(TenancyRefusals.LastAdmin, () => harness.As(harness.Administrator, h => h.Seats.SuspendAsync(harness.Administrator, default)));
         harness.Store.Calls.Should().Contain(nameof(InMemoryTenancyStore.AdministratorsAsync));
         await Refused.WithCodeAsync(TenancyRefusals.LastAdmin, () => harness.As(harness.Administrator, h =>
-            h.Seats.RevokeAsync(harness.Administrator, harness.Harbor.Root, harness.RoleFromPack(HostCatalogue.AdministratorPack), default)));
+            h.Seats.RevokeAsync(harness.Administrator, harness.RoleFromPack(HostCatalogue.AdministratorPack), harness.Harbor.Root, default)));
         await Refused.WithCodeAsync(TenancyRefusals.LastAdmin, () => harness.As(harness.Administrator, h => h.Roles.ArchiveAsync(harness.RoleFromPack(HostCatalogue.AdministratorPack), default)));
 
         // With a second administrator it may: a seat that read the rights itself would find its own alone, and take
@@ -65,7 +65,7 @@ public class OtherSeatsRightsTests
         // would be hers for good.
         await harness.Place(di, harness.Harbor.South);
         await harness.Grant(di, harness.Harbor.South, HostCatalogue.SupervisorPack, until: FixedClock.Start.AddDays(7));
-        var pier = await harness.As(di, h => h.Organization.AddUnitAsync(harness.Harbor.South, "South Pier", default));
+        var pier = (await harness.As(di, h => h.Organization.AddUnitAsync(harness.Harbor.South, "South Pier", default))).Id;
         var longer = await Refused.WithCodeAsync(TenancyRefusals.GrantExceedsOwn, () => harness.As(di, h => h.Organization.MoveUnitAsync(pier, harness.Harbor.North, default)));
         longer.Arguments["Missing"].As<string>().Should().Contain(TenancyPermissions.UnitsManage);
         await harness.As(di, h => h.Organization.MoveUnitAsync(harness.Harbor.NorthCoast, harness.Harbor.South, default));

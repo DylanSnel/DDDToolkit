@@ -161,7 +161,7 @@ public class TenancyClosedOverTheIdsTests
         result.ShouldContain(
             "TenancyAccessManager.TemplateFacade",
             "public TenancyAccessManager(global::DDDToolkit.Supporting.Tenancy.Catalogue.TenancyCatalogue catalogue, global::System.TimeProvider clock, global::System.IServiceProvider services)");
-        result.ShouldContain("TenancyEntityFrameworkServiceCollectionExtensions.AddTenancy.Registration", "global::Shop.RoleId, global::TenancyAccessManager, TContext>(services, configure)");
+        result.ShouldContain("TenancyEntityFrameworkServiceCollectionExtensions.AddTenancy.Registration", "global::Shop.RoleId, global::TenancyAccessManager, global::TenantManager, global::OrganizationManager, global::SeatManager, global::RoleManager, TContext>(services, configure)");
         result.ShouldContain("TenancyEntityFrameworkServiceCollectionExtensions.AddTenancyAccess.Registration", "global::TenancyAccessManager, TRequests, TContext>(services)");
         result.ShouldContain(
             "TenancyEntityFrameworkExtensions.Tenancy.Registration",
@@ -223,7 +223,7 @@ public class TenancyClosedOverTheIdsTests
         infrastructure.ShouldCompile();
         infrastructure.ReportedDiagnostics.Should().BeEmpty();
         infrastructure.ShouldHaveGenerated("TenancyOutboxExtensions.AddTenancyDomainEvents.Registration");
-        infrastructure.ShouldContain("TenancyEntityFrameworkServiceCollectionExtensions.AddTenancy.Registration", "global::Shop.Contracts.RoleId, global::TenancyAccessManager, TContext>(services, configure)");
+        infrastructure.ShouldContain("TenancyEntityFrameworkServiceCollectionExtensions.AddTenancy.Registration", "global::Shop.Contracts.RoleId, global::TenancyAccessManager, global::TenantManager, global::OrganizationManager, global::SeatManager, global::RoleManager, TContext>(services, configure)");
         infrastructure.HintNames.Should().NotContain("TemplateFacade", "the classes are the domain project's, and this project sees those");
 
         // The host declares no module and registers nothing of Tenancy's: it calls the module's registration. It
@@ -386,7 +386,7 @@ public class TenancyClosedOverTheIdsTests
         application.ShouldContain(
             "Shop.Projects.Application.TenancyAccessManager.TemplateFacade",
             "/// TenancyAccessManager, closed over the ids this project's line names as the package's: TenantId, SeatId, OrganizationUnitId and RoleId.");
-        application.HintNames.Should().NotContain("TenancyUseCases", "the use cases take the classes, which the module does not see");
+        application.HintNames.Should().NotContain("SeatManager", "the managers take the classes, which the module does not see");
 
         var facade = application.OutputCompilation.GetTypeByMetadataName("Shop.Projects.Application.TenancyAccessManager")!;
         facade.IsSealed.Should().BeTrue("the container makes it, and nothing derives from it");

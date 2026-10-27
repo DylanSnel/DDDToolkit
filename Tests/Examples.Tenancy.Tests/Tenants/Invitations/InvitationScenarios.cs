@@ -428,7 +428,7 @@ public sealed class InvitationScenarios(SampleHosts sample) : IClassFixture<Samp
             using (SampleAccess.Manager.BeginSystemIn(tenant.Id, tenant.Administrator.Id))
             {
                 await using var scope = host.Services.CreateAsyncScope();
-                var store = scope.ServiceProvider.GetRequiredService<TenancyUseCases.IInvitationStore<Invitation, InvitationId>>();
+                var store = scope.ServiceProvider.GetRequiredService<InvitationStore>();
                 if (await store.FindAsync(new InvitationId(invitation), Cancellation) is { } found)
                 {
                     return found.InvitedAccount;

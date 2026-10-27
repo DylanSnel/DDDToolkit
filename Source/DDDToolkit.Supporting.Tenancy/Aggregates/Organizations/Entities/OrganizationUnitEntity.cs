@@ -13,8 +13,8 @@ namespace DDDToolkit.Supporting.Tenancy;
 /// <para>
 /// It has no kind. Nothing about access reads what kind of unit a unit is, so Tenancy keeps none: an application
 /// that tells regions from sites adds a field of its own to its class, an enum say, and sets it in the callback
-/// the use cases take when they make a unit (<c>TenantToProvision.ConfigureRoot</c> and the <c>configure</c> of
-/// <c>OrganizationCommands.AddUnitAsync</c>).
+/// the managers take when they make a unit (<c>TenantToProvision.ConfigureRoot</c> and the <c>configure</c> of
+/// <c>OrganizationManager.AddUnitAsync</c>).
 /// </para>
 /// </summary>
 /// <typeparam name="TUnitId">The application's unit id.</typeparam>

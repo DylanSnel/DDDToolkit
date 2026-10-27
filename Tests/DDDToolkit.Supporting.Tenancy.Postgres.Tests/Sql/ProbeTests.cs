@@ -78,12 +78,12 @@ public sealed class ProbeTests(TenancyPostgres postgres)
         // A grant that runs from two days ago to two days ahead, and one that ended yesterday, by the database's clock.
         var (from, until) = (now.AddDays(-2), now.AddDays(2));
         await using var services = new TenancyServices(database, rowLevelSecurity: false, databaseKeepsRights: false);
-        await services.BySystemIn(TenancySeed.Harbor, scoped => scoped.Seats().AddSeatAsync(TenancySeed.Oli.Identity, Cancellation, TenancySeed.Oli.Seat, configure: seat => seat.Rename("Oli")));
+        await services.BySystemIn(TenancySeed.Harbor, scoped => scoped.Seats().AddAsync(TenancySeed.Oli.Identity, Cancellation, TenancySeed.Oli.Seat, configure: seat => seat.Rename("Oli")));
         await services.BySystemIn(TenancySeed.Harbor, scoped => scoped.Seats().PlaceAsync(TenancySeed.Oli.Seat, TenancySeed.HarborRoot, primary: true, Cancellation));
         await services.BySystemIn(TenancySeed.Harbor, scoped => scoped.Seats().GrantAsync(
-            TenancySeed.Oli.Seat, TenancySeed.HarborRoot, TenancySeed.HarborRoles.Watcher, until, reason: null, Cancellation, from));
+            TenancySeed.Oli.Seat, TenancySeed.HarborRoles.Watcher, TenancySeed.HarborRoot, until, reason: null, Cancellation, from));
         await services.BySystemIn(TenancySeed.Harbor, scoped => scoped.Seats().GrantAsync(
-            TenancySeed.Oli.Seat, TenancySeed.HarborRoot, TenancySeed.HarborRoles.Operator, now.AddDays(-1), reason: null, Cancellation, now.AddDays(-3)));
+            TenancySeed.Oli.Seat, TenancySeed.HarborRoles.Operator, TenancySeed.HarborRoot, now.AddDays(-1), reason: null, Cancellation, now.AddDays(-3)));
 
         await using var connection = await OpenAsync(database);
         await using (var command = new NpgsqlCommand(
@@ -437,7 +437,7 @@ public sealed class ProbeTests(TenancyPostgres postgres)
         using (TenancyWork.BeginSystem<TenantId, SeatId>())
         {
             await services.InScopeAsync(scoped => scoped.Tenants().ProvisionAsync(
-                new HostTenancy.TenantToProvision(
+                new TenantToProvision(
                     "harbor",
                     "Harbor Works",
                     TenantShape.Hierarchical,

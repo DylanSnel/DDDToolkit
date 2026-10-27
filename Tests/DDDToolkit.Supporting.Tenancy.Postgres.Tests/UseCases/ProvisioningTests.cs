@@ -60,7 +60,7 @@ public abstract class ProvisioningTests(TenancyPostgres postgres, TenancyNaming 
         using (TenancyWork.BeginSystem<TenantId, SeatId>())
         {
             await services.InScopeAsync(scoped => scoped.Tenants().ProvisionAsync(
-                new HostTenancy.TenantToProvision("estuary", "Estuary Works", TenantShape.Hierarchical, "Estuary", Guid.NewGuid(), TenantId: Estuary),
+                new TenantToProvision("estuary", "Estuary Works", TenantShape.Hierarchical, "Estuary", Guid.NewGuid(), TenantId: Estuary),
                 Cancellation));
         }
 
@@ -94,7 +94,7 @@ public abstract class ProvisioningTests(TenancyPostgres postgres, TenancyNaming 
         using (TenancyWork.BeginSystem<TenantId, SeatId>())
         {
             refusal = (await FluentActions.Awaiting(() => services.InScopeAsync(scoped => scoped.Tenants().ProvisionAsync(
-                    new HostTenancy.TenantToProvision("orchard", "Second Orchard", TenantShape.Flat, "Orchard", Guid.NewGuid(), TenantId: Estuary),
+                    new TenantToProvision("orchard", "Second Orchard", TenantShape.Flat, "Orchard", Guid.NewGuid(), TenantId: Estuary),
                     Cancellation)))
                 .Should().ThrowAsync<RefusalException>()).Which;
         }
@@ -139,12 +139,12 @@ public abstract class ProvisioningTests(TenancyPostgres postgres, TenancyNaming 
 
         // It is an administrator all the same, under the policies as in the use cases: it gives a role that manages
         // access, whose permissions that do it holds, and a role to work with widgets, none of whose permissions it holds.
-        var fay = await services.BySeat(dan, Estuary, provisioned.AdminSeat, scoped => scoped.Seats().AddSeatAsync(Guid.NewGuid(), Cancellation, configure: seat => seat.Rename("Fay")));
+        var fay = (await services.BySeat(dan, Estuary, provisioned.AdminSeat, scoped => scoped.Seats().AddAsync(Guid.NewGuid(), Cancellation, configure: seat => seat.Rename("Fay")))).Id;
         await services.BySeat(dan, Estuary, provisioned.AdminSeat, scoped => scoped.Seats().PlaceAsync(fay, provisioned.RootUnit, primary: true, Cancellation));
         foreach (var pack in new[] { HostCatalogue.SupervisorPack, HostCatalogue.OperatorPack })
         {
             await services.BySeat(dan, Estuary, provisioned.AdminSeat,
-                scoped => scoped.Seats().GrantAsync(fay, provisioned.RootUnit, provisioned.RolesByPack[pack], until: null, reason: null, Cancellation));
+                scoped => scoped.Seats().GrantAsync(fay, provisioned.RolesByPack[pack], provisioned.RootUnit, until: null, reason: null, Cancellation));
         }
 
         // What the database answers the administrator is what the pack lists.
@@ -211,12 +211,12 @@ public abstract class ProvisioningTests(TenancyPostgres postgres, TenancyNaming 
             }
         }
 
-        var desk = await services.BySeat(dan, Estuary, provisioned.AdminSeat,
-            scoped => scoped.Roles().CreateAsync("Settings desk", "Keeps the settings", [TenancyPermissions.SettingsManage], Cancellation));
-        var fay = await services.BySeat(dan, Estuary, provisioned.AdminSeat, scoped => scoped.Seats().AddSeatAsync(Guid.NewGuid(), Cancellation, configure: seat => seat.Rename("Fay")));
+        var desk = (await services.BySeat(dan, Estuary, provisioned.AdminSeat,
+            scoped => scoped.Roles().CreateAsync("Settings desk", "Keeps the settings", [TenancyPermissions.SettingsManage], Cancellation))).Id;
+        var fay = (await services.BySeat(dan, Estuary, provisioned.AdminSeat, scoped => scoped.Seats().AddAsync(Guid.NewGuid(), Cancellation, configure: seat => seat.Rename("Fay")))).Id;
         await services.BySeat(dan, Estuary, provisioned.AdminSeat, scoped => scoped.Seats().PlaceAsync(fay, provisioned.RootUnit, primary: true, Cancellation));
         await services.BySeat(dan, Estuary, provisioned.AdminSeat,
-            scoped => scoped.Seats().GrantAsync(fay, provisioned.RootUnit, desk, until: null, reason: null, Cancellation));
+            scoped => scoped.Seats().GrantAsync(fay, desk, provisioned.RootUnit, until: null, reason: null, Cancellation));
     }
 
     [Fact]
@@ -239,12 +239,12 @@ public abstract class ProvisioningTests(TenancyPostgres postgres, TenancyNaming 
         var fayIdentity = Guid.NewGuid();
         var provisioned = await ProvisionEstuaryAsync(services, TenantShape.Flat, dan);
         provisioned.RolesByPack.Keys.Should().NotContain(TreeAdministrators, "that pack is for a hierarchical tenant");
-        var settingsDesk = await services.BySeat(dan, Estuary, provisioned.AdminSeat,
-            scoped => scoped.Roles().CreateAsync("Settings desk", "Keeps the settings", [TenancyPermissions.SettingsManage], Cancellation));
-        var fay = await services.BySeat(dan, Estuary, provisioned.AdminSeat, scoped => scoped.Seats().AddSeatAsync(fayIdentity, Cancellation, configure: seat => seat.Rename("Fay")));
+        var settingsDesk = (await services.BySeat(dan, Estuary, provisioned.AdminSeat,
+            scoped => scoped.Roles().CreateAsync("Settings desk", "Keeps the settings", [TenancyPermissions.SettingsManage], Cancellation))).Id;
+        var fay = (await services.BySeat(dan, Estuary, provisioned.AdminSeat, scoped => scoped.Seats().AddAsync(fayIdentity, Cancellation, configure: seat => seat.Rename("Fay")))).Id;
         await services.BySeat(dan, Estuary, provisioned.AdminSeat, scoped => scoped.Seats().PlaceAsync(fay, provisioned.RootUnit, primary: true, Cancellation));
         await services.BySeat(dan, Estuary, provisioned.AdminSeat,
-            scoped => scoped.Seats().GrantAsync(fay, provisioned.RootUnit, settingsDesk, until: null, reason: null, Cancellation));
+            scoped => scoped.Seats().GrantAsync(fay, settingsDesk, provisioned.RootUnit, until: null, reason: null, Cancellation));
 
         // Without the roles permission the policy lets her add a role only as a copy of a pack, holding exactly the permissions the
         // database says the pack holds. The use case copies the hierarchical administrators' pack with the permissions it
@@ -292,11 +292,11 @@ public abstract class ProvisioningTests(TenancyPostgres postgres, TenancyNaming 
         // Provisioned as system work in the new tenant, under the policies, with the application's own fields set.
         var dan = Guid.NewGuid();
         var fayIdentity = Guid.NewGuid();
-        HostTenancy.ProvisionedTenant provisioned;
+        ProvisionedTenant provisioned;
         using (TenancyWork.BeginSystem<TenantId, SeatId>())
         {
-            provisioned = await services.InScopeAsync(scoped => scoped.Tenants().ProvisionAsync(
-                new HostTenancy.TenantToProvision(
+            provisioned = await services.InScopeAsync(scoped => scoped.Tenants().ProvisionWithIdsAsync(scoped.GetRequiredService<TenancyCatalogue>(),
+                new TenantToProvision(
                     "estuary", "Estuary Works", TenantShape.Flat, "Estuary", dan,
                     TenantId: Estuary,
                     Language: dutch,
@@ -308,7 +308,7 @@ public abstract class ProvisioningTests(TenancyPostgres postgres, TenancyNaming 
 
         await services.BySeat(dan, Estuary, provisioned.AdminSeat, async scoped =>
         {
-            (await scoped.Directory().ListRolesAsync(Cancellation)).Select(role => (role.Name, role.FromPack)).Should().Equal(
+            (await scoped.Roles().ListAsync(Cancellation)).Select(role => (role.Name, role.FromPack)).Should().Equal(
                 ("Bediener", HostCatalogue.OperatorPack), ("Hoofdgebruiker", HostCatalogue.AdministratorPack), ("Toeschouwer", HostCatalogue.WatcherPack));
             (await scoped.TenancyContext().Set<HostTenant>().AsNoTracking().SingleAsync(Cancellation)).IsDemo.Should().BeTrue();
             (await scoped.TenancyContext().Set<HostSeat>().AsNoTracking().SingleAsync(seat => seat.Id == provisioned.AdminSeat, Cancellation))
@@ -318,24 +318,24 @@ public abstract class ProvisioningTests(TenancyPostgres postgres, TenancyNaming 
 
         // A seat that manages the settings and no roles: the policy lets it add a role only as a copy of a pack, by the
         // pack's permissions. The name is the tenant's, so the copy goes in under the pack's Dutch name.
-        var settingsDesk = await services.BySeat(dan, Estuary, provisioned.AdminSeat,
-            scoped => scoped.Roles().CreateAsync("Settings desk", "Keeps the settings", [TenancyPermissions.SettingsManage], Cancellation));
-        var fay = await services.BySeat(dan, Estuary, provisioned.AdminSeat, scoped => scoped.Seats().AddSeatAsync(fayIdentity, Cancellation, configure: seat => seat.Rename("Fay")));
+        var settingsDesk = (await services.BySeat(dan, Estuary, provisioned.AdminSeat,
+            scoped => scoped.Roles().CreateAsync("Settings desk", "Keeps the settings", [TenancyPermissions.SettingsManage], Cancellation))).Id;
+        var fay = (await services.BySeat(dan, Estuary, provisioned.AdminSeat, scoped => scoped.Seats().AddAsync(fayIdentity, Cancellation, configure: seat => seat.Rename("Fay")))).Id;
         await services.BySeat(dan, Estuary, provisioned.AdminSeat, scoped => scoped.Seats().PlaceAsync(fay, provisioned.RootUnit, primary: true, Cancellation));
         await services.BySeat(dan, Estuary, provisioned.AdminSeat,
-            scoped => scoped.Seats().GrantAsync(fay, provisioned.RootUnit, settingsDesk, until: null, reason: null, Cancellation));
+            scoped => scoped.Seats().GrantAsync(fay, settingsDesk, provisioned.RootUnit, until: null, reason: null, Cancellation));
 
         await services.BySeat(fayIdentity, Estuary, fay, scoped => scoped.Tenants().ChangeShapeAsync(TenantShape.Hierarchical, roleIds: null, dutch, Cancellation));
 
-        var supervisor = (await services.BySeat(fayIdentity, Estuary, fay, scoped => scoped.Directory().ListRolesAsync(Cancellation)))
+        var supervisor = (await services.BySeat(fayIdentity, Estuary, fay, scoped => scoped.Roles().ListAsync(Cancellation)))
             .Should().ContainSingle(role => role.FromPack == HostCatalogue.SupervisorPack).Which;
         supervisor.Name.Should().Be("Afdelingshoofd");
         supervisor.Permissions.Should().Equal(TenancyPostgres.Catalogue.Packs.Single(pack => pack.Key == HostCatalogue.SupervisorPack).Permissions);
 
         // A unit the administrator adds, under the policy a seat inserts a unit by, carries the application's own
         // column as its callback set it.
-        var quay = await services.BySeat(dan, Estuary, provisioned.AdminSeat, scoped => scoped.Organization().AddUnitAsync(
-            provisioned.RootUnit, "Quay", Cancellation, configure: unit => unit.SetCostCentre("QY-001")));
+        var quay = (await services.BySeat(dan, Estuary, provisioned.AdminSeat, scoped => scoped.Organization().AddUnitAsync(
+            provisioned.RootUnit, "Quay", Cancellation, configure: unit => unit.SetCostCentre("QY-001")))).Id;
         await services.BySeat(dan, Estuary, provisioned.AdminSeat, async scoped =>
             (await scoped.TenancyContext().Set<HostOrganization>().AsNoTracking().SingleAsync(Cancellation)).FindUnit(quay)!.CostCentre.Should().Be("QY-001"));
     }
@@ -387,12 +387,12 @@ public abstract class ProvisioningTests(TenancyPostgres postgres, TenancyNaming 
     }
 
     /// <summary>Provisions Estuary with <paramref name="administrator"/> as the identity of its first administrator, as system work outside any tenant.</summary>
-    private static async Task<HostTenancy.ProvisionedTenant> ProvisionEstuaryAsync(TenancyServices services, TenantShape shape, Guid administrator)
+    private static async Task<ProvisionedTenant> ProvisionEstuaryAsync(TenancyServices services, TenantShape shape, Guid administrator)
     {
         using (TenancyWork.BeginSystem<TenantId, SeatId>())
         {
-            return await services.InScopeAsync(scoped => scoped.Tenants().ProvisionAsync(
-                new HostTenancy.TenantToProvision("estuary", "Estuary Works", shape, "Estuary", administrator, TenantId: Estuary),
+            return await services.InScopeAsync(scoped => scoped.Tenants().ProvisionWithIdsAsync(scoped.GetRequiredService<TenancyCatalogue>(),
+                new TenantToProvision("estuary", "Estuary Works", shape, "Estuary", administrator, TenantId: Estuary),
                 Cancellation));
         }
     }

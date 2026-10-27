@@ -7,15 +7,15 @@ namespace DDDToolkit.Supporting.Tenancy.Tests;
 /// system work outside any tenant does it. A tenant's life is system work in that tenant; its settings need
 /// the settings permission for the whole tenant.
 /// </summary>
-public class TenantCommandsTests
+public class TenantManagerTests
 {
     private static readonly Guid Ada = Guid.NewGuid();
 
-    private static HostTenancy.TenantToProvision Harbor(TenantShape shape = TenantShape.Hierarchical, string slug = "harbor")
+    private static TenantToProvision Harbor(TenantShape shape = TenantShape.Hierarchical, string slug = "harbor")
         => new(slug, "Harbor Works", shape, "Harbor Works", Ada);
 
-    private static async Task<HostTenancy.ProvisionedTenant> Provision(Harness harness, HostTenancy.TenantToProvision command)
-        => await harness.Run(HostCaller.System, h => h.Tenants.ProvisionAsync(command, default));
+    private static async Task<ProvisionedTenant> Provision(Harness harness, TenantToProvision command)
+        => await harness.Run(HostCaller.System, h => h.Tenants.ProvisionWithIdsAsync(h.Catalogue, command, default));
 
     [Fact]
     public async Task Provisioning_creates_tenant_organization_root_roles_first_admin_and_grant_in_one_save()
@@ -136,8 +136,8 @@ public class TenantCommandsTests
             });
             held.Should().OnlyContain(holds => holds, "the default administrators' role holds every live permission, granted at the root");
 
-            var clerk = await harness.Run(caller, h => h.Roles.CreateAsync("Clerk", "Files widgets", [HostCatalogue.WidgetCreate], default));
-            await harness.Run(caller, h => h.Seats.GrantAsync(provisioned.AdminSeat, provisioned.RootUnit, clerk, until: null, reason: null, default));
+            var clerk = (await harness.Run(caller, h => h.Roles.CreateAsync("Clerk", "Files widgets", [HostCatalogue.WidgetCreate], default))).Id;
+            await harness.Run(caller, h => h.Seats.GrantAsync(provisioned.AdminSeat, clerk, provisioned.RootUnit, until: null, reason: null, default));
         }
 
         // A flat tenant that turns hierarchical has the one pack there is already: no role is added.
@@ -301,14 +301,14 @@ public class TenantCommandsTests
         var supervisor = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.SupervisorPack);
 
         var refusal = await Refused.WithCodeAsync(TenancyRefusals.NotPermitted,
-            () => harness.As(supervisor, h => h.Tenants.RenameOrganizationAsync("Bert's Harbor", default)));
+            () => harness.As(supervisor, h => h.Organization.RenameAsync("Bert's Harbor", default)));
         refusal.Arguments["Permission"].Should().Be(TenancyPermissions.SettingsManage);
         refusal.Message.Should().Be("You lack the permission " + TenancyPermissions.SettingsManage + ".");
 
-        await harness.As(harness.Administrator, h => h.Tenants.RenameOrganizationAsync("Harbor Works Group", default));
+        await harness.As(harness.Administrator, h => h.Organization.RenameAsync("Harbor Works Group", default));
         harness.Store.Organization(harness.Tenant).Name.Should().Be("Harbor Works Group");
 
-        await harness.BySystemWork(h => h.Tenants.RenameOrganizationAsync("Harbor", default));
+        await harness.BySystemWork(h => h.Organization.RenameAsync("Harbor", default));
         harness.Store.Organization(harness.Tenant).Name.Should().Be("Harbor");
     }
 
@@ -399,7 +399,7 @@ public class TenantCommandsTests
         await harness.Run(administrator, async h =>
         {
             await Refused.WithCodeAsync(TenancyRefusals.RoleNameTaken, () => h.Tenants.ChangeShapeAsync(TenantShape.Hierarchical, roleIds: null, language: null, default));
-            await h.Tenants.RenameOrganizationAsync("Kiosk Group", default);
+            await h.Organization.RenameAsync("Kiosk Group", default);
         });
 
         harness.Store.Organization(provisioned.Tenant).Name.Should().Be("Kiosk Group", "the later command was saved");

@@ -32,7 +32,7 @@ public sealed record MarkTenantAsDemo : ICommand, ITenantsRequest;
 /// </remarks>
 /// <param name="store">Where Tenancy's aggregates are loaded and saved: one unit of work per request.</param>
 /// <param name="tenancy">Tenancy, asked about the current caller, for the tenant it works in.</param>
-public sealed class MarkTenantAsDemoHandler(TenancyUseCases.IStore store, TenancyAccessManager tenancy) : ICommandHandler<MarkTenantAsDemo>
+public sealed class MarkTenantAsDemoHandler(TenancyStore store, TenancyAccessManager tenancy) : ICommandHandler<MarkTenantAsDemo>
 {
     /// <inheritdoc />
     /// <exception cref="RefusalException"><c>access.system-only</c> for a seat, whatever it holds.</exception>

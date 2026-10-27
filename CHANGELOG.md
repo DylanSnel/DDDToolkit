@@ -536,6 +536,12 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `[TemplateFacade(typeof(...))]` is filled with that class, the project's own or the one a project of its module
   below it has, so the registration registers what the application's code takes; without one, with the package's
   class itself.
+- **A record the application makes, and a class only some applications get, from `[TemplateFacade]`.** A package's
+  record that is not sealed, as Tenancy's `TenantToProvision<...>` is, gets a sealed record of the application's own
+  with its public constructors, so the application writes `new TenantToProvision(...)` with no type argument.
+  `OnlyWith = typeof(...)`, on the assembly's `[TemplateFacade]` and on a `[TemplateRegistration]`, names the template
+  of a class an application may leave out, such as Tenancy's invitation: the class and the registration are written
+  only where that template has a class, and a project without one hears nothing, rather than DDD00065 or DDD00049.
 
 - **A package's marker names the convention that maps it: `[ModelConvention]`.** A package marks an attribute of its
   own, which domain classes carry without Entity Framework, with the assembly-qualified name of an
@@ -2934,6 +2940,35 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     SeatId, OrganizationUnitId, RoleId, IBillingRequest, BillingContext>()`, writes the line once instead, and calls
     `AddTenancyAccess<IBillingRequest, BillingContext>()`, `modelBuilder.AddTenancyReadFunctions()` and
     `AddBillingMembershipWithTenancy<BillingContext>(rules)`.
+- **Tenancy: a manager per aggregate.** `TenantManager`, `OrganizationManager`, `SeatManager`, `RoleManager` and,
+  where the application declares an invitation class, `InvitationManager` hold each aggregate's commands and reads.
+  The generator writes each, closed over your classes, in the project that declares them, with no type argument, and
+  `AddTenancy<TContext>()` and `AddTenancyInvitations<TContext>()` register them per scope. A method no longer
+  repeats its manager's noun: `seats.AddAsync(...)`, `roles.CreateAsync(...)`, `seats.OverviewAsync(seat)`. What
+  creates returns the new aggregate, what changes returns the changed one, and the reads answer your own classes:
+  `ProvisionAsync` the `Tenant`, `AddUnitAsync` the `OrganizationUnit`, `seats.ByIdAsync(ids)` the seats,
+  `roles.ListAsync()` the roles, and `SeatManager.SeatOverview` your `Tenant`, `Seat` and `Role` objects. A method
+  that takes an aggregate takes your object or its id: `GrantAsync(Seat seat, Role role, OrganizationUnit at, ...)`
+  beside `GrantAsync(SeatId seat, RoleId role, OrganizationUnitId at, ...)`. The object overload reads its id alone,
+  and the manager loads and checks the aggregate as it does for the id.
+  - **Breaking.** `TenancyUseCases` and every class nested in it are gone. `TenantCommands`, `OrganizationCommands`,
+    `SeatCommands`, `RoleCommands` and `InvitationCommands<TInvitation, TInvitationId>` are the managers above.
+    `TenancyDirectory`'s reads moved to the manager of what they read: `WhoAmIAsync`, `SeatOverviewAsync` (now
+    `OverviewAsync`), `ListSeatsAsync` (`ListAsync`) and `SeatsByIdAsync` (`ByIdAsync`) to `SeatManager`;
+    `ListRolesAsync` (`ListAsync`) and `RolesByIdAsync` (`ByIdAsync`) to `RoleManager`; `ListUnitsAsync` and
+    `UnitsByIdAsync` to `OrganizationManager`. `TenantDirectory.ListAsync` is `TenantManager.ListAsync`, which
+    answers a `TenantManager.TenantPage` of `TenantListing(Tenant, Name, ActiveSeats)`. `RenameOrganizationAsync` is
+    `OrganizationManager.RenameAsync`, and `AddSeatAsync` is `AddAsync`. `GrantAsync` and `RevokeAsync` take the
+    role before the unit: `GrantAsync(seat, role, at, until, reason, ...)` and `RevokeAsync(seat, role, at, ...)`.
+    `ProvisionedTenant` is gone: give the ids you need in `TenantToProvision` (`TenantId`, `RootId`, `AdminSeatId`,
+    `RoleIds`), which is `new TenantToProvision(...)` with no prefix. `RoleSummary` is your `Role`, with
+    `roles.ManagesAccess(role)` for what it said; `TenantSummary` is your `Tenant`, and the overview's `TenantName`
+    its name. `OpenInvitation` is your `Invitation`; `IssuedInvitation` holds the `Invitation` and its token, and
+    `AcceptedInvitation` the `Tenant` and the `Seat`. `AddTenancyInvitations<TInvitation, TInvitationId,
+    TContext>()` is `AddTenancyInvitations<TContext>()`. The stores, `ITenancyStore<...>` and `IInvitationStore<...>`,
+    and the token's `InvitationOfToken<...>` are in `DDDToolkit.Supporting.Tenancy.UseCases`, no longer nested: a
+    storage package implements them as before. `TenancyUseCases.BeginOperator(...)` and `BeginOperatorIn(...)` are on
+    `TenantManager` for now.
 - **`UseDDDToolkit` keeps a context's migration history in its default schema.** A context whose model has a
   default schema, `modelBuilder.HasDefaultSchema("ordering")`, keeps its history in
   `ordering."__EFMigrationsHistory"` without its options naming it, so the modules that share a database each keep

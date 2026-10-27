@@ -18,11 +18,11 @@ public sealed record CreateTenantRole(string Name, string Description, IReadOnly
 
 /// <summary>Handles <see cref="CreateTenantRole"/> with the Tenancy package's use case, which checks the caller, decides and saves.</summary>
 /// <param name="roles">The package's use cases that change a role.</param>
-public sealed class CreateTenantRoleHandler(TenancyUseCases.RoleCommands roles) : ICommandHandler<CreateTenantRole, RoleId>
+public sealed class CreateTenantRoleHandler(RoleManager roles) : ICommandHandler<CreateTenantRole, RoleId>
 {
     /// <inheritdoc />
     /// <returns>The new role's id.</returns>
     /// <exception cref="Exceptions.RefusalException">What the package's use case refuses, with its code.</exception>
     public async ValueTask<RoleId> Handle(CreateTenantRole command, CancellationToken cancellationToken)
-        => await roles.CreateAsync(command.Name, command.Description, command.Permissions, cancellationToken);
+        => (await roles.CreateAsync(command.Name, command.Description, command.Permissions, cancellationToken)).Id;
 }

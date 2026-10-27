@@ -15,27 +15,34 @@ public static class SampleTenants
 
     /// <summary>
     /// Provisions a flat tenant with an administrator whose person has no sign-in here: the tenant, its root, its
-    /// administrator's seat and the roles of its packs, and nothing else.
+    /// administrator's seat and the roles of its packs, and nothing else. The ids are made here, as seeding makes them,
+    /// since the tenant manager answers the tenant alone.
     /// </summary>
     /// <param name="host">The host, started.</param>
     /// <param name="slug">The new tenant's slug.</param>
     /// <param name="name">Its name, and its root's.</param>
-    public static async Task<TenancyUseCases.ProvisionedTenant> ProvisionAsync(SampleFactory host, string slug, string name)
+    /// <returns>The ids of the tenant, its root and its administrator's seat.</returns>
+    public static async Task<(TenantId Tenant, OrganizationUnitId RootUnit, SeatId AdminSeat)> ProvisionAsync(SampleFactory host, string slug, string name)
     {
         ArgumentNullException.ThrowIfNull(host);
+        var root = OrganizationUnitId.Create();
+        var administrator = SeatId.Create();
         using (SampleAccess.Manager.BeginSystem())
         {
             await using var scope = host.Services.CreateAsyncScope();
-            return await scope.ServiceProvider.GetRequiredService<TenancyUseCases.TenantCommands>().ProvisionAsync(
-                new TenancyUseCases.TenantToProvision(
+            var tenant = await scope.ServiceProvider.GetRequiredService<TenantManager>().ProvisionAsync(
+                new TenantToProvision(
                     slug,
                     name,
                     TenantShape.Flat,
                     name,
                     Guid.NewGuid(),
-                    ConfigureRoot: root => root.SetKind(DemoTenant.RootKind),
-                    ConfigureFirstSeat: administrator => administrator.Rename("Its administrator")),
+                    RootId: root,
+                    AdminSeatId: administrator,
+                    ConfigureRoot: unit => unit.SetKind(DemoTenant.RootKind),
+                    ConfigureFirstSeat: seat => seat.Rename("Its administrator")),
                 Cancellation);
+            return (tenant.Id, root, administrator);
         }
     }
 

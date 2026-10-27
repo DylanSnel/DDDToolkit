@@ -206,24 +206,20 @@ public sealed class TenancyServices : IAsyncDisposable
 /// <summary>What a test resolves from a scope, by name.</summary>
 public static class ScopedServices
 {
-    public static HostTenancy.TenantCommands Tenants(this IServiceProvider services) => services.GetRequiredService<HostTenancy.TenantCommands>();
+    public static TenantManager Tenants(this IServiceProvider services) => services.GetRequiredService<TenantManager>();
 
-    public static HostTenancy.OrganizationCommands Organization(this IServiceProvider services) => services.GetRequiredService<HostTenancy.OrganizationCommands>();
+    public static OrganizationManager Organization(this IServiceProvider services) => services.GetRequiredService<OrganizationManager>();
 
-    public static HostTenancy.SeatCommands Seats(this IServiceProvider services) => services.GetRequiredService<HostTenancy.SeatCommands>();
+    public static SeatManager Seats(this IServiceProvider services) => services.GetRequiredService<SeatManager>();
 
-    public static HostTenancy.RoleCommands Roles(this IServiceProvider services) => services.GetRequiredService<HostTenancy.RoleCommands>();
+    public static HostRoleManager Roles(this IServiceProvider services) => services.GetRequiredService<HostRoleManager>();
 
     public static TestTenancyContext TenancyContext(this IServiceProvider services) => services.GetRequiredService<TestTenancyContext>();
 
     public static WidgetContext Widgets(this IServiceProvider services) => services.GetRequiredService<WidgetContext>();
 
-    public static HostTenancy.TenancyDirectory Directory(this IServiceProvider services) => services.GetRequiredService<HostTenancy.TenancyDirectory>();
-
-    public static HostTenancy.TenantDirectory TenantDirectory(this IServiceProvider services) => services.GetRequiredService<HostTenancy.TenantDirectory>();
-
-    public static HostTenancy.InvitationCommands<DDDToolkit.Supporting.Tenancy.TestHost.Domain.HostInvitation, InvitationId> Invitations(this IServiceProvider services)
-        => services.GetRequiredService<HostTenancy.InvitationCommands<DDDToolkit.Supporting.Tenancy.TestHost.Domain.HostInvitation, InvitationId>>();
+    public static InvitationManager Invitations(this IServiceProvider services)
+        => services.GetRequiredService<InvitationManager>();
 
     public static TallyContext Tallies(this IServiceProvider services) => services.GetRequiredService<TallyContext>();
 
@@ -245,7 +241,7 @@ public static class ScopedServices
     /// <exception cref="InvalidOperationException">The caller may not read the seat.</exception>
     public static async Task RenameSeatAsync(this IServiceProvider services, SeatId seat, string name, CancellationToken cancellationToken)
     {
-        var store = services.GetRequiredService<HostTenancy.IStore>();
+        var store = services.GetRequiredService<ITenancyStore<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId>>();
         var renamed = await store.FindSeatAsync(seat, cancellationToken) ?? throw new InvalidOperationException("No seat " + seat + " is the caller's to read.");
         renamed.Rename(name);
         await store.SaveAsync(cancellationToken);

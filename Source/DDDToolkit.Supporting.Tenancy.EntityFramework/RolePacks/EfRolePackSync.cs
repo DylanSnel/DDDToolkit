@@ -12,7 +12,7 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 /// <summary>
 /// <see cref="IRolePackSync"/> over Tenancy's context: the tenants to visit are read across tenants
 /// (<see cref="TenancySystemReads.TenantsToSweepAsync{TTenant, TTenantId}"/>), and each tenant's roles follow their
-/// packs through <c>RoleCommands.FollowPacksAsync</c>, as Tenancy's system work in that tenant, in a scope of its own.
+/// packs through <c>RoleManager.FollowPacksAsync</c>, as Tenancy's system work in that tenant, in a scope of its own.
 /// </summary>
 /// <remarks>
 /// A tenant that another run, or an administrator, changed between this run's reading and its save fails on the
@@ -86,7 +86,7 @@ internal sealed class EfRolePackSync<TTenant, TTenantId, TOrganization, TUnit, T
     }
 
     /// <summary>One tenant's roles follow their packs, as Tenancy's system work in it, tried again on a lost race.</summary>
-    private async Task<TenancyUseCases<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>.PacksFollowed> FollowAsync(
+    private async Task<RoleManager<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>.PacksFollowed> FollowAsync(
         TTenantId tenant,
         CancellationToken cancellationToken)
     {
@@ -99,7 +99,7 @@ internal sealed class EfRolePackSync<TTenant, TTenantId, TOrganization, TUnit, T
                 {
                     await using var scope = scopes.CreateAsyncScope();
                     var roles = scope.ServiceProvider
-                        .GetRequiredService<TenancyUseCases<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>.RoleCommands>();
+                        .GetRequiredService<RoleManager<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>>();
                     return await roles.FollowPacksAsync(cancellationToken).ConfigureAwait(false);
                 }
             }

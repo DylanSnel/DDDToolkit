@@ -120,7 +120,7 @@ public class FollowPacksTests
         var harness = Harness.OfHarbor();
         var watcher = harness.RoleFromPack(HostCatalogue.WatcherPack);
         var operatorRole = harness.RoleFromPack(HostCatalogue.OperatorPack);
-        var desk = await harness.BySystemWork(h => h.Roles.CreateAsync("Desk", "Answers the phone", [HostCatalogue.WidgetRead], default));
+        var desk = (await harness.BySystemWork(h => h.Roles.CreateAsync("Desk", "Answers the phone", [HostCatalogue.WidgetRead], default))).Id;
         await harness.BySystemWork(h => h.Roles.ArchiveAsync(watcher, default));
         var later = Catalogue(packs => packs
             .Where(pack => pack.Key != HostCatalogue.OperatorPack)
@@ -146,7 +146,7 @@ public class FollowPacksTests
         var operatorRole = harness.RoleFromPack(HostCatalogue.OperatorPack);
         var administrators = harness.Harbor.AdministratorRole.Id;
         var bert = await harness.SeatAt("Bert", root, HostCatalogue.OperatorPack);
-        await harness.BySystemWork(h => h.Seats.RevokeAsync(harness.Administrator, root, administrators, default));
+        await harness.BySystemWork(h => h.Seats.RevokeAsync(harness.Administrator, administrators, root, default));
         var later = New.Catalogue();
 
         var held = await harness.BySystemWork(h => Roles(h, later).FollowPacksAsync(default));
@@ -164,7 +164,7 @@ public class FollowPacksTests
     }
 
     /// <summary>The role use cases over the harness's store, as the application runs them with <paramref name="catalogue"/>.</summary>
-    private static HostTenancy.RoleCommands Roles(Harness harness, TenancyCatalogue catalogue)
+    private static HostRoleManager Roles(Harness harness, TenancyCatalogue catalogue)
         => new(harness.Store, catalogue, harness.Clock);
 
     /// <summary>The catalogue a later version of the application ships: the watcher's pack creates widgets too, and the operator's no longer does.</summary>

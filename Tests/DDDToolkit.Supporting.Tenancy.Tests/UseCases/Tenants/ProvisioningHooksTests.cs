@@ -9,7 +9,7 @@ namespace DDDToolkit.Supporting.Tenancy.Tests;
 /// </summary>
 public class ProvisioningHooksTests
 {
-    private static HostTenancy.TenantToProvision Harbor(
+    private static TenantToProvision Harbor(
         Action<HostTenant>? configureTenant = null,
         Action<HostSeat>? configureFirstSeat = null,
         Action<HostUnit>? configureRoot = null)
@@ -19,8 +19,8 @@ public class ProvisioningHooksTests
             ConfigureRoot: configureRoot,
             ConfigureFirstSeat: configureFirstSeat);
 
-    private static Task<HostTenancy.ProvisionedTenant> Provision(Harness harness, HostTenancy.TenantToProvision command)
-        => harness.Run(HostCaller.System, h => h.Tenants.ProvisionAsync(command, default));
+    private static Task<ProvisionedTenant> Provision(Harness harness, TenantToProvision command)
+        => harness.Run(HostCaller.System, h => h.Tenants.ProvisionWithIdsAsync(h.Catalogue, command, default));
 
     [Fact]
     public async Task The_host_fields_set_at_provisioning_are_saved_with_the_tenant()

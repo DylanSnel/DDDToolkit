@@ -4,11 +4,19 @@ using DDDToolkit.Supporting.Tenancy;
 using DDDToolkit.Supporting.Tenancy.Access;
 using DDDToolkit.Supporting.Tenancy.UseCases;
 
-// The project that declares a module's classes with Tenancy's templates gets the use cases closed over them, as a
-// class named as this one is without its type parameters: TenancyUseCases, whatever the module is called. Every project
-// that sees it names TenancyUseCases.SeatCommands and TenancyUseCases.SeatOverview without writing the nine types. An
-// application whose two modules both declare the classes names one of them with [assembly: TemplateFacadeName].
-[assembly: TemplateFacade(typeof(TenancyUseCases<,,,,,,,,>))]
+// The project that declares a module's classes with Tenancy's templates gets a manager per aggregate closed over them,
+// each a class named as the package's is without its type parameters, which the container makes: TenantManager,
+// OrganizationManager, SeatManager and RoleManager, whatever the module is called, and InvitationManager where the
+// module declares an invitation class, the one class an application may leave out. Every project that sees them takes a
+// SeatManager and names SeatManager.SeatOverview without writing the nine types. TenantToProvision, the record a tenant
+// is provisioned from, is written beside them, so code makes one without type arguments. An application whose two
+// modules both declare the classes names one module's with [assembly: TemplateFacadeName].
+[assembly: TemplateFacade(typeof(TenantManager<,,,,,,,,>))]
+[assembly: TemplateFacade(typeof(OrganizationManager<,,,,,,,,>))]
+[assembly: TemplateFacade(typeof(SeatManager<,,,,,,,,>))]
+[assembly: TemplateFacade(typeof(RoleManager<,,,,,,,,>))]
+[assembly: TemplateFacade(typeof(InvitationManager<,,,,,,,,,,>), OnlyWith = typeof(InvitationAggregateAttribute<>))]
+[assembly: TemplateFacade(typeof(TenantToProvision<,,,,,,>))]
 
 // And it gets the access manager closed over its four ids, TenancyAccessManager, a class the container makes: who acts,
 // in which tenant, and the work that is not the caller's own. A project of another module that sees only the ids says

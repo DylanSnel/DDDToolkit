@@ -22,7 +22,7 @@ namespace Examples.Tenancy.Tenants.Infrastructure.Persistence;
 /// <item>A reading takes a context from the factory the module registers next to its context, and disposes it
 /// with the reading. The factory builds it with the options the request's own context has, so the tenant filter
 /// and the caller it reads are the same.</item>
-/// <item>The Tenancy package's directory and its tenant selection are the package's services. The container makes them
+/// <item>The Tenancy package's managers and its tenant selection are the package's services. The container makes them
 /// over the context of the scope they are resolved in, and nothing here can hand them another, so each question
 /// to them gets a scope of its own, and with it a context of its own. The caller is not the scope's: Tenancy
 /// keeps it with the flow of work, so it is the same inside.</item>
@@ -42,12 +42,13 @@ internal sealed class EfTenancyReads(IDbContextFactory<TenantsContext> contexts,
     public ITenancyReading Open() => new Reading(contexts.CreateDbContext());
 
     /// <inheritdoc />
-    public async Task<TAnswer> AskDirectoryAsync<TAnswer>(Func<TenancyUseCases.TenancyDirectory, Task<TAnswer>> ask)
+    public async Task<TAnswer> AskAsync<TManager, TAnswer>(Func<TManager, Task<TAnswer>> ask)
+        where TManager : notnull
     {
         ArgumentNullException.ThrowIfNull(ask);
 
         await using var scope = scopes.CreateAsyncScope();
-        return await ask(scope.ServiceProvider.GetRequiredService<TenancyUseCases.TenancyDirectory>());
+        return await ask(scope.ServiceProvider.GetRequiredService<TManager>());
     }
 
     /// <inheritdoc />
@@ -58,10 +59,10 @@ internal sealed class EfTenancyReads(IDbContextFactory<TenantsContext> contexts,
     }
 
     /// <inheritdoc />
-    public async Task<TenancyUseCases.TenantDirectoryPage> TenantsAsync(string? after, int size, CancellationToken cancellationToken)
+    public async Task<TenantManager.TenantPage> TenantsAsync(string? after, int size, CancellationToken cancellationToken)
     {
         await using var scope = scopes.CreateAsyncScope();
-        return await scope.ServiceProvider.GetRequiredService<TenancyUseCases.TenantDirectory>().ListAsync(after, size, cancellationToken);
+        return await scope.ServiceProvider.GetRequiredService<TenantManager>().ListAsync(after, size, cancellationToken);
     }
 
     /// <inheritdoc />
@@ -94,13 +95,13 @@ internal sealed class EfTenancyReads(IDbContextFactory<TenantsContext> contexts,
 
     /// <inheritdoc />
     /// <remarks>
-    /// The package lists invitations with the use cases that issue and cancel them. Asked here for the list
+    /// The package lists invitations with the manager that issues and cancels them. Asked here for the list
     /// alone, over the context of a scope of this read's own, never the request's unit of work.
     /// </remarks>
-    public async Task<IReadOnlyList<TenancyUseCases.OpenInvitation<InvitationId>>> OpenInvitationsAsync(CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<Invitation>> OpenInvitationsAsync(CancellationToken cancellationToken)
     {
         await using var scope = scopes.CreateAsyncScope();
-        return await scope.ServiceProvider.GetRequiredService<TenancyUseCases.InvitationCommands<Invitation, InvitationId>>().ListOpenAsync(cancellationToken);
+        return await scope.ServiceProvider.GetRequiredService<InvitationManager>().ListOpenAsync(cancellationToken);
     }
 
     /// <summary>

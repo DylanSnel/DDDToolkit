@@ -1,3 +1,4 @@
+using Examples.Tenancy.Tenants.Application.Seats;
 using HotChocolate.Types;
 
 namespace Examples.Tenancy.Tenants.Api.Seats.GraphQL;
@@ -6,8 +7,8 @@ namespace Examples.Tenancy.Tenants.Api.Seats.GraphQL;
 /// The tenant the calling seat is in, as the schema shows it: declared over the record the seat's own overview
 /// answers, under the name a client knows it by.
 /// </summary>
-[ObjectType<TenancyUseCases.TenantSummary>]
+[ObjectType<TenantOfMine>]
 internal static partial class TenantOfMineType
 {
-    static partial void Configure(IObjectTypeDescriptor<TenancyUseCases.TenantSummary> descriptor) => descriptor.Name("TenantOfMine");
+    static partial void Configure(IObjectTypeDescriptor<TenantOfMine> descriptor) => descriptor.Name("TenantOfMine");
 }

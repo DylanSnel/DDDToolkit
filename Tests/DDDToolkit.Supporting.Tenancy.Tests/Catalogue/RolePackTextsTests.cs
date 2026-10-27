@@ -15,11 +15,11 @@ public class RolePackTextsTests
 {
     private static readonly CultureInfo Dutch = CultureInfo.GetCultureInfo("nl");
 
-    private static HostTenancy.TenantToProvision Harbor(TenantShape shape, CultureInfo? language)
+    private static TenantToProvision Harbor(TenantShape shape, CultureInfo? language)
         => new("harbor", "Harbor Works", shape, "Harbor Works", Guid.NewGuid(), Language: language);
 
-    private static Task<HostTenancy.ProvisionedTenant> Provision(Harness harness, HostTenancy.TenantToProvision command)
-        => harness.Run(HostCaller.System, h => h.Tenants.ProvisionAsync(command, default));
+    private static Task<ProvisionedTenant> Provision(Harness harness, TenantToProvision command)
+        => harness.Run(HostCaller.System, h => h.Tenants.ProvisionWithIdsAsync(h.Catalogue, command, default));
 
     /// <summary>The host's four packs in Dutch.</summary>
     private static PackTexts DutchTexts() => new PackTexts()
@@ -229,7 +229,7 @@ public class RolePackTextsTests
                 options.Catalogue = HostCatalogue.Application;
             });
             services.AddSingleton(provider => new InMemoryTenancyStore(provider.GetRequiredService<TenancyCatalogue>()));
-            services.AddSingleton<HostTenancy.IStore>(provider => provider.GetRequiredService<InMemoryTenancyStore>());
+            services.AddSingleton<ITenancyStore<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId>>(provider => provider.GetRequiredService<InMemoryTenancyStore>());
             services.AddScoped<ISeatDirectory<TenantId, SeatId>, ListedSeats>();
             register(services);
 
@@ -239,7 +239,7 @@ public class RolePackTextsTests
             using (TenancyCallers.Begin(HostCaller.System))
             {
                 store.BeginUnitOfWork();
-                await scope.ServiceProvider.GetRequiredService<HostTenancy.TenantCommands>()
+                await scope.ServiceProvider.GetRequiredService<CoreTenantManager>()
                     .ProvisionAsync(Harbor(TenantShape.Flat, Dutch) with { TenantId = new TenantId(7) }, TestContext.Current.CancellationToken);
             }
 

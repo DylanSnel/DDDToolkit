@@ -17,7 +17,7 @@ public abstract class ConcurrencyTests(TestDatabases databases) : IAsyncLifetime
 {
     private TestServices _services = null!;
 
-    private HostTenancy.ProvisionedTenant _harbor = null!;
+    private ProvisionedTenant _harbor = null!;
     private OrganizationUnitId _north;
     private OrganizationUnitId _south;
     private OrganizationUnitId _coast;
@@ -51,8 +51,8 @@ public abstract class ConcurrencyTests(TestDatabases databases) : IAsyncLifetime
 
         // Each sees the other administrator, so each passes the last-administrator rule on its own.
         var conflict = await RaceAsync(
-            interrupted: services => services.Seats().RevokeAsync(ada, _harbor.RootUnit, Administrator, TestContext.Current.CancellationToken),
-            interrupting: services => services.Seats().RevokeAsync(beth, _harbor.RootUnit, Administrator, TestContext.Current.CancellationToken));
+            interrupted: services => services.Seats().RevokeAsync(ada, Administrator, _harbor.RootUnit, TestContext.Current.CancellationToken),
+            interrupting: services => services.Seats().RevokeAsync(beth, Administrator, _harbor.RootUnit, TestContext.Current.CancellationToken));
 
         conflict.AggregateType.Should().Be<TenancyAccessRevision<TenantId>>();
         (await AdministratorsAsync()).Should().Equal([ada], "one administrator is left");
@@ -75,9 +75,9 @@ public abstract class ConcurrencyTests(TestDatabases databases) : IAsyncLifetime
             _services.Hook.AfterCommand(
                 grantorContext,
                 command => command.Contains("FROM " + Revisions),
-                () => _services.BySystemIn(_harbor.Tenant, system => system.Seats().RevokeAsync(_grace, _north, Operator, TestContext.Current.CancellationToken)));
+                () => _services.BySystemIn(_harbor.Tenant, system => system.Seats().RevokeAsync(_grace, Operator, _north, TestContext.Current.CancellationToken)));
 
-            var conflict = await FluentActions.Awaiting(() => services.Seats().GrantAsync(_lin, _north, Operator, until: null, reason: null, TestContext.Current.CancellationToken))
+            var conflict = await FluentActions.Awaiting(() => services.Seats().GrantAsync(_lin, Operator, _north, until: null, reason: null, TestContext.Current.CancellationToken))
                 .Should().ThrowAsync<ConcurrencyConflictException>();
             conflict.Which.AggregateType.Should().Be<TenancyAccessRevision<TenantId>>();
         });
@@ -118,8 +118,8 @@ public abstract class ConcurrencyTests(TestDatabases databases) : IAsyncLifetime
         _services.Commands.Reset();
         await _services.BySeat(_harbor.Tenant, _harbor.AdminSeat, services => command switch
         {
-            "grant" => services.Seats().GrantAsync(_lin, _coast, Operator, until: null, reason: null, TestContext.Current.CancellationToken),
-            "revoke" => services.Seats().RevokeAsync(_grace, _north, Supervisor, TestContext.Current.CancellationToken),
+            "grant" => services.Seats().GrantAsync(_lin, Operator, _coast, until: null, reason: null, TestContext.Current.CancellationToken),
+            "revoke" => services.Seats().RevokeAsync(_grace, Supervisor, _north, TestContext.Current.CancellationToken),
             "withdraw" => services.Seats().WithdrawAsync(_lin, _coast, TestContext.Current.CancellationToken),
             "suspend" => services.Seats().SuspendAsync(_lin, TestContext.Current.CancellationToken),
             "reactivate" => services.Seats().ReactivateAsync(_lin, TestContext.Current.CancellationToken),
@@ -142,8 +142,8 @@ public abstract class ConcurrencyTests(TestDatabases databases) : IAsyncLifetime
         await BuildHarborAsync();
 
         var conflict = await RaceAsync(
-            interrupted: services => services.Seats().GrantAsync(_lin, _north, Operator, until: null, reason: null, TestContext.Current.CancellationToken),
-            interrupting: services => services.Seats().RevokeAsync(_grace, _north, Supervisor, TestContext.Current.CancellationToken),
+            interrupted: services => services.Seats().GrantAsync(_lin, Operator, _north, until: null, reason: null, TestContext.Current.CancellationToken),
+            interrupting: services => services.Seats().RevokeAsync(_grace, Supervisor, _north, TestContext.Current.CancellationToken),
             interruptedSeat: _grace);
 
         conflict.AggregateType.Should().Be<TenancyAccessRevision<TenantId>>();
@@ -151,7 +151,7 @@ public abstract class ConcurrencyTests(TestDatabases databases) : IAsyncLifetime
         (await _services.StoredRightsAsync(_grace)).Should().BeEmpty();
 
         await Refused.WithCodeAsync(TenancyRefusals.NotPermitted, () => _services.BySeat(_harbor.Tenant, _grace, services =>
-            services.Seats().GrantAsync(_lin, _north, Operator, until: null, reason: null, TestContext.Current.CancellationToken)));
+            services.Seats().GrantAsync(_lin, Operator, _north, until: null, reason: null, TestContext.Current.CancellationToken)));
     }
 
     [Fact]
@@ -161,7 +161,7 @@ public abstract class ConcurrencyTests(TestDatabases databases) : IAsyncLifetime
 
         // The role gains a permission Grace does not hold while she grants it.
         var conflict = await RaceAsync(
-            interrupted: services => services.Seats().GrantAsync(_lin, _north, Operator, until: null, reason: null, TestContext.Current.CancellationToken),
+            interrupted: services => services.Seats().GrantAsync(_lin, Operator, _north, until: null, reason: null, TestContext.Current.CancellationToken),
             interrupting: services => services.Roles().SetPermissionsAsync(Operator, [HostCatalogue.WidgetChange, HostCatalogue.WidgetCreate, TenancyPermissions.RolesManage], TestContext.Current.CancellationToken),
             interruptedSeat: _grace);
 
@@ -169,7 +169,7 @@ public abstract class ConcurrencyTests(TestDatabases databases) : IAsyncLifetime
         (await GrantsAsync(_lin)).Should().BeEmpty();
 
         var refusal = await Refused.WithCodeAsync(TenancyRefusals.GrantExceedsOwn, () => _services.BySeat(_harbor.Tenant, _grace, services =>
-            services.Seats().GrantAsync(_lin, _north, Operator, until: null, reason: null, TestContext.Current.CancellationToken)));
+            services.Seats().GrantAsync(_lin, Operator, _north, until: null, reason: null, TestContext.Current.CancellationToken)));
         refusal.Arguments["Missing"].Should().Be(TenancyPermissions.RolesManage);
     }
 
@@ -180,7 +180,7 @@ public abstract class ConcurrencyTests(TestDatabases databases) : IAsyncLifetime
 
         // Coast moves out from under North, where Grace's permissions are, while she grants there.
         var conflict = await RaceAsync(
-            interrupted: services => services.Seats().GrantAsync(_lin, _coast, Operator, until: null, reason: null, TestContext.Current.CancellationToken),
+            interrupted: services => services.Seats().GrantAsync(_lin, Operator, _coast, until: null, reason: null, TestContext.Current.CancellationToken),
             interrupting: services => services.Organization().MoveUnitAsync(_coast, _south, TestContext.Current.CancellationToken),
             interruptedSeat: _grace);
 
@@ -188,7 +188,7 @@ public abstract class ConcurrencyTests(TestDatabases databases) : IAsyncLifetime
         (await GrantsAsync(_lin)).Should().BeEmpty();
 
         await Refused.WithCodeAsync(TenancyRefusals.NotPermitted, () => _services.BySeat(_harbor.Tenant, _grace, services =>
-            services.Seats().GrantAsync(_lin, _coast, Operator, until: null, reason: null, TestContext.Current.CancellationToken)));
+            services.Seats().GrantAsync(_lin, Operator, _coast, until: null, reason: null, TestContext.Current.CancellationToken)));
     }
 
     [Fact]
@@ -199,13 +199,13 @@ public abstract class ConcurrencyTests(TestDatabases databases) : IAsyncLifetime
         // The grant finds Coast active; the archive commits before the grant saves. The grant never touches the
         // organization, so its version cannot keep them apart; the revision both take does.
         var conflict = await RaceAsync(
-            interrupted: services => services.Seats().GrantAsync(_lin, _coast, Operator, until: null, reason: null, TestContext.Current.CancellationToken),
+            interrupted: services => services.Seats().GrantAsync(_lin, Operator, _coast, until: null, reason: null, TestContext.Current.CancellationToken),
             interrupting: services => services.Organization().ArchiveUnitAsync(_coast, TestContext.Current.CancellationToken));
 
         conflict.AggregateType.Should().Be<TenancyAccessRevision<TenantId>>();
         (await GrantsAsync(_lin)).Should().BeEmpty("nothing new is granted at an archived unit");
         await Refused.WithCodeAsync(TenancyRefusals.UnitNotActive, () => _services.BySystemIn(_harbor.Tenant, services =>
-            services.Seats().GrantAsync(_lin, _coast, Operator, until: null, reason: null, TestContext.Current.CancellationToken)));
+            services.Seats().GrantAsync(_lin, Operator, _coast, until: null, reason: null, TestContext.Current.CancellationToken)));
     }
 
     [Fact]
@@ -231,7 +231,7 @@ public abstract class ConcurrencyTests(TestDatabases databases) : IAsyncLifetime
 
         var conflict = await RaceAsync(
             interrupted: services => services.Organization().RenameUnitAsync(_north, "North Shore", TestContext.Current.CancellationToken),
-            interrupting: async services => west = await services.Organization().AddUnitAsync(_harbor.RootUnit, "West", TestContext.Current.CancellationToken));
+            interrupting: async services => west = (await services.Organization().AddUnitAsync(_harbor.RootUnit, "West", TestContext.Current.CancellationToken)).Id);
 
         conflict.AggregateType.Should().Be<HostOrganization>("a rename does not take the access revision; the organization's version keeps the edits apart");
         await _services.BySystemIn(_harbor.Tenant, async services =>

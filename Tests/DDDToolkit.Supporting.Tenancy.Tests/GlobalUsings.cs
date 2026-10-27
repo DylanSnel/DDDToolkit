@@ -1,4 +1,5 @@
 global using DDDToolkit.Supporting.Tenancy.Access;
+global using DDDToolkit.Supporting.Tenancy.UseCases;
 global using DDDToolkit.Supporting.Tenancy.Catalogue;
 global using DDDToolkit.Supporting.Tenancy.TestHost;
 global using DDDToolkit.Supporting.Tenancy.TestHost.Contracts;
@@ -7,8 +8,36 @@ global using DDDToolkit.Supporting.Tenancy.Tests.Support;
 global using FluentAssertions;
 global using Xunit;
 
-// The caller closed over the host's ids, once, as an application does. The use cases are HostTenancy, which the
-// toolkit's generator writes into the test host that declares the classes, under the name its module gives it.
+// The caller closed over the host's ids, once, as an application does. The managers are the classes the toolkit's
+// generator writes into the test host that declares the classes: SeatManager and the others, and HostRoleManager, under
+// the name the host gives it.
 global using HostCaller = DDDToolkit.Supporting.Tenancy.Access.TenancyCaller<
     DDDToolkit.Supporting.Tenancy.TestHost.Contracts.TenantId,
     DDDToolkit.Supporting.Tenancy.TestHost.Contracts.SeatId>;
+
+// The package's managers closed over the host's classes, as AddTenancyCore registers them: the classes the generator
+// writes derive from these, and AddTenancy of the storage package registers those.
+global using CoreTenantManager = DDDToolkit.Supporting.Tenancy.UseCases.TenantManager<
+    DDDToolkit.Supporting.Tenancy.TestHost.Domain.HostTenant, DDDToolkit.Supporting.Tenancy.TestHost.Contracts.TenantId,
+    DDDToolkit.Supporting.Tenancy.TestHost.Domain.HostOrganization, DDDToolkit.Supporting.Tenancy.TestHost.Domain.HostUnit,
+    DDDToolkit.Supporting.Tenancy.TestHost.Contracts.OrganizationUnitId, DDDToolkit.Supporting.Tenancy.TestHost.Domain.HostSeat,
+    DDDToolkit.Supporting.Tenancy.TestHost.Contracts.SeatId, DDDToolkit.Supporting.Tenancy.TestHost.Domain.HostRole,
+    DDDToolkit.Supporting.Tenancy.TestHost.Contracts.RoleId>;
+global using CoreOrganizationManager = DDDToolkit.Supporting.Tenancy.UseCases.OrganizationManager<
+    DDDToolkit.Supporting.Tenancy.TestHost.Domain.HostTenant, DDDToolkit.Supporting.Tenancy.TestHost.Contracts.TenantId,
+    DDDToolkit.Supporting.Tenancy.TestHost.Domain.HostOrganization, DDDToolkit.Supporting.Tenancy.TestHost.Domain.HostUnit,
+    DDDToolkit.Supporting.Tenancy.TestHost.Contracts.OrganizationUnitId, DDDToolkit.Supporting.Tenancy.TestHost.Domain.HostSeat,
+    DDDToolkit.Supporting.Tenancy.TestHost.Contracts.SeatId, DDDToolkit.Supporting.Tenancy.TestHost.Domain.HostRole,
+    DDDToolkit.Supporting.Tenancy.TestHost.Contracts.RoleId>;
+global using CoreSeatManager = DDDToolkit.Supporting.Tenancy.UseCases.SeatManager<
+    DDDToolkit.Supporting.Tenancy.TestHost.Domain.HostTenant, DDDToolkit.Supporting.Tenancy.TestHost.Contracts.TenantId,
+    DDDToolkit.Supporting.Tenancy.TestHost.Domain.HostOrganization, DDDToolkit.Supporting.Tenancy.TestHost.Domain.HostUnit,
+    DDDToolkit.Supporting.Tenancy.TestHost.Contracts.OrganizationUnitId, DDDToolkit.Supporting.Tenancy.TestHost.Domain.HostSeat,
+    DDDToolkit.Supporting.Tenancy.TestHost.Contracts.SeatId, DDDToolkit.Supporting.Tenancy.TestHost.Domain.HostRole,
+    DDDToolkit.Supporting.Tenancy.TestHost.Contracts.RoleId>;
+global using CoreRoleManager = DDDToolkit.Supporting.Tenancy.UseCases.RoleManager<
+    DDDToolkit.Supporting.Tenancy.TestHost.Domain.HostTenant, DDDToolkit.Supporting.Tenancy.TestHost.Contracts.TenantId,
+    DDDToolkit.Supporting.Tenancy.TestHost.Domain.HostOrganization, DDDToolkit.Supporting.Tenancy.TestHost.Domain.HostUnit,
+    DDDToolkit.Supporting.Tenancy.TestHost.Contracts.OrganizationUnitId, DDDToolkit.Supporting.Tenancy.TestHost.Domain.HostSeat,
+    DDDToolkit.Supporting.Tenancy.TestHost.Contracts.SeatId, DDDToolkit.Supporting.Tenancy.TestHost.Domain.HostRole,
+    DDDToolkit.Supporting.Tenancy.TestHost.Contracts.RoleId>;

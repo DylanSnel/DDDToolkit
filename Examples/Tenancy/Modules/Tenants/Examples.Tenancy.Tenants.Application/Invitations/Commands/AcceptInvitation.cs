@@ -42,7 +42,7 @@ public sealed record AcceptInvitation(string Token, string? DisplayName) : IComm
 /// </summary>
 /// <param name="invitations">The package's use cases for invitations.</param>
 /// <param name="callers">Who is calling, as the host verified it: where the caller's address is read.</param>
-public sealed class AcceptInvitationHandler(TenancyUseCases.InvitationCommands<Invitation, InvitationId> invitations, ICallerAccessor callers) : ICommandHandler<AcceptInvitation, SeatId>
+public sealed class AcceptInvitationHandler(InvitationManager invitations, ICallerAccessor callers) : ICommandHandler<AcceptInvitation, SeatId>
 {
     /// <summary>The claim of an access token that carries the account's e-mail address.</summary>
     private const string AddressClaim = "email";
@@ -62,6 +62,6 @@ public sealed class AcceptInvitationHandler(TenancyUseCases.InvitationCommands<I
         // The name is this application's field: set on the new seat once the package found the invitation good, and
         // before anything is saved, so a name the seat refuses leaves the invitation open for another try.
         var accepted = await invitations.AcceptAsync(command.Token, address, cancellationToken, configure: seat => seat.Rename(command.DisplayName));
-        return accepted.Seat;
+        return accepted.Seat.Id;
     }
 }

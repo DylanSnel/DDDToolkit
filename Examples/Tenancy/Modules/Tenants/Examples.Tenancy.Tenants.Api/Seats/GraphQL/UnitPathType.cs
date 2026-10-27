@@ -6,8 +6,8 @@ namespace Examples.Tenancy.Tenants.Api.Seats.GraphQL;
 /// A unit as the calling seat's own overview names it, its id and its path from the root, as the schema shows
 /// it. It is no <c>OrganizationUnit</c>: an entity has all its fields wherever its owner answers it.
 /// </summary>
-[ObjectType<TenancyUseCases.UnitRef>]
+[ObjectType<SeatManager.UnitRef>]
 internal static partial class UnitPathType
 {
-    static partial void Configure(IObjectTypeDescriptor<TenancyUseCases.UnitRef> descriptor) => descriptor.Name("UnitPath");
+    static partial void Configure(IObjectTypeDescriptor<SeatManager.UnitRef> descriptor) => descriptor.Name("UnitPath");
 }

@@ -66,7 +66,7 @@ internal static class Signatures
 
     /// <summary>
     /// A type's name as the reference heads it: the types it is nested in by name, itself with its type parameters,
-    /// <c>TenancyRequirement.AtUnit&lt;TUnitId&gt;</c>. The nine type parameters of <c>TenancyUseCases</c> would bury
+    /// <c>TenancyRequirement.AtUnit&lt;TUnitId&gt;</c>. The nine type parameters of <c>SeatManager</c> would bury
     /// every type nested in it, and the generated class an application names them through has none.
     /// </summary>
     public static string Name(INamedTypeSymbol type)
@@ -75,7 +75,7 @@ internal static class Signatures
         return type.ContainingType is { } containing ? Plain(containing) + "." + own : own;
     }
 
-    /// <summary>A type and the types it is nested in, by name alone: <c>TenancyUseCases.SeatCommands</c>.</summary>
+    /// <summary>A type and the types it is nested in, by name alone: <c>SeatManager.SeatOverview</c>.</summary>
     public static string Plain(INamedTypeSymbol type)
         => type.ContainingType is { } containing ? Plain(containing) + "." + type.Name : type.Name;
 

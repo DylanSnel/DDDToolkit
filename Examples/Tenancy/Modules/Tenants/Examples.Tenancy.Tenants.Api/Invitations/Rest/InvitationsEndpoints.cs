@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using Examples.Tenancy.Tenants.Application.Invitations.Commands;
+using Examples.Tenancy.Tenants.Application.Invitations;
 using Examples.Tenancy.Tenants.Application.Invitations.Queries;
 using Mediator;
 using Microsoft.AspNetCore.Builder;
@@ -73,7 +74,7 @@ internal static class InvitationsEndpoints
     }
 
     /// <summary>An open invitation as this project writes it: who it is for, and what it offers and who issued it, by id.</summary>
-    private static object Describe(TenancyUseCases.OpenInvitation<InvitationId> invitation) => new
+    private static object Describe(OpenInvitationListing invitation) => new
     {
         invitation.Id,
         invitation.Address,

@@ -330,10 +330,10 @@ public abstract class ModelTests(TestDatabases databases) : IAsyncLifetime
     public void The_generated_services_AddTenancy_registers_what_the_explicit_one_does()
     {
         var generated = TestHostTenancy.Add(new ServiceCollection());
-        var explicitServices = new ServiceCollection().AddTenancy<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId, TenancyAccessManager, TestTenancyContext>(
+        var explicitServices = new ServiceCollection().AddTenancy<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId, TenancyAccessManager, TenantManager, OrganizationManager, SeatManager, HostRoleManager, TestTenancyContext>(
             options => options.Catalogue = HostCatalogue.Application);
         explicitServices.AddTenancyAccess<TenantId, SeatId, OrganizationUnitId, RoleId, TenancyAccessManager, DDDToolkit.Supporting.Tenancy.TestHost.Requests.IHostRequest, TestTenancyContext>();
-        explicitServices.AddTenancyInvitations<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId, HostInvitation, InvitationId, TestTenancyContext>();
+        explicitServices.AddTenancyInvitations<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId, HostInvitation, InvitationId, InvitationManager, TestTenancyContext>();
 
         Registrations(generated).Should().Equal(Registrations(explicitServices));
     }

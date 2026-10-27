@@ -17,7 +17,7 @@ public sealed record WithdrawPlacement(SeatId Seat, [AtUnit] OrganizationUnitId 
 
 /// <summary>Handles <see cref="WithdrawPlacement"/> with the Tenancy package's use case, which checks the caller, decides and saves.</summary>
 /// <param name="seats">The package's use cases that change a seat.</param>
-public sealed class WithdrawPlacementHandler(TenancyUseCases.SeatCommands seats) : ICommandHandler<WithdrawPlacement>
+public sealed class WithdrawPlacementHandler(SeatManager seats) : ICommandHandler<WithdrawPlacement>
 {
     /// <inheritdoc />
     /// <exception cref="Exceptions.RefusalException">What the package's use case refuses, with its code.</exception>

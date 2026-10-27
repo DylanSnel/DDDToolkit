@@ -36,21 +36,19 @@ internal static class TenancyReference
             new(
                 "use-cases.md",
                 "Use cases",
-                "The management classes. `TenancyUseCases` is a class the generator writes in the project that declares the "
-                + "application's classes: it derives from `TenancyUseCases<…>` closed over them, so every type nested there is "
-                + "named through it, `TenancyUseCases.SeatCommands`, `TenancyUseCases.SeatOverview`, and every static member is "
-                + "called through it, `TenancyUseCases.BeginSystem()`. This page names them that way. What fills the nine type "
-                + "parameters:\n\n"
-                + PageWriter.TypeParameterTable + "TenancyUseCases}\n\n"
+                "The managers, one per aggregate. Each is a class the generator writes in the project that declares the "
+                + "application's classes, named as the package's class is: `SeatManager` derives from `SeatManager<…>` closed "
+                + "over them, so every type nested there is named through it, `SeatManager.SeatOverview`. This page names them "
+                + "that way. What fills the nine type parameters:\n\n"
+                + PageWriter.TypeParameterTable + "SeatManager}\n\n"
                 + "The registration a host calls, from all three packages, is at the end, under [Registration](#registration).",
                 [
-                    new("TenancyUseCases", [new(Tenancy, Folder: "UseCases")]),
+                    new("Stores", [new(Tenancy, Folder: "UseCases")]),
                     new("Tenants", [new(Tenancy, Folder: "UseCases/Tenants")]),
                     new("Organization", [new(Tenancy, Folder: "UseCases/Organizations")]),
                     new("Seats", [new(Tenancy, Folder: "UseCases/Seats")]),
                     new("Roles", [new(Tenancy, Folder: "UseCases/Roles")]),
                     new("Invitations", [new(Tenancy, Folder: "UseCases/Invitations")]),
-                    new("Directory", [new(Tenancy, Folder: "UseCases/Directory")]),
                     new(
                         "Registration",
                         [

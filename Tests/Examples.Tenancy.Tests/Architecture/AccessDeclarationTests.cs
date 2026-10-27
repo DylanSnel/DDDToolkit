@@ -453,20 +453,20 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
                 "the Tenants module has no case of its own, and so no check of its own");
         Requests.Select(request => request.Module).Distinct().Should().BeEquivalentTo(SampleLayout.Modules, "every module's requests are held to it");
 
-        // A handler that hands its request to the package's commands belongs to a request that requires a caller in
-        // the tenant, a permission there, or a signed-in user: what the use case asks first, so a caller it would refuse
+        // A handler that hands its request to the package's managers belongs to a request that requires a caller in
+        // the tenant, a permission there, or a signed-in user: what the manager asks first, so a caller it would refuse
         // before anything else is refused at the door already, with the same code. Which code each gets is
         // RequestPipelineTests' to prove, past the door and in front of it.
         var handedOn = Requests
-            .Where(request => request.Handler.GetConstructors().Single().GetParameters().Any(parameter => IsPackageCommands(parameter.ParameterType)))
+            .Where(request => request.Handler.GetConstructors().Single().GetParameters().Any(parameter => IsPackageManager(parameter.ParameterType)))
             .ToList();
-        handedOn.Should().Contain(request => request.Type == typeof(MakeGrant), "the package's commands are found by their type, or this proves nothing");
+        handedOn.Should().Contain(request => request.Type == typeof(MakeGrant), "the package's managers are found by their type, or this proves nothing");
 
         foreach (var request in handedOn)
         {
             var declares = DeclaredBy(Declared.Single(row => row.Request.GetType() == request.Type).Request);
             (declares is TenancyRequirement.InTenant or TenancyRequirement.AtTenant or TenancyRequirement.AtUnit<OrganizationUnitId> or AccessRequirement.SignedInUser)
-                .Should().BeTrue("{0} is handed to the package's use case, which asks first for a caller of the tenant, a permission there, or a signed-in user", request.Type.Name);
+                .Should().BeTrue("{0} is handed to the package's manager, which asks first for a caller of the tenant, a permission there, or a signed-in user", request.Type.Name);
         }
     }
 
@@ -543,12 +543,12 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
         foreach (var query in queries)
         {
             TypeScan.From(TypeScan.WithNested(query.Handler)).Uses
-                .Where(use => IsWritePort(use.Type) || IsPackageCommands(use.Type))
+                .Where(use => IsWritePort(use.Type))
                 .Select(use => use.ToString())
                 .Should().BeEmpty("{0} reads: it names nothing that loads to change, or saves", query.Handler.Name);
         }
 
-        IsWritePort(typeof(TenancyUseCases.IStore)).Should().BeTrue("the package's store saves");
+        IsWritePort(typeof(TenancyStore)).Should().BeTrue("the package's store saves");
         IsWritePort(typeof(IProjectStore)).Should().BeTrue("Projects' store saves");
         IsWritePort(typeof(ITenancyReads)).Should().BeFalse("a read port does not");
         IsWritePort(typeof(IProjectReads)).Should().BeFalse("nor does Projects'");
@@ -587,7 +587,7 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
         // to ask about with a query. It hands back no entity, and nothing it read on the way. One answers more:
         // inviting answers the invitation's token, which is kept nowhere, so no query could answer it afterwards.
         var commands = Requests.Where(request => !request.IsQuery && request.Type != typeof(InvitePerson)).ToList();
-        Requests.Single(request => request.Type == typeof(InvitePerson)).Response.Should().Be(typeof(TenancyUseCases.IssuedInvitation<InvitationId>));
+        Requests.Single(request => request.Type == typeof(InvitePerson)).Response.Should().Be(typeof(Examples.Tenancy.Tenants.Application.Invitations.IssuedInvitationListing));
 
         commands.Where(command => command.Response != typeof(Unit) && !typeof(IEntityId).IsAssignableFrom(command.Response))
             .Select(command => $"{command.Type.Name} answers with {command.Response}")
@@ -666,13 +666,14 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
     };
 
     /// <summary>
-    /// A use-case class of the Tenancy package that changes something: its tenant, organization, seat, role and
-    /// invitation commands. The last has type parameters of its own, which its name counts after a backtick.
+    /// One of the Tenancy package's managers, as the generator closed it over the Tenants module's classes: the tenant,
+    /// organization, seat, role and invitation managers. A manager both reads and changes, and checks its caller itself
+    /// either way, so a query handler may take one to read: which of its methods a handler calls is no type a scan sees.
     /// </summary>
-    private static bool IsPackageCommands(Type type)
-        => type.IsGenericType
-            && type.DeclaringType == typeof(TenancyUseCases<,,,,,,,,>)
-            && type.Name.Split('`')[0].EndsWith("Commands", StringComparison.Ordinal);
+    private static bool IsPackageManager(Type type)
+        => type.BaseType is { IsGenericType: true } parent
+            && parent.GetGenericTypeDefinition().Namespace == typeof(SeatManager<,,,,,,,,>).Namespace
+            && parent.Name.Split('`')[0].EndsWith("Manager", StringComparison.Ordinal);
 
     /// <summary>A port that saves: one of an application project's, or the Tenancy package's store.</summary>
     private static bool IsWritePort(Type type)

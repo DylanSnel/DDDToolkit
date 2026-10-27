@@ -100,11 +100,11 @@ public sealed class TenancySettingTests(TenancyPostgres postgres) : IDisposable
         await using var services = new TenancyServices(database);
 
         // Provisioned under the policies, as system work in the tenant it makes: its id travels in the setting.
-        HostTenancy.ProvisionedTenant provisioned;
+        ProvisionedTenant provisioned;
         using (TenancyWork.BeginSystem<TenantId, SeatId>())
         {
-            provisioned = await services.InScopeAsync(scoped => scoped.Tenants().ProvisionAsync(
-                new HostTenancy.TenantToProvision("lagoon", "Lagoon Works", TenantShape.Flat, "Lagoon", identity, TenantId: lagoon),
+            provisioned = await services.InScopeAsync(scoped => scoped.Tenants().ProvisionWithIdsAsync(scoped.GetRequiredService<TenancyCatalogue>(),
+                new TenantToProvision("lagoon", "Lagoon Works", TenantShape.Flat, "Lagoon", identity, TenantId: lagoon),
                 TestContext.Current.CancellationToken));
         }
 

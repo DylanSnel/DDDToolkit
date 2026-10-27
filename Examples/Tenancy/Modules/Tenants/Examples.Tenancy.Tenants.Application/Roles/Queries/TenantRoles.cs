@@ -28,7 +28,7 @@ public sealed class TenantRolesHandler(ITenancyReads reads, TenancyAccessManager
     public async ValueTask<IReadOnlyList<RoleListing>> Handle(TenantRoles query, CancellationToken cancellationToken)
     {
         // The directory first: it refuses a caller who may not ask, before anything else is read.
-        var roles = await reads.AskDirectoryAsync(directory => directory.ListRolesAsync(cancellationToken));
+        var roles = await reads.AskAsync(async (RoleManager manager) => RoleListing.Judged(await manager.ListAsync(cancellationToken), manager));
         return RoleListing.From(roles, withKeys: await AtTenantPermission.IsHeldAsync(tenancy, reads, RoleListing.ManageRolesPermission, cancellationToken));
     }
 }

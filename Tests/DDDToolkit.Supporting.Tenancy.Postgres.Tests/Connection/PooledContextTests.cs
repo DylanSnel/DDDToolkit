@@ -149,7 +149,7 @@ public abstract class PooledContextTests(TenancyPostgres postgres, TenancyNaming
         Task<IReadOnlyList<(SeatId Seat, RoleId Role)>> AdministratorsAsync(IServiceProvider scoped, TenantId tenant)
         {
             rented.Add(scoped.TenancyContext());
-            return scoped.GetRequiredService<HostTenancy.IStore>().AdministratorsAsync(tenant, DateTimeOffset.UtcNow, Cancellation);
+            return scoped.GetRequiredService<ITenancyStore<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId>>().AdministratorsAsync(tenant, DateTimeOffset.UtcNow, Cancellation);
         }
 
         // The request's own context comes from the pool too, and the store with it. Ada administers Harbor and is told
@@ -171,7 +171,7 @@ public abstract class PooledContextTests(TenancyPostgres postgres, TenancyNaming
         async Task<int> OwnReachesAsync(IServiceProvider scoped, SeatId seat)
         {
             rented.Add(scoped.TenancyContext());
-            var reaches = await scoped.GetRequiredService<HostTenancy.IStore>().RightsAMoveChangesAsync(
+            var reaches = await scoped.GetRequiredService<ITenancyStore<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId>>().RightsAMoveChangesAsync(
                 Harbor, seat, North, NorthPier, scoped.GetRequiredService<Catalogue.TenancyCatalogue>().AccessManagingPermissions, DateTimeOffset.UtcNow, Cancellation);
             return reaches.Count(reach => reach.OfCaller);
         }
@@ -205,7 +205,7 @@ public abstract class PooledContextTests(TenancyPostgres postgres, TenancyNaming
         });
 
         // Ada, who administers Harbor, adds a seat, places it and gives it a role: three commands, three requests.
-        var seat = await As(Ada, scoped => scoped.Seats().AddSeatAsync(Pat, Cancellation, configure: seat => seat.Rename("Pat")));
+        var seat = (await As(Ada, scoped => scoped.Seats().AddAsync(Pat, Cancellation, configure: seat => seat.Rename("Pat")))).Id;
         await As(Ada, async scoped =>
         {
             await scoped.Seats().PlaceAsync(seat, North, primary: true, Cancellation);
@@ -213,12 +213,12 @@ public abstract class PooledContextTests(TenancyPostgres postgres, TenancyNaming
         });
         await As(Ada, async scoped =>
         {
-            await scoped.Seats().GrantAsync(seat, North, HarborRoles.Watcher, until: null, reason: null, Cancellation);
+            await scoped.Seats().GrantAsync(seat, HarborRoles.Watcher, North, until: null, reason: null, Cancellation);
             return true;
         });
 
         // Oli, on the context she gave back, manages no seats: the use case asks the database as him, and refuses.
-        var refused = await RefusedAsync(TenancyRefusals.NotPermitted, () => As(Oli, scoped => scoped.Seats().AddSeatAsync(Guid.NewGuid(), Cancellation, configure: seat => seat.Rename("Uninvited"))));
+        var refused = await RefusedAsync(TenancyRefusals.NotPermitted, () => As(Oli, scoped => scoped.Seats().AddAsync(Guid.NewGuid(), Cancellation, configure: seat => seat.Rename("Uninvited"))));
         refused.Arguments["Permission"].Should().Be(Catalogue.TenancyPermissions.SeatsManage);
 
         rented.Should().HaveCount(4);
@@ -394,7 +394,7 @@ public abstract class PooledContextTests(TenancyPostgres postgres, TenancyNaming
         // Three questions: who the caller is, with every permission it holds and where; who holds a permission at a unit, inside a
         // query on a context taken from the factory; and where the caller holds one, inside a module's own query.
         var catalogue = services.Provider.GetRequiredService<Catalogue.TenancyCatalogue>();
-        var overview = await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.Directory().WhoAmIAsync(Cancellation));
+        var overview = await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.Seats().WhoAmIAsync(Cancellation));
         overview.Seat.Id.Should().Be(Ada.Seat);
         overview.Permissions.Should().HaveCount(catalogue.LivePermissions.Count).And.OnlyContain(reach => reach.AtTenant);
 

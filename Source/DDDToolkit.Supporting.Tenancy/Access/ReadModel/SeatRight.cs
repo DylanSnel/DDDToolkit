@@ -9,8 +9,8 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 // They carry what an access rule reads and nothing else: ids, permissions, periods, statuses, a unit's parent, and a
 // role's pack and permissions. They never carry a text that is shown to people: no unit's name, no role's name, and
 // nothing the application keeps on its seat class, such as the name it shows a seat by. A module that maps these
-// rows can therefore not lean on Tenancy for what it shows; names are the directory's to answer, by id
-// (TenancyUseCases<...>.TenancyDirectory), which answers the application's own seat whole, for the application to
+// rows can therefore not lean on Tenancy for what it shows; names are the managers' to answer, by id
+// (SeatManager.ByIdAsync and the others), which answer the application's own seat whole, for the application to
 // select what it shows of it. A property added here is a column every module's model maps and every read function
 // answers, so a test pins the exact list.
 

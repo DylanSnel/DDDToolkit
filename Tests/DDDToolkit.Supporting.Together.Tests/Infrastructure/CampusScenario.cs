@@ -250,7 +250,7 @@ public sealed class CampusScenario
         var cancellation = TestContext.Current.CancellationToken;
 
         await services.BySystemAsync(provider => provider.Tenants().ProvisionAsync(
-            new TenancyUseCases.TenantToProvision(
+            new TenantToProvision(
                 InAlder, "Alder College", TenantShape.Hierarchical, "Alder College", Ada.Identity,
                 TenantId: Alder,
                 RootId: AlderRoot,
@@ -263,7 +263,7 @@ public sealed class CampusScenario
                 }),
             cancellation));
         await services.BySystemAsync(provider => provider.Tenants().ProvisionAsync(
-            new TenancyUseCases.TenantToProvision(
+            new TenantToProvision(
                 InBirch, "Birch College", TenantShape.Flat, "Birch College", Bea.Identity,
                 TenantId: Birch,
                 RootId: BirchRoot,
@@ -410,11 +410,11 @@ public sealed class CampusScenario
     private static async Task GiveASeatAsync(CampusServices services, TenantId college, CampusPerson person, SeatId seat, OrganizationUnitId unit, params RoleId[] roles)
     {
         var cancellation = TestContext.Current.CancellationToken;
-        await services.BySystemInAsync(college, provider => provider.Seats().AddSeatAsync(person.Identity, cancellation, seat));
+        await services.BySystemInAsync(college, provider => provider.Seats().AddAsync(person.Identity, cancellation, seat));
         await services.BySystemInAsync(college, provider => provider.Seats().PlaceAsync(seat, unit, primary: true, cancellation));
         foreach (var role in roles)
         {
-            await services.BySystemInAsync(college, provider => provider.Seats().GrantAsync(seat, unit, role, until: null, reason: null, cancellation));
+            await services.BySystemInAsync(college, provider => provider.Seats().GrantAsync(seat, role, unit, until: null, reason: null, cancellation));
         }
     }
 

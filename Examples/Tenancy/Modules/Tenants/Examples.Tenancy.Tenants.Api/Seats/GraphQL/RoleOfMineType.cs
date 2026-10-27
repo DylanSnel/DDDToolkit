@@ -1,3 +1,4 @@
+using Examples.Tenancy.Tenants.Application.Seats;
 using HotChocolate.Types;
 
 namespace Examples.Tenancy.Tenants.Api.Seats.GraphQL;
@@ -7,8 +8,8 @@ namespace Examples.Tenancy.Tenants.Api.Seats.GraphQL;
 /// record the seat's own overview answers. It is no <c>Role</c>: that is an entity other modules refer to, with
 /// a rule on its permissions, and what a seat holds itself it may always read.
 /// </summary>
-[ObjectType<TenancyUseCases.RoleSummary>]
+[ObjectType<RoleOfMine>]
 internal static partial class RoleOfMineType
 {
-    static partial void Configure(IObjectTypeDescriptor<TenancyUseCases.RoleSummary> descriptor) => descriptor.Name("RoleOfMine");
+    static partial void Configure(IObjectTypeDescriptor<RoleOfMine> descriptor) => descriptor.Name("RoleOfMine");
 }

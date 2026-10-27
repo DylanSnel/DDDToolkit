@@ -133,7 +133,7 @@ public abstract class ProjectionWriterTests(TestDatabases databases) : IAsyncLif
         (await PermissionsAsync(grace)).Should().HaveCount(4);
 
         await _services.BySystemIn(harbor.Tenant, services =>
-            services.Seats().RevokeAsync(grace, north, harbor.RolesByPack[HostCatalogue.OperatorPack], TestContext.Current.CancellationToken));
+            services.Seats().RevokeAsync(grace, harbor.RolesByPack[HostCatalogue.OperatorPack], north, TestContext.Current.CancellationToken));
 
         (await PermissionsAsync(grace)).Should().Equal((harbor.RolesByPack[HostCatalogue.WatcherPack], HostCatalogue.WidgetRead));
     }
@@ -264,9 +264,9 @@ public abstract class ProjectionWriterTests(TestDatabases databases) : IAsyncLif
         // One scope, one context: the rows the first save wrote are tracked when the next ones run.
         await _services.BySystemIn(harbor.Tenant, async services =>
         {
-            await services.Seats().GrantAsync(grace, north, operatorRole, until: _clock.Now.AddDays(1), reason: null, TestContext.Current.CancellationToken);
-            await services.Seats().RevokeAsync(grace, north, operatorRole, TestContext.Current.CancellationToken);
-            await services.Seats().GrantAsync(grace, north, operatorRole, until: null, reason: null, TestContext.Current.CancellationToken);
+            await services.Seats().GrantAsync(grace, operatorRole, north, until: _clock.Now.AddDays(1), reason: null, TestContext.Current.CancellationToken);
+            await services.Seats().RevokeAsync(grace, operatorRole, north, TestContext.Current.CancellationToken);
+            await services.Seats().GrantAsync(grace, operatorRole, north, until: null, reason: null, TestContext.Current.CancellationToken);
             await services.Seats().SuspendAsync(grace, TestContext.Current.CancellationToken);
             await services.Seats().ReactivateAsync(grace, TestContext.Current.CancellationToken);
         });

@@ -4,7 +4,7 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 
 /// <summary>
 /// What a unit is called, and nothing more: its name, its path from the root and how deep it is. What
-/// <c>TenancyDirectory.UnitsByIdAsync</c> answers about the units a caller works on, whether or not it reads the rest of
+/// <c>OrganizationManager.UnitsByIdAsync</c> answers about the units a caller works on, whether or not it reads the rest of
 /// the organization: a seat on a project at a unit it is not placed under, or one an application's restrictive rule
 /// keeps out of the organization, still reads what that unit is called.
 /// </summary>

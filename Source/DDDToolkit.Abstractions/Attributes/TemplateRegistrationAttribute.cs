@@ -47,6 +47,10 @@ namespace DDDToolkit.Abstractions.Attributes;
 /// method: the project's own, or the one a project of its module below it has; the package's class itself where there
 /// is none. So a registration registers the class the application's code takes.
 /// </para>
+/// <para>
+/// A method over a template an application may leave out says so with <see cref="OnlyWith"/>: it is written only where
+/// that template has a class, and a project without one hears nothing of it.
+/// </para>
 /// </summary>
 /// <remarks>
 /// The generic method keeps working on its own. The wrapper only saves the application from repeating, in
@@ -82,4 +86,14 @@ public sealed class TemplateRegistrationAttribute : Attribute
     /// </para>
     /// </summary>
     public string? Name { get; set; }
+
+    /// <summary>
+    /// The template of a class an application may leave out, such as Tenancy's invitation,
+    /// <c>typeof(InvitationAggregateAttribute&lt;&gt;)</c>. The wrapper is written only where a class is declared with that
+    /// template: in the project, in the projects it references, or, for a project of a module that declares none of the
+    /// classes, in a project of its module it references. A project without one gets no wrapper and hears nothing, where
+    /// a missing template is DDD00049 otherwise. One of the method's <see cref="TemplateTypeAttribute"/>s names the same
+    /// template.
+    /// </summary>
+    public Type? OnlyWith { get; set; }
 }

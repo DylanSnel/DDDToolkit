@@ -84,12 +84,12 @@ public abstract class AccessHistoryTests(TestDatabases databases) : IAsyncLifeti
         var watcher = harbor.RolesByPack[HostCatalogue.WatcherPack];
         Task AsAda(Func<IServiceProvider, Task> act) => _services.BySeat(harbor.Tenant, ada, act);
 
-        var ben = await _services.BySeat(harbor.Tenant, ada, services => services.Seats().AddSeatAsync(Guid.NewGuid(), Cancellation, configure: seat => seat.Rename("Ben")));
+        var ben = (await _services.BySeat(harbor.Tenant, ada, services => services.Seats().AddAsync(Guid.NewGuid(), Cancellation, configure: seat => seat.Rename("Ben")))).Id;
         await AsAda(services => services.Seats().PlaceAsync(ben, harbor.RootUnit, primary: true, Cancellation));
 
         // One change, looked at closely: the grant, its outbox row and its row in the history are written by one transaction.
         _services.Commands.Reset();
-        await AsAda(services => services.Seats().GrantAsync(ben, harbor.RootUnit, watcher, until: null, reason: null, Cancellation));
+        await AsAda(services => services.Seats().GrantAsync(ben, watcher, harbor.RootUnit, until: null, reason: null, Cancellation));
 
         var writes = _services.Commands.Sent.Where(command => command.Writes).ToList();
         writes.Should().Contain(command => command.Text.Contains("\"SeatRoleGrants\""));
@@ -98,23 +98,23 @@ public abstract class AccessHistoryTests(TestDatabases databases) : IAsyncLifeti
         writes.Select(command => command.Transaction).Distinct().Should().ContainSingle("the grant and its row in the history are one save").Which.Should().NotBeNull();
 
         // Every other command a seat gives, the three that only rename something among them.
-        await AsAda(services => services.Tenants().RenameOrganizationAsync("Harbor Yards", Cancellation));
-        var east = await _services.BySeat(harbor.Tenant, ada, services => services.Organization().AddUnitAsync(harbor.RootUnit, "East", Cancellation));
-        var pier = await _services.BySeat(harbor.Tenant, ada, services => services.Organization().AddUnitAsync(harbor.RootUnit, "Pier", Cancellation));
+        await AsAda(services => services.Organization().RenameAsync("Harbor Yards", Cancellation));
+        var east = (await _services.BySeat(harbor.Tenant, ada, services => services.Organization().AddUnitAsync(harbor.RootUnit, "East", Cancellation))).Id;
+        var pier = (await _services.BySeat(harbor.Tenant, ada, services => services.Organization().AddUnitAsync(harbor.RootUnit, "Pier", Cancellation))).Id;
         await AsAda(services => services.Organization().RenameUnitAsync(pier, "Long Pier", Cancellation));
         await AsAda(services => services.Organization().MoveUnitAsync(pier, east, Cancellation));
         await AsAda(services => services.Organization().ArchiveUnitAsync(pier, Cancellation));
 
-        var polisher = await _services.BySeat(harbor.Tenant, ada, services =>
-            services.Roles().CreateAsync("Polisher", "Polishes widgets", [HostCatalogue.WidgetRead], Cancellation));
+        var polisher = (await _services.BySeat(harbor.Tenant, ada, services =>
+            services.Roles().CreateAsync("Polisher", "Polishes widgets", [HostCatalogue.WidgetRead], Cancellation))).Id;
         await AsAda(services => services.Roles().RenameAsync(polisher, "Buffer", "Buffs widgets", Cancellation));
         await AsAda(services => services.Roles().SetPermissionsAsync(polisher, [HostCatalogue.WidgetCreate], Cancellation));
         await AsAda(services => services.Roles().ArchiveAsync(polisher, Cancellation));
 
         await AsAda(services => services.Seats().PlaceAsync(ben, east, primary: false, Cancellation));
         await AsAda(services => services.Seats().MakePrimaryAsync(ben, east, Cancellation));
-        await AsAda(services => services.Seats().RevokeAsync(ben, harbor.RootUnit, watcher, Cancellation));
-        await AsAda(services => services.Seats().GrantAsync(ben, east, watcher, until: null, reason: null, Cancellation));
+        await AsAda(services => services.Seats().RevokeAsync(ben, watcher, harbor.RootUnit, Cancellation));
+        await AsAda(services => services.Seats().GrantAsync(ben, watcher, east, until: null, reason: null, Cancellation));
         await AsAda(services => services.Seats().WithdrawAsync(ben, east, Cancellation));
         await AsAda(services => services.Seats().SuspendAsync(ben, Cancellation));
         await AsAda(services => services.Seats().ReactivateAsync(ben, Cancellation));
@@ -196,13 +196,13 @@ public abstract class AccessHistoryTests(TestDatabases databases) : IAsyncLifeti
         var harbor = await _services.ProvisionAsync("harbor", administratorName: "Ada Lovelace");
         var ada = harbor.AdminSeat;
 
-        var wharf = await _services.BySeat(harbor.Tenant, ada, services => services.Organization().AddUnitAsync(harbor.RootUnit, "Farthing Wharf", Cancellation));
-        var lamplighter = await _services.BySeat(harbor.Tenant, ada, services =>
-            services.Roles().CreateAsync("Lamplighter", "Tends the lamps", [HostCatalogue.WidgetRead], Cancellation));
+        var wharf = (await _services.BySeat(harbor.Tenant, ada, services => services.Organization().AddUnitAsync(harbor.RootUnit, "Farthing Wharf", Cancellation))).Id;
+        var lamplighter = (await _services.BySeat(harbor.Tenant, ada, services =>
+            services.Roles().CreateAsync("Lamplighter", "Tends the lamps", [HostCatalogue.WidgetRead], Cancellation))).Id;
         await _services.BySeat(harbor.Tenant, ada, services => services.Roles().SetPermissionsAsync(lamplighter, [HostCatalogue.WidgetCreate], Cancellation));
-        var ben = await _services.BySeat(harbor.Tenant, ada, services => services.Seats().AddSeatAsync(Guid.NewGuid(), Cancellation, configure: seat => seat.Rename("Benedict Quill")));
+        var ben = (await _services.BySeat(harbor.Tenant, ada, services => services.Seats().AddAsync(Guid.NewGuid(), Cancellation, configure: seat => seat.Rename("Benedict Quill")))).Id;
         await _services.BySeat(harbor.Tenant, ada, services => services.Seats().PlaceAsync(ben, wharf, primary: true, Cancellation));
-        await _services.BySeat(harbor.Tenant, ada, services => services.Seats().GrantAsync(ben, wharf, lamplighter, until: null, reason: "covering for Grace", Cancellation));
+        await _services.BySeat(harbor.Tenant, ada, services => services.Seats().GrantAsync(ben, lamplighter, wharf, until: null, reason: "covering for Grace", Cancellation));
 
         var kept = await KeptAsync();
 
@@ -242,12 +242,12 @@ public abstract class AccessHistoryTests(TestDatabases databases) : IAsyncLifeti
     [Fact]
     public async Task A_tenant_provisioned_for_an_operator_is_recorded_as_that_operators()
     {
-        HostTenancy.ProvisionedTenant quay;
+        ProvisionedTenant quay;
         await using (var scope = _services.Scope())
         using (TenancyWork.BeginOperator<TenantId, SeatId>(Odette))
         {
-            quay = await scope.ServiceProvider.Tenants().ProvisionAsync(
-                new HostTenancy.TenantToProvision("quay", "Quay Works", TenantShape.Flat, "Quay", Guid.NewGuid()),
+            quay = await scope.ServiceProvider.Tenants().ProvisionWithIdsAsync(scope.ServiceProvider.GetRequiredService<TenancyCatalogue>(),
+                new TenantToProvision("quay", "Quay Works", TenantShape.Flat, "Quay", Guid.NewGuid()),
                 Cancellation);
         }
 
@@ -393,7 +393,7 @@ public abstract class AccessHistoryTests(TestDatabases databases) : IAsyncLifeti
     }
 
     /// <summary>Carries out, in a scope of its own, what the operator asked for in <paramref name="tenant"/>.</summary>
-    private async Task ForTheOperatorAsync(TenantId tenant, Func<HostTenancy.TenantCommands, Task> act)
+    private async Task ForTheOperatorAsync(TenantId tenant, Func<TenantManager, Task> act)
     {
         await using var scope = _services.Scope();
         using (TenancyWork.BeginOperatorIn<TenantId, SeatId>(tenant, Odette))

@@ -19,13 +19,13 @@ public sealed record RevokeGrant(SeatId Seat, [AtUnit] OrganizationUnitId Unit, 
 
 /// <summary>Handles <see cref="RevokeGrant"/> with the Tenancy package's use case, which checks the caller, decides and saves.</summary>
 /// <param name="seats">The package's use cases that change a seat.</param>
-public sealed class RevokeGrantHandler(TenancyUseCases.SeatCommands seats) : ICommandHandler<RevokeGrant>
+public sealed class RevokeGrantHandler(SeatManager seats) : ICommandHandler<RevokeGrant>
 {
     /// <inheritdoc />
     /// <exception cref="Exceptions.RefusalException">What the package's use case refuses, with its code.</exception>
     public async ValueTask<Unit> Handle(RevokeGrant command, CancellationToken cancellationToken)
     {
-        await seats.RevokeAsync(command.Seat, command.Unit, command.Role, cancellationToken);
+        await seats.RevokeAsync(command.Seat, command.Role, command.Unit, cancellationToken);
         return Unit.Value;
     }
 }

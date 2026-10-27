@@ -18,7 +18,7 @@ public abstract class TenancyAccessCheckTests(TestDatabases databases) : IAsyncL
     private const string OperatorRole = "operator";
 
     private TestServices _services = null!;
-    private HostTenancy.ProvisionedTenant _harbor = null!;
+    private ProvisionedTenant _harbor = null!;
     private OrganizationUnitId _north;
     private SeatId _seth;
     private SeatId _wes;
