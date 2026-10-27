@@ -70,7 +70,7 @@ public sealed class InvitationWithSupabaseAuthTests(SampleSupabaseStack stack)
         invited.StatusCode.Should().Be(HttpStatusCode.OK, "the answer was {0}", await invited.Content.ReadAsStringAsync(Cancellation));
 
         var answer = await invited.Content.ReadFromJsonAsync<JsonElement>(Cancellation);
-        answer.EnumerateObject().Select(property => property.Name).Should().Equal("invitationId", "token", "expiresAt");
+        answer.EnumerateObject().Select(property => property.Name).Should().Equal("invitation", "token");
         return answer.Text("token")!;
     }
 }

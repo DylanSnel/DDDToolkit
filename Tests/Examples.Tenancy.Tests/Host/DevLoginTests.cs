@@ -80,7 +80,7 @@ public sealed class DevLoginTests(SampleHosts sample) : IClassFixture<SampleHost
         // The bearer takes it, and tenant selection finds Rhea's seat by its subject.
         using var mine = host.Client(token, tenant: null);
         var seats = await mine.GetFromJsonAsync<JsonElement>("/me/seats", Cancellation);
-        seats.EnumerateArray().Select(seat => seat.GetProperty("tenant").GetProperty("slug").GetString()).Should().Equal("harbor");
+        seats.EnumerateArray().Select(seat => seat.GetProperty("slug").GetString()).Should().Equal("harbor");
     }
 
     [Fact]

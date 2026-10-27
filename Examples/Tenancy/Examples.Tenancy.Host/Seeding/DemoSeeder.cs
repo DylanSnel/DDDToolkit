@@ -6,7 +6,7 @@ using Examples.Tenancy.Projects.Application.ProjectRoles.Commands;
 using Examples.Tenancy.Projects.Application.ProjectRoles.Queries;
 using Examples.Tenancy.Tenants.Application.Roles;
 using Examples.Tenancy.Tenants.Application.Roles.Queries;
-using Examples.Tenancy.Tenants.Application.Seats;
+using Examples.Tenancy.Tenants.Domain.Aggregates.Seats;
 using Examples.Tenancy.Tenants.Application.Seats.Queries;
 using Examples.Tenancy.Tenants.Application.Tenant.Commands;
 using DDDToolkit.Exceptions;
@@ -151,7 +151,7 @@ public sealed class DemoSeeder(IServiceScopeFactory scopes, IConfiguration confi
             // System work in a tenant reads all of it: Tenancy's every seat and role, Projects' every project role
             // and every project, each module's in its own scope.
             IReadOnlyList<string> lacking;
-            IReadOnlyList<SeatListing> seats;
+            IReadOnlyList<Seat> seats;
             IReadOnlyList<RoleListing> roles;
             using (access.BeginSystemIn(tenant.Id, tenant.Administrator.Id))
             {
@@ -170,7 +170,7 @@ public sealed class DemoSeeder(IServiceScopeFactory scopes, IConfiguration confi
                 var projects = await sender.Send(new VisibleProjects(new PagingArguments(first: VisibleProjects.LargestPage)), cancellationToken);
                 lacking = tenant.MissingFrom(
                     seats.Select(seat => seat.Id).ToHashSet(),
-                    roles.Select(listed => listed.Id).ToHashSet(),
+                    roles.Select(listed => listed.Role.Id).ToHashSet(),
                     projectRoles.Select(listed => listed.Id).ToHashSet(),
                     projects.Items.Select(project => project.Id).ToHashSet());
             }

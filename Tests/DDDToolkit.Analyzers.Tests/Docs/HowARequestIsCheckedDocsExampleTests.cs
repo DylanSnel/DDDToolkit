@@ -51,7 +51,8 @@ public partial class HowARequestIsCheckedDocsExampleTests
         """;
 
     /// <summary>
-    /// What the sample declares elsewhere and the page's requests name: the ids, a listing and a kind of unit, the
+    /// What the sample declares elsewhere and the page's requests name: the ids, the organization manager's record of a
+    /// unit and a kind of unit, the
     /// projects' permissions, and the module interfaces in the sample's namespaces, with the line that says which ids are
     /// Tenancy's, so the project gets the access manager the page's check takes. And what a test adds to run the
     /// requirement of the module's own: a plan it answers, a stand-in for Tenancy's check of the permission, and counts of
@@ -82,7 +83,10 @@ public partial class HowARequestIsCheckedDocsExampleTests
 
             public enum UnitKind { Region, Area }
 
-            public sealed record UnitListing(OrganizationUnitId Id, string Name);
+            public static class OrganizationManager
+            {
+                public sealed record UnitInTree(OrganizationUnitId Id, string Path, int Depth);
+            }
 
             public sealed record AuditEntry(string What);
 

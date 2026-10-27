@@ -1,6 +1,5 @@
 using System.Text.Json.Serialization;
-using Examples.Tenancy.Tenants.Application.Directory;
-using Examples.Tenancy.Tenants.Application.Organization;
+using DDDToolkit.Supporting.Tenancy.Access;
 using Examples.Tenancy.Tenants.Application.Organization.Commands;
 using Examples.Tenancy.Tenants.Application.Organization.Queries;
 using Examples.Tenancy.Tenants.Domain.Aggregates.Organizations.ValueObjects;
@@ -62,18 +61,21 @@ internal static class OrganizationEndpoints
     internal static object Describe(SeatManager.UnitRef unit) => new { unit.Id, unit.Path };
 
     /// <summary>A unit asked for by id, by name: its id, its name, its path from the root and its depth.</summary>
-    internal static object Describe(UnitName unit) => new { unit.Id, unit.Name, unit.Path, unit.Depth };
+    internal static object Describe(NamedUnit<OrganizationUnitId> unit) => new { unit.Id, unit.Name, unit.Path, unit.Depth };
 
-    /// <summary>A unit as every list of this project writes it, its kind by the name a request gives it in.</summary>
-    internal static object Describe(UnitListing unit) => new
+    /// <summary>
+    /// A unit as every list of this project writes it: the unit's fields, its kind by the name a request gives it in,
+    /// and the path and the depth the organization manager read beside it, as the unit's GraphQL type shows them.
+    /// </summary>
+    internal static object Describe(OrganizationManager.UnitInTree found) => new
     {
-        unit.Id,
-        unit.ParentId,
-        unit.Name,
-        unit.Kind,
-        unit.Status,
-        unit.Path,
-        unit.Depth,
+        found.Unit.Id,
+        found.Unit.ParentId,
+        found.Unit.Name,
+        found.Unit.Kind,
+        found.Unit.Status,
+        found.Path,
+        found.Depth,
     };
 
     // The bodies. An id a command cannot do without is required: left out, it would bind as an empty id and come

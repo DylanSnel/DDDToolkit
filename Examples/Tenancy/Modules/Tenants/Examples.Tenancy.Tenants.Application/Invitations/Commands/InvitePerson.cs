@@ -16,7 +16,8 @@ namespace Examples.Tenancy.Tenants.Application.Invitations.Commands;
 /// <para>
 /// The token is answered this once, and the application keeps only its digest: it writes the token to no log, no
 /// event and no refusal of its own. Whoever invites can hand it to the person, as the link the UI shows. That is
-/// why this command answers more than the id of what it made: no query could answer the token later.
+/// why this command answers more than the id of what it made: the invitation manager's record of the issued
+/// invitation, with its token, since no query could answer the token later.
 /// </para>
 /// </remarks>
 /// <param name="Address">The person's e-mail address.</param>
@@ -25,7 +26,7 @@ namespace Examples.Tenancy.Tenants.Application.Invitations.Commands;
 /// <param name="Until">When that role ends, later than the invitation itself, or <see langword="null"/> for no end.</param>
 [RequiresPermission(TenancyPermissions.SeatsManage)]
 public sealed record InvitePerson(string Address, OrganizationUnitId Unit, RoleId Role, DateTimeOffset? Until)
-    : ICommand<IssuedInvitationListing>, ITenantsRequest
+    : ICommand<InvitationManager.IssuedInvitation>, ITenantsRequest
 {
 }
 
@@ -82,11 +83,11 @@ public sealed class InvitePersonHandler(
     TenancyStore store,
     IIdentityAccounts? accounts = null,
     InvitationPage? page = null)
-    : ICommandHandler<InvitePerson, IssuedInvitationListing>
+    : ICommandHandler<InvitePerson, InvitationManager.IssuedInvitation>
 {
     /// <inheritdoc />
     /// <exception cref="Exceptions.RefusalException">What the package's use case refuses, with its code.</exception>
-    public async ValueTask<IssuedInvitationListing> Handle(InvitePerson command, CancellationToken cancellationToken)
+    public async ValueTask<InvitationManager.IssuedInvitation> Handle(InvitePerson command, CancellationToken cancellationToken)
     {
         var issued = await invitations.IssueAsync(command.Address, command.Unit, command.Role, command.Until, lifetime: null, cancellationToken);
 
@@ -119,7 +120,7 @@ public sealed class InvitePersonHandler(
             }
         }
 
-        return new IssuedInvitationListing(issued.Invitation.Id, issued.Token, issued.Invitation.ExpiresAt);
+        return issued;
     }
 
     /// <summary>

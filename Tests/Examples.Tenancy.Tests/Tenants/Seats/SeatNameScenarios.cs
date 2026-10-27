@@ -119,7 +119,7 @@ public sealed class SeatNameScenarios(SampleHosts sample) : IClassFixture<Sample
         // seats the package read anyway; and never with her identity.
         using var tove = await host.ClientAsync("tove", tenant: null);
         var mine = (await tove.GetFromJsonAsync<JsonElement>("/me/seats", Cancellation)).EnumerateArray()
-            .ToDictionary(row => row.GetProperty("tenant").Text("slug")!, row => row.GetProperty("seat"));
+            .ToDictionary(row => row.Text("slug")!, row => row.GetProperty("seat"));
 
         mine.Keys.Should().BeEquivalentTo([Harbor.Slug, meadow.Slug]);
         mine[Harbor.Slug].Text("displayName").Should().Be(DemoPeople.Tove.Name);
@@ -129,8 +129,8 @@ public sealed class SeatNameScenarios(SampleHosts sample) : IClassFixture<Sample
             .Should().BeEquivalentTo(["id", "displayName", "status"], "a seat is answered as every answer writes one, never with an identity");
 
         // GraphQL's picker answers the Seat every other field answers, with the same name.
-        var picked = (await tove.GraphQLDataAsync("{ seatsOfMine { tenant { slug } seat { id displayName status } } }")).GetProperty("seatsOfMine").EnumerateArray()
-            .ToDictionary(row => row.GetProperty("tenant").Text("slug")!, row => row.GetProperty("seat").Text("displayName"));
+        var picked = (await tove.GraphQLDataAsync("{ seatsOfMine { slug seat { id displayName status } } }")).GetProperty("seatsOfMine").EnumerateArray()
+            .ToDictionary(row => row.Text("slug")!, row => row.GetProperty("seat").Text("displayName"));
         picked.Should().BeEquivalentTo(new Dictionary<string, string?> { [Harbor.Slug] = DemoPeople.Tove.Name, [meadow.Slug] = "Tove of the meadow" });
     }
 }

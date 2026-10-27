@@ -96,7 +96,7 @@ public sealed class InvitedByMailTests(SampleSupabaseStack stack)
         session.Tenant.Should().Be(Meadow.Slug);
         var me = (await api.WhoAmIAsync(Cancellation)).Value!;
         me.Seat.DisplayName.Should().Be("Wren");
-        me.Placements.Should().ContainSingle().Which.Grants.Should().ContainSingle().Which.Role.Should().Be("Surveyor");
+        me.NameOf(me.Placements.Should().ContainSingle().Which.Grants.Should().ContainSingle().Which.RoleId).Should().Be("Surveyor");
         (await api.VisibleProjectsAsync(cancellationToken: Cancellation)).Value!.Items.Select(project => project.Name).Should().Equal("Garden shed");
 
         // The mail's link works once. Followed again, Auth sends the browser to the page with its refusal and

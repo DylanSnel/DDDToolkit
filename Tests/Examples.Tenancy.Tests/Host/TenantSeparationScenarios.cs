@@ -137,7 +137,7 @@ public sealed class TenantSeparationScenarios(SampleHosts sample) : IClassFixtur
 
         seats.EnumerateArray()
             .Select(seat => (
-                Slug: seat.GetProperty("tenant").GetProperty("slug").GetString(),
+                Slug: seat.GetProperty("slug").GetString(),
                 Seat: seat.GetProperty("seat").GetProperty("id").GetGuid(),
                 Status: seat.GetProperty("seat").GetProperty("status").GetString()))
             .Should().BeEquivalentTo(

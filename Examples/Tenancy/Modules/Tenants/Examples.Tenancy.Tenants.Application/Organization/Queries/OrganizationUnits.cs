@@ -3,27 +3,23 @@ using Mediator;
 namespace Examples.Tenancy.Tenants.Application.Organization.Queries;
 
 /// <summary>
-/// The units the caller reads, each by its path from the root and with its kind: for a seat, the units it is placed
-/// in and every unit below them; for system work in the tenant, every unit.
+/// The units the caller reads, each with its path from the root and its depth: for a seat, the units it is placed in
+/// and every unit below them; for system work in the tenant, every unit.
 /// </summary>
 /// <remarks>
-/// It requires a caller who works in the tenant. Which units a seat reads is the package's to say: its directory answers.
+/// It requires a caller who works in the tenant. Which units a seat reads is the package's to say: its organization
+/// manager answers. Each unit is the module's own class, with the kind it keeps, in the organization manager's record
+/// beside its path and depth, which the unit does not hold.
 /// </remarks>
 [InTenant]
-public sealed record OrganizationUnits : IQuery<IReadOnlyList<UnitListing>>, ITenantsRequest;
+public sealed record OrganizationUnits : IQuery<IReadOnlyList<OrganizationManager.UnitInTree>>, ITenantsRequest;
 
-/// <summary>
-/// Answers <see cref="OrganizationUnits"/> from the Tenancy package's directory: the module's own units, each
-/// selected with the kind its class keeps and the path the package put beside it.
-/// </summary>
-/// <param name="reads">Where Tenancy is read: the directory, in a scope of this query's own.</param>
-public sealed class OrganizationUnitsHandler(ITenancyReads reads) : IQueryHandler<OrganizationUnits, IReadOnlyList<UnitListing>>
+/// <summary>Answers <see cref="OrganizationUnits"/> from the Tenancy package's organization manager.</summary>
+/// <param name="reads">Where Tenancy is read: the organization manager, in a scope of this query's own.</param>
+public sealed class OrganizationUnitsHandler(ITenancyReads reads) : IQueryHandler<OrganizationUnits, IReadOnlyList<OrganizationManager.UnitInTree>>
 {
     /// <inheritdoc />
     /// <exception cref="Exceptions.RefusalException">The caller's own refusal when it is nobody.</exception>
-    public async ValueTask<IReadOnlyList<UnitListing>> Handle(OrganizationUnits query, CancellationToken cancellationToken)
-    {
-        var units = await reads.AskAsync((OrganizationManager manager) => manager.ListUnitsAsync(cancellationToken));
-        return [.. units.Select(found => new UnitListing(found.Unit.Id, found.Unit.ParentId, found.Unit.Name, found.Unit.Kind, found.Unit.Status, found.Path, found.Depth))];
-    }
+    public async ValueTask<IReadOnlyList<OrganizationManager.UnitInTree>> Handle(OrganizationUnits query, CancellationToken cancellationToken)
+        => await reads.AskAsync((OrganizationManager manager) => manager.ListUnitsAsync(cancellationToken));
 }

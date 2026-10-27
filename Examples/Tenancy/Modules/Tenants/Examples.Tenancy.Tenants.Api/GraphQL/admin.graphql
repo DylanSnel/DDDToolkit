@@ -48,7 +48,7 @@ type Query {
   unitsWhereIHold(permission: String!): HeldUnits! @cost(weight: "10")
   catalogue: Catalogue! @cost(weight: "10")
   openInvitations: [Invitation!]! @cost(weight: "10")
-  tenants(after: String, size: Int): TenantDirectoryPage! @cost(weight: "10")
+  tenants(after: String, size: Int): TenantPage! @cost(weight: "10")
   organizationUnits: [OrganizationUnit!]! @cost(weight: "10")
   roles: [Role!]! @cost(weight: "10")
   overviewOfMine: SeatOverview! @cost(weight: "10")
@@ -152,14 +152,6 @@ type FailureArgument @shareable {
   value: String
 }
 
-type GrantOfMine {
-  roleId: UUID!
-  role: String!
-  startsAt: DateTime!
-  endsAt: DateTime
-  appliesNow: Boolean!
-}
-
 type HeldUnits {
   units: [UUID!]!
   atTenant: Boolean!
@@ -181,9 +173,9 @@ type Invitation {
   unit: OrganizationUnitName
   role: Role
   issuedBy: Seat
-  until: DateTime
   id: UUID!
-  address: String!
+  address: String
+  grantUntil: DateTime
   issuedAt: DateTime!
   expiresAt: DateTime!
 }
@@ -199,19 +191,18 @@ type InvitationCancelPayload {
 }
 
 type IssuedInvitation {
-  id: UUID!
+  invitation: Invitation!
   token: String!
-  expiresAt: DateTime!
 }
 
 type OrganizationUnit {
+  path: String @cost(weight: "1")
+  depth: Int @cost(weight: "1")
   id: UUID!
   parentId: UUID
   name: String!
   kind: UnitKind
   status: UnitStatus!
-  path: String!
-  depth: Int!
 }
 
 type OrganizationUnitAddPayload {
@@ -281,10 +272,10 @@ type PersonInvitePayload {
   errors: [PersonInviteError!]
 }
 
-type PlacementOfMine {
-  unit: UnitPath!
+type Placement {
+  unitId: UUID!
   isPrimary: Boolean!
-  grants: [GrantOfMine!]!
+  grants: [RoleGrant!]!
 }
 
 type PlacementWithdrawPayload {
@@ -307,12 +298,12 @@ type RefusalError implements CodedError @shareable {
 }
 
 type Role @key(fields: "id") {
+  permissions: [String!] @authorize(policy: "tenancy.roles.manage")
+  managesAccess: Boolean @cost(weight: "1")
   id: UUID!
   name: String
   fromStarterRole: String
   status: RoleStatus
-  permissions: [String!] @authorize(policy: "tenancy.roles.manage")
-  managesAccess: Boolean
 }
 
 type RoleArchivePayload {
@@ -325,18 +316,15 @@ type RoleCreatePayload {
   errors: [RoleCreateError!]
 }
 
+type RoleGrant {
+  roleId: UUID!
+  startsAt: DateTime!
+  endsAt: DateTime
+}
+
 type RoleGrantPayload {
   seat: Seat
   errors: [RoleGrantError!]
-}
-
-type RoleOfMine {
-  id: UUID!
-  name: String!
-  fromStarterRole: String
-  status: RoleStatus!
-  permissions: [String!]!
-  managesAccess: Boolean!
 }
 
 type RolePermissionsSetPayload {
@@ -385,16 +373,21 @@ type SeatGrant {
 }
 
 type SeatOfMine {
-  tenant: TenantOfSeat!
   seat: Seat!
+  slug: String!
+  organizationName: String!
+  tenantStatus: TenantStatus!
 }
 
 type SeatOverview {
-  tenant: TenantOfMine!
+  placements: [Placement!]!
+  tenant: Tenant!
+  tenantName: String!
   seat: Seat!
-  placements: [PlacementOfMine!]!
-  roles: [RoleOfMine!]!
+  units: [UnitPath!]!
+  roles: [Role!]!
   permissions: [PermissionOfMine!]!
+  asOf: DateTime!
 }
 
 type SeatPlacePayload {
@@ -426,32 +419,22 @@ type StarterRole {
   administers: Boolean!
 }
 
-type TenantDirectoryPage {
-  items: [TenantListing!]!
-  next: String
-}
-
-type TenantListing {
-  id: UUID!
+type Tenant {
   slug: String!
-  name: String!
-  status: TenantStatus!
-  activeSeats: Int!
-}
-
-type TenantOfMine {
   id: UUID!
-  slug: String!
-  name: String!
   shape: TenantShape!
   status: TenantStatus!
 }
 
-type TenantOfSeat {
-  id: UUID!
-  slug: String!
+type TenantListing {
+  tenant: Tenant!
   name: String!
-  status: TenantStatus!
+  activeSeats: Int!
+}
+
+type TenantPage {
+  items: [TenantListing!]!
+  next: String
 }
 
 type TenantShapeChangePayload {

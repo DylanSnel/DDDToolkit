@@ -226,7 +226,7 @@ public sealed class FailClosedScenarios(SampleHosts sample) : IClassFixture<Samp
         recorder.Seen.Should().NotBeEmpty().And.OnlyContain(
             caller => caller != null && caller.Kind == CallerKind.User && caller.UserId == DemoPeople.Rhea.Id,
             "the request made its own caller current");
-        seats.EnumerateArray().Select(seat => seat.GetProperty("tenant").GetProperty("slug").GetString()).Should().Equal(Harbor.Slug);
+        seats.EnumerateArray().Select(seat => seat.GetProperty("slug").GetString()).Should().Equal(Harbor.Slug);
 
         logs.Entries.Should().Contain(
             entry => entry.Level == LogLevel.Warning && entry.Message.Contains("Tenancy caller was current", StringComparison.Ordinal),

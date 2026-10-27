@@ -1,7 +1,7 @@
 using DDDToolkit.Exceptions;
 using DDDToolkit.HotChocolate.Authorization;
 using Examples.Tenancy.Tenants.Api.Access.GraphQL;
-using Examples.Tenancy.Tenants.Application.Roles;
+using Examples.Tenancy.Tenants.Domain;
 using HotChocolate.Resolvers;
 using HotChocolate.Types;
 
@@ -16,10 +16,10 @@ namespace Examples.Tenancy.Tenants.Api.Roles.GraphQL;
 /// roles is one question. The refusal is the one the module's access check gives for the same permission, so a client
 /// reads one code whether a request or a field was refused.
 /// </remarks>
-internal sealed class RoleFieldPermissions : IFieldPermissions<RoleListing>
+internal sealed class RoleFieldPermissions : IFieldPermissions<Role>
 {
     /// <inheritdoc />
-    public async ValueTask<RefusalException?> RefusedAsync(RoleListing parent, string permission, IResolverContext context, CancellationToken cancellationToken)
+    public async ValueTask<RefusalException?> RefusedAsync(Role parent, string permission, IResolverContext context, CancellationToken cancellationToken)
         => await context.DataLoader<IHeldUnitsByPermissionDataLoader>().LoadAsync(permission, cancellationToken) is { AtTenant: true }
             ? null
             : TenancyRefusals.Refuse(TenancyRefusals.NotPermitted, ("Permission", permission));

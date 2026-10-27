@@ -58,8 +58,9 @@ GET {{api}}/me/seats
 Authorization: Bearer {{rhea.response.body.access_token}}
 
 ### Who she is in harbor. The Tenant header names the tenant by its slug; the seat comes from her own seats.
-### Her Area manager role is granted at North, so every permission she holds reaches North, North Coast and North
-### Inland, and nothing else.
+### The answer is the seat manager's overview: the tenant, her seat, its placements with their grants by id, the
+### units and roles those ids name, and every permission she holds at "asOf". Her Area manager role is granted at
+### North, so every permission she holds reaches North, North Coast and North Inland, and nothing else.
 GET {{api}}/me
 Authorization: Bearer {{rhea.response.body.access_token}}
 Tenant: harbor
@@ -340,7 +341,7 @@ Content-Type: application/json
 
 { "person": "vic" }
 
-### The grant is still there, and applies no longer: appliesNow is false, and it gives him no permission.
+### The grant is still there, and applies no longer: its endsAt is before asOf, and it gives him no permission.
 GET {{api}}/me
 Authorization: Bearer {{vic.response.body.access_token}}
 Tenant: harbor
@@ -656,8 +657,8 @@ Authorization: Bearer {{tove.response.body.access_token}}
 Tenant: meadow
 
 ### She invites juno, who has no seat in meadow, by her address: a seat at meadow's root as a surveyor, for
-### whoever accepts. 200 with the invitation's id, when it ends (a week from now), and its token. This is the
-### one answer that carries the token; the API keeps only its digest. Nothing is made yet but the invitation.
+### whoever accepts. 200 with the invitation, which ends a week from now, and its token. This is the one answer
+### that carries the token; the API keeps only its digest. Nothing is made yet but the invitation.
 ### Inviting takes what adding a seat and giving the role take: tenancy.seats.manage for the whole tenant and
 ### tenancy.grants.manage at the unit; without them it is 403 tenancy.not-permitted. The identity provider is
 ### asked for an account at the address, and the answer says nothing of whether there was one. With the dev
@@ -728,7 +729,7 @@ Content-Type: application/json
 ### Revoked: 204. Its token is then 409 tenancy.invitation-cancelled; one whose week ran out is 409
 ### tenancy.invitation-lapsed, and a text that is no token 404 tenancy.invitation-not-found. The account that
 ### was made for it goes too, since nobody ever signed in with it and no other open invitation keeps it.
-DELETE {{api}}/tenancy/invitations/{{second.response.body.invitationId}}
+DELETE {{api}}/tenancy/invitations/{{second.response.body.invitation.id}}
 Authorization: Bearer {{tove.response.body.access_token}}
 Tenant: meadow
 
@@ -810,7 +811,7 @@ Content-Type: application/json
 
 { "person": "orla" }
 
-### Every tenant, by slug, each with its status and how many of its seats are in use. No Tenant header: an
+### Every tenant, by slug, each beside its name and how many of its seats are in use. No Tenant header: an
 ### operator works in no tenant. A page at a time, with "next" as the marker to send as "after".
 GET {{api}}/operations/tenants
 Authorization: Bearer {{orla.response.body.access_token}}
@@ -950,7 +951,7 @@ Content-Type: application/json
 { "query": "{ roles { name permissions } }" }
 
 ### Inviting through the schema: tove invites leo into meadow, as POST /tenancy/invitations does. The payload
-### answers the invitation's id, when it ends and its token, this once. Without the permissions, errors holds one
+### answers the invitation and its token, this once. Without the permissions, errors holds one
 ### RefusalError with the code tenancy.not-permitted.
 # @name invitedViaGraphQL
 POST {{api}}/graphql
@@ -959,7 +960,7 @@ Tenant: meadow
 Content-Type: application/json
 
 {
-  "query": "mutation($unit: UUID!, $role: UUID!) { personInvite(input: { address: \"leo@example.test\", unitId: $unit, roleId: $role }) { issuedInvitation { id token expiresAt } errors { __typename ... on CodedError { code message } } } }",
+  "query": "mutation($unit: UUID!, $role: UUID!) { personInvite(input: { address: \"leo@example.test\", unitId: $unit, roleId: $role }) { issuedInvitation { invitation { id expiresAt } token } errors { __typename ... on CodedError { code message } } } }",
   "variables": { "unit": "{{meadowRoot}}", "role": "{{meadowSurveyor}}" }
 }
 
@@ -970,7 +971,7 @@ Authorization: Bearer {{tove.response.body.access_token}}
 Tenant: meadow
 Content-Type: application/json
 
-{ "query": "{ openInvitations { id address until expiresAt unit { name } role { name } issuedBy { displayName } } }" }
+{ "query": "{ openInvitations { id address grantUntil expiresAt unit { name } role { name } issuedBy { displayName } } }" }
 
 ### leo accepts, naming no tenant: the mutation needs a token and no seat, as POST /invitations/accept. The
 ### token travels as a variable, not in the document. The answer is the id of his new seat; seatsOfMine lists
@@ -1014,7 +1015,7 @@ POST {{api}}/graphql
 Authorization: Bearer {{orla.response.body.access_token}}
 Content-Type: application/json
 
-{ "query": "{ tenants { items { slug name status activeSeats } next } }" }
+{ "query": "{ tenants { items { tenant { slug status } name activeSeats } next } }" }
 
 ### One tenant's projects, as GET /operations/tenants/{tenant}/projects answers them. The unit and the owner
 ### are ids: an operator has no seat for Tenancy to say their names to. A project's id is a node id, for the

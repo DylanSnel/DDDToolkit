@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using FluentAssertions;
 
 namespace Examples.Tenancy.Tests.Host;
@@ -120,15 +121,23 @@ public sealed class DevAttemptsTests(SampleHosts sample) : IClassFixture<SampleH
         [
             await ada.GetStringAsync("/tenancy/seats", Cancellation),
             await ada.GetStringAsync("/tenancy/roles", Cancellation),
-            await maud.GetStringAsync("/me", Cancellation),
-            await ada.GetStringAsync("/me", Cancellation),
+            await OverviewAsync(maud),
+            await OverviewAsync(ada),
             await ada.GetStringAsync("/projects", Cancellation),
-            await leo.GetStringAsync("/me", Cancellation),
-            await hana.GetStringAsync("/me", Cancellation),
-            await rhea.GetStringAsync("/me", Cancellation),
-            await toveInHarbor.GetStringAsync("/me", Cancellation),
-            await toveInMeadow.GetStringAsync("/me", Cancellation),
+            await OverviewAsync(leo),
+            await OverviewAsync(hana),
+            await OverviewAsync(rhea),
+            await OverviewAsync(toveInHarbor),
+            await OverviewAsync(toveInMeadow),
             await toveInMeadow.GetStringAsync("/projects", Cancellation),
         ];
+    }
+
+    /// <summary>The client's seat's overview, <c>GET /me</c>, without the moment it holds for, which is no state.</summary>
+    private static async Task<string> OverviewAsync(HttpClient client)
+    {
+        var overview = JsonNode.Parse(await client.GetStringAsync("/me", Cancellation))!.AsObject();
+        overview.Remove("asOf");
+        return overview.ToJsonString();
     }
 }

@@ -54,7 +54,7 @@ type Query {
   tenantProjectInspections(project: ID!, tenant: UUID!): [Inspection!]!
     @cost(weight: "10")
   tenantProjects(tenant: UUID!): [TenantProject!]! @cost(weight: "10")
-  tenants(after: String, size: Int): TenantDirectoryPage! @cost(weight: "10")
+  tenants(after: String, size: Int): TenantPage! @cost(weight: "10")
   unitsWhereIHold(permission: String!): HeldUnits! @cost(weight: "10")
 }
 
@@ -232,14 +232,6 @@ type FailureArgument {
   value: String
 }
 
-type GrantOfMine {
-  appliesNow: Boolean!
-  endsAt: DateTime
-  role: String!
-  roleId: UUID!
-  startsAt: DateTime!
-}
-
 type HeldUnits {
   atTenant: Boolean!
   units: [UUID!]!
@@ -292,14 +284,14 @@ type InvalidValuesError implements CodedError {
 }
 
 type Invitation {
-  address: String!
+  address: String
   expiresAt: DateTime!
+  grantUntil: DateTime
   id: UUID!
   issuedAt: DateTime!
   issuedBy: Seat
   role: Role
   unit: OrganizationUnitName
-  until: DateTime
 }
 
 type InvitationAcceptPayload {
@@ -313,18 +305,17 @@ type InvitationCancelPayload {
 }
 
 type IssuedInvitation {
-  expiresAt: DateTime!
-  id: UUID!
+  invitation: Invitation!
   token: String!
 }
 
 type OrganizationUnit {
-  depth: Int!
+  depth: Int @cost(weight: "1")
   id: UUID!
   kind: UnitKind
   name: String!
   parentId: UUID
-  path: String!
+  path: String @cost(weight: "1")
   status: UnitStatus!
 }
 
@@ -395,10 +386,10 @@ type PersonInvitePayload {
   issuedInvitation: IssuedInvitation
 }
 
-type PlacementOfMine {
-  grants: [GrantOfMine!]!
+type Placement {
+  grants: [RoleGrant!]!
   isPrimary: Boolean!
-  unit: UnitPath!
+  unitId: UUID!
 }
 
 type PlacementWithdrawPayload {
@@ -552,7 +543,7 @@ type RefusalError implements CodedError {
 type Role {
   fromStarterRole: String
   id: UUID!
-  managesAccess: Boolean
+  managesAccess: Boolean @cost(weight: "1")
   name: String
   permissions: [String!] @authorize(policy: "tenancy.roles.manage")
   status: RoleStatus
@@ -568,18 +559,15 @@ type RoleCreatePayload {
   role: Role
 }
 
+type RoleGrant {
+  endsAt: DateTime
+  roleId: UUID!
+  startsAt: DateTime!
+}
+
 type RoleGrantPayload {
   errors: [RoleGrantError!]
   seat: Seat
-}
-
-type RoleOfMine {
-  fromStarterRole: String
-  id: UUID!
-  managesAccess: Boolean!
-  name: String!
-  permissions: [String!]!
-  status: RoleStatus!
 }
 
 type RolePermissionsSetPayload {
@@ -628,16 +616,21 @@ type SeatGrant {
 }
 
 type SeatOfMine {
+  organizationName: String!
   seat: Seat!
-  tenant: TenantOfSeat!
+  slug: String!
+  tenantStatus: TenantStatus!
 }
 
 type SeatOverview {
+  asOf: DateTime!
   permissions: [PermissionOfMine!]!
-  placements: [PlacementOfMine!]!
-  roles: [RoleOfMine!]!
+  placements: [Placement!]!
+  roles: [Role!]!
   seat: Seat!
-  tenant: TenantOfMine!
+  tenant: Tenant!
+  tenantName: String!
+  units: [UnitPath!]!
 }
 
 type SeatPlacePayload {
@@ -669,32 +662,22 @@ type StarterRole {
   seededFor: TenantShape
 }
 
-type TenantDirectoryPage {
-  items: [TenantListing!]!
-  next: String
-}
-
-type TenantListing {
-  activeSeats: Int!
+type Tenant {
   id: UUID!
-  name: String!
-  slug: String!
-  status: TenantStatus!
-}
-
-type TenantOfMine {
-  id: UUID!
-  name: String!
   shape: TenantShape!
   slug: String!
   status: TenantStatus!
 }
 
-type TenantOfSeat {
-  id: UUID!
+type TenantListing {
+  activeSeats: Int!
   name: String!
-  slug: String!
-  status: TenantStatus!
+  tenant: Tenant!
+}
+
+type TenantPage {
+  items: [TenantListing!]!
+  next: String
 }
 
 type TenantProject {

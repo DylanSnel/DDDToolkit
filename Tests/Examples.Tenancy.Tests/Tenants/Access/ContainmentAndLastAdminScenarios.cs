@@ -82,7 +82,7 @@ public sealed class ContainmentAndLastAdminScenarios(SampleHosts sample) : IClas
         granted.StatusCode.Should().Be(HttpStatusCode.NoContent);
         var me = await leo.GetFromJsonAsync<JsonElement>("/me", Cancellation);
         me.GetProperty("placements").EnumerateArray().Single().GetProperty("grants").EnumerateArray()
-            .Select(grant => (Role: grant.GetProperty("role").GetString(), Applies: grant.GetProperty("appliesNow").GetBoolean()))
+            .Select(grant => (Role: me.RoleNameOf(grant.GetProperty("roleId").GetGuid()), Applies: me.AppliesNow(grant)))
             .Should().Equal(("Observer", true));
     }
 
@@ -161,7 +161,7 @@ public sealed class ContainmentAndLastAdminScenarios(SampleHosts sample) : IClas
 
         var me = await juno.GetFromJsonAsync<JsonElement>("/me", Cancellation);
         me.GetProperty("placements").EnumerateArray().Single().GetProperty("grants").EnumerateArray()
-            .Select(grant => grant.GetProperty("role").GetString())
+            .Select(grant => me.RoleNameOf(grant.GetProperty("roleId").GetGuid()))
             .Should().Equal("Observer");
     }
 

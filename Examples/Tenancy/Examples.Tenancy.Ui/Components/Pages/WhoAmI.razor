@@ -21,7 +21,7 @@ else
         <div class="card">
             <div class="card-body">
                 <h2 class="h6 card-title">@T["common.tenant"]</h2>
-                <div><strong>@me.Tenant.Name</strong> <code>@me.Tenant.Slug</code></div>
+                <div><strong>@me.TenantName</strong> <code>@me.Tenant.Slug</code></div>
                 <div class="small">@T["whoami.shape-status", me.Tenant.Shape, me.Tenant.Status]</div>
             </div>
         </div>
@@ -41,31 +41,33 @@ else
                 <tr><th>@T["whoami.placed-at"]</th><th>@T["common.role"]</th><th>@T["common.from"]</th><th>@T["common.until"]</th><th>@T["whoami.applies-now"]</th></tr>
             </thead>
             <tbody>
-                @foreach (var placement in me.Placements)
+                @foreach (var placement in me.Placements.OrderByDescending(placement => placement.IsPrimary).ThenBy(placement => me.PathOf(placement.UnitId), StringComparer.OrdinalIgnoreCase))
                 {
                     if (placement.Grants.Count == 0)
                     {
                         <tr>
-                            <td>@PlacedAt(placement)</td>
+                            <td>@PlacedAt(me, placement)</td>
                             <td colspan="4" class="text-body-secondary">@T["whoami.no-role-here"]</td>
                         </tr>
                     }
 
-                    for (var index = 0; index < placement.Grants.Count; index++)
+                    var grants = placement.Grants.OrderBy(grant => me.NameOf(grant.RoleId), StringComparer.OrdinalIgnoreCase).ToList();
+                    for (var index = 0; index < grants.Count; index++)
                     {
-                        var grant = placement.Grants[index];
-                        var struck = grant.AppliesNow ? null : "not-applying";
+                        var grant = grants[index];
+                        var applies = me.AppliesNow(grant);
+                        var struck = applies ? null : "not-applying";
                         <tr>
                             <td>
                                 @if (index == 0)
                                 {
-                                    @PlacedAt(placement)
+                                    @PlacedAt(me, placement)
                                 }
                             </td>
-                            <td class="@struck">@grant.Role</td>
+                            <td class="@struck">@me.NameOf(grant.RoleId)</td>
                             <td class="@struck">@Day(grant.StartsAt)</td>
                             <td class="@struck">@(grant.EndsAt is { } ends ? UntilDay.Shown(ends) : T["common.open-ended"])</td>
-                            <td>@Applies(grant)</td>
+                            <td>@Applies(applies, grant)</td>
                         </tr>
                     }
                 }
@@ -86,12 +88,13 @@ else
                 <tbody>
                     @foreach (var role in me.Roles)
                     {
+                        var listed = _listed.GetValueOrDefault(role.Id) ?? role;
                         <tr>
                             <td>@role.Name</td>
                             <td><code>@role.FromStarterRole</code></td>
                             <td>@role.Status</td>
-                            <td>@(role.ManagesAccess ? T["common.yes"] : T["common.no"])</td>
-                            <td><div class="permissions">@foreach (var key in role.PermissionsShown) { <code>@key</code> }</div></td>
+                            <td>@(listed.ManagesAccess ? T["common.yes"] : T["common.no"])</td>
+                            <td><div class="permissions">@foreach (var key in listed.PermissionsShown) { <code>@key</code> }</div></td>
                         </tr>
                     }
                 </tbody>
@@ -157,11 +160,22 @@ else
 
     private ApiOutcome<WhoAmIAnswer>? _me;
 
-    protected override async Task LoadAsync() => _me = await Api.WhoAmIAsync();
+    // The seat's roles as the directory answers them by id: whether each manages access, and its permissions for
+    // whoever manages the tenant's roles. The overview names the roles and says neither. Not the session's last answer.
+    private IReadOnlyDictionary<Guid, RoleInfo> _listed = new Dictionary<Guid, RoleInfo>();
 
-    private RenderFragment PlacedAt(PlacementInfo placement) =>
+    protected override async Task LoadAsync()
+    {
+        _me = await Api.WhoAmIAsync();
+        _listed = _me.Value is { Roles.Count: > 0 } me
+            && (await Api.RolesByIdAsync([.. me.Roles.Select(role => role.Id)])).Value is { } roles
+                ? roles.ToDictionary(role => role.Id)
+                : new Dictionary<Guid, RoleInfo>();
+    }
+
+    private RenderFragment PlacedAt(WhoAmIAnswer me, PlacementInfo placement) =>
         @<span>
-            @placement.Unit.Path
+            @me.PathOf(placement.UnitId)
             @if (placement.IsPrimary)
             {
                 <span class="badge text-bg-light">@T["whoami.primary"]</span>
@@ -169,8 +183,8 @@ else
         </span>;
 
     // An expired grant is the demonstration's point: say why it does not apply, not only that it does not.
-    private string Applies(GrantInfo grant)
-        => grant.AppliesNow ? T["common.yes"]
+    private string Applies(bool applies, GrantInfo grant)
+        => applies ? T["common.yes"]
             : grant.EndsAt is { } ends && ends <= DateTimeOffset.UtcNow ? T["whoami.ended"]
             : T["whoami.not-started"];
 

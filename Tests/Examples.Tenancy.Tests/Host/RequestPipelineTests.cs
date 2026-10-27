@@ -1284,7 +1284,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
     {
         var host = await sample.SharedAsync();
 
-        async Task<IReadOnlyList<SeatOfMine>> OwnSeatsAsync(string claims)
+        async Task<IReadOnlyList<SeatInTenant<Seat>>> OwnSeatsAsync(string claims)
         {
             using (Callers.Begin(Callers.FromClaims(claims)))
             {

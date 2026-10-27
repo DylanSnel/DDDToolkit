@@ -19,7 +19,7 @@ namespace Examples.Tenancy.Tests.Tenants.Operators;
 [Trait("Sample", "Tenancy.Supabase")]
 public sealed class OperatorFieldScenarios(SampleHosts sample) : IClassFixture<SampleHosts>
 {
-    private const string Tenants = "query($size: Int, $after: String) { tenants(size: $size, after: $after) { items { id slug name status activeSeats } next } }";
+    private const string Tenants = "query($size: Int, $after: String) { tenants(size: $size, after: $after) { items { tenant { id slug status } name activeSeats } next } }";
 
     private const string History =
         """
@@ -48,7 +48,7 @@ public sealed class OperatorFieldScenarios(SampleHosts sample) : IClassFixture<S
         var byRoute = await orla.GetFromJsonAsync<JsonElement>("/operations/tenants", Cancellation);
 
         page.GetProperty("items").EnumerateArray().Select(Told).Should().Equal(byRoute.GetProperty("items").EnumerateArray().Select(Told));
-        page.GetProperty("items").EnumerateArray().Select(tenant => tenant.Text("slug")).Should().Equal(Harbor.Slug, Meadow.Slug);
+        page.GetProperty("items").EnumerateArray().Select(listed => listed.GetProperty("tenant").Text("slug")).Should().Equal(Harbor.Slug, Meadow.Slug);
         page.GetProperty("next").ValueKind.Should().Be(JsonValueKind.Null);
 
         // A page at a time, by the route's own marker.
@@ -57,7 +57,7 @@ public sealed class OperatorFieldScenarios(SampleHosts sample) : IClassFixture<S
         first.Text("next").Should().NotBeNull().And.Be(firstByRoute.Text("next"));
 
         var second = (await orla.GraphQLDataAsync(Tenants, new { size = 1, after = first.Text("next") })).GetProperty("tenants");
-        second.GetProperty("items").EnumerateArray().Select(tenant => tenant.Text("slug")).Should().Equal(Meadow.Slug);
+        second.GetProperty("items").EnumerateArray().Select(listed => listed.GetProperty("tenant").Text("slug")).Should().Equal(Meadow.Slug);
     }
 
     [Fact]
@@ -181,11 +181,11 @@ public sealed class OperatorFieldScenarios(SampleHosts sample) : IClassFixture<S
         row.Text("byKind"),
         row.Text("bySeatId"));
 
-    /// <summary>What an answer says of a tenant, the route's and the field's alike.</summary>
-    private static (Guid Id, string? Slug, string? Name, string? Status, int ActiveSeats) Told(JsonElement tenant) => (
-        tenant.GetProperty("id").GetGuid(),
-        tenant.Text("slug"),
-        tenant.Text("name"),
-        tenant.Text("status"),
-        tenant.GetProperty("activeSeats").GetInt32());
+    /// <summary>What an answer says of a tenant beside its name and its active seats, the route's and the field's alike.</summary>
+    private static (Guid Id, string? Slug, string? Name, string? Status, int ActiveSeats) Told(JsonElement listed) => (
+        listed.GetProperty("tenant").GetProperty("id").GetGuid(),
+        listed.GetProperty("tenant").Text("slug"),
+        listed.Text("name"),
+        listed.GetProperty("tenant").Text("status"),
+        listed.GetProperty("activeSeats").GetInt32());
 }

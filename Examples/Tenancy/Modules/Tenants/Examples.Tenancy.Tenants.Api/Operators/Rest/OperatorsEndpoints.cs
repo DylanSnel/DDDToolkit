@@ -1,4 +1,5 @@
 using Examples.Tenancy.Tenants.Api.Rest;
+using Examples.Tenancy.Tenants.Api.Tenant.Rest;
 using Examples.Tenancy.Tenants.Application.Operators.Queries;
 using Mediator;
 using Microsoft.AspNetCore.Builder;
@@ -31,13 +32,14 @@ internal static class OperatorsEndpoints
     {
         ArgumentNullException.ThrowIfNull(group);
 
-        // Every tenant by slug, each with its status and its active seats. "next" is the marker to send as "after".
+        // Every tenant by slug, each beside its name and its active seats, as the tenant manager's page holds them.
+        // "next" is the marker to send as "after".
         group.MapGet("/operations/tenants", async (string? after, int? size, ISender sender, CancellationToken cancellationToken) =>
         {
             var page = await sender.Send(new AllTenants(after, size ?? AllTenants.DefaultPage), cancellationToken);
             return Results.Ok(new
             {
-                items = page.Items.Select(tenant => new { tenant.Id, tenant.Slug, tenant.Name, tenant.Status, tenant.ActiveSeats }),
+                items = page.Items.Select(listed => new { tenant = TenantEndpoints.Describe(listed.Tenant), listed.Name, listed.ActiveSeats }),
                 page.Next,
             });
         });

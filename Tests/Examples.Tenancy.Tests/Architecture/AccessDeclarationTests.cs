@@ -561,12 +561,14 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
     [Fact]
     public void A_query_answers_with_data_only()
     {
-        // What a query answers with outlives the context it was read on, and crosses to whoever asked: no entity
-        // that could be changed, no query that still has to run, no service.
+        // What a query answers with outlives the context it was read on, and crosses to whoever asked: no query that
+        // still has to run, no service, and no entity of a module's own. The entities a query answers are Tenancy's
+        // classes, as one of the package's managers read them for the question: tracked by nobody, so nothing done to
+        // them is saved, and read in a scope that ended with the question.
         foreach (var query in Requests.Where(request => request.IsQuery))
         {
             GraphOf(query.Response, [])
-                .Where(type => typeof(IEntity).IsAssignableFrom(type)
+                .Where(type => (typeof(IEntity).IsAssignableFrom(type) && !IsTenancysClass(type))
                     || typeof(IQueryable).IsAssignableFrom(type)
                     || SampleLayout.IsPort(type)
                     || HostRegistrations.Services.Contains(type.IsGenericType ? type.GetGenericTypeDefinition() : type))
@@ -574,6 +576,8 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
         }
 
         GraphOf(typeof(IReadOnlyList<Seat>), []).Should().Contain(type => typeof(IEntity).IsAssignableFrom(type), "an aggregate in a list would be found");
+        GraphOf(typeof(IReadOnlyList<Project>), []).Should().Contain(type => typeof(IEntity).IsAssignableFrom(type) && !IsTenancysClass(type), "and one of a module's own is no class of Tenancy's");
+        GraphOf(typeof(SeatManager.SeatOverview), []).Should().Contain([typeof(Seat), typeof(Tenant)], "a manager's record holds Tenancy's classes, and they are looked into");
         GraphOf(typeof(HeldUnits), []).Should().Contain(typeof(OrganizationUnitId), "what a response's properties carry is looked into");
         GraphOf(typeof(IReadOnlyDictionary<ProjectId, ProjectCrew>), []).Should().Contain([typeof(CrewOverview), typeof(CrewRoleOverview)], "to the end");
         GraphOf(typeof(Page<ProjectOverview>), []).Should().Contain([typeof(ProjectOverview), typeof(DateRange)], "through a page too");
@@ -588,7 +592,7 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
         // to ask about with a query. It hands back no entity, and nothing it read on the way. One answers more:
         // inviting answers the invitation's token, which is kept nowhere, so no query could answer it afterwards.
         var commands = Requests.Where(request => !request.IsQuery && request.Type != typeof(InvitePerson)).ToList();
-        Requests.Single(request => request.Type == typeof(InvitePerson)).Response.Should().Be(typeof(Examples.Tenancy.Tenants.Application.Invitations.IssuedInvitationListing));
+        Requests.Single(request => request.Type == typeof(InvitePerson)).Response.Should().Be(typeof(InvitationManager.IssuedInvitation));
 
         commands.Where(command => command.Response != typeof(Unit) && !typeof(IEntityId).IsAssignableFrom(command.Response))
             .Select(command => $"{command.Type.Name} answers with {command.Response}")
@@ -681,9 +685,17 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
         => SampleLayout.IsPort(type) && type.GetMethods().Any(method => method.Name == "SaveAsync");
 
     /// <summary>
+    /// Whether <paramref name="type"/> is one of Tenancy's classes: declared in the Tenants module's domain project, or
+    /// an entity of the package's own, such as a seat's placement.
+    /// </summary>
+    private static bool IsTenancysClass(Type type)
+        => type.Assembly == typeof(Seat).Assembly || type.Assembly == typeof(TenancyRefusals).Assembly;
+
+    /// <summary>
     /// Every type an answer is made of: the type, what a collection holds, and the types of its public properties,
     /// to the end. The type arguments of a class the answer is nested in are not part of it: the Tenancy package
-    /// nests its DTOs in a class that is generic over the application's aggregates, and carries none of them.
+    /// nests its records in a manager that is generic over the application's classes, and a record carries those
+    /// it holds as properties, which are looked into.
     /// </summary>
     private static IEnumerable<Type> GraphOf(Type type, HashSet<Type> seen)
     {

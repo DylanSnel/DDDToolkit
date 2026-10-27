@@ -1,7 +1,7 @@
 using System.Text.Json.Serialization;
 using Examples.Tenancy.Tenants.Application.Invitations.Commands;
-using Examples.Tenancy.Tenants.Application.Invitations;
 using Examples.Tenancy.Tenants.Application.Invitations.Queries;
+using Examples.Tenancy.Tenants.Domain.Aggregates.Invitations;
 using Mediator;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -37,13 +37,14 @@ internal static class InvitationsEndpoints
         group.MapGet("/tenancy/invitations", async (ISender sender, CancellationToken cancellationToken)
             => Results.Ok((await sender.Send(new OpenInvitations(), cancellationToken)).Select(Describe)));
 
-        // The one answer that carries the token, which nothing keeps: not this API, and no cache on the way.
-        // It says nothing of whether the address had an account.
+        // The one answer that carries the token, which nothing keeps: not this API, and no cache on the way. It is the
+        // invitation manager's record: the invitation, as the list writes it, and its token. It says nothing of
+        // whether the address had an account.
         group.MapPost("/tenancy/invitations", async (PersonToInvite body, ISender sender, HttpContext http, CancellationToken cancellationToken) =>
         {
             var issued = await sender.Send(new InvitePerson(body.Address, body.UnitId, body.RoleId, body.EndsAt), cancellationToken);
             http.Response.Headers.CacheControl = "no-store";
-            return Results.Ok(new { invitationId = issued.Id, token = issued.Token, expiresAt = issued.ExpiresAt });
+            return Results.Ok(new { invitation = Describe(issued.Invitation), issued.Token });
         });
 
         group.MapDelete("/tenancy/invitations/{invitationId}", async (InvitationId invitationId, ISender sender, CancellationToken cancellationToken) =>
@@ -73,14 +74,18 @@ internal static class InvitationsEndpoints
         return group;
     }
 
-    /// <summary>An open invitation as this project writes it: who it is for, and what it offers and who issued it, by id.</summary>
-    private static object Describe(OpenInvitationListing invitation) => new
+    /// <summary>
+    /// An invitation as this project writes it: who it is for, and what it offers and who issued it, by id, under the
+    /// invitation's own names. Never a token, which the invitation does not hold, and never the account the identity
+    /// provider made for the address, which it does.
+    /// </summary>
+    private static object Describe(Invitation invitation) => new
     {
         invitation.Id,
         invitation.Address,
         invitation.UnitId,
         invitation.RoleId,
-        until = invitation.GrantUntil,
+        invitation.GrantUntil,
         invitation.IssuedAt,
         invitation.ExpiresAt,
         invitation.IssuedBy,

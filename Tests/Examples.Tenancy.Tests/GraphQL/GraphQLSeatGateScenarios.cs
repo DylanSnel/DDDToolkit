@@ -195,9 +195,9 @@ public sealed class GraphQLSeatGateScenarios(SampleHosts sample) : IClassFixture
         // Picking a tenant comes before being in one: the caller's own seats are the one field the gate leaves open.
         using var tove = await sample.ClientAsync("tove", tenant: null);
 
-        var mine = (await tove.GraphQLDataAsync("{ seatsOfMine { tenant { slug name } seat { displayName status } } }")).GetProperty("seatsOfMine");
+        var mine = (await tove.GraphQLDataAsync("{ seatsOfMine { slug organizationName seat { displayName status } } }")).GetProperty("seatsOfMine");
 
-        mine.EnumerateArray().Select(seat => seat.GetProperty("tenant").GetProperty("slug").GetString())
+        mine.EnumerateArray().Select(seat => seat.GetProperty("slug").GetString())
             .Should().BeEquivalentTo([Harbor.Slug, DemoData.Meadow.Slug]);
     }
 
@@ -245,7 +245,7 @@ public sealed class GraphQLSeatGateScenarios(SampleHosts sample) : IClassFixture
 
         // Orla is one, with no seat anywhere: her field sends its query.
         using var orla = await host.ClientAsync("orla", tenant: null);
-        (await orla.GraphQLDataAsync("{ tenants { items { slug } } }")).GetProperty("tenants").GetProperty("items").GetArrayLength().Should().Be(2);
+        (await orla.GraphQLDataAsync("{ tenants { items { tenant { slug } } } }")).GetProperty("tenants").GetProperty("items").GetArrayLength().Should().Be(2);
         sent.Names.Skip(asked).Should().Equal(nameof(AllTenants));
     }
 

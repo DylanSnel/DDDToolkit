@@ -27,7 +27,7 @@ flowchart LR
     gateway["<b>The gateway</b><br/><small>one schema</small>"]
     projects["<b>projects</b><br/><small>Project, its crew, ProjectRole</small>"]
     inspections["<b>inspections</b><br/><small>Inspection, a project's inspections</small>"]
-    tenants["<b>tenants</b><br/><small>Seat, OrganizationUnit, Role</small>"]
+    tenants["<b>tenants</b><br/><small>Tenant, Seat, Role, OrganizationUnit</small>"]
     client -->|"POST /graphql"| gateway
     gateway --> projects
     gateway --> inspections
@@ -40,9 +40,140 @@ flowchart LR
 ```
 
 Projects declares a seat as its key alone: `[GraphQLName("Seat")] [EntityKey("id")] record ReferencedSeat(SeatId Id)`.
-Tenants declares the owned `Seat` type over its `SeatListing`, with an internal lookup (`[Lookup] [Internal]`). The
+Tenants declares the owned `Seat` type over its `Seat` class, with an internal lookup (`[Lookup] [Internal]`). The
 lookup uses a data loader that sends `SeatsById` once per batch, in parts of at most 200 ids
 ([`DirectoryQueries.cs`](../../../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Api/Directory/GraphQL/DirectoryQueries.cs)).
+
+## Tenancy's classes as GraphQL types
+
+Tenancy's managers return the application's classes: `Tenant`, `Seat`, `Role`, `OrganizationUnit` and
+`Invitation`. The Tenants schema declares one GraphQL type over each class. For example, `seats` returns the `Seat`
+objects that `SeatManager.ListAsync` read, and the `Seat` type shows their `id`, `displayName` and `status`.
+
+- **A type class lists the fields it shows.** Each type class calls `BindFieldsExplicitly()` and names the fields of
+  the class one by one. A field that is not listed is not in the schema. The classes hold more than the schema
+  shows:
+  - A seat holds the identity of its person.
+  - An invitation holds the id of the account that the identity provider made for its address.
+  - A role holds the permissions that its starter role gave it.
+- **A field that the class lacks is a resolver in the type class.** A unit's path depends on the units above it, so
+  `OrganizationUnit.path` and `depth` are resolvers. Whether a role manages access comes from the catalogue, so
+  `Role.managesAccess` is a resolver. Each resolver loads its value through a data loader. The data loader sends a
+  query, and the query's handler asks the manager. A resolver takes no manager itself. So the units of a list are one
+  question to the manager, and that question passes the access check of its query.
+- **A manager's record is a GraphQL type too.** Some reads return more than one class holds. The manager then returns
+  a record with the class inside it, and the schema shows that record. `overviewOfMine` returns the seat manager's
+  `SeatOverview`, which holds the tenant, the seat, its units and its roles. The operators' `tenants` returns the tenant
+  manager's page, where each `TenantListing` holds a tenant beside its name and its number of active seats.
+
+The diagram follows the fields of one unit. Purple: the resolvers in the type class; green: the manager that reads
+the path and the depth; grey: the fields that come from the object, with no read.
+
+```mermaid
+flowchart TB
+    unit["<b>OrganizationUnit</b><br/><small>an object a query returned</small>"]
+    own["<b>id, parentId, name, kind, status</b><br/><small>read from the object</small>"]
+    resolvers["<b>path, depth</b><br/><small>resolvers in OrganizationUnitType</small>"]
+    loader["<b>IOrganizationUnitNameByIdDataLoader</b><br/><small>the ids of one batch</small>"]
+    query["<b>OrganizationUnitsById</b><br/><small>access check, then handler</small>"]
+    manager["<b>OrganizationManager</b><br/><small>UnitsByIdAsync: one statement</small>"]
+    unit --> own
+    unit --> resolvers
+    resolvers --> loader --> query --> manager
+    classDef strong fill:#5b2ec933,stroke:#5b2ec9,stroke-width:2px
+    classDef good fill:#1f8a5b26,stroke:#1f8a5b
+    classDef muted fill:none,stroke:#9a9ab5,stroke-dasharray:4 3,color:#9a9ab5
+    class resolvers strong
+    class manager good
+    class own muted
+```
+
+**`Tenants.Api/Organization/GraphQL/OrganizationUnitType.cs`**: the type over the unit, with the two fields the unit
+lacks.
+
+```csharp {6,14-17}
+[ObjectType<OrganizationUnit>]
+internal static partial class OrganizationUnitType
+{
+    static partial void Configure(IObjectTypeDescriptor<OrganizationUnit> descriptor)
+    {
+        descriptor.BindFieldsExplicitly();
+        descriptor.Field(unit => unit.Id);
+        descriptor.Field(unit => unit.ParentId);
+        descriptor.Field(unit => unit.Name);
+        descriptor.Field(unit => unit.Kind);
+        descriptor.Field(unit => unit.Status);
+    }
+
+    [Cost(DirectoryQueries.LoadedForTheRequest)]
+    public static async Task<string?> GetPathAsync(
+        [Parent] OrganizationUnit unit, IOrganizationUnitNameByIdDataLoader names, CancellationToken cancellationToken)
+        => (await names.LoadAsync(unit.Id, cancellationToken))?.Path;
+
+    [Cost(DirectoryQueries.LoadedForTheRequest)]
+    public static async Task<int?> GetDepthAsync(
+        [Parent] OrganizationUnit unit, IOrganizationUnitNameByIdDataLoader names, CancellationToken cancellationToken)
+        => (await names.LoadAsync(unit.Id, cancellationToken))?.Depth;
+}
+```
+
+- `[ObjectType<OrganizationUnit>]` makes the class `OrganizationUnit` a GraphQL type. HotChocolate's generator adds
+  every public static method of the type class as a field. `GetPathAsync` becomes `path`.
+- `[Parent]` is the unit that the field belongs to. The data loader collects the ids of a batch and sends one
+  `OrganizationUnitsById` for them.
+- `[Cost]` says that the field reads once per batch. Without it, HotChocolate estimates one read per unit.
+- The resolver runs only when a client asks for `path`. `{ organizationUnits { name kind } }` reads the units once.
+
+<details>
+<summary>Show the code: the role, with a rule on one field and a resolver on another</summary>
+
+**`Tenants.Api/Roles/GraphQL/RoleType.cs`**
+
+```csharp {14-15,17-19}
+[ObjectType<Role>]
+[EntityKey("id")]
+internal static partial class RoleType
+{
+    static partial void Configure(IObjectTypeDescriptor<Role> descriptor)
+    {
+        descriptor.BindFieldsExplicitly();
+        descriptor.Field(role => role.Id);
+        descriptor.Field(role => role.Name);
+        descriptor.Field(role => role.FromStarterRole);
+        descriptor.Field(role => role.Status);
+    }
+
+    [Authorize(RoleListing.ManageRolesPermission)]   // tenancy.roles.manage
+    public static IReadOnlyList<string> GetPermissions([Parent] Role role) => role.Permissions;
+
+    [Cost(DirectoryQueries.LoadedForTheRequest)]
+    public static async Task<bool?> GetManagesAccessAsync([Parent] Role role, IRoleByIdDataLoader roles, CancellationToken cancellationToken)
+        => (await roles.LoadAsync(role.Id, cancellationToken))?.ManagesAccess;
+}
+```
+
+</details>
+
+The types of the Tenants schema, with the class or record each is declared over:
+
+| GraphQL type | Declared over | Fields the class lacks |
+|---|---|---|
+| `Tenant` | `Tenant` | `slug` is a resolver that returns the text of the `TenantSlug`. |
+| `Seat` | `Seat` | None. The type shows `id`, `displayName` and `status`. |
+| `Role` | `Role` | `managesAccess` loads through `IRoleByIdDataLoader`. `permissions` requires `tenancy.roles.manage`. |
+| `OrganizationUnit` | `OrganizationUnit` | `path` and `depth` load through `IOrganizationUnitNameByIdDataLoader`. |
+| `Invitation` | `Invitation` | `unit`, `role` and `issuedBy` load through the three directory loaders. |
+| `SeatOverview` | `SeatManager.SeatOverview` | `placements` returns the placements of the overview's seat. |
+| `Placement`, `RoleGrant` | the package's `Placement<…>` and `RoleGrant<…>` | None. They name units and roles by id. |
+| `SeatOfMine` | `SeatInTenant<Seat>` | None. |
+| `TenantPage`, `TenantListing` | `TenantManager.TenantPage` and `TenantManager.TenantListing` | None. |
+| `OrganizationUnitName` | `NamedUnit<OrganizationUnitId>` | None. |
+| `IssuedInvitation` | `InvitationManager.IssuedInvitation` | None. |
+
+The routes write the same fields as the types. `GET /tenancy/units` writes each unit with `path` and `depth`, from the
+organization manager's `UnitInTree`. `GET /me` writes the fields of `SeatOverview`. Its `placements` name units and
+roles by id, and the overview's `units` and `roles` say what each id is called. A route writes a seat as `id`,
+`displayName` and `status`. It never writes the identity.
 
 ## A field on another module's type
 
@@ -132,12 +263,14 @@ module against these rules. Projects' schema is the example:
 
 - **A field contains no logic.** It sends the request that the route of its feature sends. A mutation returns what it
   changed.
-- **A type is the application's record.** It is declared over the record that a query returns, with
-  [`[ObjectType<T>]`](../../graphql.md#types-over-application-records). Nothing is copied or mapped.
+- **A type is what a query returns.** It is declared over that class or record with
+  [`[ObjectType<T>]`](../../graphql.md#types-over-application-records). In Projects and Inspections that is the
+  application's record. In Tenants it is one of Tenancy's classes or a manager's record, as
+  [Tenancy's classes as GraphQL types](#tenancys-classes-as-graphql-types) shows. Nothing is copied or mapped.
 - **Missing data returns `null` without an error.** `project(id:)` and `node(id:)` return `null` for a project that is
   missing or out of sight. A reference that its owner does not resolve, such as another tenant's seat, returns its id
-  with every other field `null`. So every field except the key of `Seat`, `OrganizationUnit`, `Role` and `Project` is
-  nullable (`AddDDDToolkitEntityNullability()`).
+  with every other field `null`. So every field except the key of `Seat`, `OrganizationUnitName`, `Role` and
+  `Project` is nullable (`AddDDDToolkitEntityNullability()`).
 - **Ids are loaded together**, once per field of the response. For example, the owners of a page take one
   `SeatsById`. `crew`, `myRoles` and `can` are resolvers behind data loaders. Each runs one statement per batch, when
   the client asks for it.
@@ -145,13 +278,15 @@ module against these rules. Projects' schema is the example:
   [`[Authorize("tenancy.roles.manage")]`](../../graphql.md#a-permission-on-a-field) on `Role.permissions` and
   `ProjectRole.permissions`, and `[Authorize("projects.crew.manage")]` on `CrewMember.roles`. Without the permission
   the field is `null`, with a coded error.
-- **The query enforces the same rule where it reads the data.** The queries check the permission in their SQL
-  statement and return `null`. An empty list would mean "none", so they do not return one. The routes therefore return
-  what the fields return. A seat can always read the roles it holds itself.
+- **The routes keep the same rule.** The crew queries check `projects.crew.manage` in their SQL statement and return
+  `null` for the roles. An empty list would mean "none", so they do not return one. The role queries return whether
+  the caller holds `tenancy.roles.manage` for the whole tenant, and `GET /tenancy/roles` writes `"permissions": null`
+  when it does not. A seat reads what it holds itself in its overview: its roles by name, and each permission with
+  the units it reaches.
 - **Tenants returns whole lists** for `seats`, `organizationUnits`, `roles` and `openInvitations`. The operators'
   `tenants` field keeps the package's page and cursor.
 - **A history row** has `byKind`, `bySeatId` and `bySeat`.
-- **Invitations.** `personInvite` returns the token once. Send the token as a variable.
+- **Invitations.** `personInvite` returns the invitation and its token, once. Send the token as a variable.
 - **Operators' fields** (`tenants`, `tenantAccessHistory`, `tenantProjects`, `tenantProjectInspections`) return ids
   where other fields return names. The directory resolves names only for a seat of the tenant, and an operator has
   none.

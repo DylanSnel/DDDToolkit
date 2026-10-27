@@ -45,7 +45,7 @@ public sealed class SuspendedAndExpiredScenarios(SampleHosts sample) : IClassFix
 
         // The tenant picker shows it, so its refusal can be seen, rather than a tenant that seems not to exist.
         var harbor = seats.EnumerateArray().Should().ContainSingle().Which;
-        harbor.GetProperty("tenant").GetProperty("slug").GetString().Should().Be(Harbor.Slug);
+        harbor.GetProperty("slug").GetString().Should().Be(Harbor.Slug);
         harbor.GetProperty("seat").GetProperty("id").GetGuid().Should().Be(Harbor.SeatOf(DemoPeople.Seth).Value);
         harbor.GetProperty("seat").GetProperty("status").GetString().Should().Be("suspended");
     }
@@ -83,10 +83,10 @@ public sealed class SuspendedAndExpiredScenarios(SampleHosts sample) : IClassFix
         var me = await vic.GetFromJsonAsync<JsonElement>("/me", Cancellation);
 
         var placement = me.GetProperty("placements").EnumerateArray().Should().ContainSingle().Which;
-        placement.GetProperty("unit").GetProperty("path").GetString().Should().Be("Harbor Works / North / North Inland");
+        me.PathOf(placement.GetProperty("unitId").GetGuid()).Should().Be("Harbor Works / North / North Inland");
         var grant = placement.GetProperty("grants").EnumerateArray().Should().ContainSingle().Which;
-        grant.GetProperty("role").GetString().Should().Be("Observer");
-        grant.GetProperty("appliesNow").GetBoolean().Should().BeFalse();
+        me.RoleNameOf(grant.GetProperty("roleId").GetGuid()).Should().Be("Observer");
+        me.AppliesNow(grant).Should().BeFalse();
         grant.GetProperty("endsAt").GetDateTimeOffset().Should().BeBefore(DateTimeOffset.UtcNow);
         me.GetProperty("permissions").EnumerateArray().Should().BeEmpty("a grant that does not apply holds no permission");
     }

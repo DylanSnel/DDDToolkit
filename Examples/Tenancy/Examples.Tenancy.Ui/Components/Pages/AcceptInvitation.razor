@@ -209,7 +209,7 @@ else
         {
             _token = null;
             var seats = await Api.SeatsOfMineAsync();
-            _tenant = seats.Value?.FirstOrDefault(mine => mine.Seat.Id == answer.SeatId)?.Tenant.Slug;
+            _tenant = seats.Value?.FirstOrDefault(mine => mine.Seat.Id == answer.SeatId)?.Slug;
             Session.SeatAdded(_tenant);
         }
 

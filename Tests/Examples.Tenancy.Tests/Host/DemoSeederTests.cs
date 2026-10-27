@@ -60,7 +60,7 @@ public sealed class DemoSeederTests(SampleHosts sample) : IClassFixture<SampleHo
 
             me.GetProperty("seat").GetProperty("id").GetGuid().Should().Be(seat.Id.Value);
             me.GetProperty("placements").EnumerateArray()
-                .Select(placement => (Unit: placement.GetProperty("unit").GetProperty("id").GetGuid(), Primary: placement.GetProperty("isPrimary").GetBoolean()))
+                .Select(placement => (Unit: placement.GetProperty("unitId").GetGuid(), Primary: placement.GetProperty("isPrimary").GetBoolean()))
                 .Should().ContainSingle("{0} is placed in one unit", seat.Person.Name)
                 .Which.Should().Be((seat.PlacedIn.Value, true));
         }
@@ -91,7 +91,7 @@ public sealed class DemoSeederTests(SampleHosts sample) : IClassFixture<SampleHo
             foreach (var grant in grants)
             {
                 grant.GetProperty("endsAt").ValueKind.Should().Be(JsonValueKind.Null);
-                grant.GetProperty("appliesNow").GetBoolean().Should().BeTrue();
+                me.AppliesNow(grant).Should().BeTrue();
             }
 
             // Either way every live permission of the catalogue is hers, for the whole tenant.

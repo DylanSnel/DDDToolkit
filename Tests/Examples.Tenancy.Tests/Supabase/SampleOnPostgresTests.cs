@@ -320,7 +320,7 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
         // Through the host it is the same role that reads: every tenant, and one tenant's projects.
         using var asOperator = await sample.Host.ClientAsync("orla", tenant: null);
         var tenants = await asOperator.GetFromJsonAsync<JsonElement>("/operations/tenants", Cancellation);
-        tenants.GetProperty("items").EnumerateArray().Select(tenant => tenant.Text("slug")).Should().Equal(Harbor.Slug, Meadow.Slug);
+        tenants.GetProperty("items").EnumerateArray().Select(listed => listed.GetProperty("tenant").Text("slug")).Should().Equal(Harbor.Slug, Meadow.Slug);
         (await asOperator.GetFromJsonAsync<JsonElement>($"/operations/tenants/{Meadow.Id.Value}/projects", Cancellation))
             .EnumerateArray().Names().Should().Equal("Garden shed");
 

@@ -198,9 +198,9 @@ public sealed class AdministrationSchemaScenarios(SampleHosts sample) : IClassFi
 
         // What a seat reads of its own roles is at /graphql: its overview.
         using var rhea = await sample.ClientAsync("rhea", Harbor.Slug);
-        var own = (await rhea.GraphQLDataAsync("{ overviewOfMine { placements { unit { id } grants { roleId appliesNow } } } }"))
+        var own = (await rhea.GraphQLDataAsync("{ overviewOfMine { placements { unitId grants { roleId startsAt endsAt } } } }"))
             .GetProperty("overviewOfMine").GetProperty("placements").EnumerateArray().Should().ContainSingle().Subject;
-        own.GetProperty("unit").GetProperty("id").GetGuid().Should().Be(Harbor.UnitNamed("North").Value);
+        own.GetProperty("unitId").GetGuid().Should().Be(Harbor.UnitNamed("North").Value);
         own.GetProperty("grants").EnumerateArray().Should().ContainSingle()
             .Which.GetProperty("roleId").GetGuid().Should().Be(Harbor.Roles[SampleCatalogue.AreaManager].Value);
     }

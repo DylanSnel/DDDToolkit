@@ -3,8 +3,9 @@ using Mediator;
 namespace Examples.Tenancy.Tenants.Application.Operators.Queries;
 
 /// <summary>
-/// Every tenant of the application, by slug and a page at a time, each with its status and how many of its seats
-/// are active: what the application's own staff start from.
+/// Every tenant of the application, by slug and a page at a time: what the application's own staff start from. The
+/// tenant manager's page holds each tenant beside its name and how many of its seats are active, which the tenant
+/// does not hold.
 /// </summary>
 /// <remarks>
 /// For operators only. The Tenancy package's tenant manager answers it, and asks the same of its caller
@@ -14,7 +15,7 @@ namespace Examples.Tenancy.Tenants.Application.Operators.Queries;
 /// <param name="After">The marker the page before answered as its next, or <see langword="null"/> for the first page.</param>
 /// <param name="Size">How many tenants a page holds: 1 to <see cref="TenantManager.MostPerPage"/>.</param>
 [Operator]
-public sealed record AllTenants(string? After = null, int Size = AllTenants.DefaultPage) : IQuery<ListedTenants>, ITenantsRequest
+public sealed record AllTenants(string? After = null, int Size = AllTenants.DefaultPage) : IQuery<TenantManager.TenantPage>, ITenantsRequest
 {
     /// <summary>How many tenants a page holds when the caller does not say.</summary>
     public const int DefaultPage = 50;
@@ -22,17 +23,12 @@ public sealed record AllTenants(string? After = null, int Size = AllTenants.Defa
 
 /// <summary>Answers <see cref="AllTenants"/> from the Tenancy package's tenant manager.</summary>
 /// <param name="reads">Where Tenancy is read.</param>
-public sealed class AllTenantsHandler(ITenancyReads reads) : IQueryHandler<AllTenants, ListedTenants>
+public sealed class AllTenantsHandler(ITenancyReads reads) : IQueryHandler<AllTenants, TenantManager.TenantPage>
 {
     /// <inheritdoc />
     /// <exception cref="Exceptions.RefusalException">
     /// The manager's own: <c>tenancy.page-size-invalid</c>, with <c>Max</c>, and <c>tenancy.cursor-invalid</c>.
     /// </exception>
-    public async ValueTask<ListedTenants> Handle(AllTenants query, CancellationToken cancellationToken)
-    {
-        var page = await reads.TenantsAsync(query.After, query.Size, cancellationToken);
-        return new ListedTenants(
-            [.. page.Items.Select(listed => new ListedTenant(listed.Tenant.Id, listed.Tenant.Slug.Value, listed.Name, listed.Tenant.Status, listed.ActiveSeats))],
-            page.Next);
-    }
+    public async ValueTask<TenantManager.TenantPage> Handle(AllTenants query, CancellationToken cancellationToken)
+        => await reads.TenantsAsync(query.After, query.Size, cancellationToken);
 }

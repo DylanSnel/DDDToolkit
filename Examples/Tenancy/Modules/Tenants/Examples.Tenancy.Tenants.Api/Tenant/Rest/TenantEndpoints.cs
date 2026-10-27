@@ -34,6 +34,19 @@ internal static class TenantEndpoints
         return group;
     }
 
+    /// <summary>
+    /// A tenant as every answer of this project writes it: its id, its slug, its shape and its status, the fields of
+    /// its GraphQL type. Inside this project <c>Tenant</c> is a feature's namespace, so the class is named from the
+    /// domain project's.
+    /// </summary>
+    internal static object Describe(Domain.Aggregates.Tenants.Tenant tenant) => new
+    {
+        tenant.Id,
+        slug = tenant.Slug.Value,
+        tenant.Shape,
+        tenant.Status,
+    };
+
     /// <summary>The new shape, by name (<c>"hierarchical"</c>), as the host spells every enum value.</summary>
     public sealed record NewShape([property: JsonRequired] TenantShape Shape);
 }

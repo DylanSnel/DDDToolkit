@@ -2,7 +2,7 @@ using System.Text.Json.Serialization;
 using Examples.Tenancy.Tenants.Application.Roles;
 using Examples.Tenancy.Tenants.Application.Roles.Commands;
 using Examples.Tenancy.Tenants.Application.Roles.Queries;
-using Examples.Tenancy.Tenants.Application.Seats;
+using Examples.Tenancy.Tenants.Domain;
 using Mediator;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -58,32 +58,30 @@ internal static class RolesEndpoints
     }
 
     /// <summary>
-    /// A role where a seat's overview shows one: a role the seat holds itself, so with its permissions, which a seat may
-    /// always read of its own. Whether a role manages access says who may give it: only someone who holds its
-    /// permissions that do, or whoever manages grants where the seat is placed.
+    /// A role where a seat's overview names one: its id, its name, the starter role it was copied from and its status.
+    /// The overview holds no more than the role, so its permissions, which are for whoever manages the tenant's roles,
+    /// are left out, and so is whether it manages access. The list of the tenant's roles answers both.
     /// </summary>
-    internal static object Describe(RoleOfMine role) => new
+    internal static object Describe(Role role) => new
     {
         role.Id,
         role.Name,
         role.FromStarterRole,
         role.Status,
-        role.Permissions,
-        role.ManagesAccess,
     };
 
     /// <summary>
-    /// A role in a list of the tenant's roles: the same, and what the tenant uses it for, which says whether it may
-    /// be given on a crew. Its <c>permissions</c> are a list for a caller who manages the tenant's roles and <c>null</c>
-    /// for anybody else: the query left them out.
+    /// A role in a list of the tenant's roles: the role's fields, as its GraphQL type shows them, with whether it manages
+    /// access, which says who may give it. Its <c>permissions</c> are a list for a caller who manages the tenant's roles
+    /// and <c>null</c> for anybody else, as the query says.
     /// </summary>
     internal static object Describe(RoleListing listed) => new
     {
-        listed.Id,
-        listed.Name,
-        listed.FromStarterRole,
-        listed.Status,
-        listed.Permissions,
+        listed.Role.Id,
+        listed.Role.Name,
+        listed.Role.FromStarterRole,
+        listed.Role.Status,
+        permissions = listed.PermissionsShown ? listed.Role.Permissions : null,
         listed.ManagesAccess,
     };
 

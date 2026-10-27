@@ -60,7 +60,7 @@ public sealed class InvitationScenarios(SampleHosts sample) : IClassFixture<Samp
         var answer = await invited.Content.ReadFromJsonAsync<JsonElement>(Cancellation);
         var token = answer.Text("token")!;
         token.Should().HaveLength(BearerTokens.TokenLength);
-        answer.GetProperty("expiresAt").GetDateTimeOffset().Should().BeCloseTo(DateTimeOffset.UtcNow.AddDays(7), TimeSpan.FromMinutes(5));
+        answer.GetProperty("invitation").GetProperty("expiresAt").GetDateTimeOffset().Should().BeCloseTo(DateTimeOffset.UtcNow.AddDays(7), TimeSpan.FromMinutes(5));
 
         // Until she accepts there is the invitation and nothing else: no seat, so meadow refuses her.
         using (var notYet = await junoInMeadow.GetAsync("/me", Cancellation))
@@ -79,17 +79,17 @@ public sealed class InvitationScenarios(SampleHosts sample) : IClassFixture<Samp
         me.GetProperty("seat").GetProperty("id").GetGuid().Should().Be(seat);
         me.GetProperty("seat").Text("displayName").Should().Be("Juno");
         var placement = me.GetProperty("placements").EnumerateArray().Should().ContainSingle().Subject;
-        placement.GetProperty("unit").GetProperty("id").GetGuid().Should().Be(Meadow.Root.Value);
+        placement.GetProperty("unitId").GetGuid().Should().Be(Meadow.Root.Value);
         placement.GetProperty("isPrimary").GetBoolean().Should().BeTrue();
         var grant = placement.GetProperty("grants").EnumerateArray().Should().ContainSingle().Subject;
         grant.GetProperty("roleId").GetGuid().Should().Be(surveyor);
-        grant.GetProperty("appliesNow").GetBoolean().Should().BeTrue();
+        me.AppliesNow(grant).Should().BeTrue();
         grant.GetProperty("endsAt").GetDateTimeOffset().Should().BeCloseTo(until, TimeSpan.FromSeconds(1));
 
         // It is among her seats now, which is where a client reads which tenant it is in; and the invitation is no longer open.
         var mine = await juno.GetFromJsonAsync<JsonElement>("/me/seats", Cancellation);
-        mine.EnumerateArray().Select(of => of.GetProperty("tenant").Text("slug")).Should().BeEquivalentTo(Harbor.Slug, Meadow.Slug);
-        mine.EnumerateArray().Single(of => of.GetProperty("seat").GetProperty("id").GetGuid() == seat).GetProperty("tenant").Text("slug").Should().Be(Meadow.Slug);
+        mine.EnumerateArray().Select(of => of.Text("slug")).Should().BeEquivalentTo(Harbor.Slug, Meadow.Slug);
+        mine.EnumerateArray().Single(of => of.GetProperty("seat").GetProperty("id").GetGuid() == seat).Text("slug").Should().Be(Meadow.Slug);
         (await OpenAsync(tove)).Should().BeEmpty();
 
         // Sent again by her, the answer is the seat she has; sent by anyone else, the invitation was used.
@@ -289,7 +289,7 @@ public sealed class InvitationScenarios(SampleHosts sample) : IClassFixture<Samp
         var (first, second) = (await known.Content.ReadFromJsonAsync<JsonElement>(Cancellation), await unknown.Content.ReadFromJsonAsync<JsonElement>(Cancellation));
         second.EnumerateObject().Select(property => (property.Name, property.Value.ValueKind))
             .Should().Equal(first.EnumerateObject().Select(property => (property.Name, property.Value.ValueKind)));
-        first.EnumerateObject().Select(property => property.Name).Should().Equal("invitationId", "token", "expiresAt");
+        first.EnumerateObject().Select(property => property.Name).Should().Equal("invitation", "token");
 
         // And the list says the same of both: an address, and nothing about an account.
         var listed = await OpenAsync(tove);
@@ -446,7 +446,7 @@ public sealed class InvitationScenarios(SampleHosts sample) : IClassFixture<Samp
         response.StatusCode.Should().Be(HttpStatusCode.OK, "the answer was {0}", await response.Content.ReadAsStringAsync(Cancellation));
 
         var answer = await response.Content.ReadFromJsonAsync<JsonElement>(Cancellation);
-        return (answer.GetProperty("invitationId").GetGuid(), answer.Text("token")!);
+        return (answer.GetProperty("invitation").GetProperty("id").GetGuid(), answer.Text("token")!);
     }
 
     /// <summary>The open invitations <paramref name="reader"/> is answered.</summary>

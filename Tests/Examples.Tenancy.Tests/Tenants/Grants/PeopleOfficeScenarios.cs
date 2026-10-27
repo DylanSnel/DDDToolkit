@@ -43,14 +43,18 @@ public sealed class PeopleOfficeScenarios(SampleHosts sample) : IClassFixture<Sa
 
         var me = await hana.GetFromJsonAsync<JsonElement>("/me", Cancellation);
 
-        me.GetProperty("placements").EnumerateArray().Should().ContainSingle().Which
-            .GetProperty("unit").GetProperty("path").GetString().Should().Be("Harbor Works");
+        me.PathOf(me.GetProperty("placements").EnumerateArray().Should().ContainSingle().Which.GetProperty("unitId").GetGuid())
+            .Should().Be("Harbor Works");
         var permission = me.GetProperty("permissions").EnumerateArray().Should().ContainSingle().Which;
         permission.GetProperty("permission").GetString().Should().Be(TenancyPermissions.GrantsManage);
         permission.GetProperty("atTenant").GetBoolean().Should().BeTrue();
         var role = me.GetProperty("roles").EnumerateArray().Should().ContainSingle().Which;
         role.GetProperty("fromStarterRole").GetString().Should().Be(SampleCatalogue.PeopleOffice);
-        role.GetProperty("managesAccess").GetBoolean().Should().BeTrue("its one permission gives power over other people's access");
+
+        // Whether the role manages access is in the list of the tenant's roles: the overview names the role.
+        var listed = await hana.GetFromJsonAsync<JsonElement>("/tenancy/roles", Cancellation);
+        listed.EnumerateArray().Single(found => found.GetProperty("id").GetGuid() == role.GetProperty("id").GetGuid())
+            .GetProperty("managesAccess").GetBoolean().Should().BeTrue("its one permission gives power over other people's access");
         (await hana.VisibleProjectsAsync()).Should().BeEmpty("giving roles lets her see nothing");
     }
 
@@ -71,7 +75,7 @@ public sealed class PeopleOfficeScenarios(SampleHosts sample) : IClassFixture<Sa
 
         var me = await leo.GetFromJsonAsync<JsonElement>("/me", Cancellation);
         me.GetProperty("placements").EnumerateArray().Single().GetProperty("grants").EnumerateArray()
-            .Select(grant => grant.GetProperty("role").GetString()).Should().Equal("Observer");
+            .Select(grant => me.RoleNameOf(grant.GetProperty("roleId").GetGuid())).Should().Equal("Observer");
         var hanas = await hana.GetFromJsonAsync<JsonElement>("/me", Cancellation);
         hanas.GetProperty("permissions").EnumerateArray().Select(permission => permission.GetProperty("permission").GetString())
             .Should().Equal([TenancyPermissions.GrantsManage], "giving a role gives the giver nothing");

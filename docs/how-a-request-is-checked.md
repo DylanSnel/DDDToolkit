@@ -129,7 +129,7 @@ The permission is a constant of the catalogue. A request can declare its own con
 
 ```csharp
 [InTenant]
-public sealed record OrganizationUnits : IQuery<IReadOnlyList<UnitListing>>, ITenantsRequest;
+public sealed record OrganizationUnits : IQuery<IReadOnlyList<OrganizationManager.UnitInTree>>, ITenantsRequest;
 
 [RequiresPermission(TenancyPermissions.UnitsManage)]
 public sealed record AddOrganizationUnit([AtUnit] OrganizationUnitId Parent, string Name, UnitKind? Kind) : ICommand<OrganizationUnitId>, ITenantsRequest;
@@ -173,7 +173,7 @@ sample's four requests and the registration look as below. The sample does not w
 one way of writing each requirement.
 
 ```csharp
-public sealed record OrganizationUnits : IQuery<IReadOnlyList<UnitListing>>, ITenantsRequest
+public sealed record OrganizationUnits : IQuery<IReadOnlyList<OrganizationManager.UnitInTree>>, ITenantsRequest
 {
     AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.InTenant();
 }

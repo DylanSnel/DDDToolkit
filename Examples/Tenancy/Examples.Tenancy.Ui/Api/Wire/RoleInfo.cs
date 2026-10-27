@@ -7,10 +7,11 @@ namespace Examples.Tenancy.Ui.Api.Wire;
 /// <see cref="ProjectRoleInfo"/>.
 /// </summary>
 /// <remarks>
-/// The permissions of a role a seat holds itself are always there, in <c>GET /me</c>. In the lists of the tenant's roles
-/// the API answers them to whoever manages the roles, and <c>null</c> to anybody else.
+/// In the lists of the tenant's roles the API answers the permissions to whoever manages the roles, and <c>null</c> to
+/// anybody else. The roles in <c>GET /me</c> are named, without their permissions and without whether they manage
+/// access: the list of the tenant's roles says both.
 /// </remarks>
-public sealed record RoleInfo(Guid Id, string Name, string? FromStarterRole, string Status, IReadOnlyList<string>? Permissions, bool ManagesAccess = false)
+public sealed record RoleInfo(Guid Id, string Name, string? FromStarterRole, string Status, IReadOnlyList<string>? Permissions = null, bool ManagesAccess = false)
 {
     /// <summary>The permissions it brings; none when the API did not answer them.</summary>
     public IReadOnlyList<string> PermissionsShown => Permissions ?? [];

@@ -12,11 +12,6 @@ using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
-// The UI's records of a row of GET /me/seats and its tenant, not the module's answers of the same names, which every
-// file of this project imports.
-using SeatOfMine = Examples.Tenancy.Ui.Api.Wire.SeatOfMine;
-using TenantOfSeat = Examples.Tenancy.Ui.Api.Wire.TenantOfSeat;
-
 namespace Examples.Tenancy.Tests.Ui;
 
 /// <summary>
@@ -489,7 +484,7 @@ public sealed class SampleApiTests
     [Fact]
     public void A_fresh_sign_in_starts_in_the_first_tenant_by_slug_where_the_seat_is_active()
     {
-        static SeatOfMine In(string slug, string status) => new(new TenantOfSeat(Guid.NewGuid(), slug, slug, "active"), new SeatInfo(Guid.NewGuid(), "Someone", status));
+        static SeatOfMine In(string slug, string status) => new(new SeatInfo(Guid.NewGuid(), "Someone", status), slug, slug, "active");
 
         UiSession.TenantToStartIn([In("meadow", "active"), In("harbor", "active")]).Should().Be("harbor");
         UiSession.TenantToStartIn([In("harbor", "suspended"), In("meadow", "active")]).Should().Be("meadow");
