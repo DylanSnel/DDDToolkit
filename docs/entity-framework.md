@@ -275,8 +275,8 @@ after Tenancy's save check.
 `UseDDDToolkit` puts a part on every context it sets up. Some contexts need a part because of what their model
 holds. For example, a context that keeps rows to a tenant needs Tenancy's save check. Where nothing registered the part, or the
 context was given the base alone, the one call has nothing to add, and the context would save without the part. So
-the model states what it requires. `ScopeToTenant` states the save check. A mapping of yours states its part with
-`RequireContextPart`:
+the model states what it requires. Tenancy's mapping of a class kept to a tenant, by `[OfTenant]` or by
+`ScopeToTenant`, states the save check. A mapping of yours states its part with `RequireContextPart`:
 
 ```csharp
 entity.Metadata.Model.RequireContextPart(
@@ -297,11 +297,12 @@ registration:
 
 Where a registration brought the part, the message names `UseDDDToolkit`, and the part's own call after
 `UseDDDToolkitCore`. The requirement is a model annotation with a text value, so the model still goes into a
-migration's snapshot and a compiled model.
+migration's snapshot and a compiled model. A package's convention states its part with the overload for conventions,
+`modelBuilder.Metadata.RequireContextPart(...)`, as Tenancy's convention of `[OfTenant]` states the save check.
 
 ### `AddDDDToolkitConventions` and `Add{Module}Converters`
 
-`AddDDDToolkitConventions` adds the toolkit's five conventions to the model. It is the same for every context, so it
+`AddDDDToolkitConventions` adds the toolkit's six conventions to the model. It is the same for every context, so it
 takes no arguments. [Generated code and conventions](#generated-code-and-conventions) describes each convention.
 
 `Add{Module}Converters` is generated, once per assembly that declares identifiers or single value objects. It
@@ -1049,6 +1050,7 @@ Both lines are needed:
 |---|---|
 | `InternalMemberConvention` | Ignores every member marked `[Internal]`, on entity types and complex types alike |
 | `ReadOnlyCollectionConvention` | Maps generated get-only collections of primitives and converted types as primitive collections, and applies the element converter |
+| `MarkerConvention` | Runs the convention of a package that a marker names with `[ModelConvention]`, in every model that maps a class with the marker, on the class or on a property. Tenancy's `[OfTenant]` and Membership's `[Member<...>]` and `[CustomRole<...>]` are mapped this way. A model with a marked class whose convention the application does not have is refused, naming the assembly to reference ([A marker mapped by a convention](writing-a-supporting-domain.md#a-marker-mapped-by-a-convention)). |
 | `AggregateRootVersionConvention` | Makes `Version` on every aggregate root a concurrency token |
 | `KeyPartConvention` | Puts `[KeyPart]` properties into the primary key ahead of `Id`, and into the foreign key of every owned type below ([Composite keys](composite-keys.md)) |
 | `IndexRefusalConvention` | Checks, when the model is built, every index that names its refusal with `RefusesAs`. The index must be unique, and every property that its message names in braces must be one the entity maps. |
@@ -1057,7 +1059,9 @@ Both lines are needed:
 it `[Internal]`, so the convention ignores it, as `[NotMapped]` would.
 
 Explicit configuration in `OnModelCreating` still wins over all of this. The conventions fill in what you did not
-configure.
+configure. `MarkerConvention` runs when the model is finished, so a package's convention sees what the context mapped
+by hand and leaves it. It runs before the version and the key parts, so what a package maps is keyed like the rest,
+and before `IndexRefusalConvention`, so an index a package adds is checked.
 
 ### A domain project without Entity Framework
 
@@ -1319,6 +1323,11 @@ public sealed class OrderReads(IDbContextFactory<OrderingContext> contexts)
   [an outbox](event-delivery.md#the-outbox) needs none either, because the outbox writes its rows on the saving
   context and resolves nothing. Dispatching in process does need a scope. Name it with
   `context.BindToScope(scope.ServiceProvider)`. The binding lasts until the context is disposed.
+- **A package reads the scope back** with `context.ScopeOf()`. It returns the services of the scope the context is
+  bound to for the rental it is in, or `null` when it is bound to none, when the binding is an earlier rental's, or
+  when the scope is gone. A package that asks the application's scoped services about a statement of the context asks
+  them there first, and the provider the context's options were built with after. Membership's queries on a
+  resource's set, such as `db.Boards.WhereIHold(permission)`, find the rules this way.
 - **A pooled context with events to dispatch in process and no scope is refused**, with an
   `InvalidOperationException` that names both fixes. It is refused before any event leaves its aggregate. So nothing is
   dispatched and nothing is saved, and the same save succeeds once the context is bound. The toolkit does not make a

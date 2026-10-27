@@ -40,7 +40,7 @@
     {
       "id": "system",
       "name": "System work",
-      "who": "System work in harbor, started by trusted code with `TenancyUseCases.BeginSystemIn(harbor)`.",
+      "who": "System work in harbor, started by trusted code with `access.BeginSystemIn(harbor)`.",
       "runsAs": "ddd_system_in",
       "connection": "SELECT set_config('role', 'ddd_system_in', false), set_config('request.jwt.claims', '{\"role\":\"ddd_system_in\",\"scope\":\"tenancy\"}', false), …, set_config('tenancy.caller_tenant', '<harbor>', false);"
     }
@@ -99,9 +99,14 @@
           "decides": "SignedIn(), Own(value)"
         },
         {
-          "name": "TenancyAccessCheck over TenantsContext",
+          "name": "Tenancy's check of operators",
           "addedBy": "services.AddTenancyAccess<ITenantsRequest, TenantsContext>()",
-          "decides": "TenancyRequirement"
+          "decides": "Operator(), Operator(tenant)"
+        },
+        {
+          "name": "TenancyAccessCheck over TenantsContext",
+          "addedBy": "the same call",
+          "decides": "every other TenancyRequirement"
         }
       ]
     },
@@ -114,9 +119,14 @@
           "decides": "SignedIn(), Own(value)"
         },
         {
+          "name": "Tenancy's check of operators",
+          "addedBy": "services.AddTenancyAccess<IProjectsRequest, ProjectsContext>()",
+          "decides": "Operator(), Operator(tenant)"
+        },
+        {
           "name": "TenancyAccessCheck over ProjectsContext",
-          "addedBy": "services.AddTenancyAccess<TenantId, SeatId, OrganizationUnitId, RoleId, IProjectsRequest, ProjectsContext>()",
-          "decides": "TenancyRequirement"
+          "addedBy": "the same call",
+          "decides": "every other TenancyRequirement"
         },
         {
           "name": "MemberAccessCheck<Project, ProjectId>",
@@ -139,9 +149,14 @@
           "decides": "SignedIn(), Own(value)"
         },
         {
+          "name": "Tenancy's check of operators",
+          "addedBy": "services.AddTenancyAccess<IAuditRequest, AuditContext>()",
+          "decides": "Operator(), Operator(tenant)"
+        },
+        {
           "name": "TenancyAccessCheck over the audit module's context",
-          "addedBy": "services.AddTenancyAccess<TenantId, SeatId, OrganizationUnitId, RoleId, IAuditRequest, AuditContext>()",
-          "decides": "TenancyRequirement"
+          "addedBy": "the same call",
+          "decides": "every other TenancyRequirement"
         }
       ]
     }
@@ -162,7 +177,7 @@
         "attribute": "generated.organization-units"
       },
       "decides": [
-        1
+        2
       ],
       "setSay": "Each check says what it decides with a type test. `TenancyAccessCheck` says yes: `InTenant()` is a `TenancyRequirement`.",
       "check": {
@@ -180,7 +195,7 @@
           },
           "door": {
             "pass": true,
-            "say": "Ada has a seat in harbor, so `RequireTenant()` answers her tenant and seat."
+            "say": "Ada has a seat in harbor, so `CurrentTenant.Require()` answers her tenant and seat."
           },
           "statement": {
             "snippet": null,
@@ -224,7 +239,7 @@
             "pass": false,
             "status": 403,
             "code": "tenancy.not-seated",
-            "say": "No seat in harbor: the host found none for this identity, so the caller is nobody there, and `RequireTenant()` refuses with that reason."
+            "say": "No seat in harbor: the host found none for this identity, so the caller is nobody there, and `CurrentTenant.Require()` refuses with that reason."
           },
           "statement": {
             "snippet": null,
@@ -294,7 +309,7 @@
           },
           "door": {
             "pass": true,
-            "say": "System work in harbor works in the tenant: `RequireTenant()` answers harbor, by system work."
+            "say": "System work in harbor works in the tenant: `CurrentTenant.Require()` answers harbor, by system work."
           },
           "statement": {
             "snippet": null,
@@ -323,9 +338,9 @@
         "attribute": "generated.add-unit"
       },
       "decides": [
-        1
+        2
       ],
-      "setSay": "`TenancyAccessCheck` says yes: `AtUnit(permission, unit)` is a `TenancyRequirement`. The core's check says no, and is passed by.",
+      "setSay": "`TenancyAccessCheck` says yes: `AtUnit(permission, unit)` is a `TenancyRequirement`. The core's check and Tenancy's check of operators say no, and are passed by.",
       "check": {
         "snippet": "check.tenancy",
         "highlight": "{14,16-17}"
@@ -554,9 +569,9 @@
         "attribute": "generated.add-crew-member"
       },
       "decides": [
-        2
+        3
       ],
-      "setSay": "`MemberAccessCheck<Project, ProjectId>` says yes: `On(permission, project, version)` is a `MemberAccess<ProjectId>`. Tenancy's check says no to it, though it is earlier in the set.",
+      "setSay": "`MemberAccessCheck<Project, ProjectId>` says yes: `On(permission, project, version)` is a `MemberAccess<ProjectId>`. Tenancy's two checks say no to it, though they are earlier in the set.",
       "check": {
         "snippet": "check.member",
         "highlight": "{4-5,10-11}"
@@ -822,7 +837,7 @@
       },
       "decides": [
         0,
-        1
+        2
       ],
       "setSay": "An `Any` is decided by the set, case by case: `Own(seat)` by the core's check, `AtTenant(permission)` by Tenancy's. Both must have a check before either is asked.",
       "check": {
@@ -1025,9 +1040,10 @@
         "attribute": null
       },
       "decides": [
-        1
+        1,
+        2
       ],
-      "setSay": "An `Any` of two of Tenancy's cases: the set gives `Operator()` and `AtTenant(permission)` each to the check of Tenancy's that decides it, in that order.",
+      "setSay": "An `Any` of two of Tenancy's cases: the set gives `Operator()` to Tenancy's check of operators and `AtTenant(permission)` to `TenancyAccessCheck`, in that order.",
       "check": {
         "snippet": "check.combined",
         "highlight": "{2,6-7,9}"
@@ -1573,26 +1589,22 @@
       "language": "csharp",
       "lines": [
         "// TenancyAccessCheck, Tenancy.EntityFramework, shortened",
-        "public bool Decides(AccessRequirement requirement) => requirement is TenancyRequirement;",
+        "public bool Decides(AccessRequirement requirement) => requirement is TenancyRequirement && !IsOperatorCase(requirement);",
         "",
         "switch (requirement)",
         "{",
         "    case TenancyRequirement.InTenant:",
-        "        tenancy.RequireTenant();                                 // a seat here, or system work here",
+        "        access.CurrentTenant.Require();                          // a seat here, or system work here",
         "        break;",
         "    case TenancyRequirement.AtTenant required:",
-        "        tenancy.RequireTenant();                                 // nobody is refused without a statement",
+        "        access.CurrentTenant.Require();                          // nobody is refused without a statement",
         "        if (!await HoldsAtTenantAsync(required.Permission, cancellationToken))",
         "            throw TenancyRefusals.Refuse(TenancyRefusals.NotPermitted, (\"Permission\", required.Permission));",
         "        break;",
         "    case TenancyRequirement.AtUnit<TUnitId> required:",
-        "        tenancy.RequireTenant();",
+        "        access.CurrentTenant.Require();",
         "        if (!await HoldsAtAsync(required.Permission, required.Unit, cancellationToken))",
         "            throw TenancyRefusals.Refuse(TenancyRefusals.NotPermitted, (\"Permission\", required.Permission), (\"Unit\", required.Unit));",
-        "        break;",
-        "    case TenancyRequirement.Operator:",
-        "        if (!options.IsOperator(callers.Current))                // the token's role, never a seat",
-        "            throw TenancyRefusals.Refuse(TenancyRefusals.OperatorsOnly);",
         "        break;",
         "    default:",
         "        throw new InvalidOperationException(\"... which Tenancy's access check does not decide ...\");",
@@ -1844,18 +1856,18 @@
     "rows.register": {
       "language": "csharp",
       "lines": [
-        "using (TenancyUseCases.BeginSystem())                             // system work outside any tenant, begun here",
+        "using (access.BeginSystem())                                      // system work outside any tenant, begun here",
         "{",
-        "    var made = await tenants.ProvisionAsync(new TenancyUseCases.TenantToProvision(",
+        "    var tenant = await tenants.ProvisionAsync(new TenantToProvision(",
         "        command.Slug, command.Name, TenantShape.Flat, command.Name, administrator), cancellationToken);",
-        "    return made.Tenant;",
+        "    return tenant.Id;",
         "}                                                                 // the caller before it is current again"
       ]
     },
     "rows.register-forgotten": {
       "language": "csharp",
       "lines": [
-        "var made = await tenants.ProvisionAsync(new TenancyUseCases.TenantToProvision(",
+        "var tenant = await tenants.ProvisionAsync(new TenantToProvision(",
         "    command.Slug, command.Name, TenantShape.Flat, command.Name, administrator), cancellationToken);"
       ]
     }

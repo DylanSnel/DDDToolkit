@@ -1050,7 +1050,7 @@ CREATE POLICY "Only employees read the organization (select) for authenticated" 
   role may use the table, there is nothing to narrow, and the script refuses the rule and names it.
 - **Work past the policies is not narrowed.** Functions that run as their owner read what they read. The scoped
   system role is narrowed only where the rule names it in `To`. So a package's work keeps working.
-  [Tenancy's](tenancy/postgres.md#restrictive-rules) use cases all keep working while a rule keeps a seat out of the
+  [Tenancy's](tenancy/postgres.md#restrictive-rules) managers all keep working while a rule keeps a seat out of the
   organization.
 - **Not with `Columns`.** A column rule is a trigger, and a restrictive rule is a policy. A rule with both is
   refused.
@@ -2949,8 +2949,8 @@ writes, or a dispatcher of yours written with `async` and `await`
 What runs again is the requirement that the request declared:
 
 - A rule that a handler checks itself, beyond what its request declared, is not part of the requirement.
-- What a package's use case checks beyond the requirement is not part of it either. A request handed to one of
-  Tenancy's use cases declares what the use case checks first, such as `TenancyAccess.InTenant()`, and the use case
+- What a package's manager checks beyond the requirement is not part of it either. A request handed to one of
+  Tenancy's managers declares what the manager checks first, such as `TenancyAccess.InTenant()`, and the manager
   checks the rest itself.
 - A change of permissions against either one still gives a warning. The warning names the requirement that ran
   again, so it shows how little that requirement checked.

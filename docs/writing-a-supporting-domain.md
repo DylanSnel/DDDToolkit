@@ -259,11 +259,11 @@ With `CreatesIds`:
 
 - An application class declared over an id without a `Create()` is [DDD00067](diagnostics.md#ddd00067), on the class,
   with a code fix that adds `Create()` to the id.
-- The registrations and the class the use cases are named through also require `Create()` in their constraints. They
-  do not report the class again, and the compiler reports no error in generated code.
+- The registrations and the classes of `[TemplateFacade]` also require `Create()` in their constraints. They do not
+  report the class again, and the compiler reports no error in generated code.
 
 Without `CreatesIds`, the toolkit cannot tell the application which class to fix. Then a registration reports the
-problem with [DDD00050](diagnostics.md#ddd00050), and the class the use cases are named through with
+problem with [DDD00050](diagnostics.md#ddd00050), and a class of `[TemplateFacade]` with
 [DDD00065](diagnostics.md#ddd00065). Leave `CreatesIds` unset for a template whose ids the application creates
 itself. Its ids then need no `Create()`.
 
@@ -278,6 +278,165 @@ key parts.
 A [row access rule](row-level-security.md#row-access-rules-written-in-c) is written for the application's class, and
 reads the parent's properties and collections like the class's own. A rule about the parent itself is refused with
 [DDD00040](diagnostics.md#ddd00040), because the parent has no table.
+
+### A marker mapped by a convention
+
+Some facts about an application's class concern a package: which subscription a delivery belongs to, which tenant a
+project belongs to. The application states such a fact on its domain class, with an attribute that the package ships.
+This page calls such an attribute a **marker**. A domain project references no Entity Framework, so the marker maps
+nothing by itself. The package maps it in its Entity Framework package, with a convention. **`[ModelConvention]`** on
+the marker names that convention. A context then maps every marked class, and writes no line per class.
+
+The example marks the property of the application's `Delivery` that names its subscription. The package's convention
+gives that property an index.
+
+**`Acme.Subscriptions.Abstractions`**, the marker:
+
+```csharp
+[ModelConvention("Acme.Subscriptions.EntityFramework.OfSubscriptionConvention, Acme.Subscriptions.EntityFramework")]
+[AttributeUsage(AttributeTargets.Property, Inherited = false)]
+public sealed class OfSubscriptionAttribute : Attribute;
+```
+
+**`Acme.Subscriptions.EntityFramework`**, the convention:
+
+```csharp
+internal sealed class OfSubscriptionConvention : IModelFinalizingConvention
+{
+    public void ProcessModelFinalizing(IConventionModelBuilder modelBuilder, IConventionContext<IConventionModelBuilder> context)
+    {
+        foreach (var entityType in modelBuilder.Metadata.GetEntityTypes().ToList())
+        {
+            var marked = entityType.ClrType.GetProperties().FirstOrDefault(each => each.IsDefined(typeof(OfSubscriptionAttribute)));
+            if (marked is not null && entityType.FindProperty(marked.Name) is { } property)
+            {
+                entityType.Builder.HasIndex([property]);      // a delivery is found by its subscription
+            }
+        }
+    }
+}
+```
+
+**The application**, a domain class and the context that maps it:
+
+```csharp
+// Shop.Deliveries.Domain: references Acme.Subscriptions.Abstractions, and no Entity Framework
+[AggregateRoot<DeliveryId>]
+public sealed partial class Delivery
+{
+    [OfSubscription] public SubscriptionId SubscriptionId { get; private set; }
+}
+
+// Shop.Deliveries.Infrastructure: references Acme.Subscriptions.EntityFramework
+public sealed class DeliveriesContext(DbContextOptions<DeliveriesContext> options) : DbContext(options)
+{
+    protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
+        => configurationBuilder.AddDDDToolkitConventions();      // runs OfSubscriptionConvention, because Delivery is marked
+}
+```
+
+In the diagram, purple marks the application's class with the marker, and green the convention that the context
+runs for it:
+
+```mermaid
+flowchart TB
+    context["<b>DeliveriesContext</b><br/><small>AddDDDToolkitConventions()</small>"]
+    delivery["<b>Delivery</b><br/><small>[OfSubscription] on a property</small>"]
+    marker["<b>OfSubscriptionAttribute</b><br/><small>in Acme.Subscriptions.Abstractions</small>"]
+    convention["<b>OfSubscriptionConvention</b><br/><small>in Acme.Subscriptions.EntityFramework</small>"]
+    context -- "maps" --> delivery
+    delivery -- "carries" --> marker
+    marker -. "names it, by [ModelConvention]" .-> convention
+    context -- "runs it once per model,<br/>when the model is finished" --> convention
+    classDef strong fill:#5b2ec933,stroke:#5b2ec9,stroke-width:2px
+    classDef good fill:#1f8a5b26,stroke:#1f8a5b
+    class delivery strong
+    class convention good
+```
+
+How the convention runs:
+
+- **`AddDDDToolkitConventions()` runs it.** The call adds the toolkit's `MarkerConvention`. When the model is
+  finished, after `OnModelCreating`, `MarkerConvention` reads the attributes on every class the model maps and on the
+  class's properties. It runs each convention that a marker names once per model, in the order the model first names
+  it. The convention finds the marked classes itself.
+- **Every mapped class counts.** That is a class the context names, a class that Entity Framework reaches only
+  through a navigation of another class, and a class the model owns, also where two owners share it. A model without a
+  marked class is not touched.
+- **What the context configures by hand wins.** The convention runs after `OnModelCreating`, so it sees the context's
+  own mapping, and can leave a class that the context mapped itself as it is. Tenancy's convention leaves a class that
+  the context keeps to a tenant with `ScopeToTenant`. Membership's leaves a members collection that the context maps
+  with `HasMembers`.
+- **The order.** `MarkerConvention` runs before the conventions of the version and the key parts, so what a package
+  maps is keyed as the rest of the model is. It also runs before the check of the indexes that say what they refuse
+  with (`RefusesAs`), so an index that a package adds is checked.
+- **A generic marker names the convention on its definition.** A template attribute such as Membership's
+  `[Member<TId, TMemberId, TRoleId, TResource>]` carries `[ModelConvention]` once. Every class declared with it, over
+  any type arguments, runs the convention.
+- **No registration.** The conventions follow from the classes a model maps, and from nothing registered in the
+  container. So `dotnet ef` and the Supabase export build the model the application runs with.
+- **A part the model needs.** A convention whose mapping needs a part of the context, such as an interceptor, states
+  it on the model with the overload for conventions: `modelBuilder.Metadata.RequireContextPart(...)`. A context
+  without the part is then refused at its first save
+  ([Code the package writes for the application](#code-the-package-writes-for-the-application)).
+
+**A missing convention refuses the model.** The marker names the convention by its assembly-qualified name, as text,
+because the marker's assembly does not reference Entity Framework. A module whose infrastructure project lacks the
+package's Entity Framework assembly cannot load that name. The toolkit then refuses the model while it is built, at
+the context's first use, in `dotnet ef` and in the Supabase export. The message names the class, the marker and the
+assembly to reference:
+
+```text
+System.InvalidOperationException: 'Delivery.SubscriptionId' is marked [OfSubscription], which
+Acme.Subscriptions.EntityFramework maps, and the application does not have it. Reference
+Acme.Subscriptions.EntityFramework from the project of the context, or remove the marker.
+```
+
+A skipped convention would leave the marker mapping nothing, and no message would say so. For Tenancy's
+`[OfTenant]`, a skipped convention would give a module whose reads see the rows of every tenant. So the toolkit refuses
+the model before any row is read.
+
+A context that leaves `AddDDDToolkitConventions()` out runs no convention at all, and the toolkit cannot see that from
+the marker. A package whose mapping must be there checks it where it can. Tenancy's save check refuses a context whose
+model has a class marked `[OfTenant]` that is not kept to a tenant, at its first save.
+
+Rules for the convention:
+
+- It implements Entity Framework's `IModelFinalizingConvention`.
+- It has a public constructor that takes nothing. The class itself may be internal to its package, because the
+  toolkit makes it by its name. A class without such a constructor refuses the model, with a message that says so.
+- The marker names it as `"Namespace.Convention, Assembly"`, on the marker's class. A marker on a property is read
+  on the property. A marker on a class is read on the class.
+
+Tenancy's `[OfTenant]` and Membership's `[Member<...>]` and `[CustomRole<...>]` are mapped this way
+([Keeping tenants apart](tenancy/keeping-tenants-apart.md), [Resources and members](membership/resources-and-members.md)).
+
+### Markers in a package of their own
+
+A domain project of another module often needs a package's marker and nothing else of the package. A delivery names
+its subscription, and a project names its tenant. Put the markers in a small package of their own,
+`<Package>.Abstractions`:
+
+- It references `DDDToolkit.Abstractions` alone, and no Entity Framework.
+- It declares no classes, ids or value objects, so no generator runs on it.
+- It uses the package's own namespace, so an application names the markers beside the package's other types.
+- The package's main package references it, so a project with the package has the markers as well.
+
+A module's domain project then references the markers' package and the ids it needs. Its infrastructure project
+references the package's Entity Framework package, which holds the convention.
+
+A generator that checks where a marker goes ships in the main package, next to the code that reads the marker. So a
+project that references only the markers' package gets no diagnostic at the declaration. The project that uses the
+package's rules gets it.
+
+The toolkit's markers are split this way:
+
+| Markers' package | Namespace | Marker | Read by |
+|---|---|---|---|
+| `Temp.DDDToolkit.Supporting.Tenancy.Abstractions` | `DDDToolkit.Supporting.Tenancy` | `[OfTenant]`: the tenant an aggregate root belongs to | `OfTenantConvention`, in `Temp.DDDToolkit.Supporting.Tenancy.EntityFramework` |
+| `Temp.DDDToolkit.Supporting.Membership.Abstractions` | `DDDToolkit.Supporting.Membership` | `[At]`: where an aggregate root hangs | the rules of a resource with members. Membership's generator, in `Temp.DDDToolkit.Supporting.Membership`, reports [DDD00097](diagnostics.md#ddd00097) |
+
+`[Owner]` stays in the core, in `DDDToolkit.Abstractions`, because the core's checks of the owner read it.
 
 ### Row level security from a package
 
@@ -859,16 +1018,134 @@ projects declare a class with one of the method's templates and none with anothe
 `[assembly: Module]` attribute, or at its project file where `DDD_Module` declares the module. The missing class
 belongs next to the others, in the domain project.
 
-## Use cases closed over your classes
+## A class closed over your classes
 
-A package's use cases need the application's classes as much as its registrations do. Nest the use cases, and the
-records they take and return, in one class that is generic over the classes. Then the classes are named once for all
-use cases. The application would still have to write that class's type arguments wherever it names a use case, in
-every project that does. To avoid this:
+A package's managers, and the records they take and return, are generic over the application's classes. The
+application would write their type arguments wherever it names them, in every project that does. To avoid this:
 
-- mark each type parameter **`[TemplateType]`**, as for a registration;
-- make the class abstract, not static, with a protected constructor;
+- mark each type parameter of the package's class **`[TemplateType]`**, as for a registration;
 - name the class in an assembly attribute, **`[assembly: TemplateFacade]`**.
+
+The project that declares the application's classes then gets a class of its own, named as the package's class is
+without its type parameters. It derives from the package's class, closed over the application's classes. What the
+application gets depends on the package's class:
+
+| The package's class | The application gets | Used as |
+|---|---|---|
+| a class that is not abstract, with public constructors | a sealed class with the same public constructors | a service the container makes, such as Tenancy's `SeatManager` |
+| a record that is not sealed | a sealed record with the same public constructors | a record the application makes and hands to the package, such as Tenancy's `TenantToProvision` |
+| an abstract class with a protected constructor | an abstract class with a private constructor | a name for the nested types and the static members of the package's class |
+
+In the diagram, purple marks the class that the generator writes into the application:
+
+```mermaid
+flowchart TB
+    package["<b>SubscriptionManager, generic</b><br/><small>in Acme.Subscriptions</small>"]
+    domain["<b>Shop.Billing.Domain</b><br/><small>your classes</small>"]
+    facade(["<b>SubscriptionManager</b><br/><small>generated in the domain project</small>"])
+    application["<b>Shop.Billing.Application</b><br/><small>its API project, the host</small>"]
+    domain -- "generated into" --> facade
+    facade -- "derives from,<br/>closed over the classes" --> package
+    application -- "takes a SubscriptionManager" --> facade
+    classDef strong fill:#5b2ec933,stroke:#5b2ec9,stroke-width:2px
+    class facade strong
+```
+
+### A service the container makes
+
+A manager holds the package's commands and reads for one aggregate. The package declares it as a class that is not
+abstract, with a public constructor that takes the services it needs:
+
+```csharp
+[assembly: TemplateFacade(typeof(Acme.Subscriptions.SubscriptionManager<,>))]
+
+public class SubscriptionManager<
+    [TemplateType(typeof(SubscriptionAttribute<>), Take = TemplateArgumentKind.Type)] TSubscription,
+    [TemplateType(typeof(SubscriptionAttribute<>))] TSubscriptionId>
+    where TSubscription : SubscriptionAggregate<TSubscriptionId>
+    where TSubscriptionId : IEntityId, IEquatable<TSubscriptionId>
+{
+    public SubscriptionManager(ISubscriptionStore<TSubscription, TSubscriptionId> store, TimeProvider clock) { ... }
+
+    public Task<TSubscription> RenewAsync(TSubscriptionId subscription, CancellationToken cancellationToken) { ... }
+}
+```
+
+The project that declares `ShopSubscription` gets a sealed `SubscriptionManager` with the same constructor. The
+application's code takes it like any service, and every member it calls is the package's own:
+
+```csharp
+public sealed class RenewHandler(SubscriptionManager subscriptions)
+{
+    public Task<ShopSubscription> HandleAsync(Renew command, CancellationToken cancellationToken)
+        => subscriptions.RenewAsync(command.Subscription, cancellationToken);
+}
+```
+
+The package's registration registers the application's class. Mark the registration's type parameter
+**`[TemplateFacade(typeof(...))]`**. The generated registration fills it with the class the project gets, or with the
+one a project of its module below it has. Where there is none, it fills it with the package's class itself, closed
+over the classes:
+
+```csharp
+[TemplateRegistration]
+public static IServiceCollection AddSubscriptions<
+    [TemplateType(typeof(SubscriptionAttribute<>), Take = TemplateArgumentKind.Type)] TSubscription,
+    [TemplateType(typeof(SubscriptionAttribute<>))] TSubscriptionId,
+    [TemplateFacade(typeof(SubscriptionManager<,>))] TSubscriptionManager,
+    TContext>(this IServiceCollection services)
+    where TSubscription : SubscriptionAggregate<TSubscriptionId>
+    where TSubscriptionId : IEntityId, IEquatable<TSubscriptionId>
+    where TSubscriptionManager : SubscriptionManager<TSubscription, TSubscriptionId>
+    where TContext : DbContext
+{
+    services.TryAddScoped<TSubscriptionManager>();
+    return services;
+}
+```
+
+The application calls `services.AddSubscriptions<BillingContext>()`, and the container makes the application's
+`SubscriptionManager`.
+
+<details>
+<summary>Show the code: what the generator writes</summary>
+
+**`SubscriptionManager.TemplateFacade.g.cs`**, shortened:
+
+```csharp
+/// <summary>
+/// SubscriptionManager, closed over the classes of the module Billing: ShopSubscription and SubscriptionId.
+/// The container makes it, and the package's registration registers it: your code takes it, and every member is the
+/// package's own.
+/// Named as the package's class is; [assembly: TemplateFacadeName("SubscriptionManager", "...")] in this project names it otherwise.
+/// </summary>
+public sealed class SubscriptionManager : global::Acme.Subscriptions.SubscriptionManager<
+    global::Shop.Billing.ShopSubscription, global::Shop.Contracts.SubscriptionId>
+{
+    /// <summary>Made by the container, with what the package's class asks for.</summary>
+    public SubscriptionManager(
+        global::Acme.Subscriptions.ISubscriptionStore<global::Shop.Billing.ShopSubscription, global::Shop.Contracts.SubscriptionId> store,
+        global::System.TimeProvider clock)
+        : base(store, clock)
+    {
+    }
+}
+```
+
+</details>
+
+### A record the application makes
+
+A record that the application makes and hands to a manager is a record of the package that is not sealed. The
+application gets a sealed record with each public constructor of the package's record, its default values included.
+The application writes `new TenantToProvision(...)` without type arguments, and Tenancy's
+`TenantManager.ProvisionAsync` takes it as the package's record.
+
+### A name for nested types
+
+An abstract class with a protected constructor gets an abstract class with a private constructor, which nothing makes.
+It is a name only. The package nests types in it, such as records and small services, and the application names them
+through it:
 
 ```csharp
 [assembly: TemplateFacade(typeof(Acme.Subscriptions.SubscriptionUseCases<,,,,,>))]
@@ -899,30 +1176,14 @@ public abstract partial class SubscriptionUseCases<
 }
 ```
 
-The project that declares the classes gets a class named `SubscriptionUseCases`, your class's name without its type
-parameters. That project and every project above it name the use cases and their records through this class, without
-type arguments:
+The project that declares the classes gets a class named `SubscriptionUseCases`. That project and every project above
+it name the nested types through this class, without type arguments:
 
 ```csharp
 public sealed class Reminders(SubscriptionUseCases.Dunning dunning)
 {
     public SubscriptionUseCases.InvoiceDue DueFor(ShopInvoice invoice) => dunning.Due(invoice);
 }
-```
-
-In the diagram, purple marks the class that the generator writes into the application:
-
-```mermaid
-flowchart TB
-    package["<b>SubscriptionUseCases, generic</b><br/><small>in Acme.Subscriptions</small>"]
-    domain["<b>Shop.Billing.Domain</b><br/><small>your classes</small>"]
-    facade(["<b>SubscriptionUseCases</b><br/><small>generated in the domain project</small>"])
-    application["<b>Shop.Billing.Application</b><br/><small>its API project, the host</small>"]
-    domain -- "generated into" --> facade
-    facade -- "derives from,<br/>closed over the classes" --> package
-    application -- "SubscriptionUseCases.Dunning" --> facade
-    classDef strong fill:#5b2ec933,stroke:#5b2ec9,stroke-width:2px
-    class facade strong
 ```
 
 <details>
@@ -954,15 +1215,17 @@ public abstract class SubscriptionUseCases : global::Acme.Subscriptions.Subscrip
 
 - **A name, and no second type.** C# finds a type nested in a class through every class derived from it. So
   `SubscriptionUseCases.Dunning` is the package's own `Dunning`, closed over the application's classes. It is the type
-  that the package's registration adds to the container, with the package's documentation. The generated class is
-  abstract, has a private constructor, and is never created.
+  that the package's registration adds to the container, with the package's documentation. The same holds for the
+  types nested in a manager: Tenancy's `SeatManager.SeatOverview` is the package's own record.
 - **Calls as well as names.** C# finds a static member through a derived class, as it finds a nested type. So put
   members that are generic over the classes, and that code calls, on the same class. The application calls them
   without type arguments: `public static IDisposable BeginRun() => DunningRuns.Begin<TSubscriptionId>();` on
-  `SubscriptionUseCases<...>` is `SubscriptionUseCases.BeginRun()`. Tenancy puts its system work and the current caller
-  there: `TenancyUseCases.BeginSystem()`. The compiler binds a call, and the compiler sees the output of every
-  generator. So a call also works in the project the class is generated into, where another generator would not see
-  the class.
+  `SubscriptionUseCases<...>` is `SubscriptionUseCases.BeginRun()`. The compiler binds a call, and the compiler sees
+  the output of every generator. So a call also works in the project the class is generated into, where another
+  generator would not see the class.
+
+### Rules for the generated classes
+
 - **Written once, where the classes are.** A project gets the class when it declares a class with one of the type's
   templates. Each type parameter is filled as a registration's is: from the project's own classes, or, for a template
   the project declares no class of, from the projects of its module that it references. Every project above sees the
@@ -974,16 +1237,20 @@ public abstract class SubscriptionUseCases : global::Acme.Subscriptions.Subscrip
 - **Named as your class is.** The application's class has your class's name, without the type parameters. It is the
   name your documentation uses, whatever the module is called. It does not clash with your class, because C# tells the
   two apart by their type parameters, even in a file that imports your namespace. So name the generic class for what
-  it holds, `SubscriptionUseCases` and not `UseCases`. Classes with one name from two packages would clash in an
+  it holds, `SubscriptionManager` and not `Manager`. Classes with one name from two packages would clash in an
   application that uses both. Your package asks only for its own types. An `[assembly: TemplateFacade]` that another
   assembly declares for your types has no effect.
 - **Two modules, two names.** An application with two modules that each declare your classes gets two classes with
   that name. They clash in the projects that see both, the host first. The toolkit reports this in such a project with
   [DDD00075](diagnostics.md#ddd00075), together with the line that gives one of them its own name. The application
   writes that line in the project that declares that module's classes:
-  `[assembly: TemplateFacadeName("SubscriptionUseCases", "ShopBilling")]`. Every project above it then names that
-  module's use cases `ShopBilling.Dunning`. Nothing in your package changes for this. An application may also set the
+  `[assembly: TemplateFacadeName("SubscriptionManager", "ShopSubscriptions")]`. Every project above it then takes that
+  module's manager as `ShopSubscriptions`. Nothing in your package changes for this. An application may also set the
   name without a second module. A line that changes nothing is [DDD00076](diagnostics.md#ddd00076).
+- **A class only some applications get.** `OnlyWith = typeof(...)` on the assembly attribute names the template of a
+  class that an application may leave out. The class is written only where that template has a class, and a project
+  without one hears nothing. `OnlyWith` on a `[TemplateRegistration]` does the same for a registration. Tenancy's
+  `InvitationManager` and `AddTenancyInvitations` are written only where the application declares an invitation class.
 - **A missing class is reported where the classes are**, with [DDD00065](diagnostics.md#ddd00065), as information.
   The causes are a template with no class or with several classes, or a class that does not meet the constraints.
   Without this diagnostic, the projects above would only learn that the name does not exist. The toolkit does not
@@ -992,16 +1259,52 @@ public abstract class SubscriptionUseCases : global::Acme.Subscriptions.Subscrip
   diagnostic: a type or a namespace in the global namespace, or an alias at the top of a file. A type with that name
   declared in a namespace keeps the class out with DDD00065, because the class would hide that type wherever its
   namespace is imported.
-- **The generic class** is a class that is not static, not sealed and not nested in a generic type. It has a
-  parameterless constructor that a derived class can call, and every type parameter is marked `[TemplateType]`,
-  because the application's class leaves none open. The generator skips a class that does not meet these rules,
-  without a diagnostic. So prove it in the package's own tests, with a project that names the class.
+- **The generic class** is not nested in a generic type, and every type parameter is marked `[TemplateType]`, because
+  the application's class leaves none open. For a service or a record it is neither abstract nor sealed, with public
+  constructors. For a name only it is abstract, not static, with a protected constructor. The generator skips a class
+  that does not meet these rules, without a diagnostic. So prove it in the package's own tests, with a project that
+  names the class.
 
-[Tenancy](tenancy/your-module.md#the-managers-and-the-access-manager) is written this way. Its use cases are `TenancyUseCases<...>`, and
-an application, including the sample, names them `TenancyUseCases.SeatCommands`. The use cases of
-[Membership](membership/overview.md) are small classes generic over the ids only, such as
-`MemberAdmission<TResourceId, TMemberId, TRoleId>`. Their type arguments are short to write where the application uses
-them, so Membership declares no such class. No other package of the toolkit uses one either.
+### A module that sees only the ids
+
+A module of the application that uses the package's ids, and declares none of the package's classes, still needs what
+the package closes over the ids: an access manager, a registration of its checks. The generator cannot find the ids in
+such a module, because it finds them from the classes. So the package ships a generic assembly attribute that the
+module writes once, with its ids. Mark the attribute **`[TemplateIds]`**, and each of its type parameters with the
+`[TemplateType]` of the template whose class's id it is:
+
+```csharp
+[TemplateIds]
+[AttributeUsage(AttributeTargets.Assembly, Inherited = false)]
+public sealed class SubscriptionIdsAttribute<
+    [TemplateType(typeof(SubscriptionAttribute<>))] TSubscriptionId,
+    [TemplateType(typeof(InvoiceLineAttribute<>))] TInvoiceLineId> : Attribute
+    where TSubscriptionId : struct, IEntityId, IEquatable<TSubscriptionId>
+    where TInvoiceLineId : struct, IEntityId, IEquatable<TInvoiceLineId>;
+```
+
+The module writes the line in its application project, with the ids it sees in the contracts of the module that
+declares the classes: `[assembly: SubscriptionIds<SubscriptionId, InvoiceLineId>]`. It then gets:
+
+- every class of `[TemplateFacade]` whose type parameters take only ids, written into the project with the line, in
+  its root namespace. In the global namespace it would meet the declaring module's class in every project that sees
+  both, the host first;
+- every `[TemplateRegistration]` whose type parameters take only ids, in the project of the module that holds its
+  context, below the one with the line.
+
+A registration or a class that takes a class gets nothing there: it belongs to the module that declares the classes.
+A class that the project or its module declares with a template wins over the line. Constrain each type parameter as
+the package's classes constrain the id, so the compiler checks the line.
+
+### The toolkit's packages
+
+[Tenancy](tenancy/your-module.md#the-managers-and-the-access-manager) is written this way. Its managers are `TenantManager<...>`,
+`OrganizationManager<...>`, `SeatManager<...>`, `RoleManager<...>` and `InvitationManager<...>`, and an application,
+including the sample, takes a `SeatManager`. Its access manager, `TenancyAccessManager<...>`, is closed over the four
+ids alone. A module that sees only Tenancy's ids writes `[assembly: TenancyIds<TenantId, SeatId, OrganizationUnitId,
+RoleId>]` and gets `TenancyAccessManager`, `db.Tenancy()` and `services.AddTenancyAccess<TRequests, TContext>()`.
+Membership's access manager, `MembershipAccessManager<TResource>`, is generic over the resource alone, which is short
+to write where the application uses it, so Membership declares no such class.
 
 ## Working alone and next to another package
 
@@ -1066,9 +1369,9 @@ docs must explain. A package can take over these lines:
 
   The toolkit's generator writes the declarations and hands them to the toolkit's other generators, through the same
   providers that the declared classes come from. So a written class and id get the base class, the converters, the
-  registrations and the class the use cases are named through, like declared ones. A template of another package that
-  names a written id as a later type argument is closed over that id. Generators outside the toolkit see the written
-  classes only from the project above, as they see the class the use cases are named through.
+  registrations and the classes of `[TemplateFacade]`, like declared ones. A template of another package that names a
+  written id as a later type argument is closed over that id. Generators outside the toolkit see the written classes
+  only from the project above, as they see the classes of `[TemplateFacade]`.
 
   A second attribute with `IdsOnly = true` writes only the ids, for a module's contracts project. Leave out a class
   whose declaration turns on a feature, as Tenancy leaves out the invitation
@@ -1120,6 +1423,20 @@ docs must explain. A package can take over these lines:
     [DDD00081](diagnostics.md#ddd00081), in the project where the application's classes are visible.
   - `[PermissionMarkerArgument(typeof(OnLedgerAttribute))]` marks one more argument of that call, as Membership's
     `[ExpectedVersion]` does for `[OnResource]`.
+  - `[RequirementArgument(typeof(TAttribute))]` does the same for the call of a `[StatesRequirement]` attribute. The
+    generator hands the marked member to the call after the attribute's constructor arguments. Tenancy's `[ForTenant]`
+    marks the tenant of a request that carries `[Operator]`, so `[Operator]` with `[ForTenant] TenantId Tenant` is
+    `TenancyAccess.Operator(request.Tenant)`. `IdOf` names the template whose classes' ids the member holds. A marker
+    without its attribute on the request, or on two members, is [DDD00102](diagnostics.md#ddd00102).
+  - A property set where a request carries the attribute goes to the call as a named argument, its name with a lower
+    case first letter: `[Operator(Scope = "projects")]` is `TenancyAccess.Operator(scope: "projects")`. Give the method
+    a parameter of that name and type, with a default value.
+  - A package's check can begin work around the handler of a request it let through. It implements `IBeginsWork`
+    beside `IAccessCheck`. The behavior the generator writes, and a dispatcher of your own, call
+    `AccessChecks<TRequests>.BeginWork(request, isQuery)` after the checks and run the handler inside it
+    ([Asking the checks without Mediator](access-requirements.md#asking-the-checks-without-mediator)). Begin nothing
+    for a query that would change anything. Tenancy's check of `[Operator]` begins operator work for a command this
+    way.
   - `[assembly: PermissionWithoutMarker(typeof(...), nameof(...))]` states what a permission without any marker means.
     One package of an application states this: Tenancy, for the whole tenant.
 
@@ -1133,7 +1450,7 @@ docs must explain. A package can take over these lines:
 
   - `Implies = [typeof(SignedInAttribute)]`, on any of the three marks, names the requirement attributes that yours
     already requires. One of them stacked next to yours is then a warning, [DDD00084](diagnostics.md#ddd00084).
-    Tenancy's `[RequiresOperator]` names `[SignedIn]`, and its permission cases name `[InTenant]`.
+    Tenancy's `[Operator]` names `[SignedIn]`, and its permission cases name `[InTenant]`.
   - `OwnAlternative = nameof(...)` on `[PermissionMarker]` states that the marked member is what the request acts on,
     so `[OrOwn]` may stand next to it. It names a method of your factory, with the same parameters as the marker's
     method. The case it returns is what a caller who acts on its own value must still meet. Membership's

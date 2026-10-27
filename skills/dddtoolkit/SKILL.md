@@ -52,7 +52,7 @@ Namespaces:
 | `DDDToolkit.Validation` | `ValidationErrorBuilder`, `ValidationError`, `TryToValid`, `Prefixed`, `ToErrorDictionary` |
 | `DDDToolkit.Exceptions` | `ConcurrencyConflictException`, `InvariantViolationException`, `InvalidValueObjectException` |
 | `DDDToolkit.Abstractions.Access` | `Caller`, the parameter of a `[RowAccess]` rule, and `Sql.Call`/`Sql.Raw` |
-| `DDDToolkit.Access` | `Callers.Begin`/`FromClaims` and `ICallerAccessor`: who the application is acting for. And who may send a request: `IRequireAccess`, the attributes a request states it with (`[AllowAnonymous]`, `[SignedIn]`, `[RequiresPermission(permission)]` with a package's marker of where the permission is held, `[OrOwn]` on the member for the caller's own or the permission, `[OwnOnly]` with `[Own]` for the caller's own alone; stacked attributes all hold, `AccessRequirement.All` in the order written, a derived request's after its base's; which the generator turns into `RequiredAccess` in the module's partial `[AccessRequests]` interface; one on that interface itself, `[AccessRequests, InTenant]`, is the module's default for a request that states none, on its own generated line, never stacked onto a request's own, and never `[AllowAnonymous]`, a queries-only one or `[OwnOnly]` (DDD00089); `[AllowAnonymous]` beside another is DDD00079; in a file that imports ASP.NET Core's or HotChocolate's `AllowAnonymous` too, write `[DDDToolkit.Access.AllowAnonymous]` or alias it), `AccessRequirement` (the core's `AllowAnonymous()`, `SignedIn()` and `Own(value)`, which `CallerAccessCheck` decides in every module, and `All(...)`/`Any(...)`, which the set of checks decides case by case: `All` refuses with the first failing case's reason, `Any` with one `access.refused` whose `Reasons` argument lists each case's; what a case's check keeps is kept only once the whole combination let the caller through; beside `[OnResource]` the caller's own way through still sees the resource, `MemberAccess.Sees`, which compares the version and keeps the hold, and a member lock (a permission marked `LocksMembers`) makes the handler save the caller's own place as the application's own work; what the caller's own value of a type is says an `ICallersOwn<T>`, the core's for a `Guid`, Tenancy's for its seat id, an application's own registered with `services.AddCallersOwn<T, TCallersOwn>()`; each way of an `Any` onto the application's own table needs a row rule of its own; system work is no requirement but a scope, `Callers.Begin(Caller.System)`, begun around the work, and `Callers.RequireSystemWork(callers)` refuses everyone but that begun work past the door, `access.system-only`), `IAccessCheck`, `AccessChecks<TRequests>`, `Checked<T>` (an answer a check worked out, kept for the code after it), `RequestInHand` (the request whose checks let it through, in the flow its handler and save run in, with the requirement it passed; `StillPassesAsync()` asks its check again); a handler acts on its request and takes nothing from the check; `[AccessRequests]` on a module's request interface has the Mediator pipeline behaviors written that ask the checks (one for requests, one for stream queries) |
+| `DDDToolkit.Access` | `Callers.Begin`/`FromClaims` and `ICallerAccessor`: who the application is acting for. And who may send a request: `IRequireAccess`, the attributes a request states it with (`[AllowAnonymous]`, `[SignedIn]`, `[RequiresPermission(permission)]` with a package's marker of where the permission is held, `[OrOwn]` on the member for the caller's own or the permission, `[OwnOnly]` with `[Own]` for the caller's own alone; stacked attributes all hold, `AccessRequirement.All` in the order written, a derived request's after its base's; which the generator turns into `RequiredAccess` in the module's partial `[AccessRequests]` interface; one on that interface itself, `[AccessRequests, InTenant]`, is the module's default for a request that states none, on its own generated line, never stacked onto a request's own, and never `[AllowAnonymous]`, a queries-only one or `[OwnOnly]` (DDD00089); `[AllowAnonymous]` beside another is DDD00079; in a file that imports ASP.NET Core's or HotChocolate's `AllowAnonymous` too, write `[DDDToolkit.Access.AllowAnonymous]` or alias it), `AccessRequirement` (the core's `AllowAnonymous()`, `SignedIn()` and `Own(value)`, which `CallerAccessCheck` decides in every module, and `All(...)`/`Any(...)`, which the set of checks decides case by case: `All` refuses with the first failing case's reason, `Any` with one `access.refused` whose `Reasons` argument lists each case's; what a case's check keeps is kept only once the whole combination let the caller through; beside `[OnResource]` the caller's own way through still sees the resource, `MemberAccess.Sees`, which compares the version and keeps the hold, and a member lock (a permission marked `LocksMembers`) makes the handler save the caller's own place as system work; what the caller's own value of a type is says an `ICallersOwn<T>`, the core's for a `Guid`, Tenancy's for its seat id, an application's own registered with `services.AddCallersOwn<T, TCallersOwn>()`; each way of an `Any` onto the application's own table needs a row rule of its own; system work is no requirement but a scope, `Callers.Begin(Caller.System)`, begun around the work, and `Callers.RequireSystemWork(callers)` refuses everyone but that begun work after the access check, `access.system-only`), `IAccessCheck`, `AccessChecks<TRequests>` (`RequireAsync`, then the handler inside `BeginWork(request, isQuery)`, the work a check that is `IBeginsWork` begins: Tenancy's operator work for an `[Operator]` command, nothing for a query), `Checked<T>` (an answer a check worked out, kept for the code after it), `RequestInHand` (the request whose checks let it through, in the flow its handler and save run in, with the requirement it passed; `StillPassesAsync()` asks its check again); a handler acts on its request and takes nothing from the check; `[AccessRequests]` on a module's request interface has the Mediator pipeline behaviors written that ask the checks (one for requests, one for stream queries) |
 
 ## Identifiers
 
@@ -341,11 +341,14 @@ The mistakes it prevents most often:
   last. Do not write `UseSupabaseRowLevelSecurity` or `UseTenancy` next to it. A context that should do without
   a part, one that runs as the login role, takes `UseDDDToolkitCore` and the `Use...` calls it does want; a
   context whose model keeps rows to a tenant is refused at its first save without Tenancy's save check, so a
-  host that uses `ScopeToTenant` registers `AddTenancy`. The one call after it is Membership's expert hold,
+  host whose classes mark their tenant `[OfTenant]` (or that uses `ScopeToTenant`) registers `AddTenancy`. The one call after it is Membership's expert hold,
   `.UseMemberHolds(services)`, and only on a context the host wants every save of a resource with members held to
   its request's check; without it the default path holds the change (`ExpectVersion`).
 - `ConfigureConventions` calls `AddDDDToolkitConventions()` and one generated `Add{Module}Converters()`
   per module, plus one per assembly that is no module and declares identifiers or single value objects.
+  The conventions map a package's markers on the domain classes (Tenancy's `[OfTenant]`, Membership's member and
+  role templates) with no line per class; a marked class whose package's Entity Framework assembly the context's
+  project lacks refuses the model, naming the assembly to reference.
   Only a project that references Entity Framework gets the method. A module's projects without it
   (domain, contracts) get none: the method of the module's project that holds the context registers
   their ids, and the published ids of other modules, itself.
@@ -363,13 +366,18 @@ composed over several: [references/graphql.md](references/graphql.md). The mista
 
 - A class declared with a package's template (`[SeatAggregate<SeatId>]`) gets the package's rules first and
   adds its own. Its registrations (`modelBuilder.AddTenancy()`) are generated: do not write them by hand.
-- A module asks Tenancy inside its own query, `tenancy.In(db).UnitsWhereIHold(permission)` as a subquery, and
-  answers ids. The application's own seats and units, whole, and a role's name are asked of Tenancy's
-  directory, by id; a seat has no name of Tenancy's, only what the application keeps on its seat class.
-- Whether a command may run is asked when it runs, by the use case. A permission set only draws a screen.
-- A role a tenant got from a pack follows a pack you change later only where the host calls
+- Code takes Tenancy's managers (`SeatManager`, `RoleManager`, ...) and `TenancyAccessManager` by those names,
+  generated closed over the module's classes; a module that sees only Tenancy's ids writes
+  `[assembly: TenancyIds<TenantId, SeatId, OrganizationUnitId, RoleId>]` once. Never write their type arguments.
+- A module asks Tenancy inside its own query, `db.Tenancy().UnitsWhereIHold(permission)` as a subquery, and
+  returns ids. The application's own seats and units, whole, and a role's name are asked of Tenancy's managers,
+  by id; a seat has no name of Tenancy's, only what the application keeps on its seat class.
+- Whether a command may run is asked when it runs, by the manager. A permission set only draws a screen.
+- A request of the application's operators carries `[Operator]`; on a command the pipeline runs the handler as
+  operator work, in the tenant of its `[ForTenant]` member, so the handler begins nothing itself.
+- A role a tenant got from a starter role follows a starter role you change later only where the host calls
   `builder.Services.SyncStarterRoles()`, beside `RunStartupChecks()` and not among the checks. Without it a permission
-  added to a pack, or a module's new permissions, reach the tenants provisioned afterwards alone.
+  added to a starter role, or a module's new permissions, reach the tenants provisioned afterwards alone.
 - A row rule asks a resource with members by its id, through a one-line contract in the module that owns the
   id: `[ResourceAccessContract<ProjectId>(ResourceAccessSet.Seen)] public static partial class ProjectsISee;`,
   asked as `ProjectsISee.Ids().Contains(row.ProjectId)`. No rule and no contract names the SQL function: the
@@ -406,7 +414,7 @@ this skill:
 | In-process dispatch versus the outbox | `event-delivery` |
 | Modules, contracts, integration events, versioning | `modules`, `module-contracts`, `integration-events` |
 | What a request requires of its caller, access checks, the generated behavior | `access-requirements` |
-| One request from its attribute to the rows: the generated line, the check that decides, the statement at the door, the policies | `how-a-request-is-checked` |
+| One request from its attribute to the rows: the generated line, the check that decides, the statement of the access check, the policies | `how-a-request-is-checked` |
 | pgmq, Wolverine, MassTransit, a custom sink | `transports` |
 | Tenants, the organization tree, seats and roles | `tenancy` |
 | Access to a resource through its members, their roles and its owner | `membership/overview`, then its topic pages: `membership/resources-and-members`, `membership/permissions-and-roles`, `membership/checks-and-saves`, `membership/postgres`, `membership/beside-an-organization` |
