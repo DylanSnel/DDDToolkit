@@ -71,7 +71,8 @@ no [supporting domain](writing-a-supporting-domain.md):
 | `[Owner]`, `IAggregateOwners<TId>` | `[Owner]` marks the property of an aggregate root that names its owner. This is a fact of the domain. `IAggregateOwners<TId>` reads that owner for a request about the owner's own. The Entity Framework package registers one for every id. |
 | `IAccessCheck` | Decides the cases of one package. A package ships one, and a module writes one for its own cases. |
 | `CallerAccessCheck` | The core's check of who is calling. It is first in every module's set. |
-| `AccessChecks<TRequests>` | The checks of one module. `RequireAsync(request)` checks a request against its requirement, and fails closed. |
+| `AccessChecks<TRequests>` | The checks of one module. `RequireAsync(request)` checks a request against its requirement, and fails closed. `BeginWork(request, isQuery)` begins the work a check says the handler runs in. |
+| `IBeginsWork` | A check that begins work around the handler of a request it let through, as Tenancy's check of `[Operator]` begins operator work. |
 | `Checked<T>` | What a check read, kept for the code that handles the same request after it. |
 | `RequestInHand` | The request that the current flow of work handles, after the access check let it through, with the requirement it passed. The handler and its save use it, and the check can be asked again through it. |
 
@@ -129,7 +130,7 @@ public sealed record CloseInvoice(InvoiceId Invoice) : IBillingRequest
 - **A requirement names the permission and the ids.** It carries a permission and the ids the request names. The
   check reads everything else, such as who holds the permission and where, from where it is stored. A rule that a
   requirement cannot express, such as a rule about what is given to whom or about the current state, belongs in the
-  handler, or in the use case of the package the handler calls.
+  handler, or in the method of the package that the handler calls, such as a method of Tenancy's managers.
 - **Every request declares a requirement.** A request that declares none is stopped when it is sent, so a forgotten
   requirement lets nobody through. When the interface is `partial`, the build reports it as
   [DDD00077](diagnostics.md#ddd00077). When it is not, the compiler reports CS0535. A request that anyone may send
@@ -223,9 +224,10 @@ flowchart LR
 
   These cannot, and are reported as [DDD00089](diagnostics.md#ddd00089):
   - `[AllowAnonymous]`, because every request that forgot its own requirement would let anyone in;
-  - `[RequiresOperator]` and `[SeenWith<TResourceId>(permission)]`, because they are for queries only, and a command
-    that states nothing would get them;
-  - `[OwnOnly]`, because it reads a member of the request.
+  - `[SeenWith<TResourceId>(permission)]`, because it is for queries only, and a command that states nothing would
+    get it;
+  - `[OwnOnly]`, because it reads a member of the request;
+  - `[Operator]`, because its `AttributeUsage` allows no interface. The compiler reports CS0592 as well.
 
   A default on an interface that is not `partial`, or on an interface that is not the module's, is
   [DDD00083](diagnostics.md#ddd00083).
@@ -277,7 +279,7 @@ computes its requirement:
 | a permission at a unit | `[RequiresPermission(permission)]`, with `[AtUnit]` on the unit | `TenancyAccess.AtUnit(permission, unit)` | whoever holds the permission now at that unit or at a unit above it | `tenancy.not-permitted`, with the permission and the unit |
 | a permission on a resource | `[RequiresPermission(permission)]`, with `[OnResource]` on the resource and `[ExpectedVersion]` on the version read, from [Membership](membership/resources-and-members.md#a-document-and-the-people-it-is-shared-with) | `MemberAccess.On(permission, resource, expectedVersion)` | whoever holds the permission on it, through its members or from above | the resource's `not-found` or `not-permitted` |
 | a query that shows the resources a permission is held on | `[SeenWith<TResourceId>(permission)]`, from [Membership](membership/checks-and-saves.md#access-in-your-own-queries) | `MemberAccess.SeenWith<TResourceId>(permission)` | every caller who signed in, and system work. The query's own statement leaves out the resources where the caller does not hold the permission. | the caller's own reason for a caller who is nobody; the resource's `not-permitted`, naming the permission, for a caller who did not sign in |
-| one of the application's operators, on a query | `[RequiresOperator]` | `TenancyAccess.RequiresOperator()` | a signed-in user with an [operator's token role](tenancy/operators-and-history.md#operators) | `tenancy.operators-only` |
+| one of the application's operators | `[Operator]`, with `[ForTenant]` on the tenant the request names ([An operator's request](#an-operators-request)) | `TenancyAccess.Operator()`, `TenancyAccess.Operator(tenant)` | a signed-in user with an [operator's token role](tenancy/operators-and-history.md#operators). On a command, the handler runs as operator work. | `tenancy.operators-only`; `tenancy.tenant-mismatch` for a request that names another tenant than its `[ForTenant]` member |
 | the caller's own, or a permission | `[RequiresPermission(permission)]`, with `[OrOwn]` on the member that names the value | `AccessRequirement.Any(AccessRequirement.Own(seat), ...)` | the caller the member names, and whoever holds the permission | one `access.refused`, with `access.not-own` and the permission's reason |
 | only the caller's own | `[OwnOnly]`, with `[Own]` on the member that names the value | `AccessRequirement.Own(seat)` | the caller the member names | `access.not-own` |
 | the owner of an aggregate, or a permission | `[RequiresPermission(permission)]`, with `[OrOwn]` on the aggregate's id. The aggregate marks its owner with `[Owner]`. | `AccessRequirement.Any(AccessRequirement.OwnerOf(board), ...)` | the aggregate's owner, and whoever holds the permission | one `access.refused`, with `access.not-own` or `access.not-found` and the permission's reason |
@@ -347,6 +349,57 @@ declare its own constant, as `[RequiresPermission(RequiredPermission)]` with
 `public const string RequiredPermission = ProjectPermissionNames.Edit;`. Its handler, or a list of abilities, then
 reads the same permission.
 
+### An operator's request
+
+An operator is one of the application's own staff. An operator is a signed-in user whose token carries one of the
+operators' token roles ([Operators](tenancy/operators-and-history.md#operators)). An operator holds no seat in any
+tenant and no permission. `[Operator]`, from Tenancy, lets an operator through. The access check refuses every other caller with
+`tenancy.operators-only`, before the handler runs. A seat is refused whatever it holds, and so is system work.
+
+What happens after the access check depends on the kind of request:
+
+- **A command runs as operator work.** The pipeline begins the work around the handler and ends it when the handler
+  returns. Operator work is system work, recorded as the operator. The operator's identity is the current user's id,
+  never an id that the request carries. The work holds every permission in its tenant, so a handler of an operator's
+  command does the operator's act and nothing more. The handler writes no `using` for it.
+- **A query begins nothing.** An operator reads across tenants through the database role of its token,
+  `tenancy_operator` in the sample.
+
+A command states the tenant its operator work acts in. There are three choices:
+
+| The command | The operator work acts in | Refused before the handler with |
+|---|---|---|
+| marks a member `[ForTenant]` | the tenant that the member names | `tenancy.tenant-mismatch`, when the request names another tenant beside the command |
+| carries `[Operator(Tenant = OperatorTenant.FromRequest)]` | the tenant that the request names beside the command, as tenant selection reads it (the `Tenant` header in the sample). The operator gets no seat there. | `tenancy.tenant-required` for a request that names no tenant; `tenancy.not-seated` for a tenant that does not exist |
+| does neither | no tenant, as provisioning needs. A tenant that the request names is ignored. | nothing more |
+
+A command that does both names two tenants. The build reports it as [DDD00103](diagnostics.md#ddd00103). `[ForTenant]`
+goes on a positional parameter of a record as written, without a `property:` target, or on a property. It marks the
+application's tenant id. Without `[Operator]` on the request it is [DDD00102](diagnostics.md#ddd00102).
+
+`Scope` names the scope of the work. The default is Tenancy's own scope, `tenancy`, which writes Tenancy's tables. A
+module's own command names the module's scope, such as `[Operator(Scope = "projects")]`. On a query nothing begins, so
+`Tenant` and `Scope` there are the warning [DDD00105](diagnostics.md#ddd00105).
+
+```csharp shortened
+[Operator(Scope = "projects")]                       // operator work in the tenant the command names, scope projects
+public sealed record RenameTenantProject([ForTenant] TenantId Tenant, ProjectId Project, string Name) : ICommand, IProjectsRequest;
+
+[Operator(Tenant = OperatorTenant.FromRequest)]      // operator work in the tenant of the Tenant header, scope tenancy
+public sealed record CloseStaleInvitations : ICommand, ITenantsRequest;
+
+[Operator]                                           // operator work in no tenant: provisioning
+public sealed record ProvisionTenant(string Slug, string Name, Guid Administrator) : ICommand<Tenant>, ITenantsRequest;
+
+[Operator]                                           // a query: nothing begins
+public sealed record AllTenants(string? After = null) : IQuery<TenantManager.TenantPage>, ITenantsRequest;
+```
+
+The generator writes `[Operator]` with `[ForTenant]` as `TenancyAccess.Operator(request.Tenant)`, and a property set
+on the attribute as a named argument: `TenancyAccess.Operator(request.Tenant, scope: "projects")`. The sample's
+`RenameTenantProject` is the first command above. Its handler loads the project, renames it and saves, with no `using`
+of its own.
+
 ### Valid combinations of attributes
 
 Stacked requirement attributes must all hold. A marker states where the permission of the request's one
@@ -369,7 +422,7 @@ with `[Owner]`, `[OrOwn]` produces the same with `OwnerOf(member)` instead of `O
 |---|---|---|
 | `[AllowAnonymous]` | No other requirement attribute, on the request or on a base request, and not the property. | [DDD00079](diagnostics.md#ddd00079), [DDD00078](diagnostics.md#ddd00078) |
 | any other requirement attribute | Other requirement attributes, on the request and on its base requests. All of them must hold. Not the property. | [DDD00078](diagnostics.md#ddd00078) |
-| `[InTenant]`, `[SignedIn]` | A neighbour that does not already require it. So not `[InTenant]` next to a permission of Tenancy's, not `[SignedIn]` next to `[RequiresOperator]`, neither next to `[OwnOnly]` with `[Own]` on a member whose own value already requires it, and not the same attribute on a base request. On a sealed request, also not alone when it repeats the module's default. | [DDD00084](diagnostics.md#ddd00084), a warning |
+| `[InTenant]`, `[SignedIn]` | A neighbour that does not already require it. So not `[InTenant]` next to a permission of Tenancy's, not `[SignedIn]` next to `[Operator]`, neither next to `[OwnOnly]` with `[Own]` on a member whose own value already requires it, and not the same attribute on a base request. On a sealed request, also not alone when it repeats the module's default. | [DDD00084](diagnostics.md#ddd00084), a warning |
 | `[RequiresPermission]` | One per request, base requests included. | [DDD00080](diagnostics.md#ddd00080) |
 | `[AtUnit]` or `[OnResource]` | `[RequiresPermission]`. One of the two markers, on a member of the id type it marks, which is never null. | [DDD00080](diagnostics.md#ddd00080), [DDD00081](diagnostics.md#ddd00081) |
 | `[ExpectedVersion]` | `[OnResource]`, on a `long?`. | [DDD00080](diagnostics.md#ddd00080), [DDD00081](diagnostics.md#ddd00081) |
@@ -377,15 +430,17 @@ with `[Owner]`, `[OrOwn]` produces the same with `OwnerOf(member)` instead of `O
 | `[OrOwn]` | `[RequiresPermission]` without `[AtUnit]`. Once per request, on a member that is never null. The member's type has an own value, or is the id of an aggregate whose owner's type has one. Not on the id of a resource with members next to a permission that its owner already holds. | [DDD00085](diagnostics.md#ddd00085), [DDD00086](diagnostics.md#ddd00086), [DDD00088](diagnostics.md#ddd00088), [DDD00096](diagnostics.md#ddd00096) (a warning) |
 | `[Own]` | `[OwnOnly]`. Once, on a member that is never null. The member's type has an own value, or is the id of an aggregate whose owner's type has one. | [DDD00085](diagnostics.md#ddd00085), [DDD00086](diagnostics.md#ddd00086), [DDD00088](diagnostics.md#ddd00088) |
 | `[Owner]`, on a property of an aggregate | The aggregate root itself, once, on a property of a type with an own value. The property may be nullable. | [DDD00087](diagnostics.md#ddd00087), [DDD00088](diagnostics.md#ddd00088) |
-| `[At]`, on a property of an aggregate | The aggregate root itself, once, on an instance property that is never null. It names the unit the aggregate is placed at. The rules of a resource with members read it when the resource is reached from above. | [DDD00097](diagnostics.md#ddd00097), and [DDD00098](diagnostics.md#ddd00098) for rules that reach a class that marks none |
+| `[At]`, from Membership's markers, on a property of an aggregate | The aggregate root itself, once, on an instance property that is never null. It names the unit the aggregate is placed at. The rules of a resource with members read it when the resource is reached from above. | [DDD00097](diagnostics.md#ddd00097), and [DDD00098](diagnostics.md#ddd00098) for rules that reach a class that marks none |
 | `[Permissions]`, on a class | A static class whose public constants each have a level: `[AtTenant]`, `[AtUnit]` or `[On<TResource>]`. | [DDD00092](diagnostics.md#ddd00092), [DDD00093](diagnostics.md#ddd00093) |
-| `[SeenWith<TResourceId>(permission)]`, `[RequiresOperator]` | A query. | [DDD00082](diagnostics.md#ddd00082) on a command, or on a plain request of Mediator |
+| `[SeenWith<TResourceId>(permission)]` | A query. | [DDD00082](diagnostics.md#ddd00082) on a command, or on a plain request of Mediator |
+| `[Operator]` | Neither `[InTenant]` nor `[RequiresPermission]`, because an operator holds no seat and no permission. On a query, no `Tenant` and no `Scope`. | [DDD00104](diagnostics.md#ddd00104), [DDD00105](diagnostics.md#ddd00105) (a warning) |
+| `[ForTenant]` | `[Operator]` without `Tenant = OperatorTenant.FromRequest`. Once per request, on a member of the application's tenant id. | [DDD00102](diagnostics.md#ddd00102), [DDD00103](diagnostics.md#ddd00103), [DDD00081](diagnostics.md#ddd00081) |
 | any of them | One module interface of the same project, with `[AccessRequests]` and `partial`. | [DDD00083](diagnostics.md#ddd00083) |
 
 | On the module's interface | Goes with | Reported otherwise |
 |---|---|---|
 | `[SignedIn]`, `[InTenant]`, `[RequiresPermission(permission)]`, an attribute of your own that allows an interface | `[AccessRequests]` and `partial`. Each other, and all of them must hold. A permission without a marker, held where a package says, such as Tenancy. | [DDD00083](diagnostics.md#ddd00083), [DDD00080](diagnostics.md#ddd00080), [DDD00084](diagnostics.md#ddd00084) |
-| `[AllowAnonymous]`, `[RequiresOperator]`, `[SeenWith<TResourceId>(permission)]`, `[OwnOnly]` | Nothing, because they cannot be a default. | [DDD00089](diagnostics.md#ddd00089) |
+| `[AllowAnonymous]`, `[Operator]`, `[SeenWith<TResourceId>(permission)]`, `[OwnOnly]` | Nothing, because they cannot be a default. | [DDD00089](diagnostics.md#ddd00089) |
 
 Why these combinations are reported:
 
@@ -393,6 +448,9 @@ Why these combinations are reported:
   The build cannot know which one was meant.
 - `[InTenant]` next to `[RequiresPermission]` adds nothing, because only a seat in the tenant, or system work there,
   holds a permission of Tenancy's.
+- `[Operator]` next to `[InTenant]` or `[RequiresPermission]` refuses every caller. An operator holds no seat and no
+  permission, and a seat is no operator. A request that either may send implements the property with
+  `AccessRequirement.Any` ([Any and All in RequiredAccess](#any-and-all-in-requiredaccess)).
 - `[SignedIn]` next to `[RequiresPermission]` does add something, and is not reported. System work holds every
   permission, but it is not a signed-in user.
 - The caller's own also requires something. Only a signed-in user has a verified identity, so `[SignedIn]` next to
@@ -541,7 +599,7 @@ attribute, `PlanCheck` and its registration.
 - **`[AllowAnonymous]` with another attribute is an error.** The two contradict each other, and the build reports
   [DDD00079](diagnostics.md#ddd00079).
 - **An attribute that adds nothing is a warning.** `[InTenant]` next to a permission of Tenancy's, and `[SignedIn]`
-  next to `[RequiresOperator]`, add nothing to what the other attribute already requires. The build reports
+  next to `[Operator]`, add nothing to what the other attribute already requires. The build reports
   [DDD00084](diagnostics.md#ddd00084). A package states what its requirement already requires with `Implies` on its
   `[StatesRequirement]` or `[PermissionMarker]`, so a module's own attribute follows the same rule.
 - **One permission per request.** A request has at most one `[RequiresPermission]`, because a marker could not say
@@ -581,7 +639,7 @@ public sealed class RequiresPlanAttribute(Plan plan) : Attribute
 
 // The module's check decides PlanAtLeast, beside Tenancy's, for the same interface
 services.AddAccessCheck<IBoardsRequest, PlanCheck>();
-services.AddTenancyAccess<TenantId, SeatId, OrganizationUnitId, RoleId, IBoardsRequest, BoardsContext>();
+services.AddTenancyAccess<IBoardsRequest, BoardsContext>();
 ```
 
 ```csharp title="BoardsAccessBehavior.g.cs, shortened"
@@ -605,7 +663,7 @@ Stacked attributes cannot express one caller or another, or two permissions at t
 implements the property with `Any` or `All`:
 
 - **One caller or another.** The application's operators read a tenant's audit log across tenants. A seat that manages
-  the tenant's seats reads it too: `Any(TenancyAccess.RequiresOperator(),
+  the tenant's seats reads it too: `Any(TenancyAccess.Operator(),
   TenancyAccess.AtTenant(TenancyPermissions.SeatsManage))`. The first case lets an operator through without reading
   anything. The second case lets a seat manager through, with one statement.
 - **Two permissions at two units.** Moving a seat from one unit to another requires the permission that manages seats at
@@ -638,7 +696,7 @@ public sealed record MoveSeat(SeatId Seat, OrganizationUnitId From, Organization
         TenancyAccess.AtUnit(TenancyPermissions.SeatsManage, To));
 }
 
-public sealed class MoveSeatHandler(TenancyUseCases.SeatCommands seats) : ICommandHandler<MoveSeat>
+public sealed class MoveSeatHandler(SeatManager seats) : ICommandHandler<MoveSeat>
 {
     public async ValueTask<Unit> Handle(MoveSeat command, CancellationToken cancellationToken)
     {
@@ -1061,12 +1119,17 @@ a requirement. It is a scope that trusted code starts explicitly around the work
 
 - `Callers.Begin(Caller.System)`;
 - `Callers.Begin(Caller.SystemIn(scope))`;
-- a call of a supporting domain, such as Tenancy's `TenancyUseCases.BeginSystem()` and `BeginSystemIn(tenant)`.
+- a call of a supporting domain, such as `access.BeginSystem()` and `access.BeginSystemIn(tenant)` on Tenancy's
+  `TenancyAccessManager`.
 
 When the result is disposed, the previous caller is current again.
 
+The pipeline begins one kind of system work itself: the operator work of a command marked `[Operator]`
+([An operator's request](#an-operators-request)). The operator sends a request, and the access check lets only an
+operator through. The work is recorded as that operator.
+
 - **Trusted code starts it, around the send or inside the handler.** A seeder, a job or an import starts it. Inside
-  it, the code either calls the use case directly, without a request, or sends a request. The sample's seeding does
+  it, the code either calls the package's manager directly, without a request, or sends a request. The sample's seeding does
   both. It provisions its tenants without a request, and sends `MarkTenantAsDemo` in each tenant. A handler starts
   system work itself for the one step its caller may not do, as the registration that
   [provisions a tenant](tenancy/who-may-do-what.md#requests-that-provision-a-tenant) does.
@@ -1079,11 +1142,11 @@ When the result is disposed, the previous caller is current again.
     test's list of requests that anyone may send ([Testing the requirements](#testing-the-requirements)), so a review
     sees the decision. Refuse everyone else in the handler.
   - When only trusted code ever runs the work, call the work inside the scope. No request is needed.
-- **The handler refuses everyone except system work.** The handler, or the use case of the package it calls, checks
+- **The handler refuses everyone except system work.** The handler, or the manager of the package it calls, checks
   which caller it runs as. It refuses every other caller with `access.system-only` (`ToolkitRefusals.SystemOnly`).
   - `Callers.RequireSystemWork(callers)` does this in any host.
-  - In a tenant, `ITenancy` returns it together with the tenant: `tenancy.RequireTenant().BySystem`. The sample's
-    `MarkTenantAsDemo` uses this.
+  - In a tenant, Tenancy's access manager returns it together with the tenant:
+    `access.CurrentTenant.Require().BySystem`. The sample's `MarkTenantAsDemo` uses this.
   - Tenancy's provisioning refuses every other caller itself.
 
   The caller who sent the request gets no extra permissions from it, because only the handler decides what the system
@@ -1115,7 +1178,7 @@ sequenceDiagram
 
 ```csharp shortened
 // The seeding, trusted code: system work in the tenant, around what it sends
-using (TenancyUseCases.BeginSystemIn(tenant.Id))
+using (access.BeginSystemIn(tenant.Id))
 {
     await sender.Send(new MarkTenantAsDemo(), cancellationToken);
 }
@@ -1124,11 +1187,11 @@ using (TenancyUseCases.BeginSystemIn(tenant.Id))
 [InTenant]
 public sealed record MarkTenantAsDemo : ICommand, ITenantsRequest;
 
-public sealed class MarkTenantAsDemoHandler(TenancyUseCases.IStore store, SampleTenancy tenancy) : ICommandHandler<MarkTenantAsDemo>
+public sealed class MarkTenantAsDemoHandler(TenancyStore store, TenancyAccessManager access) : ICommandHandler<MarkTenantAsDemo>
 {
     public async ValueTask<Unit> Handle(MarkTenantAsDemo command, CancellationToken cancellationToken)
     {
-        var scope = tenancy.RequireTenant();
+        var scope = access.CurrentTenant.Require();
         if (!scope.BySystem)
         {
             throw ToolkitRefusals.Refuse(ToolkitRefusals.SystemOnly);           // what only system work may do
@@ -1166,7 +1229,7 @@ the `IAccessCheck` that decides it:
 | the caller's own | `[OrOwn]`, `[OwnOnly]` with `[Own]`, `AccessRequirement.Own(value)`, from the core | Nothing for a `Guid` or for Tenancy's seat id. `services.AddCallersOwn<TValue, TCallersOwn>()` for a type you define. |
 | the owner of an aggregate | `[OrOwn]`, or `[OwnOnly]` with `[Own]`, on the id of an aggregate that marks its owner `[Owner]`; `AccessRequirement.OwnerOf(id)`; from the core | Nothing more on Entity Framework, whose `AddDDDToolkitEntityFramework` registers what reads the owner. The caller's own value of the owner's type, as in the row above. |
 | several cases at once, or one of several | stacked attributes, `AccessRequirement.All(...)` and `Any(...)`, from the core | Nothing. The set gives each case to the check that decides it. |
-| a tenant: a seat in it, a permission for the whole tenant or at a unit, operators | `[InTenant]`, `[RequiresPermission(permission)]` with `[AtUnit]` or without a marker, `[RequiresOperator]`; `TenancyAccess.InTenant()` and the other cases of `TenancyRequirement`; from [Tenancy](tenancy/who-may-do-what.md#what-a-request-requires-of-its-caller) | `services.AddTenancyAccess<...>()`, once per module |
+| a tenant: a seat in it, a permission for the whole tenant or at a unit, operators | `[InTenant]`, `[RequiresPermission(permission)]` with `[AtUnit]` or without a marker, `[Operator]` with `[ForTenant]`; `TenancyAccess.InTenant()` and the other cases of `TenancyRequirement`; from [Tenancy](tenancy/who-may-do-what.md#what-a-request-requires-of-its-caller) | `services.AddTenancyAccess<TRequests, TContext>()`, once per module. It adds Tenancy's check and the check of the operator cases. |
 | a resource with members: a permission held on it | `[RequiresPermission(permission)]` with `[OnResource]`, `[SeenWith<TResourceId>(permission)]`; `MemberAccess.On(permission, resource)` and `SeenWith`; from [Membership](membership/resources-and-members.md#a-document-and-the-people-it-is-shared-with) | `services.AddDocumentMemberAccess<IFilingRequest>()`, generated for each resource |
 | something only your module knows | a record of your own | `services.AddAccessCheck<IBillingRequest, BillingAccessCheck>()` |
 
@@ -1330,7 +1393,10 @@ public sealed class BillingDispatcher(AccessChecks<IBillingRequest> checks, ISer
         where TRequest : class, IBillingRequest
     {
         await checks.RequireAsync(request, cancellationToken);                              // returns, or refuses
-        await services.GetRequiredService<IHandler<TRequest>>().HandleAsync(request, cancellationToken);
+        using (checks.BeginWork(request, isQuery: false))                                   // the work a check begins, or none
+        {
+            await services.GetRequiredService<IHandler<TRequest>>().HandleAsync(request, cancellationToken);
+        }
     }
 }
 ```
@@ -1339,6 +1405,12 @@ The checks, the dispatcher and the handlers come from one scope, the scope of th
 by a handler of the same scope. Ask the checks and run the handler in one `async` method, as above. The request is
 then [in hand](#the-request-in-hand) for the handler and its save, with the check it passed, until the method returns.
 A method without `async` that returns the task of the checks leaves the request in hand for its caller instead.
+
+`BeginWork` begins the work that a check says the handler runs in, and returns `null` when no check begins any. Call
+it after `RequireAsync`, in the same method, and run the handler inside it. Tenancy's check of `[Operator]` begins
+operator work here for an operator's command ([An operator's request](#an-operators-request)). `isQuery` says whether
+the request only reads. Pass `true` for a query, and a check begins no work for it. `BeginWork` throws for a request
+that is not in hand in this flow of work.
 
 ## The request in hand
 
@@ -1390,7 +1462,7 @@ nothing for a handler while it does this. It returns:
 Any other exception the check throws comes out unchanged. This includes a `ConcurrencyConflictException`, which means
 the resource changed since the version the request named. It says nothing about whether the caller may act. A request
 that anyone may send passed without asking a check, and passes again the same way. Only the requirement the request
-declared is asked again. A rule that a handler or a package's use case checks itself is not part of it.
+declared is asked again. A rule that a handler or a package's manager checks itself is not part of it.
 
 The toolkit calls it when the policies or a guard refuse a save that the check allowed. The answer tells two cases
 apart: the caller's permissions changed in the meantime, or C# and the policies apply a rule differently
@@ -1426,7 +1498,10 @@ public sealed class BillingAccessBehavior<TMessage, TResponse> : IPipelineBehavi
     public async ValueTask<TResponse> Handle(TMessage message, MessageHandlerDelegate<TMessage, TResponse> next, CancellationToken cancellationToken)
     {
         await _checks.RequireAsync(message, cancellationToken).ConfigureAwait(false);
-        return await next(message, cancellationToken).ConfigureAwait(false);
+        using (_checks.BeginWork(message, isQuery: message is IBaseQuery))
+        {
+            return await next(message, cancellationToken).ConfigureAwait(false);
+        }
     }
 }
 
@@ -1446,10 +1521,14 @@ public static class BillingAccessBehaviorRegistration
 - The behavior is named after the interface: `IBillingRequest` gives `BillingAccessBehavior`. It is in the
   interface's namespace and has the interface's visibility. An interface the behavior cannot be written for is
   [DDD00056](diagnostics.md#ddd00056).
+- The behavior runs the next step inside `BeginWork`, so the work a check begins reaches the handler and ends with it.
+  A command an operator sends runs as operator work this way. A message that implements Mediator's `IBaseQuery` is
+  passed as a query, and a check begins nothing for it.
 - A streamed message, such as an `IStreamQuery<T>`, passes its own pipeline in Mediator, `IStreamPipelineBehavior<,>`.
   No `IPipelineBehavior<,>` is part of that pipeline. So the generator writes a second class,
   `BillingAccessStreamBehavior<TMessage, TResponse>`, and the same call registers it. The checks of a stream query that
-  implements the interface run before its handler streams anything.
+  implements the interface run before its handler streams anything. The stream behavior begins no work, because the
+  reader of the stream asks for each item in its own flow.
 - Both behaviors are registered per scope, like the checks, so register Mediator with `ServiceLifetime.Scoped`.
   Behaviors run in the order they were registered.
 - The generator reads the shape of `IPipelineBehavior<TMessage, TResponse>` and

@@ -425,8 +425,10 @@ a cancellation token and the next-step delegate once each, or one that answers n
 `Task` of the response, for a stream an `IAsyncEnumerable` of it), so no behavior is written. Remove
 `[AccessRequests]` and write the behavior by hand for that version: a class implementing
 `IPipelineBehavior<TMessage, TResponse>` constrained to the interface, whose `Handle` awaits
-`AccessChecks<TheInterface>.RequireAsync(message, cancellationToken)` and then calls the next step; register
-it as an open generic `IPipelineBehavior<,>`, scoped. A module with stream queries needs the same for
+`AccessChecks<TheInterface>.RequireAsync(message, cancellationToken)` and then awaits the next step inside
+`using (checks.BeginWork(message, isQuery: message is IBaseQuery))`, in the same method (an operator's command runs as
+operator work there); register it as an open generic `IPipelineBehavior<,>`, scoped. The stream behavior begins no
+work. A module with stream queries needs the same for
 `IStreamPipelineBehavior<,>`: they pass no `IPipelineBehavior<,>`.
 
 ## DDD00058
@@ -506,13 +508,15 @@ does not reach it; a `.globalconfig` or `<WarningsAsErrors>` does.
 ## DDD00065
 
 Info, in the project that declares Tenancy's classes (or another package's that asks with
-`[assembly: TemplateFacade]`): the class the use cases are named through, `TenancyUseCases` (the package's class's
-name without its type parameters), is not written, so every project above that names `TenancyUseCases.SeatCommands`
-fails with CS0246. Read the message for why. A template with no class: declare that class next to the others, once
+`[assembly: TemplateFacade]`), once per class not written: a class the package asks for, such as `SeatManager` (the
+package's class's name without its type parameters; Tenancy asks for `TenantManager`, `OrganizationManager`,
+`SeatManager`, `RoleManager`, `InvitationManager` where an invitation class is declared, `TenancyAccessManager` and
+`TenantToProvision`), is not written, so every project above that takes a `SeatManager` fails with CS0246. Read the
+message for why. A template with no class: declare that class next to the others, once
 (a module split over two projects hears this in the first and gets the class in the second; nothing to do).
 Several classes of one template: keep one. A class that does not meet a constraint: give it what the message
 names. A type of that name in a namespace of the project: rename it, or name the class otherwise with
-`[assembly: TemplateFacadeName("TenancyUseCases", "ShopTenancy")]` in that project. Never
+`[assembly: TemplateFacadeName("SeatManager", "ShopSeatManager")]` in that project. Never
 answer it by writing the nine-type alias in the projects above.
 
 ## DDD00066
@@ -627,16 +631,16 @@ written by hand: the build writes one beside it that makes the call, so delete a
 
 ## DDD00075
 
-Warning: two classes the use cases of one package are named through have one name where this project sees them,
-`TenancyUseCases` twice: two modules each declare Tenancy's classes. At the project file of a project that references
+Warning, once per name: two classes a package asks for have one name where this project sees them, `SeatManager`
+twice (and the other six of Tenancy's): two modules each declare Tenancy's classes. At the project file of a project that references
 both modules' domain projects (the host, a test project), where naming it is CS0433; on the first Tenancy class of a
 module's project that references the other module's domain project (it still gets its own, which its own code binds
 to with CS0436, and every project above sees both); or on the first class of a project whose own two classes come to
 one name. Copy the line the message writes out into the project it names, the one that declares that module's
 classes, beside `[assembly: Module]` or the switch, with `using DDDToolkit.Abstractions.Attributes;`:
-`[assembly: TemplateFacadeName("TenancyUseCases", "CustomersTenancyUseCases")]`, or any other name a class can have
-that no namespace or type in the global namespace has (not the module's root namespace), and name that module's use
-cases by it above. Where the message names an existing line, give another name in that line instead of adding one.
+`[assembly: TemplateFacadeName("SeatManager", "CustomersSeatManager")]`, one line per class the message names, or any
+other name a class can have that no namespace or type in the global namespace has (not the module's root namespace),
+and take that module's managers by it above. Where the message names an existing line, give another name in that line instead of adding one.
 Never answer it with a `using` alias in the host, or by renaming a module.
 
 ## DDD00076
@@ -654,7 +658,8 @@ module in either.
 Error, on a request whose module's interface is `partial` (so the compiler no longer asks for the property) and
 that says nothing of what it requires. Put the requirement attribute on it that says who may send it: `[SignedIn]`,
 `[InTenant]`, `[RequiresPermission(permission)]` with `[AtUnit]` or `[OnResource]` on the member where the permission is held,
-`[SeenWith<TResourceId>(permission)]` on a list, `[RequiresOperator]` on an operator's query, `[AllowAnonymous]` only
+`[SeenWith<TResourceId>(permission)]` on a list, `[Operator]` on a request of the application's operators (with
+`[ForTenant]` on the tenant a command acts in), `[AllowAnonymous]` only
 where anyone may send it, `[OrOwn]` on the member beside the permission for the caller's own or the permission, several stacked
 where all hold. Answer `RequiredAccess` instead only for a case of the module's own, a requirement computed from the
 request's values, or one caller or another and two permissions (`AccessRequirement.Any`, `All`). A request of another project than its interface answers `RequiredAccess`. Never
@@ -707,12 +712,11 @@ message names, or fix the member's type. A unit or resource that may be null is 
 
 Error, on a message of the Mediator library that is no query (a command, `ICommand` or `IStreamCommand`, or a plain
 `IRequest` or `IStreamRequest`) and carries a requirement its package declares for queries only:
-`[SeenWith<TResourceId>(permission)]` (refuses nobody, the query's statement filters) or `[RequiresOperator]`. Make it a query
-(`IQuery`, `IStreamQuery`) if it only reads. If it changes something: for `[SeenWith]`, require the permission where it acts,
-`[RequiresPermission(permission)]` with `[OnResource]` on the resource; for `[RequiresOperator]`, never a permission (an operator holds
-none), but trusted code that carries the operator's ask out as system work naming the operator,
-`TenancyUseCases.BeginOperatorIn(tenant, identity)`, behind a requirement of the module's own. The same requirement
-written as `RequiredAccess` on a command is not reported; do not write it so.
+`[SeenWith<TResourceId>(permission)]` (refuses nobody, the query's statement filters). Make it a query (`IQuery`,
+`IStreamQuery`) if it only reads. If it changes something, require the permission where it acts,
+`[RequiresPermission(permission)]` with `[OnResource]` on the resource. The same requirement written as
+`RequiredAccess` on a command is not reported; do not write it so. Tenancy's `[Operator]` is not queries-only: on a
+command the pipeline runs the handler as operator work.
 
 ## DDD00083
 
@@ -729,7 +733,7 @@ answer `RequiredAccess` in that interface.
 
 Warning, at a stacked requirement attribute its neighbour already requires: `[InTenant]` beside `[RequiresPermission]` (a permission
 of Tenancy's, with or without `[AtUnit]`, is held only by a seat in the tenant or system work there), `[SignedIn]`
-beside `[RequiresOperator]`, `[SignedIn]` beside `[OwnOnly]` with `[Own]` on a `Guid` (only a signed-in user has an
+beside `[Operator]`, `[SignedIn]` beside `[OwnOnly]` with `[Own]` on a `Guid` (only a signed-in user has an
 identity), `[InTenant]` or `[SignedIn]` beside `[OwnOnly]` with `[Own]` on the seat id, `[InTenant]` beside a permission of
 Tenancy's with `[OrOwn]` on the seat id (either way the caller is in the tenant), and an attribute a request the
 request derives from carries already. Take it off. Not reported: `[SignedIn]` beside `[RequiresPermission]` (it keeps system
@@ -781,8 +785,9 @@ owner's type is; write a small `ICallersOwn<T>` beside the requests and register
 
 Error, at a requirement attribute on a module's interface (`[AccessRequests, ...]`): it may not be the module's
 default, which every request that states nothing takes, a command that forgot its permission included. `[AllowAnonymous]`
-(a forgotten requirement would open the door): put it on each request anyone may send. `[RequiresOperator]`,
-`[SeenWith<TResourceId>(permission)]` or another queries-only one (a command would take it): put it on each query. `[OwnOnly]`
+(a forgotten requirement would let anyone in): put it on each request anyone may send.
+`[SeenWith<TResourceId>(permission)]` or another queries-only one (a command would take it): put it on each query.
+`[Operator]` (its `AttributeUsage` allows no interface, CS0592 too): put it on each request of the operators. `[OwnOnly]`
 (it reads a member marked `[Own]`): put it on each request about the caller's own. An attribute whose class's
 `AttributeUsage` leaves out `AttributeTargets.Interface` (CS0592 too): add `Interface` to the class, where it is the
 application's own and may be a default, or put it on each request. Defaults that work: `[SignedIn]`, `[InTenant]`,
@@ -841,9 +846,11 @@ owner passes the permission already. Remove `[OrOwn]`. Keep it only for a permis
 
 ## DDD00097
 
-Error, at `[At]` (`DDDToolkit.Abstractions.Attributes`): it goes on one instance property of an aggregate root, the
-place the root hangs at, never nullable. Not on an entity inside an aggregate, not on a static property, not twice
-on one aggregate, not on a property that may be empty.
+Error, at `[At]` (namespace `DDDToolkit.Supporting.Membership`, package
+`Temp.DDDToolkit.Supporting.Membership.Abstractions`), reported by Membership's generator, which ships in
+`Temp.DDDToolkit.Supporting.Membership`: it goes on one instance property of an aggregate root, the place the root
+hangs at, never nullable. Not on an entity inside an aggregate, not on a static property, not twice on one aggregate,
+not on a property that may be empty. Keep one `[At]` property on the root, of a type that is never empty.
 
 ## DDD00098
 
@@ -882,7 +889,8 @@ parameter.
 
 Error, at `[ForTenant]` on a command marked `[Operator(Tenant = OperatorTenant.FromRequest)]`: the work would act in
 two tenants. Keep `[ForTenant]` when the command names its tenant, or `FromRequest` when the tenant comes from the
-request (the `Tenant` header). With neither, the work acts in no tenant.
+request (the `Tenant` header). With neither, the work acts in no tenant. `TenancyAccess.Operator(tenant,
+OperatorTenant.FromRequest)` as `RequiredAccess` throws `ArgumentException` for the same reason.
 
 ## DDD00104
 

@@ -215,7 +215,7 @@ public readonly partial record struct OrderId : DDDToolkit.Abstractions.Interfac
 - `CreateSequential()` makes a version 7 `Guid`. A version 7 `Guid` is ordered by time, which suits a database index
   better than a random `Guid`.
 - `Create()` makes a new `OrderId`, in code, before the save. Here `Create()` calls `CreateSequential()`. It implements
-  `ICreatableEntityId<OrderId>`, so code that is generic over ids, such as a supporting domain's use cases, makes an id
+  `ICreatableEntityId<OrderId>`, so code that is generic over ids, such as a supporting domain's managers, makes an id
   with `TId.Create()`.
 - Declare a `Create()` of your own in the id's partial declaration, and the generator writes none. An id over a `long`
   or a `string` gets a `Create()` only that way.

@@ -145,9 +145,9 @@ rules, by topic:
   thing twice.
 - [DDD00087](#ddd00087) and [DDD00088](#ddd00088): [the owner an aggregate marks](access-requirements.md#the-owner-of-an-aggregate).
   They catch a request about the owner that no row could ever let through.
-- [DDD00102](#ddd00102) to [DDD00105](#ddd00105): a request for operators, `[Operator]`. They catch a tenant marker
-  that nothing reads, a command that names two tenants for its work, a request no caller can send, and a query that
-  names work it never begins.
+- [DDD00102](#ddd00102) to [DDD00105](#ddd00105): [an operator's request](access-requirements.md#an-operators-request),
+  `[Operator]`. They catch a tenant marker that nothing reads, a command that names two tenants for its work, a
+  request that no caller can send, and a query that names work it never begins.
 - [DDD00059](#ddd00059) and [DDD00060](#ddd00060): the
   [member list of a resource](membership/resources-and-members.md#the-generated-member-list). They report what
   the Membership generator could not tell, and a member class that names the wrong resource.
@@ -2089,7 +2089,9 @@ Without the behavior, the requests of the interface reach their handlers uncheck
 Write the behavior by hand against the version you use, and remove `[AccessRequests]` from the interface. The
 interface still names the checks that its requests are held to. Write `Handle` with `async` and `await`, as below.
 `RequireAsync` puts the request in hand for the flow of work that asked. The handler that `Handle` calls next runs
-in that flow and finds the request in hand ([the request in hand](access-requirements.md#the-request-in-hand)).
+in that flow and finds the request in hand ([the request in hand](access-requirements.md#the-request-in-hand)). Run
+the next step inside `BeginWork`, in the same method, so the work a check begins reaches the handler, such as the
+operator work of an operator's command. The stream behavior begins no work.
 
 ```csharp
 public sealed class BillingAccessBehavior<TMessage, TResponse>(AccessChecks<IBillingRequest> checks) : IPipelineBehavior<TMessage, TResponse>
@@ -2098,7 +2100,10 @@ public sealed class BillingAccessBehavior<TMessage, TResponse>(AccessChecks<IBil
     public async ValueTask<TResponse> Handle(TMessage message, MessageHandlerDelegate<TMessage, TResponse> next, CancellationToken cancellationToken)
     {
         await checks.RequireAsync(message, cancellationToken);
-        return await next(message, cancellationToken);
+        using (checks.BeginWork(message, isQuery: message is IBaseQuery))
+        {
+            return await next(message, cancellationToken);
+        }
     }
 }
 
@@ -2455,36 +2460,39 @@ with `is_global = true`.
 
 ```csharp
 // Shop.Tenants.Domain, [assembly: Module("Tenants")], with no class declared with [SeatAggregate]
-[TenantAggregate<TenantId>] public sealed partial class Tenant;   // DDD00065: 'TenancyUseCases' is not written, ...
+[TenantAggregate<TenantId>] public sealed partial class Tenant;   // DDD00065: 'SeatManager' is not written, ...
 [OrganizationAggregate<TenantId>] public sealed partial class Organization;
 [OrganizationUnit<OrganizationUnitId>] public sealed partial class OrganizationUnit;
 [RoleAggregate<RoleId>] public sealed partial class Role;
 ```
 
 ```csharp
-// The same project, with all five classes, and a type of the class's name in a namespace of its own
+// The same project, with all the classes, and a type of the class's name in a namespace of its own
 namespace Shop.Tenants.Settings;
 
-public static class TenancyUseCases;   // DDD00065, on this type: the class would hide it where Shop.Tenants.Settings is imported
+public static class SeatManager;   // DDD00065, on this type: the class would hide it where Shop.Tenants.Settings is imported
 ```
 
-Tenancy's use cases are named through a class that the toolkit's generator writes into the project that declares
-your classes. The class has the name of the package's class: `TenancyUseCases.SeatCommands`
-([Calling a use case](tenancy/your-module.md#calling-a-use-case)). Each of its type parameters is one of your
-classes or ids. So the generator writes it only when every template it takes from has one class, in that project
-or in a project of the same module that the project references.
+A package names its generic classes in `[assembly: TemplateFacade]`. For each, the toolkit's generator writes a class
+into the project that declares your classes. The class derives from the package's class, closed over your classes,
+and has the package's class name without the type parameters. Tenancy names seven: `TenantManager`,
+`OrganizationManager`, `SeatManager`, `RoleManager`, `InvitationManager`, `TenancyAccessManager` and the record
+`TenantToProvision`. So your code takes a `SeatManager` and names `SeatManager.SeatOverview`
+([The managers and the access manager](tenancy/your-module.md#the-managers-and-the-access-manager)). Each type parameter of the package's class is one of
+your classes or ids. So the generator writes a class only when every template it takes from has one class, in that
+project or in a project of the same module that the project references.
 
-If the class is not written, the projects above that name a use case only get CS0246: the name does not exist.
-The project that registers Tenancy would give more detail. That project references the application project, and
-does not build once the application project fails. So the project that declares the classes reports the cause, on
-the first of the classes:
+If a class is not written, the projects above that name it only get CS0246: the name does not exist. The project that
+registers Tenancy would give more detail. That project references the application project, and does not build once
+the application project fails. So the project that declares the classes reports the cause, on the first of the
+classes, once for each class that is not written:
 
 | What keeps it out | What to do |
 |---|---|
 | no class is declared with one of the templates | declare it, next to the others |
 | several classes are declared with one template | keep one |
 | a class does not meet the constraints of the package's class | give it what the message names |
-| the project declares a type of that name in a namespace. The class would hide that type wherever the namespace is imported | rename that type, or name the class otherwise: `[assembly: TemplateFacadeName("TenancyUseCases", "ShopTenancy")]` |
+| the project declares a type of that name in a namespace. The class would hide that type wherever the namespace is imported | rename that type, or name the class otherwise: `[assembly: TemplateFacadeName("SeatManager", "ShopSeatManager")]` |
 
 DDD00065 has the severity Info. A module whose classes are split over two projects gets DDD00065 in the first
 project, where nothing is wrong. The second project, where the classes are complete, gets the class.
@@ -2496,6 +2504,9 @@ Some causes are reported elsewhere, and not again here:
 - A template that a registration the project can call takes from is reported by the registration:
   [DDD00049](#ddd00049) or [DDD00045](#ddd00045).
 - A class that cannot be generated has its own diagnostic.
+- A class that the package marks `OnlyWith` a template is written only where that template has a class. A project
+  without one gets no class and no diagnostic. Tenancy's `InvitationManager` is written only where the module declares
+  an invitation class.
 
 A name that you keep in the global namespace yourself is your own way of naming the classes: an alias of the name
 at the top of a file, or a type or a namespace of that name. The generator leaves that name alone and reports
@@ -2865,44 +2876,52 @@ not read generated code. See [Supabase](supabase.md#exporting-as-part-of-the-bui
 **Every class a package's use cases are named through has a name of its own where a project sees it.**
 
 ```
-Shop.Host.csproj: warning DDD00075: 'TenancyUseCases' is the name of more than one class in this project: it sees
-the one 'Shop.Customers.Domain' has for the module Customers and the one 'Shop.Partners.Domain' has for the module
-Partners. Give one of them a name of its own, with [assembly: TemplateFacadeName("TenancyUseCases",
-"CustomersTenancyUseCases")] in 'Shop.Customers.Domain'.
+Shop.Host.csproj: warning DDD00075: 'SeatManager' is the name of more than one class in this project: it sees the
+one 'Shop.Customers.Domain' has for the module Customers and the one 'Shop.Partners.Domain' has for the module
+Partners. Give one of them a name of its own, with [assembly: TemplateFacadeName("SeatManager",
+"CustomersSeatManager")] in 'Shop.Customers.Domain'.
 ```
 
-Tenancy's use cases are named through a class that the toolkit's generator writes into the project that declares
-your Tenancy classes. The class is called `TenancyUseCases`, after the package's own class
-([Two modules with the classes](tenancy/your-module.md#two-modules-with-tenancys-classes)). An application with
-two modules that each declare Tenancy's classes gets two classes of that name, one in each module's domain
+The toolkit's generator writes Tenancy's managers, its access manager and `TenantToProvision` into the project that
+declares your Tenancy classes. Each class is named after the package's own class: `SeatManager`, `TenancyAccessManager`
+and so on ([Two modules with the classes](tenancy/your-module.md#two-modules-with-tenancys-classes)). An application
+with two modules that each declare Tenancy's classes gets two classes of each name, one in each module's domain
 project. While neither module references the other, neither project sees the other's class, and neither reports
 anything. The two classes meet in every project that references both modules, first the host and your tests.
-There, the first line that names `TenancyUseCases` gets the compiler's CS0433, with no hint of what to do. So
-DDD00075 is reported in such a project, at its project file, because no line of its code is wrong.
+There, the first line that names `SeatManager` gets the compiler's CS0433, with no hint of what to do. So DDD00075 is
+reported in such a project, at its project file, because no line of its code is wrong. It is reported once for each
+name, so a host that sees two modules with Tenancy's classes gets seven warnings.
 
 What happens depends on where the two classes meet. DDD00075 is a warning in every case. It stops no build unless
 warnings are errors there. The compiler's error on the first line that names the class stops the build:
 
 | Where the two classes meet | What the generator writes there | Where DDD00075 is reported | What your code gets while the warning stands |
 |---|---|---|---|
-| a project that references both modules' projects, such as the host or a test project | nothing. The classes belong to the modules | at the project file, because no line of it is wrong | Code that names neither class builds and runs. The first line that names `TenancyUseCases` gets CS0433, an error |
+| a project that references both modules' projects, such as the host or a test project | nothing. The classes belong to the modules | at the project file, because no line of it is wrong | Code that names neither class builds and runs. The first line that names `SeatManager` gets CS0433, an error |
 | a project that declares one module's classes, and references another module's project that has a class of that name | its own class, as usual | on the project's first Tenancy class, and not also at the project file | The project's own code builds and names its own module's classes. The compiler takes the class from the project's own source and reports CS0436, a warning. Every project above it sees both classes, gets DDD00075 at its project file, and gets CS0433 on the first line that names the class |
 | a project that would get two classes of one name itself: two packages' classes of one name, or a name you gave that another of its classes has | neither class, because the two cannot be told apart | on the project's first class | Code that names neither class builds. A line that names the class gets the compiler's error that no such type exists |
 
 Give one of the classes a name of its own, with the line that the message writes out, in the project it names.
 That is the project that declares that module's classes. If you named that class already, the message names the
-line that names it. Give another name in that line. A second line for one class changes nothing.
+line that names it. Give another name in that line. A second line for one class changes nothing. Name every class
+of the module that the host sees twice, one line each:
 
 ```csharp
 // Shop.Customers.Domain, beside [assembly: Module("Customers")] or Tenancy's switch
 using DDDToolkit.Abstractions.Attributes;
 
-[assembly: TemplateFacadeName("TenancyUseCases", "CustomersTenancyUseCases")]
+[assembly: TemplateFacadeName("TenantManager", "CustomersTenantManager")]
+[assembly: TemplateFacadeName("OrganizationManager", "CustomersOrganizationManager")]
+[assembly: TemplateFacadeName("SeatManager", "CustomersSeatManager")]
+[assembly: TemplateFacadeName("RoleManager", "CustomersRoleManager")]
+[assembly: TemplateFacadeName("InvitationManager", "CustomersInvitationManager")]   // where the module declares an invitation
+[assembly: TemplateFacadeName("TenancyAccessManager", "CustomersTenancyAccessManager")]
+[assembly: TemplateFacadeName("TenantToProvision", "CustomersTenantToProvision")]
 ```
 
-Every project above it then names Customers' use cases `CustomersTenancyUseCases.SeatCommands`, and Partners keeps
-`TenancyUseCases`. Any name that a class can have works, `CustomersTenancy` too, as long as no namespace or type
-of yours in the global namespace has it. The message only suggests a name.
+Every project above it then takes Customers' managers as `CustomersSeatManager` and the others, and Partners keeps
+`SeatManager`. Any name that a class can have works, `CustomersSeats` too, as long as no namespace or type of yours
+in the global namespace has it. The message only suggests a name.
 
 If two packages' classes share a name in one project, the line names the one it means with its namespace:
 `[assembly: TemplateFacadeName("Acme.Billing.UseCases", "BillingUseCases")]`. A type, a namespace or an alias of
@@ -2923,11 +2942,12 @@ works as well.
 **`[assembly: TemplateFacadeName]` names, once, a class this project gets.**
 
 ```csharp
-[assembly: TemplateFacadeName("TenancyUsecases", "ShopTenancy")]   // DDD00076: ... changes nothing: no package this project
-                                                                   // references asks for a class of that name; it can name 'TenancyUseCases'
+[assembly: TemplateFacadeName("SeatManagers", "ShopSeats")]   // DDD00076: ... changes nothing: no package this project
+                                                              // references asks for a class of that name; it can name
+                                                              // 'InvitationManager', 'OrganizationManager', ... and 'TenantToProvision'
 ```
 
-The line gives your own name to the class that a package's use cases are named through. It works in the project
+The line gives your own name to a class that the generator writes for a package's `[TemplateFacade]`. It works in the project
 where the generator writes the class: the project that declares the classes. A module whose classes are split over
 two projects may put the line beside the module declaration in either project. The project that writes the class
 reads the line in the projects of its module that it takes classes from. A line that changes nothing looks as if
@@ -2936,7 +2956,7 @@ it changed the name. So it is reported at the line, and the class keeps its name
 | The line | What to do |
 |---|---|
 | names no class that a referenced package asks for | write the class name as the message lists it: the package's class name without its type parameters |
-| names two classes: two packages' classes of one name | name the class you mean with its namespace, `"DDDToolkit.Supporting.Tenancy.UseCases.TenancyUseCases"` |
+| names two classes: two packages' classes of one name | name the class you mean with its namespace, `"DDDToolkit.Supporting.Tenancy.UseCases.SeatManager"` |
 | is in a project that declares none of the classes, such as an application project above the domain project | move it into the project that declares the classes. The class is written and named there |
 | names a class that an earlier line names already, in this project or in a project of its module that it takes classes from | keep one line. This project's line wins, then the line of the first other project by name |
 | gives a name that no class can have, such as a keyword or a name with a space | give a name that a class can have |
@@ -3123,15 +3143,12 @@ A member that may be null is a requirement computed from whether the value is gi
 public sealed record ArchiveDocuments : ICommand, IDocumentsRequest;                                // DDD00082
 ```
 
-Some requirements are for queries only. Their packages say so with `[StatesRequirement(..., QueriesOnly = true)]`:
+Some requirements are for queries only. Their packages say so with `[StatesRequirement(..., QueriesOnly = true)]`.
+Membership's `[SeenWith<TResourceId>(permission)]` is one. It refuses nobody for lack of the permission. It lets every
+signed-in caller through, also one that holds nothing, and says what the query's own statement filters by. That
+filter is the check. On a command, the handler would run unchecked.
 
-- Membership's `[SeenWith<TResourceId>(permission)]` refuses nobody for lack of the permission. It lets every
-  signed-in caller through, also one that holds nothing, and says what the query's own statement filters by. That
-  filter is the check. On a command, the handler would run unchecked.
-- Tenancy's `[RequiresOperator]` lets an operator through. An operator holds no seat and no permission, and changes
-  nothing directly.
-
-DDD00082 reports a message of the Mediator library that is not a query and carries one of these attributes:
+DDD00082 reports a message of the Mediator library that is not a query and carries such an attribute:
 
 - a command, `ICommand` or `IStreamCommand`;
 - a plain `IRequest` or `IStreamRequest`, which may change as much as a command does.
@@ -3142,7 +3159,9 @@ What to do instead:
 |---|---|
 | only reads | make it a query, `IQuery` or `IStreamQuery` |
 | changes something, `[SeenWith]` on it | require the permission where it acts, `[RequiresPermission(permission)]` with `[OnResource]` on the resource |
-| carries out what an operator asks, `[RequiresOperator]` on it | let trusted code carry it out as system work that names the operator, `TenancyUseCases.BeginOperatorIn(tenant, identity)`, behind a requirement of the module's own ([Operators](tenancy/operators-and-history.md#operators)) |
+
+Tenancy's `[Operator]` is no requirement for queries only. On a command, the pipeline runs the handler as operator work
+([An operator's request](access-requirements.md#an-operators-request)).
 
 A request of another dispatcher is not reported, because the generator cannot tell whether it is a command or a
 query. The same requirement answered as `RequiredAccess` on a command is not reported either. A test covers both
@@ -3190,7 +3209,7 @@ module's interface and its requests, nothing reads the attribute either. Such an
 [RequiresPermission(BillingPermissions.Close)]
 public sealed record CloseTheBooks(int Year) : IBillingRequest;
 
-[SignedIn, RequiresOperator]                                        // DDD00084: an operator is signed in
+[SignedIn, Operator]                                                // DDD00084: an operator is signed in
 public sealed record AllLedgers : IQuery<IReadOnlyList<Ledger>>, IBillingRequest;
 
 [OwnOnly, SignedIn]                                                 // DDD00084: only a signed-in caller has an identity
@@ -3201,8 +3220,8 @@ Stacked requirement attributes all hold. So an attribute that its neighbour alre
 
 - Only a seat in the tenant, or system work there, holds a permission of Tenancy's, with or without `[AtUnit]`.
   So `[InTenant]` beside such a permission adds nothing.
-- `[RequiresOperator]` lets through only a signed-in caller with an operator's token role. So `[SignedIn]` beside
-  it adds nothing.
+- `[Operator]` lets through only a signed-in caller with an operator's token role. So `[SignedIn]` beside it adds
+  nothing.
 
 The extra attribute changes nothing that is checked, and the generator writes the line. A reader takes it for a
 second condition and looks for what it adds. So DDD00084 is a warning. Remove the attribute.
@@ -3409,8 +3428,8 @@ be told, and the access check reports the problem when the request is sent.
 [AccessRequests, AllowAnonymous]                                    // DDD00089: a request that forgets its requirement would let anyone in
 public partial interface IBillingRequest : IRequireAccess;
 
-[AccessRequests, RequiresOperator]                                  // DDD00089: a command that says nothing would take it
-public partial interface IOperationsRequest : IRequireAccess;
+[AccessRequests, SeenWith<DocumentId>(DocumentPermissions.View)]     // DDD00089: a command that says nothing would take it
+public partial interface IDocumentsRequest : IRequireAccess;
 ```
 
 A requirement attribute on a module's interface is the default of its requests. A request that states nothing of
@@ -3422,9 +3441,9 @@ that any of the requests may take. DDD00089 is reported at the attribute:
 | On the interface | Because | Instead |
 |---|---|---|
 | `[AllowAnonymous]` | a request that forgot its requirement would let anyone in. Without a default, the access check refuses such a request | `[AllowAnonymous]` on each request that anyone may send, where a review sees it |
-| `[RequiresOperator]`, `[SeenWith<TResourceId>(permission)]`, any attribute its package declares for queries only | a command of the module that states nothing would take it, and on a command it checks nothing that the command changes ([DDD00082](#ddd00082)) | the attribute on each query |
+| `[SeenWith<TResourceId>(permission)]`, any attribute its package declares for queries only | a command of the module that states nothing would take it, and on a command it checks nothing that the command changes ([DDD00082](#ddd00082)) | the attribute on each query |
 | `[OwnOnly]` | it reads the member of a request marked `[Own]`, and a default reads no member | `[OwnOnly]` on each request about the caller's own |
-| an attribute whose class's `AttributeUsage` leaves out interfaces | the attribute is declared for requests only. The compiler reports this as well (CS0592) | add `AttributeTargets.Interface` to its class's `AttributeUsage`, if it may be a default |
+| an attribute whose class's `AttributeUsage` leaves out interfaces, such as Tenancy's `[Operator]` | the attribute is declared for requests only. The compiler reports this as well (CS0592) | for a module's own attribute, add `AttributeTargets.Interface` to its class's `AttributeUsage`, if it may be a default. Put `[Operator]` on each request of the application's staff |
 
 A refused default is not used. The interface's last arm then stops a request that states nothing, as it does
 without a default. The attributes that a package ships and that may be a default already allow an interface:
@@ -3635,10 +3654,10 @@ public sealed partial class Column
 }
 ```
 
-`[At]` marks the property of an aggregate root that says where the aggregate hangs: the unit of an organization
-that a board belongs to, or the bay a crate stands in. This is a fact of the domain. The rules of a resource with
-members read it where they let the resource be reached from above. A permission held at that place, or above it,
-reaches the aggregate ([Beside an organization](membership/beside-an-organization.md#reach-from-above)).
+`[At]` marks the property of an aggregate root that says where the aggregate hangs: the unit of an organization that
+a board belongs to, or the bay a crate stands in. This is a fact of the domain. The rules of a resource with members
+read it where they let the resource be reached from above. A permission held at that place, or above it, reaches the
+aggregate ([Beside an organization](membership/beside-an-organization.md#reach-from-above)).
 
 So `[At]` goes on one instance property of an aggregate root, on the root itself and never on an entity inside
 it. That property is never empty. An aggregate that hangs nowhere could not be reached from above, and reaching
@@ -3648,6 +3667,25 @@ from above is what `[At]` is for. DDD00097 refuses each of these, where the prop
 - a property on a type that is no aggregate root;
 - a second `[At]` property;
 - a nullable property.
+
+Keep one `[At]` property, on the root, of a type that is never empty:
+
+```csharp
+[AggregateRoot<BoardId>]
+public sealed partial class Board
+{
+    [At] public OrganizationUnitId UnitId { get; private set; }            // the one place, never empty
+
+    public OrganizationUnitId? FormerUnitId { get; private set; }          // a plain property
+}
+```
+
+`[At]` is Membership's marker, in the namespace `DDDToolkit.Supporting.Membership`. It ships in the package
+`Temp.DDDToolkit.Supporting.Membership.Abstractions`, which references `DDDToolkit.Abstractions` alone and no Entity
+Framework, so a domain project references it for the marker. Membership's generator reports DDD00097. That generator
+ships in the package `Temp.DDDToolkit.Supporting.Membership`, which references the markers' package. A project that
+declares the aggregate and references only the markers' package gets no DDD00097. `[Owner]` stays in the core,
+because the core's checks of the owner read it.
 
 ## DDD00098
 
@@ -3740,23 +3778,35 @@ with `[SeatAggregate]`. In a rule of a module whose context does not map the sea
 **A marker of a requirement's argument goes beside the attribute whose call it is.**
 
 ```csharp
-[Operator]
-public sealed record SuspendTenant([ForTenant] TenantId Tenant, string Reason) : ICommand<Tenant>, ITenancyRequest;   // fine
-
 [InTenant]
-public sealed record RenameTenant([ForTenant] TenantId Tenant, string Name) : ICommand, ITenancyRequest;              // DDD00102
+public sealed record RenameTenant([ForTenant] TenantId Tenant, string Name) : ICommand, ITenancyRequest;               // DDD00102: no [Operator]
+
+[Operator]
+public sealed record MergeTenants([ForTenant] TenantId Tenant, [ForTenant] TenantId Into) : ICommand, ITenancyRequest;  // DDD00102: two members
 ```
 
 A package marks an attribute as one more argument of a requirement's call with `[RequirementArgument]`. Tenancy's
 `[ForTenant]` is one. The generator hands the marked member to the call of the attribute it goes with: `[Operator]`
-with `[ForTenant] TenantId Tenant` is `TenancyAccess.Operator(request.Tenant)`.
+with `[ForTenant] TenantId Tenant` is `TenancyAccess.Operator(request.Tenant)`
+([An operator's request](access-requirements.md#an-operators-request)). DDD00102 reports a marker that the call cannot
+take:
 
-- Without that attribute on the request, the member is handed to nothing. Put `[Operator]` on the request, or take
-  the marker off.
-- Two members marked with one marker give the call two arguments where it takes one. Mark one member.
-- The marker goes on a positional parameter of a record or on a property that the module's interface can read.
+- **The attribute is not on the request.** The member is handed to nothing, and the request reads as if it said
+  something it does not.
+- **Two members carry one marker.** The call would get two arguments where it takes one.
+- **The module's interface cannot read the member.** The generator writes the call into the module's interface. So
+  the marker goes on a positional parameter of a record, which is its property, or on a property the interface can
+  read. A parameter of a class's primary constructor is no member, and neither is a private or a protected property.
 
-A member of another type than the marker names is DDD00081: `[ForTenant]` marks the application's tenant id.
+Put the attribute on the request, or take the marker off. Mark one member:
+
+```csharp
+[Operator]
+public sealed record SuspendTenant([ForTenant] TenantId Tenant, string Reason) : ICommand<Tenant>, ITenancyRequest;
+```
+
+A member of another type than the marker names is [DDD00081](#ddd00081): `[ForTenant]` marks the application's
+tenant id.
 
 ## DDD00103
 
@@ -3772,32 +3822,50 @@ public sealed record SuspendTenant([ForTenant] TenantId Tenant, string Reason) :
 | The command says | The work acts in |
 |---|---|
 | a `[ForTenant]` member | the tenant the command names |
-| `Tenant = OperatorTenant.FromRequest` | the tenant the request names beside the command |
+| `Tenant = OperatorTenant.FromRequest` | the tenant the request names beside the command, as tenant selection reads it |
 | neither | no tenant, as provisioning needs |
 
 Both at once name two tenants for one piece of work. Keep `[ForTenant]` for a command that names its tenant, or
-`FromRequest` for one that takes the tenant the request names.
+`FromRequest` for a command that takes the tenant the request names:
+
+```csharp
+[Operator]
+public sealed record SuspendTenant([ForTenant] TenantId Tenant, string Reason) : ICommand<Tenant>, ITenancyRequest;
+
+[Operator(Tenant = OperatorTenant.FromRequest)]
+public sealed record CloseStaleInvitations : ICommand, ITenancyRequest;
+```
+
+The same requirement written as the property, `TenancyAccess.Operator(Tenant, OperatorTenant.FromRequest)`, throws an
+`ArgumentException` that names DDD00103.
 
 ## DDD00104
 
 **`[Operator]` stands beside no requirement an operator cannot meet.**
 
 ```csharp
-[Operator, InTenant]                                       // DDD00104
+[Operator, InTenant]                                               // DDD00104
 public sealed record ArchiveUnits : ICommand, ITenancyRequest;
+
+[Operator, RequiresPermission(TenancyPermissions.SeatsManage)]     // DDD00104
+public sealed record TenantSeats : IQuery<IReadOnlyList<SeatRow>>, ITenancyRequest;
 ```
 
 Requirement attributes on one request all hold. `[Operator]` lets through only a signed-in user with an operator's
 token role. An operator holds no seat in any tenant and no permission, so `[InTenant]` and
-`[RequiresPermission(permission)]` refuse every operator. Together they refuse every caller.
+`[RequiresPermission(permission)]` refuse every operator. A seat is no operator, so `[Operator]` refuses every seat.
+Together they refuse every caller, and the request can never be sent.
 
 Keep `[Operator]` for a request of the application's staff, or the other attribute for a request of a tenant's
-seats. A request that either may send answers `RequiredAccess` itself:
+seats. A request that either may send implements `RequiredAccess` itself, with `AccessRequirement.Any`:
 
 ```csharp
-AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.Any(
-    TenancyAccess.Operator(),
-    TenancyAccess.AtTenant(TenancyPermissions.SeatsManage));
+public sealed record TenantSeats : IQuery<IReadOnlyList<SeatRow>>, ITenancyRequest
+{
+    AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.Any(
+        TenancyAccess.Operator(),
+        TenancyAccess.AtTenant(TenancyPermissions.SeatsManage));
+}
 ```
 
 ## DDD00105
@@ -3806,13 +3874,20 @@ AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.Any(
 
 ```csharp
 [Operator(Tenant = OperatorTenant.FromRequest)]            // DDD00105, a warning
-public sealed record AllTenants(string? After) : IQuery<TenantPage>, ITenancyRequest;
+public sealed record AllTenants(string? After) : IQuery<TenantManager.TenantPage>, ITenancyRequest;
 ```
 
-On a command, `[Operator]` runs the handler as operator work, and `Tenant` and `Scope` say where the work acts and in
-which scope. On a query nothing begins: an operator reads across tenants through the database role of its token. So
-`Tenant` and `Scope` on a query say nothing. Take them off. `[ForTenant]` on a query is not reported: a request that
-names another tenant beside it is still refused.
+On a command, `[Operator]` runs the handler as operator work. `Tenant` and `Scope` say where the work acts and in
+which scope. On a query nothing begins. An operator reads across tenants through the database role of its token. So
+`Tenant` and `Scope` on a query say nothing, and a reader takes them for the tenant the query reads in. Take them off:
+
+```csharp
+[Operator]
+public sealed record AllTenants(string? After) : IQuery<TenantManager.TenantPage>, ITenancyRequest;
+```
+
+`[ForTenant]` on a query is not reported. It still refuses a request that names another tenant than the query does,
+with `tenancy.tenant-mismatch`.
 
 ## Building the model fails: the owned type must carry the key part
 

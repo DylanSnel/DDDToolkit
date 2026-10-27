@@ -332,7 +332,7 @@ public static IServiceCollection AddLedger(this IServiceCollection services)
 A check reads and changes nothing. Work that changes data at start-up has its own call next to
 `RunStartupChecks()`. For example, Tenancy's `SyncStarterRoles()` updates every tenant's roles to the starter roles
 they were copied from, once the host has started
-([Starter roles after provisioning](tenancy/roles-and-permissions.md#packs-after-provisioning)).
+([Starter roles after provisioning](tenancy/roles-and-permissions.md#starter-roles-after-provisioning)).
 
 ## Where to look next
 

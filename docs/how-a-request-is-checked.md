@@ -82,7 +82,7 @@ seat there before anything else ([TenantHeader](../Examples/Tenancy/Examples.Ten
 | **A new sign-in** | A person who signed in and has no seat in harbor. | `authenticated` |
 | **Orla** | One of the application's operators. Her token carries the operators' role. She has no seat in any tenant. | `tenancy_operator` |
 | **Anonymous** | A request without a token. | `anon` |
-| **System work** | System work in harbor. Trusted code starts it with `TenancyUseCases.BeginSystemIn(harbor)`. Its scope is the module of the request it sends: `tenancy`, or `projects` for a request of the Projects module, because the projects' rules let only that scope through. | `ddd_system_in`, scope `tenancy` or `projects` |
+| **System work** | System work in harbor. Trusted code starts it with `access.BeginSystemIn(harbor)` on Tenancy's `TenancyAccessManager`. Its scope is the module of the request it sends: `tenancy`, or `projects` for a request of the Projects module, because the projects' rules let only that scope through. | `ddd_system_in`, scope `tenancy` or `projects` |
 
 | Request | What it does | What it requires | Where it comes from |
 |---|---|---|---|
@@ -260,7 +260,9 @@ No reflection runs, and nothing is looked up when a request is sent. Stacked att
 of their calls, in the order they are written. `[OrOwn]` becomes `Any` of the caller's own and the permission
 ([The caller's own, or a permission](access-requirements.md#the-callers-own-or-a-permission)). When the project uses
 Mediator, the same file also contains the pipeline behavior. The behavior asks the module's checks before every
-handler of the interface. It reads the property, so it works the same for attributes and for the property.
+handler of the interface. It reads the property, so it works the same for attributes and for the property. Then it
+runs the handler inside the work a check begins for the request, such as the operator work of an operator's command
+([An operator's request](access-requirements.md#an-operators-request)).
 
 <details>
 <summary>Show the code: the behavior in the same file</summary>
@@ -274,7 +276,10 @@ public sealed class TenantsAccessBehavior<TMessage, TResponse> : IPipelineBehavi
     public async ValueTask<TResponse> Handle(TMessage message, MessageHandlerDelegate<TMessage, TResponse> next, CancellationToken cancellationToken)
     {
         await _checks.RequireAsync(message, cancellationToken).ConfigureAwait(false);
-        return await next(message, cancellationToken).ConfigureAwait(false);
+        using (_checks.BeginWork(message, isQuery: message is IBaseQuery))
+        {
+            return await next(message, cancellationToken).ConfigureAwait(false);
+        }
     }
 }
 
@@ -301,12 +306,14 @@ a module adds come after it, in the order they were added.
 | The Tenants module's set, for `ITenantsRequest` | Added by | Decides |
 |---|---|---|
 | `CallerAccessCheck` | every set, first | `SignedIn()`, `Own(value)`, `OwnerOf(id)` |
-| `TenancyAccessCheck` over `TenantsContext` | `services.AddTenancyAccess<ITenantsRequest, TenantsContext>()` | every `TenancyRequirement` |
+| Tenancy's check of operators | `services.AddTenancyAccess<ITenantsRequest, TenantsContext>()` | `Operator()`, `Operator(tenant)` |
+| `TenancyAccessCheck` over `TenantsContext` | the same call | every other `TenancyRequirement` |
 
 | The Projects module's set, for `IProjectsRequest` | Added by | Decides |
 |---|---|---|
 | `CallerAccessCheck` | every set, first | `SignedIn()`, `Own(value)`, `OwnerOf(id)` |
-| `TenancyAccessCheck` over `ProjectsContext` | `services.AddTenancyAccess<TenantId, SeatId, OrganizationUnitId, RoleId, IProjectsRequest, ProjectsContext>()` | every `TenancyRequirement` |
+| Tenancy's check of operators | `services.AddTenancyAccess<IProjectsRequest, ProjectsContext>()` | `Operator()`, `Operator(tenant)` |
+| `TenancyAccessCheck` over `ProjectsContext` | the same call | every other `TenancyRequirement` |
 | `MemberAccessCheck<Project, ProjectId>` | `services.AddProjectMemberAccess<IProjectsRequest>()`, generated for the project's members | `MemberAccess<ProjectId>`: `On`, `Sees`, `SeenWith` |
 | `ProjectsAccessCheck` | `services.AddAccessCheck<IProjectsRequest, ProjectsAccessCheck>()` | `ProjectsRequirement`, the module's own case |
 
@@ -397,7 +404,7 @@ statement is sent. Only four cases read from the database.
 | `InTenant()` | Tenancy's | Nothing. The seat was found when the request came in. | The caller's own reason, such as `tenancy.not-seated`, 403 |
 | `AtTenant(permission)` | Tenancy's | One statement for a seat: the permission at the tenant's root. Nothing for system work in the tenant, which holds every permission there. | `tenancy.not-permitted` with the permission, 403 |
 | `AtUnit(permission, unit)` | Tenancy's | One statement for a seat: the permission at the unit or above it. For system work in the tenant: whether the unit belongs to the tenant. | `tenancy.not-permitted` with the permission and the unit, 403 |
-| `RequiresOperator()` | Tenancy's | Nothing. It looks at the token's role. | `tenancy.operators-only`, 403 |
+| `Operator()`, `Operator(tenant)` | Tenancy's check of operators | Nothing. It looks at the token's role, and compares the tenant the request names with the command's `[ForTenant]` member. | `tenancy.operators-only`, 403. `tenancy.tenant-mismatch`, 400, for a request that names another tenant than the command. |
 | `On(permission, project, version)` | Membership's | One statement: the project as the caller sees it, how the caller holds the permission there, and the project's version. Nothing for a caller who is nobody. | For nobody, the caller's own reason. For a project the caller cannot see, `projects.not-found`, 404. Without the permission, `projects.not-permitted` with the permission, 403. Then a changed version, 409. |
 | `All(...)`, `Any(...)` | the set, case by case | What each case reads, in order, until the result is known | For `All`, the refusal of the first failing case. For `Any`, one `access.refused` with each case's reason, 403. |
 
@@ -429,30 +436,43 @@ switch (requirement)
 
 ```csharp shortened
 // TenancyAccessCheck, Tenancy.EntityFramework, shortened
-public bool Decides(AccessRequirement requirement) => requirement is TenancyRequirement;
+public bool Decides(AccessRequirement requirement) => requirement is TenancyRequirement && !IsOperatorCase(requirement);
 
 switch (requirement)
 {
     case TenancyRequirement.InTenant:
-        tenancy.RequireTenant();                                 // a seat here, or system work here
+        access.CurrentTenant.Require();                          // a seat here, or system work here
         break;
     case TenancyRequirement.AtTenant required:
-        tenancy.RequireTenant();                                 // nobody is refused without a statement
+        access.CurrentTenant.Require();                          // nobody is refused without a statement
         if (!await HoldsAtTenantAsync(required.Permission, cancellationToken))
             throw TenancyRefusals.Refuse(TenancyRefusals.NotPermitted, ("Permission", required.Permission));
         break;
     case TenancyRequirement.AtUnit<TUnitId> required:
-        tenancy.RequireTenant();
+        access.CurrentTenant.Require();
         if (!await HoldsAtAsync(required.Permission, required.Unit, cancellationToken))
             throw TenancyRefusals.Refuse(TenancyRefusals.NotPermitted, ("Permission", required.Permission), ("Unit", required.Unit));
-        break;
-    case TenancyRequirement.Operator:
-        if (!options.IsOperator(callers.Current))                // the token's role, never a seat
-            throw TenancyRefusals.Refuse(TenancyRefusals.OperatorsOnly);
         break;
     default:
         throw new InvalidOperationException("... which Tenancy's access check does not decide ...");
 }
+```
+
+```csharp shortened
+// TenancyOperatorCheck, Tenancy, shortened: the operator cases, decided from the token
+public bool Decides(AccessRequirement requirement) => IsOperatorCase(requirement);
+
+// RequireAsync
+if (!options.IsOperator(callers.Current))                        // the token's role, never a seat
+    throw TenancyRefusals.Refuse(TenancyRefusals.OperatorsOnly);
+if (requirement is TenancyRequirement.OperatorIn<TTenantId> required
+    && TenancyCallers.Current<TTenantId, TSeatId>().NamedTenant is { } named && !named.Equals(required.Tenant))
+    throw TenancyRefusals.Refuse(TenancyRefusals.TenantMismatch);   // the request names another tenant
+
+// BeginWork, once the request was let through: operator work around a command's handler
+if (isQuery)
+    return null;                                                 // a query begins nothing
+return TenancyWork.BeginOperatorIn<TTenantId, TSeatId>(required.Tenant, operatorsIdentity, required.Scope);
 ```
 
 ```csharp shortened
@@ -669,11 +689,19 @@ $function$;
 
 ## 6. Let through or refused
 
-When the check returns, the request is let through. The handler runs next, with the request in hand. When the check
-refuses, it throws a `RefusalException` with a refusal code, a kind, and arguments such as the permission. The edge
-turns the kind into an HTTP status: 403 for not permitted, 404 for not found. A changed version throws a
-`ConcurrencyConflictException`, which the edge answers with 409. The client reads the refusal code. The handler of a
-refused request does not run, so nothing it would read or write reaches a table.
+When the check returns, the request is let through. The handler runs next, with the request in hand. Around the
+handler, the behavior begins the work that a check says the handler runs in (`BeginWork`). Of the six requests, none
+begins work. A query begins nothing. A command marked `[Operator]` runs as operator work, which is system work
+recorded as the operator. The work acts in the tenant of the command's `[ForTenant]` member. With
+`[Operator(Tenant = OperatorTenant.FromRequest)]` it acts in the tenant that the `Tenant` header names. Tenancy's check
+of operators refuses such a command before the handler runs. A caller who is no operator gets `tenancy.operators-only`,
+and a header that names another tenant than the command gets `tenancy.tenant-mismatch`
+([An operator's request](access-requirements.md#an-operators-request)).
+
+When the check refuses, it throws a `RefusalException` with a refusal code, a kind, and arguments such as the
+permission. The edge turns the kind into an HTTP status: 400 for invalid, 403 for not permitted, 404 for not found. A
+changed version throws a `ConcurrencyConflictException`, which the edge answers with 409. The client reads the refusal
+code. The handler of a refused request does not run, so nothing it would read or write reaches a table.
 
 ```json
 {
@@ -690,7 +718,7 @@ refused request does not run, so nothing it would read or write reaches a table.
 ```
 
 The refusal above is Juno renaming Leo's seat. Neither alternative holds, so `Any` gives one refusal with both reasons.
-The access check is not the only place that refuses. A handler, or the use case of the package it calls, refuses what
+The access check is not the only place that refuses. A handler, or the manager of the package it calls, refuses what
 only it can read. For example, the sample's `AddCrewMember` handler refuses a seat that is not active, and Tenancy's
 provisioning refuses everyone except system work. The database also refuses a row that its policies do not allow, after
 the access check let the request through.
@@ -945,9 +973,9 @@ sequenceDiagram
     Handler->>Postgres: sends as Ada again
 ```
 
-A handler that does not start the scope fails in the use case. Tenancy's provisioning refuses a seat with
-`access.system-only`, and refuses a caller without a seat with that caller's own reason, `tenancy.not-seated`. System
-work can also start before the request is sent. The sample's seeding does this. It starts system work in each tenant
+A handler that does not start the scope fails in the package's manager. Tenancy's provisioning,
+`TenantManager.ProvisionAsync`, refuses a seat with `access.system-only`, and refuses a caller without a seat with that
+caller's own reason, `tenancy.not-seated`. System work can also start before the request is sent. The sample's seeding does this. It starts system work in each tenant
 and sends `MarkTenantAsDemo`. That request requires `[InTenant]`, which lets system work in the tenant through, and
 its handler refuses everyone else ([System work](access-requirements.md#system-work)).
 
@@ -962,11 +990,11 @@ if (caller.UserId is not { } administrator || caller.Claim("is_anonymous") == "t
     throw TenancyRefusals.Refuse(TenancyRefusals.IdentityRequired);
 }
 
-using (TenancyUseCases.BeginSystem())                             // system work outside any tenant, begun here
+using (access.BeginSystem())                                      // system work outside any tenant, begun here
 {
-    var made = await tenants.ProvisionAsync(new TenancyUseCases.TenantToProvision(
+    var tenant = await tenants.ProvisionAsync(new TenantToProvision(
         command.Slug, command.Name, TenantShape.Flat, command.Name, administrator), cancellationToken);
-    return made.Tenant;
+    return tenant.Id;
 }                                                                 // the caller before it is current again
 ```
 
@@ -1032,7 +1060,7 @@ public sealed class PlanCheck(TenancyAccessManager access, ITenantPlans plans) :
 
 public static class BoardsModule
 {
-    // Beside Tenancy's check for the permission: services.AddTenancyAccess<..., IBoardsRequest, BoardsContext>()
+    // Beside Tenancy's check for the permission: services.AddTenancyAccess<IBoardsRequest, BoardsContext>()
     public static IServiceCollection AddBoardsAccess(this IServiceCollection services)
         => services.AddAccessCheck<IBoardsRequest, PlanCheck>();
 }

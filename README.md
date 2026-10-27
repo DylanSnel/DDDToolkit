@@ -70,9 +70,9 @@ public partial class Order { }
 | [Transports](docs/transports.md) | Carrying integration events out of the process: pgmq, Wolverine, MassTransit, or a sink of your own |
 | [Tenancy](docs/tenancy/overview.md) | The first supporting domain: what it is for, what it does and does not do, and how its pieces connect |
 | [Tenancy: the tutorial](docs/tenancy/tutorial.md) | Tenancy built into an application step by step: why each step, the whole files, and what they do |
-| [Tenancy: your module](docs/tenancy/your-module.md) | The module that holds Tenancy: its packages, the model, your own classes and ids, the context and the registration, and calling its use cases |
+| [Tenancy: your module](docs/tenancy/your-module.md) | The module that holds Tenancy: its packages, the model, your own classes and ids, the context and the registration, and calling its managers |
 | [Tenancy: roles and permissions](docs/tenancy/roles-and-permissions.md) | The permission catalogue, the starter roles a new tenant gets and how they follow your changes, who may give a role, and containment |
-| [Tenancy: who may do what](docs/tenancy/who-may-do-what.md) | The questions a module asks Tenancy about its caller, what a request requires of its caller, and what a module reads of Tenancy |
+| [Tenancy: who may do what](docs/tenancy/who-may-do-what.md) | Who acts and Tenancy's queries about the caller, what a request requires of its caller, and what a module reads of Tenancy |
 | [Tenancy: keeping tenants apart](docs/tenancy/keeping-tenants-apart.md) | The query filter and the save check that keep every read and save in the caller's tenant, and system work |
 | [Tenancy: names and languages](docs/tenancy/names-and-languages.md) | Turning the ids a module answers into names, how a seat is shown, and refusals and role names in the reader's language |
 | [Tenancy: invitations](docs/tenancy/invitations.md) | Inviting a person without an account yet into a tenant, with a unit and a role waiting |
@@ -85,24 +85,24 @@ public partial class Order { }
 | [Tenancy sample: design choices](docs/tenancy/sample/design-choices.md) | Every Tenancy design choice with its code, something to try in the sample, and the test that holds it |
 | [Tenancy: design and limits](docs/tenancy/design.md) | Why Tenancy is shaped the way it is, what it does not do, and upgrading from key to permission |
 | [Tenancy API: aggregates and entities](docs/tenancy/reference/aggregates.md) | Generated from the code: the templates of tenant, organization, unit, seat, role and invitation, with their value objects, invariants and events |
-| [Tenancy API: use cases](docs/tenancy/reference/use-cases.md) | Generated from the code: `TenancyUseCases` and every command, directory and record nested in it, and the registration a host calls |
-| [Tenancy API: catalogue and role packs](docs/tenancy/reference/catalogue.md) | Generated from the code: permissions, the catalogue, role packs and their sync |
-| [Tenancy API: callers and requirements](docs/tenancy/reference/callers.md) | Generated from the code: the Tenancy caller, actors, tenant selection and the requirement attributes |
-| [Tenancy API: ITenancy, its queries and row access](docs/tenancy/reference/queries.md) | Generated from the code: `ITenancy` and its queries, the read model, the projection and the row access rules |
+| [Tenancy API: managers](docs/tenancy/reference/managers.md) | Generated from the code: `TenantManager`, `OrganizationManager`, `SeatManager`, `RoleManager` and `InvitationManager`, the stores a storage package implements, and the registration a host calls |
+| [Tenancy API: catalogue and starter roles](docs/tenancy/reference/catalogue.md) | Generated from the code: permissions, the catalogue, starter roles and their sync |
+| [Tenancy API: access manager and callers](docs/tenancy/reference/callers.md) | Generated from the code: `TenancyAccessManager`, the Tenancy caller, actors, tenant selection and the requirement attributes, `[Operator]` among them |
+| [Tenancy API: queries and row access](docs/tenancy/reference/queries.md) | Generated from the code: `db.Tenancy()` and its queries, the read model, the projection and the row access rules |
 | [Tenancy API: refusals](docs/tenancy/reference/refusals.md) | Generated from the code: every refusal code and what it means |
-| [Tenancy API: Entity Framework](docs/tenancy/reference/entity-framework.md) | Generated from the code: the public API of the Entity Framework package |
+| [Tenancy API: Entity Framework](docs/tenancy/reference/entity-framework.md) | Generated from the code: the public API of the Entity Framework package, with `[OfTenant]` and the mapping of a context |
 | [Tenancy API: Postgres](docs/tenancy/reference/postgres.md) | Generated from the code: the public API of the Postgres package |
 | [Membership](docs/membership/overview.md) | The second supporting domain: access to one thing through the people on it, what it does and does not do, how its pieces connect, and what the application decides |
 | [Membership: the tutorial](docs/membership/tutorial.md) | Membership built into the Harbor application step by step: a board with its members, owner and roles, its database rules, and reach from above |
 | [Membership: resources and members](docs/membership/resources-and-members.md) | The packages, a whole resource with members and no Tenancy, the member list written for you, names, what the member list keeps, and several kinds of resource |
 | [Membership: permissions and roles](docs/membership/permissions-and-roles.md) | The settings of a permission, who holds one, who may give a role, and roles a customer makes: starter roles, changing a role, whose a role is |
-| [Membership: from the check to the save](docs/membership/checks-and-saves.md) | Requirements that combine, what holds a change from the check to the save, the questions inside your own statements, system work, and the expert hold |
+| [Membership: from the check to the save](docs/membership/checks-and-saves.md) | Requirements that combine, what holds a change from the check to the save, `MembershipAccessManager` and the queries inside your own statements, system work, and the expert hold |
 | [Membership on Postgres](docs/membership/postgres.md) | The functions your row access rules ask, who may ask them, the start-up check, and the lock on the member rows and the owner |
 | [Membership: beside an organization](docs/membership/beside-an-organization.md) | Who a member is, where the roles come from and reach from above, with Tenancy or an organization of your own |
 | [Membership: design and limits](docs/membership/design.md) | Why each piece of a resource with members is yours to write, and what the package does not do |
 | [Membership API: resource and members](docs/membership/reference/resource-and-members.md) | Generated from the code: the member template and its member list, periods and roles held, what the resource's class says, and the custom role template |
 | [Membership API: rules and permissions](docs/membership/reference/rules.md) | Generated from the code: `MembershipRules`, where the roles come from, the permissions on a resource and their settings, reach from above, and who a member is |
-| [Membership API: use cases and access](docs/membership/reference/use-cases.md) | Generated from the code: the admission, the overviews, starter roles, the access questions, the requirements and the resource access contracts |
+| [Membership API: use cases and access](docs/membership/reference/use-cases.md) | Generated from the code: the admission, the overviews, starter roles, `MembershipAccessManager`, the requirements and the resource access contracts |
 | [Membership API: refusals](docs/membership/reference/refusals.md) | Generated from the code: every refusal code, the codes of one resource, and their texts |
 | [Membership API: Entity Framework](docs/membership/reference/entity-framework.md) | Generated from the code: the public API of the Entity Framework package |
 | [Membership API: Postgres](docs/membership/reference/postgres.md) | Generated from the code: the public API of the Postgres package |
@@ -176,14 +176,14 @@ of another fails restore with NU1605, a package downgrade, or fails at run time 
 | `DDDToolkit.HotChocolate` | GraphQL scalar bindings and converters for typed identifiers, failures as coded errors and as typed errors in mutation payloads, plus a subscription sink. Needs HotChocolate 16.6.9 or later. |
 | `DDDToolkit.HotChocolate.Fusion.InMemory` | One GraphQL schema over a modular monolith: each module a source schema, composed by a Fusion gateway in the process. Needs HotChocolate Fusion 16.6.9 or later. |
 | `DDDToolkit.NewtonSoft.Json` | Newtonsoft converters and a contract resolver that honours `[Internal]`. |
-| `DDDToolkit.Supporting.Tenancy` | [Tenancy](docs/tenancy/overview.md), a supporting domain: tenants, their organization tree, seats and roles over a permission catalogue, and the access questions. No database in it. |
+| `DDDToolkit.Supporting.Tenancy` | [Tenancy](docs/tenancy/overview.md), a supporting domain: tenants, their organization tree, seats and roles over a permission catalogue, a manager per aggregate, and the access manager. No database in it. |
 | `DDDToolkit.Supporting.Tenancy.Abstractions` | Tenancy's markers for domain classes, `[OfTenant]` on the property that says which tenant a row belongs to, for a module's domain project that sees only Tenancy's ids. Tenancy's package references it. |
-| `DDDToolkit.Supporting.Tenancy.EntityFramework` | Tenancy in a context of your own, with the access questions as Entity Framework queries, on every provider. |
-| `DDDToolkit.Supporting.Tenancy.Postgres` | Tenancy's questions as SQL functions, its row level security policies, and the start-up checks. |
+| `DDDToolkit.Supporting.Tenancy.EntityFramework` | Tenancy in a context of your own, with its queries as Entity Framework queries (`db.Tenancy()`), on every provider, and the convention that maps `[OfTenant]`. |
+| `DDDToolkit.Supporting.Tenancy.Postgres` | Tenancy's queries as SQL functions, its row level security policies, and the start-up checks. |
 | `DDDToolkit.Supporting.Membership` | [Membership](docs/membership/overview.md), a supporting domain: access to a resource through its members, the roles they hold for a period, and roles a customer makes. No database in it. Its generator writes the member list on your aggregate. |
 | `DDDToolkit.Supporting.Membership.Abstractions` | Membership's markers for domain classes, `[At]` on the property that says where a resource hangs. Membership's package references it. |
-| `DDDToolkit.Supporting.Membership.EntityFramework` | A resource's members in a context of your own, a registration named after each resource, and the access questions inside your own statements. Its generator joins a resource to Tenancy where an application has both. |
-| `DDDToolkit.Supporting.Membership.Postgres` | A resource's access questions as SQL functions for your row access rules, and a start-up check. |
+| `DDDToolkit.Supporting.Membership.EntityFramework` | A resource's members in a context of your own, mapped by convention, a registration named after each resource, and queries inside your own statements (`db.Boards.WhereIHold(permission)`). Its generator joins a resource to Tenancy where an application has both. |
+| `DDDToolkit.Supporting.Membership.Postgres` | A resource's access queries as SQL functions for your row access rules, and a start-up check. |
 | `DDDToolkit.Testing` | The aggregate testing kit. A test-only reference; it brings no test framework of its own. |
 
 ```bash
