@@ -1,7 +1,5 @@
-using DDDToolkit.Access;
 using DDDToolkit.Supporting.Membership;
 using DDDToolkit.Supporting.Tenancy;
-using DDDToolkit.Supporting.Tenancy.Access;
 using DDDToolkit.Supporting.Tenancy.Catalogue;
 using Mediator;
 
@@ -41,37 +39,29 @@ public sealed record MakeProjectRole(string Name, string? Description, IReadOnly
     }
 }
 
-/// <summary>Handles <see cref="MakeProjectRole"/>: makes the role, in the caller's tenant, and saves it.</summary>
-/// <remarks>
-/// Nothing of a package's stands between this command and the role, and nothing else asks who may send it, so the
-/// handler asks again what its request declared, of the very checks the pipeline asks. It then decides the same
-/// wherever it runs, in a program that left the module's access behavior out of the pipeline as much as in the
-/// host, for the check's statement a second time on a command that is sent rarely.
-/// </remarks>
-/// <param name="store">Where project roles are added and saved.</param>
-/// <param name="membership">The projects' rules, which a role's permissions are held to.</param>
+/// <summary>
+/// Handles <see cref="MakeProjectRole"/>: refuses a permission the catalogue does not know, as Tenancy refuses it, then has
+/// the project role manager add the role, made in the caller's tenant with the module's constructor, and save it.
+/// </summary>
+/// <param name="roles">The project role manager, which hands the role the projects' rules.</param>
 /// <param name="catalogue">The permissions the application knows.</param>
 /// <param name="tenancy">Tenancy, asked about the current caller: the tenant the role is made in.</param>
-/// <param name="checks">The module's access checks, which hold a request to what it declared.</param>
-public sealed class MakeProjectRoleHandler(IProjectStore store, ProjectMembership membership, TenancyCatalogue catalogue, TenancyAccessManager tenancy, AccessChecks<IProjectsRequest> checks)
+public sealed class MakeProjectRoleHandler(ProjectRoleManager roles, TenancyCatalogue catalogue, TenancyAccessManager tenancy)
     : ICommandHandler<MakeProjectRole, ProjectRoleId>
 {
     /// <inheritdoc />
     /// <returns>The new role's id.</returns>
     /// <exception cref="Exceptions.RefusalException">
-    /// <c>tenancy.not-permitted</c>, naming the permission, for a caller that does not hold it for the whole tenant;
-    /// <c>tenancy.unknown-permission</c>, <c>projects.role-name-invalid</c>, <c>projects.permission-not-for-members</c>,
+    /// <c>tenancy.unknown-permission</c>; <c>tenancy.not-permitted</c>, naming the permission, for a caller that does not
+    /// hold it for the whole tenant; <c>projects.role-name-invalid</c>, <c>projects.permission-not-for-members</c>,
     /// <c>projects.role-name-taken</c>.
     /// </exception>
     public async ValueTask<ProjectRoleId> Handle(MakeProjectRole command, CancellationToken cancellationToken)
     {
-        await checks.RequireAsync(command, cancellationToken);
-
         var permissions = MakeProjectRole.Known(command.Permissions, catalogue);
-        var role = new ProjectRole(ProjectRoleId.Create(), tenancy.CurrentTenant.Require().Id, new CustomRoleDraft(command.Name, command.Description, permissions), membership.Rules);
-
-        store.Add(role);
-        await store.SaveAsync(cancellationToken);
+        var role = await roles.CreateAsync(
+            new ProjectRole(ProjectRoleId.Create(), tenancy.CurrentTenant.Require().Id, new CustomRoleDraft(command.Name, command.Description, permissions), roles.Rules),
+            cancellationToken);
         return role.Id;
     }
 }

@@ -98,6 +98,12 @@ public static class MembershipRefusals
 
     // ---------------------------------------------------------------- the roles kept for a resource
 
+    /// <summary>
+    /// The role is not one the caller may see among the roles kept for the resource: it does not exist, or is another
+    /// customer's. Argument: <c>Role</c>.
+    /// </summary>
+    public const string RoleNotFound = "membership.role-not-found";
+
     /// <summary>The role is archived: it gives nothing, and it is not renamed, given permissions or archived again.</summary>
     public const string RoleIsArchived = "membership.role-archived";
 
@@ -137,6 +143,7 @@ public static class MembershipRefusals
             [AlreadyOwner] = (RefusalKind.Conflict, "That member is the owner already."),
             [InvalidPeriod] = (RefusalKind.Invalid, "A period's end must come after its start."),
 
+            [RoleNotFound] = (RefusalKind.NotFound, "That role was not found, or it is not one you can see."),
             [RoleIsArchived] = (RefusalKind.Conflict, "That role is archived."),
             [RoleNameInvalid] = (RefusalKind.Invalid, "Enter {Min} to {Max} characters."),
             [PermissionNotForMembers] = (RefusalKind.Invalid, "A role cannot give these permissions here: {Permissions}."),

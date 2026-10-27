@@ -19,7 +19,7 @@ public static class DocumentPermissions
     public const string Edit = "documents.edit";
 
     /// <summary>Decide who a document is shared with: the permission this host's commands that change the shares require.</summary>
-    [On<Document>(LocksMembers = true, LocksOwner = true)]
+    [On<Document>(ManagesMembers = true, NamesOwner = true)]
     public const string Share = "documents.share";
 }
 

@@ -7,7 +7,7 @@ using DDDToolkit.BaseTypes;
 using DDDToolkit.Interfaces;
 using DDDToolkit.Localization;
 using DDDToolkit.Supporting.Membership.Access;
-using DDDToolkit.Supporting.Membership.UseCases;
+using DDDToolkit.Supporting.Membership.Managers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -19,6 +19,12 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
 {
     private static readonly MethodInfo MakerMethod =
         typeof(MembershipEntityFrameworkServiceCollectionExtensions).GetMethod(nameof(Maker), BindingFlags.NonPublic | BindingFlags.Static)!;
+
+    private static readonly MethodInfo ManagersOfMethod =
+        typeof(MembershipEntityFrameworkServiceCollectionExtensions).GetMethod(nameof(ManagersOf), BindingFlags.NonPublic | BindingFlags.Static)!;
+
+    private static readonly MethodInfo AddRoleStoreMethod =
+        typeof(MembershipEntityFrameworkServiceCollectionExtensions).GetMethod(nameof(AddRoleStore), BindingFlags.NonPublic | BindingFlags.Static)!;
 
     /// <summary>
     /// Registers one kind of resource with members, kept in <typeparamref name="TContext"/>, the context whose
@@ -38,11 +44,14 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
     /// (<see cref="AddMemberAccess{TResource, TResourceId, TRequests}"/>).</item>
     /// <item>What the queries on the resource's own set ask, <c>db.Documents.WhereIHold(permission)</c>
     /// (<see cref="MemberQueryableExtensions"/>): they find it in the services the context was made with.</item>
-    /// <item><see cref="MemberAdmission{TResourceId, TMemberId, TRoleId}"/>, what a handler asks before it
-    /// changes the members, over the roles the rules declare (<see cref="NamedRoles{TResourceId}"/>) or the
-    /// rows of the roles kept for the resource, with the application's
-    /// <see cref="IMemberDirectory{TResourceId, TMemberId}"/> and
-    /// <see cref="IMemberRolePolicy{TResourceId, TRoleId}"/> where it registered them.</item>
+    /// <item>The managers the generator wrote for the resource, per scope: the member manager,
+    /// <c>DocumentShareManager</c> for the member class <c>DocumentShare</c>, and the role manager of the role class
+    /// kept for the resource, where there is one. Each is read off the resource, which names them, and each loads and
+    /// saves on the request's own context, through the store registered beside it. The member manager asks the
+    /// application's <see cref="IMemberDirectory{TResourceId, TMemberId}"/> and
+    /// <see cref="IMemberRolePolicy{TResourceId, TRoleId}"/> where it registered them, and answers which roles there are
+    /// from the rules, from the rows of the roles kept for the resource, or from what the application answers for roles
+    /// kept elsewhere.</item>
     /// <item>A <see cref="MembershipRegistration"/>, which a start-up check reads.</item>
     /// <item>The <see cref="MemberHoldInterceptor"/>, one for every resource registered, which nothing uses
     /// until a context asks for the expert hold with
@@ -85,7 +94,7 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
     /// <c>AddScopedFromPool</c> say, since the questions of one request may be asked side by side; otherwise on
     /// the request's own context. Where the resource, or the role class of a resource whose roles are kept,
     /// has a query filter that reads a member of the context it runs on, the questions read on the request's
-    /// own context wherever the scope has one, as the admission does: a rule kept on the request's context
+    /// own context wherever the scope has one, as the member manager does: a rule kept on the request's context
     /// applies to both alike, and questions asked side by side then each take a scope of their own. A filter
     /// that reads what is around the work, and no member of its context, holds on every context.
     /// A <see cref="TimeProvider"/> and an <see cref="ICurrentUser"/> registered before stay; otherwise the
@@ -193,16 +202,24 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
             // application registered before stays, as every answer of its own does.
             services.TryAddScoped<IMemberRoles<TResourceId, TRoleId>>(provider => new CustomMemberRoles<TContext, TResource, TResourceId, TRoleId>(registration, provider));
         }
-        else if (rules.Roles.Kind == RolesKind.Fixed)
-        {
-            services.TryAddSingleton(_ => (IMemberRoles<TResourceId, TRoleId>)(object)new NamedRoles<TResourceId>(rules));
-        }
 
-        services.AddScoped(provider => new MemberAdmission<TResourceId, TMemberId, TRoleId>(
-            rules,
-            provider.GetRequiredService<IMemberRoles<TResourceId, TRoleId>>(),
-            provider.GetService<IMemberDirectory<TResourceId, TMemberId>>(),
-            provider.GetService<IMemberRolePolicy<TResourceId, TRoleId>>()));
+        // The managers the generator wrote for the resource, which names them, each with the store it loads and saves through.
+        if (typeof(IMembershipResource<TMember, TMemberId, TRoleId>).IsAssignableFrom(typeof(TResource)))
+        {
+            services.TryAddScoped<IMemberStore<TResource, TResourceId, TMemberId>>(provider =>
+                new EfMemberStore<TContext, TResource, TResourceId, TMember, TId, TMemberId, TRoleId>(registration, asMember, provider));
+
+            var managers = (IReadOnlyList<Type>)ManagersOfMethod.MakeGenericMethod(typeof(TResource), typeof(TMember), typeof(TMemberId), typeof(TRoleId)).Invoke(null, null)!;
+            foreach (var manager in managers)
+            {
+                if (RoleClassOf(manager, typeof(TResource)) is { } role)
+                {
+                    AddRoleStoreMethod.MakeGenericMethod(typeof(TContext), role.Role, role.Id).Invoke(null, [services]);
+                }
+
+                services.TryAddScoped(manager);
+            }
+        }
 
         return services;
     }
@@ -227,7 +244,10 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
     /// let a resource be reached from above.</item>
     /// <item><see cref="IMemberDirectory{TResourceId, TMemberId}"/> and
     /// <see cref="IMemberRolePolicy{TResourceId, TRoleId}"/>, which no rules need: who can be made a member,
-    /// and which roles go to one.</item>
+    /// and which roles go to one, as the member manager asks.</item>
+    /// <item><see cref="IOwnPlaceWork{TResourceId, TMemberId}"/>: how the save of a change to the caller's own place
+    /// begins as the resource's own work. <see cref="ICustomRoleAccess{TResource}"/>: whether the caller may change the
+    /// roles a customer makes for the resource.</item>
     /// </list>
     /// <para>
     /// A port registered before stays, so an application can answer one of them elsewhere. What the rules
@@ -287,6 +307,8 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
                 typeof(IMemberRoles<TResourceId, TRoleId>),
                 typeof(IMemberDirectory<TResourceId, TMemberId>),
                 typeof(IMemberRolePolicy<TResourceId, TRoleId>),
+                typeof(IOwnPlaceWork<TResourceId, TMemberId>),
+                typeof(ICustomRoleAccess<TResource>),
             }.Where(port => port.IsAssignableFrom(typeof(TPorts))),
             .. typeof(TPorts).GetInterfaces().Where(IsPlacesReached<TResourceId>),
         ];
@@ -297,7 +319,8 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
                 typeof(TPorts).Name + " answers nothing of " + typeof(TResource).Name + ": it implements none of ICallerMember<" + typeof(TResourceId).Name + ", "
                 + typeof(TMemberId).Name + ">, IRolesWithPermission<" + typeof(TResourceId).Name + ", " + typeof(TRoleId).Name + ">, IMemberRoles<" + typeof(TResourceId).Name + ", "
                 + typeof(TRoleId).Name + ">, IPlacesReached<" + typeof(TResourceId).Name + ", TPlaceId>, IMemberDirectory<" + typeof(TResourceId).Name + ", " + typeof(TMemberId).Name
-                + "> and IMemberRolePolicy<" + typeof(TResourceId).Name + ", " + typeof(TRoleId).Name + ">. Hand over the class that does, or register the resource without one.",
+                + ">, IMemberRolePolicy<" + typeof(TResourceId).Name + ", " + typeof(TRoleId).Name + ">, IOwnPlaceWork<" + typeof(TResourceId).Name + ", " + typeof(TMemberId).Name
+                + "> and ICustomRoleAccess<" + typeof(TResource).Name + ">. Hand over the class that does, or register the resource without one.",
                 nameof(TPorts));
         }
 
@@ -356,6 +379,35 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
 
         return services.AddAccessCheck<TRequests, MemberAccessCheck<TResource, TResourceId>>();
     }
+
+    /// <summary>The manager classes the generator wrote for <typeparamref name="TResource"/>, which the resource names.</summary>
+    private static IReadOnlyList<Type> ManagersOf<TResource, TMember, TMemberId, TRoleId>()
+        where TResource : IMembershipResource<TMember, TMemberId, TRoleId>
+        where TMember : class
+        where TMemberId : struct, IEntityId, IEquatable<TMemberId>
+        where TRoleId : struct, IEntityId, IEquatable<TRoleId>
+        => TResource.MembershipManagers;
+
+    /// <summary>The role class and its id a role manager of <paramref name="resource"/> is closed over, or <see langword="null"/> for a member manager.</summary>
+    private static (Type Role, Type Id)? RoleClassOf(Type manager, Type resource)
+    {
+        for (var type = manager; type is not null; type = type.BaseType)
+        {
+            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(CustomRoleManager<,,>) && type.GenericTypeArguments[2] == resource)
+            {
+                return (type.GenericTypeArguments[0], type.GenericTypeArguments[1]);
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Registers the store a role manager loads and saves through, over the context that maps the role class.</summary>
+    private static void AddRoleStore<TContext, TRole, TRoleId>(IServiceCollection services)
+        where TContext : DbContext
+        where TRole : CustomRoleAggregate<TRoleId>
+        where TRoleId : struct, IEntityId, IEquatable<TRoleId>
+        => services.TryAddScoped<ICustomRoleStore<TRole, TRoleId>>(provider => new EfCustomRoleStore<TContext, TRole, TRoleId>(provider));
 
     /// <summary>
     /// Whether <paramref name="registration"/> is in <paramref name="services"/> already, exactly as it is: a

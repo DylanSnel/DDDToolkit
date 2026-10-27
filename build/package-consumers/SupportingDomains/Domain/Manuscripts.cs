@@ -67,11 +67,11 @@ public sealed partial class Manuscript
     [Owner]
     public SeatId OwnerSeatId { get; private set; }
 
-    /// <summary>Those who work on the manuscript.</summary>
+    /// <summary>
+    /// Those who work on the manuscript. Membership's generator writes the editors' manager beside it,
+    /// ManuscriptEditorManager, which makes every change of them, and this class writes no method for one.
+    /// </summary>
     public partial IReadOnlyList<ManuscriptEditor> Editors { get; }
-
-    /// <summary>Takes a seat on to the manuscript in a role.</summary>
-    public ManuscriptEditor TakeOn(SeatId seat, ManuscriptRoleId role, MemberPeriod period, DateTimeOffset now, SeatId? by) => Members.Add(seat, role, period, now, by);
 }
 
 /// <summary>

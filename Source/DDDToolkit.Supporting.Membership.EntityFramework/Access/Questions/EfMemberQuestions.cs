@@ -34,8 +34,8 @@ namespace DDDToolkit.Supporting.Membership.EntityFramework;
 /// application registered one, since the questions of one request may be asked side by side; otherwise on the
 /// request's own context. Where the application's rule about the rows a question reads, the resource's or
 /// those of the roles kept for it, is a query filter that reads a member of the context it runs on, the question runs on
-/// the request's own context wherever the scope has one, as what the admission asks does: such a rule is
-/// that context's, and a context the factory makes knows nothing of it. So a role the admission would refuse
+/// the request's own context wherever the scope has one, as what the member manager asks does: such a rule is
+/// that context's, and a context the factory makes knows nothing of it. So a role the member manager would refuse
 /// gives nothing where the questions read either. A filter that reads what is around the work, and not the
 /// context, holds on every context, and takes nothing from a reading on a context of its own.
 /// </para>
@@ -331,7 +331,7 @@ internal sealed class EfMemberQuestions<TContext, TResource, TResourceId, TMembe
     /// Runs one reading: on a context of its own where the application registered a factory for the context,
     /// disposed when the reading is done, and otherwise on the context of the scope. Where the rows it reads
     /// are under a query filter that reads its context, on the context of the scope wherever it has one: that
-    /// rule is the request's context's, as it is for what the admission asks.
+    /// rule is the request's context's, as it is for what the member manager asks.
     /// </summary>
     private async Task<T> ReadAsync<T>(Func<TContext, Task<T>> read, CancellationToken cancellationToken)
     {

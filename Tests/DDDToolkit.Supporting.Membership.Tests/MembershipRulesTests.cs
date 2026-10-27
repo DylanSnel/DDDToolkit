@@ -21,7 +21,7 @@ public sealed class MembershipRulesTests
     [
         new(View, EveryMember: true),
         new(Edit),
-        new(Sharing, InRoles: false, LocksMembers: true, LocksOwner: true),
+        new(Sharing, InRoles: false, ManagesMembers: true, NamesOwner: true),
     ];
 
     private static readonly DeclaredRole Drafter = new("drafter", [View, Edit]);
@@ -45,7 +45,7 @@ public sealed class MembershipRulesTests
         rules.Permissions.Select(permission => permission.Name).Should().Equal(DocumentPermissions.View, DocumentPermissions.Edit, DocumentPermissions.Share);
         rules.OwnerPermissions.Should().Equal(DocumentPermissions.View, DocumentPermissions.Edit, DocumentPermissions.Share);
         rules.EveryMemberPermission.Should().Be(DocumentPermissions.View);
-        (rules.MembersLockPermission, rules.OwnerLockPermission).Should().Be((DocumentPermissions.Share, DocumentPermissions.Share));
+        (rules.ManagesMembersPermission, rules.NamesOwnerPermission).Should().Be((DocumentPermissions.Share, DocumentPermissions.Share));
         rules.SystemScopes.Should().BeEmpty("the documents' rules let no scope through, systemScopes: []");
     }
 
@@ -69,7 +69,7 @@ public sealed class MembershipRulesTests
         // same permissions. Nothing else is said, and nothing here names who may.
         typeof(MembershipRules).GetProperties().Select(property => property.Name).Should().BeEquivalentTo(
             "Resource", "Name", "Codes", "Functions", "Members", "Roles", "ReachFromAbove", "Permissions", "OwnerPermissions", "EveryMemberPermission", "RolePermissions",
-            "MembersLockPermission", "OwnerLockPermission", "SystemScopes");
+            "ManagesMembersPermission", "NamesOwnerPermission", "SystemScopes");
         typeof(MembershipRules).GetMethod(nameof(MembershipRules.For))!.GetParameters().Select(parameter => parameter.Name)
             .Should().Equal("roles", "members", "reachFromAbove", "systemScopes");
         typeof(MembershipRules).GetConstructors().Should().BeEmpty("rules are made through the resource's type");
@@ -92,7 +92,7 @@ public sealed class MembershipRulesTests
         rules.RolePermissions.Permissions.Should().Equal(FolderPermissions.Read, FolderPermissions.File, FolderPermissions.Staff);
         rules.OwnerPermissions.Should().Equal(FolderPermissions.Read, FolderPermissions.File, FolderPermissions.Staff, FolderPermissions.Shred, FolderPermissions.HandOver);
         rules.EveryMemberPermission.Should().BeNull("no permission of a folder is held by every member");
-        (rules.MembersLockPermission, rules.OwnerLockPermission).Should().Be((FolderPermissions.Staff, FolderPermissions.HandOver));
+        (rules.ManagesMembersPermission, rules.NamesOwnerPermission).Should().Be((FolderPermissions.Staff, FolderPermissions.HandOver));
         rules.Codes.Should().BeSameAs(FolderRefusals.Membership);
         rules.Functions.Should().Be(new MembershipFunctions("folders_as_member", "folders_as_member_with", "folders_i_see", "folders_where_i_hold", "folders_fellow_members"));
         rules.SystemScopes.Should().Equal(FolderMembership.Scope);
@@ -253,13 +253,13 @@ public sealed class MembershipRulesTests
     {
         Making(() => Notes([new(View, EveryMember: true), new(Edit, EveryMember: true)], Roles.Fixed([Bystander])))
             .Should().Throw<ArgumentException>().WithMessage("Two permissions on Pad are marked EveryMember*'notes.view' and 'notes.edit'*");
-        Making(() => Notes([new(View, LocksMembers: true), new(Edit, LocksMembers: true)], Roles.Fixed([Bystander])))
-            .Should().Throw<ArgumentException>().WithMessage("Two permissions on Pad are marked LocksMembers*");
-        Making(() => Notes([new(View, LocksOwner: true), new(Edit, LocksOwner: true)], Roles.Fixed([Bystander])))
-            .Should().Throw<ArgumentException>().WithMessage("Two permissions on Pad are marked LocksOwner*");
+        Making(() => Notes([new(View, ManagesMembers: true), new(Edit, ManagesMembers: true)], Roles.Fixed([Bystander])))
+            .Should().Throw<ArgumentException>().WithMessage("Two permissions on Pad are marked ManagesMembers*");
+        Making(() => Notes([new(View, NamesOwner: true), new(Edit, NamesOwner: true)], Roles.Fixed([Bystander])))
+            .Should().Throw<ArgumentException>().WithMessage("Two permissions on Pad are marked NamesOwner*");
 
         // One permission may lock both, as a document's that decides who it is shared with does.
-        Notes([new(View, LocksMembers: true, LocksOwner: true)], Roles.Fixed([Bystander])).OwnerLockPermission.Should().Be(View);
+        Notes([new(View, ManagesMembers: true, NamesOwner: true)], Roles.Fixed([Bystander])).NamesOwnerPermission.Should().Be(View);
     }
 
     [Fact]
@@ -296,14 +296,14 @@ public sealed class MembershipRulesTests
     [Fact]
     public void A_lock_nobody_could_pass_is_refused()
     {
-        Making(() => Notes([new(View, EveryMember: true), new(Sharing, Owner: false, InRoles: false, LocksMembers: true)], Roles.Fixed([Bystander])))
-            .Should().Throw<ArgumentException>().WithMessage("'notes.share' is marked LocksMembers, and nobody would hold it on Pad*");
-        Making(() => Notes([new(View, EveryMember: true), new(Sharing, Owner: false, InRoles: false, LocksOwner: true)], Roles.Fixed([Bystander])))
-            .Should().Throw<ArgumentException>().WithMessage("'notes.share' is marked LocksOwner*");
+        Making(() => Notes([new(View, EveryMember: true), new(Sharing, Owner: false, InRoles: false, ManagesMembers: true)], Roles.Fixed([Bystander])))
+            .Should().Throw<ArgumentException>().WithMessage("'notes.share' is marked ManagesMembers, and nobody would hold it on Pad*");
+        Making(() => Notes([new(View, EveryMember: true), new(Sharing, Owner: false, InRoles: false, NamesOwner: true)], Roles.Fixed([Bystander])))
+            .Should().Throw<ArgumentException>().WithMessage("'notes.share' is marked NamesOwner*");
 
         // Held from above, it is passed by whoever holds it there.
-        Notes([new(View, EveryMember: true), new(Sharing, Owner: false, InRoles: false, LocksOwner: true)], Roles.Fixed([Bystander]), reachFromAbove: true)
-            .OwnerLockPermission.Should().Be(Sharing);
+        Notes([new(View, EveryMember: true), new(Sharing, Owner: false, InRoles: false, NamesOwner: true)], Roles.Fixed([Bystander]), reachFromAbove: true)
+            .NamesOwnerPermission.Should().Be(Sharing);
     }
 
     [Fact]

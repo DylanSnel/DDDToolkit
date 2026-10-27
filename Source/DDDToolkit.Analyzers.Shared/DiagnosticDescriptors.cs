@@ -809,7 +809,7 @@ internal static class DiagnosticDescriptors
         category: Membership,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "[On<TResource>] says a permission is asked on one resource with members, and how it is held there. TResource is the aggregate root a member class names, [Member<TId, TMemberId, TRoleId, TResource>]: on another class the permission would be asked on something that has no members, and its rules could not be made. Of the permissions on one resource, one at most is held by every member (EveryMember), since that is also the one that sees the resource from above; one at most locks the members (LocksMembers) and one at most locks the owner (LocksOwner), since each is the one key the database's lock asks for. A second is refused where it is declared, among the permissions the project sees.");
+        description: "[On<TResource>] says a permission is asked on one resource with members, and how it is held there. TResource is the aggregate root a member class names, [Member<TId, TMemberId, TRoleId, TResource>]: on another class the permission would be asked on something that has no members, and its rules could not be made. Of the permissions on one resource, one at most is held by every member (EveryMember), since that is also the one that sees the resource from above; one at most manages the members (ManagesMembers) and one at most names the owner (NamesOwner), since each is the one permission the member manager requires for those changes, and the one the database's lock asks for. A second is refused where it is declared, among the permissions the project sees.");
 
     public static readonly DiagnosticDescriptor RulesWithoutPermissions = Create(
         id: "DDD00094",
@@ -918,4 +918,12 @@ internal static class DiagnosticDescriptors
         isEnabledByDefault: true,
         description: "On a command, [Operator] runs the handler as operator work, and Tenant and Scope say where the work acts and in which scope. On a query nothing begins: an operator reads across tenants through the database role of its token. So Tenant and Scope on a query say nothing, and a reader takes them for the tenant the query reads in. [ForTenant] on a query is not reported: it still refuses a request that names another tenant than the query does.");
 
+    public static readonly DiagnosticDescriptor ManagerNotWritten = Create(
+        id: "DDD00106",
+        title: "A member or role manager is not written",
+        messageFormat: "'{0}' is not written for '{1}': {2}",
+        category: Membership,
+        DiagnosticSeverity.Info,
+        isEnabledByDefault: true,
+        description: "For a class declared with the Membership package's member template, [Member<TId, TMemberId, TRoleId, TResource>], whose member list the toolkit writes, the toolkit also writes the member manager, a class named after the member class with Manager after it, BoardMemberManager for BoardMember, in the global namespace, and for each class declared with its role template, [CustomRole<TRoleId, TResource>], the role manager, BoardRoleManager for BoardRole. The resource's registration registers both. A resource whose list is not written gets no manager, and DDD00059 or DDD00060 says why. This says why a manager is not written where the list is: a type of the manager's name that the project declares in a namespace, which the manager in the global namespace would hide in every file that imports that namespace; two member or role classes of one name, whose managers would be one class; an owner property the manager cannot set when it names another owner; or a resource whose id cannot be told. A type of the name in the global namespace keeps the manager out without a word: the project wrote its own. A role class whose resource is declared in another project gets no role manager either, since the resource's registration cannot name it.");
 }

@@ -139,13 +139,13 @@ internal static class MembershipSql
             }
         }
 
-        if (rules.MembersLockPermission is { } membersPermission)
+        if (rules.ManagesMembersPermission is { } membersPermission)
         {
             Mark("members-permission");
             Say(membersPermission);
         }
 
-        if (rules.OwnerLockPermission is { } ownerPermission)
+        if (rules.NamesOwnerPermission is { } ownerPermission)
         {
             Mark("owner-permission");
             Say(ownerPermission);
@@ -372,7 +372,7 @@ internal static class MembershipSql
         return name.Length <= LongestName
             ? name
             : throw new InvalidOperationException(
-                "A permission of " + rules.Resource.Name + " locks the owner, and the lock on the owner column would be called '" + name
+                "A permission of " + rules.Resource.Name + " names the owner, and the lock on the owner column would be called '" + name
                 + "', which is longer than the 63 characters Postgres keeps of a name. Give the resource a shorter name, with [Members(\"...\")].");
     }
 
@@ -386,8 +386,8 @@ internal static class MembershipSql
     private static string OwnerLockName(MembershipRules rules) => rules.Name.Replace('.', '_').Replace('-', '_') + "_owner_stays";
 
     /// <summary>
-    /// The lock on the two member tables, for rules with a permission that locks the members
-    /// (<see cref="MembershipRules.MembersLockPermission"/>): for each database role that may ask the
+    /// The lock on the two member tables, for rules with a permission that manages the members
+    /// (<see cref="MembershipRules.ManagesMembersPermission"/>): for each database role that may ask the
     /// functions, a restrictive policy for adding, changing and removing a row of either table, which lets a
     /// row be written only on a resource the caller holds that permission on. Restrictive, so it narrows whatever the
     /// application's own rules allow, and allows nothing itself: reading the rows stays what those rules say.
@@ -415,7 +415,7 @@ internal static class MembershipSql
     /// <exception cref="InvalidOperationException">A customer makes the roles, and the model maps no role class for the resource.</exception>
     public static IReadOnlyList<ContributedPolicy> Policies(MemberMapping mapping, MembershipRules rules, string owner, Written written)
     {
-        if (rules.MembersLockPermission is not { } permission)
+        if (rules.ManagesMembersPermission is not { } permission)
         {
             return [];
         }
@@ -432,7 +432,7 @@ internal static class MembershipSql
 
         // Asked once for a statement: the resources the caller holds a permission on, as the functions answer it.
         string Held(string held) => "(SELECT held.id FROM " + Asked(owner + "/" + rules.Functions.HeldOn) + "(" + Text(held) + ") AS held(id))";
-        var handsOn = rules.OwnerLockPermission is { } ownerPermission && !string.Equals(ownerPermission, permission, StringComparison.Ordinal) ? ownerPermission : null;
+        var handsOn = rules.NamesOwnerPermission is { } ownerPermission && !string.Equals(ownerPermission, permission, StringComparison.Ordinal) ? ownerPermission : null;
         var policies = new List<ContributedPolicy>();
         foreach (var (table, column) in new[] { (mapping.Members, ofMember), (mapping.Roles, ofRole) })
         {
@@ -472,7 +472,7 @@ internal static class MembershipSql
     /// <summary>
     /// What the policy of the lock that holds a role given to one the caller sees is about, which its name
     /// starts with: written on the table of the roles a member holds, where a customer makes the roles and a
-    /// permission locks the members.
+    /// permission manages the members.
     /// </summary>
     public const string RoleSeen = "Members hold roles the caller sees";
 
@@ -514,8 +514,8 @@ internal static class MembershipSql
     private static string FunctionIn(string schema, string name) => Braces(schema) + "." + name;
 
     /// <summary>
-    /// The lock on the owner column, for rules with a permission that locks the owner
-    /// (<see cref="MembershipRules.OwnerLockPermission"/>): a trigger on the resource's table that fires when a
+    /// The lock on the owner column, for rules with a permission that names the owner
+    /// (<see cref="MembershipRules.NamesOwnerPermission"/>): a trigger on the resource's table that fires when a
     /// statement would leave a row with another owner than it had, and refuses it, as a policy refuses, unless
     /// the caller held that permission on the resource before the change. A trigger, because a policy sees the row a
     /// statement leaves behind and not the one it found: only here are both at hand, and nothing a caller can
@@ -533,7 +533,7 @@ internal static class MembershipSql
         var resource = mapping.Resource;
 
         // No role may ask the functions, so no caller is held to the lock: what reaches the table is the tables' owner.
-        if (rules.OwnerLockPermission is not { } permission || written.GrantTo.Count == 0)
+        if (rules.NamesOwnerPermission is not { } permission || written.GrantTo.Count == 0)
         {
             // Rules whose lock could never have been written, its name being too long, left nothing to take away.
             var left = OwnerLockName(rules);
@@ -593,7 +593,7 @@ internal static class MembershipSql
         if (trigger.Split(BodyQuote).Length != 3)
         {
             throw new InvalidOperationException(
-                "The lock on the owner column of " + resource.DisplayName() + " cannot be written from the rules '" + rules.Name + "': the permission that locks the owner, '" + permission
+                "The lock on the owner column of " + resource.DisplayName() + " cannot be written from the rules '" + rules.Name + "': the permission that names the owner, '" + permission
                 + "', a role or a name of the model has '" + BodyQuote + "' in it, which would end the function's body early.");
         }
 

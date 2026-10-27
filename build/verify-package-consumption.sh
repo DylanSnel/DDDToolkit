@@ -467,6 +467,17 @@ expect_generators_wrote SupportingDomains/Domain \
   "DDDToolkit.Analyzers" \
   "DDDToolkit.Supporting.Membership.Analyzers"
 
+# Membership's generator writes the managers into the domain project, beside the member list: one named after the
+# member class and one after the role class, in the global namespace. The infrastructure project calls both.
+for manager in ManuscriptEditorManager ManuscriptRoleManager; do
+  if [ -z "$(find "$work/package-consumers/SupportingDomains/Domain/obj" -path '*generated*' -name "$manager.g.cs" | head -n 1)" ]; then
+    echo "FAILED: SupportingDomains/Domain: Membership's generator wrote no $manager." >&2
+    exit 1
+  fi
+done
+
+echo "    SupportingDomains/Domain: the editors' and the roles' managers"
+
 expect_generators_wrote SupportingDomains/Infrastructure \
   "DDDToolkit.Analyzers" \
   "DDDToolkit.EntityFramework.Analyzers" \

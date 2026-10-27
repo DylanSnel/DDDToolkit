@@ -581,25 +581,27 @@ public sealed class BesideAnOrganizationTests
     }
 
     [Fact]
-    public async Task The_admission_of_a_crate_asks_the_depot_who_counts_and_which_roles_there_are()
+    public async Task The_member_manager_of_crates_asks_the_depot_who_counts_and_which_roles_there_are()
     {
         using var depot = await SqliteDepot.SeededAsync();
         var data = depot.Scenario;
 
         await depot.Services.AsAsync(CurrentUserSnapshot.System, async provider =>
         {
-            var admission = provider.GetRequiredService<MemberAdmission<CrateId, PorterId, DepotRoleId>>();
+            var crates = provider.GetRequiredService<CratePorterManager>();
 
             // A porter the depot let go is not put on a crate, and neither is somebody it does not know.
-            (await Refused.WithCodeAsync(CrateMembership.Codes, MembershipRefusals.MemberNotActive, () => admission.RequireMemberAsync(data.Ned.Porter!.Value, Cancellation).AsTask()))
+            (await Refused.WithCodeAsync(CrateMembership.Codes, MembershipRefusals.MemberNotActive, () => crates.AddAsync(data.Rice, data.Ned.Porter!.Value, null, null, Cancellation)))
                 .Arguments.Should().Contain("Member", data.Ned.Porter!.Value);
-            await Refused.WithCodeAsync(CrateMembership.Codes, MembershipRefusals.MemberNotActive, () => admission.RequireMemberAsync(PorterId.CreateSequential(), Cancellation).AsTask());
-            await admission.RequireMemberAsync(data.Eli.Porter!.Value, Cancellation);
+            await Refused.WithCodeAsync(CrateMembership.Codes, MembershipRefusals.MemberNotActive, () => crates.AddAsync(data.Rice, PorterId.CreateSequential(), null, null, Cancellation));
+
+            // One the depot counts is admitted: what refuses him then is the period, which ends before it starts.
+            await Refused.WithCodeAsync(CrateMembership.Codes, MembershipRefusals.InvalidPeriod, () => crates.AddAsync(data.Rice, data.Eli.Porter!.Value, null, DateTimeOffset.MinValue, Cancellation));
 
             // The roles there are, are the depot's rows: one in use goes to a member, one that is not does not.
-            await admission.RequireRoleAsync(data.Packer, Cancellation);
-            await Refused.WithCodeAsync(CrateMembership.Codes, MembershipRefusals.RoleNotForMembers, () => admission.RequireRoleAsync(data.OldHand, Cancellation).AsTask());
-            await Refused.WithCodeAsync(CrateMembership.Codes, MembershipRefusals.RoleNotForMembers, () => admission.RequireRoleAsync(DepotRoleId.CreateSequential(), Cancellation).AsTask());
+            await Refused.WithCodeAsync(CrateMembership.Codes, MembershipRefusals.InvalidPeriod, () => crates.AddAsync(data.Rice, data.Eli.Porter!.Value, data.Packer, DateTimeOffset.MinValue, Cancellation));
+            await Refused.WithCodeAsync(CrateMembership.Codes, MembershipRefusals.RoleNotForMembers, () => crates.AddAsync(data.Rice, data.Eli.Porter!.Value, data.OldHand, null, Cancellation));
+            await Refused.WithCodeAsync(CrateMembership.Codes, MembershipRefusals.RoleNotForMembers, () => crates.AddAsync(data.Rice, data.Eli.Porter!.Value, DepotRoleId.CreateSequential(), null, Cancellation));
             provider.GetRequiredService<IMemberRoles<CrateId, DepotRoleId>>().Should().BeOfType<CratesInTheDepot>()
                 .And.BeSameAs(provider.GetRequiredService<IRolesWithPermission<CrateId, DepotRoleId>>(), "one instance for a scope answers every port of the resource");
         });

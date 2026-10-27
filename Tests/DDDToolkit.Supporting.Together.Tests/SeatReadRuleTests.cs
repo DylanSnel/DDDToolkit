@@ -41,10 +41,10 @@ public abstract class SeatReadRuleTests(CampusPostgresServer postgres)
 
         // Now Owen reads the people placed at Physics and below, and Ned is none of them: refused as no seat is.
         (await FluentActions.Awaiting(() => campus.Services.AsAsync(data.Owen, CampusScenario.InAlder, provider =>
-                provider.GetRequiredService<MemberAdmission<CourseId, SeatId, CourseRoleId>>().RequireMemberAsync(data.NedSeat, Cancellation).AsTask()))
+                new Admission<CourseId, SeatId, CourseRoleId>(provider, CourseMembership.Codes).RequireMemberAsync(data.NedSeat, Cancellation).AsTask()))
             .Should().ThrowAsync<RefusalException>()).Which.Code.Should().Be(CourseMembership.Codes[MembershipRefusals.MemberNotActive]);
         (await FluentActions.Awaiting(() => campus.Services.AsAsync(data.Owen, CampusScenario.InAlder, provider =>
-                provider.GetRequiredService<MemberAdmission<LabId, SeatId, RoleId>>().RequireMemberAsync(data.NedSeat, Cancellation).AsTask()))
+                new Admission<LabId, SeatId, RoleId>(provider, LabMembership.Codes).RequireMemberAsync(data.NedSeat, Cancellation).AsTask()))
             .Should().ThrowAsync<RefusalException>()).Which.Code.Should().Be(LabMembership.Codes[MembershipRefusals.MemberNotActive]);
 
         // Tom, placed at Physics as well, he still makes a member; Pia, at Arts, makes Ned one; and Ada, who manages
@@ -115,8 +115,8 @@ public abstract class SeatReadRuleTests(CampusPostgresServer postgres)
     private static async Task AdmitAsync(CampusApp campus, CampusPerson person, SeatId seat)
         => await campus.Services.AsAsync(person, CampusScenario.InAlder, async provider =>
         {
-            await provider.GetRequiredService<MemberAdmission<CourseId, SeatId, CourseRoleId>>().RequireMemberAsync(seat, Cancellation);
-            await provider.GetRequiredService<MemberAdmission<LabId, SeatId, RoleId>>().RequireMemberAsync(seat, Cancellation);
+            await new Admission<CourseId, SeatId, CourseRoleId>(provider, CourseMembership.Codes).RequireMemberAsync(seat, Cancellation);
+            await new Admission<LabId, SeatId, RoleId>(provider, LabMembership.Codes).RequireMemberAsync(seat, Cancellation);
         });
 }
 

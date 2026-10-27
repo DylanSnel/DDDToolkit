@@ -39,6 +39,7 @@ public sealed class CampusPostgres() : CampusPostgresServer(CampusSchemas.Defaul
     [
         RowAccessRule.For<Course>("Seats read the courses they see", RowOperations.Read, SeatsReadTheCoursesTheySee.RowAccessSql, RowAccessRoles.User),
         RowAccessRule.For<CourseRole>("Seats read the roles of courses of their college", RowOperations.Read, SeatsReadTheRolesOfCoursesOfTheirCollege.RowAccessSql, RowAccessRoles.User),
+        RowAccessRule.For<CourseRole>("Role managers change the roles of courses", RowOperations.Create | RowOperations.Change, RoleManagersChangeTheRolesOfCourses.RowAccessSql, RowAccessRoles.User),
         RowAccessRule.For<Lab>("Seats read the labs they see", RowOperations.Read, SeatsReadTheLabsTheySee.RowAccessSql, RowAccessRoles.User),
     ];
 

@@ -1,14 +1,14 @@
 using DDDToolkit.Abstractions.Interfaces;
 
-namespace DDDToolkit.Supporting.Membership.UseCases;
+namespace DDDToolkit.Supporting.Membership.Managers;
 
 /// <summary>
 /// Says whether somebody can be made a member of one kind of resource: whether the id is one the application
-/// knows, and whoever it stands for is active. An application implements it where it keeps its users, and the
-/// admission of that kind of resource asks it before a member is added or an owner named.
+/// knows, and whoever it stands for is active. An application implements it where it keeps its users, and the member
+/// manager of that kind of resource asks it before a member is added, an owner named or a resource opened.
 /// <para>
 /// Optional. Without one every id is admitted: a resource whose members are users of an identity provider
-/// often has nowhere to ask.
+/// often has nowhere to ask. The join with an organization's package answers it for members that are seats.
 /// </para>
 /// <para>
 /// It is asked for by the resource, so two kinds of resource whose members are known by the same id each have

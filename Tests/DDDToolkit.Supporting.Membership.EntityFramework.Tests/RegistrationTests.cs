@@ -210,7 +210,7 @@ public sealed class RegistrationTests
             await Refused.WithCodeAsync(
                 CrateMembership.Codes,
                 MembershipRefusals.MemberNotActive,
-                () => provider.GetRequiredService<MemberAdmission<CrateId, PorterId, DepotRoleId>>().RequireMemberAsync(depot.Scenario.Eli.Porter!.Value, Cancellation).AsTask());
+                () => provider.GetRequiredService<CratePorterManager>().AddAsync(depot.Scenario.Rice, depot.Scenario.Eli.Porter!.Value, null, null, Cancellation));
         });
     }
 
@@ -261,7 +261,8 @@ public sealed class RegistrationTests
         var resolved = new ServiceCollection();
         resolved.AddSingleton<DepotDesk>();
         resolved.AddMembership<PalletPorter, PalletPorterId, PorterId, NamedRole, DepotContext, Pallet, PalletId, PalletsInTheDepot>(resolvedAlone);
-        resolved.Should().Contain(descriptor => descriptor.ServiceType == typeof(IMemberRoles<PalletId, NamedRole>), "roles the rules declare are answered from the rules");
+        resolved.Should().NotContain(descriptor => descriptor.ServiceType == typeof(IMemberRoles<PalletId, NamedRole>), "roles the rules declare are answered from the rules, by the member manager itself");
+        resolved.Should().Contain(descriptor => descriptor.ServiceType == typeof(PalletPorterManager), "the member manager the generator wrote for the pallets, which the pallet names");
 
         // Roles the host keeps may be known by name as well: what a role is known by is not what says where it is kept.
         var namedAndKept = MembershipRules.Declare(typeof(Document), "papers", [new("papers.read")], Roles.External(otherPermissions: OtherPermissions.All));
@@ -445,19 +446,21 @@ public sealed class RegistrationTests
 
         await filing.Services.AsAsync(CurrentUserSnapshot.System, async provider =>
         {
-            var documents = provider.GetRequiredService<MemberAdmission<DocumentId, UserId, NamedRole>>();
-            var folders = provider.GetRequiredService<MemberAdmission<FolderId, StaffCode, NamedRole>>();
+            var documents = provider.GetRequiredService<DocumentShareManager>();
+            var folders = provider.GetRequiredService<FolderMemberManager>();
+            var data = filing.Scenario;
 
-            // The directory is the documents': a folder has none, and admits everybody.
-            (await Refused.WithCodeAsync(DocumentRefusals.Membership, MembershipRefusals.MemberNotActive, () => documents.RequireMemberAsync(stranger, Cancellation).AsTask()))
+            // The directory is the documents': a folder has none, and admits everybody. An admitted member is refused
+            // next for its period, which ends before it starts, so nothing changes.
+            (await Refused.WithCodeAsync(DocumentRefusals.Membership, MembershipRefusals.MemberNotActive, () => documents.AddAsync(data.Minutes, stranger, null, null, Cancellation)))
                 .Arguments.Should().Contain("Member", stranger);
-            await documents.RequireMemberAsync(OnlyKnown.Known, Cancellation);
-            await folders.RequireMemberAsync(new StaffCode("N-777"), Cancellation);
+            await Refused.WithCodeAsync(DocumentRefusals.Membership, MembershipRefusals.InvalidPeriod, () => documents.AddAsync(data.Minutes, OnlyKnown.Known, null, DateTimeOffset.MinValue, Cancellation));
+            await Refused.WithCodeAsync(FolderRefusals.Membership, MembershipRefusals.InvalidPeriod, () => folders.AddAsync(data.Cabinet, new StaffCode("N-777"), null, DateTimeOffset.MinValue, Cancellation));
 
             // The policy is the folders': a document's roles all go to a member.
-            await Refused.WithCodeAsync(FolderRefusals.Membership, MembershipRefusals.RoleNotForMembers, () => folders.RequireRoleAsync(FolderMembership.Visitor, Cancellation).AsTask());
-            await folders.RequireRoleAsync(FolderMembership.Clerk, Cancellation);
-            await documents.RequireRoleAsync(DocumentMembership.Onlooker, Cancellation);
+            await Refused.WithCodeAsync(FolderRefusals.Membership, MembershipRefusals.RoleNotForMembers, () => folders.AddAsync(data.Cabinet, new StaffCode("N-777"), FolderMembership.Visitor, null, Cancellation));
+            await Refused.WithCodeAsync(FolderRefusals.Membership, MembershipRefusals.InvalidPeriod, () => folders.AddAsync(data.Cabinet, new StaffCode("N-777"), FolderMembership.Clerk, DateTimeOffset.MinValue, Cancellation));
+            await Refused.WithCodeAsync(DocumentRefusals.Membership, MembershipRefusals.InvalidPeriod, () => documents.AddAsync(data.Minutes, OnlyKnown.Known, DocumentMembership.Onlooker, DateTimeOffset.MinValue, Cancellation));
         });
     }
 
@@ -470,8 +473,11 @@ public sealed class RegistrationTests
         await filing.Services.AsAsync(CurrentUserSnapshot.System, async provider =>
         {
             provider.GetRequiredService<IMemberRoles<DocumentId, NamedRole>>().Should().BeOfType<NoRoles>();
-            await Refused.WithCodeAsync(DocumentRefusals.Membership, MembershipRefusals.RoleNotForMembers, () => provider.GetRequiredService<MemberAdmission<DocumentId, UserId, NamedRole>>().RequireRoleAsync(DocumentMembership.Onlooker, Cancellation).AsTask());
-            provider.GetRequiredService<IMemberRoles<FolderId, NamedRole>>().Should().BeOfType<NamedRoles<FolderId>>();
+            await Refused.WithCodeAsync(
+                DocumentRefusals.Membership,
+                MembershipRefusals.RoleNotForMembers,
+                () => provider.GetRequiredService<DocumentShareManager>().AddAsync(filing.Scenario.Minutes, UserId.CreateSequential(), DocumentMembership.Onlooker, null, Cancellation));
+            provider.GetService<IMemberRoles<FolderId, NamedRole>>().Should().BeNull("a folder's roles are the ones its rules declare, which the member manager asks of the rules");
             provider.GetRequiredService<TimeProvider>().Should().BeSameAs(filing.Clock, "a clock registered before is the one the questions ask");
         });
     }

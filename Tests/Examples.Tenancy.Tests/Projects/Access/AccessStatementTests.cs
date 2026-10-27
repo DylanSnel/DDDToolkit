@@ -237,18 +237,20 @@ public sealed class AccessStatementTests(SampleHosts hosts) : IClassFixture<Samp
                 Cancellation);
 
             // Four contexts: a reading for each case the access check asks, the permission to open and, as Leo is not Ada,
-            // the owner's permission; one reading for everything the handler asks of Tenancy; and the request's own, the unit
-            // of work, for the number and the save. Each is taken from the pool, so they are counted by rental: a
-            // later reading may well be handed the instance an earlier one gave back.
+            // the owner's permission; one reading for the unit the handler asks of Tenancy; and the request's own, the unit
+            // of work, for the number, the seat the crew manager asks about, and the save. Each is taken from the pool, so
+            // they are counted by rental: a later reading may well be handed the instance an earlier one gave back.
             counter.Rentals.Should().HaveCount(4, "the check reads on a context per case it asks, the handler asks on one more, and the command saves on the request's");
             counter.Rentals[^1].Should().Be(ofTheScope.ContextId, "what changes is saved on the request's context, last");
             counter.Rentals.Take(3).Should().NotContain(ofTheScope.ContextId, "and nothing of Tenancy is read on it");
-            counter.Commands.Take(4).Should().AllSatisfy(
-                statement => statement.Should().StartWith("SELECT").And.Contain($"FROM {TenantsContext.Schema}.").And.NotContain(AnyTableOfTenancy).And.NotContain($"FROM {ProjectsTable}"),
-                "the four questions of Tenancy's come first, each asked of a function of Tenancy's: the permission to open, the owner's permission, the unit and the seat");
-            counter.Commands.Skip(4).Should().AllSatisfy(
+            var ofTenancy = counter.Commands.Where(statement => statement.Contains($"FROM {TenantsContext.Schema}.", StringComparison.Ordinal)).ToList();
+            ofTenancy.Should().HaveCount(4).And.AllSatisfy(
+                statement => statement.Should().StartWith("SELECT").And.NotContain(AnyTableOfTenancy).And.NotContain($"FROM {ProjectsTable}"),
+                "four questions are Tenancy's, each asked of a function of Tenancy's: the permission to open, the owner's permission, the unit and the seat");
+            counter.Commands.Take(3).Should().Equal(ofTenancy.Take(3), "the check's two questions and the unit come first");
+            counter.Commands.Where(statement => !ofTenancy.Contains(statement)).Should().AllSatisfy(
                 statement => statement.Should().Contain(ProjectsTable).And.NotContain($"{TenantsContext.Schema}.").And.NotContain(ProjectRolesTable),
-                "and then the module's own: whether the number is free, and the save; the owner is given no project role, so none is read");
+                "and the rest is the module's own: whether the number is free, and the save; the owner is given no project role, so none is read");
         }
     }
 

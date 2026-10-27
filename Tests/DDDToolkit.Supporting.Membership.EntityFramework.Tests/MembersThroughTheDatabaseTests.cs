@@ -24,8 +24,8 @@ public sealed class MembersThroughTheDatabaseTests
             var read = await filing.Services.ReadAsync(written.Id);
 
             read.OwnerId.Should().Be(written.OwnerId);
-            MemberOverviews.From(read.Shares, read.OwnerId, data.Now).Should().BeEquivalentTo(
-                MemberOverviews.From(written.Shares, written.OwnerId, data.Now),
+            Shown(read.Shares).Should().BeEquivalentTo(
+                Shown(written.Shares),
                 options => options.WithStrictOrdering(),
                 "every member, period and role comes back as the member list left it");
             read.Shares.Select(share => (share.Id, share.MemberId, share.AddedBy)).Should().BeEquivalentTo(written.Shares.Select(share => (share.Id, share.MemberId, share.AddedBy)));
@@ -53,7 +53,7 @@ public sealed class MembersThroughTheDatabaseTests
         var written = data.Folders.Single(folder => folder.Id == data.Cabinet);
 
         read.Keeper.Should().Be(data.Keeper);
-        MemberOverviews.From(read.Staff, read.Keeper, data.Now).Should().BeEquivalentTo(MemberOverviews.From(written.Staff, written.Keeper, data.Now), options => options.WithStrictOrdering());
+        Shown(read.Staff).Should().BeEquivalentTo(Shown(written.Staff), options => options.WithStrictOrdering());
         read.Staff.Single(member => member.MemberId == data.Clerk).Note.Should().Be("Covers for the keeper");
         read.Staff.Single(member => member.MemberId == data.Temp).Roles.Should().BeEmpty("a role that was taken is gone from the database");
 
@@ -172,7 +172,7 @@ public sealed class MembersThroughTheDatabaseTests
 
         var after = await filing.Services.ReadAsync(data.Minutes);
         after.Version.Should().Be(before.Version);
-        MemberOverviews.From(after.Shares, after.OwnerId, data.Now).Should().BeEquivalentTo(MemberOverviews.From(before.Shares, before.OwnerId, data.Now), options => options.WithStrictOrdering());
+        Shown(after.Shares).Should().BeEquivalentTo(Shown(before.Shares), options => options.WithStrictOrdering());
     }
 
     [Fact]
@@ -191,4 +191,19 @@ public sealed class MembersThroughTheDatabaseTests
         saved.Which.InvariantViolations.Select(violation => violation.Code).Should().Equal(DocumentRefusals.Membership[MembershipRefusals.OwnerProtected]);
         (await filing.Services.ReadAsync(data.Minutes)).Shares.Single(share => share.MemberId == data.Ada).EndsAt.Should().BeNull("nothing of a refused save is written");
     }
+
+    /// <summary>The members and the roles they hold, each with its period, in one order whatever order they were read in.</summary>
+    private static List<object> Shown<TId, TMemberId, TRoleId>(IEnumerable<MemberEntity<TId, TMemberId, TRoleId>> members)
+        where TId : struct, DDDToolkit.Abstractions.Interfaces.IEntityId, IEquatable<TId>
+        where TMemberId : struct, DDDToolkit.Abstractions.Interfaces.IEntityId, IEquatable<TMemberId>
+        where TRoleId : struct, DDDToolkit.Abstractions.Interfaces.IEntityId, IEquatable<TRoleId>
+        => [.. members
+            .OrderBy(member => member.MemberId.ToString(), StringComparer.Ordinal)
+            .Select(member => (object)new
+            {
+                member.MemberId,
+                member.StartsAt,
+                member.EndsAt,
+                Roles = member.Roles.OrderBy(held => held.RoleId.ToString(), StringComparer.Ordinal).Select(held => new { held.RoleId, held.StartsAt, held.EndsAt }).ToList(),
+            })];
 }

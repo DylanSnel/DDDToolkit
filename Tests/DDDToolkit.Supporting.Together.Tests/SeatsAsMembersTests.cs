@@ -294,8 +294,8 @@ public abstract class SeatsAsMembersTests(CampusDatabases databases)
 
             // What the admission asks of the organization is asked outside a statement of the resource's: whether a seat
             // is active, which of the college's roles there are, and which is the owner's.
-            var courses = provider.GetRequiredService<MemberAdmission<CourseId, SeatId, CourseRoleId>>();
-            var labs = provider.GetRequiredService<MemberAdmission<LabId, SeatId, RoleId>>();
+            var courses = new Admission<CourseId, SeatId, CourseRoleId>(provider, CourseMembership.Codes);
+            var labs = new Admission<LabId, SeatId, RoleId>(provider, LabMembership.Codes);
 
             await courses.RequireMemberAsync(data.NedSeat, Cancellation);
             (await FluentActions.Awaiting(() => labs.RequireMemberAsync(data.SueSeat, Cancellation).AsTask()).Should().ThrowAsync<RefusalException>())
@@ -320,8 +320,8 @@ public abstract class SeatsAsMembersTests(CampusDatabases databases)
 
         await campus.Services.AsAsync(data.Owen, CampusScenario.InAlder, async provider =>
         {
-            var courses = provider.GetRequiredService<MemberAdmission<CourseId, SeatId, CourseRoleId>>();
-            var labs = provider.GetRequiredService<MemberAdmission<LabId, SeatId, RoleId>>();
+            var courses = new Admission<CourseId, SeatId, CourseRoleId>(provider, CourseMembership.Codes);
+            var labs = new Admission<LabId, SeatId, RoleId>(provider, LabMembership.Codes);
 
             // A member is a seat, so whether somebody can be made one is whether that seat is active in this college.
             await courses.RequireMemberAsync(data.NedSeat, Cancellation);
@@ -349,7 +349,7 @@ public abstract class SeatsAsMembersTests(CampusDatabases databases)
         // A role of the college's that it archived is given no more, and gives nothing where it is still held.
         await campus.Services.BySystemInAsync(data.Alder, provider => provider.Roles().ArchiveAsync(data.AlderDemonstrator, Cancellation));
         await campus.Services.AsAsync(data.Owen, CampusScenario.InAlder, async provider =>
-            (await FluentActions.Awaiting(() => provider.GetRequiredService<MemberAdmission<LabId, SeatId, RoleId>>().RequireRoleAsync(data.AlderDemonstrator, Cancellation).AsTask())
+            (await FluentActions.Awaiting(() => new Admission<LabId, SeatId, RoleId>(provider, LabMembership.Codes).RequireRoleAsync(data.AlderDemonstrator, Cancellation).AsTask())
                 .Should().ThrowAsync<RefusalException>()).Which.Code.Should().Be(LabMembership.Codes[MembershipRefusals.RoleNotForMembers]));
         var tom = new Asking(data.Tom, CampusScenario.InAlder);
         (await HoldInAsync(campus, tom, data.Laser, LabPermissions.Equip))!.Via.Should().BeNull("the demonstrator's role is archived");
@@ -366,7 +366,7 @@ public abstract class SeatsAsMembersTests(CampusDatabases databases)
         // The college archives its role for a lab's chief: it gives nothing from then on, and goes to nobody.
         await campus.Services.BySystemInAsync(data.Alder, provider => provider.Roles().ArchiveAsync(data.AlderLabChief, Cancellation));
         await campus.Services.AsAsync(data.Owen, CampusScenario.InAlder, async provider =>
-            (await FluentActions.Awaiting(() => provider.GetRequiredService<MemberAdmission<LabId, SeatId, RoleId>>().RequireRoleAsync(data.AlderLabChief, Cancellation).AsTask())
+            (await FluentActions.Awaiting(() => new Admission<LabId, SeatId, RoleId>(provider, LabMembership.Codes).RequireRoleAsync(data.AlderLabChief, Cancellation).AsTask())
                 .Should().ThrowAsync<RefusalException>()).Which.Code.Should().Be(LabMembership.Codes[MembershipRefusals.RoleNotForMembers]));
 
         // The owner held nothing through it: what an owner holds, the lab's permissions say, by owning it.
@@ -432,6 +432,44 @@ public abstract class SeatsAsMembersTests(CampusDatabases databases)
             var see = provider.GetRequiredService<MembershipAccessManager<Lab>>().ReachSeen();
             return await provider.Campus().Labs.Within(see).Select(lab => lab.Id).ToListAsync(Cancellation);
         });
+
+    [Fact]
+    public async Task The_managers_ask_the_college_who_may_be_made_a_member_and_who_may_change_the_roles_it_keeps()
+    {
+        using var campus = await databases.CreateAsync();
+        var data = campus.Scenario;
+        var tutor = data.AlderCourseRoles[CourseMembership.Tutor];
+
+        // The college's own work on its courses adds a seat of the college, active, in a role the college keeps for courses.
+        var optics = await campus.Services.BySystemInAsync(
+            data.Alder,
+            provider => provider.GetRequiredService<CourseTutorManager>().AddAsync(data.Optics, data.NedSeat, tutor, until: null, Cancellation),
+            scope: CourseMembership.Scope);
+        optics.Tutors.Single(row => row.MemberId == data.NedSeat).Roles.Single().RoleId.Should().Be(tutor);
+
+        // A suspended seat is no member to be, and another college's role is no role of this one's.
+        await FluentActions.Awaiting(() => campus.Services.BySystemInAsync(
+                data.Alder,
+                provider => provider.GetRequiredService<CourseTutorManager>().AddAsync(data.Optics, data.SueSeat, null, null, Cancellation),
+                scope: CourseMembership.Scope))
+            .Should().ThrowAsync<RefusalException>().Where(refused => refused.Code == CourseMembership.Codes[MembershipRefusals.MemberNotActive]);
+        await FluentActions.Awaiting(() => campus.Services.BySystemInAsync(
+                data.Alder,
+                provider => provider.GetRequiredService<CourseTutorManager>().GiveRoleAsync(data.Optics, data.NedSeat, data.BirchCourseRoles[CourseMembership.Tutor], null, Cancellation),
+                scope: CourseMembership.Scope))
+            .Should().ThrowAsync<RefusalException>().Where(refused => refused.Code == CourseMembership.Codes[MembershipRefusals.RoleNotForMembers]);
+
+        // The courses' rules name the college's permission that manages roles for their roles: Ada administers the college
+        // and holds it for the whole of it; Tom tutors and does not, and is refused as Tenancy refuses it.
+        var renamed = await campus.Services.AsAsync(data.Ada, CampusScenario.InAlder, provider =>
+            provider.GetRequiredService<CourseRoleManager>().RenameAsync(tutor, "Tutor of record", null, Cancellation));
+        renamed.Name.Should().Be("Tutor of record");
+
+        var refused = (await FluentActions.Awaiting(() => campus.Services.AsAsync(data.Tom, CampusScenario.InAlder, provider =>
+                provider.GetRequiredService<CourseRoleManager>().ArchiveAsync(tutor, Cancellation)))
+            .Should().ThrowAsync<RefusalException>()).Which;
+        (refused.Code, refused.Arguments["Permission"]).Should().Be(("tenancy.not-permitted", DDDToolkit.Supporting.Tenancy.Catalogue.TenancyPermissions.RolesManage));
+    }
 
     /// <summary>Asserts that the questions that refuse answer <paramref name="asking"/> with Tenancy's own refusal, for a course and for a lab, and read nothing for it.</summary>
     private static async Task RefusedAsync(CampusApp campus, Asking asking, string code)

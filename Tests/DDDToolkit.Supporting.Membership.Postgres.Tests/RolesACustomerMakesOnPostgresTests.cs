@@ -407,10 +407,10 @@ public sealed partial class RolesACustomerMakesOnPostgresTests(FilingPostgres po
         (await FencedByBenAsync()).Should().BeEquivalentTo(before);
         (await garden.Services.PlotsAsync(data.Ben, access => access.HoldAsync(data.Beans, PlotPermissions.Fence, Cancellation)))!.Via.Should().BeNull();
 
-        // And the roles are read as before, under the rule: the admission and the questions run as the caller.
+        // And the roles are read as before, under the rule: what the member manager asks and the questions run as the caller.
         await garden.Services.AsAsync(data.Ben, async provider =>
         {
-            await provider.GetRequiredService<MemberAdmission<PlotId, UserId, PlotRoleId>>().RequireRoleAsync(data.MeadowTender.Id, Cancellation);
+            await Admitted.RoleAsync<PlotId, PlotRoleId>(provider, PlotMembership.Codes, data.MeadowTender.Id, Cancellation);
             return true;
         });
         (await garden.Services.PlotsAsync(data.Ben, access => access.HoldAsync(data.Beans, PlotPermissions.Plant, Cancellation)))!.Via.Should().Be(MemberVia.Members);

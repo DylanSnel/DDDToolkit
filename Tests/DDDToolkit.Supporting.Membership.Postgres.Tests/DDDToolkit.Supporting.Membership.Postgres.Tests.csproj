@@ -44,6 +44,7 @@
   <ItemGroup>
     <Compile Include="..\DDDToolkit.EntityFramework.Tests\Infrastructure\RequiredContainers.cs" LinkBase="Infrastructure" />
     <Compile Include="..\DDDToolkit.EntityFramework.Tests\Infrastructure\ServerRole.cs" LinkBase="Infrastructure" />
+    <Compile Include="..\DDDToolkit.Supporting.Membership.EntityFramework.Tests\Infrastructure\Admitted.cs" LinkBase="Infrastructure" />
     <Compile Include="..\DDDToolkit.Supporting.Membership.EntityFramework.Tests\Infrastructure\CommandCounter.cs" LinkBase="Infrastructure" />
     <Compile Include="..\DDDToolkit.Supporting.Membership.EntityFramework.Tests\Infrastructure\FilingScenario.cs" LinkBase="Infrastructure" />
     <Compile Include="..\DDDToolkit.Supporting.Membership.EntityFramework.Tests\Infrastructure\FilingServices.cs" LinkBase="Infrastructure" />

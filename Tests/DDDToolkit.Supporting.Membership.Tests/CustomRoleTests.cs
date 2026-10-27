@@ -253,7 +253,7 @@ public sealed class CustomRoleTests
     public void A_role_remembers_the_starter_role_it_was_made_from_whatever_it_is_called_and_any_is_archived_alike()
     {
         // The sheds' rules declare the keeper's starter role.
-        var keeper = new ShedRole(ShedRoleId.CreateSequential(), StarterRoles.Missing<ShedRoleId>(Sheds, []).Single());
+        var keeper = new ShedRole(ShedRoleId.CreateSequential(), Starter(Sheds, ShedMembership.Keeper));
         (keeper.Name, keeper.MadeFrom).Should().Be((ShedMembership.Keeper, ShedMembership.Keeper));
 
         // Renamed and given other permissions like any role, and still the one made from that starter role.
@@ -266,14 +266,14 @@ public sealed class CustomRoleTests
         keeper.Status.Should().Be(CustomRoleStatus.Archived);
 
         // A role made from another starter role is archived like any other: the plots' tender.
-        var tender = new PlotRole(PlotRoleId.CreateSequential(), Meadow, StarterRoles.Missing<PlotRoleId>(PlotMembership.Rules, []).Single(draft => draft.MadeFrom == PlotMembership.Tender));
+        var tender = new PlotRole(PlotRoleId.CreateSequential(), Meadow, Starter(PlotMembership.Rules, PlotMembership.Tender));
         tender.PutAway();
         (tender.Status, tender.MadeFrom).Should().Be((CustomRoleStatus.Archived, PlotMembership.Tender));
 
         // What a role was made from is one of the roles its resource's rules declare, and a draft made from
         // what a customer entered names none.
         FluentActions.Invoking(() => new ShedRole(ShedRoleId.CreateSequential(), new CustomRoleDraft("Boss", null, [], MadeFrom: PlotMembership.Tender)))
-            .Should().Throw<ArgumentException>().WithMessage("*made from the starter role 'tender', and the rules 'sheds' declare no role of that name*StarterRoles.Missing*");
+            .Should().Throw<ArgumentException>().WithMessage("*made from the starter role 'tender', and the rules 'sheds' declare no role of that name*CreateStarterRolesAsync*");
         new ShedRole(ShedRoleId.CreateSequential(), new CustomRoleDraft("Boss", null, [], MadeFrom: " ")).MadeFrom.Should().BeNull();
     }
 
@@ -290,7 +290,6 @@ public sealed class CustomRoleTests
             .Should().Throw<ArgumentException>().WithParameterName("rules").WithMessage("The rules 'documents' do not say a customer makes the resource's roles*Roles.Custom()*");
         FluentActions.Invoking(() => role.SetPermissions([DocumentPermissions.View], declared)).Should().Throw<ArgumentException>().WithParameterName("rules");
         FluentActions.Invoking(() => role.Archive(declared)).Should().Throw<ArgumentException>().WithParameterName("rules");
-        FluentActions.Invoking(() => StarterRoles.Missing<ShedRoleId>(declared, [])).Should().Throw<ArgumentException>().WithParameterName("rules");
 
         FluentActions.Invoking(() => role.Rename("Librarian", null, null!)).Should().Throw<ArgumentNullException>();
         FluentActions.Invoking(() => role.SetPermissions([], null!)).Should().Throw<ArgumentNullException>();
@@ -366,47 +365,6 @@ public sealed class CustomRoleTests
         plot.GardenId.Should().Be(Meadow, "whose a role is, is the host's own column, set in the host's own constructor");
     }
 
-    // ---------------------------------------------------------------- the starter roles
-
-    [Fact]
-    public void The_starter_roles_are_the_roles_the_rules_declare_each_as_the_draft_its_row_is_made_from()
-    {
-        var drafts = StarterRoles.Missing<PlotRoleId>(PlotMembership.Rules, []);
-
-        drafts.Select(draft => (draft.Name, draft.MadeFrom, draft.Description)).Should().Equal(
-            [(PlotMembership.Tender, PlotMembership.Tender, null), (PlotMembership.Waterer, PlotMembership.Waterer, null)],
-            "the starter roles the rules declare, and none for the owner, which holds no role");
-        drafts[0].Permissions.Should().Equal(PlotPermissions.See, PlotPermissions.Plant, PlotPermissions.Water);
-
-        // A host makes each with its own constructor, and may call it otherwise from the start: what it was made from stays.
-        var named = new PlotRole(PlotRoleId.CreateSequential(), Meadow, drafts[1] with { Name = "Watering can", Description = "Waters." });
-        (named.Name, named.MadeFrom, named.Status).Should().Be(("Watering can", PlotMembership.Waterer, CustomRoleStatus.Active));
-    }
-
-    [Fact]
-    public void A_starter_role_is_made_once_for_a_scope_whatever_became_of_it()
-    {
-        var rules = PlotMembership.Rules;
-        List<PlotRole> meadow = [.. StarterRoles.Missing<PlotRoleId>(rules, []).Select(draft => new PlotRole(PlotRoleId.CreateSequential(), Meadow, draft))];
-
-        // Asked again with the roles the scope has: nothing is missing.
-        StarterRoles.Missing(rules, meadow).Should().BeEmpty();
-
-        // Renamed, given other permissions, archived: told by what it was made from, so still there.
-        meadow[0].CallIt("Grower", null);
-        meadow[0].HaveItGive(PlotPermissions.See);
-        meadow[1].PutAway();
-        StarterRoles.Missing(rules, meadow).Should().BeEmpty();
-
-        // A role a customer made with a starter role's name is no starter role: that one is still to be made.
-        var orchard = new List<PlotRole> { new(PlotRoleId.CreateSequential(), GardenId.CreateSequential(), new CustomRoleDraft(PlotMembership.Tender, null, [PlotPermissions.See])) };
-        StarterRoles.Missing(rules, orchard).Select(draft => draft.MadeFrom).Should().Equal(PlotMembership.Tender, PlotMembership.Waterer);
-
-        // Only what is missing: a scope that has the waterer's role alone is given the tender's.
-        StarterRoles.Missing(rules, meadow.Where(role => role.MadeFrom == PlotMembership.Waterer)).Select(draft => draft.MadeFrom).Should().Equal(PlotMembership.Tender);
-
-        // Which scope is meant is said by the roles handed over, and by nothing else.
-        FluentActions.Invoking(() => StarterRoles.Missing<PlotRoleId>(rules, null!)).Should().Throw<ArgumentNullException>();
-        FluentActions.Invoking(() => StarterRoles.Missing<PlotRoleId>(null!, [])).Should().Throw<ArgumentNullException>();
-    }
+    /// <summary>The draft of a starter role the rules declare, as the role manager makes one.</summary>
+    private static CustomRoleDraft Starter(MembershipRules rules, string name) => new(name, null, rules.PermissionsOf(new NamedRole(name)), name);
 }

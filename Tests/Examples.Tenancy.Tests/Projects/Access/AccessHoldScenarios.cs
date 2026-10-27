@@ -175,8 +175,8 @@ public sealed class AccessHoldScenarios(SampleHosts sample) : IClassFixture<Samp
         var lead = Harbor.ProjectRoles[SampleCatalogue.CrewLead];
 
         // Vic is an observer on Pier 7 and manages no crew. Reached around their checks, the handlers that give up a
-        // seat's own place save as Vic, not as the application: on the default path the database refuses his write,
-        // and under the hold a change no check let through is refused before anything is written.
+        // seat's own place call the crew manager, which finds no request in hand that its check let through. So the
+        // manager asks Vic's permission itself and refuses him before anything is written, with the hold and without.
         Exception?[] refused =
         [
             await DirectAsync(onPostgres, DemoPeople.Vic, provider => ActivatorUtilities.CreateInstance<TakeCrewRoleHandler>(provider)
@@ -184,17 +184,7 @@ public sealed class AccessHoldScenarios(SampleHosts sample) : IClassFixture<Samp
             await DirectAsync(onPostgres, DemoPeople.Vic, provider => ActivatorUtilities.CreateInstance<RemoveCrewMemberHandler>(provider)
                 .Handle(new RemoveCrewMember(PierSeven.Id, vic), Cancellation)),
         ];
-        foreach (var thrown in refused)
-        {
-            if (holds)
-            {
-                thrown.Should().BeOfType<InvalidOperationException>().Which.Message.Should().Contain("was changed with no request in hand");
-            }
-            else
-            {
-                thrown.Should().BeOfType<RefusalException>().Which.Code.Should().Be(ToolkitRefusals.Refused);
-            }
-        }
+        refused.Should().AllSatisfy(thrown => thrown.Should().BeOfType<RefusalException>().Which.Code.Should().Be(ProjectRefusals.NotPermitted));
 
         using var leo = await onPostgres.Host.ClientAsync("leo", Harbor.Slug);
         (await RolesOnTheCrewAsync(leo, vic)).Should().Equal([observer.Value], "Vic is on the crew still, with his role");

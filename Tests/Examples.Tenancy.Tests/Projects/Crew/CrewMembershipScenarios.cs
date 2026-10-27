@@ -135,12 +135,12 @@ public sealed class CrewMembershipScenarios(SampleHosts sample) : IClassFixture<
         // A membership and a role each start now, so an end that is not after now is no period at all.
         using (var added = await leo.PostAsJsonAsync($"/projects/{PierSeven.Id.Value}/crew", new { seatId = Harbor.SeatOf(DemoPeople.Tove).Value, until = yesterday }, Cancellation))
         {
-            await added.ShouldBeRefusedAsync(HttpStatusCode.BadRequest, TenancyRefusals.InvalidPeriod);
+            await added.ShouldBeRefusedAsync(HttpStatusCode.BadRequest, ProjectRefusals.InvalidPeriod);
         }
 
         using (var given = await leo.GiveCrewRoleAsync(PierSeven, Harbor.SeatOf(DemoPeople.Vic), Surveyor, until: yesterday))
         {
-            await given.ShouldBeRefusedAsync(HttpStatusCode.BadRequest, TenancyRefusals.InvalidPeriod);
+            await given.ShouldBeRefusedAsync(HttpStatusCode.BadRequest, ProjectRefusals.InvalidPeriod);
         }
 
         var crew = (await leo.WithNamesAsync(await leo.ProjectDetailAsync(PierSeven))).Crew;

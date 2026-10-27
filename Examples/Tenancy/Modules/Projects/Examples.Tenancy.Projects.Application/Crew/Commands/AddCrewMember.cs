@@ -1,4 +1,3 @@
-using DDDToolkit.Supporting.Membership.UseCases;
 using Mediator;
 
 namespace Examples.Tenancy.Projects.Application.Crew.Commands;
@@ -11,8 +10,9 @@ namespace Examples.Tenancy.Projects.Application.Crew.Commands;
 /// <remarks>
 /// Whoever manages the crew may put anyone on it, themselves included, in any project role of the tenant in use,
 /// without holding that role's permissions: on a crew a role gives only what acts on the project. That is this
-/// application's rule, and the whole of it: the command requires <see cref="RequiredPermission"/> on the project, and
-/// nothing is checked for a caller who adds their own seat.
+/// application's rule, and the whole of it: the command requires <see cref="RequiredPermission"/> on the project, the
+/// permission the projects' rules mark as the one that manages the crew, and nothing is checked for a caller who adds
+/// their own seat.
 /// </remarks>
 /// <param name="Project">The project.</param>
 /// <param name="Seat">The seat.</param>
@@ -30,51 +30,23 @@ public sealed record AddCrewMember([OnResource] ProjectId Project, SeatId Seat, 
 }
 
 /// <summary>
-/// Handles <see cref="AddCrewMember"/>: loads the project its command names, has the seat and the role admitted,
-/// adds the member, with the role when one was named, and saves.
+/// Handles <see cref="AddCrewMember"/> with one call to the crew manager, which takes the answer of the command's check,
+/// admits the seat and the role, puts the seat on the crew of the project it loads, and saves. The seat that added it is
+/// the caller's.
 /// </summary>
-/// <param name="store">Where projects are loaded and saved.</param>
-/// <param name="admission">Whether the seat may go on a crew, and the role on a member: the projects' rules.</param>
-/// <param name="tenancy">Tenancy, asked about the current caller, for who added the member.</param>
-/// <param name="clock">What "now" is: when the membership starts.</param>
-public sealed class AddCrewMemberHandler(
-    IProjectStore store,
-    MemberAdmission<ProjectId, SeatId, ProjectRoleId> admission,
-    TenancyAccessManager tenancy,
-    TimeProvider clock)
-    : ICommandHandler<AddCrewMember>
+/// <param name="crew">The projects' crew manager, which the Membership package's generator writes for <c>CrewMember</c>.</param>
+public sealed class AddCrewMemberHandler(CrewMemberManager crew) : ICommandHandler<AddCrewMember>
 {
     /// <inheritdoc />
     /// <exception cref="Exceptions.RefusalException">
     /// <c>projects.not-found</c>, <c>projects.seat-not-active</c>, <c>projects.role-not-for-members</c>,
-    /// <c>projects.already-on-crew</c>, <c>projects.closed</c>, and <c>tenancy.invalid-period</c> for an end that is
-    /// not after now.
+    /// <c>projects.closed</c>, <c>projects.invalid-period</c> for an end that is not after now, and
+    /// <c>projects.already-on-crew</c>.
     /// </exception>
     /// <exception cref="Exceptions.ConcurrencyConflictException">The project is at another version than the caller named, or was changed while this was saved.</exception>
     public async ValueTask<Unit> Handle(AddCrewMember command, CancellationToken cancellationToken)
     {
-        var project = await store.LoadAsync(command.Project, command.ExpectedVersion, cancellationToken)
-            ?? throw ProjectRefusals.Refuse(ProjectRefusals.NotFound);
-
-        await admission.RequireMemberAsync(command.Seat, cancellationToken);
-        if (command.Role is { } asked)
-        {
-            await admission.RequireRoleAsync(asked, cancellationToken);
-        }
-
-        var now = clock.GetUtcNow();
-        var period = CrewPeriod.Between(now, command.Until);
-        var by = tenancy.CurrentTenant.Require().Seat;
-        if (command.Role is { } given)
-        {
-            project.AddToCrew(command.Seat, given, period, now, by);
-        }
-        else
-        {
-            project.AddToCrew(command.Seat, period, now, by);
-        }
-
-        await store.SaveAsync(cancellationToken);
+        await crew.AddAsync(command.Project, command.Seat, command.Role, command.Until, cancellationToken, command.ExpectedVersion);
         return Unit.Value;
     }
 }

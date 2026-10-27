@@ -32,7 +32,7 @@ namespace DDDToolkit.Supporting.Membership.Access;
 /// refuses one that is not: the caller's own lets it act on itself, not on a resource it has nothing to do with.
 /// </para>
 /// <para>
-/// Where a permission on the resource locks the members (<see cref="MembershipRules.MembersLockPermission"/>), a
+/// Where a permission on the resource manages the members (<see cref="MembershipRules.ManagesMembersPermission"/>), a
 /// database that checks every row lets a member row change only for a caller that holds that permission, so a caller who takes
 /// itself off without it is refused there. The handler then saves the caller's own place as the application's own work,
 /// begun for that caller once its request is the one in hand (<see cref="RequestInHand"/>): the check decided it.

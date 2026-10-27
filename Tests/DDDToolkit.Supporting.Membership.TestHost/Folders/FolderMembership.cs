@@ -18,7 +18,7 @@ public static class FolderPermissions
     public const string File = "folders.file";
 
     /// <summary>Decide who is on a folder's staff: the permission this host's commands that change the staff require.</summary>
-    [On<Folder>(LocksMembers = true)]
+    [On<Folder>(ManagesMembers = true)]
     public const string Staff = "folders.staff";
 
     /// <summary>Destroy what is in a folder: no role gives it, so the keeper's alone.</summary>
@@ -26,7 +26,7 @@ public static class FolderPermissions
     public const string Shred = "folders.shred";
 
     /// <summary>Hand a folder to another keeper: no role gives it, so the keeper's alone.</summary>
-    [On<Folder>(InRoles = false, LocksOwner = true)]
+    [On<Folder>(InRoles = false, NamesOwner = true)]
     public const string HandOver = "folders.hand-over";
 }
 

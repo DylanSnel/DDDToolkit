@@ -1,4 +1,3 @@
-using DDDToolkit.Supporting.Membership.UseCases;
 using Mediator;
 
 namespace Examples.Tenancy.Projects.Application.Lifecycle.Commands;
@@ -54,20 +53,21 @@ public sealed record OpenProject(string Number, string Name, OrganizationUnitId 
 }
 
 /// <summary>
-/// Handles <see cref="OpenProject"/>: decides everything first, then opens the project and saves once. Who may open it,
-/// and name whom as its owner, the command's requirement said at the door.
+/// Handles <see cref="OpenProject"/>: decides what is the tenant's to say first, then has the crew manager admit the
+/// owner, add the project and save it once. Who may open it, and name whom as its owner, the command's requirement said
+/// at the door.
 /// </summary>
-/// <param name="store">Where projects are added and saved.</param>
+/// <param name="store">Where a project's number is asked about.</param>
 /// <param name="reads">Where Tenancy's rows are read, for the unit.</param>
 /// <param name="organization">What the tenant allows: an active unit.</param>
-/// <param name="admission">Whether the owner may go on a crew.</param>
+/// <param name="crew">The projects' crew manager, which admits the owner and adds and saves the project.</param>
 /// <param name="tenancy">Tenancy, asked about the current caller.</param>
 /// <param name="clock">What "now" is.</param>
 public sealed class OpenProjectHandler(
     IProjectStore store,
     IProjectReads reads,
     ProjectTenancy organization,
-    MemberAdmission<ProjectId, SeatId, ProjectRoleId> admission,
+    CrewMemberManager crew,
     TenancyAccessManager tenancy,
     TimeProvider clock)
     : ICommandHandler<OpenProject, ProjectId>
@@ -101,18 +101,16 @@ public sealed class OpenProjectHandler(
         await using var reading = reads.Open();
         await organization.RequireActiveUnitAsync(reading, unit, cancellationToken);
 
-        // Whether the owner may be on a crew: the projects' rules answer it, on the request's context.
-        await admission.RequireMemberAsync(owner, cancellationToken);
-
         var number = command.Number?.Trim() ?? string.Empty;
         if (await store.NumberTakenAsync(number, cancellationToken))
         {
             throw ProjectRefusals.Refuse(ProjectRefusals.NumberTaken, ("Number", number));
         }
 
-        var opened = new Project(command.Id ?? ProjectId.Create(), scope.Id, number, command.Name, unit, owner, clock.GetUtcNow(), command.Planned);
-        store.Add(opened);
-        await store.SaveAsync(cancellationToken);
+        // Whether the owner may be on a crew the crew manager asks of the organization, then it adds the project and saves.
+        var opened = await crew.OpenAsync(
+            new Project(command.Id ?? ProjectId.Create(), scope.Id, number, command.Name, unit, owner, clock.GetUtcNow(), command.Planned),
+            cancellationToken);
         return opened.Id;
     }
 }

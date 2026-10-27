@@ -1,5 +1,4 @@
 using DDDToolkit.Supporting.Membership;
-using DDDToolkit.Supporting.Membership.UseCases;
 using Mediator;
 
 namespace Examples.Tenancy.Projects.Application.Ownership.Commands;
@@ -14,7 +13,8 @@ namespace Examples.Tenancy.Projects.Application.Ownership.Commands;
 /// Only the organization names an owner: <see cref="RequiredPermission"/> is held at the project's unit or above it,
 /// never through the crew, whatever role is on it, and not by owning the project either
 /// (<see cref="Access.ProjectPermissions.ChangeOwner"/>). So the owner cannot hand the project on. The projects'
-/// rules name the permission as the one that locks the owner, so the database holds a caller to it as well.
+/// rules mark the permission as the one that names the owner, so the crew manager requires it, and the database holds a
+/// caller to it as well.
 /// </remarks>
 /// <param name="Id">The project.</param>
 /// <param name="Seat">The seat that is to own it.</param>
@@ -34,39 +34,22 @@ public sealed record ChangeProjectOwner([OnResource] ProjectId Id, SeatId Seat, 
 }
 
 /// <summary>
-/// Handles <see cref="ChangeProjectOwner"/>: loads the project its command names, has the seat admitted, and the
-/// role the old owner stays in, names the owner and saves.
+/// Handles <see cref="ChangeProjectOwner"/> with one call to the crew manager, which takes the answer of the command's
+/// check, admits the seat and the role the old owner stays in, names the owner of the project it loads, and saves.
 /// </summary>
-/// <param name="store">Where projects are loaded and saved.</param>
-/// <param name="admission">Whether the seat may go on a crew, and whether the old owner's role is one of the tenant's in use.</param>
-/// <param name="clock">What "now" is: when the new owner's membership starts to count.</param>
-public sealed class ChangeProjectOwnerHandler(
-    IProjectStore store,
-    MemberAdmission<ProjectId, SeatId, ProjectRoleId> admission,
-    TimeProvider clock)
-    : ICommandHandler<ChangeProjectOwner>
+/// <param name="crew">The projects' crew manager.</param>
+public sealed class ChangeProjectOwnerHandler(CrewMemberManager crew) : ICommandHandler<ChangeProjectOwner>
 {
     /// <inheritdoc />
     /// <exception cref="Exceptions.RefusalException">
     /// <c>projects.not-found</c>, <c>projects.seat-not-active</c>, <c>projects.role-not-for-members</c> for the old
-    /// owner's role, <c>projects.already-owner</c>, <c>projects.closed</c>.
+    /// owner's role, <c>projects.closed</c>, <c>projects.already-owner</c>.
     /// </exception>
     /// <exception cref="Exceptions.ConcurrencyConflictException">The project is at another version than the caller named, or was changed while this was saved.</exception>
     public async ValueTask<Unit> Handle(ChangeProjectOwner command, CancellationToken cancellationToken)
     {
-        var project = await store.LoadAsync(command.Id, command.ExpectedVersion, cancellationToken)
-            ?? throw ProjectRefusals.Refuse(ProjectRefusals.NotFound);
-
-        await admission.RequireMemberAsync(command.Seat, cancellationToken);
-        FormerOwner<ProjectRoleId> formerOwner = FormerOwner.Leaves;
-        if (command.FormerOwnerRole is { } role)
-        {
-            await admission.RequireRoleAsync(role, cancellationToken);
-            formerOwner = FormerOwner.StaysAs(role);
-        }
-
-        project.ChangeOwner(command.Seat, formerOwner, clock.GetUtcNow());
-        await store.SaveAsync(cancellationToken);
+        FormerOwner<ProjectRoleId> formerOwner = command.FormerOwnerRole is { } role ? FormerOwner.StaysAs(role) : FormerOwner.Leaves;
+        await crew.NameOwnerAsync(command.Id, command.Seat, formerOwner, cancellationToken, command.ExpectedVersion);
         return Unit.Value;
     }
 }

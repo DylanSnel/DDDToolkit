@@ -115,8 +115,10 @@ internal sealed class MembershipModelConvention : IModelFinalizingConvention
     /// <exception cref="InvalidOperationException">It holds two: a resource has one member list.</exception>
     private static PropertyInfo? MembersOf(Type resource)
     {
+        // The member manager's way to the members, which the generator writes as an explicit implementation, is the same
+        // collection under the interface's name: it is passed over.
         var found = resource.GetProperties(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
-            .Where(property => ElementOf(property.PropertyType) is { } member && MemberClassOf(member) == resource)
+            .Where(property => !property.Name.Contains('.', StringComparison.Ordinal) && ElementOf(property.PropertyType) is { } member && MemberClassOf(member) == resource)
             .ToList();
 
         return found.Count switch

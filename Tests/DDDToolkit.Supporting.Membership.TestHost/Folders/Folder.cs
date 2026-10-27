@@ -62,40 +62,26 @@ public sealed partial class Folder
     /// </summary>
     private static MembershipCodes Codes => FolderRefusals.Membership;
 
-    /// <summary>Puts a member of staff on the folder, in a role.</summary>
-    public FolderMember Admit(StaffCode staff, NamedRole role, MemberPeriod period, DateTimeOffset now, StaffCode? by)
-    {
-        RequireUnlocked();
-        return Members.Add(staff, role, period, now, by);
-    }
+    /// <summary>The way to the members the member manager takes, which the generator writes.</summary>
+    private IMembershipResource<FolderMember, StaffCode, NamedRole> Managed => this;
 
-    /// <summary>Gives a member of staff on the folder a role.</summary>
-    public void GiveRole(StaffCode to, NamedRole role, MemberPeriod period, DateTimeOffset now, StaffCode? by)
-    {
-        RequireUnlocked();
-        Members.GiveRole(to, role, period, now, by);
-    }
+    /// <summary>Puts a member of staff on the folder in a role, for the tests to set a folder up with.</summary>
+    public FolderMember Admit(StaffCode staff, NamedRole role, MemberPeriod period, DateTimeOffset now, StaffCode? by) => Managed.AddMember(staff, role, period, now, by);
 
-    /// <summary>Takes a role from a member of staff on the folder.</summary>
-    public void TakeRole(StaffCode from, NamedRole role)
-    {
-        RequireUnlocked();
-        Members.TakeRole(from, role);
-    }
+    /// <summary>Gives a member of staff a role.</summary>
+    public void GiveRole(StaffCode to, NamedRole role, MemberPeriod period, DateTimeOffset now, StaffCode? by) => Managed.GiveRole(to, role, period, now, by);
+
+    /// <summary>Takes a role from a member of staff.</summary>
+    public void TakeRole(StaffCode from, NamedRole role) => Managed.TakeRole(from, role);
 
     /// <summary>Takes a member of staff off the folder.</summary>
-    public void Dismiss(StaffCode staff)
-    {
-        RequireUnlocked();
-        Members.Remove(staff);
-    }
+    public void Dismiss(StaffCode staff) => Managed.RemoveMember(staff);
 
     /// <summary>Hands the folder to another keeper.</summary>
-    public void HandOver(StaffCode to, FormerOwner<NamedRole> formerKeeper, DateTimeOffset now)
-    {
-        RequireUnlocked();
-        Keeper = Members.NameOwner(to, formerKeeper, now).Owner;
-    }
+    public void HandOver(StaffCode to, FormerOwner<NamedRole> formerKeeper, DateTimeOffset now) => Managed.NameOwner(to, formerKeeper, now);
+
+    /// <summary>The host's guard, which runs in front of every change of the staff: a locked folder changes no more.</summary>
+    partial void OnChangingMembers() => RequireUnlocked();
 
     /// <summary>Locks the folder.</summary>
     public void Lock() => Locked = true;

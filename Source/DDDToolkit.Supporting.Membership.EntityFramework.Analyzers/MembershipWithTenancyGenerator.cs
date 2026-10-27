@@ -378,13 +378,15 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
         var answered = new List<string>
         {
             Membership + ".Access.ICallerMember<" + join.IdOfResource + ", " + join.Seat + ">",
-            Membership + ".UseCases.IMemberDirectory<" + join.IdOfResource + ", " + join.Seat + ">",
+            Membership + ".Managers.IMemberDirectory<" + join.IdOfResource + ", " + join.Seat + ">",
             Membership + ".EntityFramework.IPlacesReached<" + join.IdOfResource + ", " + unit + ">",
+            Membership + ".Managers.IOwnPlaceWork<" + join.IdOfResource + ", " + join.Seat + ">",
+            Membership + ".Managers.ICustomRoleAccess<" + join.Resource + ">",
         };
         if (join.TenantsRoles)
         {
             answered.Add(Membership + ".EntityFramework.IRolesWithPermission<" + join.IdOfResource + ", " + join.Role + ">");
-            answered.Add(Membership + ".UseCases.IMemberRoles<" + join.IdOfResource + ", " + join.Role + ">");
+            answered.Add(Membership + ".Access.IMemberRoles<" + join.IdOfResource + ", " + join.Role + ">");
         }
 
         using (Declared(
@@ -433,6 +435,33 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
             writer.Line("            seat => seat.Id.Equals(member) && seat.Status == global::" + Tenancy + ".SeatStatus.Active,");
             writer.Line("            cancellationToken),");
             writer.Line("        cancellationToken).ConfigureAwait(false);");
+
+            writer.Line();
+            writer.Line("/// <summary>");
+            writer.Line("/// Begins the resource's own work in the caller's tenant, for the caller's seat, for the save of a change to the caller's own");
+            writer.Line("/// place: Tenancy's system work in the tenant, in the scope the resource's rules name or Tenancy's own where they name none,");
+            writer.Line("/// recorded as done for that seat.");
+            writer.Line("/// </summary>");
+            writer.Line("public global::System.IDisposable Begin(" + join.Seat + " member, string? scope)");
+            writer.Line("    => scope is null");
+            writer.Line("        ? _access.BeginSystemIn(_access.CurrentTenant.Require().Id, member)");
+            writer.Line("        : _access.BeginSystemIn(_access.CurrentTenant.Require().Id, member, scope);");
+
+            writer.Line();
+            writer.Line("/// <summary>");
+            writer.Line("/// Requires the caller to hold <paramref name=\"permission\"/>, the one the rules name for changing the roles a customer makes,");
+            writer.Line("/// for the whole tenant, as Tenancy refuses it: somebody with no seat that counts in the tenant first, as nobody; system");
+            writer.Line("/// work in the tenant holds every permission there. A permission the catalogue does not know is held by nobody.");
+            writer.Line("/// </summary>");
+            using (writer.Block("public async global::System.Threading.Tasks.ValueTask RequireAsync(string permission, " + CancellationTokenType + " cancellationToken)"))
+            {
+                writer.Line("_access.CurrentTenant.Require();");
+                writer.Line("if (!_catalogue.Knows(permission)");
+                using (writer.Block("    || !await AskAsync(queries => queries.HoldsAtTenantAsync(permission, cancellationToken), cancellationToken).ConfigureAwait(false))"))
+                {
+                    writer.Line("throw global::" + Tenancy + ".TenancyRefusals.Refuse(global::" + Tenancy + ".TenancyRefusals.NotPermitted, (\"Permission\", permission));");
+                }
+            }
 
             writer.Line();
             writer.Line("/// <summary>");

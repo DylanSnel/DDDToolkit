@@ -167,7 +167,7 @@ public sealed class ContributionTests(FilingPostgres postgres)
             .WithMessage("A row access rule of Folder is for the role '@token:archivist', which may ask its functions, and they cannot be granted to it: '@token:archivist' is the token role 'archivist', which is mapped to no database role*");
 
         // And a name Postgres would cut is refused where the lock is written: it is named after the resource.
-        var longName = MembershipRules.Declare(typeof(Document), new string('d', 60), [new("d.read", LocksOwner: true)], Roles.Fixed([new("reader", ["d.read"])]));
+        var longName = MembershipRules.Declare(typeof(Document), new string('d', 60), [new("d.read", NamesOwner: true)], Roles.Fixed([new("reader", ["d.read"])]));
         FluentActions.Invoking(() => new MembershipRowAccessContribution<DocumentShare>(longName).Contribute(context, Export))
             .Should().Throw<InvalidOperationException>().WithMessage("*longer than the 63 characters Postgres keeps of a name*");
 
@@ -175,7 +175,7 @@ public sealed class ContributionTests(FilingPostgres postgres)
         // would end the body early, and what came after it would be read as the statement's own: refused where the
         // lock is written, as the export refuses a function's body with its quote in it.
         var quoted = MembershipRules.Declare(
-            typeof(Document), "documents", [new("d.read"), new("d.give $body$; DROP TABLE x; --", LocksOwner: true)], Roles.Fixed([new("reader", ["d.read"])]));
+            typeof(Document), "documents", [new("d.read"), new("d.give $body$; DROP TABLE x; --", NamesOwner: true)], Roles.Fixed([new("reader", ["d.read"])]));
         FluentActions.Invoking(() => new MembershipRowAccessContribution<DocumentShare>(quoted).Contribute(context, Export))
             .Should().Throw<InvalidOperationException>()
             .WithMessage("The lock on the owner column of Document cannot be written from the rules 'documents'*has '$body$' in it, which would end the function's body early.");
@@ -576,7 +576,7 @@ public sealed class ContributionTests(FilingPostgres postgres)
             => MembershipRules.Declare(
                 typeof(Document),
                 "documents",
-                [new(DocumentPermissions.View), new(DocumentPermissions.Edit), new(DocumentPermissions.Share, LocksMembers: membersLocked, LocksOwner: ownerLocked)],
+                [new(DocumentPermissions.View), new(DocumentPermissions.Edit), new(DocumentPermissions.Share, ManagesMembers: membersLocked, NamesOwner: ownerLocked)],
                 Roles.Fixed([new("contributor", [DocumentPermissions.View, DocumentPermissions.Edit])]),
                 systemScopes: scopes ?? []);
         string[] documents =
@@ -625,7 +625,7 @@ public sealed class ContributionTests(FilingPostgres postgres)
             (new MembershipRowAccessContribution<DocumentShare>(MembershipRules.Declare(
                 typeof(Document),
                 "documents",
-                [new("documents.view", EveryMember: true), new("documents.edit"), new("documents.share", LocksMembers: true, LocksOwner: true)],
+                [new("documents.view", EveryMember: true), new("documents.edit"), new("documents.share", ManagesMembers: true, NamesOwner: true)],
                 Roles.Fixed([new("contributor", ["documents.view", "documents.edit"]), new("onlooker", ["documents.view"])]),
                 systemScopes: [])), filing),
 
@@ -633,7 +633,7 @@ public sealed class ContributionTests(FilingPostgres postgres)
             (new MembershipRowAccessContribution<FolderMember>(MembershipRules.Declare(
                 typeof(Folder),
                 "folders",
-                [new("folders.read"), new("folders.file"), new("folders.staff", LocksMembers: true), new("folders.shred", InRoles: false), new("folders.hand-over", InRoles: false, LocksOwner: true)],
+                [new("folders.read"), new("folders.file"), new("folders.staff", ManagesMembers: true), new("folders.shred", InRoles: false), new("folders.hand-over", InRoles: false, NamesOwner: true)],
                 Roles.Fixed([new("keeper", ["folders.read", "folders.file", "folders.staff"]), new("visitor", ["folders.read"])]),
                 members: MemberSource.Claim("app_metadata.staff"),
                 systemScopes: ["filing"])), filing),
@@ -641,11 +641,11 @@ public sealed class ContributionTests(FilingPostgres postgres)
             // Members the host resolves, roles kept elsewhere, reached from above, no lock.
             (new MembershipRowAccessContribution<CratePorter>(Kept("crates")), depot),
 
-            // Roles a customer makes, a permission that locks the members alone, which then holds a role given to one the caller sees.
+            // Roles a customer makes, a permission that manages the members alone, which then holds a role given to one the caller sees.
             (new MembershipRowAccessContribution<PlotGardener>(MembershipRules.Declare(
                 typeof(Plot),
                 "plots",
-                [new("plots.see", EveryMember: true), new("plots.plant"), new("plots.fence", LocksMembers: true)],
+                [new("plots.see", EveryMember: true), new("plots.plant"), new("plots.fence", ManagesMembers: true)],
                 Roles.Custom(starters: [new("tender", ["plots.see", "plots.plant"])]),
                 systemScopes: [])), gardens),
         ];

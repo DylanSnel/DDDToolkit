@@ -1,6 +1,4 @@
-using DDDToolkit.Access;
 using DDDToolkit.Exceptions;
-using DDDToolkit.Supporting.Membership.UseCases;
 using Mediator;
 
 namespace Examples.Tenancy.Projects.Application.ProjectRoles.Commands;
@@ -32,46 +30,33 @@ namespace Examples.Tenancy.Projects.Application.ProjectRoles.Commands;
 /// </param>
 public sealed record SetUpProjectRoles(IReadOnlyDictionary<string, ProjectRoleId>? Ids = null) : ICommand, IProjectsRequest;
 
-/// <summary>Handles <see cref="SetUpProjectRoles"/>: reads the tenant's roles, makes the starter roles it lacks and saves.</summary>
-/// <remarks>
-/// Nothing of a package's stands between this command and the role, so the handler asks again what its request
-/// declared, of the very checks the pipeline asks, and then narrower: system work in the very tenant it sets up,
-/// which is where the roles are made, and nobody else. It then decides the same wherever it runs, in a program that
-/// left the module's access behavior out of the pipeline as much as in the host.
-/// </remarks>
-/// <param name="store">Where project roles are read, added and saved.</param>
-/// <param name="membership">The projects' rules and starter roles.</param>
+/// <summary>
+/// Handles <see cref="SetUpProjectRoles"/>: only system work in the tenant sets it up; the project role manager makes the
+/// starter roles the tenant lacks, each with the name and description the module gives it, and saves them.
+/// </summary>
+/// <param name="roles">The project role manager, which makes a starter role once, told by what it was made from.</param>
+/// <param name="membership">The projects' starter roles, with their names and descriptions.</param>
 /// <param name="tenancy">Tenancy, asked about the current caller: the tenant being set up.</param>
-/// <param name="checks">The module's access checks, which hold a request to what it declared.</param>
-public sealed class SetUpProjectRolesHandler(IProjectStore store, ProjectMembership membership, TenancyAccessManager tenancy, AccessChecks<IProjectsRequest> checks) : ICommandHandler<SetUpProjectRoles>
+public sealed class SetUpProjectRolesHandler(ProjectRoleManager roles, ProjectMembership membership, TenancyAccessManager tenancy) : ICommandHandler<SetUpProjectRoles>
 {
     /// <inheritdoc />
     /// <exception cref="RefusalException"><c>access.system-only</c>: anybody but system work in the tenant.</exception>
     public async ValueTask<Unit> Handle(SetUpProjectRoles command, CancellationToken cancellationToken)
     {
-        await checks.RequireAsync(command, cancellationToken);
-
         var scope = tenancy.CurrentTenant.Require();
         if (!scope.BySystem)
         {
             throw ToolkitRefusals.Refuse(ToolkitRefusals.SystemOnly);
         }
 
-        var tenant = scope.Id;
-        var missing = StarterRoles.Missing(membership.Rules, await store.RolesOfTheTenantAsync(cancellationToken));
-        if (missing.Count == 0)
-        {
-            return Unit.Value;
-        }
-
-        foreach (var draft in missing)
-        {
-            var starter = membership.StarterRoles.Single(role => role.Key == draft.MadeFrom);
-            var id = command.Ids is { } ids && ids.TryGetValue(starter.Key, out var given) ? given : ProjectRoleId.Create();
-            store.Add(new ProjectRole(id, tenant, draft with { Name = starter.Name, Description = starter.Description }, membership.Rules));
-        }
-
-        await store.SaveAsync(cancellationToken);
+        await roles.CreateStarterRolesAsync(
+            draft =>
+            {
+                var starter = membership.StarterRoles.Single(role => role.Key == draft.MadeFrom);
+                var id = command.Ids is { } ids && ids.TryGetValue(starter.Key, out var given) ? given : ProjectRoleId.Create();
+                return new ProjectRole(id, scope.Id, draft with { Name = starter.Name, Description = starter.Description }, roles.Rules);
+            },
+            cancellationToken);
         return Unit.Value;
     }
 }

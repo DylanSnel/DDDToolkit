@@ -126,8 +126,8 @@ public static class CoursePermissions
 }
 
 /// <summary>
-/// The rules of access through a course's tutors: roles the college makes for itself, from two starter roles, and
-/// reach from above through Tenancy's grants. Who a tutor is follows from the seat id; the college's own work on a
+/// The rules of access through a course's tutors: roles the college makes for itself, from two starter roles, changed by
+/// whoever manages the college's roles for the whole college, and reach from above through Tenancy's grants. Who a tutor is follows from the seat id; the college's own work on a
 /// course runs in the module's scope, <c>campus</c>, and holds every permission there. A lab's rules let no work in a scope
 /// through, <c>systemScopes: []</c>.
 /// </summary>
@@ -147,6 +147,8 @@ public static class CourseMembership
 
     /// <summary>The rules.</summary>
     public static MembershipRules Rules { get; } = MembershipRules.For<Course>(
-        Roles.Custom(starters: [new(Tutor, [CoursePermissions.See, CoursePermissions.Grade]), new(Convenor, [CoursePermissions.See, CoursePermissions.Outline])]),
+        Roles.Custom(
+            starters: [new(Tutor, [CoursePermissions.See, CoursePermissions.Grade]), new(Convenor, [CoursePermissions.See, CoursePermissions.Outline])],
+            managedWith: DDDToolkit.Supporting.Tenancy.Catalogue.TenancyPermissions.RolesManage),
         reachFromAbove: true);
 }

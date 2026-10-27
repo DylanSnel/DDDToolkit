@@ -1,4 +1,3 @@
-using DDDToolkit.Supporting.Membership.UseCases;
 using Mediator;
 
 namespace Examples.Tenancy.Projects.Application.Crew.Commands;
@@ -30,37 +29,22 @@ public sealed record GiveCrewRole([OnResource] ProjectId Project, SeatId Seat, P
 }
 
 /// <summary>
-/// Handles <see cref="GiveCrewRole"/>: loads the project its command names, has the role admitted, gives it and
-/// saves.
+/// Handles <see cref="GiveCrewRole"/> with one call to the crew manager, which admits the role, gives it on the project
+/// it loads, and saves. The seat that gave it is the caller's.
 /// </summary>
-/// <param name="store">Where projects are loaded and saved.</param>
-/// <param name="admission">Whether the role may go on a member: one of the tenant's project roles in use.</param>
-/// <param name="tenancy">Tenancy, asked about the current caller, for who gave the role.</param>
-/// <param name="clock">What "now" is: when the role starts.</param>
-public sealed class GiveCrewRoleHandler(
-    IProjectStore store,
-    MemberAdmission<ProjectId, SeatId, ProjectRoleId> admission,
-    TenancyAccessManager tenancy,
-    TimeProvider clock)
-    : ICommandHandler<GiveCrewRole>
+/// <param name="crew">The projects' crew manager.</param>
+public sealed class GiveCrewRoleHandler(CrewMemberManager crew) : ICommandHandler<GiveCrewRole>
 {
     /// <inheritdoc />
     /// <exception cref="Exceptions.RefusalException">
-    /// <c>projects.not-found</c>, <c>projects.role-not-for-members</c>, <c>projects.member-not-found</c>,
-    /// <c>projects.crew-role-held</c>, <c>projects.closed</c>, and <c>tenancy.invalid-period</c> for an end that is
-    /// not after now.
+    /// <c>projects.not-found</c>, <c>projects.role-not-for-members</c>, <c>projects.closed</c>,
+    /// <c>projects.invalid-period</c> for an end that is not after now, <c>projects.member-not-found</c>,
+    /// <c>projects.crew-role-held</c>, and <c>projects.owner-protected</c> for the owner, who holds no project role.
     /// </exception>
     /// <exception cref="Exceptions.ConcurrencyConflictException">The project is at another version than the caller named, or was changed while this was saved.</exception>
     public async ValueTask<Unit> Handle(GiveCrewRole command, CancellationToken cancellationToken)
     {
-        var project = await store.LoadAsync(command.Project, command.ExpectedVersion, cancellationToken)
-            ?? throw ProjectRefusals.Refuse(ProjectRefusals.NotFound);
-
-        await admission.RequireRoleAsync(command.Role, cancellationToken);
-
-        var now = clock.GetUtcNow();
-        project.GiveCrewRole(command.Seat, command.Role, CrewPeriod.Between(now, command.Until), now, tenancy.CurrentTenant.Require().Seat);
-        await store.SaveAsync(cancellationToken);
+        await crew.GiveRoleAsync(command.Project, command.Seat, command.Role, command.Until, cancellationToken, command.ExpectedVersion);
         return Unit.Value;
     }
 }

@@ -41,9 +41,9 @@ public static class ProjectPermissions
     [On<Project>(Description = "Close or reopen a project.")]
     public const string Close = ProjectPermissionNames.Close;
 
-    [On<Project>(LocksMembers = true, Implies = [ProjectPermissionNames.View], Description = "Add and remove crew members, give and take their project roles.")]
+    [On<Project>(ManagesMembers = true, Implies = [ProjectPermissionNames.View], Description = "Add and remove crew members, give and take their project roles.")]
     public const string ManageCrew = ProjectPermissionNames.ManageCrew;
 
-    [On<Project>(Owner = false, InRoles = false, LocksOwner = true, Description = "Name a project's owner.")]
+    [On<Project>(Owner = false, InRoles = false, NamesOwner = true, Description = "Name a project's owner.")]
     public const string ChangeOwner = ProjectPermissionNames.ChangeOwner;
 }

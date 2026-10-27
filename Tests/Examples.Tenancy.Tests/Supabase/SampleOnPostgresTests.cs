@@ -125,7 +125,7 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
         // A project's owner changes only for a seat that holds the permission that names one.
         ["no lock on a project's owner"] = (
             $"""DROP TRIGGER projects_owner_stays ON {ProjectsContext.Schema}."{ProjectsContext.ProjectsTable}" """,
-            "(its owner column is not held to the permission that locks the owner)",
+            "(its owner column is not held to the permission that names the owner)",
             MembershipPostgresChecks.FunctionsInPlaceCheck),
     };
 

@@ -36,7 +36,7 @@ public class MembershipDocsExampleTests
         using DDDToolkit.Supporting.Membership;
         using DDDToolkit.Supporting.Membership.Access;
         using DDDToolkit.Supporting.Membership.EntityFramework;
-        using DDDToolkit.Supporting.Membership.UseCases;
+        using DDDToolkit.Supporting.Membership.Managers;
         using Filing.Converters;
         using Microsoft.EntityFrameworkCore;
         using Microsoft.Extensions.DependencyInjection;
@@ -120,7 +120,7 @@ public class MembershipDocsExampleTests
         // and no warning at start-up that the rules leave them to whoever may change a document.
         var rules = (MembershipRules)Run().Emit().StaticProperty("Filing.DocumentMembership", "Rules")!;
 
-        (rules.MembersLockPermission, rules.OwnerLockPermission).Should().Be(("documents.share", "documents.share"), "the permission the example's command that shares requires");
+        (rules.ManagesMembersPermission, rules.NamesOwnerPermission).Should().Be(("documents.share", "documents.share"), "the permission the example's command that shares requires");
     }
 
     [Fact]

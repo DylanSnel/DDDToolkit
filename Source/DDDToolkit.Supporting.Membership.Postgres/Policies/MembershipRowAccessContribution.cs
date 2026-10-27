@@ -94,19 +94,19 @@ namespace DDDToolkit.Supporting.Membership.Postgres;
 /// That the member tables follow the resource's rules means whoever those rules let change a resource
 /// writes its member rows and its owner column, by any statement that reaches the database: a caller that
 /// only edits a resource could give itself a role on it, or make itself its owner. So the permissions the
-/// application's commands require for that are marked <c>LocksMembers</c> and <c>LocksOwner</c>, and the lock is
+/// application's commands require for that are marked <c>ManagesMembers</c> and <c>NamesOwner</c>, and the lock is
 /// written from them, for the database roles that may ask the functions:
 /// </para>
 /// <list type="bullet">
-/// <item><see cref="MembershipRules.MembersLockPermission"/>: a restrictive policy on both member tables for
+/// <item><see cref="MembershipRules.ManagesMembersPermission"/>: a restrictive policy on both member tables for
 /// adding, changing and removing a row. A row is written only on a resource the caller holds that permission on, or
-/// the one that locks the owner, where there is one: naming an owner writes member rows too. It
+/// the one that names the owner, where there is one: naming an owner writes member rows too. It
 /// narrows what the application's rules allow and allows nothing itself. Where a customer makes the
 /// roles, a second one on the table of the roles a member holds, for adding and changing a row: the role
 /// is one the caller sees in the role table, asked as the caller, so the application's own rules on that
 /// table decide it. The functions find a role by its id, whoever's it is; this keeps a role the caller does
 /// not see, another customer's, off a member list it writes.</item>
-/// <item><see cref="MembershipRules.OwnerLockPermission"/>: a trigger on the resource's table that refuses, as a
+/// <item><see cref="MembershipRules.NamesOwnerPermission"/>: a trigger on the resource's table that refuses, as a
 /// policy does, a statement that would leave a row with another owner, unless the caller held that permission on
 /// the resource before.</item>
 /// </list>
@@ -114,7 +114,7 @@ namespace DDDToolkit.Supporting.Membership.Postgres;
 /// The lock asks what the caller holds when each statement runs, as every policy does, and a change of a
 /// resource's members is several statements. Two things follow. A resource is opened with its owner on the
 /// list, and those first rows pass the lock like any other: an owner holds the permissions marked <c>Owner</c>
-/// (<see cref="MembershipRules.OwnerPermissions"/>), so the one that locks the members is one of them wherever a
+/// (<see cref="MembershipRules.OwnerPermissions"/>), so the one that manages the members is one of them wherever a
 /// caller opens a resource as itself. And an owner that hands its own resource on, holding the permissions by
 /// owning it alone, holds them no longer once the owner column has changed: the rows written after that are
 /// not its to write, under the lock or under an application's own rule that asks what the caller holds.
@@ -180,7 +180,7 @@ public class MembershipRowAccessContribution<TMember> : IRowAccessContribution
     /// resource be reached from above, and it marks no place it hangs at; the roles are fixed, and the members
     /// hold roles that are not <see cref="NamedRole"/>; a customer makes the roles, and the model maps no role class
     /// for the resource, or one a member does not hold by its id; or the model stores a member, a moment of a period
-    /// or a role's permissions as something the functions cannot compare; or a permission locks the owner and a role the lock
+    /// or a role's permissions as something the functions cannot compare; or a permission names the owner and a role the lock
     /// cannot be written for may ask the functions; or a trigger's name would be longer than Postgres keeps one.
     /// </exception>
     public RowAccessContributionResult? Contribute(DbContext context, RowAccessExport export)

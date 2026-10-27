@@ -58,7 +58,7 @@ public sealed class PeriodsInBothDomainsTests
 
         // His seat is as active as it was: he is refused for the course, and not as nobody.
         await campus.Services.AsAsync(data.Owen, CampusScenario.InAlder, provider =>
-            provider.GetRequiredService<MemberAdmission<CourseId, SeatId, CourseRoleId>>().RequireMemberAsync(data.NedSeat, Cancellation).AsTask());
+            new Admission<CourseId, SeatId, CourseRoleId>(provider, CourseMembership.Codes).RequireMemberAsync(data.NedSeat, Cancellation).AsTask());
     }
 
     [Fact]

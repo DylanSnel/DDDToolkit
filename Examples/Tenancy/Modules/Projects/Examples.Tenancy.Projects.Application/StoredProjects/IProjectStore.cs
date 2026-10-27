@@ -1,13 +1,15 @@
 namespace Examples.Tenancy.Projects.Application.StoredProjects;
 
 /// <summary>
-/// Where Projects' commands load, add and save projects and project roles: one unit of work per request. The
-/// application declares it; the infrastructure project implements it over the module's context and registers it,
-/// scoped.
+/// Where Projects' commands load and save a project they change themselves: its name, its plan, its unit, whether it is
+/// closed. One unit of work per request. The application declares it; the infrastructure project implements it over the
+/// module's context and registers it, scoped.
 /// </summary>
 /// <remarks>
 /// The write side only. A command loads the project it changes, calls the domain, and saves; nothing here lists
-/// projects or answers who may see one, which is <see cref="IProjectReads"/>'s. The two never share storage: a
+/// projects or answers who may see one, which is <see cref="IProjectReads"/>'s. A project's crew, its opening and the
+/// tenant's project roles are the Membership package's managers' to load and save, <c>CrewMemberManager</c> and
+/// <c>ProjectRoleManager</c>, over the same context. The two never share storage: a
 /// request's commands run one at a time on this unit of work, while its queries may run side by side, each on a
 /// context of its own.
 /// <para>
@@ -48,49 +50,10 @@ public interface IProjectStore
     /// <param name="cancellationToken">Cancels the query.</param>
     Task<bool> NumberTakenAsync(string number, CancellationToken cancellationToken);
 
-    /// <summary>Adds a new project to the unit of work.</summary>
-    /// <param name="project">The project, just opened.</param>
-    void Add(Project project);
-
     /// <summary>
-    /// A project role of the caller's tenant, for a command to change and then save with <see cref="SaveAsync"/>;
-    /// or <see langword="null"/> when the tenant has no such role.
-    /// </summary>
-    /// <param name="id">The role.</param>
-    /// <param name="cancellationToken">Cancels the query.</param>
-    Task<ProjectRole?> LoadRoleAsync(ProjectRoleId id, CancellationToken cancellationToken);
-
-    /// <summary>
-    /// Every project role of the caller's tenant, archived ones included: what the tenant's starter roles are made
-    /// against, so none is made twice.
-    /// </summary>
-    /// <param name="cancellationToken">Cancels the query.</param>
-    Task<IReadOnlyList<ProjectRole>> RolesOfTheTenantAsync(CancellationToken cancellationToken);
-
-    /// <summary>Adds a new project role to the unit of work.</summary>
-    /// <param name="role">The role, just made.</param>
-    void Add(ProjectRole role);
-
-    /// <summary>
-    /// Saves every project loaded or added in this unit of work, with the domain events they raised, in one
-    /// transaction.
+    /// Saves every project loaded in this unit of work, with the domain events they raised, in one transaction.
     /// </summary>
     /// <param name="cancellationToken">Cancels the save.</param>
     /// <exception cref="Exceptions.ConcurrencyConflictException">Somebody else saved the same project first.</exception>
     Task SaveAsync(CancellationToken cancellationToken);
-
-    /// <summary>
-    /// Saves <paramref name="project"/>, with the domain events it raised, and refuses to when the unit of work
-    /// holds a change to anything else: for a save that is not judged as its caller's.
-    /// </summary>
-    /// <remarks>
-    /// A save writes everything the unit of work holds, so one that runs as the application's own work would write
-    /// whatever an earlier command of the same scope left changed there, past the rules its caller is held to.
-    /// What such a save may write is therefore said here, by the project, and held where the changes are known.
-    /// </remarks>
-    /// <param name="project">The one project the save may write, with its crew.</param>
-    /// <param name="cancellationToken">Cancels the save.</param>
-    /// <exception cref="InvalidOperationException">The unit of work holds a change to something that is not <paramref name="project"/>'s. Nothing was saved.</exception>
-    /// <exception cref="Exceptions.ConcurrencyConflictException">Somebody else saved the same project first.</exception>
-    Task SaveOnlyAsync(Project project, CancellationToken cancellationToken);
 }

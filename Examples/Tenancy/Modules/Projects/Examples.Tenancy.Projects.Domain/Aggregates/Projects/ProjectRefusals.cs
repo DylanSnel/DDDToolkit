@@ -167,7 +167,7 @@ public static class ProjectRefusals
     /// The codes a crew's rules refuse under, which are the Membership package's: each of the package's rules
     /// under this module's prefix, the ones a crew had before the package with the codes they had, and the seat
     /// a refusal is about named <c>Seat</c>. The project's member list refuses with these, and so do the access
-    /// checks and the admission of the projects' rules.
+    /// checks and the crew manager.
     /// </summary>
     public static MembershipCodes Membership { get; } = MembershipCodes.Under("projects")
         .With(MembershipRefusals.AlreadyMember, Suffix(AlreadyOnCrew))

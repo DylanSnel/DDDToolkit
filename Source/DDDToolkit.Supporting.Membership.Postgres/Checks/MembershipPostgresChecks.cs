@@ -62,7 +62,7 @@ public static class MembershipPostgresChecks
     /// no rule names ask a function that runs as its owner.
     /// </para>
     /// <para>
-    /// Where a permission locks the members, or the owner, the lock written from it is held to as well: a
+    /// Where a permission manages the members, or names the owner, the lock written from it is held to as well: a
     /// restrictive policy on both member tables for each of those roles, where a customer makes the roles the one
     /// that holds a role given to one the caller sees, and the trigger on the owner column. Where a customer makes
     /// the roles, their table is one a caller must not write as it likes: a role's row says what everybody who holds
@@ -164,11 +164,11 @@ public static class MembershipPostgresChecks
     {
         var rules = registration.Rules;
         var resource = registration.Resource.Name;
-        var open = (rules.MembersLockPermission, rules.OwnerLockPermission) switch
+        var open = (rules.ManagesMembersPermission, rules.NamesOwnerPermission) switch
         {
-            (null, null) => "has no permission that locks its members and none that locks its owner (LocksMembers, LocksOwner), so the database leaves its member rows and its owner column",
-            (null, _) => "has no permission that locks its members (LocksMembers), so the database leaves its member rows",
-            (_, null) => "has no permission that locks its owner (LocksOwner), so the database leaves its owner column, and with it every permission an owner holds,",
+            (null, null) => "has no permission that locks its members and none that locks its owner (ManagesMembers, NamesOwner), so the database leaves its member rows and its owner column",
+            (null, _) => "has no permission that locks its members (ManagesMembers), so the database leaves its member rows",
+            (_, null) => "has no permission that locks its owner (NamesOwner), so the database leaves its owner column, and with it every permission an owner holds,",
             _ => null,
         };
 
@@ -176,7 +176,7 @@ public static class MembershipPostgresChecks
             ? null
             : resource + " " + open + " to whoever the application's row access rules let change a " + resource
               + ": such a caller writes them by any statement that reaches the database, without a command of the application's having asked anything. "
-              + "Mark the permissions the application's commands require for it [On<" + resource + ">(LocksMembers = true)] and [On<" + resource + ">(LocksOwner = true)], "
+              + "Mark the permissions the application's commands require for it [On<" + resource + ">(ManagesMembers = true)] and [On<" + resource + ">(NamesOwner = true)], "
               + "or let no caller that may change a " + resource + " reach the database past the application.";
     }
 
@@ -334,10 +334,10 @@ public static class MembershipPostgresChecks
         CancellationToken cancellationToken)
     {
         var findings = new List<string>();
-        if (rules.MembersLockPermission is not null)
+        if (rules.ManagesMembersPermission is not null)
         {
             findings.AddRange(await UnheldAsync(
-                connection, [mapping.Members, mapping.Roles], ["a", "w", "d"], roles, MembershipSql.MemberLock, "is not held to the permission that locks the members", cancellationToken).ConfigureAwait(false));
+                connection, [mapping.Members, mapping.Roles], ["a", "w", "d"], roles, MembershipSql.MemberLock, "is not held to the permission that manages the members", cancellationToken).ConfigureAwait(false));
 
             if (rules.Roles.Kind == RolesKind.Custom)
             {
@@ -346,7 +346,7 @@ public static class MembershipPostgresChecks
             }
         }
 
-        if (rules.OwnerLockPermission is not null && roles.Length > 0)
+        if (rules.NamesOwnerPermission is not null && roles.Length > 0)
         {
             var table = mapping.Resource.GetTableName()!;
             var tableSchema = mapping.Resource.GetSchema() ?? PostgresRowAccess.DefaultSchema;
@@ -355,7 +355,7 @@ public static class MembershipPostgresChecks
             findings.AddRange(await ListAsync(
                 connection,
                 """
-                SELECT '"' || pg_catalog.replace($1, '"', '""') || '".' || pg_catalog.quote_ident($2) || ' (its owner column is not held to the permission that locks the owner)'
+                SELECT '"' || pg_catalog.replace($1, '"', '""') || '".' || pg_catalog.quote_ident($2) || ' (its owner column is not held to the permission that names the owner)'
                 WHERE NOT EXISTS (SELECT 1 FROM pg_catalog.pg_trigger t
                                   JOIN pg_catalog.pg_class c ON c.oid = t.tgrelid
                                   JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace

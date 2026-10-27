@@ -38,7 +38,7 @@ public sealed class RolesACustomerMakesTests
         // The role goes to a gardener as any role does: the admission knows it, in its garden, and the plot gives it.
         await garden.Services.InAsync(data.Meadow, async provider =>
         {
-            await provider.GetRequiredService<MemberAdmission<PlotId, UserId, PlotRoleId>>().RequireRoleAsync(pruner.Id, Cancellation);
+            await Admitted.RoleAsync<PlotId, PlotRoleId>(provider, PlotMembership.Codes, pruner.Id, Cancellation);
             return true;
         });
         await garden.Services.ChangeAsync(async context =>
@@ -155,7 +155,7 @@ public sealed class RolesACustomerMakesTests
         // It is not given again: to the admission of plots it is no role there is.
         await Refused.WithCodeAsync(PlotMembership.Codes, MembershipRefusals.RoleNotForMembers, () => garden.Services.InAsync(data.Meadow, async provider =>
         {
-            await provider.GetRequiredService<MemberAdmission<PlotId, UserId, PlotRoleId>>().RequireRoleAsync(data.Fencer.Id, Cancellation);
+            await Admitted.RoleAsync<PlotId, PlotRoleId>(provider, PlotMembership.Codes, data.Fencer.Id, Cancellation);
             return true;
         }));
 
@@ -204,7 +204,7 @@ public sealed class RolesACustomerMakesTests
 
         // Two requests that ask at the same moment are kept apart by the host's own index over its garden and
         // what a role was made from: a second tender made from the starter role is not saved.
-        var second = new PlotRole(PlotRoleId.CreateSequential(), paddock, StarterRoles.Missing<PlotRoleId>(PlotMembership.Rules, []).First() with { Name = "Second tender" });
+        var second = new PlotRole(PlotRoleId.CreateSequential(), paddock, new CustomRoleDraft("Second tender", null, PlotMembership.Rules.PermissionsOf(new NamedRole(PlotMembership.Tender)), PlotMembership.Tender));
         await FluentActions.Awaiting(() => garden.Services.ChangeAsync(context =>
         {
             context.PlotRoles.Add(second);
@@ -293,7 +293,7 @@ public sealed class RolesACustomerMakesTests
             {
                 await garden.Services.InAsync(where, async provider =>
                 {
-                    await provider.GetRequiredService<MemberAdmission<PlotId, UserId, PlotRoleId>>().RequireRoleAsync(role, Cancellation);
+                    await Admitted.RoleAsync<PlotId, PlotRoleId>(provider, PlotMembership.Codes, role, Cancellation);
                     return true;
                 });
                 return true;
@@ -396,10 +396,9 @@ public sealed class RolesACustomerMakesTests
             await using var scope = provider.CreateAsyncScope();
             (scope.ServiceProvider.GetService<GardenContext>() is null).Should().BeTrue("this host registered a factory of its own, and no context of a request");
 
-            var admission = scope.ServiceProvider.GetRequiredService<MemberAdmission<PlotId, UserId, PlotRoleId>>();
-            await admission.RequireRoleAsync(data.Fencer.Id, Cancellation);
-            await Refused.WithCodeAsync(PlotMembership.Codes, MembershipRefusals.RoleNotForMembers, () => admission.RequireRoleAsync(data.Seasonal.Id, Cancellation).AsTask());
-            await Refused.WithCodeAsync(PlotMembership.Codes, MembershipRefusals.RoleNotForMembers, () => admission.RequireRoleAsync(data.OrchardTender.Id, Cancellation).AsTask());
+            await Admitted.RoleAsync<PlotId, PlotRoleId>(scope.ServiceProvider, PlotMembership.Codes, data.Fencer.Id, Cancellation);
+            await Refused.WithCodeAsync(PlotMembership.Codes, MembershipRefusals.RoleNotForMembers, () => Admitted.RoleAsync<PlotId, PlotRoleId>(scope.ServiceProvider, PlotMembership.Codes, data.Seasonal.Id, Cancellation));
+            await Refused.WithCodeAsync(PlotMembership.Codes, MembershipRefusals.RoleNotForMembers, () => Admitted.RoleAsync<PlotId, PlotRoleId>(scope.ServiceProvider, PlotMembership.Codes, data.OrchardTender.Id, Cancellation));
         }
 
         // And so is what a gardener holds through a role.
@@ -450,7 +449,7 @@ public sealed class RolesACustomerMakesTests
             // the beans, and holds nothing through it. On a context of the factory's the rule would not
             // apply, and the role would give what it holds.
             await Refused.WithCodeAsync(PlotMembership.Codes, MembershipRefusals.RoleNotForMembers, () =>
-                scope.ServiceProvider.GetRequiredService<MemberAdmission<PlotId, UserId, PlotRoleId>>().RequireRoleAsync(data.OrchardTender.Id, Cancellation).AsTask());
+                Admitted.RoleAsync<PlotId, PlotRoleId>(scope.ServiceProvider, PlotMembership.Codes, data.OrchardTender.Id, Cancellation));
             var hold = await access.HoldAsync(data.Beans, PlotPermissions.Plant, Cancellation);
             (hold!.Via, hold.Until).Should().Be((null, null));
             (await access.PermissionsOnAsync([data.Beans], GardenScenario.PermissionsAsked, Cancellation))[data.Beans].Should().BeEquivalentTo([PlotPermissions.See]);
@@ -585,7 +584,7 @@ public sealed class RolesACustomerMakesTests
         commands.Reset();
         await garden.Services.InAsync(data.Meadow, async provider =>
         {
-            await provider.GetRequiredService<MemberAdmission<PlotId, UserId, PlotRoleId>>().RequireRoleAsync(data.Fencer.Id, Cancellation);
+            await Admitted.RoleAsync<PlotId, PlotRoleId>(provider, PlotMembership.Codes, data.Fencer.Id, Cancellation);
             return true;
         });
         commands.Count.Should().Be(1);
@@ -705,10 +704,10 @@ public sealed class RolesACustomerMakesTests
         // the host's about whose roles a request reads, and the starter role is made once.
         (await garden.Services.AsAsync(CurrentUserSnapshot.System, provider => provider.GetRequiredService<IMemberRoles<ShedId, ShedRoleId>>().ExistsAsync(data.ShedKeeper.Id, Cancellation).AsTask())).Should().BeTrue();
         (await garden.Services.InAsync(data.Orchard, provider => provider.GetRequiredService<IMemberRoles<ShedId, ShedRoleId>>().ExistsAsync(data.ShedKeeper.Id, Cancellation).AsTask())).Should().BeTrue();
-        StarterRoles.Missing(ShedMembership.Rules, data.ShedRoles).Should().BeEmpty();
-        var starter = StarterRoles.Missing<ShedRoleId>(ShedMembership.Rules, []).Should().ContainSingle().Which;
-        (starter.Name, starter.MadeFrom).Should().Be((ShedMembership.Keeper, ShedMembership.Keeper));
-        starter.Permissions.Should().Equal([ShedPermissions.Open, ShedPermissions.Stock], "selling is no role's to give, and the starter role does not list it");
+        (await garden.Services.AsAsync(CurrentUserSnapshot.System, provider => provider.GetRequiredService<ShedRoleManager>().CreateStarterRolesAsync(draft => new ShedRole(ShedRoleId.CreateSequential(), draft), Cancellation)))
+            .Should().BeEmpty();
+        (data.ShedKeeper.Name, data.ShedKeeper.MadeFrom).Should().Be((ShedMembership.Keeper, ShedMembership.Keeper));
+        ShedMembership.Rules.PermissionsOf(new NamedRole(ShedMembership.Keeper)).Should().Equal([ShedPermissions.Open, ShedPermissions.Stock], "selling is no role's to give, and the starter role does not list it");
 
         // What a garden does to a role of its plots changes nothing for a shed, and what was done to the lender nothing for a plot.
         await garden.Services.ChangeAsync(data.MeadowTender.Id, role => role.PutAway());

@@ -1,15 +1,15 @@
 using DDDToolkit.Abstractions.Interfaces;
 using DDDToolkit.Supporting.Membership.Access;
 
-namespace DDDToolkit.Supporting.Membership.UseCases;
+namespace DDDToolkit.Supporting.Membership.Managers;
 
 /// <summary>
-/// The fixed roles a resource's rules declare, as the admission asks about them: for a resource whose members hold
+/// The fixed roles a resource's rules declare, as the member manager asks about them: for a resource whose members hold
 /// <see cref="NamedRole"/>s. It reads nothing but the rules.
 /// </summary>
 /// <typeparam name="TResourceId">The id of the kind of resource the members are of.</typeparam>
 /// <param name="rules">The resource's rules.</param>
-public sealed class NamedRoles<TResourceId>(MembershipRules rules) : IMemberRoles<TResourceId, NamedRole>
+internal sealed class NamedRoles<TResourceId>(MembershipRules rules) : IMemberRoles<TResourceId, NamedRole>
     where TResourceId : struct, IEntityId, IEquatable<TResourceId>
 {
     private readonly MembershipRules _rules = rules ?? throw new ArgumentNullException(nameof(rules));

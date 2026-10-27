@@ -115,10 +115,10 @@ public sealed class StartUpCheckTests(FilingPostgres postgres)
         IReadOnlyList<ResourcePermission> permissions =
         [
             new(FolderPermissions.Read, EveryMember: difference == "another permission is what being a member gives"),
-            new(FolderPermissions.File, LocksMembers: difference == "another permission changes the members"),
-            new(FolderPermissions.Staff, LocksMembers: difference != "another permission changes the members"),
+            new(FolderPermissions.File, ManagesMembers: difference == "another permission changes the members"),
+            new(FolderPermissions.Staff, ManagesMembers: difference != "another permission changes the members"),
             new(FolderPermissions.Shred, Owner: difference != "the owner holds another permission", InRoles: false),
-            new(FolderPermissions.HandOver, InRoles: false, LocksOwner: difference != "no permission changes the owner"),
+            new(FolderPermissions.HandOver, InRoles: false, NamesOwner: difference != "no permission changes the owner"),
             .. difference == "the resource has another permission" ? [new ResourcePermission("folders.audit")] : Array.Empty<ResourcePermission>(),
         ];
         var exported = MembershipRules.Declare(
@@ -326,7 +326,7 @@ public sealed class StartUpCheckTests(FilingPostgres postgres)
         var refused = await FluentActions.Awaiting(() => CheckAsync(filing)).Should().ThrowAsync<InvalidOperationException>();
         refused.Which.Message.Should()
             .StartWith("A permission of Document locks its members or its owner, and the database does not hold callers to it: ")
-            .And.Contain("\"filing\".\"DocumentShares\" (authenticated is not held to the permission that locks the members). ")
+            .And.Contain("\"filing\".\"DocumentShares\" (authenticated is not held to the permission that manages the members). ")
             .And.Contain("Apply the access files the export writes");
 
         // Row security turned off on the roles' table: its policies are there, and hold nobody.
@@ -335,17 +335,17 @@ public sealed class StartUpCheckTests(FilingPostgres postgres)
         await filing.ExecuteAsync($"ALTER TABLE filing.\"{FilingContext.FolderStaffRolesTable}\" DISABLE ROW LEVEL SECURITY");
         (await FluentActions.Awaiting(() => CheckAsync(filing)).Should().ThrowAsync<InvalidOperationException>())
             .Which.Message.Should().StartWith("A permission of Folder locks its members").And.Contain(
-                $"\"filing\".\"{FilingContext.FolderStaffRolesTable}\" (authenticated, ddd_system_in, {FilingPostgres.ArchivistRole} is not held to the permission that locks the members). ");
+                $"\"filing\".\"{FilingContext.FolderStaffRolesTable}\" (authenticated, ddd_system_in, {FilingPostgres.ArchivistRole} is not held to the permission that manages the members). ");
 
         // The trigger on the owner column disabled, and then dropped.
         await filing.ExecuteAsync(FilingPostgres.AccessScript());
         await CheckAsync(filing);
         await filing.ExecuteAsync("ALTER TABLE filing.\"Documents\" DISABLE TRIGGER documents_owner_stays");
         (await FluentActions.Awaiting(() => CheckAsync(filing)).Should().ThrowAsync<InvalidOperationException>())
-            .Which.Message.Should().Contain("hold callers to it: \"filing\".\"Documents\" (its owner column is not held to the permission that locks the owner). ");
+            .Which.Message.Should().Contain("hold callers to it: \"filing\".\"Documents\" (its owner column is not held to the permission that names the owner). ");
         await filing.ExecuteAsync("ALTER TABLE filing.\"Documents\" ENABLE TRIGGER documents_owner_stays; DROP TRIGGER folders_owner_stays ON filing.\"Folders\"");
         (await FluentActions.Awaiting(() => CheckAsync(filing)).Should().ThrowAsync<InvalidOperationException>())
-            .Which.Message.Should().Contain("hold callers to it: \"filing\".\"Folders\" (its owner column is not held to the permission that locks the owner). ");
+            .Which.Message.Should().Contain("hold callers to it: \"filing\".\"Folders\" (its owner column is not held to the permission that names the owner). ");
 
         await filing.ExecuteAsync(FilingPostgres.AccessScript());
         await CheckAsync(filing);
@@ -392,9 +392,9 @@ public sealed class StartUpCheckTests(FilingPostgres postgres)
         var remarks = await MembershipPostgresChecks.EnsureFunctionsAreInPlaceAsync(garden.Services.Provider, Cancellation);
 
         remarks.Should().ContainSingle().Which.Should()
-            .StartWith("Shed has no permission that locks its members and none that locks its owner (LocksMembers, LocksOwner), so the database leaves its member rows and its owner column to whoever the application's row access rules let change a Shed")
+            .StartWith("Shed has no permission that locks its members and none that locks its owner (ManagesMembers, NamesOwner), so the database leaves its member rows and its owner column to whoever the application's row access rules let change a Shed")
             .And.Contain("without a command of the application's having asked anything")
-            .And.Contain("Mark the permissions the application's commands require for it [On<Shed>(LocksMembers = true)] and [On<Shed>(LocksOwner = true)]");
+            .And.Contain("Mark the permissions the application's commands require for it [On<Shed>(ManagesMembers = true)] and [On<Shed>(NamesOwner = true)]");
         logged.Lines.Should().Equal([(LogLevel.Warning, "DDDToolkit.Supporting.Membership.Postgres", remarks[0])], "what is remarked on is logged as a warning, where the host has a logger");
 
         // Rules with one of the two are told about the other.
@@ -402,7 +402,7 @@ public sealed class StartUpCheckTests(FilingPostgres postgres)
             => MembershipRules.Declare(
                 typeof(Shed),
                 "sheds",
-                [new(ShedPermissions.Open), new(ShedPermissions.Stock, LocksMembers: membersLocked), new(ShedPermissions.Sell, InRoles: false, LocksOwner: ownerLocked)],
+                [new(ShedPermissions.Open), new(ShedPermissions.Stock, ManagesMembers: membersLocked), new(ShedPermissions.Sell, InRoles: false, NamesOwner: ownerLocked)],
                 Roles.Custom(starters: ShedMembership.Rules.Roles.Declared, otherPermissions: OtherPermissions.All),
                 systemScopes: ShedMembership.Rules.SystemScopes,
                 codes: ShedMembership.Codes);
@@ -415,9 +415,9 @@ public sealed class StartUpCheckTests(FilingPostgres postgres)
         }
 
         (await RemarksForAsync(Sheds(membersLocked: true, ownerLocked: false))).Should().ContainSingle().Which.Should()
-            .StartWith("Shed has no permission that locks its owner (LocksOwner), so the database leaves its owner column, and with it every permission an owner holds, to whoever");
+            .StartWith("Shed has no permission that locks its owner (NamesOwner), so the database leaves its owner column, and with it every permission an owner holds, to whoever");
         (await RemarksForAsync(Sheds(membersLocked: false, ownerLocked: true))).Should().ContainSingle().Which.Should()
-            .StartWith("Shed has no permission that locks its members (LocksMembers), so the database leaves its member rows to whoever");
+            .StartWith("Shed has no permission that locks its members (ManagesMembers), so the database leaves its member rows to whoever");
         (await RemarksForAsync(Sheds(membersLocked: true, ownerLocked: true))).Should().BeEmpty();
     }
 

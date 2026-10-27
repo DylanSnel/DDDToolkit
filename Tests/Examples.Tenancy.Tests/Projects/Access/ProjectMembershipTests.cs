@@ -58,9 +58,9 @@ public sealed class ProjectMembershipTests
     [Fact]
     public void The_database_holds_a_crew_and_an_owner_to_the_permissions_the_commands_require()
     {
-        Rules.MembersLockPermission.Should().Be(AddCrewMember.RequiredPermission);
-        new[] { GiveCrewRole.RequiredPermission, TakeCrewRole.RequiredPermission, RemoveCrewMember.RequiredPermission }.Should().OnlyContain(permission => permission == Rules.MembersLockPermission);
-        Rules.OwnerLockPermission.Should().Be(ChangeProjectOwner.RequiredPermission);
+        Rules.ManagesMembersPermission.Should().Be(AddCrewMember.RequiredPermission);
+        new[] { GiveCrewRole.RequiredPermission, TakeCrewRole.RequiredPermission, RemoveCrewMember.RequiredPermission }.Should().OnlyContain(permission => permission == Rules.ManagesMembersPermission);
+        Rules.NamesOwnerPermission.Should().Be(ChangeProjectOwner.RequiredPermission);
     }
 
     [Fact]

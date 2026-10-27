@@ -19,7 +19,7 @@ namespace DDDToolkit.Supporting.Membership.Access;
 ///     public const string Edit = "boards.edit";
 ///
 ///     /// &lt;summary&gt;Say who is on a board, and in which role.&lt;/summary&gt;
-///     [On&lt;Board&gt;(InRoles = false, LocksMembers = true, LocksOwner = true)]
+///     [On&lt;Board&gt;(InRoles = false, ManagesMembers = true, NamesOwner = true)]
 ///     public const string ManageMembers = "boards.members.manage";
 /// }
 /// </code>
@@ -30,12 +30,12 @@ namespace DDDToolkit.Supporting.Membership.Access;
 /// in the project that makes them, from the classes of that project and of the projects it references. So the C#
 /// check in front of a handler and the functions in the database answer from the same declaration. The defaults
 /// are what most permissions of a resource are: the owner holds it, a role can give it, nobody holds it by being a
-/// member alone, and it locks nothing.
+/// member alone, and it neither manages the members nor names the owner.
 /// </para>
 /// <para>
 /// <typeparamref name="TResource"/> is the aggregate root a member class names, <c>[Member&lt;..., Board&gt;]</c>; another
-/// class is DDD00093. Of the permissions on one resource, one at most is held by every member, one at most locks
-/// the members, and one at most locks the owner (DDD00093).
+/// class is DDD00093. Of the permissions on one resource, one at most is held by every member, one at most manages
+/// the members, and one at most names the owner (DDD00093).
 /// </para>
 /// </remarks>
 /// <typeparam name="TResource">The resource the permission is asked on.</typeparam>
@@ -83,30 +83,32 @@ public sealed class OnAttribute<TResource> : PermissionLevelAttribute
     public bool InRoles { get; set; } = true;
 
     /// <summary>
-    /// Whether this is the permission the application's commands require to add or remove a member and to give or
-    /// take a role, so a database that checks every row itself holds the member rows to it. <see langword="false"/>
-    /// unless said; one permission of a resource at most.
+    /// Whether this is the permission that manages the members: the one the resource's member manager requires to add
+    /// or remove a member and to give or take a role. <see langword="false"/> unless said; one permission of a resource
+    /// at most.
     /// <para>
-    /// <c>LocksMembers = true</c>: whatever writes the database's policies adds a lock to both member tables, and a
-    /// member row is written only by a caller that holds this permission on the resource, or the one that locks the
-    /// owner. Without it, whoever may change a resource in any way writes its member rows, a role for itself
-    /// included, by a statement that never went through a command. No code of the package gates a command by it:
-    /// the commands still say what they require.
+    /// <c>ManagesMembers = true</c>: the manager the generator writes for the resource's member class,
+    /// <c>BoardMemberManager</c>, requires it on the resource for each of those changes, and a resource that marks no
+    /// permission so lets only system work change its members there. Whatever writes the database's policies adds a lock
+    /// to both member tables as well, and a member row is written only by a caller that holds this permission on the
+    /// resource, or the one that names the owner. Without it, whoever may change a resource in any way writes its member
+    /// rows, a role for itself included, by a statement that never went through a command.
     /// </para>
     /// </summary>
-    public bool LocksMembers { get; set; }
+    public bool ManagesMembers { get; set; }
 
     /// <summary>
-    /// Whether this is the permission the application's command requires to hand the resource to another owner, so
-    /// a database that checks every row itself holds the owner column to it. <see langword="false"/> unless said;
-    /// one permission of a resource at most.
+    /// Whether this is the permission that names the owner: the one the resource's member manager requires to hand the
+    /// resource to another owner. <see langword="false"/> unless said; one permission of a resource at most.
     /// <para>
-    /// <c>LocksOwner = true</c>: whatever writes the database's policies pins the owner column, and a change of a
-    /// resource leaves its owner as it was unless the caller holds this permission on it. The owner holds what it
-    /// holds by owning, so whoever may write that column could make itself everything.
+    /// <c>NamesOwner = true</c>: the member manager requires it on the resource to name an owner, and a resource that
+    /// marks no permission so lets only system work name one there. Whatever writes the database's policies pins the
+    /// owner column as well, and a change of a resource leaves its owner as it was unless the caller holds this
+    /// permission on it. The owner holds what it holds by owning, so whoever may write that column could make itself
+    /// everything.
     /// </para>
     /// </summary>
-    public bool LocksOwner { get; set; }
+    public bool NamesOwner { get; set; }
 
     /// <summary>
     /// Whether the permission reaches the resource from above, where its rules let a resource be reached so: held

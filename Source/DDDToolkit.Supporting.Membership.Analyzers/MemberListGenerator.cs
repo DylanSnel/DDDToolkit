@@ -83,6 +83,11 @@ public sealed class MemberListGenerator : IIncrementalGenerator
 {
     private const string Package = "DDDToolkit.Supporting.Membership";
     private const string MemberTemplate = Package + ".MemberAttribute`4";
+    private const string RoleTemplate = Package + ".CustomRoleAttribute`2";
+    private const string ManagedResource = "global::" + Package + ".IMembershipResource";
+    private const string RoleHooks = "global::" + Package + ".ICustomRoleHooks";
+    private const string Managers = "global::" + Package + ".Managers";
+    private const string Access = "global::" + Package + ".Access";
     private const string MemberList = Package + ".MemberList`4";
     private const string Codes = Package + ".MembershipCodes";
     private const string MembersName = Package + ".MembersAttribute";
@@ -104,7 +109,17 @@ public sealed class MemberListGenerator : IIncrementalGenerator
                 transform: static (syntaxContext, cancellationToken) => Discover(syntaxContext, cancellationToken))
             .Where(static list => list is not null)
             .Collect()
-            .SelectMany(static (all, _) => PerResource(all!));
+            .Select(static (all, _) => PerResource(all!).ToEquatableArray());
+
+        // The role classes, each of the resource it names: the hooks written onto each, and a manager beside the
+        // member manager of a resource whose list is written here.
+        var roles = context.SyntaxProvider.ForAttributeWithMetadataName(
+                RoleTemplate,
+                predicate: static (node, _) => node is ClassDeclarationSyntax,
+                transform: static (syntaxContext, cancellationToken) => DiscoverRole(syntaxContext, cancellationToken))
+            .Where(static role => role is not null)
+            .Collect()
+            .Select(static (all, _) => all.Select(static role => role!).ToEquatableArray());
 
         // Whether the registrations of the package are closed in this project, and so say what is wrong with a
         // member class themselves: read off the compilation, and a plain boolean, so the output step stays cached.
@@ -114,9 +129,13 @@ public sealed class MemberListGenerator : IIncrementalGenerator
         // sees, so a member class over one is closed over it by the name it was written with.
         var written = context.TemplateDefaultsPlan().Select(static (plan, _) => plan.Ids);
 
+        // The types of the managers' names the project declares itself: such a type keeps the manager out.
+        var taken = lists.Combine(roles).Combine(context.CompilationProvider)
+            .Select(static (all, cancellationToken) => TakenNames(all.Left.Left, all.Left.Right, all.Right, cancellationToken));
+
         context.RegisterSourceOutput(
-            lists.Combine(registered).Combine(written),
-            static (production, all) => Execute(production, all.Left.Left, all.Left.Right, all.Right));
+            lists.Combine(roles).Combine(registered).Combine(written).Combine(taken),
+            static (production, all) => ExecuteAll(production, all.Left.Left.Left.Left, all.Left.Left.Left.Right, all.Left.Left.Right, all.Left.Right, all.Right));
     }
 
     // ------------------------------------------------------------------ what to write
@@ -306,6 +325,10 @@ public sealed class MemberListGenerator : IIncrementalGenerator
             reasons.Add("it has a member called " + PropertyName + " already, which the list would be called too");
         }
 
+        // What the member manager is closed over beside the list's types, and what it sets when it names an owner.
+        var resourceId = DefinitionFactory.IdOf(resource, cancellationToken, out var idText, out _, out _) == DefinitionFactory.DeclaredIdKind.Found ? idText : null;
+        var ownerSettable = owners.Count == 1 && owners[0].SetMethod is { IsInitOnly: false };
+
         return new ListOfAResource(
             Resource: type,
             MemberName: member.Name,
@@ -324,6 +347,8 @@ public sealed class MemberListGenerator : IIncrementalGenerator
             WritesCodes = codes.Count == 0 && resourceReasons.Count == 0,
             Scope = scope,
             BadName = badName,
+            ResourceId = resourceId,
+            OwnerSettable = ownerSettable,
         };
     }
 
@@ -453,7 +478,447 @@ public sealed class MemberListGenerator : IIncrementalGenerator
 
         /// <summary>DDD00091 for a name <c>[Members]</c> says that cannot be converted, or null.</summary>
         public DiagnosticInfo? BadName { get; init; }
+
+        /// <summary>The resource's id, in full, or null when it cannot be told: what the member manager is closed over.</summary>
+        public string? ResourceId { get; init; }
+
+        /// <summary>Whether the property marked <c>[Owner]</c> can be set in the class: what naming an owner does.</summary>
+        public bool OwnerSettable { get; init; }
     }
+
+    /// <summary>
+    /// What one role class asks for: hooks on the class, and a manager where the resource it names gets a member manager
+    /// here. Null for a class the entity generator reports as it stands: one that is not partial, or is generic.
+    /// </summary>
+    private static RoleClass? DiscoverRole(GeneratorAttributeSyntaxContext context, CancellationToken cancellationToken)
+    {
+        if (context.TargetSymbol is not INamedTypeSymbol role
+            || context.Attributes.Length == 0
+            || context.Attributes[0].AttributeClass is not { TypeArguments.Length: 2 } attribute
+            || attribute.TypeArguments[0] is not INamedTypeSymbol id
+            || attribute.TypeArguments[1] is not INamedTypeSymbol { TypeKind: TypeKind.Class } resource)
+        {
+            return null;
+        }
+
+        var declarations = role.DeclaringSyntaxReferences
+            .Select(reference => reference.GetSyntax(cancellationToken))
+            .OfType<ClassDeclarationSyntax>()
+            .ToList();
+        if (declarations.Count == 0
+            || declarations.Count != role.DeclaringSyntaxReferences.Length
+            || declarations.Any(static declaration => !declaration.Modifiers.Any(SyntaxKind.PartialKeyword)))
+        {
+            return null;
+        }
+
+        var type = DefinitionFactory.CreateTypeInfo(role, declarations[0]);
+        if (type.IsGeneric)
+        {
+            return null;
+        }
+
+        return new RoleClass(
+            type,
+            id.TypeKind == TypeKind.Error ? id.Name : Qualified(id),
+            Qualified(resource),
+            LocationInfo.From(((ClassDeclarationSyntax)context.TargetNode).Identifier));
+    }
+
+    /// <summary>
+    /// Each manager's name the project declares a type of itself, top-level: in the global namespace, where the project
+    /// wrote its own, or in a namespace, where the manager would hide it.
+    /// </summary>
+    private static EquatableArray<TakenName> TakenNames(
+        EquatableArray<ListOfAResource> lists,
+        EquatableArray<RoleClass> roles,
+        Compilation compilation,
+        CancellationToken cancellationToken)
+    {
+        var names = lists.Select(static list => list.MemberName + ManagerSuffix)
+            .Concat(roles.Select(static role => role.Role.Name + ManagerSuffix))
+            .Distinct(StringComparer.Ordinal);
+
+        var taken = new List<TakenName>();
+        foreach (var name in names)
+        {
+            if (!compilation.Assembly.TypeNames.Contains(name))
+            {
+                continue;
+            }
+
+            foreach (var symbol in compilation.GetSymbolsWithName(name, SymbolFilter.Type, cancellationToken).OfType<INamedTypeSymbol>())
+            {
+                if (symbol.ContainingType is null)
+                {
+                    taken.Add(new TakenName(
+                        name,
+                        symbol.ContainingNamespace.IsGlobalNamespace ? null : symbol.ContainingNamespace.ToDisplayString(),
+                        LocationInfo.From(symbol)));
+                }
+            }
+        }
+
+        return taken.ToEquatableArray();
+    }
+
+    /// <summary>What the managers' names are, after the member class or the role class.</summary>
+    private const string ManagerSuffix = "Manager";
+
+    /// <summary>Writes the lists, then the member managers, the role hooks and the role managers.</summary>
+    private static void ExecuteAll(
+        SourceProductionContext context,
+        EquatableArray<ListOfAResource> lists,
+        EquatableArray<RoleClass> roles,
+        bool registered,
+        EquatableArray<EntityIdDefinition> written,
+        EquatableArray<TakenName> taken)
+    {
+        // Two member classes, or two role classes, of one name would give two managers of one name.
+        var twice = lists.Where(static list => !list.NotARoot && list.KeptMember is null).Select(static list => list.MemberName + ManagerSuffix)
+            .Concat(roles.Select(static role => role.Role.Name + ManagerSuffix))
+            .GroupBy(static name => name, StringComparer.Ordinal)
+            .Where(static group => group.Count() > 1)
+            .Select(static group => group.Key)
+            .ToImmutableHashSet(StringComparer.Ordinal);
+
+        var managed = new Dictionary<string, (ListOfAResource List, string[] Types)>(StringComparer.Ordinal);
+        foreach (var list in lists)
+        {
+            if (Execute(context, list, registered, written) is not { } types)
+            {
+                continue;
+            }
+
+            if (!list.OwnerSettable)
+            {
+                Report(
+                    context,
+                    list.MemberName + ManagerSuffix,
+                    list.Resource.Name,
+                    "its owner, '" + list.Owner + "', has no setter in the class, and naming another owner sets it: give it one, { get; private set; }",
+                    list.MemberAt);
+                continue;
+            }
+
+            // The way to the members, and the hooks, whatever becomes of the manager's own class.
+            managed[list.Resource.FullyQualifiedName] = (list, types);
+        }
+
+        // The role managers: for a role class whose resource gets a member manager here.
+        var roleManagers = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        foreach (var role in roles)
+        {
+            WriteRoleHooks(context, role);
+
+            var manager = role.Role.Name + ManagerSuffix;
+            if (!managed.ContainsKey(role.Resource))
+            {
+                if (!lists.Any(list => list.Resource.FullyQualifiedName == role.Resource))
+                {
+                    Report(context, manager, role.Role.Name, "its resource, '" + LastNameOf(role.Resource) + "', is declared in another project, whose registration cannot name it", role.At);
+                }
+
+                continue;
+            }
+
+            if (Blocked(context, manager, role.Role.Name, role.At, twice, taken))
+            {
+                continue;
+            }
+
+            WriteRoleManager(context, role, manager);
+            if (!roleManagers.TryGetValue(role.Resource, out var listed))
+            {
+                roleManagers[role.Resource] = listed = [];
+            }
+
+            listed.Add(manager);
+        }
+
+        foreach (var (list, types) in managed.Values)
+        {
+            var manager = list.MemberName + ManagerSuffix;
+            var writesManager = false;
+            if (list.ResourceId is null)
+            {
+                Report(context, manager, list.Resource.Name, "its id cannot be told: declare it with [AggregateRoot<TId>] over an id of your own", list.MemberAt);
+            }
+            else
+            {
+                writesManager = !Blocked(context, manager, list.Resource.Name, list.MemberAt, twice, taken);
+            }
+
+            List<string> managers = writesManager ? [manager] : [];
+            if (roleManagers.TryGetValue(list.Resource.FullyQualifiedName, out var ofRoles))
+            {
+                managers.AddRange(ofRoles);
+            }
+
+            WriteManagedResource(context, list, types, managers);
+            if (writesManager)
+            {
+                WriteMemberManager(context, list, types, manager);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Whether a manager's name is not to be written: a type of the name in the global namespace, which the project wrote
+    /// itself and hears nothing about; one in a namespace, said on that type; or two classes that would both give it.
+    /// </summary>
+    private static bool Blocked(SourceProductionContext context, string manager, string forClass, LocationInfo? at, ImmutableHashSet<string> twice, EquatableArray<TakenName> taken)
+    {
+        var mine = taken.Where(each => each.Name == manager).ToList();
+        if (mine.Count > 0)
+        {
+            foreach (var each in mine.Where(static each => each.Namespace is not null))
+            {
+                Report(
+                    context,
+                    manager,
+                    forClass,
+                    "the project declares a type of that name in '" + each.Namespace + "', which the manager in the global namespace would hide wherever that namespace is imported: "
+                    + "rename that type",
+                    each.At);
+            }
+
+            return true;
+        }
+
+        if (twice.Contains(manager))
+        {
+            Report(context, manager, forClass, "two classes of the project would each give a manager of that name: rename one of them", at);
+            return true;
+        }
+
+        return false;
+    }
+
+    private static void Report(SourceProductionContext context, string manager, string forClass, string reason, LocationInfo? at)
+        => DiagnosticInfo.Create(DiagnosticDescriptors.ManagerNotWritten, at, manager, forClass, reason).Report(context);
+
+    /// <summary>
+    /// The member manager's way to the resource's members, explicitly, and the hooks the resource writes its guard and
+    /// its events in: each change calls the guard, then the list, then the hook that says what happened.
+    /// </summary>
+    private static void WriteManagedResource(SourceProductionContext context, ListOfAResource list, string[] types, List<string> managers)
+    {
+        var member = types[0];
+        var memberId = types[2];
+        var roleId = types[3];
+        var face = ManagedResource + "<" + member + ", " + memberId + ", " + roleId + ">";
+        var memberRole = "global::" + Package + ".MemberRole<" + memberId + ", " + roleId + ">";
+        var ownerNamed = "global::" + Package + ".OwnerNamed<" + memberId + ", " + roleId + ">";
+        var period = "global::" + Package + ".MemberPeriod";
+        var now = "global::System.DateTimeOffset";
+        var field = Identifier(list.Field!);
+        var owner = Identifier(list.Owner!);
+
+        var writer = new CodeWriter().Header();
+        using (writer.TypeScope(list.Resource))
+        {
+            using (writer.Block("partial class " + Identifier(list.Resource.Name) + " : " + face))
+            {
+                writer.Line("/// <summary>Runs in front of every change the member manager makes to the members: a guard of the resource's, such as a closed resource changing no more.</summary>");
+                writer.Line("partial void OnChangingMembers();");
+                writer.Line();
+                writer.Line("/// <summary>A member was added.</summary>");
+                writer.Line("partial void OnMemberAdded(" + member + " member);");
+                writer.Line();
+                writer.Line("/// <summary>A member was taken off, with every role it held.</summary>");
+                writer.Line("partial void OnMemberRemoved(" + memberId + " member);");
+                writer.Line();
+                writer.Line("/// <summary>A member was given a role.</summary>");
+                writer.Line("partial void OnRoleGiven(" + memberId + " member, " + memberRole + " role);");
+                writer.Line();
+                writer.Line("/// <summary>A role was taken from a member.</summary>");
+                writer.Line("partial void OnRoleTaken(" + memberId + " member, " + memberRole + " role);");
+                writer.Line();
+                writer.Line("/// <summary>Another owner was named: everything that changed with it, in the order its events are raised.</summary>");
+                writer.Line("partial void OnOwnerNamed(" + ownerNamed + " named);");
+                writer.Line();
+
+                writer.Line("static global::System.Collections.Generic.IReadOnlyList<global::System.Type> " + face + ".MembershipManagers { get; } =");
+                writer.Line("    [" + string.Join(", ", managers.Select(static manager => "typeof(global::" + manager + ")")) + "];");
+                writer.Line();
+                writer.Line(memberId + " " + face + ".Owner => " + owner + ";");
+                writer.Line();
+                writer.Line("global::System.Collections.Generic.IReadOnlyList<" + member + "> " + face + ".Members => " + field + ";");
+                writer.Line();
+
+                using (writer.Block(member + " " + face + ".AddMember(" + memberId + " member, " + roleId + "? role, " + period + " period, " + now + " now, " + memberId + "? by)"))
+                {
+                    writer.Line("OnChangingMembers();");
+                    using (writer.Block("if (role is { } given)"))
+                    {
+                        writer.Line("var added = " + PropertyName + ".Add(member, given, period, now, by);");
+                        writer.Line("OnMemberAdded(added);");
+                        writer.Line("OnRoleGiven(member, added.Roles[added.Roles.Count - 1]);");
+                        writer.Line("return added;");
+                    }
+
+                    writer.Line();
+                    writer.Line("var plain = " + PropertyName + ".Add(member, period, now, by);");
+                    writer.Line("OnMemberAdded(plain);");
+                    writer.Line("return plain;");
+                }
+
+                writer.Line();
+                using (writer.Block(memberRole + " " + face + ".GiveRole(" + memberId + " member, " + roleId + " role, " + period + " period, " + now + " now, " + memberId + "? by)"))
+                {
+                    writer.Line("OnChangingMembers();");
+                    writer.Line("var given = " + PropertyName + ".GiveRole(member, role, period, now, by);");
+                    writer.Line("OnRoleGiven(member, given);");
+                    writer.Line("return given;");
+                }
+
+                writer.Line();
+                using (writer.Block(memberRole + " " + face + ".TakeRole(" + memberId + " member, " + roleId + " role)"))
+                {
+                    writer.Line("OnChangingMembers();");
+                    writer.Line("var taken = " + PropertyName + ".TakeRole(member, role);");
+                    writer.Line("OnRoleTaken(member, taken);");
+                    writer.Line("return taken;");
+                }
+
+                writer.Line();
+                using (writer.Block(member + " " + face + ".RemoveMember(" + memberId + " member)"))
+                {
+                    writer.Line("OnChangingMembers();");
+                    writer.Line("var removed = " + PropertyName + ".Remove(member);");
+                    writer.Line("OnMemberRemoved(member);");
+                    writer.Line("return removed;");
+                }
+
+                writer.Line();
+                using (writer.Block(ownerNamed + " " + face + ".NameOwner(" + memberId + " member, global::" + Package + ".FormerOwner<" + roleId + "> formerOwner, " + now + " now)"))
+                {
+                    writer.Line("OnChangingMembers();");
+                    writer.Line("var named = " + PropertyName + ".NameOwner(member, formerOwner, now);");
+                    writer.Line(owner + " = named.Owner;");
+                    writer.Line("OnOwnerNamed(named);");
+                    writer.Line("return named;");
+                }
+            }
+        }
+
+        context.AddSource(list.Resource.HintName(".MemberManagement"), SourceText.From(writer.ToString(), Encoding.UTF8));
+    }
+
+    /// <summary>The member manager, in the global namespace, closed over the resource, its id and the member class's types.</summary>
+    private static void WriteMemberManager(SourceProductionContext context, ListOfAResource list, string[] types, string manager)
+    {
+        var resource = list.Resource.FullyQualifiedName;
+        var resourceId = list.ResourceId!;
+        var member = types[0];
+        var ownId = types[1];
+        var memberId = types[2];
+        var roleId = types[3];
+
+        var writer = new CodeWriter().Header();
+        writer.Line("/// <summary>");
+        writer.Line("/// The members of <see cref=\"" + Cref(resource) + "\"/>: adding them, giving and taking their roles, removing them, leaving, naming");
+        writer.Line("/// another owner, opening a new one, and listing who is on one. Written for <see cref=\"" + Cref(member) + "\"/>, and registered");
+        writer.Line("/// per scope by the resource's registration.");
+        writer.Line("/// </summary>");
+        using (writer.Block("public sealed class " + manager + " : " + Managers + ".MemberManager<" + resource + ", " + resourceId + ", " + member + ", " + ownId + ", " + memberId + ", " + roleId + ">"))
+        {
+            writer.Line("/// <summary>The member manager of " + list.Resource.Name + ". The container makes it.</summary>");
+            writer.Line("public " + manager + "(");
+            writer.Line("    " + Access + ".MembershipAccessManager<" + resource + "> access,");
+            writer.Line("    " + Managers + ".IMemberStore<" + resource + ", " + resourceId + ", " + memberId + "> store,");
+            writer.Line("    global::DDDToolkit.Abstractions.Access.ICurrentUser user,");
+            writer.Line("    global::System.TimeProvider clock,");
+            writer.Line("    " + Access + ".IMemberRoles<" + resourceId + ", " + roleId + ">? roles = null,");
+            writer.Line("    " + Managers + ".IMemberDirectory<" + resourceId + ", " + memberId + ">? directory = null,");
+            writer.Line("    " + Managers + ".IMemberRolePolicy<" + resourceId + ", " + roleId + ">? policy = null,");
+            writer.Line("    " + Managers + ".IOwnPlaceWork<" + resourceId + ", " + memberId + ">? ownPlace = null)");
+            writer.Line("    : base(access, store, user, clock, roles, directory, policy, ownPlace)");
+            writer.Line("{");
+            writer.Line("}");
+        }
+
+        context.AddSource(manager + ".g.cs", SourceText.From(writer.ToString(), Encoding.UTF8));
+    }
+
+    /// <summary>The hooks of a role class: partial methods the class raises its events in, and the way the package's role calls them.</summary>
+    private static void WriteRoleHooks(SourceProductionContext context, RoleClass role)
+    {
+        var set = "global::" + Package + ".RolePermissionsSet";
+        var writer = new CodeWriter().Header();
+        using (writer.TypeScope(role.Role))
+        {
+            using (writer.Block("partial class " + Identifier(role.Role.Name) + " : " + RoleHooks))
+            {
+                writer.Line("/// <summary>The role was renamed, or described again.</summary>");
+                writer.Line("partial void OnRenamed();");
+                writer.Line();
+                writer.Line("/// <summary>The role's permissions changed: the permissions that came in and the permissions that went out.</summary>");
+                writer.Line("partial void OnPermissionsSet(" + set + " set);");
+                writer.Line();
+                writer.Line("/// <summary>The role was archived.</summary>");
+                writer.Line("partial void OnArchived();");
+                writer.Line();
+                writer.Line("void " + RoleHooks + ".Renamed() => OnRenamed();");
+                writer.Line();
+                writer.Line("void " + RoleHooks + ".PermissionsSet(" + set + " set) => OnPermissionsSet(set);");
+                writer.Line();
+                writer.Line("void " + RoleHooks + ".Archived() => OnArchived();");
+            }
+        }
+
+        context.AddSource(role.Role.HintName(".RoleHooks"), SourceText.From(writer.ToString(), Encoding.UTF8));
+    }
+
+    /// <summary>The role manager, in the global namespace, closed over the role class, its id and the resource.</summary>
+    private static void WriteRoleManager(SourceProductionContext context, RoleClass role, string manager)
+    {
+        var type = role.Role.FullyQualifiedName;
+        var writer = new CodeWriter().Header();
+        writer.Line("/// <summary>");
+        writer.Line("/// The roles a customer makes for <see cref=\"" + Cref(role.Resource) + "\"/>, of <see cref=\"" + Cref(type) + "\"/>: making them, the starter roles among");
+        writer.Line("/// them, renaming them, setting their permissions and archiving them, and reading them. Registered per scope by the");
+        writer.Line("/// resource's registration.");
+        writer.Line("/// </summary>");
+        using (writer.Block("public sealed class " + manager + " : " + Managers + ".CustomRoleManager<" + type + ", " + role.Id + ", " + role.Resource + ">"))
+        {
+            writer.Line("/// <summary>The role manager of " + role.Role.Name + ". The container makes it.</summary>");
+            writer.Line("public " + manager + "(");
+            writer.Line("    " + Managers + ".ICustomRoleStore<" + type + ", " + role.Id + "> store,");
+            writer.Line("    " + Access + ".MembershipAccessManager<" + role.Resource + "> access,");
+            writer.Line("    global::DDDToolkit.Abstractions.Access.ICurrentUser user,");
+            writer.Line("    " + Managers + ".ICustomRoleAccess<" + role.Resource + ">? roleAccess = null)");
+            writer.Line("    : base(store, access, user, roleAccess)");
+            writer.Line("{");
+            writer.Line("}");
+        }
+
+        context.AddSource(manager + ".g.cs", SourceText.From(writer.ToString(), Encoding.UTF8));
+    }
+
+    /// <summary>A type in full as a <c>cref</c> takes it: without <c>global::</c>.</summary>
+    private static string Cref(string qualified) => qualified.StartsWith("global::", StringComparison.Ordinal) ? qualified.Substring("global::".Length) : qualified;
+
+    /// <summary>A type's own name, from its fully qualified one.</summary>
+    private static string LastNameOf(string qualified)
+    {
+        var dot = qualified.LastIndexOfAny(['.', ':']);
+        return dot < 0 ? qualified : qualified.Substring(dot + 1);
+    }
+
+    /// <summary>A role class, as the managers are written from it.</summary>
+    /// <param name="Role">The role class.</param>
+    /// <param name="Id">The role class's id, in full; the name alone for one this generator cannot see.</param>
+    /// <param name="Resource">The resource the roles are of, in full.</param>
+    /// <param name="At">Where the role class is declared.</param>
+    private sealed record RoleClass(TypeDeclarationInfo Role, string Id, string Resource, LocationInfo? At);
+
+    /// <summary>A top-level type the project declares of a manager's name.</summary>
+    /// <param name="Name">The name.</param>
+    /// <param name="Namespace">Its namespace, or null for the global one.</param>
+    /// <param name="At">Where it is declared.</param>
+    private sealed record TakenName(string Name, string? Namespace, LocationInfo? At);
 
     // ------------------------------------------------------------------ writing it
 
@@ -462,7 +927,7 @@ public sealed class MemberListGenerator : IIncrementalGenerator
     /// <param name="list">What the member class asks for.</param>
     /// <param name="registered">Whether the registrations of this project say what is wrong with a member class themselves.</param>
     /// <param name="written">The ids a package's switch writes into this project, which this generator knows by their names alone.</param>
-    private static void Execute(SourceProductionContext context, ListOfAResource list, bool registered, EquatableArray<EntityIdDefinition> written)
+    private static string[]? Execute(SourceProductionContext context, ListOfAResource list, bool registered, EquatableArray<EntityIdDefinition> written)
     {
         // A type of the member class this generator cannot see and no switch writes: one nobody declares, which the
         // compiler reports as well, or one another generator writes, the id of an [AggregateRoot<Guid>] say. The list
@@ -483,7 +948,7 @@ public sealed class MemberListGenerator : IIncrementalGenerator
                     .Report(context);
             }
 
-            return;
+            return null;
         }
 
         // An id a switch writes is named in full, so the list compiles wherever the resource is.
@@ -508,7 +973,7 @@ public sealed class MemberListGenerator : IIncrementalGenerator
                     .Report(context);
             }
 
-            return;
+            return null;
         }
 
         list.BadName?.Report(context);
@@ -547,7 +1012,7 @@ public sealed class MemberListGenerator : IIncrementalGenerator
 
         if (!writesList)
         {
-            return;
+            return null;
         }
 
         var writer = new CodeWriter().Header();
@@ -566,6 +1031,7 @@ public sealed class MemberListGenerator : IIncrementalGenerator
         }
 
         context.AddSource(list.Resource.HintName("." + PropertyName), SourceText.From(writer.ToString(), Encoding.UTF8));
+        return [.. list.TypeArguments.Select(InFull)];
     }
 
     /// <summary>

@@ -103,3 +103,4 @@ DDD00102 | DDDToolkit.Access | Error | A marker of a requirement's argument goes
 DDD00103 | DDDToolkit.Tenancy | Error | An operator's command takes its tenant from the request or from itself
 DDD00104 | DDDToolkit.Tenancy | Error | [Operator] stands beside no requirement an operator cannot meet
 DDD00105 | DDDToolkit.Tenancy | Warning | [Operator] on a query names no tenant and no scope
+DDD00106 | DDDToolkit.Membership | Info | A member or role manager is not written

@@ -16,31 +16,23 @@ public sealed record RemoveCrewMember([OnResource] ProjectId Project, SeatId Sea
     public const string RequiredPermission = ProjectPermissionNames.ManageCrew;
 }
 
-/// <summary>Handles <see cref="RemoveCrewMember"/>: loads the project its command names, takes the seat off its crew and saves.</summary>
-/// <param name="store">Where projects are loaded and saved.</param>
-/// <param name="tenancy">Tenancy, asked about the current caller: whether the seat is the caller's own.</param>
-public sealed class RemoveCrewMemberHandler(IProjectStore store, TenancyAccessManager tenancy) : ICommandHandler<RemoveCrewMember>
+/// <summary>Handles <see cref="RemoveCrewMember"/> with one call to the crew manager, which takes the seat off the crew of the project it loads, and saves.</summary>
+/// <remarks>
+/// A seat that takes itself off may lose with its place the very right the save needs, where the database checks every
+/// row. The crew manager saves that change as this module's own work for the seat, since this command's check let it
+/// through: nothing here says so.
+/// </remarks>
+/// <param name="crew">The projects' crew manager.</param>
+public sealed class RemoveCrewMemberHandler(CrewMemberManager crew) : ICommandHandler<RemoveCrewMember>
 {
     /// <inheritdoc />
     /// <exception cref="Exceptions.RefusalException">
-    /// <c>projects.not-found</c>, <c>projects.member-not-found</c>, <c>projects.owner-protected</c>, <c>projects.closed</c>.
+    /// <c>projects.not-found</c>, <c>projects.closed</c>, <c>projects.member-not-found</c>, <c>projects.owner-protected</c>.
     /// </exception>
     /// <exception cref="Exceptions.ConcurrencyConflictException">The project is at another version than the caller named, or was changed while this was saved.</exception>
     public async ValueTask<Unit> Handle(RemoveCrewMember command, CancellationToken cancellationToken)
     {
-        var project = await store.LoadAsync(command.Project, command.ExpectedVersion, cancellationToken)
-            ?? throw ProjectRefusals.Refuse(ProjectRefusals.NotFound);
-
-        project.RemoveFromCrew(command.Seat);
-
-        // The caller's own place may be what this very change was allowed by, once this command's check let it
-        // through: see OwnPlaceOnTheCrew. Either way it writes this project and nothing an earlier command may
-        // have left in the unit of work.
-        using (OwnPlaceOnTheCrew.BeginSave(command, command.Seat, tenancy))
-        {
-            await store.SaveOnlyAsync(project, cancellationToken);
-        }
-
+        await crew.RemoveAsync(command.Project, command.Seat, cancellationToken, command.ExpectedVersion);
         return Unit.Value;
     }
 }

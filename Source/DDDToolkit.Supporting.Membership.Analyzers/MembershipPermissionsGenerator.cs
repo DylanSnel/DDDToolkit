@@ -35,7 +35,7 @@ namespace DDDToolkit.Supporting.Membership.Analyzers;
 /// </para>
 /// <para>
 /// <b>What it reports.</b> A level on a class that is no resource with members, and a second permission of one
-/// resource that every member holds or that locks the members or the owner (DDD00093); rules made of a resource
+/// resource that every member holds, that manages the members or that names the owner (DDD00093); rules made of a resource
 /// no permission is declared on (DDD00094); a property marked <c>[At]</c> that is not the one place an aggregate root
 /// hangs at (DDD00097); and rules that reach from above a resource that marks no place (DDD00098). A permission without
 /// a level, and a class that is not static, are the core's to report (DDD00092).
@@ -107,7 +107,7 @@ public sealed class MembershipPermissionsGenerator : IIncrementalGenerator
     // ------------------------------------------------------------------ what is declared
 
     /// <summary>One permission on a resource, as the attribute says it.</summary>
-    private sealed record Declared(string Name, bool Owner, bool EveryMember, bool InRoles, bool LocksMembers, bool LocksOwner, bool FromAbove, string Field, LocationInfo? At);
+    private sealed record Declared(string Name, bool Owner, bool EveryMember, bool InRoles, bool ManagesMembers, bool NamesOwner, bool FromAbove, string Field, LocationInfo? At);
 
     /// <summary>What one class declares on one resource.</summary>
     /// <param name="Resource">The resource, written out in full.</param>
@@ -179,8 +179,8 @@ public sealed class MembershipPermissionsGenerator : IIncrementalGenerator
                     Named(attribute, "Owner", true),
                     Named(attribute, "EveryMember", false),
                     Named(attribute, "InRoles", true),
-                    Named(attribute, "LocksMembers", false),
-                    Named(attribute, "LocksOwner", false),
+                    Named(attribute, "ManagesMembers", false),
+                    Named(attribute, "NamesOwner", false),
                     Named(attribute, "FromAbove", true),
                     type.Name + "." + field.Name,
                     own && attribute.ApplicationSyntaxReference?.GetSyntax(cancellationToken) is { } syntax ? LocationInfo.From(syntax) : null));
@@ -371,8 +371,8 @@ public sealed class MembershipPermissionsGenerator : IIncrementalGenerator
             var permissions = resource.SelectMany(static on => on.Permissions).ToList();
             var name = resource.First().ResourceName;
             Once(production, permissions.Where(static each => each.EveryMember).ToList(), name, "EveryMember", "every member holds");
-            Once(production, permissions.Where(static each => each.LocksMembers).ToList(), name, "LocksMembers", "locks the members");
-            Once(production, permissions.Where(static each => each.LocksOwner).ToList(), name, "LocksOwner", "locks the owner");
+            Once(production, permissions.Where(static each => each.ManagesMembers).ToList(), name, "ManagesMembers", "manages the members");
+            Once(production, permissions.Where(static each => each.NamesOwner).ToList(), name, "NamesOwner", "names the owner");
             foreach (var twice in permissions.GroupBy(static each => each.Name, StringComparer.Ordinal).Where(static each => each.Count() > 1))
             {
                 var second = twice.Skip(1).First();
@@ -472,7 +472,7 @@ public sealed class MembershipPermissionsGenerator : IIncrementalGenerator
                     foreach (var permission in on.Permissions)
                     {
                         writer.Line("        new(" + Literal(permission.Name) + ", Owner: " + Bool(permission.Owner) + ", EveryMember: " + Bool(permission.EveryMember)
-                                    + ", InRoles: " + Bool(permission.InRoles) + ", LocksMembers: " + Bool(permission.LocksMembers) + ", LocksOwner: " + Bool(permission.LocksOwner)
+                                    + ", InRoles: " + Bool(permission.InRoles) + ", ManagesMembers: " + Bool(permission.ManagesMembers) + ", NamesOwner: " + Bool(permission.NamesOwner)
                                     + ", FromAbove: " + Bool(permission.FromAbove) + "),");
                     }
 

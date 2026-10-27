@@ -191,7 +191,7 @@ public interface ITenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId>
     /// This reads the seats, where the other queries read rights. By default it returns every seat of the tenant. On
     /// Postgres it returns the seats that a read rule of the application's on its seat class lets the caller read, where
     /// the application writes one (<c>tenant_seats()</c> runs as its caller). A module that admits a seat by asking here,
-    /// as Membership's admission does, then admits only seats the caller reads.
+    /// as Membership's member manager does, then admits only seats the caller reads.
     /// </para>
     /// </summary>
     /// <returns>A query of the seats' rows.</returns>

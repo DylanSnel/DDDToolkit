@@ -85,8 +85,8 @@ public sealed class PackageReferenceTests
     {
         typeof(MembershipRules).Assembly.GetExportedTypes().Select(type => type.Namespace).Distinct()
             .Should().BeEquivalentTo(
-                ["DDDToolkit.Supporting.Membership", "DDDToolkit.Supporting.Membership.Access", "DDDToolkit.Supporting.Membership.UseCases"],
-                "the model, the access questions and the use-case pieces, whatever folder a file is in");
+                ["DDDToolkit.Supporting.Membership", "DDDToolkit.Supporting.Membership.Access", "DDDToolkit.Supporting.Membership.Managers"],
+                "the model, the access questions and the managers with what they take, whatever folder a file is in");
     }
 
     [Fact]

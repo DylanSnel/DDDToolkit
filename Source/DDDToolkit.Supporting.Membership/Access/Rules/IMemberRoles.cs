@@ -1,17 +1,15 @@
 using DDDToolkit.Abstractions.Interfaces;
-using DDDToolkit.Supporting.Membership.Access;
 
-namespace DDDToolkit.Supporting.Membership.UseCases;
+namespace DDDToolkit.Supporting.Membership.Access;
 
 /// <summary>
-/// The roles there are for the members of one kind of resource, as the admission asks about them: whether a
-/// role exists.
+/// The roles there are for the members of one kind of resource: whether a role exists, which the member manager asks
+/// before it gives one.
 /// <para>
-/// Where the roles are fixed (<see cref="Roles.Fixed"/>), the package answers it from the rules
-/// (<see cref="NamedRoles{TResourceId}"/>). Where a customer makes them (<see cref="Roles.Custom"/>), the package
-/// that stores them answers it from their rows: a role in use. Where they are kept elsewhere
-/// (<see cref="Roles.External"/>), the roles an organization makes for itself say, the application answers it from
-/// there, registered with the resource.
+/// Where the roles are fixed (<see cref="Roles.Fixed"/>), the package answers it from the rules. Where a customer makes
+/// them (<see cref="Roles.Custom"/>), the package that stores them answers it from their rows: a role in use. Where they
+/// are kept elsewhere (<see cref="Roles.External"/>), the roles an organization makes for itself say, the application
+/// answers it from there, registered with the resource, or the join with that organization's package answers it.
 /// </para>
 /// </summary>
 /// <typeparam name="TResourceId">The id of the kind of resource the members are of.</typeparam>

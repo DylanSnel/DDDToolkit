@@ -86,6 +86,12 @@ public abstract partial class MemberEntity<TId, TMemberId, TRoleId>
         AddedBy = addedBy;
     }
 
+    /// <summary>
+    /// Puts the roles in <paramref name="order"/>: for a member read to be shown, never for one that is saved, since the
+    /// order of the roles is no fact about the member.
+    /// </summary>
+    internal void OrderRoles(Comparison<MemberRole<TMemberId, TRoleId>> order) => _roles.Sort(order);
+
     /// <summary>The member's hold of <paramref name="role"/>, ended or not, or <see langword="null"/>.</summary>
     internal MemberRole<TMemberId, TRoleId>? Find(TRoleId role) => _roles.FirstOrDefault(held => held.RoleId.Equals(role));
 

@@ -9,7 +9,6 @@ using DDDToolkit.Exceptions;
 using DDDToolkit.Startup;
 using DDDToolkit.Supporting.Membership;
 using DDDToolkit.Supporting.Membership.Access;
-using DDDToolkit.Supporting.Membership.UseCases;
 using DDDToolkit.Supporting.Tenancy;
 using DDDToolkit.Supporting.Tenancy.Access;
 using DDDToolkit.Supporting.Tenancy.Catalogue;
@@ -345,9 +344,9 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
         var observer = Harbor.ProjectRoles[SampleCatalogue.Observer];
         var archive = new ArchiveProjectRole(observer);
 
-        // Nothing of a package's stands between this command and the role, so its handler asks again what the
-        // command declared. Leo owns a project and manages no roles: handed the command directly, past the check, the
-        // handler refuses him as the check does, naming the permission.
+        // The project role manager asks again who may change the roles: the permission the projects' rules name for them,
+        // held for the whole tenant. Leo owns a project and manages no roles: handed the command directly, past the check,
+        // the handler refuses him as the check does, naming the permission.
         using (AsSeatOf(DemoPeople.Leo))
         {
             await using var scope = host.Services.CreateAsyncScope();
@@ -911,10 +910,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
             using (SampleCallers.BeginSeatOf(DemoPeople.Leo, DemoData.Harbor))
             {
                 await using var scope = scopes.CreateAsyncScope();
-                var projects = scope.ServiceProvider.GetRequiredService<ProjectsContext>();
-                var project = await projects.Projects.AsTracking().SingleAsync(candidate => candidate.Id == message.Id, cancellationToken);
-                project.TakeCrewRole(From, Role);
-                await projects.SaveChangesAsync(cancellationToken);
+                await scope.ServiceProvider.GetRequiredService<CrewMemberManager>().TakeRoleAsync(message.Id, From, Role, cancellationToken);
             }
 
             return await next(message, cancellationToken);
@@ -1171,9 +1167,9 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
     public async Task A_host_that_leaves_a_module_s_access_check_out_changes_no_project_under_the_hold()
     {
         // The same host, on the demonstration, with the expert hold on Projects' context. No request's checks were
-        // asked, so no request is in hand, and no project is saved, whoever sends what: here Ada, who may send all of
-        // it, and Vic, who manages no crew, giving up his own place on one, which is saved as the application's work
-        // only for a command its check let through.
+        // asked, so no request is in hand, and no project is saved, whoever sends what. Ada may send all of it, and the
+        // hold refuses each save. Vic manages no crew and gives up his own place on one. With no request in hand the
+        // crew manager asks his permission itself and refuses him before the save.
         Type[] checks = [typeof(ProjectsAccessBehavior<,>), typeof(InspectionsAccessBehavior<,>), typeof(TenantsAccessBehavior<,>)];
         await using var host = await sample.StartAsync(services =>
         {
@@ -1191,9 +1187,8 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
             (DemoPeople.Ada, new CloseProject(pier.Id)),
             (DemoPeople.Ada, new AddCrewMember(pier.Id, Harbor.SeatOf(DemoPeople.Tove), Role: null, Until: null)),
             (DemoPeople.Ada, new ChangeProjectOwner(pier.Id, Harbor.SeatOf(DemoPeople.Juno), FormerOwnerRole: null)),
-            (DemoPeople.Vic, new TakeCrewRole(pier.Id, vic, observer)),
-            (DemoPeople.Vic, new RemoveCrewMember(pier.Id, vic)),
         ];
+        IMessage[] ofVic = [new TakeCrewRole(pier.Id, vic, observer), new RemoveCrewMember(pier.Id, vic)];
 
         foreach (var (sender, request) in changes)
         {
@@ -1202,6 +1197,16 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
                 await using var scope = host.Services.CreateAsyncScope();
                 var send = async () => await scope.ServiceProvider.GetRequiredService<ISender>().Send(request, Cancellation);
                 (await send.Should().ThrowAsync<InvalidOperationException>(request.GetType().Name)).WithMessage("*was changed with no request in hand*");
+            }
+        }
+
+        foreach (var request in ofVic)
+        {
+            using (AsSeatOf(DemoPeople.Vic))
+            {
+                await using var scope = host.Services.CreateAsyncScope();
+                var send = async () => await scope.ServiceProvider.GetRequiredService<ISender>().Send(request, Cancellation);
+                (await send.Should().ThrowAsync<RefusalException>(request.GetType().Name)).Which.Code.Should().Be(ProjectRefusals.NotPermitted);
             }
         }
 
@@ -1401,10 +1406,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
 
     /// <summary>The handler of <see cref="ArchiveProjectRole"/> over the services of <paramref name="scope"/>, as the mediator makes it, to be called past the mediator.</summary>
     private static ArchiveProjectRoleHandler ArchiveHandlerOf(AsyncServiceScope scope)
-        => new(
-            scope.ServiceProvider.GetRequiredService<IProjectStore>(),
-            scope.ServiceProvider.GetRequiredService<ProjectMembership>(),
-            scope.ServiceProvider.GetRequiredService<AccessChecks<IProjectsRequest>>());
+        => new(scope.ServiceProvider.GetRequiredService<ProjectRoleManager>());
 
     /// <summary>Whether harbor's project role <paramref name="role"/> is in use, read as system work there.</summary>
     private static async Task<CustomRoleStatus> StatusOfAsync(SampleFactory host, ProjectRoleId role)

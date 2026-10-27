@@ -28,23 +28,18 @@ public sealed class TwoResourcesInOneContextTests
             new MembershipRegistration(typeof(FilingContext), typeof(Folder), typeof(FolderId), typeof(FolderMember), FolderMembership.Rules),
         ]);
 
-        // The roles there are for a member are each resource's own.
-        var ofDocuments = provider.GetRequiredService<IMemberRoles<DocumentId, NamedRole>>();
-        var ofFolders = provider.GetRequiredService<IMemberRoles<FolderId, NamedRole>>();
-        (await ofDocuments.ExistsAsync(DocumentMembership.Contributor, Cancellation)).Should().BeTrue();
-        (await ofDocuments.ExistsAsync(FolderMembership.Clerk, Cancellation)).Should().BeFalse();
-        (await ofFolders.ExistsAsync(FolderMembership.Clerk, Cancellation)).Should().BeTrue();
-        (await ofFolders.ExistsAsync(DocumentMembership.Contributor, Cancellation)).Should().BeFalse();
-
-        // And so is what a handler asks before it changes the members, refused under the resource's own code.
-        var documents = provider.GetRequiredService<MemberAdmission<DocumentId, UserId, NamedRole>>();
-        var folders = provider.GetRequiredService<MemberAdmission<FolderId, StaffCode, NamedRole>>();
-        (await Refused.WithCodeAsync(DocumentRefusals.Membership, MembershipRefusals.RoleNotForMembers, () => documents.RequireRoleAsync(FolderMembership.Clerk, Cancellation).AsTask()))
+        // The roles there are for a member are each resource's own, and so is the member manager that asks about them, which
+        // refuses under the resource's own code. A role that goes to a member is refused next for its period, which ends
+        // before it starts, so nothing changes.
+        var data = filing.Scenario;
+        var documents = provider.GetRequiredService<DocumentShareManager>();
+        var folders = provider.GetRequiredService<FolderMemberManager>();
+        (await Refused.WithCodeAsync(DocumentRefusals.Membership, MembershipRefusals.RoleNotForMembers, () => documents.AddAsync(data.Minutes, UserId.CreateSequential(), FolderMembership.Clerk, null, Cancellation)))
             .Code.Should().Be("documents.role-not-for-members");
-        (await Refused.WithCodeAsync(FolderRefusals.Membership, MembershipRefusals.RoleNotForMembers, () => folders.RequireRoleAsync(DocumentMembership.Contributor, Cancellation).AsTask()))
+        (await Refused.WithCodeAsync(FolderRefusals.Membership, MembershipRefusals.RoleNotForMembers, () => folders.AddAsync(data.Cabinet, new StaffCode("N-777"), DocumentMembership.Contributor, null, Cancellation)))
             .Code.Should().Be("folders.role-not-for-members");
-        await folders.RequireRoleAsync(FolderMembership.Clerk, Cancellation);
-        await folders.RequireMemberAsync(new StaffCode("N-777"), Cancellation);
+        await Refused.WithCodeAsync(DocumentRefusals.Membership, MembershipRefusals.InvalidPeriod, () => documents.AddAsync(data.Minutes, UserId.CreateSequential(), DocumentMembership.Contributor, DateTimeOffset.MinValue, Cancellation));
+        await Refused.WithCodeAsync(FolderRefusals.Membership, MembershipRefusals.InvalidPeriod, () => folders.AddAsync(data.Cabinet, new StaffCode("N-777"), FolderMembership.Clerk, DateTimeOffset.MinValue, Cancellation));
     }
 
     [Fact]

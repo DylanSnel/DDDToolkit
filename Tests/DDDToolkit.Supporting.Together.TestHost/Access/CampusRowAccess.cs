@@ -60,6 +60,17 @@ public static partial class SeatsReadTheRolesOfCoursesOfTheirCollege
     public static bool Allows(CourseRole role, ICurrentUser user) => role.TenantId == TenancyRowAccess.CallerTenant<TenantId>();
 }
 
+/// <summary>
+/// Whoever manages the college's roles for the whole college makes and changes the roles of its courses: the permission the
+/// courses' rules name for their roles, which the course role manager asks first.
+/// </summary>
+[RowAccess<CourseRole>(RowOperations.Create | RowOperations.Change, To = [RowAccessRoles.User])]
+public static partial class RoleManagersChangeTheRolesOfCourses
+{
+    /// <summary>Whether the caller holds the permission that manages roles for the whole college.</summary>
+    public static bool Allows(CourseRole role, ICurrentUser user) => TenancyRowAccess.HoldsAtTenant(DDDToolkit.Supporting.Tenancy.Catalogue.TenancyPermissions.RolesManage);
+}
+
 /// <summary>A seat reads the labs it sees.</summary>
 [RowAccess<Lab>(RowOperations.Read, To = [RowAccessRoles.User])]
 public static partial class SeatsReadTheLabsTheySee

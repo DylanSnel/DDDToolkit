@@ -5,7 +5,7 @@ using DDDToolkit.Supporting.Membership.EntityFramework;
 using DDDToolkit.Supporting.Membership.TestHost.Crates;
 using DDDToolkit.Supporting.Membership.TestHost.Pallets;
 using DDDToolkit.Supporting.Membership.TestHost.Persistence;
-using DDDToolkit.Supporting.Membership.UseCases;
+using DDDToolkit.Supporting.Membership.Managers;
 using Microsoft.EntityFrameworkCore;
 
 namespace DDDToolkit.Supporting.Membership.TestHost.Depot;

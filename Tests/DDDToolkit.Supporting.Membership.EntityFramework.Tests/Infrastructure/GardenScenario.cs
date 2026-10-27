@@ -98,7 +98,7 @@ public sealed class GardenScenario
         Plots = [beans, leeks, kale];
 
         // The sheds' roles: the one starter role, and one made since.
-        ShedKeeper = new ShedRole(ShedRoleId.CreateSequential(), StarterRoles.Missing<ShedRoleId>(ShedMembership.Rules, []).Single());
+        ShedKeeper = new ShedRole(ShedRoleId.CreateSequential(), new CustomRoleDraft(ShedMembership.Keeper, null, ShedMembership.Rules.PermissionsOf(new NamedRole(ShedMembership.Keeper)), ShedMembership.Keeper));
         Lender = new ShedRole(ShedRoleId.CreateSequential(), new CustomRoleDraft("Lender", "Lends the tools out.", [ShedPermissions.Open, ToolPermissions.LendTools]));
         ShedRoles = [ShedKeeper, Lender];
 
@@ -262,5 +262,5 @@ public sealed class GardenScenario
 
     /// <summary>A garden's role made from the starter role <paramref name="name"/>, as the rules' drafts say it.</summary>
     private static PlotRole Starter(GardenId garden, string name)
-        => new(PlotRoleId.CreateSequential(), garden, StarterRoles.Missing<PlotRoleId>(PlotMembership.Rules, []).Single(draft => draft.MadeFrom == name));
+        => new(PlotRoleId.CreateSequential(), garden, new CustomRoleDraft(name, null, PlotMembership.Rules.PermissionsOf(new NamedRole(name)), name));
 }

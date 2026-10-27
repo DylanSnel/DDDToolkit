@@ -100,3 +100,26 @@ public sealed class ManuscriptReads(PressContext db, MembershipAccessManager<Man
     public Task<MemberVia?> EditsAsync(ManuscriptId manuscript, CancellationToken cancellationToken)
         => access.ViaAsync(manuscript, ManuscriptPermissions.Edit, cancellationToken);
 }
+
+/// <summary>
+/// What the press changes of its manuscripts' editors and of the roles it keeps for them, through the managers Membership's
+/// generator writes into the domain project for the editor class and the role class: one call each.
+/// </summary>
+/// <param name="editors">The manager of a manuscript's editors.</param>
+/// <param name="roles">The manager of the roles of manuscripts.</param>
+public sealed class ManuscriptDesk(ManuscriptEditorManager editors, ManuscriptRoleManager roles)
+{
+    /// <summary>Takes a seat on to a manuscript in a role, from now on, and answers the manuscript as it was saved.</summary>
+    /// <param name="manuscript">The manuscript, by the id a request carries.</param>
+    /// <param name="seat">The seat.</param>
+    /// <param name="role">The role.</param>
+    /// <param name="cancellationToken">Cancels the work.</param>
+    public Task<Manuscript> TakeOnAsync(ManuscriptId manuscript, SeatId seat, ManuscriptRoleId role, CancellationToken cancellationToken)
+        => editors.AddAsync(manuscript, seat, role, until: null, cancellationToken);
+
+    /// <summary>Makes the starter roles of manuscripts a house does not have yet.</summary>
+    /// <param name="house">The house the roles are of.</param>
+    /// <param name="cancellationToken">Cancels the work.</param>
+    public Task<IReadOnlyList<ManuscriptRole>> SetUpAsync(TenantId house, CancellationToken cancellationToken)
+        => roles.CreateStarterRolesAsync(draft => new ManuscriptRole(ManuscriptRoleId.Create(), house, draft), cancellationToken);
+}

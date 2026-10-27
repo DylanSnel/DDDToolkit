@@ -161,10 +161,9 @@ public sealed class RoleClassMappingTests
         await using var provider = services.BuildServiceProvider();
         await using var scope = provider.CreateAsyncScope();
 
-        // No context is registered here at all: nothing of the roles' rows is read for the admission.
-        var admission = scope.ServiceProvider.GetRequiredService<MemberAdmission<PlotId, UserId, PlotRoleId>>();
-        await admission.RequireRoleAsync(owners, Cancellation);
-        await Refused.WithCodeAsync(PlotMembership.Codes, MembershipRefusals.RoleNotForMembers, () => admission.RequireRoleAsync(PlotRoleId.CreateSequential(), Cancellation).AsTask());
+        // No context is registered here at all: nothing of the roles' rows is read for what the member manager asks.
+        await Admitted.RoleAsync<PlotId, PlotRoleId>(scope.ServiceProvider, PlotMembership.Codes, owners, Cancellation);
+        await Refused.WithCodeAsync(PlotMembership.Codes, MembershipRefusals.RoleNotForMembers, () => Admitted.RoleAsync<PlotId, PlotRoleId>(scope.ServiceProvider, PlotMembership.Codes, PlotRoleId.CreateSequential(), Cancellation));
     }
 
     [Fact]
@@ -185,8 +184,8 @@ public sealed class RoleClassMappingTests
                 var asked = FluentActions.Invoking(() => scope.ServiceProvider.GetRequiredService<MembershipAccessManager<Plot>>().Reach(PlotPermissions.Plant))
                     .Should().Throw<InvalidOperationException>().Which;
 
-                // The admission is told the same: it reads the same rows.
-                (await FluentActions.Awaiting(() => scope.ServiceProvider.GetRequiredService<MemberAdmission<PlotId, UserId, PlotRoleId>>().RequireRoleAsync(PlotRoleId.CreateSequential(), Cancellation).AsTask())
+                // What the member manager asks of a role is told the same: it reads the same rows.
+                (await FluentActions.Awaiting(() => Admitted.RoleAsync<PlotId, PlotRoleId>(scope.ServiceProvider, PlotMembership.Codes, PlotRoleId.CreateSequential(), Cancellation))
                     .Should().ThrowAsync<InvalidOperationException>()).Which.Message.Should().Be(asked.Message);
 
                 return asked;

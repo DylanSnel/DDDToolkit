@@ -68,7 +68,7 @@ public partial class RefusalTableTests
 
         MembershipRefusals.Codes.Should().BeEquivalentTo(declared, "every constant is in the table and the table has nothing else");
         declared.Should().OnlyHaveUniqueItems().And.OnlyContain(code => code.StartsWith("membership.", StringComparison.Ordinal));
-        declared.Should().HaveCount(15, "the ten rules of access and of a member list, the one about a period, and the four about a role a customer makes");
+        declared.Should().HaveCount(16, "the ten rules of access and of a member list, the one about a period, and the five about a role a customer makes");
 
         var english = Resx(CultureInfo.InvariantCulture);
         english.Keys.Should().BeEquivalentTo(declared, "MembershipFailures.resx holds exactly the table's names");
@@ -102,6 +102,7 @@ public partial class RefusalTableTests
             [MembershipRefusals.OwnerProtected] = RefusalKind.Conflict,
             [MembershipRefusals.AlreadyOwner] = RefusalKind.Conflict,
             [MembershipRefusals.InvalidPeriod] = RefusalKind.Invalid,
+            [MembershipRefusals.RoleNotFound] = RefusalKind.NotFound,
             [MembershipRefusals.RoleIsArchived] = RefusalKind.Conflict,
             [MembershipRefusals.RoleNameInvalid] = RefusalKind.Invalid,
             [MembershipRefusals.PermissionNotForMembers] = RefusalKind.Invalid,
@@ -160,7 +161,7 @@ public partial class RefusalTableTests
         own[MembershipRefusals.AlreadyMember].Should().Be("projects.already-on-crew");
         own[MembershipRefusals.MemberNotActive].Should().Be("projects.seat-not-active");
         own[MembershipRefusals.OwnerProtected].Should().Be("projects.owner-protected", "a rule nobody renamed keeps the package's name");
-        own.All.Should().HaveCount(15).And.OnlyHaveUniqueItems();
+        own.All.Should().HaveCount(16).And.OnlyHaveUniqueItems();
         own.Refuse(MembershipRefusals.AlreadyMember).Code.Should().Be("projects.already-on-crew");
 
         // A map never changes: renaming answers another one.
@@ -324,8 +325,12 @@ public partial class RefusalTableTests
             (MembershipRefusals.InvalidPeriod, "until",
                 Refused.With(codes, MembershipRefusals.InvalidPeriod, () => document.ShareWith(UserId.CreateSequential(), MemberPeriod.Between(Now, Now), Now, by: null)).Arguments),
             (MembershipRefusals.RoleNotForMembers, "role",
-                Refused.With(codes, MembershipRefusals.RoleNotForMembers, () => new MemberAdmission<DocumentId, UserId, NamedRole>(DocumentMembership.Rules, new NamedRoles<DocumentId>(DocumentMembership.Rules))
-                    .RequireRoleAsync(new NamedRole("auditor"), CancellationToken.None).AsTask().GetAwaiter().GetResult()).Arguments),
+                Refused.With(codes, MembershipRefusals.RoleNotForMembers, () => new DocumentShareManager(
+                        new StubAccess<Document, DocumentId>(DocumentMembership.Rules).Sees(document.Id, version: 0, (DocumentPermissions.Share, MemberVia.Members)),
+                        new StubMemberStore<Document, DocumentId, UserId>().With(document),
+                        TestUser,
+                        TimeProvider.System)
+                    .AddAsync(document.Id, UserId.CreateSequential(), new NamedRole("auditor"), null, CancellationToken.None).GetAwaiter().GetResult()).Arguments),
 
             // A role kept for a resource, refused under that resource's codes: its name, and the permissions it would give.
             (MembershipRefusals.RoleNameInvalid, "name",
@@ -408,7 +413,7 @@ public partial class RefusalTableTests
     {
         var permissions = FolderRefusals.Membership.TextKeys;
 
-        permissions.Should().HaveCount(18, "fifteen codes of its own, and the three rules a member and a role report under the package's names");
+        permissions.Should().HaveCount(19, "sixteen codes of its own, and the three rules a member and a role report under the package's names");
         permissions["folders.already-on-folder"].Should().Be(MembershipRefusals.AlreadyMember);
         permissions["folders.owner-protected"].Should().Be(MembershipRefusals.OwnerProtected);
         permissions[MembershipRefusals.RoleHeld].Should().Be(MembershipRefusals.RoleHeld, "a member does not know whose it is, and reports the rule by the package's name");
@@ -418,7 +423,7 @@ public partial class RefusalTableTests
         permissions.Values.Distinct().Should().BeEquivalentTo(MembershipRefusals.Codes, "every text is read by a code");
 
         // A resource named as the package names its rules needs no entry twice.
-        MembershipCodes.Under("membership").TextKeys.Should().HaveCount(15);
+        MembershipCodes.Under("membership").TextKeys.Should().HaveCount(16);
     }
 
     [Fact]

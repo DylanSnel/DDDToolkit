@@ -284,9 +284,16 @@ public class MembershipWithTenancyGeneratorTests
 
         RegistrationsOf(result).Should().BeEquivalentTo(["AddCourseMembershipWithTenancy<TContext>"]);
         PortsOf(result, "GeneratedCourseMembershipWithTenancy`1").Should().BeEquivalentTo(
-            ["ICallerMember`2", "IMemberDirectory`2", "IPlacesReached`2"],
-            "a course's roles are kept for it, so nothing is answered about roles: the package reads them where they are kept");
+            ["ICallerMember`2", "IMemberDirectory`2", "IPlacesReached`2", "IOwnPlaceWork`2", "ICustomRoleAccess`1"],
+            "a course's roles are kept for it, so nothing is answered about which roles there are: the package reads them where they are kept");
         result.ShouldNotContain(File, "RolesWithPermission");
+
+        // The managers' two: the save of the caller's own place begins Tenancy's system work in the caller's tenant, for
+        // its seat, and the permission that changes the roles a customer makes is asked for the whole tenant.
+        result.ShouldContain(File, "? _access.BeginSystemIn(_access.CurrentTenant.Require().Id, member)");
+        result.ShouldContain(File, ": _access.BeginSystemIn(_access.CurrentTenant.Require().Id, member, scope);");
+        result.ShouldContain(File, "|| !await AskAsync(queries => queries.HoldsAtTenantAsync(permission, cancellationToken), cancellationToken).ConfigureAwait(false))");
+        result.ShouldContain(File, "throw global::DDDToolkit.Supporting.Tenancy.TenancyRefusals.Refuse(global::DDDToolkit.Supporting.Tenancy.TenancyRefusals.NotPermitted, (\"Permission\", permission));");
     }
 
     [Fact]
@@ -299,7 +306,7 @@ public class MembershipWithTenancyGeneratorTests
 
         const string File = "GeneratedMembershipWithTenancyExtensions.AddLabMembershipWithTenancy";
         PortsOf(result, "GeneratedLabMembershipWithTenancy`1").Should().BeEquivalentTo(
-            "ICallerMember`2", "IMemberDirectory`2", "IPlacesReached`2", "IRolesWithPermission`2", "IMemberRoles`2");
+            "ICallerMember`2", "IMemberDirectory`2", "IPlacesReached`2", "IOwnPlaceWork`2", "ICustomRoleAccess`1", "IRolesWithPermission`2", "IMemberRoles`2");
 
         // Which roles give a permission, and which roles there are: the tenant's, asked of Tenancy. None is the owner's.
         result.ShouldContain(File, "? queries.RolesWithPermission(permission)");
@@ -328,8 +335,8 @@ public class MembershipWithTenancyGeneratorTests
         var lab = result.Source("AddLabMembershipWithTenancy");
         course.Should().NotContain("Lab");
         lab.Should().NotContain("Course");
-        PortsOf(result, "GeneratedCourseMembershipWithTenancy`1").Should().HaveCount(3);
-        PortsOf(result, "GeneratedLabMembershipWithTenancy`1").Should().HaveCount(5);
+        PortsOf(result, "GeneratedCourseMembershipWithTenancy`1").Should().HaveCount(5);
+        PortsOf(result, "GeneratedLabMembershipWithTenancy`1").Should().HaveCount(7);
 
         // The resources' own registrations are there as they were: the written ones stand beside them.
         MethodsOf(result, Package + "GeneratedMembershipEntityFrameworkServiceCollectionExtensions").Should().BeEquivalentTo(
@@ -542,11 +549,11 @@ public class MembershipWithTenancyGeneratorTests
             Course,
             "/// <typeparam name=\"TUnitId\">The id of the application's organization unit class, which this project sees no class of and so cannot be given.</typeparam>",
             "whoever writes the call is told which id goes where");
-        PortsOf(result, "GeneratedCourseMembershipWithTenancy`4").Should().HaveCount(3, "a course's roles are kept for it: its role class says so");
+        PortsOf(result, "GeneratedCourseMembershipWithTenancy`4").Should().HaveCount(5, "a course's roles are kept for it: its role class says so");
 
         const string Lab = "GeneratedMembershipWithTenancyExtensions.AddLabMembershipWithTenancy";
         result.ShouldContain(Lab, "TenancyAccessManager<TTenantId, global::Campus.Tenants.SeatId, TUnitId, global::Campus.Tenants.RoleId> _access;");
-        PortsOf(result, "GeneratedLabMembershipWithTenancy`3").Should().HaveCount(5);
+        PortsOf(result, "GeneratedLabMembershipWithTenancy`3").Should().HaveCount(7);
     }
 
     [Fact]
@@ -590,7 +597,7 @@ public class MembershipWithTenancyGeneratorTests
 
         result.ShouldCompile();
         RegistrationsOf(result).Should().BeEquivalentTo(["AddClubMembershipWithTenancy<TContext, TTenantId, TUnitId, TRoleId>"]);
-        PortsOf(result, "GeneratedClubMembershipWithTenancy`4").Should().HaveCount(3, "roles the rules declare are held by name, and are nobody's to answer");
+        PortsOf(result, "GeneratedClubMembershipWithTenancy`4").Should().HaveCount(5, "roles the rules declare are held by name, and are nobody's to answer");
     }
 
     [Fact]
@@ -771,8 +778,8 @@ public class MembershipWithTenancyGeneratorTests
         services.Should().ContainSingle(descriptor => descriptor.ServiceType == written).Which.Lifetime.Should().Be(ServiceLifetime.Scoped);
         services.Where(descriptor => written.GetInterfaces().Contains(descriptor.ServiceType)).Select(descriptor => descriptor.ServiceType.Name)
             .Should().BeEquivalentTo(
-                ["ICallerMember`2", "IMemberDirectory`2", "IPlacesReached`2"],
-                "what the rules ask of the organization is answered by the written class, one for a scope");
+                ["ICallerMember`2", "IMemberDirectory`2", "IPlacesReached`2", "IOwnPlaceWork`2", "ICustomRoleAccess`1"],
+                "what the rules and the managers ask of the organization is answered by the written class, one for a scope");
         services.Should().Contain(descriptor => descriptor.ServiceType == typeof(MembershipAccessManager<>).MakeGenericType(emitted.Type("Campus.Courses.Course")));
 
         // Said twice it is said once, as for the resource's own registration.

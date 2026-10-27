@@ -98,7 +98,9 @@ public sealed class CampusScenario
         };
 
         // The roles of courses of each college: the starter roles the rules declare, made as the application makes them.
-        var starters = StarterRoles.Missing<CourseRoleId>(CourseMembership.Rules, []);
+        var starters = CourseMembership.Rules.Roles.Declared
+            .Select(starter => new CustomRoleDraft(starter.Name, null, CourseMembership.Rules.PermissionsOf(new NamedRole(starter.Name)), starter.Name))
+            .ToList();
         CourseRoles =
         [
             .. starters.Select(draft => new CourseRole(AlderCourseRoles[draft.MadeFrom!], Alder, draft)),

@@ -11,7 +11,7 @@ global using DDDToolkit.Supporting.Membership;
 global using DDDToolkit.Supporting.Membership.Access;
 global using DDDToolkit.Supporting.Membership.EntityFramework;
 global using DDDToolkit.Supporting.Membership.EntityFramework.Tests.Infrastructure;
-global using DDDToolkit.Supporting.Membership.UseCases;
+global using DDDToolkit.Supporting.Membership.Managers;
 global using DDDToolkit.Supporting.Tenancy;
 global using DDDToolkit.Supporting.Tenancy.Access;
 global using DDDToolkit.Supporting.Tenancy.Catalogue;
