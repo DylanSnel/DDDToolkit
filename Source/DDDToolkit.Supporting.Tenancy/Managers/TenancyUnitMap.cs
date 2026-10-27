@@ -1,7 +1,7 @@
 using DDDToolkit.Abstractions.Interfaces;
 using DDDToolkit.Supporting.Tenancy.Access;
 
-namespace DDDToolkit.Supporting.Tenancy.UseCases;
+namespace DDDToolkit.Supporting.Tenancy.Managers;
 
 /// <summary>
 /// A tenant's units and the closure of its tree, read once, to name units by their path from the root and

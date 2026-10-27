@@ -31,6 +31,11 @@ namespace DDDToolkit.Analyzers;
 /// abstract class that is only a name. A project that says which of its ids are a package's with
 /// <c>[assembly: TenancyIds&lt;...&gt;]</c> gets a class closed over them, in its root namespace.
 /// </para>
+/// <para>
+/// A package's interface, <c>[assembly: TemplateFacade(typeof(ITenancyStore&lt;,,,,,,,,&gt;))]</c>, gets a global alias,
+/// <c>global using TenancyStore = global::...ITenancyStore&lt;...&gt;;</c>, in the project that declares the classes and in
+/// every project above it that sees them, since an alias holds in its own project only.
+/// </para>
 /// </summary>
 [Generator(LanguageNames.CSharp)]
 public sealed class TemplateFacadeGenerator : IIncrementalGenerator
@@ -48,6 +53,17 @@ public sealed class TemplateFacadeGenerator : IIncrementalGenerator
         }
 
         var writer = new CodeWriter().Header();
+        if (file.IsAlias)
+        {
+            // A package's interface: an alias, which holds in this project only, so each project that sees the classes
+            // has its own. A comment says what it is closed over, since an alias carries no documentation.
+            writer.Line("// " + file.Summary);
+            writer.Line("// " + file.Naming);
+            writer.Line("global using " + file.Name + " = " + file.BaseType + ";");
+            context.AddSource(file.HintName, SourceText.From(writer.ToString(), Encoding.UTF8));
+            return;
+        }
+
         if (file.Namespace.Length > 0)
         {
             writer.Line("namespace " + file.Namespace + ";");

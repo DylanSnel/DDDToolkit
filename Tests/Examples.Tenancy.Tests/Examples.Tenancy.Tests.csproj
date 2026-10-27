@@ -55,6 +55,13 @@
       is internal, so the host's stays the only Program these tests see.
     -->
     <ProjectReference Include="..\..\Examples\Tenancy\Examples.Tenancy.Ui\Examples.Tenancy.Ui.csproj" />
+    <!--
+      The toolkit's generator, for the stores' names: TenancyStore and InvitationStore are aliases, which hold in the
+      project they are written into only, so these tests get their own, as every project of the sample that sees the
+      Tenants module's classes does. A package reference brings the generator with the package; a project reference
+      does not.
+    -->
+    <ProjectReference Include="..\..\Source\DDDToolkit.Analyzers\DDDToolkit.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
   <!--

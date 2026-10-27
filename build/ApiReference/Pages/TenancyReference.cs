@@ -56,17 +56,19 @@ internal static class TenancyReference
                 + "The stores a storage package implements are under [Stores](#stores). The registration a host calls, from all "
                 + "three packages, is under [Registration](#registration).",
                 [
-                    new("Tenants", [new(Tenancy, Folder: "UseCases/Tenants")], Lead: ["TenantManager", "TenantToProvision"]),
-                    new("Organization", [new(Tenancy, Folder: "UseCases/Organizations")]),
-                    new("Seats", [new(Tenancy, Folder: "UseCases/Seats")]),
-                    new("Roles", [new(Tenancy, Folder: "UseCases/Roles")]),
-                    new("Invitations", [new(Tenancy, Folder: "UseCases/Invitations")], Lead: ["InvitationManager"]),
+                    new("Tenants", [new(Tenancy, Folder: "Managers/Tenants")], Lead: ["TenantManager", "TenantToProvision"]),
+                    new("Organization", [new(Tenancy, Folder: "Managers/Organizations")]),
+                    new("Seats", [new(Tenancy, Folder: "Managers/Seats")]),
+                    new("Roles", [new(Tenancy, Folder: "Managers/Roles")]),
+                    new("Invitations", [new(Tenancy, Folder: "Managers/Invitations")], Lead: ["InvitationManager"]),
                     new(
                         "Stores",
-                        [new(Tenancy, Folder: "UseCases"), new(Tenancy, Type: "IInvitationStore"), new(Tenancy, Type: "InvitationOfToken")],
+                        [new(Tenancy, Folder: "Managers"), new(Tenancy, Type: "IInvitationStore"), new(Tenancy, Type: "InvitationOfToken")],
                         "Where the managers load and save. A storage package implements these interfaces and registers them: "
                         + "`DDDToolkit.Supporting.Tenancy.EntityFramework` does, in `AddTenancy` and `AddTenancyInvitations`. "
-                        + "Your code takes the managers."),
+                        + "Your code takes the managers. A command of yours that changes a field of your own on one of the "
+                        + "aggregates takes a store by the name the generator gives it, `TenancyStore` or, where you declare "
+                        + "an invitation class, `InvitationStore`. Each name is an alias closed over your classes."),
                     new(
                         "Registration",
                         [

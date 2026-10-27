@@ -3,7 +3,7 @@ using DDDToolkit.Abstractions.Interfaces;
 using DDDToolkit.Supporting.Tenancy.Access;
 using DDDToolkit.Supporting.Tenancy.Catalogue;
 
-namespace DDDToolkit.Supporting.Tenancy.UseCases;
+namespace DDDToolkit.Supporting.Tenancy.Managers;
 
 /// <summary>
 /// The organization and its tree: renaming the organization, adding, renaming, moving and archiving units, and reading

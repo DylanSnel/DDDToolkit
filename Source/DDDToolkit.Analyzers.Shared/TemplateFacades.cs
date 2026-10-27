@@ -109,6 +109,18 @@ namespace DDDToolkit.Analyzers.Common;
 /// declares the classes in every project that sees both. So the module's code under that namespace names it, and no
 /// other module sees it there. What is in the way of it is judged in that namespace, as in the global one for the others.
 /// </para>
+/// <para>
+/// <b>An interface.</b> No class can stand for an interface the package's storage implements: the container hands out
+/// the package's interface, closed over the classes, and a class of the application's would be another service. So a
+/// package's interface, Tenancy's <c>ITenancyStore&lt;...&gt;</c>, gets a global alias,
+/// <c>global using TenancyStore = global::...ITenancyStore&lt;...&gt;;</c>, named as the interface is without its
+/// leading <c>I</c>. An alias holds in its own project only, so it is written into the project that declares the classes,
+/// closed over them as a class is, and into every project above it that sees the classes the generator wrote there
+/// (<see cref="AliasesAbove"/>), closed over the types those were closed over. A name given with
+/// <c>[assembly: TemplateFacadeName]</c> in the project that declares the classes holds in all of them. What is in the
+/// way of an alias is judged in each project as for a class; two modules' aliases of one name are DDD00075 where a
+/// project sees both modules' classes, at its project file, and neither is written there.
+/// </para>
 /// </summary>
 internal static class TemplateFacades
 {
@@ -227,6 +239,13 @@ internal static class TemplateFacades
             }
         }
 
+        // An alias holds in its own project only: a project above the classes gets its own, from the classes it sees.
+        var interfaces = asked.Where(type => type.TypeKind == TypeKind.Interface && !anchored.Contains(type)).ToList();
+        if (interfaces.Count > 0)
+        {
+            outcomes.AddRange(AliasesAbove(interfaces, declared.IsDefault ? ImmutableArray<EntityDefinition>.Empty : declared, compilation, projectFile, cancellationToken));
+        }
+
         return outcomes.Count == 0
             ? ImmutableArray<FacadeOutcome>.Empty
             : outcomes
@@ -253,6 +272,7 @@ internal static class TemplateFacades
         => Resolve(declared, compilation, string.Empty, projectFile: null, cancellationToken, standingBack, rootNamespace)
             .Select(static outcome => outcome.File)
             .OfType<FacadeFile>()
+            .Where(static file => !file.IsAlias)
             .ToList();
 
     /// <summary>
@@ -378,7 +398,9 @@ internal static class TemplateFacades
             var takes = read.Select(static take => take!).ToArray();
             if (declared.FirstOrDefault(definition => definition.TemplateKey is { } key && takes.Any(take => take.Key == key)) is not { } anchor)
             {
-                if (ClosedOverALine(type, takes, lines, names, scope, module, compilation, cancellationToken) is { } closedOverALine)
+                // An interface's alias above the classes is closed over what the classes were closed over, AliasesAbove.
+                if (type.TypeKind != TypeKind.Interface
+                    && ClosedOverALine(type, takes, lines, names, scope, module, compilation, cancellationToken) is { } closedOverALine)
                 {
                     own.Add(closedOverALine);
                 }
@@ -410,7 +432,7 @@ internal static class TemplateFacades
                 }
             }
 
-            var name = line?.Name ?? type.Name;
+            var name = line?.Name ?? DefaultNameOf(type);
             var closing = new Closing(type, name, takes, anchor.Type.Location, module, line);
             var outcome = Closed(closing, CandidatesFor, SaidElsewhere, compilation, cancellationToken);
             own.Add((closing, outcome?.File is not null && OwnTypeNamed(name, compilation, cancellationToken) is { } mine ? HiddenBy(closing, mine) : outcome));
@@ -460,6 +482,200 @@ internal static class TemplateFacades
         var closing = new Closing(type, name, takes, where, module, line, scope);
         var outcome = Closed(closing, take => fromLines[take.Key], static _ => false, compilation, cancellationToken);
         return (closing, outcome?.File is not null && OwnTypeNamed(name, compilation, cancellationToken, except: scope) is { } mine ? HiddenBy(closing, mine) : outcome);
+    }
+
+    /// <summary>
+    /// The aliases of a package's interfaces in a project above the classes: one for each module whose classes the
+    /// generator wrote into a project this one references, closed over the types those classes were closed over, and
+    /// named as the project that declares the classes names it. An interface over a template the module has no class of,
+    /// such as an invitation it leaves out, gets nothing, and nothing is said. A project that declares a class of one of
+    /// the interface's templates gets its own alias, and none from here.
+    /// <para>
+    /// What the application keeps of the name stays its own without a word, as in the project that declares the classes:
+    /// a type or a namespace of the name in the global namespace, or an alias of it at the top of one of its files. A type
+    /// of the name it declares in a namespace keeps the alias out, DDD00065 on that type. Two modules' aliases of one name
+    /// are DDD00075 at the project file, and neither is written: no line of this project is wrong.
+    /// </para>
+    /// </summary>
+    private static IEnumerable<FacadeOutcome> AliasesAbove(
+        List<INamedTypeSymbol> interfaces,
+        ImmutableArray<EntityDefinition> declared,
+        Compilation compilation,
+        LocationInfo? projectFile,
+        CancellationToken cancellationToken)
+    {
+        var given = ClosingsInReferences(compilation, cancellationToken);
+        if (given.Count == 0)
+        {
+            yield break;
+        }
+
+        var found = new List<(INamedTypeSymbol Type, string Name, IAssemblySymbol Assembly, GivenName? Line, string Closed, string[] Shown)>();
+        foreach (var type in interfaces)
+        {
+            if (TemplateRegistrations.TakesOf(type.TypeParameters) is not { } read || read.Any(static take => take is null))
+            {
+                continue;
+            }
+
+            var takes = read.Select(static take => take!).ToArray();
+            if (declared.Any(definition => definition.TemplateKey is { } key && takes.Any(take => take.Key == key)))
+            {
+                continue;
+            }
+
+            foreach (var (assembly, types) in given)
+            {
+                var texts = new string[takes.Length];
+                var shown = new string[takes.Length];
+                var complete = true;
+                for (var position = 0; position < takes.Length && complete; position++)
+                {
+                    if (types.TryGetValue(KeyOf(takes[position]), out var argument))
+                    {
+                        texts[position] = argument.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                        shown[position] = argument.Name;
+                    }
+                    else
+                    {
+                        complete = false;
+                    }
+                }
+
+                if (!complete)
+                {
+                    continue;
+                }
+
+                var line = LinesByAssembly.GetValue(assembly, LinesOf).FirstOrDefault(each => Names(type, each.Facade) && IsAName(each.Name));
+                var qualifier = type.ContainingNamespace is { IsGlobalNamespace: false } scope ? "global::" + scope.ToDisplayString() + "." : "global::";
+                found.Add((type, line?.Name ?? DefaultNameOf(type), assembly, line, qualifier + type.Name + "<" + string.Join(", ", texts) + ">", shown));
+            }
+        }
+
+        if (found.Count == 0)
+        {
+            yield break;
+        }
+
+        var taken = AliasesIn(compilation, cancellationToken);
+        var none = new Dictionary<string, List<INamedTypeSymbol>>(StringComparer.Ordinal);
+        foreach (var named in found.GroupBy(static each => each.Name).OrderBy(static group => group.Key, StringComparer.Ordinal))
+        {
+            var name = named.Key;
+            var all = named.ToList();
+            if (taken.Contains(name) || TakenInTheGlobalNamespace(name, compilation, none) is not null)
+            {
+                continue;
+            }
+
+            if (all.Count > 1)
+            {
+                var first = all.OrderBy(static each => each.Assembly.Name, StringComparer.Ordinal).First();
+                yield return new FacadeOutcome(
+                    name,
+                    File: null,
+                    DiagnosticInfo.Create(
+                        DiagnosticDescriptors.TemplateFacadeNameMet,
+                        projectFile,
+                        name,
+                        "it sees " + DefinitionFactory.Listed(all.Select(static each => "the classes " + DeclaredBy(each.Assembly)).OrderBy(static text => text, StringComparer.Ordinal))
+                        + ", and would get an alias of " + first.Type.Name + " for each",
+                        all.Count == 2 ? "one of them" : "each of them but one",
+                        first.Line is { } line
+                            ? "another name in " + line.Written
+                            : NameLine(DefaultNameOf(first.Type), DDDOptions.Default.ResolveModuleName(ModuleBoundary.ModuleOf(first.Assembly), first.Assembly.Name) + DefaultNameOf(first.Type))
+                              + " in '" + first.Assembly.Name + "'",
+                        "alias"));
+                continue;
+            }
+
+            var (type, _, assembly, given2, closed, shown) = all[0];
+            if (OwnTypeNamed(name, compilation, cancellationToken) is { } mine)
+            {
+                yield return new FacadeOutcome(
+                    name,
+                    File: null,
+                    DiagnosticInfo.Create(
+                        DiagnosticDescriptors.TemplateFacadeNotWritten,
+                        LocationInfo.From(mine),
+                        name,
+                        WhatItNames(type),
+                        "this project declares '" + mine.ToDisplayString() + "', which an alias of that name would hide in every file that imports '"
+                        + mine.ContainingNamespace.ToDisplayString() + "' with a using; name the alias otherwise, with "
+                        + (given2 is { } line ? "another name in " + line.Written : NameLine(DefaultNameOf(type), "...") + " in '" + assembly.Name + "'")
+                        + ", or rename '" + mine.Name + "'"));
+                continue;
+            }
+
+            yield return new FacadeOutcome(
+                name,
+                new FacadeFile(
+                    HintName: name + AliasSuffix,
+                    Name: name,
+                    IsPublic: true,
+                    BaseType: closed,
+                    Summary: type.Name + ", closed over the classes " + DeclaredBy(assembly) + ": " + DefinitionFactory.Listed(shown) + ".",
+                    Naming: given2 is { } named2
+                        ? "Named by " + named2.Written + "."
+                        : "Named as the package's interface is, without its I; [assembly: TemplateFacadeName(\"" + name + "\", \"...\")] in '" + assembly.Name + "' names it otherwise.")
+                {
+                    IsAlias = true,
+                },
+                Diagnostic: null);
+        }
+    }
+
+    /// <summary>"'Customers.Domain' declares for the module Customers": whose classes an alias above them is closed over.</summary>
+    private static string DeclaredBy(IAssemblySymbol assembly)
+        => ModuleBoundary.ModuleOf(assembly) is { } module
+            ? "'" + assembly.Name + "' declares for the module " + module
+            : "'" + assembly.Name + "' declares";
+
+    /// <summary>What a type parameter takes, as one written class and an interface both say it.</summary>
+    private static (string Key, bool TakeType, int Argument, bool IdOfArgument) KeyOf(TemplateRegistrations.Take take)
+        => (take.Key, take.TakeType, take.Argument, take.IdOfArgument);
+
+    /// <summary>
+    /// What the classes the generator wrote into each referenced assembly were closed over, by what each type parameter
+    /// takes: the module's tenant class, its tenant id, and so on, read from the classes' base types. Only an assembly
+    /// with such a class this project can see is here.
+    /// </summary>
+    private static List<(IAssemblySymbol Assembly, Dictionary<(string Key, bool TakeType, int Argument, bool IdOfArgument), ITypeSymbol> Types)> ClosingsInReferences(
+        Compilation compilation,
+        CancellationToken cancellationToken)
+    {
+        var closings = new List<(IAssemblySymbol, Dictionary<(string, bool, int, bool), ITypeSymbol>)>();
+        foreach (var assembly in compilation.SourceModule.ReferencedAssemblySymbols)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Dictionary<(string, bool, int, bool), ITypeSymbol>? types = null;
+            foreach (var type in WrittenByAssembly.GetValue(assembly, WrittenIn))
+            {
+                if (!compilation.IsSymbolAccessibleWithin(type, compilation.Assembly)
+                    || type.BaseType is not { } closed
+                    || TemplateRegistrations.TakesOf(closed.OriginalDefinition.TypeParameters) is not { } takes)
+                {
+                    continue;
+                }
+
+                types ??= new Dictionary<(string, bool, int, bool), ITypeSymbol>();
+                for (var position = 0; position < takes.Length; position++)
+                {
+                    if (takes[position] is { } take && !types.ContainsKey(KeyOf(take)))
+                    {
+                        types.Add(KeyOf(take), closed.TypeArguments[position]);
+                    }
+                }
+            }
+
+            if (types is not null)
+            {
+                closings.Add((assembly, types));
+            }
+        }
+
+        return closings;
     }
 
     /// <summary>What one asked class is closed over, and what is said about it.</summary>
@@ -618,6 +834,7 @@ internal static class TemplateFacades
         var over = space.Length > 0 ? "the ids this project's line names as the package's"
             : module is not null ? "the classes of the module " + module
             : "the classes of this project";
+        var isAlias = type.TypeKind == TypeKind.Interface;
 
         // A class the container makes has each public constructor of the package's class, closed over the same types.
         var constructors = new List<FacadeConstructor>();
@@ -639,16 +856,23 @@ internal static class TemplateFacades
         return new FacadeOutcome(
             name,
             new FacadeFile(
-                HintName: (space.Length > 0 ? space + "." : string.Empty) + name + ".TemplateFacade.g.cs",
+                HintName: (space.Length > 0 ? space + "." : string.Empty) + name + (isAlias ? AliasSuffix : ".TemplateFacade.g.cs"),
                 Name: name,
                 IsPublic: isPublic,
                 BaseType: qualifier + type.Name + "<" + string.Join(", ", texts) + ">",
-                Summary: CodeWriter.XmlText(type.Name + ", closed over " + over + ": " + DefinitionFactory.Listed(shown) + "."),
-                Naming: CodeWriter.XmlText(line is not null
-                    ? "Named by " + line.Written + "."
-                    : "Named as the package's class is; [assembly: TemplateFacadeName(\"" + type.Name + "\", \"...\")] in this project names it otherwise."))
+                Summary: isAlias
+                    ? type.Name + ", closed over " + over + ": " + DefinitionFactory.Listed(shown) + "."
+                    : CodeWriter.XmlText(type.Name + ", closed over " + over + ": " + DefinitionFactory.Listed(shown) + "."),
+                Naming: isAlias
+                    ? line is not null
+                        ? "Named by " + line.Written + "."
+                        : "Named as the package's interface is, without its I; [assembly: TemplateFacadeName(\"" + name + "\", \"...\")] in this project names it otherwise."
+                    : CodeWriter.XmlText(line is not null
+                        ? "Named by " + line.Written + "."
+                        : "Named as the package's class is; [assembly: TemplateFacadeName(\"" + type.Name + "\", \"...\")] in this project names it otherwise."))
             {
                 Namespace = space,
+                IsAlias = isAlias,
                 IsService = !type.IsAbstract,
                 IsRecord = type.IsRecord,
                 Constructors = constructors.ToEquatableArray(),
@@ -658,7 +882,14 @@ internal static class TemplateFacades
 
     /// <summary>DDD00065 on the first class of the project with one of the type's templates.</summary>
     private static FacadeOutcome NotWritten(Closing closing, string why)
-        => new(closing.Name, File: null, DiagnosticInfo.Create(DiagnosticDescriptors.TemplateFacadeNotWritten, closing.Where, closing.Name, closing.Type.Name, why));
+        => new(closing.Name, File: null, DiagnosticInfo.Create(DiagnosticDescriptors.TemplateFacadeNotWritten, closing.Where, closing.Name, WhatItNames(closing.Type), why));
+
+    /// <summary>What no project can name when the class or the alias is not written, as DDD00065 says it.</summary>
+    private static string WhatItNames(INamedTypeSymbol type)
+        => type.TypeKind == TypeKind.Interface ? type.Name + " closed over the classes" : "the types nested in " + type.Name;
+
+    /// <summary>What two of one name are, as DDD00075 says it.</summary>
+    private static string KindOf(INamedTypeSymbol type) => type.TypeKind == TypeKind.Interface ? "alias" : "class";
 
     /// <summary>
     /// A type of the name this project declares in a namespace, not nested in another type and without type
@@ -687,11 +918,11 @@ internal static class TemplateFacades
                 DiagnosticDescriptors.TemplateFacadeNotWritten,
                 LocationInfo.From(own) ?? closing.Where,
                 closing.Name,
-                closing.Type.Name,
-                "this project declares '" + own.ToDisplayString() + "', which a class of that name in "
+                WhatItNames(closing.Type),
+                "this project declares '" + own.ToDisplayString() + "', which " + (closing.Type.TypeKind == TypeKind.Interface ? "an alias" : "a class") + " of that name in "
                 + (closing.Namespace.Length > 0 ? "'" + closing.Namespace + "'" : "the global namespace") + " would hide in every file that imports '"
-                + own.ContainingNamespace.ToDisplayString() + "' with a using; name the class otherwise, with "
-                + (closing.Line is { } line ? "another name in " + line.Written : NameLine(closing.Type.Name, "...") + " in this project")
+                + own.ContainingNamespace.ToDisplayString() + "' with a using; name the " + KindOf(closing.Type) + " otherwise, with "
+                + (closing.Line is { } line ? "another name in " + line.Written : NameLine(DefaultNameOf(closing.Type), "...") + " in this project")
                 + ", or rename '" + own.Name + "'"));
 
     /// <summary>Whether a type, and every type it is made of, can be seen from any assembly.</summary>
@@ -775,7 +1006,8 @@ internal static class TemplateFacades
                 closings.Count == 2 ? "one of them" : "each of them but one",
                 first.Line is { } line
                     ? "another name in " + line.Written
-                    : NameLine(closings.Count(closing => closing.Type.Name == first.Type.Name) > 1 ? FullName(first.Type) : first.Type.Name, "...") + " in this project"));
+                    : NameLine(closings.Count(closing => DefaultNameOf(closing.Type) == DefaultNameOf(first.Type)) > 1 ? FullName(first.Type) : DefaultNameOf(first.Type), "...") + " in this project",
+                closings.All(static closing => closing.Type.TypeKind == TypeKind.Interface) ? "alias" : closings.Any(static closing => closing.Type.TypeKind == TypeKind.Interface) ? "class or alias" : "class"));
     }
 
     /// <summary>
@@ -796,7 +1028,8 @@ internal static class TemplateFacades
                 others.Count == 1 ? "one of them" : "each of them but one",
                 closing.Line is { } line
                     ? "another name in " + line.Written
-                    : NameLine(closing.Type.Name, moduleName + closing.Type.Name) + " in this project"));
+                    : NameLine(DefaultNameOf(closing.Type), moduleName + DefaultNameOf(closing.Type)) + " in this project",
+                "class"));
 
     /// <summary>
     /// DDD00075 at the project file: the projects this one references have classes of one name, which meet here. No
@@ -822,7 +1055,8 @@ internal static class TemplateFacades
                 name,
                 "it sees " + DefinitionFactory.Listed(classes.Select(HadBy)),
                 classes.Count == 2 ? "one of them" : "each of them but one",
-                fix));
+                fix,
+                "class"));
     }
 
     /// <summary>"the one 'Customers.Domain' has for the module Customers": a class the generator wrote into a referenced project.</summary>
@@ -965,7 +1199,17 @@ internal static class TemplateFacades
     }
 
     /// <summary>Whether a line names the package's class: by its name without type parameters, or with its namespace.</summary>
-    private static bool Names(INamedTypeSymbol type, string facade) => type.Name == facade || FullName(type) == facade;
+    private static bool Names(INamedTypeSymbol type, string facade) => type.Name == facade || DefaultNameOf(type) == facade || FullName(type) == facade;
+
+    /// <summary>
+    /// What the application's class or alias is called when nobody names it: the package's type's name without its type
+    /// parameters, and an interface's without its leading <c>I</c> as well, <c>ITenancyStore</c> giving <c>TenancyStore</c>.
+    /// </summary>
+    internal static string DefaultNameOf(INamedTypeSymbol type)
+        => type.TypeKind == TypeKind.Interface && type.Name.Length > 1 && type.Name[0] == 'I' && char.IsUpper(type.Name[1]) ? type.Name.Substring(1) : type.Name;
+
+    /// <summary>The end of the name of the file an alias is written into.</summary>
+    private const string AliasSuffix = ".TemplateAlias.g.cs";
 
     /// <summary>Whether a class can have the name: an identifier, and no keyword.</summary>
     private static bool IsAName(string name) => SyntaxFacts.IsValidIdentifier(name) && SyntaxFacts.GetKeywordKind(name) == SyntaxKind.None;
@@ -985,7 +1229,7 @@ internal static class TemplateFacades
                 outcomes.Add(NamesNothing(line, asked.Count == 0
                     ? "no package this project references asks for a class of that name, and none asks for any"
                     : "no package this project references asks for a class of that name; it can name "
-                      + DefinitionFactory.Listed(asked.Select(static type => "'" + type.Name + "'").Distinct().OrderBy(static text => text, StringComparer.Ordinal))));
+                      + DefinitionFactory.Listed(asked.Select(static type => "'" + DefaultNameOf(type) + "'").Distinct().OrderBy(static text => text, StringComparer.Ordinal))));
             }
             else if (named.Count > 1)
             {
@@ -1032,8 +1276,8 @@ internal static class TemplateFacades
     /// <summary>
     /// The classes a package asks for, of the types it declares itself: the project's own, read on every edit as it
     /// changes, and every referenced assembly's, read once per assembly. Each a generic class that is neither static
-    /// nor sealed, with a constructor a class of another assembly can call, not nested in a generic type. An
-    /// attribute one assembly declares for another's type asks nothing.
+    /// nor sealed, with a constructor a class of another assembly can call, or a generic interface, which gets an
+    /// alias; neither nested in a generic type. An attribute one assembly declares for another's type asks nothing.
     /// </summary>
     private static List<INamedTypeSymbol> FacadeTypesIn(Compilation compilation, CancellationToken cancellationToken)
     {
@@ -1076,9 +1320,9 @@ internal static class TemplateFacades
             if (attribute.AttributeClass is not { } attributeClass
                 || !EntityDeclarations.Is(attributeClass, KnownTypes.TemplateFacadeAttribute)
                 || attribute.ConstructorArguments.Length != 1
-                || attribute.ConstructorArguments[0] is not { Kind: TypedConstantKind.Type, Value: INamedTypeSymbol { TypeKind: TypeKind.Class, IsGenericType: true, IsStatic: false, IsSealed: false } type }
+                || attribute.ConstructorArguments[0] is not { Kind: TypedConstantKind.Type, Value: INamedTypeSymbol { IsGenericType: true, IsStatic: false } type }
+                || !(type.TypeKind == TypeKind.Interface || (type.TypeKind == TypeKind.Class && !type.IsSealed && CanBeDerivedFrom(type.OriginalDefinition)))
                 || InAGenericType(type)
-                || !CanBeDerivedFrom(type.OriginalDefinition)
                 || asked.Contains(type.OriginalDefinition, SymbolEqualityComparer.Default))
             {
                 continue;
@@ -1173,6 +1417,12 @@ internal sealed record FacadeFile(string HintName, string Name, bool IsPublic, s
 {
     /// <summary>The namespace it is written into: empty for the global namespace.</summary>
     public string Namespace { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Whether it is a global alias of a package's interface, <c>global using TenancyStore = ...;</c>, rather than a class:
+    /// its file holds the alias alone, and no registration fills a type parameter with it.
+    /// </summary>
+    public bool IsAlias { get; init; }
 
     /// <summary>Whether it is a class the container makes, sealed with constructors, rather than a name alone.</summary>
     public bool IsService { get; init; }

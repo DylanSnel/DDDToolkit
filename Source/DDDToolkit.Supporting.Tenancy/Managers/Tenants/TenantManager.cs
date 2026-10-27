@@ -8,7 +8,7 @@ using DDDToolkit.Access;
 using DDDToolkit.Supporting.Tenancy.Access;
 using DDDToolkit.Supporting.Tenancy.Catalogue;
 
-namespace DDDToolkit.Supporting.Tenancy.UseCases;
+namespace DDDToolkit.Supporting.Tenancy.Managers;
 
 /// <summary>
 /// A tenant's life and settings: provisioning it with everything it needs to be used, changing its shape, and

@@ -2,7 +2,7 @@ using DDDToolkit.Abstractions.Interfaces;
 using DDDToolkit.Access;
 using DDDToolkit.Supporting.Tenancy.Access;
 using DDDToolkit.Supporting.Tenancy.Catalogue;
-using DDDToolkit.Supporting.Tenancy.UseCases;
+using DDDToolkit.Supporting.Tenancy.Managers;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;

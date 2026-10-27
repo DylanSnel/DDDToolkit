@@ -1,7 +1,7 @@
 using DDDToolkit.Supporting.Tenancy.Catalogue;
 using DDDToolkit.Supporting.Tenancy.TestHost.Contracts;
 using DDDToolkit.Supporting.Tenancy.TestHost.Domain;
-using DDDToolkit.Supporting.Tenancy.UseCases;
+using DDDToolkit.Supporting.Tenancy.Managers;
 
 namespace DDDToolkit.Supporting.Tenancy.TestHost;
 

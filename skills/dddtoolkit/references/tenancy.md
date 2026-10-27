@@ -103,6 +103,11 @@ public sealed partial class ShopSeat
    returns the new aggregate, changing returns the changed one, reads return your own classes
    (`seats.ByIdAsync(ids, ct)`, `roles.ListAsync(ct)`). A record nested in a manager is the package's own type:
    `SeatManager.SeatOverview`, `OrganizationManager.UnitInTree`.
+   The stores the managers save through are interfaces (`ITenancyStore<...>`, `IInvitationStore<...>` in
+   `DDDToolkit.Supporting.Tenancy.Managers`): the generator writes `global using TenancyStore = ...;`, and
+   `InvitationStore` where an invitation class is declared, into the declaring project and every project above that
+   sees its classes (where the toolkit's generator runs). A command that changes a field of the application's own on
+   a Tenancy aggregate takes `TenancyStore`, loads, changes, `SaveAsync`; write no alias of the stores either.
    A hand-written `global using SeatManager = ...` above it is CS0576: delete it. Two modules that each declare
    Tenancy's classes get two classes of each name, and the host is warned once per name (DDD00075): copy the lines
    the messages write out into one module's domain project, beside `[assembly: Module]` or the switch,

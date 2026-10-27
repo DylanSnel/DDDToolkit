@@ -1,4 +1,4 @@
-namespace DDDToolkit.Supporting.Tenancy.UseCases;
+namespace DDDToolkit.Supporting.Tenancy.Managers;
 
 /// <summary>What the managers' reads share: how many ids one question takes, and the order seats are answered in.</summary>
 internal static class TenancyReads

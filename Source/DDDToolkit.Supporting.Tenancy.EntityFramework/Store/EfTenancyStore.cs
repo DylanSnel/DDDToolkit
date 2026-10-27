@@ -4,7 +4,7 @@ using DDDToolkit.Abstractions.Interfaces;
 using DDDToolkit.Exceptions;
 using DDDToolkit.Supporting.Tenancy.Access;
 using DDDToolkit.Supporting.Tenancy.Catalogue;
-using DDDToolkit.Supporting.Tenancy.UseCases;
+using DDDToolkit.Supporting.Tenancy.Managers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 

@@ -13,7 +13,9 @@ namespace DDDToolkit.Abstractions.Attributes;
 /// and the class the generator writes there is <c>CustomersSeatManager</c> instead of <c>SeatManager</c>, the name of
 /// the package's generic class it is called after otherwise. Every project above it takes the class by that name,
 /// <c>CustomersSeatManager</c>, and writes nothing. A package that asks for several classes, as Tenancy does, gets one
-/// line per class to name.
+/// line per class to name. An alias of a package's interface is named the same way, by its name without the leading
+/// <c>I</c>: <c>[assembly: TemplateFacadeName("TenancyStore", "CustomersTenancyStore")]</c>, which every project above
+/// that writes the alias reads.
 /// <para>
 /// <b>When.</b> Rarely: the package's name is the one its documentation uses. Two modules of one application that
 /// each declare a package's classes get two classes of that name, which meet in every project that sees both, the
@@ -32,7 +34,7 @@ namespace DDDToolkit.Abstractions.Attributes;
 /// <param name="facade">
 /// The class to name, as the package calls it: the name of its generic class without the type parameters,
 /// <c>"SeatManager"</c>. Where two packages' classes of one name meet in the project, the one with its namespace,
-/// <c>"DDDToolkit.Supporting.Tenancy.UseCases.SeatManager"</c>, tells them apart.
+/// <c>"DDDToolkit.Supporting.Tenancy.Managers.SeatManager"</c>, tells them apart.
 /// </param>
 /// <param name="name">The name the class gets: a name a class can have, in the global namespace, that no namespace or type there has.</param>
 [AttributeUsage(AttributeTargets.Assembly, AllowMultiple = true, Inherited = false)]

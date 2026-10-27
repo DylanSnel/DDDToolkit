@@ -1035,6 +1035,7 @@ application gets depends on the package's class:
 | a class that is not abstract, with public constructors | a sealed class with the same public constructors | a service the container makes, such as Tenancy's `SeatManager` |
 | a record that is not sealed | a sealed record with the same public constructors | a record the application makes and hands to the package, such as Tenancy's `TenantToProvision` |
 | an abstract class with a protected constructor | an abstract class with a private constructor | a name for the nested types and the static members of the package's class |
+| an interface | a `global using` alias, named without the leading `I`, in every project that sees the classes | an interface the storage package implements, such as Tenancy's `ITenancyStore<...>`, which the application names `TenancyStore` |
 
 In the diagram, purple marks the class that the generator writes into the application:
 
@@ -1224,6 +1225,34 @@ public abstract class SubscriptionUseCases : global::Acme.Subscriptions.Subscrip
   the output of every generator. So a call also works in the project the class is generated into, where another
   generator would not see the class.
 
+### An interface the storage implements
+
+A store is an interface of the package that a storage package implements and registers. The container hands out the
+package's interface, closed over the application's classes, so no class of the application's can stand for it. The
+application gets a `global using` alias instead, named as the interface is without the leading `I`:
+
+```csharp
+[assembly: TemplateFacade(typeof(Acme.Subscriptions.ISubscriptionStore<,>))]
+```
+
+**`SubscriptionStore.TemplateAlias.g.cs`**
+
+```csharp
+// ISubscriptionStore, closed over the classes of the module Billing: Subscription and SubscriptionId.
+// Named as the package's interface is, without its I; [assembly: TemplateFacadeName("SubscriptionStore", "...")] in this project names it otherwise.
+global using SubscriptionStore = global::Acme.Subscriptions.ISubscriptionStore<global::Shop.Billing.Domain.Subscription, global::Shop.Billing.Contracts.SubscriptionId>;
+```
+
+- An alias works only in its own project. So the project that declares the classes gets the alias, and so does every
+  project above it that sees the classes the generator wrote there. Each alias is closed over the types those classes
+  are closed over.
+- A project above gets the alias only when the toolkit's generator runs in it. A package reference brings the
+  generator.
+- A name given with `[assembly: TemplateFacadeName]` in the project that declares the classes holds in every project
+  above.
+- A project that sees two modules' classes would get two aliases of one name. It gets neither, and
+  [DDD00075](diagnostics.md#ddd00075) says so at its project file.
+
 ### Rules for the generated classes
 
 - **Written once, where the classes are.** A project gets the class when it declares a class with one of the type's
@@ -1261,7 +1290,7 @@ public abstract class SubscriptionUseCases : global::Acme.Subscriptions.Subscrip
   namespace is imported.
 - **The generic class** is not nested in a generic type, and every type parameter is marked `[TemplateType]`, because
   the application's class leaves none open. For a service or a record it is neither abstract nor sealed, with public
-  constructors. For a name only it is abstract, not static, with a protected constructor. The generator skips a class
+  constructors. For a name only it is abstract, not static, with a protected constructor. An interface gets an alias. The generator skips a class
   that does not meet these rules, without a diagnostic. So prove it in the package's own tests, with a project that
   names the class.
 
@@ -1303,8 +1332,9 @@ the package's classes constrain the id, so the compiler checks the line.
 including the sample, takes a `SeatManager`. Its access manager, `TenancyAccessManager<...>`, is closed over the four
 ids alone. A module that sees only Tenancy's ids writes `[assembly: TenancyIds<TenantId, SeatId, OrganizationUnitId,
 RoleId>]` and gets `TenancyAccessManager`, `db.Tenancy()` and `services.AddTenancyAccess<TRequests, TContext>()`.
-Membership's access manager, `MembershipAccessManager<TResource>`, is generic over the resource alone, which is short
-to write where the application uses it, so Membership declares no such class.
+Its stores, `ITenancyStore<...>` and `IInvitationStore<...>`, are interfaces, and the application names them
+`TenancyStore` and `InvitationStore`. Membership's access manager, `MembershipAccessManager<TResource>`, is generic over
+the resource alone, which is short to write where the application uses it, so Membership declares no such class.
 
 ## Working alone and next to another package
 

@@ -3,7 +3,7 @@ using DDDToolkit.Exceptions;
 using DDDToolkit.Supporting.Tenancy.Access;
 using DDDToolkit.Supporting.Tenancy.Catalogue;
 
-namespace DDDToolkit.Supporting.Tenancy.UseCases;
+namespace DDDToolkit.Supporting.Tenancy.Managers;
 
 /// <summary>
 /// What every command asks before it acts: who is calling, whether they hold the permission where the command

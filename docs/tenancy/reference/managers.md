@@ -29,7 +29,7 @@ The stores a storage package implements are under [Stores](#stores). The registr
 
 ## Tenants
 
-Namespace `DDDToolkit.Supporting.Tenancy.UseCases`.
+Namespace `DDDToolkit.Supporting.Tenancy.Managers`.
 
 ### `TenantManager<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>`
 
@@ -423,7 +423,7 @@ The primary constructor: the type's summary says what it makes.
 
 ## Organization
 
-Namespace `DDDToolkit.Supporting.Tenancy.UseCases`.
+Namespace `DDDToolkit.Supporting.Tenancy.Managers`.
 
 ### `OrganizationManager<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>`
 
@@ -832,7 +832,7 @@ The unit was read for this answer and is tracked by nobody: nothing done to it i
 
 ## Seats
 
-Namespace `DDDToolkit.Supporting.Tenancy.UseCases`.
+Namespace `DDDToolkit.Supporting.Tenancy.Managers`.
 
 ### `SeatManager<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>`
 
@@ -1707,7 +1707,7 @@ The primary constructor: the type's summary says what it makes.
 
 ## Roles
 
-Namespace `DDDToolkit.Supporting.Tenancy.UseCases`.
+Namespace `DDDToolkit.Supporting.Tenancy.Managers`.
 
 ### `RoleManager<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>`
 
@@ -2118,7 +2118,7 @@ The primary constructor: the type's summary says what it makes.
 
 ## Invitations
 
-Namespace `DDDToolkit.Supporting.Tenancy.UseCases`.
+Namespace `DDDToolkit.Supporting.Tenancy.Managers`.
 
 ### `InvitationManager<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId, TInvitation, TInvitationId>`
 
@@ -2440,9 +2440,9 @@ Says which invitation and not its token: a record prints its members, and this o
 
 ## Stores
 
-Where the managers load and save. A storage package implements these interfaces and registers them: `DDDToolkit.Supporting.Tenancy.EntityFramework` does, in `AddTenancy` and `AddTenancyInvitations`. Your code takes the managers.
+Where the managers load and save. A storage package implements these interfaces and registers them: `DDDToolkit.Supporting.Tenancy.EntityFramework` does, in `AddTenancy` and `AddTenancyInvitations`. Your code takes the managers. A command of yours that changes a field of your own on one of the aggregates takes a store by the name the generator gives it, `TenancyStore` or, where you declare an invitation class, `InvitationStore`. Each name is an alias closed over your classes.
 
-Namespace `DDDToolkit.Supporting.Tenancy.UseCases`.
+Namespace `DDDToolkit.Supporting.Tenancy.Managers`.
 
 ### `ITenancyStore<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>`
 
@@ -2462,6 +2462,8 @@ public interface ITenancyStore<TTenant, TTenantId, TOrganization, TUnit, TUnitId
 Where the managers load and save: one unit of work per command. The storage package implements it, closed over the application's classes and ids, and registers it with `AddTenancy`.
 
 Every lookup keeps to the current caller's tenant, as the storage's tenant filter does: a seat or a role of another tenant is simply not found. Two lookups go across tenants: [`SlugTakenAsync`](#slugtakenasyncstring-cancellationtoken), which says no more than yes or no, and [`ListTenantsAsync`](#listtenantsasyncstring-int-cancellationtoken), which is an operator's and reads what the operator may read.
+
+The project that declares the application's classes, and every project above it that sees them, names it `TenancyStore`, a global alias the toolkit's generator writes, closed over those classes. A command of the application's that changes a field of its own on one of Tenancy's aggregates loads and saves it there, in the unit of work the managers save through.
 
 | Member | Summary |
 |---|---|
@@ -2751,6 +2753,8 @@ public interface IInvitationStore<TInvitation, TInvitationId, TTenantId, TUnitId
 Where the invitation manager loads and keeps invitations, in the unit of work of [`ITenancyStore<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>`](#itenancystorettenant-ttenantid-torganization-tunit-tunitid-tseat-tseatid-trole-troleid): what is added or changed here is saved by that store's save, with everything else the command changed. The storage package implements it.
 
 A token's digest is handed over with its invitation and never comes back. The store keeps it where reading invitations does not read it, and answers one question about it: which invitation it belongs to.
+
+Where the application declares an invitation class, the project that declares it, and every project above that sees it, names this interface `InvitationStore`, a global alias the toolkit's generator writes, closed over the application's classes.
 
 **Type parameters**
 

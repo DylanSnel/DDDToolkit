@@ -1,6 +1,6 @@
 using DDDToolkit.Abstractions.Interfaces;
 using DDDToolkit.Supporting.Tenancy.Access;
-using DDDToolkit.Supporting.Tenancy.UseCases;
+using DDDToolkit.Supporting.Tenancy.Managers;
 using Microsoft.EntityFrameworkCore;
 
 namespace DDDToolkit.Supporting.Tenancy.EntityFramework;

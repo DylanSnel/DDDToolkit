@@ -1,6 +1,6 @@
 using DDDToolkit.Abstractions.Interfaces;
 
-namespace DDDToolkit.Supporting.Tenancy.UseCases;
+namespace DDDToolkit.Supporting.Tenancy.Managers;
 
 /// <summary>Which invitation a token is for, as the invitation store answers it across tenants: ids, and nothing else of it.</summary>
 /// <typeparam name="TInvitationId">The application's invitation id.</typeparam>

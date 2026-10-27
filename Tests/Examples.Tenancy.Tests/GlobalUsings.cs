@@ -94,23 +94,5 @@ global using Examples.Tenancy.Catalogue;
 global using Examples.Tenancy.Tests.Infrastructure;
 
 // Tenancy's managers are SeatManager and the others here as in the sample: the classes the toolkit's generator wrote
-// into the Tenants module's domain project, which these tests see through the projects they test.
-// Their stores are the storage package's, not classes the generator writes, so these tests name them as the module's
-// application project does, once, with the classes in full.
-global using TenancyStore = DDDToolkit.Supporting.Tenancy.UseCases.ITenancyStore<
-    Examples.Tenancy.Tenants.Domain.Aggregates.Tenants.Tenant,
-    Examples.Tenancy.Tenants.Contracts.ValueObjects.TenantId,
-    Examples.Tenancy.Tenants.Domain.Organization,
-    Examples.Tenancy.Tenants.Domain.Aggregates.Organizations.Entities.OrganizationUnit,
-    Examples.Tenancy.Tenants.Contracts.ValueObjects.OrganizationUnitId,
-    Examples.Tenancy.Tenants.Domain.Aggregates.Seats.Seat,
-    Examples.Tenancy.Tenants.Contracts.ValueObjects.SeatId,
-    Examples.Tenancy.Tenants.Domain.Role,
-    Examples.Tenancy.Tenants.Contracts.ValueObjects.RoleId>;
-global using InvitationStore = DDDToolkit.Supporting.Tenancy.UseCases.IInvitationStore<
-    Examples.Tenancy.Tenants.Domain.Aggregates.Invitations.Invitation,
-    Examples.Tenancy.Tenants.Contracts.ValueObjects.InvitationId,
-    Examples.Tenancy.Tenants.Contracts.ValueObjects.TenantId,
-    Examples.Tenancy.Tenants.Contracts.ValueObjects.OrganizationUnitId,
-    Examples.Tenancy.Tenants.Contracts.ValueObjects.RoleId,
-    Examples.Tenancy.Tenants.Contracts.ValueObjects.SeatId>;
+// into the Tenants module's domain project, which these tests see through the projects they test. Their stores are
+// TenancyStore and InvitationStore, the aliases the generator writes into every project that sees those classes.

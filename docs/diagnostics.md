@@ -2508,6 +2508,10 @@ Some causes are reported elsewhere, and not again here:
   without one gets no class and no diagnostic. Tenancy's `InvitationManager` is written only where the module declares
   an invitation class.
 
+A package's interface gets an alias instead of a class, such as Tenancy's `TenancyStore`. The same causes keep the
+alias out of the project that declares the classes. A project above that declares a type of the alias's name in a
+namespace gets DDD00065 on that type, because the alias would hide it wherever the namespace is imported.
+
 A name that you keep in the global namespace yourself is your own way of naming the classes: an alias of the name
 at the top of a file, or a type or a namespace of that name. The generator leaves that name alone and reports
 nothing. A name that you give with `TemplateFacadeName`, and that a type or a namespace in the global namespace
@@ -2890,7 +2894,18 @@ project. While neither module references the other, neither project sees the oth
 anything. The two classes meet in every project that references both modules, first the host and your tests.
 There, the first line that names `SeatManager` gets the compiler's CS0433, with no hint of what to do. So DDD00075 is
 reported in such a project, at its project file, because no line of its code is wrong. It is reported once for each
-name, so a host that sees two modules with Tenancy's classes gets seven warnings.
+name, so a host that sees two modules with Tenancy's classes gets seven warnings for the classes.
+
+The stores are aliases, `TenancyStore` and `InvitationStore`, which the generator writes into every project that sees
+the classes. A project that sees two modules' classes would get two aliases of one name. It gets neither, and
+DDD00075 says so at its project file, once for each alias:
+
+```
+Shop.Host.csproj: warning DDD00075: 'TenancyStore' is the name of more than one alias in this project: it sees the
+classes 'Shop.Customers.Domain' declares for the module Customers and the classes 'Shop.Partners.Domain' declares for
+the module Partners, and would get an alias of ITenancyStore for each. Give one of them a name of its own, with
+[assembly: TemplateFacadeName("TenancyStore", "CustomersTenancyStore")] in 'Shop.Customers.Domain'.
+```
 
 What happens depends on where the two classes meet. DDD00075 is a warning in every case. It stops no build unless
 warnings are errors there. The compiler's error on the first line that names the class stops the build:
@@ -2917,6 +2932,8 @@ using DDDToolkit.Abstractions.Attributes;
 [assembly: TemplateFacadeName("InvitationManager", "CustomersInvitationManager")]   // where the module declares an invitation
 [assembly: TemplateFacadeName("TenancyAccessManager", "CustomersTenancyAccessManager")]
 [assembly: TemplateFacadeName("TenantToProvision", "CustomersTenantToProvision")]
+[assembly: TemplateFacadeName("TenancyStore", "CustomersTenancyStore")]
+[assembly: TemplateFacadeName("InvitationStore", "CustomersInvitationStore")]                 // where the module declares an invitation
 ```
 
 Every project above it then takes Customers' managers as `CustomersSeatManager` and the others, and Partners keeps
@@ -2956,7 +2973,7 @@ it changed the name. So it is reported at the line, and the class keeps its name
 | The line | What to do |
 |---|---|
 | names no class that a referenced package asks for | write the class name as the message lists it: the package's class name without its type parameters |
-| names two classes: two packages' classes of one name | name the class you mean with its namespace, `"DDDToolkit.Supporting.Tenancy.UseCases.SeatManager"` |
+| names two classes: two packages' classes of one name | name the class you mean with its namespace, `"DDDToolkit.Supporting.Tenancy.Managers.SeatManager"` |
 | is in a project that declares none of the classes, such as an application project above the domain project | move it into the project that declares the classes. The class is written and named there |
 | names a class that an earlier line names already, in this project or in a project of its module that it takes classes from | keep one line. This project's line wins, then the line of the first other project by name |
 | gives a name that no class can have, such as a keyword or a name with a space | give a name that a class can have |

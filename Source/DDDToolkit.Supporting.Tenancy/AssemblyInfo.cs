@@ -2,7 +2,7 @@ using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.Access;
 using DDDToolkit.Supporting.Tenancy;
 using DDDToolkit.Supporting.Tenancy.Access;
-using DDDToolkit.Supporting.Tenancy.UseCases;
+using DDDToolkit.Supporting.Tenancy.Managers;
 
 // The project that declares a module's classes with Tenancy's templates gets a manager per aggregate closed over them,
 // each a class named as the package's is without its type parameters, which the container makes: TenantManager,
@@ -17,6 +17,14 @@ using DDDToolkit.Supporting.Tenancy.UseCases;
 [assembly: TemplateFacade(typeof(RoleManager<,,,,,,,,>))]
 [assembly: TemplateFacade(typeof(InvitationManager<,,,,,,,,,,>), OnlyWith = typeof(InvitationAggregateAttribute<>))]
 [assembly: TemplateFacade(typeof(TenantToProvision<,,,,,,>))]
+
+// The stores the managers load and save through are interfaces the storage package implements, so no class can stand for
+// them: the same projects get a global alias of each instead, named without its I, closed over the same classes. An alias
+// holds in its own project only, so the project that declares the classes gets one and so does every project above it
+// that sees them: TenancyStore, and InvitationStore where the module declares an invitation class. A command of the
+// application's that changes a field of its own on one of Tenancy's aggregates takes the store by that name.
+[assembly: TemplateFacade(typeof(ITenancyStore<,,,,,,,,>))]
+[assembly: TemplateFacade(typeof(IInvitationStore<,,,,,>), OnlyWith = typeof(InvitationAggregateAttribute<>))]
 
 // And it gets the access manager closed over its four ids, TenancyAccessManager, a class the container makes: who acts,
 // in which tenant, and the work that is not the caller's own. A project of another module that sees only the ids says

@@ -6,7 +6,7 @@ using System.Xml.Linq;
 using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.HotChocolate.Authorization;
 using DDDToolkit.Supporting.Tenancy.Access;
-using DDDToolkit.Supporting.Tenancy.UseCases;
+using DDDToolkit.Supporting.Tenancy.Managers;
 using Examples.Tenancy.Shared.Infrastructure.Paging;
 using FluentAssertions;
 using GreenDonut;

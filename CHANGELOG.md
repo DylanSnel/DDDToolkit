@@ -162,6 +162,15 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     too, since the class would hide it wherever that namespace is imported. A type, a namespace or an alias the
     project keeps in the global namespace under the package's name stays the project's own, and nothing is
     reported.
+  - A generic interface in `[assembly: TemplateFacade(typeof(ITenancyStore<,,,,,,,,>))]`, such as a store the storage
+    package implements, gets a global alias instead of a class, named without the leading `I`:
+    `global using TenancyStore = global::...ITenancyStore<...>;`. No class can stand for an interface the container
+    hands out. An alias holds in its own project only, so it is written into the project that declares the classes
+    and into every project above it that sees the classes written there, closed over the same types, where the
+    toolkit's generator runs. `[assembly: TemplateFacadeName("TenancyStore", "...")]` in the declaring project names
+    it in all of them. A project that sees two modules' classes gets neither alias of one name, and DDD00075 says so
+    at its project file. A type of the name a project declares in a namespace keeps the alias out of that project,
+    with DDD00065. The aliases are written into `{Name}.TemplateAlias.g.cs`.
 
   See [A class closed over your classes](docs/writing-a-supporting-domain.md#a-class-closed-over-your-classes).
 - A code fix for DDD00044 and DDD00049 declares the missing class, named after the class the error is on
@@ -1393,7 +1402,11 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   - `new TenantToProvision(...)` needs no type argument. It takes the ids an import or seeding fixes: `TenantId`,
     `RootId`, `AdminSeatId` and `RoleIds`.
   - The stores, `ITenancyStore<...>` and `IInvitationStore<...>`, and the token's `InvitationOfToken<...>`, are in
-    `DDDToolkit.Supporting.Tenancy.UseCases`. A storage package implements them.
+    `DDDToolkit.Supporting.Tenancy.Managers`, with the managers. A storage package implements them. The generator
+    names the stores `TenancyStore` and, where an invitation class is declared, `InvitationStore`: global aliases
+    closed over the application's classes, in the project that declares them and in every project above that sees
+    them. A command that changes a field of the application's own on one of Tenancy's aggregates takes the store by
+    that name.
   - HotChocolate's generator reads a manager's nested types in an API project as any type, so
     `[ObjectType<SeatManager.PermissionReach>]` works there. A `SeatOverview` carries the application's seat, identity
     included, so it is selected into a record of the application's rather than returned itself.
@@ -2956,9 +2969,10 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `RoleManager`, `InvitationManager` and `TenancyAccessManager`, the classes the generator writes into the Tenants
   domain project. Projects and Inspections see only the ids, and take the `TenancyAccessManager` their
   `[assembly: TenancyIds<...>]` line gets them. Projects keeps one alias over the four ids, `SampleTenancyQueries`
-  for `ITenancyQueries<…>`, and the Tenants application project keeps `TenancyStore` and `InvitationStore` for the
-  stores its ports implement. `SourceTreeTests` holds every file of the sample and of its tests to closing the
-  managers nowhere. Tenancy's own test host names its role manager `HostRoleManager` with one
+  for `ITenancyQueries<…>`. The Tenants application project and the sample's tests take the stores as `TenancyStore`
+  and `InvitationStore`, the aliases the generator writes into them, so the tests' project runs the toolkit's
+  generator too. `SourceTreeTests` holds every file of the sample and of its tests to closing the managers and the
+  stores nowhere. Tenancy's own test host names its role manager `HostRoleManager` with one
   `[assembly: TemplateFacadeName]`.
 - **The Tenancy sample answers Tenancy's classes as the managers return them.** The Tenants module's queries answer
   the seat, role, unit, tenant and invitation classes, and the managers' records that hold them beside what they lack: `SeatManager.SeatOverview`, `OrganizationManager.UnitInTree`,
@@ -3132,7 +3146,10 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
       - `AddTenancyInvitations<TInvitation, TInvitationId, TContext>()`: `AddTenancyInvitations<TContext>()`.
       - `TenancyUseCases.IStore`, `IInvitationStore<TInvitation, TInvitationId>` and `InvitationOfToken<TInvitationId>`:
         `ITenancyStore<...>`, `IInvitationStore<...>` and `InvitationOfToken<...>`, in
-        `DDDToolkit.Supporting.Tenancy.UseCases` and no longer nested. A storage package implements them as before.
+        `DDDToolkit.Supporting.Tenancy.Managers` and no longer nested. A storage package implements them as before,
+        and the application takes them as `TenancyStore` and `InvitationStore`, the aliases the generator writes.
+      - The namespace `DDDToolkit.Supporting.Tenancy.UseCases`: `DDDToolkit.Supporting.Tenancy.Managers`, with the
+        managers, the stores and `TenantToProvision` in it.
       - `UnitInTree`, `SeatOverview`, `PermissionReach` and `UnitRef`: `OrganizationManager.UnitInTree`,
         `SeatManager.SeatOverview`, `SeatManager.PermissionReach` and `SeatManager.UnitRef`.
       - `[assembly: TemplateFacadeName("TenancyUseCases", "...")]`: one line per manager to name,

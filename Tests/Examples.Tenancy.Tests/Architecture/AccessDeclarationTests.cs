@@ -5,7 +5,7 @@ using DDDToolkit.Supporting.Membership.Access;
 using DDDToolkit.Supporting.Tenancy;
 using DDDToolkit.Supporting.Tenancy.Access;
 using DDDToolkit.Supporting.Tenancy.Catalogue;
-using DDDToolkit.Supporting.Tenancy.UseCases;
+using DDDToolkit.Supporting.Tenancy.Managers;
 using FluentAssertions;
 using GreenDonut.Data;
 using Mediator;

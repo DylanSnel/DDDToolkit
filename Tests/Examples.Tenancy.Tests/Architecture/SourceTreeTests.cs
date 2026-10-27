@@ -391,7 +391,8 @@ public sealed partial class SourceTreeTests
     /// Tenancy's managers are generic over the Tenants module's classes and ids. The toolkit's generator closes each over
     /// them in the domain project that declares them, as <c>SeatManager</c> and the others, which every project above it
     /// sees, so no file of the sample, nor of these tests, closes one again: an alias written by hand is the nine types
-    /// once more, in every project that takes a manager.
+    /// once more, in every project that takes a manager. The stores are interfaces, which no class stands for: the
+    /// generator writes an alias of each into every project that sees the classes, so no file closes a store either.
     /// </summary>
     [Fact]
     public void No_file_of_the_sample_or_of_these_tests_closes_Tenancys_managers_itself()
@@ -414,7 +415,10 @@ public sealed partial class SourceTreeTests
                 ],
                 "the scan reads the projects that take the managers: the application's, the API's, the host's and these tests'");
         files.Where(file => ClosesTenancysManagers().IsMatch(file.Value)).Select(file => file.Key)
-            .Should().BeEmpty("every project that sees the module's classes sees SeatManager and the others, and takes them as they are");
+            .Should().BeEmpty("every project that sees the module's classes sees SeatManager and the others, and takes them as they are, "
+                              + "and gets TenancyStore and InvitationStore, the aliases the generator writes into it");
+        files.Where(file => file.Value.Contains("TenancyStore", StringComparison.Ordinal)).Select(file => file.Key)
+            .Should().Contain("Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Application/Seats/Commands/RenameSeat.cs", "the scan reads the files that take a store");
 
         // The class is the domain project's, sealed for the container to make, and derives from the package's own,
         // closed over the module's classes and ids: what a name nested in it stands for is the package's own type.
@@ -425,11 +429,11 @@ public sealed partial class SourceTreeTests
             typeof(Tenant), typeof(TenantId), typeof(Examples.Tenancy.Tenants.Domain.Organization), typeof(OrganizationUnit),
             typeof(OrganizationUnitId), typeof(Seat), typeof(SeatId), typeof(Examples.Tenancy.Tenants.Domain.Role), typeof(RoleId),
         ];
-        typeof(SeatManager).BaseType!.GetGenericTypeDefinition().Should().Be(typeof(DDDToolkit.Supporting.Tenancy.UseCases.SeatManager<,,,,,,,,>));
+        typeof(SeatManager).BaseType!.GetGenericTypeDefinition().Should().Be(typeof(DDDToolkit.Supporting.Tenancy.Managers.SeatManager<,,,,,,,,>));
         typeof(SeatManager).BaseType!.GetGenericArguments().Should().Equal(module);
 
         // Reflection writes a type nested in a generic class with the outer class's type arguments as its own.
-        typeof(SeatManager.PermissionReach).DeclaringType.Should().Be(typeof(DDDToolkit.Supporting.Tenancy.UseCases.SeatManager<,,,,,,,,>));
+        typeof(SeatManager.PermissionReach).DeclaringType.Should().Be(typeof(DDDToolkit.Supporting.Tenancy.Managers.SeatManager<,,,,,,,,>));
         typeof(SeatManager.PermissionReach).GetGenericArguments().Should().Equal(module);
     }
 
@@ -531,10 +535,10 @@ public sealed partial class SourceTreeTests
     private static partial Regex NamesTenancysManagers();
 
     /// <summary>
-    /// One of Tenancy's managers closed over types: <c>SeatManager&lt;</c> and a type's name. What a test compares with,
-    /// the open <c>SeatManager&lt;,,,,,,,,&gt;</c>, closes it over nothing.
+    /// One of Tenancy's managers or stores closed over types: <c>SeatManager&lt;</c> or <c>ITenancyStore&lt;</c> and a
+    /// type's name. What a test compares with, the open <c>SeatManager&lt;,,,,,,,,&gt;</c>, closes it over nothing.
     /// </summary>
-    [GeneratedRegex(@"\b(?:TenantManager|OrganizationManager|SeatManager|RoleManager|InvitationManager|TenantToProvision)<\s*[\w.]")]
+    [GeneratedRegex(@"\b(?:TenantManager|OrganizationManager|SeatManager|RoleManager|InvitationManager|TenantToProvision|ITenancyStore|IInvitationStore)<\s*[\w.]")]
     private static partial Regex ClosesTenancysManagers();
 
     /// <summary>

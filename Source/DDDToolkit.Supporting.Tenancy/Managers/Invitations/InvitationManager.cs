@@ -7,7 +7,7 @@ using DDDToolkit.Security;
 using DDDToolkit.Supporting.Tenancy.Access;
 using DDDToolkit.Supporting.Tenancy.Catalogue;
 
-namespace DDDToolkit.Supporting.Tenancy.UseCases;
+namespace DDDToolkit.Supporting.Tenancy.Managers;
 
 /// <summary>
 /// Invitations into a tenant: issuing one for an address, listing the open ones, cancelling one, and accepting

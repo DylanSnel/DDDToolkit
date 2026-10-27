@@ -1,7 +1,8 @@
+using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.Abstractions.Interfaces;
 using DDDToolkit.Security;
 
-namespace DDDToolkit.Supporting.Tenancy.UseCases;
+namespace DDDToolkit.Supporting.Tenancy.Managers;
 
 /// <summary>
 /// Where the invitation manager loads and keeps invitations, in the unit of work of
@@ -12,6 +13,11 @@ namespace DDDToolkit.Supporting.Tenancy.UseCases;
 /// A token's digest is handed over with its invitation and never comes back. The store keeps it where reading
 /// invitations does not read it, and answers one question about it: which invitation it belongs to.
 /// </para>
+/// <para>
+/// Where the application declares an invitation class, the project that declares it, and every project above that
+/// sees it, names this interface <c>InvitationStore</c>, a global alias the toolkit's generator writes, closed over the
+/// application's classes.
+/// </para>
 /// </summary>
 /// <typeparam name="TInvitation">The application's invitation class.</typeparam>
 /// <typeparam name="TInvitationId">The application's invitation id.</typeparam>
@@ -19,7 +25,13 @@ namespace DDDToolkit.Supporting.Tenancy.UseCases;
 /// <typeparam name="TUnitId">The application's unit id.</typeparam>
 /// <typeparam name="TRoleId">The application's role id.</typeparam>
 /// <typeparam name="TSeatId">The application's seat id.</typeparam>
-public interface IInvitationStore<TInvitation, TInvitationId, TTenantId, TUnitId, TRoleId, TSeatId>
+public interface IInvitationStore<
+    [TemplateType(typeof(InvitationAggregateAttribute<>), Take = TemplateArgumentKind.Type)] TInvitation,
+    [TemplateType(typeof(InvitationAggregateAttribute<>))] TInvitationId,
+    [TemplateType(typeof(TenantAggregateAttribute<>))] TTenantId,
+    [TemplateType(typeof(OrganizationUnitAttribute<>))] TUnitId,
+    [TemplateType(typeof(RoleAggregateAttribute<>))] TRoleId,
+    [TemplateType(typeof(SeatAggregateAttribute<>))] TSeatId>
     where TInvitation : InvitationAggregate<TInvitationId, TTenantId, TUnitId, TRoleId, TSeatId>
     where TInvitationId : struct, IEntityId, IEquatable<TInvitationId>
     where TTenantId : struct, IEntityId, IEquatable<TTenantId>

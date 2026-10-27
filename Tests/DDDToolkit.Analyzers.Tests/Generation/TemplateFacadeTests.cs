@@ -85,7 +85,7 @@ public class TemplateFacadeTests
 
     /// <summary>What the class derives from, as the generator spells it.</summary>
     private const string ClosedOverShop =
-        "global::DDDToolkit.Supporting.Tenancy.UseCases.SeatManager<global::Shop.Domain.Tenant, global::Shop.Contracts.TenantId, "
+        "global::DDDToolkit.Supporting.Tenancy.Managers.SeatManager<global::Shop.Domain.Tenant, global::Shop.Contracts.TenantId, "
         + "global::Shop.Domain.Organization, global::Shop.Domain.OrganizationUnit, global::Shop.Contracts.OrganizationUnitId, "
         + "global::Shop.Domain.Seat, global::Shop.Contracts.SeatId, global::Shop.Domain.Role, global::Shop.Contracts.RoleId>";
 
@@ -139,9 +139,15 @@ public class TemplateFacadeTests
     private static readonly string[] TenancyClasses =
         ["InvitationManager", "OrganizationManager", "RoleManager", "SeatManager", "TenancyAccessManager", "TenantManager", "TenantToProvision"];
 
-    /// <summary>The lines that name every class Tenancy asks for, each with <paramref name="prefix"/> before the package's name.</summary>
+    /// <summary>The aliases Tenancy asks for, of its stores, by the package's names without the I, in the order of their names.</summary>
+    private static readonly string[] TenancyAliases = ["InvitationStore", "TenancyStore"];
+
+    /// <summary>Every class and alias Tenancy asks for, in the order of their names.</summary>
+    private static readonly string[] TenancyNames = [.. TenancyClasses.Concat(TenancyAliases).Order(StringComparer.Ordinal)];
+
+    /// <summary>The lines that name every class and alias Tenancy asks for, each with <paramref name="prefix"/> before the package's name.</summary>
     private static string NamedEvery(string prefix)
-        => string.Concat(TenancyClasses.Select(facade => NamedItself(prefix + facade, facade)));
+        => string.Concat(TenancyNames.Select(facade => NamedItself(prefix + facade, facade)));
 
     /// <summary>
     /// The one diagnostic of <paramref name="id"/> said of the class called <paramref name="name"/>, the seat manager's unless
@@ -219,7 +225,7 @@ public class TemplateFacadeTests
         result.ShouldCompile();
         var overview = TypeOf(result, "Shop.Application.SeatsOfMine", "Last");
         overview.ContainingAssembly.Name.Should().Be("DDDToolkit.Supporting.Tenancy", "the record a read answers is the package's own type");
-        overview.ContainingType!.OriginalDefinition.ToDisplayString().Should().StartWith("DDDToolkit.Supporting.Tenancy.UseCases.SeatManager<");
+        overview.ContainingType!.OriginalDefinition.ToDisplayString().Should().StartWith("DDDToolkit.Supporting.Tenancy.Managers.SeatManager<");
         overview.ContainingType.TypeArguments.Select(argument => argument.Name).Should().Equal("Tenant", "TenantId", "Organization", "OrganizationUnit", "OrganizationUnitId", "Seat", "SeatId", "Role", "RoleId");
 
         var facade = result.OutputCompilation.GetTypeByMetadataName(Default)!;
@@ -259,7 +265,7 @@ public class TemplateFacadeTests
         // C# tells two classes of one name apart by their type parameters: the file names both, each by its own.
         var result = Domain("Shop")(Project(
                 """
-                using DDDToolkit.Supporting.Tenancy.UseCases;
+                using DDDToolkit.Supporting.Tenancy.Managers;
                 using Shop.Contracts;
                 using Shop.Domain;
 
@@ -344,7 +350,7 @@ public class TemplateFacadeTests
 
         api.ShouldCompile();
         api.ShouldContain("SeatOverviewType.Describes", "// resolved");
-        api.ShouldContain("SeatOverviewType.Describes", "typeof(global::DDDToolkit.Supporting.Tenancy.UseCases.SeatManager<global::Shop.Domain.Tenant, ");
+        api.ShouldContain("SeatOverviewType.Describes", "typeof(global::DDDToolkit.Supporting.Tenancy.Managers.SeatManager<global::Shop.Domain.Tenant, ");
     }
 
     [Fact]
@@ -359,7 +365,7 @@ public class TemplateFacadeTests
 
         domain.ShouldHaveGenerated("SeatManager.TemplateFacade");
         domain.ShouldContain("SeatOverviewType.Describes", "// unresolved");
-        domain.ShouldNotContain("SeatOverviewType.Describes", "DDDToolkit.Supporting.Tenancy.UseCases", "the generator could not tell what the name stands for");
+        domain.ShouldNotContain("SeatOverviewType.Describes", "DDDToolkit.Supporting.Tenancy.Managers", "the generator could not tell what the name stands for");
     }
 
     [Fact]
@@ -375,7 +381,7 @@ public class TemplateFacadeTests
         domain.HintNames.Should().NotContain(Default + ".TemplateFacade");
         domain.ReportedDiagnostics.Should().BeEmpty("the alias is the application's own way of naming the classes");
         domain.ShouldContain("SeatOverviewType.Describes", "// resolved");
-        domain.ShouldContain("SeatOverviewType.Describes", "typeof(global::DDDToolkit.Supporting.Tenancy.UseCases.SeatManager<global::Shop.Domain.Tenant, ");
+        domain.ShouldContain("SeatOverviewType.Describes", "typeof(global::DDDToolkit.Supporting.Tenancy.Managers.SeatManager<global::Shop.Domain.Tenant, ");
     }
 
     [Fact]
@@ -451,7 +457,7 @@ public class TemplateFacadeTests
         About(first.ReportedDiagnostics, "DDD00065")
             .Severity.Should().Be(DiagnosticSeverity.Info, "the first project of a split module is told, and nothing in it is wrong");
         About(first.ReportedDiagnostics, "DDD00065", AccessManager).Severity.Should().Be(DiagnosticSeverity.Info, "and so it is of the access manager, which takes the seat's id");
-        first.ReportedDiagnostics.Should().HaveCount(TenancyClasses.Length - 1, "once for each class but the invitation manager, which is for a module with invitations");
+        first.ReportedDiagnostics.Should().HaveCount(TenancyNames.Length - 2, "once for each class and alias but the invitation manager and the invitation store, which are for a module with invitations");
 
         var second = Project(PeopleHalf, module: "Shop")
             .WithReferencedProject("Shop.Organization", OrganizationProject())
@@ -507,7 +513,7 @@ public class TemplateFacadeTests
             .RunCore();
 
         host.ShouldCompile();
-        host.GeneratorDiagnostics.Should().HaveCount(TenancyClasses.Length, "each class Tenancy asks for meets the other module's");
+        host.GeneratorDiagnostics.Should().HaveCount(TenancyNames.Length, "each class and alias Tenancy asks for meets the other module's");
         About(host.GeneratorDiagnostics, "DDD00075", AccessManager).GetMessage().Should().EndWith(
             "[assembly: TemplateFacadeName(\"TenancyAccessManager\", \"CustomersTenancyAccessManager\")] in 'Customers.Domain'.");
         var told = About(host.GeneratorDiagnostics, "DDD00075");
@@ -530,7 +536,7 @@ public class TemplateFacadeTests
             .RunCore();
 
         host.CompilationErrors.Select(error => error.Id).Should().Contain("CS0433", "the type exists in both modules' domain projects");
-        host.ShouldHaveExactlyDiagnostics([.. TenancyClasses.Select(_ => "DDD00075")]);
+        host.ShouldHaveExactlyDiagnostics([.. TenancyNames.Select(_ => "DDD00075")]);
     }
 
     [Fact]
@@ -654,7 +660,7 @@ public class TemplateFacadeTests
         told.GetMessage().Should().Be(
             "'SeatManager' is not written, so no project can name the types nested in SeatManager through it: no class is declared with "
             + "[SeatAggregate], in this project or in a project of the module Shop that it references");
-        result.Count("DDD00065").Should().Be(TenancyClasses.Length - 1, "once for each class that takes the seat or its id; the invitation manager is for a module with invitations, and is left out without a word");
+        result.Count("DDD00065").Should().Be(TenancyNames.Length - 2, "once for each class and alias that takes the seat or its id; the invitation manager and the invitation store are for a module with invitations, and are left out without a word");
     }
 
     [Fact]
@@ -885,7 +891,7 @@ public class TemplateFacadeTests
     public void A_line_may_name_the_class_with_its_namespace()
     {
         var result = Domain("Shop")(Project(Handler("ShopTenancy")))
-            .WithSource(NamedItself("ShopTenancy", "DDDToolkit.Supporting.Tenancy.UseCases.SeatManager"), "Named.cs")
+            .WithSource(NamedItself("ShopTenancy", "DDDToolkit.Supporting.Tenancy.Managers.SeatManager"), "Named.cs")
             .RunCore();
 
         result.ShouldCompile();
@@ -988,7 +994,7 @@ public class TemplateFacadeTests
         told.Severity.Should().Be(DiagnosticSeverity.Warning);
         told.GetMessage().Should().Be(
             "[assembly: TemplateFacadeName(\"TenancyUsecases\", \"ShopTenancy\")] changes nothing: no package this project references asks for a class of that "
-            + "name; it can name 'InvitationManager', 'OrganizationManager', 'RoleManager', 'SeatManager', 'TenancyAccessManager', 'TenantManager' and 'TenantToProvision'");
+            + "name; it can name 'InvitationManager', 'InvitationStore', 'OrganizationManager', 'RoleManager', 'SeatManager', 'TenancyAccessManager', 'TenancyStore', 'TenantManager' and 'TenantToProvision'");
     }
 
     [Fact]
@@ -1034,7 +1040,7 @@ public class TemplateFacadeTests
         result.ShouldCompile();
         result.ShouldContain(
             "TenantToProvision.TemplateFacade",
-            "public sealed record TenantToProvision : global::DDDToolkit.Supporting.Tenancy.UseCases.TenantToProvision<global::Shop.Domain.Tenant, "
+            "public sealed record TenantToProvision : global::DDDToolkit.Supporting.Tenancy.Managers.TenantToProvision<global::Shop.Domain.Tenant, "
             + "global::Shop.Contracts.TenantId, global::Shop.Domain.OrganizationUnit, global::Shop.Contracts.OrganizationUnitId, global::Shop.Domain.Seat, "
             + "global::Shop.Contracts.SeatId, global::Shop.Contracts.RoleId>");
         result.ShouldContain("TenantToProvision.TemplateFacade", "global::Shop.Contracts.TenantId? TenantId = null", "the defaults of the package's record are the application's too");
@@ -1210,6 +1216,159 @@ public class TemplateFacadeTests
             "'BillingUseCases' is the name of more than one class in this project: it would get the one for Acme.Billing.BillingUseCases<,> and the one for "
             + "Acme.Billing.Ledger<,>, and gets neither. Give one of them a name of its own, with [assembly: TemplateFacadeName(\"BillingUseCases\", \"...\")] "
             + "in this project.");
+    }
+
+    // ------------------------------------------------------------------ the stores: an alias of a package's interface
+
+    /// <summary>The store closed over the module's classes, as the alias is written.</summary>
+    private const string StoreOverShop =
+        "global::DDDToolkit.Supporting.Tenancy.Managers.ITenancyStore<global::Shop.Domain.Tenant, global::Shop.Contracts.TenantId, "
+        + "global::Shop.Domain.Organization, global::Shop.Domain.OrganizationUnit, global::Shop.Contracts.OrganizationUnitId, "
+        + "global::Shop.Domain.Seat, global::Shop.Contracts.SeatId, global::Shop.Domain.Role, global::Shop.Contracts.RoleId>";
+
+    /// <summary>The invitation store closed over the module's classes, as the alias is written.</summary>
+    private const string InvitationStoreOverShop =
+        "global::DDDToolkit.Supporting.Tenancy.Managers.IInvitationStore<global::Shop.Domain.Invitation, global::Shop.Contracts.InvitationId, "
+        + "global::Shop.Contracts.TenantId, global::Shop.Contracts.OrganizationUnitId, global::Shop.Contracts.RoleId, global::Shop.Contracts.SeatId>";
+
+    /// <summary>A handler of the application's that takes both stores, by the names the aliases give them.</summary>
+    private static string StoreHandler(string @namespace = "Shop.Application", string store = "TenancyStore", bool invitations = true)
+        => $$"""
+             namespace {{@namespace}};
+
+             public sealed class RenameSeat({{store}} store)
+             {
+                 public {{store}} Store => store;
+             {{(invitations ? "\n    public InvitationStore? Invitations { get; set; }" : string.Empty)}}
+             }
+             """;
+
+    [Fact]
+    public void The_project_that_declares_the_classes_gets_an_alias_of_each_store_named_without_its_I()
+    {
+        // An interface the storage package implements has no class to stand for it: the container hands out the package's
+        // interface. So the project gets a global alias of it, closed over its classes as the managers are.
+        var result = Domain("Shop")(Project(StoreHandler())).RunCore();
+
+        result.ShouldCompile();
+        result.ReportedDiagnostics.Should().BeEmpty();
+        result.ShouldContain("TenancyStore.TemplateAlias", "global using TenancyStore = " + StoreOverShop + ";");
+        result.ShouldContain("InvitationStore.TemplateAlias", "global using InvitationStore = " + InvitationStoreOverShop + ";");
+        result.ShouldContain("TenancyStore.TemplateAlias", "// ITenancyStore, closed over the classes of the module Shop: Tenant, TenantId, Organization, OrganizationUnit, OrganizationUnitId, Seat, SeatId, Role and RoleId.");
+        result.ShouldContain("TenancyStore.TemplateAlias", "// Named as the package's interface is, without its I; [assembly: TemplateFacadeName(\"TenancyStore\", \"...\")] in this project names it otherwise.");
+        TypeOf(result, "Shop.Application.RenameSeat", "Store").ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat).Should().Be(StoreOverShop, "the alias is the package's interface itself");
+    }
+
+    [Fact]
+    public void Every_project_above_that_sees_the_classes_gets_its_own_alias_closed_over_them()
+    {
+        // An alias holds in its own project only. The application project declares no class: it gets the alias from the
+        // classes the generator wrote into the domain project, and so does the host above both.
+        var application = Project(StoreHandler(), module: "Shop")
+            .WithReferencedProject("Shop.Domain", Domain("Shop"))
+            .RunCore();
+
+        application.ShouldCompile();
+        application.ReportedDiagnostics.Should().BeEmpty();
+        application.ShouldContain("TenancyStore.TemplateAlias", "global using TenancyStore = " + StoreOverShop + ";");
+        application.ShouldContain("InvitationStore.TemplateAlias", "global using InvitationStore = " + InvitationStoreOverShop + ";");
+        application.ShouldContain("TenancyStore.TemplateAlias", "// ITenancyStore, closed over the classes 'Shop.Domain' declares for the module Shop: Tenant, TenantId, Organization, OrganizationUnit, OrganizationUnitId, Seat, SeatId, Role and RoleId.");
+        application.HintNames.Should().NotContain(".TemplateFacade", "the classes are the domain project's");
+
+        var host = Project(StoreHandler("Host"))
+            .WithReferencedProject("Shop.Domain", Domain("Shop"))
+            .WithReferencedProject("Shop.Application", project => project.WithSource(ModuleAttribute("Shop"), "Module.cs").WithSource(StoreHandler(), "RenameSeat.cs"))
+            .RunCore();
+
+        host.ShouldCompile();
+        host.ReportedDiagnostics.Should().BeEmpty("one module's classes, seen through two of its projects, give one alias of each name");
+        host.ShouldContain("TenancyStore.TemplateAlias", "global using TenancyStore = " + StoreOverShop + ";");
+    }
+
+    [Fact]
+    public void A_module_without_an_invitation_class_gets_no_invitation_store_and_hears_nothing()
+    {
+        // The invitation store is for a module with invitations, as the invitation manager is.
+        static GeneratorTestHost WithoutInvitations(GeneratorTestHost project)
+            => project.WithSource(Ids, "Ids.cs").WithSource(Without(Classes, InvitationLines), "Classes.cs").WithSource(ModuleAttribute("Shop"), "Module.cs");
+
+        var domain = WithoutInvitations(Project(StoreHandler(invitations: false))).RunCore();
+        domain.ShouldCompile();
+        domain.ReportedDiagnostics.Should().BeEmpty();
+        domain.ShouldHaveGenerated("TenancyStore.TemplateAlias");
+        domain.HintNames.Should().NotContain("InvitationStore");
+
+        var application = Project(StoreHandler(invitations: false), module: "Shop")
+            .WithReferencedProject("Shop.Domain", WithoutInvitations)
+            .RunCore();
+        application.ShouldCompile();
+        application.ReportedDiagnostics.Should().BeEmpty();
+        application.ShouldHaveGenerated("TenancyStore.TemplateAlias");
+        application.HintNames.Should().NotContain("InvitationStore");
+    }
+
+    [Fact]
+    public void A_name_given_where_the_classes_are_declared_names_the_alias_in_every_project_above()
+    {
+        var application = Project(StoreHandler(store: "ShopStore"), module: "Shop")
+            .WithReferencedProject("Shop.Domain", project => Domain("Shop")(project).WithSource(NamedItself("ShopStore", "TenancyStore"), "Named.cs"))
+            .RunCore();
+
+        application.ShouldCompile();
+        application.ReportedDiagnostics.Should().BeEmpty();
+        application.ShouldContain("ShopStore.TemplateAlias", "global using ShopStore = " + StoreOverShop + ";");
+        application.HintNames.Should().NotContain("TenancyStore");
+    }
+
+    [Fact]
+    public void A_host_that_sees_two_modules_gets_neither_store_alias_and_is_told_at_its_project_file()
+    {
+        // Each module's projects get their own aliases. A project that sees both modules' classes would get two aliases of
+        // one name, which the compiler refuses: it gets none, and the warning names the line that gives one another name.
+        var host = Project("namespace Host; public sealed class Nothing;")
+            .WithReferencedProject("Customers.Domain", ModuleOfItsOwn("Customers"))
+            .WithReferencedProjectBeside("Partners.Domain", ModuleOfItsOwn("Partners"))
+            .RunCore();
+
+        host.ShouldCompile();
+        host.HintNames.Should().NotContain("TemplateAlias");
+        var told = About(host.GeneratorDiagnostics, "DDD00075", "TenancyStore");
+        told.Severity.Should().Be(DiagnosticSeverity.Warning);
+        told.Location.GetLineSpan().Path.Should().Be("src/DDDToolkit.Sample/DDDToolkit.Sample.csproj", "no line of the host is wrong");
+        told.GetMessage().Should().Be(
+            "'TenancyStore' is the name of more than one alias in this project: it sees the classes 'Customers.Domain' declares for the module "
+            + "Customers and the classes 'Partners.Domain' declares for the module Partners, and would get an alias of ITenancyStore for each. "
+            + "Give one of them a name of its own, with [assembly: TemplateFacadeName(\"TenancyStore\", \"CustomersTenancyStore\")] in 'Customers.Domain'.");
+    }
+
+    [Fact]
+    public void A_store_alias_the_project_writes_itself_stays_its_own()
+    {
+        // The form the sample wrote before: the generator stands back, and the compiler is not handed two.
+        var result = Project(StoreHandler(invitations: false), module: "Shop")
+            .WithReferencedProject("Shop.Domain", Domain("Shop"))
+            .WithSource("global using TenancyStore = " + StoreOverShop + ";", "GlobalUsings.cs")
+            .RunCore();
+
+        result.ShouldCompile();
+        result.ReportedDiagnostics.Should().BeEmpty();
+        result.HintNames.Should().NotContain("TenancyStore.TemplateAlias");
+    }
+
+    [Fact]
+    public void A_type_of_the_stores_name_a_project_above_declares_in_a_namespace_keeps_the_alias_out_and_is_told_where()
+    {
+        var result = Project("namespace Shop.Storage; public sealed class TenancyStore;", module: "Shop")
+            .WithReferencedProject("Shop.Domain", Domain("Shop"))
+            .RunCore();
+
+        result.ShouldCompile();
+        result.HintNames.Should().NotContain("TenancyStore.TemplateAlias");
+        var told = About(result.ReportedDiagnostics, "DDD00065", "TenancyStore");
+        told.GetMessage().Should().Be(
+            "'TenancyStore' is not written, so no project can name ITenancyStore closed over the classes through it: this project declares "
+            + "'Shop.Storage.TenancyStore', which an alias of that name would hide in every file that imports 'Shop.Storage' with a using; name the "
+            + "alias otherwise, with [assembly: TemplateFacadeName(\"TenancyStore\", \"...\")] in 'Shop.Domain', or rename 'TenancyStore'");
     }
 
     // ------------------------------------------------------------------ incremental

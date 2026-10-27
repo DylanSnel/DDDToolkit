@@ -2,7 +2,7 @@ using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.Abstractions.Interfaces;
 using DDDToolkit.Supporting.Tenancy.Catalogue;
 
-namespace DDDToolkit.Supporting.Tenancy.UseCases;
+namespace DDDToolkit.Supporting.Tenancy.Managers;
 
 /// <summary>
 /// The tenant's roles: making them, renaming them, changing their permissions and archiving them, and reading them.

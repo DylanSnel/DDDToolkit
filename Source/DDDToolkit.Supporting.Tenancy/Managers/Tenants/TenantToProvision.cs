@@ -3,7 +3,7 @@ using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.Abstractions.Interfaces;
 using DDDToolkit.Supporting.Tenancy.Catalogue;
 
-namespace DDDToolkit.Supporting.Tenancy.UseCases;
+namespace DDDToolkit.Supporting.Tenancy.Managers;
 
 /// <summary>
 /// What a new tenant is provisioned with, for <c>TenantManager.ProvisionAsync</c>. Your code makes it as

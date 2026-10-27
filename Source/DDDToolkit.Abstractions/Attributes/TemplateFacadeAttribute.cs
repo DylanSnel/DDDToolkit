@@ -50,6 +50,14 @@ namespace DDDToolkit.Abstractions.Attributes;
 /// </list>
 /// </para>
 /// <para>
+/// <b>An interface.</b> An interface your storage package implements, such as Tenancy's <c>ITenancyStore&lt;...&gt;</c>,
+/// has no class to stand for it: the container hands out your interface, closed over the application's classes. The
+/// application gets a global alias of it instead, <c>global using TenancyStore = ...;</c>, named as your interface is
+/// without its leading <c>I</c>. An alias holds in its own project only, so it is written into the project that declares
+/// the classes and into every project above it that sees the classes written there, each closed over the same classes.
+/// A project that sees two modules' classes gets neither alias of one name, and is told so (DDD00075).
+/// </para>
+/// <para>
 /// <b>Why a class, and not a global alias.</b> An alias holds in the project that declares it and no further, so it
 /// would have to be written into every project, and a generator's alias is seen by the compiler but not by the
 /// other generators of the project: HotChocolate's, reading <c>[ObjectType&lt;SeatManager.SeatOverview&gt;]</c>,
@@ -90,7 +98,8 @@ namespace DDDToolkit.Abstractions.Attributes;
 /// The open generic class, <c>typeof(SeatManager&lt;,,,,,,,,&gt;)</c>, not nested in a generic type. Every one of its
 /// type parameters carries <see cref="TemplateTypeAttribute"/>, since the class the application gets leaves none open.
 /// It is neither abstract nor sealed, with public constructors, for a class the container makes or a record your code
-/// makes; or it is abstract rather than static, with a protected constructor, for a name alone.
+/// makes; or it is abstract rather than static, with a protected constructor, for a name alone. Or it is an open
+/// generic interface, <c>typeof(ITenancyStore&lt;,,,,,,,,&gt;)</c>, for an alias.
 /// </param>
 /// <remarks>
 /// A type this attribute names that the generator cannot use is passed over without a word: that is the package's

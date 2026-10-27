@@ -346,10 +346,41 @@ C# finds a nested type through a derived class. So `SeatManager.SeatOverview` is
 closed over your classes. Each name is a class because a `global using` alias works only in its own project. A class
 reaches every project above, and the generators of those projects read it.
 
+### The stores
+
+The managers load and save through two **stores**, interfaces that the storage package implements and registers:
+`ITenancyStore<...>` and, where you declare an invitation class, `IInvitationStore<...>`. A command of yours that changes
+a field of your own on one of Tenancy's aggregates loads and saves it through a store. The save then happens in the unit
+of work that the managers save through.
+
+The generator names the stores `TenancyStore` and `InvitationStore`. Each name is a `global using` alias, closed over
+your classes. No class can stand for an interface that the container hands out. An alias works only in its own
+project, so the generator writes the alias into the project that declares your classes and into every project above it
+that sees them.
+
+```csharp
+public sealed class RenameSeatHandler(TenancyStore store) : ICommandHandler<RenameSeat, Seat>
+{
+    // The store keeps to the caller's tenant. A seat of another tenant is not found.
+    public async ValueTask<Seat> Handle(RenameSeat command, CancellationToken cancellationToken)
+    {
+        var seat = await store.FindSeatAsync(command.Seat, cancellationToken) ?? throw TenancyRefusals.Refuse(TenancyRefusals.SeatNotFound);
+        seat.Rename(command.DisplayName);
+        await store.SaveAsync(cancellationToken);
+        return seat;
+    }
+}
+```
+
+- A project above gets the aliases only when the toolkit's generator runs in it. A package reference brings the
+  generator. A project reference to the toolkit's source needs `OutputItemType="Analyzer"`.
+- Your own alias of the same name stays, and the generator writes none.
+- [Stores](reference/managers.md#stores) in the reference lists every member.
+
 ### Another name for a manager
 
-Add one line per class to the project that declares the classes, beside `[assembly: Module]` or the switch. Every
-project above uses the new name.
+Add one line per class or store to the project that declares the classes, beside `[assembly: Module]` or the switch.
+Every project above uses the new name.
 
 ```csharp
 using DDDToolkit.Abstractions.Attributes;
@@ -371,7 +402,8 @@ using DDDToolkit.Abstractions.Attributes;
 | A type, namespace or alias of yours with a manager's name exists in the global namespace | That manager is not written. Your type stays. |
 | A type of yours with a manager's name exists in a namespace of the declaring project | That manager is not written. [DDD00065](../diagnostics.md#ddd00065) says so on your type: a class in the global namespace would win over yours in every file that imports your namespace. |
 | A project above has an alias with that name | CS0576. Remove the alias. |
-| HotChocolate's generator runs in the declaring project | HotChocolate's generator does not see the managers, because they are another generator's output. Its code over a manager's record, such as `SeatManager.SeatOverview`, does not compile. A module split by layer names those records in its API project, where the generators see them. A module of one project keeps an alias of the manager's name, such as `global using SeatManager = DDDToolkit.Supporting.Tenancy.UseCases.SeatManager<...>;`. Every generator reads the alias, and the class is then not written. |
+| A project declares a type of yours with a store's name in a namespace | That project gets no alias of the store. [DDD00065](../diagnostics.md#ddd00065) says so on your type. |
+| HotChocolate's generator runs in the declaring project | HotChocolate's generator does not see the managers, because they are another generator's output. Its code over a manager's record, such as `SeatManager.SeatOverview`, does not compile. A module split by layer names those records in its API project, where the generators see them. A module of one project keeps an alias of the manager's name, such as `global using SeatManager = DDDToolkit.Supporting.Tenancy.Managers.SeatManager<...>;`. Every generator reads the alias, and the class is then not written. |
 
 ### Two modules with Tenancy's classes
 
@@ -382,6 +414,8 @@ for partners' tenants. Each module's domain project then gets its own managers a
   those projects, naming `TenantManager` is CS0433. [DDD00075](../diagnostics.md#ddd00075) warns in each of those
   projects, on the project file. The warning contains the line that gives one class another name, and names the
   project where that module declares its classes.
+- Those projects get no `TenancyStore` alias, because they would get one for each module.
+  [DDD00075](../diagnostics.md#ddd00075) warns about the alias in the same way.
 - When one module's domain project references the other module's domain project, the warning appears on the first
   Tenancy class of the referencing project. In that project, C# binds the name to the project's own class (CS0436).
   No project above can name either class (CS0433).
@@ -401,6 +435,7 @@ using DDDToolkit.Supporting.Tenancy;
 [assembly: TemplateFacadeName("RoleManager", "CustomersRoleManager")]
 [assembly: TemplateFacadeName("TenantToProvision", "CustomersTenantToProvision")]
 [assembly: TemplateFacadeName("TenancyAccessManager", "CustomersAccessManager")]
+[assembly: TemplateFacadeName("TenancyStore", "CustomersTenancyStore")]
 ```
 
 **`Shop.Host/Provisioning.cs`**

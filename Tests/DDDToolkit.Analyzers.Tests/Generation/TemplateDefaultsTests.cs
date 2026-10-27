@@ -375,7 +375,7 @@ public class TemplateDefaultsTests
         }
 
         result.ShouldContain("TenancyModelBuilderExtensions.AddTenancy.Registration", "AddTenancy<global::DDDToolkit.Sample.Tenant, global::DDDToolkit.Sample.TenantId, global::DDDToolkit.Sample.Organization");
-        result.ShouldContain("SeatManager.TemplateFacade", "public sealed class SeatManager : global::DDDToolkit.Supporting.Tenancy.UseCases.SeatManager<global::DDDToolkit.Sample.Tenant,");
+        result.ShouldContain("SeatManager.TemplateFacade", "public sealed class SeatManager : global::DDDToolkit.Supporting.Tenancy.Managers.SeatManager<global::DDDToolkit.Sample.Tenant,");
         result.ShouldContain("OrganizationUnit.EntityFramework", "[global::Microsoft.EntityFrameworkCore.Owned]");
     }
 

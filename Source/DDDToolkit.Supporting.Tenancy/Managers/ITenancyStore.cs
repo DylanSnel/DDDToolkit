@@ -1,7 +1,8 @@
+using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.Abstractions.Interfaces;
 using DDDToolkit.Supporting.Tenancy.Access;
 
-namespace DDDToolkit.Supporting.Tenancy.UseCases;
+namespace DDDToolkit.Supporting.Tenancy.Managers;
 
 /// <summary>
 /// Where the managers load and save: one unit of work per command. The storage package implements it, closed over the
@@ -12,8 +13,23 @@ namespace DDDToolkit.Supporting.Tenancy.UseCases;
 /// <see cref="SlugTakenAsync"/>, which says no more than yes or no, and <see cref="ListTenantsAsync"/>, which
 /// is an operator's and reads what the operator may read.
 /// </para>
+/// <para>
+/// The project that declares the application's classes, and every project above it that sees them, names it
+/// <c>TenancyStore</c>, a global alias the toolkit's generator writes, closed over those classes. A command of the
+/// application's that changes a field of its own on one of Tenancy's aggregates loads and saves it there, in the unit of
+/// work the managers save through.
+/// </para>
 /// </summary>
-public interface ITenancyStore<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>
+public interface ITenancyStore<
+    [TemplateType(typeof(TenantAggregateAttribute<>), Take = TemplateArgumentKind.Type)] TTenant,
+    [TemplateType(typeof(TenantAggregateAttribute<>))] TTenantId,
+    [TemplateType(typeof(OrganizationAggregateAttribute<>), Take = TemplateArgumentKind.Type)] TOrganization,
+    [TemplateType(typeof(OrganizationUnitAttribute<>), Take = TemplateArgumentKind.Type)] TUnit,
+    [TemplateType(typeof(OrganizationUnitAttribute<>))] TUnitId,
+    [TemplateType(typeof(SeatAggregateAttribute<>), Take = TemplateArgumentKind.Type)] TSeat,
+    [TemplateType(typeof(SeatAggregateAttribute<>))] TSeatId,
+    [TemplateType(typeof(RoleAggregateAttribute<>), Take = TemplateArgumentKind.Type)] TRole,
+    [TemplateType(typeof(RoleAggregateAttribute<>))] TRoleId>
     where TTenant : TenantAggregate<TTenantId>
     where TOrganization : OrganizationAggregate<TTenantId, TUnit, TUnitId>
     where TUnit : OrganizationUnitEntity<TUnitId>

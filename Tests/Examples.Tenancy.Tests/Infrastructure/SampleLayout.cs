@@ -1,5 +1,5 @@
 using System.Reflection;
-using DDDToolkit.Supporting.Tenancy.UseCases;
+using DDDToolkit.Supporting.Tenancy.Managers;
 
 namespace Examples.Tenancy.Tests.Infrastructure;
 
@@ -169,7 +169,7 @@ public static class SampleLayout
     /// </remarks>
     public static bool IsPort(Type type)
         => Ports.Value.Contains(type)
-            || (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(DDDToolkit.Supporting.Tenancy.UseCases.ITenancyStore<,,,,,,,,>));
+            || (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(DDDToolkit.Supporting.Tenancy.Managers.ITenancyStore<,,,,,,,,>));
 
     /// <summary>
     /// The names no folder and no namespace at a project's root may have: each says what kind of class is inside,

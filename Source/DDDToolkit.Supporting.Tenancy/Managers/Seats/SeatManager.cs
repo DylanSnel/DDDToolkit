@@ -3,7 +3,7 @@ using DDDToolkit.Abstractions.Interfaces;
 using DDDToolkit.Supporting.Tenancy.Access;
 using DDDToolkit.Supporting.Tenancy.Catalogue;
 
-namespace DDDToolkit.Supporting.Tenancy.UseCases;
+namespace DDDToolkit.Supporting.Tenancy.Managers;
 
 /// <summary>
 /// People's seats: adding them, placing them in units, granting them roles there, and suspending, reactivating or
