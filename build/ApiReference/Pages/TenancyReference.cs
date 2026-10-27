@@ -3,7 +3,8 @@ namespace DDDToolkit.Build.ApiReference.Pages;
 /// <summary>
 /// Tenancy's reference, in <c>docs/tenancy/reference</c>: which types each page holds. The folders are where the packages
 /// keep their code; a type in a folder no claim takes still gets a section, under "Other" on its package's last page, and
-/// the tool says so, so a new folder is never left out of the reference.
+/// the tool says so, so a new folder is never left out of the reference. One attribute of <c>DDDToolkit.Abstractions</c>,
+/// the hook <c>[OfTenant]</c> is mapped through, is taken by name beside the package's own types.
 /// </summary>
 internal static class TenancyReference
 {
@@ -11,6 +12,9 @@ internal static class TenancyReference
     public const string Markers = "DDDToolkit.Supporting.Tenancy.Abstractions";
     public const string EntityFramework = "DDDToolkit.Supporting.Tenancy.EntityFramework";
     public const string Postgres = "DDDToolkit.Supporting.Tenancy.Postgres";
+
+    // Not documented whole: only the types a claim names.
+    private const string Abstractions = "DDDToolkit.Abstractions";
 
     public static readonly ReferencePlan Plan = new(
         "Tenancy",
@@ -22,7 +26,7 @@ internal static class TenancyReference
                 "Aggregates and entities",
                 "The templates the application's own classes derive from, in the order of the tree: the tenant, its organization "
                 + "and units, the seat with its placements and grants, the role, the invitation. Each section opens with the name "
-                + "the application sees, the template in brackets, and the attribute that declares the application's class; its "
+                + "the application sees, the template in brackets, and the attribute that declares the application's class. Its "
                 + "value objects, invariants and events follow it.",
                 [
                     new("Declaring the classes", [new(Tenancy, Folder: "Aggregates"), new(Tenancy, Folder: "Services")]),
@@ -34,69 +38,104 @@ internal static class TenancyReference
                     new("Shared value objects", [new(Tenancy, Folder: "ValueObjects")]),
                 ]),
             new(
-                "use-cases.md",
-                "Use cases",
-                "The managers, one per aggregate. Each is a class the generator writes in the project that declares the "
-                + "application's classes, named as the package's class is: `SeatManager` derives from `SeatManager<…>` closed "
-                + "over them, so every type nested there is named through it, `SeatManager.SeatOverview`. This page names them "
-                + "that way. What fills the nine type parameters:\n\n"
+                "managers.md",
+                "Managers",
+                "The managers, one per aggregate: `TenantManager`, `OrganizationManager`, `SeatManager`, `RoleManager` and "
+                + "`InvitationManager`. Your code takes each one by that name, with no type arguments. The generator writes each "
+                + "one into the project that declares the application's Tenancy classes, as a sealed class that derives from the "
+                + "package's class closed over those classes: `SeatManager` derives from `SeatManager<…>`. A type nested in the "
+                + "package's class is named through the generated class, such as `SeatManager.SeatOverview`. This page names them "
+                + "that way. `InvitationManager` is written only where the project declares an invitation class. "
+                + "`AddTenancy<TContext>()` registers the first four per scope, and `AddTenancyInvitations<TContext>()` registers "
+                + "`InvitationManager`.\n\n"
+                + "A command that works on an aggregate has two overloads: one takes the domain objects, the other their ids. Both "
+                + "load the aggregate and check the caller's permissions in the same way. A command that creates an aggregate "
+                + "returns it, and a command that changes one returns it as changed. A read returns the application's own classes.\n\n"
+                + "The nine type parameters are filled with:\n\n"
                 + PageWriter.TypeParameterTable + "SeatManager}\n\n"
-                + "The registration a host calls, from all three packages, is at the end, under [Registration](#registration).",
+                + "The stores a storage package implements are under [Stores](#stores). The registration a host calls, from all "
+                + "three packages, is under [Registration](#registration).",
                 [
-                    new("Stores", [new(Tenancy, Folder: "UseCases")]),
-                    new("Tenants", [new(Tenancy, Folder: "UseCases/Tenants")]),
+                    new("Tenants", [new(Tenancy, Folder: "UseCases/Tenants")], Lead: ["TenantManager", "TenantToProvision"]),
                     new("Organization", [new(Tenancy, Folder: "UseCases/Organizations")]),
                     new("Seats", [new(Tenancy, Folder: "UseCases/Seats")]),
                     new("Roles", [new(Tenancy, Folder: "UseCases/Roles")]),
-                    new("Invitations", [new(Tenancy, Folder: "UseCases/Invitations")]),
+                    new("Invitations", [new(Tenancy, Folder: "UseCases/Invitations")], Lead: ["InvitationManager"]),
+                    new(
+                        "Stores",
+                        [new(Tenancy, Folder: "UseCases"), new(Tenancy, Type: "IInvitationStore"), new(Tenancy, Type: "InvitationOfToken")],
+                        "Where the managers load and save. A storage package implements these interfaces and registers them: "
+                        + "`DDDToolkit.Supporting.Tenancy.EntityFramework` does, in `AddTenancy` and `AddTenancyInvitations`. "
+                        + "Your code takes the managers."),
                     new(
                         "Registration",
                         [
                             new(Tenancy, Folder: "Registration"),
                             new(EntityFramework, Folder: "Registration"),
-                            new(EntityFramework, Type: "TenancyModelBuilderExtensions"),
-                            new(EntityFramework, Type: "TenancyTableNames"),
                             new(Postgres, Folder: "Registration"),
                         ],
-                        "What a host calls, from all three packages: the storage-agnostic core, Entity Framework's tables and "
-                        + "services, the checks of requests, and Postgres."),
+                        "What a host registers, from all three packages: Tenancy's services and options, the access checks of a "
+                        + "module's requests, and Postgres. The calls in a context's model that map Tenancy's tables are with "
+                        + "Entity Framework, under [Mapping](entity-framework.md#mapping)."),
                 ]),
             new(
                 "catalogue.md",
                 "Catalogue and starter roles",
                 "The permissions the modules declare, the catalogue the host builds from them, the starter roles a tenant's roles "
-                + "start from, and the sync that keeps those roles following their starter roles.",
+                + "are copied from, and the sync that keeps those roles in line with their starter roles.",
                 [
                     new("Catalogue", [new(Tenancy, Folder: "Catalogue")], Lead: ["ApplicationCatalogue", "Permission", "StarterRole", "TenancyCatalogue", "TenancyPermissions", "TenancyStarterRoles"]),
                     new("Starter roles", [new(Tenancy, Folder: "StarterRoles")]),
                 ]),
             new(
                 "callers.md",
-                "Callers and requirements",
-                "Who is calling and in which tenant, the actor a change records, the selection of a seat in the tenant a request "
-                + "names, and the requirements a request states with an attribute.",
+                "Access manager and callers",
+                "`TenancyAccessManager` says who acts (`CurrentUser`) and which tenant and seat the work acts in "
+                + "(`CurrentTenant`). Its `Begin` methods start system work. Below it: the callers it reads, the actor a change "
+                + "records, the selection of a seat in the tenant a request names, and the requirements a request states with "
+                + "an attribute, `[Operator]` among them.\n\n"
+                + "Your code takes `TenancyAccessManager` with no type arguments. The generator writes it into the global "
+                + "namespace of the project that declares the application's Tenancy classes. A project of another module "
+                + "says which of its ids are Tenancy's with `[assembly: TenancyIds<TenantId, SeatId, OrganizationUnitId, RoleId>]`, "
+                + "and gets the class in its root namespace. The class derives from `TenancyAccessManager<…>` closed over the "
+                + "four ids:\n\n"
+                + PageWriter.TypeParameterTable + "TenancyAccessManager}",
                 [
+                    new(
+                        "Access manager",
+                        [new(Tenancy, Folder: "Access/Manager")],
+                        Lead: ["TenancyAccessManager", "CurrentUser", "CurrentTenant", "TenantInScope", "ITenantsToSweep"]),
                     new("Callers", [new(Tenancy, Folder: "Access/Callers")], Lead: ["TenancyCaller", "ITenancyCaller", "TenancyCallers", "TenancyWork"]),
                     new("Actors", [new(Tenancy, Folder: "Access/ActedBy")]),
                     new("Tenant selection", [new(Tenancy, Folder: "Access/Selection")]),
-                    new("Requirements", [new(Tenancy, Folder: "Access/RequiredAccess")]),
+                    new(
+                        "Requirements",
+                        [new(Tenancy, Folder: "Access/RequiredAccess")],
+                        Lead: ["InTenantAttribute", "AtTenantAttribute", "AtUnitAttribute", "OperatorAttribute", "ForTenantAttribute", "OperatorTenant", "TenancyAccess", "TenancyRequirement"]),
                 ]),
             new(
                 "queries.md",
-                "ITenancy, its queries and row access",
-                "`ITenancy`, through which a module asks about the caller, and the queries it gives in a context; the read model "
-                + "they read, the projection that keeps it, and the row access rules a database enforces.",
+                "Queries and row access",
+                "Tenancy's queries for the current caller, which a module composes into its own queries. Over an Entity "
+                + "Framework context, `db.Tenancy()` returns them. The generator writes `db.Tenancy()` for the application's ids, "
+                + "so your code calls it with no type arguments. Over a read source that is not Entity Framework, "
+                + "`access.In(source, executor)` on the access manager returns them. The queries a module asks most are "
+                + "`UnitsWhereIHold`, the units where the caller holds a permission, and `RolesWithPermission`, the roles that "
+                + "grant a permission. Below them: the read model the queries read, the projection that keeps it up to date, and "
+                + "the row access rules a database enforces.",
                 [
-                    new("Queries", [new(Tenancy, Folder: "Access/Queries")], Lead: ["ITenancy", "ITenancyQueries", "CurrentTenancy"]),
-                    new("Read model", [new(Tenancy, Folder: "Access/ReadModel")]),
+                    new(
+                        "Queries",
+                        [new(Tenancy, Folder: "Access/Queries"), new(EntityFramework, Type: "TenancyEntityFrameworkExtensions")],
+                        Lead: ["TenancyEntityFrameworkExtensions", "ITenancyQueries", "UnitPermission", "RoleWithPermission", "MoveReach", "NamedUnit"]),
+                    new("Read model", [new(Tenancy, Folder: "Access/ReadModel")], Lead: ["ITenancyReadSource", "IQueryExecutor"]),
                     new("Projection", [new(Tenancy, Folder: "Access/Projection")]),
                     new("Row access", [new(Tenancy, Folder: "Access/RowAccess")]),
                 ]),
             new(
                 "refusals.md",
                 "Refusals",
-                "Every code Tenancy refuses a command with, in the members of `TenancyRefusals`, and the resources that hold "
-                + "their texts.",
+                "Every refusal code of Tenancy, in the members of `TenancyRefusals`, and the resources that hold their texts.",
                 [
                     new("Refusal codes", [new(Tenancy, Folder: "Refusals")]),
                     new("Texts", [new(Tenancy, Folder: "Resources")]),
@@ -104,11 +143,26 @@ internal static class TenancyReference
             new(
                 "entity-framework.md",
                 "Entity Framework",
-                "The public API of `DDDToolkit.Supporting.Tenancy.EntityFramework`, by folder. Its registration, "
-                + "`AddTenancy`, `AddTenancyAccess` and the table names, is with the use cases, under "
-                + "[Registration](use-cases.md#registration).",
+                "The public API of `DDDToolkit.Supporting.Tenancy.EntityFramework`, by folder, with the marker `[OfTenant]` from "
+                + "`DDDToolkit.Supporting.Tenancy.Abstractions`. `db.Tenancy()` is with the queries, under "
+                + "[Queries](queries.md#queries). The services a host registers, `AddTenancy`, `AddTenancyInvitations` and "
+                + "`AddTenancyAccess`, are with the managers, under [Registration](managers.md#registration).",
                 [
-                    new("Mapping", [new(EntityFramework, Folder: "Mapping"), new(Markers, Folder: "")], Lead: ["OfTenantAttribute", "OfTenantConvention"]),
+                    new(
+                        "Mapping",
+                        [
+                            new(EntityFramework, Folder: "Mapping"),
+                            new(Markers, Folder: ""),
+                            new(Abstractions, Type: "ModelConventionAttribute"),
+                        ],
+                        "How a context maps Tenancy. A class marks the property that holds its tenant with `[OfTenant]`. "
+                        + "The marker names its convention with `[ModelConvention]`, and every context that calls "
+                        + "`AddDDDToolkitConventions()` runs that convention. The convention gives the class the tenant filter "
+                        + "and Tenancy's save check. A context that keeps the tenant in another property, or in a column of its "
+                        + "own, calls `ScopeToTenant` on the class instead, and that call wins. `AddTenancy`, "
+                        + "`AddTenancyReadModel` and `AddTenancyReadFunctions` on the model builder map Tenancy's own tables, its "
+                        + "read model, or its read functions.",
+                        Lead: ["OfTenantAttribute", "OfTenantConvention", "ModelConventionAttribute", "TenancyModelBuilderExtensions", "TenancyTableNames"]),
                     new("Store", [new(EntityFramework, Folder: "Store")]),
                     new("Saving", [new(EntityFramework, Folder: "Saving")]),
                     new("Read model", [new(EntityFramework, Folder: "ReadModel")]),
@@ -124,7 +178,7 @@ internal static class TenancyReference
                 "postgres.md",
                 "Postgres",
                 "The public API of `DDDToolkit.Supporting.Tenancy.Postgres`, by folder. Its registration, "
-                + "`AddTenancyPostgres`, is with the use cases, under [Registration](use-cases.md#registration).",
+                + "`AddTenancyPostgres`, is with the managers, under [Registration](managers.md#registration).",
                 [
                     new("Policies", [new(Postgres, Folder: "Policies")]),
                     new("SQL", [new(Postgres, Folder: "Sql")]),

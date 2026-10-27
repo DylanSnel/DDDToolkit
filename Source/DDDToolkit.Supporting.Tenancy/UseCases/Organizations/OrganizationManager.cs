@@ -66,6 +66,11 @@ public class OrganizationManager<
     /// <c>tenancy.not-permitted</c> without <see cref="TenancyPermissions.SettingsManage"/> for the whole tenant,
     /// <c>tenancy.name-invalid</c>.
     /// </exception>
+    /// <example>
+    /// <code>
+    /// var renamed = await organization.RenameAsync("Harbor Works Group", cancellationToken);
+    /// </code>
+    /// </example>
     public async Task<TOrganization> RenameAsync(string name, CancellationToken cancellationToken)
     {
         var gate = Gate();
@@ -98,6 +103,12 @@ public class OrganizationManager<
     /// <paramref name="id"/> is already a unit's: a mistake in the import or seeding that gave it, not a
     /// refusal.
     /// </exception>
+    /// <example>
+    /// A handler that adds a unit from a request, and sets a field the application added to its unit class:
+    /// <code>
+    /// var unit = await organization.AddUnitAsync(command.Parent, command.Name, cancellationToken, configure: added =&gt; added.SetKind(command.Kind));
+    /// </code>
+    /// </example>
     public async Task<TUnit> AddUnitAsync(
         TUnitId parent,
         string name,
@@ -121,6 +132,11 @@ public class OrganizationManager<
 
     /// <summary>Adds a unit below <paramref name="parent"/>, as <see cref="AddUnitAsync(TUnitId, string, CancellationToken, TUnitId?, Action{TUnit}?)"/> does with its id.</summary>
     /// <inheritdoc cref="AddUnitAsync(TUnitId, string, CancellationToken, TUnitId?, Action{TUnit}?)"/>
+    /// <example>
+    /// <code>
+    /// var northCoast = await organization.AddUnitAsync(north, "North Coast", cancellationToken);
+    /// </code>
+    /// </example>
     public Task<TUnit> AddUnitAsync(
         TUnit parent,
         string name,
@@ -138,6 +154,11 @@ public class OrganizationManager<
     /// <c>tenancy.not-permitted</c> without <see cref="TenancyPermissions.UnitsManage"/> at the unit, and what the
     /// organization refuses.
     /// </exception>
+    /// <example>
+    /// <code>
+    /// var unit = await organization.RenameUnitAsync(command.Unit, command.Name, cancellationToken);
+    /// </code>
+    /// </example>
     public async Task<TUnit> RenameUnitAsync(TUnitId unit, string name, CancellationToken cancellationToken)
     {
         var gate = Gate();
@@ -152,6 +173,11 @@ public class OrganizationManager<
 
     /// <summary>Renames a unit, as <see cref="RenameUnitAsync(TUnitId, string, CancellationToken)"/> does with its id.</summary>
     /// <inheritdoc cref="RenameUnitAsync(TUnitId, string, CancellationToken)"/>
+    /// <example>
+    /// <code>
+    /// var renamed = await organization.RenameUnitAsync(northCoast, "North Coast Yard", cancellationToken);
+    /// </code>
+    /// </example>
     public Task<TUnit> RenameUnitAsync(TUnit unit, string name, CancellationToken cancellationToken)
         => RenameUnitAsync(IdOf(unit), name, cancellationToken);
 
@@ -176,6 +202,11 @@ public class OrganizationManager<
     /// <c>tenancy.grant-exceeds-own</c> naming the permissions the move would give the calling seat, or, while
     /// containment is on, give or take away from anyone, that it lacks at the unit, or lacks for long enough.
     /// </exception>
+    /// <example>
+    /// <code>
+    /// var moved = await organization.MoveUnitAsync(command.Unit, command.NewParent, cancellationToken);
+    /// </code>
+    /// </example>
     public async Task<TUnit> MoveUnitAsync(TUnitId unit, TUnitId newParent, CancellationToken cancellationToken)
     {
         var gate = Gate();
@@ -196,6 +227,12 @@ public class OrganizationManager<
 
     /// <summary>Moves a unit under another unit, as <see cref="MoveUnitAsync(TUnitId, TUnitId, CancellationToken)"/> does with their ids.</summary>
     /// <inheritdoc cref="MoveUnitAsync(TUnitId, TUnitId, CancellationToken)"/>
+    /// <example>
+    /// North Coast moves from North to South Bay. The grants held at North no longer reach it:
+    /// <code>
+    /// var moved = await organization.MoveUnitAsync(northCoast, southBay, cancellationToken);
+    /// </code>
+    /// </example>
     public Task<TUnit> MoveUnitAsync(TUnit unit, TUnit newParent, CancellationToken cancellationToken)
         => MoveUnitAsync(IdOf(unit), IdOf(newParent), cancellationToken);
 
@@ -210,6 +247,11 @@ public class OrganizationManager<
     /// <c>tenancy.unit-not-found</c>, <c>tenancy.not-permitted</c> without <see cref="TenancyPermissions.UnitsManage"/>
     /// at the parent, and what the organization refuses.
     /// </exception>
+    /// <example>
+    /// <code>
+    /// var archived = await organization.ArchiveUnitAsync(command.Unit, cancellationToken);
+    /// </code>
+    /// </example>
     public async Task<TUnit> ArchiveUnitAsync(TUnitId unit, CancellationToken cancellationToken)
     {
         var gate = Gate();
@@ -230,6 +272,11 @@ public class OrganizationManager<
 
     /// <summary>Archives a unit, as <see cref="ArchiveUnitAsync(TUnitId, CancellationToken)"/> does with its id.</summary>
     /// <inheritdoc cref="ArchiveUnitAsync(TUnitId, CancellationToken)"/>
+    /// <example>
+    /// <code>
+    /// var archived = await organization.ArchiveUnitAsync(northCoast, cancellationToken);
+    /// </code>
+    /// </example>
     public Task<TUnit> ArchiveUnitAsync(TUnit unit, CancellationToken cancellationToken)
         => ArchiveUnitAsync(IdOf(unit), cancellationToken);
 
@@ -242,8 +289,17 @@ public class OrganizationManager<
     /// what kind of unit it is, is shown from the units read here, with no statement more.
     /// </summary>
     /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The units, each with its path and depth, by path. A seat that reads no unit of the organization gets none.</returns>
     /// <exception cref="Exceptions.RefusalException">The caller is nobody.</exception>
     /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>
+    /// <example>
+    /// <code>
+    /// foreach (var (unit, path, depth) in await organization.ListUnitsAsync(cancellationToken))
+    /// {
+    ///     // path: "Harbor Works / North / North Coast", depth: 3
+    /// }
+    /// </code>
+    /// </example>
     public async Task<IReadOnlyList<UnitInTree>> ListUnitsAsync(CancellationToken cancellationToken)
     {
         var gate = Gate();
@@ -273,10 +329,17 @@ public class OrganizationManager<
     /// </summary>
     /// <param name="ids">The units asked about, at most <see cref="MostIds"/> different ones.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>Each unit's id, name, path and depth, by path.</returns>
     /// <exception cref="Exceptions.RefusalException">
     /// The caller is nobody, with its own code; or <c>tenancy.too-many-ids</c>.
     /// </exception>
     /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>
+    /// <example>
+    /// The paths of the units a page of projects sits at, in one read:
+    /// <code>
+    /// var named = await organization.UnitsByIdAsync([.. projects.Select(project =&gt; project.UnitId)], cancellationToken);
+    /// </code>
+    /// </example>
     public async Task<IReadOnlyList<NamedUnit<TUnitId>>> UnitsByIdAsync(IReadOnlyCollection<TUnitId> ids, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(ids);

@@ -21,7 +21,7 @@ namespace DDDToolkit.Supporting.Tenancy.Postgres;
 /// <summary>
 /// Checks a host runs at start-up, before it serves anything, that the database and the host are set up the way
 /// Tenancy's policies rely on. Each throws <see cref="InvalidOperationException"/> naming what is wrong and how to
-/// put it right, so a host that would run with a hole in its second lock does not start.
+/// put it right, so a host whose row level security has a gap does not start.
 /// <para>
 /// <see cref="TenancyPostgresServiceCollectionExtensions.AddTenancyPostgres"/> registers each of them as a start-up
 /// check, by the names below, which a host runs with <c>services.RunStartupChecks()</c>. The methods stay for a
@@ -462,8 +462,8 @@ public static class TenancyPostgresChecks
     /// running as their owner; and the functions a module reads Tenancy through are there, running as
     /// their caller and written for Postgres to fold into the module's queries, each answering exactly the columns
     /// of its row of the read model, in order. A contribution the export was never told to use, or an access file
-    /// written from another catalogue or another version of this package and not yet applied, leaves the second
-    /// lock open or out of date, and nothing else would say so.
+    /// written from another catalogue or another version of this package and not yet applied, leaves RLS
+    /// incomplete or out of date, and no other check reports it.
     /// <para>
     /// The index is the one <c>AddTenancy</c> maps when it is given the context's <c>Database</c>, and on Postgres
     /// it is required. The policies keep a seat from leaving a unit without a parent, and hold neither Tenancy's
@@ -477,7 +477,7 @@ public static class TenancyPostgresChecks
     /// each of their token roles is mapped to a database role of its own
     /// (<see cref="PostgresRowLevelSecurityOptions.TokenRoles"/>), and that role has the policy that lets it read
     /// the tenants. The options name the operators for the application and the contribution names them for the
-    /// database; when only the first does, an operator is answered an empty directory, in silence.
+    /// database; when only the first does, an operator gets an empty list of tenants, and no error says why.
     /// </para>
     /// </summary>
     /// <param name="services">The application's services, with the context that maps Tenancy's tables and the catalogue.</param>

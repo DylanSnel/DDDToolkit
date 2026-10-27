@@ -6,7 +6,7 @@ namespace DDDToolkit.Supporting.Tenancy.Catalogue;
 /// A starter role's name and description in one language, for the roles a tenant is given from the starter roles.
 /// <para>
 /// The catalogue declares each starter role once, with one name and one description. A tenant that works in another
-/// language should not get its roles named in the catalogue's, so the use cases ask this when they make a
+/// language should not get its roles named in the catalogue's, so the managers ask this when they make a
 /// role from a starter role: when a tenant is provisioned with a <c>Language</c>, and when a change of shape copies
 /// the starter roles the tenant has no copy of yet. The texts are chosen once. From then on the role is the tenant's
 /// own, renamed like any other, and a later change of the tenant's language changes no role.

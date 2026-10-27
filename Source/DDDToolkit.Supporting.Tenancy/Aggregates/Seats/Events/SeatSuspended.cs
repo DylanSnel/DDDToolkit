@@ -11,7 +11,7 @@ namespace DDDToolkit.Supporting.Tenancy;
 /// <param name="By">
 /// Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an
 /// operator or a token the work was begun for (<see cref="TenancyActor{TSeatId}"/>). <see langword="null"/> only
-/// where the aggregate was changed outside the package's use cases, with no actor handed to it.
+/// where the aggregate was changed outside the package's managers, with no actor handed to it.
 /// </param>
 [DomainEventName("tenancy.seat-suspended")]
 public sealed record SeatSuspended<TTenantId, TSeatId>(TTenantId TenantId, TSeatId SeatId, TenancyActor<TSeatId>? By) : DomainEvent

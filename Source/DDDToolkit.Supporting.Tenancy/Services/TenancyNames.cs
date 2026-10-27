@@ -10,7 +10,7 @@ namespace DDDToolkit.Supporting.Tenancy;
 /// <para>
 /// A refusal says which name it is about with a stable token in its <c>What</c> argument, never with a word,
 /// so its message reads the same in every language. Next to it, the <c>Field</c> argument names the input the
-/// text belongs under, in the word the use cases call it by: <c>name</c> for the name of a tenant, a unit or a
+/// text belongs under, in the word the managers call it by: <c>name</c> for the name of a tenant, a unit or a
 /// role, since each is the one name its command takes, and <c>description</c> or <c>reason</c> for the others.
 /// A seat has no name here: what it is shown by is the application's, with the application's own rule.
 /// </para>
@@ -86,7 +86,7 @@ internal static class TenancyNames
     private static (string Name, object? Value)[] Arguments(string what, int min, int max)
         => [("What", what), ("Min", min), ("Max", max), (RefusalException.FieldArgument, FieldOf(what))];
 
-    /// <summary>The input a name's refusal is about, as the use cases call it.</summary>
+    /// <summary>The input a name's refusal is about, as the managers call it.</summary>
     private static string FieldOf(string what)
         => what switch
         {

@@ -19,7 +19,7 @@ namespace DDDToolkit.Supporting.Tenancy;
 /// </para>
 /// <para>
 /// Every method that changes the tenant takes who makes the change, <c>by</c>, and puts it on the event it
-/// raises. The use cases pass the actor of their caller. A tenant is declared without the seat class and does
+/// raises. The managers pass the actor of their caller. A tenant is declared without the seat class and does
 /// not know the seat id's type, so the methods take it: it follows from a caller's actor
 /// (<c>tenant.Suspend(reason, caller.Actor)</c>), and code that names nobody, an import or a test, names the
 /// type instead (<c>tenant.Activate&lt;SeatId&gt;()</c>).
@@ -155,7 +155,7 @@ public abstract partial class TenantAggregate<TTenantId>
         RaiseDomainEvent(new TenantShapeChanged<TTenantId, TSeatId>(Id, from, to, by));
     }
 
-    /// <summary>Refuses what <see cref="ChangeShape{TSeatId}"/> refuses, and changes nothing: a use case checks this before it prepares the change.</summary>
+    /// <summary>Refuses what <see cref="ChangeShape{TSeatId}"/> refuses, and changes nothing: a manager checks this before it prepares the change.</summary>
     internal void RequireShapeChange(TenantShape to)
     {
         if (Status == TenantStatus.Closed)

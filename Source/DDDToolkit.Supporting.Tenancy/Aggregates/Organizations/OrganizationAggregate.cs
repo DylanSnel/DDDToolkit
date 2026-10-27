@@ -23,7 +23,7 @@ namespace DDDToolkit.Supporting.Tenancy;
 /// </para>
 /// <para>
 /// Every method that changes the organization takes who makes the change, <c>by</c>, and puts it on the event
-/// it raises. The use cases pass the actor of their caller. An organization is declared without the seat class
+/// it raises. The managers pass the actor of their caller. An organization is declared without the seat class
 /// and does not know the seat id's type, so the methods take it: it follows from a caller's actor
 /// (<c>organization.ArchiveUnit(unit, caller.Actor)</c>), and code that names nobody, an import or a test,
 /// names the type instead (<c>organization.ArchiveUnit&lt;SeatId&gt;(unit)</c>).
@@ -189,7 +189,7 @@ public abstract partial class OrganizationAggregate<TTenantId, TUnit, TUnitId>
 
     /// <summary>
     /// Moves a unit, and everything below it, under another active unit. What a permission held above the unit
-    /// reaches changes with it, which is why the use case also guards the move against concurrent grants.
+    /// reaches changes with it, which is why the manager also guards the move against concurrent grants.
     /// </summary>
     /// <typeparam name="TSeatId">The application's seat id, which the actor is closed over: an organization does not know it by itself.</typeparam>
     /// <param name="id">The unit that moves.</param>
@@ -212,7 +212,7 @@ public abstract partial class OrganizationAggregate<TTenantId, TUnit, TUnitId>
     }
 
     /// <summary>
-    /// Refuses what <see cref="MoveUnit{TSeatId}"/> refuses, in the same order, and changes nothing: a use case
+    /// Refuses what <see cref="MoveUnit{TSeatId}"/> refuses, in the same order, and changes nothing: a manager
     /// checks the move before it asks what the move would change.
     /// </summary>
     /// <returns>The unit that would move.</returns>
@@ -255,7 +255,7 @@ public abstract partial class OrganizationAggregate<TTenantId, TUnit, TUnitId>
 
     /// <summary>
     /// Archives a unit that has no active unit below it. Seats placed there and rights granted there keep
-    /// working. Nothing new goes to it: no unit is added below it or moved under it here, and the use cases
+    /// working. Nothing new goes to it: no unit is added below it or moved under it here, and the managers
     /// place no seat and grant no role there.
     /// </summary>
     /// <typeparam name="TSeatId">The application's seat id, which the actor is closed over: an organization does not know it by itself.</typeparam>

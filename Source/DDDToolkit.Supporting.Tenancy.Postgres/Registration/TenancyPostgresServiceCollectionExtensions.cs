@@ -13,8 +13,8 @@ public static class TenancyPostgresServiceCollectionExtensions
     /// Sets <see cref="TenancyRowLevelSecurity.TenantSetting"/> to the current Tenancy caller's tenant whenever a
     /// context under row level security connects, next to the caller's role and claims and in the same
     /// statement; turns the last administrator the trigger keeps at commit, which no index states, into the
-    /// refusal the use case gives for the same rule (a slug another tenant has, which the policies hide from the
-    /// use case's own check, is refused by its unique index on any database, with no help from here);
+    /// refusal the manager gives for the same rule (a slug another tenant has, which the policies hide from the
+    /// manager's own check, is refused by its unique index on any database, with no help from here);
     /// requires explicit callers (<see cref="CallerServiceCollectionExtensions.RequireExplicitCallers"/>),
     /// so work nobody said anything about fails rather than running as the login role, past every policy; and
     /// leaves the rights to the database (<see cref="TenancyStoreOptions.DatabaseKeepsRights"/>), whose trigger

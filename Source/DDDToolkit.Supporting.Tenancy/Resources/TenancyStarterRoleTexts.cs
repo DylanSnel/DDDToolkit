@@ -9,7 +9,7 @@ namespace DDDToolkit.Supporting.Tenancy;
 /// languages the package ships: <c>TenancyStarterRoleTexts.resx</c> in English, which are the starter role's own texts, and
 /// <c>TenancyStarterRoleTexts.nl.resx</c> in Dutch.
 /// <para>
-/// The use cases read them when they make a role from that starter role in a language the application's
+/// The managers read them when they make a role from that starter role in a language the application's
 /// <see cref="IStarterRoleTexts"/> has no texts for, or when it registered none: the application did not declare
 /// the starter role, so it is the package that names it. They are read here rather than through the application's
 /// localizer, which holds refusals, so the role is named in Dutch whether or not the application localizes

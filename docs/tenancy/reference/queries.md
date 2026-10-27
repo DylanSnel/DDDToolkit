@@ -1,68 +1,68 @@
 ---
-title: "Tenancy API: ITenancy, its queries and row access"
-sidebar_label: ITenancy, its queries and row access
+title: "Tenancy API: Queries and row access"
+sidebar_label: Queries and row access
 ---
 
 <!-- Generated from the packages' code and XML documentation by build/ApiReference; do not edit by hand. Regenerate with build/generate-api-reference.sh. -->
 
-# Tenancy API: ITenancy, its queries and row access
+# Tenancy API: Queries and row access
 
-`ITenancy`, through which a module asks about the caller, and the queries it gives in a context; the read model they read, the projection that keeps it, and the row access rules a database enforces.
+Tenancy's queries for the current caller, which a module composes into its own queries. Over an Entity Framework context, `db.Tenancy()` returns them. The generator writes `db.Tenancy()` for the application's ids, so your code calls it with no type arguments. Over a read source that is not Entity Framework, `access.In(source, executor)` on the access manager returns them. The queries a module asks most are `UnitsWhereIHold`, the units where the caller holds a permission, and `RolesWithPermission`, the roles that grant a permission. Below them: the read model the queries read, the projection that keeps it up to date, and the row access rules a database enforces.
 
 ## Queries
 
-Namespace `DDDToolkit.Supporting.Tenancy.Access`.
-
-### `ITenancy<TTenantId, TSeatId, TUnitId, TRoleId>`
+### `TenancyEntityFrameworkExtensions`
 
 ```csharp
-public interface ITenancy<TTenantId, TSeatId, TUnitId, TRoleId>
+public static class TenancyEntityFrameworkExtensions
+```
+
+Namespace `DDDToolkit.Supporting.Tenancy.EntityFramework`.
+
+Asks Tenancy inside a module's own queries.
+
+| Member | Summary |
+|---|---|
+| [`Tenancy(DbContext)`](#tenancydbcontext) | Tenancy's queries for the current caller over `context`, at this moment: Tenancy's own context, or a module's that maps the read model with `AddTenancyReadModel` or, where the database keeps the rights, with `AddTenancyReadFunctions`. |
+
+#### `Tenancy(DbContext)`
+
+```csharp
+public static ITenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId> Tenancy<TTenantId, TSeatId, TUnitId, TRoleId>(this DbContext context)
     where TTenantId : struct, IEntityId, IEquatable<TTenantId>
     where TSeatId : struct, IEntityId, IEquatable<TSeatId>
     where TUnitId : struct, IEntityId, IEquatable<TUnitId>
     where TRoleId : struct, IEntityId, IEquatable<TRoleId>
 ```
 
-The door a module goes through to ask Tenancy about the current caller: who it is, which tenant it acts in, and, over a read source the module supplies, what it may do.
+Tenancy's queries for the current caller over `context`, at this moment: Tenancy's own context, or a module's that maps the read model with `AddTenancyReadModel` or, where the database keeps the rights, with `AddTenancyReadFunctions`. What they return are queries of that context, so composed into the module's own query they become subqueries of one statement:
 
 ```csharp
-var queries = tenancy.In(source, executor);
-var mine = projects.Where(project => queries.UnitsWhereIHold("projects.edit").Contains(project.UnitId));
+var held = db.Tenancy().UnitsWhereIHold(ProjectPermissions.Edit);
+var mine = db.Projects.Where(project => held.Contains(project.UnitId));
 ```
 
-| Member | Summary |
-|---|---|
-| `TenancyCaller<TTenantId, TSeatId> Caller { get; }` | The current Tenancy caller. |
-| [`RequireTenant()`](#requiretenant) | The tenant the current caller acts in, for work that only makes sense inside one. |
-| [`In(ITenancyReadSource<TTenantId, TSeatId, TUnitId, TRoleId>, IQueryExecutor)`](#initenancyreadsourcettenantid-tseatid-tunitid-troleid-iqueryexecutor) | The access queries for the current caller, over `source`, at this moment. |
+Your code calls `db.Tenancy()` without type arguments. The generator writes it closed over your ids, into the project that declares Tenancy's classes, or the project of the module that holds the context, and into the project of another module that holds its context, below the one that says `[assembly: TenancyIds<TenantId, SeatId, OrganizationUnitId, RoleId>]`. This method can be called as well, with the four ids.
 
-#### `RequireTenant()`
-
-```csharp
-TenantInScope<TTenantId, TSeatId> RequireTenant()
-```
-
-The tenant the current caller acts in, for work that only makes sense inside one.
-
-**Exceptions**
-
-- `RefusalException`: The caller is nobody; the refusal is the one it was given.
-- `InvalidOperationException`: The caller is system work outside any tenant.
-
-#### `In(ITenancyReadSource<TTenantId, TSeatId, TUnitId, TRoleId>, IQueryExecutor)`
-
-```csharp
-ITenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId> In(
-    ITenancyReadSource<TTenantId, TSeatId, TUnitId, TRoleId> source,
-    IQueryExecutor executor)
-```
-
-The access queries for the current caller, over `source`, at this moment.
+The caller and the moment are fixed once, so every answer of one set of queries agrees with the others. The catalogue and the clock come from the application's services, through the context's options: the services `UseDDDToolkit(serviceProvider)` wired Tenancy's part with, or else those `AddDbContext`, a context pool or a factory made the context with. The queries keep nothing of the context but the reference: ask over the context that runs the query they are composed into.
 
 **Parameters**
 
-- `source`: The rows to ask over, usually in the module's own context.
-- `executor`: Runs the queries that answer yes or no.
+- `context`: The context to ask over.
+
+**Type parameters**
+
+- `TTenantId`: The application's tenant id.
+- `TSeatId`: The application's seat id.
+- `TUnitId`: The application's unit id.
+- `TRoleId`: The application's role id.
+
+**Returns**: The queries for the caller of the current flow of work at this moment, as queries of `context`.
+
+**Exceptions**
+
+- `ArgumentNullException`: `context` is null.
+- `InvalidOperationException`: `context` is neither wired with `UseDDDToolkit` nor made by the application's services, or Tenancy is not registered in them. Or the database keeps the rights ([`TenancyStoreOptions.DatabaseKeepsRights`](entity-framework.md#tenancystoreoptions)), and `context` is a module's that maps the read model as views over Tenancy's tables: there a module reads no table of Tenancy's, and asks its functions, mapped with `AddTenancyReadFunctions`.
 
 ### `ITenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId>`
 
@@ -74,24 +74,33 @@ public interface ITenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId>
     where TRoleId : struct, IEntityId, IEquatable<TRoleId>
 ```
 
-What the current caller may do, asked over one read source. Made by [`ITenancy.In`](#initenancyreadsourcettenantid-tseatid-tunitid-troleid-iqueryexecutor), which fixes the caller and the moment "now" once, so every answer of one set of queries agrees with the others.
+Namespace `DDDToolkit.Supporting.Tenancy.Access`.
+
+What the current caller may do, asked over one read source. Made by `db.Tenancy()` over a context, or by [`TenancyAccessManager.In`](callers.md#initenancyreadsourcettenantid-tseatid-tunitid-troleid-iqueryexecutor) over another read source. Either fixes the caller and the moment "now" once, so every answer of one set of queries agrees with the others.
 
 The queries are not run here: a module composes them into its own query, where they become subqueries, or runs them itself. A permission granted at the root holds for the whole tenant; one granted lower down covers its unit and every unit below it. A grant counts from its start until its end, and a permission the catalogue has retired holds nowhere.
 
 A seat is answered from its own rights. System work in a tenant holds every permission in that tenant and nothing in another. Nobody holds nothing. System work outside any tenant has nothing to ask about here, and asking is a programming error.
 
+**Type parameters**
+
+- `TTenantId`: The application's tenant id.
+- `TSeatId`: The application's seat id.
+- `TUnitId`: The application's unit id.
+- `TRoleId`: The application's role id.
+
 | Member | Summary |
 |---|---|
 | [`UnitsWhereIHold(string)`](#unitswhereiholdstring) | Every unit where the caller holds `permission` now: the units it is held at, and every unit below them. |
-| [`WhereIHold(IReadOnlyCollection<string>)`](#whereiholdireadonlycollectionstring) | Every pair of a unit and a permission of `permissions` the caller holds there now: for each permission, the units it is held at and every unit below them. |
+| [`UnitsWhereIHold(IReadOnlyCollection<string>)`](#unitswhereiholdireadonlycollectionstring) | Every pair of a unit and a permission of `permissions` the caller holds there now: for each permission, the units it is held at and every unit below them. |
 | [`ReadableUnits()`](#readableunits) | The units the caller belongs to: each unit it is placed in, and every unit below it. |
 | [`UnitsUnder(TUnitId)`](#unitsundertunitid) | `unit` and every unit below it, in the caller's tenant: the part of the tree that hangs under one unit, read from the closure. |
 | [`RolesWithPermission(string)`](#roleswithpermissionstring) | The tenant's active roles that grant `permission`. |
-| [`RolePermissions(IReadOnlyCollection<string>)`](#rolepermissionsireadonlycollectionstring) | Every pair of one of the tenant's active roles and a permission of `permissions` it grants: [`RolesWithPermission`](#roleswithpermissionstring) for several permissions in one query. |
+| [`RolesWithPermission(IReadOnlyCollection<string>)`](#roleswithpermissionireadonlycollectionstring) | Every pair of one of the tenant's active roles and a permission of `permissions` it grants: [`RolesWithPermission`](#roleswithpermissionstring) for several permissions in one query. |
 | [`PermissionsIHoldAt(TUnitId)`](#permissionsiholdattunitid) | Every live permission the caller holds now that reaches `unit`, each once. |
 | [`SeatsHoldingPermissionAt(string, TUnitId)`](#seatsholdingpermissionatstring-tunitid) | Who holds `permission` at `unit` now: the active seats with a right for it that applies now, held at the unit or at a unit above it. |
 | [`Units()`](#units) | The tenant's units, archived ones included, as access facts, without a name: where each hangs and whether it is in use. |
-| [`Roles()`](#roles) | The tenant's roles, archived ones included, as access facts, without a name: the pack each was copied from, its status and the permissions it grants. |
+| [`Roles()`](#roles) | The tenant's roles, archived ones included, as access facts, without a name: the starter role each was copied from, its status and the permissions it grants. |
 | [`Seats()`](#seats) | The tenant's seats the caller reads, in any status, as access facts, without a name: whether each counts. |
 | [`HoldsAtTenantAsync(string, CancellationToken)`](#holdsattenantasyncstring-cancellationtoken) | Whether the caller holds `permission` now for the whole tenant: at its root. |
 | [`HoldsAtAsync(string, TUnitId, CancellationToken)`](#holdsatasyncstring-tunitid-cancellationtoken) | Whether the caller holds `permission` now at `unit`, held there or above it. |
@@ -108,37 +117,52 @@ Every unit where the caller holds `permission` now: the units it is held at, and
 
 - `permission`: A permission of the catalogue.
 
+**Returns**: A query of the units' ids, which the module composes into its own query.
+
 **Exceptions**
 
 - `ArgumentException`: The catalogue does not know `permission`: a typo in code.
 - `InvalidOperationException`: The caller is system work outside any tenant.
 
-#### `WhereIHold(IReadOnlyCollection<string>)`
+**Example**
+
+The projects the caller may edit, in one statement:
 
 ```csharp
-IQueryable<UnitPermission<TUnitId>> WhereIHold(IReadOnlyCollection<string> permissions)
+var editable = db.Tenancy().UnitsWhereIHold("projects.edit");
+var projects = await db.Projects.Where(project => editable.Contains(project.UnitId)).ToListAsync(cancellationToken);
 ```
 
-Every pair of a unit and a permission of `permissions` the caller holds there now: for each permission, the units it is held at and every unit below them. It is [`UnitsWhereIHold`](#unitswhereiholdstring) for several permissions in one query, so a list that shows what the caller may do with each row asks once, not once per permission:
+#### `UnitsWhereIHold(IReadOnlyCollection<string>)`
 
 ```csharp
-var held = queries.WhereIHold(["projects.edit", "projects.close"]);
-var abilities = from project in projects
-                join pair in held on project.UnitId equals pair.Unit
-                select new { project.Id, pair.Key };
+IQueryable<UnitPermission<TUnitId>> UnitsWhereIHold(IReadOnlyCollection<string> permissions)
 ```
 
-The answer is for showing what a caller can do, a button or a menu. Whether a command may run is still asked when it runs, by the use case that runs it: a permission set read a moment ago decides nothing.
+Every pair of a unit and a permission of `permissions` the caller holds there now: for each permission, the units it is held at and every unit below them. It is [`UnitsWhereIHold`](#unitswhereiholdstring) for several permissions in one query, so a list that shows what the caller may do with each row asks once, not once per permission.
+
+The answer is for showing what a caller can do, a button or a menu. The manager that runs a command checks the permission again when the command runs.
 
 **Parameters**
 
 - `permissions`: Permissions of the catalogue. A retired permission is held nowhere, and none at all answers nothing.
+
+**Returns**: A query of pairs of a unit and a permission held there, which the module composes into its own query.
 
 **Exceptions**
 
 - `ArgumentNullException`: `permissions` is null.
 - `ArgumentException`: The catalogue does not know one of `permissions`: a typo in code.
 - `InvalidOperationException`: The caller is system work outside any tenant.
+
+**Example**
+
+```csharp
+var held = db.Tenancy().UnitsWhereIHold(["projects.edit", "projects.close"]);
+var abilities = from project in db.Projects
+                join pair in held on project.UnitId equals pair.Unit
+                select new { project.Id, pair.Permission };
+```
 
 #### `ReadableUnits()`
 
@@ -148,9 +172,18 @@ IQueryable<TUnitId> ReadableUnits()
 
 The units the caller belongs to: each unit it is placed in, and every unit below it.
 
+**Returns**: A query of the units' ids.
+
 **Exceptions**
 
 - `InvalidOperationException`: The caller is system work outside any tenant.
+
+**Example**
+
+```csharp
+var mine = db.Tenancy().ReadableUnits();
+var nearby = db.Inspections.Where(inspection => mine.Contains(inspection.UnitId));
+```
 
 #### `UnitsUnder(TUnitId)`
 
@@ -164,9 +197,20 @@ IQueryable<TUnitId> UnitsUnder(TUnitId unit)
 
 - `unit`: The unit.
 
+**Returns**: A query of the units' ids, `unit` included.
+
 **Exceptions**
 
 - `InvalidOperationException`: The caller is system work outside any tenant.
+
+**Example**
+
+The projects at North and every unit below it, such as North Coast:
+
+```csharp
+var north = db.Tenancy().UnitsUnder(command.Unit);
+var projects = db.Projects.Where(project => north.Contains(project.UnitId));
+```
 
 #### `RolesWithPermission(string)`
 
@@ -180,15 +224,25 @@ The tenant's active roles that grant `permission`.
 
 - `permission`: A permission of the catalogue.
 
+**Returns**: A query of the roles' ids.
+
 **Exceptions**
 
 - `ArgumentException`: The catalogue does not know `permission`.
 - `InvalidOperationException`: The caller is system work outside any tenant.
 
-#### `RolePermissions(IReadOnlyCollection<string>)`
+**Example**
+
+The roles a crew lead could be given, for a picker:
 
 ```csharp
-IQueryable<RoleWithPermission<TRoleId>> RolePermissions(IReadOnlyCollection<string> permissions)
+var leading = await db.Tenancy().RolesWithPermission("projects.crew.manage").ToListAsync(cancellationToken);
+```
+
+#### `RolesWithPermission(IReadOnlyCollection<string>)`
+
+```csharp
+IQueryable<RoleWithPermission<TRoleId>> RolesWithPermission(IReadOnlyCollection<string> permissions)
 ```
 
 Every pair of one of the tenant's active roles and a permission of `permissions` it grants: [`RolesWithPermission`](#roleswithpermissionstring) for several permissions in one query.
@@ -197,11 +251,19 @@ Every pair of one of the tenant's active roles and a permission of `permissions`
 
 - `permissions`: Permissions of the catalogue. A retired permission is granted by no role here, and none at all answers nothing.
 
+**Returns**: A query of pairs of a role and a permission it grants.
+
 **Exceptions**
 
 - `ArgumentNullException`: `permissions` is null.
 - `ArgumentException`: The catalogue does not know one of `permissions`.
 - `InvalidOperationException`: The caller is system work outside any tenant.
+
+**Example**
+
+```csharp
+var pairs = await db.Tenancy().RolesWithPermission(["projects.edit", "projects.close"]).ToListAsync(cancellationToken);
+```
 
 #### `PermissionsIHoldAt(TUnitId)`
 
@@ -211,9 +273,21 @@ IQueryable<string> PermissionsIHoldAt(TUnitId unit)
 
 Every live permission the caller holds now that reaches `unit`, each once. A retired permission is never among them.
 
+**Parameters**
+
+- `unit`: The unit.
+
+**Returns**: A query of the permissions.
+
 **Exceptions**
 
 - `InvalidOperationException`: The caller is system work outside any tenant.
+
+**Example**
+
+```csharp
+var atNorthCoast = await db.Tenancy().PermissionsIHoldAt(project.UnitId).ToListAsync(cancellationToken);
+```
 
 #### `SeatsHoldingPermissionAt(string, TUnitId)`
 
@@ -221,17 +295,29 @@ Every live permission the caller holds now that reaches `unit`, each once. A ret
 IQueryable<TSeatId> SeatsHoldingPermissionAt(string permission, TUnitId unit)
 ```
 
-Who holds `permission` at `unit` now: the active seats with a right for it that applies now, held at the unit or at a unit above it. A seat learns about another seat's right only where it may read the grant that gives it: at a unit where it manages grants, seats or units, held there or above it, or anywhere when it manages roles for the whole tenant. So a seat that manages one part of the tree learns who holds the permission from within that part, and not who holds it from above; a seat that manages none learns only whether it holds the permission there itself. System work in a tenant learns about every seat of that tenant, and nobody about none.
+Who holds `permission` at `unit` now: the active seats with a right for it that applies now, held at the unit or at a unit above it.
+
+A seat sees another seat's right only where it may read the grant that gives it. That is at a unit where it manages grants, seats or units, held there or above it, or anywhere when it manages roles for the whole tenant. A seat that manages one part of the tree sees who holds the permission from within that part, and not who holds it from above. A seat that manages nothing sees only whether it holds the permission there itself. System work in a tenant sees every seat of that tenant. Nobody sees none.
 
 **Parameters**
 
 - `permission`: A permission of the catalogue.
 - `unit`: The unit.
 
+**Returns**: A query of the seats' ids.
+
 **Exceptions**
 
 - `ArgumentException`: The catalogue does not know `permission`: a typo in code.
 - `InvalidOperationException`: The caller is system work outside any tenant.
+
+**Example**
+
+Who may close projects at North Coast, for the list of people a closure can be handed to:
+
+```csharp
+var closers = await db.Tenancy().SeatsHoldingPermissionAt("projects.close", northCoast).ToListAsync(cancellationToken);
+```
 
 #### `Units()`
 
@@ -239,11 +325,19 @@ Who holds `permission` at `unit` now: the active seats with a right for it that 
 IQueryable<OrganizationUnitRow<TTenantId, TUnitId>> Units()
 ```
 
-The tenant's units, archived ones included, as access facts, without a name: where each hangs and whether it is in use. What a unit is called is the directory's to answer, by id.
+The tenant's units, archived ones included, as access facts, without a name: where each hangs and whether it is in use. What a unit is called comes from `OrganizationManager.UnitsByIdAsync`, by id.
+
+**Returns**: A query of the units' rows.
 
 **Exceptions**
 
 - `InvalidOperationException`: The caller is system work outside any tenant.
+
+**Example**
+
+```csharp
+var active = db.Tenancy().Units().Where(unit => unit.Status == UnitStatus.Active).Select(unit => unit.Id);
+```
 
 #### `Roles()`
 
@@ -251,11 +345,19 @@ The tenant's units, archived ones included, as access facts, without a name: whe
 IQueryable<RoleRow<TTenantId, TRoleId>> Roles()
 ```
 
-The tenant's roles, archived ones included, as access facts, without a name: the pack each was copied from, its status and the permissions it grants. What a role is called is the directory's to answer, by id.
+The tenant's roles, archived ones included, as access facts, without a name: the starter role each was copied from, its status and the permissions it grants. What a role is called comes from `RoleManager.ByIdAsync`, by id.
+
+**Returns**: A query of the roles' rows.
 
 **Exceptions**
 
 - `InvalidOperationException`: The caller is system work outside any tenant.
+
+**Example**
+
+```csharp
+var fromStarterRoles = db.Tenancy().Roles().Where(role => role.FromStarterRole != null);
+```
 
 #### `Seats()`
 
@@ -263,13 +365,21 @@ The tenant's roles, archived ones included, as access facts, without a name: the
 IQueryable<SeatRow<TTenantId, TSeatId>> Seats()
 ```
 
-The tenant's seats the caller reads, in any status, as access facts, without a name: whether each counts. What a seat is shown by is the application's, selected from its own seat, which the directory answers whole, by id.
+The tenant's seats the caller reads, in any status, as access facts, without a name: whether each counts. What a seat is shown by is the application's, selected from its own seat class, which `SeatManager.ByIdAsync` returns whole, by id.
 
-A read of the seats, unlike the queries about rights: by default every seat of the tenant, and on Postgres the seats a read rule of the application's on its seat class lets the caller read, where it writes one (`tenant_seats()` runs as its caller). A module that admits a seat by asking here, as Membership's admission does, then admits only seats the caller reads.
+This reads the seats, where the other queries read rights. By default it returns every seat of the tenant. On Postgres it returns the seats that a read rule of the application's on its seat class lets the caller read, where the application writes one (`tenant_seats()` runs as its caller). A module that admits a seat by asking here, as Membership's admission does, then admits only seats the caller reads.
+
+**Returns**: A query of the seats' rows.
 
 **Exceptions**
 
 - `InvalidOperationException`: The caller is system work outside any tenant.
+
+**Example**
+
+```csharp
+var seated = await db.Tenancy().Seats().AnyAsync(seat => seat.Id == command.Seat, cancellationToken);
+```
 
 #### `HoldsAtTenantAsync(string, CancellationToken)`
 
@@ -284,10 +394,18 @@ Whether the caller holds `permission` now for the whole tenant: at its root.
 - `permission`: A permission of the catalogue.
 - `cancellationToken`: Cancels the query.
 
+**Returns**: `true` when the caller holds the permission at the root. System work in the tenant holds every live permission. A retired permission, and a caller who is nobody, give `false`.
+
 **Exceptions**
 
 - `ArgumentException`: The catalogue does not know `permission`.
 - `InvalidOperationException`: The caller is system work outside any tenant.
+
+**Example**
+
+```csharp
+var showSettings = await db.Tenancy().HoldsAtTenantAsync(TenancyPermissions.SettingsManage, cancellationToken);
+```
 
 #### `HoldsAtAsync(string, TUnitId, CancellationToken)`
 
@@ -303,70 +421,78 @@ Whether the caller holds `permission` now at `unit`, held there or above it.
 - `unit`: The unit.
 - `cancellationToken`: Cancels the query.
 
+**Returns**: `true` when the caller holds the permission at the unit or above it. System work in the tenant holds every live permission at every unit of its tenant. A retired permission, a unit of another tenant, and a caller who is nobody give `false`.
+
 **Exceptions**
 
 - `ArgumentException`: The catalogue does not know `permission`.
 - `InvalidOperationException`: The caller is system work outside any tenant.
 
-### `CurrentTenancy<TTenantId, TSeatId, TUnitId, TRoleId>`
+**Example**
 
 ```csharp
-public sealed class CurrentTenancy<TTenantId, TSeatId, TUnitId, TRoleId> : ITenancy<TTenantId, TSeatId, TUnitId, TRoleId>
-    where TTenantId : struct, IEntityId, IEquatable<TTenantId>
-    where TSeatId : struct, IEntityId, IEquatable<TSeatId>
-    where TUnitId : struct, IEntityId, IEquatable<TUnitId>
-    where TRoleId : struct, IEntityId, IEquatable<TRoleId>
+var mayEdit = await db.Tenancy().HoldsAtAsync("projects.edit", project.UnitId, cancellationToken);
 ```
 
-Answers what the current caller may do, over any read source. Registered once for the application; it keeps no state of its own, and reads the caller and the time each time it is asked.
+### `UnitPermission<TUnitId>`
+
+```csharp
+public readonly record struct UnitPermission<TUnitId>
+    where TUnitId : struct, IEntityId, IEquatable<TUnitId>
+```
+
+Namespace `DDDToolkit.Supporting.Tenancy.Access`.
+
+A unit and a permission the caller holds there now: one answer of [`ITenancyQueries.UnitsWhereIHold`](#unitswhereiholdireadonlycollectionstring), which answers such a pair for every unit a permission reaches, the units it is held at and every unit below them.
 
 | Member | Summary |
 |---|---|
-| [`CurrentTenancy(TenancyCatalogue, TimeProvider)`](#currenttenancytenancycatalogue-timeprovider) | The primary constructor: the type's summary says what it makes. |
-| `TenancyCaller<TTenantId, TSeatId> Caller { get; }` | The current Tenancy caller. |
-| [`RequireTenant()`](#requiretenant-1) | The tenant the current caller acts in, for work that only makes sense inside one. |
-| [`In(ITenancyReadSource<TTenantId, TSeatId, TUnitId, TRoleId>, IQueryExecutor)`](#initenancyreadsourcettenantid-tseatid-tunitid-troleid-iqueryexecutor-1) | The access queries for the current caller, over `source`, at this moment. |
+| [`UnitPermission(TUnitId, string)`](#unitpermissiontunitid-string) | The primary constructor: the type's summary says what it makes. |
+| `TUnitId Unit { get; init; }` | The unit. |
+| `string Permission { get; init; }` | The permission held there. |
 
-#### `CurrentTenancy(TenancyCatalogue, TimeProvider)`
+#### `UnitPermission(TUnitId, string)`
 
 ```csharp
-public CurrentTenancy(TenancyCatalogue catalogue, TimeProvider clock)
+public UnitPermission(TUnitId Unit, string Permission)
 ```
 
 The primary constructor: the type's summary says what it makes.
 
 **Parameters**
 
-- `catalogue`: The catalogue every permission asked about is checked against.
-- `clock`: What "now" is, for whether a grant applies.
+- `Unit`: The unit.
+- `Permission`: The permission held there.
 
-#### `RequireTenant()`
-
-```csharp
-public TenantInScope<TTenantId, TSeatId> RequireTenant()
-```
-
-The tenant the current caller acts in, for work that only makes sense inside one.
-
-**Exceptions**
-
-- `RefusalException`: The caller is nobody; the refusal is the one it was given.
-- `InvalidOperationException`: The caller is system work outside any tenant.
-
-#### `In(ITenancyReadSource<TTenantId, TSeatId, TUnitId, TRoleId>, IQueryExecutor)`
+### `RoleWithPermission<TRoleId>`
 
 ```csharp
-public ITenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId> In(
-    ITenancyReadSource<TTenantId, TSeatId, TUnitId, TRoleId> source,
-    IQueryExecutor executor)
+public readonly record struct RoleWithPermission<TRoleId>
+    where TRoleId : struct, IEntityId, IEquatable<TRoleId>
 ```
 
-The access queries for the current caller, over `source`, at this moment.
+Namespace `DDDToolkit.Supporting.Tenancy.Access`.
+
+One of the tenant's active roles and a permission it grants: one answer of [`ITenancyQueries.RolesWithPermission`](#roleswithpermissionireadonlycollectionstring).
+
+| Member | Summary |
+|---|---|
+| [`RoleWithPermission(TRoleId, string)`](#rolewithpermissiontroleid-string) | The primary constructor: the type's summary says what it makes. |
+| `TRoleId Role { get; init; }` | The role. |
+| `string Permission { get; init; }` | The permission it grants. |
+
+#### `RoleWithPermission(TRoleId, string)`
+
+```csharp
+public RoleWithPermission(TRoleId Role, string Permission)
+```
+
+The primary constructor: the type's summary says what it makes.
 
 **Parameters**
 
-- `source`: The rows to ask over, usually in the module's own context.
-- `executor`: Runs the queries that answer yes or no.
+- `Role`: The role.
+- `Permission`: The permission it grants.
 
 ### `MoveReach<TUnitId>`
 
@@ -374,6 +500,8 @@ The access queries for the current caller, over `source`, at this moment.
 public sealed record MoveReach<TUnitId>
     where TUnitId : struct, IEntityId, IEquatable<TUnitId>
 ```
+
+Namespace `DDDToolkit.Supporting.Tenancy.Access`.
 
 A right a move of a unit would change: where it is held, the permission, until when, which of the two parents it reaches, the one the unit hangs under or the one it would, and whether it is the moving seat's own. What a move's check reads of the rights of every seat, and no more of them: no seat, and no role.
 
@@ -414,7 +542,9 @@ public sealed record NamedUnit<TUnitId>
     where TUnitId : struct, IEntityId, IEquatable<TUnitId>
 ```
 
-What a unit is called, and nothing more: its name, its path from the root and how deep it is. What `TenancyDirectory.UnitsByIdAsync` answers about the units a caller works on, whether or not it reads the rest of the organization: a seat on a project at a unit it is not placed under, or one an application's restrictive rule keeps out of the organization, still reads what that unit is called.
+Namespace `DDDToolkit.Supporting.Tenancy.Access`.
+
+What a unit is called, and nothing more: its name, its path from the root and how deep it is. What `OrganizationManager.UnitsByIdAsync` answers about the units a caller works on, whether or not it reads the rest of the organization: a seat on a project at a unit it is not placed under, or one an application's restrictive rule keeps out of the organization, still reads what that unit is called.
 
 | Member | Summary |
 |---|---|
@@ -439,134 +569,9 @@ The primary constructor: the type's summary says what it makes.
 - `Path`: The names of the unit and the units above it, the root first, joined with `" / "`.
 - `Depth`: How deep the unit is, the root being 1.
 
-### `RoleWithPermission<TRoleId>`
-
-```csharp
-public readonly record struct RoleWithPermission<TRoleId>
-    where TRoleId : struct, IEntityId, IEquatable<TRoleId>
-```
-
-One of the tenant's active roles and a permission it grants: one answer of [`ITenancyQueries.RolePermissions`](#rolepermissionsireadonlycollectionstring).
-
-| Member | Summary |
-|---|---|
-| [`RoleWithPermission(TRoleId, string)`](#rolewithpermissiontroleid-string) | The primary constructor: the type's summary says what it makes. |
-| `TRoleId Role { get; init; }` | The role. |
-| `string Permission { get; init; }` | The permission it grants. |
-
-#### `RoleWithPermission(TRoleId, string)`
-
-```csharp
-public RoleWithPermission(TRoleId Role, string Permission)
-```
-
-The primary constructor: the type's summary says what it makes.
-
-**Parameters**
-
-- `Role`: The role.
-- `Permission`: The permission it grants.
-
-### `TenantInScope<TTenantId, TSeatId>`
-
-```csharp
-public readonly record struct TenantInScope<TTenantId, TSeatId>
-    where TTenantId : struct, IEntityId, IEquatable<TTenantId>
-    where TSeatId : struct, IEntityId, IEquatable<TSeatId>
-```
-
-The tenant a caller acts in.
-
-| Member | Summary |
-|---|---|
-| [`TenantInScope(TTenantId, TSeatId?, bool)`](#tenantinscopettenantid-tseatid-bool) | The primary constructor: the type's summary says what it makes. |
-| `TTenantId Tenant { get; init; }` | The tenant. |
-| `TSeatId? Seat { get; init; }` | The caller's seat, or the seat system work acts for, if any. |
-| `bool BySystem { get; init; }` | Whether this is system work in the tenant rather than a seat. |
-
-#### `TenantInScope(TTenantId, TSeatId?, bool)`
-
-```csharp
-public TenantInScope(TTenantId Tenant, TSeatId? Seat, bool BySystem)
-```
-
-The primary constructor: the type's summary says what it makes.
-
-**Parameters**
-
-- `Tenant`: The tenant.
-- `Seat`: The caller's seat, or the seat system work acts for, if any.
-- `BySystem`: Whether this is system work in the tenant rather than a seat.
-
-### `UnitPermission<TUnitId>`
-
-```csharp
-public readonly record struct UnitPermission<TUnitId>
-    where TUnitId : struct, IEntityId, IEquatable<TUnitId>
-```
-
-A unit and a permission the caller holds there now: one answer of [`ITenancyQueries.WhereIHold`](#whereiholdireadonlycollectionstring), which answers such a pair for every unit a permission reaches, the units it is held at and every unit below them.
-
-| Member | Summary |
-|---|---|
-| [`UnitPermission(TUnitId, string)`](#unitpermissiontunitid-string) | The primary constructor: the type's summary says what it makes. |
-| `TUnitId Unit { get; init; }` | The unit. |
-| `string Permission { get; init; }` | The permission held there. |
-
-#### `UnitPermission(TUnitId, string)`
-
-```csharp
-public UnitPermission(TUnitId Unit, string Permission)
-```
-
-The primary constructor: the type's summary says what it makes.
-
-**Parameters**
-
-- `Unit`: The unit.
-- `Permission`: The permission held there.
-
 ## Read model
 
 Namespace `DDDToolkit.Supporting.Tenancy.Access`.
-
-### `IQueryExecutor`
-
-```csharp
-public interface IQueryExecutor
-```
-
-Runs a query asynchronously without the package knowing the storage. Entity Framework's asynchronous operators live in Entity Framework, which this package does not reference; the storage that supplies the read source supplies the way to run what is built over it.
-
-| Member | Summary |
-|---|---|
-| [`AnyAsync(IQueryable<T>, CancellationToken)`](#anyasynciqueryablet-cancellationtoken) | Whether the query has any row. |
-| [`ListAsync(IQueryable<T>, CancellationToken)`](#listasynciqueryablet-cancellationtoken) | Every row of the query. |
-| [`FirstOrDefaultAsync(IQueryable<T>, CancellationToken)`](#firstordefaultasynciqueryablet-cancellationtoken) | The first row of the query, or the default when it has none. |
-
-#### `AnyAsync(IQueryable<T>, CancellationToken)`
-
-```csharp
-Task<bool> AnyAsync<T>(IQueryable<T> query, CancellationToken cancellationToken)
-```
-
-Whether the query has any row.
-
-#### `ListAsync(IQueryable<T>, CancellationToken)`
-
-```csharp
-Task<IReadOnlyList<T>> ListAsync<T>(IQueryable<T> query, CancellationToken cancellationToken)
-```
-
-Every row of the query.
-
-#### `FirstOrDefaultAsync(IQueryable<T>, CancellationToken)`
-
-```csharp
-Task<T?> FirstOrDefaultAsync<T>(IQueryable<T> query, CancellationToken cancellationToken)
-```
-
-The first row of the query, or the default when it has none.
 
 ### `ITenancyReadSource<TTenantId, TSeatId, TUnitId, TRoleId>`
 
@@ -578,9 +583,21 @@ public interface ITenancyReadSource<TTenantId, TSeatId, TUnitId, TRoleId>
     where TRoleId : struct, IEntityId, IEquatable<TRoleId>
 ```
 
-Where the access questions read their rows. The storage supplies it over whichever context the question is composed into, so a module asks Tenancy inside its own query, and the question becomes a subquery of it rather than a second round trip.
+Where Tenancy's queries read their rows. The storage supplies it over whichever context a query is composed into, so a module asks Tenancy inside its own query, and Tenancy's query becomes a subquery of it rather than a second round trip. Over an Entity Framework context, `db.Tenancy()` uses the package's own source. A storage that is not Entity Framework implements this interface, and asks with the access manager's long form, [`TenancyAccessManager.In`](callers.md#initenancyreadsourcettenantid-tseatid-tunitid-troleid-iqueryexecutor):
 
-A source may already keep every set to the current tenant; the questions keep to the caller's tenant themselves as well.
+```csharp
+var queries = access.In(readSource, executor);
+var editable = await executor.ListAsync(queries.UnitsWhereIHold("projects.edit"), cancellationToken);
+```
+
+A source may already keep every set to the current tenant. The queries keep to the caller's tenant themselves as well.
+
+**Type parameters**
+
+- `TTenantId`: The application's tenant id.
+- `TSeatId`: The application's seat id.
+- `TUnitId`: The application's unit id.
+- `TRoleId`: The application's role id.
 
 | Member | Summary |
 |---|---|
@@ -604,6 +621,71 @@ The seats that hold `permission` at `unit` now, as the storage itself answers th
 
 - `permission`: A live permission of the catalogue.
 - `unit`: The unit.
+
+### `IQueryExecutor`
+
+```csharp
+public interface IQueryExecutor
+```
+
+Runs a query asynchronously without the package knowing the storage. Entity Framework's asynchronous operators live in Entity Framework, which this package does not reference; the storage that supplies the read source supplies the way to run what is built over it.
+
+| Member | Summary |
+|---|---|
+| [`AnyAsync(IQueryable<T>, CancellationToken)`](#anyasynciqueryablet-cancellationtoken) | Whether the query has any row. |
+| [`ListAsync(IQueryable<T>, CancellationToken)`](#listasynciqueryablet-cancellationtoken) | Every row of the query. |
+| [`FirstOrDefaultAsync(IQueryable<T>, CancellationToken)`](#firstordefaultasynciqueryablet-cancellationtoken) | The first row of the query, or the default when it has none. |
+
+#### `AnyAsync(IQueryable<T>, CancellationToken)`
+
+```csharp
+Task<bool> AnyAsync<T>(IQueryable<T> query, CancellationToken cancellationToken)
+```
+
+Whether the query has any row.
+
+**Parameters**
+
+- `query`: The query, of the read source's storage.
+- `cancellationToken`: Cancels the query.
+
+**Type parameters**
+
+- `T`: The type of the query's rows.
+
+#### `ListAsync(IQueryable<T>, CancellationToken)`
+
+```csharp
+Task<IReadOnlyList<T>> ListAsync<T>(IQueryable<T> query, CancellationToken cancellationToken)
+```
+
+Every row of the query.
+
+**Parameters**
+
+- `query`: The query, of the read source's storage.
+- `cancellationToken`: Cancels the query.
+
+**Type parameters**
+
+- `T`: The type of the query's rows.
+
+#### `FirstOrDefaultAsync(IQueryable<T>, CancellationToken)`
+
+```csharp
+Task<T?> FirstOrDefaultAsync<T>(IQueryable<T> query, CancellationToken cancellationToken)
+```
+
+The first row of the query, or the default when it has none.
+
+**Parameters**
+
+- `query`: The query, of the read source's storage.
+- `cancellationToken`: Cancels the query.
+
+**Type parameters**
+
+- `T`: The type of the query's rows.
 
 ### `OrganizationUnitPath<TTenantId, TUnitId>`
 
@@ -663,13 +745,13 @@ public sealed class RoleRow<TTenantId, TRoleId>
     where TRoleId : struct, IEntityId, IEquatable<TRoleId>
 ```
 
-A tenant's role, as a row to read: its pack, its status and the permissions it grants, never its name.
+A tenant's role, as a row to read: its starter role, its status and the permissions it grants, never its name.
 
 | Member | Summary |
 |---|---|
 | `TRoleId Id { get; set; }` | The role's id. |
 | `TTenantId TenantId { get; set; }` | The role's tenant. |
-| `string? FromPack { get; set; }` | The key of the pack it was copied from, or `null`. |
+| `string? FromStarterRole { get; set; }` | The key of the starter role it was copied from, or `null`. |
 | `RoleStatus Status { get; set; }` | Whether the role is in use. |
 | `IReadOnlyList<string> Permissions { get; set; }` | The permissions it grants. |
 
@@ -1084,7 +1166,7 @@ Answered by the SQL function `tenancy/roles_with_permission_in_tenant`, a set a 
 public static class TenancySaveCheck
 ```
 
-The rule every write of a tenant's row passes, whatever wrote it: a seat and system work in a tenant only write their own tenant's rows, and nobody writes any. The storage applies it to every changed row that belongs to a tenant, before anything is written, so a use case that loaded the wrong row cannot save it.
+The rule every write of a tenant's row passes, whatever wrote it: a seat and system work in a tenant only write their own tenant's rows, and nobody writes any. The storage applies it to every changed row that belongs to a tenant, before anything is written, so a handler that loaded the wrong row cannot save it.
 
 System work outside any tenant writes no tenant's rows either. It acts in no tenant, so every tenant's row is another tenant's to it. Provisioning, the one thing it starts, saves as system work inside the tenant it makes, once it knows that tenant's id, and so passes as that; nothing is left that system work outside any tenant has to save.
 

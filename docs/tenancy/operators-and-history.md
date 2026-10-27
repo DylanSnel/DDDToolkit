@@ -15,11 +15,11 @@ An operator is a member of your staff who looks across tenants, for example in s
 seat** and **changes nothing directly**. So an operator is not an administrator of every tenant.
 
 - **Who is an operator.** A signed-in user is an operator when the user's token carries a role listed in
-  [`TenancyOptions.OperatorTokenRoles`](reference/use-cases.md#operatortokenroles). The list is empty by default.
+  [`TenancyOptions.OperatorTokenRoles`](reference/managers.md#operatortokenroles). The list is empty by default.
   Registration refuses a token role that is also a seated token role. Tenant selection returns nobody for an
   operator, whatever tenant the request names.
 - **What an operator reads.**
-  [`TenantDirectory.ListAsync(after, size)`](reference/use-cases.md#listasyncstring-int-cancellationtoken) returns
+  [`TenantDirectory.ListAsync(after, size)`](reference/managers.md#listasyncstring-int-cancellationtoken) returns
   every tenant by slug, 1 to 200 per page, with its name, status and number of active seats. The read runs as the
   operator. Every other caller gets `tenancy.operators-only` before anything is read, as with
   [`[RequiresOperator]`](who-may-do-what.md#what-a-request-requires-of-its-caller) on a request of yours.

@@ -190,7 +190,7 @@ slug is free, and then saves as system work inside the new tenant.
 Two reads run before any tenant is known. Each one is a single query that returns ids or permissions only:
 
 - The start-up check reads the permissions stored on the roles of every tenant.
-- [`TenancySystemReads.TenantsToSweepAsync`](reference/entity-framework.md#tenantstosweepasyncdbcontext-string-cancellationtoken)
+- [`TenancySystemReads.TenantsToSweepAsync`](reference/callers.md#tenantstosweepasyncstring-cancellationtoken)
   reads the tenants that a round of system work visits, the active and the suspended ones.
 
 ```csharp

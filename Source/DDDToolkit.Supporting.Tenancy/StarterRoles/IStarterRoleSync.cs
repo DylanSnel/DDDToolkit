@@ -1,7 +1,7 @@
 namespace DDDToolkit.Supporting.Tenancy;
 
 /// <summary>
-/// Brings every tenant's roles up to the starter roles they were made from: the use case behind
+/// Brings every tenant's roles up to the starter roles they were made from: the service behind
 /// <c>services.SyncStarterRoles()</c>, for a host that runs it itself, from a deployment step or an operator's
 /// endpoint.
 /// <code>

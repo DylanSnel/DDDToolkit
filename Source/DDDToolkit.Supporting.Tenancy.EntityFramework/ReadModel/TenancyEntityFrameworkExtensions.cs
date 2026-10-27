@@ -40,6 +40,9 @@ public static class TenancyEntityFrameworkExtensions
     /// <typeparam name="TUnitId">The application's unit id.</typeparam>
     /// <typeparam name="TRoleId">The application's role id.</typeparam>
     /// <param name="context">The context to ask over.</param>
+    /// <returns>
+    /// The queries for the caller of the current flow of work at this moment, as queries of <paramref name="context"/>.
+    /// </returns>
     /// <exception cref="ArgumentNullException"><paramref name="context"/> is null.</exception>
     /// <exception cref="InvalidOperationException">
     /// <paramref name="context"/> is neither wired with <c>UseDDDToolkit</c> nor made by the application's services, or

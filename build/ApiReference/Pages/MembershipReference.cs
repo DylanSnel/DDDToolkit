@@ -89,17 +89,18 @@ internal static class MembershipReference
             new(
                 "use-cases.md",
                 "Use cases and access",
-                "What a use case asks before it changes the members, what a caller is shown of them, the starter roles of a "
-                + "resource whose customers make its roles, the access questions about one kind of resource, the requirements a "
-                + "request states, and the contracts that publish a resource's access to row access rules. The admission, the "
-                + "questions and the requirements are each asked for by the resource's id, so those of documents never answer "
-                + "for folders. Their registration is with Entity Framework, under [Registration](entity-framework.md#registration).",
+                "What a handler asks before it changes the members, what a caller is shown of them, the starter roles of a "
+                + "resource whose customers make its roles, the access manager of one kind of resource, the requirements a "
+                + "request states, and the contracts that publish a resource's access to row access rules. The access manager "
+                + "is asked for by the resource's class, `MembershipAccessManager<Board>`. The admission and the requirements "
+                + "are asked for by the resource's id. So those of documents never answer for folders. Their registration is "
+                + "with Entity Framework, under [Registration](entity-framework.md#registration).",
                 [
                     new("Admission", [new(Membership, Folder: "UseCases/Admission")], Lead: ["MemberAdmission"]),
                     new("Overview", [new(Membership, Folder: "UseCases/Overview")], Lead: ["MemberOverviews"]),
                     new("Starter roles", [new(Membership, Folder: "UseCases/Roles")]),
                     new(
-                        "Questions",
+                        "Access manager",
                         [new(Membership, Folder: "Access/Questions")],
                         Lead: ["MembershipAccessManager", "MembershipAccessManagerExtensions", "MemberHold", "MemberVia", "MemberReach", "IMembershipStorage"]),
                     new(
@@ -127,7 +128,8 @@ internal static class MembershipReference
                 "Entity Framework",
                 "The public API of `DDDToolkit.Supporting.Membership.EntityFramework`, by folder: the registration a host calls "
                 + "for each kind of resource, the mapping of a resource's member tables into the application's own context, the "
-                + "steps that put what the access questions decided into a module's own statements, and what an application "
+                + "queries on the resource's own set, `db.Boards.WhereIHold(permission)`, that put what the access manager "
+                + "decides into a module's own statements, and what an application "
                 + "answers for a resource whose roles or places it keeps itself.",
                 [
                     new("Registration", [new(EntityFramework, Folder: "Registration")], Lead: ["MembershipEntityFrameworkServiceCollectionExtensions"]),

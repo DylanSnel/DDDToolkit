@@ -14,7 +14,7 @@ namespace DDDToolkit.Supporting.Tenancy;
 /// Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an
 /// operator or a token the work was begun for (<see cref="TenancyActor{TSeatId}"/>); for a seat an invitation
 /// made, the system, for the seat that issued the invitation, as on <c>InvitationAccepted</c>.
-/// <see langword="null"/> only where the aggregate was changed outside the package's use cases, with no actor
+/// <see langword="null"/> only where the aggregate was changed outside the package's managers, with no actor
 /// handed to it.
 /// </param>
 [DomainEventName("tenancy.seat-placed")]

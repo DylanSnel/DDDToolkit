@@ -136,7 +136,7 @@ builder.Services.AddTenancyPermissionsOfModules();
 - A seat that holds `tenancy.roles.manage` for the whole tenant can put any permission into any role. An
   **administrator** is an active seat, placed at the root, that holds `tenancy.roles.manage` there through a grant
   with no end.
-- [`StarterRole`](reference/catalogue.md#rolepack) lists every member.
+- [`StarterRole`](reference/catalogue.md#starterrole) lists every member.
 
 ## The administrators' pack
 
@@ -223,7 +223,7 @@ that list with the starter role as your catalogue builds it now:
 | that the tenant removed while the starter role still has it | leaves it out |
 | that the tenant added and the starter role never had | leaves it in |
 
-[`FollowStarterRole`](reference/aggregates.md#followpacktenancycatalogue-tenancyactortseatid) covers the cases that the
+[`FollowStarterRole`](reference/aggregates.md#followstarterroletenancycatalogue-tenancyactortseatid) covers the cases that the
 comparison cannot tell apart. The cases you are likely to meet:
 
 - When following would take `tenancy.roles.manage` from the tenant's last administrators, the sync leaves the role as
@@ -257,8 +257,8 @@ builder.Services.SyncStarterRoles();   // once the host has started, every tenan
   reads the tenant again, for at most three attempts.
 - The sync logs a tenant that fails as an error, and tries that tenant again at the next start.
 - To sync from a deployment step or an operator's endpoint, leave out the call and run
-  [`IStarterRoleSync`](reference/catalogue.md#irolepacksync) yourself. `AddTenancy` registers it. An operator who syncs
-  one tenant runs [`FollowStarterRolesAsync`](reference/use-cases.md#followpacksasynccancellationtoken) in that tenant, and
+  [`IStarterRoleSync`](reference/catalogue.md#istarterrolesync) yourself. `AddTenancy` registers it. An operator who syncs
+  one tenant runs [`FollowStarterRolesAsync`](reference/managers.md#followstarterrolesasynccancellationtoken) in that tenant, and
   the events record the operator.
 
 <details>
@@ -287,7 +287,7 @@ using (TenancyWork.BeginOperatorIn<TenantId, SeatId>(tenant, operatorIdentity))
 
 ### Telling the tenant's administrators
 
-- Each role that changes raises [`RoleFollowedItsStarterRole`](reference/aggregates.md#rolefolloweditspackttenantid-troleid-tseatid).
+- Each role that changes raises [`RoleFollowedItsStarterRole`](reference/aggregates.md#rolefolloweditsstarterrolettenantid-troleid-tseatid).
   The event has `Added`, `Removed`, the permissions among them that manage access (`ManagingAccess`), and `By`.
 - The package sends no message. `AddTenancyEventLog` stores the event in the
   [access history](operators-and-history.md#access-history), where the tenant's administrators can read it.
@@ -391,7 +391,7 @@ catch (RefusalException refusal) when (refusal.Code == TenancyRefusals.GrantExce
 }
 ```
 
-[`SeatCommands.GrantAsync`](reference/use-cases.md#grantasynctseatid-tunitid-troleid-datetimeoffset-string-cancellationtoken-datetimeoffset)
+[`SeatCommands.GrantAsync`](reference/managers.md#grantasynctseatid-troleid-tunitid-datetimeoffset-string-cancellationtoken-datetimeoffset)
 lists every parameter and refusal.
 
 ### Which permissions manage access
@@ -463,11 +463,11 @@ Each of these commands follows the rule for giving a role. With containment on:
 
 | Change | The command requires | A role that manages access also requires |
 |---|---|---|
-| Take a role away ([`RevokeAsync`](reference/use-cases.md#revokeasynctseatid-tunitid-troleid-cancellationtoken)) | `tenancy.grants.manage` at the unit | The role's access-managing permissions at the unit, until at least the grant's end. A seat's current grant counts as the seat's hold, so a seat can take away its own roles. |
-| Withdraw a placement and its grants ([`WithdrawAsync`](reference/use-cases.md#withdrawasynctseatid-tunitid-cancellationtoken)) | `tenancy.seats.manage` at the unit, plus `tenancy.grants.manage` when the placement has grants | The same, for each grant. |
-| Suspend, deactivate or reactivate a seat ([`SuspendAsync`](reference/use-cases.md#suspendasynctseatid-cancellationtoken)). This takes away or gives back the seat's grants. | `tenancy.seats.manage` for the whole tenant | The same, for each grant that has not ended. A seat can suspend or deactivate itself. A seat can never reactivate itself, because a suspended seat acts as nobody. |
-| Move a unit ([`MoveUnitAsync`](reference/use-cases.md#moveunitasynctunitid-tunitid-cancellationtoken)). This changes which grants reach the unit. | `tenancy.units.manage` at the old parent and at the new parent | Every access-managing permission that the move gives to anyone or takes from anyone, held by the mover at the unit until at least the end of that grant. Even with containment off, the move gives the mover nothing that the mover lacks at the unit, or for longer. |
-| Add or remove an access-managing permission in a role, or archive a role that holds one ([`SetPermissionsAsync`](reference/use-cases.md#setpermissionsasynctroleid-ireadonlycollectionstring-cancellationtoken)) | `tenancy.roles.manage` for the whole tenant | A caller who is an administrator, which means `tenancy.roles.manage` at the root with no end. |
+| Take a role away ([`RevokeAsync`](reference/managers.md#revokeasynctseatid-troleid-tunitid-cancellationtoken)) | `tenancy.grants.manage` at the unit | The role's access-managing permissions at the unit, until at least the grant's end. A seat's current grant counts as the seat's hold, so a seat can take away its own roles. |
+| Withdraw a placement and its grants ([`WithdrawAsync`](reference/managers.md#withdrawasynctseatid-tunitid-cancellationtoken)) | `tenancy.seats.manage` at the unit, plus `tenancy.grants.manage` when the placement has grants | The same, for each grant. |
+| Suspend, deactivate or reactivate a seat ([`SuspendAsync`](reference/managers.md#suspendasynctseatid-cancellationtoken)). This takes away or gives back the seat's grants. | `tenancy.seats.manage` for the whole tenant | The same, for each grant that has not ended. A seat can suspend or deactivate itself. A seat can never reactivate itself, because a suspended seat acts as nobody. |
+| Move a unit ([`MoveUnitAsync`](reference/managers.md#moveunitasynctunitid-tunitid-cancellationtoken)). This changes which grants reach the unit. | `tenancy.units.manage` at the old parent and at the new parent | Every access-managing permission that the move gives to anyone or takes from anyone, held by the mover at the unit until at least the end of that grant. Even with containment off, the move gives the mover nothing that the mover lacks at the unit, or for longer. |
+| Add or remove an access-managing permission in a role, or archive a role that holds one ([`SetPermissionsAsync`](reference/managers.md#setpermissionsasynctroleid-ireadonlycollectionstring-cancellationtoken)) | `tenancy.roles.manage` for the whole tenant | A caller who is an administrator, which means `tenancy.roles.manage` at the root with no end. |
 
 - The refusal is `tenancy.grant-exceeds-own`, and it names what the seat lacks. The last administrator always stays.
 - Only an administrator changes an access-managing permission in a role, because the change reaches every holder at

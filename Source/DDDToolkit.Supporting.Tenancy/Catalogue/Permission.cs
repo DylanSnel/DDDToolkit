@@ -1,7 +1,7 @@
 namespace DDDToolkit.Supporting.Tenancy.Catalogue;
 
 /// <summary>
-/// One permission of the catalogue: what a role grants, and what a use case asks for.
+/// One permission of the catalogue: what a role grants, and what a manager asks for.
 /// <para>
 /// A permission is retired with <paramref name="Retired"/> and never removed. A retired permission grants nothing and is
 /// not added to a role again, but a role that holds it keeps it, so retiring a permission breaks no role and no

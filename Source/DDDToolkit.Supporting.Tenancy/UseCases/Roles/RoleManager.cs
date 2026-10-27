@@ -82,6 +82,11 @@ public class RoleManager<
     /// <c>tenancy.not-permitted</c> without <see cref="TenancyPermissions.RolesManage"/> for the whole tenant,
     /// <c>tenancy.role-name-taken</c>, <c>tenancy.name-invalid</c>, <c>tenancy.unknown-permission</c>.
     /// </exception>
+    /// <example>
+    /// <code>
+    /// var planner = await roles.CreateAsync("Planner", "Opens and edits projects", ["projects.open", "projects.edit"], cancellationToken);
+    /// </code>
+    /// </example>
     public async Task<TRole> CreateAsync(
         string name,
         string description,
@@ -112,6 +117,11 @@ public class RoleManager<
     /// <c>tenancy.role-not-found</c>, <c>tenancy.role-name-taken</c>, <c>tenancy.role-archived</c>,
     /// <c>tenancy.name-invalid</c>.
     /// </exception>
+    /// <example>
+    /// <code>
+    /// var role = await roles.RenameAsync(command.Role, command.Name, command.Description, cancellationToken);
+    /// </code>
+    /// </example>
     public async Task<TRole> RenameAsync(TRoleId role, string name, string description, CancellationToken cancellationToken)
     {
         var gate = Gate();
@@ -127,6 +137,11 @@ public class RoleManager<
 
     /// <summary>Renames a role and describes it again, as <see cref="RenameAsync(TRoleId, string, string, CancellationToken)"/> does with its id.</summary>
     /// <inheritdoc cref="RenameAsync(TRoleId, string, string, CancellationToken)"/>
+    /// <example>
+    /// <code>
+    /// planner = await roles.RenameAsync(planner, "Project planner", "Opens and edits projects", cancellationToken);
+    /// </code>
+    /// </example>
     public Task<TRole> RenameAsync(TRole role, string name, string description, CancellationToken cancellationToken)
         => RenameAsync(IdOf(role), name, description, cancellationToken);
 
@@ -148,6 +163,11 @@ public class RoleManager<
     /// <c>tenancy.last-admin</c> when
     /// the last administrators' role would lose the administrator permission.
     /// </exception>
+    /// <example>
+    /// <code>
+    /// var role = await roles.SetPermissionsAsync(command.Role, command.Permissions, cancellationToken);
+    /// </code>
+    /// </example>
     public async Task<TRole> SetPermissionsAsync(TRoleId role, IReadOnlyCollection<string> permissions, CancellationToken cancellationToken)
     {
         var gate = Gate();
@@ -175,6 +195,11 @@ public class RoleManager<
 
     /// <summary>Sets the permissions a role grants, as <see cref="SetPermissionsAsync(TRoleId, IReadOnlyCollection{string}, CancellationToken)"/> does with its id.</summary>
     /// <inheritdoc cref="SetPermissionsAsync(TRoleId, IReadOnlyCollection{string}, CancellationToken)"/>
+    /// <example>
+    /// <code>
+    /// planner = await roles.SetPermissionsAsync(planner, ["projects.open", "projects.edit", "projects.close"], cancellationToken);
+    /// </code>
+    /// </example>
     public Task<TRole> SetPermissionsAsync(TRole role, IReadOnlyCollection<string> permissions, CancellationToken cancellationToken)
         => SetPermissionsAsync(IdOf(role), permissions, cancellationToken);
 
@@ -192,6 +217,11 @@ public class RoleManager<
     /// seat that is not an administrator archives a role that manages access while containment is on, naming
     /// <see cref="TenancyPermissions.AdministratorPermission"/>, and <c>tenancy.last-admin</c>.
     /// </exception>
+    /// <example>
+    /// <code>
+    /// var role = await roles.ArchiveAsync(command.Role, cancellationToken);
+    /// </code>
+    /// </example>
     public async Task<TRole> ArchiveAsync(TRoleId role, CancellationToken cancellationToken)
     {
         var gate = Gate();
@@ -213,6 +243,11 @@ public class RoleManager<
 
     /// <summary>Archives a role, as <see cref="ArchiveAsync(TRoleId, CancellationToken)"/> does with its id.</summary>
     /// <inheritdoc cref="ArchiveAsync(TRoleId, CancellationToken)"/>
+    /// <example>
+    /// <code>
+    /// planner = await roles.ArchiveAsync(planner, cancellationToken);
+    /// </code>
+    /// </example>
     public Task<TRole> ArchiveAsync(TRole role, CancellationToken cancellationToken)
         => ArchiveAsync(IdOf(role), cancellationToken);
 
@@ -241,6 +276,14 @@ public class RoleManager<
     /// <returns>The roles that changed, the roles kept for an administrator, and the roles whose starter role is gone.</returns>
     /// <exception cref="Exceptions.RefusalException"><c>access.system-only</c> for a seat.</exception>
     /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>
+    /// <example>
+    /// <code>
+    /// using (access.BeginSystemIn(tenant))
+    /// {
+    ///     var followed = await roles.FollowStarterRolesAsync(cancellationToken);
+    /// }
+    /// </code>
+    /// </example>
     public async Task<StarterRolesFollowed> FollowStarterRolesAsync(CancellationToken cancellationToken)
     {
         var gate = Gate();
@@ -312,8 +355,14 @@ public class RoleManager<
 
     /// <summary>The tenant's roles, the application's own class, the active ones first, each by name.</summary>
     /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The roles, archived ones included.</returns>
     /// <exception cref="Exceptions.RefusalException">The caller is nobody.</exception>
     /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>
+    /// <example>
+    /// <code>
+    /// var active = (await roles.ListAsync(cancellationToken)).Where(role =&gt; role.Status == RoleStatus.Active);
+    /// </code>
+    /// </example>
     public async Task<IReadOnlyList<TRole>> ListAsync(CancellationToken cancellationToken)
     {
         var gate = Gate();
@@ -328,10 +377,18 @@ public class RoleManager<
     /// </summary>
     /// <param name="ids">The roles asked about, at most <see cref="MostIds"/> different ones.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The roles found.</returns>
     /// <exception cref="Exceptions.RefusalException">
     /// The caller is nobody, with its own code; or <c>tenancy.too-many-ids</c>.
     /// </exception>
     /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>
+    /// <example>
+    /// The names of the roles that grant <c>projects.edit</c>:
+    /// <code>
+    /// var ids = await db.Tenancy().RolesWithPermission("projects.edit").ToListAsync(cancellationToken);
+    /// var names = (await roles.ByIdAsync(ids, cancellationToken)).Select(role =&gt; role.Name);
+    /// </code>
+    /// </example>
     public async Task<IReadOnlyList<TRole>> ByIdAsync(IReadOnlyCollection<TRoleId> ids, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(ids);
@@ -357,7 +414,14 @@ public class RoleManager<
     /// role, and this still says it manages access. It reads nothing.
     /// </summary>
     /// <param name="role">The role.</param>
+    /// <returns><see langword="true"/> when one of the role's live permissions manages access.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="role"/> is null.</exception>
+    /// <example>
+    /// A role list that marks the roles only some seats may give:
+    /// <code>
+    /// var list = (await roles.ListAsync(cancellationToken)).Select(role =&gt; new { role.Id, role.Name, Restricted = roles.ManagesAccess(role) });
+    /// </code>
+    /// </example>
     public bool ManagesAccess(TRole role)
     {
         ArgumentNullException.ThrowIfNull(role);

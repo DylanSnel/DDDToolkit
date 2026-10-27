@@ -14,7 +14,7 @@ namespace DDDToolkit.Supporting.Tenancy.Catalogue;
 /// </summary>
 public static class TenancyPermissions
 {
-    /// <summary>The tenant's own settings: its name, and its shape. Asked for tenant-wide.</summary>
+    /// <summary>The tenant's own settings: its name, and its shape. Asked for the whole tenant.</summary>
     public const string SettingsManage = "tenancy.settings.manage";
 
     /// <summary>
@@ -26,7 +26,7 @@ public static class TenancyPermissions
     public const string UnitsManage = "tenancy.units.manage";
 
     /// <summary>
-    /// Add seats and suspend, reactivate or deactivate them, asked for tenant-wide; place a seat in a unit,
+    /// Add seats and suspend, reactivate or deactivate them, asked for the whole tenant; place a seat in a unit,
     /// withdraw it or make a placement primary, asked for at the unit. A seat that holds a role that manages
     /// access is suspended, reactivated or deactivated only by a seat that also holds that role's permissions that do,
     /// where and for as long as the seat holds them.
@@ -41,12 +41,12 @@ public static class TenancyPermissions
     /// </summary>
     public const string GrantsManage = "tenancy.grants.manage";
 
-    /// <summary>The tenant's roles: new ones, their names, their permissions and archiving. Asked for tenant-wide.</summary>
+    /// <summary>The tenant's roles: new ones, their names, their permissions and archiving. Asked for the whole tenant.</summary>
     public const string RolesManage = "tenancy.roles.manage";
 
     /// <summary>
     /// Read the tenant's access history: which seat, role, grant or unit changed, when, and who changed it. Asked
-    /// for tenant-wide. It manages no access, so a role that holds it is given like any other; an administrators'
+    /// for the whole tenant. It manages no access, so a role that holds it is given like any other; an administrators'
     /// starter role that lists its permissions holds it, as it holds every permission of Tenancy's.
     /// </summary>
     public const string HistoryView = "tenancy.history.view";

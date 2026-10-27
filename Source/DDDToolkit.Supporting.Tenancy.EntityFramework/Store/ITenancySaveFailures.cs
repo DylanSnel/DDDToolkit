@@ -5,8 +5,8 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 
 /// <summary>
 /// Turns a failed save of Tenancy's store into the refusal it stands for. Some rules are kept by the database
-/// where it sees more than the use case does; when such a rule fails the save, the caller should get the same
-/// coded refusal the use case gives, not the database's error.
+/// where it sees more than the manager does; when such a rule fails the save, the caller should get the same
+/// coded refusal the manager gives, not the database's error.
 /// <para>
 /// The unique indexes need none: each says in the mapping which refusal a save that breaks it gets, and the
 /// toolkit's own interceptor makes it, on any database, before a translator is asked. A translator is for a

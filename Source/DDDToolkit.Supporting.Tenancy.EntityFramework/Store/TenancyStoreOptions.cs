@@ -7,7 +7,7 @@ public sealed class TenancyStoreOptions
     /// The database writes each seat's rights itself, from its grants, its seat and its roles, and lets a seat
     /// read only its own. The save then writes no rights rows, and Tenancy's store asks the database's functions
     /// for what reaches past the calling seat's own rows: the tenant's administrators, the rights a move of a unit
-    /// changes, and who holds a permission at a unit. Tenancy's reads across tenants (<see cref="TenancySystemReads"/>)
+    /// changes, and who holds a permission at a unit. Tenancy's reads across tenants, the tenants a sweep visits and the invitation a token is for,
     /// ask functions too, as scoped system work in no tenant, and nothing of Tenancy's then runs as the
     /// application itself. The functions are named by <see cref="TenancyFunctionNames"/>, and
     /// a package for one database writes them, together with what keeps the rights:

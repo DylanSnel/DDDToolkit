@@ -98,6 +98,12 @@ public class SeatManager<
     /// <c>tenancy.not-permitted</c> without <see cref="TenancyPermissions.SeatsManage"/> for the whole tenant,
     /// <c>tenancy.identity-has-seat</c>, <c>tenancy.identity-required</c>.
     /// </exception>
+    /// <example>
+    /// A seat for Leo, with the name the application's seat class keeps:
+    /// <code>
+    /// var leo = await seats.AddAsync(command.Identity, cancellationToken, configure: seat =&gt; seat.Rename("Leo"));
+    /// </code>
+    /// </example>
     public async Task<TSeat> AddAsync(Guid identity, CancellationToken cancellationToken, TSeatId? id = null, Action<TSeat>? configure = null)
     {
         var gate = Gate();
@@ -131,6 +137,11 @@ public class SeatManager<
     /// <c>tenancy.seat-not-found</c>, <c>tenancy.unit-not-found</c>, <c>tenancy.unit-not-active</c>, and what
     /// the seat refuses: placing itself, a second placement in the unit, a second primary.
     /// </exception>
+    /// <example>
+    /// <code>
+    /// var seat = await seats.PlaceAsync(command.Seat, command.Unit, command.Primary, cancellationToken);
+    /// </code>
+    /// </example>
     public async Task<TSeat> PlaceAsync(TSeatId seat, TUnitId unit, bool primary, CancellationToken cancellationToken)
     {
         var gate = Gate();
@@ -148,6 +159,11 @@ public class SeatManager<
 
     /// <summary>Places a seat in an active unit, as <see cref="PlaceAsync(TSeatId, TUnitId, bool, CancellationToken)"/> does with their ids.</summary>
     /// <inheritdoc cref="PlaceAsync(TSeatId, TUnitId, bool, CancellationToken)"/>
+    /// <example>
+    /// <code>
+    /// leo = await seats.PlaceAsync(leo, northCoast, primary: true, cancellationToken);
+    /// </code>
+    /// </example>
     public Task<TSeat> PlaceAsync(TSeat seat, TUnit unit, bool primary, CancellationToken cancellationToken)
         => PlaceAsync(IdOf(seat), IdOf(unit), primary, cancellationToken);
 
@@ -166,6 +182,11 @@ public class SeatManager<
     /// <c>tenancy.not-permitted</c>, <c>tenancy.seat-not-found</c>, <c>tenancy.placement-not-found</c>,
     /// <c>tenancy.grant-exceeds-own</c>, <c>tenancy.last-admin</c>.
     /// </exception>
+    /// <example>
+    /// <code>
+    /// var seat = await seats.WithdrawAsync(command.Seat, command.Unit, cancellationToken);
+    /// </code>
+    /// </example>
     public async Task<TSeat> WithdrawAsync(TSeatId seat, TUnitId unit, CancellationToken cancellationToken)
     {
         var gate = Gate();
@@ -201,6 +222,12 @@ public class SeatManager<
 
     /// <summary>Withdraws a seat from a unit, as <see cref="WithdrawAsync(TSeatId, TUnitId, CancellationToken)"/> does with their ids.</summary>
     /// <inheritdoc cref="WithdrawAsync(TSeatId, TUnitId, CancellationToken)"/>
+    /// <example>
+    /// Leo leaves North Coast, with the roles he held there:
+    /// <code>
+    /// leo = await seats.WithdrawAsync(leo, northCoast, cancellationToken);
+    /// </code>
+    /// </example>
     public Task<TSeat> WithdrawAsync(TSeat seat, TUnit unit, CancellationToken cancellationToken)
         => WithdrawAsync(IdOf(seat), IdOf(unit), cancellationToken);
 
@@ -213,6 +240,11 @@ public class SeatManager<
     /// <c>tenancy.not-permitted</c> without <see cref="TenancyPermissions.SeatsManage"/> at the unit,
     /// <c>tenancy.seat-not-found</c>, <c>tenancy.placement-not-found</c>.
     /// </exception>
+    /// <example>
+    /// <code>
+    /// var seat = await seats.MakePrimaryAsync(command.Seat, command.Unit, cancellationToken);
+    /// </code>
+    /// </example>
     public async Task<TSeat> MakePrimaryAsync(TSeatId seat, TUnitId unit, CancellationToken cancellationToken)
     {
         var gate = Gate();
@@ -227,6 +259,11 @@ public class SeatManager<
 
     /// <summary>Makes a seat's placement in a unit its primary one, as <see cref="MakePrimaryAsync(TSeatId, TUnitId, CancellationToken)"/> does with their ids.</summary>
     /// <inheritdoc cref="MakePrimaryAsync(TSeatId, TUnitId, CancellationToken)"/>
+    /// <example>
+    /// <code>
+    /// leo = await seats.MakePrimaryAsync(leo, southBay, cancellationToken);
+    /// </code>
+    /// </example>
     public Task<TSeat> MakePrimaryAsync(TSeat seat, TUnit unit, CancellationToken cancellationToken)
         => MakePrimaryAsync(IdOf(seat), IdOf(unit), cancellationToken);
 
@@ -259,6 +296,11 @@ public class SeatManager<
     /// <c>tenancy.unit-not-found</c>, <c>tenancy.unit-not-active</c> for an archived unit,
     /// <c>tenancy.invalid-period</c>, and what the seat refuses.
     /// </exception>
+    /// <example>
+    /// <code>
+    /// var seat = await seats.GrantAsync(command.Seat, command.Role, command.Unit, command.Until, command.Reason, cancellationToken);
+    /// </code>
+    /// </example>
     public async Task<TSeat> GrantAsync(
         TSeatId seat,
         TRoleId role,
@@ -291,9 +333,15 @@ public class SeatManager<
 
     /// <summary>
     /// Grants a seat a role at a unit, as <see cref="GrantAsync(TSeatId, TRoleId, TUnitId, DateTimeOffset?, string?, CancellationToken, DateTimeOffset?)"/>
-    /// does with their ids: <c>seats.GrantAsync(leo, safetyOfficer, at: north, until: null, reason: "Passed the quiz", cancellationToken)</c>.
+    /// does with their ids.
     /// </summary>
     /// <inheritdoc cref="GrantAsync(TSeatId, TRoleId, TUnitId, DateTimeOffset?, string?, CancellationToken, DateTimeOffset?)"/>
+    /// <example>
+    /// Rhea gives Leo the role Surveyor at North, with no end:
+    /// <code>
+    /// leo = await seats.GrantAsync(leo, surveyor, at: north, until: null, reason: "Passed the survey course", cancellationToken);
+    /// </code>
+    /// </example>
     public Task<TSeat> GrantAsync(
         TSeat seat,
         TRole role,
@@ -322,6 +370,11 @@ public class SeatManager<
     /// <c>tenancy.role-not-found</c>, <c>tenancy.seat-not-found</c>, <c>tenancy.grant-exceeds-own</c>,
     /// <c>tenancy.last-admin</c>, <c>tenancy.grant-not-found</c>.
     /// </exception>
+    /// <example>
+    /// <code>
+    /// var seat = await seats.RevokeAsync(command.Seat, command.Role, command.Unit, cancellationToken);
+    /// </code>
+    /// </example>
     public async Task<TSeat> RevokeAsync(TSeatId seat, TRoleId role, TUnitId at, CancellationToken cancellationToken)
     {
         var gate = Gate();
@@ -346,6 +399,11 @@ public class SeatManager<
 
     /// <summary>Revokes a role a seat holds at a unit, as <see cref="RevokeAsync(TSeatId, TRoleId, TUnitId, CancellationToken)"/> does with their ids.</summary>
     /// <inheritdoc cref="RevokeAsync(TSeatId, TRoleId, TUnitId, CancellationToken)"/>
+    /// <example>
+    /// <code>
+    /// leo = await seats.RevokeAsync(leo, surveyor, at: north, cancellationToken);
+    /// </code>
+    /// </example>
     public Task<TSeat> RevokeAsync(TSeat seat, TRole role, TUnit at, CancellationToken cancellationToken)
         => RevokeAsync(IdOf(seat), IdOf(role), IdOf(at), cancellationToken);
 
@@ -364,11 +422,21 @@ public class SeatManager<
     /// <c>tenancy.seat-not-found</c>, <c>tenancy.grant-exceeds-own</c>, <c>tenancy.last-admin</c>,
     /// <c>tenancy.seat-state</c>.
     /// </exception>
+    /// <example>
+    /// <code>
+    /// var seat = await seats.SuspendAsync(command.Seat, cancellationToken);
+    /// </code>
+    /// </example>
     public Task<TSeat> SuspendAsync(TSeatId seat, CancellationToken cancellationToken)
         => ChangeStatusAsync(seat, (changed, by) => changed.Suspend(by), endsAdministration: true, cancellationToken);
 
     /// <summary>Suspends a seat, as <see cref="SuspendAsync(TSeatId, CancellationToken)"/> does with its id.</summary>
     /// <inheritdoc cref="SuspendAsync(TSeatId, CancellationToken)"/>
+    /// <example>
+    /// <code>
+    /// tove = await seats.SuspendAsync(tove, cancellationToken);
+    /// </code>
+    /// </example>
     public Task<TSeat> SuspendAsync(TSeat seat, CancellationToken cancellationToken)
         => SuspendAsync(IdOf(seat), cancellationToken);
 
@@ -385,11 +453,21 @@ public class SeatManager<
     /// <c>tenancy.not-permitted</c> without <see cref="TenancyPermissions.SeatsManage"/> for the whole tenant,
     /// <c>tenancy.seat-not-found</c>, <c>tenancy.grant-exceeds-own</c>, <c>tenancy.seat-state</c>.
     /// </exception>
+    /// <example>
+    /// <code>
+    /// var seat = await seats.ReactivateAsync(command.Seat, cancellationToken);
+    /// </code>
+    /// </example>
     public Task<TSeat> ReactivateAsync(TSeatId seat, CancellationToken cancellationToken)
         => ChangeStatusAsync(seat, (changed, by) => changed.Reactivate(by), endsAdministration: false, cancellationToken);
 
     /// <summary>Makes a suspended seat active again, as <see cref="ReactivateAsync(TSeatId, CancellationToken)"/> does with its id.</summary>
     /// <inheritdoc cref="ReactivateAsync(TSeatId, CancellationToken)"/>
+    /// <example>
+    /// <code>
+    /// tove = await seats.ReactivateAsync(tove, cancellationToken);
+    /// </code>
+    /// </example>
     public Task<TSeat> ReactivateAsync(TSeat seat, CancellationToken cancellationToken)
         => ReactivateAsync(IdOf(seat), cancellationToken);
 
@@ -405,11 +483,21 @@ public class SeatManager<
     /// <c>tenancy.seat-not-found</c>, <c>tenancy.grant-exceeds-own</c>, <c>tenancy.last-admin</c>,
     /// <c>tenancy.seat-state</c>.
     /// </exception>
+    /// <example>
+    /// <code>
+    /// var seat = await seats.DeactivateAsync(command.Seat, cancellationToken);
+    /// </code>
+    /// </example>
     public Task<TSeat> DeactivateAsync(TSeatId seat, CancellationToken cancellationToken)
         => ChangeStatusAsync(seat, (changed, by) => changed.Deactivate(by), endsAdministration: true, cancellationToken);
 
     /// <summary>Deactivates a seat for good, as <see cref="DeactivateAsync(TSeatId, CancellationToken)"/> does with its id.</summary>
     /// <inheritdoc cref="DeactivateAsync(TSeatId, CancellationToken)"/>
+    /// <example>
+    /// <code>
+    /// tove = await seats.DeactivateAsync(tove, cancellationToken);
+    /// </code>
+    /// </example>
     public Task<TSeat> DeactivateAsync(TSeat seat, CancellationToken cancellationToken)
         => DeactivateAsync(IdOf(seat), cancellationToken);
 
@@ -426,10 +514,18 @@ public class SeatManager<
     /// it is saved, by this question or by a save later in the same unit of work.
     /// </remarks>
     /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The calling seat's overview.</returns>
     /// <exception cref="Exceptions.RefusalException">
     /// <c>tenancy.not-seated</c> for every caller that is not a seat: nobody, whatever it was refused for,
-    /// and system work, which has no self to show.
+    /// and system work, which has no seat of its own to show.
     /// </exception>
+    /// <example>
+    /// Whether to show the button that edits projects at North Coast:
+    /// <code>
+    /// var me = await seats.WhoAmIAsync(cancellationToken);
+    /// var canEdit = me.Permissions.Any(held =&gt; held.Permission == "projects.edit" &amp;&amp; held.Reaches.Any(unit =&gt; unit.Id == northCoast));
+    /// </code>
+    /// </example>
     public async Task<SeatOverview> WhoAmIAsync(CancellationToken cancellationToken)
     {
         var gate = Gate();
@@ -478,6 +574,14 @@ public class SeatManager<
     /// which the answer does not tell apart.
     /// </exception>
     /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>
+    /// <returns>The seat's overview, as the caller reads it.</returns>
+    /// <example>
+    /// The units a seat is placed at, by path:
+    /// <code>
+    /// var overview = await seats.OverviewAsync(command.Seat, cancellationToken);
+    /// var paths = overview.Seat.Placements.Select(placement =&gt; overview.UnitOf(placement.UnitId).Path);
+    /// </code>
+    /// </example>
     public async Task<SeatOverview> OverviewAsync(TSeatId seat, CancellationToken cancellationToken)
     {
         var gate = Gate();
@@ -488,6 +592,11 @@ public class SeatManager<
 
     /// <summary>Any seat of the caller's tenant and what it may do where, as <see cref="OverviewAsync(TSeatId, CancellationToken)"/> answers it by its id.</summary>
     /// <inheritdoc cref="OverviewAsync(TSeatId, CancellationToken)"/>
+    /// <example>
+    /// <code>
+    /// var overview = await seats.OverviewAsync(leo, cancellationToken);
+    /// </code>
+    /// </example>
     public Task<SeatOverview> OverviewAsync(TSeat seat, CancellationToken cancellationToken)
         => OverviewAsync(IdOf(seat), cancellationToken);
 
@@ -510,8 +619,14 @@ public class SeatManager<
     /// </para>
     /// </remarks>
     /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The seats the caller reads, the application's own class, in the order of their ids.</returns>
     /// <exception cref="Exceptions.RefusalException">The caller is nobody.</exception>
     /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>
+    /// <example>
+    /// <code>
+    /// var people = (await seats.ListAsync(cancellationToken)).Select(seat =&gt; new { seat.Id, seat.DisplayName, seat.Status });
+    /// </code>
+    /// </example>
     public async Task<IReadOnlyList<TSeat>> ListAsync(CancellationToken cancellationToken)
     {
         var gate = Gate();
@@ -531,10 +646,17 @@ public class SeatManager<
     /// </remarks>
     /// <param name="ids">The seats asked about, at most <see cref="MostIds"/> different ones.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The seats found, the application's own class, in the order of their ids.</returns>
     /// <exception cref="Exceptions.RefusalException">
     /// The caller is nobody, with its own code; or <c>tenancy.too-many-ids</c>.
     /// </exception>
     /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>
+    /// <example>
+    /// The seats of a project's crew, to show their names:
+    /// <code>
+    /// var crew = await seats.ByIdAsync([.. project.Crew.Select(member =&gt; member.Seat)], cancellationToken);
+    /// </code>
+    /// </example>
     public async Task<IReadOnlyList<TSeat>> ByIdAsync(IReadOnlyCollection<TSeatId> ids, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(ids);

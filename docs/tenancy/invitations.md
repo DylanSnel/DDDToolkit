@@ -76,7 +76,7 @@ app.MapPost("/invitations/accept", async (
 
 `AcceptAsync` returns the tenant, the tenant's slug for the next request, and the new seat. `ListOpenAsync` returns
 the open invitations, the soonest to end first. `CancelAsync` cancels one invitation
-([`InvitationCommands`](reference/use-cases.md#tenancyusecasesinvitationcommandstinvitation-tinvitationid)).
+([`InvitationCommands`](reference/managers.md#invitationmanagerttenant-ttenantid-torganization-tunit-tunitid-tseat-tseatid-trole-troleid-tinvitation-tinvitationid)).
 
 ## Who may issue an invitation
 

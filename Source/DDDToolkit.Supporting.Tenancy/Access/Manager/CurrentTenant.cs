@@ -23,6 +23,15 @@ public sealed class CurrentTenant<TTenantId, TSeatId>
 
     /// <summary>Whether the current work acts in a tenant: through a seat, or as system work in the tenant.</summary>
     /// <exception cref="InvalidOperationException">The current caller was made with other id types: two Tenancy registrations with different ids.</exception>
+    /// <example>
+    /// A read that shows nothing outside a tenant, where <see cref="Require"/> would throw:
+    /// <code>
+    /// if (!access.CurrentTenant.IsAvailable)
+    /// {
+    ///     return [];
+    /// }
+    /// </code>
+    /// </example>
     public bool IsAvailable => Caller.Kind is TenancyCallerKind.Seat or TenancyCallerKind.SystemInTenant;
 
     /// <summary>The tenant the current work acts in; <see langword="null"/> when it acts in none.</summary>
@@ -38,13 +47,27 @@ public sealed class CurrentTenant<TTenantId, TSeatId>
     public TSeatId? Seat => Caller is { Kind: TenancyCallerKind.Seat or TenancyCallerKind.SystemInTenant } caller ? caller.Seat : null;
 
     /// <summary>
-    /// The tenant the current work acts in, with the seat, for work that only makes sense inside one. A caller who is
-    /// nobody gets the refusal it was given when the request was resolved, such as <c>tenancy.not-seated</c>.
+    /// The tenant the current work acts in, with the seat, for work that only makes sense inside one. It reads nothing.
+    /// A caller who is nobody gets the refusal that tenant selection gave the request.
     /// </summary>
-    /// <exception cref="Exceptions.RefusalException">The caller is nobody; the refusal is the one it was given.</exception>
+    /// <returns>
+    /// The tenant and the seat: the caller's seat, or for system work in the tenant the seat it acts for, if any, with
+    /// <see cref="TenantInScope{TTenantId, TSeatId}.BySystem"/> set.
+    /// </returns>
+    /// <exception cref="Exceptions.RefusalException">
+    /// The caller is nobody, with the refusal tenant selection gave: <c>tenancy.tenant-required</c>,
+    /// <c>tenancy.not-seated</c>, <c>tenancy.tenant-inactive</c> or <c>tenancy.seat-suspended</c>. Outside any request,
+    /// <c>tenancy.not-seated</c>.
+    /// </exception>
     /// <exception cref="InvalidOperationException">
     /// The work is system work outside any tenant; or the current caller was made with other id types.
     /// </exception>
+    /// <example>
+    /// <code>
+    /// var current = access.CurrentTenant.Require();
+    /// var board = Board.Open(BoardId.Create(), current.Id, command.Name, openedBy: current.Seat);
+    /// </code>
+    /// </example>
     public TenantInScope<TTenantId, TSeatId> Require()
     {
         var caller = Caller;

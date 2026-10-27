@@ -6,13 +6,13 @@ public abstract partial record TenancyRequirement
 {
     /// <summary>
     /// A permission is held by the caller at a unit: there, or at a unit above it, now. Otherwise
-    /// <c>tenancy.not-permitted</c>, with the permission and the unit, exactly as the package's own use cases refuse
+    /// <c>tenancy.not-permitted</c>, with the permission and the unit, exactly as the package's own managers refuse
     /// it; nobody is refused with its own reason first. System work in the tenant holds every permission at every
     /// unit of its tenant. A unit of another tenant, or one that does not exist, is one where nobody holds
     /// anything, and is refused the same way. A request declares it with <see cref="TenancyAccess.AtUnit{TUnitId}"/>.
     /// </summary>
     /// <remarks>
-    /// For a command that acts at a unit the request names: one the package's use case decides, such as placing
+    /// For a command that acts at a unit the request names: one the package's manager decides, such as placing
     /// a seat or giving a role there, and one that makes something at a unit, where there is nothing yet a permission
     /// could be held on, such as opening a project there: the check a module would otherwise write in its
     /// handler, or as a case of its own. The unit is the request's own, so the unit checked is the unit the
