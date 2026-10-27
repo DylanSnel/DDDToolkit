@@ -71,7 +71,8 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
         (new RemoveCrewMember(TheProject, SeatId.CreateSequential()), MemberAccess.On(ProjectPermissionNames.ManageCrew, TheProject)),
         (new AllCrewMembers(TheProject), MemberAccess.SeenWith<ProjectId>(ProjectPermissionNames.View)),
         (new ChangeProjectOwner(TheProject, SeatId.CreateSequential(), FormerOwnerRole: null), MemberAccess.On(ProjectPermissionNames.ChangeOwner, TheProject)),
-        (new TenantProjects(TheTenant), TenancyAccess.RequiresOperator()),
+        (new TenantProjects(TheTenant), TenancyAccess.Operator()),
+        (new RenameTenantProject(TheTenant, TheProject, "Quay wall, as support renamed it"), TenancyAccess.Operator(TheTenant, scope: "projects")),
         (new TenantProjectRoles(), TenancyAccess.InTenant()),
         (new ProjectRolesById([ProjectRoleId.CreateSequential()]), TenancyAccess.InTenant()),
         (new MakeProjectRole("Rigger", "Rigs the hoists", [ProjectPermissionNames.View]), TenancyAccess.AtTenant(TenancyPermissions.RolesManage)),
@@ -111,14 +112,14 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
         (new OpenInvitations(), TenancyAccess.InTenant()),
         (new CancelInvitation(InvitationId.CreateSequential()), TenancyAccess.InTenant()),
         (new AcceptInvitation("a-token-nobody-was-given", DisplayName: null), AccessRequirement.SignedIn()),
-        (new AllTenants(), TenancyAccess.RequiresOperator()),
-        (new TenantAccessHistory(TheTenant, new PagingArguments(first: 10)), TenancyAccess.RequiresOperator()),
+        (new AllTenants(), TenancyAccess.Operator()),
+        (new TenantAccessHistory(TheTenant, new PagingArguments(first: 10)), TenancyAccess.Operator()),
         (new ProjectInspections(TheProject), new InspectionsRequirement.OnProject(ProjectPermissionNames.View, TheProject)),
         (new InspectionDetail(TheProject, InspectionId.CreateSequential()), new InspectionsRequirement.OnProject(ProjectPermissionNames.View, TheProject)),
         (new InspectionsOfProjects(TheProjects, new PagingArguments(first: 5)), new InspectionsRequirement.OnProjectsInReach(ProjectPermissionNames.View, TheProjects)),
         (new ProjectsOpenToRecording(TheProjects), new InspectionsRequirement.OnProjectsInReach(InspectionPermissionNames.Record, TheProjects)),
         (new RecordInspection(TheProject, "Loose railing"), new InspectionsRequirement.OnOpenProject(InspectionPermissionNames.Record, TheProject, BySeat: true)),
-        (new TenantProjectInspections(TheTenant, TheProject), TenancyAccess.RequiresOperator()),
+        (new TenantProjectInspections(TheTenant, TheProject), TenancyAccess.Operator()),
     ];
 
     private static IReadOnlyList<HandledRequest> Requests => HostRegistrations.Requests;
@@ -307,7 +308,7 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
         OfTheModuleOrTwoPermissions(AccessRequirement.Any(AccessRequirement.Own(TheSeat), TenancyAccess.AtTenant(TenancyPermissions.SeatsManage))).Should().BeFalse("[RequiresPermission(permission)] with [OrOwn] says it");
         OfTheModuleOrTwoPermissions(TenancyAccess.AtTenant(TenancyPermissions.SeatsManage)).Should().BeFalse("[RequiresPermission(permission)] says it");
 
-        OfTheModuleOrTwoPermissions(AccessRequirement.Any(TenancyAccess.RequiresOperator(), TenancyAccess.AtTenant(TenancyPermissions.SeatsManage))).Should().BeTrue("one caller or another is no stack");
+        OfTheModuleOrTwoPermissions(AccessRequirement.Any(TenancyAccess.Operator(), TenancyAccess.AtTenant(TenancyPermissions.SeatsManage))).Should().BeTrue("one caller or another is no stack");
         OfTheModuleOrTwoPermissions(AccessRequirement.All(TenancyAccess.AtUnit(TenancyPermissions.SeatsManage, TheUnit), TenancyAccess.AtUnit(TenancyPermissions.SeatsManage, TheOtherUnit))).Should().BeTrue("two permissions at once");
         OfTheModuleOrTwoPermissions(AccessRequirement.All(TenancyAccess.InTenant(), new ProjectsRequirement.AtUnit(ProjectPermissionNames.Open, TheUnit))).Should().BeTrue("the module's own case, in a combination too");
     }

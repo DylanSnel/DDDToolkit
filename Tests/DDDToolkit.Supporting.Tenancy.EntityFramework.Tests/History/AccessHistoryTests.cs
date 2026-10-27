@@ -4,6 +4,7 @@ using DDDToolkit.Access;
 using DDDToolkit.EntityFramework.EventLog;
 using DDDToolkit.EntityFramework.Outbox;
 using DDDToolkit.Supporting.Tenancy.TestHost.Converters;
+using DDDToolkit.Supporting.Tenancy.TestHost.Requests;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -44,9 +45,8 @@ public abstract class AccessHistoryTests(TestDatabases databases) : IAsyncLifeti
         // A seat changes its tenant, and an operator has another tenant suspended.
         await _services.BySeat(harbor.Tenant, harbor.AdminSeat, services => services.Organization().AddUnitAsync(harbor.RootUnit, "North", Cancellation));
         await using (var scope = _services.Scope())
-        using (TenancyWork.BeginOperatorIn<TenantId, SeatId>(orchard.Tenant, Odette))
         {
-            await scope.ServiceProvider.Tenants().SuspendAsync("Asked for by the owner", Cancellation);
+            await OperatorWork.RunAsync(Odette, orchard.Tenant, () => scope.ServiceProvider.Tenants().SuspendAsync("Asked for by the owner", Cancellation));
         }
 
         var kept = await KeptAsync();
@@ -244,11 +244,10 @@ public abstract class AccessHistoryTests(TestDatabases databases) : IAsyncLifeti
     {
         ProvisionedTenant quay;
         await using (var scope = _services.Scope())
-        using (TenancyWork.BeginOperator<TenantId, SeatId>(Odette))
         {
-            quay = await scope.ServiceProvider.Tenants().ProvisionWithIdsAsync(scope.ServiceProvider.GetRequiredService<TenancyCatalogue>(),
+            quay = await OperatorWork.RunAsync(Odette, () => scope.ServiceProvider.Tenants().ProvisionWithIdsAsync(scope.ServiceProvider.GetRequiredService<TenancyCatalogue>(),
                 new TenantToProvision("quay", "Quay Works", TenantShape.Flat, "Quay", Guid.NewGuid()),
-                Cancellation);
+                Cancellation));
         }
 
         (await KeptAsync()).Should().NotBeEmpty()
@@ -343,10 +342,11 @@ public abstract class AccessHistoryTests(TestDatabases databases) : IAsyncLifeti
             }
         }
 
-        using (TenancyWork.BeginOperatorIn<TenantId, SeatId>(new TenantId(1), Odette, scope: "operations"))
+        await OperatorWork.RunAsync(Odette, new TenantId(1), () =>
         {
             accessor.Current.Should().Be(new ActedBy("operator", Odette.ToString("D")));
-        }
+            return Task.CompletedTask;
+        }, scope: "operations");
 
         using (TenancyWork.BeginSystemIn<TenantId, SeatId>(new TenantId(1), scope: "widgets"))
         {
@@ -392,14 +392,11 @@ public abstract class AccessHistoryTests(TestDatabases databases) : IAsyncLifeti
         provider.GetRequiredService<IActedByAccessor>().Should().BeOfType<TenancyActedByAccessor>().Which.Current.Kind.Should().Be("request");
     }
 
-    /// <summary>Carries out, in a scope of its own, what the operator asked for in <paramref name="tenant"/>.</summary>
+    /// <summary>Carries out, in a scope of its own, the operator's command for <paramref name="tenant"/>.</summary>
     private async Task ForTheOperatorAsync(TenantId tenant, Func<TenantManager, Task> act)
     {
         await using var scope = _services.Scope();
-        using (TenancyWork.BeginOperatorIn<TenantId, SeatId>(tenant, Odette))
-        {
-            await act(scope.ServiceProvider.Tenants());
-        }
+        await OperatorWork.RunAsync(Odette, tenant, () => act(scope.ServiceProvider.Tenants()));
     }
 
     private async Task<List<Kept>> KeptAsync()

@@ -90,6 +90,12 @@ public sealed class AmbientCallerRecorder
             return inner.FindAsync(identity, tenantSlug, cancellationToken);
         }
 
+        public Task<TenantId?> FindTenantAsync(string tenantSlug, CancellationToken cancellationToken)
+        {
+            lookups.Enqueue(TenancyCallers.Ambient);
+            return inner.FindTenantAsync(tenantSlug, cancellationToken);
+        }
+
         public Task<IReadOnlyList<SeatInTenant<TSeat>>> AllOfAsync<TSeat>(Guid identity, CancellationToken cancellationToken)
             where TSeat : class
             => inner.AllOfAsync<TSeat>(identity, cancellationToken);

@@ -6,8 +6,8 @@ namespace DDDToolkit.Supporting.Tenancy.Tests;
 /// <summary>
 /// System work and the current tenant are reached through the access manager, closed over the application's ids, so no
 /// project that sees the classes names an id to begin either: <c>access.BeginSystem()</c> on the
-/// <c>TenancyAccessManager</c> the generator writes into the test host. An operator's work is still named through the
-/// tenant manager the generator writes into the test host, <c>TenantManager.BeginOperator(...)</c>. Where a seat is given, C# infers both
+/// <c>TenancyAccessManager</c> the generator writes into the test host. An operator's work is begun by nothing a project
+/// names: a command marked <c>[Operator]</c> runs as it. Where a seat is given, C# infers both
 /// ids of <see cref="TenancyWork"/>'s own method, for code that sees the ids alone. Each begins exactly what the method
 /// generic over the ids begins, and ends it.
 /// </summary>
@@ -15,7 +15,6 @@ public class ClosedOverTheIdsTests
 {
     private static readonly TenantId Harbor = new(1);
     private static readonly SeatId Ada = SeatId.CreateSequential();
-    private static readonly Guid Odette = Guid.NewGuid();
 
     /// <summary>The access manager as the container makes it: the class the generator wrote into the test host.</summary>
     private static readonly TenancyAccessManager Access = new(TenancyCatalogue.Build(HostCatalogue.Application, []), TimeProvider.System, NoServices.Instance);
@@ -37,8 +36,6 @@ public class ClosedOverTheIdsTests
             ("BeginSystem", Access.BeginSystem, TenancyWork.BeginSystem<TenantId, SeatId>),
             ("BeginSystemIn", () => Access.BeginSystemIn(Harbor), () => TenancyWork.BeginSystemIn<TenantId, SeatId>(Harbor)),
             ("BeginSystemIn for a seat", () => Access.BeginSystemIn(Harbor, Ada, "projects"), () => TenancyWork.BeginSystemIn<TenantId, SeatId>(Harbor, (SeatId?)Ada, "projects")),
-            ("BeginOperator", () => TenantManager.BeginOperator(Odette), () => TenancyWork.BeginOperator<TenantId, SeatId>(Odette)),
-            ("BeginOperatorIn", () => TenantManager.BeginOperatorIn(Harbor, Odette, "projects"), () => TenancyWork.BeginOperatorIn<TenantId, SeatId>(Harbor, Odette, "projects")),
             ("BeginTokenIn", () => Access.BeginTokenIn(Harbor, Ada, "feeds"), () => TenancyWork.BeginTokenIn<TenantId, SeatId>(Harbor, Ada, "feeds")),
         ];
 
@@ -56,9 +53,8 @@ public class ClosedOverTheIdsTests
     [Fact]
     public void The_closed_forms_check_what_their_counterparts_check()
     {
-        // A scope that is not one, and an operator without an identity: nothing is begun.
+        // A scope that is not one: nothing is begun.
         FluentActions.Invoking(() => Access.BeginSystemIn(Harbor, scope: "Projects!")).Should().Throw<ArgumentException>();
-        FluentActions.Invoking(() => TenantManager.BeginOperator(Guid.Empty)).Should().Throw<ArgumentException>();
 
         Callers.Ambient.Should().BeNull();
         TenancyCallers.Ambient.Should().BeNull();

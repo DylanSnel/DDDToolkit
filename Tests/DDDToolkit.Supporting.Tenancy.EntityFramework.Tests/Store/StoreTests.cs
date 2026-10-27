@@ -3,6 +3,7 @@ using DDDToolkit.EntityFramework;
 using DDDToolkit.EntityFramework.Outbox;
 using DDDToolkit.Interfaces;
 using DDDToolkit.Supporting.Tenancy.Catalogue;
+using DDDToolkit.Supporting.Tenancy.TestHost.Requests;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -292,11 +293,10 @@ public abstract class StoreTests(TestDatabases databases) : IAsyncLifetime
         var operatorIdentity = Guid.NewGuid();
         ProvisionedTenant harbor;
         await using (var scope = services.Scope())
-        using (TenancyWork.BeginOperator<TenantId, SeatId>(operatorIdentity))
         {
-            harbor = await scope.ServiceProvider.Tenants().ProvisionWithIdsAsync(scope.ServiceProvider.GetRequiredService<TenancyCatalogue>(),
+            harbor = await OperatorWork.RunAsync(operatorIdentity, () => scope.ServiceProvider.Tenants().ProvisionWithIdsAsync(scope.ServiceProvider.GetRequiredService<TenancyCatalogue>(),
                 new TenantToProvision("harbor", "Harbor Works", TenantShape.Hierarchical, "Harbor", Guid.NewGuid()),
-                TestContext.Current.CancellationToken);
+                TestContext.Current.CancellationToken));
         }
 
         var watcher = harbor.RolesByPack[HostCatalogue.WatcherPack];

@@ -116,6 +116,8 @@ type Mutation {
     @cost(weight: "10")
   seatRename(input: SeatRenameInput!): SeatRenamePayload! @cost(weight: "10")
   seatSuspend(input: SeatSuspendInput!): SeatSuspendPayload! @cost(weight: "10")
+  tenantProjectRename(input: TenantProjectRenameInput!): TenantProjectRenamePayload!
+    @cost(weight: "10")
   tenantShapeChange(input: TenantShapeChangeInput!): TenantShapeChangePayload!
     @cost(weight: "10")
 }
@@ -706,6 +708,11 @@ type TenantProject {
   unitId: UUID!
 }
 
+type TenantProjectRenamePayload {
+  errors: [TenantProjectRenameError!]
+  tenantProject: TenantProject
+}
+
 type TenantShapeChangePayload {
   errors: [TenantShapeChangeError!]
   shape: TenantShape
@@ -941,6 +948,12 @@ union SeatSuspendError =
   | BrokenRulesError
   | ConcurrencyConflictError
 
+union TenantProjectRenameError =
+  | RefusalError
+  | InvalidValuesError
+  | BrokenRulesError
+  | ConcurrencyConflictError
+
 union TenantShapeChangeError =
   | RefusalError
   | InvalidValuesError
@@ -1137,6 +1150,12 @@ input SeatRenameInput {
 
 input SeatSuspendInput {
   seatId: UUID!
+}
+
+input TenantProjectRenameInput {
+  name: String!
+  project: ID!
+  tenant: UUID!
 }
 
 input TenantShapeChangeInput {

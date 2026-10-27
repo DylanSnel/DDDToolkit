@@ -14,7 +14,7 @@ namespace Examples.Tenancy.Projects.Application.Access;
 /// own, and keeps only that: a case of the Membership package's for a permission held on a project,
 /// <c>[RequiresPermission(RequiredPermission)]</c> with <c>[OnResource]</c> on the project and <c>[ExpectedVersion]</c> on the version
 /// the caller read, or <c>[SeenWith&lt;ProjectId&gt;(permission)]</c> on a list; or one of Tenancy's, <c>[RequiresPermission(permission)]</c>
-/// for the whole tenant and <c>[RequiresOperator]</c>. A case of the module's own, a permission held at a unit where a project
+/// for the whole tenant and <c>[Operator]</c>. A case of the module's own, a permission held at a unit where a project
 /// is to be opened (<see cref="ProjectsRequirement"/>), has no attribute, so its request answers
 /// <see cref="IRequireAccess.RequiredAccess"/> itself, as <c>OpenProject</c> does, and so does a request that requires
 /// two permissions in two places, <c>AccessRequirement.All</c> of them, as <c>MoveProjectToUnit</c> does; it implements the

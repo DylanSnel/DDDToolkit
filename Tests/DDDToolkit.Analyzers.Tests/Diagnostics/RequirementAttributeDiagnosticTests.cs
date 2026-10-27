@@ -151,7 +151,7 @@ public class RequirementAttributeDiagnosticTests
     [Theory]
     [InlineData("[AllowAnonymous, RequiresPermission(\"billing.close\")]", "[RequiresPermission]")]
     [InlineData("[AllowAnonymous, SignedIn]", "[SignedIn]")]
-    [InlineData("[InTenant, AllowAnonymous, RequiresOperator]", "[InTenant] and [RequiresOperator]")]
+    [InlineData("[InTenant, AllowAnonymous, Operator]", "[InTenant] and [Operator]")]
     public void AllowAnonymous_beside_another_requirement_attribute_is_DDD00079(string attributes, string named)
     {
         var result = Run(attributes + " public sealed record CloseTheBooks(int Year) : IBillingRequest;");
@@ -366,7 +366,6 @@ public class RequirementAttributeDiagnosticTests
 
     [Theory]
     [InlineData("[SeenWith<DocumentId>(\"documents.view\")]", "SeenWith<DocumentId>")]
-    [InlineData("[RequiresOperator]", "RequiresOperator")]
     public void A_requirement_for_queries_only_on_a_command_is_DDD00082(string attribute, string named)
     {
         var result = Run(attribute + " public sealed record ArchiveAll : Mediator.ICommand, IBillingRequest;", mediator: true);
@@ -378,8 +377,7 @@ public class RequirementAttributeDiagnosticTests
     [Theory]
     [InlineData("[SeenWith<DocumentId>(\"documents.view\")]", "Mediator.IRequest<int>")]
     [InlineData("[SeenWith<DocumentId>(\"documents.view\")]", "Mediator.IRequest")]
-    [InlineData("[RequiresOperator]", "Mediator.IRequest<int>")]
-    [InlineData("[RequiresOperator]", "Mediator.IStreamRequest<int>")]
+    [InlineData("[SeenWith<DocumentId>(\"documents.view\")]", "Mediator.IStreamRequest<int>")]
     public void A_requirement_for_queries_only_on_a_plain_request_of_Mediator_s_is_DDD00082(string attribute, string message)
     {
         // A plain request may change as much as a command does, and the requirement would hold its caller to nothing.
@@ -390,13 +388,28 @@ public class RequirementAttributeDiagnosticTests
             .And.Contain("make it a query, IQuery or IStreamQuery");
     }
 
+    [Theory]
+    [InlineData("Mediator.ICommand")]
+    [InlineData("Mediator.IRequest<int>")]
+    [InlineData("Mediator.IStreamCommand<int>")]
+    public void Operator_is_for_commands_as_much_as_for_queries(string message)
+    {
+        // An operator's command runs as operator work, which the pipeline begins: [Operator] holds the caller to what the
+        // command changes, so it is no requirement for queries only.
+        var result = Run("[Operator] public sealed record SuspendAll : " + message + ", IBillingRequest;", mediator: true);
+
+        result.ShouldCompile();
+        result.ShouldHaveExactlyDiagnostics();
+        result.ShouldContain("BillingAccessBehavior.", "global::Shop.Billing.SuspendAll => global::DDDToolkit.Supporting.Tenancy.Access.TenancyAccess.Operator()");
+    }
+
     [Fact]
     public void On_a_query_or_where_a_command_cannot_be_told_it_is_not_reported()
     {
         var withTheLibrary = Run(
             """
             [SeenWith<DocumentId>("documents.view")] public sealed record ListDocuments : Mediator.IQuery<int>, IBillingRequest;
-            [RequiresOperator] public sealed record AllLedgers : Mediator.IStreamQuery<int>, IBillingRequest;
+            [Operator] public sealed record AllLedgers : Mediator.IStreamQuery<int>, IBillingRequest;
             """,
             mediator: true);
         var withoutIt = Run("[SeenWith<DocumentId>(\"documents.view\")] public sealed record ListDocuments : IBillingRequest;");

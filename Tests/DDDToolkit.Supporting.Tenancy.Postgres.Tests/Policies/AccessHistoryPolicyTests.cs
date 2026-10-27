@@ -2,6 +2,7 @@ using System.Text.Json;
 using DDDToolkit.EntityFramework.EventLog;
 using DDDToolkit.Supporting.Tenancy.Catalogue;
 using DDDToolkit.Supporting.Tenancy.TestHost;
+using DDDToolkit.Supporting.Tenancy.TestHost.Requests;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using static DDDToolkit.Supporting.Tenancy.Postgres.Tests.Infrastructure.TenancySeed;
@@ -137,13 +138,10 @@ public abstract class AccessHistoryPolicyTests(TenancyPostgres postgres, Tenancy
             changed.RootElement.GetProperty("Removed").GetArrayLength().Should().Be(0);
         }
 
-        // An operator has Orchard suspended. System work carries it out, in Tenancy's scope, and the row and the event
-        // name the operator, by identity and with no seat.
+        // An operator has Orchard suspended. The command runs as operator work, in Tenancy's scope, and the row and the
+        // event name the operator, by identity and with no seat.
         var operatorIdentity = Guid.NewGuid();
-        using (TenancyWork.BeginOperatorIn<TenantId, SeatId>(Orchard, operatorIdentity))
-        {
-            await services.InScopeAsync(scoped => scoped.Tenants().SuspendAsync("Asked for by the owner", Cancellation));
-        }
+        await OperatorWork.RunAsync(operatorIdentity, Orchard, () => services.InScopeAsync(scoped => scoped.Tenants().SuspendAsync("Asked for by the owner", Cancellation)));
 
         await using var owner = await AsCaller.OwnerAsync(database, Cancellation);
         (await owner.ScalarAsync<long>("SELECT count(*) FROM ddd.\"OutboxMessages\" WHERE \"EventName\" = 'tenancy.organization-unit-renamed'", Cancellation))

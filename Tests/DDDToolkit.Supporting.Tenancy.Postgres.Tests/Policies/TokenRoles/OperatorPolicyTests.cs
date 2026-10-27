@@ -118,12 +118,13 @@ public sealed class OperatorPolicyTests(TenancyPostgres postgres)
             await RefusedAsync(asOperator, "SELECT tenancy.holds_permission('tenancy.seats.manage')");
         }
 
-        // In the application: no seat is chosen for an operator, whatever tenant the request names, and the
-        // tenants' directory answers it every tenant, read as its own database role.
+        // In the application: no seat is chosen for an operator, whatever tenant the request names; the tenant it names
+        // is found, as its own database role reads every tenant, and kept. The tenants' directory answers it every
+        // tenant, read as that role.
         using (Callers.Begin(Callers.FromClaims(Claims)))
         {
             var selected = await services.InScopeAsync(scoped => scoped.GetRequiredService<TenantSelection<TenantId, SeatId>>().ResolveAsync(Callers.Ambient!, "harbor", Cancellation));
-            selected.Should().Be(HostCaller.Nobody(TenancyRefusals.NotSeated));
+            selected.Should().Be(HostCaller.OperatorNaming(Harbor));
 
             using (TenancyCallers.Begin(selected))
             {

@@ -9,7 +9,8 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 
 /// <summary>
 /// Decides Tenancy's requirements (<see cref="TenancyRequirement"/>) before a handler runs, for the requests of
-/// the module it is registered for with <c>AddTenancyAccess</c>.
+/// the module it is registered for with <c>AddTenancyAccess</c>. The operator cases are the package's own check's,
+/// which <c>AddTenancyAccess</c> registers beside this one.
 /// </summary>
 /// <remarks>
 /// Every case but two reads nothing: who is calling is kept with the flow of work, and is asked each time. A
@@ -24,13 +25,9 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 /// </para>
 /// </remarks>
 /// <param name="access">Tenancy's access manager, asked about the current caller and for the queries over the context.</param>
-/// <param name="options">Which token roles are operators'.</param>
-/// <param name="callers">Who is calling, as the toolkit says: what says whether the caller is an operator.</param>
 /// <param name="services">The services of the scope the check runs in, for the context a permission is asked over.</param>
 internal sealed class TenancyAccessCheck<TTenantId, TSeatId, TUnitId, TRoleId, TContext>(
     TenancyAccessManager<TTenantId, TSeatId, TUnitId, TRoleId> access,
-    TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId> options,
-    ICallerAccessor callers,
     IServiceProvider services) : IAccessCheck
     where TTenantId : struct, IEntityId, IEquatable<TTenantId>
     where TSeatId : struct, IEntityId, IEquatable<TSeatId>
@@ -39,7 +36,9 @@ internal sealed class TenancyAccessCheck<TTenantId, TSeatId, TUnitId, TRoleId, T
     where TContext : DbContext
 {
     /// <inheritdoc />
-    public bool Decides(AccessRequirement requirement) => requirement is TenancyRequirement;
+    public bool Decides(AccessRequirement requirement)
+        => requirement is TenancyRequirement and not TenancyRequirement.Operator
+           && !(requirement.GetType() is { IsGenericType: true } type && type.GetGenericTypeDefinition() == typeof(TenancyRequirement.OperatorIn<>));
 
     /// <inheritdoc />
     /// <exception cref="RefusalException">The caller is not who the request requires.</exception>
@@ -74,15 +73,6 @@ internal sealed class TenancyAccessCheck<TTenantId, TSeatId, TUnitId, TRoleId, T
                 if (!await HoldsAtAsync(required.Permission, required.Unit, cancellationToken).ConfigureAwait(false))
                 {
                     throw TenancyRefusals.Refuse(TenancyRefusals.NotPermitted, ("Permission", required.Permission), ("Unit", required.Unit));
-                }
-
-                break;
-
-            case TenancyRequirement.Operator:
-                // The token's own role, never the Tenancy caller: an operator is nobody in every tenant.
-                if (!options.IsOperator(callers.Current))
-                {
-                    throw TenancyRefusals.Refuse(TenancyRefusals.OperatorsOnly);
                 }
 
                 break;

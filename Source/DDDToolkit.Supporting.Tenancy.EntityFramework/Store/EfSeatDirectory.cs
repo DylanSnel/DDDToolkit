@@ -10,7 +10,7 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 /// seats across tenants, past the tenant filter, because the caller has no tenant yet: that is what it is
 /// finding. It never looks for anything but the identity it is given, and joins the tenant and what its
 /// organization is called only for the seats that identity has. The application's own filters still apply: a seat
-/// the application hides is not found.
+/// the application hides is not found. For an operator it finds the tenant a request names, by its slug alone.
 /// <para>
 /// On a database that keeps its own policies the names come from Tenancy's function that answers what the
 /// identity's tenants are called, <see cref="TenancyFunctionNames.TenantNamesOfIdentity"/>, which runs as its owner:
@@ -42,6 +42,24 @@ internal sealed class EfSeatDirectory<TTenant, TTenantId, TOrganization, TUnit, 
             .ConfigureAwait(false);
 
         return found?.ToSeatOfCaller();
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Past the tenant filter, as the operator it is asked for reads every tenant. On a database that keeps its own
+    /// policies the read runs as the operator's own database role, whose policy reads every tenant.
+    /// </remarks>
+    public async Task<TTenantId?> FindTenantAsync(string tenantSlug, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(tenantSlug);
+
+        var found = await Tenants(TenantSlug.Create(tenantSlug))
+            .Select(tenant => tenant.Id)
+            .Take(1)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return found.Count == 0 ? null : found[0];
     }
 
     /// <inheritdoc />

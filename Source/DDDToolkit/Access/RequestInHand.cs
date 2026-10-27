@@ -16,7 +16,10 @@ namespace DDDToolkit.Access;
 /// generator writes does:
 /// <code>
 /// await checks.RequireAsync(request, cancellationToken);      // the request is in hand from here
-/// await handler.HandleAsync(request, cancellationToken);      // and here, down to the save
+/// using (checks.BeginWork(request, isQuery: false))           // with the work a check begins for it
+/// {
+///     await handler.HandleAsync(request, cancellationToken);  // and here, down to the save
+/// }
 /// </code>
 /// A helper that asks the checks in a method of its own has the request in hand there alone, and hands nothing
 /// back: the handler it calls next runs with no request in hand. And only an <see langword="async"/> method gives

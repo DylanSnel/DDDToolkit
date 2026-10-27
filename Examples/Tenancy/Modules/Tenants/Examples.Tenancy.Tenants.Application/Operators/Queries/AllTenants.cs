@@ -13,7 +13,7 @@ namespace Examples.Tenancy.Tenants.Application.Operators.Queries;
 /// </remarks>
 /// <param name="After">The marker the page before answered as its next, or <see langword="null"/> for the first page.</param>
 /// <param name="Size">How many tenants a page holds: 1 to <see cref="TenantManager.MostPerPage"/>.</param>
-[RequiresOperator]
+[Operator]
 public sealed record AllTenants(string? After = null, int Size = AllTenants.DefaultPage) : IQuery<ListedTenants>, ITenantsRequest
 {
     /// <summary>How many tenants a page holds when the caller does not say.</summary>

@@ -99,3 +99,7 @@ DDD00098 | DDDToolkit.Membership | Error | Rules that reach a resource from abov
 DDD00099 | DDDToolkit.Access | Warning | A permission says what it lets somebody do
 DDD00100 | DDDToolkit.Tenancy | Error | A restrictive rule narrows a table it can reach
 DDD00101 | DDDToolkit.Tenancy | Error | TenancyRowAccess.CallerSeat answers with the application's seat class
+DDD00102 | DDDToolkit.Access | Error | A marker of a requirement's argument goes beside the attribute whose call it is
+DDD00103 | DDDToolkit.Tenancy | Error | An operator's command takes its tenant from the request or from itself
+DDD00104 | DDDToolkit.Tenancy | Error | [Operator] stands beside no requirement an operator cannot meet
+DDD00105 | DDDToolkit.Tenancy | Warning | [Operator] on a query names no tenant and no scope

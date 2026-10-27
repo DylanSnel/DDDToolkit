@@ -159,7 +159,7 @@ handler starts the system work that creates the tenant ([System work](#system-wo
 public sealed record TenantAuditLog(TenantId Tenant, PagingArguments Paging) : IQuery<Page<AuditEntry>>, IAuditRequest
 {
     AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.Any(
-        TenancyAccess.RequiresOperator(),
+        TenancyAccess.Operator(),
         TenancyAccess.AtTenant(TenancyPermissions.SeatsManage));
 }
 

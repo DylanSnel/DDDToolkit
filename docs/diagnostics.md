@@ -101,6 +101,10 @@ problem, and the fix.
 | [DDD00099](#ddd00099) | Warning | A permission says what it lets somebody do |
 | [DDD00100](#ddd00100) | Error | A restrictive rule narrows a table it can reach |
 | [DDD00101](#ddd00101) | Error | TenancyRowAccess.CallerSeat answers with the application's seat class |
+| [DDD00102](#ddd00102) | Error | A marker of a requirement's argument goes beside the attribute whose call it is |
+| [DDD00103](#ddd00103) | Error | An operator's command takes its tenant from the request or from itself |
+| [DDD00104](#ddd00104) | Error | [Operator] stands beside no requirement an operator cannot meet |
+| [DDD00105](#ddd00105) | Warning | [Operator] on a query names no tenant and no scope |
 
 The Meaning column is the title the IDE shows for each id.
 
@@ -141,6 +145,9 @@ rules, by topic:
   thing twice.
 - [DDD00087](#ddd00087) and [DDD00088](#ddd00088): [the owner an aggregate marks](access-requirements.md#the-owner-of-an-aggregate).
   They catch a request about the owner that no row could ever let through.
+- [DDD00102](#ddd00102) to [DDD00105](#ddd00105): a request for operators, `[Operator]`. They catch a tenant marker
+  that nothing reads, a command that names two tenants for its work, a request no caller can send, and a query that
+  names work it never begins.
 - [DDD00059](#ddd00059) and [DDD00060](#ddd00060): the
   [member list of a resource](membership/resources-and-members.md#the-generated-member-list). They report what
   the Membership generator could not tell, and a member class that names the wrong resource.
@@ -3727,6 +3734,85 @@ TenancyRowAccess.CallerSeat<Role>().Name == "Employee"             // DDD00101: 
 with a row of Tenancy's seats table. So `TSeat` must be the class that this table is mapped to: the class declared
 with `[SeatAggregate]`. In a rule of a module whose context does not map the seats, use
 `TenancyRowAccess.CallerSeatId<SeatId>()` for the seat's id.
+
+## DDD00102
+
+**A marker of a requirement's argument goes beside the attribute whose call it is.**
+
+```csharp
+[Operator]
+public sealed record SuspendTenant([ForTenant] TenantId Tenant, string Reason) : ICommand<Tenant>, ITenancyRequest;   // fine
+
+[InTenant]
+public sealed record RenameTenant([ForTenant] TenantId Tenant, string Name) : ICommand, ITenancyRequest;              // DDD00102
+```
+
+A package marks an attribute as one more argument of a requirement's call with `[RequirementArgument]`. Tenancy's
+`[ForTenant]` is one. The generator hands the marked member to the call of the attribute it goes with: `[Operator]`
+with `[ForTenant] TenantId Tenant` is `TenancyAccess.Operator(request.Tenant)`.
+
+- Without that attribute on the request, the member is handed to nothing. Put `[Operator]` on the request, or take
+  the marker off.
+- Two members marked with one marker give the call two arguments where it takes one. Mark one member.
+- The marker goes on a positional parameter of a record or on a property that the module's interface can read.
+
+A member of another type than the marker names is DDD00081: `[ForTenant]` marks the application's tenant id.
+
+## DDD00103
+
+**An operator's command takes its tenant from the request or from itself.**
+
+```csharp
+[Operator(Tenant = OperatorTenant.FromRequest)]
+public sealed record SuspendTenant([ForTenant] TenantId Tenant, string Reason) : ICommand<Tenant>, ITenancyRequest;   // DDD00103
+```
+
+`[Operator]` on a command runs its handler as operator work. The work acts in one place:
+
+| The command says | The work acts in |
+|---|---|
+| a `[ForTenant]` member | the tenant the command names |
+| `Tenant = OperatorTenant.FromRequest` | the tenant the request names beside the command |
+| neither | no tenant, as provisioning needs |
+
+Both at once name two tenants for one piece of work. Keep `[ForTenant]` for a command that names its tenant, or
+`FromRequest` for one that takes the tenant the request names.
+
+## DDD00104
+
+**`[Operator]` stands beside no requirement an operator cannot meet.**
+
+```csharp
+[Operator, InTenant]                                       // DDD00104
+public sealed record ArchiveUnits : ICommand, ITenancyRequest;
+```
+
+Requirement attributes on one request all hold. `[Operator]` lets through only a signed-in user with an operator's
+token role. An operator holds no seat in any tenant and no permission, so `[InTenant]` and
+`[RequiresPermission(permission)]` refuse every operator. Together they refuse every caller.
+
+Keep `[Operator]` for a request of the application's staff, or the other attribute for a request of a tenant's
+seats. A request that either may send answers `RequiredAccess` itself:
+
+```csharp
+AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.Any(
+    TenancyAccess.Operator(),
+    TenancyAccess.AtTenant(TenancyPermissions.SeatsManage));
+```
+
+## DDD00105
+
+**`[Operator]` on a query names no tenant and no scope.**
+
+```csharp
+[Operator(Tenant = OperatorTenant.FromRequest)]            // DDD00105, a warning
+public sealed record AllTenants(string? After) : IQuery<TenantPage>, ITenancyRequest;
+```
+
+On a command, `[Operator]` runs the handler as operator work, and `Tenant` and `Scope` say where the work acts and in
+which scope. On a query nothing begins: an operator reads across tenants through the database role of its token. So
+`Tenant` and `Scope` on a query say nothing. Take them off. `[ForTenant]` on a query is not reported: a request that
+names another tenant beside it is still refused.
 
 ## Building the model fails: the owned type must carry the key part
 

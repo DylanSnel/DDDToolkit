@@ -259,7 +259,7 @@ public partial class HowARequestIsCheckedDocsExampleTests
 
         // The audit log says it as the property alone, and C# takes its own over the interface's default.
         Required(emitted.New("Examples.Tenancy.TenantAuditLog", emitted.New("Examples.Tenancy.TenantId", Guid.NewGuid()), emitted.New("Examples.Tenancy.PagingArguments", null, null)))
-            .Should().Be(AccessRequirement.Any(TenancyAccess.RequiresOperator(), TenancyAccess.AtTenant("tenancy.seats.manage")));
+            .Should().Be(AccessRequirement.Any(TenancyAccess.Operator(), TenancyAccess.AtTenant("tenancy.seats.manage")));
     }
 
     [Fact]

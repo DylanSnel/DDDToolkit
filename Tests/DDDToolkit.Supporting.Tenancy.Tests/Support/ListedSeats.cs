@@ -33,6 +33,18 @@ public sealed class ListedSeats : ISeatDirectory<TenantId, SeatId>
         return Task.FromResult<SeatOfCaller<TenantId, SeatId>?>(found);
     }
 
+    /// <summary>Every slug a tenant was looked up by, in order, for an operator.</summary>
+    public List<string> TenantLookups { get; } = [];
+
+    /// <inheritdoc />
+    /// <remarks>Answers the tenant any listed seat is in, by its slug.</remarks>
+    public Task<TenantId?> FindTenantAsync(string tenantSlug, CancellationToken cancellationToken)
+    {
+        TenantLookups.Add(tenantSlug);
+        var found = _seats.Where(entry => entry.Seat.Slug == tenantSlug).Select(entry => (TenantId?)entry.Seat.Tenant).FirstOrDefault();
+        return Task.FromResult(found);
+    }
+
     /// <inheritdoc />
     /// <remarks>Answers the application's own seat each seat was listed with, beside its tenant.</remarks>
     public Task<IReadOnlyList<SeatInTenant<TSeat>>> AllOfAsync<TSeat>(Guid identity, CancellationToken cancellationToken)

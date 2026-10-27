@@ -18,8 +18,8 @@ namespace DDDToolkit.Supporting.Tenancy.UseCases;
 /// <para>
 /// Provisioning is the one thing system work outside any tenant does. Suspending, reactivating and closing
 /// are system work inside the tenant, and act on that tenant: whoever carries them out begins
-/// <c>access.BeginSystemIn(tenant)</c> first, or <c>TenantManager.BeginOperatorIn(tenant, identity)</c> for an
-/// operator, so acting on another tenant cannot be expressed.
+/// <c>access.BeginSystemIn(tenant)</c> first, or sends a command marked <c>[Operator]</c> with the tenant on a
+/// <c>[ForTenant]</c> member, which runs as operator work in that tenant, so acting on another tenant cannot be expressed.
 /// </para>
 /// <para>
 /// The organization's name is the tenant's name, and <c>OrganizationManager.RenameAsync</c> changes it.
@@ -233,29 +233,6 @@ public class TenantManager<
     /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>
     public Task<TTenant> CloseAsync(string reason, CancellationToken cancellationToken)
         => ChangeStatusAsync((tenant, by) => tenant.Close(reason, by), cancellationToken);
-
-    // ------------------------------------------------------------------ an operator's work
-
-    /// <summary>
-    /// Begins system work outside any tenant that provisions a tenant for an operator, recorded as that operator:
-    /// <see cref="TenancyWork.BeginOperator{TTenantId, TSeatId}"/> closed over the application's ids. A static member, so
-    /// it is called through the class the generator writes, <c>TenantManager.BeginOperator(identity)</c>.
-    /// </summary>
-    /// <param name="operatorIdentity">The operator's verified identity: the <c>sub</c> of the token they signed in with.</param>
-    /// <exception cref="ArgumentException"><paramref name="operatorIdentity"/> is empty; nothing is begun then.</exception>
-    public static IDisposable BeginOperator(Guid operatorIdentity) => TenancyWork.BeginOperator<TTenantId, TSeatId>(operatorIdentity);
-
-    /// <summary>
-    /// Begins system work inside one tenant that carries out what an operator asked for, recorded as that operator:
-    /// <see cref="TenancyWork.BeginOperatorIn{TTenantId, TSeatId}"/> closed over the application's ids. A static member, so
-    /// it is called through the class the generator writes, <c>TenantManager.BeginOperatorIn(tenant, identity)</c>.
-    /// </summary>
-    /// <param name="tenant">The tenant.</param>
-    /// <param name="operatorIdentity">The operator's verified identity: the <c>sub</c> of the token they signed in with.</param>
-    /// <param name="scope">The scope of the toolkit's scoped system caller.</param>
-    /// <exception cref="ArgumentException"><paramref name="operatorIdentity"/> is empty, or <paramref name="scope"/> is not a scope; nothing is begun then.</exception>
-    public static IDisposable BeginOperatorIn(TTenantId tenant, Guid operatorIdentity, string scope = TenancyWork.SystemScope)
-        => TenancyWork.BeginOperatorIn<TTenantId, TSeatId>(tenant, operatorIdentity, scope);
 
     // ------------------------------------------------------------------ reads
 

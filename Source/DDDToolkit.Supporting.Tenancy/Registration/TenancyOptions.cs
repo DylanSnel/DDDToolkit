@@ -44,11 +44,10 @@ public sealed class TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId>
     /// </code>
     /// <para>
     /// An operator holds no seat. Its token role is never one of <see cref="TenantSelectionOptions.SeatedTokenRoles"/>,
-    /// so tenant selection answers nobody for it whatever tenant the request names, and registration refuses a
-    /// role that is on both lists. An operator reads: the tenants, through <c>TenantManager</c>, and on Postgres
-    /// whatever the policies of its own database role let it read. It changes nothing itself: what it asks for is
-    /// carried out by system work that names it (<see cref="TenancyWork.BeginOperator"/> and
-    /// <see cref="TenancyWork.BeginOperatorIn"/>).
+    /// so tenant selection answers nobody for it whatever tenant the request names, keeping that tenant, and registration
+    /// refuses a role that is on both lists. An operator reads: the tenants, through <c>TenantManager</c>, and on Postgres
+    /// whatever the policies of its own database role let it read. It changes nothing as itself. A command marked
+    /// <see cref="OperatorAttribute"/> runs as operator work, which is system work that names it.
     /// </para>
     /// </summary>
     public ISet<string> OperatorTokenRoles { get; } = new HashSet<string>(StringComparer.Ordinal);
@@ -56,8 +55,7 @@ public sealed class TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId>
     /// <summary>
     /// Whether <paramref name="caller"/> is one of the application's operators: a signed-in user whose token
     /// carries one of <see cref="OperatorTokenRoles"/>. The one place that says so: the tenants' directory and
-    /// the check of <see cref="TenancyRequirement.Operator"/> both ask here, so they mean the same caller
-    /// by it. System work is never one, whoever it is recorded as, and neither is anyone without an identity.
+    /// the check of <see cref="OperatorAttribute"/> both ask here, so they mean the same caller by it. System work is never one, whoever it is recorded as, and neither is anyone without an identity.
     /// </summary>
     /// <param name="caller">Who is calling, as the toolkit says: the caller of the request, not the Tenancy caller.</param>
     public bool IsOperator(Caller? caller)

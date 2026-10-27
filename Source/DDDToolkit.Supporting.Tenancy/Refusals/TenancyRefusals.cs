@@ -83,9 +83,15 @@ public static class TenancyRefusals
 
     /// <summary>
     /// Only an operator of the application reads the tenants' directory, or sends a request that requires one
-    /// (<c>TenancyAccess.RequiresOperator()</c>).
+    /// (<c>[Operator]</c>, <c>TenancyAccess.Operator()</c>).
     /// </summary>
     public const string OperatorsOnly = "tenancy.operators-only";
+
+    /// <summary>
+    /// An operator's request names one tenant with its <c>[ForTenant]</c> member and another beside it, as tenant selection
+    /// reads it. It carries no field, since the tenant beside the request is no input of the command.
+    /// </summary>
+    public const string TenantMismatch = "tenancy.tenant-mismatch";
 
     /// <summary>
     /// The invitation is for another address than the one the application says the accepting identity has. It
@@ -299,6 +305,7 @@ public static class TenancyRefusals
             [OtherTenant] = (RefusalKind.NotPermitted, "That row belongs to a tenant you are not working in."),
             [StartSystemOnly] = (RefusalKind.NotPermitted, "A grant you make starts now; only system work picks another start."),
             [OperatorsOnly] = (RefusalKind.NotPermitted, "Only an operator can do this."),
+            [TenantMismatch] = (RefusalKind.Invalid, "This request names two different tenants."),
             [AddressMismatch] = (RefusalKind.NotPermitted, "This invitation was sent to another address than this account's."),
 
             [UnitNotFound] = (RefusalKind.NotFound, "The unit was not found in this tenant."),

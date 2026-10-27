@@ -22,7 +22,7 @@ namespace DDDToolkit.Access;
 ///     : TenancyAccess.AtTenant(BillingPermissions.Close);
 ///
 /// AccessRequirement IRequireAccess.RequiredAccess =&gt; AccessRequirement.Any(
-///     TenancyAccess.RequiresOperator(),
+///     TenancyAccess.Operator(),
 ///     TenancyAccess.AtTenant(TenancyPermissions.SeatsManage));
 /// </code>
 /// The cases spelled here are about who is calling, or combine other cases, so the core decides them, and a host
@@ -31,10 +31,11 @@ namespace DDDToolkit.Access;
 /// decides them, and a module adds cases of its own the same way. A record, so two requirements that say the same
 /// are equal, and a test can hold every request to the requirement it is meant to declare.
 /// <para>
-/// A requirement says who may send a request, never what the work runs with: the application's own work is
-/// no requirement but a scope, begun on purpose by trusted code around the work, <c>Callers.Begin(Caller.System)</c>
+/// A requirement says who may send a request. What the work runs with is begun on purpose. The application's own work
+/// is no requirement but a scope, begun by trusted code around the work, <c>Callers.Begin(Caller.System)</c>
 /// or a supporting domain's own way such as Tenancy's <c>access.BeginSystem()</c>, after which the caller
-/// before it is current again. And it says what is asked, never who may: it carries a permission and the ids the request
+/// before it is current again. A check may begin work around the handler of a request it let through
+/// (<see cref="IBeginsWork"/>), as Tenancy's does for a command an operator sends. And it says what is asked, never who may: it carries a permission and the ids the request
 /// names, and the check reads the rest where it is kept. What a requirement cannot say is decided where it can
 /// be: in the handler, in plain sight; in the use case of the package the handler calls; and in the database's
 /// own row level security, which asks again for every row, as the caller.
@@ -113,7 +114,7 @@ public abstract partial record AccessRequirement
     /// combine.
     /// <code>
     /// AccessRequirement IRequireAccess.RequiredAccess =&gt; AccessRequirement.Any(
-    ///     TenancyAccess.RequiresOperator(),
+    ///     TenancyAccess.Operator(),
     ///     TenancyAccess.AtTenant(TenancyPermissions.SeatsManage));
     /// </code>
     /// No attribute says it, since stacked attributes all hold: a request whose caller may be one or another says it

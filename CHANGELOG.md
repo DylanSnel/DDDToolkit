@@ -542,6 +542,21 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `OnlyWith = typeof(...)`, on the assembly's `[TemplateFacade]` and on a `[TemplateRegistration]`, names the template
   of a class an application may leave out, such as Tenancy's invitation: the class and the registration are written
   only where that template has a class, and a project without one hears nothing, rather than DDD00065 or DDD00049.
+- **A check begins work around the handler of a request it let through.** A check that implements `IBeginsWork`
+  beside `IAccessCheck` begins work for a case it decides, and `AccessChecks<TRequests>.BeginWork(request, isQuery)`
+  asks each check of the request's requirement after `RequireAsync` let it through. The behavior the generator writes
+  runs the next step inside it: `using (_checks.BeginWork(message, isQuery: message is IBaseQuery))`. What a check
+  begins reaches the handler and ends with it. A query of the Mediator library begins no work that changes anything,
+  and a message answered with a stream begins none. Tenancy's check of `[Operator]` begins operator work this way. A
+  dispatcher of your own calls `BeginWork` after `RequireAsync`, in the same method, and runs the handler inside it.
+- **A requirement attribute's call takes a member of the request and the attribute's properties.** A marker whose class
+  carries `[RequirementArgument(typeof(TAttribute))]` hands the member it marks to the call of `TAttribute`, after the
+  attribute's constructor arguments: `[Operator]` with `[ForTenant] TenantId Tenant` is
+  `TenancyAccess.Operator(request.Tenant)`. A property set where the request carries a requirement attribute goes to the
+  call as a named argument, its name with a lower case first letter: `[Operator(Scope = "projects")]` is
+  `TenancyAccess.Operator(scope: "projects")`. DDD00102 reports a marker without its attribute, two members marked
+  with one marker, and a member the module's interface cannot read; DDD00081 reports a member of another id than
+  `IdOf` names.
 
 #### Entity Framework and row level security
 
@@ -2867,8 +2882,36 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     `AcceptedInvitation` the `Tenant` and the `Seat`. `AddTenancyInvitations<TInvitation, TInvitationId,
     TContext>()` is `AddTenancyInvitations<TContext>()`. The stores, `ITenancyStore<...>` and `IInvitationStore<...>`,
     and the token's `InvitationOfToken<...>` are in `DDDToolkit.Supporting.Tenancy.UseCases`, no longer nested: a
-    storage package implements them as before. `TenancyUseCases.BeginOperator(...)` and `BeginOperatorIn(...)` are on
-    `TenantManager` for now.
+    storage package implements them as before. `TenancyUseCases.BeginOperator(...)` and `BeginOperatorIn(...)` are
+    gone: a command marked `[Operator]` runs as operator work (below).
+- **Tenancy: `[Operator]` on the request, operator work around the handler.** A request marked `[Operator]` lets
+  through one of the application's operators and nobody else, with `tenancy.operators-only` before the handler runs.
+  On a command, the pipeline runs the handler as operator work: system work recorded as the operator, whose identity
+  is the current user's id. It acts in the tenant of the command's `[ForTenant] TenantId Tenant` member; with
+  `[Operator(Tenant = OperatorTenant.FromRequest)]`, in the tenant the request names beside the command, without a
+  seat; with neither, in no tenant, which provisioning needs. `Scope` names the scope of the work, Tenancy's own,
+  `tenancy`, by default: `[Operator(Scope = "projects")]` for a module's own command. On a query nothing begins, and an
+  operator reads across tenants through its token's database role.
+  - **Breaking.** `[RequiresOperator]` is `[Operator]`, and is no longer for queries only; `TenancyAccess.RequiresOperator()`
+    is `TenancyAccess.Operator(tenant, scope)`, with `TenancyAccess.Operator(forTenant, ...)` beside it, which answers the new
+    case `TenancyRequirement.OperatorIn<TTenantId>`. `TenancyRequirement.Operator` carries `Tenant` and `Scope`.
+    `TenantManager.BeginOperator(identity)`, `TenantManager.BeginOperatorIn(tenant, identity)`,
+    `TenancyWork.BeginOperator<TTenantId, TSeatId>(identity)` and `TenancyWork.BeginOperatorIn<TTenantId, TSeatId>(...)`
+    are gone from the public API: put `[Operator]` on the request and take the `using` out of the handler.
+  - **New refusal.** `tenancy.tenant-mismatch` (`TenancyRefusals.TenantMismatch`, invalid): an operator's request names
+    one tenant with its `[ForTenant]` member and another beside it.
+  - **Tenant selection keeps the tenant an operator names.** For a user with an operator's token role, selection looks
+    the slug up and answers nobody with that tenant kept, `TenancyCaller.OperatorNaming(tenant)`, whose `NamedTenant` is
+    the tenant; a request that names no tenant gets `tenancy.tenant-required` and one that names a tenant nobody has
+    `tenancy.not-seated`. `ISeatDirectory<TTenantId, TSeatId>` has `FindTenantAsync(slug, cancellationToken)` for it,
+    and `TenantSelection` takes the operators' token roles.
+  - **The operator cases have a check of their own.** `AddTenancyAccess<TRequests, TContext>()` adds it beside Tenancy's
+    other check; `AddTenancyOperatorAccess<...>()` adds it alone.
+  - DDD00103 reports `FromRequest` beside a `[ForTenant]` member, DDD00104 `[Operator]` beside `[InTenant]` or
+    `[RequiresPermission]`, which no operator meets, and DDD00105, a warning, `Tenant` or `Scope` on a query's
+    `[Operator]`.
+  - The sample's Projects module has an operator's command, `RenameTenantProject`, at
+    `PUT /operations/tenants/{tenant}/projects/{project}/name` and as the mutation `tenantProjectRename`.
 - **`UseDDDToolkit` keeps a context's migration history in its default schema.** A context whose model has a
   default schema, `modelBuilder.HasDefaultSchema("ordering")`, keeps its history in
   `ordering."__EFMigrationsHistory"` without its options naming it, so the modules that share a database each keep

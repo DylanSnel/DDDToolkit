@@ -6,8 +6,8 @@ namespace DDDToolkit.Supporting.Tenancy.Tests;
 
 /// <summary>
 /// An operator of the application looks across tenants and holds no seat in any: its token carries a role the
-/// application lists, tenant selection answers nobody for it, and the tenants' directory answers it and nobody
-/// else, a page at a time.
+/// application lists, tenant selection answers nobody for it and keeps the tenant it names, and the tenants' directory
+/// answers it and nobody else, a page at a time.
 /// </summary>
 public class OperatorTests
 {
@@ -157,7 +157,7 @@ public class OperatorTests
     }
 
     [Fact]
-    public async Task An_operator_has_no_seat_whatever_the_header()
+    public async Task An_operator_has_no_seat_whatever_the_header_and_the_tenant_it_names_is_kept()
     {
         // The same person has a seat in Harbor, and signs in once as a member and once as an operator.
         var harbor = new TenantId(1);
@@ -176,15 +176,25 @@ public class OperatorTests
 
         (await selection.ResolveAsync(Caller.User(Odette), "harbor", TestContext.Current.CancellationToken)).Should().Be(HostCaller.InSeat(harbor, seat));
 
-        foreach (var slug in new[] { "harbor", "quarry", null, "" })
-        {
-            var asOperator = await selection.ResolveAsync(Caller.User(Odette, OperatorRole), slug, TestContext.Current.CancellationToken);
+        // An operator is nobody in every tenant, and is told what a person without a seat is told. The tenant it names is
+        // kept, for a command that acts in the tenant the request names.
+        var named = await selection.ResolveAsync(Caller.User(Odette, OperatorRole), " Harbor ", TestContext.Current.CancellationToken);
+        named.Should().Be(HostCaller.OperatorNaming(harbor));
+        named.Kind.Should().Be(TenancyCallerKind.Nobody);
+        named.Refusal.Should().Be(TenancyRefusals.NotSeated);
+        named.NamedTenant.Should().Be(harbor);
+        named.Actor.Should().BeNull("nobody changes nothing, so there is nobody to record");
 
-            asOperator.Should().Be(HostCaller.Nobody(TenancyRefusals.NotSeated), "an operator is nobody in every tenant, and is told what a person without a seat is told");
-            asOperator.Actor.Should().BeNull("nobody changes nothing, so there is nobody to record");
+        (await selection.ResolveAsync(Caller.User(Odette, OperatorRole), "quarry", TestContext.Current.CancellationToken))
+            .Should().Be(HostCaller.Nobody(TenancyRefusals.NotSeated), "a tenant nobody has is told as a seat is told");
+        foreach (var slug in new[] { null, "", " " })
+        {
+            (await selection.ResolveAsync(Caller.User(Odette, OperatorRole), slug, TestContext.Current.CancellationToken))
+                .Should().Be(HostCaller.Nobody(TenancyRefusals.TenantRequired), "a request that names no tenant is told so, as a seat is");
         }
 
-        seats.Lookups.Should().ContainSingle("only the member's request was looked up: an operator's token role is asked about before any seat is");
+        seats.Lookups.Should().ContainSingle("only the member's seat was looked up: an operator's tenant is found by its slug alone");
+        seats.TenantLookups.Should().Equal(["harbor", "quarry"], "trimmed and lowercased, as a seat's slug is");
         provider.GetRequiredService<TenancyOperatorTokenRoles>().TokenRoles.Should().Equal(OperatorRole);
     }
 

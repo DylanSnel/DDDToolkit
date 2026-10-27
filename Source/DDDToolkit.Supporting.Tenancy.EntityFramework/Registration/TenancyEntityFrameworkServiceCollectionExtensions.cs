@@ -239,6 +239,11 @@ public static class TenancyEntityFrameworkServiceCollectionExtensions
     /// writes for an interface marked <c>[AccessRequests]</c>.
     /// </para>
     /// <para>
+    /// The operator cases, <c>[Operator]</c>, are decided by the check <c>AddTenancyOperatorAccess</c> adds, which this
+    /// adds as well. That check reads nothing, and begins the operator work a command an operator sends runs in, through
+    /// <see cref="AccessChecks{TRequests}.BeginWork"/>.
+    /// </para>
+    /// <para>
     /// <c>AddTenancyAccess&lt;IBillingRequest, BillingContext&gt;</c> is generated into the project that declares
     /// Tenancy's classes, closed over their four ids (<see cref="TemplateRegistrationAttribute"/>), or into a
     /// project of the same <c>[assembly: Module]</c> that declares none. A module that only asks Tenancy
@@ -286,6 +291,10 @@ public static class TenancyEntityFrameworkServiceCollectionExtensions
         // The module's access manager, one per scope, and the package's it derives from, which the check asks.
         services.TryAddScoped<TAccessManager>();
         services.TryAddScoped<TenancyAccessManager<TTenantId, TSeatId, TUnitId, TRoleId>>();
+
+        // The operator cases, [Operator], are the package's own check's, which reads nothing and begins the operator work
+        // of a command; the others are asked over the module's context.
+        services.AddTenancyOperatorAccess<TTenantId, TSeatId, TUnitId, TRoleId, TRequests>();
         return services.AddAccessCheck<TRequests, TenancyAccessCheck<TTenantId, TSeatId, TUnitId, TRoleId, TContext>>();
     }
 }

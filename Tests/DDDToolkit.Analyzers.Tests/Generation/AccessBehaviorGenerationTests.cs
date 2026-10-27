@@ -91,6 +91,105 @@ public class AccessBehaviorGenerationTests
         }
         """;
 
+    /// <summary>
+    /// A command and a query of the module, a check that begins work around the handler of a request it let through, and code
+    /// that sends each through the behavior and says what ran, in order, and in which work the handler ran.
+    /// </summary>
+    private const string BillingWithWork =
+        """
+        using System;
+        using System.Collections.Generic;
+        using System.Threading;
+        using System.Threading.Tasks;
+        using DDDToolkit.Access;
+        using Mediator;
+
+        namespace Shop.Billing;
+
+        public sealed record MayClose : AccessRequirement;
+
+        public sealed record CloseInvoice(int Invoice) : ICommand, IBillingRequest
+        {
+            AccessRequirement IRequireAccess.RequiredAccess => new MayClose();
+        }
+
+        public sealed record InvoiceTotal(int Invoice) : IQuery<int>, IBillingRequest
+        {
+            AccessRequirement IRequireAccess.RequiredAccess => new MayClose();
+        }
+
+        public sealed class WorkingCheck(List<string> steps) : IAccessCheck, IBeginsWork
+        {
+            public static readonly AsyncLocal<string?> Work = new();
+
+            public bool Decides(AccessRequirement requirement) => requirement is MayClose;
+
+            public ValueTask RequireAsync(AccessRequirement requirement, IRequireAccess request, CancellationToken cancellationToken)
+            {
+                steps.Add("check");
+                return ValueTask.CompletedTask;
+            }
+
+            public IDisposable? BeginWork(AccessRequirement requirement, IRequireAccess request, bool isQuery)
+            {
+                if (isQuery)
+                {
+                    steps.Add("a query begins nothing");
+                    return null;
+                }
+
+                steps.Add("work begins");
+                var before = Work.Value;
+                Work.Value = "the check's work";
+                return new Ending(() =>
+                {
+                    Work.Value = before;
+                    steps.Add("work ends");
+                });
+            }
+
+            private sealed class Ending(Action end) : IDisposable
+            {
+                public void Dispose() => end();
+            }
+        }
+
+        public static class WorkProbe
+        {
+            public static async Task<string> CommandAsync()
+            {
+                var steps = new List<string>();
+                var behavior = new BillingAccessBehavior<CloseInvoice, Unit>(new AccessChecks<IBillingRequest>(new IAccessCheck[] { new WorkingCheck(steps) }));
+                await behavior.Handle(
+                    new CloseInvoice(7),
+                    async (message, cancellationToken) =>
+                    {
+                        await Task.Yield();
+                        steps.Add("handler in " + (WorkingCheck.Work.Value ?? "no work"));
+                        return Unit.Value;
+                    },
+                    CancellationToken.None);
+                steps.Add("after it, " + (WorkingCheck.Work.Value ?? "no work"));
+                return string.Join(", ", steps);
+            }
+
+            public static async Task<string> QueryAsync()
+            {
+                var steps = new List<string>();
+                var behavior = new BillingAccessBehavior<InvoiceTotal, int>(new AccessChecks<IBillingRequest>(new IAccessCheck[] { new WorkingCheck(steps) }));
+                await behavior.Handle(
+                    new InvoiceTotal(7),
+                    (message, cancellationToken) =>
+                    {
+                        steps.Add("handler in " + (WorkingCheck.Work.Value ?? "no work"));
+                        return new ValueTask<int>(12);
+                    },
+                    CancellationToken.None);
+                return string.Join(", ", steps);
+            }
+        }
+        """;
+
     /// <summary>A query of the module that is answered with a stream, its check, and code that asks for the stream through the behavior.</summary>
     private const string BillingStreamInUse =
         """
@@ -259,9 +358,12 @@ public class AccessBehaviorGenerationTests
             Hint,
             """
                     await _checks.RequireAsync(message, cancellationToken).ConfigureAwait(false);
-                    return await next(message, cancellationToken).ConfigureAwait(false);
+                    using (_checks.BeginWork(message, isQuery: message is global::Mediator.IBaseQuery))
+                    {
+                        return await next(message, cancellationToken).ConfigureAwait(false);
+                    }
             """,
-            "the checks, then the next step, and nothing else");
+            "the checks, then the next step inside the work a check begins for it, and nothing else");
     }
 
     [Fact]
@@ -667,6 +769,17 @@ public class AccessBehaviorGenerationTests
 
         static async Task<string> RunThroughAsync(EmittedAssembly emitted, int invoice, object? requires)
             => await (Task<string>)emitted.CallStatic("Shop.Billing.Probe", "RunThroughAsync", invoice, requires)!;
+    }
+
+    [Fact]
+    public async Task The_handler_runs_inside_the_work_a_check_begins_and_a_query_begins_none()
+    {
+        var emitted = GeneratorTestHost.Create(Billing).WithSource(BillingWithWork, "Work.cs").WithMediator().RunCore().Emit();
+
+        (await (Task<string>)emitted.CallStatic("Shop.Billing.WorkProbe", "CommandAsync")!)
+            .Should().Be("check, work begins, handler in the check's work, work ends, after it, no work", "the work reaches the handler, past an await, and ends with it");
+        (await (Task<string>)emitted.CallStatic("Shop.Billing.WorkProbe", "QueryAsync")!)
+            .Should().Be("check, a query begins nothing, handler in no work", "the behavior tells a query of the library by its interface");
     }
 
     [Fact]

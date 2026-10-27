@@ -13,13 +13,14 @@ public sealed record TenancyCaller<TTenantId, TSeatId> : ITenancyCaller
     where TTenantId : struct, IEntityId, IEquatable<TTenantId>
     where TSeatId : struct, IEntityId, IEquatable<TSeatId>
 {
-    private TenancyCaller(TenancyCallerKind kind, TTenantId? tenant, TSeatId? seat, string? refusal, TenancyActor<TSeatId>? actor)
+    private TenancyCaller(TenancyCallerKind kind, TTenantId? tenant, TSeatId? seat, string? refusal, TenancyActor<TSeatId>? actor, TTenantId? namedTenant = null)
     {
         Kind = kind;
         Tenant = tenant;
         Seat = seat;
         Refusal = refusal;
         Actor = actor;
+        NamedTenant = namedTenant;
     }
 
     /// <summary>System work outside any tenant: provisioning only. Recorded as the system, in Tenancy's own scope.</summary>
@@ -49,6 +50,13 @@ public sealed record TenancyCaller<TTenantId, TSeatId> : ITenancyCaller
     /// </summary>
     public TenancyActor<TSeatId>? Actor { get; }
 
+    /// <summary>
+    /// The tenant an operator's request names, as tenant selection found it: where a command marked
+    /// <c>[Operator(Tenant = OperatorTenant.FromRequest)]</c> acts, and what a <c>[ForTenant]</c> member is held to.
+    /// <see langword="null"/> for every other caller. The operator holds nothing there, and the caller is nobody.
+    /// </summary>
+    public TTenantId? NamedTenant { get; }
+
     object? ITenancyCaller.TenantId => Tenant;
 
     object? ITenancyCaller.SeatId => Seat;
@@ -64,6 +72,15 @@ public sealed record TenancyCaller<TTenantId, TSeatId> : ITenancyCaller
         TenancyRefusals.KindOf(refusal);
         return new TenancyCaller<TTenantId, TSeatId>(TenancyCallerKind.Nobody, null, null, refusal, null);
     }
+
+    /// <summary>
+    /// One of the application's operators, whose request names <paramref name="tenant"/>. To Tenancy the caller is nobody,
+    /// refused as a person without a seat there. The tenant is kept as <see cref="NamedTenant"/>. Tenant selection answers
+    /// it for an operator's token role.
+    /// </summary>
+    /// <param name="tenant">The tenant the request names.</param>
+    public static TenancyCaller<TTenantId, TSeatId> OperatorNaming(TTenantId tenant)
+        => new(TenancyCallerKind.Nobody, null, null, TenancyRefusals.NotSeated, null, tenant);
 
     /// <summary>A person, through their seat in a tenant.</summary>
     /// <param name="tenant">The tenant.</param>

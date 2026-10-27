@@ -161,6 +161,9 @@ internal static class KnownTypes
     /// <summary>On an attribute a package ships: it marks one more argument of a key marker's call, such as the version read.</summary>
     public const string PermissionMarkerArgumentAttribute = "DDDToolkit.Access.PermissionMarkerArgumentAttribute";
 
+    /// <summary>On an attribute a package ships: it marks one more argument of a requirement attribute's call, such as the tenant an operator's command acts in.</summary>
+    public const string RequirementArgumentAttribute = "DDDToolkit.Access.RequirementArgumentAttribute";
+
     /// <summary>On a package's assembly: what <c>[RequiresPermission]</c> means on a request that marks no member.</summary>
     public const string PermissionWithoutMarkerAttribute = "DDDToolkit.Access.PermissionWithoutMarkerAttribute";
 

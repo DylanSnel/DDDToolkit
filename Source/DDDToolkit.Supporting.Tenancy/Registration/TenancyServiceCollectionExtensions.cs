@@ -146,6 +146,31 @@ public static class TenancyServiceCollectionExtensions
     }
 
     /// <summary>
+    /// Registers the check of Tenancy's operator cases for the requests of <typeparamref name="TRequests"/>:
+    /// <see cref="TenancyRequirement.Operator"/> and <see cref="TenancyRequirement.OperatorIn{TTenantId}"/>, which a request
+    /// declares with <see cref="OperatorAttribute"/>. It refuses every caller who is no operator, and runs a command an
+    /// operator sends as operator work. The storage package's <c>AddTenancyAccess</c> calls it beside the check of Tenancy's
+    /// other cases, so an application calls that one. Adding it twice adds it once.
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <typeparam name="TTenantId">The application's tenant id.</typeparam>
+    /// <typeparam name="TSeatId">The application's seat id.</typeparam>
+    /// <typeparam name="TUnitId">The application's unit id.</typeparam>
+    /// <typeparam name="TRoleId">The application's role id.</typeparam>
+    /// <typeparam name="TRequests">The module's request interface.</typeparam>
+    public static IServiceCollection AddTenancyOperatorAccess<TTenantId, TSeatId, TUnitId, TRoleId, TRequests>(this IServiceCollection services)
+        where TTenantId : struct, IEntityId, IEquatable<TTenantId>
+        where TSeatId : struct, IEntityId, IEquatable<TSeatId>
+        where TUnitId : struct, IEntityId, IEquatable<TUnitId>
+        where TRoleId : struct, IEntityId, IEquatable<TRoleId>
+        where TRequests : class, IRequireAccess
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        return services.AddAccessCheck<TRequests, TenancyOperatorCheck<TTenantId, TSeatId, TUnitId, TRoleId>>();
+    }
+
+    /// <summary>
     /// Adds permissions to the catalogue by hand. Contributions add up. A permission may be declared only once in
     /// the whole catalogue, and never under <c>tenancy.</c>.
     /// <para>

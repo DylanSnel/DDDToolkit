@@ -490,7 +490,7 @@ internal static class DiagnosticDescriptors
     public static readonly DiagnosticDescriptor PipelineBehaviorShapeUnknown = Create(
         id: "DDD00057",
         title: "The Mediator library's pipeline behavior has the shape the generator writes a behavior for",
-        messageFormat: "No access behavior is written for '{0}': the Mediator library this project references declares {2} otherwise than the generator knows it, {1}. Write the behavior yourself: its Handle is async, awaits AccessChecks<{0}>.RequireAsync(message, cancellationToken), and then awaits the next step.",
+        messageFormat: "No access behavior is written for '{0}': the Mediator library this project references declares {2} otherwise than the generator knows it, {1}. Write the behavior yourself: its Handle is async, awaits AccessChecks<{0}>.RequireAsync(message, cancellationToken), and then awaits the next step inside using (checks.BeginWork(message, isQuery)).",
         category: Access,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
@@ -692,7 +692,7 @@ internal static class DiagnosticDescriptors
         category: Access,
         DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
-        description: "Requirement attributes stacked on one request all hold, so one that another beside it already requires says nothing more: [InTenant] beside a permission of Tenancy's, [RequiresPermission(permission)] with or without [AtUnit], which only a seat in the tenant or system work there holds, and [SignedIn] beside [RequiresOperator], which lets only a signed-in user with an operator's token role through. It does no harm to what is checked, but a reader takes it for a second condition and looks for what it adds. What a requirement already requires its package says, with Implies on [StatesRequirement], [PermissionMarker] or [PermissionWithoutMarker], so a module's own attribute is held to it the same way. The caller's own requires what its package says with Implies on [assembly: CallersOwn]: a Guid is the identity of a signed-in user, so [SignedIn] beside [OwnOnly] with [Own] on a Guid says nothing more, and Tenancy's seat id is a seat in the tenant, so [InTenant] beside [OwnOnly] with [Own] on it says nothing more either. A permission with [OrOwn] beside it lets the caller's own through as well, so only what both the permission and the caller's own require is counted for it. An attribute that the request it derives from carries already says nothing more either: the requirement attributes of a request and of the requests it derives from all hold. Nor do a request's own attributes that say what its module's default says, call for call: without them it takes the default, and requires the same. They are reported on a request nothing derives from, since one that derives from it holds to its attributes beside its own, and on the module's interface an attribute of its default that another there already requires is reported as on a request.");
+        description: "Requirement attributes stacked on one request all hold, so one that another beside it already requires says nothing more: [InTenant] beside a permission of Tenancy's, [RequiresPermission(permission)] with or without [AtUnit], which only a seat in the tenant or system work there holds, and [SignedIn] beside [Operator], which lets only a signed-in user with an operator's token role through. It does no harm to what is checked, but a reader takes it for a second condition and looks for what it adds. What a requirement already requires its package says, with Implies on [StatesRequirement], [PermissionMarker] or [PermissionWithoutMarker], so a module's own attribute is held to it the same way. The caller's own requires what its package says with Implies on [assembly: CallersOwn]: a Guid is the identity of a signed-in user, so [SignedIn] beside [OwnOnly] with [Own] on a Guid says nothing more, and Tenancy's seat id is a seat in the tenant, so [InTenant] beside [OwnOnly] with [Own] on it says nothing more either. A permission with [OrOwn] beside it lets the caller's own through as well, so only what both the permission and the caller's own require is counted for it. An attribute that the request it derives from carries already says nothing more either: the requirement attributes of a request and of the requests it derives from all hold. Nor do a request's own attributes that say what its module's default says, call for call: without them it takes the default, and requires the same. They are reported on a request nothing derives from, since one that derives from it holds to its attributes beside its own, and on the module's interface an attribute of its default that another there already requires is reported as on a request.");
 
     public static readonly DiagnosticDescriptor OwnMarkerOutOfPlace = Create(
         id: "DDD00085",
@@ -755,7 +755,7 @@ internal static class DiagnosticDescriptors
         category: Access,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "Some requirements are for queries only, and their packages say so ([StatesRequirement(..., QueriesOnly = true)]). Membership's [SeenWith<TResourceId>(permission)] refuses nobody for want of the permission: it lets a signed-in caller through, one that holds nothing too, and says what the query's own statement filters by, which is the check; on a command the handler would run unchecked. Tenancy's [RequiresOperator] lets an operator through, who holds no seat and no permission and changes nothing itself: what an operator asks for is carried out by trusted code as system work that names the operator, TenantManager.BeginOperatorIn, behind a requirement of the module's own. A message of the Mediator library that is no query and carries either is reported: a command, ICommand or IStreamCommand, and a plain IRequest or IStreamRequest, which may change as much as a command. A request of another dispatcher, which the generator cannot tell for a command or a query, is not; nor is the same requirement written as RequiredAccess, which a test holds.");
+        description: "Some requirements are for queries only, and their packages say so ([StatesRequirement(..., QueriesOnly = true)]). Membership's [SeenWith<TResourceId>(permission)] refuses nobody for want of the permission: it lets a signed-in caller through, one that holds nothing too, and says what the query's own statement filters by, which is the check; on a command the handler would run unchecked. A message of the Mediator library that is no query and carries it is reported: a command, ICommand or IStreamCommand, and a plain IRequest or IStreamRequest, which may change as much as a command. A request of another dispatcher, which the generator cannot tell for a command or a query, is not; nor is the same requirement written as RequiredAccess, which a test holds.");
 
     public static readonly DiagnosticDescriptor RequirementAttributesNotRead = Create(
         id: "DDD00083",
@@ -773,7 +773,7 @@ internal static class DiagnosticDescriptors
         category: Access,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "A requirement attribute on a module's interface, [AccessRequests, InTenant] say, is the default of its requests: one that states nothing of its own, by attribute or by answering RequiredAccess, requires what the default says, on a line of its own in the generated switch. So every request that forgets its own requirement takes it, a command that forgets its permission included, and a default is a requirement any of them may take. [AllowAnonymous] is none: a request that forgot would let anyone in, and a forgotten requirement never opens a door. A requirement for queries only, Tenancy's [RequiresOperator] or Membership's [SeenWith<TResourceId>(permission)], is none either, since a command that says nothing would take it (DDD00082); [OwnOnly] reads a member of a request marked [Own], and a default reads none. And an attribute whose class's AttributeUsage leaves out interfaces is no default, which the compiler says as well (CS0592): a module's own requirement attribute is one where its class allows AttributeTargets.Interface. Each is reported at the attribute, and the interface's last arm stops a request that states nothing, as it does without a default.");
+        description: "A requirement attribute on a module's interface, [AccessRequests, InTenant] say, is the default of its requests: one that states nothing of its own, by attribute or by answering RequiredAccess, requires what the default says, on a line of its own in the generated switch. So every request that forgets its own requirement takes it, a command that forgets its permission included, and a default is a requirement any of them may take. [AllowAnonymous] is none: a request that forgot would let anyone in, and a forgotten requirement never opens a door. A requirement for queries only, Membership's [SeenWith<TResourceId>(permission)], is none either, since a command that says nothing would take it (DDD00082); [OwnOnly] reads a member of a request marked [Own], and a default reads none. And an attribute whose class's AttributeUsage leaves out interfaces is no default, which the compiler says as well (CS0592): a module's own requirement attribute is one where its class allows AttributeTargets.Interface. Each is reported at the attribute, and the interface's last arm stops a request that states nothing, as it does without a default.");
 
     public static readonly DiagnosticDescriptor MembershipNamesChanged = Create(
         id: "DDD00090",
@@ -881,5 +881,41 @@ internal static class DiagnosticDescriptors
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
         description: "TenancyRowAccess.CallerSeat<TSeat>() is the calling seat's own row, read by a rule through the fields of the application's seat class: CallerSeat<Seat>().Kind == SeatKind.Employee. The function answers with the row of Tenancy's seats table, which the seat class is mapped to, so TSeat is that class, the one declared with [SeatAggregate]. For the seat's id in a rule of a module whose context does not map the seats, ask TenancyRowAccess.CallerSeatId<TSeatId>().");
+
+    public static readonly DiagnosticDescriptor RequirementArgumentOutOfPlace = Create(
+        id: "DDD00102",
+        title: "A marker of a requirement's argument goes beside the attribute whose call it is",
+        messageFormat: "'{0}' {1}",
+        category: Access,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "A package marks an attribute of its own as one more argument of a requirement's call with [RequirementArgument(typeof(TAttribute))]. Tenancy's [ForTenant] is one: it goes on the tenant of a request that carries [Operator]. The generator hands the marked member to the call of that attribute. Without the attribute on the request the member is handed to nothing, and the request reads as if it said something it does not. Two members marked with one marker give the call two arguments where it takes one. A marker goes on a positional parameter of a record, which is its property, or on a property the module's interface can read. A parameter of a class's primary constructor is no member the requirement can read, and neither is a private or protected property, since the line is written in the module's interface.");
+
+    public static readonly DiagnosticDescriptor OperatorTenantTwice = Create(
+        id: "DDD00103",
+        title: "An operator's command takes its tenant from the request or from itself",
+        messageFormat: "'{0}' carries [Operator(Tenant = OperatorTenant.FromRequest)] and marks '{1}' [ForTenant], so its work would act in the tenant the request names and in the one the command names: keep [ForTenant] for a command that names its tenant, or FromRequest for one that takes the tenant the request names",
+        category: Tenancy,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "[Operator] on a command runs its handler as operator work. The work acts in the tenant of the command's [ForTenant] member. With Tenant = OperatorTenant.FromRequest it acts in the tenant the request names beside the command, as tenant selection reads it from the Tenant header. With neither it acts in no tenant, which is what provisioning needs. A command says one of the three. Both at once name two tenants for one piece of work.");
+
+    public static readonly DiagnosticDescriptor OperatorBesideSeatRequirement = Create(
+        id: "DDD00104",
+        title: "[Operator] stands beside no requirement an operator cannot meet",
+        messageFormat: "'{0}' carries [Operator] beside {1}, which no operator meets, since an operator holds no seat and no permission in any tenant, so the two refuse every caller: keep [Operator] for a request of the application's staff or {1} for a request of a tenant's seats, and answer RequiredAccess with AccessRequirement.Any for a request either may send",
+        category: Tenancy,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "Requirement attributes stacked on one request all hold. [Operator] lets through only a signed-in user with an operator's token role. An operator holds no seat in any tenant and no permission, so [InTenant] and [RequiresPermission(permission)] refuse every operator. Stacked, the two refuse every caller, and the request can never be sent. A request that an operator or a seat with a permission may send answers RequiredAccess itself, with AccessRequirement.Any(TenancyAccess.Operator(), TenancyAccess.AtTenant(permission)).");
+
+    public static readonly DiagnosticDescriptor OperatorWorkOnAQuery = Create(
+        id: "DDD00105",
+        title: "[Operator] on a query names no tenant and no scope",
+        messageFormat: "'{0}' is a query and carries [Operator({1})], but nothing begins for a query, so {1} says nothing: take it off, since an operator's query reads across tenants through the database role of the operator's token",
+        category: Tenancy,
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "On a command, [Operator] runs the handler as operator work, and Tenant and Scope say where the work acts and in which scope. On a query nothing begins: an operator reads across tenants through the database role of its token. So Tenant and Scope on a query say nothing, and a reader takes them for the tenant the query reads in. [ForTenant] on a query is not reported: it still refuses a request that names another tenant than the query does.");
 
 }

@@ -13,8 +13,8 @@ namespace Examples.Tenancy.Tenants.Api.Operators.Rest;
 /// </summary>
 /// <remarks>
 /// An operator holds no seat, so these routes name no tenant in a header: one that reads inside a tenant has the
-/// tenant's id in its path. Every one of them reads. There is no route here that changes anything, because an
-/// operator changes nothing itself.
+/// tenant's id in its path. Every one of them reads. A change an operator makes is a command marked <c>[Operator]</c>,
+/// which runs as operator work, such as the projects' rename for support.
 /// <para>
 /// Like every route of this project, these decide nothing and take only the sender;
 /// <see cref="TenantsModule"/> says what all of them keep to. Internal: the module's entry maps them into the

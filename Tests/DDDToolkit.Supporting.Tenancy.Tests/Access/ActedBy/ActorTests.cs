@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Access;
 using DDDToolkit.Interfaces;
+using DDDToolkit.Supporting.Tenancy.TestHost.Requests;
 using DDDToolkit.Testing;
 
 namespace DDDToolkit.Supporting.Tenancy.Tests;
@@ -77,9 +78,10 @@ public class ActorTests
     }
 
     [Fact]
-    public void Begin_operator_names_the_operator_and_no_seat()
+    public async Task Operator_work_names_the_operator_and_no_seat()
     {
-        using (TenancyWork.BeginOperator<TenantId, SeatId>(Odette))
+        // An operator's command that names no tenant runs as operator work in no tenant, as provisioning needs.
+        await OperatorWork.RunAsync(Odette, () =>
         {
             Current.Kind.Should().Be(TenancyCallerKind.System, "it provisions, as system work outside any tenant does");
             Current.Actor.Should().Be(TenancyActor<SeatId>.OfOperator(Odette, TenancyWork.SystemScope));
@@ -88,30 +90,37 @@ public class ActorTests
             Callers.Ambient!.Kind.Should().Be(CallerKind.SystemIn);
             Callers.Ambient.Scope.Should().Be(TenancyWork.SystemScope);
             Callers.Ambient.UserId.Should().BeNull("the operator is who the work is recorded as, never who it runs as");
-        }
+            return Task.CompletedTask;
+        });
 
-        using (TenancyWork.BeginOperatorIn<TenantId, SeatId>(Harbor, Odette))
+        // One that names its tenant runs in that tenant.
+        await OperatorWork.RunAsync(Odette, Harbor, () =>
         {
             Current.Kind.Should().Be(TenancyCallerKind.SystemInTenant);
             Current.Tenant.Should().Be(Harbor);
             Current.Seat.Should().BeNull("an operator holds no seat, and none is recorded for it");
             Current.Actor.Should().Be(new TenancyActor<SeatId>(TenancyActorKind.Operator, Operator: Odette, Scope: "tenancy"));
             Callers.Ambient!.Scope.Should().Be(TenancyWork.SystemScope);
-        }
+            return Task.CompletedTask;
+        });
 
-        using (TenancyWork.BeginOperatorIn<TenantId, SeatId>(Harbor, Odette, scope: "operations"))
+        await OperatorWork.RunAsync(Odette, Harbor, () =>
         {
             Current.Actor!.Value.Scope.Should().Be("operations");
             Callers.Ambient!.Scope.Should().Be("operations");
-        }
+            return Task.CompletedTask;
+        }, scope: "operations");
 
         Callers.Ambient.Should().BeNull();
         TenancyCallers.Ambient.Should().BeNull();
 
-        // An operator is somebody: the empty identity is refused, and so is a scope that is none, before anything begins.
-        FluentActions.Invoking(() => TenancyWork.BeginOperator<TenantId, SeatId>(Guid.Empty)).Should().Throw<ArgumentException>();
-        FluentActions.Invoking(() => TenancyWork.BeginOperatorIn<TenantId, SeatId>(Harbor, Guid.Empty)).Should().Throw<ArgumentException>();
-        FluentActions.Invoking(() => TenancyWork.BeginOperatorIn<TenantId, SeatId>(Harbor, Odette, scope: "Not A Scope")).Should().Throw<ArgumentException>();
+        // An operator is somebody: work for the empty identity is refused, before the handler runs. A scope that is none
+        // is refused where the request says it.
+        var ran = false;
+        await FluentActions.Awaiting(() => OperatorWork.RunAsync(Guid.Empty, Harbor, () => Task.FromResult(ran = true))).Should().ThrowAsync<ArgumentException>();
+        ran.Should().BeFalse();
+        FluentActions.Invoking(() => TenancyAccess.Operator(Harbor, scope: "Not A Scope")).Should().Throw<ArgumentException>();
+        FluentActions.Invoking(() => TenancyAccess.Operator(scope: "Not A Scope")).Should().Throw<ArgumentException>();
         Callers.Ambient.Should().BeNull("a refused beginning leaves no caller behind");
         TenancyCallers.Ambient.Should().BeNull();
     }
@@ -358,8 +367,8 @@ public class ActorTests
         byQuin.Select(raised => raised.GetType().GetGenericTypeDefinition()).Should().Contain([typeof(TenantShapeChanged<,>), typeof(RoleCreated<,,>)]);
         byQuin.Should().OnlyContain(raised => ByOf(raised) == TenancyActor<SeatId>.OfSeat(quay.AdminSeat));
 
-        // ... and suspended, reactivated and closed for an operator.
-        using (TenancyWork.BeginOperatorIn<TenantId, SeatId>(quay.Tenant, Odette))
+        // ... and suspended, reactivated and closed by an operator's commands.
+        await OperatorWork.RunAsync(Odette, quay.Tenant, async () =>
         {
             harness.Store.BeginUnitOfWork();
             await harness.Tenants.SuspendAsync("unpaid", Cancellation);
@@ -367,7 +376,7 @@ public class ActorTests
             await harness.Tenants.ReactivateAsync(Cancellation);
             harness.Store.BeginUnitOfWork();
             await harness.Tenants.CloseAsync("wound up", Cancellation);
-        }
+        });
 
         var forTheOperator = harness.Store.SavedEvents.Skip(before + bySystem.Count + byQuin.Count).ToList();
         forTheOperator.Should().HaveCount(3).And.OnlyContain(raised => ByOf(raised) == TenancyActor<SeatId>.OfOperator(Odette, TenancyWork.SystemScope));
@@ -427,11 +436,11 @@ public class ActorTests
     {
         var harness = Harness.OfHarbor();
 
-        using (TenancyWork.BeginOperatorIn<TenantId, SeatId>(harness.Tenant, Odette))
+        await OperatorWork.RunAsync(Odette, harness.Tenant, async () =>
         {
             harness.Store.BeginUnitOfWork();
             await harness.Tenants.SuspendAsync("Asked for by the owner", Cancellation);
-        }
+        });
 
         var suspended = harness.Store.SavedEvents.Should().ContainSingle().Which.Should().BeOfType<TenantSuspended<TenantId, SeatId>>().Which;
         suspended.By.Should().Be(TenancyActor<SeatId>.OfOperator(Odette, TenancyWork.SystemScope));
@@ -503,12 +512,11 @@ public class ActorTests
         var harness = new Harness(New.Catalogue());
         var command = new TenantToProvision("harbor", "Harbor Works", TenantShape.Hierarchical, "Harbor Works", Guid.NewGuid());
 
-        ProvisionedTenant provisioned;
-        using (TenancyWork.BeginOperator<TenantId, SeatId>(Odette))
+        var provisioned = await OperatorWork.RunAsync(Odette, () =>
         {
             harness.Store.BeginUnitOfWork();
-            provisioned = await harness.Tenants.ProvisionWithIdsAsync(harness.Catalogue, command, TestContext.Current.CancellationToken);
-        }
+            return harness.Tenants.ProvisionWithIdsAsync(harness.Catalogue, command, TestContext.Current.CancellationToken);
+        });
 
         // It saves as system work in the tenant it makes, as any provisioning does, and still as the operator's act.
         var save = harness.Store.Observed.Single(call => call.Name == nameof(ITenancyStore<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId>.SaveAsync));

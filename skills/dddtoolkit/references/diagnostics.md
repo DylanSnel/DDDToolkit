@@ -871,6 +871,31 @@ Error, at `TenancyRowAccess.CallerSeat<T>()` where `T` is not the class declared
 answers a row of Tenancy's seats table. Name the seat class, `CallerSeat<Seat>().Kind`. For the seat's id alone, in a
 module whose context does not map the seats, use `TenancyRowAccess.CallerSeatId<SeatId>()`.
 
+## DDD00102
+
+Error, at a marker whose class carries `[RequirementArgument(typeof(TAttribute))]`, such as Tenancy's `[ForTenant]`:
+the request does not carry `TAttribute` (`[Operator]`), or marks two members with it, or marks a member the module's
+interface cannot read. Put the attribute on the request, mark one member, and mark a property or a record's positional
+parameter.
+
+## DDD00103
+
+Error, at `[ForTenant]` on a command marked `[Operator(Tenant = OperatorTenant.FromRequest)]`: the work would act in
+two tenants. Keep `[ForTenant]` when the command names its tenant, or `FromRequest` when the tenant comes from the
+request (the `Tenant` header). With neither, the work acts in no tenant.
+
+## DDD00104
+
+Error, at `[Operator]` beside `[InTenant]` or `[RequiresPermission]`: an operator holds no seat and no permission, so
+the request refuses every caller. Keep one. For a request an operator or a seat may send, answer `RequiredAccess` with
+`AccessRequirement.Any(TenancyAccess.Operator(), TenancyAccess.AtTenant(permission))`.
+
+## DDD00105
+
+Warning, at `[Operator(Tenant = ...)]` or `[Operator(Scope = ...)]` on a query of Mediator's: nothing begins for a
+query, so the arguments say nothing. Take them off. An operator's query reads across tenants through its token's
+database role.
+
 ## Not a diagnostic: the owned type must carry the key part
 
 An exception when the Entity Framework model is built, not at compile time: an aggregate with a

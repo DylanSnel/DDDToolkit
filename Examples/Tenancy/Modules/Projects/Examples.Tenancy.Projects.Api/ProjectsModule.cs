@@ -91,9 +91,9 @@ public static class ProjectsModule
             .MapAccessEndpoints();
 
     /// <summary>
-    /// Maps what the application's own staff read of the projects: <c>GET /operations/tenants/{tenant}/projects</c>,
-    /// every project of one tenant. An operator holds no seat, so the host maps it outside the group that requires
-    /// one.
+    /// Maps what the application's own staff read and change of the projects: <c>GET /operations/tenants/{tenant}/projects</c>,
+    /// every project of one tenant, and <c>PUT /operations/tenants/{tenant}/projects/{project}/name</c>, an operator's
+    /// rename. An operator holds no seat, so the host maps them outside the group that requires one.
     /// </summary>
     /// <param name="operators">The group for operators. What it requires is the host's to decide.</param>
     public static IEndpointRouteBuilder MapProjectsOperations(this IEndpointRouteBuilder operators)

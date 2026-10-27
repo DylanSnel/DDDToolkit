@@ -150,6 +150,9 @@
   <data name="tenancy.operators-only" xml:space="preserve">
     <value>Dit kan alleen een operator.</value>
   </data>
+  <data name="tenancy.tenant-mismatch" xml:space="preserve">
+    <value>Dit verzoek noemt twee verschillende tenants.</value>
+  </data>
   <data name="tenancy.page-size-invalid" xml:space="preserve">
     <value>Een pagina bevat 1 tot {Max} tenants.</value>
   </data>

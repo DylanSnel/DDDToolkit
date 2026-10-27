@@ -1,4 +1,5 @@
 using DDDToolkit.Supporting.Tenancy.EntityFramework;
+using DDDToolkit.Supporting.Tenancy.TestHost.Requests;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using static DDDToolkit.Supporting.Tenancy.Postgres.Tests.Infrastructure.TenancySeed;
@@ -136,12 +137,14 @@ public abstract class AttributionTriggerTests(TenancyPostgres postgres, TenancyN
         (await RecordedAsync(database, tallies, "Crates, counted")).Should().Be(($"{Seth.Seat.Value}", "seat", null, $"{Oli.Seat.Value}", "seat", null));
 
         await using (var scope = services.Scope())
-        using (TenancyWork.BeginOperatorIn<TenantId, SeatId>(Harbor, Operator, scope: TallyContext.Schema))
         {
-            var context = scope.ServiceProvider.Tallies();
-            (await context.Tallies.SingleAsync(tally => tally.Id == crates, Cancellation)).Rename("Crates, checked");
-            context.Tallies.Add(new Tally(TallyId.CreateSequential(), Harbor, South, "Drums"));
-            await context.SaveChangesAsync(Cancellation);
+            await OperatorWork.RunAsync(Operator, Harbor, async () =>
+            {
+                var context = scope.ServiceProvider.Tallies();
+                (await context.Tallies.SingleAsync(tally => tally.Id == crates, Cancellation)).Rename("Crates, checked");
+                context.Tallies.Add(new Tally(TallyId.CreateSequential(), Harbor, South, "Drums"));
+                await context.SaveChangesAsync(Cancellation);
+            }, scope: TallyContext.Schema);
         }
 
         (await RecordedAsync(database, tallies, "Crates, checked")).Should().Be(($"{Seth.Seat.Value}", "seat", null, null, "operator", $"{Operator}"));

@@ -143,12 +143,13 @@ public sealed class OperatorFieldScenarios(SampleHosts sample) : IClassFixture<S
         }
 
         // The row is answered with the seat's id. Who that seat is, the directory says to a seat of the tenant,
-        // and an operator has none: the one field is refused, with the code the directory's routes give it.
+        // and an operator has none: the one field is refused, with the code the directory's routes give it. Her
+        // request names no tenant, so she is told so, as a person without a seat who names none is told.
         var answer = await orla.GraphQLAsync(
             "query($tenant: UUID!) { tenantAccessHistory(tenant: $tenant, first: 1) { nodes { byKind bySeatId bySeat { displayName } } } }",
             new { tenant = Harbor.Id.Value });
 
-        answer.SingleError().Code().Should().Be(TenancyRefusals.NotSeated);
+        answer.SingleError().Code().Should().Be(TenancyRefusals.TenantRequired);
         var row = answer.GetProperty("data").GetProperty("tenantAccessHistory").GetProperty("nodes").EnumerateArray().Should().ContainSingle().Subject;
         row.Text("bySeatId").Should().Be(Harbor.SeatOf(DemoPeople.Hana).Value.ToString());
         row.GetProperty("bySeat").ValueKind.Should().Be(JsonValueKind.Null);

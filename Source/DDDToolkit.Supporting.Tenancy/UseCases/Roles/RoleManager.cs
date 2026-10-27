@@ -224,8 +224,8 @@ public class RoleManager<
     /// change reaches every seat that holds the role at the save, the one save of the command.
     /// <para>
     /// System work in the tenant alone runs it, as <c>services.SyncRolePacks()</c> does for every tenant once
-    /// the host has started, through <see cref="IRolePackSync"/>; an operator's request begins
-    /// <c>TenancyWork.BeginOperatorIn(tenant, operator)</c> for one tenant, and the events name the operator. No
+    /// the host has started, through <see cref="IRolePackSync"/>; an operator's command marked <c>[Operator]</c> runs it for
+    /// one tenant, as operator work there, and the events name the operator. No
     /// seat runs it: what a pack holds is the application's decision, permissions that manage access included, and an
     /// administrator changes a role with <see cref="SetPermissionsAsync(TRoleId, IReadOnlyCollection{string}, CancellationToken)"/>.
     /// </para>

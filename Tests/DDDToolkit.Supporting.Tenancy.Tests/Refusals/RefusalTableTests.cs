@@ -35,9 +35,10 @@ public partial class RefusalTableTests
 
     /// <summary>
     /// The codes of kind Invalid that are about no one input of a command. The tenant is named beside the
-    /// command, in a header or in the address, so a form has no input to put that text under.
+    /// command, in a header or in the address, so a form has no input to put that text under. A request that names
+    /// two tenants is about the one beside the command as much as about the command's own.
     /// </summary>
-    private static readonly string[] AboutNoOneInput = [TenancyRefusals.TenantRequired];
+    private static readonly string[] AboutNoOneInput = [TenancyRefusals.TenantRequired, TenancyRefusals.TenantMismatch];
 
     /// <summary>The codes declared as constants on <see cref="TenancyRefusals"/>.</summary>
     private static IReadOnlyList<string> DeclaredCodes()

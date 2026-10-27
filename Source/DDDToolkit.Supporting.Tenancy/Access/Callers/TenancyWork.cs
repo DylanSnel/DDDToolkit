@@ -48,10 +48,12 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// </para>
 /// <para>
 /// Each also says who the work is recorded as (<see cref="TenancyCaller{TTenantId, TSeatId}.Actor"/>): the system
-/// in its scope, unless the work is carried out for an operator (<see cref="BeginOperator"/>,
-/// <see cref="BeginOperatorIn"/>) or answers a link that carries a seat's token (<see cref="BeginTokenIn"/>).
-/// These are the one way an operator's act is named: an operator holds no seat and changes nothing as itself,
-/// so what it asked for is done by system work that names it.
+/// in its scope, unless the work answers a link that carries a seat's token (<see cref="BeginTokenIn"/>).
+/// </para>
+/// <para>
+/// An operator's work is begun by none of them. A command marked <see cref="OperatorAttribute"/> runs as operator work.
+/// The access check begins it around the handler, recorded as the operator who sent the command. Nothing else begins
+/// it, so no code can record work as an operator who did not ask for it.
 /// </para>
 /// </summary>
 public static class TenancyWork
@@ -75,8 +77,8 @@ public static class TenancyWork
         => Both(Caller.SystemIn(SystemScope), TenancyCaller<TTenantId, TSeatId>.System);
 
     /// <summary>
-    /// Begins system work inside one tenant, such as an import, seeding or an operator's command: it holds
-    /// every permission there, and nothing in any other tenant. The last-administrator rule still applies to it.
+    /// Begins system work inside one tenant, such as an import or seeding: it holds every permission there, and
+    /// nothing in any other tenant. The last-administrator rule still applies to it.
     /// <para>
     /// Work that calls Tenancy's use cases keeps the default scope. A module's own system work in a tenant,
     /// that only reads Tenancy's rows next to its own, passes the module's name instead, and then cannot write
@@ -115,35 +117,34 @@ public static class TenancyWork
         => BeginSystemIn<TTenantId, TSeatId>(tenant, (TSeatId?)actingSeat, scope);
 
     /// <summary>
-    /// Begins system work outside any tenant that provisions a tenant for an operator: the callers of
-    /// <see cref="BeginSystem"/>, recorded as the operator rather than as the system. Provisioning then makes the
-    /// tenant as that operator's act.
+    /// Begins system work outside any tenant for an operator's command. It begins the callers of <see cref="BeginSystem"/>,
+    /// recorded as the operator rather than as the system. Provisioning then makes the tenant as that operator's act.
+    /// The access check of <see cref="OperatorAttribute"/> begins it, and nothing else.
     /// </summary>
-    /// <param name="operatorIdentity">The operator's verified identity: the <c>sub</c> of the token they signed in with.</param>
-    /// <exception cref="ArgumentException"><paramref name="operatorIdentity"/> is empty; nothing is begun then.</exception>
-    public static IDisposable BeginOperator<TTenantId, TSeatId>(Guid operatorIdentity)
+    /// <param name="operatorIdentity">The operator's verified identity: the current user's id.</param>
+    /// <param name="scope">The scope of the toolkit's scoped system caller: lower case letters, digits, <c>_</c> and <c>-</c>.</param>
+    /// <exception cref="ArgumentException"><paramref name="operatorIdentity"/> is empty, or <paramref name="scope"/> is not a scope; nothing is begun then.</exception>
+    internal static IDisposable BeginOperator<TTenantId, TSeatId>(Guid operatorIdentity, string scope = SystemScope)
         where TTenantId : struct, IEntityId, IEquatable<TTenantId>
         where TSeatId : struct, IEntityId, IEquatable<TSeatId>
         => Both(
-            Caller.SystemIn(SystemScope),
-            TenancyCaller<TTenantId, TSeatId>.SystemBy(TenancyActor<TSeatId>.OfOperator(operatorIdentity, SystemScope)));
+            Caller.SystemIn(scope),
+            TenancyCaller<TTenantId, TSeatId>.SystemBy(TenancyActor<TSeatId>.OfOperator(operatorIdentity, scope)));
 
     /// <summary>
-    /// Begins system work inside one tenant that carries out what an operator asked for, such as suspending the
-    /// tenant: the callers of <see cref="BeginSystemIn{TTenantId, TSeatId}(TTenantId, TSeatId?, string)"/>, recorded as
-    /// the operator rather than as the system.
-    /// The operator gets nothing by it: the work holds what system work in the tenant holds, and the operator is
-    /// only who it is recorded as.
+    /// Begins system work inside one tenant for an operator's command, such as suspending the tenant. It begins the
+    /// callers of <see cref="BeginSystemIn{TTenantId, TSeatId}(TTenantId, TSeatId?, string)"/>, recorded as the operator
+    /// rather than as the system. The work holds what system work in the tenant holds, and the operator is only who it is recorded as.
+    /// The access check of <see cref="OperatorAttribute"/> begins it, and nothing else.
     /// <para>
-    /// The identity is the verified one of the request that asked, never one a caller sends: whoever begins this
-    /// took it from the token, or from a record written by the request that did.
+    /// The identity is the verified one of the request that asked. It is the current user's id, never one a caller sends.
     /// </para>
     /// </summary>
     /// <param name="tenant">The tenant.</param>
-    /// <param name="operatorIdentity">The operator's verified identity: the <c>sub</c> of the token they signed in with.</param>
+    /// <param name="operatorIdentity">The operator's verified identity: the current user's id.</param>
     /// <param name="scope">The scope of the toolkit's scoped system caller: lower case letters, digits, <c>_</c> and <c>-</c>.</param>
     /// <exception cref="ArgumentException"><paramref name="operatorIdentity"/> is empty, or <paramref name="scope"/> is not a scope; nothing is begun then.</exception>
-    public static IDisposable BeginOperatorIn<TTenantId, TSeatId>(TTenantId tenant, Guid operatorIdentity, string scope = SystemScope)
+    internal static IDisposable BeginOperatorIn<TTenantId, TSeatId>(TTenantId tenant, Guid operatorIdentity, string scope = SystemScope)
         where TTenantId : struct, IEntityId, IEquatable<TTenantId>
         where TSeatId : struct, IEntityId, IEquatable<TSeatId>
         => Both(

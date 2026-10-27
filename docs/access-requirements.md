@@ -489,7 +489,7 @@ flowchart LR
 ```csharp shortened
 // The request: one of the application's operators, or a seat that manages seats for the whole tenant
 AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.Any(
-    TenancyAccess.RequiresOperator(),
+    TenancyAccess.Operator(),
     TenancyAccess.AtTenant(TenancyPermissions.SeatsManage));
 
 // A client that wants each reason reads them from the refusal's arguments
@@ -627,7 +627,7 @@ implements the property with `Any` or `All`:
 public sealed record TenantAuditLog(TenantId Tenant, PagingArguments Paging) : IQuery<Page<AuditEntry>>, IAuditRequest
 {
     AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.Any(
-        TenancyAccess.RequiresOperator(),
+        TenancyAccess.Operator(),
         TenancyAccess.AtTenant(TenancyPermissions.SeatsManage));
 }
 
@@ -1009,7 +1009,7 @@ depends on who grants the table's privileges:
 public sealed record TenantAuditLog(TenantId Tenant, PagingArguments Paging) : IQuery<Page<AuditEntry>>, IAuditRequest
 {
     AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.Any(
-        TenancyAccess.RequiresOperator(),
+        TenancyAccess.Operator(),
         TenancyAccess.AtTenant(TenancyPermissions.SeatsManage));
 }
 

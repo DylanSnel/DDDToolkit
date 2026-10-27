@@ -39,7 +39,7 @@ public sealed class GraphQLSeatGateScenarios(SampleHosts sample) : IClassFixture
     private static readonly string[] OpenFields = ["seatsOfMine", "invitationAccept"];
 
     /// <summary>The root fields of the application's own staff, as the host names them to the gate.</summary>
-    private static readonly string[] OperatorFields = ["tenants", "tenantAccessHistory", "tenantProjects", "tenantProjectInspections"];
+    private static readonly string[] OperatorFields = ["tenants", "tenantAccessHistory", "tenantProjects", "tenantProjectInspections", "tenantProjectRename"];
 
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 

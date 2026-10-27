@@ -57,6 +57,8 @@ type Mutation {
     @cost(weight: "10")
   projectReopen(input: ProjectReopenInput!): ProjectReopenPayload!
     @cost(weight: "10")
+  tenantProjectRename(input: TenantProjectRenameInput!): TenantProjectRenamePayload!
+    @cost(weight: "10")
   projectOwnerChange(input: ProjectOwnerChangeInput!): ProjectOwnerChangePayload!
     @cost(weight: "10")
   projectRoleCreate(input: ProjectRoleCreateInput!): ProjectRoleCreatePayload!
@@ -347,6 +349,11 @@ type TenantProject {
   changedBy: ChangedBy!
 }
 
+type TenantProjectRenamePayload {
+  tenantProject: TenantProject
+  errors: [TenantProjectRenameError!]
+}
+
 "One reason a value was refused, in an InvalidValuesError."
 type ValueFailure @shareable {
   "What went wrong, in the reader's language when the server has a translation for it, and in the domain's own words otherwise."
@@ -474,6 +481,12 @@ union ProjectRoleRenameError =
   | BrokenRulesError
   | ConcurrencyConflictError
 
+union TenantProjectRenameError =
+  | RefusalError
+  | InvalidValuesError
+  | BrokenRulesError
+  | ConcurrencyConflictError
+
 input CrewMemberAddInput {
   id: ID!
   seatId: UUID!
@@ -570,6 +583,12 @@ input ProjectRoleRenameInput {
   id: UUID!
   name: String!
   description: String
+}
+
+input TenantProjectRenameInput {
+  tenant: UUID!
+  project: ID!
+  name: String!
 }
 
 "Defines when a policy shall be executed."

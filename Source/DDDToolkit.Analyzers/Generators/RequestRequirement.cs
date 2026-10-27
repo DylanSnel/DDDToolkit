@@ -21,7 +21,10 @@ namespace DDDToolkit.Analyzers;
 /// <c>[RequiresPermission(permission)]</c> and a marker of where the permission is held on one of its members, whose class a package marked
 /// <c>[PermissionMarker(typeof(Factory), "Method")]</c>, such as <c>[AtUnit]</c>; a permission without a marker is held where a
 /// package says with <c>[assembly: PermissionWithoutMarker]</c>. <c>[OrOwn]</c> on a member beside the permission makes the caller's
-/// own its alternative, and <c>[OwnOnly]</c> with <c>[Own]</c> on a member says the caller's own alone. Nothing here
+/// own its alternative, and <c>[OwnOnly]</c> with <c>[Own]</c> on a member says the caller's own alone. A member marked with an
+/// attribute a package marked <c>[RequirementArgument(typeof(TAttribute))]</c>, such as <c>[ForTenant]</c>, is handed to the call of
+/// that attribute, after its constructor's arguments; a property set where the request carries an attribute goes to its call as a
+/// named argument, <c>scope: "projects"</c>. Nothing here
 /// knows a package's attribute by its name: the marks say which call to write, so a package of the application's own
 /// declares attributes the same way. Attributes stacked on one request all hold, so the line is the call of each, in
 /// the order they are written, inside <c>AccessRequirement.All(...)</c> where there are several:
@@ -199,15 +202,30 @@ internal sealed record RequestRequirement(
             : null;
     }
 
-    /// <summary>The call of a requirement attribute a package marked <c>[StatesRequirement]</c>: its method, with the attribute's arguments.</summary>
-    private static string CallOf(Stated each)
+    /// <summary>
+    /// The call of a requirement attribute a package marked <c>[StatesRequirement]</c>: its method, with the attribute's
+    /// constructor arguments, then <paramref name="members"/>, the members of the request markers of its arguments mark, and
+    /// then each property set on the attribute as a named argument, its name with a lower case first letter.
+    /// </summary>
+    private static string CallOf(Stated each, IEnumerable<string>? members = null)
     {
         var typeArguments = each.Class.TypeArguments.Length > 0
             ? "<" + string.Join(", ", each.Class.TypeArguments.Select(static argument => argument.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat))) + ">"
             : string.Empty;
+        var arguments = each.Attribute.ConstructorArguments.Select(Literal)
+            .Concat(members ?? Enumerable.Empty<string>())
+            .Concat(each.Attribute.NamedArguments.Select(static named => Identifier(ParameterNamed(named.Key)) + ": " + Literal(named.Value)));
         return each.Factory!.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + "." + Identifier(each.Method) + typeArguments
-               + "(" + string.Join(", ", each.Attribute.ConstructorArguments.Select(Literal)) + ")";
+               + "(" + string.Join(", ", arguments) + ")";
     }
+
+    /// <summary>The parameter a property of an attribute is handed to: its name with a lower case first letter, <c>Scope</c> to <c>scope</c>.</summary>
+    private static string ParameterNamed(string property)
+        => property.Length == 0 ? property : char.ToLowerInvariant(property[0]) + property.Substring(1);
+
+    /// <summary>Whether two attribute classes are the same class, whatever their type arguments.</summary>
+    private static bool Same(INamedTypeSymbol? one, INamedTypeSymbol? other)
+        => one is not null && other is not null && SymbolEqualityComparer.Default.Equals(one.OriginalDefinition, other.OriginalDefinition);
 
     /// <summary>The permission of <c>[RequiresPermission]</c>, as C# writes it.</summary>
     private static string PermissionOf(Stated each)
@@ -385,8 +403,8 @@ internal sealed record RequestRequirement(
     }
 
     /// <summary>
-    /// A marker of where a permission is held, of one more argument of such a marker's call, or of the caller's own; null for
-    /// any other attribute.
+    /// A marker of where a permission is held, of one more argument of such a marker's call, of one more argument of a requirement
+    /// attribute's call, or of the caller's own; null for any other attribute.
     /// </summary>
     private static Marker? MarkerOf(AttributeData attribute)
     {
@@ -429,6 +447,14 @@ internal sealed record RequestRequirement(
                 && meta.ConstructorArguments[0].Value is INamedTypeSymbol goesWith)
             {
                 return new Marker(attributeClass, MarkerKind.Argument, null, "", goesWith, null, 0, false, ImmutableArray<INamedTypeSymbol>.Empty, null);
+            }
+
+            if (Is(metaClass, KnownTypes.RequirementArgumentAttribute)
+                && meta.ConstructorArguments.Length == 1
+                && meta.ConstructorArguments[0].Value is INamedTypeSymbol requirement)
+            {
+                var idOf = meta.NamedArguments.FirstOrDefault(static named => named.Key == "IdOf").Value.Value as INamedTypeSymbol;
+                return new Marker(attributeClass, MarkerKind.RequirementArgument, null, "", requirement, idOf, 0, false, ImmutableArray<INamedTypeSymbol>.Empty, null);
             }
         }
 
@@ -773,6 +799,9 @@ internal sealed record RequestRequirement(
 
         /// <summary>The caller's own, of an <c>[OwnOnly]</c> request: <c>[Own]</c>.</summary>
         Own,
+
+        /// <summary>One more argument of the call of a requirement attribute: <c>[ForTenant]</c>, beside <c>[Operator]</c>.</summary>
+        RequirementArgument,
     }
 
     /// <summary>A requirement attribute on a request: one a package marked, <c>[RequiresPermission]</c> or <c>[OwnOnly]</c>.</summary>
@@ -855,7 +884,7 @@ internal sealed record RequestRequirement(
         private int _errors;
 
         /// <summary>The markers of where the permission is held and of the arguments of its call, without those of the caller's own.</summary>
-        private IEnumerable<Marker> PermissionMarkers => markers.Where(static each => !each.IsOwn);
+        private IEnumerable<Marker> PermissionMarkers => markers.Where(static each => each.Kind is MarkerKind.Place or MarkerKind.Argument);
 
         public RequestRequirement Result()
         {
@@ -877,6 +906,7 @@ internal sealed record RequestRequirement(
 
             MarkedRightly();
             OwnMarkedRightly();
+            RequirementArgumentsRight();
             QueriesOnly();
             Redundant();
 
@@ -1327,6 +1357,101 @@ internal sealed record RequestRequirement(
         }
 
         /// <summary>
+        /// DDD00102 and DDD00081: a marker of one more argument of a requirement attribute's call, beside that attribute, once,
+        /// on a member the line can read, of the id it marks.
+        /// </summary>
+        private void RequirementArgumentsRight()
+        {
+            var arguments = markers.Where(static each => each.Kind == MarkerKind.RequirementArgument).ToList();
+            if (arguments.Count == 0)
+            {
+                return;
+            }
+
+            // An abstract request is a shape the requests that derive from it share: each of them carries the attribute, and
+            // is read on its own with the markers it inherits.
+            if (!type.IsAbstract)
+            {
+                foreach (var argument in arguments)
+                {
+                    if (stated.Any(each => each.Kind == StatedKind.Call && Same(each.Class, argument.GoesWith)) || ReadWithABaseCarrying(argument))
+                    {
+                        continue;
+                    }
+
+                    var with = argument.GoesWith is { } goesWith ? Bracketed(goesWith) : "another attribute";
+                    Report(DiagnosticDescriptors.RequirementArgumentOutOfPlace, DeclaredHere(argument) ? argument.Location ?? _location : _location, _name,
+                        (DeclaredHere(argument)
+                            ? "marks '" + argument.Name + "' " + Bracketed(argument.Class)
+                            : "inherits '" + argument.Name + "' " + Bracketed(argument.Class) + " from '" + argument.Property!.ContainingType.Name + "'")
+                        + ", which goes with " + with + ", and carries no " + with + ": the member is handed to the call of " + with
+                        + ", so put that on the request, or take the marker off");
+                    return;
+                }
+            }
+
+            var twice = arguments.GroupBy(static each => each.Class.OriginalDefinition, SymbolEqualityComparer.Default).FirstOrDefault(static same => same.Count() > 1);
+            if (twice is not null)
+            {
+                Report(DiagnosticDescriptors.RequirementArgumentOutOfPlace, twice.ElementAt(1).Location ?? _location, _name,
+                    "marks " + Listed(twice.Select(static each => "'" + each.Name + "'")) + " " + Bracketed(twice.First().Class) + ": the call takes it once, so mark one member");
+                return;
+            }
+
+            if (Unreadable(arguments, DiagnosticDescriptors.RequirementArgumentOutOfPlace))
+            {
+                return;
+            }
+
+            foreach (var argument in arguments)
+            {
+                if (argument.Type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T })
+                {
+                    Report(DiagnosticDescriptors.PermissionMarkerOnWrongType, argument.Location ?? _location, _name, argument.Name, Bracketed(argument.Class).Trim('[', ']'),
+                        "which is '" + Written(argument.Type) + "' and may be null: a requirement computed from whether it is given is written as RequiredAccess");
+                    return;
+                }
+
+                if (argument.Type.TypeKind != TypeKind.Error && argument.IdOf is { } template && IdsFor(template, 0, false, compilation, cancellationToken) is { } ids
+                    && !ids.Contains(argument.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)))
+                {
+                    var plural = ids.Count > 1;
+                    Report(DiagnosticDescriptors.PermissionMarkerOnWrongType, argument.Location ?? _location, _name, argument.Name, Bracketed(argument.Class).Trim('[', ']'),
+                        "which is a '" + Written(argument.Type) + "': it marks " + Listed(ids.OrderBy(static id => id, StringComparer.Ordinal).Select(static id => "'" + TemplateRegistrations.LastNameOf(id) + "'"))
+                        + ", the id" + (plural ? "s" : string.Empty) + " of the " + Bracketed(template.OriginalDefinition) + " class" + (plural ? "es" : string.Empty) + " this project sees");
+                    return;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Whether an inherited marker of a requirement's argument is read with the line of a class the request derives from:
+        /// one between the request and the class that declares the marker, that one included, carries the attribute it goes with.
+        /// </summary>
+        private bool ReadWithABaseCarrying(Marker marker)
+        {
+            if (DeclaredHere(marker) || marker.Property?.ContainingType is not { } declaring)
+            {
+                return false;
+            }
+
+            for (var current = type.BaseType; current is not null && current.SpecialType != SpecialType.System_Object; current = current.BaseType)
+            {
+                if (StatedOn(current).Any(each => each.Kind == StatedKind.Call && Same(each.Class, marker.GoesWith)))
+                {
+                    return true;
+                }
+
+                if (SymbolEqualityComparer.Default.Equals(current, declaring))
+                {
+                    break;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
         /// Reads <paramref name="marker"/> as the id of an aggregate whose owner it marks <c>[Owner]</c>, where nothing says the
         /// caller's own of the id itself: the line is then <c>AccessRequirement.OwnerOf</c> of the member, and the owner's own
         /// is the caller's own the request is about. <see langword="null"/> where the member is no such id, so it is read as
@@ -1637,7 +1762,11 @@ internal sealed record RequestRequirement(
                     return held;
 
                 default:
-                    return RequestRequirement.CallOf(each);
+                    var members = markers.Where(marker => marker.Kind == MarkerKind.RequirementArgument && Same(marker.GoesWith, each.Class))
+                        .Select(static marker => Designation + "." + Identifier(marker.Property!.Name))
+                        .ToList();
+                    reads |= members.Count > 0;
+                    return RequestRequirement.CallOf(each, members);
             }
         }
 

@@ -9,7 +9,8 @@ namespace DDDToolkit.Access;
 /// that decide the cases its requests declare
 /// (<see cref="AccessCheckServiceCollectionExtensions.AddAccessCheck{TRequests, TCheck}"/>), and calls
 /// <see cref="RequireAsync"/> in front of every handler: from a pipeline behavior, an endpoint filter or its
-/// own dispatcher. Nothing here knows which of those it is.
+/// own dispatcher. Nothing here knows which of those it is. The handler then runs inside <see cref="BeginWork"/>, the
+/// work a check begins for it, such as operator work for an operator's command.
 /// <para>
 /// It fails closed. A request that declares nothing, and a requirement that none of the module's checks
 /// decides, stop the request with an <see cref="InvalidOperationException"/> rather than letting it through:
@@ -143,6 +144,105 @@ public sealed class AccessChecks<TRequests>
         return RequestInHand.Take(request, requirement, check, cancellationToken);
     }
 
+    /// <summary>
+    /// Begins the work the checks that let <paramref name="request"/> through say its handler runs in, or answers
+    /// <see langword="null"/> where none does. Tenancy's check begins operator work for a command an operator sends. Call it
+    /// after <see cref="RequireAsync"/>, in the same method, and run the handler inside it, as the generated behavior does:
+    /// <code>
+    /// await checks.RequireAsync(request, cancellationToken);
+    /// using (checks.BeginWork(request, isQuery: request is IBaseQuery))
+    /// {
+    ///     await handler.HandleAsync(request, cancellationToken);
+    /// }
+    /// </code>
+    /// </summary>
+    /// <remarks>
+    /// Each case of the request's requirement goes to the check that decides it, where that check begins work
+    /// (<see cref="IBeginsWork"/>), in the order the cases are written. What they begin ends in the opposite order when the
+    /// result is disposed. It is not <see langword="async"/>, so what a check begins reaches the handler that runs next.
+    /// </remarks>
+    /// <param name="request">The request the checks let through.</param>
+    /// <param name="isQuery">Whether the request is a query, which changes nothing. A check begins no work for a query that changes anything.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="request"/> is null.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The request is not in hand in this flow of work: <see cref="RequireAsync"/> was not asked about it here, refused it, or
+    /// is still asking.
+    /// </exception>
+    public IDisposable? BeginWork(TRequests request, bool isQuery)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        // The request in hand in this flow, let through: the very one, or, for a request that is a value, one equal to it,
+        // since a value is boxed anew each time it is handed over as the interface.
+        var hand = RequestInHand.Current is { } passed
+                   && (ReferenceEquals(passed.Request, request) || (request.GetType().IsValueType && passed.Request.Equals(request)))
+            ? passed
+            : throw new InvalidOperationException(
+                $"{NameOf(request.GetType())} is not in hand in this flow of work: begin its work after its access checks let it through, "
+                + "in the same method that awaited AccessChecks.RequireAsync for it.");
+
+        List<IDisposable>? begun = null;
+        try
+        {
+            foreach (var requirement in CasesOf(hand.Requirement))
+            {
+                if (CheckFor(requirement) is IBeginsWork check && check.BeginWork(requirement, request, isQuery) is { } work)
+                {
+                    (begun ??= []).Add(work);
+                }
+            }
+        }
+        catch
+        {
+            if (begun is not null)
+            {
+                new Begun(begun).Dispose();
+            }
+
+            throw;
+        }
+
+        return begun switch
+        {
+            null => null,
+            [var only] => only,
+            _ => new Begun(begun),
+        };
+    }
+
+    /// <summary>The cases of <paramref name="requirement"/> a check decides, each once, in the order they are written.</summary>
+    private static List<AccessRequirement> CasesOf(AccessRequirement requirement)
+    {
+        var found = new List<AccessRequirement>();
+        Add(requirement);
+        return found;
+
+        void Add(AccessRequirement each)
+        {
+            switch (each)
+            {
+                case AccessRequirement.Anyone:
+                    break;
+
+                case AccessRequirement.Combined combined:
+                    foreach (var part in combined.Cases)
+                    {
+                        Add(part);
+                    }
+
+                    break;
+
+                default:
+                    if (!found.Contains(each))
+                    {
+                        found.Add(each);
+                    }
+
+                    break;
+            }
+        }
+    }
+
     /// <summary>The check of every case of <paramref name="combined"/>, its combinations' cases included, by case.</summary>
     private Dictionary<AccessRequirement, IAccessCheck> CheckedCases(TRequests request, AccessRequirement.Combined combined)
     {
@@ -200,4 +300,24 @@ public sealed class AccessChecks<TRequests>
 
     /// <summary>A type as its author writes it, for a message a developer reads (<see cref="WrittenTypeNames.Of"/>).</summary>
     private static string NameOf(Type type) => WrittenTypeNames.Of(type);
+
+    /// <summary>What several checks began for one request: ended in the opposite order, once.</summary>
+    private sealed class Begun(List<IDisposable> begun) : IDisposable
+    {
+        private bool _disposed;
+
+        public void Dispose()
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
+            for (var index = begun.Count - 1; index >= 0; index--)
+            {
+                begun[index].Dispose();
+            }
+        }
+    }
 }

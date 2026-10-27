@@ -23,14 +23,27 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// is told, so the answer says nothing about the seats their identity has. The list of a person's own seats,
 /// <see cref="SeatsOfAsync{TSeat}(Caller, CancellationToken)"/>, follows the same rule.
 /// </para>
+/// <para>
+/// An operator of the application, a user whose token carries one of <paramref name="operators"/>, holds no seat either.
+/// The tenant its request names is looked up by its slug alone, and the answer is nobody with that tenant kept
+/// (<see cref="TenancyCaller{TTenantId, TSeatId}.OperatorNaming"/>). A command marked
+/// <c>[Operator(Tenant = OperatorTenant.FromRequest)]</c> acts in that tenant. A request that names no tenant is nobody with
+/// <c>tenancy.tenant-required</c>, and one that names a tenant nobody has is nobody with <c>tenancy.not-seated</c>.
+/// </para>
 /// </summary>
-/// <param name="seats">Finds the caller's seats.</param>
+/// <param name="seats">Finds the caller's seats, and the tenant an operator names.</param>
 /// <param name="options">Which token roles are seated; signed-in users with the role <c>authenticated</c> when left out.</param>
-public sealed class TenantSelection<TTenantId, TSeatId>(ISeatDirectory<TTenantId, TSeatId> seats, TenantSelectionOptions? options = null) : ITenantSelection
+/// <param name="operators">Which token roles are operators'; none when left out.</param>
+public sealed class TenantSelection<TTenantId, TSeatId>(
+    ISeatDirectory<TTenantId, TSeatId> seats,
+    TenantSelectionOptions? options = null,
+    TenancyOperatorTokenRoles? operators = null) : ITenantSelection
     where TTenantId : struct, IEntityId, IEquatable<TTenantId>
     where TSeatId : struct, IEntityId, IEquatable<TSeatId>
 {
     private readonly TenantSelectionOptions _options = options ?? new TenantSelectionOptions();
+
+    private readonly IReadOnlyList<string> _operators = operators?.TokenRoles ?? [];
 
     /// <summary>
     /// The Tenancy caller for <paramref name="caller"/> in the tenant <paramref name="tenantSlug"/> names.
@@ -47,6 +60,13 @@ public sealed class TenantSelection<TTenantId, TSeatId>(ISeatDirectory<TTenantId
         if (caller.Kind != CallerKind.User || caller.UserId is not { } identity)
         {
             return TenancyCaller<TTenantId, TSeatId>.Nobody(TenancyRefusals.NotSeated);
+        }
+
+        // An operator reads every tenant, so the tenant its request names is found by its slug alone, and kept for its
+        // command. It holds no seat there.
+        if (caller.Role is { } role && _operators.Contains(role, StringComparer.Ordinal))
+        {
+            return await OperatorNamingAsync(tenantSlug, cancellationToken).ConfigureAwait(false);
         }
 
         // Before anything is looked up, and with the answer of a person without a seat: a token role that holds no
@@ -77,6 +97,20 @@ public sealed class TenantSelection<TTenantId, TSeatId>(ISeatDirectory<TTenantId
         return seat.SeatStatus != SeatStatus.Active
             ? TenancyCaller<TTenantId, TSeatId>.Nobody(TenancyRefusals.SeatSuspended)
             : TenancyCaller<TTenantId, TSeatId>.InSeat(seat.Tenant, seat.Seat);
+    }
+
+    /// <summary>The operator's answer: nobody, with the tenant the slug names kept where there is one.</summary>
+    private async Task<TenancyCaller<TTenantId, TSeatId>> OperatorNamingAsync(string? tenantSlug, CancellationToken cancellationToken)
+    {
+        var slug = tenantSlug?.Trim().ToLowerInvariant();
+        if (string.IsNullOrEmpty(slug))
+        {
+            return TenancyCaller<TTenantId, TSeatId>.Nobody(TenancyRefusals.TenantRequired);
+        }
+
+        return await seats.FindTenantAsync(slug, cancellationToken).ConfigureAwait(false) is { } tenant
+            ? TenancyCaller<TTenantId, TSeatId>.OperatorNaming(tenant)
+            : TenancyCaller<TTenantId, TSeatId>.Nobody(TenancyRefusals.NotSeated);
     }
 
     /// <inheritdoc />

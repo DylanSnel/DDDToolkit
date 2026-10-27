@@ -1027,7 +1027,7 @@
       "decides": [
         1
       ],
-      "setSay": "An `Any` of two of Tenancy's cases: the set gives `RequiresOperator()` and `AtTenant(permission)` each to Tenancy's check, in that order.",
+      "setSay": "An `Any` of two of Tenancy's cases: the set gives `Operator()` and `AtTenant(permission)` each to the check of Tenancy's that decides it, in that order.",
       "check": {
         "snippet": "check.combined",
         "highlight": "{2,6-7,9}"
@@ -1415,7 +1415,7 @@
         "public sealed record TenantAuditLog(TenantId Tenant, PagingArguments Paging) : IQuery<Page<AuditEntry>>, IAuditRequest",
         "{",
         "    AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.Any(",
-        "        TenancyAccess.RequiresOperator(),",
+        "        TenancyAccess.Operator(),",
         "        TenancyAccess.AtTenant(TenancyPermissions.SeatsManage));",
         "}"
       ]

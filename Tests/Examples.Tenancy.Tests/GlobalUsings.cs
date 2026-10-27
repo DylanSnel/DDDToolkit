@@ -42,6 +42,7 @@ global using Examples.Tenancy.Projects.Application.Crew;
 global using Examples.Tenancy.Projects.Application.Crew.Commands;
 global using Examples.Tenancy.Projects.Application.Crew.Queries;
 global using Examples.Tenancy.Projects.Application.Lifecycle.Commands;
+global using Examples.Tenancy.Projects.Application.Operators.Commands;
 global using Examples.Tenancy.Projects.Application.Operators.Queries;
 global using Examples.Tenancy.Projects.Application.Overview;
 global using Examples.Tenancy.Projects.Application.Overview.Queries;

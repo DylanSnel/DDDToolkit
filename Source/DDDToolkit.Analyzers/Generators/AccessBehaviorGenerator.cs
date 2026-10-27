@@ -27,19 +27,25 @@ namespace DDDToolkit.Analyzers;
 ///     public async ValueTask&lt;TResponse&gt; Handle(TMessage message, MessageHandlerDelegate&lt;TMessage, TResponse&gt; next, CancellationToken cancellationToken)
 ///     {
 ///         await _checks.RequireAsync(message, cancellationToken);
-///         return await next(message, cancellationToken);
+///         using (_checks.BeginWork(message, isQuery: message is IBaseQuery))
+///         {
+///             return await next(message, cancellationToken);
+///         }
 ///     }
 /// }
 /// </code>
 /// over <c>AccessChecks&lt;IBillingRequest&gt;</c>, and <c>services.AddBillingAccessBehavior()</c>, which adds it
-/// to the pipeline and registers the set of checks it asks.
+/// to the pipeline and registers the set of checks it asks. The handler runs inside the work a check begins for the
+/// request, such as operator work for a command an operator sends; a query begins no work that changes anything.
 /// <para>
 /// The library sends a message that is answered with a stream through a pipeline of its own,
 /// <c>IStreamPipelineBehavior&lt;TMessage, TResponse&gt;</c>, which the behavior above is never part of. So
 /// where the library has that pipeline a second class is written in the same file,
 /// <c>BillingAccessStreamBehavior&lt;TMessage, TResponse&gt;</c>, which asks the same checks before the
 /// handler streams anything, and the one registration adds both. Otherwise a stream query that implements
-/// the interface would reach its handler with nothing having asked what it requires.
+/// the interface would reach its handler with nothing having asked what it requires. It begins no work around the
+/// stream: a stream is read item by item in the flow of whoever reads it, and what a check began would end with the
+/// first item.
 /// </para>
 /// <para>
 /// The library is noticed by its type, <c>Mediator.IPipelineBehavior&lt;TMessage, TResponse&gt;</c>, as
@@ -516,7 +522,13 @@ public sealed class AccessBehaviorGenerator : IIncrementalGenerator
                 }
                 else
                 {
-                    writer.Line("return await " + next + ".ConfigureAwait(false);");
+                    // The handler runs inside the work a check begins for the request, begun here and not in a method
+                    // of its own, so it reaches the next step; a query of the library begins no work that changes anything.
+                    var isQuery = pipeline.QueryInterface.Length > 0 ? pipeline.Message + " is " + pipeline.QueryInterface : "false";
+                    using (writer.Block("using (_checks.BeginWork(" + pipeline.Message + ", isQuery: " + isQuery + "))"))
+                    {
+                        writer.Line("return await " + next + ".ConfigureAwait(false);");
+                    }
                 }
             }
         }
@@ -716,6 +728,10 @@ internal sealed record AccessRequestsInterface(
 /// <param name="NextTakesTheMessageFirst">Whether the next step takes the message before the token.</param>
 /// <param name="Streams">Whether <c>Handle</c> answers a stream of responses, and not a task of one.</param>
 /// <param name="StreamItem">A name for one response of the stream that no parameter of <c>Handle</c> has.</param>
+/// <param name="QueryInterface">
+/// What every query of the library implements, from <c>global::</c> on, or empty where the library has no such type: what
+/// the behavior tells a query by, for the work a check begins.
+/// </param>
 internal sealed record PipelineShape(
     string Interface,
     string MessageParameter,
@@ -733,7 +749,8 @@ internal sealed record PipelineShape(
     string CancellationToken,
     bool NextTakesTheMessageFirst,
     bool Streams,
-    string StreamItem)
+    string StreamItem,
+    string QueryInterface)
 {
     private static readonly SymbolDisplayFormat WithNullability =
         SymbolDisplayFormat.FullyQualifiedFormat.AddMiscellaneousOptions(SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);
@@ -840,7 +857,10 @@ internal sealed record PipelineShape(
                 CancellationToken: Identifier(parameters[tokenAt].Name),
                 NextTakesTheMessageFirst: messageOfNextAt == 0,
                 Streams: streams,
-                StreamItem: new[] { "item", "streamed", "streamedItem", "oneOfTheStream" }.First(name => !taken.Contains(name))),
+                StreamItem: new[] { "item", "streamed", "streamedItem", "oneOfTheStream" }.First(name => !taken.Contains(name)),
+                QueryInterface: compilation.GetTypeByMetadataName(streams ? KnownTypes.MediatorBaseStreamQuery : KnownTypes.MediatorBaseQuery) is { TypeKind: TypeKind.Interface } query
+                    ? query.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+                    : string.Empty),
             null);
     }
 

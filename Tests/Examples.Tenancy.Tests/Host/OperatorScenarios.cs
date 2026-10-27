@@ -143,8 +143,9 @@ public sealed class OperatorScenarios(SampleHosts sample) : IClassFixture<Sample
     [Fact]
     public async Task The_use_cases_themselves_refuse_whoever_is_no_operator()
     {
-        // Past the routes and their policy: each query sent as the application's own work in harbor, which holds
-        // every permission there and is no operator. What refuses is each module's own check, on the way to the handler.
+        // Past the routes and their policy: each request sent as the application's own work in harbor, which holds
+        // every permission there and is no operator. What refuses is each module's own check, on the way to the handler,
+        // the operators' command among them.
         var host = await sample.SharedAsync();
         IMessage[] queries =
         [
@@ -152,6 +153,7 @@ public sealed class OperatorScenarios(SampleHosts sample) : IClassFixture<Sample
             new TenantAccessHistory(Harbor.Id, new GreenDonut.Data.PagingArguments(first: 5)),
             new TenantProjects(Harbor.Id),
             new TenantProjectInspections(Harbor.Id, Harbor.ProjectNamed("Pier 7").Id),
+            new RenameTenantProject(Harbor.Id, Harbor.ProjectNamed("Pier 7").Id, "Renamed by the system"),
         ];
 
         using (SampleAccess.Manager.BeginSystemIn(Harbor.Id, Harbor.Administrator.Id))

@@ -3,6 +3,7 @@ using DDDToolkit.Abstractions.Interfaces;
 using DDDToolkit.EntityFramework;
 using DDDToolkit.EntityFramework.Conventions;
 using DDDToolkit.Supporting.Tenancy.TestHost.Converters;
+using DDDToolkit.Supporting.Tenancy.TestHost.Requests;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -90,14 +91,17 @@ public abstract class AttributionTests(TestDatabases databases) : IAsyncLifetime
         var pump = await AddAsync(HostCaller.InSeat(_harbor.Tenant, _grace), "Pump");
         Guid valve;
 
-        // What an operator asked for is carried out by system work that names the operator.
+        // An operator's command runs as operator work, which names the operator.
         await using (var scope = _services.Scope())
-        using (TenancyWork.BeginOperatorIn<TenantId, SeatId>(_harbor.Tenant, Odette, scope: "widgets"))
         {
-            var widgets = scope.ServiceProvider.Widgets();
-            (await widgets.Widgets.SingleAsync(widget => widget.Id == pump, Cancellation)).Name = "Checked pump";
-            valve = widgets.Widgets.Add(NewWidget("Valve")).Entity.Id;
-            await widgets.SaveChangesAsync(Cancellation);
+            valve = await OperatorWork.RunAsync(Odette, _harbor.Tenant, async () =>
+            {
+                var widgets = scope.ServiceProvider.Widgets();
+                (await widgets.Widgets.SingleAsync(widget => widget.Id == pump, Cancellation)).Name = "Checked pump";
+                var added = widgets.Widgets.Add(NewWidget("Valve")).Entity.Id;
+                await widgets.SaveChangesAsync(Cancellation);
+                return added;
+            }, scope: "widgets");
         }
 
         (await RecordedAsync(pump)).Should().Be(new Recorded(_grace, "seat", null, null, "operator", Odette), "the seat that wrote it stays, and the operator changed it");

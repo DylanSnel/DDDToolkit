@@ -20,6 +20,13 @@ namespace DDDToolkit.Access;
 /// <see cref="AccessRequirement"/>, and takes what the attribute's constructor takes, in that order: what does not is
 /// the package's mistake, which the compiler reports in the line the generator wrote.
 /// <para>
+/// After the constructor's arguments come the members of the request a marker of one more argument marks
+/// (<see cref="RequirementArgumentAttribute"/>), and then each property set where the request carries the attribute, as
+/// a named argument: the property's name with a lower case first letter. So Tenancy's
+/// <c>[Operator(Scope = "projects")]</c> on a request with <c>[ForTenant] TenantId Tenant</c> is
+/// <c>TenancyAccess.Operator(request.Tenant, scope: "projects")</c>, and the method has a parameter of that name.
+/// </para>
+/// <para>
 /// Attributes stacked on one request all hold: the generator writes <c>AccessRequirement.All(...)</c> of their calls, in
 /// the order they are written above the request, so a module's own attribute stacks beside a package's as theirs do.
 /// None goes with a request that answers the property itself (DDD00078), and none with <c>[AllowAnonymous]</c>, which
@@ -48,16 +55,15 @@ public sealed class StatesRequirementAttribute(Type factory, string method) : At
 
     /// <summary>
     /// Whether only a query may state it: a requirement that refuses nobody for want of a permission and says what a query's
-    /// own statement filters by, such as Membership's <c>SeenWith</c>, or one for a caller who changes nothing, such
-    /// as Tenancy's operators. On a message of the Mediator library that is no query, a command or a plain request,
-    /// it would let the handler run unchecked, or let through a caller who changes nothing, so there it is DDD00082.
+    /// own statement filters by, such as Membership's <c>SeenWith</c>. On a message of the Mediator library that is no
+    /// query, a command or a plain request, it would let the handler run unchecked, so there it is DDD00082.
     /// A request of another dispatcher, which the generator cannot tell for a command or a query, is not reported.
     /// </summary>
     public bool QueriesOnly { get; set; }
 
     /// <summary>
     /// The requirement attributes this one already requires, so that one of them stacked beside it says nothing more:
-    /// Tenancy's <c>[RequiresOperator]</c> lets only a signed-in user through, so it names <see cref="SignedInAttribute"/>,
+    /// Tenancy's <c>[Operator]</c> lets only a signed-in user through, so it names <see cref="SignedInAttribute"/>,
     /// and <c>[SignedIn]</c> beside it is DDD00084, a warning. Empty by default.
     /// </summary>
     public Type[] Implies { get; set; } = [];
