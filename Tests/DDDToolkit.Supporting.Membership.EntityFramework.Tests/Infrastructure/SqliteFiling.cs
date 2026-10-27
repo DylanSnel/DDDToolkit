@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using Microsoft.Data.Sqlite;
 
 namespace DDDToolkit.Supporting.Membership.EntityFramework.Tests.Infrastructure;
@@ -46,11 +47,11 @@ public sealed class SqliteFiling : IDisposable
     }
 
     /// <summary>The access questions about documents, asked as <paramref name="caller"/>.</summary>
-    public Task<T> DocumentsAsync<T>(Caller caller, Func<MembershipAccessManager<Document>, Task<T>> ask)
+    public Task<T> DocumentsAsync<T>(CurrentUserSnapshot caller, Func<MembershipAccessManager<Document>, Task<T>> ask)
         => Services.AsAsync(caller, provider => ask(provider.GetRequiredService<MembershipAccessManager<Document>>()));
 
     /// <summary>The access questions about folders, asked as <paramref name="caller"/>.</summary>
-    public Task<T> FoldersAsync<T>(Caller caller, Func<MembershipAccessManager<Folder>, Task<T>> ask)
+    public Task<T> FoldersAsync<T>(CurrentUserSnapshot caller, Func<MembershipAccessManager<Folder>, Task<T>> ask)
         => Services.AsAsync(caller, provider => ask(provider.GetRequiredService<MembershipAccessManager<Folder>>()));
 
     /// <inheritdoc />

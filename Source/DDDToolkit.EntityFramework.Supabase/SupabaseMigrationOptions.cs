@@ -74,7 +74,7 @@ public sealed class SupabaseMigrationOptions
     /// <see cref="RowAccessRoleNames.System"/>, where one is set. <see cref="SupabaseRowLevelSecurity.DefaultRoles"/>
     /// by default, Supabase's <c>authenticated</c> and <c>anon</c>, <c>ddd_system_in</c>, and <c>ddd_system</c> for the
     /// bookkeeping, with no token role mapped: the roles <c>AddSupabaseRowLevelSecurity</c> switches to unless told
-    /// otherwise. Set <see cref="RowAccessRoleNames.System"/> to <see langword="null"/> where the system caller has no
+    /// otherwise. Set <see cref="RowAccessRoleNames.System"/> to <see langword="null"/> where system work has no
     /// bookkeeping role of the application's own, because it runs as the role the application logs in as or as
     /// <c>service_role</c>. The build takes them from the <c>SupabaseRowAccessRoles</c> property of the project that
     /// runs the export.

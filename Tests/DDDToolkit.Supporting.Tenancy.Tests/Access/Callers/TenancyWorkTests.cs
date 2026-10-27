@@ -19,44 +19,44 @@ public class TenancyWorkTests
     {
         using (TenancyWork.BeginSystem<TenantId, SeatId>())
         {
-            var core = Callers.Ambient!;
-            core.Kind.Should().Be(CallerKind.SystemIn);
-            core.Scope.Should().Be(TenancyWork.SystemScope).And.Be("tenancy");
-            core.IsSystem.Should().BeFalse("the scoped system caller is not the application past every policy");
+            var core = BegunUser!;
+            core.Kind.Should().Be(CurrentUserKind.SystemIn);
+            core.SystemScope.Should().Be(TenancyWork.SystemScope).And.Be("tenancy");
+            core.Kind.Should().NotBe(CurrentUserKind.System, "scoped system work does not run past every policy");
 
             TenancyCallers.Ambient!.Kind.Should().Be(TenancyCallerKind.System);
             TenancyCallers.CurrentTenantOrNull().Should().BeNull("system work outside any tenant has no tenant to act in");
         }
 
-        Callers.Ambient.Should().BeNull();
+        BegunUser.Should().BeNull();
         TenancyCallers.Ambient.Should().BeNull();
     }
 
     [Fact]
     public void BeginSystemIn_begins_both_callers_and_disposing_ends_both()
     {
-        var person = Caller.User(Guid.NewGuid());
+        var person = CurrentUserSnapshot.User(Guid.NewGuid());
         var seat = HostCaller.InSeat(Harbor, Ada);
 
-        using (Callers.Begin(person))
+        using (TestUser.BeginAs(person))
         using (TenancyCallers.Begin(seat))
         {
             var work = TenancyWork.BeginSystemIn(Harbor, (SeatId?)Ada);
 
-            Callers.Ambient!.IsSystemIn.Should().BeTrue();
-            Callers.Ambient.Scope.Should().Be(TenancyWork.SystemScope);
+            BegunUser!.Kind.Should().Be(CurrentUserKind.SystemIn);
+            BegunUser.SystemScope.Should().Be(TenancyWork.SystemScope);
             TenancyCallers.Current<TenantId, SeatId>().Should().Be(HostCaller.SystemIn(Harbor, Ada));
 
             work.Dispose();
-            Callers.Ambient.Should().BeSameAs(person, "the toolkit's caller before it is back");
+            BegunUser.Should().BeSameAs(person, "the toolkit's caller before it is back");
             TenancyCallers.Ambient.Should().BeSameAs(seat, "and so is Tenancy's");
 
             work.Dispose();
-            Callers.Ambient.Should().BeSameAs(person, "disposing twice ends nothing more");
+            BegunUser.Should().BeSameAs(person, "disposing twice ends nothing more");
             TenancyCallers.Ambient.Should().BeSameAs(seat);
         }
 
-        Callers.Ambient.Should().BeNull();
+        BegunUser.Should().BeNull();
         TenancyCallers.Ambient.Should().BeNull();
     }
 
@@ -97,13 +97,13 @@ public class TenancyWorkTests
     {
         using (TenancyWork.BeginSystemIn<TenantId, SeatId>(Harbor, scope: "projects"))
         {
-            Callers.Ambient!.Scope.Should().Be("projects", "a module's own work in a tenant says whose it is");
+            BegunUser!.SystemScope.Should().Be("projects", "a module's own work in a tenant says whose it is");
             TenancyCallers.CurrentTenantOrNull().Should().Be(Harbor, "the scope says whose work it is, not where it acts");
         }
 
         // A scope that is not one begins neither caller.
         FluentActions.Invoking(() => TenancyWork.BeginSystemIn<TenantId, SeatId>(Harbor, scope: "Projects!")).Should().Throw<ArgumentException>();
-        Callers.Ambient.Should().BeNull();
+        BegunUser.Should().BeNull();
         TenancyCallers.Ambient.Should().BeNull();
     }
 
@@ -125,7 +125,7 @@ public class TenancyWorkTests
         var inTheNewTenant = HostCaller.SystemIn(provisioned.Tenant);
         harness.Store.Observed.Select(call => call.Name).Should().Contain([nameof(InMemoryTenancyStore.SlugTakenAsync), nameof(InMemoryTenancyStore.SaveAsync)]);
         harness.Store.Observed.Should().OnlyContain(
-            call => Equals(call.Tenancy, inTheNewTenant) && call.Core != null && call.Core.IsSystemIn && call.Core.Scope == TenancyWork.SystemScope,
+            call => Equals(call.Tenancy, inTheNewTenant) && call.Core != null && call.Core.Kind == CurrentUserKind.SystemIn && call.Core.SystemScope == TenancyWork.SystemScope,
             "provisioning sees and writes only the tenant it makes");
     }
 
@@ -168,7 +168,7 @@ public class TenancyWorkTests
 
         // A person, as their seat: the directory and a command.
         var administrator = HostCaller.InSeat(tenant, harbor.AdminSeat);
-        using (Callers.Begin(Caller.User(Guid.NewGuid())))
+        using (TestUser.BeginAs(CurrentUserSnapshot.User(Guid.NewGuid())))
         {
             await harness.Run(administrator, h => h.Seats.WhoAmIAsync(default));
             await harness.Run(administrator, h => h.Seats.ListAsync(default));
@@ -194,7 +194,7 @@ public class TenancyWorkTests
         harness.Store.Observed
             .Where(call => !listedReads.Contains(call.Name))
             .Should().NotContain(
-                call => call.Core != null && (call.Core.IsSystem || ReferenceEquals(call.Core, Caller.System)),
+                call => call.Core != null && (call.Core.Kind == CurrentUserKind.System || ReferenceEquals(call.Core, CurrentUserSnapshot.System)),
                 "nothing in Tenancy runs as the application past every policy");
     }
 

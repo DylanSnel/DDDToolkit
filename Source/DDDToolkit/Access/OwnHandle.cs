@@ -33,10 +33,10 @@ internal abstract class OwnHandle
     public abstract bool CanBeAnswered(IServiceProvider? services);
 
     /// <summary>The caller's own value of the type, boxed, or <see langword="null"/> where it has none.</summary>
-    /// <param name="caller">Who is calling.</param>
+    /// <param name="user">Who is calling.</param>
     /// <param name="services">The scope's services, where a handle is registered; <see langword="null"/> for none.</param>
     /// <exception cref="InvalidOperationException">Nothing says what the caller's own value of the type is.</exception>
-    public abstract object? Find(Caller caller, IServiceProvider? services);
+    public abstract object? Find(ICurrentUser user, IServiceProvider? services);
 }
 
 /// <summary>The handle of <typeparamref name="TValue"/>: the <see cref="ICallersOwn{TValue}"/> registered for it, or the core's for a <see cref="Guid"/>.</summary>
@@ -57,8 +57,8 @@ internal sealed class OwnHandle<TValue> : OwnHandle
     public override bool CanBeAnswered(IServiceProvider? services) => In(services) is not null;
 
     /// <inheritdoc />
-    public override object? Find(Caller caller, IServiceProvider? services)
+    public override object? Find(ICurrentUser user, IServiceProvider? services)
         => (In(services) ?? throw new InvalidOperationException(
                 $"Nothing says what the caller's own {WrittenTypeNames.Of(typeof(TValue))} is. Register an ICallersOwn<{WrittenTypeNames.Of(typeof(TValue))}> with services.AddCallersOwn<{WrittenTypeNames.Of(typeof(TValue))}, TCallersOwn>(); a requirement nothing checks lets nobody through."))
-            .Find(caller);
+            .Find(user);
 }

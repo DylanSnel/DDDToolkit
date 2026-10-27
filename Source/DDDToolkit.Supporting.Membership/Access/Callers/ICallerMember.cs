@@ -25,12 +25,12 @@ public interface ICallerMember<TResourceId, TMemberId>
     where TMemberId : struct, IEntityId, IEquatable<TMemberId>
 {
     /// <summary>
-    /// The member id <paramref name="caller"/> has, or <see langword="null"/> when it has none that counts
+    /// The member id <paramref name="user"/> has, or <see langword="null"/> when it has none that counts
     /// now: somebody the application does not know, or knows and no longer counts. Such a caller is nobody's
     /// member, and holds only what reaches a resource from above. It refuses nobody.
     /// </summary>
-    /// <param name="caller">The caller a question is asked for: a signed-in user.</param>
-    TMemberId? Find(Caller caller);
+    /// <param name="user">The caller a question is asked for: a signed-in user.</param>
+    TMemberId? Find(CurrentUserSnapshot user);
 
     /// <summary>
     /// Refuses a caller the questions cannot be asked about at all, with the application's own refusal:
@@ -39,9 +39,9 @@ public interface ICallerMember<TResourceId, TMemberId>
     /// returns for everybody unless the application says otherwise: a caller that is nobody's member then
     /// simply reaches nothing.
     /// </summary>
-    /// <param name="caller">The caller a question is asked for.</param>
+    /// <param name="user">The caller a question is asked for.</param>
     /// <exception cref="Exceptions.RefusalException">The caller is nobody the questions can be asked about.</exception>
-    void Require(Caller caller)
+    void Require(CurrentUserSnapshot user)
     {
     }
 }

@@ -130,7 +130,7 @@ columns.
   [access history](#access-history).
 
 > [!IMPORTANT]
-> `Caller.UserId` is always the verified `sub` of a token. System work has no `UserId`. The person that system work
+> `ICurrentUser.Id` is always the verified `sub` of a token. System work has no `Id`. The person that system work
 > acts for is only recorded, and that record gives the work no rights.
 
 **On Postgres** a trigger checks the six columns on every write:

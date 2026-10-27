@@ -135,7 +135,7 @@ public abstract class PooledContextTests(TenancyPostgres postgres, TenancyNaming
         rented.Should().HaveCount(60);
         rented.Distinct().Count().Should().BeLessThan(rented.Count, "the pool handed contexts out again");
         recorder.Sent.Should().HaveCount(60, "each read is one statement, the question inside it")
-            .And.OnlyContain(command => command.Text.Contains("tenancy." + TenancyFunctionNames.CallerPermissions + "()", StringComparison.Ordinal) && command.Caller!.Kind == CallerKind.User);
+            .And.OnlyContain(command => command.Text.Contains("tenancy." + TenancyFunctionNames.CallerPermissions + "()", StringComparison.Ordinal) && command.Caller!.Kind == CurrentUserKind.User);
     }
 
     [Fact]
@@ -159,7 +159,7 @@ public abstract class PooledContextTests(TenancyPostgres postgres, TenancyNaming
         (await services.BySeat(Oli.Identity, Harbor, Oli.Seat, scoped => AdministratorsAsync(scoped, Harbor))).Should().BeEmpty();
         (await services.BySeat(Odette.Identity, Orchard, Odette.Seat, scoped => AdministratorsAsync(scoped, Orchard))).Should().Equal((Odette.Seat, OrchardRoles.Administrator));
         recorder.Sent.Should().HaveCount(3).And.OnlyContain(
-            command => command.Text.Contains(TenancyFunctionNames.TenantAdministrators, StringComparison.Ordinal) && command.Caller!.Kind == CallerKind.User,
+            command => command.Text.Contains(TenancyFunctionNames.TenantAdministrators, StringComparison.Ordinal) && command.Caller!.Kind == CurrentUserKind.User,
             "the store found that the database keeps the rights, from the application's services, and asked its function as the signed-in user");
 
         // System work in the tenant reads the rights itself, on the same context.
@@ -183,7 +183,7 @@ public abstract class PooledContextTests(TenancyPostgres postgres, TenancyNaming
         rented.Distinct().Should().ContainSingle("each request was handed the context the one before gave back");
 
         // And the checks a host runs at start-up find a context that comes from a pool.
-        TenancyPostgresChecks.EnsureExplicitCallers(services.Provider);
+        TenancyPostgresChecks.EnsureExplicitCurrentUser(services.Provider);
         await TenancyPostgresChecks.EnsurePoliciesAreInPlaceAsync(services.Provider, Cancellation);
     }
 
@@ -432,7 +432,7 @@ public abstract class PooledContextTests(TenancyPostgres postgres, TenancyNaming
 
         // For a seat, the database's function answers, in one statement each, sent as that person.
         recorder.Sent.Should().HaveCount(Asking.Length);
-        recorder.Sent.Select(command => command.Caller!.UserId).Should().Equal(Asking.Select(asking => (Guid?)asking.Person.Identity));
+        recorder.Sent.Select(command => command.Caller!.Id).Should().Equal(Asking.Select(asking => (Guid?)asking.Person.Identity));
         recorder.Sent.Should().OnlyContain(command => command.Text.Contains(TenancyFunctionNames.SeatsHoldingPermissionAt, StringComparison.Ordinal),
             "the context found that the database keeps the rights, from the application's services its options were built with");
 

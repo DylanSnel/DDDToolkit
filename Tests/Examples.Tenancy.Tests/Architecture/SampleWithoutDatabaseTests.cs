@@ -76,7 +76,7 @@ public sealed class SampleWithoutDatabaseTests
 
         host.Services.GetRequiredService<StartupChecks>().InOrder().Select(check => check.Name).Should().Equal(
             "postgres.row-level-security-wired",
-            "tenancy.explicit-callers",
+            "tenancy.explicit-current-user",
             "tenancy.seated-token-roles",
             "tenancy.catalogue-builds",
             "tenancy.contexts-wired",

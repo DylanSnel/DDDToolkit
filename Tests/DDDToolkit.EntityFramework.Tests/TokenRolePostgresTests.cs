@@ -92,7 +92,7 @@ public sealed class TokenRolePostgresTests(PalletDepotDatabase database) : IAsyn
         (await ScalarAsync(alice, "SELECT current_user")).Should().Be("authenticated");
         (await alice.Pallets.CountAsync(Cancellation)).Should().Be(2);
 
-        caller.Current = Caller.Anonymous;
+        caller.Current = CurrentUserSnapshot.Anonymous;
         await using var nobody = database.CreateContext(caller, Mapped());
         (await ScalarAsync(nobody, "SELECT current_user")).Should().Be("anon");
         (await nobody.Pallets.CountAsync(Cancellation)).Should().Be(0);
@@ -482,8 +482,8 @@ public sealed class TokenRolePostgresTests(PalletDepotDatabase database) : IAsyn
             CancellationToken.None);
 
     /// <summary>The caller a validated token makes, signed for <paramref name="user"/> with <paramref name="role"/> as its role claim.</summary>
-    private static Caller Signed(Guid user, string role)
-        => Callers.FromClaims($$"""{"sub":"{{user}}","role":"{{role}}"}""");
+    private static CurrentUserSnapshot Signed(Guid user, string role)
+        => CurrentUserSnapshot.FromClaims($$"""{"sub":"{{user}}","role":"{{role}}"}""");
 
     /// <summary>One value, from SQL the tests themselves write; nothing here comes from outside.</summary>
     private static async Task<string?> ScalarAsync(DbContext context, string sql)

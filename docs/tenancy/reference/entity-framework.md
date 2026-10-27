@@ -911,7 +911,7 @@ Namespace `DDDToolkit.Supporting.Tenancy.EntityFramework`.
 public sealed class TenancyActedByAccessor : IActedByAccessor
 ```
 
-Tells a record that keeps who acted, an event log for one, what Tenancy knows of the caller: a seat as the seat, an operator by its verified identity, the application's own work as the system with its scope, and a link's token as the seat it stands for ([`TenancyCaller.Actor`](callers.md#tenancycallerttenantid-tseatid)). Where there is no Tenancy caller, or the caller is nobody, the accessor it wraps answers: the toolkit's own caller.
+Tells a record that keeps who acted, an event log for one, what Tenancy knows of the caller: a seat as the seat, an operator by its verified identity, the application's own work as the system with its scope, and a link's token as the seat it stands for ([`TenancyCaller.Actor`](callers.md#tenancycallerttenantid-tseatid)). Where there is no Tenancy caller, or the caller is nobody, the accessor it wraps answers from the toolkit's current user.
 
 `AddTenancy` puts it around the accessor that was registered before it, or around the toolkit's default. It is a singleton that reads the ambient Tenancy caller each time it is asked, keeps nothing between two answers and takes no scoped service, so it serves a context taken from a pool as it serves any other.
 
@@ -942,7 +942,7 @@ Who is acting now.
 
 **Exceptions**
 
-- `NoCallerException`: Nobody is calling, and the host requires every flow of work to say who it runs as.
+- `NoCurrentUserException`: Nobody is calling, and the host requires every flow of work to say who it runs as.
 
 ### `TenancyAttribution`
 
@@ -1217,7 +1217,7 @@ public static Task<IReadOnlyList<string>> UnknownStoredPermissionsAsync<TRole, T
 
 The permissions stored on roles, in every tenant, that `catalogue` does not know: removed from the code rather than retired. Such a permission gives no rights, and may stay on its role; this names them, so a start-up check can report them. The query reads the roles' permissions and nothing else, past every filter: a role an application's own filter hides still holds its permissions.
 
-It is one of the few reads across tenants Tenancy makes: one query, on a context of its own made in a new scope of the application's services, as a caller begun around it alone, so neither the caller of this method nor a transaction open on `context` decides who it runs as. Where the database keeps the rights ([`TenancyStoreOptions.DatabaseKeepsRights`](#tenancystoreoptions), as on Postgres with row level security), that caller is Tenancy's scoped system work in no tenant, a role the policies hold, and the query asks the database's function [`TenancyFunctionNames.RolePermissionsInUse`](#tenancyfunctionnames), which answers the permissions and nothing else of any role. Anywhere else it is the toolkit's `Caller.System`, the application itself, reading the roles' table.
+It is one of the few reads across tenants Tenancy makes: one query, on a context of its own made in a new scope of the application's services, as a user begun around it alone, so neither the caller of this method nor a transaction open on `context` decides who it runs as. Where the database keeps the rights ([`TenancyStoreOptions.DatabaseKeepsRights`](#tenancystoreoptions), as on Postgres with row level security), that caller is Tenancy's scoped system work in no tenant, a role the policies hold, and the query asks the database's function [`TenancyFunctionNames.RolePermissionsInUse`](#tenancyfunctionnames), which answers the permissions and nothing else of any role. Anywhere else it is the toolkit's `CurrentUserSnapshot.System`, the application itself, reading the roles' table.
 
 **Parameters**
 

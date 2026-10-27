@@ -119,7 +119,7 @@ public sealed class PermissionSetScenarios(SampleHosts sample) : IClassFixture<S
         // once, starter roles the answers, still sets and not lists, and the port sends them with the projects as one
         // statement: the organization's permissions, the crew's and the permission that sees, put together where it runs. Asked
         // as a request asks: as the person, in her seat.
-        using (Callers.Begin(Caller.User(DemoPeople.Rhea.Id)))
+        using (TestUser.BeginAs(DemoPeople.Rhea.Id))
         using (TenancyCallers.Begin(TenancyCaller<TenantId, SeatId>.InSeat(Harbor.Id, Harbor.SeatOf(DemoPeople.Rhea))))
         {
             await using var scope = host.Services.CreateAsyncScope();

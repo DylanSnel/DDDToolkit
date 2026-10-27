@@ -79,7 +79,7 @@ public class RestrictiveRuleGenerationTests
             {{attribute}}
             public static partial class TheRule
             {
-                public static bool Allows(Order order, Caller caller) => {{expression}};
+                public static bool Allows(Order order, ICurrentUser user) => {{expression}};
             }
             """);
 
@@ -105,7 +105,7 @@ public class RestrictiveRuleGenerationTests
             [RowAccess<Order>(RowOperations.Change, Columns = [nameof(Order.Team)], Restrictive = true)]
             public static partial class TheRule
             {
-                public static bool Allows(Order order, Caller caller) => order.Team != null;
+                public static bool Allows(Order order, ICurrentUser user) => order.Team != null;
             }
             """);
 

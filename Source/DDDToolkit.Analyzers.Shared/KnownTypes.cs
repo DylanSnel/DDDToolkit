@@ -1,3 +1,4 @@
+
 namespace DDDToolkit.Analyzers.Common;
 
 /// <summary>
@@ -112,7 +113,7 @@ internal static class KnownTypes
     public const string AccessSet = "DDDToolkit.Abstractions.Access.AccessSet`1";
 
     /// <summary>Who is asking, as a row access rule sees them.</summary>
-    public const string Caller = "DDDToolkit.Abstractions.Access.Caller";
+    public const string CurrentUser = "DDDToolkit.Abstractions.Access.ICurrentUser";
 
     /// <summary>SQL written into a row access rule as it is: <c>Sql.Call</c> and <c>Sql.Raw</c>.</summary>
     public const string SqlEscape = "DDDToolkit.Abstractions.Access.Sql";

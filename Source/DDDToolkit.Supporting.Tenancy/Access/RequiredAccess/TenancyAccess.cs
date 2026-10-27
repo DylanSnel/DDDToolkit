@@ -139,11 +139,11 @@ public static class TenancyAccess
             ? tenant
             : throw new ArgumentOutOfRangeException(nameof(tenant), tenant, "Operator work acts in the tenant the command names or in the one the request names.");
 
-    /// <summary><paramref name="scope"/>, where it is a scope as the toolkit's scoped system caller takes one.</summary>
+    /// <summary><paramref name="scope"/>, where it is a scope as the toolkit's scoped system work takes one.</summary>
     private static string ScopeOf(string scope)
     {
-        // The rule is the scoped system caller's own, which the work is begun with: asked of it, so the two cannot differ.
-        _ = Caller.SystemIn(scope);
+        // The rule is the scoped system work's own, which the work is begun with: asked of it, so the two cannot differ.
+        _ = CurrentUserSnapshot.SystemIn(scope);
         return scope;
     }
 }

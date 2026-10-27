@@ -13,7 +13,7 @@ public abstract partial record TenancyRequirement
     /// <remarks>
     /// On a command, the pipeline runs the handler as operator work recorded as the operator. The work acts in no tenant,
     /// or, with <see cref="OperatorTenant.FromRequest"/>, in the tenant the request names. On a query nothing begins. It is
-    /// the toolkit's own caller that is asked, never the Tenancy caller, which is nobody for an operator in every tenant.
+    /// the toolkit's current user that is asked, never the Tenancy caller, which is nobody for an operator in every tenant.
     /// </remarks>
     public sealed record Operator : TenancyRequirement
     {

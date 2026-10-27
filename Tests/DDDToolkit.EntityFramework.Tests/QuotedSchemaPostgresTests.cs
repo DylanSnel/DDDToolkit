@@ -20,22 +20,22 @@ public sealed class QuotedSchemaPostgresTests(HelpDeskDatabase database) : IClas
 
     private const string AlicesTicket = "Alice's, open for the north";
 
-    private static readonly Caller Alice = Callers.FromClaims(PostgresRowAccessDatabase.ClaimsOf(PostgresRowAccessDatabase.Alice, team: "north"));
+    private static readonly CurrentUserSnapshot Alice = CurrentUserSnapshot.FromClaims(PostgresRowAccessDatabase.ClaimsOf(PostgresRowAccessDatabase.Alice, team: "north"));
 
-    private static readonly Caller Bob = Callers.FromClaims(PostgresRowAccessDatabase.ClaimsOf(PostgresRowAccessDatabase.Bob, team: "north"));
+    private static readonly CurrentUserSnapshot Bob = CurrentUserSnapshot.FromClaims(PostgresRowAccessDatabase.ClaimsOf(PostgresRowAccessDatabase.Bob, team: "north"));
 
-    private static readonly Caller Carol = Callers.FromClaims(PostgresRowAccessDatabase.ClaimsOf(PostgresRowAccessDatabase.Carol, team: "south"));
+    private static readonly CurrentUserSnapshot Carol = CurrentUserSnapshot.FromClaims(PostgresRowAccessDatabase.ClaimsOf(PostgresRowAccessDatabase.Carol, team: "south"));
 
     public static TheoryData<string> CallerNames => ["Alice", "Bob", "Carol", "anonymous"];
 
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
-    private static Caller Named(string name) => name switch
+    private static CurrentUserSnapshot Named(string name) => name switch
     {
         "Alice" => Alice,
         "Bob" => Bob,
         "Carol" => Carol,
-        _ => Caller.Anonymous,
+        _ => CurrentUserSnapshot.Anonymous,
     };
 
     [Theory]
@@ -45,12 +45,12 @@ public sealed class QuotedSchemaPostgresTests(HelpDeskDatabase database) : IClas
         database.Require();
         var caller = Named(name);
 
-        var all = await database.TicketsAsync(Caller.System, Cancellation);
+        var all = await database.TicketsAsync(CurrentUserSnapshot.System, Cancellation);
         var seen = await database.TicketsAsync(caller, Cancellation);
 
         all.Should().HaveCount(5, "the application itself is not subject to the rules");
         seen.Select(ticket => ticket.Title).Should().BeEquivalentTo(
-            all.Where(ticket => DeskRules.Reads(ticket, caller) || TeammatesWorkOnTheTeamsTickets.Allows(ticket, caller)).Select(ticket => ticket.Title),
+            all.Where(ticket => DeskRules.Reads(ticket, caller) || TeammatesWorkOnTheTeamsTickets.Allows(ticket, Answering(caller))).Select(ticket => ticket.Title),
             "Postgres answers what the rules answer, the watchers' through the set the access function in \"Help_Desk\" answers");
     }
 
@@ -159,7 +159,7 @@ public sealed class QuotedSchemaPostgresTests(HelpDeskDatabase database) : IClas
     public async Task The_login_role_check_finds_the_schema_the_model_names_capitals_and_all()
     {
         database.Require();
-        await using var context = database.CreateContext(Caller.System);
+        await using var context = database.CreateContext(CurrentUserSnapshot.System);
         await PostgresRowAccessChecks.EnsureLoginRoleMaySwitchToCallersAsync(context, Cancellation);
 
         // The login role owns the schema, which the check finds by the name the catalog keeps, and names as SQL writes it.
@@ -172,7 +172,7 @@ public sealed class QuotedSchemaPostgresTests(HelpDeskDatabase database) : IClas
     public async Task The_definer_owner_check_finds_a_function_in_the_schema_the_model_names_once_a_table_there_is_forced()
     {
         database.Require();
-        await using var context = database.CreateContext(Caller.System);
+        await using var context = database.CreateContext(CurrentUserSnapshot.System);
         const string Forced = "SELECT c.relname FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'Help_Desk' AND c.relforcerowsecurity ORDER BY 1";
 
         try

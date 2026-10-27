@@ -71,9 +71,9 @@ public interface ITenancyReads
     /// person without a seat is. Each seat is the module's own, read whole beside its tenant in one statement and
     /// tracked by nobody. Read in a scope of its own, as <see cref="AskAsync"/> is.
     /// </summary>
-    /// <param name="caller">Who is calling, as the host verified it.</param>
+    /// <param name="user">Who is calling, as the host verified it.</param>
     /// <param name="cancellationToken">Cancels the lookup.</param>
-    Task<IReadOnlyList<SeatInTenant<Seat>>> SeatsOfAsync(Caller caller, CancellationToken cancellationToken);
+    Task<IReadOnlyList<SeatInTenant<Seat>>> SeatsOfAsync(CurrentUserSnapshot user, CancellationToken cancellationToken);
 
     /// <summary>
     /// A page of every tenant of the application, by slug, as the Tenancy package's tenant manager answers

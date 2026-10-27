@@ -15,7 +15,7 @@ namespace DDDToolkit.Supporting.Membership.EntityFramework;
 /// the context that statement runs on, and answers over rows that context maps, the application's own or the
 /// ones another module lets it read:
 /// <code>
-/// public IQueryable&lt;DutyId&gt; RolesWith(DbContext context, Caller caller, string permission)
+/// public IQueryable&lt;DutyId&gt; RolesWith(DbContext context, CurrentUserSnapshot user, string permission)
 ///     =&gt; context.Set&lt;DutyPermission&gt;().Where(given =&gt; given.Permission == permission).Select(given =&gt; given.DutyId);
 /// </code>
 /// </para>
@@ -36,11 +36,11 @@ public interface IRolesWithPermission<TResourceId, TRoleId>
     where TRoleId : struct, IEntityId, IEquatable<TRoleId>
 {
     /// <summary>
-    /// The roles that give <paramref name="permission"/> now: those in use, as <paramref name="caller"/> has them,
+    /// The roles that give <paramref name="permission"/> now: those in use, as <paramref name="user"/> has them,
     /// in its part of an organization say. Not run here: it goes into the statement that asks.
     /// </summary>
     /// <param name="context">The context the statement runs on: the query is over rows of it.</param>
-    /// <param name="caller">The caller the question is asked for: a signed-in user.</param>
+    /// <param name="user">The caller the question is asked for: a signed-in user.</param>
     /// <param name="permission">A permission a member's role can give on the resource.</param>
-    IQueryable<TRoleId> RolesWith(DbContext context, Caller caller, string permission);
+    IQueryable<TRoleId> RolesWith(DbContext context, CurrentUserSnapshot user, string permission);
 }

@@ -167,7 +167,7 @@ public sealed class PooledContextScenarios(SampleHosts sample) : IClassFixture<S
         var factory = host.Services.GetRequiredService<IDbContextFactory<ProjectsContext>>();
         log.Clear();
         var renames = 0;
-        while (!log.Uses.Any(use => use.IsSave && use.Caller?.Kind == CallerKind.User && ReferenceEquals(use.Context, refused)))
+        while (!log.Uses.Any(use => use.IsSave && use.Caller?.Kind == CurrentUserKind.User && ReferenceEquals(use.Context, refused)))
         {
             renames.Should().BeLessThan(20, "the pool hands the refused request's context out again");
             await using (await factory.LeaveOnlyAsync(refused!, Cancellation))
@@ -206,7 +206,7 @@ public sealed class PooledContextScenarios(SampleHosts sample) : IClassFixture<S
         var id = (await opened.Content.ReadFromJsonAsync<JsonElement>(Cancellation)).GetProperty("id").GetGuid();
 
         // One save by the signed-in user, on a context taken from the pool: the request's own, bound to its scope.
-        var save = log.Uses.Where(use => use.IsSave && use.Context is ProjectsContext && use.Caller?.Kind == CallerKind.User).Should().ContainSingle("the command saves once").Which;
+        var save = log.Uses.Where(use => use.IsSave && use.Context is ProjectsContext && use.Caller?.Kind == CurrentUserKind.User).Should().ContainSingle("the command saves once").Which;
         save.Pooled.Should().BeTrue();
 
         // That save stored the event with the project, and the poller marks it handled.
@@ -240,7 +240,7 @@ public sealed class PooledContextScenarios(SampleHosts sample) : IClassFixture<S
             .ToList();
         var poller = handled.Should().NotBeEmpty("the poller marked the event handled").And.Subject.First();
         poller.Pooled.Should().BeTrue("the poller's scope takes its context from a pool, as a request's does");
-        poller.Caller.Should().NotBeNull().And.Match<Caller>(caller => caller.IsSystem, "the poller runs as the application itself");
+        poller.Caller.Should().NotBeNull().And.Match<CurrentUserSnapshot>(caller => caller.Kind == CurrentUserKind.System, "the poller runs as the application itself");
 
         // No request was served by that instance: the pool it came from is the background's, which a request
         // never rents from.
@@ -250,7 +250,7 @@ public sealed class PooledContextScenarios(SampleHosts sample) : IClassFixture<S
         // Its round is over, and the instance it used is back in that pool: rented as the system caller, which
         // is who draws on it, the factory hands it out again.
         var factory = host.Services.GetRequiredService<IDbContextFactory<ProjectsContext>>();
-        using (Callers.Begin(Caller.System))
+        using (TestUser.BeginSystem())
         {
             (await factory.HandsOutAgainAsync(poller.Context, Cancellation)).Should().BeTrue("the poller's scope ended, which gave its context back");
         }

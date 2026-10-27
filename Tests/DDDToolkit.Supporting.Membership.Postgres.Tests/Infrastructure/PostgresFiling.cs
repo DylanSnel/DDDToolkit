@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using DDDToolkit.EntityFramework;
 using DDDToolkit.EntityFramework.Postgres;
 using Npgsql;
@@ -77,7 +78,7 @@ public sealed class PostgresFiling : IDisposable
     /// answered. With <paramref name="before"/>, that runs first in the session's transaction, as the login
     /// role, which owns the tables: what a test sets up at the transaction's own moment.
     /// </summary>
-    public Task<CallerSession> SessionAsync(Caller caller, string? role = null, string? before = null) => CallerSession.BeginAsync(Database, caller, role, before);
+    public Task<CallerSession> SessionAsync(CurrentUserSnapshot caller, string? role = null, string? before = null) => CallerSession.BeginAsync(Database, caller, role, before);
 
     /// <summary>Runs <paramref name="sql"/> as the login role, which owns everything of the application's.</summary>
     public Task ExecuteAsync(string sql) => FilingPostgres.ExecuteAsync(Database.ConnectionString, sql, TestContext.Current.CancellationToken);
@@ -131,7 +132,7 @@ public sealed class CallerSession : IAsyncDisposable
     /// caller's. The database's clock stands still in a transaction, so a row set to <c>now()</c> here is at
     /// exactly the moment every later question of the session is asked at.
     /// </param>
-    public static async Task<CallerSession> BeginAsync(FilingDatabase database, Caller caller, string? role = null, string? before = null)
+    public static async Task<CallerSession> BeginAsync(FilingDatabase database, CurrentUserSnapshot caller, string? role = null, string? before = null)
     {
         var connection = new NpgsqlConnection(database.ConnectionString);
         await connection.OpenAsync(TestContext.Current.CancellationToken);

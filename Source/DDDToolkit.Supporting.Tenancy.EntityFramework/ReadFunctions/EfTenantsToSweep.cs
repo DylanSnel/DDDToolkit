@@ -21,7 +21,7 @@ internal sealed class EfTenantsToSweep<TTenant, TTenantId, TContext>(IServicePro
     public async Task<IReadOnlyList<TTenantId>> TenantsToSweepAsync(string scope, CancellationToken cancellationToken)
     {
         // A scope that is none is refused before any context is taken, the same on every database.
-        _ = Caller.SystemIn(scope);
+        _ = CurrentUserSnapshot.SystemIn(scope);
 
         // The context only names its type and the services it was made by: the read makes one of its own, in a new
         // scope of those services.

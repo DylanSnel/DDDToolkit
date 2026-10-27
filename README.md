@@ -165,11 +165,11 @@ of another fails restore with NU1605, a package downgrade, or fails at run time 
 | `DDDToolkit.Messaging.Postgres` | A [pgmq](https://github.com/pgmq/pgmq) sink, so the outbox enqueues inside the same Postgres transaction that writes the aggregate, and a consumer that reads a queue into the modules' inboxes. |
 | `DDDToolkit.Messaging.Wolverine` | [Wolverine](https://wolverinefx.net/) as the transport between one process's outbox and another's inbox. |
 | `DDDToolkit.Messaging.MassTransit` | [MassTransit](https://masstransit.io/) 8 as that transport, for those already on it. |
-| `DDDToolkit.EntityFramework.Postgres` | Row level security on any Postgres: each connection a context opens runs as the caller, as PostgREST's do, and `[RowAccess]` rules written in C# become the policies. |
+| `DDDToolkit.EntityFramework.Postgres` | Row level security on any Postgres: each connection a context opens runs as the current user (`ICurrentUser`), as PostgREST's do, and `[RowAccess]` rules written in C# become the policies. |
 | `DDDToolkit.EntityFramework.Supabase` | Your Entity Framework migrations and row access rules written as Supabase migration files by the build, so `supabase db push` and branching apply them, and a CI build that fails when one is missing. |
-| `DDDToolkit.Auth.Supabase` | Supabase Auth's access tokens validated in any host, against the keys the project publishes or its JWT secret, and turned into the caller row level security runs your queries as. No Entity Framework needed. For server code, a client for Auth's admin API: invite an address, make a user under an id of your own, and find or delete one by id. |
-| `DDDToolkit.Auth.Supabase.AspNetCore` | The same in ASP.NET Core: a JWT bearer scheme for Supabase Auth, and each request's user as the caller. |
-| `DDDToolkit.Auth.Supabase.AzureFunctions` | The same in Azure Functions on the isolated worker: a worker middleware that makes each HTTP invocation's user the caller. |
+| `DDDToolkit.Auth.Supabase` | Supabase Auth's access tokens validated in any host, against the keys the project publishes or its JWT secret, and turned into the current user row level security runs your queries as. No Entity Framework needed. For server code, a client for Auth's admin API: invite an address, make a user under an id of your own, and find or delete one by id. |
+| `DDDToolkit.Auth.Supabase.AspNetCore` | The same in ASP.NET Core: a JWT bearer scheme for Supabase Auth, and each request's user as the current user. |
+| `DDDToolkit.Auth.Supabase.AzureFunctions` | The same in Azure Functions on the isolated worker: a worker middleware that makes each HTTP invocation's user the current user. |
 | `DDDToolkit.Mediator` | One call that dispatches domain events through [Mediator](https://github.com/martinothamar/Mediator) instead of a hand-written delegate. |
 | `DDDToolkit.FluentValidation` | A generated validator per value object. |
 | `DDDToolkit.Localization` | Validation errors and invariant violations phrased in the reader's language, through `IStringLocalizer`. |

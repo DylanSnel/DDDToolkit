@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using Microsoft.Data.Sqlite;
 
 namespace DDDToolkit.Supporting.Membership.EntityFramework.Tests;
@@ -111,9 +112,9 @@ public sealed class UsersReachedFromAboveTests
     /// <summary>Where a caller holds a permission over documents: at the owners that made it a deputy for that permission.</summary>
     private sealed class DeputiesOfOwners : IPlacesReached<DocumentId, UserId>
     {
-        public IQueryable<UserId> PlacesReached(DbContext context, Caller caller, string permission)
+        public IQueryable<UserId> PlacesReached(DbContext context, CurrentUserSnapshot caller, string permission)
         {
-            var user = caller.UserId;
+            var user = caller.Id;
             return context.Set<Deputy>().Where(deputy => deputy.User == user && deputy.Key == permission).Select(deputy => deputy.Of);
         }
     }
@@ -239,7 +240,7 @@ public sealed class UsersReachedFromAboveTests
 
         /// <summary>Changes the rows as the application's own work, and saves.</summary>
         public Task ChangeAsync(Func<DeskContext, Task> change)
-            => AsAsync(Caller.System, async provider =>
+            => AsAsync(CurrentUserSnapshot.System, async provider =>
             {
                 var context = provider.GetRequiredService<DeskContext>();
                 await change(context);
@@ -253,9 +254,9 @@ public sealed class UsersReachedFromAboveTests
             await _connection.DisposeAsync();
         }
 
-        private async Task<T> AsAsync<T>(Caller caller, Func<IServiceProvider, Task<T>> ask)
+        private async Task<T> AsAsync<T>(CurrentUserSnapshot caller, Func<IServiceProvider, Task<T>> ask)
         {
-            using (Callers.Begin(caller))
+            using (TestUser.BeginAs(caller))
             {
                 await using var scope = _provider.CreateAsyncScope();
                 return await ask(scope.ServiceProvider);

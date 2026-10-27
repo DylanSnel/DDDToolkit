@@ -12,9 +12,9 @@ namespace DDDToolkit.Supporting.Membership.TestHost;
 public sealed class CallersUser : ICallersOwn<UserId>
 {
     /// <inheritdoc />
-    public UserId? Find(Caller caller)
+    public UserId? Find(ICurrentUser user)
     {
-        ArgumentNullException.ThrowIfNull(caller);
-        return caller.UserId is { } id ? new UserId(id) : null;
+        ArgumentNullException.ThrowIfNull(user);
+        return user.Id is { } id ? new UserId(id) : null;
     }
 }

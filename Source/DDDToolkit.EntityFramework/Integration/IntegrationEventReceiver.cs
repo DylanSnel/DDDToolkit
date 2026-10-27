@@ -19,8 +19,8 @@ namespace DDDToolkit.EntityFramework.Integration;
 /// outbox processor does.
 /// </para>
 /// <para>
-/// Where the host requires explicit callers, receiving is the toolkit's own bookkeeping and runs as
-/// <c>Caller.System</c>, and each module's handlers run as that module's scopes say
+/// Where the host requires an explicit current user, receiving is the toolkit's own bookkeeping and runs as
+/// <c>CurrentUserSnapshot.System</c>, and each module's handlers run as that module's scopes say
 /// (<see cref="ModuleIntegrationEvents{TContext}.Around"/>). Without it nothing is begun.
 /// </para>
 /// <code>
@@ -41,7 +41,7 @@ public sealed class IntegrationEventReceiver(IServiceScopeFactory scopes)
         ArgumentNullException.ThrowIfNull(message);
 
         await using var scope = scopes.CreateAsyncScope();
-        using var bookkeeping = ToolkitCallers.BeginBookkeeping(ToolkitCallers.Required(scope.ServiceProvider));
+        using var bookkeeping = ToolkitWork.BeginBookkeeping(ToolkitWork.Required(scope.ServiceProvider));
         var modules = scope.ServiceProvider.GetRequiredService<ModuleIntegrationEventSink>();
 
         await modules.SendAsync(message, cancellationToken).ConfigureAwait(false);

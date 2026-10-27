@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Access;
 using DDDToolkit.Supporting.Tenancy.Access;
 
@@ -234,10 +235,10 @@ public class ModuleDefaultGenerationTests
 
             public static class Probe
             {
-                public static async System.Threading.Tasks.Task<string> SendAsync<TRequest>(TRequest request, ICallerAccessor callers)
+                public static async System.Threading.Tasks.Task<string> SendAsync<TRequest>(TRequest request, DDDToolkit.Abstractions.Access.ICurrentUser user)
                     where TRequest : Mediator.ICommand, IBillingRequest
                 {
-                    var behavior = new BillingAccessBehavior<TRequest, Mediator.Unit>(new AccessChecks<IBillingRequest>(new IAccessCheck[] { new CallerAccessCheck(callers) }));
+                    var behavior = new BillingAccessBehavior<TRequest, Mediator.Unit>(new AccessChecks<IBillingRequest>(new IAccessCheck[] { new CurrentUserAccessCheck(user) }));
                     try
                     {
                         await behavior.Handle(request, (message, cancellationToken) => new System.Threading.Tasks.ValueTask<Mediator.Unit>(Mediator.Unit.Value), System.Threading.CancellationToken.None);
@@ -249,9 +250,9 @@ public class ModuleDefaultGenerationTests
                     }
                 }
 
-                public static System.Threading.Tasks.Task<string> TakingTheDefault(ICallerAccessor callers) => SendAsync(new MyInvoices(), callers);
+                public static System.Threading.Tasks.Task<string> TakingTheDefault(DDDToolkit.Abstractions.Access.ICurrentUser user) => SendAsync(new MyInvoices(), user);
 
-                public static System.Threading.Tasks.Task<string> StatingItsOwn(ICallerAccessor callers) => SendAsync(new ListPlans(), callers);
+                public static System.Threading.Tasks.Task<string> StatingItsOwn(DDDToolkit.Abstractions.Access.ICurrentUser user) => SendAsync(new ListPlans(), user);
             }
             """,
             mediator: true).RunCore();
@@ -259,8 +260,8 @@ public class ModuleDefaultGenerationTests
         result.ShouldCompile();
         result.ShouldHaveExactlyDiagnostics();
         var emitted = result.Emit();
-        var anonymous = new RequirementAttributeGenerationTests.Answering(DDDToolkit.Abstractions.Access.Caller.Anonymous);
-        var signedIn = new RequirementAttributeGenerationTests.Answering(DDDToolkit.Abstractions.Access.Caller.User(Guid.NewGuid()));
+        var anonymous = RequirementAttributeGenerationTests.Answering(DDDToolkit.Abstractions.Access.CurrentUserSnapshot.Anonymous);
+        var signedIn = RequirementAttributeGenerationTests.Answering(DDDToolkit.Abstractions.Access.CurrentUserSnapshot.User(Guid.NewGuid()));
 
         (await (Task<string>)emitted.CallStatic("Shop.Billing.Probe", "TakingTheDefault", anonymous)!).Should().Be("access.not-signed-in", "the request said nothing, and the module's default holds it");
         (await (Task<string>)emitted.CallStatic("Shop.Billing.Probe", "TakingTheDefault", signedIn)!).Should().Be("handled");

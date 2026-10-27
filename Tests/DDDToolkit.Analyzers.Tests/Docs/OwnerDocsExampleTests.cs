@@ -37,7 +37,7 @@ public class OwnerDocsExampleTests
 
         public sealed class CallersUser : ICallersOwn<UserId>
         {
-            public UserId? Find(Caller caller) => caller.UserId is { } id ? new UserId(id) : null;
+            public UserId? Find(ICurrentUser user) => user.Id is { } id ? new UserId(id) : null;
         }
         """;
 

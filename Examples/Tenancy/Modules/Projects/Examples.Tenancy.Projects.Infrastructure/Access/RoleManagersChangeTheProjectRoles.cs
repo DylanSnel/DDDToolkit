@@ -16,5 +16,5 @@ namespace Examples.Tenancy.Projects.Infrastructure.Access;
 public static partial class RoleManagersChangeTheProjectRoles
 {
     /// <summary>Whether the seat holds the permission that manages the tenant's roles at its root.</summary>
-    public static bool Allows(ProjectRole role, Caller caller) => TenancyRowAccess.HoldsAtTenant(TenancyPermissions.RolesManage);
+    public static bool Allows(ProjectRole role, ICurrentUser user) => TenancyRowAccess.HoldsAtTenant(TenancyPermissions.RolesManage);
 }

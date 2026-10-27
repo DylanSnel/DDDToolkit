@@ -12,7 +12,7 @@ public static class TenancyRowLevelSecurity
     /// It is the application's word, as every setting is: any statement on the application's connection can set
     /// it. SQL that reads it for a signed-in user should find the seat from the verified identity and this
     /// tenant, and require that seat and tenant to be active, so a wrong tenant reaches no seat; only work the
-    /// application begins on purpose, the scoped system caller's, can take it as given.
+    /// application begins on purpose, the scoped system work's, can take it as given.
     /// </para>
     /// </summary>
     public const string TenantSetting = "tenancy.caller_tenant";

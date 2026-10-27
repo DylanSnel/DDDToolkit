@@ -16,7 +16,7 @@ public sealed record SentCommand(
     DbTransaction? Transaction,
     DbContext? Context,
     DbConnection? Connection,
-    Caller? Caller,
+    CurrentUserSnapshot? Caller,
     bool InAmbientTransaction = false,
     ITenancyCaller? TenancyCaller = null)
 {
@@ -100,7 +100,7 @@ public sealed class CommandCounter : DbCommandInterceptor
             command.Transaction,
             eventData.Context,
             command.Connection,
-            Callers.Ambient,
+            BegunUser,
             System.Transactions.Transaction.Current is not null,
             TenancyCallers.Ambient));
 }

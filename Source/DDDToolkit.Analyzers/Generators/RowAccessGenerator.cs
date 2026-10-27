@@ -15,8 +15,8 @@ namespace DDDToolkit.Analyzers;
 /// Translates each <c>[RowAccess&lt;TAggregate&gt;]</c> rule's <c>Allows</c> method into SQL, and writes it
 /// into the rule as the constant <c>RowAccessSql</c>, where the Supabase export finds it.
 /// <code>
-/// public static bool Allows(Order order, Caller caller)
-///     =&gt; order.PlacedBy == null || order.PlacedBy?.Value == caller.UserId;
+/// public static bool Allows(Order order, ICurrentUser user)
+///     =&gt; order.PlacedBy == null || order.PlacedBy?.Value == user.Id;
 /// // (({col:PlacedBy} IS NULL) OR ({col:PlacedBy} IS NOT DISTINCT FROM {caller:uid}))
 /// </code>
 /// </summary>
@@ -40,7 +40,7 @@ namespace DDDToolkit.Analyzers;
 /// An <c>[AccessFunction]</c> is translated the same way, and may also ask the aggregate's entities:
 /// <c>project.Members.Any(member =&gt; ...)</c> is <c>{exists:Members:e1}...{/exists}</c>, the entity's
 /// properties inside it <c>{col:e1:Path}</c>, the entities of that entity
-/// <c>{exists:e1:Duties:e2}...{/exists}</c>, and its own parameters after the caller <c>{arg:1}</c>,
+/// <c>{exists:e1:Duties:e2}...{/exists}</c>, and its own parameters after the user <c>{arg:1}</c>,
 /// <c>{arg:2}</c>. A rule asks the function about its own row with <c>{call:name}</c>, which the export
 /// writes with the row's key, or <c>{fn:name}({key}, ...)</c> when it passes more; and about a key it holds,
 /// from its definition or its contract, with <c>{fn:name}(...)</c>. A name is <c>schema.name</c>, or a
@@ -249,18 +249,18 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
             || method.ReturnType.SpecialType != SpecialType.System_Boolean
             || (isFunction ? method.Parameters.Length < 2 : method.Parameters.Length != 2)
             || !SymbolEqualityComparer.Default.Equals(method.Parameters[0].Type.OriginalDefinition, aggregate.OriginalDefinition)
-            || method.Parameters[1].Type.ToDisplayString() != KnownTypes.Caller)
+            || method.Parameters[1].Type.ToDisplayString() != KnownTypes.CurrentUser)
         {
             diagnostics.Add(DiagnosticInfo.Create(
                 DiagnosticDescriptors.RowAccessRuleShape,
                 LocationInfo.From(declaration?.Identifier ?? syntax.Identifier),
                 symbol.Name,
-                $"one method 'public static bool Allows({aggregate.Name} {Camel(aggregate.Name)}, Caller caller)' whose body is a single expression"
-                + (isFunction ? ", and may take strings, numbers, flags, Guids and ids after the caller" : "")));
+                $"one method 'public static bool Allows({aggregate.Name} {Camel(aggregate.Name)}, ICurrentUser user)' whose body is a single expression"
+                + (isFunction ? ", and may take strings, numbers, flags, Guids and ids after the user" : "")));
             return RowAccessDefinition.Failed(type, diagnostics);
         }
 
-        // An access function's parameters after the caller: the SQL function's own, after the key.
+        // An access function's parameters after the user: the SQL function's own, after the key.
         var extras = method.Parameters.Skip(2).ToList();
         var sqlTypes = new List<string>(extras.Count);
         foreach (var extra in extras)
@@ -271,7 +271,7 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
                     DiagnosticDescriptors.RowAccessRuleShape,
                     LocationInfo.From(extra),
                     symbol.Name,
-                    $"parameters after the caller that the SQL function can take: '{extra.Name}' is {extra.Type.ToDisplayString()}, and a parameter is a string, bool, int, long, Guid or an id"));
+                    $"parameters after the user that the SQL function can take: '{extra.Name}' is {extra.Type.ToDisplayString()}, and a parameter is a string, bool, int, long, Guid or an id"));
                 continue;
             }
 
@@ -311,7 +311,7 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
             members.Add(NameConstant(logical, contract: false));
             members.Add(FunctionConstants(resolved.Owner, string.Join(", ", sqlTypes), shape));
 
-            // The C# parameters the generated question takes after the key: those of Allows after the caller.
+            // The C# parameters the generated question takes after the key: those of Allows after the user.
             var parameters = extras.Select(extra => extra.Type.ToDisplayString(TypeFormat) + " " + Identifier(extra.Name)).ToList();
             var names = extras.Select(extra => extra.Name).ToList();
             if (shape == Shape.Set)
@@ -882,7 +882,7 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
         => "/// <summary>The owner a name without a schema is relative to: the module, or the class's <c>[AccessFunctions]</c> owner.</summary>\n"
            + "public const string? RowAccessOwner = " + (owner is null ? "null" : SymbolDisplay.FormatLiteral(owner, quote: true)) + ";\n"
            + "\n"
-           + "/// <summary>The SQL types of the function's parameters after the key, from those of <c>Allows</c> after the caller.</summary>\n"
+           + "/// <summary>The SQL types of the function's parameters after the key, from those of <c>Allows</c> after the user.</summary>\n"
            + "public const string RowAccessParameters = " + SymbolDisplay.FormatLiteral(parameters, quote: true) + ";\n"
            + "\n"
            + "/// <summary>Whether the function answers about one row, or with the keys of every row it allows.</summary>\n"
@@ -1619,7 +1619,7 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
                 return AccessFunctionCall(invocation, allows.ContainingType, function);
             }
 
-            if (invocation.Expression is MemberAccessExpressionSyntax { Name.Identifier.ValueText: "Claim" } claim
+            if (invocation.Expression is MemberAccessExpressionSyntax { Name.Identifier.ValueText: "FindClaim" } claim
                 && IsParameter(claim.Expression, caller)
                 && invocation.ArgumentList.Arguments.Count == 1
                 && invocation.ArgumentList.Arguments[0].Expression is LiteralExpressionSyntax { RawKind: (int)SyntaxKind.StringLiteralExpression } path
@@ -1863,7 +1863,7 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
         }
 
         /// <summary>
-        /// <c>ProjectMembership.Allows(project, caller)</c>, the question of an <c>[AccessFunction]</c> on the
+        /// <c>ProjectMembership.Allows(project, user)</c>, the question of an <c>[AccessFunction]</c> on the
         /// same aggregate, asked of this row: <c>{call:projects.is_member}</c>, which the export writes as the
         /// function called with the row's key; <c>{fn:projects.is_member}({key}, ...)</c> when the rule passes
         /// more; and, for a set-shaped function, whether the row's key is in its set.
@@ -1983,15 +1983,15 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
 
             return member.Name.Identifier.ValueText switch
             {
-                "UserId" => "{caller:uid}",
-                "IsSignedIn" => "{caller:signedin}",
+                "Id" => "{caller:uid}",
+                "IsAuthenticated" => "{caller:signedin}",
                 "Role" => "{caller:role}",
                 _ => null,
             };
         }
 
         /// <summary>
-        /// A parameter of the access function after the caller, <c>{arg:1}</c> for the first: the SQL function's
+        /// A parameter of the access function after the user, <c>{arg:1}</c> for the first: the SQL function's
         /// own parameter, after the key. Its <c>.Value</c>, when it is an id, is the parameter too.
         /// </summary>
         private string? ArgumentOf(ExpressionSyntax expression)

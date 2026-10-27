@@ -70,7 +70,8 @@ public static class OperatorWork
 
         var services = new ServiceCollection();
         services.AddSingleton(new TenancyOptions<TenantId, SeatId, OrganizationUnitId, RoleId> { OperatorTokenRoles = { TokenRole } });
-        services.AddSingleton<ICallerAccessor>(new AmbientCallerAccessor());
+        var user = new CurrentUser();
+        services.AddSingleton<ICurrentUser>(user);
         services.AddTenancyOperatorAccess<TenantId, SeatId, OrganizationUnitId, RoleId, IHostRequest>();
 
         await using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
@@ -78,7 +79,7 @@ public static class OperatorWork
         var checks = scope.ServiceProvider.GetRequiredService<AccessChecks<IHostRequest>>();
         var command = new OperatorCommand(requirement);
 
-        using (Callers.Begin(Caller.User(identity, TokenRole)))
+        using (user.BeginAs(CurrentUserSnapshot.User(identity, TokenRole)))
         {
             await checks.RequireAsync(command);
             using (checks.BeginWork(command, isQuery: false))

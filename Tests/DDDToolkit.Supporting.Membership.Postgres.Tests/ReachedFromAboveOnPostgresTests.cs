@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.EntityFramework.Postgres;
 using Microsoft.EntityFrameworkCore.Metadata;
@@ -163,9 +164,9 @@ public sealed class ReachedFromAboveOnPostgresTests(FilingPostgres postgres)
     /// <summary>Where a caller holds a permission over documents: at the owners that made it a deputy for that permission.</summary>
     private sealed class DeputiesOfOwners : IPlacesReached<DocumentId, UserId>
     {
-        public IQueryable<UserId> PlacesReached(DbContext context, Caller caller, string permission)
+        public IQueryable<UserId> PlacesReached(DbContext context, CurrentUserSnapshot caller, string permission)
         {
-            var user = caller.UserId;
+            var user = caller.Id;
             return context.Set<Deputy>().Where(deputy => deputy.User == user && deputy.Key == permission).Select(deputy => deputy.Of);
         }
     }
@@ -291,7 +292,7 @@ public sealed class ReachedFromAboveOnPostgresTests(FilingPostgres postgres)
                 new Deputy { Of = desk.Ada, User = desk.Cy.Value, Key = DocumentPermissions.Edit },
                 new Deputy { Of = desk.Ada, User = desk.Dee.Value, Key = DocumentPermissions.Edit });
 
-            await desk.AsAsync(Caller.System, async provider =>
+            await desk.AsAsync(CurrentUserSnapshot.System, async provider =>
             {
                 var context = provider.GetRequiredService<DeskContext>();
                 context.Documents.AddRange(desk._documents);
@@ -324,9 +325,9 @@ public sealed class ReachedFromAboveOnPostgresTests(FilingPostgres postgres)
         public Task<MemberHold<DocumentId>?> HoldAsync(UserId user, DocumentId document, string permission)
             => AsAsync(TestCallers.User(user), provider => provider.GetRequiredService<MembershipAccessManager<Document>>().HoldAsync(document, permission, Cancellation));
 
-        public async Task<T> AsAsync<T>(Caller caller, Func<IServiceProvider, Task<T>> ask)
+        public async Task<T> AsAsync<T>(CurrentUserSnapshot caller, Func<IServiceProvider, Task<T>> ask)
         {
-            using (Callers.Begin(caller))
+            using (TestUser.BeginAs(caller))
             {
                 await using var scope = _provider.CreateAsyncScope();
                 return await ask(scope.ServiceProvider);
@@ -365,11 +366,11 @@ public sealed class ReachedFromAboveOnPostgresTests(FilingPostgres postgres)
     /// </summary>
     private sealed class Wardens(UserId letGo) : ICallerMember<PlotId, UserId>, IPlacesReached<PlotId, GardenId>
     {
-        public UserId? Find(Caller caller) => caller.UserId is { } user && user != letGo.Value ? new UserId(user) : null;
+        public UserId? Find(CurrentUserSnapshot caller) => caller.Id is { } user && user != letGo.Value ? new UserId(user) : null;
 
-        public IQueryable<GardenId> PlacesReached(DbContext context, Caller caller, string permission)
+        public IQueryable<GardenId> PlacesReached(DbContext context, CurrentUserSnapshot caller, string permission)
         {
-            var user = caller.UserId;
+            var user = caller.Id;
             var counted = user is not null && user != letGo.Value;
             return context.Set<GardenPermission>().Where(held => counted && held.UserId == user && held.Permission == permission).Select(held => held.GardenId);
         }
@@ -495,7 +496,7 @@ public sealed class ReachedFromAboveOnPostgresTests(FilingPostgres postgres)
                 [new MembershipRowAccessContribution<PlotGardener>(Rules), new WardensOwnFunctions()]);
             var gardens = new WardenedGardens(database);
 
-            await gardens.AsAsync(Caller.System, async provider =>
+            await gardens.AsAsync(CurrentUserSnapshot.System, async provider =>
             {
                 var context = provider.GetRequiredService<WardensContext>();
                 context.AddRange(gardens.Data.Roles);
@@ -517,9 +518,9 @@ public sealed class ReachedFromAboveOnPostgresTests(FilingPostgres postgres)
         public IReadOnlyList<PlotId> HeldBy(GardenPerson person, string permission)
             => Counts(person) ? [.. Data.PlotsHeldBy(person, permission).Union(Above(person, permission))] : [];
 
-        public async Task<T> AsAsync<T>(Caller caller, Func<IServiceProvider, Task<T>> ask)
+        public async Task<T> AsAsync<T>(CurrentUserSnapshot caller, Func<IServiceProvider, Task<T>> ask)
         {
-            using (Callers.Begin(caller))
+            using (TestUser.BeginAs(caller))
             {
                 await using var scope = _provider.CreateAsyncScope();
                 return await ask(scope.ServiceProvider);

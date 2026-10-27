@@ -206,7 +206,7 @@ public class RequirementCombinationGenerationTests
             """
             public sealed class CallersUser : ICallersOwn<UserId>
             {
-                public UserId? Find(DDDToolkit.Abstractions.Access.Caller caller) => caller.UserId is { } id ? new UserId(id) : null;
+                public UserId? Find(DDDToolkit.Abstractions.Access.ICurrentUser user) => user.Id is { } id ? new UserId(id) : null;
             }
 
             [RequiresPermission("profiles.edit")]
@@ -236,7 +236,7 @@ public class RequirementCombinationGenerationTests
 
                 public sealed class CallersAccount : ICallersOwn<AccountId>
                 {
-                    public AccountId? Find(DDDToolkit.Abstractions.Access.Caller caller) => caller.UserId is { } id ? new AccountId(id) : null;
+                    public AccountId? Find(DDDToolkit.Abstractions.Access.ICurrentUser user) => user.Id is { } id ? new AccountId(id) : null;
                 }
                 """,
                 "Shop.Accounts")

@@ -67,7 +67,7 @@ public class RegistrationTests
             await using var scope = provider.CreateAsyncScope();
             var selection = scope.ServiceProvider.GetRequiredService<TenantSelection<TenantId, SeatId>>();
 
-            return (await selection.ResolveAsync(Caller.User(ada, "member"), "harbor", TestContext.Current.CancellationToken), await selection.ResolveAsync(Caller.User(ada), "harbor", TestContext.Current.CancellationToken));
+            return (await selection.ResolveAsync(CurrentUserSnapshot.User(ada, "member"), "harbor", TestContext.Current.CancellationToken), await selection.ResolveAsync(CurrentUserSnapshot.User(ada), "harbor", TestContext.Current.CancellationToken));
         }
 
         // Left alone, the option seats signed-in users, as before there was one.
@@ -181,7 +181,7 @@ public class RegistrationTests
     /// <summary>A host's own answer to who a request's caller is in Tenancy: here, always nobody.</summary>
     private sealed class OwnSelection : ITenantSelection
     {
-        public Task<ITenancyCaller> ResolveAsync(Caller caller, string? tenantSlug, CancellationToken cancellationToken)
+        public Task<ITenancyCaller> ResolveAsync(CurrentUserSnapshot caller, string? tenantSlug, CancellationToken cancellationToken)
             => Task.FromResult<ITenancyCaller>(HostCaller.Nobody(TenancyRefusals.NotSeated));
     }
 }

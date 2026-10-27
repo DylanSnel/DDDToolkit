@@ -240,9 +240,9 @@ public class TenancyClosedOverTheIdsTests
 
             public static class Middleware
             {
-                public static async Task<ITenancyCaller?> SeatOf(ITenantSelection selection, Caller caller, string? slug)
+                public static async Task<ITenancyCaller?> SeatOf(ITenantSelection selection, CurrentUserSnapshot user, string? slug)
                 {
-                    var seat = await selection.ResolveAsync(caller, slug, CancellationToken.None);
+                    var seat = await selection.ResolveAsync(user, slug, CancellationToken.None);
                     using (TenancyCallers.Begin(seat))
                     {
                         return TenancyCallers.Ambient;

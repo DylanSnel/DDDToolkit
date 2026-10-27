@@ -79,7 +79,7 @@ before its effects:
   context that is wired wrong fails every query to the database without saying why, so these checks come first.
 - **Login** connects as the host's login role. It checks that the roles of the callers are the roles that
   the database's access files were written for, and that the login role may switch to each of them. Every later
-  stage runs as the system caller, and so switches to the system caller's role first.
+  stage runs as system work, and so switches to the system role first.
 - **Migrations** checks that every migration is applied. A missing migration also means missing policies and
   functions. This stage names the migration.
 - **Database** checks that the database is set up as the application expects. The login role holds nothing, and
@@ -93,9 +93,9 @@ its stage names that check in `RunsBefore`. For example, Tenancy's three checks 
 - A check that names a check of an earlier stage in `RunsBefore` stops the start. Checks that name each other in a
   circle stop the start too.
 
-Each check runs as system work, `Caller.System`, like the toolkit's own bookkeeping. The runner starts
-that caller for each check separately. Without it, a host that
-[requires explicit callers](row-level-security.md#requiring-explicit-callers) would refuse the first connection of a
+Each check runs as system work, `CurrentUserSnapshot.System`, like the toolkit's own bookkeeping. The runner begins
+that work for each check separately. Without it, a host that
+[requires an explicit current user](row-level-security.md#requiring-an-explicit-current-user) would refuse the first connection of a
 check. The checks read the catalogs of the database and change nothing.
 
 ## Checks in the packages
@@ -132,8 +132,8 @@ confirms. The entries are grouped by stage.
   that belong to a tenant has the save check, after the toolkit's interceptors. A context without the save check
   gets the message of `entity-framework.toolkit-wired`. A context that keeps the access history uses Tenancy's
   accessor for who acted ([Keeping tenants apart](tenancy/keeping-tenants-apart.md)).
-- **`tenancy.explicit-callers`** (`TenancyPostgresChecks.ExplicitCallersCheck`), from `AddTenancyPostgres`. The
-  host requires explicit callers.
+- **`tenancy.explicit-current-user`** (`TenancyPostgresChecks.ExplicitCurrentUserCheck`), from `AddTenancyPostgres`. The
+  host requires an explicit current user.
 - **`tenancy.seated-token-roles`** (`TenancyPostgresChecks.SeatedTokenRolesCheck`), from `AddTenancyPostgres`.
   Every token role that Tenancy gives a seat reaches the database as the role of a signed-in user.
 
@@ -261,7 +261,7 @@ public sealed class PostgresStartupCheck(IServiceProvider services) : IHostedSer
 {
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        using var system = Callers.Begin(Caller.System);
+        using var system = services.GetRequiredService<ICurrentUser>().BeginSystem();
 
         await using (var scope = services.CreateAsyncScope())
         {
@@ -273,7 +273,7 @@ public sealed class PostgresStartupCheck(IServiceProvider services) : IHostedSer
         }
 
         await services.EnsureSupabaseMigrationsAppliedAsync(cancellationToken);
-        TenancyPostgresChecks.EnsureExplicitCallers(services);
+        TenancyPostgresChecks.EnsureExplicitCurrentUser(services);
         // ... and seven more, in an order of its own
         await TenancyPostgresChecks.EnsurePoliciesAreInPlaceAsync(services, cancellationToken);
         await MembershipPostgresChecks.EnsureFunctionsAreInPlaceAsync(services, cancellationToken);

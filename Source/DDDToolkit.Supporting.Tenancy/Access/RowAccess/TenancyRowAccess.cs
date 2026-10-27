@@ -11,7 +11,7 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// [RowAccess&lt;Report&gt;(RowOperations.Read, To = [RowAccessRoles.User])]
 /// public static partial class ReportsAreReadWhereThePermissionIsHeld
 /// {
-///     public static bool Allows(Report report, Caller caller)
+///     public static bool Allows(Report report, ICurrentUser user)
 ///         =&gt; TenancyRowAccess.UnitsWhereIHold&lt;OrganizationUnitId&gt;("reports.read").Contains(report.UnitId);
 /// }
 /// </code>
@@ -83,7 +83,7 @@ public static partial class TenancyRowAccess
     /// [RowAccess&lt;Seat&gt;(RowOperations.Read)]
     /// public static partial class MembersReadThePeopleOfTheirUnits
     /// {
-    ///     public static bool Allows(Seat seat, Caller caller) =&gt; TenancyRowAccess.SeatsInMyUnits&lt;SeatId&gt;().Contains(seat.Id);
+    ///     public static bool Allows(Seat seat, ICurrentUser user) =&gt; TenancyRowAccess.SeatsInMyUnits&lt;SeatId&gt;().Contains(seat.Id);
     /// }
     /// </code>
     /// </summary>
@@ -115,7 +115,7 @@ public static partial class TenancyRowAccess
     /// [RowAccess&lt;Organization&gt;(RowOperations.Read, Restrictive = true)]
     /// public static partial class OnlyEmployeesReadTheOrganization
     /// {
-    ///     public static bool Allows(Organization organization, Caller caller)
+    ///     public static bool Allows(Organization organization, ICurrentUser user)
     ///         =&gt; TenancyRowAccess.CallerSeat&lt;Seat&gt;().Kind == SeatKind.Employee;
     /// }
     /// </code>

@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Exceptions;
 
 namespace DDDToolkit.Supporting.Membership.EntityFramework.Tests;
@@ -171,7 +172,7 @@ public sealed class MemberQuestionsTests
         var notes = DocumentId.CreateSequential();
 
         // Opened with the owner's membership from tomorrow: its member row does not count yet, the owner column does.
-        await filing.Services.AsAsync(Caller.System, async provider =>
+        await filing.Services.AsAsync(CurrentUserSnapshot.System, async provider =>
         {
             var context = provider.GetRequiredService<FilingContext>();
             context.Documents.Add(new Document(notes, "Notes", data.Hal, data.Now.AddDays(1)));
@@ -287,7 +288,7 @@ public sealed class MemberQuestionsTests
         var data = filing.Scenario;
 
         // An anonymous caller, a signed-in one whose token names no user, and staff whose token carries no staff code.
-        Caller[] nobodies = [Caller.Anonymous, Caller.User(userId: null)];
+        CurrentUserSnapshot[] nobodies = [CurrentUserSnapshot.Anonymous, CurrentUserSnapshot.User(id: null)];
         foreach (var nobody in nobodies)
         {
             (await filing.DocumentsAsync(nobody, access => access.HoldAsync(data.Minutes, DocumentPermissions.View, Cancellation))).Should().BeNull();
@@ -299,7 +300,7 @@ public sealed class MemberQuestionsTests
         filing.Commands.Count.Should().Be(0, "a caller that is nobody's member reaches nothing, so there is nothing to ask the database");
 
         // Asked about a list, nobody is refused: the statement the reach goes into answers nothing.
-        var listed = await filing.Services.AsAsync(Caller.Anonymous, async provider =>
+        var listed = await filing.Services.AsAsync(CurrentUserSnapshot.Anonymous, async provider =>
         {
             var reach = provider.GetRequiredService<MembershipAccessManager<Document>>().Reach(DocumentPermissions.View);
             return await provider.GetRequiredService<FilingContext>().Documents.Within(reach).ToListAsync(Cancellation);
@@ -312,7 +313,7 @@ public sealed class MemberQuestionsTests
     {
         using var filing = await SqliteFiling.SeededAsync();
         var data = filing.Scenario;
-        var system = Caller.System;
+        var system = CurrentUserSnapshot.System;
 
         foreach (var permission in FilingScenario.DocumentPermissionsAsked)
         {
@@ -339,8 +340,8 @@ public sealed class MemberQuestionsTests
     {
         using var filing = await SqliteFiling.SeededAsync();
         var data = filing.Scenario;
-        var elsewhere = Caller.SystemIn("other");
-        var own = Caller.SystemIn(FolderMembership.Scope);
+        var elsewhere = CurrentUserSnapshot.SystemIn("other");
+        var own = CurrentUserSnapshot.SystemIn(FolderMembership.Scope);
 
         // A document's rules turn system work in a scope off, systemScopes: []: work in a scope, the host's own
         // module's too, is nobody's member there and nothing above the rules. It sees no document, holds no permission, and nothing is read for it.

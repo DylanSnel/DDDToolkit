@@ -68,7 +68,7 @@ public sealed class OneCallerOrAnotherTests(TenancyPostgres postgres)
         read.Should().Equal(["Barrels", "Crates"], "Harbor's, and no other tenant's: Tenancy keeps a seat to its tenant, whatever the module's rule says");
 
         // An operator: let through by the first case, and the operators' rule lets it read every tenant's.
-        using (Callers.Begin(Callers.FromClaims(Claims)))
+        using (TestUser.BeginAs(CurrentUserSnapshot.FromClaims(Claims)))
         using (TenancyCallers.Begin(HostCaller.Nobody(TenancyRefusals.NotSeated)))
         {
             var across = await services.InScopeAsync(async scoped =>
@@ -151,7 +151,7 @@ public sealed class OneCallerOrAnotherTests(TenancyPostgres postgres)
 public static partial class OperatorsReadEveryTally
 {
     /// <summary>Every tally.</summary>
-    public static bool Allows(Tally tally, Caller caller) => true;
+    public static bool Allows(Tally tally, ICurrentUser user) => true;
 }
 
 /// <summary>
@@ -162,5 +162,5 @@ public static partial class OperatorsReadEveryTally
 public static partial class SeatManagersReadTheTallies
 {
     /// <summary>Whether the calling seat manages seats for the whole tenant.</summary>
-    public static bool Allows(Tally tally, Caller caller) => TenancyRowAccess.HoldsAtTenant(TenancyPermissions.SeatsManage);
+    public static bool Allows(Tally tally, ICurrentUser user) => TenancyRowAccess.HoldsAtTenant(TenancyPermissions.SeatsManage);
 }

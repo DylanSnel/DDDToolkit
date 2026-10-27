@@ -137,7 +137,7 @@ public sealed class MembershipRules
     /// The scopes whose system work holds every permission on every resource of this kind
     /// (<see cref="SystemScopes"/>). Left out, the scope of the module that declares the resource
     /// (<see cref="IMembershipResource.MembershipScope"/>): <c>boards</c> for the module <c>Boards</c>, so work begun
-    /// as <c>Caller.SystemIn("boards")</c> does what it needs on boards. Said, the scopes named and no
+    /// as <c>CurrentUserSnapshot.SystemIn("boards")</c> does what it needs on boards. Said, the scopes named and no
     /// other: name the module's own among them to keep it, and say <c>[]</c> for no system work in a scope at all.
     /// </param>
     /// <typeparam name="TResource">The resource: the aggregate root a member class names, which the generator makes one.</typeparam>
@@ -242,8 +242,8 @@ public sealed class MembershipRules
 
     /// <summary>
     /// The scopes whose work is the application's own for this resource: work that runs as
-    /// <see cref="Caller.SystemIn"/> in one of them holds every permission on every resource of this kind, as
-    /// <see cref="Caller.System"/> does. The module's own scope unless the rules say otherwise; work in any other
+    /// <see cref="CurrentUserSnapshot.SystemIn"/> in one of them holds every permission on every resource of this kind, as
+    /// <see cref="CurrentUserSnapshot.System"/> does. The module's own scope unless the rules say otherwise; work in any other
     /// scope holds nothing on a resource, since a scope is a module's own and another module's work is not above
     /// this resource's rules.
     /// </summary>
@@ -278,18 +278,18 @@ public sealed class MembershipRules
     public bool ReachesFromAbove(string permission) => ReachFromAbove is not null && !_notFromAbove.Contains(permission);
 
     /// <summary>
-    /// Whether <paramref name="caller"/> is the application's own work for this resource, which holds every
-    /// permission on every resource of this kind: <see cref="Caller.System"/>, always, and
-    /// <see cref="Caller.SystemIn"/> in one of <see cref="SystemScopes"/>. Work in any other scope is not, and holds
-    /// nothing.
+    /// Whether <paramref name="user"/> is system work for this resource, which holds every permission on every
+    /// resource of this kind: <see cref="CurrentUserSnapshot.System"/>, always, and <see cref="CurrentUserSnapshot.SystemIn"/>
+    /// in one of <see cref="SystemScopes"/>. Work in any other scope is not, and holds nothing.
     /// </summary>
-    /// <param name="caller">The caller a question is asked for.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="caller"/> is null.</exception>
-    public bool IsOwnWork(Caller caller)
+    /// <param name="user">The caller a question is asked for.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="user"/> is null.</exception>
+    public bool IsOwnWork(CurrentUserSnapshot user)
     {
-        ArgumentNullException.ThrowIfNull(caller);
+        ArgumentNullException.ThrowIfNull(user);
 
-        return caller.IsSystem || (caller.IsSystemIn && caller.Scope is { } scope && SystemScopes.Contains(scope, StringComparer.Ordinal));
+        return user.Kind == CurrentUserKind.System
+            || (user.Kind == CurrentUserKind.SystemIn && user.SystemScope is { } scope && SystemScopes.Contains(scope, StringComparer.Ordinal));
     }
 
     /// <summary>
@@ -471,7 +471,7 @@ public sealed class MembershipRules
             if (string.IsNullOrEmpty(scope) || !scope.All(character => character is (>= 'a' and <= 'z') or (>= '0' and <= '9') or '_' or '-'))
             {
                 throw new ArgumentException(
-                    "'" + scope + "' is not a scope. A scope is lower case letters, digits, '_' and '-', such as a module's name: what Caller.SystemIn is begun with.",
+                    "'" + scope + "' is not a scope. A scope is lower case letters, digits, '_' and '-', such as a module's name: what ICurrentUser.BeginSystem(scope) is begun with.",
                     "systemScopes");
             }
         }

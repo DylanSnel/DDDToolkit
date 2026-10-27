@@ -13,10 +13,10 @@ namespace Examples.Webshop.Ordering.Domain.ValueObjects;
 [EntityId<Guid>]
 public readonly partial record struct CustomerId
 {
-    /// <summary>The customer <paramref name="caller"/> is, or <see langword="null"/> for a guest: nobody signed in.</summary>
-    public static CustomerId? From(Caller caller)
+    /// <summary>The customer <paramref name="user"/> is, or <see langword="null"/> for a guest: nobody signed in.</summary>
+    public static CustomerId? From(ICurrentUser user)
     {
-        ArgumentNullException.ThrowIfNull(caller);
-        return caller.UserId is { } user ? new CustomerId(user) : null;
+        ArgumentNullException.ThrowIfNull(user);
+        return user.Id is { } id ? new CustomerId(id) : null;
     }
 }

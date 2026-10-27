@@ -230,16 +230,16 @@ public sealed class PoolerFixture : IAsyncLifetime
     /// modules' <paramref name="settings"/>.
     /// </summary>
     public static PostgresRowLevelSecurityInterceptor Interceptor(
-        ICallerAccessor callers,
+        ICurrentUser callers,
         RowLevelSecurityScope scope,
         IEnumerable<IRowLevelSecuritySettings>? settings = null,
-        CallerOptions? callerOptions = null,
+        CurrentUserOptions? userOptions = null,
         Microsoft.Extensions.Logging.ILogger<PostgresRowLevelSecurityInterceptor>? logger = null,
         Action<PostgresRowLevelSecurityOptions>? configure = null)
     {
         var options = new PostgresRowLevelSecurityOptions { Scope = scope };
         configure?.Invoke(options);
-        return new PostgresRowLevelSecurityInterceptor(callers, options, settings ?? [], callerOptions, logger);
+        return new PostgresRowLevelSecurityInterceptor(callers, options, settings ?? [], userOptions, logger);
     }
 
     /// <summary>A context on <paramref name="connectionString"/> with <paramref name="interceptor"/>.</summary>

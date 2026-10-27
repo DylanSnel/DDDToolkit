@@ -139,17 +139,17 @@ public sealed class UnitImport(OrganizationManager organization, TenancyAccessMa
 }
 ```
 
-Each `Begin…` call starts two callers, Tenancy's caller and the toolkit's caller. Disposing the result ends both, and
-the caller from before is current again. The generator writes `TenancyAccessManager` closed over your ids
+Each `Begin…` call starts two things, Tenancy's caller and the toolkit's current user. Disposing the result ends both,
+and the caller and the user from before are current again. The generator writes `TenancyAccessManager` closed over your ids
 ([Calls closed over your ids](your-module.md#calls-closed-over-your-ids)), so you write no id type. `AddTenancy`
 registers it per scope.
 
-| Call | Tenancy's caller | The toolkit's caller, `Caller.` |
+| Call | Tenancy's caller | The toolkit's current user, `ICurrentUser` |
 |---|---|---|
-| `access.BeginSystem()` | Works outside any tenant. It provisions tenants, and reads or writes no tenant's rows. | `SystemIn("tenancy")` |
-| `access.BeginSystemIn(tenant, actingSeat, scope)` | Works inside the tenant. It holds every permission there and none elsewhere. | `SystemIn(scope)`, `"tenancy"` by default |
-| `access.BeginTokenIn(tenant, seat, scope)` | Works like `BeginSystemIn`. The work is recorded as a link's token and the seat the token stands for. | `SystemIn(scope)`. The scope is required. |
-| `[Operator]` on a command | Your code calls nothing. The access check starts the work around the handler. It works like `BeginSystem`, or like `BeginSystemIn` in the tenant the command names. The work is recorded as the operator who sent the command ([Operators](operators-and-history.md#operators)). | `SystemIn(scope)`, `"tenancy"` by default |
+| `access.BeginSystem()` | Works outside any tenant. It provisions tenants, and reads or writes no tenant's rows. | `BeginSystem("tenancy")` |
+| `access.BeginSystemIn(tenant, actingSeat, scope)` | Works inside the tenant. It holds every permission there and none elsewhere. | `BeginSystem(scope)`, `"tenancy"` by default |
+| `access.BeginTokenIn(tenant, seat, scope)` | Works like `BeginSystemIn`. The work is recorded as a link's token and the seat the token stands for. | `BeginSystem(scope)`. The scope is required. |
+| `[Operator]` on a command | Your code calls nothing. The access check starts the work around the handler. It works like `BeginSystem`, or like `BeginSystemIn` in the tenant the command names. The work is recorded as the operator who sent the command ([Operators](operators-and-history.md#operators)). | `BeginSystem(scope)`, `"tenancy"` by default |
 
 - `actingSeat` is recorded as the seat that placed or granted. It adds no rights. Pass the seat of the person who
   asked for the work, such as the administrator who starts an import. Leave it out when nobody asked.
@@ -182,11 +182,11 @@ shows what the work holds, how Tenancy records it, and which database role it ru
 
 </div>
 
-### The scoped system caller
+### Scoped system work
 
-- Neither caller is `Caller.System`. `Caller.System` stands for system work, and row level security lets
-  it past every policy. On Postgres the scoped caller runs as a database role that cannot bypass the policies, and
-  the policies decide which rows it reaches
+- No `Begin…` call of Tenancy's begins system work without a scope (`user.BeginSystem()`). Row level security lets
+  that work past every policy. On Postgres scoped system work runs as a database role that cannot bypass the
+  policies, and the policies decide which rows it reaches
   ([The scoped system role](../row-level-security.md#the-scoped-system-role)).
 - The scope names whose work the system work is:
   - `tenancy` is Tenancy's scope, for work that calls Tenancy's managers. On Postgres only work in this scope
@@ -209,9 +209,10 @@ shows what the work holds, how Tenancy records it, and which database role it ru
     `access.CurrentTenant.Require()` and refuses the caller with `access.system-only` unless `BySystem` is true.
   - Tenancy's system-only manager methods refuse every other caller with `access.system-only`. These are
     `TenantManager.ProvisionAsync`, `SuspendAsync`, `ReactivateAsync` and `CloseAsync`.
-- Code that runs without a started caller is nobody to Tenancy. This holds where the toolkit's caller is
-  `Caller.System`, and in a host that does not [require explicit callers](../row-level-security.md#requiring-explicit-callers).
-  Tenancy's managers refuse a caller that is nobody with `tenancy.not-seated`.
+- Code that runs without a started Tenancy caller is nobody to Tenancy. This holds where the toolkit's current user is
+  system work without a scope, and in a host that does not
+  [require an explicit current user](../row-level-security.md#requiring-an-explicit-current-user). Tenancy's managers refuse a
+  caller that is nobody with `tenancy.not-seated`.
 
 ### System work outside any tenant
 
@@ -248,8 +249,8 @@ public sealed class EndExpiredOrdersJob(IServiceScopeFactory scopes)
 }
 ```
 
-- **The caller of the read.** Tenancy starts a caller for the read alone. On a database where only the tenant
-  filter keeps tenants apart (SQLite), the read runs as `Caller.System` over the tables. With
+- **Who the read runs as.** Tenancy begins a user for the read alone. On a database where only the tenant
+  filter keeps tenants apart (SQLite), the read runs as system work without a scope over the tables. With
   [row level security](postgres.md), the read runs as scoped system work in no tenant and calls a database function
   ([Reads across tenants](postgres.md#reads-across-tenants)).
 - **A separate context.** The read runs on a new context from a new service scope, outside any transaction you
@@ -264,8 +265,8 @@ public sealed class EndExpiredOrdersJob(IServiceScopeFactory scopes)
   `TenancyCallers.BeginNone()` when it runs in the middle of somebody's work. Then the surrounding tenant does not
   apply to that read.
 
-### Explicit callers
+### An explicit current user
 
-`services.RequireExplicitCallers()` makes work fail when the work does not state who it runs as. Without it, work
-that states no caller runs as the application. The sample uses it
-([Fail-closed callers](../row-level-security.md#requiring-explicit-callers)).
+`services.RequireExplicitCurrentUser()` makes work fail when the work does not state who it runs as. Without it, work
+that begins no user runs as system work. The sample uses it
+([Requiring an explicit current user](../row-level-security.md#requiring-an-explicit-current-user)).

@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Access;
 using DDDToolkit.EntityFramework;
 using Examples.Hosting;
@@ -31,10 +32,10 @@ public static class OrderingModule
         // one AddSupabaseMigrations().
         host.Database.AddContext<OrderingContext>(services, OrderingContext.Schema);
 
-        // Who is asking, for the customer an order is placed in the name of. A host that knows its callers,
-        // the Supabase monolith with signed-in customers, registers its own before this; everywhere else
-        // nobody signs in, the caller is the system, and every order is a guest's.
-        services.TryAddSingleton<ICallerAccessor, AmbientCallerAccessor>();
+        // Who is asking, for the customer an order is placed in the name of. A host that knows its users, the
+        // Supabase monolith with signed-in customers, says so with its ICurrentUserSource; everywhere else nobody
+        // signs in, the current user is system work, and every order is a guest's.
+        services.AddCurrentUser();
 
         // Who may send what, for the one request that asks: ShipElsewhere, about the customer's own order. The
         // endpoints ask the checks themselves, so nothing goes in a pipeline. The order marks who placed it as its

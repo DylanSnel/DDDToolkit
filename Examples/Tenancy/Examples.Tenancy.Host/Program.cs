@@ -56,7 +56,7 @@ builder.Services.AddBrowserCors(browserOrigins);
 // pollers begin the system caller for their own bookkeeping only. With row level security this is what makes the
 // sample fail closed: work that named no caller is refused before its first command, rather than run as the role
 // the host logs in as.
-builder.Services.RequireExplicitCallers();
+builder.Services.RequireExplicitCurrentUser();
 
 // A malformed id or body throws, rather than answering an empty 400, so RefusalProblems answers it with a code
 // like every other refusal.

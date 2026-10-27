@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using System.Text.Json;
 using DDDToolkit.Access;
 using Microsoft.Azure.Functions.Worker;
@@ -6,23 +7,27 @@ using Microsoft.Azure.Functions.Worker.Middleware;
 namespace DDDToolkit.Auth.Supabase.AzureFunctions;
 
 /// <summary>
-/// Makes the user of an HTTP-triggered invocation its caller: validates the Supabase Auth access token in
+/// Makes the user of an HTTP-triggered invocation its current user. It validates the Supabase Auth access token in
 /// the request's <c>Authorization</c> header, and runs the function inside
-/// <see cref="Callers.Begin"/>, so every query it makes runs as that user, or as <c>anon</c>
-/// without a valid token. Other triggers pass through untouched and run as the system, unless the
-/// function begins a caller itself, say from claims a queued message carries; where the host requires
-/// explicit callers (<see cref="CallerServiceCollectionExtensions.RequireExplicitCallers"/>) they run as
-/// nobody until it does.
+/// <see cref="ICurrentUser.BeginAs(CurrentUserSnapshot)"/>, so every query it makes runs as that user, or as
+/// <c>anon</c> without a valid token. Other triggers pass through untouched and run as system work, unless the
+/// function begins a user itself, say from claims a queued message carries. Where the host requires every flow of
+/// work to begin its user (<see cref="CurrentUserServiceCollectionExtensions.RequireExplicitCurrentUser"/>), they run
+/// as nobody until the function begins one.
 /// </summary>
 /// <remarks>
 /// Register it with <c>builder.UseSupabaseAuth()</c>. The token is read from the invocation's trigger
 /// data rather than from an <c>HttpRequest</c>, so it works with the built-in HTTP model and with the
 /// ASP.NET Core integration alike, and nothing here needs either.
 /// </remarks>
-public sealed class SupabaseAuthMiddleware(SupabaseTokenValidator validator) : IFunctionsWorkerMiddleware
+/// <param name="validator">Validates the request's token.</param>
+/// <param name="user">The application's current user, which begins the request's user. Left out, a <see cref="CurrentUser"/>.</param>
+public sealed class SupabaseAuthMiddleware(SupabaseTokenValidator validator, ICurrentUser? user = null) : IFunctionsWorkerMiddleware
 {
-    /// <summary>Where the invocation's caller is kept, for <see cref="SupabaseFunctions.GetSupabaseCaller"/>.</summary>
-    internal const string CallerKey = "DDDToolkit.Auth.Supabase.Caller";
+    /// <summary>Where the invocation's user is kept, for <see cref="SupabaseFunctions.GetSupabaseUser"/>.</summary>
+    internal const string UserKey = "DDDToolkit.Auth.Supabase.User";
+
+    private readonly ICurrentUser _user = user ?? new CurrentUser();
 
     /// <inheritdoc />
     public async Task Invoke(FunctionContext context, FunctionExecutionDelegate next)
@@ -36,10 +41,10 @@ public sealed class SupabaseAuthMiddleware(SupabaseTokenValidator validator) : I
             return;
         }
 
-        var caller = await validator.CallerOfAsync(AuthorizationOf(context)).ConfigureAwait(false);
-        context.Items[CallerKey] = caller;
+        var requestUser = await validator.UserOfAsync(AuthorizationOf(context)).ConfigureAwait(false);
+        context.Items[UserKey] = requestUser;
 
-        using (Callers.Begin(caller))
+        using (_user.BeginAs(requestUser))
         {
             await next(context).ConfigureAwait(false);
         }

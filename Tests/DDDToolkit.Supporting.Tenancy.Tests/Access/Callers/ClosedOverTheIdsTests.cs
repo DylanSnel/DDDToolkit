@@ -20,11 +20,11 @@ public class ClosedOverTheIdsTests
     private static readonly TenancyAccessManager Access = new(TenancyCatalogue.Build(HostCatalogue.Application, []), TimeProvider.System, NoServices.Instance);
 
     /// <summary>What the toolkit's caller and Tenancy's are while the work <paramref name="begin"/> begins runs.</summary>
-    private static (CallerKind? Kind, string? Scope, ITenancyCaller? Tenancy) Within(Func<IDisposable> begin)
+    private static (CurrentUserKind? Kind, string? Scope, ITenancyCaller? Tenancy) Within(Func<IDisposable> begin)
     {
         using (begin())
         {
-            return (Callers.Ambient?.Kind, Callers.Ambient?.Scope, TenancyCallers.Ambient);
+            return (BegunUser?.Kind, BegunUser?.SystemScope, TenancyCallers.Ambient);
         }
     }
 
@@ -45,7 +45,7 @@ public class ClosedOverTheIdsTests
 
             begun.Should().Be(Within(open), "{0} is the same work, closed over the host's ids", name);
             begun.Tenancy.Should().BeOfType<HostCaller>("{0} is closed over the ids the use cases are", name);
-            Callers.Ambient.Should().BeNull("{0} ends what it began", name);
+            BegunUser.Should().BeNull("{0} ends what it began", name);
             TenancyCallers.Ambient.Should().BeNull();
         }
     }
@@ -56,7 +56,7 @@ public class ClosedOverTheIdsTests
         // A scope that is not one: nothing is begun.
         FluentActions.Invoking(() => Access.BeginSystemIn(Harbor, scope: "Projects!")).Should().Throw<ArgumentException>();
 
-        Callers.Ambient.Should().BeNull();
+        BegunUser.Should().BeNull();
         TenancyCallers.Ambient.Should().BeNull();
     }
 
@@ -67,7 +67,7 @@ public class ClosedOverTheIdsTests
         using (TenancyWork.BeginSystemIn(Harbor, Ada, "projects"))
         {
             TenancyCallers.Current<TenantId, SeatId>().Should().Be(HostCaller.SystemIn(Harbor, TenancyActor<SeatId>.OfSystem("projects", Ada)));
-            Callers.Ambient!.Scope.Should().Be("projects");
+            BegunUser!.SystemScope.Should().Be("projects");
         }
 
         using (TenancyWork.BeginSystemIn(Harbor, Ada))
@@ -128,7 +128,7 @@ public class ClosedOverTheIdsTests
     public void The_current_user_follows_what_is_begun()
     {
         var user = Guid.NewGuid();
-        using (Callers.Begin(Caller.User(user)))
+        using (TestUser.BeginAs(user))
         {
             Access.CurrentUser.Id.Should().Be(user);
             Access.CurrentUser.IsAuthenticated.Should().BeTrue();
@@ -146,7 +146,7 @@ public class ClosedOverTheIdsTests
             Access.CurrentUser.Id.Should().Be(user, "after the using, the user acts again");
         }
 
-        using (Callers.Begin(Caller.Anonymous))
+        using (TestUser.BeginAs(CurrentUserSnapshot.Anonymous))
         {
             Access.CurrentUser.Id.Should().BeNull();
             Access.CurrentUser.IsAuthenticated.Should().BeFalse();

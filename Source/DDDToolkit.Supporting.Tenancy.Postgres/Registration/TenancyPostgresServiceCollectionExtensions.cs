@@ -15,7 +15,7 @@ public static class TenancyPostgresServiceCollectionExtensions
     /// statement; turns the last administrator the trigger keeps at commit, which no index states, into the
     /// refusal the manager gives for the same rule (a slug another tenant has, which the policies hide from the
     /// manager's own check, is refused by its unique index on any database, with no help from here);
-    /// requires explicit callers (<see cref="CallerServiceCollectionExtensions.RequireExplicitCallers"/>),
+    /// requires an explicit current user (<see cref="CurrentUserServiceCollectionExtensions.RequireExplicitCurrentUser"/>),
     /// so work nobody said anything about fails rather than running as the login role, past every policy; and
     /// leaves the rights to the database (<see cref="TenancyStoreOptions.DatabaseKeepsRights"/>), whose trigger
     /// writes them and whose policies let a seat read only its own, so the save writes none, the store asks
@@ -37,7 +37,7 @@ public static class TenancyPostgresServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        services.RequireExplicitCallers();
+        services.RequireExplicitCurrentUser();
         services.AddRowLevelSecuritySettings<TenancyTenantSetting>();
         services.TryAddEnumerable(ServiceDescriptor.Singleton<ITenancySaveFailures, TenancyPostgresFailures>());
 

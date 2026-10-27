@@ -1,8 +1,8 @@
 namespace DDDToolkit.EntityFramework.Postgres;
 
 /// <summary>
-/// The SQL functions a policy asks about the caller, and so what a rule's <c>caller.UserId</c>,
-/// <c>caller.Role</c> and <c>caller.Claim(...)</c> become. All three read the claims
+/// The SQL functions a policy asks about the caller, and so what a rule's <c>user.Id</c>,
+/// <c>user.Role</c> and <c>user.FindClaim(...)</c> become. All three read the claims
 /// <see cref="PostgresRowLevelSecurityInterceptor"/> puts on the connection, <c>request.jwt.claims</c>.
 /// </summary>
 /// <param name="UserId">Answers the user's id as a <c>uuid</c>, or <see langword="null"/>: <c>"ddd".caller_id()</c>.</param>

@@ -423,10 +423,10 @@ await app.Services.EnsureSupabaseMigrationsAppliedAsync();
 A deployment that checks the migrations itself before it starts the host turns the check off, with a reason:
 `builder.Services.SkipStartupCheck(SupabaseMigrations.AppliedCheck, reason: "...")`.
 
-The check reads the history as the system caller. With
-[RLS](#row-level-security-for-your-own-queries), the connection then switches to the system caller's
+The check reads the history as system work. With
+[RLS](#row-level-security-for-your-own-queries), the connection then switches to the system
 role: `ddd_system`, unless the project names another role. The access files give that role the migration history.
-An application that logs in as its own role first checks that this role may switch to the system caller's role
+An application that logs in as its own role first checks that this role may switch to the system role
 ([The role the application logs in as](#the-role-the-application-logs-in-as)). The runner runs that check in the
 stage before the migrations' stage.
 
@@ -596,13 +596,13 @@ adds it to every context on Postgres. A context needs no extra call.
 Each time a context opens a connection, it sets the caller's role and the token's claims on the connection, as
 PostgREST does for each request:
 
-| The caller | Runs as | `auth.uid()` |
+| The current user | Runs as | `auth.uid()` |
 |---|---|---|
 | A request with a valid Supabase access token | `authenticated`, with the token's claims as they were signed | the user's id |
 | A request without a valid token, or signed in another way | `anon`, with the claims `{"role":"anon"}` | `null` |
-| System work inside a scope, `Caller.SystemIn("projects")` | `ddd_system_in`, with the claims `{"role":"ddd_system_in","scope":"projects"}` | `null` |
-| System work outside any request, such as a hosted service of yours | `ddd_system`, the toolkit's bookkeeping role. `system=<role>` in `SupabaseRowAccessRoles` names another role, and `system=none` names the role the application logged in as. Where the host requires explicit callers, this work runs as nobody. The toolkit's pollers then start the system caller for their bookkeeping only. | `null` |
-| Code inside `using (Callers.Begin(caller))` | that caller, whatever the request says | the caller's |
+| System work inside a scope, `user.BeginSystem("projects")` | `ddd_system_in`, with the claims `{"role":"ddd_system_in","scope":"projects"}` | `null` |
+| System work outside any request, such as a hosted service of yours | `ddd_system`, the toolkit's bookkeeping role. `system=<role>` in `SupabaseRowAccessRoles` names another role, and `system=none` names the role the application logged in as. Where the host requires an explicit current user, this work runs as nobody. The toolkit's pollers then begin system work for their bookkeeping only. | `null` |
+| Code inside `using (user.BeginAs(userId))` | that user, whatever the request says | the user's |
 
 So `auth.uid()`, `auth.jwt()` and every policy on every table the context touches apply to the context's queries. A
 policy you already test with pgTAP also decides what the application may see. The statement that sets the claims also
@@ -611,10 +611,10 @@ empties `request.jwt.claim.sub`, `request.jwt.claim.role`, `request.jwt.claim.em
 on a server connection decides who a query runs as. Who is calling, work that leaves a request, and how the settings
 travel work the same on any Postgres ([Running queries as the caller](row-level-security.md#running-queries-as-the-caller)).
 
-With `builder.Services.RequireExplicitCallers()`, work outside a request fails when it does not say who it runs as.
-It does not run as system work. The toolkit's own background work then says who it runs as
-([Fail-closed callers](row-level-security.md#requiring-explicit-callers)). `context.GetSupabaseCaller()` returns a request's
-own caller, the token's user or `anon`, whatever caller is ambient.
+With `builder.Services.RequireExplicitCurrentUser()`, work outside a request fails when it does not say who it runs
+as. It does not run as system work. The toolkit's own background work then says who it runs as
+([Requiring an explicit current user](row-level-security.md#requiring-an-explicit-current-user)).
+`context.GetSupabaseUser()` returns a request's own user, the token's user or `anon`, whatever user was begun.
 
 Connect through the session pooler on port 5432, or directly. The transaction pooler on port 6543 gives each
 transaction whichever server connection is free. The interceptor refuses it unless the settings travel per
@@ -662,9 +662,9 @@ Rules written in C# do both for you ([Row access rules in the build](#row-access
 
 **Background work** runs as `ddd_system`. The access files make this role for the application. They give it the
 toolkit's bookkeeping and nothing else: reading, marking and deleting outbox rows, the inbox, and the record of which
-migrations ran. A hosted service of yours that reads or writes a module's tables is refused as `ddd_system`. So start
-its work as a [scoped system caller](row-level-security.md#the-scoped-system-role):
-`using (Callers.Begin(Caller.SystemIn("projects")))`. That work runs as `ddd_system_in`, under the policies the
+migrations ran. A hosted service of yours that reads or writes a module's tables is refused as `ddd_system`. So begin
+its work as [scoped system work](row-level-security.md#the-scoped-system-role):
+`using (user.BeginSystem("projects"))`. That work runs as `ddd_system_in`, under the policies the
 module's rules write for `RowAccessRoles.SystemIn`.
 
 A host that logs in as `postgres` can run its background work as that owner, outside the policies. It sets this once
@@ -1076,7 +1076,7 @@ The policies are written for one database role per kind of caller, and they use 
 |---|---|---|
 | `user` | a signed-in user | `authenticated` |
 | `anonymous` | a caller without a token | `anon` |
-| `system-in` | system work under the policies, `Caller.SystemIn(...)` | `ddd_system_in` |
+| `system-in` | system work under the policies, `user.BeginSystem(scope)` | `ddd_system_in` |
 | `system` | system work outside a request: the toolkit's bookkeeping | `ddd_system` |
 | `token:<role>` | a signed-in user whose token carries that role | none mapped |
 
@@ -1321,7 +1321,7 @@ file for each module whose file changes, and `Check` in CI fails until that file
 **The bookkeeping role.** An application that
 [logs in as a role that holds nothing](row-level-security.md#a-login-that-owns-nothing) runs its work outside a
 request, the toolkit's bookkeeping, as a separate role. That role is `ddd_system`, the default of the `system` pair.
-The system caller switches to it unless the project names another role, so no code names it. Unless
+System work switches to it unless the project names another role, so no code names it. Unless
 `SupabaseRowAccessGrants` is `None`, the access file:
 
 - makes that role, `NOLOGIN NOINHERIT` and without `BYPASSRLS`;
@@ -1329,7 +1329,7 @@ The system caller switches to it unless the project names another role, so no co
 - gives it the outbox, the inbox, the migration history, and the event log rows that may be deleted, and nothing
   else.
 
-Every module gets such a file, also a module without rules and without an outbox. The system caller checks at
+Every module gets such a file, also a module without rules and without an outbox. System work checks at
 start-up that every migration ran, and it reads each module's history as that role. A pair that names another role of
 the application, such as `system=desk_books`, does the same for that role. That role must be separate. The export
 fails for:
@@ -1338,7 +1338,7 @@ fails for:
   role;
 - a pair that gives one of those callers `ddd_system` while the `system` pair keeps that default.
 
-Two values of the pair leave the files without a bookkeeping role, and put the system caller outside the policies:
+Two values of the pair leave the files without a bookkeeping role, and put system work outside the policies:
 
 - `system=none` runs it as the role the application logs in as: `postgres` for a host that logs in as the owner.
   `Examples/ModularMonolith.Supabase` does this on purpose.
@@ -1426,7 +1426,7 @@ What the file leaves out:
 - **All privileges.** The role gets no table, schema or function. It reaches a table only by switching to a role
   whose policies allow it. The procedure that the [transaction pooler](#the-transaction-pooler) needs is the one such
   grant an application may want, and you write it yourself.
-- **Every other role.** The policies are not written for `service_role`, so a host whose system caller runs as
+- **Every other role.** The policies are not written for `service_role`, so a host whose system work runs as
   `service_role` grants it in its own migration.
 
 **The file follows the roles.** Like an access file, a written file is never rewritten, because Supabase may have
@@ -1455,8 +1455,8 @@ application logged in as may switch to every role its options name. That is what
 - It checks the scoped system role, `ddd_system_in`, only where that role exists. The access files make it, but where
   the project writes the privileges itself, they make it only where a rule is for `RowAccessRoles.SystemIn`. An
   application whose rules never name that role does no scoped system work, so it starts without the role.
-- It runs before [the migrations' check](#checking-at-start-up). The migrations' check runs as the system caller, so
-  it switches to the system caller's role. A login role that may not switch would fail there, on the switch, without
+- It runs before [the migrations' check](#checking-at-start-up). The migrations' check runs as system work, so
+  it switches to the system role. A login role that may not switch would fail there, on the switch, without
   saying why.
 
 The [start-up checks](startup-checks.md) run these checks once per registered context, in that order, with one call.
@@ -1505,7 +1505,7 @@ nothing for it, and the bookkeeping role then fails on the outbox when the first
 The isolated worker runs no ASP.NET Core pipeline, also not with its ASP.NET Core integration. So there is no
 `UseAuthentication()` for a bearer scheme. `DDDToolkit.Auth.Supabase.AzureFunctions` is a worker middleware instead.
 For each HTTP-triggered invocation, it validates the token in the request's `Authorization` header and runs the
-function inside `Callers.Begin`: as that user, or as `anon` without a valid token.
+function inside `ICurrentUser.BeginAs`: as that user, or as `anon` without a valid token.
 
 ```csharp
 var builder = FunctionsApplication.CreateBuilder(args);
@@ -1519,12 +1519,13 @@ builder.Services.AddDbContext<OrderingContext>((provider, options) => options
     .UseDDDToolkit(provider));
 ```
 
-- A queue, timer or Service Bus trigger has no request, so it runs as system work. The function can start a caller
-  itself, for example from the claims its message carries.
-- `context.GetSupabaseCaller()` returns the caller an invocation runs as. Use it in a function that answers a caller
+- A queue, timer or Service Bus trigger has no request, so it runs as system work. The function can begin a user
+  itself with `ICurrentUser`, for example from the claims its message carries:
+  `user.BeginAs(CurrentUserSnapshot.FromClaims(message.Claims))`.
+- `context.GetSupabaseUser()` returns the user an invocation runs as. Use it in a function that answers a caller
   without a user with a 401.
-- Where the host requires explicit callers, an invocation without a request runs as nobody until the function starts
-  a caller. `GetSupabaseCaller()` then throws `NoCallerException`.
+- Where the host requires an explicit current user, an invocation without a request runs as nobody until the function
+  begins a user. `GetSupabaseUser()` then throws `NoCurrentUserException`.
 
 ### Worker services and tools
 
@@ -1532,12 +1533,12 @@ A worker service or a tool of yours needs no host package:
 
 - `SupabaseTokenValidator`, from `DDDToolkit.Auth.Supabase`, checks a token against the keys the project publishes,
   or against its secret when it was given one ([Signing keys and the JWT secret](#signing-keys-and-the-jwt-secret)).
-  It returns the token's `Caller`.
-- `Callers.Begin` makes that caller current.
-- `AddSupabaseRowLevelSecurity()` alone then runs the queries as that caller. Outside any caller, the queries run as
-  system work, or as nobody where the host requires explicit callers.
+  `UserOfAsync(authorization)` returns the token's user, a `CurrentUserSnapshot`.
+- `user.BeginAs(snapshot)`, on the `ICurrentUser` your code takes, makes that user current.
+- `AddSupabaseRowLevelSecurity()` alone then runs the queries as that user. Where nothing was begun, the queries run
+  as system work, or as nobody where the host requires an explicit current user.
 
-Pass `Callers.FromClaims(claims)` only the claims of a token that was already checked.
+Pass `CurrentUserSnapshot.FromClaims(claims)` only the claims of a token that was already checked.
 
 ## Users before their first sign-in
 

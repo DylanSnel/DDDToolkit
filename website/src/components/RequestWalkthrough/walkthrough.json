@@ -94,7 +94,7 @@
       "interface": "ITenantsRequest",
       "checks": [
         {
-          "name": "CallerAccessCheck",
+          "name": "CurrentUserAccessCheck",
           "addedBy": "the core's, first in every set",
           "decides": "SignedIn(), Own(value)"
         },
@@ -114,7 +114,7 @@
       "interface": "IProjectsRequest",
       "checks": [
         {
-          "name": "CallerAccessCheck",
+          "name": "CurrentUserAccessCheck",
           "addedBy": "the core's, first in every set",
           "decides": "SignedIn(), Own(value)"
         },
@@ -144,7 +144,7 @@
       "interface": "IAuditRequest",
       "checks": [
         {
-          "name": "CallerAccessCheck",
+          "name": "CurrentUserAccessCheck",
           "addedBy": "the core's, first in every set",
           "decides": "SignedIn(), Own(value)"
         },
@@ -1242,7 +1242,7 @@
       "decides": [
         0
       ],
-      "setSay": "The core's `CallerAccessCheck`, first in every set, says yes: `SignedIn()` is about who is calling, and means the same in every module.",
+      "setSay": "The core's `CurrentUserAccessCheck`, first in every set, says yes: `SignedIn()` is about who is calling, and means the same in every module.",
       "check": {
         "snippet": "check.caller",
         "highlight": "{7-9}"
@@ -1568,18 +1568,18 @@
     "check.caller": {
       "language": "csharp",
       "lines": [
-        "// CallerAccessCheck, the core's, shortened: who is calling, with nothing read",
+        "// CurrentUserAccessCheck, the core's, shortened: who is calling, with nothing read",
         "public bool Decides(AccessRequirement requirement)",
         "    => requirement is AccessRequirement.SignedInUser || (requirement is IOwnedRequirement owned && owned.CanBeAnswered(services));",
         "",
         "switch (requirement)",
         "{",
         "    case AccessRequirement.SignedInUser:",
-        "        if (!callers.Current.IsSignedIn)                         // a token that names a user",
+        "        if (!user.IsAuthenticated)                               // a token that names a user",
         "            throw ToolkitRefusals.Refuse(ToolkitRefusals.NotSignedIn);",
         "        return;",
         "    case IOwnedRequirement owned:                                // the request names the value, never whose it is",
-        "        if (!owned.IsTheCallers(callers.Current, services))",
+        "        if (!owned.IsTheCallers(user, services))",
         "            throw ToolkitRefusals.Refuse(ToolkitRefusals.NotOwn);",
         "        return;",
         "}"

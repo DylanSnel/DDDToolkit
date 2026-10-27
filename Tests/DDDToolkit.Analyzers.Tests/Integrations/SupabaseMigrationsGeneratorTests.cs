@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Analyzers.Tests.Harness;
 using FluentAssertions;
 
@@ -288,7 +289,7 @@ public sealed class SupabaseMigrationsGeneratorTests
             [DDDToolkit.Abstractions.Attributes.RowAccess<Order>(DDDToolkit.Abstractions.Attributes.RowOperations.Read | DDDToolkit.Abstractions.Attributes.RowOperations.Change, To = new[] { "authenticated" })]
             public static partial class ACustomerSeesTheirOrders
             {
-                public static bool Allows(Order order, DDDToolkit.Abstractions.Access.Caller caller) => order.PlacedBy == caller.UserId;
+                public static bool Allows(Order order, DDDToolkit.Abstractions.Access.ICurrentUser user) => order.PlacedBy == user.Id;
             }
             """;
 
@@ -320,7 +321,7 @@ public sealed class SupabaseMigrationsGeneratorTests
             [DDDToolkit.Abstractions.Attributes.RowAccess<Order>(DDDToolkit.Abstractions.Attributes.RowOperations.Read, To = [DDDToolkit.Abstractions.Attributes.RowAccessRoles.User, DDDToolkit.Abstractions.Attributes.RowAccessRoles.SystemIn])]
             public static partial class SignedInCustomersSeeTheirOrders
             {
-                public static bool Allows(Order order, DDDToolkit.Abstractions.Access.Caller caller) => order.PlacedBy == caller.UserId;
+                public static bool Allows(Order order, DDDToolkit.Abstractions.Access.ICurrentUser user) => order.PlacedBy == user.Id;
             }
             """;
 
@@ -356,7 +357,7 @@ public sealed class SupabaseMigrationsGeneratorTests
             [DDDToolkit.Abstractions.Attributes.RowAccess<Order>(DDDToolkit.Abstractions.Attributes.RowOperations.Change, To = [DDDToolkit.Abstractions.Attributes.RowAccessRoles.User], Columns = [nameof(Order.Status), nameof(Order.Due)])]
             public static partial class TheCustomerCancels
             {
-                public static bool Allows(Order order, DDDToolkit.Abstractions.Access.Caller caller) => order.PlacedBy == caller.UserId;
+                public static bool Allows(Order order, DDDToolkit.Abstractions.Access.ICurrentUser user) => order.PlacedBy == user.Id;
             }
             """;
 
@@ -395,7 +396,7 @@ public sealed class SupabaseMigrationsGeneratorTests
             [DDDToolkit.Abstractions.Attributes.RowAccess<Order>(DDDToolkit.Abstractions.Attributes.RowOperations.Read, To = [ShopRoles.Analyst, DDDToolkit.Abstractions.Attributes.RowAccessRoles.TokenPrefix + "examiner"])]
             public static partial class AnalystsSeeEveryPlacedOrder
             {
-                public static bool Allows(Order order, DDDToolkit.Abstractions.Access.Caller caller) => order.PlacedBy != null;
+                public static bool Allows(Order order, DDDToolkit.Abstractions.Access.ICurrentUser user) => order.PlacedBy != null;
             }
             """;
 
@@ -427,7 +428,7 @@ public sealed class SupabaseMigrationsGeneratorTests
             [DDDToolkit.Abstractions.Attributes.AccessFunction<Order>("ordering.placed_by_caller")]
             public static partial class PlacedByTheCaller
             {
-                public static bool Allows(Order order, DDDToolkit.Abstractions.Access.Caller caller) => order.PlacedBy == caller.UserId;
+                public static bool Allows(Order order, DDDToolkit.Abstractions.Access.ICurrentUser user) => order.PlacedBy == user.Id;
             }
             """;
 
@@ -459,7 +460,7 @@ public sealed class SupabaseMigrationsGeneratorTests
             [DDDToolkit.Abstractions.Attributes.AccessFunction<Order>("orders_of_team", Shape = DDDToolkit.Abstractions.Attributes.AccessFunctionShape.Set)]
             public static partial class OrdersOfTeam
             {
-                public static bool Allows(Order order, DDDToolkit.Abstractions.Access.Caller caller, string team) => order.Team == team;
+                public static bool Allows(Order order, DDDToolkit.Abstractions.Access.ICurrentUser user, string team) => order.Team == team;
             }
             """;
 

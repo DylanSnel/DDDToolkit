@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Supporting.Tenancy.Catalogue;
 using static DDDToolkit.Supporting.Tenancy.Postgres.Tests.Infrastructure.TenancySeed;
 

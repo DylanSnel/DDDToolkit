@@ -44,11 +44,11 @@ flowchart LR
 [AllowAnonymous]                                                                // who may send it: anyone
 public sealed record RequestQuote(string Email, string Product) : IBillingRequest;
 
-public sealed class RequestQuoteHandler(IQuoteStore quotes) : IHandler<RequestQuote>
+public sealed class RequestQuoteHandler(ICurrentUser user, IQuoteStore quotes) : IHandler<RequestQuote>
 {
     public async Task HandleAsync(RequestQuote command, CancellationToken cancellationToken)
     {
-        using (Callers.Begin(Caller.SystemIn("billing")))                         // which caller: system work, started here
+        using (user.BeginSystem("billing"))                                       // which caller: system work, started here
         {
             await quotes.AddAsync(command.Email, command.Product, cancellationToken);   // which rows: billing's policies
         }
@@ -70,7 +70,7 @@ no [supporting domain](writing-a-supporting-domain.md):
 | `ICallersOwn<TValue>` | Returns the caller's own value of a type. The core has one for `Guid`, Tenancy has one for its seat id, and an application can add one for a type it defines. |
 | `[Owner]`, `IAggregateOwners<TId>` | `[Owner]` marks the property of an aggregate root that names its owner. This is a fact of the domain. `IAggregateOwners<TId>` reads that owner for a request about the owner's own. The Entity Framework package registers one for every id. |
 | `IAccessCheck` | Decides the cases of one package. A package ships one, and a module writes one for its own cases. |
-| `CallerAccessCheck` | The core's check of who is calling. It is first in every module's set. |
+| `CurrentUserAccessCheck` | The core's check of who is calling. It is first in every module's set. |
 | `AccessChecks<TRequests>` | The checks of one module. `RequireAsync(request)` checks a request against its requirement, and fails closed. `BeginWork(request, isQuery)` begins the work a check says the handler runs in. |
 | `IBeginsWork` | A check that begins work around the handler of a request it let through, as Tenancy's check of `[Operator]` begins operator work. |
 | `Checked<T>` | What a check read, kept for the code that handles the same request after it. |
@@ -289,9 +289,9 @@ computes its requirement:
 | something only your module knows | `[YourOwn]`, declared with `[StatesRequirement]` | a record of your own | what your check lets through | your module's refusal code |
 
 The cases of `AccessRequirement` are about who is calling, or they combine other cases. The core decides them, so a host
-without any supporting domain has them. The host's `ICallerAccessor` returns the current caller. The set of checks asks
-it once, before any check, whatever the request requires. In a host that [requires explicit
-callers](row-level-security.md#requiring-explicit-callers), work without a started caller fails with `NoCallerException` before
+without any supporting domain has them. `ICurrentUser` returns the current user. The set of checks asks it once, before
+any check, whatever the request requires. In a host that [requires an explicit current
+user](row-level-security.md#requiring-an-explicit-current-user), work that began no user fails with `NoCurrentUserException` before
 it is let through or refused. This includes a request of `[InTenant]`, whose check asks Tenancy's own caller, and a
 request of `[AllowAnonymous]`.
 
@@ -791,7 +791,7 @@ public sealed record CloseAccount([Own] UserId User) : IAccountsRequest;
 // The handle: what the caller's own UserId is, beside the requests, where the generator sees it
 public sealed class CallersUser : ICallersOwn<UserId>
 {
-    public UserId? Find(Caller caller) => caller.UserId is { } id ? new UserId(id) : null;
+    public UserId? Find(ICurrentUser user) => user.Id is { } id ? new UserId(id) : null;
 }
 
 // The host registers it, once; a later registration for the same type takes the place of an earlier one
@@ -919,7 +919,7 @@ flowchart LR
   handle for the owner's type. An owner that may be null is allowed. A row whose owner is null belongs to nobody.
 - **The policies still decide about the rows.** The owner is read as the caller, so the access check never reveals a row
   that the policies hide. Whether the work may then change that row is still up to the policies. Write a row rule for
-  it, such as `[RowAccess<Order>]` with `order.PlacedBy?.Value == caller.UserId`, as the Webshop sample does.
+  it, such as `[RowAccess<Order>]` with `order.PlacedBy?.Value == user.Id`, as the Webshop sample does.
 
 In the Webshop sample, only the customer who placed an order can send it to another address with `ShipElsewhere`.
 `Order.PlacedBy` is marked `[Owner]` and may be null. A guest's order therefore belongs to nobody, and nobody can send
@@ -980,7 +980,7 @@ place as the caller, and the database checks that save like every other save. Th
 [RequiresPermission(DocumentPermissions.Share)]                                            // take yourself off, or anybody with the permission
 public sealed record LeaveDocument([OnResource] DocumentId Document, [OrOwn] UserId Member, [ExpectedVersion] long? ExpectedVersion = null) : IDocumentsRequest;
 
-public sealed class LeaveDocumentHandler(DocumentsContext context, ICallerAccessor callers)
+public sealed class LeaveDocumentHandler(DocumentsContext context, ICurrentUser user)
 {
     public async Task HandleAsync(LeaveDocument command, CancellationToken cancellationToken)
     {
@@ -996,9 +996,9 @@ public sealed class LeaveDocumentHandler(DocumentsContext context, ICallerAccess
 
         // The caller's own place, allowed by the access check: system work for this one save, and only for the
         // request whose check let it through in this handling. Anybody else's place is saved as the caller.
-        var own = callers.Current.UserId is { } user && new UserId(user) == command.Member
+        var own = user.Id is { } id && new UserId(id) == command.Member
             && ReferenceEquals(RequestInHand.Current?.Request, command);
-        using (own ? Callers.Begin(Caller.System) : null)
+        using (own ? user.BeginSystem() : null)
         {
             await context.SaveChangesAsync(cancellationToken);
         }
@@ -1075,13 +1075,13 @@ public sealed record TenantAuditLog(TenantId Tenant, PagingArguments Paging) : I
 [RowAccess<AuditEntry>(RowOperations.Read, To = [RowAccessRoles.TokenPrefix + "operator"])]
 public static partial class OperatorsReadTheAuditLog
 {
-    public static bool Allows(AuditEntry entry, Caller caller) => true;
+    public static bool Allows(AuditEntry entry, ICurrentUser user) => true;
 }
 
 [RowAccess<AuditEntry>(RowOperations.Read, To = [RowAccessRoles.User])]
 public static partial class SeatManagersReadTheAuditLog
 {
-    public static bool Allows(AuditEntry entry, Caller caller) => TenancyRowAccess.HoldsAtTenant(TenancyPermissions.SeatsManage);
+    public static bool Allows(AuditEntry entry, ICurrentUser user) => TenancyRowAccess.HoldsAtTenant(TenancyPermissions.SeatsManage);
 }
 ```
 
@@ -1114,15 +1114,15 @@ alternatives for each row:
 
 ## System work
 
-A requirement says who may send a request. It says nothing about the caller the work then runs as. System work is not
+A requirement says who may send a request. It says nothing about the user the work then runs as. System work is not
 a requirement. It is a scope that trusted code starts explicitly around the work, with one of these calls:
 
-- `Callers.Begin(Caller.System)`;
-- `Callers.Begin(Caller.SystemIn(scope))`;
+- `user.BeginSystem()` on `ICurrentUser`, system work without a scope;
+- `user.BeginSystem(scope)`, system work in a module's scope;
 - a call of a supporting domain, such as `access.BeginSystem()` and `access.BeginSystemIn(tenant)` on Tenancy's
   `TenancyAccessManager`.
 
-When the result is disposed, the previous caller is current again.
+When the result is disposed, the previous user is current again.
 
 The pipeline begins one kind of system work itself: the operator work of a command marked `[Operator]`
 ([An operator's request](#an-operators-request)). The operator sends a request, and the access check lets only an
@@ -1144,17 +1144,17 @@ operator through. The work is recorded as that operator.
   - When only trusted code ever runs the work, call the work inside the scope. No request is needed.
 - **The handler refuses everyone except system work.** The handler, or the manager of the package it calls, checks
   which caller it runs as. It refuses every other caller with `access.system-only` (`ToolkitRefusals.SystemOnly`).
-  - `Callers.RequireSystemWork(callers)` does this in any host.
+  - `user.RequireSystemWork()` on `ICurrentUser` does this in any host.
   - In a tenant, Tenancy's access manager returns it together with the tenant:
     `access.CurrentTenant.Require().BySystem`. The sample's `MarkTenantAsDemo` uses this.
   - Tenancy's provisioning refuses every other caller itself.
 
   The caller who sent the request gets no extra permissions from it, because only the handler decides what the system
   work does.
-- **Use `Callers.RequireSystemWork`, not `callers.Current.Kind`.** In a host that does not
-  [require explicit callers](row-level-security.md#requiring-explicit-callers), the accessor returns `Caller.System` for any
-  flow without a started caller, including a web request it does not know. Only the caller started for the flow,
-  `Callers.Ambient`, shows that trusted code started the work. `RequireSystemWork` checks both.
+- **Use `user.RequireSystemWork()`, and do not test `user.IsSystem` yourself.** In a host that does not
+  [require an explicit current user](row-level-security.md#requiring-an-explicit-current-user), `ICurrentUser` answers system
+  work for any flow that began no user, including a web request that no source knows. Only a begun user,
+  `user.IsBegun`, shows that trusted code started the work. `RequireSystemWork` checks both.
 
 The diagram shows the seeding. The shaded part runs as system work.
 
@@ -1201,15 +1201,15 @@ public sealed class MarkTenantAsDemoHandler(TenancyStore store, TenancyAccessMan
     }
 }
 
-// A module without Tenancy: an import a job sends inside Callers.Begin(Caller.System)
+// A module without Tenancy: an import a job sends inside user.BeginSystem()
 [AllowAnonymous]                                                              // system work is nobody's sign-in
 public sealed record ImportPrices(string File) : ICommand, IBillingRequest;
 
-public sealed class ImportPricesHandler(ICallerAccessor callers, IPriceList prices) : ICommandHandler<ImportPrices>
+public sealed class ImportPricesHandler(ICurrentUser user, IPriceList prices) : ICommandHandler<ImportPrices>
 {
     public async ValueTask<Unit> Handle(ImportPrices command, CancellationToken cancellationToken)
     {
-        Callers.RequireSystemWork(callers);                                   // access.system-only for anyone else
+        user.RequireSystemWork();                                             // access.system-only for anyone else
         await prices.ImportAsync(command.File, cancellationToken);
         return Unit.Value;
     }
@@ -1225,7 +1225,7 @@ the `IAccessCheck` that decides it:
 
 | The case is about | Its requirement | Its check is added with |
 |---|---|---|
-| who is calling: anyone, a signed-in user | `[AllowAnonymous]` and `[SignedIn]`, `AccessRequirement.AllowAnonymous()` and `SignedIn()`, from the core | Nothing. Every module's set asks the core's `CallerAccessCheck` first, and `AllowAnonymous()` needs no check at all. |
+| who is calling: anyone, a signed-in user | `[AllowAnonymous]` and `[SignedIn]`, `AccessRequirement.AllowAnonymous()` and `SignedIn()`, from the core | Nothing. Every module's set asks the core's `CurrentUserAccessCheck` first, and `AllowAnonymous()` needs no check at all. |
 | the caller's own | `[OrOwn]`, `[OwnOnly]` with `[Own]`, `AccessRequirement.Own(value)`, from the core | Nothing for a `Guid` or for Tenancy's seat id. `services.AddCallersOwn<TValue, TCallersOwn>()` for a type you define. |
 | the owner of an aggregate | `[OrOwn]`, or `[OwnOnly]` with `[Own]`, on the id of an aggregate that marks its owner `[Owner]`; `AccessRequirement.OwnerOf(id)`; from the core | Nothing more on Entity Framework, whose `AddDDDToolkitEntityFramework` registers what reads the owner. The caller's own value of the owner's type, as in the row above. |
 | several cases at once, or one of several | stacked attributes, `AccessRequirement.All(...)` and `Any(...)`, from the core | Nothing. The set gives each case to the check that decides it. |
@@ -1431,11 +1431,11 @@ await handler.HandleAsync(command, cancellationToken);    // and here, down to t
 // RequestInHand.Current.Request is command; Checked<T>.TryFindInHand(out var kept) finds what its check kept
 ```
 
-- **It follows the flow of work, as `Callers.Begin` does.** It flows into what the method runs after the checks, and
-  into tasks started there. It does not flow back out. Once the method that asked returns, its caller has nothing in
-  hand. So two requests sent side by side each have their own request in hand. A request sent from inside the handling
-  of another request, through its own sender, is in hand for its own handling. The outer request is in hand again once
-  it returns.
+- **It follows the flow of work, as a user begun with `user.BeginAs` does.** It flows into what the method runs after
+  the checks, and into tasks started there. It does not flow back out. Once the method that asked returns, its caller
+  has nothing in hand. So two requests sent side by side each have their own request in hand. A request sent from
+  inside the handling of another request, through its own sender, is in hand for its own handling. The outer request
+  is in hand again once it returns.
 - **Ask in an `async` method.** Only an `async` method restores the flow of its caller when it returns. A method that
   is not `async`, asks the checks, and returns the task of the handling leaves the request in hand for its caller.
   Whatever that caller runs next, including a handler it calls directly, then counts as part of the request's

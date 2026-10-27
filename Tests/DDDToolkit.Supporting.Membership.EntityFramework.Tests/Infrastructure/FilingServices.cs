@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using System.Globalization;
 using System.Text.Json;
 using DDDToolkit.EntityFramework;
@@ -88,9 +89,9 @@ public sealed class FilingServices : IDisposable
     public ServiceProvider Provider { get; }
 
     /// <summary>Asks something as <paramref name="caller"/>, in a scope of its own.</summary>
-    public async Task<T> AsAsync<T>(Caller caller, Func<IServiceProvider, Task<T>> ask)
+    public async Task<T> AsAsync<T>(CurrentUserSnapshot caller, Func<IServiceProvider, Task<T>> ask)
     {
-        using (Callers.Begin(caller))
+        using (TestUser.BeginAs(caller))
         {
             await using var scope = Provider.CreateAsyncScope();
             return await ask(scope.ServiceProvider);
@@ -98,9 +99,9 @@ public sealed class FilingServices : IDisposable
     }
 
     /// <summary>Does something as <paramref name="caller"/>, in a scope of its own.</summary>
-    public async Task AsAsync(Caller caller, Func<IServiceProvider, Task> work)
+    public async Task AsAsync(CurrentUserSnapshot caller, Func<IServiceProvider, Task> work)
     {
-        using (Callers.Begin(caller))
+        using (TestUser.BeginAs(caller))
         {
             await using var scope = Provider.CreateAsyncScope();
             await work(scope.ServiceProvider);
@@ -112,7 +113,7 @@ public sealed class FilingServices : IDisposable
     /// does once its request passed the check.
     /// </summary>
     public Task ChangeAsync(DocumentId id, Action<Document> change)
-        => AsAsync(Caller.System, async provider =>
+        => AsAsync(CurrentUserSnapshot.System, async provider =>
         {
             var context = provider.GetRequiredService<FilingContext>();
             var document = await context.Documents.SingleAsync(candidate => candidate.Id == id, TestContext.Current.CancellationToken);
@@ -122,7 +123,7 @@ public sealed class FilingServices : IDisposable
 
     /// <summary>Changes one folder as the application's own work, through its aggregate, and saves it.</summary>
     public Task ChangeAsync(FolderId id, Action<Folder> change)
-        => AsAsync(Caller.System, async provider =>
+        => AsAsync(CurrentUserSnapshot.System, async provider =>
         {
             var context = provider.GetRequiredService<FilingContext>();
             var folder = await context.Folders.SingleAsync(candidate => candidate.Id == id, TestContext.Current.CancellationToken);
@@ -134,7 +135,7 @@ public sealed class FilingServices : IDisposable
     /// Sends a request to share a document as <paramref name="caller"/>, the way a host's dispatcher does: the
     /// checks of the module first, and its handler only when they let the request through.
     /// </summary>
-    public Task SendAsync(Caller caller, ShareDocument command)
+    public Task SendAsync(CurrentUserSnapshot caller, ShareDocument command)
         => AsAsync(caller, async provider =>
         {
             await provider.GetRequiredService<AccessChecks<IFilingRequest>>().RequireAsync(command, TestContext.Current.CancellationToken);
@@ -142,7 +143,7 @@ public sealed class FilingServices : IDisposable
         });
 
     /// <summary>Sends a request to take a user off a document as <paramref name="caller"/>: the checks first, then its handler.</summary>
-    public Task SendAsync(Caller caller, LeaveDocument command)
+    public Task SendAsync(CurrentUserSnapshot caller, LeaveDocument command)
         => AsAsync(caller, async provider =>
         {
             await provider.GetRequiredService<AccessChecks<IFilingRequest>>().RequireAsync(command, TestContext.Current.CancellationToken);
@@ -150,7 +151,7 @@ public sealed class FilingServices : IDisposable
         });
 
     /// <summary>Sends a request to put staff on a folder as <paramref name="caller"/>: the checks first, then its handler.</summary>
-    public Task SendAsync(Caller caller, AdmitStaff command)
+    public Task SendAsync(CurrentUserSnapshot caller, AdmitStaff command)
         => AsAsync(caller, async provider =>
         {
             await provider.GetRequiredService<AccessChecks<IFilingRequest>>().RequireAsync(command, TestContext.Current.CancellationToken);
@@ -159,11 +160,11 @@ public sealed class FilingServices : IDisposable
 
     /// <summary>Reads one document with its shares and their roles, on a context of its own, so nothing comes from a change tracker.</summary>
     public Task<Document> ReadAsync(DocumentId id)
-        => AsAsync(Caller.System, provider => provider.GetRequiredService<FilingContext>().Documents.AsNoTracking().SingleAsync(candidate => candidate.Id == id, TestContext.Current.CancellationToken));
+        => AsAsync(CurrentUserSnapshot.System, provider => provider.GetRequiredService<FilingContext>().Documents.AsNoTracking().SingleAsync(candidate => candidate.Id == id, TestContext.Current.CancellationToken));
 
     /// <summary>Reads one folder with its staff and their roles, on a context of its own.</summary>
     public Task<Folder> ReadAsync(FolderId id)
-        => AsAsync(Caller.System, provider => provider.GetRequiredService<FilingContext>().Folders.AsNoTracking().SingleAsync(candidate => candidate.Id == id, TestContext.Current.CancellationToken));
+        => AsAsync(CurrentUserSnapshot.System, provider => provider.GetRequiredService<FilingContext>().Folders.AsNoTracking().SingleAsync(candidate => candidate.Id == id, TestContext.Current.CancellationToken));
 
     /// <inheritdoc />
     public void Dispose() => Provider.Dispose();
@@ -176,13 +177,13 @@ public static class TestCallers
     public const string StaffClaim = "app_metadata.staff";
 
     /// <summary>A signed-in user: who a document's members are.</summary>
-    public static Caller User(UserId user) => Callers.FromClaims(Claims(user.Value, staff: null));
+    public static CurrentUserSnapshot User(UserId user) => CurrentUserSnapshot.FromClaims(Claims(user.Value, staff: null));
 
     /// <summary>
     /// A signed-in member of staff, known by the code its token carries: who a folder's members are. The user
     /// id is somebody's, and no folder asks for it.
     /// </summary>
-    public static Caller Staff(StaffCode staff, UserId? user = null) => Callers.FromClaims(Claims((user ?? UserId.CreateSequential()).Value, staff.Value));
+    public static CurrentUserSnapshot Staff(StaffCode staff, UserId? user = null) => CurrentUserSnapshot.FromClaims(Claims((user ?? UserId.CreateSequential()).Value, staff.Value));
 
     /// <summary>The claim a gardener's token says the garden its requests are in by, as the gardens' database reads it.</summary>
     public const string GardenClaim = "garden";

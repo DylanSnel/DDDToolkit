@@ -351,7 +351,7 @@ module against these rules. Projects' schema is the example:
   adds runs once per row. So the gateway refuses a document with more than 200 fields or more than ten levels, before
   it asks any module (`AddSampleRequestBounds` in `Host/GraphQL/SampleGraphQL.cs`). The deepest screen asks for seven
   levels. Introspection keeps HotChocolate's own limit, so GraphQL Codegen's introspection query still works.
-- A signed-in user's SQL statement stops after ten seconds (`StatementTimeouts[CallerKind.User]` in
+- A signed-in user's SQL statement stops after ten seconds (`StatementTimeouts[CurrentUserKind.User]` in
   `Host/Storage/SampleStorage.cs`).
 - **No subscriptions.** A WebSocket carries no header per message. A host that adds subscriptions reads the tenant
   once, from the first message.

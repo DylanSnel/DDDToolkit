@@ -1,3 +1,5 @@
+using DDDToolkit.Abstractions.Access;
+
 namespace DDDToolkit.Supporting.Membership.EntityFramework.Tests.Infrastructure;
 
 /// <summary>Somebody a question about the depot's resources is asked as: a user, and the porter the depot knows it as, if any.</summary>
@@ -8,7 +10,7 @@ namespace DDDToolkit.Supporting.Membership.EntityFramework.Tests.Infrastructure;
 public sealed record DepotPerson(string Name, Guid User, PorterId? Porter, bool Active)
 {
     /// <summary>The caller: a signed-in user, with nothing of the depot in its token.</summary>
-    public Caller Caller => TestCallers.User(new UserId(User));
+    public CurrentUserSnapshot Caller => TestCallers.User(new UserId(User));
 
     /// <summary>The porter the depot counts the user as, or nobody.</summary>
     public PorterId? Member => Active ? Porter : null;
@@ -202,7 +204,7 @@ public sealed class DepotScenario
 
     /// <summary>Saves the scenario as the application's own work, and has the depot's desk know its porters.</summary>
     public async Task SaveAsync(DepotServices services)
-        => await services.AsAsync(Caller.System, async provider =>
+        => await services.AsAsync(CurrentUserSnapshot.System, async provider =>
         {
             var desk = provider.GetRequiredService<DepotDesk>();
             foreach (var porter in Porters)

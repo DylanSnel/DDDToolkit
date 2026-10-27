@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.EntityFramework.Postgres;
 using Microsoft.Extensions.Logging;
@@ -27,7 +28,7 @@ public sealed class StartUpCheckTests(FilingPostgres postgres)
 
         // And for a host whose contexts run as the caller, whoever is calling when it starts: the check asks as the application itself.
         using var asCaller = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Secured, asCaller: true, seed: false);
-        using (Callers.Begin(Caller.Anonymous))
+        using (TestUser.BeginAs(CurrentUserSnapshot.Anonymous))
         {
             await MembershipPostgresChecks.EnsureFunctionsAreInPlaceAsync(asCaller.Services.Provider, Cancellation);
         }
@@ -39,17 +40,17 @@ public sealed class StartUpCheckTests(FilingPostgres postgres)
         // A host that requires every flow of work to say its caller, whose contexts run as that caller. At
         // start-up nobody is calling.
         using var filing = await PostgresFiling.CreateAsync(
-            postgres, FilingPostgres.Template.Secured, asCaller: true, seed: false, configure: services => services.RequireExplicitCallers());
+            postgres, FilingPostgres.Template.Secured, asCaller: true, seed: false, configure: services => services.RequireExplicitCurrentUser());
 
         // With nobody calling, a context of this host cannot ask the database anything.
         await FluentActions.Awaiting(async () =>
         {
             await using var scope = filing.Services.Provider.CreateAsyncScope();
             await scope.ServiceProvider.GetRequiredService<FilingContext>().Documents.CountAsync(Cancellation);
-        }).Should().ThrowAsync<NoCallerException>();
+        }).Should().ThrowAsync<NoCurrentUserException>();
 
         // The check does all the same: it begins as the application itself around what it asks.
-        Callers.Ambient.Should().BeNull();
+        BegunUser.Should().BeNull();
         await CheckAsync(filing);
     }
 

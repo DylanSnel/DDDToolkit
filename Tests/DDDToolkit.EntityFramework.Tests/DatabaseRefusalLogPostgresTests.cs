@@ -36,7 +36,7 @@ public sealed class DatabaseRefusalLogPostgresTests(PalletDepotDatabase database
 
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
-    private static Caller Bob => PalletDepotDatabase.Bob;
+    private static CurrentUserSnapshot Bob => PalletDepotDatabase.Bob;
 
     private static Guid BobId => PalletDepotDatabase.BobId;
 

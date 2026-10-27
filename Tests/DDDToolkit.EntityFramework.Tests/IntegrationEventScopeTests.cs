@@ -99,7 +99,7 @@ public sealed class IntegrationEventScopeTests(ExplicitCallersPostgres postgres)
         await using (var work = await ToolkitWork.StartAsync(
             await postgres.CreateDatabaseAsync(Cancellation),
             module => module
-                .Around((_, _, _) => Callers.Begin(Caller.SystemIn(ToolkitWork.ReceivingScope)))
+                .Around((_, _, _) => TestUser.BeginSystem(ToolkitWork.ReceivingScope))
                 .Handle<ShelfOpenedV3, ReceiptLog>(),
             requireExplicitCallers: false))
         {
@@ -114,7 +114,7 @@ public sealed class IntegrationEventScopeTests(ExplicitCallersPostgres postgres)
         await using (var elsewhere = await ToolkitWork.StartAsync(
             await postgres.CreateDatabaseAsync(Cancellation),
             module => module
-                .Around((_, _, _) => Callers.Begin(Caller.SystemIn("elsewhere")))
+                .Around((_, _, _) => TestUser.BeginSystem("elsewhere"))
                 .Handle<ShelfOpenedV3, ReceiptLog>(),
             services: services => services.AddSingleton<KeptLogs>().AddLogging(logging => logging.Services.AddSingleton<ILoggerProvider>(provider => provider.GetRequiredService<KeptLogs>())),
             requireExplicitCallers: false))
@@ -147,11 +147,11 @@ public sealed class IntegrationEventScopeTests(ExplicitCallersPostgres postgres)
                 }
             });
 
-    /// <summary>A scope that begins <c>Caller.SystemIn(name)</c> and writes down when it begins and ends.</summary>
+    /// <summary>A scope that begins <c>CurrentUserSnapshot.SystemIn(name)</c> and writes down when it begins and ends.</summary>
     private IntegrationEventScope Begins(string name) => (_, _, _) =>
     {
         _steps.Add($"begin {name}");
-        var caller = Callers.Begin(Caller.SystemIn(name));
+        var caller = TestUser.BeginSystem(name);
         return new Ending(() =>
         {
             caller.Dispose();
@@ -187,8 +187,8 @@ public sealed class IntegrationEventScopeTests(ExplicitCallersPostgres postgres)
 
         public Task HandleAsync(ShelfOpenedV3 contract, IntegrationEventMessage message, CancellationToken cancellationToken)
         {
-            Seen.Add(Callers.Ambient?.ToString() ?? "nobody");
-            steps.Add($"handler {Callers.Ambient}");
+            Seen.Add(BegunUser?.ToString() ?? "nobody");
+            steps.Add($"handler {BegunUser}");
             return Refuse ? throw new InvalidOperationException("Refused on purpose.") : Task.CompletedTask;
         }
     }
@@ -198,7 +198,7 @@ public sealed class IntegrationEventScopeTests(ExplicitCallersPostgres postgres)
     {
         public Task HandleAsync(ShelfOpenedV3 contract, IntegrationEventMessage message, CancellationToken cancellationToken)
         {
-            steps.Add($"second {Callers.Ambient}");
+            steps.Add($"second {BegunUser}");
             return Task.CompletedTask;
         }
     }
@@ -256,14 +256,14 @@ public sealed class IntegrationEventScopeTests(ExplicitCallersPostgres postgres)
             return ValueTask.FromResult(result);
         }
 
-        public void TransactionCommitted(DbTransaction transaction, TransactionEndEventData eventData) => _commits.Add(Callers.Ambient?.ToString());
+        public void TransactionCommitted(DbTransaction transaction, TransactionEndEventData eventData) => _commits.Add(BegunUser?.ToString());
 
         public Task TransactionCommittedAsync(DbTransaction transaction, TransactionEndEventData eventData, CancellationToken cancellationToken = default)
         {
-            _commits.Add(Callers.Ambient?.ToString());
+            _commits.Add(BegunUser?.ToString());
             return Task.CompletedTask;
         }
 
-        private void Record(DbCommand command) => _commands.Add((command.CommandText, Callers.Ambient?.ToString()));
+        private void Record(DbCommand command) => _commands.Add((command.CommandText, BegunUser?.ToString()));
     }
 }

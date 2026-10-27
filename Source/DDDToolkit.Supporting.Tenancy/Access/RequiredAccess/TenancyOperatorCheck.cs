@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Abstractions.Interfaces;
 using DDDToolkit.Access;
 
@@ -9,7 +10,7 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// <c>AddTenancyAccess</c> registers it for a module's requests, beside the check of Tenancy's other cases.
 /// </summary>
 /// <remarks>
-/// It reads nothing. Whether the caller is an operator is the toolkit's caller's to say, by its token's role. The tenant
+/// It reads nothing. Whether the caller is an operator is the toolkit's current user's to say, by its token's role. The tenant
 /// the request names beside the command is the Tenancy caller's, as tenant selection found it
 /// (<see cref="TenancyCaller{TTenantId, TSeatId}.NamedTenant"/>).
 /// <para>
@@ -19,10 +20,10 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// </para>
 /// </remarks>
 /// <param name="options">Which token roles are operators'.</param>
-/// <param name="callers">Who is calling, as the toolkit says: what says whether the caller is an operator, and who.</param>
+/// <param name="user">Who is calling, as the toolkit says: what says whether the caller is an operator, and who.</param>
 internal sealed class TenancyOperatorCheck<TTenantId, TSeatId, TUnitId, TRoleId>(
     TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId> options,
-    ICallerAccessor callers) : IAccessCheck, IBeginsWork
+    ICurrentUser user) : IAccessCheck, IBeginsWork
     where TTenantId : struct, IEntityId, IEquatable<TTenantId>
     where TSeatId : struct, IEntityId, IEquatable<TSeatId>
     where TUnitId : struct, IEntityId, IEquatable<TUnitId>
@@ -51,7 +52,7 @@ internal sealed class TenancyOperatorCheck<TTenantId, TSeatId, TUnitId, TRoleId>
         }
 
         // The token's own role, never the Tenancy caller: an operator is nobody in every tenant.
-        if (!options.IsOperator(callers.Current))
+        if (!options.IsOperator(user.Snapshot))
         {
             throw TenancyRefusals.Refuse(TenancyRefusals.OperatorsOnly);
         }
@@ -94,8 +95,8 @@ internal sealed class TenancyOperatorCheck<TTenantId, TSeatId, TUnitId, TRoleId>
         ArgumentNullException.ThrowIfNull(requirement);
         ArgumentNullException.ThrowIfNull(request);
 
-        var caller = callers.Current;
-        if (isQuery || !options.IsOperator(caller) || caller.UserId is not { } identity)
+        var caller = user.Snapshot;
+        if (isQuery || !options.IsOperator(caller) || caller.Id is not { } identity)
         {
             return null;
         }

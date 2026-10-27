@@ -194,7 +194,7 @@ public abstract class TenancyFunctionTests(TenancyPostgres postgres, TenancyNami
 
         await using var scope = services.Scope();
         var caller = await scope.ServiceProvider.GetRequiredService<TenantSelection<TenantId, SeatId>>()
-            .ResolveAsync(Caller.User(identity), slug, Cancellation);
+            .ResolveAsync(CurrentUserSnapshot.User(identity), slug, Cancellation);
 
         using (TenancyCallers.Begin(caller))
         {

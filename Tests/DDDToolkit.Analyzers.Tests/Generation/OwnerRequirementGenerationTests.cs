@@ -69,7 +69,7 @@ public class OwnerRequirementGenerationTests
         """
         public sealed class CallersUser : ICallersOwn<UserId>
         {
-            public UserId? Find(DDDToolkit.Abstractions.Access.Caller caller) => caller.UserId is { } id ? new UserId(id) : null;
+            public UserId? Find(DDDToolkit.Abstractions.Access.ICurrentUser user) => user.Id is { } id ? new UserId(id) : null;
         }
 
         """;
@@ -179,7 +179,7 @@ public class OwnerRequirementGenerationTests
             + """
               public sealed class CallersBoard : ICallersOwn<BoardId>
               {
-                  public BoardId? Find(DDDToolkit.Abstractions.Access.Caller caller) => null;
+                  public BoardId? Find(DDDToolkit.Abstractions.Access.ICurrentUser user) => null;
               }
 
               [OwnOnly]

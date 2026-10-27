@@ -222,8 +222,8 @@ Running as the login role means doing what that role may do. Where the host uses
 [a login that owns nothing](row-level-security.md#a-login-that-owns-nothing), which the start-up check
 `postgres.login-role-owns-nothing` enforces, the login role holds nothing on the tables. The database then refuses
 such a context's first command. Such a context reads past the policies only where the login role owns the tables, in
-a host that skips that check with a reason. Work across callers usually belongs to a system caller instead,
-`Callers.Begin(Caller.SystemIn("reports"))`, in a context that runs as its caller.
+a host that skips that check with a reason. Work across callers usually belongs to system work instead,
+`user.BeginSystem("reports")`, in a context that runs as the current user.
 
 ### Writing a context part
 
@@ -1494,15 +1494,15 @@ The choices add up.
 A row holds the event's id (which is also its outbox row's id), its stable name, version and payload, when it
 occurred and when it was recorded, the aggregate that raised it, and who acted:
 
-| The caller | `ActedByKind` | `ActedById` |
+| The current user | `ActedByKind` | `ActedById` |
 |---|---|---|
 | A signed-in user | `user` | the user's id, or the token's `sub` where that is not a `uuid` |
 | System work | `system` | `null` |
-| System work inside a scope, `Caller.SystemIn("ordering")` | `system` | the scope |
+| System work inside a scope, `user.BeginSystem("ordering")` | `system` | the scope |
 | A request without a user | `anonymous` | `null` |
 
 That pair is an `ActedBy`, and `IActedByAccessor` returns it. The accessor that the toolkit registers reads the
-[caller](row-level-security.md#running-queries-as-the-caller) once for each save that keeps an event. To fill it in
+[current user](row-level-security.md#running-queries-as-the-caller) once for each save that keeps an event. To fill it in
 another way, register your own singleton before `AddDDDToolkitEntityFramework`, for example with a kind of your own:
 `new ActedBy("device", serialNumber)`.
 
@@ -1533,7 +1533,7 @@ services.AddSingleton<IEventLogFields, BranchOfTheEvent>();
 
 > [!IMPORTANT]
 > `IActedByAccessor` and every `IEventLogFields` are singletons. Each time they are asked, they read their answer from
-> the current flow of work: the ambient caller, the current request, the event itself. They keep nothing between two
+> the current flow of work: the begun user, the current request, the event itself. They keep nothing between two
 > events and use no scoped service. The interceptor gets them from its own provider once per save. For a context from
 > [a pool](#contexts-from-a-pool), that provider is the application's root provider, which refuses a scoped service
 > with a message that says so.

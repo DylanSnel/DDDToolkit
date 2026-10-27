@@ -68,38 +68,41 @@ Some contexts need a different call:
 - **The older chain** `UseDDDToolkit(provider).UsePostgresRowLevelSecurity(provider)` still works, and adds the
   interceptor once.
 
-| The caller | Runs as | `ddd.caller_id()` |
+| The current user | Runs as | `ddd.caller_id()` |
 |---|---|---|
 | A signed-in user | `authenticated`, with the token's claims. When the token carries a role of its own, the role that its [token role](#token-roles) maps to. | the user's id |
 | A request without a user | `anon`, with the claims `{"role":"anon"}` | `null` |
-| System work inside a scope, `Caller.SystemIn("projects")` | [`ddd_system_in`](#the-scoped-system-role), with the claims `{"role":"ddd_system_in","scope":"projects"}` | `null` |
-| No request, such as a hosted service of yours | `SystemRole`, or else the role the application logged in as. Where the host [requires explicit callers](#requiring-explicit-callers), there is no caller and the work fails. The toolkit's pollers start the system caller for their bookkeeping only. | `null` |
-| Code inside `using (Callers.Begin(caller))` | that caller, whatever the request says | the caller's id |
+| System work inside a scope, `user.BeginSystem("projects")` | [`ddd_system_in`](#the-scoped-system-role), with the claims `{"role":"ddd_system_in","scope":"projects"}` | `null` |
+| No request, such as a hosted service of yours | `SystemRole`, or else the role the application logged in as. Where the host [requires an explicit current user](#requiring-an-explicit-current-user), there is no user and the work fails. The toolkit's pollers begin system work for their bookkeeping only. | `null` |
+| Code inside `using (user.BeginAs(userId))` | that user, whatever the request says | the user's id |
 
 The roles are PostgREST's by default. Change them with `AddPostgresRowLevelSecurity(options => ...)`.
 
-**The current caller** is a toolkit `Caller`. An `ICallerAccessor` returns the current caller. A host registers the
-accessor that knows its callers:
+**The current user** is what `ICurrentUser` answers. Your code takes `ICurrentUser` from dependency injection. The
+toolkit's implementation, `CurrentUser`, answers in this order:
 
-- `AddSupabaseJwtBearer` from `DDDToolkit.Auth.Supabase.AspNetCore` reads the caller from the request.
-- `DDDToolkit.Auth.Supabase.AzureFunctions` reads the caller from the function invocation.
-- Without an accessor, the caller is the one that `Callers.Begin` made current, or else the system. A worker
-  service or a test needs this.
+1. A user that code began for the flow of work, with `BeginAs` or `BeginSystem`. A begun user always wins.
+   `DDDToolkit.Auth.Supabase.AzureFunctions` begins the user of each HTTP-triggered invocation this way.
+2. The host's `ICurrentUserSource`, which answers the request's user. `AddSupabaseJwtBearer` from
+   `DDDToolkit.Auth.Supabase.AspNetCore` registers one that reads the user from the request. A host with another way
+   to know its users registers its own with `AddPostgresRowLevelSecurity<TSource>()`.
+3. Otherwise, system work. A worker service or a test needs this.
 
-A caller comes from the claims of a validated token, with `Callers.FromClaims(claims)`, or you make it in code, with
-`Caller.User(id)`. For a caller made in code, the database sees its id and role and no other claims.
+What `ICurrentUser` answers at one moment is a `CurrentUserSnapshot`. A snapshot comes from the claims of a validated
+token, with `CurrentUserSnapshot.FromClaims(claims)`. You begin a user in code by id, with `user.BeginAs(id)`. For a
+user begun by id, the database sees the id and the role `authenticated`, and no other claims.
 
 ```csharp
 // a job queued on a user's behalf, with the claims of the token that queued it
-using (Callers.Begin(Callers.FromClaims(job.Claims)))
+using (user.BeginAs(CurrentUserSnapshot.FromClaims(job.Claims)))
 {
     await handler.HandleAsync(job, cancellationToken);
 }
 ```
 
-`Callers.Begin` flows across `await` and `Task.Run`, as an `AsyncLocal` does. A caller started in code wins over the
-request's caller. This also works the other way. A step that a request takes on the application's behalf starts
-`Callers.Begin(Caller.System)`.
+A begun user flows across `await` and `Task.Run`, as an `AsyncLocal` does. A user begun in code wins over the
+request's user. This also works the other way. A step that a request takes on the application's behalf starts
+`user.BeginSystem()`.
 
 **Background work** runs as `SystemRole`. When `SystemRole` is not set, background work runs as the role the
 application logged in as. That role is usually the owner, and the owner sees every row. To keep the application from
@@ -282,54 +285,57 @@ and `request.jwt.claim`. Supabase's `auth.uid()`, `auth.role()`, `auth.email()` 
 settings before the claims. Without this step, a value that something else left on the server connection, such as a
 pooler that does not reset it, would decide who the statement runs as.
 
-### Requiring explicit callers
+### Requiring an explicit current user
 
-Outside a request and outside any caller, the current caller is the system. On most databases the system runs as
-the tables' owner, which passes every policy. A 3.x host gets this by default. So work that never states a caller
-runs as system work, and passes every policy. On Supabase the system runs as `ddd_system`, unless the project names
+Outside a request, where nothing began a user, the current user is system work. On most databases system work runs
+as the tables' owner, which passes every policy. A 3.x host gets this by default. So work that never begins a user
+runs as system work, and passes every policy. On Supabase system work runs as `ddd_system`, unless the project names
 another role. `ddd_system` reaches only the toolkit's bookkeeping tables, so on Supabase the database refuses such
 work on a module's tables. A host that wants such work to fail everywhere, before it reaches the database, adds one
 line:
 
 ```csharp
-builder.Services.RequireExplicitCallers();
+builder.Services.RequireExplicitCurrentUser();
 ```
 
 With this line:
 
-- An accessor that knows no caller throws `NoCallerException` and does not return the system. So the first query of
-  work that never stated its caller fails before it connects. `AmbientCallerAccessor`, the Supabase accessor for
-  ASP.NET Core outside a request, and `GetSupabaseCaller()` in Azure Functions outside an HTTP trigger all throw.
-- The interceptor refuses the system caller when your own accessor returns it by itself. The system is the caller
-  only inside `Callers.Begin(Caller.System)`.
-- A request still has its caller: its user, or `anon`.
+- `CurrentUser` throws `NoCurrentUserException` where nothing began a user and the host's source knows none. It does
+  not return system work. So the first query of work that never began its user fails before it connects. The
+  Supabase source for ASP.NET Core knows no user outside a request, and `GetSupabaseUser()` in Azure Functions throws
+  outside an HTTP trigger.
+- The interceptor refuses system work without a scope when your own `ICurrentUserSource` returns it. Such work runs
+  only inside `user.BeginSystem()`.
+- A request still has its user: the signed-in user, or `anon`.
 
-The toolkit's own work states its caller. Reading, marking and deleting outbox rows, receiving from a transport,
-checking the migrations and preparing a sample's database are bookkeeping. They run as `Caller.System`. The handlers
-that this work calls run with no caller, inside `Callers.BeginNone()`, until something starts a caller for them.
+The toolkit's own work begins its user. Reading, marking and deleting outbox rows, receiving from a transport,
+checking the migrations and preparing a sample's database are bookkeeping. They run as system work without a scope,
+`CurrentUserSnapshot.System`. The handlers that this work calls run with nobody begun, inside `BeginNone()`, until
+something begins a user for them.
 
-| Work | Without `RequireExplicitCallers` | With it |
+| Work | Without `RequireExplicitCurrentUser` | With it |
 |---|---|---|
-| The bookkeeping of the outbox processor, of retention and of a transport | the current caller, or the system outside any caller | `Caller.System` |
-| Turning an event into the contract it is published as, and a sink of yours | the current caller | `Caller.System`, with the bookkeeping. It reads only what the event's module publishes. |
-| A module's integration event handlers, with their inbox read and save | the caller that the module's [scopes](integration-events.md#who-the-handlers-run-as) start, or the current caller when the module has no scopes | the caller that the module's scopes start. A module without scopes does not run its handlers. |
-| A domain event handler that the outbox dispatches in process | the current caller | no caller. The handler starts its own caller, or its first query throws. |
-| The start-up migrations check | `Caller.System` | `Caller.System` |
+| The bookkeeping of the outbox processor, of retention and of a transport | the current user, or system work where nothing was begun | system work |
+| Turning an event into the contract it is published as, and a sink of yours | the current user | system work, with the bookkeeping. It reads only what the event's module publishes. |
+| A module's integration event handlers, with their inbox read and save | the user that the module's [scopes](integration-events.md#who-the-handlers-run-as) begin, or the current user when the module has no scopes | the user that the module's scopes begin. A module without scopes does not run its handlers. |
+| A domain event handler that the outbox dispatches in process | the current user | nobody. The handler begins its own user, or its first query throws. |
+| The start-up migrations check | system work | system work |
 
 A domain event handler that the outbox dispatches in process saves its own work:
 
 - The handler may leave a change unsaved on the outbox processor's context. That change would be saved with the
-  processed mark, as the system. With `RequireExplicitCallers`, the message fails instead, and the change is dropped.
-- With `DeliverInTransaction`, the processor's context holds a transaction begun as the system. So such a handler
+  processed mark, as system work. With `RequireExplicitCurrentUser`, the message fails instead, and the change is
+  dropped.
+- With `DeliverInTransaction`, the processor's context holds a transaction begun as system work. So such a handler
   works on a separate context.
-- A transaction that you begin on the processor's context yourself is joined. Begin it as the system too.
+- A transaction that you begin on the processor's context yourself is joined. Begin it as system work too.
 
-A module states what its handlers run as where it registers them, with a scope around each delivery. The scope is a
-scoped system caller that the module's policies hold, or, chosen on purpose, the system itself:
+A module states what its handlers run as where it registers them, with a scope around each delivery. The scope is
+scoped system work that the module's policies hold, or, chosen on purpose, system work without a scope:
 
 ```csharp
 services.AddModuleIntegrationEvents<ShippingContext>(module => module
-    .Around((services, message, contract) => Callers.Begin(Caller.SystemIn("shipping")))
+    .Around((services, message, contract) => services.GetRequiredService<ICurrentUser>().BeginSystem("shipping"))
     .Handle<OrderPlacedV1, BookShipment>());
 
 // or, where the handlers may see every row:
@@ -338,10 +344,9 @@ services.AddModuleIntegrationEvents<ShippingContext>(module => module
     .Handle<OrderPlacedV1, BookShipment>());
 ```
 
-Middleware that starts a caller and forgets to end it leaks that caller into the next request, and the leaked caller
-wins over the request's caller. `context.GetSupabaseCaller()` returns the request's caller, whatever the ambient
-caller is. So a host can make that caller current at the start of every request:
-`using (Callers.Begin(context.GetSupabaseCaller()))`.
+Middleware that begins a user and forgets to end it leaks that user into the next request. The leaked user wins over
+the request's user. `context.GetSupabaseUser()` returns the request's own user, whatever was begun. So a host can make
+that user current at the start of every request: `using (user.BeginAs(context.GetSupabaseUser()))`.
 
 ### Token roles
 
@@ -394,7 +399,7 @@ public static class DeskRoles
 [RowAccess<Ticket>(RowOperations.Read, To = [DeskRoles.Analyst])]
 public static partial class AnalystsReadEveryTicket
 {
-    public static bool Allows(Ticket ticket, Caller caller) => caller.IsSignedIn;
+    public static bool Allows(Ticket ticket, ICurrentUser user) => user.IsAuthenticated;
 }
 ```
 
@@ -460,7 +465,7 @@ then runs as `UserRole`, and nothing is made or checked for the mapping.
 `UnknownTokenRole.Refuse` is the default. With `UnknownTokenRole.Anonymous`, a caller whose role is on no list runs
 as an anonymous caller: `AnonymousRole`, with the claims `{"role":"anon"}`. The database sees no user, and
 `ddd.caller_id()` is `null`. The interceptor asks a module's [custom settings](#custom-connection-settings) for
-`Caller.Anonymous` too. So a setting derived from the user's id or claims gets the value for a request without a
+`CurrentUserSnapshot.Anonymous` too. So a setting derived from the user's id or claims gets the value for a request without a
 user. In C# the caller is still the user that the token names. So a rule checked in C# may allow what the policies
 then refuse. Choose this option for a host that prefers to show such a caller what everybody may see, instead of
 refusing the caller.
@@ -481,11 +486,11 @@ role, the claims and the settings again. It compares them with what it set on th
 - Outside a transaction, the interceptor sets a change first, with the same statement. This costs one round trip
   when the caller changed, and none when it did not.
 - Inside a transaction, the interceptor does not set a change. A transaction runs as one caller, and a rollback
-  would undo a setting made inside it. With `RequireExplicitCallers`, the command is refused with an
+  would undo a setting made inside it. With `RequireExplicitCurrentUser`, the command is refused with an
   `InvalidOperationException` that names both callers. Without it, a warning is logged once per connection, and the
   transaction continues as the caller it began with.
 
-Start the caller before the transaction, or run the other caller's work on a separate context.
+Begin the user before the transaction, or run the other caller's work on a separate context.
 
 A connection opened inside a `TransactionScope` sets the caller inside that transaction. When the scope rolls back,
 the setting is rolled back too. The interceptor then sets the caller again before the connection's next command.
@@ -511,7 +516,7 @@ caller:
 - **A connection without a caller that already has an open transaction** cannot get a caller safely. Such a
   connection is one handed over with `UseTransaction`, or one opened inside a `TransactionScope`. A rollback undoes a
   session setting made inside a transaction, and everything that ran in the transaction before ran as the login role.
-  With `RequireExplicitCallers`, the command is refused with an `InvalidOperationException` that says what to change.
+  With `RequireExplicitCurrentUser`, the command is refused with an `InvalidOperationException` that says what to change.
   Without it, a warning is logged once per connection, and the command runs as the role that the connection carries.
 - **In `Transaction` scope**, a command outside a transaction carries its call, whoever opened the connection. A
   transaction handed over with `UseTransaction` gets the settings at that moment, for the rest of the transaction.
@@ -528,7 +533,7 @@ connection without having received the transaction.
 > with Postgres's `42501` (`permission denied`) and gives no reason. The interceptor either gives such a connection its
 > caller, or refuses the command with a message that names three fixes: open the connection through a context, begin
 > the transaction after a context opened the connection, or take the connection from
-> [`CallerConnections`](#raw-sql).
+> [`CurrentUserConnections`](#raw-sql).
 
 ### Custom connection settings
 
@@ -541,7 +546,7 @@ public sealed class TeamSetting : IRowLevelSecuritySettings
 {
     public IReadOnlyCollection<string> Names { get; } = ["teams.current"];
 
-    public IEnumerable<KeyValuePair<string, string>> For(Caller caller)
+    public IEnumerable<KeyValuePair<string, string>> For(CurrentUserSnapshot user)
         => TeamScope.Current is { } team ? [new("teams.current", team.ToString())] : [];
 }
 
@@ -561,15 +566,15 @@ In the diagram, purple is the custom setting and green is the result:
 ```mermaid
 sequenceDiagram
     participant Request
-    participant Accessor as ICallerAccessor
+    participant User as ICurrentUser
     participant Interceptor
     participant Settings as TeamSetting
     participant Postgres
     Request->>Interceptor: a query opens a connection
-    Interceptor->>Accessor: who is calling?
-    Accessor-->>Interceptor: the request's user
+    Interceptor->>User: who is calling?
+    User-->>Interceptor: the request's user
     rect rgba(91, 46, 201, 0.15)
-    Interceptor->>Settings: values for this caller
+    Interceptor->>Settings: values for this user
     Settings-->>Interceptor: teams.current = north
     end
     Interceptor->>Postgres: one statement with the role,<br/>the claims and teams.current
@@ -601,13 +606,13 @@ application's code sets a wrong value.
 Postgres applies the settings stored on a role, such as `alter role authenticated set statement_timeout = '8s'`,
 when that role logs in. Postgres does not apply them when a session switches to the role. So a caller's statements
 run under the timeout of the role the application logged in as, whatever the caller's role says. Set the timeout per
-kind of caller instead:
+kind of user instead:
 
 ```csharp
 builder.Services.AddPostgresRowLevelSecurity(options =>
 {
-    options.StatementTimeouts[CallerKind.User] = TimeSpan.FromSeconds(8);
-    options.StatementTimeouts[CallerKind.Anonymous] = TimeSpan.FromSeconds(3);
+    options.StatementTimeouts[CurrentUserKind.User] = TimeSpan.FromSeconds(8);
+    options.StatementTimeouts[CurrentUserKind.Anonymous] = TimeSpan.FromSeconds(3);
 });
 ```
 
@@ -634,14 +639,14 @@ interceptor like any query, in both scopes. SQL sent past Entity Framework, as a
 | `Transaction` | the login role, because nothing is set on the session. Inside a transaction that the context began or received, the command runs as that transaction's caller. |
 
 A module may send SQL without a context, such as a report read with a data reader, or a bulk copy. For that SQL,
-take the connection from `CallerConnections`. `CallerConnections` sets the caller with the interceptor's statement,
+take the connection from `CurrentUserConnections`. `CurrentUserConnections` sets the caller with the interceptor's statement,
 and refuses what the interceptor refuses. It also sets the [statement timeout](#a-statement-timeout-per-caller) and
 the [custom settings](#custom-connection-settings):
 
 ```csharp
-builder.Services.AddCallerConnections(provider => provider.GetRequiredService<NpgsqlDataSource>());
+builder.Services.AddCurrentUserConnections(provider => provider.GetRequiredService<NpgsqlDataSource>());
 
-public sealed class OrderExport(CallerConnections connections)
+public sealed class OrderExport(CurrentUserConnections connections)
 {
     public async Task WriteAsync(Stream output, CancellationToken cancellationToken)
     {
@@ -745,7 +750,7 @@ grants instead, per table and per command, from the policies it holds
 ([Privileges from the policies](#privileges-from-the-policies)).
 
 `ddd.caller_id()` is `null` for a token whose `sub` is not a `uuid`. So a rule about a user matches nobody, and does
-not fail every query. `Caller.UserId` is `null` for such a token too.
+not fail every query. `ICurrentUser.Id` is `null` for such a token too.
 
 The grants above also cover the module's outbox and inbox tables. Those tables have no policies, so a caller could
 read every pending message. A caller's save only adds outbox rows, and the toolkit reads, marks and deletes them as
@@ -774,14 +779,14 @@ and what the rule allows:
 [RowAccess<Order>(RowOperations.Read | RowOperations.Change)]
 public static partial class ACustomerSeesTheirOrders
 {
-    public static bool Allows(Order order, Caller caller)
-        => order.PlacedBy == null || order.PlacedBy?.Value == caller.UserId;
+    public static bool Allows(Order order, ICurrentUser user)
+        => order.PlacedBy == null || order.PlacedBy?.Value == user.Id;
 }
 ```
 
 When the class compiles, the generator translates `Allows` into SQL and writes the SQL into the class as
 `RowAccessSql`. The rule is still an ordinary method. So a handler, a test or a screen calls the same rule in C#:
-`ACustomerSeesTheirOrders.Allows(order, caller)`.
+`ACustomerSeesTheirOrders.Allows(order, user)`.
 
 In the diagram, purple is the rule and green is where the rule is used:
 
@@ -823,7 +828,7 @@ var sql = PostgresRowAccess.Script(context,
 ]);
 
 // The same rule, called directly
-var allowed = ACustomerSeesTheirOrders.Allows(order, caller);
+var allowed = ACustomerSeesTheirOrders.Allows(order, user);
 ```
 
 ```sql
@@ -865,12 +870,12 @@ More about rules:
 
 | In `Allows` | In the policy |
 |---|---|
-| `order.PlacedBy == null \|\| order.PlacedBy?.Value == caller.UserId` | `("PlacedBy" IS NULL) OR ("PlacedBy" IS NOT DISTINCT FROM "ddd".caller_id())` |
+| `order.PlacedBy == null \|\| order.PlacedBy?.Value == user.Id` | `("PlacedBy" IS NULL) OR ("PlacedBy" IS NOT DISTINCT FROM "ddd".caller_id())` |
 | `order.Status != OrderStatus.Cancelled` | `"Status" <> 2`, or `'Cancelled'` when the column stores it as text |
 | `order.Total.Amount <= 500` | `coalesce("Total_Amount" <= 500, FALSE)` |
-| `caller.IsSignedIn && !order.IsPublic` | `("ddd".caller_id() IS NOT NULL) AND (NOT "IsPublic")` |
-| `caller.Claim("app_metadata.team") == order.Team` | `"ddd".caller_claims() #>> '{app_metadata,team}' IS NOT DISTINCT FROM "Team"` |
-| `caller.Role == "authenticated"` | `"ddd".caller_role() IS NOT DISTINCT FROM 'authenticated'` |
+| `user.IsAuthenticated && !order.IsPublic` | `("ddd".caller_id() IS NOT NULL) AND (NOT "IsPublic")` |
+| `user.FindClaim("app_metadata.team") == order.Team` | `"ddd".caller_claims() #>> '{app_metadata,team}' IS NOT DISTINCT FROM "Team"` |
+| `user.Role == "authenticated"` | `"ddd".caller_role() IS NOT DISTINCT FROM 'authenticated'` |
 | `order.Due < DateTimeOffset.UtcNow` | `coalesce("Due" < now(), FALSE)` |
 
 - `==` keeps its C# meaning. Between two values that C# says cannot be null (an enum, a number, a flag, a `Guid`, or
@@ -895,9 +900,9 @@ database can answer, use an [access function](#access-functions) or a
 into the rule:
 
 ```csharp
-public static bool Allows(Order order, Caller caller)
-    => order.PlacedBy?.Value == caller.UserId
-       || Sql.Call<bool>("support.is_agent", caller.UserId);
+public static bool Allows(Order order, ICurrentUser user)
+    => order.PlacedBy?.Value == user.Id
+       || Sql.Call<bool>("support.is_agent", user.Id);
 ```
 
 The generator translates the arguments like the rest of the rule. You create the function in a migration. A rule
@@ -949,14 +954,14 @@ flowchart LR
 [RowAccess<Order>(RowOperations.Read | RowOperations.Change)]
 public static partial class ACustomerHasTheirOrders
 {
-    public static bool Allows(Order order, Caller caller)
-        => order.PlacedBy == null || order.PlacedBy?.Value == caller.UserId;
+    public static bool Allows(Order order, ICurrentUser user)
+        => order.PlacedBy == null || order.PlacedBy?.Value == user.Id;
 }
 
 [RowAccess<Order>(RowOperations.Read, To = [RowAccessRoles.User])]
 public static partial class AuditorsSeeEveryOrder
 {
-    public static bool Allows(Order order, Caller caller) => caller.Claim("app_metadata.auditor") == "true";
+    public static bool Allows(Order order, ICurrentUser user) => user.FindClaim("app_metadata.auditor") == "true";
 }
 ```
 
@@ -1027,7 +1032,7 @@ its employees read the organization:
 [RowAccess<Organization>(RowOperations.Read, Restrictive = true)]
 public static partial class OnlyEmployeesReadTheOrganization
 {
-    public static bool Allows(Organization organization, Caller caller)
+    public static bool Allows(Organization organization, ICurrentUser user)
         => TenancyRowAccess.CallerSeat<Seat>().Kind == SeatKind.Employee;
 }
 ```
@@ -1062,7 +1067,7 @@ are not defaults. The rule would look like a restriction and restrict nothing.
 ### The scoped system role
 
 `RowAccessRoles.SystemIn` is the role that system work runs as when the work must stay inside the policies. That
-work is a scoped system caller, `Caller.SystemIn(scope)`. The role is `ddd_system_in` unless you configure another
+work is scoped system work, begun with `user.BeginSystem(scope)`. The role is `ddd_system_in` unless you configure another
 role.
 
 - The role cannot log in, and cannot bypass RLS. So it reads and writes only the rows that its
@@ -1105,8 +1110,8 @@ revoke update, delete on ordering."InboxMessages" from ddd_system_in;
 - A login role other than the one that runs the migrations needs its own grant: `grant ddd_system_in to app;`.
 - `SetupScript()` makes the role in the same way, refuses a role that the prelude would refuse, and grants the role
   to the login role.
-- `PostgresRowLevelSecurityOptions.SystemInRole` names the role. `null` leaves the role out of the setup. A scoped
-  system caller then fails before its query connects, and never runs as another role.
+- `PostgresRowLevelSecurityOptions.SystemInRole` names the role. `null` leaves the role out of the setup. Scoped
+  system work then fails before its query connects, and never runs as another role.
 - A rule for `RowAccessRoles.SystemIn` still gets its policies when `SystemInRole` is `null`.
   `RowAccessRoleNames.From(options)` writes them for `ddd_system_in`, and the script creates that role where it is
   missing. Leave such rules out where the application has no scoped system role.
@@ -1171,14 +1176,14 @@ The rules are on the order. No rule mentions the lines:
 [RowAccess<Order>(RowOperations.Read | RowOperations.Change)]
 public static partial class ACustomerHasTheirOrders
 {
-    public static bool Allows(Order order, Caller caller)
-        => order.PlacedBy == null || order.PlacedBy?.Value == caller.UserId;
+    public static bool Allows(Order order, ICurrentUser user)
+        => order.PlacedBy == null || order.PlacedBy?.Value == user.Id;
 }
 
 [RowAccess<Order>(RowOperations.Create)]
 public static partial class NobodyOrdersForSomebodyElse
 {
-    public static bool Allows(Order order, Caller caller) => order.PlacedBy?.Value == caller.UserId;
+    public static bool Allows(Order order, ICurrentUser user) => order.PlacedBy?.Value == user.Id;
 }
 ```
 
@@ -1238,14 +1243,14 @@ rule, and call the access function from the rules:
 [AccessFunction<Project>("projects.is_member")]
 public static partial class ProjectMembership
 {
-    public static bool Allows(Project project, Caller caller)
-        => project.Members.Any(member => member.UserId == caller.UserId);
+    public static bool Allows(Project project, ICurrentUser user)
+        => project.Members.Any(member => member.UserId == user.Id);
 }
 
 [RowAccess<Project>(RowOperations.Read | RowOperations.Change)]
 public static partial class MembersWorkOnTheirProjects
 {
-    public static bool Allows(Project project, Caller caller) => ProjectMembership.Allows(project, caller);
+    public static bool Allows(Project project, ICurrentUser user) => ProjectMembership.Allows(project, user);
 }
 ```
 
@@ -1298,7 +1303,7 @@ the module's newest access file, refuses the change and says why. A script of yo
 **Called with an id.** A rule may hold a project's id and not the project. For such a rule, the generator adds `Name`
 and an `Allows` overload that takes the aggregate's id. `ProjectMembership.Allows(task.ProjectId)` becomes
 `projects.is_member("ProjectId")`. Only the database can answer this overload. Called in C#, it throws
-`DatabaseOnlyException`. Where C# holds the project, `ProjectMembership.Allows(project, caller)` answers in memory,
+`DatabaseOnlyException`. Where C# holds the project, `ProjectMembership.Allows(project, user)` answers in memory,
 because the members are loaded with the project.
 
 **Other modules** see only the Projects module's contracts. The contracts cannot hold the definition, because the
@@ -1314,15 +1319,15 @@ public static partial class ProjectMembers;
 [AccessFunction<Project>(ProjectMembers.Name)]
 public static partial class ProjectMembership
 {
-    public static bool Allows(Project project, Caller caller)
-        => project.Members.Any(member => member.UserId == caller.UserId);
+    public static bool Allows(Project project, ICurrentUser user)
+        => project.Members.Any(member => member.UserId == user.Id);
 }
 
 // Tasks
 [RowAccess<ProjectTask>(RowOperations.All)]
 public static partial class ProjectMembersWorkOnItsTasks
 {
-    public static bool Allows(ProjectTask task, Caller caller) => ProjectMembers.Allows(task.ProjectId);
+    public static bool Allows(ProjectTask task, ICurrentUser user) => ProjectMembers.Allows(task.ProjectId);
 }
 ```
 
@@ -1346,9 +1351,9 @@ entity's own entities in the same way, as deep as the model goes:
 [AccessFunction<Ticket>("desk.reacted_to_comment")]
 public static partial class ReactedToComment
 {
-    public static bool Allows(Ticket ticket, Caller caller, string text)
+    public static bool Allows(Ticket ticket, ICurrentUser user, string text)
         => ticket.IsPublic || ticket.Comments.Any(comment => comment.Text == text
-            && comment.Reactions.Any(reaction => reaction.User == caller.UserId));
+            && comment.Reactions.Any(reaction => reaction.User == user.Id));
 }
 ```
 
@@ -1358,7 +1363,7 @@ public static partial class ReactedToComment
   `ticket.Comments.Any(...)`. That is DDD00039. Put the two side by side instead, joined with `&&` or `||`.
 - A row rule reads no collection at all, including an entity's entities. It calls an access function (DDD00041).
 
-**More parameters.** `Allows` may take more parameters after the caller: a `string`, `bool`, `int`, `long`, `Guid`
+**More parameters.** `Allows` may take more parameters after the user: a `string`, `bool`, `int`, `long`, `Guid`
 or an id. Each one becomes a parameter of the SQL function, after the aggregate's id. The generator also adds them to
 the `Allows` overload that takes the id, and a rule passes them along:
 
@@ -1366,11 +1371,11 @@ the `Allows` overload that takes the id, and a rule passes them along:
 [AccessFunction<Project>("projects.has_role")]
 public static partial class ProjectRoles
 {
-    public static bool Allows(Project project, Caller caller, string role)
-        => project.Members.Any(member => member.UserId == caller.UserId && member.Role == role);
+    public static bool Allows(Project project, ICurrentUser user, string role)
+        => project.Members.Any(member => member.UserId == user.Id && member.Role == role);
 }
 
-// ProjectRoles.Allows(project, caller, "lead") and ProjectRoles.Allows(task.ProjectId, "lead") both become
+// ProjectRoles.Allows(project, user, "lead") and ProjectRoles.Allows(task.ProjectId, "lead") both become
 // projects.has_role("Id", 'lead') and projects.has_role("ProjectId", 'lead') in their policies
 ```
 
@@ -1388,14 +1393,14 @@ of ids it allows. Postgres then finds those rows through the index on the id. A 
 [AccessFunction<Ticket>("tickets_i_watch", Shape = AccessFunctionShape.Set)]
 public static partial class TicketsIWatch
 {
-    public static bool Allows(Ticket ticket, Caller caller)
-        => ticket.Watchers.Any(watcher => watcher.User == caller.UserId);
+    public static bool Allows(Ticket ticket, ICurrentUser user)
+        => ticket.Watchers.Any(watcher => watcher.User == user.Id);
 }
 
 [RowAccess<Ticket>(RowOperations.Read)]
 public static partial class WatchersReadTheTicketsTheyWatch
 {
-    public static bool Allows(Ticket ticket, Caller caller) => TicketsIWatch.Ids().Contains(ticket.Id);
+    public static bool Allows(Ticket ticket, ICurrentUser user) => TicketsIWatch.Ids().Contains(ticket.Id);
 }
 ```
 
@@ -1454,8 +1459,8 @@ So the tickets' table is still never read:
 [AccessFunction<Ticket>("desk.tickets_i_reacted_in", Shape = AccessFunctionShape.Set)]
 public static partial class TicketsIReactedIn
 {
-    public static bool Allows(Ticket ticket, Caller caller)
-        => ticket.Comments.Any(comment => comment.Reactions.Any(reaction => reaction.User == caller.UserId));
+    public static bool Allows(Ticket ticket, ICurrentUser user)
+        => ticket.Comments.Any(comment => comment.Reactions.Any(reaction => reaction.User == user.Id));
 }
 ```
 
@@ -1765,14 +1770,14 @@ public static partial class ProjectsWhereIHold;
 [RowAccess<Project>(RowOperations.Read, To = [RowAccessRoles.User])]
 public static partial class SeatsSeeTheProjectsTheyReach
 {
-    public static bool Allows(Project project, Caller caller) => ProjectsISee.Ids().Contains(project.Id);
+    public static bool Allows(Project project, ICurrentUser user) => ProjectsISee.Ids().Contains(project.Id);
 }
 
 // Inspections.Infrastructure: another module's rule calls the same contract, with the project id it stores
 [RowAccess<Inspection>(RowOperations.Create, To = [RowAccessRoles.User])]
 public static partial class SeatsRecordWhereTheyMay
 {
-    public static bool Allows(Inspection inspection, Caller caller)
+    public static bool Allows(Inspection inspection, ICurrentUser user)
         => ProjectsWhereIHold.Ids(InspectionPermissionNames.Record).Contains(inspection.ProjectId)
             && inspection.RecordedBy == TenancyRowAccess.CallerSeatId<SeatId>();
 }
@@ -1818,7 +1823,7 @@ bypass the access check before the handler.
 [RowAccess<Project>(RowOperations.Change, To = [RowAccessRoles.User], Columns = [nameof(Project.State)])]
 public static partial class StateChangesWithTheClosePermission
 {
-    public static bool Allows(Project project, Caller caller) => ProjectsWhereIHold.Ids(ProjectPermissionNames.Close).Contains(project.Id);
+    public static bool Allows(Project project, ICurrentUser user) => ProjectsWhereIHold.Ids(ProjectPermissionNames.Close).Contains(project.Id);
 }
 ```
 
@@ -1867,7 +1872,7 @@ a stricter permission:
 [RowAccess<Project>(RowOperations.Change, To = [RowAccessRoles.User])]
 public static partial class SeatsChangeTheProjectsTheyWorkOn
 {
-    public static bool Allows(Project project, Caller caller)
+    public static bool Allows(Project project, ICurrentUser user)
         => ProjectsWhereIHold.Ids(ProjectPermissionNames.Edit).Contains(project.Id)
             || ProjectsWhereIHold.Ids(ProjectPermissionNames.Close).Contains(project.Id)
             || ProjectsWhereIHold.Ids(ProjectPermissionNames.ManageCrew).Contains(project.Id)
@@ -1878,13 +1883,13 @@ public static partial class SeatsChangeTheProjectsTheyWorkOn
 [RowAccess<Project>(RowOperations.Change, To = [RowAccessRoles.User], Columns = [nameof(Project.Name), nameof(Project.Planned)])]
 public static partial class NameAndPlanChangeWithTheEditPermission
 {
-    public static bool Allows(Project project, Caller caller) => ProjectsWhereIHold.Ids(ProjectPermissionNames.Edit).Contains(project.Id);
+    public static bool Allows(Project project, ICurrentUser user) => ProjectsWhereIHold.Ids(ProjectPermissionNames.Edit).Contains(project.Id);
 }
 
 [RowAccess<Project>(RowOperations.Change, To = [RowAccessRoles.User], Columns = [nameof(Project.State)])]
 public static partial class StateChangesWithTheClosePermission
 {
-    public static bool Allows(Project project, Caller caller) => ProjectsWhereIHold.Ids(ProjectPermissionNames.Close).Contains(project.Id);
+    public static bool Allows(Project project, ICurrentUser user) => ProjectsWhereIHold.Ids(ProjectPermissionNames.Close).Contains(project.Id);
 }
 ```
 
@@ -1982,7 +1987,7 @@ decide whether to hold it. Hold it to the permission that your command for chang
 [RowAccess<Seat>(RowOperations.Change, To = [RowAccessRoles.User], Columns = [nameof(Seat.JobTitle)])]
 public static partial class JobTitlesChangeWithTheSeatsPermission
 {
-    public static bool Allows(Seat seat, Caller caller) => TenancyRowAccess.HoldsAtTenant(TenancyPermissions.SeatsManage);
+    public static bool Allows(Seat seat, ICurrentUser user) => TenancyRowAccess.HoldsAtTenant(TenancyPermissions.SeatsManage);
 }
 ```
 
@@ -2700,7 +2705,7 @@ grant anon, authenticated, ddd_system_in to app;
 alter role app with login password '...';
 ```
 
-The system caller used to run as the login role. It now gets a separate role for the one thing it still does, the
+System work used to run as the login role. It now gets a separate role for the one thing it still does, the
 toolkit's bookkeeping. The bookkeeping reads, marks and deletes outbox rows, cleans the inbox, and reads which
 migrations ran:
 
@@ -2737,13 +2742,13 @@ procedure that sets the settings: `grant usage on schema ddd to app;` and
 two grants.
 
 System work that reads a module's tables now fails with `permission denied`. This is intended. Such work runs as a
-[scoped system caller](#the-scoped-system-role) instead, inside the policies. Where the bookkeeping role itself must
+[scoped system work](#the-scoped-system-role) instead, inside the policies. Where the bookkeeping role itself must
 reach a table, write the rule for `RowAccessRoles.System`, which is `@system`. The role then gets the policy, and with
 `WriteGrants` the privilege. A script that names `@system` while no bookkeeping role is configured is refused. The
 message names `@system` and says how to configure the role.
 
 > [!NOTE]
-> A host whose system caller runs as a role that bypasses RLS, such as Supabase's `service_role`, has no bookkeeping
+> A host whose system work runs as a role that bypasses RLS, such as Supabase's `service_role`, has no bookkeeping
 > role. Its scripts stay the same as long as they write no privileges and no rule is for `RowAccessRoles.System`. This
 > also holds where a rule or a grant spells that role's name out. With `WriteGrants`, write the scripts with
 > `RowAccessRoleNames.From(options) with { System = null }`, because a role that bypasses the policies is refused as
@@ -2799,7 +2804,7 @@ PostgresRowAccessChecks.EnsureRowLevelSecurityWired(context);
   for a role that does not exist. So an application without the role does no scoped system work, and starts.
 - In `Transaction` scope, it also checks that the login role may call `ddd.use_caller`.
 - It runs as the login role itself, on the context's connection opened past the interceptor, because the system
-  caller's role is one of the roles it checks. So it must run before every check that runs as the system caller,
+  role is one of the roles it checks. So it must run before every check that runs as system work,
   including `EnsureSupabaseMigrationsAppliedAsync`. The runner runs it in a separate stage, before those checks.
 - It throws with a message that names the login role, and each role that the login role may not switch to or that
   does not exist, with the `GRANT` that fixes it. The message also names the `SupabaseRowAccessRoles` pair that maps
@@ -2824,7 +2829,7 @@ More about the ownership check:
   role that owns the tables holds nothing itself, and still reaches everything.
 - A login role that owns the database is `pg_database_owner`, which owns the schema `public`. Where the context's
   tables are in `public`, the check names this in the same way. The fix is another owner for the database.
-- The check does not ask whether the system caller's role bypasses RLS. A host that names a bypassing `SystemRole`,
+- The check does not ask whether the system role bypasses RLS. A host that names a bypassing `SystemRole`,
   such as Supabase's `service_role`, chose that.
 - The exception names the login role and every finding, each with the statement that fixes it.
 - A login role that owns a schema there created that schema, so it is the role that the migrations run as. The check

@@ -146,7 +146,7 @@ public abstract class InvitationStoreTests(TestDatabases databases) : IAsyncLife
 
         DbContext? acceptors = null;
         await using (var scope = _services.Scope())
-        using (Callers.Begin(Caller.User(Wren)))
+        using (TestUser.BeginAs(Wren))
         using (TenancyCallers.BeginNone())
         {
             acceptors = scope.ServiceProvider.TenancyContext();
@@ -159,7 +159,7 @@ public abstract class InvitationStoreTests(TestDatabases databases) : IAsyncLife
         lookup.Text.Should().Contain("\"InvitationDigests\"").And.Contain("\"Digest\" =");
         lookup.Text.Should().NotContain("\"Address\"").And.NotContain("\"Digest\",", "it selects the tenant, the invitation and its issuer, and nothing else");
         lookup.Context.Should().NotBeNull().And.NotBeSameAs(acceptors, "it runs on a context of its own");
-        lookup.Caller.Should().BeSameAs(Caller.System, "as the application itself, where nothing but the save keeps tenants apart");
+        lookup.Caller.Should().BeSameAs(CurrentUserSnapshot.System, "as the application itself, where nothing but the save keeps tenants apart");
         lookup.TenancyCaller.Should().BeNull();
         lookup.Writes.Should().BeFalse();
 
@@ -214,7 +214,7 @@ public abstract class InvitationStoreTests(TestDatabases databases) : IAsyncLife
 
         // Wren's acceptance has decided, and is about to save, when somebody else's commits.
         await using (var scope = _services.Scope())
-        using (Callers.Begin(Caller.User(Wren)))
+        using (TestUser.BeginAs(Wren))
         using (TenancyCallers.BeginNone())
         {
             _services.Hook.BeforeSave(scope.ServiceProvider.TenancyContext(), () => _services.AcceptAsync(other, issued.Token, displayName: "Lark"));

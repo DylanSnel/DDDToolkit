@@ -1,3 +1,5 @@
+using DDDToolkit.Abstractions.Access;
+
 namespace DDDToolkit.Supporting.Membership.EntityFramework.Tests;
 
 /// <summary>
@@ -29,7 +31,7 @@ public sealed class MemberHoldUntilTests
         }
 
         // The application's own work.
-        var system = await filing.DocumentsAsync(Caller.System, access => access.HoldAsync(data.Minutes, DocumentPermissions.Share, Cancellation));
+        var system = await filing.DocumentsAsync(CurrentUserSnapshot.System, access => access.HoldAsync(data.Minutes, DocumentPermissions.Share, Cancellation));
         (system!.Via, system.Until).Should().Be((MemberVia.System, null));
     }
 

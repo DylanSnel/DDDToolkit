@@ -70,7 +70,7 @@ public sealed class MemberAccessCheckTests
     public void A_check_decides_the_requirements_of_its_own_resource_and_no_other()
     {
         var documents = DocumentCheck(new StubAccess<Document, DocumentId>(DocumentMembership.Rules), new());
-        var folders = new MemberAccessCheck<Folder, FolderId>(new StubAccess<Folder, FolderId>(FolderMembership.Rules), new(), new AmbientCallerAccessor());
+        var folders = new MemberAccessCheck<Folder, FolderId>(new StubAccess<Folder, FolderId>(FolderMembership.Rules), new(), new CurrentUser());
 
         documents.Decides(MemberAccess.On(DocumentPermissions.Share, Minutes)).Should().BeTrue();
         documents.Decides(MemberAccess.SeenWith<DocumentId>(DocumentPermissions.View)).Should().BeTrue();
@@ -191,7 +191,7 @@ public sealed class MemberAccessCheckTests
         var query = new ListDocuments();
 
         RefusalException refused;
-        using (Callers.Begin(Caller.Anonymous))
+        using (TestUser.BeginAs(CurrentUserSnapshot.Anonymous))
         {
             refused = await Refused.WithCodeAsync(DocumentRefusals.Membership, MembershipRefusals.NotPermitted, () => DocumentCheck(access, new()).RequireAsync(((IRequireAccess)query).RequiredAccess, query, Cancellation).AsTask());
         }
@@ -200,14 +200,14 @@ public sealed class MemberAccessCheckTests
         access.Asked.Should().Equal(["caller"], "the caller's own refusal comes first, and nothing is read");
 
         // A signed-in caller who reaches nothing is let through: its empty list is an answer.
-        using (Callers.Begin(Caller.User(Guid.NewGuid())))
+        using (TestUser.BeginAs(CurrentUserSnapshot.User(Guid.NewGuid())))
         {
             await DocumentCheck(new StubAccess<Document, DocumentId>(DocumentMembership.Rules), new()).RequireAsync(((IRequireAccess)query).RequiredAccess, query, Cancellation);
         }
 
         // And the caller's own refusal, where the questions have one, is what a caller who is nobody hears first.
         var nobody = new RefusalException("host.not-signed-in", RefusalKind.NotPermitted, "Sign in first.");
-        using (Callers.Begin(Caller.Anonymous))
+        using (TestUser.BeginAs(CurrentUserSnapshot.Anonymous))
         {
             (await FluentActions.Awaiting(() => DocumentCheck(new StubAccess<Document, DocumentId>(DocumentMembership.Rules) { Nobody = nobody }, new()).RequireAsync(((IRequireAccess)query).RequiredAccess, query, Cancellation).AsTask())
                 .Should().ThrowAsync<RefusalException>()).Which.Should().BeSameAs(nobody);
@@ -238,7 +238,7 @@ public sealed class MemberAccessCheckTests
         await using var provider = new ServiceCollection()
             .AddSingleton<MembershipAccessManager<Document>>(documents)
             .AddSingleton<MembershipAccessManager<Folder>>(folders)
-            .AddSingleton<ICallerAccessor, AmbientCallerAccessor>()
+            .AddSingleton<ICurrentUser, CurrentUser>()
             .AddAccessCheck<IFilingRequest, MemberAccessCheck<Document, DocumentId>>()
             .AddAccessCheck<IFilingRequest, MemberAccessCheck<Folder, FolderId>>()
             .BuildServiceProvider(validateScopes: true);
@@ -274,7 +274,7 @@ public sealed class MemberAccessCheckTests
     {
         await using var provider = new ServiceCollection()
             .AddSingleton<MembershipAccessManager<Document>>(new StubAccess<Document, DocumentId>(DocumentMembership.Rules))
-            .AddSingleton<ICallerAccessor, AmbientCallerAccessor>()
+            .AddSingleton<ICurrentUser, CurrentUser>()
             .AddAccessCheck<IFilingRequest, MemberAccessCheck<Document, DocumentId>>()
             .BuildServiceProvider(validateScopes: true);
         await using var scope = provider.CreateAsyncScope();
@@ -286,7 +286,7 @@ public sealed class MemberAccessCheckTests
             .WithMessage("*FileInFolder declares 'MemberAccess<FolderId>.On'*register the check that decides it with services.Add{Resource}MemberAccess<IFilingRequest>(), written for the resource whose id the case names.");
     }
 
-    private static MemberAccessCheck<Document, DocumentId> DocumentCheck(MembershipAccessManager<Document> access, Checked<MemberHold<DocumentId>> kept) => new(access, kept, new AmbientCallerAccessor());
+    private static MemberAccessCheck<Document, DocumentId> DocumentCheck(MembershipAccessManager<Document> access, Checked<MemberHold<DocumentId>> kept) => new(access, kept, new CurrentUser());
 
     /// <summary>A requirement of somebody else's.</summary>
     private sealed record SomethingElse : AccessRequirement;

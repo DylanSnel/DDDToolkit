@@ -4,8 +4,8 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 
 /// <summary>
 /// The Tenancy caller of the current flow of work, which every manager, access question and tenant filter
-/// reads. It is kept apart from the toolkit's own <c>Callers</c>: that one says which person or which system
-/// is calling, this one which seat in which tenant, and a system caller there is never a system caller here.
+/// reads. It is kept apart from the toolkit's current user, <c>ICurrentUser</c>: that one says which person or which system
+/// is calling, this one which seat in which tenant, and system work there is never system work here.
 /// <para>
 /// It is stored without its id types, so a query filter that only compares the tenant can read it without
 /// knowing the application's classes. It follows the flow the way an <see cref="AsyncLocal{T}"/> does: into

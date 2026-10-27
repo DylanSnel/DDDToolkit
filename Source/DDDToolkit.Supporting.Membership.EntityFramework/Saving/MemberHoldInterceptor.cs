@@ -27,7 +27,7 @@ namespace DDDToolkit.Supporting.Membership.EntityFramework;
 /// <list type="table">
 /// <listheader><term>The save changes a resource</term><description>What happens</description></listheader>
 /// <item><term>that the request in hand was checked on</term><description>It is saved only at the version the check read: one changed since is a <see cref="ConcurrencyConflictException"/>, a lost race. The save compares that version, as it compares every version.</description></item>
-/// <item><term>with no hold for it, as the application's own work</term><description>Saved: system work that trusted code began, <c>Callers.Begin(Caller.System)</c> or a scope the resource's rules name, needs no check.</description></item>
+/// <item><term>with no hold for it, as the application's own work</term><description>Saved: system work that trusted code began, <c>user.BeginSystem()</c> or a scope the resource's rules name, needs no check.</description></item>
 /// <item><term>any other way</term><description>Refused with an <see cref="InvalidOperationException"/>, and nothing is saved: a handler called directly, a transport that runs it around the checks, a save that runs after the request's handling returned, or a handler that changes another resource than its request names.</description></item>
 /// </list>
 /// A new resource needs no hold: nothing was there to check. A request's handler that saves the same resource
@@ -57,7 +57,7 @@ internal sealed class MemberHoldInterceptor : SaveChangesInterceptor
     private const int MaxOwnershipDepth = 32;
 
     private readonly IReadOnlyList<HeldResource> _resources;
-    private readonly ICallerAccessor _callers;
+    private readonly ICurrentUser _user;
 
     /// <summary>Each loaded resource a successful save held to a hold, with that hold and the version the save left, for a later save of the same handling.</summary>
     private readonly ConditionalWeakTable<object, HeldSince> _held = new();
@@ -67,11 +67,11 @@ internal sealed class MemberHoldInterceptor : SaveChangesInterceptor
 
     /// <summary>The interceptor over every resource with members registered with the application.</summary>
     /// <param name="registrations">The resources, as their registrations added them.</param>
-    /// <param name="callers">Who is calling, for the application's own work.</param>
-    internal MemberHoldInterceptor(IEnumerable<MembershipRegistration> registrations, ICallerAccessor callers)
+    /// <param name="user">Who is calling, for system work.</param>
+    internal MemberHoldInterceptor(IEnumerable<MembershipRegistration> registrations, ICurrentUser user)
     {
         _resources = [.. registrations.Select(HeldResource.For)];
-        _callers = callers;
+        _user = user;
     }
 
     /// <inheritdoc />
@@ -225,12 +225,12 @@ internal sealed class MemberHoldInterceptor : SaveChangesInterceptor
     }
 
     /// <summary>
-    /// Whether the save is the application's own work on the resource: the host answers it, and trusted code
-    /// began it for this flow, with <c>Callers.Begin</c> or a supporting domain's own way. A flow nobody began a
-    /// caller for is not, even where the host answers the system for it.
+    /// Whether the save is system work on the resource: the current user answers it, and trusted code began it for
+    /// this flow, with <see cref="ICurrentUser.BeginSystem"/> or a supporting domain's own way. A flow that began no
+    /// user is not, even where the host answers system work for it.
     /// </summary>
     private bool IsOwnWork(MembershipRules rules)
-        => rules.IsOwnWork(_callers.Current) && Callers.Ambient?.Kind is CallerKind.System or CallerKind.SystemIn;
+        => _user.IsBegun && rules.IsOwnWork(_user.Snapshot);
 
     /// <summary>What a change no check read is refused with: which resource, and why there was no hold for it.</summary>
     private static string Refusal(HeldResource resource, object entity)
@@ -239,7 +239,7 @@ internal sealed class MemberHoldInterceptor : SaveChangesInterceptor
         var what = $"{name} {resource.IdOf(entity)}";
         var how =
             $"Under UseMemberHolds a resource with members is saved for the request whose access check read it (MemberAccess.On(permission, {name.ToLowerInvariant()})), "
-            + "or as the application's own work that trusted code began (Callers.Begin(Caller.System)). Nothing was saved.";
+            + "or as system work that trusted code began (ICurrentUser.BeginSystem()). Nothing was saved.";
 
         return RequestInHand.Current is not { } inHand
             ? $"{what} was changed with no request in hand: no request's access checks let one through in the flow of work this save runs in. "

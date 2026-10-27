@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Exceptions;
 
 namespace DDDToolkit.Supporting.Membership.EntityFramework.Tests;
@@ -175,7 +176,7 @@ public sealed class RolesACustomerMakesTests
         var paddock = GardenId.CreateSequential();
 
         // A garden that is new has no role. The host asks for its first ones, saying which garden it means.
-        var made = await garden.Services.AsAsync(Caller.System, provider => provider.GetRequiredService<GardenRoles>().MakeFirstAsync(paddock, Cancellation));
+        var made = await garden.Services.AsAsync(CurrentUserSnapshot.System, provider => provider.GetRequiredService<GardenRoles>().MakeFirstAsync(paddock, Cancellation));
 
         made.Select(role => (role.Name, role.MadeFrom, role.GardenId, role.Status)).Should().Equal(
             [(PlotMembership.Tender, PlotMembership.Tender, paddock, CustomRoleStatus.Active), (PlotMembership.Waterer, PlotMembership.Waterer, paddock, CustomRoleStatus.Active)],
@@ -184,20 +185,20 @@ public sealed class RolesACustomerMakesTests
         made[1].Permissions.Should().Equal(PlotPermissions.See, PlotPermissions.Water);
 
         // Asked again, nothing is made: each starter role is there already.
-        (await garden.Services.AsAsync(Caller.System, provider => provider.GetRequiredService<GardenRoles>().MakeFirstAsync(paddock, Cancellation))).Should().BeEmpty();
+        (await garden.Services.AsAsync(CurrentUserSnapshot.System, provider => provider.GetRequiredService<GardenRoles>().MakeFirstAsync(paddock, Cancellation))).Should().BeEmpty();
 
         // A starter role is known by what it was made from, not by what it is called or whether it is in use:
         // renamed and put away, it is still not made a second time.
         await garden.Services.ChangeAsync(made[0].Id, role => role.CallIt("Grower", "Sows and waters."));
         await garden.Services.ChangeAsync(made[1].Id, role => role.PutAway());
-        (await garden.Services.AsAsync(Caller.System, provider => provider.GetRequiredService<GardenRoles>().MakeFirstAsync(paddock, Cancellation))).Should().BeEmpty();
+        (await garden.Services.AsAsync(CurrentUserSnapshot.System, provider => provider.GetRequiredService<GardenRoles>().MakeFirstAsync(paddock, Cancellation))).Should().BeEmpty();
 
         // Whichever garden the request that asks is in: the host said which garden it means.
         (await garden.Services.InAsync(data.Orchard, provider => provider.GetRequiredService<GardenRoles>().MakeFirstAsync(paddock, Cancellation))).Should().BeEmpty();
         (await garden.Services.InAsync(paddock, provider => provider.GetRequiredService<GardenContext>().PlotRoles.CountAsync(Cancellation))).Should().Be(2);
 
         // The meadow and the orchard had theirs already, and each keeps its own.
-        (await garden.Services.AsAsync(Caller.System, provider => provider.GetRequiredService<GardenRoles>().MakeFirstAsync(data.Meadow, Cancellation))).Should().BeEmpty();
+        (await garden.Services.AsAsync(CurrentUserSnapshot.System, provider => provider.GetRequiredService<GardenRoles>().MakeFirstAsync(data.Meadow, Cancellation))).Should().BeEmpty();
         (await garden.Services.InAsync(data.Meadow, provider => provider.GetRequiredService<GardenContext>().PlotRoles.CountAsync(Cancellation))).Should().Be(5);
         (await garden.Services.InAsync(data.Orchard, provider => provider.GetRequiredService<GardenContext>().PlotRoles.CountAsync(Cancellation))).Should().Be(3);
 
@@ -245,7 +246,7 @@ public sealed class RolesACustomerMakesTests
 
         // What a starter role was made from tells it apart from the roles a garden made, so that is fixed once its
         // row is there: the model says so for both role classes, as it says it of a permission.
-        var behaviors = await garden.Services.AsAsync(Caller.System, provider =>
+        var behaviors = await garden.Services.AsAsync(CurrentUserSnapshot.System, provider =>
         {
             var model = provider.GetRequiredService<GardenContext>().Model;
             return Task.FromResult(new[] { typeof(PlotRole), typeof(ShedRole) }
@@ -389,7 +390,7 @@ public sealed class RolesACustomerMakesTests
 
         // What the admission asks about the roles is read on a context of the factory's, under the host's rule
         // all the same: the garden a request is in is not kept in a context.
-        using (Callers.Begin(Caller.System))
+        using (TestUser.BeginSystem())
         using (GardenOfTheRequest.Begin(data.Meadow))
         {
             await using var scope = provider.CreateAsyncScope();
@@ -402,7 +403,7 @@ public sealed class RolesACustomerMakesTests
         }
 
         // And so is what a gardener holds through a role.
-        using (Callers.Begin(data.Eve.Caller))
+        using (TestUser.BeginAs(data.Eve.Caller))
         using (GardenOfTheRequest.Begin(data.Meadow))
         {
             await using var scope = provider.CreateAsyncScope();
@@ -438,7 +439,7 @@ public sealed class RolesACustomerMakesTests
             await seeding.SaveChangesAsync(Cancellation);
         }
 
-        using (Callers.Begin(data.Di.Caller))
+        using (TestUser.BeginAs(data.Di.Caller))
         {
             await using var scope = provider.CreateAsyncScope();
             scope.ServiceProvider.GetRequiredService<GardenContext>().GardenOfThisRequest = data.Meadow;
@@ -457,7 +458,7 @@ public sealed class RolesACustomerMakesTests
         }
 
         // A role of the meadow's gives what it holds, read the same way.
-        using (Callers.Begin(data.Eve.Caller))
+        using (TestUser.BeginAs(data.Eve.Caller))
         {
             await using var scope = provider.CreateAsyncScope();
             scope.ServiceProvider.GetRequiredService<GardenContext>().GardenOfThisRequest = data.Meadow;
@@ -591,7 +592,7 @@ public sealed class RolesACustomerMakesTests
 
         // Somebody who did not sign in is nobody's gardener: nothing is read for it.
         commands.Reset();
-        (await garden.Services.AsAsync(Caller.Anonymous, provider => provider.GetRequiredService<MembershipAccessManager<Plot>>().HoldAsync(data.Beans, PlotPermissions.Water, Cancellation))).Should().BeNull();
+        (await garden.Services.AsAsync(CurrentUserSnapshot.Anonymous, provider => provider.GetRequiredService<MembershipAccessManager<Plot>>().HoldAsync(data.Beans, PlotPermissions.Water, Cancellation))).Should().BeNull();
         commands.Count.Should().Be(0);
     }
 
@@ -660,7 +661,7 @@ public sealed class RolesACustomerMakesTests
         var sheds = data.Sheds.Select(shed => shed.Id).ToArray();
 
         // Each resource's roles are found by the resource its role class names, in the one model.
-        await garden.Services.AsAsync(Caller.System, provider =>
+        await garden.Services.AsAsync(CurrentUserSnapshot.System, provider =>
         {
             var model = provider.GetRequiredService<GardenContext>().Model;
             MembershipModel.MembersOf(model.FindEntityType(typeof(Plot))!)!.RoleClass!.ClrType.Should().Be(typeof(PlotRole));
@@ -702,7 +703,7 @@ public sealed class RolesACustomerMakesTests
 
         // One set of roles for the whole application: a role is found in any garden and in none, with no rule of
         // the host's about whose roles a request reads, and the starter role is made once.
-        (await garden.Services.AsAsync(Caller.System, provider => provider.GetRequiredService<IMemberRoles<ShedId, ShedRoleId>>().ExistsAsync(data.ShedKeeper.Id, Cancellation).AsTask())).Should().BeTrue();
+        (await garden.Services.AsAsync(CurrentUserSnapshot.System, provider => provider.GetRequiredService<IMemberRoles<ShedId, ShedRoleId>>().ExistsAsync(data.ShedKeeper.Id, Cancellation).AsTask())).Should().BeTrue();
         (await garden.Services.InAsync(data.Orchard, provider => provider.GetRequiredService<IMemberRoles<ShedId, ShedRoleId>>().ExistsAsync(data.ShedKeeper.Id, Cancellation).AsTask())).Should().BeTrue();
         StarterRoles.Missing(ShedMembership.Rules, data.ShedRoles).Should().BeEmpty();
         var starter = StarterRoles.Missing<ShedRoleId>(ShedMembership.Rules, []).Should().ContainSingle().Which;
@@ -744,7 +745,7 @@ public sealed class RolesACustomerMakesTests
         services.AddMembership<PlotGardener, PlotGardenerId, UserId, PlotRoleId, GardensWithWardens, Plot, PlotId, Wardens>(rules);
         await using var provider = services.BuildServiceProvider();
 
-        using (Callers.Begin(Caller.System))
+        using (TestUser.BeginSystem())
         {
             await using var seeding = provider.CreateAsyncScope();
             var context = seeding.ServiceProvider.GetRequiredService<GardensWithWardens>();
@@ -762,7 +763,7 @@ public sealed class RolesACustomerMakesTests
 
         async Task<MemberHold<PlotId>?> HoldAsync(UserId user, PlotId plot, string permission)
         {
-            using (Callers.Begin(TestCallers.User(user)))
+            using (TestUser.BeginAs(TestCallers.User(user)))
             {
                 await using var scope = provider.CreateAsyncScope();
                 commands.Reset();
@@ -819,11 +820,11 @@ public sealed class RolesACustomerMakesTests
     /// </summary>
     private sealed class Wardens(UserId letGo) : ICallerMember<PlotId, UserId>, IPlacesReached<PlotId, GardenId>
     {
-        public UserId? Find(Caller caller) => caller.UserId is { } user && user != letGo.Value ? new UserId(user) : null;
+        public UserId? Find(CurrentUserSnapshot caller) => caller.Id is { } user && user != letGo.Value ? new UserId(user) : null;
 
-        public IQueryable<GardenId> PlacesReached(DbContext context, Caller caller, string permission)
+        public IQueryable<GardenId> PlacesReached(DbContext context, CurrentUserSnapshot caller, string permission)
         {
-            var user = caller.UserId;
+            var user = caller.Id;
             var counted = user is not null && user != letGo.Value;
             return context.Set<GardenPermission>().Where(held => counted && held.UserId == user && held.Permission == permission).Select(held => held.GardenId);
         }

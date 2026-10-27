@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Exceptions;
 using Microsoft.Data.Sqlite;
 
@@ -40,7 +41,7 @@ public sealed class MembersThroughTheDatabaseTests
         using var filing = await SqliteFiling.SeededAsync();
         var data = filing.Scenario;
 
-        await filing.Services.AsAsync(Caller.System, async provider =>
+        await filing.Services.AsAsync(CurrentUserSnapshot.System, async provider =>
         {
             var context = provider.GetRequiredService<FilingContext>();
             var cabinet = await context.Folders.SingleAsync(folder => folder.Id == data.Cabinet, Cancellation);

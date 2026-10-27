@@ -53,7 +53,7 @@ public static class Outboxes
 
     private static async Task<IReadOnlyDictionary<string, IReadOnlyList<OutboxMessage>>> ReadAsync(SampleFactory host, CancellationToken cancellationToken)
     {
-        using (Callers.Begin(Caller.System))
+        using (TestUser.BeginSystem())
         {
             await using var scope = host.Services.CreateAsyncScope();
             return new Dictionary<string, IReadOnlyList<OutboxMessage>>(StringComparer.Ordinal)

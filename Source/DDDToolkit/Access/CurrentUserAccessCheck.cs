@@ -15,7 +15,7 @@ namespace DDDToolkit.Access;
 /// cases mean the same in every module, and no check of a module that says yes to more than it should can take
 /// them over. A set made by hand, in a test, is given it the same way:
 /// <code>
-/// var checks = new AccessChecks&lt;IBillingRequest&gt;([new CallerAccessCheck(callers), new BillingAccessCheck(...)]);
+/// var checks = new AccessChecks&lt;IBillingRequest&gt;([new CurrentUserAccessCheck(user), new BillingAccessCheck(...)]);
 /// </code>
 /// <para>
 /// What the caller's own value of a type is, the <see cref="ICallersOwn{TValue}"/> registered for the type says, found
@@ -32,29 +32,28 @@ namespace DDDToolkit.Access;
 /// that is somebody else's, or nobody's, <see cref="ToolkitRefusals.NotOwn"/>.
 /// </para>
 /// <para>
-/// The application's own work is no case of it. System work is a scope trusted code begins around the work,
-/// <c>Callers.Begin(Caller.System)</c> or a supporting domain's own way such as Tenancy's
-/// <c>access.BeginSystem()</c>, and a request it sends declares who may send it like any other: what only
-/// system work may do, a supporting domain's use case refuses everyone else, with
-/// <see cref="ToolkitRefusals.SystemOnly"/>. System work is nobody's sign-in, and has no value of its own, so it is
-/// refused here as any caller who did not sign in is.
+/// System work is no case of it. Trusted code begins system work around the work, with
+/// <c>user.BeginSystem()</c> or a supporting domain's way such as Tenancy's <c>access.BeginSystem()</c>. A request that
+/// system work sends declares who may send it like any other request. A supporting domain's use case that only system
+/// work may call refuses everyone else with <see cref="ToolkitRefusals.SystemOnly"/>. System work has no sign-in and no
+/// own value, so this check refuses it as it refuses a caller who did not sign in.
 /// </para>
 /// <para>
 /// It keeps nothing, and reads nothing of its own: the owner of an aggregate is the one thing read, and the storage
 /// reads it. A host that requires every flow of work to say who it runs as
-/// (<see cref="CallerOptions.RequireExplicitCallers"/>) gets <see cref="NoCallerException"/> from its accessor
-/// for work nobody began a caller for, and that is not caught here: such work is a mistake to fix, not a
-/// caller to refuse. The set of checks asks it who is calling before any check, so that holds for every request of
-/// the set, whatever it requires.
+/// (<see cref="CurrentUserOptions.RequireExplicitCurrentUser"/>) gets <see cref="NoCurrentUserException"/> from
+/// <see cref="ICurrentUser"/> for work that began no user. This check does not catch it, because such work is a
+/// mistake to fix. The set of checks asks who is calling before any check, so this holds for every request of the
+/// set, whatever it requires.
 /// </para>
 /// </remarks>
-/// <param name="callers">Who is calling, as the host says it.</param>
+/// <param name="user">Who is calling.</param>
 /// <param name="services">
 /// The services of the scope the check runs in, where an <see cref="ICallersOwn{TValue}"/> and an
 /// <see cref="IAggregateOwners{TId}"/> are registered; left out, only a <see cref="Guid"/> is said the caller's own of, and
 /// the owner of no aggregate is read.
 /// </param>
-public sealed class CallerAccessCheck(ICallerAccessor callers, IServiceProvider? services = null) : IAccessCheck
+public sealed class CurrentUserAccessCheck(ICurrentUser user, IServiceProvider? services = null) : IAccessCheck
 {
     /// <inheritdoc />
     public bool Decides(AccessRequirement requirement)
@@ -71,7 +70,7 @@ public sealed class CallerAccessCheck(ICallerAccessor callers, IServiceProvider?
     /// <exception cref="InvalidOperationException">
     /// The requirement is not one of this check's cases, or nothing says what the caller's own of an aggregate's owner is.
     /// </exception>
-    /// <exception cref="NoCallerException">Nobody is calling, and the host requires every flow of work to say who it runs as.</exception>
+    /// <exception cref="NoCurrentUserException">Nobody is calling, and the host requires every flow of work to say who it runs as.</exception>
     public ValueTask RequireAsync(AccessRequirement requirement, IRequireAccess request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(requirement);
@@ -84,7 +83,7 @@ public sealed class CallerAccessCheck(ICallerAccessor callers, IServiceProvider?
             try
             {
                 return aggregate.RequireAsync(
-                    callers.Current,
+                    user,
                     services ?? throw new InvalidOperationException(
                         $"{WrittenTypeNames.Of(request.GetType())} declares '{WrittenTypeNames.Of(requirement.GetType())}', and the core's check of who is calling was made without the scope's services, where what reads an aggregate's owner is registered. "
                         + "A requirement nothing checks lets nobody through."),
@@ -112,11 +111,11 @@ public sealed class CallerAccessCheck(ICallerAccessor callers, IServiceProvider?
     /// <summary>
     /// Asks the host who is calling, and nothing else: what <see cref="AccessChecks{TRequests}"/> does once before it
     /// asks any check, so that in a host that requires every flow of work to say who it runs as, work nobody began a
-    /// caller for fails with <see cref="NoCallerException"/> whatever its request requires, a case of a supporting
+    /// user for fails with <see cref="NoCurrentUserException"/> whatever its request requires, a case of a supporting
     /// domain's that asks that domain's own caller included.
     /// </summary>
-    /// <exception cref="NoCallerException">Nobody is calling, and the host requires every flow of work to say who it runs as.</exception>
-    internal void AskWhoIsCalling() => _ = callers.Current;
+    /// <exception cref="NoCurrentUserException">Nobody is calling, and the host requires every flow of work to say who it runs as.</exception>
+    internal void AskWhoIsCalling() => _ = user.Snapshot;
 
     /// <summary>Returns when the current caller is who <paramref name="requirement"/> lets through, and throws otherwise.</summary>
     private void Require(AccessRequirement requirement, IRequireAccess request)
@@ -124,7 +123,7 @@ public sealed class CallerAccessCheck(ICallerAccessor callers, IServiceProvider?
         switch (requirement)
         {
             case AccessRequirement.SignedInUser:
-                if (!callers.Current.IsSignedIn)
+                if (!user.IsAuthenticated)
                 {
                     throw ToolkitRefusals.Refuse(ToolkitRefusals.NotSignedIn);
                 }
@@ -133,7 +132,7 @@ public sealed class CallerAccessCheck(ICallerAccessor callers, IServiceProvider?
 
             case IOwnedRequirement owned:
                 // Compared at the door with what the caller has: the request names the value, and never says whose it is.
-                if (!owned.IsTheCallers(callers.Current, services))
+                if (!owned.IsTheCallers(user, services))
                 {
                     throw ToolkitRefusals.Refuse(ToolkitRefusals.NotOwn);
                 }

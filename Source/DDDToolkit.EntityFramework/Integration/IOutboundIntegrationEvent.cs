@@ -30,9 +30,9 @@ namespace DDDToolkit.EntityFramework.Integration;
 /// that says the message went out.
 /// </para>
 /// <para>
-/// <b>It is the outbox's own work.</b> Where the host requires explicit callers
-/// (<see cref="DDDToolkit.Access.CallerServiceCollectionExtensions.RequireExplicitCallers"/>), it runs inside the
-/// processor's <c>Caller.System</c>, which under row level security reads past every policy: read only rows
+/// <b>It is the outbox's own work.</b> Where the host requires an explicit current user
+/// (<see cref="DDDToolkit.Access.CurrentUserServiceCollectionExtensions.RequireExplicitCurrentUser"/>), it runs inside the
+/// processor's <c>CurrentUserSnapshot.System</c>, which under row level security reads past every policy: read only rows
 /// the event's own module may publish, such as the aggregate the event is about.
 /// </para>
 /// <para>

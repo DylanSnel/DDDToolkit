@@ -1,4 +1,4 @@
-using DDDToolkit.Access;
+using DDDToolkit.Abstractions.Access;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 
@@ -6,18 +6,20 @@ namespace Examples.Hosting;
 
 /// <summary>
 /// One factory over two context pools, one per data source of <see cref="PostgresPools"/>: a context rented while
-/// the toolkit's system caller is current comes from the background pool, every other from the requests pool.
+/// code began system work without a scope comes from the background pool, every other from the requests pool.
 /// Who is calling is read at each rental, never kept.
 /// </summary>
 /// <typeparam name="TContext">The context both pools hold.</typeparam>
 internal sealed class ContextsByPurpose<TContext> : IDbContextFactory<TContext>
     where TContext : DbContext
 {
+    private readonly ICurrentUser _user;
     private readonly PooledDbContextFactory<TContext> _requests;
     private readonly PooledDbContextFactory<TContext> _background;
 
-    public ContextsByPurpose(DbContextOptions<TContext> requests, DbContextOptions<TContext> background)
+    public ContextsByPurpose(ICurrentUser user, DbContextOptions<TContext> requests, DbContextOptions<TContext> background)
     {
+        _user = user;
         RequestOptions = requests;
         _requests = new PooledDbContextFactory<TContext>(requests);
         _background = new PooledDbContextFactory<TContext>(background);
@@ -27,5 +29,5 @@ internal sealed class ContextsByPurpose<TContext> : IDbContextFactory<TContext>
     public DbContextOptions<TContext> RequestOptions { get; }
 
     /// <inheritdoc />
-    public TContext CreateDbContext() => (Callers.Ambient?.IsSystem == true ? _background : _requests).CreateDbContext();
+    public TContext CreateDbContext() => (_user.IsBegun && _user.Kind == CurrentUserKind.System ? _background : _requests).CreateDbContext();
 }

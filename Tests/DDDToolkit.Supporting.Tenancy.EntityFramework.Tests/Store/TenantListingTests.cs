@@ -71,7 +71,7 @@ public abstract class TenantListingTests(TestDatabases databases) : IAsyncLifeti
 
         _services.Commands.Reset();
         await using (var scope = _services.Scope())
-        using (Callers.Begin(Caller.User(Guid.NewGuid())))
+        using (TestUser.BeginAs(CurrentUserSnapshot.User(Guid.NewGuid())))
         using (TenancyCallers.Begin(HostCaller.InSeat(harbor.Tenant, harbor.AdminSeat)))
         {
             await Refused.WithCodeAsync(TenancyRefusals.OperatorsOnly, () => scope.ServiceProvider.GetRequiredService<TenantManager>().ListAsync(null, 10, Cancellation));
@@ -89,7 +89,7 @@ public abstract class TenantListingTests(TestDatabases databases) : IAsyncLifeti
     private async Task<TenantManager.TenantPage> PageAsync(string? after, int size)
     {
         await using var scope = _services.Scope();
-        using (Callers.Begin(Caller.User(Odette, OperatorRole)))
+        using (TestUser.BeginAs(CurrentUserSnapshot.User(Odette, OperatorRole)))
         using (TenancyCallers.Begin(HostCaller.Nobody(TenancyRefusals.NotSeated)))
         {
             return await scope.ServiceProvider.GetRequiredService<TenantManager>().ListAsync(after, size, Cancellation);

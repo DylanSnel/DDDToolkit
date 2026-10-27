@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Access;
 using DDDToolkit.EntityFramework;
 using DDDToolkit.Exceptions;
@@ -18,12 +19,12 @@ namespace DDDToolkit.Supporting.Membership.TestHost.Documents;
 /// </summary>
 /// <param name="admission">What makes a share well formed: a member that is known, a role there is.</param>
 /// <param name="context">The host's context.</param>
-/// <param name="callers">Who is calling, for who shared.</param>
+/// <param name="user">Who is calling, for who shared.</param>
 /// <param name="clock">The clock a share starts by.</param>
 public sealed class ShareDocumentHandler(
     MemberAdmission<DocumentId, UserId, NamedRole> admission,
     FilingContext context,
-    ICallerAccessor callers,
+    ICurrentUser user,
     TimeProvider clock)
 {
     /// <summary>Shares the document of <paramref name="command"/>, which passed the host's checks.</summary>
@@ -48,7 +49,7 @@ public sealed class ShareDocumentHandler(
 
         var now = clock.GetUtcNow();
         var period = MemberPeriod.Between(now, command.Until);
-        UserId? by = callers.Current.UserId is { } user ? new UserId(user) : null;
+        UserId? by = user.Id is { } id ? new UserId(id) : null;
         if (command.Role is { } role)
         {
             document.ShareWith(command.With, role, period, now, by);

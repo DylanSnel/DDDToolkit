@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Access;
 using DDDToolkit.Supporting.Tenancy;
 using DDDToolkit.Supporting.Tenancy.Access;
@@ -49,7 +50,7 @@ public sealed class SeatGate(IEnumerable<string> openFields, IEnumerable<string>
     private static readonly FieldMiddlewareConfiguration OperatorsOnly = new(next => context =>
     {
         // What the token says, as the routes' policy and the modules' own checks ask it.
-        if (!SampleTokenRoles.IsOperator(Callers.Ambient))
+        if (!SampleTokenRoles.IsOperator(context.Services.GetRequiredService<ICurrentUser>()))
         {
             throw TenancyRefusals.Refuse(TenancyRefusals.OperatorsOnly);
         }

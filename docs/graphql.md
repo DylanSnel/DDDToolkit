@@ -1489,7 +1489,7 @@ The gateway calls a module's source schema in memory. That call carries less tha
   carry values from middleware to a resolver.
 - **Ambient values stay available.** The gateway awaits the call in the request's async flow. Values that the host's
   middleware made ambient before the gateway are therefore available in a resolver, in a lookup that the gateway
-  calls in another module, and in a data loader. Examples are the caller that `Callers.Begin` made current, and the
+  calls in another module, and in a data loader. Examples are the user that `ICurrentUser.BeginAs` made current, and the
   culture that request localization set. Such middleware runs in the pipeline before every endpoint, the gateway
   included.
 - **The fields of a query run in parallel.** With a scope per resolver, each field gets its own scoped services, and

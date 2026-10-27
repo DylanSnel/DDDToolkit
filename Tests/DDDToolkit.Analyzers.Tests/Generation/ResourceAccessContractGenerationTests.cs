@@ -61,7 +61,7 @@ public class ResourceAccessContractGenerationTests
             [RowAccess<Order>(RowOperations.Read)]
             public static partial class TheRule
             {
-                public static bool Allows(Order order, Caller caller) => OrdersISee.Ids().Contains(order.Id);
+                public static bool Allows(Order order, ICurrentUser user) => OrdersISee.Ids().Contains(order.Id);
             }
             """);
 
@@ -84,7 +84,7 @@ public class ResourceAccessContractGenerationTests
             {
                 public const string Edit = "orders.edit";
 
-                public static bool Allows(Order order, Caller caller) => OrdersWhereIHold.Ids(Edit).Contains(order.Id) || OrdersWhereIHold.Ids("orders.close").Contains(order.Id);
+                public static bool Allows(Order order, ICurrentUser user) => OrdersWhereIHold.Ids(Edit).Contains(order.Id) || OrdersWhereIHold.Ids("orders.close").Contains(order.Id);
             }
             """);
 
@@ -124,7 +124,7 @@ public class ResourceAccessContractGenerationTests
             [RowAccess<Clerk>(RowOperations.Read)]
             public static partial class TheRule
             {
-                public static bool Allows(Clerk clerk, Caller caller) => ClerksOnMyOrders.Ids().Contains(clerk.Id);
+                public static bool Allows(Clerk clerk, ICurrentUser user) => ClerksOnMyOrders.Ids().Contains(clerk.Id);
             }
             """);
 
@@ -195,7 +195,7 @@ public class ResourceAccessContractGenerationTests
             [RowAccess<Inspection>(RowOperations.Read | RowOperations.Create)]
             public static partial class TheRule
             {
-                public static bool Allows(Inspection inspection, Caller caller)
+                public static bool Allows(Inspection inspection, ICurrentUser user)
                     => ProjectsISee.Ids().Contains(inspection.ProjectId) && ProjectsWhereIHold.Ids("inspections.record").Contains(inspection.ProjectId);
             }
             """).WithReferencedAssembly(Contracts, "Projects.Contracts").RunCore();
@@ -322,7 +322,7 @@ public class ResourceAccessContractGenerationTests
             [RowAccess<Board>(RowOperations.Read)]
             public static partial class TheRule
             {
-                public static bool Allows(Board board, Caller caller) => BoardsISee.Ids().Contains(board.Id) || BoardsWhereIHold.Ids("boards.edit").Contains(board.Id);
+                public static bool Allows(Board board, ICurrentUser user) => BoardsISee.Ids().Contains(board.Id) || BoardsWhereIHold.Ids("boards.edit").Contains(board.Id);
             }
             """);
 
@@ -409,7 +409,7 @@ public class ResourceAccessContractGenerationTests
                 [RowAccess<Board>(RowOperations.Read)]
                 public static partial class TheRule
                 {
-                    public static bool Allows(Board board, Caller caller) => UnitsWhereIHold.Ids("boards.view").Contains(board.Unit);
+                    public static bool Allows(Board board, ICurrentUser user) => UnitsWhereIHold.Ids("boards.view").Contains(board.Unit);
                 }
                 """)
             .WithBuildProperty("RootNamespace", "Shop")
@@ -533,7 +533,7 @@ public class ResourceAccessContractGenerationTests
             [RowAccess<Order>(RowOperations.Read)]
             public static partial class TheRule
             {
-                public static bool Allows(Order order, Caller caller) => OrdersISee.Ids() != null;
+                public static bool Allows(Order order, ICurrentUser user) => OrdersISee.Ids() != null;
             }
             """).ShouldHaveDiagnostic("DDD00039", at: "OrdersISee.Ids()").GetMessage().Should().Contain("the Ids of a [ResourceAccessContract]");
 }

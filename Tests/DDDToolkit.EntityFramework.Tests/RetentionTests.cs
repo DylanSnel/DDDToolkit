@@ -50,7 +50,7 @@ public sealed class RetentionTests(ExplicitCallersPostgres postgres) : IDisposab
         await using (var scope = work.Services.CreateAsyncScope())
         {
             var delete = () => scope.ServiceProvider.GetRequiredService<DomainEventRetention<CallerOutboxContext>>().DeleteExpiredAsync(Cancellation);
-            await delete.Should().ThrowAsync<NoCallerException>("called by hand, retention is the host's work, and the host said nothing");
+            await delete.Should().ThrowAsync<NoCurrentUserException>("called by hand, retention is the host's work, and the host said nothing");
         }
 
         var service = work.Services.GetServices<IHostedService>().OfType<DomainEventRetentionService<CallerOutboxContext>>().Single();

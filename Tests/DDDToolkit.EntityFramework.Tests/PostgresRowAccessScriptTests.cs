@@ -781,7 +781,7 @@ public sealed class PostgresRowAccessScriptTests(PostgresRowAccessDatabase datab
     public async Task A_restrictive_policy_of_your_own_is_left_apart_and_still_restricts()
     {
         database.Require();
-        var bob = Callers.FromClaims(PostgresRowAccessDatabase.ClaimsOf(PostgresRowAccessDatabase.Bob, team: "north"));
+        var bob = CurrentUserSnapshot.FromClaims(PostgresRowAccessDatabase.ClaimsOf(PostgresRowAccessDatabase.Bob, team: "north"));
         await database.RunAsOwnerAsync("""CREATE POLICY "Only public tickets, by hand" ON desk."Tickets" AS RESTRICTIVE FOR SELECT TO authenticated USING ("IsPublic");""", Cancellation);
 
         try
@@ -795,7 +795,7 @@ public sealed class PostgresRowAccessScriptTests(PostgresRowAccessDatabase datab
             (await database.TitlesAsync(bob, Cancellation)).Should().Equal(
                 ["Everyone's"],
                 "Bob's rules let him read his own ticket and the public one, and the restrictive policy still holds him to the public one");
-            (await database.TitlesAsync(Caller.Anonymous, Cancellation)).Should().Equal(["Everyone's"]);
+            (await database.TitlesAsync(CurrentUserSnapshot.Anonymous, Cancellation)).Should().Equal(["Everyone's"]);
         }
         finally
         {

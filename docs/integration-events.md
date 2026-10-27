@@ -437,19 +437,19 @@ and the sink uses that call.
 
 ### Who the handlers run as
 
-Under [row level security (RLS)](row-level-security.md), the caller a handler runs as decides which rows the handler
-sees and may write. The handler's inbox row is written in the same transaction. A caller that the handler begins
+Under [row level security (RLS)](row-level-security.md), the user a handler runs as decides which rows the handler
+sees and may write. The handler's inbox row is written in the same transaction. A user that the handler begins
 itself comes too late. By then the inbox has read and begun its transaction, and the handler's scope ends before the
-inbox saves. So a module sets the caller where it registers its handlers, with a scope. The delivery begins the scope
+inbox saves. So a module sets the user where it registers its handlers, with a scope. The delivery begins the scope
 before it asks the inbox anything, and ends it after the commit:
 
 ```csharp
 services.AddModuleIntegrationEvents<ShippingContext>(module => module
-    .Around((services, message, contract) => Callers.Begin(Caller.SystemIn("shipping")))
+    .Around((services, message, contract) => services.GetRequiredService<ICurrentUser>().BeginSystem("shipping"))
     .Handle<OrderPlacedV1, BookShipment>());
 ```
 
-In the diagram, everything in the purple band runs as the caller that the scope began:
+In the diagram, everything in the purple band runs as the user that the scope began:
 
 ```mermaid
 sequenceDiagram
@@ -473,26 +473,26 @@ sequenceDiagram
 ```csharp
 services.AddModuleIntegrationEvents<ShippingContext>(module => module
     // begun around every delivery, outermost first
-    .Around((services, message, contract) => Callers.Begin(Caller.SystemIn(
-        message.Name == "ordering.order-placed" ? "shipping" : "shipping-cancellations")))
+    .Around((services, message, contract) => services.GetRequiredService<ICurrentUser>().BeginSystem(
+        message.Name == "ordering.order-placed" ? "shipping" : "shipping-cancellations"))
     .Handle<OrderPlacedV1, BookShipment>()
     .Handle<OrderCancelledV1, CancelShipment>());
 ```
 
 </details>
 
-- A scope may return `null` to begin nothing for a message. The handler then runs as the current caller. Where the
-  host requires explicit callers, the current caller is nobody, and the handler's first query fails. So with that
-  option, a module begins a caller for every message it handles.
+- A scope may return `null` to begin nothing for a message. The handler then runs as the current user. Where the
+  host requires an explicit current user, the current user is nobody, and the handler's first query fails. So with
+  that option, a module begins a user for every message it handles.
 - Each handler gets its own scope, and the scope also ends when the handler fails.
 - You can call `Around` more than once. The scopes nest in the order you add them.
 - Every way a message reaches a module goes through the scopes: the module sink, and the receivers of pgmq, Wolverine
   and MassTransit.
 
-`IntegrationEventScopes.System` runs the handlers as system work, `Caller.System`, which RLS lets past every policy.
-Where the host [requires explicit callers](row-level-security.md#requiring-explicit-callers), this scope is the only way to
+`IntegrationEventScopes.System` runs the handlers as system work without a scope, which RLS lets past every policy.
+Where the host [requires an explicit current user](row-level-security.md#requiring-an-explicit-current-user), this scope is the only way to
 run handlers as system work, so the choice is written where the handlers are registered. In such a host, a module
-without a scope does not run its handlers. The delivery fails with a `NoCallerException` that names the module, before
+without a scope does not run its handlers. The delivery fails with a `NoCurrentUserException` that names the module, before
 the module's inbox is read, and the outbox or the transport retries it.
 
 ### Limits of the module sink

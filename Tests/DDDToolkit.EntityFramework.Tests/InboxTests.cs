@@ -61,7 +61,7 @@ public sealed class InboxTests(ExplicitCallersPostgres postgres) : IDisposable
         await using var work = await ToolkitWork.StartAsync(
             await postgres.CreateDatabaseAsync(cancellation),
             module => module
-                .Around((_, _, _) => Callers.Begin(Caller.SystemIn(ToolkitWork.ReceivingScope)))
+                .Around((_, _, _) => TestUser.BeginSystem(ToolkitWork.ReceivingScope))
                 .Handle<ShelfOpenedV3, ReceiptLog>());
         var receiver = work.Services.GetRequiredService<IntegrationEventReceiver>();
         var message = ToolkitWork.Opened("Fiction");

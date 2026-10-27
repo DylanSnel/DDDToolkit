@@ -26,7 +26,7 @@ namespace Examples.Tenancy.Projects.Infrastructure.Access;
 public static partial class SeatsChangeTheProjectsTheyWorkOn
 {
     /// <summary>Whether the calling seat may change <paramref name="project"/>.</summary>
-    public static bool Allows(Project project, Caller caller)
+    public static bool Allows(Project project, ICurrentUser user)
         => ProjectsWhereIHold.Ids(ProjectPermissionNames.Edit).Contains(project.Id)
             || ProjectsWhereIHold.Ids(ProjectPermissionNames.Close).Contains(project.Id)
             || ProjectsWhereIHold.Ids(ProjectPermissionNames.ManageCrew).Contains(project.Id)

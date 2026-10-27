@@ -116,8 +116,8 @@ public sealed partial class ShopSeat
    module's managers by those names above. CS0246 for a name above: read DDD00065 in that project. Only a module of
    one project with HotChocolate types over the nested records keeps one alias of exactly the class's name there,
    since another generator does not see a generated class.
-   `TenancyAccessManager` says who acts and begins the work that is not the caller's own: `access.CurrentUser`
-   (`Id`, `IsAuthenticated`, `IsSystem`, `Role`), `access.CurrentTenant` (`Id`, `Seat`, `IsAvailable`,
+   `TenancyAccessManager` says who acts and begins the work that is not the caller's own: `access.CurrentUser`, the
+   toolkit's `ICurrentUser` (`Id`, `IsAuthenticated`, `IsSystem`, `Role`), `access.CurrentTenant` (`Id`, `Seat`, `IsAvailable`,
    `Require()`), `access.BeginSystem()`, `access.BeginSystemIn(tenant, actingSeat, scope)`,
    `access.BeginTokenIn(tenant, seat, scope)` and `access.TenantsToSweepAsync(scope, ct)`. A module that sees only
    Tenancy's ids says which they are once, in its application project,
@@ -146,10 +146,12 @@ public sealed partial class ShopSeat
    names. The seat is found from the verified identity, never taken from what a client sends.
 
    ```csharp
-   using (Callers.Begin(caller))
+   var user = context.RequestServices.GetRequiredService<ICurrentUser>();
+   var requestUser = context.GetSupabaseUser();
+   using (user.BeginAs(requestUser))
    {
        // ITenantSelection: the selection without its ids, so the middleware names none
-       var seat = await selection.ResolveAsync(caller, context.Request.Headers["Tenant"], context.RequestAborted);
+       var seat = await selection.ResolveAsync(requestUser, context.Request.Headers["Tenant"], context.RequestAborted);
        using (TenancyCallers.Begin(seat))
        {
            await next(context);
@@ -183,8 +185,8 @@ public sealed partial class ShopSeat
 7. Provisioning, seeding and jobs are system work, begun on purpose:
    `using (access.BeginSystemIn(tenant, actingSeat)) { ... }`. A job visits the tenants of
    `await access.TenantsToSweepAsync("inspections", ct)` and begins system work in each, in its own scope. A request
-   is never system work; an operator's command runs as operator work, which the pipeline begins (`[Operator]`). With `services.RequireExplicitCallers()` work that named no caller fails instead of running
-   as the application.
+   is never system work; an operator's command runs as operator work, which the pipeline begins (`[Operator]`). With `services.RequireExplicitCurrentUser()` work that began no user fails instead of running
+   as system work.
 
 ## The access model
 
@@ -224,7 +226,7 @@ public sealed partial class ShopSeat
   them. `seats.WhoAmIAsync(ct)` returns a `SeatManager.SeatOverview`: the `Seat` with its placements and grants,
   and only what is not on it (`Tenant`, `TenantName`, `Units` by path, `Roles` its grants name, `Permissions`,
   `AsOf`; `UnitOf(id)` and `RoleOf(id)` look them up). The tenant picker's
-  `TenantSelection.SeatsOfAsync<Seat>(caller, ct)` returns `SeatInTenant<Seat>` (the seat, `Slug`,
+  `TenantSelection.SeatsOfAsync<Seat>(user.Snapshot, ct)` returns `SeatInTenant<Seat>` (the seat, `Slug`,
   `OrganizationName`, `TenantStatus`). A seat carries its identity: decide what leaves, in a route's select or in
   the GraphQL type over the class. `seats.OverviewAsync(seat, ct)` returns the same `SeatOverview` for any seat of
   the tenant and asks no permission: the request that sends it says who may ask (the sample's `SeatGrants`,
@@ -273,7 +275,7 @@ public sealed partial class ShopSeat
   `[RequiresPermission]` (DDD00104); for an operator or a seat, `AccessRequirement.Any(TenancyAccess.Operator(),
   TenancyAccess.AtTenant(permission))`.
 - **Who acted** is a seat, an operator, the system or a token, on every event of Tenancy's (`By`) and on a
-  row that `RecordsWhoChanged()`. Never put whoever work acts for into the toolkit's `Caller`.
+  row that `RecordsWhoChanged()`. Never put whoever work acts for into the toolkit's `ICurrentUser`.
 - **Invitations** are optional (`AddTenancyInvitations`). The token is a bearer credential: show it once,
   store its digest, keep it out of logs and query strings. A seat is linked to a verified identity, never
   found by an e-mail address. The account a person signs in with is asked for through `IIdentityAccounts`,

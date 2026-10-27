@@ -4,9 +4,9 @@ namespace DDDToolkit.Abstractions.Access;
 /// SQL inside a row access rule, for what the translation cannot say: a lookup in another table, a
 /// function the database already has. The generator writes it into the policy as it is.
 /// <code>
-/// public static bool Allows(Order order, Caller caller)
-///     =&gt; order.PlacedBy?.Value == caller.UserId
-///        || Sql.Call&lt;bool&gt;("private.is_support_agent", caller.UserId);
+/// public static bool Allows(Order order, ICurrentUser user)
+///     =&gt; order.PlacedBy?.Value == user.Id
+///        || Sql.Call&lt;bool&gt;("private.is_support_agent", user.Id);
 /// </code>
 /// </summary>
 /// <remarks>

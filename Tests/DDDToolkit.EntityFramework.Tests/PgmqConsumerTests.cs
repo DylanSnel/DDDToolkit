@@ -146,7 +146,7 @@ public sealed class PgmqConsumerTests : IAsyncLifetime
             (await host.Consumer.ConsumeOnceAsync(Cancellation)).Should().Be(1);
 
             shelves.Seen.Should().Equal("Fiction");
-            shelves.Callers.Should().Equal([Caller.System], "the module said its handler runs as the system");
+            shelves.Callers.Should().Equal([CurrentUserSnapshot.System], "the module said its handler runs as the system");
             (await host.PendingAsync()).Should().Be(0, "an applied message is archived");
         }
 
@@ -245,7 +245,7 @@ public sealed class PgmqConsumerTests : IAsyncLifetime
             // The module's context runs under row level security, which asks who is calling on every connection:
             // UseDDDToolkit below puts it on the context once it is registered.
             services.AddPostgresRowLevelSecurity();
-            services.RequireExplicitCallers();
+            services.RequireExplicitCurrentUser();
         }
 
         services.AddDbContext<PgmqContext>((provider, options) => options.UseNpgsql(database.ConnectionString).UseDDDToolkit(provider));
@@ -261,7 +261,7 @@ public sealed class PgmqConsumerTests : IAsyncLifetime
 
         var provider = services.BuildServiceProvider();
         await using (var scope = provider.CreateAsyncScope())
-        using (Callers.Begin(Caller.System))
+        using (TestUser.BeginSystem())
         {
             await scope.ServiceProvider.GetRequiredService<PgmqContext>().Database.EnsureCreatedAsync(Cancellation);
         }
@@ -318,7 +318,7 @@ public sealed class PgmqConsumerTests : IAsyncLifetime
         public List<string> Seen { get; } = [];
 
         /// <summary>Who each run of the handler ran as.</summary>
-        public List<Caller?> Callers { get; } = [];
+        public List<CurrentUserSnapshot?> Callers { get; } = [];
 
         public int FailuresLeft { get; set; }
 
@@ -330,7 +330,7 @@ public sealed class PgmqConsumerTests : IAsyncLifetime
             }
 
             Seen.Add(contract.DisplayName);
-            Callers.Add(DDDToolkit.Access.Callers.Ambient);
+            Callers.Add(BegunUser);
             return Task.CompletedTask;
         }
     }

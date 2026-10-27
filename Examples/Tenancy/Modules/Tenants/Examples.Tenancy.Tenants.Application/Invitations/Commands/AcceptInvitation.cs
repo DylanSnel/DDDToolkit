@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using Examples.Tenancy.Tenants.Domain.Aggregates.Invitations;
 using Mediator;
 
@@ -42,8 +43,8 @@ public sealed record AcceptInvitation(string Token, string? DisplayName) : IComm
 /// saves; the seat it makes is named in the manager's callback, by this application's own rule.
 /// </summary>
 /// <param name="invitations">The package's invitation manager.</param>
-/// <param name="callers">Who is calling, as the host verified it: where the caller's address is read.</param>
-public sealed class AcceptInvitationHandler(InvitationManager invitations, ICallerAccessor callers) : ICommandHandler<AcceptInvitation, InvitationManager.AcceptedInvitation>
+/// <param name="user">Who is calling, as the host verified it: where the caller's address is read.</param>
+public sealed class AcceptInvitationHandler(InvitationManager invitations, ICurrentUser user) : ICommandHandler<AcceptInvitation, InvitationManager.AcceptedInvitation>
 {
     /// <summary>The claim of an access token that carries the account's e-mail address.</summary>
     private const string AddressClaim = "email";
@@ -59,7 +60,7 @@ public sealed class AcceptInvitationHandler(InvitationManager invitations, ICall
     {
         // Never from the request. Without an address in the token there is nothing to hold against the
         // invitation's, and an empty one matches none: the package then refuses as it does another address.
-        var address = callers.Current.Claim(AddressClaim) ?? string.Empty;
+        var address = user.FindClaim(AddressClaim) ?? string.Empty;
 
         // The name is this application's field: set on the new seat once the package found the invitation good, and
         // before anything is saved, so a name the seat refuses leaves the invitation open for another try.

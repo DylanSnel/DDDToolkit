@@ -69,7 +69,7 @@ public class ActorTests
             Current.Actor.Should().Be(new TenancyActor<SeatId>(TenancyActorKind.System, Ada, Scope: "projects"));
             Current.Seat.Should().Be(Ada);
             Current.Actor!.Value.ToActedBy().Should().Be(new ActedBy("system", "projects"));
-            Callers.Ambient!.Scope.Should().Be("projects", "the scope of the record is the scope the work runs in");
+            BegunUser!.SystemScope.Should().Be("projects", "the scope of the record is the scope the work runs in");
         }
 
         // A caller made by hand, as a test makes one, is Tenancy's own work.
@@ -87,9 +87,9 @@ public class ActorTests
             Current.Actor.Should().Be(TenancyActor<SeatId>.OfOperator(Odette, TenancyWork.SystemScope));
             Current.Seat.Should().BeNull();
             TenancyCallers.CurrentTenantOrNull().Should().BeNull();
-            Callers.Ambient!.Kind.Should().Be(CallerKind.SystemIn);
-            Callers.Ambient.Scope.Should().Be(TenancyWork.SystemScope);
-            Callers.Ambient.UserId.Should().BeNull("the operator is who the work is recorded as, never who it runs as");
+            BegunUser!.Kind.Should().Be(CurrentUserKind.SystemIn);
+            BegunUser.SystemScope.Should().Be(TenancyWork.SystemScope);
+            BegunUser.Id.Should().BeNull("the operator is who the work is recorded as, never who it runs as");
             return Task.CompletedTask;
         });
 
@@ -100,18 +100,18 @@ public class ActorTests
             Current.Tenant.Should().Be(Harbor);
             Current.Seat.Should().BeNull("an operator holds no seat, and none is recorded for it");
             Current.Actor.Should().Be(new TenancyActor<SeatId>(TenancyActorKind.Operator, Operator: Odette, Scope: "tenancy"));
-            Callers.Ambient!.Scope.Should().Be(TenancyWork.SystemScope);
+            BegunUser!.SystemScope.Should().Be(TenancyWork.SystemScope);
             return Task.CompletedTask;
         });
 
         await OperatorWork.RunAsync(Odette, Harbor, () =>
         {
             Current.Actor!.Value.Scope.Should().Be("operations");
-            Callers.Ambient!.Scope.Should().Be("operations");
+            BegunUser!.SystemScope.Should().Be("operations");
             return Task.CompletedTask;
         }, scope: "operations");
 
-        Callers.Ambient.Should().BeNull();
+        BegunUser.Should().BeNull();
         TenancyCallers.Ambient.Should().BeNull();
 
         // An operator is somebody: work for the empty identity is refused, before the handler runs. A scope that is none
@@ -121,7 +121,7 @@ public class ActorTests
         ran.Should().BeFalse();
         FluentActions.Invoking(() => TenancyAccess.Operator(Harbor, scope: "Not A Scope")).Should().Throw<ArgumentException>();
         FluentActions.Invoking(() => TenancyAccess.Operator(scope: "Not A Scope")).Should().Throw<ArgumentException>();
-        Callers.Ambient.Should().BeNull("a refused beginning leaves no caller behind");
+        BegunUser.Should().BeNull("a refused beginning leaves no caller behind");
         TenancyCallers.Ambient.Should().BeNull();
     }
 
@@ -134,7 +134,7 @@ public class ActorTests
             Current.Tenant.Should().Be(Harbor);
             Current.Seat.Should().Be(Ada);
             Current.Actor.Should().Be(TenancyActor<SeatId>.OfToken(Ada, "projects"));
-            Callers.Ambient!.Scope.Should().Be("projects");
+            BegunUser!.SystemScope.Should().Be("projects");
         }
 
         FluentActions.Invoking(() => TenancyWork.BeginTokenIn(Harbor, Ada, scope: "")).Should().Throw<ArgumentException>();
@@ -219,7 +219,7 @@ public class ActorTests
         // The system's kind is the toolkit's own; the other three are Tenancy's.
         TenancyActorKinds.System.Should().Be(ActedByKinds.System);
         Enum.GetValues<TenancyActorKind>().Select(TenancyActorKinds.From).Should().Equal("seat", "operator", "system", "token");
-        TenancyActor<SeatId>.OfSystem("tenancy").ToActedBy().Should().Be(ActedBy.From(Caller.SystemIn("tenancy")), "system work is recorded as the toolkit records it");
+        TenancyActor<SeatId>.OfSystem("tenancy").ToActedBy().Should().Be(ActedBy.From(CurrentUserSnapshot.SystemIn("tenancy")), "system work is recorded as the toolkit records it");
     }
 
     [Fact]
@@ -523,7 +523,7 @@ public class ActorTests
         save.Tenancy!.Kind.Should().Be(TenancyCallerKind.SystemInTenant);
         save.Tenancy.TenantId.Should().Be(provisioned.Tenant);
         save.Tenancy.Actor!.ToActedBy().Should().Be(new ActedBy("operator", Odette.ToString("D")));
-        save.Core!.Scope.Should().Be(TenancyWork.SystemScope);
+        save.Core!.SystemScope.Should().Be(TenancyWork.SystemScope);
 
         // Every event of the new tenant says the same: the operator, and no seat.
         harness.Store.SavedEvents.Should().NotBeEmpty().And.OnlyContain(raised => ByOf(raised) == TenancyActor<SeatId>.OfOperator(Odette, TenancyWork.SystemScope));

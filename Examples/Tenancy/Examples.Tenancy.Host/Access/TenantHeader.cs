@@ -21,23 +21,22 @@ public static class TenantHeader
     public const string Name = "Tenant";
 
     /// <summary>
-    /// Makes the rest of the request run as the request's own caller, the user of its validated token or
-    /// anonymous, and as the Tenancy caller that caller resolves to: its active seat in the tenant the header
-    /// names, or nobody and why. Add it after authentication, so the token is validated, and before authorization,
-    /// which asks for the seat.
+    /// Makes the rest of the request run as the request's own user, the user of its validated token or anonymous,
+    /// and as the Tenancy caller that user resolves to: its active seat in the tenant the header names, or nobody and
+    /// why. Add it after authentication, so the token is validated, and before authorization, which asks for the seat.
     /// </summary>
     /// <remarks>
     /// It always resolves, and never refuses: whether a route needs a seat is the route's business
     /// (<see cref="SamplePolicies.SeatRequired"/>), and a route that does not, such as a person's own
     /// list of seats or the health check, runs as nobody without harm.
     /// <para>
-    /// Both callers are begun for the request, not asked for: the toolkit's from the token
-    /// (<see cref="SupabaseHttpContextExtensions.GetSupabaseCaller"/>), never from whatever is ambient, and
-    /// Tenancy's from the seat that caller has. A caller that is somehow current when a request starts, such as
-    /// system work begun around a call and never ended, is replaced for the request rather than inherited, and a
-    /// warning says so: a request is never system work. The seat is looked up with the leaked Tenancy caller
-    /// already replaced by nobody, so the lookup does not run in the leaked tenant either. The toolkit's
-    /// accessors answer a begun caller first, so the request's queries run as its own user.
+    /// Both are begun for the request, not asked for. The toolkit's current user comes from the token
+    /// (<see cref="SupabaseHttpContextExtensions.GetSupabaseUser"/>), never from whatever was begun before. Tenancy's
+    /// caller comes from the seat that user has. A user that is somehow begun when a request starts, such as system
+    /// work begun around a call and never ended, is replaced for the request rather than inherited, and a warning says
+    /// so: a request is never system work. The seat is looked up with the leaked Tenancy caller already replaced by
+    /// nobody, so the lookup does not run in the leaked tenant either. <see cref="ICurrentUser"/> answers a begun user
+    /// first, so the request's queries run as its own user.
     /// </para>
     /// <para>
     /// It names no id. The selection is asked without its id types (<see cref="ITenantSelection"/>), and what it
@@ -49,14 +48,15 @@ public static class TenantHeader
         ArgumentNullException.ThrowIfNull(app);
 
         var logger = app.ApplicationServices.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(TenantHeader));
+        var currentUser = app.ApplicationServices.GetRequiredService<ICurrentUser>();
 
         return app.Use(async (context, next) =>
         {
-            if (Callers.Ambient is { } leakedCaller)
+            if (currentUser.IsBegun)
             {
                 logger.LogWarning(
-                    "A {Kind} caller was current when the request {Method} {Path} started; the request runs as its own instead.",
-                    leakedCaller.Kind,
+                    "A {Kind} user was begun when the request {Method} {Path} started; the request runs as its own instead.",
+                    currentUser.Kind,
                     context.Request.Method,
                     context.Request.Path);
             }
@@ -71,13 +71,13 @@ public static class TenantHeader
                     context.Request.Path);
             }
 
-            var caller = context.GetSupabaseCaller();
-            using (Callers.Begin(caller))
+            var requestUser = context.GetSupabaseUser();
+            using (currentUser.BeginAs(requestUser))
             {
                 ITenancyCaller? seat;
                 using (leaked is null ? null : TenancyCallers.BeginNone())
                 {
-                    seat = await ResolveAsync(context, caller, logger);
+                    seat = await ResolveAsync(context, requestUser, logger);
                 }
 
                 // A lookup that failed leaves the request with no Tenancy caller at all, which every reader takes
@@ -95,13 +95,13 @@ public static class TenantHeader
     /// <see langword="null"/>, and the request runs as nobody rather than failing here: a route that needs a seat
     /// then refuses it the usual way, and one that does not is unaffected.
     /// </summary>
-    private static async Task<ITenancyCaller?> ResolveAsync(HttpContext context, Caller caller, ILogger logger)
+    private static async Task<ITenancyCaller?> ResolveAsync(HttpContext context, CurrentUserSnapshot user, ILogger logger)
     {
         var slug = context.Request.Headers[Name].ToString();
         try
         {
             var selection = context.RequestServices.GetRequiredService<ITenantSelection>();
-            return await selection.ResolveAsync(caller, slug, context.RequestAborted);
+            return await selection.ResolveAsync(user, slug, context.RequestAborted);
         }
         catch (Exception exception) when (!context.RequestAborted.IsCancellationRequested)
         {

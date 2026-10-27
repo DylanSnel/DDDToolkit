@@ -505,7 +505,7 @@ public class TemplateEdgeCaseTests
                 [AccessFunction<Project>("projects.is_visible")]
                 public static partial class ProjectVisible
                 {
-                    public static bool Allows(Project project, Caller caller) => project.Region == "eu";
+                    public static bool Allows(Project project, ICurrentUser user) => project.Region == "eu";
                 }
                 """,
                 "Rule.cs")
@@ -681,7 +681,7 @@ public class TemplateEdgeCaseTests
             [RowAccess<TenantAggregate<TenantId>>(RowOperations.Read)]
             public static partial class NamedTenants
             {
-                public static bool Allows(TenantAggregate<TenantId> tenant, Caller caller) => tenant.Name != "";
+                public static bool Allows(TenantAggregate<TenantId> tenant, ICurrentUser user) => tenant.Name != "";
             }
             """).RunCore();
 
@@ -698,7 +698,7 @@ public class TemplateEdgeCaseTests
             [AccessFunction<ShopOrganization>("org.has_named_unit")]
             public static partial class HasNamedUnit
             {
-                public static bool Allows(ShopOrganization organization, Caller caller) => organization.Units.Any(unit => unit.Name == "x");
+                public static bool Allows(ShopOrganization organization, ICurrentUser user) => organization.Units.Any(unit => unit.Name == "x");
             }
             """).RunCore();
 
@@ -717,7 +717,7 @@ public class TemplateEdgeCaseTests
             [AccessFunction<ShopOrganization>("org.has_valued_unit")]
             public static partial class HasValuedUnit
             {
-                public static bool Allows(ShopOrganization organization, Caller caller) => organization.Units.Any(unit => unit.Id.Value > 10);
+                public static bool Allows(ShopOrganization organization, ICurrentUser user) => organization.Units.Any(unit => unit.Id.Value > 10);
             }
             """).RunCore();
 
@@ -767,7 +767,7 @@ public class TemplateEdgeCaseTests
                 [RowAccess<Club>(RowOperations.Read)]
                 public static partial class BigClubs
                 {
-                    public static bool Allows(Club club, Caller caller) => club.Limit.Value > 10 && club.Id.Value > 0;
+                    public static bool Allows(Club club, ICurrentUser user) => club.Limit.Value > 10 && club.Id.Value > 0;
                 }
                 """,
                 "Application.cs")

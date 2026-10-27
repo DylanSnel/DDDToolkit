@@ -4,7 +4,7 @@ namespace DDDToolkit.Abstractions.Access;
 /// The answer to a set-shaped question only the database can answer, such as the ids of the tickets the
 /// caller watches. A row access rule asks whether a value is in it:
 /// <code>
-/// public static bool Allows(Ticket ticket, Caller caller) =&gt; TicketsIWatch.Ids().Contains(ticket.Id);
+/// public static bool Allows(Ticket ticket, ICurrentUser user) =&gt; TicketsIWatch.Ids().Contains(ticket.Id);
 /// </code>
 /// The generator writes that as <c>"Id" = ANY (ARRAY(SELECT "desk".tickets_i_watch()))</c>, which Postgres
 /// answers once per statement, before it reads the table, and with the column's index.

@@ -13,15 +13,15 @@ namespace DDDToolkit.Abstractions.Attributes;
 /// [AccessFunction&lt;Project&gt;(ProjectMembers.Name)]
 /// public static partial class ProjectMembership
 /// {
-///     public static bool Allows(Project project, Caller caller)
-///         =&gt; project.Members.Any(member =&gt; member.UserId == caller.UserId);
+///     public static bool Allows(Project project, ICurrentUser user)
+///         =&gt; project.Members.Any(member =&gt; member.UserId == user.Id);
 /// }
 ///
 /// // Tasks
 /// [RowAccess&lt;ProjectTask&gt;(RowOperations.All)]
 /// public static partial class ProjectMembersWorkOnItsTasks
 /// {
-///     public static bool Allows(ProjectTask task, Caller caller) =&gt; ProjectMembers.Allows(task.ProjectId);
+///     public static bool Allows(ProjectTask task, ICurrentUser user) =&gt; ProjectMembers.Allows(task.ProjectId);
 /// }
 /// </code>
 /// </summary>

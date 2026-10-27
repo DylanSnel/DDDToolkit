@@ -499,7 +499,7 @@ Projects' read rule for the operators' role is below. Inspections has the same r
 [RowAccess<Project>(RowOperations.Read, To = [RowAccessRoles.TokenPrefix + SampleTokenRoles.Operator])]
 public static partial class OperatorsSeeEveryProject
 {
-    public static bool Allows(Project project, Caller caller) => true;
+    public static bool Allows(Project project, ICurrentUser user) => true;
 }
 ```
 

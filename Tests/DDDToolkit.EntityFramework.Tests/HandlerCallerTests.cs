@@ -34,7 +34,7 @@ public sealed class HandlerCallerTests(ExplicitCallersPostgres postgres)
         var row = (await work.OutboxAsync()).Single();
         row.ProcessedAt.Should().BeNull("the message is tried again once the module says what its handlers run as");
         row.Attempts.Should().Be(1);
-        row.LastError.Should().Contain("The handlers of CallerInboxContext have no caller")
+        row.LastError.Should().Contain("The handlers of CallerInboxContext begin no user")
             .And.Contain("callers.receipt-log did not run")
             .And.Contain("module.Around(IntegrationEventScopes.System)");
         work.Seen.Callers.Should().BeEmpty();
@@ -49,7 +49,7 @@ public sealed class HandlerCallerTests(ExplicitCallersPostgres postgres)
         // Said where the handlers are registered: the system, the login role, past row level security.
         await using (var system = await DeliverOnceAsync(IntegrationEventScopes.System))
         {
-            system.Seen.Callers.Should().Equal([Caller.System]);
+            system.Seen.Callers.Should().Equal([CurrentUserSnapshot.System]);
             (await system.InboxAsync()).Should().ContainSingle().Which.By.Should().Be("postgres");
         }
 
@@ -57,14 +57,14 @@ public sealed class HandlerCallerTests(ExplicitCallersPostgres postgres)
         await using (var nothing = await DeliverOnceAsync(static (_, _, _) => null))
         {
             nothing.Seen.Callers.Should().BeEmpty();
-            (await nothing.OutboxAsync()).Single().LastError.Should().Contain(NoCallerException.DefaultMessage);
+            (await nothing.OutboxAsync()).Single().LastError.Should().Contain(NoCurrentUserException.DefaultMessage);
             (await nothing.InboxAsync()).Should().BeEmpty();
         }
 
         // A scoped system caller is not the system: it runs as the role the policies hold.
-        await using (var scoped = await DeliverOnceAsync(static (_, _, _) => Callers.Begin(Caller.SystemIn(ToolkitWork.ReceivingScope))))
+        await using (var scoped = await DeliverOnceAsync(static (_, _, _) => TestUser.BeginSystem(ToolkitWork.ReceivingScope)))
         {
-            scoped.Seen.Callers.Should().ContainSingle().Which.Should().NotBe(Caller.System).And.Match<Caller>(caller => caller.IsSystemIn);
+            scoped.Seen.Callers.Should().ContainSingle().Which.Should().NotBe(CurrentUserSnapshot.System).And.Match<CurrentUserSnapshot>(caller => caller.Kind == CurrentUserKind.SystemIn);
             (await scoped.InboxAsync()).Should().ContainSingle().Which.By.Should().Be(ExplicitCallersPostgres.SystemInRole);
         }
     }
@@ -72,7 +72,7 @@ public sealed class HandlerCallerTests(ExplicitCallersPostgres postgres)
     [Fact]
     public async Task An_in_process_handler_runs_with_no_caller()
     {
-        Caller? seen = Caller.Anonymous;
+        CurrentUserSnapshot? seen = CurrentUserSnapshot.Anonymous;
         Exception? asked = null;
         Exception? read = null;
 
@@ -81,14 +81,14 @@ public sealed class HandlerCallerTests(ExplicitCallersPostgres postgres)
             sendToModules: false,
             configure: options => options.DispatchInProcess(async (services, events, cancellationToken) =>
             {
-                seen = Callers.Ambient;
-                asked = Record(() => services.GetRequiredService<DDDToolkit.Access.ICallerAccessor>().Current);
+                seen = BegunUser;
+                asked = Record(() => services.GetRequiredService<ICurrentUser>().Snapshot);
 
                 try
                 {
                     await services.GetRequiredService<CallerInboxContext>().Receipts.CountAsync(cancellationToken);
                 }
-                catch (NoCallerException exception)
+                catch (NoCurrentUserException exception)
                 {
                     read = exception;
                 }
@@ -98,8 +98,8 @@ public sealed class HandlerCallerTests(ExplicitCallersPostgres postgres)
         (await work.ProcessAsync()).Should().Be(1, "the processor read, delivered and marked the row as the system");
 
         seen.Should().BeNull("the handler does not inherit the system caller the processor ran as");
-        asked.Should().BeOfType<NoCallerException>();
-        read.Should().BeOfType<NoCallerException>("a handler that touches a context without beginning a caller fails at its first command");
+        asked.Should().BeOfType<NoCurrentUserException>();
+        read.Should().BeOfType<NoCurrentUserException>("a handler that touches a context without beginning a caller fails at its first command");
         (await work.OutboxAsync()).Single().ProcessedAt.Should().NotBeNull();
     }
 
@@ -136,7 +136,7 @@ public sealed class HandlerCallerTests(ExplicitCallersPostgres postgres)
             sendToModules: false,
             configure: options => options.DispatchInProcess(async (services, events, cancellationToken) =>
             {
-                using (Callers.Begin(Caller.System))
+                using (TestUser.BeginSystem())
                 {
                     await Stage(services, "saved by the handler");
                     await services.GetRequiredService<CallerOutboxContext>().SaveChangesAsync(cancellationToken);
@@ -173,7 +173,7 @@ public sealed class HandlerCallerTests(ExplicitCallersPostgres postgres)
         return work;
     }
 
-    private static Exception? Record(Func<Caller> ask)
+    private static Exception? Record(Func<CurrentUserSnapshot> ask)
     {
         try
         {

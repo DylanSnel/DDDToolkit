@@ -85,7 +85,7 @@ public sealed class ToolkitWork : IAsyncDisposable
         collection.AddPostgresRowLevelSecurity();
         if (requireExplicitCallers)
         {
-            collection.RequireExplicitCallers();
+            collection.RequireExplicitCurrentUser();
         }
 
         collection.AddDbContext<CallerOutboxContext>((provider, options) => options
@@ -237,14 +237,14 @@ public sealed class ToolkitWork : IAsyncDisposable
 /// <summary>A row, who wrote it, and the claims it was written under.</summary>
 public sealed record Written(string Key, string By, string Claims);
 
-/// <summary>The callers a handler saw: <see cref="Callers.Ambient"/> at the moment it ran.</summary>
+/// <summary>The callers a handler saw: <see cref="BegunUser"/> at the moment it ran.</summary>
 public sealed class SeenCallers
 {
-    private readonly List<Caller?> _callers = [];
+    private readonly List<CurrentUserSnapshot?> _callers = [];
 
-    public IReadOnlyList<Caller?> Callers => _callers;
+    public IReadOnlyList<CurrentUserSnapshot?> Callers => _callers;
 
-    public void Add(Caller? caller)
+    public void Add(CurrentUserSnapshot? caller)
     {
         lock (_callers)
         {
@@ -306,7 +306,7 @@ public sealed class ReceiptLog(CallerInboxContext context, SeenCallers seen) : I
 {
     public Task HandleAsync(ShelfOpenedV3 contract, IntegrationEventMessage message, CancellationToken cancellationToken)
     {
-        seen.Add(Callers.Ambient);
+        seen.Add(BegunUser);
         context.Receipts.Add(new Receipt { Id = Guid.CreateVersion7(), Note = contract.DisplayName });
         return Task.CompletedTask;
     }
@@ -318,7 +318,7 @@ public sealed class ReceiptWatch(SeenCallers seen) : IIntegrationEventHandler<Sh
 {
     public Task HandleAsync(ShelfOpenedV3 contract, IntegrationEventMessage message, CancellationToken cancellationToken)
     {
-        seen.Add(Callers.Ambient);
+        seen.Add(BegunUser);
         return Task.CompletedTask;
     }
 }

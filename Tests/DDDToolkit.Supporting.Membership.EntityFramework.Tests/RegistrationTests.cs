@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using System.Reflection;
 using DDDToolkit.Abstractions.Interfaces;
 using DDDToolkit.BaseTypes;
@@ -200,7 +201,7 @@ public sealed class RegistrationTests
         // before, that answer is the one asked, and the class answers the rest.
         using var depot = await SqliteDepot.SeededAsync(services => services.AddSingleton<IMemberDirectory<CrateId, PorterId>>(new NobodyNew()));
 
-        await depot.Services.AsAsync(Caller.System, async provider =>
+        await depot.Services.AsAsync(CurrentUserSnapshot.System, async provider =>
         {
             provider.GetRequiredService<IMemberDirectory<CrateId, PorterId>>().Should().BeOfType<NobodyNew>();
             provider.GetRequiredService<IMemberRoles<CrateId, DepotRoleId>>().Should().BeOfType<CratesInTheDepot>();
@@ -287,7 +288,7 @@ public sealed class RegistrationTests
 
         await using var provider = services.BuildServiceProvider();
         await using var scope = provider.CreateAsyncScope();
-        using (Callers.Begin(TestCallers.User(UserId.CreateSequential())))
+        using (TestUser.BeginAs(TestCallers.User(UserId.CreateSequential())))
         {
             FluentActions.Invoking(() => scope.ServiceProvider.GetRequiredService<MembershipAccessManager<Pallet>>().Reach("pens.view"))
                 .Should().Throw<InvalidOperationException>()
@@ -307,7 +308,7 @@ public sealed class RegistrationTests
 
         await using var other = misplaced.BuildServiceProvider();
         await using var asking = other.CreateAsyncScope();
-        using (Callers.Begin(TestCallers.User(UserId.CreateSequential())))
+        using (TestUser.BeginAs(TestCallers.User(UserId.CreateSequential())))
         {
             FluentActions.Invoking(() => asking.ServiceProvider.GetRequiredService<MembershipAccessManager<Crate>>().Reach(CratePermissions.Pack))
                 .Should().Throw<InvalidOperationException>()
@@ -339,7 +340,7 @@ public sealed class RegistrationTests
         await using var provider = services.BuildServiceProvider();
 
         var data = new DepotScenario(clock.Now);
-        using (Callers.Begin(Caller.System))
+        using (TestUser.BeginSystem())
         {
             await using var seeding = provider.CreateAsyncScope();
             var context = seeding.ServiceProvider.GetRequiredService<DepotContext>();
@@ -361,7 +362,7 @@ public sealed class RegistrationTests
 
         async Task<MemberHold<CrateId>?> HoldAsync(DepotPerson person, CrateId crate, string permission)
         {
-            using (Callers.Begin(person.Caller))
+            using (TestUser.BeginAs(person.Caller))
             {
                 await using var scope = provider.CreateAsyncScope();
                 return await scope.ServiceProvider.GetRequiredService<MembershipAccessManager<Crate>>().HoldAsync(crate, permission, Cancellation);
@@ -415,7 +416,7 @@ public sealed class RegistrationTests
             register(services);
             await using var provider = services.BuildServiceProvider();
             await using var scope = provider.CreateAsyncScope();
-            using (Callers.Begin(TestCallers.User(UserId.CreateSequential())))
+            using (TestUser.BeginAs(TestCallers.User(UserId.CreateSequential())))
             {
                 return FluentActions.Invoking(() => scope.ServiceProvider.GetRequiredService<MembershipAccessManager<Document>>().Reach(DocumentPermissions.View))
                     .Should().Throw<InvalidOperationException>().Which;
@@ -442,7 +443,7 @@ public sealed class RegistrationTests
         });
         var stranger = UserId.CreateSequential();
 
-        await filing.Services.AsAsync(Caller.System, async provider =>
+        await filing.Services.AsAsync(CurrentUserSnapshot.System, async provider =>
         {
             var documents = provider.GetRequiredService<MemberAdmission<DocumentId, UserId, NamedRole>>();
             var folders = provider.GetRequiredService<MemberAdmission<FolderId, StaffCode, NamedRole>>();
@@ -466,7 +467,7 @@ public sealed class RegistrationTests
         // The roles there are for a document's members, as the host says them: registered before, they are the ones asked.
         using var filing = await SqliteFiling.SeededAsync(services => services.AddSingleton<IMemberRoles<DocumentId, NamedRole>>(new NoRoles()));
 
-        await filing.Services.AsAsync(Caller.System, async provider =>
+        await filing.Services.AsAsync(CurrentUserSnapshot.System, async provider =>
         {
             provider.GetRequiredService<IMemberRoles<DocumentId, NamedRole>>().Should().BeOfType<NoRoles>();
             await Refused.WithCodeAsync(DocumentRefusals.Membership, MembershipRefusals.RoleNotForMembers, () => provider.GetRequiredService<MemberAdmission<DocumentId, UserId, NamedRole>>().RequireRoleAsync(DocumentMembership.Onlooker, Cancellation).AsTask());
@@ -516,15 +517,15 @@ public sealed class RegistrationTests
     /// <summary>A class that answers who calls, and nothing else the crates' rules need.</summary>
     private sealed class OnlyWhoCalls : ICallerMember<CrateId, PorterId>
     {
-        public PorterId? Find(Caller caller) => null;
+        public PorterId? Find(CurrentUserSnapshot caller) => null;
     }
 
     /// <summary>One class that says who a caller is for two kinds of resource, whose members are known by different ids.</summary>
     private sealed class WhoCallsAnywhere : ICallerMember<PalletId, PorterId>, ICallerMember<DocumentId, UserId>
     {
-        PorterId? ICallerMember<PalletId, PorterId>.Find(Caller caller) => null;
+        PorterId? ICallerMember<PalletId, PorterId>.Find(CurrentUserSnapshot caller) => null;
 
-        UserId? ICallerMember<DocumentId, UserId>.Find(Caller caller) => null;
+        UserId? ICallerMember<DocumentId, UserId>.Find(CurrentUserSnapshot caller) => null;
     }
 
     /// <summary>A directory that admits nobody.</summary>
@@ -536,25 +537,25 @@ public sealed class RegistrationTests
     /// <summary>Where a caller holds a permission, for folders that would sit at bays.</summary>
     private sealed class FoldersAtBays : IPlacesReached<FolderId, BayId>
     {
-        public IQueryable<BayId> PlacesReached(DbContext context, Caller caller, string permission) => context.Set<BayPath>().Where(path => false).Select(path => path.BayId);
+        public IQueryable<BayId> PlacesReached(DbContext context, CurrentUserSnapshot caller, string permission) => context.Set<BayPath>().Where(path => false).Select(path => path.BayId);
     }
 
     /// <summary>Where a caller holds a permission, for pallets that would sit at bays.</summary>
     private sealed class PalletsAtBays : IPlacesReached<PalletId, BayId>
     {
-        public IQueryable<BayId> PlacesReached(DbContext context, Caller caller, string permission) => context.Set<BayPath>().Where(path => false).Select(path => path.BayId);
+        public IQueryable<BayId> PlacesReached(DbContext context, CurrentUserSnapshot caller, string permission) => context.Set<BayPath>().Where(path => false).Select(path => path.BayId);
     }
 
     /// <summary>An answer about the wrong kind of place: crates sit at bays, and this says at which porters a permission is held.</summary>
     private sealed class CratesAtPorters : IPlacesReached<CrateId, PorterId>
     {
-        public IQueryable<PorterId> PlacesReached(DbContext context, Caller caller, string permission) => context.Set<Porter>().Where(porter => false).Select(porter => porter.Id);
+        public IQueryable<PorterId> PlacesReached(DbContext context, CurrentUserSnapshot caller, string permission) => context.Set<Porter>().Where(porter => false).Select(porter => porter.Id);
     }
 
     /// <summary>Roles the host keeps, known by name, none of which gives anything.</summary>
     private sealed class NoRolesGive : IRolesWithPermission<DocumentId, NamedRole>
     {
-        public IQueryable<NamedRole> RolesWith(DbContext context, Caller caller, string permission) => Array.Empty<NamedRole>().AsQueryable();
+        public IQueryable<NamedRole> RolesWith(DbContext context, CurrentUserSnapshot caller, string permission) => Array.Empty<NamedRole>().AsQueryable();
     }
 
     private sealed class NoRoles : IMemberRoles<DocumentId, NamedRole>

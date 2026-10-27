@@ -470,9 +470,9 @@ public abstract class TenancyPolicyTests(TenancyPostgres postgres, TenancyNaming
         // Signed in, the tenant named but none chosen yet: the directory is read as the user, by the token's identity.
         foreach (var (person, slug, seat) in new[] { (Oli, "harbor", (SeatId?)Oli.Seat), (Oli, "orchard", OliInOrchard), (Ada, "harbor", Ada.Seat), (Sue, "harbor", null), (Quin, "quay", null), (Ada, "orchard", null) })
         {
-            using (Callers.Begin(Caller.User(person.Identity)))
+            using (TestUser.BeginAs(person.Identity))
             {
-                var caller = await services.InScopeAsync(scoped => scoped.GetRequiredService<TenantSelection<TenantId, SeatId>>().ResolveAsync(Caller.User(person.Identity), slug, Cancellation));
+                var caller = await services.InScopeAsync(scoped => scoped.GetRequiredService<TenantSelection<TenantId, SeatId>>().ResolveAsync(CurrentUserSnapshot.User(person.Identity), slug, Cancellation));
                 caller.Seat.Should().Be(seat, "{0} in {1}: a suspended seat or tenant, or none, is nobody", person.Name, slug);
                 caller.Kind.Should().Be(seat is null ? TenancyCallerKind.Nobody : TenancyCallerKind.Seat);
             }

@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Access;
 using DDDToolkit.EntityFramework.Postgres;
 using DDDToolkit.Supporting.Tenancy.EntityFramework;
@@ -121,9 +122,9 @@ public sealed class OperatorPolicyTests(TenancyPostgres postgres)
         // In the application: no seat is chosen for an operator, whatever tenant the request names; the tenant it names
         // is found, as its own database role reads every tenant, and kept. The tenants' directory answers it every
         // tenant, read as that role.
-        using (Callers.Begin(Callers.FromClaims(Claims)))
+        using (TestUser.BeginAs(CurrentUserSnapshot.FromClaims(Claims)))
         {
-            var selected = await services.InScopeAsync(scoped => scoped.GetRequiredService<TenantSelection<TenantId, SeatId>>().ResolveAsync(Callers.Ambient!, "harbor", Cancellation));
+            var selected = await services.InScopeAsync(scoped => scoped.GetRequiredService<TenantSelection<TenantId, SeatId>>().ResolveAsync(BegunUser!, "harbor", Cancellation));
             selected.Should().Be(HostCaller.OperatorNaming(Harbor));
 
             using (TenancyCallers.Begin(selected))
@@ -212,7 +213,7 @@ public sealed class OperatorPolicyTests(TenancyPostgres postgres)
         }
 
         // In the application an operator acts in no tenant, so a query of the module's names that it looks across them.
-        using (Callers.Begin(Callers.FromClaims(Claims)))
+        using (TestUser.BeginAs(CurrentUserSnapshot.FromClaims(Claims)))
         using (TenancyCallers.Begin(HostCaller.Nobody(TenancyRefusals.NotSeated)))
         {
             var (filtered, across) = await services.InScopeAsync(async scoped => (

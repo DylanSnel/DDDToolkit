@@ -165,9 +165,9 @@ public sealed class RestrictiveRulesTests(TenancyPostgres postgres)
         // The seat a request acts as is found before a tenant is chosen, past the organization, which only names it.
         foreach (var (person, slug, seat) in new[] { (Oli, "harbor", Oli.Seat), (Ada, "harbor", Ada.Seat), (Oli, "orchard", OliInOrchard) })
         {
-            using (Callers.Begin(Caller.User(person.Identity)))
+            using (TestUser.BeginAs(person.Identity))
             {
-                (await services.InScopeAsync(scoped => scoped.GetRequiredService<TenantSelection<TenantId, SeatId>>().ResolveAsync(Caller.User(person.Identity), slug, Cancellation)))
+                (await services.InScopeAsync(scoped => scoped.GetRequiredService<TenantSelection<TenantId, SeatId>>().ResolveAsync(CurrentUserSnapshot.User(person.Identity), slug, Cancellation)))
                     .Seat.Should().Be(seat, "{0} has a seat in {1}", person.Name, slug);
             }
         }
@@ -177,9 +177,9 @@ public sealed class RestrictiveRulesTests(TenancyPostgres postgres)
         // organization through, to the employee as to the external seat.
         foreach (var (person, expected) in new[] { (Oli, new[] { ("harbor", "Harbor Works"), ("orchard", "Orchard Works") }), (Ada, new[] { ("harbor", "Harbor Works") }) })
         {
-            using (Callers.Begin(Caller.User(person.Identity)))
+            using (TestUser.BeginAs(person.Identity))
             {
-                var mine = await services.InScopeAsync(scoped => scoped.GetRequiredService<TenantSelection<TenantId, SeatId>>().SeatsOfAsync<HostSeat>(Caller.User(person.Identity), Cancellation));
+                var mine = await services.InScopeAsync(scoped => scoped.GetRequiredService<TenantSelection<TenantId, SeatId>>().SeatsOfAsync<HostSeat>(CurrentUserSnapshot.User(person.Identity), Cancellation));
                 mine.Select(found => (found.Slug, found.OrganizationName)).Should().BeEquivalentTo(expected, "{0} sees the tenants by name", person.Name);
             }
         }
@@ -232,6 +232,6 @@ public sealed class RestrictiveRulesTests(TenancyPostgres postgres)
 [RowAccess<HostOrganization>(RowOperations.Read, Restrictive = true)]
 public static partial class OnlyEmployeesReadTheOrganization
 {
-    public static bool Allows(HostOrganization organization, Caller caller)
+    public static bool Allows(HostOrganization organization, ICurrentUser user)
         => TenancyRowAccess.CallerSeat<HostSeat>().Kind == HostSeatKind.Employee;
 }

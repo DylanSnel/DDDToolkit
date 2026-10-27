@@ -25,7 +25,7 @@ public static class SupabaseRowLevelSecurity
     public const string ServiceRole = "service_role";
 
     /// <summary>
-    /// The role the toolkit's own bookkeeping runs as unless the project says otherwise: the role the system caller
+    /// The role the toolkit's own bookkeeping runs as unless the project says otherwise: the role system work
     /// switches to, <see cref="PostgresRowLevelSecurityOptions.SystemRole"/>, and the one the access files make and
     /// give the outbox, the inbox and the migration history, <see cref="RowAccessRoleNames.System"/>. A role of the
     /// application's own, which can neither log in nor bypass row level security, so an application that logs in as

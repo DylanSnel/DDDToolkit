@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Access;
 using DDDToolkit.EntityFramework;
 using DDDToolkit.Exceptions;
@@ -19,8 +20,8 @@ namespace DDDToolkit.Supporting.Membership.TestHost.Documents;
 /// caller, which the database judges as it judges every other.
 /// </remarks>
 /// <param name="context">The host's context.</param>
-/// <param name="callers">Who is calling, for whether the member is the caller itself.</param>
-public sealed class LeaveDocumentHandler(FilingContext context, ICallerAccessor callers)
+/// <param name="user">Who is calling, for whether the member is the caller itself.</param>
+public sealed class LeaveDocumentHandler(FilingContext context, ICurrentUser user)
 {
     /// <summary>Takes the member of <paramref name="command"/> off its document, which passed the host's checks.</summary>
     /// <param name="command">The request.</param>
@@ -53,7 +54,7 @@ public sealed class LeaveDocumentHandler(FilingContext context, ICallerAccessor 
     /// and passed its check in this handling; <see langword="null"/>, the save as the caller, otherwise.
     /// </summary>
     private IDisposable? OwnPlace(LeaveDocument command)
-        => callers.Current.UserId is { } user && new UserId(user) == command.Member && ReferenceEquals(RequestInHand.Current?.Request, command)
-            ? Callers.Begin(DDDToolkit.Abstractions.Access.Caller.System)
+        => user.Id is { } id && new UserId(id) == command.Member && ReferenceEquals(RequestInHand.Current?.Request, command)
+            ? user.BeginSystem()
             : null;
 }

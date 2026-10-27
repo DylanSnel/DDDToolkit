@@ -63,7 +63,7 @@ public class TenancyRestrictiveRuleTests
              [RowAccess<{{aggregate}}>({{operations}}, Restrictive = true)]
              public static partial class TheRule
              {
-                 public static bool Allows({{aggregate}} row, Caller caller) => {{expression}};
+                 public static bool Allows({{aggregate}} row, ICurrentUser user) => {{expression}};
              }
              """;
 

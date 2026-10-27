@@ -67,8 +67,8 @@ internal sealed class BearerApplication : IAsyncDisposable
         var app = builder.Build();
         app.UseAuthentication();
         app.UseAuthorization();
-        app.MapGet("/me", (HttpContext context) => Results.Text($"{context.User.Identity!.Name}|{context.GetSupabaseCaller()}")).RequireAuthorization();
-        app.MapGet("/who", (HttpContext context) => Results.Text(context.GetSupabaseCaller().ToString()));
+        app.MapGet("/me", (HttpContext context) => Results.Text($"{context.User.Identity!.Name}|{context.GetSupabaseUser()}")).RequireAuthorization();
+        app.MapGet("/who", (HttpContext context) => Results.Text(context.GetSupabaseUser().ToString()));
 
         await app.StartAsync(cancellation);
         var address = app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.Single();
@@ -79,7 +79,7 @@ internal sealed class BearerApplication : IAsyncDisposable
     public Task<Answer> AskAsync(string token) => SendAsync("/me", token);
 
     /// <summary>Asks the route that answers anybody who the request's caller is, with <paramref name="token"/> as its bearer token.</summary>
-    public async Task<string> CallerOfAsync(string token) => (await SendAsync("/who", token)).Body;
+    public async Task<string> UserOfAsync(string token) => (await SendAsync("/who", token)).Body;
 
     private async Task<Answer> SendAsync(string path, string token)
     {

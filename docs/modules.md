@@ -167,9 +167,9 @@ It keeps its entities, aggregates, repositories and `DbContext` to itself. Two m
 can run in one process, and they can become two services later. Two modules that share a navigation property cannot
 be separated.
 
-A consuming module also sets the caller its handlers run as, where it registers them:
-`module.Around((services, message, contract) => Callers.Begin(Caller.SystemIn("shipping")))`. Under row level
-security, the policies see this caller, for the handler's work and for its inbox row
+A consuming module also sets the user its handlers run as, where it registers them:
+`module.Around((services, message, contract) => services.GetRequiredService<ICurrentUser>().BeginSystem("shipping"))`.
+Under row level security, the policies see this user, for the handler's work and for its inbox row
 ([Who the handlers run as](integration-events.md#who-the-handlers-run-as)).
 
 ## The same modules in different hosts

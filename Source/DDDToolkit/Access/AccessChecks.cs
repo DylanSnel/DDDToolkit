@@ -19,7 +19,7 @@ namespace DDDToolkit.Access;
 /// <para>
 /// The checks are asked in the order they were given, and the first that decides a requirement is the one that
 /// holds the caller to it. <see cref="AccessRequirement.AllowAnonymous"/> is decided here, by asking nobody. The
-/// set dependency injection makes asks the core's <see cref="CallerAccessCheck"/> first, for
+/// set dependency injection makes asks the core's <see cref="CurrentUserAccessCheck"/> first, for
 /// <see cref="AccessRequirement.SignedIn"/>, <see cref="AccessRequirement.Own{TValue}"/> and
 /// <see cref="AccessRequirement.OwnerOf{TId}"/>, and then the checks the module added.
 /// </para>
@@ -45,12 +45,12 @@ public sealed class AccessChecks<TRequests>
     private readonly IAccessCheck[] _checks;
 
     /// <summary>The core's check of who is calling, where the set holds one: asked who is calling before any check is.</summary>
-    private readonly CallerAccessCheck? _callers;
+    private readonly CurrentUserAccessCheck? _currentUser;
 
     /// <summary>
     /// A set of the given checks, asked in this order. Dependency injection makes one per scope, of the core's
-    /// <see cref="CallerAccessCheck"/> and then the checks registered for <typeparamref name="TRequests"/>; a test
-    /// makes one by hand, and gives it the <see cref="CallerAccessCheck"/> where its requests require a signed-in
+    /// <see cref="CurrentUserAccessCheck"/> and then the checks registered for <typeparamref name="TRequests"/>; a test
+    /// makes one by hand, and gives it the <see cref="CurrentUserAccessCheck"/> where its requests require a signed-in
     /// user.
     /// </summary>
     /// <param name="checks">The checks of the module, in the order they are asked.</param>
@@ -66,7 +66,7 @@ public sealed class AccessChecks<TRequests>
             throw new ArgumentException("A set of access checks holds no null.", nameof(checks));
         }
 
-        _callers = _checks.OfType<CallerAccessCheck>().FirstOrDefault();
+        _currentUser = _checks.OfType<CurrentUserAccessCheck>().FirstOrDefault();
     }
 
     /// <summary>
@@ -108,18 +108,18 @@ public sealed class AccessChecks<TRequests>
     /// The request declares nothing, or a requirement none of the checks registered for
     /// <typeparamref name="TRequests"/> decides.
     /// </exception>
-    /// <exception cref="NoCallerException">
+    /// <exception cref="NoCurrentUserException">
     /// Nobody is calling, and the host requires every flow of work to say who it runs as: asked of the set's
-    /// <see cref="CallerAccessCheck"/> before any check, whatever the request requires.
+    /// <see cref="CurrentUserAccessCheck"/> before any check, whatever the request requires.
     /// </exception>
     public ValueTask RequireAsync(TRequests request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
 
         // Who is calling, before anything else: in a host that requires every flow of work to say who it runs as, work
-        // nobody began a caller for is a mistake in the calling code, and fails here whatever the request requires, a
+        // that began no user is a mistake in the calling code, and fails here whatever the request requires, a
         // case of a supporting domain's that asks its own caller, never the host's, included.
-        _callers?.AskWhoIsCalling();
+        _currentUser?.AskWhoIsCalling();
 
         // Read once: a request may make its requirement anew each time it is asked. A request that states it with
         // attributes answers it the same way, from the line the generator wrote into its module's interface.

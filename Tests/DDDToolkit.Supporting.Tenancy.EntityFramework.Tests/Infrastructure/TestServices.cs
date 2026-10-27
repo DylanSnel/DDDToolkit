@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using DDDToolkit.EntityFramework;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -217,7 +218,7 @@ public sealed class TestServices : IDisposable
     public async Task<InvitationManager.AcceptedInvitation> AcceptAsync(Guid identity, string token, string? displayName = "Wren", string? verifiedAddress = null)
     {
         await using var scope = Scope();
-        using (DDDToolkit.Access.Callers.Begin(DDDToolkit.Abstractions.Access.Caller.User(identity)))
+        using (TestUser.BeginAs(identity))
         using (TenancyCallers.BeginNone())
         {
             return await scope.ServiceProvider.Invitations().AcceptAsync(token, verifiedAddress, CancellationToken.None, configure: seat => seat.Rename(displayName));

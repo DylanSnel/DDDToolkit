@@ -554,19 +554,19 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
 }
 ```
 
-Fill the columns from an interceptor of your own, registered next to the toolkit's interceptors. The caller comes from
-the toolkit's `ICallerAccessor`, the same accessor that
-[row level security (RLS)](row-level-security.md#running-queries-as-the-caller) reads. So the column holds the caller
+Fill the columns from an interceptor of your own, registered next to the toolkit's interceptors. The user comes from
+the toolkit's `ICurrentUser`, the same current user that
+[row level security (RLS)](row-level-security.md#running-queries-as-the-caller) reads. So the column holds the user
 that the database also saw:
 
 ```csharp
-public sealed class AuditInterceptor(ICallerAccessor callers, TimeProvider clock) : SaveChangesInterceptor
+public sealed class AuditInterceptor(ICurrentUser user, TimeProvider clock) : SaveChangesInterceptor
 {
     public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
         DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
     {
-        // Caller.System (system work) has no user, so the columns stay null.
-        var caller = callers.Current;
+        // System work has no user id, so the columns stay null.
+        var by = user.Id;
 
         foreach (var entry in eventData.Context!.ChangeTracker.Entries())
         {
@@ -578,12 +578,12 @@ public sealed class AuditInterceptor(ICallerAccessor callers, TimeProvider clock
             if (entry.State == EntityState.Added)
             {
                 entry.Property("CreatedAt").CurrentValue = clock.GetUtcNow();
-                entry.Property("CreatedBy").CurrentValue = caller.UserId;
+                entry.Property("CreatedBy").CurrentValue = by;
             }
             else if (entry.State == EntityState.Modified)
             {
                 entry.Property("UpdatedAt").CurrentValue = clock.GetUtcNow();
-                entry.Property("UpdatedBy").CurrentValue = caller.UserId;
+                entry.Property("UpdatedBy").CurrentValue = by;
             }
         }
 

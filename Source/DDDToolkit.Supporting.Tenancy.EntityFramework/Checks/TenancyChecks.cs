@@ -135,13 +135,13 @@ public static class TenancyChecks
     /// a role an application's own filter hides still holds its permissions.
     /// <para>
     /// It is one of the few reads across tenants Tenancy makes: one query, on
-    /// a context of its own made in a new scope of the application's services, as a caller begun around it
+    /// a context of its own made in a new scope of the application's services, as a user begun around it
     /// alone, so neither the caller of this method nor a transaction open on <paramref name="context"/> decides
     /// who it runs as. Where the database keeps the rights (<see cref="TenancyStoreOptions.DatabaseKeepsRights"/>,
     /// as on Postgres with row level security), that caller is Tenancy's scoped system work in no tenant, a role
     /// the policies hold, and the query asks the database's function
     /// <see cref="TenancyFunctionNames.RolePermissionsInUse"/>, which answers the permissions and nothing else of any role.
-    /// Anywhere else it is the toolkit's <c>Caller.System</c>, the application itself, reading the roles' table.
+    /// Anywhere else it is the toolkit's <c>CurrentUserSnapshot.System</c>, the application itself, reading the roles' table.
     /// </para>
     /// </summary>
     /// <param name="context">

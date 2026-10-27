@@ -235,15 +235,15 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   or `AccessRequirement.SignedIn()` (a signed-in user, who need not hold anything yet), and the cases a package or a
   module declares. There is no requirement that says nothing, none that leaves the decision to a package, and none for
   the application's own work, which is a scope trusted code begins around the work. A request that declares nothing is
-  stopped, and a request anyone may send says so. `CallerAccessCheck` decides `SignedIn()` from the host's
-  `ICallerAccessor`, and every module's set asks it first, so a host without any supporting domain has it and no check
+  stopped, and a request anyone may send says so. `CurrentUserAccessCheck` decides `SignedIn()` from
+  `ICurrentUser`, and every module's set asks it first, so a host without any supporting domain has it and no check
   of a module can take it over; a caller who is not a signed-in user is refused with `access.not-signed-in`
   (`ToolkitRefusals.NotSignedIn`, of the kind `NotPermitted`, in English and Dutch). What only system work may do is
   refused after the access check, by a supporting domain's manager or a handler, with `access.system-only`
-  (`ToolkitRefusals.SystemOnly`): in any host `Callers.RequireSystemWork(callers)` does it, which lets through only
-  system work trusted code began for the flow, never the accessor's answer for a flow nobody began a caller for, which
-  in a host that does not require explicit callers is the application itself, a web request the accessor does not know
-  included. Who may send a request is not what its handler runs with: a handler that does what no caller of its request
+  (`ToolkitRefusals.SystemOnly`): in any host `user.RequireSystemWork()` does it, which lets through only system work
+  trusted code began for the flow, never the host's answer for a flow that began no user, which in a host that does not
+  require an explicit current user is system work, a web request the host's source does not know included. Who may send
+  a request is not what its handler runs with: a handler that does what no caller of its request
   could, such as provisioning a tenant for a registration form, begins system work itself, in trusted code. An
   `IAccessCheck` decides the cases of one owner, `services.AddAccessCheck<TRequests, TCheck>()` adds it to the set of
   one request interface, and `AccessChecks<TRequests>.RequireAsync(request)` asks the first check that decides the
@@ -343,12 +343,14 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   with a permission marked `LocksMembers` has its member rows locked to it in the database, so the handler saves the
   caller's own place as the application's own work once the request is the one in hand (the docs show it). `[OwnOnly]`
   on the request with `[Own]` on the member is `Own(member)` alone. What the caller's own is, an `ICallersOwn<TValue>`
-  says (`TValue? Find(Caller caller)`): the core for a `Guid`, the caller's verified identity, with nothing registered;
+  says (`TValue? Find(ICurrentUser user)`): the core for a `Guid`, the caller's verified identity, with nothing
+  registered;
   Tenancy for the application's seat id, the caller's seat in the tenant of the request, which `AddTenancy` registers,
   and `TenancyAccess.Own(seat)` spells beside its other cases; an application for a kind of its own with a small handle
   of its own beside its requests, registered by the host with `services.AddCallersOwn<UserId, CallersUser>()`, which
-  takes the place of one registered before. The core's `CallerAccessCheck` decides the case, and now takes the scope's
-  services, `new CallerAccessCheck(callers, services)`. A package names the types its handles are for with `[assembly:
+  takes the place of one registered before. The core's `CurrentUserAccessCheck` decides the case, and now takes the
+  scope's
+  services, `new CurrentUserAccessCheck(user, services)`. A package names the types its handles are for with `[assembly:
   CallersOwn(typeof(...))]` or, for an id of the application's class, `[assembly: CallersOwn(IdOf =
   typeof(Template<>))]`, with `Implies` there for what its caller's own requires already (the core's `Guid`
   `[SignedIn]`, Tenancy's seat id `[InTenant]` and `[SignedIn]`, which DDD00084 counts beside `[OwnOnly]`, and beside a
@@ -368,7 +370,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   case `AccessRequirement.OwnedAggregate<TId>`; beside `[OnResource]` it stands in the place of `Own(member)`. A handle
   of the id's own wins over the owner, so where an `ICallersOwn` of the id, or Tenancy for its seat id, says the
   caller's own, the line compares the id as before; DDD00086 stays for a type that is neither, and says where an
-  aggregate's owner would be marked. The core's `CallerAccessCheck` decides the case: it asks the caller's own of the
+  aggregate's owner would be marked. The core's `CurrentUserAccessCheck` decides the case: it asks the caller's own of
+  the
   owner's type first, refusing a caller with none, one who did not sign in or the application's own work, with
   `access.not-own` before anything is read; then the owner is read, the one column of the one row the id names, as the
   caller. No row for the caller is `access.not-found`, a new code of the toolkit's (`ToolkitRefusals.NotFound`,
@@ -430,7 +433,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   work in `StartingAsync`, so the checks run before any hosted service starts and before the server binds its
   port, in a `WebApplication` and a generic host alike. Among the lifecycle services it sits where
   `RunStartupChecks()` is called, so one the host registers before the call, its own migration say, starts
-  first. Each check runs as `Caller.System`, begun for that check alone, in four stages
+  first. Each check runs as system work, begun for that check alone, in four stages
   (`StartupCheckStage`): what the services say, then whether the login role may become every caller, then the
   migrations, then the database, each before the next because a failure of the earlier hides the cause of the
   later; within a stage as registered, and a check may say by name which checks of its stage it runs before
@@ -751,31 +754,30 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 - **A scope around each inbound handler.** `ModuleIntegrationEvents<TContext>.Around(scope)` begins an
   `IntegrationEventScope` around each delivery to the module's handlers: before the inbox reads whether the
   message was applied, until its transaction committed, so the inbox's read, the handler's work and the
-  inbox row run as one caller. `IntegrationEventScopes.System` runs them as the application itself. With
-  `RequireExplicitCallers`, a module without a scope does not run its handlers: the delivery fails with a
-  `NoCallerException` naming the module, and is tried again. See
+  inbox row run as one user. `IntegrationEventScopes.System` runs them as system work without a scope. With
+  `RequireExplicitCurrentUser`, a module without a scope does not run its handlers: the delivery fails with a
+  `NoCurrentUserException` naming the module, and is tried again. See
   [Who the handlers run as](docs/integration-events.md#who-the-handlers-run-as).
-- **Fail-closed callers, opt-in.** `services.RequireExplicitCallers()` registers `CallerOptions` with
-  `RequireExplicitCallers` on. An accessor that knows no caller then throws the new `NoCallerException` instead
-  of answering the system: `AmbientCallerAccessor`, the Supabase accessor of
-  `DDDToolkit.Auth.Supabase.AspNetCore` outside a request, and `GetSupabaseCaller()` of
-  `DDDToolkit.Auth.Supabase.AzureFunctions` outside an HTTP trigger. The toolkit's own bookkeeping begins
-  `Caller.System` for itself, the outbox processor, retention and the receiver that pgmq, Wolverine and
-  MassTransit deliver through, and the handlers it calls run with no caller, inside the new
-  `Callers.BeginNone()`, until something begins one for them. The outbox poller, `OutboxBackgroundService`,
-  begins the system caller before it resolves its processor, and with it its context, so whatever makes that
-  context, such as a factory that chooses a data source by who is calling, sees the poller's rental as the
-  system's. An in-process handler that leaves changes unsaved on the outbox processor's context fails the
-  message instead of having them saved with the mark as the system, and the interceptor refuses the system as
-  the caller unless `Callers.Begin(Caller.System)` made it so, whichever accessor answered it.
-  `PostgresRowLevelSecurityInterceptor.RequireExplicitCallers` says whether the interceptor the contexts use was
-  built with the option, for a start-up check. Without the option nothing changes. See
-  [Fail-closed callers](docs/row-level-security.md#requiring-explicit-callers).
-- **The scoped system caller.** `Caller.SystemIn(scope)` is the application's own work inside a scope a
-  module chose, such as its name: it runs as `PostgresRowLevelSecurityOptions.SystemInRole`, `ddd_system_in`,
-  with the claims `{"role":"ddd_system_in","scope":"…"}`, so a policy can ask whose work it is. It is not
-  `Caller.System`: `IsSystem` is false for it and `IsSystemIn` true. With `SystemInRole` set to `null` a
-  scoped system caller fails before its query connects. See
+- **An explicit current user, opt-in.** `services.RequireExplicitCurrentUser()` registers `CurrentUserOptions` with
+  `RequireExplicitCurrentUser` on. `CurrentUser` then throws the new `NoCurrentUserException` where nothing was begun
+  and the host knows no user, instead of answering system work. That covers work outside a request in ASP.NET Core
+  with the Supabase scheme, and `GetSupabaseUser()` of `DDDToolkit.Auth.Supabase.AzureFunctions` outside an HTTP
+  trigger. The toolkit's own bookkeeping begins system work for itself: the outbox processor, retention and the
+  receiver that pgmq, Wolverine and MassTransit deliver through. The handlers it calls run with nobody begun, inside
+  the new `user.BeginNone()`, until something begins a user for them. The outbox poller, `OutboxBackgroundService`,
+  begins system work before it resolves its processor, and with it its context. So whatever makes that context, such
+  as a factory that chooses a data source by who is calling, sees the poller's rental as system work. An in-process
+  handler that leaves changes unsaved on the outbox processor's context fails the message instead of having them
+  saved with the mark as system work. The interceptor refuses system work without a scope unless code began it with
+  `user.BeginSystem()`, whichever source answered it. `PostgresRowLevelSecurityInterceptor.RequireExplicitCurrentUser`
+  says whether the interceptor the contexts use was built with the option, for a start-up check. Without the option
+  nothing changes. See
+  [Requiring an explicit current user](docs/row-level-security.md#requiring-an-explicit-current-user).
+- **Scoped system work.** `user.BeginSystem(scope)` begins system work inside a scope a module chose, such as its
+  name. It runs as `PostgresRowLevelSecurityOptions.SystemInRole`, `ddd_system_in`, with the claims
+  `{"role":"ddd_system_in","scope":"…"}`, so a policy can ask whose work it is. Its kind is
+  `CurrentUserKind.SystemIn`. `CurrentUserKind.System` is system work without a scope, which runs past the policies.
+  With `SystemInRole` set to `null`, scoped system work fails before its query connects. See
   [The scoped system role](docs/row-level-security.md#the-scoped-system-role).
 - **The scoped system role.** `ddd_system_in`, `PostgresRowLevelSecurityOptions.SystemInRole`, is a role
   that can neither log in nor bypass row level security, for the application's own work that should stay
@@ -843,8 +845,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   when a session switches to it, so without this every caller ran under the login role's. A kind left out
   gets the login role's own again. See
   [A statement timeout per caller](docs/row-level-security.md#a-statement-timeout-per-caller).
-- **Connections for SQL of your own.** `CallerConnections`, registered with
-  `services.AddCallerConnections(provider => dataSource)`, opens a connection, or begins a transaction, with
+- **Connections for SQL of your own.** `CurrentUserConnections`, registered with
+  `services.AddCurrentUserConnections(provider => dataSource)`, opens a connection, or begins a transaction, with
   the current caller set as a context's connections have it, for SQL a module sends outside Entity
   Framework. A context handed such a connection or transaction finds the caller there. See
   [SQL of your own](docs/row-level-security.md#raw-sql).
@@ -862,7 +864,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   [Set-shaped questions](docs/row-level-security.md#set-shaped-access-functions).
 - **Access functions over the entities of an entity.** Inside an `Any` over one of the aggregate's
   collections, an access function may ask the entity about its own entities in the same way, as deep as the
-  model goes: `ticket.Comments.Any(comment => comment.Reactions.Any(reaction => reaction.User == caller.UserId))`.
+  model goes: `ticket.Comments.Any(comment => comment.Reactions.Any(reaction => reaction.User == user.Id))`.
   The inner question becomes an `EXISTS` inside the outer one, joined to the entity it is asked of, and reads
   that entity, the caller and the function's parameters. A set-shaped function over them still starts from the
   first entities' table and never reads the aggregate's. Asking one of the aggregate's own collections from
@@ -1151,7 +1153,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   login role, in the stage of the login and before `postgres.login-role-may-switch-to-callers`, and names each
   difference with the fixes on both sides: the pair of the host's own `SupabaseRowAccessRoles` or the line of its
   code, and the pair of the exporter's. A database without a record passes, and so does a host without a scoped
-  system role, for that one; files without a bookkeeping role expect a system caller that runs as the login role or
+  system role, for that one; files without a bookkeeping role expect system work that runs as the login role or
   as one of the platform's roles. The next build writes a new access file for every module, which adds the record
   and nothing else. `PostgresRowLevelSecurityInterceptor.Options` is public, so such a check reads the roles a
   context really runs with. See
@@ -1220,9 +1222,9 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   or one `SupabaseAuthOptions` that a host builds once and hands to each: `AddSupabaseJwtBearer` in
   `DDDToolkit.Auth.Supabase.AspNetCore`, `AddSupabaseAuth` and `AddSupabaseAuthAdmin`. Each reads it when it
   is called. See [Where Auth answers](docs/supabase.md#the-address-of-supabase-auth).
-- `context.GetSupabaseCaller()`, in `DDDToolkit.Auth.Supabase.AspNetCore`, is a request's own caller, the
-  user of its validated token or `Caller.Anonymous`, whatever caller is ambient, so a host can make it
-  current at the start of every request.
+- `context.GetSupabaseUser()`, in `DDDToolkit.Auth.Supabase.AspNetCore`, is a request's own user: the user of its
+  validated token, or `CurrentUserSnapshot.Anonymous`, whatever user was begun. So a host can begin it at the start of
+  every request.
 
 #### HotChocolate
 
@@ -1489,7 +1491,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   [Quick start](docs/tenancy/your-module.md#quick-start).
 - **Tenancy's checks are start-up checks.** `AddTenancy` brings `tenancy.catalogue-builds`, `tenancy.contexts-wired` and
   `tenancy.unknown-stored-permissions`, which logs a permission a role holds that the catalogue has lost.
-  `AddTenancyPostgres` brings `tenancy.explicit-callers`, `tenancy.seated-token-roles`,
+  `AddTenancyPostgres` brings `tenancy.explicit-current-user`, `tenancy.seated-token-roles`,
   `tenancy.system-in-role-confined`, `tenancy.system-reads-across-tenants` and `tenancy.policies-in-place`. The last
   three run before the read of the stored permissions, whatever order the two were registered in. A host runs them with
   `RunStartupChecks()`. The methods of `TenancyChecks` and `TenancyPostgresChecks` stay. See [The start-up
@@ -1681,8 +1683,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     them behind the aggregate's back is `access.refused`.
   - No manager of Tenancy changes them. Only Tenancy's system work in the seat's tenant passes, so a one-off of yours
     inside `access.BeginSystemIn(tenant)` can link a seat to the identity another sign-in provider gives the same
-    person. The policies keep that to Tenancy's scope and its tenant. Background work under `Caller.System`, a
-    migration and the SQL editor change none of them.
+    person. The policies keep that to Tenancy's scope and its tenant. System work without a scope, a migration and the
+    SQL editor change none of them.
   - The status stays held by `tenancy_seat_status_is_managed`, and the version is the row's.
   - Tenancy decides nothing about the columns your seat class adds, a job title for example. Each is as writable as
     the row until a [column rule](docs/row-level-security.md#column-rules) of yours holds it to the rule of your
@@ -1900,7 +1902,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     work outside any tenant there.
   - Tenancy's own commands that only system work may call, provisioning a tenant and suspending, reactivating or
     closing one, refuse everyone else with `access.system-only`.
-  - Every name for system work in the C# API follows `Caller.System`: `Caller.SystemIn(scope)`,
+  - Every name for system work in the C# API follows the core's `user.BeginSystem()`: `user.BeginSystem(scope)`,
     `access.BeginSystem()`, `access.BeginSystemIn(...)`, and `TenancyWork.BeginSystem` and `TenancyWork.BeginSystemIn`
     for code generic over the ids. The database roles `ddd_system` and `ddd_system_in` keep their names.
   - `services.AddTenancyAccess<TRequests, TContext>()`, in `DDDToolkit.Supporting.Tenancy.EntityFramework`, adds the
@@ -2026,7 +2028,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   a data source of one connection. Its messages for a read across tenants that finds no context to make, and for
   a start-up check on Postgres that finds no context with Tenancy's tables, name `AddScopedFromPool`.
 - `TenancyCallers.BeginNone()`: no Tenancy caller until it is disposed, for a read that is no seat's and no
-  tenant's made in the middle of somebody's work, as `Callers.BeginNone()` is for the toolkit's caller.
+  tenant's made in the middle of somebody's work, as `user.BeginNone()` is for the toolkit's current user.
 - **Tenancy on Postgres**, in `DDDToolkit.Supporting.Tenancy.Postgres`. Tenancy's rules as row level security, under
   the tenant filter and the save check. `TenancyRowAccessContribution` is written into every application that
   references the package, from the catalogue the application marks `[TenancyCatalogue]`. It writes Tenancy's queries
@@ -2035,7 +2037,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   a grant to what they are about. The policies know which permissions manage access and which permissions a copy of
   each starter role holds, from functions written from the catalogue. `AddTenancyPostgres()` carries the tenant in the
   setting `tenancy.caller_tenant`, turns the last administrator its trigger keeps into Tenancy's refusal, and requires
-  explicit callers. `TenancyPostgresChecks` checks at start-up that the host and the database are set up as the
+  an explicit current user. `TenancyPostgresChecks` checks at start-up that the host and the database are set up as the
   policies rely on. Modules ask Tenancy's functions in their rules through `TenancyRowAccess`. See
   [Row level security on Postgres](docs/tenancy/postgres.md).
 - `TenancyStoreOptions`, with `DatabaseKeepsRights`: the database writes the rights and answers the questions
@@ -2099,15 +2101,16 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   and someone without a seat learn nothing, the tenant's roles included. See
   [Where the connection names no tenant](docs/tenancy/postgres.md#functions-that-take-the-tenant-as-an-argument).
 - **Tenancy on Postgres: the reads across tenants run without a bypass.** The few reads Tenancy makes before any
-  tenant is known do not run as the application itself, `Caller.System`, past the policies. Where the database keeps
-  the rights, each runs as Tenancy's scoped system work, `Caller.SystemIn`, in no tenant, where the policies show it
+  tenant is known do not run as system work without a scope, past the policies. Where the database keeps the rights,
+  each runs as Tenancy's scoped system work, `user.BeginSystem(scope)`, in no tenant, where the policies show it
   no row. It asks a function that runs as its owner and returns ids or permissions only:
   - `role_permissions_in_use()`, which `TenancyChecks.UnknownStoredPermissionsAsync` asks, and
     `seats_of_identity(identity)` answer Tenancy's own scope alone;
   - `tenants_to_sweep()`, which `access.TenantsToSweepAsync` asks, answers every scope.
 
   None may be run by a signed-in user or by `anon`. So the role the application logs in as needs no reach past the
-  policies for Tenancy, and nothing in Tenancy begins `Caller.System` there but the start-up checks' reads of
+  policies for Tenancy, and nothing in Tenancy begins system work without a scope there but the start-up checks' reads
+  of
   Postgres's catalog. On SQLite, and on a Postgres without the package, the reads run as the system.
   `EnsureSystemReadsAcrossTenantsAsync` proves those functions: each is there, runs as its owner with an empty
   `search_path`, has an owner that reads the table it answers from past the policies, and may be run by the scoped
@@ -2178,8 +2181,9 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   permission of its own for it and no rule about who gives what. A command requires the permission the application
   chooses. The access manager says until when its caller holds that permission (`HoldAsync`, `MemberHold.Until`, no
   end for the owner and for system work), for a rule the application writes itself, such as that nobody gives a role
-  for longer than they hold the permission. The application itself (`Caller.System`) holds every permission. Its work
-  in a scope (`Caller.SystemIn`) holds every permission on a resource whose rules let that scope through, the scope of
+  for longer than they hold the permission. System work without a scope (`user.BeginSystem()`) holds every permission.
+  System work in a scope (`user.BeginSystem(scope)`) holds every permission on a resource whose rules let that scope
+  through, the scope of
   the resource's own module unless `systemScopes` names others, and nothing on any other. Refusals carry the
   resource's own codes, in English and Dutch, and registering a resource offers the texts under them, so
   an application that localizes its failures adds no line for them. The package needs no dispatcher and no
@@ -2509,7 +2513,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 - `Examples/Tenancy`, a second sample, on Tenancy: crews that work on projects, in two tenants, in three modules that
   share one Postgres database. Its host signs seeded people in with a dev login that issues Supabase access tokens and
   picks the tenant from a header, and its Blazor UI shows each person what they may do and lets them try what they may
-  not, with the status and the code of every refusal. The host requires explicit callers: each request runs as its own
+  not, with the status and the code of every refusal. The host requires an explicit current user: each request runs as
+  its own
   token's user, and the seeding as system work begun in each tenant. Each module is split into a domain, an application,
   an infrastructure and an API project, and Tenants, the module that holds the application's tenancy classes, and
   Projects into a contracts project besides: the application project declares the ports it reads and saves through, the
@@ -2814,7 +2819,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   route and a `RefusalError` from a mutation, where an owner named by a seat that lost the permission after the check ended as
   a failure of the server; [What stays in C#](docs/tenancy/postgres.md#rules-checked-only-in-c) lists what the policy
   still lets a statement do that goes round the application. A statement that runs for a signed-in user has a timeout of
-  ten seconds (`StatementTimeouts[CallerKind.User]`). At start-up the host checks that every migration is applied, that
+  ten seconds (`StatementTimeouts[CurrentUserKind.User]`). At start-up the host checks that every migration is applied,
+  that
   the login role owns nothing and that Tenancy's second lock is in place. A field of `/graphql` reads through the same
   contexts as a route, on the connections for requests and as its caller. The names are as Entity Framework gives them.
 - **Tenancy sample: a module's migrations are in its infrastructure project.** A module has one set, beside
@@ -2879,7 +2885,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `SupabaseLoginRole` to `tenancy_api`, so a token role added to its roles reaches the login role with the next
   build. The migration that made the role by hand, `*_tenancy_login_role.sql`, stays, since a database that
   applied it keeps its version in its history; the two say the same and both run again without harm. The host
-  checks first, before anything runs as the system caller, that `tenancy_api` may switch to every role its
+  checks first, before anything runs as system work, that `tenancy_api` may switch to every role its
   callers run as; `LoginRoleFileTests` applies the file the export writes to Supabase's own Postgres and starts
   the host as the role it made.
 - **The Tenancy sample: every request says what it requires.** The Tenants module's requests declare the first
@@ -3088,6 +3094,74 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ### Changed
 
+- **The current user is `ICurrentUser`.** Code that needs to know who it runs for takes `ICurrentUser` from dependency
+  injection and asks it: `user.Id`, `user.IsAuthenticated`, `user.IsSystem`, `user.SystemScope`, `user.Role`,
+  `user.FindClaim(path)` and `user.Kind`. It reads the current flow of work each time it is asked. Work without a
+  request begins its user with an instance method, `using (user.BeginAs(userId))` for a user and
+  `using (user.BeginSystem(scope))` for system work. There is no static API to begin work. The toolkit registers its
+  `CurrentUser` as the `ICurrentUser`, a singleton, wherever it needs one: the access checks, Entity Framework, row
+  level
+  security, Supabase Auth, Tenancy and Membership. `services.AddCurrentUser()` registers it in any other host. A user
+  that code began wins over the host's answer. A host that knows its requests says who a request runs as with an
+  `ICurrentUserSource`, as `AddSupabaseJwtBearer` does. `CurrentUserSnapshot` is the current user at one moment, for
+  code that keeps the answer or passes it on: a host, row level security, a test. See
+  [Running queries as the caller](docs/row-level-security.md#running-queries-as-the-caller).
+  - **Breaking.** From 3.1.0 and the 3.2.0 previews, was, now:
+    - `Caller`: `ICurrentUser` where code asks, and `CurrentUserSnapshot` where code keeps or passes a user. Its
+      `UserId`: `Id`. `IsSignedIn`: `IsAuthenticated`. `Claim(path)`: `FindClaim(path)`. `Scope`: `SystemScope`.
+      `IsSystemIn`: `Kind == CurrentUserKind.SystemIn`. `Kind`, `Role` and `Claims` keep their names.
+    - `Caller.IsSystem` was true for system work without a scope only. `IsSystem` is true for scoped system work as
+      well, and `Kind == CurrentUserKind.System` asks for system work without a scope.
+    - `Caller.System`, `Caller.Anonymous`, `Caller.SystemIn(scope)` and `Caller.User(userId, ...)`:
+      `CurrentUserSnapshot.System`, `Anonymous`, `SystemIn(scope)` and `User(id, ...)`.
+    - `CallerKind`: `CurrentUserKind`, with the same values.
+    - `ICallerAccessor` and its `Current`: `ICurrentUser` and its `Snapshot`, for code that takes it. A host that
+      registered an accessor of its own implements `ICurrentUserSource` instead. Its `Current` answers the user of the
+      host's current request, or `null` outside one. `AddPostgresRowLevelSecurity<TAccessor>()` and
+      `AddSupabaseRowLevelSecurity<TAccessor>()`: `AddPostgresRowLevelSecurity<TSource>()` and
+      `AddSupabaseRowLevelSecurity<TSource>()`, which register the source.
+    - `AmbientCallerAccessor`: `CurrentUser`, which asks the host's source where nothing was begun.
+    - `Callers.Begin(Caller.User(id))`: `user.BeginAs(id)`. `Callers.Begin(Caller.System)`: `user.BeginSystem()`.
+      `Callers.Begin(Caller.SystemIn(scope))`: `user.BeginSystem(scope)`. `Callers.Begin(caller)`:
+      `user.BeginAs(snapshot)`. `Callers.BeginNone()`: `user.BeginNone()`.
+    - `Callers.Ambient`: `user.IsBegun`, and `user.Snapshot` for what was begun. `Callers.FromClaims(claims)`:
+      `CurrentUserSnapshot.FromClaims(claims)`. `Callers.RequireSystemWork(callers)`: `user.RequireSystemWork()`.
+    - A row access rule takes `ICurrentUser user` where it took `Caller caller`:
+      `Allows(Order order, ICurrentUser user) => order.PlacedBy?.Value == user.Id`. The generator translates
+      `user.Id`, `user.IsAuthenticated`, `user.Role` and `user.FindClaim(path)` into the same SQL as before.
+    - `services.RequireExplicitCallers()`: `services.RequireExplicitCurrentUser()`. `CallerOptions` and its
+      `RequireExplicitCallers`: `CurrentUserOptions` and `RequireExplicitCurrentUser`. `NoCallerException`:
+      `NoCurrentUserException`. `PostgresRowLevelSecurityInterceptor.RequireExplicitCallers`:
+      `RequireExplicitCurrentUser`. The interceptor's constructor takes `ICurrentUser user` and
+      `CurrentUserOptions? userOptions`.
+    - `CallerAccessCheck`: `CurrentUserAccessCheck`. `CallerActedByAccessor`: `CurrentUserActedByAccessor`.
+      `CallerConnections` and `AddCallerConnections`: `CurrentUserConnections` and `AddCurrentUserConnections`.
+    - `ICallersOwn<TValue>.Find(Caller caller)`: `Find(ICurrentUser user)`. `IRowLevelSecuritySettings.For(Caller)`:
+      `For(CurrentUserSnapshot)`. `ActedBy.From(Caller)`: `ActedBy.From(CurrentUserSnapshot)`.
+      `PostgresRowLevelSecurityOptions.StatementTimeouts` is keyed by `CurrentUserKind`.
+    - `GetSupabaseCaller()`, of an `HttpContext` and of a `FunctionContext`: `GetSupabaseUser()`.
+      `SupabaseTokenValidator.CallerOfAsync`: `UserOfAsync`. `SupabaseTokenValidation.Caller`: `User`.
+      `SupabaseAuthMiddleware` takes the `ICurrentUser` as well, and `UseSupabaseAuth()` registers it.
+    - Tenancy: `TenancyAccessManager.CurrentUser` is the core's `ICurrentUser`, and Tenancy's own `CurrentUser` class
+      is gone. `ITenantSelection.ResolveAsync`, `TenantSelection.SeatsOfAsync` and `TenancyOptions.IsOperator` take a
+      `CurrentUserSnapshot`. `TenantManager` and `InvitationManager` take an `ICurrentUser`. The start-up check
+      `tenancy.explicit-callers`, `TenancyPostgresChecks.ExplicitCallersCheck` and `EnsureExplicitCallers`:
+      `tenancy.explicit-current-user`, `ExplicitCurrentUserCheck` and `EnsureExplicitCurrentUser`.
+    - Membership: `ICallerMember.Find` and `Require`, `IPlacesReached.PlacesReached`, `IRolesWithPermission.RolesWith`
+      and `MembershipRules.IsOwnWork` take a `CurrentUserSnapshot`. `MemberAccessCheck` takes an `ICurrentUser`.
+    - The texts of exceptions and log lines say user where they said caller, such as "The current user changed from
+      ... while a transaction was open on this connection".
+  - **Breaking, for a host with an accessor of its own.** A user that code began always wins over the host's answer.
+    An accessor of the host's own used to decide that itself, and one that did not ask `Callers.Ambient` answered the
+    request's user inside `Callers.Begin(...)` as well. The toolkit's own accessors already let a begun user win.
+  - The database keeps its names: `ddd.caller_id()`, `caller_role()` and `caller_claims()`, the `{caller:...}` tokens
+    in the SQL of a contribution, and `PostgresCallerFunctions`. So do the caller's own (`ICallersOwn`,
+    `[CallersOwn]`, `AddCallersOwn`), Tenancy's caller (`TenancyCaller`, `TenancyCallers`,
+    `TenancyRowAccess.CallerSeat`) and Membership's `ICallerMember`.
+  - **Upgrading.** Rebuild, and rename as the list says. A handler that took `ICallerAccessor callers` takes
+    `ICurrentUser user` and reads `user.Id` where it read `callers.Current.UserId`. A rule changes its second parameter
+    and its members. A host that turned off `tenancy.explicit-callers` by name turns off
+    `tenancy.explicit-current-user`.
 - **For the 3.2.0 previews: Tenancy and Membership as 3.2.0 ships them.** After 3.2.0-preview.5 the API of the two
   supporting domains was regrouped. Tenancy has a manager per aggregate and an access manager, Membership has an
   access manager per kind of resource, an operator's command says `[Operator]`, the markers for domain classes are in
@@ -3394,7 +3468,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `3.2.0-preview.3` had every request answer `AccessRequirement IRequireAccess.RequiredAccess => ...`, and a requirement
   for the application's own work. System work is a scope trusted code begins around the work, and no requirement, so
   `AccessRequirement.RequiresSystemWork()` and its case `AccessRequirement.SystemWork` are gone, and a request that
-  still declares it no longer compiles; `CallerAccessCheck` decides `SignedIn()` alone. From 3.2.0-preview.3:
+  still declares it no longer compiles; `CurrentUserAccessCheck` decides `SignedIn()` alone. From 3.2.0-preview.3:
   - `AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.RequiresSystemWork();` says who may send the
     request instead: `[InTenant]` where system work in a tenant sends it, as the seeding does, `[AllowAnonymous]` for a
     development route, `[SignedIn]` for a signed-in person's registration. Begin the system work around the send or
@@ -3404,10 +3478,10 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     provisioning refuses everyone else itself. A job that sends nothing calls the manager inside the scope.
   - A request that only system work outside any tenant sends, or one of a module without Tenancy, passes
     `[AllowAnonymous]` alone, since system work is nobody's sign-in: declare that, hold it to the list of requests
-    anyone may send, and refuse everyone else in its handler with `Callers.RequireSystemWork(callers)`, which throws
+    anyone may send, and refuse everyone else in its handler with `user.RequireSystemWork()`, which throws
     `access.system-only` unless trusted code began system work for the flow, as the removed requirement did in the
-    access check. Never test `callers.Current.Kind` for it: a host that does not require explicit callers answers the
-    application itself for any flow nobody began a caller for.
+    access check. Never test `user.Kind` for it: a host that does not require an explicit current user answers system
+    work for any flow that began no user.
   - What a client is answered changes where a caller who is no system work sends such a request. After the access check
     it is the handler's `access.system-only`, as before, and in the access check the requirement's own refusal,
     `tenancy.not-seated` for a caller in no tenant where it was `access.system-only`.
@@ -3444,16 +3518,17 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   - `access.refused`'s text is `Access to this was refused.` (Dutch `De toegang hiertoe is geweigerd.`), where it was
     `The database refused this change.`: the code is the database's refusal of a save, as before, and the access check's
     refusal of a request none of whose ways was met. Its code and kind are as they were.
-  - `new CallerAccessCheck(callers)` still compiles; given the scope's services, `new CallerAccessCheck(callers,
+  - `new CurrentUserAccessCheck(user)` still compiles; given the scope's services, `new CurrentUserAccessCheck(user,
     services)`, it decides the caller's own of every type a handle is registered for, and without them a `Guid`'s
     alone. The set `AddAccessChecks` makes gives it the scope's services.
   - The access check asks the host who is calling once, before any check, whatever the request requires. In a host that
-    requires explicit callers (`RequireExplicitCallers`), work nobody began a caller for now fails with
-    `NoCallerException` for every request sent through the checks, where a request of `TenancyAccess.InTenant()` or a
+    requires an explicit current user (`RequireExplicitCurrentUser`), work that began no user now fails with
+    `NoCurrentUserException` for every request sent through the checks, where a request of `TenancyAccess.InTenant()` or
+    a
     permission of Tenancy's was refused with `tenancy.not-seated`, since Tenancy's check asks its own caller, and one of
-    `AccessRequirement.AllowAnonymous()` was let through. Begin the caller in that work, `Callers.Begin(...)` or a
-    supporting domain's own way, as such a host requires everywhere else. A set of checks made by hand asks it of the
-    `CallerAccessCheck` it holds; one without it asks nobody.
+    `AccessRequirement.AllowAnonymous()` was let through. Begin the user in that work, `user.BeginAs(...)`,
+    `user.BeginSystem(...)` or a supporting domain's own way, as such a host requires everywhere else. A set of checks
+    made by hand asks it of the `CurrentUserAccessCheck` it holds; one without it asks nobody.
   - `Checked<T>.KeepFor` called by the check of a case of a combination keeps nothing until the combination let the
     caller through, and `TakeFor` throws where the cases of one kept several of `T`, pointing at the new `TakeAllFor`.
     A requirement of one case keeps and hands out as before.
@@ -3495,8 +3570,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     access check and from Tenancy's provisioning, suspending, reactivating and closing a tenant
     (`TenancyRefusals.SystemOnly` is gone). `access.not-signed-in` for a caller who did not sign in, on a request that
     requires a signed-in user, where listing one's own seats answered `tenancy.not-seated` and accepting an invitation
-    `tenancy.identity-required`. And in a host that requires explicit callers, a request that requires a signed-in user
-    and runs as nobody fails with `NoCallerException`.
+    `tenancy.identity-required`. And in a host that requires an explicit current user, a request that requires a
+    signed-in user and runs as nobody fails with `NoCurrentUserException`.
 - **For the 3.2.0 previews: a package's row access contribution is written because the application references
   the package.** `3.2.0-preview.1` and `3.2.0-preview.2` wrote one only when the project that runs the export
   listed it, through a class of the application's that handed it the catalogue or a resource's rules, and warned
@@ -3608,7 +3683,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   every host with a sink or a consumer. It now runs, in `StartingAsync` as before, in a host that calls
   `RunStartupChecks()`, and not in one that does not: a host that relied on it calls that once. It turns off by its
   name, `pgmq.extension-installed`, and `CheckExtensionOnStart = false` leaves one sink's or consumer's database out
-  of it. It runs as `Caller.System`, as every start-up check does.
+  of it. It runs as system work, as every start-up check does.
 - **The drop at the start of every script of policies takes the triggers of column rules away too,** found by
   the comment each carries, `PostgresRowAccess.ColumnRuleComment`, as the policies are found by theirs, so a
   column rule taken out loses its trigger with the next script, and a migration of a module with rules may
@@ -3654,15 +3729,15 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     `None`, since a guest reprices products in Catalog, which has no rules, and its new Ordering access file,
     `20261006170415`, forces the policies and records its roles (see Added, Supabase and Auth).
     `Examples.Tenancy.Exporter` drops both properties, which changes none of its files.
-- **On Supabase every kind of caller has a default role, the system caller's included.** `SupabaseRowAccessRoles`
+- **On Supabase every kind of user has a default role, system work's included.** `SupabaseRowAccessRoles`
   takes `user=authenticated|anonymous=anon|system-in=ddd_system_in|system=ddd_system` for every pair it leaves out,
   and so do `SupabaseMigrationOptions.Roles` by hand, now `SupabaseRowLevelSecurity.DefaultRoles`, and
   `AddSupabaseRowLevelSecurity`, whose `SystemRole` is `ddd_system` (`SupabaseRowLevelSecurity.DefaultSystemRole`)
   where it was `null`. The access files make that role and give it the toolkit's bookkeeping and nothing else, so
   an application that logs in as a role that owns nothing writes neither the property nor `SystemRole`. Every
-  module gets an access file for it, also one without a rule or any of the toolkit's tables, since the system caller
+  module gets an access file for it, also one without a rule or any of the toolkit's tables, since system work
   reads each module's migration history at start-up (`PostgresRowAccess.WritesFor` says so for a script that writes
-  privileges and has a bookkeeping role). `system=none` runs the system caller as the role the application logs in
+  privileges and has a bookkeeping role). `system=none` runs system work as the role the application logs in
   as, and `system=service_role`, or another of the platform's roles, runs it as that role, past the policies: either
   way the files make no bookkeeping role. That pair was refused while the files wrote the privileges, and is the way
   to say it now. With the `system` pair left out, a pair that gives a caller `ddd_system`, `anonymous=ddd_system` for
@@ -3677,8 +3752,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     in it, and in the exporter's as well where the export runs in a project of its own, so the files make no
     bookkeeping role and record that they made none. `options.SystemRole = null` in code alone is enough only where
     the database has no access file of this version, a host without the export: the files of an export that left
-    the pair out give the bookkeeping to `ddd_system`, and the start-up check stops a host whose system caller runs
-    as the login role against them. One whose system caller runs as `service_role` says `system=service_role` in
+    the pair out give the bookkeeping to `ddd_system`, and the start-up check stops a host whose system work runs
+    as the login role against them. One whose system work runs as `service_role` says `system=service_role` in
     the same places. A project that wrote the default pairs out may drop them, and a host that set
     `SystemRole = "ddd_system"` may drop that line; its files and its roles stay as they are. An export that left
     the pair out writes `ddd_system` into every access file with its next build.
@@ -3722,7 +3797,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 - **A connection opened outside Entity Framework gets the caller.** A connection passed to
   `UseNpgsql(connection)` already open used to get nothing and run as the login role. It now gets the caller
   before the context's first command, which costs one round trip, once. Where a transaction is
-  already open on it, the command is refused with `RequireExplicitCallers`, and logged once per connection
+  already open on it, the command is refused with `RequireExplicitCurrentUser`, and logged once per connection
   without, because the caller cannot be set safely there. What a connection carries is remembered for the
   whole process, so a connection one context opened carries its caller into another context with another
   instance of the interceptor, and it is forgotten when the connection closes, whoever closes it. See
@@ -3806,7 +3881,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   connects, so a token that names the system's role or the login role runs as neither. A host whose tokens
   carry `authenticated` or no role is not affected. One whose tokens carry a role of their own maps it:
   `options.TokenRoles["member"] = options.UserRole` keeps what it had.
-- `Callers.FromClaims` gives a caller whose `role` claim is not text, a list of roles say, that claim as it
+- `CurrentUserSnapshot.FromClaims` gives a user whose `role` claim is not text, a list of roles say, that claim as it
   is written for its `Role`, where it gave no role at all: such a token is no longer read as one without a
   role claim, which is a signed-in user's.
 - `PostgresRowLevelSecurityInterceptor` reads its options once, when it is built: changing the options
@@ -3846,14 +3921,15 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 - `PostgresRowAccess.Script` and `CreateStatements` have overloads that take a `RowAccessExport`, so a call
   that passes `null` for the caller functions by position, `Script(context, rules, functions, null)`, is
   ambiguous now and no longer compiles. Pass it by name, `callerFunctions: null`, or leave it out.
-- `CallerKind` has a fourth value, `SystemIn`. A `switch` of your own over it that has no default arm
+- `CurrentUserKind`, which was `CallerKind`, has a fourth value, `SystemIn`. A `switch` of your own over it that has no
+  default arm
   misses a case, and the interceptor refuses a kind it has no role for rather than running it as the
   system.
-- `EnsureSupabaseMigrationsAppliedAsync` reads the migration history as `Caller.System`, whatever caller is
-  current, so it works on a context with row level security in a host that requires explicit callers.
+- `EnsureSupabaseMigrationsAppliedAsync` reads the migration history as system work, whatever user is current, so it
+  works on a context with row level security in a host that requires an explicit current user.
 - `PostgresRowLevelSecurityInterceptor` is a command and a transaction interceptor as well, and has a
-  constructor that takes the settings, the `CallerOptions` and a logger, which dependency injection uses.
-  `AmbientCallerAccessor` has a second constructor, which takes the `CallerOptions`.
+  constructor that takes the settings, the `CurrentUserOptions` and a logger, which dependency injection uses.
+  `CurrentUser`, which was `AmbientCallerAccessor`, takes the `CurrentUserOptions` and the host's `ICurrentUserSource`.
 - A role named `none` is refused where a role is configured, in `PostgresRowLevelSecurityOptions` and
   `RowAccessRoleNames`: switching to it goes back to the role the application logged in as.
 - **Row level security: `==` between values that cannot be null is `=`.** A rule's `==` and `!=` between two
@@ -4152,7 +4228,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `OpenConnection()` or inside a transaction, was ignored, and the work ran as the caller before it. Before
   every command, and before a transaction begins, it now compares the caller and the settings with what it
   set: outside a transaction a change is set first, in one extra round trip; inside one it is logged as a
-  warning, once per connection, and the transaction goes on as before, or, with `RequireExplicitCallers`,
+  warning, once per connection, and the transaction goes on as before, or, with `RequireExplicitCurrentUser`,
   refused with an `InvalidOperationException` naming both callers. See
   [A caller that changes on an open connection](docs/row-level-security.md#a-caller-that-changes-on-an-open-connection).
 - **Row level security: settings left on a server connection.** Supabase's `auth.uid()`, `auth.role()`,

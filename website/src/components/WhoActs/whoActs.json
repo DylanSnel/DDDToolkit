@@ -322,8 +322,8 @@
           "to": "/docs/tenancy/keeping-tenants-apart#reads-before-any-tenant-is-known"
         },
         {
-          "text": "The scoped system caller",
-          "to": "/docs/tenancy/keeping-tenants-apart#the-scoped-system-caller"
+          "text": "Scoped system work",
+          "to": "/docs/tenancy/keeping-tenants-apart#scoped-system-work"
         }
       ]
     },
@@ -457,8 +457,8 @@
           "to": "/docs/tenancy/keeping-tenants-apart#system-work"
         },
         {
-          "text": "The scoped system caller",
-          "to": "/docs/tenancy/keeping-tenants-apart#the-scoped-system-caller"
+          "text": "Scoped system work",
+          "to": "/docs/tenancy/keeping-tenants-apart#scoped-system-work"
         }
       ]
     },

@@ -158,7 +158,8 @@ endpoint with the schemas it composes, `AddInMemoryFusionGateway("user", [...])`
   (`DefaultQueryDependencyInjectionScope`, `DefaultMutationDependencyInjectionScope`). Fields run side by
   side, so a read takes a context of its own from a pool.
 - **A gateway is an endpoint.** Require a token or a policy on it as on a route, `RequireAuthorization(...)`;
-  authentication, the caller (`Callers.Begin`) and request localization are middleware, which runs before it.
+  authentication, the current user (`ICurrentUser.BeginAs`) and request localization are middleware, which runs
+  before it.
 - **Tools read the schema with a key.** GraphQL Codegen and the Relay compiler send `X-GraphQL-Schema-Key` with the
   key the host reads at `GraphQL:SchemaKey` (never code, 32 characters at least): a deployed host from
   `GraphQL__SchemaKey` or its secret store, the tool from the same secret in its own environment. In Development they

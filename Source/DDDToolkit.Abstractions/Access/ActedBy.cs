@@ -17,23 +17,24 @@ namespace DDDToolkit.Abstractions.Access;
 public readonly record struct ActedBy(string Kind, string? Id)
 {
     /// <summary>
-    /// Who <paramref name="caller"/> is, as a record keeps it: a signed-in user by its id, scoped system work as
-    /// the system with its scope, the system as the system, and an anonymous caller as anonymous. A user whose
-    /// token names somebody by something else than a <see cref="Guid"/> is kept by the token's <c>sub</c> claim.
+    /// Who <paramref name="user"/> is, as a record keeps it: a signed-in user by its id, scoped system work as the
+    /// system with its scope, system work without a scope as the system, and a caller who has not signed in as
+    /// anonymous. A user whose token names somebody by something else than a <see cref="Guid"/> is kept by the
+    /// token's <c>sub</c> claim.
     /// </summary>
-    /// <exception cref="ArgumentNullException"><paramref name="caller"/> is null.</exception>
-    public static ActedBy From(Caller caller)
+    /// <exception cref="ArgumentNullException"><paramref name="user"/> is null.</exception>
+    public static ActedBy From(CurrentUserSnapshot user)
     {
-        if (caller is null)
+        if (user is null)
         {
-            throw new ArgumentNullException(nameof(caller));
+            throw new ArgumentNullException(nameof(user));
         }
 
-        return caller.Kind switch
+        return user.Kind switch
         {
-            CallerKind.User => new(ActedByKinds.User, caller.UserId?.ToString("D") ?? caller.Claim("sub")),
-            CallerKind.SystemIn => new(ActedByKinds.System, caller.Scope),
-            CallerKind.System => new(ActedByKinds.System, null),
+            CurrentUserKind.User => new(ActedByKinds.User, user.Id?.ToString("D") ?? user.FindClaim("sub")),
+            CurrentUserKind.SystemIn => new(ActedByKinds.System, user.SystemScope),
+            CurrentUserKind.System => new(ActedByKinds.System, null),
             _ => new(ActedByKinds.Anonymous, null),
         };
     }

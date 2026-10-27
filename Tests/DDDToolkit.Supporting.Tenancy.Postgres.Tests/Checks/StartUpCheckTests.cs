@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Access;
 using DDDToolkit.EntityFramework.Postgres;
 using DDDToolkit.Supporting.Tenancy.Catalogue;
@@ -27,14 +28,14 @@ public sealed class StartUpCheckTests(TenancyPostgres postgres)
     {
         await using (var registered = new ServiceCollection().AddPostgresRowLevelSecurity().AddTenancyPostgres().BuildServiceProvider())
         {
-            TenancyPostgresChecks.EnsureExplicitCallers(registered);
+            TenancyPostgresChecks.EnsureExplicitCurrentUser(registered);
         }
 
         // Options registered again after AddTenancyPostgres() shadow the ones it turned on.
-        await using (var shadowed = new ServiceCollection().AddPostgresRowLevelSecurity().AddTenancyPostgres().AddSingleton(new CallerOptions()).BuildServiceProvider())
+        await using (var shadowed = new ServiceCollection().AddPostgresRowLevelSecurity().AddTenancyPostgres().AddSingleton(new CurrentUserOptions()).BuildServiceProvider())
         {
-            FluentActions.Invoking(() => TenancyPostgresChecks.EnsureExplicitCallers(shadowed))
-                .Should().Throw<InvalidOperationException>().WithMessage("*do not require explicit callers*");
+            FluentActions.Invoking(() => TenancyPostgresChecks.EnsureExplicitCurrentUser(shadowed))
+                .Should().Throw<InvalidOperationException>().WithMessage("*do not require a begun user*");
         }
 
         // An interceptor made without the options, as one made by hand is, would log a caller that changes inside a
@@ -43,15 +44,15 @@ public sealed class StartUpCheckTests(TenancyPostgres postgres)
                          .AddPostgresRowLevelSecurity()
                          .AddTenancyPostgres()
                          .AddSingleton(services => new PostgresRowLevelSecurityInterceptor(
-                             services.GetRequiredService<ICallerAccessor>(), services.GetRequiredService<PostgresRowLevelSecurityOptions>()))
+                             services.GetRequiredService<ICurrentUser>(), services.GetRequiredService<PostgresRowLevelSecurityOptions>()))
                          .BuildServiceProvider())
         {
-            FluentActions.Invoking(() => TenancyPostgresChecks.EnsureExplicitCallers(handMade))
-                .Should().Throw<InvalidOperationException>().WithMessage("*interceptor was built without explicit callers*");
+            FluentActions.Invoking(() => TenancyPostgresChecks.EnsureExplicitCurrentUser(handMade))
+                .Should().Throw<InvalidOperationException>().WithMessage("*interceptor was built without RequireExplicitCurrentUser*");
         }
 
         await using var withoutRowLevelSecurity = new ServiceCollection().AddTenancyPostgres().BuildServiceProvider();
-        FluentActions.Invoking(() => TenancyPostgresChecks.EnsureExplicitCallers(withoutRowLevelSecurity))
+        FluentActions.Invoking(() => TenancyPostgresChecks.EnsureExplicitCurrentUser(withoutRowLevelSecurity))
             .Should().Throw<InvalidOperationException>().WithMessage("Row level security is not registered*");
     }
 

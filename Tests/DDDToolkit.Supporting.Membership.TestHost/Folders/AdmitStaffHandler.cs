@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Access;
 using DDDToolkit.EntityFramework;
 using DDDToolkit.Exceptions;
@@ -21,13 +22,13 @@ namespace DDDToolkit.Supporting.Membership.TestHost.Folders;
 /// <param name="questions">The folders' access questions: until when the caller holds the permission.</param>
 /// <param name="admission">What makes an admission well formed: a member that is known, a role there is.</param>
 /// <param name="context">The host's context.</param>
-/// <param name="callers">Who is calling, for who admitted.</param>
+/// <param name="user">Who is calling, for who admitted.</param>
 /// <param name="clock">The clock an admission starts by.</param>
 public sealed class AdmitStaffHandler(
     MembershipAccessManager<Folder> questions,
     MemberAdmission<FolderId, StaffCode, NamedRole> admission,
     FilingContext context,
-    ICallerAccessor callers,
+    ICurrentUser user,
     TimeProvider clock)
 {
     /// <summary>Puts the member of staff of <paramref name="command"/> on its folder.</summary>
@@ -65,7 +66,7 @@ public sealed class AdmitStaffHandler(
             ?? throw FolderRefusals.Membership.Refuse(MembershipRefusals.NotFound);
         context.ExpectVersion(folder, command.ExpectedVersion);
 
-        StaffCode? by = callers.Current.Claim("app_metadata.staff") is { } code ? new StaffCode(code) : null;
+        StaffCode? by = user.FindClaim("app_metadata.staff") is { } code ? new StaffCode(code) : null;
         var now = clock.GetUtcNow();
         folder.Admit(command.Staff, command.Role, MemberPeriod.Between(now, command.Until), now, by);
         await context.SaveChangesAsync(cancellationToken);

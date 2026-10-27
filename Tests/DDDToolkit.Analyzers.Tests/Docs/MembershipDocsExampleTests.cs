@@ -27,6 +27,7 @@ public class MembershipDocsExampleTests
         using System.Linq;
         using System.Threading;
         using System.Threading.Tasks;
+        using DDDToolkit.Abstractions.Access;
         using DDDToolkit.Abstractions.Attributes;
         using DDDToolkit.Access;
         using DDDToolkit.EntityFramework;
@@ -137,9 +138,9 @@ public class MembershipDocsExampleTests
         services.Should().Contain(descriptor => descriptor.ServiceType == typeof(DDDToolkit.Access.AccessChecks<>).MakeGenericType(emitted.Type("Filing.IFilingRequest")));
         services.Should().Contain(descriptor => descriptor.ServiceType == typeof(FailureTexts), "the texts come with the registration, with no line of the page's");
         services.Should().Contain(descriptor => descriptor.ServiceType == emitted.Type("Filing.DocumentHandlers"));
-        services.Should().ContainSingle(descriptor => descriptor.ServiceType == typeof(DDDToolkit.Access.CallerOptions))
-            .Which.ImplementationInstance.Should().BeOfType<DDDToolkit.Access.CallerOptions>()
-            .Which.RequireExplicitCallers.Should().BeTrue("work that says nothing about who it runs as fails, as the page says");
+        services.Should().ContainSingle(descriptor => descriptor.ServiceType == typeof(DDDToolkit.Access.CurrentUserOptions))
+            .Which.ImplementationInstance.Should().BeOfType<DDDToolkit.Access.CurrentUserOptions>()
+            .Which.RequireExplicitCurrentUser.Should().BeTrue("work that says nothing about who it runs as fails, as the page says");
     }
 
     [Fact]

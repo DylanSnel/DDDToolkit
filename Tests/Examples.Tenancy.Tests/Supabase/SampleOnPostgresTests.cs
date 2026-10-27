@@ -1152,13 +1152,13 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
         }
 
         // The toolkit's own bookkeeping, which is what the system caller is: the connections kept for the background.
-        using (Callers.Begin(Caller.System))
+        using (TestUser.BeginSystem())
         {
             (await ApplicationNameAsync()).Should().Be("tenancy-background");
         }
 
         // Anyone else: the connections requests are answered on. Read at each rental, so the same factory serves both.
-        using (Callers.Begin(Caller.User(DemoPeople.Tove.Id)))
+        using (TestUser.BeginAs(DemoPeople.Tove.Id))
         {
             (await ApplicationNameAsync()).Should().Be("tenancy-requests");
         }
@@ -1312,7 +1312,7 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
         refused.Where(failure => CheckOf(failure) == SupabaseRowAccessChecks.RolesMatchAccessFilesCheck).Select(failure => failure.Message)
             .Should().ContainSingle("the check stops the start before the switch check would, on a role that is missing, and the host gave up with {0}", Described(refused))
             .Which.Should().Contain(
-                "- the system caller: the files give the outbox, the inbox and the migration history to ddd_system, and this host's system caller runs as the role it logs in as. " +
+                "- system work: the files give the outbox, the inbox and the migration history to ddd_system, and this host's system work runs as the role it logs in as. " +
                 "Fix: system=ddd_system in this host's SupabaseRowAccessRoles, or options.SystemRole = \"ddd_system\" in its code; or system=none in SupabaseRowAccessRoles of the project that exports.\n" +
                 $"- the token role '{SampleTokenRoles.Operator}': the policies are for {SampleTokenRoles.Operator}, and this host runs it as tenancy_reader. " +
                 $"Fix: token:{SampleTokenRoles.Operator}={SampleTokenRoles.Operator} in this host's SupabaseRowAccessRoles, or options.TokenRoles[\"{SampleTokenRoles.Operator}\"] = \"{SampleTokenRoles.Operator}\" in its code; or token:{SampleTokenRoles.Operator}=tenancy_reader in SupabaseRowAccessRoles of the project that exports.");

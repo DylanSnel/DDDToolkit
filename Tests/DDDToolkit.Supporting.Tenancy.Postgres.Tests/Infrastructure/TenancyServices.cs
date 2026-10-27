@@ -156,7 +156,7 @@ public sealed class TenancyServices : IAsyncDisposable
     /// </summary>
     public async Task<T> BySeat<T>(Guid identity, TenantId tenant, SeatId seat, Func<IServiceProvider, Task<T>> act)
     {
-        using (Callers.Begin(Caller.User(identity)))
+        using (TestUser.BeginAs(identity))
         using (TenancyCallers.Begin(HostCaller.InSeat(tenant, seat)))
         {
             return await InScopeAsync(act);
@@ -177,7 +177,7 @@ public sealed class TenancyServices : IAsyncDisposable
     /// </summary>
     public async Task<T> BySignedInUser<T>(Guid identity, Func<IServiceProvider, Task<T>> act)
     {
-        using (Callers.Begin(Caller.User(identity)))
+        using (TestUser.BeginAs(identity))
         using (TenancyCallers.BeginNone())
         {
             return await InScopeAsync(act);

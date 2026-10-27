@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Abstractions.Interfaces;
 
 namespace DDDToolkit.Supporting.Membership.EntityFramework.Tests;
@@ -236,9 +237,9 @@ public sealed class MemberStatementTests
         whole[0].Permission.Should().Be(DocumentPermissions.Share);
 
         // On the set itself the query finds its context, and the application's own work holds every permission on every document.
-        var all = await filing.Services.AsAsync(Caller.System, async provider =>
+        var all = await filing.Services.AsAsync(CurrentUserSnapshot.System, async provider =>
             await provider.GetRequiredService<FilingContext>().Documents.WhereIHold([DocumentPermissions.Share]).Select(pair => pair.Resource.Id).ToListAsync(Cancellation));
-        var every = await filing.Services.AsAsync(Caller.System, async provider => await provider.GetRequiredService<FilingContext>().Documents.CountAsync(Cancellation));
+        var every = await filing.Services.AsAsync(CurrentUserSnapshot.System, async provider => await provider.GetRequiredService<FilingContext>().Documents.CountAsync(Cancellation));
         all.Should().HaveCount(every);
     }
 
@@ -282,7 +283,7 @@ public sealed class MemberStatementTests
         FluentActions.Invoking(() => documents.Reached(foreign)).Should().Throw<ArgumentException>();
 
         // A reach is what it was when it was made: for the caller and the moment it was asked at.
-        using (Callers.Begin(TestCallers.User(filing.Scenario.Ada)))
+        using (TestUser.BeginAs(TestCallers.User(filing.Scenario.Ada)))
         {
             var reach = scope.ServiceProvider.GetRequiredService<MembershipAccessManager<Document>>().Reach(DocumentPermissions.View);
             (reach.Permission, reach.Now, reach.Everything).Should().Be((DocumentPermissions.View, filing.Clock.Now, false));

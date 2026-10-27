@@ -155,7 +155,7 @@ public sealed class SupabaseRowLevelSecurityDatabase : IAsyncLifetime
     }
 
     /// <summary>A context on <paramref name="connectionString"/>, the application's by default, running as whoever <paramref name="callers"/> names.</summary>
-    public NotesContext CreateContext(ICallerAccessor callers, PostgresRowLevelSecurityOptions? options = null, string? connectionString = null)
+    public NotesContext CreateContext(ICurrentUser callers, PostgresRowLevelSecurityOptions? options = null, string? connectionString = null)
         => CreateContext(new PostgresRowLevelSecurityInterceptor(callers, options ?? new PostgresRowLevelSecurityOptions()), connectionString);
 
     /// <summary>A context on <paramref name="connectionString"/>, the application's by default, with <paramref name="interceptor"/>.</summary>
@@ -178,10 +178,60 @@ public sealed class SupabaseRowLevelSecurityDatabase : IAsyncLifetime
     }
 }
 
-/// <summary>Whoever the test says is calling.</summary>
-public sealed class CallerOfTheTest : ICallerAccessor
+/// <summary>
+/// Whoever the test says is calling: the host's answer where nothing was begun, and a current user that asks it, so a
+/// test hands it to an interceptor or registers it as the host's source.
+/// </summary>
+public sealed class CallerOfTheTest : ICurrentUserSource, ICurrentUser
 {
-    public Caller Current { get; set; } = Caller.System;
+    private readonly CurrentUser _user;
+
+    public CallerOfTheTest() => _user = new CurrentUser(source: this);
+
+    /// <summary>The user the host answers where nothing was begun.</summary>
+    public CurrentUserSnapshot Current { get; set; } = CurrentUserSnapshot.System;
+
+    /// <inheritdoc />
+    public CurrentUserSnapshot Snapshot => _user.Snapshot;
+
+    /// <inheritdoc />
+    public bool IsBegun => _user.IsBegun;
+
+    /// <inheritdoc />
+    public CurrentUserKind Kind => _user.Kind;
+
+    /// <inheritdoc />
+    public Guid? Id => _user.Id;
+
+    /// <inheritdoc />
+    public bool IsAuthenticated => _user.IsAuthenticated;
+
+    /// <inheritdoc />
+    public bool IsSystem => _user.IsSystem;
+
+    /// <inheritdoc />
+    public string? SystemScope => _user.SystemScope;
+
+    /// <inheritdoc />
+    public string? Role => _user.Role;
+
+    /// <inheritdoc />
+    public string? FindClaim(string path) => _user.FindClaim(path);
+
+    /// <inheritdoc />
+    public IDisposable BeginAs(Guid userId) => _user.BeginAs(userId);
+
+    /// <inheritdoc />
+    public IDisposable BeginAs(CurrentUserSnapshot user) => _user.BeginAs(user);
+
+    /// <inheritdoc />
+    public IDisposable BeginSystem(string? scope = null) => _user.BeginSystem(scope);
+
+    /// <inheritdoc />
+    public IDisposable BeginNone() => _user.BeginNone();
+
+    /// <inheritdoc />
+    public CurrentUserSnapshot RequireSystemWork() => _user.RequireSystemWork();
 }
 
 public class NotesContext(DbContextOptions<NotesContext> options) : DbContext(options)

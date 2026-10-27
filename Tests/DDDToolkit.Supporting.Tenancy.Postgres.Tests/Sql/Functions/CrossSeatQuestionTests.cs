@@ -141,7 +141,7 @@ public abstract class CrossSeatQuestionTests(TenancyPostgres postgres, TenancyNa
         // He stops Eve's seat. The command asks who administers Harbor before it lets a seat stop counting, and the
         // database answers him, though the rights it reads are not his to read: Ada stays, so Eve's seat is stopped.
         await As(Oli, scoped => scoped.Seats().SuspendAsync(Eve.Seat, Cancellation));
-        recorder.Sent.Should().Contain(command => command.Text.Contains("tenant_administrators", StringComparison.Ordinal) && command.Caller!.Kind == CallerKind.User,
+        recorder.Sent.Should().Contain(command => command.Text.Contains("tenant_administrators", StringComparison.Ordinal) && command.Caller!.Kind == CurrentUserKind.User,
             "the store asks the database's function, as the signed-in user");
         var rights = "tenancy." + names.Shown("SeatRights");
         recorder.Sent.Should().Contain(command => command.Text.Contains("UPDATE tenancy." + names.Shown("Seats"), StringComparison.Ordinal), "the save is among what was recorded, under this naming");
@@ -190,7 +190,7 @@ public abstract class CrossSeatQuestionTests(TenancyPostgres postgres, TenancyNa
             // A unit of South moved under North would be his for good.
             var longer = await RefusedAsync(TenancyRefusals.GrantExceedsOwn, () => AsSeth(scoped => scoped.Organization().MoveUnitAsync(quay, North, Cancellation)));
             longer.Arguments["Missing"].As<string>().Should().Contain(TenancyPermissions.UnitsManage, "Seth holds South's permissions for a week, and North's for good");
-            recorder.Sent.Should().Contain(command => command.Text.Contains("permissions_a_move_changes", StringComparison.Ordinal) && command.Caller!.Kind == CallerKind.User,
+            recorder.Sent.Should().Contain(command => command.Text.Contains("permissions_a_move_changes", StringComparison.Ordinal) && command.Caller!.Kind == CurrentUserKind.User,
                 "the store asks the database's function, as the signed-in user");
 
             // The other way round his hold only gets shorter.
@@ -425,7 +425,7 @@ public abstract class CrossSeatQuestionTests(TenancyPostgres postgres, TenancyNa
                          databaseKeepsRights: false))
         {
             await using var scope = composed.Scope();
-            var caller = await scope.ServiceProvider.GetRequiredService<TenantSelection<TenantId, SeatId>>().ResolveAsync(Caller.User(identity), slug, Cancellation);
+            var caller = await scope.ServiceProvider.GetRequiredService<TenantSelection<TenantId, SeatId>>().ResolveAsync(CurrentUserSnapshot.User(identity), slug, Cancellation);
             using (TenancyCallers.Begin(caller))
             {
                 var queries = scope.ServiceProvider.TenancyContext().Tenancy();

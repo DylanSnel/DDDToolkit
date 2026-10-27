@@ -41,7 +41,7 @@ public sealed class DomainEventRetentionOptions<TContext> where TContext : DbCon
     /// within that minute of each other.
     /// </para>
     /// <para>
-    /// The rows are deleted as the toolkit's own bookkeeping, like the outbox's: as the system caller, which on
+    /// The rows are deleted as the toolkit's own bookkeeping, like the outbox's: as system work, which on
     /// Postgres under a login role that holds nothing is the bookkeeping role.
     /// </para>
     /// </summary>

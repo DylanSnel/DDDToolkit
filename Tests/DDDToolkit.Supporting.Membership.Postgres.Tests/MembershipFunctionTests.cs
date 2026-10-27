@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using Npgsql;
 
 namespace DDDToolkit.Supporting.Membership.Postgres.Tests;
@@ -128,11 +129,11 @@ public sealed class MembershipFunctionTests(FilingPostgres postgres)
 
         // Hal is a user and a member of no document; Ada owns a document and her token carries no staff code; and
         // a token that names no user at all.
-        (Caller Caller, string What)[] outsiders =
+        (CurrentUserSnapshot Caller, string What)[] outsiders =
         [
             (TestCallers.User(data.Hal), "a user who is no member"),
             (TestCallers.Staff(data.Nobody, user: data.Hal), "staff on no folder"),
-            (Callers.FromClaims("""{"role":"authenticated"}"""), "a token without a user"),
+            (CurrentUserSnapshot.FromClaims("""{"role":"authenticated"}"""), "a token without a user"),
         ];
 
         foreach (var (caller, what) in outsiders)
@@ -201,7 +202,7 @@ public sealed class MembershipFunctionTests(FilingPostgres postgres)
             WHERE n.nspname = '{FilingContext.Schema}' AND pg_catalog.has_function_privilege('public', p.oid, 'EXECUTE')
             """)).Should().Equal(0);
 
-        await using var anonymous = await filing.SessionAsync(Caller.Anonymous, role: "anon");
+        await using var anonymous = await filing.SessionAsync(CurrentUserSnapshot.Anonymous, role: "anon");
         (await FluentActions.Awaiting(() => anonymous.ListAsync<Guid>($"SELECT id FROM {Filing}documents_i_see() AS id")).Should().ThrowAsync<PostgresException>())
             .Which.SqlState.Should().Be(PostgresErrorCodes.InsufficientPrivilege);
     }
@@ -278,7 +279,7 @@ public sealed class MembershipFunctionTests(FilingPostgres postgres)
         long[] every = [data.Cabinet.Value, data.Annex.Value];
 
         // The module's own scope: every folder is seen, and every permission is held on every folder. Nobody's member.
-        await using (var own = await filing.SessionAsync(Callers.FromClaims(Scoped(FolderMembership.Scope)), role: "ddd_system_in"))
+        await using (var own = await filing.SessionAsync(CurrentUserSnapshot.FromClaims(Scoped(FolderMembership.Scope)), role: "ddd_system_in"))
         {
             (await own.ListAsync<long>("SELECT id FROM filing.folders_i_see() AS id")).Should().BeEquivalentTo(every);
             (await own.ListAsync<long>("SELECT id FROM filing.folders_where_i_hold($1) AS id", FolderPermissions.Shred)).Should().BeEquivalentTo(every);
@@ -290,20 +291,20 @@ public sealed class MembershipFunctionTests(FilingPostgres postgres)
         // Another module's scope, and no scope at all: nothing, as in C#.
         foreach (var claims in new[] { Scoped("other"), """{"role":"ddd_system_in"}""" })
         {
-            await using var elsewhere = await filing.SessionAsync(Callers.FromClaims(claims), role: "ddd_system_in");
+            await using var elsewhere = await filing.SessionAsync(CurrentUserSnapshot.FromClaims(claims), role: "ddd_system_in");
             (await elsewhere.ListAsync<long>("SELECT id FROM filing.folders_i_see() AS id")).Should().BeEmpty();
             (await elsewhere.ListAsync<long>("SELECT id FROM filing.folders_where_i_hold($1) AS id", FolderPermissions.Read)).Should().BeEmpty();
         }
 
         // A signed-in user whose token happens to carry that scope is a user: its role is not the one scoped work runs as.
-        await using var user = await filing.SessionAsync(Callers.FromClaims($$"""{"sub":"{{data.Hal.Value}}","role":"authenticated","scope":"{{FolderMembership.Scope}}"}"""));
+        await using var user = await filing.SessionAsync(CurrentUserSnapshot.FromClaims($$"""{"sub":"{{data.Hal.Value}}","role":"authenticated","scope":"{{FolderMembership.Scope}}"}"""));
         (await user.ListAsync<long>("SELECT id FROM filing.folders_i_see() AS id")).Should().BeEmpty();
         (await user.ListAsync<long>("SELECT id FROM filing.folders_where_i_hold($1) AS id", FolderPermissions.Read)).Should().BeEmpty();
 
         // And what C# answers for the same callers.
-        var hold = await filing.Services.AsAsync(Caller.SystemIn(FolderMembership.Scope), provider => provider.GetRequiredService<MembershipAccessManager<Folder>>().HoldAsync(data.Annex, FolderPermissions.Shred, Cancellation));
+        var hold = await filing.Services.AsAsync(CurrentUserSnapshot.SystemIn(FolderMembership.Scope), provider => provider.GetRequiredService<MembershipAccessManager<Folder>>().HoldAsync(data.Annex, FolderPermissions.Shred, Cancellation));
         hold!.Via.Should().Be(MemberVia.System);
-        (await filing.Services.AsAsync(Caller.SystemIn("other"), provider => provider.GetRequiredService<MembershipAccessManager<Folder>>().HoldAsync(data.Annex, FolderPermissions.Read, Cancellation))).Should().BeNull();
+        (await filing.Services.AsAsync(CurrentUserSnapshot.SystemIn("other"), provider => provider.GetRequiredService<MembershipAccessManager<Folder>>().HoldAsync(data.Annex, FolderPermissions.Read, Cancellation))).Should().BeNull();
     }
 
     [Fact]

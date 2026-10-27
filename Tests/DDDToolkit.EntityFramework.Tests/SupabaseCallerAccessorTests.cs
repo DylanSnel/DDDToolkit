@@ -21,18 +21,18 @@ public sealed class SupabaseCallerAccessorTests
     public void Outside_a_request_with_explicit_callers_required_the_accessor_throws()
     {
         using var strict = Host(requireExplicitCallers: true);
-        var callers = strict.GetRequiredService<ICallerAccessor>();
+        var callers = strict.GetRequiredService<ICurrentUser>();
 
         strict.GetRequiredService<IHttpContextAccessor>().HttpContext.Should().BeNull("this is work outside a request");
-        ((Func<Caller>)(() => callers.Current)).Should().Throw<NoCallerException>();
+        ((Func<CurrentUserSnapshot>)(() => callers.Snapshot)).Should().Throw<NoCurrentUserException>();
 
-        using (Callers.Begin(Caller.SystemIn("reports")))
+        using (TestUser.BeginSystem("reports"))
         {
-            callers.Current.Should().BeSameAs(Callers.Ambient, "a caller begun around the work is answered");
+            callers.Snapshot.Should().BeSameAs(BegunUser, "a caller begun around the work is answered");
         }
 
         using var plain = Host(requireExplicitCallers: false);
-        plain.GetRequiredService<ICallerAccessor>().Current.Should().BeSameAs(Caller.System, "without the option, work outside a request is the system's, as before");
+        plain.GetRequiredService<ICurrentUser>().Snapshot.Should().BeSameAs(CurrentUserSnapshot.System, "without the option, work outside a request is the system's, as before");
     }
 
     [Fact]
@@ -42,12 +42,12 @@ public sealed class SupabaseCallerAccessorTests
         var requests = strict.GetRequiredService<IHttpContextAccessor>();
         requests.HttpContext = new DefaultHttpContext();
 
-        strict.GetRequiredService<ICallerAccessor>().Current.Should().BeSameAs(Caller.Anonymous, "a request without a validated token is anon");
-        requests.HttpContext.GetSupabaseCaller().Should().BeSameAs(Caller.Anonymous);
+        strict.GetRequiredService<ICurrentUser>().Snapshot.Should().BeSameAs(CurrentUserSnapshot.Anonymous, "a request without a validated token is anon");
+        requests.HttpContext.GetSupabaseUser().Should().BeSameAs(CurrentUserSnapshot.Anonymous);
 
-        using (Callers.BeginNone())
+        using (TestUser.BeginNone())
         {
-            strict.GetRequiredService<ICallerAccessor>().Current.Should().BeSameAs(Caller.Anonymous, "BeginNone hides an ambient caller, not the request");
+            strict.GetRequiredService<ICurrentUser>().Snapshot.Should().BeSameAs(CurrentUserSnapshot.Anonymous, "BeginNone hides an ambient caller, not the request");
         }
 
         requests.HttpContext = null;
@@ -59,7 +59,7 @@ public sealed class SupabaseCallerAccessorTests
         services.AddAuthentication().AddSupabaseJwtBearer(ProjectUrl, jwt => jwt.UseSupabaseJwtSecret(JwtSecret));
         if (requireExplicitCallers)
         {
-            services.RequireExplicitCallers();
+            services.RequireExplicitCurrentUser();
         }
 
         return services.BuildServiceProvider();

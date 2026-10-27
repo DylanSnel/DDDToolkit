@@ -8,8 +8,8 @@ namespace DDDToolkit.Abstractions.Attributes;
 /// [RowAccess&lt;Order&gt;(RowOperations.Read | RowOperations.Change)]
 /// public static partial class ACustomerSeesTheirOrders
 /// {
-///     public static bool Allows(Order order, Caller caller)
-///         => order.PlacedBy == null || order.PlacedBy?.Value == caller.UserId;
+///     public static bool Allows(Order order, ICurrentUser user)
+///         => order.PlacedBy == null || order.PlacedBy?.Value == user.Id;
 /// }
 /// </code>
 /// The generator translates <c>Allows</c> into SQL when the class compiles, and reports what it cannot
@@ -71,7 +71,7 @@ public sealed class RowAccessAttribute<TAggregate>(RowOperations operations) : A
     /// [RowAccess&lt;Organization&gt;(RowOperations.Read, Restrictive = true)]
     /// public static partial class OnlyEmployeesReadTheOrganization
     /// {
-    ///     public static bool Allows(Organization organization, Caller caller)
+    ///     public static bool Allows(Organization organization, ICurrentUser user)
     ///         =&gt; TenancyRowAccess.CallerSeat&lt;Seat&gt;().Kind == SeatKind.Employee;
     /// }
     /// </code>

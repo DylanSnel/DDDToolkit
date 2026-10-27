@@ -207,7 +207,7 @@ public abstract class ReadFunctionTests(TenancyPostgres postgres, TenancyNaming 
         List<string> csharp;
         await using (var scope = unheld.Scope())
         {
-            caller = await scope.ServiceProvider.GetRequiredService<TenantSelection<TenantId, SeatId>>().ResolveAsync(Caller.User(identity), slug, Cancellation);
+            caller = await scope.ServiceProvider.GetRequiredService<TenantSelection<TenantId, SeatId>>().ResolveAsync(CurrentUserSnapshot.User(identity), slug, Cancellation);
             using (TenancyCallers.Begin(caller))
             {
                 csharp = await AnswersAsync(scope.ServiceProvider, scope.ServiceProvider.TenancyContext(), permissions);
@@ -219,7 +219,7 @@ public abstract class ReadFunctionTests(TenancyPostgres postgres, TenancyNaming 
         await using var services = new TenancyServices(database, configure: collection => collection.AddSingleton<TimeProvider>(new StoppedClock(now)));
         List<string> functions;
         List<string> own;
-        using (Callers.Begin(Caller.User(identity)))
+        using (TestUser.BeginAs(identity))
         using (TenancyCallers.Begin(caller))
         {
             functions = await services.InScopeAsync(scoped => AnswersAsync(scoped, scoped.Widgets(), permissions));

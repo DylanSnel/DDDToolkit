@@ -24,7 +24,7 @@ namespace DDDToolkit.Supporting.Membership.EntityFramework;
 /// what the application answers inside the statement. Either way only for a permission a member's role can give
 /// at all. Where the rules let a resource be reached from above, a signed-in caller holds a permission on it as well
 /// when the application answers that it holds the permission where the resource sits. The application itself
-/// (<see cref="Caller.System"/>) holds every permission on every resource, and so does its work in a scope the rules
+/// (<see cref="CurrentUserSnapshot.System"/>) holds every permission on every resource, and so does its work in a scope the rules
 /// name as its own for the resource (<see cref="MembershipRules.SystemScopes"/>). Work in any other scope is
 /// nobody's member and nothing above the rules: like anybody else that holds a permission in none of these ways it
 /// reaches nothing, and nothing is read for it.
@@ -53,10 +53,10 @@ internal sealed class EfMemberQuestions<TContext, TResource, TResourceId, TMembe
     private readonly IDbContextFactory<TContext>? _contexts;
     private readonly MembershipRegistration _registration;
     private readonly MemberNamesOf<TContext, TResource, TRoleId> _names;
-    private readonly Func<Caller, TMemberId?> _asMember;
+    private readonly Func<CurrentUserSnapshot, TMemberId?> _asMember;
     private readonly ICallerMember<TResourceId, TMemberId>? _resolved;
     private readonly IRolesWithPermission<TResourceId, TRoleId>? _kept;
-    private readonly ICallerAccessor _callers;
+    private readonly ICurrentUser _user;
     private readonly TimeProvider _clock;
 
     /// <summary>The access questions of one kind of resource.</summary>
@@ -66,7 +66,7 @@ internal sealed class EfMemberQuestions<TContext, TResource, TResourceId, TMembe
     /// resolves it, and is asked.
     /// </param>
     /// <param name="services">The services of the scope the questions are asked in.</param>
-    public EfMemberQuestions(MembershipRegistration registration, Func<Caller, TMemberId?>? asMember, IServiceProvider services)
+    public EfMemberQuestions(MembershipRegistration registration, Func<CurrentUserSnapshot, TMemberId?>? asMember, IServiceProvider services)
     {
         var rules = registration.Rules;
         Rules = rules;
@@ -74,7 +74,7 @@ internal sealed class EfMemberQuestions<TContext, TResource, TResourceId, TMembe
         _services = services;
         _contexts = services.GetService<IDbContextFactory<TContext>>();
         _names = services.GetRequiredService<MemberNamesOf<TContext, TResource, TRoleId>>();
-        _callers = services.GetRequiredService<ICallerAccessor>();
+        _user = services.GetRequiredService<ICurrentUser>();
         _clock = services.GetRequiredService<TimeProvider>();
 
         // What the application answers is asked of the scope the questions are asked in: it knows the request.
@@ -95,7 +95,7 @@ internal sealed class EfMemberQuestions<TContext, TResource, TResourceId, TMembe
     /// </remarks>
     public void RequireCaller()
     {
-        var caller = _callers.Current;
+        var caller = _user.Snapshot;
         if (_resolved is not null && !Rules.IsOwnWork(caller))
         {
             _resolved.Require(caller);
@@ -213,8 +213,8 @@ internal sealed class EfMemberQuestions<TContext, TResource, TResourceId, TMembe
     /// <summary>Who asks, and when: taken once for a question, so everything it is answered from is of one caller and one moment.</summary>
     private Asking Ask()
     {
-        var caller = _callers.Current;
-        var signedIn = caller.Kind == CallerKind.User;
+        var caller = _user.Snapshot;
+        var signedIn = caller.Kind == CurrentUserKind.User;
         return new Asking(
             caller,
 
@@ -244,7 +244,7 @@ internal sealed class EfMemberQuestions<TContext, TResource, TResourceId, TMembe
             return new(asked.Now, asked.Everything, heldBy, member, names);
         }
 
-        var above = asked.SignedIn && !asked.Everything ? names.Above?.Reaching(_services, asked.Caller, permission) : null;
+        var above = asked.SignedIn && !asked.Everything ? names.Above?.Reaching(_services, asked.User, permission) : null;
         return new(permission, asked.Now, asked.Everything, above is null ? heldBy : heldBy | MemberHeldBy.Above, member, [], names, Asked(null, above));
     }
 
@@ -302,7 +302,7 @@ internal sealed class EfMemberQuestions<TContext, TResource, TResourceId, TMembe
                 // statement. Only for a permission a member's role can give: whatever else such a role holds, it
                 // gives no permission the rules keep from members.
                 var answers = _kept;
-                var caller = asked.Caller;
+                var caller = asked.User;
                 kept = context => answers.RolesWith(context, caller, permission)
                     ?? throw new InvalidOperationException(answers.GetType().Name + " answered no query for the roles that give '" + permission + "'. Answer an empty one for none.");
                 heldBy |= MemberHeldBy.Roles;
@@ -311,7 +311,7 @@ internal sealed class EfMemberQuestions<TContext, TResource, TResourceId, TMembe
 
         // Held where the resource sits, or above it: asked of the application, for members and others alike, for
         // every permission but a permission the rules keep from above.
-        var above = Rules.ReachesFromAbove(permission) ? names.Above?.Reaching(_services, asked.Caller, permission) : null;
+        var above = Rules.ReachesFromAbove(permission) ? names.Above?.Reaching(_services, asked.User, permission) : null;
         if (above is not null)
         {
             heldBy |= MemberHeldBy.Above;
@@ -359,10 +359,10 @@ internal sealed class EfMemberQuestions<TContext, TResource, TResourceId, TMembe
     private MemberNames<TResource, TRoleId> Names() => _names.Read(_services, _registration);
 
     /// <summary>Who asks, and when.</summary>
-    /// <param name="Caller">The caller the question is asked for.</param>
+    /// <param name="User">The caller the question is asked for.</param>
     /// <param name="Everything">Whether the caller is the application's own work for this resource.</param>
     /// <param name="SignedIn">Whether the caller is a signed-in user: the only caller that is a member, or holds a permission from above.</param>
     /// <param name="Member">Who the caller is as a member, or nobody.</param>
     /// <param name="Now">The moment the question is asked at.</param>
-    private readonly record struct Asking(Caller Caller, bool Everything, bool SignedIn, TMemberId? Member, DateTimeOffset Now);
+    private readonly record struct Asking(CurrentUserSnapshot User, bool Everything, bool SignedIn, TMemberId? Member, DateTimeOffset Now);
 }

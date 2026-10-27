@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.EntityFramework.Postgres;
 using Npgsql;
@@ -439,7 +440,7 @@ public sealed class BesideAnOrganizationOnPostgresTests(FilingPostgres postgres)
     /// <summary>Where a caller holds a permission, for pallets that would sit at bays.</summary>
     private sealed class PalletsAtBays : IPlacesReached<PalletId, BayId>
     {
-        public IQueryable<BayId> PlacesReached(DbContext context, Caller caller, string permission) => context.Set<BayPath>().Where(path => false).Select(path => path.BayId);
+        public IQueryable<BayId> PlacesReached(DbContext context, CurrentUserSnapshot caller, string permission) => context.Set<BayPath>().Where(path => false).Select(path => path.BayId);
     }
 
     /// <summary>Another function that says who the calling porter is, defined by somebody else than the depot: nobody, to everybody.</summary>

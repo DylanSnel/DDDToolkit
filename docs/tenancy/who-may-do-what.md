@@ -278,14 +278,14 @@ involves two separate decisions: who may send the request, and what the work run
 [SignedIn]
 public sealed record RegisterOrganization(string Slug, string Name, string AdministratorName) : ICommand<TenantId>, ITenantsRequest;
 
-public sealed class RegisterOrganizationHandler(TenantManager tenants, TenancyAccessManager access, ICallerAccessor callers)
+public sealed class RegisterOrganizationHandler(TenantManager tenants, TenancyAccessManager access)
     : ICommandHandler<RegisterOrganization, TenantId>
 {
     public async ValueTask<TenantId> Handle(RegisterOrganization command, CancellationToken cancellationToken)
     {
-        // Read the caller before the system work begins. Inside the system work, the caller is the system.
+        // Read the user before the system work begins. Inside the system work, the current user is system work.
         if (access.CurrentUser.Id is not { } administrator
-            || string.Equals(callers.Current.Claim("is_anonymous"), "true", StringComparison.OrdinalIgnoreCase))
+            || string.Equals(access.CurrentUser.FindClaim("is_anonymous"), "true", StringComparison.OrdinalIgnoreCase))
         {
             throw TenancyRefusals.Refuse(TenancyRefusals.IdentityRequired);
         }

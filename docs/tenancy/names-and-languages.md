@@ -130,7 +130,7 @@ IReadOnlyList<Seat> listed = await seats.ListAsync(cancellationToken);
 - Renaming is a command of yours, under your rule. In the sample's `RenameSeat`, a seat renames itself, and a seat
   with `tenancy.seats.manage` for the whole tenant renames any seat.
 - Tenancy returns objects of your seat class with every field. `SeatManager` does this, and so does
-  `TenantSelection.SeatsOfAsync<TSeat>(caller)`, which returns the person's seats in every tenant for a tenant
+  `TenantSelection.SeatsOfAsync<TSeat>(user)`, which returns the person's seats in every tenant for a tenant
   picker. A screen shows the name with no extra query.
 - The identity is personal data, like an e-mail address. Only the fields your API lists leave it. Each of the
   sample's GraphQL types lists its fields one by one (`BindFieldsExplicitly`), and REST writes the same fields. No

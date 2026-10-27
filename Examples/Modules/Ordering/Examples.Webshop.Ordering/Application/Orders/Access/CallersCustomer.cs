@@ -15,5 +15,5 @@ namespace Examples.Webshop.Ordering.Application.Orders;
 public sealed class CallersCustomer : ICallersOwn<CustomerId>
 {
     /// <inheritdoc />
-    public CustomerId? Find(Caller caller) => CustomerId.From(caller);
+    public CustomerId? Find(ICurrentUser user) => CustomerId.From(user);
 }

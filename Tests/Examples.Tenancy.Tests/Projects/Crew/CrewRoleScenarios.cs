@@ -670,7 +670,7 @@ public sealed class CrewRoleScenarios(SampleHosts sample) : IClassFixture<Sample
         // looked for is the comparison of a crew member's own columns: the alias the crew's table has where the
         // seat's membership is looked up. A provider quotes an alias or leaves it bare, and names the table's
         // schema or has none, so the pattern takes both. Asked as a request asks: as the person, in her seat.
-        using (Callers.Begin(Caller.User(DemoPeople.Juno.Id)))
+        using (TestUser.BeginAs(DemoPeople.Juno.Id))
         using (TenancyCallers.Begin(TenancyCaller<TenantId, SeatId>.InSeat(Harbor.Id, Harbor.SeatOf(DemoPeople.Juno))))
         {
             await using var scope = host.Services.CreateAsyncScope();

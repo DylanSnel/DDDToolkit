@@ -4,16 +4,16 @@ using DDDToolkit.Abstractions.Interfaces;
 namespace DDDToolkit.Supporting.Tenancy.Access;
 
 /// <summary>
-/// Turns the toolkit's caller and the tenant a request names into a Tenancy caller: the caller's active seat
+/// Turns the toolkit's current user and the tenant a request names into a Tenancy caller: the caller's active seat
 /// in that tenant, or nobody and why.
 /// <para>
 /// The request names the tenant by its slug only. The tenant's id and the seat's id always come from the
 /// directory, found through the caller's verified identity, so nothing a caller sends picks a seat. The
-/// toolkit's system caller is nobody here: system work in Tenancy is begun on purpose with
+/// toolkit's system work is nobody here: system work in Tenancy is begun on purpose with
 /// <see cref="TenancyWork"/>, never inherited from a request.
 /// </para>
 /// <para>
-/// A host's middleware, which only makes the caller it is answered current, asks the same of
+/// A host's middleware, which only makes the Tenancy caller it is answered current, asks the same of
 /// <see cref="ITenantSelection"/>, the very instance without its id types, and names no id.
 /// </para>
 /// <para>
@@ -21,7 +21,7 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// <see cref="TenantSelectionOptions.SeatedTokenRoles"/>: <c>authenticated</c> unless the application lists
 /// others. A user with another token role is nobody in every tenant, and is told what a person without a seat
 /// is told, so the answer says nothing about the seats their identity has. The list of a person's own seats,
-/// <see cref="SeatsOfAsync{TSeat}(Caller, CancellationToken)"/>, follows the same rule.
+/// <see cref="SeatsOfAsync{TSeat}(CurrentUserSnapshot, CancellationToken)"/>, follows the same rule.
 /// </para>
 /// <para>
 /// An operator of the application, a user whose token carries one of <paramref name="operators"/>, holds no seat either.
@@ -46,32 +46,32 @@ public sealed class TenantSelection<TTenantId, TSeatId>(
     private readonly IReadOnlyList<string> _operators = operators?.TokenRoles ?? [];
 
     /// <summary>
-    /// The Tenancy caller for <paramref name="caller"/> in the tenant <paramref name="tenantSlug"/> names.
+    /// The Tenancy caller for <paramref name="user"/> in the tenant <paramref name="tenantSlug"/> names.
     /// Every refusal comes back as nobody, with the refusal's code; nothing is thrown for a caller Tenancy
     /// does not let in.
     /// </summary>
-    /// <param name="caller">Who is calling, as the toolkit says.</param>
+    /// <param name="user">Who is calling, as the toolkit's current user answers.</param>
     /// <param name="tenantSlug">The tenant the request names, by its slug; trimmed and lowercased here.</param>
     /// <param name="cancellationToken">Cancels the lookup.</param>
-    public async Task<TenancyCaller<TTenantId, TSeatId>> ResolveAsync(Caller caller, string? tenantSlug, CancellationToken cancellationToken)
+    public async Task<TenancyCaller<TTenantId, TSeatId>> ResolveAsync(CurrentUserSnapshot user, string? tenantSlug, CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(caller);
+        ArgumentNullException.ThrowIfNull(user);
 
-        if (caller.Kind != CallerKind.User || caller.UserId is not { } identity)
+        if (user.Kind != CurrentUserKind.User || user.Id is not { } identity)
         {
             return TenancyCaller<TTenantId, TSeatId>.Nobody(TenancyRefusals.NotSeated);
         }
 
         // An operator reads every tenant, so the tenant its request names is found by its slug alone, and kept for its
         // command. It holds no seat there.
-        if (caller.Role is { } role && _operators.Contains(role, StringComparer.Ordinal))
+        if (user.Role is { } role && _operators.Contains(role, StringComparer.Ordinal))
         {
             return await OperatorNamingAsync(tenantSlug, cancellationToken).ConfigureAwait(false);
         }
 
         // Before anything is looked up, and with the answer of a person without a seat: a token role that holds no
         // seat learns nothing about the tenants, not even that a slug is missing.
-        if (!_options.Seats(caller.Role))
+        if (!_options.Seats(user.Role))
         {
             return TenancyCaller<TTenantId, TSeatId>.Nobody(TenancyRefusals.NotSeated);
         }
@@ -114,11 +114,11 @@ public sealed class TenantSelection<TTenantId, TSeatId>(
     }
 
     /// <inheritdoc />
-    async Task<ITenancyCaller> ITenantSelection.ResolveAsync(Caller caller, string? tenantSlug, CancellationToken cancellationToken)
-        => await ResolveAsync(caller, tenantSlug, cancellationToken).ConfigureAwait(false);
+    async Task<ITenancyCaller> ITenantSelection.ResolveAsync(CurrentUserSnapshot user, string? tenantSlug, CancellationToken cancellationToken)
+        => await ResolveAsync(user, tenantSlug, cancellationToken).ConfigureAwait(false);
 
     /// <summary>
-    /// Every seat <paramref name="caller"/> has, in every tenant and in any status, for a tenant picker: the
+    /// Every seat <paramref name="user"/> has, in every tenant and in any status, for a tenant picker: the
     /// application's own seats, whole, each beside its tenant (<see cref="SeatInTenant{TSeat}"/>), so a picker shows a
     /// seat by the name the application keeps on its seat class, say, as every other answer about the seat does. Looked
     /// up by the verified identity of the caller's own token, and by nothing a request could supply. None for a caller
@@ -126,23 +126,23 @@ public sealed class TenantSelection<TTenantId, TSeatId>(
     /// they are answered what a person without a seat is answered, as in <see cref="ResolveAsync"/>.
     /// </summary>
     /// <typeparam name="TSeat">The application's seat class, or a class it derives from.</typeparam>
-    /// <param name="caller">Who is calling, as the toolkit says.</param>
+    /// <param name="user">Who is calling, as the toolkit's current user answers.</param>
     /// <param name="cancellationToken">Cancels the lookup.</param>
     /// <exception cref="InvalidOperationException"><typeparamref name="TSeat"/> is no class the storage's seats are.</exception>
-    public async Task<IReadOnlyList<SeatInTenant<TSeat>>> SeatsOfAsync<TSeat>(Caller caller, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<SeatInTenant<TSeat>>> SeatsOfAsync<TSeat>(CurrentUserSnapshot user, CancellationToken cancellationToken)
         where TSeat : class
     {
-        ArgumentNullException.ThrowIfNull(caller);
+        ArgumentNullException.ThrowIfNull(user);
 
-        return ListedIdentity(caller) is { } identity
+        return ListedIdentity(user) is { } identity
             ? await seats.AllOfAsync<TSeat>(identity, cancellationToken).ConfigureAwait(false)
             : [];
     }
 
     /// <summary>
-    /// The identity whose seats a picker lists for <paramref name="caller"/>: a signed-in user's whose token role holds
+    /// The identity whose seats a picker lists for <paramref name="user"/>: a signed-in user's whose token role holds
     /// seats, and nobody else's.
     /// </summary>
-    private Guid? ListedIdentity(Caller caller)
-        => caller.Kind == CallerKind.User && caller.UserId is { } identity && _options.Seats(caller.Role) ? identity : null;
+    private Guid? ListedIdentity(CurrentUserSnapshot user)
+        => user.Kind == CurrentUserKind.User && user.Id is { } identity && _options.Seats(user.Role) ? identity : null;
 }

@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.EntityFramework.Postgres;
 using DDDToolkit.Supporting.Membership.TestHost.Access;
@@ -22,7 +23,7 @@ public sealed class MembershipPolicyTests(FilingPostgres postgres)
         using var filing = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Secured, asCaller: true);
         var data = filing.Scenario;
 
-        Task<List<Document>> ReadAsync(Caller caller)
+        Task<List<Document>> ReadAsync(CurrentUserSnapshot caller)
             => filing.Services.AsAsync(caller, provider => provider.GetRequiredService<FilingContext>().Documents.AsNoTracking().OrderBy(document => document.Title).ToListAsync(Cancellation));
 
         // Ben contributes to the minutes and owns the budget: both come with everybody on them, since the member
@@ -39,7 +40,7 @@ public sealed class MembershipPolicyTests(FilingPostgres postgres)
 
         // Hal is a member of nothing, and a caller who did not sign in is nobody: no row of a document, and none of its members.
         (await ReadAsync(TestCallers.User(data.Hal))).Should().BeEmpty();
-        (await ReadAsync(Caller.Anonymous)).Should().BeEmpty();
+        (await ReadAsync(CurrentUserSnapshot.Anonymous)).Should().BeEmpty();
 
         await using var hal = await filing.SessionAsync(TestCallers.User(data.Hal));
         (await hal.ListAsync<long>(
@@ -47,7 +48,7 @@ public sealed class MembershipPolicyTests(FilingPostgres postgres)
             .Should().Equal(0);
 
         // The application's own work reads everything, as the role that owns the tables.
-        (await ReadAsync(Caller.System)).Should().HaveCount(3);
+        (await ReadAsync(CurrentUserSnapshot.System)).Should().HaveCount(3);
     }
 
     [Fact]
@@ -56,7 +57,7 @@ public sealed class MembershipPolicyTests(FilingPostgres postgres)
         using var filing = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Secured, asCaller: true);
         var data = filing.Scenario;
 
-        Task<List<FolderId>> ReadAsync(Caller caller)
+        Task<List<FolderId>> ReadAsync(CurrentUserSnapshot caller)
             => filing.Services.AsAsync(caller, provider => provider.GetRequiredService<FilingContext>().Folders.AsNoTracking().OrderBy(folder => folder.Id).Select(folder => folder.Id).ToListAsync(Cancellation));
 
         (await ReadAsync(TestCallers.Staff(data.Clerk))).Should().Equal(data.Cabinet, data.Annex);
@@ -475,7 +476,7 @@ public sealed class MembershipPolicyTests(FilingPostgres postgres)
             (await filing.ListAsync<bool>(
                 """SELECT bool_and(c.relforcerowsecurity) FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'filing' AND c.relkind = 'r'"""))
                 .Should().Equal(true);
-            await filing.Services.AsAsync(Caller.System, provider =>
+            await filing.Services.AsAsync(CurrentUserSnapshot.System, provider =>
                 DDDToolkit.EntityFramework.Postgres.PostgresRowAccessChecks.EnsureDefinerOwnersBypassAsync(provider.GetRequiredService<FilingContext>(), Cancellation));
             await MembershipPostgresChecks.EnsureFunctionsAreInPlaceAsync(filing.Services.Provider, Cancellation);
 

@@ -65,9 +65,9 @@ The rules say three things apart from each other, and what they say decides what
 
 The application registers what it answers before it registers the resource, or hands the class that answers to the registration that takes one: [`AddMembership<TMember, TId, TMemberId, TRoleId, TContext, TResource, TResourceId, TPorts>`](#addmembershipiservicecollection-membershiprules-1).
 
-The questions read on a context of their own, from the context's factory (`IDbContextFactory<TContext>`), where the application registered one, a pooled one with `AddScopedFromPool` say, since the questions of one request may be asked side by side; otherwise on the request's own context. Where the resource, or the role class of a resource whose roles are kept, has a query filter that reads a member of the context it runs on, the questions read on the request's own context wherever the scope has one, as the admission does: a rule kept on the request's context applies to both alike, and questions asked side by side then each take a scope of their own. A filter that reads what is around the work, and no member of its context, holds on every context. A `TimeProvider` and an `ICallerAccessor` registered before stay; otherwise the system clock and the ambient caller are used.
+The questions read on a context of their own, from the context's factory (`IDbContextFactory<TContext>`), where the application registered one, a pooled one with `AddScopedFromPool` say, since the questions of one request may be asked side by side; otherwise on the request's own context. Where the resource, or the role class of a resource whose roles are kept, has a query filter that reads a member of the context it runs on, the questions read on the request's own context wherever the scope has one, as the admission does: a rule kept on the request's context applies to both alike, and questions asked side by side then each take a scope of their own. A filter that reads what is around the work, and no member of its context, holds on every context. A `TimeProvider` and an `ICurrentUser` registered before stay; otherwise the system clock and the toolkit's `CurrentUser` are used.
 
-The ambient caller answers `Caller.System` where nobody began one, and the application itself holds every permission on every resource. An application whose requests each have a caller says so, with `services.RequireExplicitCallers()`, and a request that reaches the questions with no caller then fails rather than passes as the application. Work in a scope (`Caller.SystemIn`) holds nothing on a resource unless the rules name that scope ([`MembershipRules.SystemScopes`](rules.md#membershiprules)).
+The current user answers system work where nothing began a user, and the application itself holds every permission on every resource. An application whose work always begins its user says so, with `services.RequireExplicitCurrentUser()`, and a request that reaches the questions with no user then fails rather than passes as the application. Work in a scope (`ICurrentUser.BeginSystem` with a scope) holds nothing on a resource unless the rules name that scope ([`MembershipRules.SystemScopes`](rules.md#membershiprules)).
 
 `AddDocumentMembership<DocumentsContext>` is generated into the project that declares the member class, `[Member<DocumentShareId, UserId, NamedRole, Document>]`, closed over that class, its types, the resource it names and the resource's id (`TemplateRegistrationAttribute`), or into a project of the same `[assembly: Module]` that declares none. It is named after the resource whether a project declares one member class or several: `AddDocumentMembership` and `AddFolderMembership`. This is the method they call, and it can be called as well, with all seven types written out.
 
@@ -802,11 +802,11 @@ Where a caller holds a permission, for one kind of resource that is reached from
 It answers a query, not a list: the access questions put it into their own statement, where it becomes a subquery next to the resource's row, so what a caller holds stays one statement. It is therefore asked with the context that statement runs on, and answers over rows that context maps:
 
 ```csharp
-public IQueryable<BayId> PlacesReached(DbContext context, Caller caller, string permission)
+public IQueryable<BayId> PlacesReached(DbContext context, CurrentUserSnapshot user, string permission)
 {
-    var user = caller.UserId;
+    var id = user.Id;
     return from porter in context.Set<Porter>()
-           where porter.UserId == user && porter.Active
+           where porter.UserId == id && porter.Active
            join hold in context.Set<BayHold>() on porter.Id equals hold.PorterId
            where hold.Key == permission
            join path in context.Set<BayPath>() on hold.BayId equals path.AboveId
@@ -816,7 +816,7 @@ public IQueryable<BayId> PlacesReached(DbContext context, Caller caller, string 
 
 The questions of one request may be asked side by side, each on a context of its own, so it keeps nothing between two questions and reads on no context but the one it is handed.
 
-It is asked about every signed-in caller, a member of the resource or not, and also about one the application answered nobody for as a member ([`ICallerMember.Find`](rules.md#findcaller)): reach from above is for callers that are on no member list. So whether the caller still counts is asked here as well, of the same rows or the same fact the application answers who a member is from. An application that answers from the caller's id alone lets somebody it no longer counts keep what they held.
+It is asked about every signed-in caller, a member of the resource or not, and also about one the application answered nobody for as a member ([`ICallerMember.Find`](rules.md#findcurrentusersnapshot)): reach from above is for callers that are on no member list. So whether the caller still counts is asked here as well, of the same rows or the same fact the application answers who a member is from. An application that answers from the caller's id alone lets somebody it no longer counts keep what they held.
 
 What is above what is the application's to know: the package compares where a resource sits (the property its class marks `[At]`) with what this answers, and keeps no places and no tree of them. A permission answered here is held whatever the rules say a member's role gives: that list is about members.
 
@@ -827,20 +827,20 @@ What is above what is the application's to know: the package compares where a re
 
 | Member | Summary |
 |---|---|
-| [`PlacesReached(DbContext, Caller, string)`](#placesreacheddbcontext-caller-string) | The places `caller`'s hold of `permission` reaches now: each place the permission is held at, and every place below it. |
+| [`PlacesReached(DbContext, CurrentUserSnapshot, string)`](#placesreacheddbcontext-currentusersnapshot-string) | The places `user`'s hold of `permission` reaches now: each place the permission is held at, and every place below it. |
 
-#### `PlacesReached(DbContext, Caller, string)`
+#### `PlacesReached(DbContext, CurrentUserSnapshot, string)`
 
 ```csharp
-IQueryable<TPlaceId> PlacesReached(DbContext context, Caller caller, string permission)
+IQueryable<TPlaceId> PlacesReached(DbContext context, CurrentUserSnapshot user, string permission)
 ```
 
-The places `caller`'s hold of `permission` reaches now: each place the permission is held at, and every place below it. None for a caller that holds the permission nowhere. Not run here: it goes into the statement that asks.
+The places `user`'s hold of `permission` reaches now: each place the permission is held at, and every place below it. None for a caller that holds the permission nowhere. Not run here: it goes into the statement that asks.
 
 **Parameters**
 
 - `context`: The context the statement runs on: the query is over rows of it.
-- `caller`: The caller the question is asked for: a signed-in user.
+- `user`: The caller the question is asked for: a signed-in user.
 - `permission`: A permission.
 
 ### `IRolesWithPermission<TResourceId, TRoleId>`
@@ -856,7 +856,7 @@ Which of the roles an application keeps give a permission, for one kind of resou
 It answers a query, not a list: the access questions put it into their own statement, where it becomes a subquery next to the member rows, so what a caller holds stays one statement. It is therefore asked with the context that statement runs on, and answers over rows that context maps, the application's own or the ones another module lets it read:
 
 ```csharp
-public IQueryable<DutyId> RolesWith(DbContext context, Caller caller, string permission)
+public IQueryable<DutyId> RolesWith(DbContext context, CurrentUserSnapshot user, string permission)
     => context.Set<DutyPermission>().Where(given => given.Permission == permission).Select(given => given.DutyId);
 ```
 
@@ -871,18 +871,18 @@ What a role holds here is not all it gives a member: the package asks only for a
 
 | Member | Summary |
 |---|---|
-| [`RolesWith(DbContext, Caller, string)`](#roleswithdbcontext-caller-string) | The roles that give `permission` now: those in use, as `caller` has them, in its part of an organization say. |
+| [`RolesWith(DbContext, CurrentUserSnapshot, string)`](#roleswithdbcontext-currentusersnapshot-string) | The roles that give `permission` now: those in use, as `user` has them, in its part of an organization say. |
 
-#### `RolesWith(DbContext, Caller, string)`
+#### `RolesWith(DbContext, CurrentUserSnapshot, string)`
 
 ```csharp
-IQueryable<TRoleId> RolesWith(DbContext context, Caller caller, string permission)
+IQueryable<TRoleId> RolesWith(DbContext context, CurrentUserSnapshot user, string permission)
 ```
 
-The roles that give `permission` now: those in use, as `caller` has them, in its part of an organization say. Not run here: it goes into the statement that asks.
+The roles that give `permission` now: those in use, as `user` has them, in its part of an organization say. Not run here: it goes into the statement that asks.
 
 **Parameters**
 
 - `context`: The context the statement runs on: the query is over rows of it.
-- `caller`: The caller the question is asked for: a signed-in user.
+- `user`: The caller the question is asked for: a signed-in user.
 - `permission`: A permission a member's role can give on the resource.

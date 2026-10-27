@@ -48,7 +48,7 @@ public abstract class TenancyAccessCheckTests(TenancyPostgres postgres, TenancyN
         recorder.Clear();
         await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => RequireAsync<IHostRequest>(scoped, request));
         var asked = recorder.Sent.Should().ContainSingle("the permission is asked in one statement").Which;
-        asked.Caller!.UserId.Should().Be(Ada.Identity, "the statement runs as the person, under the policies");
+        asked.Caller!.Id.Should().Be(Ada.Identity, "the statement runs as the person, under the policies");
         asked.TenancyCaller.Should().Be(HostCaller.InSeat(Harbor, Ada.Seat));
 
         // Seth manages seats at North, which is not the whole tenant.
@@ -76,7 +76,7 @@ public abstract class TenancyAccessCheckTests(TenancyPostgres postgres, TenancyN
 
         recorder.Clear();
         await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => RequireAsync<IHostRequest>(scoped, new StatedRequests.ManageEverySeat()));
-        recorder.Sent.Should().ContainSingle("the permission is asked in one statement").Which.Caller!.UserId.Should().Be(Ada.Identity);
+        recorder.Sent.Should().ContainSingle("the permission is asked in one statement").Which.Caller!.Id.Should().Be(Ada.Identity);
         (await RefusedWithAsync(TenancyRefusals.NotPermitted, () => services.BySeat(Seth.Identity, Harbor, Seth.Seat, scoped => RequireAsync<IHostRequest>(scoped, new StatedRequests.ManageEverySeat()))))
             .Arguments["Permission"].Should().Be(TenancyPermissions.SeatsManage);
 
@@ -132,7 +132,7 @@ public abstract class TenancyAccessCheckTests(TenancyPostgres postgres, TenancyN
             await Task.WhenAll(RequireAsync<IHostRequest>(scoped, request), RequireAsync<IHostRequest>(scoped, request));
 
             recorder.Sent.Should().HaveCount(2, "two requests of one scope are checked side by side, each in one statement");
-            recorder.Sent.Should().OnlyContain(sent => sent.Caller!.UserId == Ada.Identity && Equals(sent.TenancyCaller, HostCaller.InSeat(Harbor, Ada.Seat)));
+            recorder.Sent.Should().OnlyContain(sent => sent.Caller!.Id == Ada.Identity && Equals(sent.TenancyCaller, HostCaller.InSeat(Harbor, Ada.Seat)));
             ofTheScope.ChangeTracker.Entries().Should().BeEmpty("a check never reads on the request's unit of work");
         });
 

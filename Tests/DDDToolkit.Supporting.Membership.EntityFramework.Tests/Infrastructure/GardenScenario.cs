@@ -1,3 +1,5 @@
+using DDDToolkit.Abstractions.Access;
+
 namespace DDDToolkit.Supporting.Membership.EntityFramework.Tests.Infrastructure;
 
 /// <summary>Somebody a question about plots is asked as: a user, and the garden its requests are in.</summary>
@@ -7,7 +9,7 @@ namespace DDDToolkit.Supporting.Membership.EntityFramework.Tests.Infrastructure;
 public sealed record GardenPerson(string Name, Guid User, GardenId Garden)
 {
     /// <summary>The caller: a signed-in user, whose token says the garden its requests are in, as the host's database reads it.</summary>
-    public Caller Caller => Callers.FromClaims(TestCallers.Claims(User, staff: null, garden: Garden.Value));
+    public CurrentUserSnapshot Caller => CurrentUserSnapshot.FromClaims(TestCallers.Claims(User, staff: null, garden: Garden.Value));
 
     /// <summary>Who the user is as a gardener.</summary>
     public UserId Member => new(User);
@@ -196,7 +198,7 @@ public sealed class GardenScenario
 
     /// <summary>Saves the scenario as the application's own work, in no garden.</summary>
     public async Task SaveAsync(GardenServices services)
-        => await services.AsAsync(Caller.System, async provider =>
+        => await services.AsAsync(CurrentUserSnapshot.System, async provider =>
         {
             var context = provider.GetRequiredService<GardenContext>();
             context.PlotRoles.AddRange(Roles);

@@ -29,22 +29,25 @@ namespace DDDToolkit.Supporting.Tenancy.Postgres;
 /// </para>
 /// <code>
 /// var app = builder.Build();
-/// TenancyPostgresChecks.EnsureExplicitCallers(app.Services);
+/// TenancyPostgresChecks.EnsureExplicitCurrentUser(app.Services);
 /// TenancyPostgresChecks.EnsureSeatedTokenRolesAreSignedInUsers(app.Services);
 /// await TenancyPostgresChecks.EnsureSystemInRoleIsConfinedAsync(app.Services, cancellationToken);
 /// await TenancyPostgresChecks.EnsureSystemReadsAcrossTenantsAsync(app.Services, cancellationToken);
 /// await TenancyPostgresChecks.EnsurePoliciesAreInPlaceAsync(app.Services, cancellationToken);
 /// </code>
 /// The ones that ask the database do so on a context of Tenancy's own, made in a scope of their own, as the
-/// application itself (<see cref="Caller.System"/>, begun around each query and outside any transaction the caller
-/// holds), and read the catalog of Postgres alone: no table of Tenancy's, and no tenant's rows. The one that
+/// system work without a scope (<see cref="CurrentUserSnapshot.System"/>, begun around each query and outside any
+/// transaction the caller holds), and read the catalog of Postgres alone: no table of Tenancy's, and no tenant's rows. The one that
 /// proves the reads across tenants also asks one of their functions, as Tenancy's own scoped system work in no
 /// tenant, the way those reads run.
 /// </summary>
 public static class TenancyPostgresChecks
 {
-    /// <summary>The start-up check that the host still requires explicit callers (<see cref="EnsureExplicitCallers"/>).</summary>
-    public const string ExplicitCallersCheck = "tenancy.explicit-callers";
+    /// <summary>
+    /// The start-up check that the host still requires every flow of work to begin its user
+    /// (<see cref="EnsureExplicitCurrentUser"/>).
+    /// </summary>
+    public const string ExplicitCurrentUserCheck = "tenancy.explicit-current-user";
 
     /// <summary>
     /// The start-up check that every token role Tenancy seats reaches the database as a signed-in user
@@ -86,34 +89,34 @@ public static class TenancyPostgresChecks
     private const string ParentProperty = "ParentId";
 
     /// <summary>
-    /// Proves the host still requires explicit callers, as <see cref="TenancyPostgresServiceCollectionExtensions.AddTenancyPostgres"/>
-    /// registered: the <see cref="CallerOptions"/> the services resolve, and the row level security interceptor the
+    /// Proves the host still requires every flow of work to begin its user, as <see cref="TenancyPostgresServiceCollectionExtensions.AddTenancyPostgres"/>
+    /// registered: the <see cref="CurrentUserOptions"/> the services resolve, and the row level security interceptor the
     /// contexts use, which read them when it was built. A later registration of the options, or an interceptor
     /// made without them, would let work that said nothing about who it runs as run as the application, past
     /// every policy.
     /// </summary>
     /// <param name="services">The application's services.</param>
     /// <exception cref="ArgumentNullException"><paramref name="services"/> is null.</exception>
-    /// <exception cref="InvalidOperationException">Either one does not require explicit callers, or row level security is not registered.</exception>
-    public static void EnsureExplicitCallers(IServiceProvider services)
+    /// <exception cref="InvalidOperationException">Either one does not require a begun user, or row level security is not registered.</exception>
+    public static void EnsureExplicitCurrentUser(IServiceProvider services)
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        if (services.GetService<CallerOptions>() is not { RequireExplicitCallers: true })
+        if (services.GetService<CurrentUserOptions>() is not { RequireExplicitCurrentUser: true })
         {
             throw new InvalidOperationException(
-                "The CallerOptions the services resolve do not require explicit callers, so work that says nothing about who it runs as would run as the application, past every policy. " +
-                "Something registered CallerOptions after AddTenancyPostgres(); call services.RequireExplicitCallers() after it, or leave CallerOptions to AddTenancyPostgres().");
+                "The CurrentUserOptions the services resolve do not require a begun user (RequireExplicitCurrentUser), so work that says nothing about who it runs as would run as system work, past every policy. " +
+                "Something registered CurrentUserOptions after AddTenancyPostgres(); call services.RequireExplicitCurrentUser() after it, or leave CurrentUserOptions to AddTenancyPostgres().");
         }
 
         var interceptor = services.GetService<PostgresRowLevelSecurityInterceptor>()
             ?? throw new InvalidOperationException(
-                "Row level security is not registered, so Tenancy's policies see no caller. Call services.AddSupabaseRowLevelSecurity() or services.AddPostgresRowLevelSecurity() next to AddTenancyPostgres(): UseDDDToolkit then runs every context on Postgres as its caller.");
+                "Row level security is not registered, so Tenancy's policies see no user. Call services.AddSupabaseRowLevelSecurity() or services.AddPostgresRowLevelSecurity() next to AddTenancyPostgres(): UseDDDToolkit then runs every context on Postgres as the current user.");
 
-        if (!interceptor.RequireExplicitCallers)
+        if (!interceptor.RequireExplicitCurrentUser)
         {
             throw new InvalidOperationException(
-                "The row level security interceptor was built without explicit callers, although the options require them: a caller that changes inside a transaction would be logged rather than refused. " +
+                "The row level security interceptor was built without RequireExplicitCurrentUser, although the options require it: a user that changes inside a transaction would be logged rather than refused. " +
                 "Resolve PostgresRowLevelSecurityInterceptor from the services, after AddTenancyPostgres(), rather than making one by hand.");
         }
     }
@@ -349,7 +352,7 @@ public static class TenancyPostgresChecks
                 "Row level security is not registered, so there is no scoped system role to check. Call services.AddSupabaseRowLevelSecurity() or services.AddPostgresRowLevelSecurity() next to AddTenancyPostgres().");
         if (options.SystemInRole is not { } role)
         {
-            // Without one, a scoped system caller fails before it connects, and nothing runs as such a role.
+            // Without one, scoped system work fails before it connects, and nothing runs as such a role.
             return Task.CompletedTask;
         }
 
@@ -801,9 +804,9 @@ public static class TenancyPostgresChecks
     /// </summary>
     internal static void AddStartupChecks(IServiceCollection services)
     {
-        services.AddStartupCheck(new StartupCheck(ExplicitCallersCheck, StartupCheckStage.Services, static (provider, cancellationToken) =>
+        services.AddStartupCheck(new StartupCheck(ExplicitCurrentUserCheck, StartupCheckStage.Services, static (provider, cancellationToken) =>
         {
-            EnsureExplicitCallers(provider);
+            EnsureExplicitCurrentUser(provider);
             return Task.CompletedTask;
         }));
 
@@ -879,14 +882,14 @@ public static class TenancyPostgresChecks
 
     /// <summary>
     /// Runs <paramref name="check"/> on the connection of a context that maps Tenancy's tables, made in a scope of its
-    /// own, as <see cref="Caller.System"/>, begun around it alone and outside any ambient transaction. The caller
-    /// is begun before the context is taken, so a host that makes a context for whoever is calling makes this
-    /// one for the application itself.
+    /// own, as system work without a scope, begun around it alone and outside any ambient transaction. The user is
+    /// begun before the context is taken, so a host that makes a context for whoever is calling makes this one for
+    /// system work.
     /// </summary>
     private static async Task AsSystemAsync(IServiceProvider services, Func<DbConnection, TenancyTables, Task> check, CancellationToken cancellationToken)
     {
         using (new TransactionScope(TransactionScopeOption.Suppress, TransactionScopeAsyncFlowOption.Enabled))
-        using (Callers.Begin(Caller.System))
+        using ((services.GetService<ICurrentUser>() ?? new CurrentUser()).BeginSystem())
         {
             await using var scope = services.GetRequiredService<IServiceScopeFactory>().CreateAsyncScope();
             var (context, tenancy) = TenancyContextOf(scope.ServiceProvider);
@@ -912,9 +915,9 @@ public static class TenancyPostgresChecks
     /// <exception cref="InvalidOperationException">The database refused the role or the function to the connection.</exception>
     private static async Task<(string Role, long Permissions)> AskedInAsync(IServiceProvider services, string scope, CancellationToken cancellationToken)
     {
-        // The caller first and then the context, as the reads themselves take theirs.
+        // The user first and then the context, as the reads themselves take theirs.
         using (new TransactionScope(TransactionScopeOption.Suppress, TransactionScopeAsyncFlowOption.Enabled))
-        using (Callers.Begin(Caller.SystemIn(scope)))
+        using ((services.GetService<ICurrentUser>() ?? new CurrentUser()).BeginSystem(scope))
         using (TenancyCallers.BeginNone())
         {
             await using var lifetime = services.GetRequiredService<IServiceScopeFactory>().CreateAsyncScope();

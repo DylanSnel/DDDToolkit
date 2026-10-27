@@ -12,14 +12,14 @@ namespace DDDToolkit.Auth.Supabase.AspNetCore;
 
 /// <summary>
 /// Supabase Auth in ASP.NET Core: a JWT bearer scheme for the access tokens Supabase Auth issues, the
-/// ones supabase-js sends, and each request's user as the caller row level security runs its queries as.
+/// ones supabase-js sends, and each request's user as the user row level security runs its queries as.
 /// <code>
 /// builder.Services.AddAuthentication().AddSupabaseJwtBearer("https://&lt;ref&gt;.supabase.co");
 /// builder.Services.AddDDDToolkitEntityFramework();   // UseDDDToolkit is DDDToolkit.EntityFramework's
 /// builder.Services.AddSupabaseRowLevelSecurity();   // or AddPostgresRowLevelSecurity() off Supabase
 /// builder.Services.AddDbContext&lt;OrderingContext&gt;((provider, options) => options
 ///     .UseNpgsql(connectionString)
-///     .UseDDDToolkit(provider));                   // runs the context as its caller, with the toolkit
+///     .UseDDDToolkit(provider));                   // runs the context as the current user, with the toolkit
 ///
 /// app.UseAuthentication();
 /// </code>
@@ -90,14 +90,14 @@ public static class SupabaseAuthentication
     /// there is ASP.NET Core's to say, as for any JWT bearer scheme.
     /// </para>
     /// <para>
-    /// <b>The caller.</b> The scheme also makes the request's user the caller for row level security: a
-    /// request whose token this scheme validated runs its queries as that user, any other request as
-    /// <c>anon</c>, and work outside a request as the system, unless code made another caller current with
-    /// <see cref="Callers.Begin"/>, which always wins. With
-    /// <see cref="CallerServiceCollectionExtensions.RequireExplicitCallers"/>, work outside a request that
-    /// began no caller throws <see cref="NoCallerException"/> instead of running as the system.
-    /// <see cref="SupabaseHttpContextExtensions.GetSupabaseCaller"/> is the request's own caller, whatever was
-    /// begun around it. Each token that passes has its claims kept exactly as they were signed, so Postgres
+    /// <b>The current user.</b> The scheme also makes the request's user what <see cref="ICurrentUser"/> answers,
+    /// and so the user row level security runs the request's queries as. A request whose token this scheme validated
+    /// runs as that user. Any other request runs as <c>anon</c>. Work outside a request is system work. A user that code
+    /// began with <see cref="ICurrentUser.BeginAs(Guid)"/> or <see cref="ICurrentUser.BeginSystem"/> always wins. With
+    /// <see cref="CurrentUserServiceCollectionExtensions.RequireExplicitCurrentUser"/>, work outside a request that
+    /// began no user throws <see cref="NoCurrentUserException"/> instead of running as system work.
+    /// <see cref="SupabaseHttpContextExtensions.GetSupabaseUser"/> is the request's own user, whatever was begun
+    /// around it. Each token that passes has its claims kept exactly as they were signed, so Postgres
     /// sees what PostgREST would have seen. A handler of <c>OnTokenValidated</c> set in
     /// <paramref name="configure"/> still runs, first; a token it fails is not kept.
     /// </para>
@@ -157,9 +157,10 @@ public static class SupabaseAuthentication
         builder.Services.PostConfigure<JwtBearerOptions>(authenticationScheme, options => CheckBothKindsOfToken(options, authUrl, allowPlainHttp));
         builder.Services.PostConfigure<JwtBearerOptions>(authenticationScheme, KeepValidatedClaims);
 
-        // Replace: whatever registered a caller before, in ASP.NET Core the request knows best.
+        // Replace: whatever said who a request runs as before, in ASP.NET Core the request knows best.
         builder.Services.AddHttpContextAccessor();
-        builder.Services.Replace(ServiceDescriptor.Singleton<ICallerAccessor, HttpSupabaseCallerAccessor>());
+        builder.Services.Replace(ServiceDescriptor.Singleton<ICurrentUserSource, HttpSupabaseUsers>());
+        builder.Services.AddCurrentUser();
 
         return builder;
     }
@@ -240,28 +241,23 @@ public static class SupabaseAuthentication
             // A handler that failed the token, or answered for it, decided; only a token that passed is kept.
             if (context.Result is null or { Succeeded: true } && SupabaseTokens.ClaimsOf(context.SecurityToken) is { } claims)
             {
-                context.HttpContext.Features.Set(new SupabaseAccessTokenFeature(Callers.FromClaims(claims)));
+                context.HttpContext.Features.Set(new SupabaseAccessTokenFeature(CurrentUserSnapshot.FromClaims(claims)));
             }
         };
     }
 }
 
-/// <summary>The caller a validated Supabase access token made of this request.</summary>
-internal sealed record SupabaseAccessTokenFeature(Caller Caller);
+/// <summary>The user a validated Supabase access token made of this request.</summary>
+internal sealed record SupabaseAccessTokenFeature(CurrentUserSnapshot User);
 
 /// <summary>
-/// The caller of the current request. Asked when a context opens a connection, and again before each command
-/// and each transaction on it, so a query runs as whoever the request that is running it came from.
+/// The user of the current request, for <see cref="CurrentUser"/>. Asked when a context opens a connection, and again
+/// before each command and each transaction on it, so a query runs as the user of the request that runs it.
 /// </summary>
-internal sealed class HttpSupabaseCallerAccessor(IHttpContextAccessor requests, CallerOptions? options = null) : ICallerAccessor
+internal sealed class HttpSupabaseUsers(IHttpContextAccessor requests) : ICurrentUserSource
 {
-    public Caller Current => Callers.Ambient ?? requests.HttpContext switch
-    {
-        // No request: work the application does on its own behalf. That includes work a request started
-        // that is still running after the response went out, because ASP.NET Core forgets the request
-        // then; begin a caller around such work to keep it. A host that requires explicit callers gets
-        // nobody here, rather than the system's power by default.
-        null => options?.RequireExplicitCallers == true ? throw new NoCallerException() : Caller.System,
-        { } request => request.GetSupabaseCaller(),
-    };
+    // No request answers nobody, and the current user decides: system work, or with RequireExplicitCurrentUser an
+    // exception. That includes work a request started that still runs after the response went out, because ASP.NET
+    // Core forgets the request then. Begin a user around such work to keep it.
+    public CurrentUserSnapshot? Current => requests.HttpContext?.GetSupabaseUser();
 }

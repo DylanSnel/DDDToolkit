@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Exceptions;
 
 namespace DDDToolkit.Supporting.Membership.EntityFramework.Tests;
@@ -54,7 +55,7 @@ public sealed class TwoResourcesInOneContextTests
 
         // Somebody on a folder whose staff code is, of all things, Ada's user id as text.
         var confusing = new StaffCode(data.Ada.Value.ToString());
-        await filing.Services.AsAsync(Caller.System, async provider =>
+        await filing.Services.AsAsync(CurrentUserSnapshot.System, async provider =>
         {
             var context = provider.GetRequiredService<FilingContext>();
             var cabinet = await context.Folders.SingleAsync(folder => folder.Id == data.Cabinet, Cancellation);
@@ -125,7 +126,7 @@ public sealed class TwoResourcesInOneContextTests
         });
 
         // Refused under the code of the resource the request is about.
-        Task RequireAsync(Caller caller, IFilingRequest request)
+        Task RequireAsync(CurrentUserSnapshot caller, IFilingRequest request)
             => filing.Services.AsAsync(caller, provider => provider.GetRequiredService<AccessChecks<IFilingRequest>>().RequireAsync(request, Cancellation).AsTask());
 
         (await Refused.WithCodeAsync(DocumentRefusals.Membership, MembershipRefusals.NotPermitted, () => RequireAsync(TestCallers.User(data.Ben), new ShareDocument(data.Minutes, data.Hal)))).Code.Should().Be("documents.not-permitted");
@@ -139,7 +140,7 @@ public sealed class TwoResourcesInOneContextTests
         filing.Commands.Reset();
         await RequireAsync(TestCallers.User(data.Hal), new ListDocuments());
         await RequireAsync(TestCallers.Staff(data.Nobody), new ListFolders());
-        (await Refused.WithCodeAsync(FolderRefusals.Membership, MembershipRefusals.NotPermitted, () => RequireAsync(Caller.Anonymous, new ListFolders()))).Code.Should().Be("folders.not-permitted");
+        (await Refused.WithCodeAsync(FolderRefusals.Membership, MembershipRefusals.NotPermitted, () => RequireAsync(CurrentUserSnapshot.Anonymous, new ListFolders()))).Code.Should().Be("folders.not-permitted");
         filing.Commands.Count.Should().Be(0);
     }
 
@@ -177,7 +178,7 @@ public sealed class TwoResourcesInOneContextTests
         filing.Commands.Commands.Should().NotBeEmpty().And.NotContain(sql => ofFolders.Any(table => sql.Contains(table, StringComparison.Ordinal)));
 
         filing.Commands.Reset();
-        await filing.Services.AsAsync(Caller.System, async provider =>
+        await filing.Services.AsAsync(CurrentUserSnapshot.System, async provider =>
         {
             var context = provider.GetRequiredService<FilingContext>();
             var cabinet = await context.Folders.SingleAsync(folder => folder.Id == data.Cabinet, Cancellation);

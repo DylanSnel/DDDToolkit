@@ -137,7 +137,7 @@ public static class FilingModule
         services.AddDbContext<FilingContext>(database);                             // your context, on your provider
         services.AddDocumentMembership<FilingContext>(DocumentMembership.Rules);    // the access manager, the queries and the admission for documents
         services.AddDocumentMemberAccess<IFilingRequest>();                         // the check for documents, on your requests
-        services.RequireExplicitCallers();                                          // work that names no caller fails
+        services.RequireExplicitCurrentUser();                                      // work that begins no user fails
         return services.AddScoped<DocumentHandlers>();
     }
 }
@@ -148,8 +148,8 @@ public static class FilingModule
   document. `OnModelCreating` needs no line for them. Add a migration for the tables.
 - `AddDocumentMembership` registers `MembershipAccessManager<Document>` per scope, and the queries on
   `db.Documents` ([Access in your own queries](checks-and-saves.md#access-in-your-own-queries)).
-- Without `RequireExplicitCallers()`, work that names no caller runs as the application, which holds every
-  permission. With it, that work [fails](../row-level-security.md#requiring-explicit-callers).
+- Without `RequireExplicitCurrentUser()`, work that begins no user runs as system work, which holds every
+  permission. With it, that work [fails](../row-level-security.md#requiring-an-explicit-current-user).
 
 **A request and its handler.** `[OnResource]` marks the document the permission is held on. `[ExpectedVersion]` marks
 the version the caller read. The generator writes `MemberAccess.On("documents.share", request.Document,
@@ -165,13 +165,13 @@ public sealed record ShareDocument([OnResource] DocumentId Document, UserId With
 public sealed class DocumentHandlers(
     FilingContext db,
     MemberAdmission<DocumentId, UserId, NamedRole> admission,
-    ICallerAccessor callers,
+    ICurrentUser user,
     TimeProvider clock)
 {
-    // The caller who writes a document owns it
+    // The user who writes a document owns it
     public async Task<DocumentId> WriteAsync(CancellationToken cancellationToken)
     {
-        var owner = new UserId(callers.Current.UserId!.Value);
+        var owner = new UserId(user.Id!.Value);
         var document = new Document(DocumentId.Create(), owner, clock.GetUtcNow());
         db.Documents.Add(document);
         await db.SaveChangesAsync(cancellationToken);
@@ -189,7 +189,7 @@ public sealed class DocumentHandlers(
         db.ExpectVersion(document, command.ExpectedVersion);                         // a stale If-Match version is a 409
 
         var now = clock.GetUtcNow();
-        document.ShareWith(command.With, role, MemberPeriod.Between(now, command.Until), now, by: new UserId(callers.Current.UserId!.Value));
+        document.ShareWith(command.With, role, MemberPeriod.Between(now, command.Until), now, by: new UserId(user.Id!.Value));
         await db.SaveChangesAsync(cancellationToken);
     }
 }

@@ -7,8 +7,8 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 
 /// <summary>
 /// The ways system power in Tenancy is meant to be begun. Nothing becomes system work in Tenancy by itself,
-/// whatever the toolkit's own caller says: a person reaches Tenancy through a seat, and system work is begun here,
-/// on purpose, each method beginning Tenancy's caller together with the toolkit's scoped system caller.
+/// whatever the toolkit's current user says. A person reaches Tenancy through a seat, and system work is begun here,
+/// on purpose. Each method begins Tenancy's caller together with the toolkit's scoped system work.
 /// <code>
 /// using (TenancyWork.BeginSystemIn(tenant, actingSeat))
 /// {
@@ -29,22 +29,21 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// tool only the application runs is trusted code itself: it begins the work here and calls the manager, or sends
 /// its request inside it. The requirement decides who gets as far as the handler; what the work may then do is
 /// what is begun here, and nothing of the caller's. System work is no requirement a request declares: it is this
-/// scope, and once its result is disposed the caller before it is current again.
+/// scope, and once its result is disposed the user before it is current again.
 /// </para>
 /// <para>
-/// Each method begins two callers, and ends both when its result is disposed: the Tenancy caller, which says
-/// in which tenant the work acts, and the toolkit's scoped system caller, <c>Caller.SystemIn(scope)</c>, which
-/// says what kind of work it is. Keeping them in one scope keeps them from drifting apart. Neither begins the
-/// toolkit's <c>Caller.System</c>: that one stands for the application itself, which row level security lets
-/// past every policy, while system work in a tenant must stay inside that tenant. On Postgres the scoped
-/// caller runs as a role that cannot bypass the policies, and the tenant reaches them next to it; Tenancy's
-/// own policies come with <c>DDDToolkit.Supporting.Tenancy.Postgres</c>.
+/// Each method begins two things, and ends both when its result is disposed. The Tenancy caller says in which
+/// tenant the work acts. The toolkit's scoped system work, <c>ICurrentUser.BeginSystem(scope)</c>, says what kind of
+/// work it is. Keeping them in one scope keeps them from drifting apart. Neither begins system work without a scope,
+/// which row level security lets past every policy, while system work in a tenant must stay inside that tenant. On
+/// Postgres scoped system work runs as a role that cannot bypass the policies, and the tenant reaches them next to
+/// it. Tenancy's own policies come with <c>DDDToolkit.Supporting.Tenancy.Postgres</c>.
 /// </para>
 /// <para>
 /// They are not the only way. <see cref="TenancyCallers.Begin"/> with a caller made by
 /// <see cref="TenancyCaller{TTenantId, TSeatId}.System"/>, <c>SystemIn</c> or <c>SystemBy</c> begins Tenancy's
-/// caller alone, a handle for tests and for code that begins the toolkit's caller itself: it leaves the toolkit's
-/// caller, and so the role the database runs as, as it is.
+/// caller alone, a handle for tests and for code that begins the toolkit's current user itself. It leaves the
+/// toolkit's current user, and so the role the database runs as, as it is.
 /// </para>
 /// <para>
 /// Each also says who the work is recorded as (<see cref="TenancyCaller{TTenantId, TSeatId}.Actor"/>): the system
@@ -58,8 +57,11 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// </summary>
 public static class TenancyWork
 {
+    /// <summary>Begins the toolkit's scoped system work. What it begins does not depend on the instance.</summary>
+    private static readonly ICurrentUser Users = new CurrentUser();
+
     /// <summary>
-    /// The scope of the toolkit's scoped system caller for Tenancy's own work. Under the policies of
+    /// The scope of Tenancy's own system work. Under the policies of
     /// <c>DDDToolkit.Supporting.Tenancy.Postgres</c>, only work in this scope writes Tenancy's tables; work in
     /// another scope may read them.
     /// </summary>
@@ -67,14 +69,14 @@ public static class TenancyWork
 
     /// <summary>
     /// Begins system work outside any tenant, for provisioning a tenant. It reads nothing inside one: every
-    /// tenant filter matches nothing for it. The toolkit's caller is the scoped system caller in
+    /// tenant filter matches nothing for it. The toolkit's current user is scoped system work in
     /// <see cref="SystemScope"/>, which under the policies of <c>DDDToolkit.Supporting.Tenancy.Postgres</c>
     /// reads and writes nothing until provisioning narrows it to the tenant it makes.
     /// </summary>
     public static IDisposable BeginSystem<TTenantId, TSeatId>()
         where TTenantId : struct, IEntityId, IEquatable<TTenantId>
         where TSeatId : struct, IEntityId, IEquatable<TSeatId>
-        => Both(Caller.SystemIn(SystemScope), TenancyCaller<TTenantId, TSeatId>.System);
+        => Both(SystemScope, TenancyCaller<TTenantId, TSeatId>.System);
 
     /// <summary>
     /// Begins system work inside one tenant, such as an import or seeding: it holds every permission there, and
@@ -87,12 +89,12 @@ public static class TenancyWork
     /// </summary>
     /// <param name="tenant">The tenant.</param>
     /// <param name="actingSeat">The seat the work is done for, recorded as who placed or granted; it adds no rights.</param>
-    /// <param name="scope">The scope of the toolkit's scoped system caller: lower case letters, digits, <c>_</c> and <c>-</c>.</param>
+    /// <param name="scope">The scope of the system work: lower case letters, digits, <c>_</c> and <c>-</c>.</param>
     /// <exception cref="ArgumentException"><paramref name="scope"/> is not a scope; nothing is begun then.</exception>
     public static IDisposable BeginSystemIn<TTenantId, TSeatId>(TTenantId tenant, TSeatId? actingSeat = null, string scope = SystemScope)
         where TTenantId : struct, IEntityId, IEquatable<TTenantId>
         where TSeatId : struct, IEntityId, IEquatable<TSeatId>
-        => Both(Caller.SystemIn(scope), TenancyCaller<TTenantId, TSeatId>.SystemIn(tenant, TenancyActor<TSeatId>.OfSystem(scope, actingSeat)));
+        => Both(scope, TenancyCaller<TTenantId, TSeatId>.SystemIn(tenant, TenancyActor<TSeatId>.OfSystem(scope, actingSeat)));
 
     /// <summary>
     /// Begins system work inside one tenant for a seat: <see cref="BeginSystemIn{TTenantId, TSeatId}(TTenantId, TSeatId?, string)"/>
@@ -108,7 +110,7 @@ public static class TenancyWork
     /// </summary>
     /// <param name="tenant">The tenant.</param>
     /// <param name="actingSeat">The seat the work is done for, recorded as who placed or granted; it adds no rights.</param>
-    /// <param name="scope">The scope of the toolkit's scoped system caller: lower case letters, digits, <c>_</c> and <c>-</c>.</param>
+    /// <param name="scope">The scope of the system work: lower case letters, digits, <c>_</c> and <c>-</c>.</param>
     /// <exception cref="ArgumentException"><paramref name="scope"/> is not a scope; nothing is begun then.</exception>
     [OverloadResolutionPriority(-1)]
     public static IDisposable BeginSystemIn<TTenantId, TSeatId>(TTenantId tenant, TSeatId actingSeat, string scope = SystemScope)
@@ -122,13 +124,13 @@ public static class TenancyWork
     /// The access check of <see cref="OperatorAttribute"/> begins it, and nothing else.
     /// </summary>
     /// <param name="operatorIdentity">The operator's verified identity: the current user's id.</param>
-    /// <param name="scope">The scope of the toolkit's scoped system caller: lower case letters, digits, <c>_</c> and <c>-</c>.</param>
+    /// <param name="scope">The scope of the system work: lower case letters, digits, <c>_</c> and <c>-</c>.</param>
     /// <exception cref="ArgumentException"><paramref name="operatorIdentity"/> is empty, or <paramref name="scope"/> is not a scope; nothing is begun then.</exception>
     internal static IDisposable BeginOperator<TTenantId, TSeatId>(Guid operatorIdentity, string scope = SystemScope)
         where TTenantId : struct, IEntityId, IEquatable<TTenantId>
         where TSeatId : struct, IEntityId, IEquatable<TSeatId>
         => Both(
-            Caller.SystemIn(scope),
+            scope,
             TenancyCaller<TTenantId, TSeatId>.SystemBy(TenancyActor<TSeatId>.OfOperator(operatorIdentity, scope)));
 
     /// <summary>
@@ -142,13 +144,13 @@ public static class TenancyWork
     /// </summary>
     /// <param name="tenant">The tenant.</param>
     /// <param name="operatorIdentity">The operator's verified identity: the current user's id.</param>
-    /// <param name="scope">The scope of the toolkit's scoped system caller: lower case letters, digits, <c>_</c> and <c>-</c>.</param>
+    /// <param name="scope">The scope of the system work: lower case letters, digits, <c>_</c> and <c>-</c>.</param>
     /// <exception cref="ArgumentException"><paramref name="operatorIdentity"/> is empty, or <paramref name="scope"/> is not a scope; nothing is begun then.</exception>
     internal static IDisposable BeginOperatorIn<TTenantId, TSeatId>(TTenantId tenant, Guid operatorIdentity, string scope = SystemScope)
         where TTenantId : struct, IEntityId, IEquatable<TTenantId>
         where TSeatId : struct, IEntityId, IEquatable<TSeatId>
         => Both(
-            Caller.SystemIn(scope),
+            scope,
             TenancyCaller<TTenantId, TSeatId>.SystemIn(tenant, TenancyActor<TSeatId>.OfOperator(operatorIdentity, scope)));
 
     /// <summary>
@@ -164,12 +166,12 @@ public static class TenancyWork
     /// </summary>
     /// <param name="tenant">The tenant.</param>
     /// <param name="seat">The seat the token stands for.</param>
-    /// <param name="scope">The scope of the toolkit's scoped system caller, the module's name: lower case letters, digits, <c>_</c> and <c>-</c>.</param>
+    /// <param name="scope">The scope of the system work, the module's name: lower case letters, digits, <c>_</c> and <c>-</c>.</param>
     /// <exception cref="ArgumentException"><paramref name="scope"/> is not a scope; nothing is begun then.</exception>
     public static IDisposable BeginTokenIn<TTenantId, TSeatId>(TTenantId tenant, TSeatId seat, string scope)
         where TTenantId : struct, IEntityId, IEquatable<TTenantId>
         where TSeatId : struct, IEntityId, IEquatable<TSeatId>
-        => Both(Caller.SystemIn(scope), TenancyCaller<TTenantId, TSeatId>.SystemIn(tenant, TenancyActor<TSeatId>.OfToken(seat, scope)));
+        => Both(scope, TenancyCaller<TTenantId, TSeatId>.SystemIn(tenant, TenancyActor<TSeatId>.OfToken(seat, scope)));
 
     /// <summary>
     /// Begins system work inside <paramref name="tenant"/> in Tenancy's own scope, recorded as
@@ -178,16 +180,19 @@ public static class TenancyWork
     internal static IDisposable BeginSystemInAs<TTenantId, TSeatId>(TTenantId tenant, TenancyActor<TSeatId> actor)
         where TTenantId : struct, IEntityId, IEquatable<TTenantId>
         where TSeatId : struct, IEntityId, IEquatable<TSeatId>
-        => Both(Caller.SystemIn(SystemScope), TenancyCaller<TTenantId, TSeatId>.SystemIn(tenant, actor));
+        => Both(SystemScope, TenancyCaller<TTenantId, TSeatId>.SystemIn(tenant, actor));
 
-    /// <summary>Begins the toolkit's caller and then the Tenancy caller, and ends them in the opposite order.</summary>
-    private static IDisposable Both(Caller core, ITenancyCaller tenancy)
+    /// <summary>
+    /// Begins the toolkit's scoped system work in <paramref name="scope"/> and then the Tenancy caller, and ends them in
+    /// the opposite order. A scope that is no scope throws before anything is begun.
+    /// </summary>
+    private static IDisposable Both(string scope, ITenancyCaller tenancy)
     {
-        var outer = Callers.Begin(core);
+        var outer = Users.BeginSystem(scope);
         return new Scopes(outer, TenancyCallers.Begin(tenancy));
     }
 
-    /// <summary>Ends the Tenancy caller and then the toolkit's, once.</summary>
+    /// <summary>Ends the Tenancy caller and then the toolkit's current user, once.</summary>
     private sealed class Scopes(IDisposable outer, IDisposable inner) : IDisposable
     {
         private bool _disposed;

@@ -40,7 +40,7 @@ public static class RowAccessRoles
     /// <summary>
     /// The application's own bookkeeping, where the role it logs in as holds nothing: the role that reads and
     /// marks outbox rows, writes inbox rows, checks the migration history and deletes rows that are old enough
-    /// to go. It is the role the host configured for the system caller, and there is none unless the host
+    /// to go. It is the role the host configured for system work, and there is none unless the host
     /// configured one: a script refuses a rule or a contribution that names it while none is configured.
     /// </summary>
     public const string System = "@system";

@@ -1338,13 +1338,13 @@ code that uses the constant from adding errors of its own.
 [RowAccess<Order>(RowOperations.Read)]
 public static class ACustomerSeesTheirOrders                      // DDD00038: not partial
 {
-    public static bool Allows(Order order) => order.PlacedBy == null;   // DDD00038: no Caller
+    public static bool Allows(Order order) => order.PlacedBy == null;   // DDD00038: no ICurrentUser
 }
 ```
 
 The generator writes the rule's SQL into another part of the class, so the class is `static partial`. The
-generator translates `Allows`. `Allows` is a static method that takes the aggregate the rule is about and a
-`Caller`, returns `bool`, and has a single expression for a body: after `=>`, or as its only `return` statement.
+generator translates `Allows`. `Allows` is a static method that takes the aggregate the rule is about and an
+`ICurrentUser`, returns `bool`, and has a single expression for a body: after `=>`, or as its only `return` statement.
 The generator generates nothing until the rule has this shape. A rule without SQL never reaches the database.
 
 The same holds for the other classes the generator reads, with more requirements:
@@ -1405,7 +1405,7 @@ The same holds for the other classes the generator reads, with more requirements
 **A row access rule can only say what the database can check.**
 
 ```csharp
-public static bool Allows(Order order, Caller caller)
+public static bool Allows(Order order, ICurrentUser user)
     => order.Team!.StartsWith("north");                           // DDD00039, on the call
 ```
 
@@ -1413,7 +1413,7 @@ The generator turns a rule into a condition that the database checks for every r
 
 - the aggregate's own properties;
 - constants written in the rule;
-- the caller: `caller.UserId`, `caller.IsSignedIn`, `caller.Role` and `caller.Claim("app_metadata.team")`;
+- the current user: `user.Id`, `user.IsAuthenticated`, `user.Role` and `user.FindClaim("app_metadata.team")`;
 - the time, as `DateTimeOffset.UtcNow` or `DateTime.UtcNow`, which the database answers as `now()`;
 - SQL written with `Sql.Call` or `Sql.Raw`.
 
@@ -1457,8 +1457,8 @@ parent's template. That class reads the parent's properties like its own.
 [RowAccess<Project>(RowOperations.Read)]
 public static partial class MembersSeeTheirProjects
 {
-    public static bool Allows(Project project, Caller caller)
-        => project.Members.Any(member => member.UserId == caller.UserId);   // DDD00041
+    public static bool Allows(Project project, ICurrentUser user)
+        => project.Members.Any(member => member.UserId == user.Id);   // DDD00041
 }
 ```
 
@@ -1472,14 +1472,14 @@ as its owner (`SECURITY DEFINER`), so it reads the entities without their polici
 [AccessFunction<Project>("projects.is_member")]
 public static partial class ProjectMembership
 {
-    public static bool Allows(Project project, Caller caller)
-        => project.Members.Any(member => member.UserId == caller.UserId);
+    public static bool Allows(Project project, ICurrentUser user)
+        => project.Members.Any(member => member.UserId == user.Id);
 }
 
 [RowAccess<Project>(RowOperations.Read)]
 public static partial class MembersSeeTheirProjects
 {
-    public static bool Allows(Project project, Caller caller) => ProjectMembership.Allows(project, caller);
+    public static bool Allows(Project project, ICurrentUser user) => ProjectMembership.Allows(project, user);
 }
 ```
 
@@ -1849,7 +1849,7 @@ public sealed partial class NoteShare;
 **A set-shaped question is asked once per statement, so its arguments do not read the row.**
 
 ```csharp
-public static bool Allows(Ticket ticket, Caller caller)
+public static bool Allows(Ticket ticket, ICurrentUser user)
     => DeskQuestions.TicketsForTeam(ticket.Team!).Contains(ticket.Id);   // DDD00051, on ticket.Team!
 ```
 
@@ -3339,7 +3339,7 @@ caller's own value of a type is:
 ```csharp
 public sealed class CallersUser : ICallersOwn<UserId>
 {
-    public UserId? Find(Caller caller) => caller.UserId is { } id ? new UserId(id) : null;
+    public UserId? Find(ICurrentUser user) => user.Id is { } id ? new UserId(id) : null;
 }
 
 services.AddCallersOwn<UserId, CallersUser>();

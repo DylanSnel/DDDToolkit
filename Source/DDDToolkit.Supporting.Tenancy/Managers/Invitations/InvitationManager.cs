@@ -40,7 +40,7 @@ namespace DDDToolkit.Supporting.Tenancy.Managers;
 /// <param name="catalogue">The permissions asked for, and which roles manage access.</param>
 /// <param name="options">Which signed-in users may hold a seat: whom an acceptance seats.</param>
 /// <param name="invitationOptions">How long an invitation stays open.</param>
-/// <param name="callers">Who is calling, as the toolkit says: the signed-in identity that accepts.</param>
+/// <param name="user">Who is calling, as the toolkit's current user answers: the signed-in identity that accepts.</param>
 /// <param name="clock">What "now" is.</param>
 public class InvitationManager<
     [TemplateType(typeof(TenantAggregateAttribute<>), Take = TemplateArgumentKind.Type)] TTenant,
@@ -59,7 +59,7 @@ public class InvitationManager<
     TenancyCatalogue catalogue,
     TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId> options,
     TenancyInvitationOptions<TInvitationId> invitationOptions,
-    ICallerAccessor callers,
+    ICurrentUser user,
     TimeProvider clock)
     where TTenant : TenantAggregate<TTenantId>
     where TOrganization : OrganizationAggregate<TTenantId, TUnit, TUnitId>
@@ -249,7 +249,7 @@ public class InvitationManager<
     /// one save it makes that identity's seat in the invitation's tenant, places it in the invitation's unit as
     /// its primary placement, grants it the invitation's role there, and marks the invitation as accepted.
     /// <para>
-    /// The caller is the toolkit's own, read here and never handed in: a signed-in user with a verified
+    /// The caller is the toolkit's current user, read here and never handed in: a signed-in user with a verified
     /// identity, whose token role may hold a seat, and who did not sign in anonymously. It names no tenant and
     /// needs no seat: the token says which invitation, and so which tenant. Nothing is found by an address.
     /// </para>
@@ -306,7 +306,7 @@ public class InvitationManager<
         TSeatId? seat = null,
         Action<TSeat>? configure = null)
     {
-        var identity = AcceptingIdentity(callers.Current);
+        var identity = AcceptingIdentity(user.Snapshot);
 
         // A text that is no token has no digest, and is answered as a token nobody was given.
         if (!BearerTokens.TryDigest(token, out var digest)
@@ -479,7 +479,7 @@ public class InvitationManager<
             throw TenancyRefusals.Refuse(TenancyRefusals.InvitationUnbacked);
         }
 
-        // The toolkit's caller stays the system work this runs as: only who Tenancy asks about changes.
+        // The toolkit's current user stays the system work this runs as: only who Tenancy asks about changes.
         using (TenancyCallers.Begin(TenancyCaller<TTenantId, TSeatId>.InSeat(invitation.TenantId, issuer)))
         {
             var asIssuer = Gate();
@@ -501,11 +501,11 @@ public class InvitationManager<
     /// sign-in was not an anonymous one.
     /// </summary>
     /// <exception cref="RefusalException"><c>tenancy.identity-required</c>.</exception>
-    private Guid AcceptingIdentity(Caller caller)
-        => caller is { Kind: CallerKind.User, UserId: { } identity }
+    private Guid AcceptingIdentity(CurrentUserSnapshot accepting)
+        => accepting is { Kind: CurrentUserKind.User, Id: { } identity }
            && identity != Guid.Empty
-           && options.TenantSelection.Seats(caller.Role)
-           && !string.Equals(caller.Claim(AnonymousClaim), "true", StringComparison.OrdinalIgnoreCase)
+           && options.TenantSelection.Seats(accepting.Role)
+           && !string.Equals(accepting.FindClaim(AnonymousClaim), "true", StringComparison.OrdinalIgnoreCase)
             ? identity
             : throw TenancyRefusals.Refuse(TenancyRefusals.IdentityRequired);
 

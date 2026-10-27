@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using System.Text.RegularExpressions;
 using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.EntityFramework.Postgres;
@@ -393,7 +394,7 @@ public sealed partial class RolesACustomerMakesOnPostgresTests(FilingPostgres po
         }
 
         // Somebody who did not sign in reads no role and writes none.
-        await using (var nobody = await CallerSession.BeginAsync(garden.Database, Caller.Anonymous, role: "anon"))
+        await using (var nobody = await CallerSession.BeginAsync(garden.Database, CurrentUserSnapshot.Anonymous, role: "anon"))
         {
             (await nobody.ListAsync<long>($"SELECT count(*) FROM {Gardens}\"PlotRoles\"")).Should().Equal(0L);
             (await nobody.ListAsync<long>(

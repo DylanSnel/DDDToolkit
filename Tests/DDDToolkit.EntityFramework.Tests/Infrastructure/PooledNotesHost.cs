@@ -21,7 +21,7 @@ public sealed class PooledContextPostgres : ICollectionFixture<SupabaseRowLevelS
 /// <summary>
 /// A host, in miniature, whose <see cref="NotesContext"/> comes from a context pool and runs under row level
 /// security: the options callback calls <c>UseDDDToolkit</c> and <c>UsePostgresRowLevelSecurity</c>, once, with
-/// the root provider, and every flow of work says who it runs as (<c>RequireExplicitCallers</c>). One
+/// the root provider, and every flow of work says who it runs as (<c>RequireExplicitCurrentUser</c>). One
 /// interceptor, one set of options and one settings provider serve every context of the pool, so whatever
 /// differs per caller has to be read per use.
 /// </summary>
@@ -35,7 +35,7 @@ public sealed class PooledNotesHost : IAsyncDisposable
         var services = new ServiceCollection();
         services.AddDDDToolkitEntityFramework();
         services.AddPostgresRowLevelSecurity(options => options.SystemRole = SupabaseRowLevelSecurity.ServiceRole);
-        services.RequireExplicitCallers();
+        services.RequireExplicitCurrentUser();
         services.AddRowLevelSecuritySettings<TeamOfTheCaller>();
         services.AddPooledDbContextFactory<NotesContext>((provider, options) => options
             .UseNpgsql(connectionString)
@@ -49,8 +49,8 @@ public sealed class PooledNotesHost : IAsyncDisposable
     public IDbContextFactory<NotesContext> Factory => _provider.GetRequiredService<IDbContextFactory<NotesContext>>();
 
     /// <summary>A signed-in user, optionally in a team, which <see cref="TeamOfTheCaller"/> turns into a setting.</summary>
-    public static Caller User(Guid id, string? team = null)
-        => Callers.FromClaims(team is null
+    public static CurrentUserSnapshot User(Guid id, string? team = null)
+        => CurrentUserSnapshot.FromClaims(team is null
             ? $$"""{"sub":"{{id}}","role":"authenticated"}"""
             : $$"""{"sub":"{{id}}","role":"authenticated","team":"{{team}}"}""");
 
@@ -91,6 +91,6 @@ public sealed class TeamOfTheCaller : IRowLevelSecuritySettings
 
     public IReadOnlyCollection<string> Names { get; } = [Setting];
 
-    public IEnumerable<KeyValuePair<string, string>> For(Caller caller)
-        => caller.Claim("team") is { } team ? [new(Setting, team)] : [];
+    public IEnumerable<KeyValuePair<string, string>> For(CurrentUserSnapshot caller)
+        => caller.FindClaim("team") is { } team ? [new(Setting, team)] : [];
 }

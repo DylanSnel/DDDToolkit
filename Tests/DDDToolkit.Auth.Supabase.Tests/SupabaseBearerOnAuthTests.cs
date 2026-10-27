@@ -66,6 +66,6 @@ public sealed class SupabaseBearerOnAuthTests(SupabaseAuthStack stack)
         // And without a web framework, as a function or a worker checks it.
         var validation = await new SupabaseTokenValidator(project).ValidateAsync(token!);
         validation.IsValid.Should().BeTrue(validation.Error?.Message);
-        validation.Caller.Should().BeEquivalentTo(new { Kind = CallerKind.User, UserId = (Guid?)person.Id });
+        validation.User.Should().BeEquivalentTo(new { Kind = CurrentUserKind.User, Id = (Guid?)person.Id });
     }
 }

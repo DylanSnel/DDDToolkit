@@ -21,6 +21,6 @@ internal sealed class CallersSeat<TTenantId, TSeatId> : ICallersOwn<TSeatId>
     where TSeatId : struct, IEntityId, IEquatable<TSeatId>
 {
     /// <inheritdoc />
-    public TSeatId? Find(Caller caller)
+    public TSeatId? Find(ICurrentUser user)
         => TenancyCallers.Current<TTenantId, TSeatId>() is { Kind: TenancyCallerKind.Seat, Seat: { } seat } ? seat : null;
 }

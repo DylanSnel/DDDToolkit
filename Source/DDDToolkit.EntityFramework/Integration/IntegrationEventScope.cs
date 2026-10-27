@@ -9,7 +9,7 @@ namespace DDDToolkit.EntityFramework.Integration;
 /// <see cref="ModuleIntegrationEvents{TContext}.Around"/>.
 /// <code>
 /// services.AddModuleIntegrationEvents&lt;ShippingContext&gt;(module => module
-///     .Around((services, message, contract) => Callers.Begin(Caller.SystemIn("shipping")))
+///     .Around((services, message, contract) => services.GetRequiredService&lt;ICurrentUser&gt;().BeginSystem("shipping"))
 ///     .Handle&lt;OrderPlacedV1, BookShipment&gt;());
 /// </code>
 /// </summary>

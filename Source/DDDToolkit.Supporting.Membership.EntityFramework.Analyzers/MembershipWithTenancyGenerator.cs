@@ -281,7 +281,7 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
     private const string EntityFramework = "global::Microsoft.EntityFrameworkCore";
     private const string Membership = "global::DDDToolkit.Supporting.Membership";
     private const string TenancyAccessNamespace = "global::" + Tenancy + ".Access";
-    private const string Caller = "global::DDDToolkit.Abstractions.Access.Caller";
+    private const string CurrentUserSnapshot = "global::DDDToolkit.Abstractions.Access.CurrentUserSnapshot";
     private const string CancellationTokenType = "global::System.Threading.CancellationToken";
     private const string TenancyEntityFramework = "global::" + Tenancy + ".EntityFramework";
     private const string Queryable = "global::System.Linq.Queryable";
@@ -410,7 +410,7 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
 
             writer.Line();
             writer.Line("/// <summary>The caller's seat, while it is one: the application's own work in a tenant acts for a seat at most, and is nobody's member.</summary>");
-            using (writer.Block("public " + join.Seat + "? Find(" + Caller + " caller)"))
+            using (writer.Block("public " + join.Seat + "? Find(" + CurrentUserSnapshot + " user)"))
             {
                 writer.Line("var current = " + callers + ";");
                 writer.Line("return current.Kind == " + TenancyAccessNamespace + ".TenancyCallerKind.Seat ? current.Seat : null;");
@@ -418,7 +418,7 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
 
             writer.Line();
             writer.Line("/// <summary>Refuses somebody who has no seat that counts in the tenant, as Tenancy refuses them, before anything is read.</summary>");
-            writer.Line("public void Require(" + Caller + " caller) => _access.CurrentTenant.Require();");
+            writer.Line("public void Require(" + CurrentUserSnapshot + " user) => _access.CurrentTenant.Require();");
 
             writer.Line();
             writer.Line("/// <summary>");
@@ -440,7 +440,7 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
             writer.Line("/// catalogue does not know is one no role of the organization can hold, so it is held nowhere: Tenancy itself would");
             writer.Line("/// take the question for a typo.");
             writer.Line("/// </summary>");
-            using (writer.Block("public global::System.Linq.IQueryable<" + unit + "> PlacesReached(" + EntityFramework + ".DbContext context, " + Caller + " caller, string permission)"))
+            using (writer.Block("public global::System.Linq.IQueryable<" + unit + "> PlacesReached(" + EntityFramework + ".DbContext context, " + CurrentUserSnapshot + " user, string permission)"))
             {
                 writer.Line("var queries = QueriesOver(context);");
                 writer.Line("return _catalogue.Knows(permission)");
@@ -452,7 +452,7 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
             {
                 writer.Line();
                 writer.Line("/// <summary>The tenant's roles in use that give <paramref name=\"permission\"/>; none for a permission the catalogue does not know.</summary>");
-                using (writer.Block("public global::System.Linq.IQueryable<" + join.Role + "> RolesWith(" + EntityFramework + ".DbContext context, " + Caller + " caller, string permission)"))
+                using (writer.Block("public global::System.Linq.IQueryable<" + join.Role + "> RolesWith(" + EntityFramework + ".DbContext context, " + CurrentUserSnapshot + " user, string permission)"))
                 {
                     writer.Line("var queries = QueriesOver(context);");
                     writer.Line("return _catalogue.Knows(permission)");

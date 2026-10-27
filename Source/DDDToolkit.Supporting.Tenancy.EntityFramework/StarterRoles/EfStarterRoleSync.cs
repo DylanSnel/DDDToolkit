@@ -94,7 +94,7 @@ internal sealed class EfStarterRoleSync<TTenant, TTenantId, TOrganization, TUnit
         {
             try
             {
-                // The caller is begun before the scope's context is taken, so the context is the work's own.
+                // The user is begun before the scope's context is taken, so the context is the work's own.
                 using (TenancyWork.BeginSystemIn<TTenantId, TSeatId>(tenant))
                 {
                     await using var scope = scopes.CreateAsyncScope();

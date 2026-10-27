@@ -1,3 +1,5 @@
+using DDDToolkit.Abstractions.Access;
+
 namespace DDDToolkit.Supporting.Tenancy.Tests.Support;
 
 /// <summary>
@@ -47,7 +49,7 @@ public sealed class Harness
     public IStarterRoleTexts? StarterRoleTexts { get; set; }
 
     /// <summary>The tenants, whose list asks the toolkit's own caller: the one <c>Callers.Begin</c> made current.</summary>
-    public TenantManager Tenants => new(Store, Catalogue, Clock, Options, new DDDToolkit.Access.AmbientCallerAccessor(), StarterRoleTexts);
+    public TenantManager Tenants => new(Store, Catalogue, Clock, Options, new DDDToolkit.Access.CurrentUser(), StarterRoleTexts);
 
     public OrganizationManager Organization => new(Store, Catalogue, Clock);
 
@@ -57,7 +59,7 @@ public sealed class Harness
 
     /// <summary>The invitations, which ask the toolkit's own caller who accepts: the one <c>Callers.Begin</c> made current.</summary>
     public InvitationManager Invitations
-        => new(Store, Store, Catalogue, Options, InvitationOptions, new DDDToolkit.Access.AmbientCallerAccessor(), Clock);
+        => new(Store, Store, Catalogue, Options, InvitationOptions, new DDDToolkit.Access.CurrentUser(), Clock);
 
     /// <summary>Harbor, saved, with the catalogue given or the host's.</summary>
     public static Harness OfHarbor(TenancyCatalogue? catalogue = null)
@@ -122,7 +124,7 @@ public sealed class Harness
     /// </summary>
     public async Task<InvitationManager.AcceptedInvitation> Accept(Guid identity, string token, string? displayName = "Wren", string? verifiedAddress = null)
     {
-        using (DDDToolkit.Access.Callers.Begin(DDDToolkit.Abstractions.Access.Caller.User(identity)))
+        using (TestUser.BeginAs(identity))
         {
             Store.BeginUnitOfWork();
             return await Invitations.AcceptAsync(token, verifiedAddress, CancellationToken.None, configure: seat => seat.Rename(displayName));

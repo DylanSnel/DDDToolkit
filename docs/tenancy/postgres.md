@@ -72,8 +72,9 @@ Tenancy's save check.
 `AddTenancyPostgres()` ([reference](reference/managers.md#addtenancypostgresiservicecollection)) does four things:
 
 - Sets the caller's tenant on every connection ([Passing the tenant to Postgres](#passing-the-tenant-to-postgres)).
-- Requires explicit callers. Work that never says who it runs as fails. Without this rule, that work would run
-  as the application, past every policy ([Fail-closed callers](../row-level-security.md#requiring-explicit-callers)).
+- Requires an explicit current user. Work that never says who it runs as fails. Without this rule, that work would
+  run as system work, past every policy
+  ([Requiring an explicit current user](../row-level-security.md#requiring-an-explicit-current-user)).
 - Leaves [the rights](#how-rights-are-written) to the database, by turning on
   `TenancyStoreOptions.DatabaseKeepsRights`.
 - Turns the refusal of the administrator trigger into `tenancy.last-admin`, and registers the
@@ -120,7 +121,7 @@ statement that fixes it.
 
 | `TenancyPostgresChecks.` | What it proves |
 |---|---|
-| `EnsureExplicitCallers` | The host still requires explicit callers, in `CallerOptions` and in the RLS interceptor. |
+| `EnsureExplicitCurrentUser` | The host still requires an explicit current user, in `CurrentUserOptions` and in the RLS interceptor. |
 | `EnsureSeatedTokenRolesAreSignedInUsers` | Every token role that Tenancy seats reaches the database as a signed-in user ([Which signed-in users hold seats](#which-signed-in-users-hold-seats)). |
 | `EnsureSystemInRoleIsConfinedAsync` | The scoped system role cannot log in, cannot bypass RLS, and cannot act as a table's owner. No caller's role has its privileges, and the Data API's login role (`authenticator`) cannot switch to it. No mapped token role acts as a signed-in user or may run Tenancy's functions. `anon` and `PUBLIC` may not run any function that runs as its owner. |
 | `EnsureSystemReadsAcrossTenantsAsync` | The [reads across tenants](#reads-across-tenants) return their rows, and only the scoped system role may run them. |
@@ -130,8 +131,8 @@ statement that fixes it.
   `TenancyChecks.UnknownStoredPermissionsCheck`.
 - To run the checks by hand, call the methods of
   [`TenancyPostgresChecks`](reference/postgres.md#tenancypostgreschecks) in the order of the table. Call them after
-  the checks of the login role and after the migrations. The methods that ask the database run as `Caller.System`, on
-  a context of Tenancy's own, outside any transaction of yours.
+  the checks of the login role and after the migrations. The methods that ask the database run as system work without
+  a scope, on a context of Tenancy's own, outside any transaction of yours.
 
 ### What Postgres refuses
 
@@ -223,12 +224,12 @@ token's identity. `TenantSelection` returns the seat when the seat and its tenan
 ```csharp
 app.Use(async (context, next) =>
 {
-    var caller = context.GetSupabaseCaller();
-    using (Callers.Begin(caller))
+    var user = context.GetSupabaseUser();
+    using (context.RequestServices.GetRequiredService<ICurrentUser>().BeginAs(user))
     {
         // ITenantSelection has no type parameters, so the middleware names no id types
         var seat = await context.RequestServices.GetRequiredService<ITenantSelection>()
-            .ResolveAsync(caller, context.Request.Headers["Tenant"], context.RequestAborted);
+            .ResolveAsync(user, context.Request.Headers["Tenant"], context.RequestAborted);
         using (TenancyCallers.Begin(seat))
         {
             await next(context);
@@ -352,7 +353,7 @@ A member reads the people placed at its units or below:
 [RowAccess<Seat>(RowOperations.Read)]
 public static partial class MembersReadThePeopleOfTheirUnits
 {
-    public static bool Allows(Seat seat, Caller caller) => TenancyRowAccess.SeatsInMyUnits<SeatId>().Contains(seat.Id);
+    public static bool Allows(Seat seat, ICurrentUser user) => TenancyRowAccess.SeatsInMyUnits<SeatId>().Contains(seat.Id);
 }
 ```
 
@@ -362,7 +363,7 @@ A seat that gives roles at an invitation's unit also reads the invitation:
 [RowAccess<Invitation>(RowOperations.Read)]
 public static partial class GrantsManagersReadTheInvitationsAtTheirUnits
 {
-    public static bool Allows(Invitation invitation, Caller caller)
+    public static bool Allows(Invitation invitation, ICurrentUser user)
         => TenancyRowAccess.UnitsWhereIHold<OrganizationUnitId>(TenancyPermissions.GrantsManage).Contains(invitation.UnitId);
 }
 ```
@@ -376,7 +377,7 @@ of your class. Each method runs once per statement.
 | The caller itself | `seat.Id == TenancyRowAccess.CallerSeatId<SeatId>()` |
 | A field of the caller's own seat | `TenancyRowAccess.CallerSeat<Seat>().Kind == SeatKind.Employee` |
 | The people on the projects the caller is on | `PeopleOnMyProjects.Ids().Contains(seat.Id)` ([below](#restrictive-rules)) |
-| The person's own seats, in every tenant | `seat.Identity == caller.UserId` |
+| The person's own seats, in every tenant | `seat.Identity == user.Id` |
 | The seats placed at or below the caller's units (for a seat at the root, every placed seat) | `TenancyRowAccess.SeatsInMyUnits<SeatId>().Contains(seat.Id)` |
 | Where the caller holds a permission | `TenancyRowAccess.UnitsWhereIHold<OrganizationUnitId>(permission).Contains(invitation.UnitId)` |
 | A permission held anywhere, or for the whole tenant | `TenancyRowAccess.HoldsPermission(permission)`, `TenancyRowAccess.HoldsAtTenant(permission)` |
@@ -429,7 +430,7 @@ public sealed partial class Seat
 [RowAccess<Organization>(RowOperations.Read, Restrictive = true)]
 public static partial class OnlyEmployeesReadTheOrganization
 {
-    public static bool Allows(Organization organization, Caller caller)
+    public static bool Allows(Organization organization, ICurrentUser user)
         => TenancyRowAccess.CallerSeat<Seat>().Kind == SeatKind.Employee;
 }
 ```
@@ -449,7 +450,7 @@ CREATE POLICY "Only employees read the organization (select) for authenticated" 
   a tenant or an invitation, the build reports [DDD00100](../diagnostics.md#ddd00100). Without `Restrictive`, a rule
   on the organization or role class is refused, because it would change nothing.
 - **The rule narrows Tenancy's own reads too.** On the seats, keep the person's own seats in the rule:
-  `seat.Identity == caller.UserId || ...`. Tenancy finds the tenant picker's tenants and the request's seat from
+  `seat.Identity == user.Id || ...`. Tenancy finds the tenant picker's tenants and the request's seat from
   those seats.
 - **A field of the caller's own seat.** `CallerSeat<Seat>()` reads `caller_seat_row()`, which runs as its owner,
   past your read rule. A caller without a seat gets null in every field, so no row passes. `CallerSeat<T>()` with
@@ -480,7 +481,7 @@ public static partial class PeopleOnMyProjects
 [RowAccess<Seat>(RowOperations.Read)]
 public static partial class EmployeesReadEveryoneExternalsTheirProjects
 {
-    public static bool Allows(Seat seat, Caller caller)
+    public static bool Allows(Seat seat, ICurrentUser user)
         => TenancyRowAccess.CallerSeat<Seat>().Kind == SeatKind.Employee || PeopleOnMyProjects.Ids().Contains(seat.Id);
 }
 ```
@@ -532,7 +533,7 @@ functions, so write such a rule for signed-in users:
 [RowAccess<Project>(RowOperations.Read, To = [RowAccessRoles.User])]
 public static partial class ProjectsAreReadWhereThePermissionIsHeld
 {
-    public static bool Allows(Project project, Caller caller)
+    public static bool Allows(Project project, ICurrentUser user)
         => TenancyRowAccess.UnitsWhereIHold<OrganizationUnitId>(ProjectPermissionNames.Read).Contains(project.UnitId);
 }
 ```
@@ -638,7 +639,7 @@ instead:
 [AccessFunction<Project>("projects.readable_in_tenant")]
 public static partial class ProjectIsReadableInTenant
 {
-    public static bool Allows(Project project, Caller caller, TenantId tenant)
+    public static bool Allows(Project project, ICurrentUser user, TenantId tenant)
         => project.TenantId == tenant
            && TenancyRowAccess.UnitsWhereIHoldInTenant<OrganizationUnitId, TenantId>(tenant, ProjectPermissionNames.Read).Contains(project.UnitId);
 }
@@ -785,7 +786,7 @@ has its own guard:
 
 | Column | Who may change it | Guarded by |
 |---|---|---|
-| Id, identity, tenant | Only Tenancy's system work in the seat's tenant. Its policies keep that work to that tenant. No seat, no `Caller.System`, and no tables' owner (in a migration or the SQL editor) may change them. | Trigger 5. Where the export [writes the privileges](../row-level-security.md#privileges-from-the-policies), the key columns and the tenant are not updatable at all. |
+| Id, identity, tenant | Only Tenancy's system work in the seat's tenant. Its policies keep that work to that tenant. No seat, no system work without a scope, and no tables' owner (in a migration or the SQL editor) may change them. | Trigger 5. Where the export [writes the privileges](../row-level-security.md#privileges-from-the-policies), the key columns and the tenant are not updatable at all. |
 | Status | A seat with `tenancy.seats.manage` for the whole tenant and the access-managing permissions of the seat's grants. | Trigger 6 |
 | Version | Whoever may change the row. | The row's policy |
 | Your columns | Whoever may change the row, unless your column rule says more. | Your [column rule](../row-level-security.md#column-rules) |
@@ -819,7 +820,7 @@ tenant. Its column rule states the same rule to the database. The job title has 
 [RowAccess<Seat>(RowOperations.Change, To = [RowAccessRoles.User], Columns = [nameof(Seat.DisplayName)])]
 public static partial class NameChangesByTheSeatOrWithTheSeatsPermission
 {
-    public static bool Allows(Seat seat, Caller caller)
+    public static bool Allows(Seat seat, ICurrentUser user)
         => seat.Id == TenancyRowAccess.CallerSeatId<SeatId>() || TenancyRowAccess.HoldsAtTenant(RenameSeat.RequiredPermission);
 }
 ```

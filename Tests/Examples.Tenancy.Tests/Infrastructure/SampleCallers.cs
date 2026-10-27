@@ -28,7 +28,7 @@ public static class SampleCallers
         ArgumentNullException.ThrowIfNull(person);
         ArgumentNullException.ThrowIfNull(tenant);
 
-        var user = Callers.Begin(Caller.User(person.Id));
+        var user = TestUser.BeginAs(person.Id);
         try
         {
             return new Both(user, TenancyCallers.Begin(TenancyCaller<TenantId, SeatId>.InSeat(tenant.Id, tenant.SeatOf(person))));

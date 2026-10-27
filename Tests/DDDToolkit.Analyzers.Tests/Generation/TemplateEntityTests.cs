@@ -488,7 +488,7 @@ public class TemplateEntityTests
                 [RowAccess<ShopTenant>(RowOperations.Read)]
                 public static partial class NamedPaidShops
                 {
-                    public static bool Allows(ShopTenant tenant, Caller caller) => tenant.Name != "" && tenant.Plan == "paid";
+                    public static bool Allows(ShopTenant tenant, ICurrentUser user) => tenant.Name != "" && tenant.Plan == "paid";
                 }
                 """,
                 "Rule.cs")

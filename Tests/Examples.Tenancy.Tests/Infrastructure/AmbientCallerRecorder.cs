@@ -21,11 +21,11 @@ namespace Examples.Tenancy.Tests.Infrastructure;
 /// </remarks>
 public sealed class AmbientCallerRecorder
 {
-    private readonly ConcurrentQueue<Caller?> _seen = new();
+    private readonly ConcurrentQueue<CurrentUserSnapshot?> _seen = new();
     private readonly ConcurrentQueue<ITenancyCaller?> _lookups = new();
 
     /// <summary>The ambient caller each time the accessor was asked since the last <see cref="Clear"/>, in order.</summary>
-    public IReadOnlyList<Caller?> Seen => [.. _seen];
+    public IReadOnlyList<CurrentUserSnapshot?> Seen => [.. _seen];
 
     /// <summary>The Tenancy caller current each time a seat was looked up in a tenant since the last <see cref="Clear"/>, in order.</summary>
     public IReadOnlyList<ITenancyCaller?> Lookups => [.. _lookups];
@@ -38,17 +38,17 @@ public sealed class AmbientCallerRecorder
     }
 
     /// <summary>
-    /// Puts the recorder in front of the accessor and the seat directory the host registered. The host has
+    /// Puts the recorder in front of the current user and the seat directory the host registered. The host has
     /// registered both by the time a test's services run.
     /// </summary>
     public void AddTo(IServiceCollection services)
     {
         services.AddHttpContextAccessor();
 
-        var accessor = services.Last(descriptor => descriptor.ServiceType == typeof(ICallerAccessor));
+        var accessor = services.Last(descriptor => descriptor.ServiceType == typeof(ICurrentUser));
         services.Remove(accessor);
-        services.AddSingleton<ICallerAccessor>(provider => new Recording(
-            (ICallerAccessor)Made(accessor, provider),
+        services.AddSingleton<ICurrentUser>(provider => new Recording(
+            (ICurrentUser)Made(accessor, provider),
             provider.GetRequiredService<IHttpContextAccessor>(),
             _seen));
 
@@ -65,21 +65,47 @@ public sealed class AmbientCallerRecorder
             ?? descriptor.ImplementationFactory?.Invoke(provider)
             ?? ActivatorUtilities.CreateInstance(provider, descriptor.ImplementationType!);
 
-    private sealed class Recording(ICallerAccessor inner, IHttpContextAccessor http, ConcurrentQueue<Caller?> seen) : ICallerAccessor
+    private sealed class Recording(ICurrentUser inner, IHttpContextAccessor http, ConcurrentQueue<CurrentUserSnapshot?> seen) : ICurrentUser
     {
-        public Caller Current
+        public CurrentUserSnapshot Snapshot
         {
             get
             {
                 // The request's own flow has its context; a poller's has none.
                 if (http.HttpContext is not null)
                 {
-                    seen.Enqueue(Callers.Ambient);
+                    seen.Enqueue(BegunUser);
                 }
 
-                return inner.Current;
+                return inner.Snapshot;
             }
         }
+
+        public bool IsBegun => inner.IsBegun;
+
+        public CurrentUserKind Kind => inner.Kind;
+
+        public Guid? Id => inner.Id;
+
+        public bool IsAuthenticated => inner.IsAuthenticated;
+
+        public bool IsSystem => inner.IsSystem;
+
+        public string? SystemScope => inner.SystemScope;
+
+        public string? Role => inner.Role;
+
+        public string? FindClaim(string path) => inner.FindClaim(path);
+
+        public IDisposable BeginAs(Guid userId) => inner.BeginAs(userId);
+
+        public IDisposable BeginAs(CurrentUserSnapshot user) => inner.BeginAs(user);
+
+        public IDisposable BeginSystem(string? scope = null) => inner.BeginSystem(scope);
+
+        public IDisposable BeginNone() => inner.BeginNone();
+
+        public CurrentUserSnapshot RequireSystemWork() => inner.RequireSystemWork();
     }
 
     private sealed class RecordingDirectory(ISeatDirectory<TenantId, SeatId> inner, ConcurrentQueue<ITenancyCaller?> lookups) : ISeatDirectory<TenantId, SeatId>

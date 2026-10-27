@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using System.Globalization;
 using System.Text.Json;
 using DDDToolkit.EntityFramework;
@@ -11,7 +12,7 @@ namespace DDDToolkit.Supporting.Together.Tests.Infrastructure;
 public sealed record CampusPerson(string Name, Guid Identity)
 {
     /// <summary>The caller as the toolkit knows it: a signed-in user, with nothing of any college in its token.</summary>
-    public Caller Caller => Callers.FromClaims(Claims);
+    public CurrentUserSnapshot Caller => CurrentUserSnapshot.FromClaims(Claims);
 
     /// <summary>The claims of the person's token, as JSON: what a database is given for the caller as well.</summary>
     public string Claims => JsonSerializer.Serialize(new Dictionary<string, object>
@@ -114,7 +115,7 @@ public sealed class CampusServices : IDisposable
     public async Task<T> AsAsync<T>(CampusPerson person, string? college, Func<IServiceProvider, Task<T>> ask)
     {
         var caller = person.Caller;
-        using (Callers.Begin(caller))
+        using (TestUser.BeginAs(caller))
         {
             await using var scope = Provider.CreateAsyncScope();
             var seat = await scope.ServiceProvider.GetRequiredService<TenantSelection<TenantId, SeatId>>().ResolveAsync(caller, college, TestContext.Current.CancellationToken);

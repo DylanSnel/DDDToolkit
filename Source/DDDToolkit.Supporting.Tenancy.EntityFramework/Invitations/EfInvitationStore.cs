@@ -12,7 +12,7 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 /// <para>
 /// A token's digest goes into a table of its own, in a row added with its invitation, and is never loaded again.
 /// The one question asked of it, which invitation a digest is for, is one of the few reads Tenancy makes across
-/// tenants (<see cref="TenancySystemReads"/>): on a context of its own, as a caller begun around it alone. Where
+/// tenants (<see cref="TenancySystemReads"/>): on a context of its own, as a user begun around it alone. Where
 /// the database keeps the rights (<see cref="TenancyStoreOptions.DatabaseKeepsRights"/>, as on Postgres with row
 /// level security), that caller is Tenancy's scoped system work in no tenant, and the question is asked of the
 /// database's function <see cref="TenancyFunctionNames.InvitationOfDigest"/>, since no caller's role reads the

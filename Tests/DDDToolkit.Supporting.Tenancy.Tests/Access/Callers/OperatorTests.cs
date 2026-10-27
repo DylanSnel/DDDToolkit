@@ -26,9 +26,9 @@ public class OperatorTests
     }
 
     /// <summary>Asks for a page as <paramref name="caller"/>, the way a request does: nobody to Tenancy, whoever it is to the toolkit.</summary>
-    private static async Task<TenantManager.TenantPage> Page(Harness harness, Caller? caller, string? after = null, int size = 50)
+    private static async Task<TenantManager.TenantPage> Page(Harness harness, CurrentUserSnapshot? caller, string? after = null, int size = 50)
     {
-        using (caller is null ? null : Callers.Begin(caller))
+        using (caller is null ? null : TestUser.BeginAs(caller))
         using (TenancyCallers.Begin(HostCaller.Nobody(TenancyRefusals.NotSeated)))
         {
             harness.Store.BeginUnitOfWork();
@@ -41,20 +41,20 @@ public class OperatorTests
     {
         var harness = ThreeTenants();
 
-        (await Page(harness, Caller.User(Odette, OperatorRole))).Items.Should().HaveCount(3);
+        (await Page(harness, CurrentUserSnapshot.User(Odette, OperatorRole))).Items.Should().HaveCount(3);
 
         // Everybody else is refused, and before anything is read: a seat of a tenant, a user with another token
         // role, an operator's role without a verified identity, an anonymous caller, the application itself and
         // its scoped work.
-        Caller?[] others =
+        CurrentUserSnapshot?[] others =
         [
-            Caller.User(Odette),
-            Caller.User(Odette, "analyst"),
-            Caller.User(Odette, role: null),
-            Caller.User(null, OperatorRole),
-            Caller.Anonymous,
-            Caller.System,
-            Caller.SystemIn(TenancyWork.SystemScope),
+            CurrentUserSnapshot.User(Odette),
+            CurrentUserSnapshot.User(Odette, "analyst"),
+            CurrentUserSnapshot.User(Odette, role: null),
+            CurrentUserSnapshot.User(null, OperatorRole),
+            CurrentUserSnapshot.Anonymous,
+            CurrentUserSnapshot.System,
+            CurrentUserSnapshot.SystemIn(TenancyWork.SystemScope),
             null,
         ];
         foreach (var other in others)
@@ -67,8 +67,8 @@ public class OperatorTests
 
         // Nor is it a matter of what a caller sends: a page size or a marker that would be refused says nothing
         // to someone who is no operator.
-        await Refused.WithCodeAsync(TenancyRefusals.OperatorsOnly, () => Page(harness, Caller.User(Odette), size: 0));
-        await Refused.WithCodeAsync(TenancyRefusals.OperatorsOnly, () => Page(harness, Caller.User(Odette), after: "not a marker"));
+        await Refused.WithCodeAsync(TenancyRefusals.OperatorsOnly, () => Page(harness, CurrentUserSnapshot.User(Odette), size: 0));
+        await Refused.WithCodeAsync(TenancyRefusals.OperatorsOnly, () => Page(harness, CurrentUserSnapshot.User(Odette), after: "not a marker"));
     }
 
     [Fact]
@@ -77,8 +77,8 @@ public class OperatorTests
         var harness = Harness.OfHarbor();
 
         harness.Options.OperatorTokenRoles.Should().BeEmpty("an application has no operators until it lists a token role");
-        await Refused.WithCodeAsync(TenancyRefusals.OperatorsOnly, () => Page(harness, Caller.User(Odette, OperatorRole)));
-        await Refused.WithCodeAsync(TenancyRefusals.OperatorsOnly, () => Page(harness, Caller.User(Odette)));
+        await Refused.WithCodeAsync(TenancyRefusals.OperatorsOnly, () => Page(harness, CurrentUserSnapshot.User(Odette, OperatorRole)));
+        await Refused.WithCodeAsync(TenancyRefusals.OperatorsOnly, () => Page(harness, CurrentUserSnapshot.User(Odette)));
     }
 
     [Fact]
@@ -88,7 +88,7 @@ public class OperatorTests
         var bert = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.WatcherStarterRole);
         var cy = await harness.SeatAt("Cy", harness.Harbor.South, HostCatalogue.WatcherStarterRole);
         await harness.BySystemWork(h => h.Seats.SuspendAsync(cy, default));
-        var odette = Caller.User(Odette, OperatorRole);
+        var odette = CurrentUserSnapshot.User(Odette, OperatorRole);
 
         // By slug, whatever order the tenants were made in, and a page holds what it was asked to.
         var first = await Page(harness, odette, size: 2);
@@ -120,7 +120,7 @@ public class OperatorTests
     public async Task A_page_holds_one_to_two_hundred_tenants()
     {
         var harness = ThreeTenants();
-        var odette = Caller.User(Odette, OperatorRole);
+        var odette = CurrentUserSnapshot.User(Odette, OperatorRole);
 
         TenantManager.MostPerPage.Should().Be(200);
         foreach (var size in new[] { 0, -1, 201, int.MaxValue })
@@ -139,7 +139,7 @@ public class OperatorTests
     public async Task A_marker_the_directory_did_not_make_is_refused()
     {
         var harness = ThreeTenants();
-        var odette = Caller.User(Odette, OperatorRole);
+        var odette = CurrentUserSnapshot.User(Odette, OperatorRole);
 
         // Not the directory's alphabet, not a slug once read, empty, or longer than any slug's marker.
         string[] none = ["harbor!", "not a marker", "", "SGFyYm9y", new string('a', 400), "aGFyYm9y="];
@@ -174,22 +174,22 @@ public class OperatorTests
         await using var scope = provider.CreateAsyncScope();
         var selection = scope.ServiceProvider.GetRequiredService<TenantSelection<TenantId, SeatId>>();
 
-        (await selection.ResolveAsync(Caller.User(Odette), "harbor", TestContext.Current.CancellationToken)).Should().Be(HostCaller.InSeat(harbor, seat));
+        (await selection.ResolveAsync(CurrentUserSnapshot.User(Odette), "harbor", TestContext.Current.CancellationToken)).Should().Be(HostCaller.InSeat(harbor, seat));
 
         // An operator is nobody in every tenant, and is told what a person without a seat is told. The tenant it names is
         // kept, for a command that acts in the tenant the request names.
-        var named = await selection.ResolveAsync(Caller.User(Odette, OperatorRole), " Harbor ", TestContext.Current.CancellationToken);
+        var named = await selection.ResolveAsync(CurrentUserSnapshot.User(Odette, OperatorRole), " Harbor ", TestContext.Current.CancellationToken);
         named.Should().Be(HostCaller.OperatorNaming(harbor));
         named.Kind.Should().Be(TenancyCallerKind.Nobody);
         named.Refusal.Should().Be(TenancyRefusals.NotSeated);
         named.NamedTenant.Should().Be(harbor);
         named.Actor.Should().BeNull("nobody changes nothing, so there is nobody to record");
 
-        (await selection.ResolveAsync(Caller.User(Odette, OperatorRole), "quarry", TestContext.Current.CancellationToken))
+        (await selection.ResolveAsync(CurrentUserSnapshot.User(Odette, OperatorRole), "quarry", TestContext.Current.CancellationToken))
             .Should().Be(HostCaller.Nobody(TenancyRefusals.NotSeated), "a tenant nobody has is told as a seat is told");
         foreach (var slug in new[] { null, "", " " })
         {
-            (await selection.ResolveAsync(Caller.User(Odette, OperatorRole), slug, TestContext.Current.CancellationToken))
+            (await selection.ResolveAsync(CurrentUserSnapshot.User(Odette, OperatorRole), slug, TestContext.Current.CancellationToken))
                 .Should().Be(HostCaller.Nobody(TenancyRefusals.TenantRequired), "a request that names no tenant is told so, as a seat is");
         }
 

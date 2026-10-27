@@ -5,7 +5,7 @@ namespace DDDToolkit.Access;
 /// <summary>
 /// Reads the owner of an aggregate whose id is <typeparamref name="TId"/>, as the caller, for a request about the owner's
 /// own (<see cref="AccessRequirement.OwnerOf{TId}"/>): the value of the property the aggregate marks <c>[Owner]</c>, in the
-/// one row the id names. The core's <see cref="CallerAccessCheck"/> asks it, and compares what it read with what the
+/// one row the id names. The core's <see cref="CurrentUserAccessCheck"/> asks it, and compares what it read with what the
 /// <see cref="ICallersOwn{TValue}"/> of the owner's type says is the caller's.
 /// </summary>
 /// <remarks>

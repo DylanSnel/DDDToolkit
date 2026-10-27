@@ -401,7 +401,7 @@ public sealed class PublishDomainEventsInterceptor : SaveChangesInterceptor
         }
 
         // A host that built this interceptor by hand, without the toolkit's registration, still gets the toolkit's own answer.
-        accessor ??= new CallerActedByAccessor((ICallerAccessor?)_serviceProvider.GetService(typeof(ICallerAccessor)));
+        accessor ??= new CurrentUserActedByAccessor((ICurrentUser?)_serviceProvider.GetService(typeof(ICurrentUser)));
         return new EventLogWriting(accessor.Current, fields);
     }
 

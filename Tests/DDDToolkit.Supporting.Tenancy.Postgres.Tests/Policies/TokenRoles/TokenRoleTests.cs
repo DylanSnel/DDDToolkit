@@ -108,11 +108,11 @@ public sealed class TokenRoleTests(TenancyPostgres postgres)
         // In the application: no seat is chosen for the role, whatever seats the identity has. Nothing is looked up
         // for it either: no caller is begun here, and a query without one would fail.
         var selected = await services.InScopeAsync(scoped => scoped.GetRequiredService<TenantSelection<TenantId, SeatId>>()
-            .ResolveAsync(Callers.FromClaims(AnalystClaims(Ada.Identity)), "harbor", Cancellation));
+            .ResolveAsync(CurrentUserSnapshot.FromClaims(AnalystClaims(Ada.Identity)), "harbor", Cancellation));
         selected.Should().Be(HostCaller.Nobody(TenancyRefusals.NotSeated));
 
         // And the contexts run its queries as the mapped role, which reads nothing, with the filters skipped as well.
-        using (Callers.Begin(Callers.FromClaims(AnalystClaims(Ada.Identity))))
+        using (TestUser.BeginAs(CurrentUserSnapshot.FromClaims(AnalystClaims(Ada.Identity))))
         {
             var (role, widgets, seats) = await services.InScopeAsync(async scoped => (
                 await scoped.Widgets().Database.SqlQueryRaw<string>("SELECT current_user::text AS \"Value\"").SingleAsync(Cancellation),
@@ -126,9 +126,9 @@ public sealed class TokenRoleTests(TenancyPostgres postgres)
 
         // A seat is what it was: the files written with the map change nothing for a signed-in user.
         (await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.Widgets().Widgets.CountAsync(Cancellation))).Should().Be(asASeat);
-        using (Callers.Begin(Caller.User(Ada.Identity)))
+        using (TestUser.BeginAs(Ada.Identity))
         {
-            (await services.InScopeAsync(scoped => scoped.GetRequiredService<TenantSelection<TenantId, SeatId>>().ResolveAsync(Caller.User(Ada.Identity), "harbor", Cancellation)))
+            (await services.InScopeAsync(scoped => scoped.GetRequiredService<TenantSelection<TenantId, SeatId>>().ResolveAsync(CurrentUserSnapshot.User(Ada.Identity), "harbor", Cancellation)))
                 .Should().Be(HostCaller.InSeat(Harbor, Ada.Seat), "the directory is read as the user, under the policies written with the map");
         }
     }

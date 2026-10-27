@@ -143,21 +143,21 @@ public class TenancyRequirementTests
         var options = new TenancyOptions<TenantId, SeatId, OrganizationUnitId, RoleId>();
         var odette = Guid.NewGuid();
 
-        options.IsOperator(Caller.User(odette, OperatorRole)).Should().BeFalse("an application has no operators until it lists a token role");
+        options.IsOperator(CurrentUserSnapshot.User(odette, OperatorRole)).Should().BeFalse("an application has no operators until it lists a token role");
 
         options.OperatorTokenRoles.Add(OperatorRole);
 
-        options.IsOperator(Caller.User(odette, OperatorRole)).Should().BeTrue();
-        Caller?[] others =
+        options.IsOperator(CurrentUserSnapshot.User(odette, OperatorRole)).Should().BeTrue();
+        CurrentUserSnapshot?[] others =
         [
-            Caller.User(odette),
-            Caller.User(odette, "analyst"),
-            Caller.User(odette, role: null),
-            Caller.User(odette, "Operator"),
-            Caller.User(null, OperatorRole),
-            Caller.Anonymous,
-            Caller.System,
-            Caller.SystemIn(TenancyWork.SystemScope),
+            CurrentUserSnapshot.User(odette),
+            CurrentUserSnapshot.User(odette, "analyst"),
+            CurrentUserSnapshot.User(odette, role: null),
+            CurrentUserSnapshot.User(odette, "Operator"),
+            CurrentUserSnapshot.User(null, OperatorRole),
+            CurrentUserSnapshot.Anonymous,
+            CurrentUserSnapshot.System,
+            CurrentUserSnapshot.SystemIn(TenancyWork.SystemScope),
             null,
         ];
         foreach (var other in others)

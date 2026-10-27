@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.Abstractions.Interfaces;
 using DDDToolkit.Access;
@@ -33,7 +34,7 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// <para>
 /// Each <c>Begin</c> method starts work that is not the caller's own, for one <c>using</c>. It begins the tenant the work
 /// acts in and the kind of work together: the kind decides how the work is recorded, and which database role it runs as.
-/// When the result is disposed, the caller before it is current again. Begin as narrow as possible: around the one call
+/// When the result is disposed, the user before it is current again. Begin as narrow as possible: around the one call
 /// that needs it.
 /// </para>
 /// <para>
@@ -64,8 +65,8 @@ public class TenancyAccessManager<
     /// <param name="catalogue">The catalogue every permission asked about is checked against.</param>
     /// <param name="clock">What "now" is, for whether a grant applies.</param>
     /// <param name="services">
-    /// The services of the scope: where <see cref="CurrentUser"/> finds who the application acts for, the host's
-    /// <see cref="ICallerAccessor"/>, and the storage package's read of the tenants to visit.
+    /// The services of the scope: where <see cref="CurrentUser"/> comes from, the application's
+    /// <see cref="ICurrentUser"/>, and the storage package's read of the tenants to visit.
     /// </param>
     /// <exception cref="ArgumentNullException">An argument is null.</exception>
     public TenancyAccessManager(TenancyCatalogue catalogue, TimeProvider clock, IServiceProvider services)
@@ -77,20 +78,23 @@ public class TenancyAccessManager<
         _catalogue = catalogue;
         _clock = clock;
         _services = services;
-        CurrentUser = new CurrentUser(services);
+        CurrentUser = services.GetService<ICurrentUser>()
+            ?? new DDDToolkit.Access.CurrentUser(services.GetService<CurrentUserOptions>(), services.GetService<ICurrentUserSource>());
         CurrentTenant = new CurrentTenant<TTenantId, TSeatId>();
     }
 
     /// <summary>
-    /// Who acts: a signed-in user, somebody who has not signed in, or system work. It reads the current flow of work
-    /// each time it is asked.
+    /// Who acts: a signed-in user, somebody who has not signed in, or system work. It is the toolkit's
+    /// <see cref="ICurrentUser"/>, the one code takes from dependency injection, and it reads the current flow of work
+    /// each time it is asked. So inside <see cref="BeginSystem"/> it answers system work, and after the <c>using</c>
+    /// the user again.
     /// </summary>
     /// <example>
     /// <code>
     /// var identity = access.CurrentUser.Id;   // null for system work and for somebody who has not signed in
     /// </code>
     /// </example>
-    public CurrentUser CurrentUser { get; }
+    public ICurrentUser CurrentUser { get; }
 
     /// <summary>
     /// The tenant the current work acts in, and the seat in it. It reads the current flow of work each time it is
@@ -110,10 +114,10 @@ public class TenancyAccessManager<
     /// </summary>
     /// <remarks>
     /// It does what <see cref="TenancyWork.BeginSystem{TTenantId, TSeatId}"/> does. On Postgres the work runs as the
-    /// toolkit's scoped system caller in the scope <c>tenancy</c>. Under Tenancy's policies that caller reads and writes
+    /// toolkit's scoped system work in the scope <c>tenancy</c>. Under Tenancy's policies that work reads and writes
     /// nothing until provisioning narrows it to the tenant it makes.
     /// </remarks>
-    /// <returns>The work, which ends when it is disposed. The caller before it is current again then.</returns>
+    /// <returns>The work, which ends when it is disposed. The user before it is current again then.</returns>
     /// <example>
     /// Read the signed-in user's id before the work begins: inside it, <see cref="CurrentUser"/> reports system work and has no id.
     /// <code>
@@ -140,7 +144,7 @@ public class TenancyAccessManager<
     /// <remarks>
     /// It does what <see cref="TenancyWork.BeginSystemIn{TTenantId, TSeatId}(TTenantId, TSeatId?, string)"/> does. The work
     /// is recorded as the system in <paramref name="scope"/>, and <paramref name="actingSeat"/> as who placed or
-    /// granted. On Postgres it runs as the toolkit's scoped system caller, a database role that cannot bypass the
+    /// granted. On Postgres it runs as the toolkit's scoped system work, a database role that cannot bypass the
     /// policies, so it reads and writes the rows of that tenant alone.
     /// </remarks>
     /// <param name="tenant">The tenant.</param>
@@ -149,7 +153,7 @@ public class TenancyAccessManager<
     /// The scope of the work: Tenancy's own, which writes Tenancy's tables, unless a module's own work passes its name.
     /// Lower case letters, digits, <c>_</c> and <c>-</c>.
     /// </param>
-    /// <returns>The work, which ends when it is disposed. The caller before it is current again then.</returns>
+    /// <returns>The work, which ends when it is disposed. The user before it is current again then.</returns>
     /// <exception cref="ArgumentException"><paramref name="scope"/> is not a scope. Nothing is begun then.</exception>
     /// <example>
     /// A seat that passed a course gets the role the course gives. The seat holds no <c>tenancy.grants.manage</c>, so
@@ -174,12 +178,12 @@ public class TenancyAccessManager<
     /// </summary>
     /// <remarks>
     /// It does what <see cref="TenancyWork.BeginTokenIn{TTenantId, TSeatId}"/> does. On Postgres it runs as the toolkit's
-    /// scoped system caller in <paramref name="scope"/>, as <see cref="BeginSystemIn"/> does.
+    /// scoped system work in <paramref name="scope"/>, as <see cref="BeginSystemIn"/> does.
     /// </remarks>
     /// <param name="tenant">The tenant.</param>
     /// <param name="seat">The seat the token stands for.</param>
     /// <param name="scope">The scope of the work, the module's name: lower case letters, digits, <c>_</c> and <c>-</c>.</param>
-    /// <returns>The work, which ends when it is disposed. The caller before it is current again then.</returns>
+    /// <returns>The work, which ends when it is disposed. The user before it is current again then.</returns>
     /// <exception cref="ArgumentException"><paramref name="scope"/> is not a scope. Nothing is begun then.</exception>
     /// <example>
     /// A calendar feed whose address carries a token Leo made. The handler checks the token first, with the

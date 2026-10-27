@@ -189,7 +189,7 @@ public const string TenantSetting = "tenancy.caller_tenant"
 
 The setting the tenant of the current Tenancy caller travels in, next to the caller's role and claims and in the same statement: the value of its id, written with the invariant culture (a `Guid` as `D`), or `''` when the caller acts in no tenant. SQL reads it with `current_setting('tenancy.caller_tenant', true)`.
 
-It is the application's word, as every setting is: any statement on the application's connection can set it. SQL that reads it for a signed-in user should find the seat from the verified identity and this tenant, and require that seat and tenant to be active, so a wrong tenant reaches no seat; only work the application begins on purpose, the scoped system caller's, can take it as given.
+It is the application's word, as every setting is: any statement on the application's connection can set it. SQL that reads it for a signed-in user should find the seat from the verified identity and this tenant, and require that seat and tenant to be active, so a wrong tenant reaches no seat; only work the application begins on purpose, the scoped system work's, can take it as given.
 
 ## Start-up checks
 
@@ -207,36 +207,36 @@ Checks a host runs at start-up, before it serves anything, that the database and
 
 ```csharp
 var app = builder.Build();
-TenancyPostgresChecks.EnsureExplicitCallers(app.Services);
+TenancyPostgresChecks.EnsureExplicitCurrentUser(app.Services);
 TenancyPostgresChecks.EnsureSeatedTokenRolesAreSignedInUsers(app.Services);
 await TenancyPostgresChecks.EnsureSystemInRoleIsConfinedAsync(app.Services, cancellationToken);
 await TenancyPostgresChecks.EnsureSystemReadsAcrossTenantsAsync(app.Services, cancellationToken);
 await TenancyPostgresChecks.EnsurePoliciesAreInPlaceAsync(app.Services, cancellationToken);
 ```
 
-The ones that ask the database do so on a context of Tenancy's own, made in a scope of their own, as the application itself (`Caller.System`, begun around each query and outside any transaction the caller holds), and read the catalog of Postgres alone: no table of Tenancy's, and no tenant's rows. The one that proves the reads across tenants also asks one of their functions, as Tenancy's own scoped system work in no tenant, the way those reads run.
+The ones that ask the database do so on a context of Tenancy's own, made in a scope of their own, as the system work without a scope (`CurrentUserSnapshot.System`, begun around each query and outside any transaction the caller holds), and read the catalog of Postgres alone: no table of Tenancy's, and no tenant's rows. The one that proves the reads across tenants also asks one of their functions, as Tenancy's own scoped system work in no tenant, the way those reads run.
 
 | Member | Summary |
 |---|---|
-| `ExplicitCallersCheck = "tenancy.explicit-callers"` | The start-up check that the host still requires explicit callers ([`EnsureExplicitCallers`](#ensureexplicitcallersiserviceprovider)). |
+| `ExplicitCurrentUserCheck = "tenancy.explicit-current-user"` | The start-up check that the host still requires every flow of work to begin its user ([`EnsureExplicitCurrentUser`](#ensureexplicitcurrentuseriserviceprovider)). |
 | `SeatedTokenRolesCheck = "tenancy.seated-token-roles"` | The start-up check that every token role Tenancy seats reaches the database as a signed-in user ([`EnsureSeatedTokenRolesAreSignedInUsers`](#ensureseatedtokenrolesaresignedinusersiserviceprovider)). |
 | `SystemInRoleConfinedCheck = "tenancy.system-in-role-confined"` | The start-up check that the scoped system role cannot leave the tenant its work is in ([`EnsureSystemInRoleIsConfinedAsync`](#ensuresysteminroleisconfinedasynciserviceprovider-cancellationtoken)). |
 | `SystemReadsAcrossTenantsCheck = "tenancy.system-reads-across-tenants"` | The start-up check that Tenancy's reads across tenants answer, with nothing running past the policies ([`EnsureSystemReadsAcrossTenantsAsync`](#ensuresystemreadsacrosstenantsasynciserviceprovider-cancellationtoken)). |
 | `PoliciesInPlaceCheck = "tenancy.policies-in-place"` | The start-up check that Tenancy's policies, functions, triggers and the unique index on a tenant's root are in the database, written from the catalogue the application runs with ([`EnsurePoliciesAreInPlaceAsync`](#ensurepoliciesareinplaceasynciserviceprovider-cancellationtoken)). |
 | `DataApiLoginRole = "authenticator"` | The role PostgREST, and so Supabase's Data API, logs in as before it switches to a caller's role. |
-| [`EnsureExplicitCallers(IServiceProvider)`](#ensureexplicitcallersiserviceprovider) | Proves the host still requires explicit callers, as [`TenancyPostgresServiceCollectionExtensions.AddTenancyPostgres`](managers.md#addtenancypostgresiservicecollection) registered: the `CallerOptions` the services resolve, and the row level security interceptor the contexts use, which read them when it was built. |
+| [`EnsureExplicitCurrentUser(IServiceProvider)`](#ensureexplicitcurrentuseriserviceprovider) | Proves the host still requires every flow of work to begin its user, as [`TenancyPostgresServiceCollectionExtensions.AddTenancyPostgres`](managers.md#addtenancypostgresiservicecollection) registered: the `CurrentUserOptions` the services resolve, and the row level security interceptor the contexts use, which read them when it was built. |
 | [`EnsureSeatedTokenRolesAreSignedInUsers(IServiceProvider)`](#ensureseatedtokenrolesaresignedinusersiserviceprovider) | Proves every token role Tenancy seats ([`TenantSelectionOptions.SeatedTokenRoles`](callers.md#tenantselectionoptions)) reaches the database as a signed-in user: the role `authenticated`, the user's role by its own name, or a token role mapped to the user's role (`PostgresRowLevelSecurityOptions.TokenRoles`). |
 | [`EnsureSystemReadsAcrossTenantsAsync(IServiceProvider, CancellationToken)`](#ensuresystemreadsacrosstenantsasynciserviceprovider-cancellationtoken) | Proves Tenancy's reads across tenants answer, with nothing running past the policies: the few reads made before any tenant is known, the permissions stored on every tenant's roles among them and the tenants a round of system work visits. |
 | [`EnsureSystemInRoleIsConfinedAsync(IServiceProvider, CancellationToken)`](#ensuresysteminroleisconfinedasynciserviceprovider-cancellationtoken) | Proves the scoped system role, `PostgresRowLevelSecurityOptions.SystemInRole`, cannot escape the tenant its policies keep it in: it is not a superuser, has no `BYPASSRLS`, cannot log in and has the privileges of no role that owns a table; neither the user's nor the anonymous caller's role has its privileges, nor does the role of any mapped token role (`PostgresRowLevelSecurityOptions.TokenRoles`), and the Data API's login role ([`DataApiLoginRole`](#tenancypostgreschecks)), where there is one, is not a member of it; no mapped token role has the privileges of the user's role, which would give the holder of such a token, who has no seat, every policy and every function written for signed-in users; no mapped token role may execute a function in Tenancy's schema either, by a grant of its own or with the privileges of another role it was given; and neither the anonymous caller's role nor every role at once, `PUBLIC`, may execute any of the functions in Tenancy's schema that run as their owner, the ones that answer about other seats' rights among them. |
 | [`EnsurePoliciesAreInPlaceAsync(IServiceProvider, CancellationToken)`](#ensurepoliciesareinplaceasynciserviceprovider-cancellationtoken) | Proves Tenancy's policies are in the database the application talks to, and that the application leaves to the database what they take from it: every one of Tenancy's tables has row level security on, and so has its access history where the context maps one; the units' table has the unique index that keeps a tenant's organization to a single root; the functions written from the catalogue, which say which permissions manage access, which of them a seat hands on only where it holds them, which permissions a copy of each starter role holds and which permissions are live, answer as the catalogue the application runs with does, so a database written with containment on for an application that turned it off, or the other way round, is refused and said to be so; the store leaves the rights to the database ([`TenancyStoreOptions.DatabaseKeepsRights`](entity-framework.md#tenancystoreoptions)), and the trigger that writes them is on the grants, the seats and the roles; the functions the store asks about other seats' rights, the ones system work reads across tenants through and the ones that take the tenant as an argument are there, running as their owner; and the functions a module reads Tenancy through are there, running as their caller and written for Postgres to fold into the module's queries, each answering exactly the columns of its row of the read model, in order. |
 
-#### `EnsureExplicitCallers(IServiceProvider)`
+#### `EnsureExplicitCurrentUser(IServiceProvider)`
 
 ```csharp
-public static void EnsureExplicitCallers(IServiceProvider services)
+public static void EnsureExplicitCurrentUser(IServiceProvider services)
 ```
 
-Proves the host still requires explicit callers, as [`TenancyPostgresServiceCollectionExtensions.AddTenancyPostgres`](managers.md#addtenancypostgresiservicecollection) registered: the `CallerOptions` the services resolve, and the row level security interceptor the contexts use, which read them when it was built. A later registration of the options, or an interceptor made without them, would let work that said nothing about who it runs as run as the application, past every policy.
+Proves the host still requires every flow of work to begin its user, as [`TenancyPostgresServiceCollectionExtensions.AddTenancyPostgres`](managers.md#addtenancypostgresiservicecollection) registered: the `CurrentUserOptions` the services resolve, and the row level security interceptor the contexts use, which read them when it was built. A later registration of the options, or an interceptor made without them, would let work that said nothing about who it runs as run as the application, past every policy.
 
 **Parameters**
 
@@ -245,7 +245,7 @@ Proves the host still requires explicit callers, as [`TenancyPostgresServiceColl
 **Exceptions**
 
 - `ArgumentNullException`: `services` is null.
-- `InvalidOperationException`: Either one does not require explicit callers, or row level security is not registered.
+- `InvalidOperationException`: Either one does not require a begun user, or row level security is not registered.
 
 #### `EnsureSeatedTokenRolesAreSignedInUsers(IServiceProvider)`
 

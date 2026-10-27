@@ -19,7 +19,7 @@ namespace Examples.Tenancy.Projects.Infrastructure.Access;
 public static partial class SeatsOpenProjectsWhereTheyMay
 {
     /// <summary>Whether the calling seat may open <paramref name="project"/> at the unit it names, for the owner it names.</summary>
-    public static bool Allows(Project project, Caller caller)
+    public static bool Allows(Project project, ICurrentUser user)
         => TenancyRowAccess.UnitsWhereIHold<OrganizationUnitId>(ProjectPermissionNames.Open).Contains(project.UnitId)
            && (project.OwnerSeatId == TenancyRowAccess.CallerSeatId<SeatId>()
                || TenancyRowAccess.UnitsWhereIHold<OrganizationUnitId>(ProjectPermissionNames.ChangeOwner).Contains(project.UnitId));

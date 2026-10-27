@@ -33,9 +33,9 @@ public sealed class UseDDDToolkitPostgresTests(SupabaseRowLevelSecurityDatabase 
         registered.AddSingleton(new NotesConnection(database.ApplicationConnectionString));
         registered.AddDbContext<SelfConfiguredNotesContext>((provider, options) => options.UseDDDToolkit(provider));
         await using var services = registered.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
-        var callers = (CallerOfTheTest)services.GetRequiredService<ICallerAccessor>();
+        var callers = (CallerOfTheTest)services.GetRequiredService<ICurrentUserSource>();
 
-        callers.Current = Caller.Anonymous;
+        callers.Current = CurrentUserSnapshot.Anonymous;
         await using (var scope = services.CreateAsyncScope())
         {
             (await CurrentUserAsync(scope.ServiceProvider.GetRequiredService<NotesContext>())).Should().Be("anon", "nothing but the one call put the caller on its connection");
@@ -44,7 +44,7 @@ public sealed class UseDDDToolkitPostgresTests(SupabaseRowLevelSecurityDatabase 
             (await CurrentUserAsync(scope.ServiceProvider.GetRequiredService<GuardedNotesContext>())).Should().Be(LoginRole, "the base alone leaves the connection to the login role");
         }
 
-        callers.Current = Callers.FromClaims(ClaimsOf(Alice));
+        callers.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
         await using (var scope = services.CreateAsyncScope())
         {
             (await CurrentUserAsync(scope.ServiceProvider.GetRequiredService<NotesContext>())).Should().Be("authenticated");

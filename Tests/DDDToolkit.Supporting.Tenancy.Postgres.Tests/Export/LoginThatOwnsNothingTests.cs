@@ -114,7 +114,7 @@ public sealed class LoginThatOwnsNothingTests(TenancyPostgres postgres)
                 await PostgresRowAccessChecks.EnsureDefinerOwnersBypassAsync(context, Cancellation);
             }
         });
-        TenancyPostgresChecks.EnsureExplicitCallers(services.Provider);
+        TenancyPostgresChecks.EnsureExplicitCurrentUser(services.Provider);
         await TenancyPostgresChecks.EnsureSystemInRoleIsConfinedAsync(services.Provider, Cancellation);
         await TenancyPostgresChecks.EnsureSystemReadsAcrossTenantsAsync(services.Provider, Cancellation);
         await TenancyPostgresChecks.EnsurePoliciesAreInPlaceAsync(services.Provider, Cancellation);

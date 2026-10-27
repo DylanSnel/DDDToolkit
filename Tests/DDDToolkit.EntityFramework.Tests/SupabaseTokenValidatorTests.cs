@@ -68,10 +68,10 @@ public sealed class SupabaseTokenValidatorTests : IAsyncLifetime
         var validation = await Validator.ValidateAsync(Signed(Alice, _projectKey, Issuer));
 
         validation.IsValid.Should().BeTrue();
-        validation.Caller.Kind.Should().Be(CallerKind.User);
+        validation.User.Kind.Should().Be(CurrentUserKind.User);
         validation.Identity!.Name.Should().Be(Alice.ToString(), "sub is the name, as it is in ASP.NET Core");
 
-        using var claims = JsonDocument.Parse(validation.Caller.Claims!);
+        using var claims = JsonDocument.Parse(validation.User.Claims!);
         claims.RootElement.GetProperty("app_metadata").GetProperty("teams")[0].GetString().Should().Be("north");
     }
 
@@ -92,7 +92,7 @@ public sealed class SupabaseTokenValidatorTests : IAsyncLifetime
             var validation = await validator.ValidateAsync(token);
 
             validation.IsValid.Should().BeFalse(why);
-            validation.Caller.Should().BeSameAs(Caller.Anonymous, why);
+            validation.User.Should().BeSameAs(CurrentUserSnapshot.Anonymous, why);
             validation.Error.Should().NotBeNull(why);
         }
     }
@@ -102,7 +102,7 @@ public sealed class SupabaseTokenValidatorTests : IAsyncLifetime
     {
         var validator = new SupabaseTokenValidator(new SupabaseAuthOptions { ProjectUrl = LocalProjectUrl, JwtSecret = LocalJwtSecret });
 
-        (await validator.ValidateAsync(Local(Alice))).Caller.Kind.Should().Be(CallerKind.User);
+        (await validator.ValidateAsync(Local(Alice))).User.Kind.Should().Be(CurrentUserKind.User);
         (await validator.ValidateAsync(Local(Alice, secret: "somebody-else's-secret-that-is-also-32-characters-long"))).IsValid.Should().BeFalse();
     }
 
@@ -111,11 +111,11 @@ public sealed class SupabaseTokenValidatorTests : IAsyncLifetime
     {
         var validator = Validator;
 
-        (await validator.CallerOfAsync("Bearer " + Signed(Alice, _projectKey, Issuer))).Kind.Should().Be(CallerKind.User);
-        (await validator.CallerOfAsync("bearer " + Signed(Alice, _projectKey, Issuer))).Kind.Should().Be(CallerKind.User, "the scheme is not case sensitive");
-        (await validator.CallerOfAsync(null)).Should().BeSameAs(Caller.Anonymous);
-        (await validator.CallerOfAsync("Basic YWxpY2U6c2VjcmV0")).Should().BeSameAs(Caller.Anonymous);
-        (await validator.CallerOfAsync("Bearer not-a-token")).Should().BeSameAs(Caller.Anonymous);
+        (await validator.UserOfAsync("Bearer " + Signed(Alice, _projectKey, Issuer))).Kind.Should().Be(CurrentUserKind.User);
+        (await validator.UserOfAsync("bearer " + Signed(Alice, _projectKey, Issuer))).Kind.Should().Be(CurrentUserKind.User, "the scheme is not case sensitive");
+        (await validator.UserOfAsync(null)).Should().BeSameAs(CurrentUserSnapshot.Anonymous);
+        (await validator.UserOfAsync("Basic YWxpY2U6c2VjcmV0")).Should().BeSameAs(CurrentUserSnapshot.Anonymous);
+        (await validator.UserOfAsync("Bearer not-a-token")).Should().BeSameAs(CurrentUserSnapshot.Anonymous);
     }
 
     [Fact]

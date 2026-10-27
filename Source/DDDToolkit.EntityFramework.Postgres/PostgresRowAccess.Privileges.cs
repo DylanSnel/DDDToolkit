@@ -84,7 +84,7 @@ public static partial class PostgresRowAccess
     /// <see cref="RowAccessExport.WriteGrants"/>, tables of the toolkit's own, an outbox, an inbox or an event
     /// log, to write the privileges of, or a bookkeeping role, <see cref="RowAccessRoleNames.System"/>, to make and
     /// to give the context's migration history. The Supabase export asks it, so a module with neither a rule nor a
-    /// contribution still gets its access file: every migrated context has a history, and the system caller that
+    /// contribution still gets its access file: every migrated context has a history, and system work that
     /// checks at start-up that every migration ran reads it as the bookkeeping role, which only a file lets in.
     /// </summary>
     /// <exception cref="ArgumentNullException"><paramref name="context"/> or <paramref name="export"/> is null.</exception>

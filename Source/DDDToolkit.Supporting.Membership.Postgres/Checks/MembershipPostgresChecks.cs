@@ -71,7 +71,7 @@ public static class MembershipPostgresChecks
     /// </para>
     /// <para>
     /// It asks the database on the context of each resource, made in a scope of its own, as the application
-    /// itself (<see cref="Caller.System"/>, begun around the question and outside any transaction the caller
+    /// itself (<see cref="CurrentUserSnapshot.System"/>, begun around the question and outside any transaction the caller
     /// holds), and reads the catalog of Postgres alone: no table of the application's, and nobody's rows.
     /// </para>
     /// </summary>
@@ -182,14 +182,14 @@ public static class MembershipPostgresChecks
 
     /// <summary>
     /// What is wrong with the database's part of one resource; nothing when it is in place. Asked on the
-    /// resource's own context, as the application itself, outside any ambient transaction; the caller is begun
+    /// resource's own context, as system work, outside any ambient transaction; the user is begun
     /// before the context is taken, so a host that makes a context for whoever is calling makes this one for
     /// the application.
     /// </summary>
     private static async Task<Found> FindingsAsync(IServiceProvider services, MembershipRegistration registration, CancellationToken cancellationToken)
     {
         using (new TransactionScope(TransactionScopeOption.Suppress, TransactionScopeAsyncFlowOption.Enabled))
-        using (Callers.Begin(Caller.System))
+        using ((services.GetService<ICurrentUser>() ?? new CurrentUser()).BeginSystem())
         {
             var scope = services.GetRequiredService<IServiceScopeFactory>().CreateAsyncScope();
             await using (scope.ConfigureAwait(false))

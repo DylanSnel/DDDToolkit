@@ -98,7 +98,7 @@ public sealed class UseDDDToolkitTests : IDisposable
         var registered = new ServiceCollection();
         registered.AddDDDToolkitEntityFramework();
         registered.AddSupabaseRowLevelSecurity();
-        registered.RequireExplicitCallers();
+        registered.RequireExplicitCurrentUser();
 
         // The chain 3.1 accepted, with the provider set in OnConfiguring, which runs after the options callback; and
         // a context on SQLite whose callback names its provider after the one call.
@@ -116,7 +116,7 @@ public sealed class UseDDDToolkitTests : IDisposable
         FluentActions.Invoking(() => PostgresRowAccessChecks.EnsureRowLevelSecurityWired(selfConfigured)).Should().NotThrow();
 
         // On Postgres it asks who is calling before anything connects: nobody, in a host that requires a caller.
-        await FluentActions.Awaiting(() => selfConfigured.Database.OpenConnectionAsync(Cancellation)).Should().ThrowAsync<NoCallerException>(
+        await FluentActions.Awaiting(() => selfConfigured.Database.OpenConnectionAsync(Cancellation)).Should().ThrowAsync<NoCurrentUserException>(
             "the interceptor runs a context on Postgres as its caller, wherever its provider was configured");
 
         // On SQLite it passes the context over: nobody is asked, nothing is set, and the context reads and saves.

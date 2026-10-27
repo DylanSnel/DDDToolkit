@@ -88,15 +88,15 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
     /// own context wherever the scope has one, as the admission does: a rule kept on the request's context
     /// applies to both alike, and questions asked side by side then each take a scope of their own. A filter
     /// that reads what is around the work, and no member of its context, holds on every context.
-    /// A <see cref="TimeProvider"/> and an <see cref="ICallerAccessor"/> registered before stay; otherwise the
-    /// system clock and the ambient caller are used.
+    /// A <see cref="TimeProvider"/> and an <see cref="ICurrentUser"/> registered before stay; otherwise the
+    /// system clock and the toolkit's <see cref="CurrentUser"/> are used.
     /// </para>
     /// <para>
-    /// The ambient caller answers <see cref="Caller.System"/> where nobody began one, and the application
-    /// itself holds every permission on every resource. An application whose requests each have a caller says so,
-    /// with <c>services.RequireExplicitCallers()</c>, and a request that reaches the questions with no caller
+    /// The current user answers system work where nothing began a user, and the application
+    /// itself holds every permission on every resource. An application whose work always begins its user says so,
+    /// with <c>services.RequireExplicitCurrentUser()</c>, and a request that reaches the questions with no user
     /// then fails rather than passes as the application. Work in a scope
-    /// (<see cref="Caller.SystemIn"/>) holds nothing on a resource unless the rules name that scope
+    /// (<see cref="ICurrentUser.BeginSystem"/> with a scope) holds nothing on a resource unless the rules name that scope
     /// (<see cref="MembershipRules.SystemScopes"/>).
     /// </para>
     /// <para>
@@ -170,13 +170,13 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
         // One for the application, made when a context first asks; nothing uses it until then.
         services.TryAddSingleton(provider => new MemberHoldInterceptor(
             provider.GetServices<MembershipRegistration>(),
-            provider.GetRequiredService<ICallerAccessor>()));
+            provider.GetRequiredService<ICurrentUser>()));
 
         // The texts of what this resource refuses with, under its own codes. Offered, not added: only an
         // application that localizes its failures reads them, and its own texts for these codes come first.
         services.AddFailureTexts<MembershipFailures>(rules.Codes.TextKeys);
         services.TryAddSingleton(TimeProvider.System);
-        services.TryAddSingleton<ICallerAccessor, AmbientCallerAccessor>();
+        services.AddCurrentUser();
         services.AddSingleton(new MemberNamesOf<TContext, TResource, TRoleId>());
 
         // Each made by a factory that holds this resource's rules: the rules themselves are never a service,
@@ -410,7 +410,7 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
     /// The rules take the members from a value the member id is not over, or from the application, which
     /// registered nothing that answers.
     /// </exception>
-    private static Func<Caller, TMemberId?>? CallerAsMember<TResource, TResourceId, TMemberId>(IServiceCollection services, MembershipRules rules)
+    private static Func<CurrentUserSnapshot, TMemberId?>? CallerAsMember<TResource, TResourceId, TMemberId>(IServiceCollection services, MembershipRules rules)
         where TResourceId : struct, IEntityId, IEquatable<TResourceId>
         where TMemberId : struct, IEntityId, IEquatable<TMemberId>
     {
@@ -432,7 +432,7 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
                         + HowToAnswer<TResource>("ICallerMember<" + typeof(TResourceId).Name + ", " + typeof(TMemberId).Name + ">"),
                         nameof(rules));
 
-                return caller => caller.UserId is { } user ? known(user) : null;
+                return user => user.Id is { } id ? known(id) : null;
             }
 
             case MemberSourceKind.CallerId:
@@ -444,7 +444,7 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
                         + "MemberSource.Claim(path) for an id over a text, or leave members out and register what answers who the caller is.",
                         nameof(rules));
 
-                return caller => caller.UserId is { } user ? known(user) : null;
+                return user => user.Id is { } id ? known(id) : null;
             }
 
             case MemberSourceKind.Claim:
@@ -456,7 +456,7 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
                         + " are known by " + typeof(TMemberId).Name + ", which is not an id over a text. Declare it with [EntityId<string>], or take the members from MemberSource.CallerId for an id over a Guid.",
                         nameof(rules));
 
-                return caller => caller.Claim(path) is { } claimed ? known(claimed) : null;
+                return user => user.FindClaim(path) is { } claimed ? known(claimed) : null;
             }
 
             default:

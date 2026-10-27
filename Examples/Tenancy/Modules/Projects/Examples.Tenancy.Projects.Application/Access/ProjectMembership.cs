@@ -40,7 +40,7 @@ namespace Examples.Tenancy.Projects.Application.Access;
 public sealed class ProjectMembership
 {
     /// <summary>
-    /// The scope of this module's own system work, <c>Caller.SystemIn("projects")</c>: the name of the module as a
+    /// The scope of this module's own system work, <c>CurrentUserSnapshot.SystemIn("projects")</c>: the name of the module as a
     /// scope is written, which is the scope the projects' rules let through when they name none. The seeder works in
     /// it, and so does the save in which a seat gives up its own place on a crew, which the command has checked
     /// already.

@@ -371,14 +371,14 @@ public sealed class MembershipRulesTests
     {
         var own = Notes(Permissions, Roles.Fixed([Drafter]), scope: "notes");
         own.SystemScopes.Should().Equal(["notes"], "the module's own scope unless the rules say otherwise");
-        own.IsOwnWork(Caller.System).Should().BeTrue("the application itself is above the rules, as everywhere");
-        own.IsOwnWork(Caller.SystemIn("notes")).Should().BeTrue("the module's own work");
-        own.IsOwnWork(Caller.SystemIn("tenancy")).Should().BeFalse("another module's work is not above this resource's rules");
-        own.IsOwnWork(Caller.SystemIn("note")).Should().BeFalse("a scope is compared whole");
+        own.IsOwnWork(CurrentUserSnapshot.System).Should().BeTrue("the application itself is above the rules, as everywhere");
+        own.IsOwnWork(CurrentUserSnapshot.SystemIn("notes")).Should().BeTrue("the module's own work");
+        own.IsOwnWork(CurrentUserSnapshot.SystemIn("tenancy")).Should().BeFalse("another module's work is not above this resource's rules");
+        own.IsOwnWork(CurrentUserSnapshot.SystemIn("note")).Should().BeFalse("a scope is compared whole");
 
         // Nobody else is ever the application's own work, whatever its token says.
-        own.IsOwnWork(Caller.Anonymous).Should().BeFalse();
-        own.IsOwnWork(Caller.User(Guid.NewGuid(), claim: path => path == "scope" ? "notes" : null)).Should().BeFalse();
+        own.IsOwnWork(CurrentUserSnapshot.Anonymous).Should().BeFalse();
+        own.IsOwnWork(CurrentUserSnapshot.User(Guid.NewGuid(), claim: path => path == "scope" ? "notes" : null)).Should().BeFalse();
         FluentActions.Invoking(() => own.IsOwnWork(null!)).Should().Throw<ArgumentNullException>();
 
         // A resource of no module has no scope of its own.
@@ -390,16 +390,16 @@ public sealed class MembershipRulesTests
     {
         var replaced = Notes(Permissions, Roles.Fixed([Drafter]), scope: "notes", systemScopes: ["imports"]);
         replaced.SystemScopes.Should().Equal(["imports"], "the scopes named and no other");
-        replaced.IsOwnWork(Caller.SystemIn("notes")).Should().BeFalse("the module's own is named among them to keep it");
+        replaced.IsOwnWork(CurrentUserSnapshot.SystemIn("notes")).Should().BeFalse("the module's own is named among them to keep it");
 
         var kept = Notes(Permissions, Roles.Fixed([Drafter]), scope: "notes", systemScopes: ["notes", "imports"]);
-        kept.IsOwnWork(Caller.SystemIn("notes")).Should().BeTrue();
-        kept.IsOwnWork(Caller.SystemIn("imports")).Should().BeTrue();
+        kept.IsOwnWork(CurrentUserSnapshot.SystemIn("notes")).Should().BeTrue();
+        kept.IsOwnWork(CurrentUserSnapshot.SystemIn("imports")).Should().BeTrue();
 
         var off = Notes(Permissions, Roles.Fixed([Drafter]), scope: "notes", systemScopes: []);
         off.SystemScopes.Should().BeEmpty();
-        off.IsOwnWork(Caller.SystemIn("notes")).Should().BeFalse("no system work in a scope at all");
-        off.IsOwnWork(Caller.System).Should().BeTrue("the application itself still is");
+        off.IsOwnWork(CurrentUserSnapshot.SystemIn("notes")).Should().BeFalse("no system work in a scope at all");
+        off.IsOwnWork(CurrentUserSnapshot.System).Should().BeTrue("the application itself still is");
     }
 
     [Theory]
@@ -410,7 +410,7 @@ public sealed class MembershipRulesTests
     public void A_scope_is_named_as_a_caller_is_begun_in_one(string scope)
     {
         Making(() => Notes(Permissions, Roles.Fixed([Drafter]), systemScopes: [scope]))
-            .Should().Throw<ArgumentException>().WithParameterName("systemScopes").WithMessage("*is not a scope*Caller.SystemIn*");
+            .Should().Throw<ArgumentException>().WithParameterName("systemScopes").WithMessage("*is not a scope*BeginSystem(scope)*");
     }
 
     [Fact]

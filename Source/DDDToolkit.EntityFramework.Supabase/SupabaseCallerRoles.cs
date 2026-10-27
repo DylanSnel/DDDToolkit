@@ -10,16 +10,16 @@ using Microsoft.Extensions.Hosting;
 namespace DDDToolkit.EntityFramework.Supabase;
 
 /// <summary>
-/// The database role each kind of caller runs as, as the project says it once, in <c>SupabaseRowAccessRoles</c>:
+/// The database role each kind of user runs as, as the project says it once, in <c>SupabaseRowAccessRoles</c>:
 /// <c>user=…|anonymous=…|system-in=…|system=…</c> and a <c>token:&lt;role&gt;=…</c> pair for each token role the host
 /// maps, each pair optional and each left out a default, <see cref="SupabaseRowLevelSecurity.DefaultRoles"/>. The
 /// export writes the policies for these roles, and <c>AddSupabaseRowLevelSecurity</c> switches to them, so a project
 /// that deviates from the defaults says so in one place and nowhere in code.
 /// <para>
-/// Two values of <c>system</c> say the system caller has no bookkeeping role of the application's own: <c>none</c>, it
+/// Two values of <c>system</c> say system work has no bookkeeping role of the application's own: <c>none</c>, it
 /// runs as the role the application logs in as, and one of Postgres's or Supabase's own roles, <c>service_role</c> for
 /// one, which it switches to and which bypasses the policies. Either way the access files make and grant no
-/// bookkeeping role, so <see cref="Names"/> has none, and <see cref="SystemCaller"/> says what the system caller
+/// bookkeeping role, so <see cref="Names"/> has none, and <see cref="SystemCaller"/> says what system work
 /// runs as.
 /// </para>
 /// </summary>
@@ -28,7 +28,7 @@ internal sealed class SupabaseCallerRoles
     /// <summary>The project property the roles come from, as an error names it, and the key the build records them under.</summary>
     internal const string Property = "SupabaseRowAccessRoles";
 
-    /// <summary>The value of <c>system</c> that says the system caller runs as the role the application logs in as.</summary>
+    /// <summary>The value of <c>system</c> that says system work runs as the role the application logs in as.</summary>
     internal const string LoginRole = "none";
 
     /// <summary>A value that sets every key, for a problem to show.</summary>
@@ -47,23 +47,23 @@ internal sealed class SupabaseCallerRoles
         SystemSaid = systemSaid;
     }
 
-    /// <summary>The defaults: <see cref="SupabaseRowLevelSecurity.DefaultRoles"/>, the system caller as its bookkeeping role.</summary>
+    /// <summary>The defaults: <see cref="SupabaseRowLevelSecurity.DefaultRoles"/>, system work as its bookkeeping role.</summary>
     internal static SupabaseCallerRoles Default { get; } = new(SupabaseRowLevelSecurity.DefaultRoles, SupabaseRowLevelSecurity.DefaultSystemRole, systemSaid: false);
 
     /// <summary>
     /// The roles the export writes for: <see cref="RowAccessRoleNames.System"/> is the bookkeeping role the access
-    /// files make and give the toolkit's tables, or <see langword="null"/> where the system caller has none of the
+    /// files make and give the toolkit's tables, or <see langword="null"/> where system work has none of the
     /// application's own.
     /// </summary>
     internal RowAccessRoleNames Names { get; }
 
     /// <summary>
-    /// The role the system caller switches to, <see cref="PostgresRowLevelSecurityOptions.SystemRole"/>: the bookkeeping
+    /// The role system work switches to, <see cref="PostgresRowLevelSecurityOptions.SystemRole"/>: the bookkeeping
     /// role, one of the platform's, or <see langword="null"/> for the role the application logs in as.
     /// </summary>
     internal string? SystemCaller { get; }
 
-    /// <summary>Whether the property said what the system caller runs as, rather than leaving it the default.</summary>
+    /// <summary>Whether the property said what system work runs as, rather than leaving it the default.</summary>
     internal bool SystemSaid { get; }
 
     /// <summary>
@@ -157,7 +157,7 @@ internal sealed class SupabaseCallerRoles
             return true;
         }
 
-        // The role the system caller runs as is one of its own, which the other roles are known to tell by now; one
+        // The role system work runs as is one of its own, which the other roles are known to tell by now; one
         // of the platform's is checked the same way, so no caller's role is the system's as well.
         RowAccessRoleNames withSystem;
         try
@@ -180,7 +180,7 @@ internal sealed class SupabaseCallerRoles
             return false;
         }
 
-        // One of Postgres's or Supabase's own roles, service_role for one, is the platform's: the system caller runs
+        // One of Postgres's or Supabase's own roles, service_role for one, is the platform's: system work runs
         // as it, past the policies, and the access files neither make it nor give it the toolkit's tables.
         roles = SupabaseMigrations.IsPlatformRole(system)
             ? new(names, system, systemSaid: true)
@@ -190,7 +190,7 @@ internal sealed class SupabaseCallerRoles
 
     /// <summary>
     /// Sets <paramref name="options"/>' roles to these: the user's, the anonymous caller's, the scoped system role, the
-    /// system caller's and the mapped token roles. What the host's own code sets afterwards wins.
+    /// system work's and the mapped token roles. What the host's own code sets afterwards wins.
     /// </summary>
     internal void ApplyTo(PostgresRowLevelSecurityOptions options)
     {

@@ -32,7 +32,7 @@ namespace DDDToolkit.Access;
 /// are equal, and a test can hold every request to the requirement it is meant to declare.
 /// <para>
 /// A requirement says who may send a request. What the work runs with is begun on purpose. The application's own work
-/// is no requirement but a scope, begun by trusted code around the work, <c>Callers.Begin(Caller.System)</c>
+/// is no requirement but a scope, begun by trusted code around the work, <c>user.BeginSystem()</c>
 /// or a supporting domain's own way such as Tenancy's <c>access.BeginSystem()</c>, after which the caller
 /// before it is current again. A check may begin work around the handler of a request it let through
 /// (<see cref="IBeginsWork"/>), as Tenancy's does for a command an operator sends. And it says what is asked, never who may: it carries a permission and the ids the request
@@ -68,7 +68,7 @@ public abstract partial record AccessRequirement
     public static Anyone AllowAnonymous() => new();
 
     /// <summary>
-    /// The caller is a signed-in user (<see cref="Abstractions.Access.Caller.IsSignedIn"/>), who need not hold
+    /// The caller is a signed-in user (<see cref="Abstractions.Access.ICurrentUser.IsAuthenticated"/>), who need not hold
     /// anything yet: accepting an invitation, listing the caller's own seats, registering a first tenant. Anyone
     /// else is refused with <see cref="Exceptions.ToolkitRefusals.NotSignedIn"/>: a caller who did not sign in,
     /// and the application's own work, which is nobody's sign-in. A request says it with
@@ -179,10 +179,10 @@ public abstract partial record AccessRequirement
     }
 
     /// <summary>
-    /// What <see cref="SignedIn"/> answers: a signed-in user. Decided by <see cref="CallerAccessCheck"/>, which
+    /// What <see cref="SignedIn"/> answers: a signed-in user. Decided by <see cref="CurrentUserAccessCheck"/>, which
     /// a set of checks registered with <c>AddAccessChecks</c> asks before the module's own.
     /// </summary>
-    [AccessCheckRegistration("services.AddAccessChecks<{TRequests}>(), which puts the core's CallerAccessCheck first in the module's set")]
+    [AccessCheckRegistration("services.AddAccessChecks<{TRequests}>(), which puts the core's CurrentUserAccessCheck first in the module's set")]
     public sealed record SignedInUser : AccessRequirement
     {
         /// <summary>Made by <see cref="SignedIn"/>, the one spelling a request writes.</summary>

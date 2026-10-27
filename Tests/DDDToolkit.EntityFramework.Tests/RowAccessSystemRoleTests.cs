@@ -213,7 +213,7 @@ public sealed class RowAccessSystemRoleTests(ExplicitCallersPostgres postgres)
             await context.SaveChangesAsync(Cancellation);
         });
 
-        await ApiaryDatabase.AsAsync(host, Caller.System, async context =>
+        await ApiaryDatabase.AsAsync(host, CurrentUserSnapshot.System, async context =>
         {
             (await context.Database.SqlQueryRaw<string>("""SELECT current_user::text || ' of ' || session_user::text AS "Value" """).SingleAsync(Cancellation))
                 .Should().Be("ddd_system of apiary_app", "the system caller runs as the bookkeeping role, on the login role's connection");
@@ -590,7 +590,7 @@ public sealed class RowAccessSystemRoleTests(ExplicitCallersPostgres postgres)
                     $"The role '{login}' that 'ApiaryContext' logs in as is meant to switch to every role its callers run as, and it cannot:\n" +
                     $"- it may not switch to authenticated, the role of a signed-in user. Fix: GRANT authenticated TO {login}; {MappedOnSupabase("user=authenticated")}\n" +
                     $"- it may not switch to ddd_system_in, the scoped system role. Fix: GRANT ddd_system_in TO {login}; {MappedOnSupabase("system-in=ddd_system_in")}\n" +
-                    $"- it may not switch to ddd_system, the role the system caller runs as. Fix: GRANT ddd_system TO {login}; {MappedOnSupabase("system=ddd_system")}\n" +
+                    $"- it may not switch to ddd_system, the system role. Fix: GRANT ddd_system TO {login}; {MappedOnSupabase("system=ddd_system")}\n" +
                     $"- it may not switch to {ApiaryRules.RangerRole}, the role of the token role '{ApiaryRules.Ranger}'. Fix: GRANT {ApiaryRules.RangerRole} TO {login}; {MappedOnSupabase($"token:{ApiaryRules.Ranger}={ApiaryRules.RangerRole}")}\n" +
                     SwitchCheckCloses);
             }

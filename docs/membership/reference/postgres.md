@@ -197,7 +197,7 @@ Who may execute a function follows from the row access rules of the resource, wh
 
 Where a permission locks the members, or the owner, the lock written from it is held to as well: a restrictive policy on both member tables for each of those roles, where a customer makes the roles the one that holds a role given to one the caller sees, and the trigger on the owner column. Where a customer makes the roles, their table is one a caller must not write as it likes: a role's row says what everybody who holds it may do. A role table without row security that one of those roles may write is refused. Which rows a caller reads and changes there stays the application's own rules to say.
 
-It asks the database on the context of each resource, made in a scope of its own, as the application itself (`Caller.System`, begun around the question and outside any transaction the caller holds), and reads the catalog of Postgres alone: no table of the application's, and nobody's rows.
+It asks the database on the context of each resource, made in a scope of its own, as the application itself (`CurrentUserSnapshot.System`, begun around the question and outside any transaction the caller holds), and reads the catalog of Postgres alone: no table of the application's, and nobody's rows.
 
 **Parameters**
 

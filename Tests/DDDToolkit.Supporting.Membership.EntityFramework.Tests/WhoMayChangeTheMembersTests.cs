@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Exceptions;
 
 namespace DDDToolkit.Supporting.Membership.EntityFramework.Tests;
@@ -146,7 +147,7 @@ public sealed class WhoMayChangeTheMembersTests
         var data = filing.Scenario;
 
         await filing.Services.SendAsync(TestCallers.Staff(data.Keeper), new AdmitStaff(data.Cabinet, new StaffCode("N-300"), FolderMembership.Clerk));
-        await filing.Services.SendAsync(Caller.System, new AdmitStaff(data.Cabinet, new StaffCode("N-400"), FolderMembership.Visitor, data.Now.AddYears(5)));
+        await filing.Services.SendAsync(CurrentUserSnapshot.System, new AdmitStaff(data.Cabinet, new StaffCode("N-400"), FolderMembership.Visitor, data.Now.AddYears(5)));
 
         var cabinet = await filing.Services.ReadAsync(data.Cabinet);
         var byKeeper = cabinet.Staff.Single(member => member.MemberId == new StaffCode("N-300"));

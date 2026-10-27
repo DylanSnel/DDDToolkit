@@ -847,7 +847,7 @@ public static partial class PostgresRowAccess
 
         // Whether the script is about the bookkeeping role: it writes privileges, or something of it is for the
         // role by its symbol. A role a host names as the database spells it is the host's own to make, also
-        // where that name is the one its system caller runs as, a role that bypasses the policies for one.
+        // where that name is the one its system work runs as, a role that bypasses the policies for one.
         var bookkeeping = export.WriteGrants
             || prepared.Rules.Any(rule => rule.Roles.Contains(RowAccessRoles.System, StringComparer.Ordinal))
             || prepared.Contributions.Any(contributed =>
@@ -1154,7 +1154,7 @@ public static partial class PostgresRowAccess
     /// where the script names it: because a rule or a contribution is for <c>RowAccessRoles.System</c>, or
     /// because the script writes privileges. A rule or a grant that spells that role's name out, instead of
     /// naming it by its symbol, is for a role of the host's own, as any other spelled-out name is: the script
-    /// neither makes nor checks it, so a host whose system caller bypasses the policies gets the script it
+    /// neither makes nor checks it, so a host whose system work bypasses the policies gets the script it
     /// always got. A script that writes privileges takes them back from every role a caller could run as, so
     /// it makes the scoped system role and the roles of the mapped token roles as well, whether a policy names
     /// them or not: Postgres refuses to revoke from a role that does not exist.
@@ -1496,7 +1496,7 @@ public static partial class PostgresRowAccess
 
     /// <summary>
     /// The access functions a rule's or a function's SQL asks, by name: <c>projects.is_member</c> for
-    /// <c>ProjectMembership.Allows(project, caller)</c> and for <c>ProjectMembers.Allows(task.ProjectId)</c>,
+    /// <c>ProjectMembership.Allows(project, user)</c> and for <c>ProjectMembers.Allows(task.ProjectId)</c>,
     /// and a logical name, <c>desk/tickets_i_watch</c>, for a function named relative to its owner and for a
     /// question of an <c>[AccessFunctions]</c> class; and the name of a resource access set,
     /// <c>@Projects.Contracts.ProjectId/seen</c>, for a <c>[ResourceAccessContract]</c>, which the function a

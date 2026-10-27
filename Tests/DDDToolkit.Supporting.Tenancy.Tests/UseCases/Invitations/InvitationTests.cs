@@ -300,9 +300,9 @@ public class InvitationTests
         var calls = harness.Store.Observed.Skip(before).ToList();
         calls[0].Name.Should().Be(nameof(InMemoryTenancyStore.FindByDigestAsync));
         calls[0].Tenancy.Should().BeNull();
-        calls[0].Core!.Kind.Should().Be(CallerKind.User);
+        calls[0].Core!.Kind.Should().Be(CurrentUserKind.User);
         calls.Skip(1).Should().NotBeEmpty().And.OnlyContain(call =>
-            Equals(call.Tenancy!.TenantId, harness.Tenant) && call.Core!.IsSystemIn && call.Core.Scope == TenancyWork.SystemScope);
+            Equals(call.Tenancy!.TenantId, harness.Tenant) && call.Core!.Kind == CurrentUserKind.SystemIn && call.Core.SystemScope == TenancyWork.SystemScope);
         var saved = calls.Should().ContainSingle(call => call.Name == nameof(InMemoryTenancyStore.SaveAsync)).Which;
         saved.Tenancy!.Kind.Should().Be(TenancyCallerKind.SystemInTenant);
         saved.Tenancy.SeatId.Should().Be(harness.Administrator, "the work is done for the seat that issued the invitation");
@@ -317,7 +317,7 @@ public class InvitationTests
         var seen = new List<string>();
 
         InvitationManager.AcceptedInvitation accepted;
-        using (Callers.Begin(Caller.User(Wren)))
+        using (TestUser.BeginAs(Wren))
         {
             harness.Store.BeginUnitOfWork();
             accepted = await harness.Invitations.AcceptAsync(issued.Token, verifiedAddress: null, Cancellation, configure: seat =>
@@ -376,7 +376,7 @@ public class InvitationTests
     /// <summary>Accepts as Wren, with <paramref name="configure"/> as the host's callback, in a new unit of work.</summary>
     private static async Task<InvitationManager.AcceptedInvitation> AcceptWith(Harness harness, string token, Action<HostSeat> configure)
     {
-        using (Callers.Begin(Caller.User(Wren)))
+        using (TestUser.BeginAs(Wren))
         {
             harness.Store.BeginUnitOfWork();
             return await harness.Invitations.AcceptAsync(token, verifiedAddress: null, Cancellation, configure: configure);
@@ -392,20 +392,20 @@ public class InvitationTests
         var before = harness.Store.Observed.Count;
 
         // The caller is the toolkit's own, and the method takes none: nothing a host could build is handed in.
-        Caller?[] others =
+        CurrentUserSnapshot?[] others =
         [
             null,
-            Caller.System,
-            Caller.SystemIn(TenancyWork.SystemScope),
-            Caller.Anonymous,
-            Caller.User(null),
-            Caller.User(Guid.Empty),
-            Caller.User(Wren, "operator"),
-            Caller.User(Wren, claim: path => path == "is_anonymous" ? "true" : null),
+            CurrentUserSnapshot.System,
+            CurrentUserSnapshot.SystemIn(TenancyWork.SystemScope),
+            CurrentUserSnapshot.Anonymous,
+            CurrentUserSnapshot.User(null),
+            CurrentUserSnapshot.User(Guid.Empty),
+            CurrentUserSnapshot.User(Wren, "operator"),
+            CurrentUserSnapshot.User(Wren, claim: path => path == "is_anonymous" ? "true" : null),
         ];
         foreach (var other in others)
         {
-            using (other is null ? null : Callers.Begin(other))
+            using (other is null ? null : TestUser.BeginAs(other))
             {
                 harness.Store.BeginUnitOfWork();
                 var refusal = await Refused.WithCodeAsync(
@@ -418,10 +418,10 @@ public class InvitationTests
 
         harness.Store.Observed.Skip(before).Should().BeEmpty("nobody without an identity learns whether a token exists");
         typeof(InvitationManager).GetMethod(nameof(InvitationManager.AcceptAsync))!
-            .GetParameters().Should().NotContain(parameter => parameter.ParameterType == typeof(Caller) || parameter.ParameterType == typeof(Guid));
+            .GetParameters().Should().NotContain(parameter => parameter.ParameterType == typeof(CurrentUserSnapshot) || parameter.ParameterType == typeof(Guid));
 
         // A seat of the tenant that is signed in is an identity like any other; a sign-in that says it is not anonymous is one too.
-        using (Callers.Begin(Caller.User(Wren, claim: path => path == "is_anonymous" ? "false" : null)))
+        using (TestUser.BeginAs(CurrentUserSnapshot.User(Wren, claim: path => path == "is_anonymous" ? "false" : null)))
         {
             harness.Store.BeginUnitOfWork();
             (await harness.Invitations.AcceptAsync(issued.Token, verifiedAddress: null, Cancellation)).Tenant.Id.Should().Be(harness.Tenant);
@@ -585,7 +585,7 @@ public class InvitationTests
 
         // The rights asked about are the issuer's, while the work stays the application's.
         harness.Store.Observed.Skip(before).Should().Contain(call =>
-            call.Tenancy != null && call.Tenancy.Kind == TenancyCallerKind.Seat && Equals(call.Tenancy.SeatId, hana) && call.Core!.IsSystemIn);
+            call.Tenancy != null && call.Tenancy.Kind == TenancyCallerKind.Seat && Equals(call.Tenancy.SeatId, hana) && call.Core!.Kind == CurrentUserKind.SystemIn);
         harness.Store.Seat(accepted.Seat.Id).Placements.Single().Grants.Single().GrantedBy.Should().Be(hana);
     }
 
@@ -652,7 +652,7 @@ public class InvitationTests
         await harness.BySystemWork(use => use.Seats.SuspendAsync(hana, Cancellation));
 
         // A handler that catches the refusal and goes on saves the same unit of work again.
-        using (Callers.Begin(Caller.User(Wren)))
+        using (TestUser.BeginAs(Wren))
         {
             harness.Store.BeginUnitOfWork();
             await Refused.WithCodeAsync(TenancyRefusals.InvitationUnbacked, () => harness.Invitations.AcceptAsync(issued.Token, null, Cancellation));
@@ -831,7 +831,7 @@ public class InvitationTests
         var harness = Harness.OfHarbor();
         var broken = new InvitationManager(
             harness.Store, harness.Store, harness.Catalogue, harness.Options, new TenancyInvitationOptions<InvitationId> { MinLifetime = TimeSpan.FromDays(8) },
-            new AmbientCallerAccessor(), harness.Clock);
+            new CurrentUser(), harness.Clock);
 
         // Made by hand with lifetimes out of order, a use case still says what is wrong.
         (await FluentActions.Awaiting(() => harness.As(harness.Administrator, _ => broken.IssueAsync(

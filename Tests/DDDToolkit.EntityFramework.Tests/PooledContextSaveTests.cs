@@ -380,8 +380,8 @@ public sealed class PooledContextSaveTests : IDisposable
     [Fact]
     public async Task The_event_log_is_written_from_a_pooled_context_without_a_scope()
     {
-        var alice = Callers.FromClaims("""{"sub":"a11ce000-0000-4000-8000-000000000041","role":"authenticated"}""");
-        var bob = Callers.FromClaims("""{"sub":"b0b00000-0000-4000-8000-000000000042","role":"authenticated"}""");
+        var alice = CurrentUserSnapshot.FromClaims("""{"sub":"a11ce000-0000-4000-8000-000000000041","role":"authenticated"}""");
+        var bob = CurrentUserSnapshot.FromClaims("""{"sub":"b0b00000-0000-4000-8000-000000000042","role":"authenticated"}""");
 
         ServiceProvider Build(Action<IServiceCollection> fields)
         {
@@ -403,15 +403,15 @@ public sealed class PooledContextSaveTests : IDisposable
         await using var host = Build(services => services.AddSingleton<IEventLogFields, YardOfTheFlow>());
         var factory = host.GetRequiredService<IDbContextFactory<LoggedApiaryContext>>();
 
-        async Task<DbContext> SettleAsAsync(Caller caller, string yard, int number)
+        async Task<DbContext> SettleAsAsync(CurrentUserSnapshot caller, string yard, int number)
         {
-            using var running = Callers.Begin(caller);
+            using var running = TestUser.BeginAs(caller);
             using var standing = YardOfTheFlow.Begin(yard);
 
             // Rented from the factory, with no scope anywhere and none bound: the log asks for none.
             await using var context = await factory.CreateDbContextAsync(Cancellation);
             context.IsPooled().Should().BeTrue();
-            context.Hives.Add(new Hive(HiveId.CreateSequential(), number, "By the hedge", caller.UserId, isOpen: true));
+            context.Hives.Add(new Hive(HiveId.CreateSequential(), number, "By the hedge", caller.Id, isOpen: true));
             await context.SaveChangesAsync(Cancellation);
             return context;
         }
@@ -921,10 +921,10 @@ public sealed class PooledContextSaveTests : IDisposable
     public async Task The_outbox_poller_takes_its_context_as_the_system_caller()
     {
         using var provider = PollerHost(requireExplicitCallers: true, out var rentals, out var recorder);
-        var handlerCallers = new List<Caller?>();
+        var handlerCallers = new List<CurrentUserSnapshot?>();
         recorder.OnEvent = (_, _, _) =>
         {
-            handlerCallers.Add(Callers.Ambient);
+            handlerCallers.Add(BegunUser);
             return Task.CompletedTask;
         };
         await QueueAsync(provider);
@@ -933,9 +933,9 @@ public sealed class PooledContextSaveTests : IDisposable
         var poller = provider.GetServices<IHostedService>().OfType<OutboxBackgroundService<LibraryContext>>().Single();
         await poller.DrainAsync(Cancellation);
 
-        rentals.Should().Equal([Caller.System, Caller.System], "one rental per batch, the batch that delivered and the one that found nothing, each taken as the system");
+        rentals.Should().Equal([CurrentUserSnapshot.System, CurrentUserSnapshot.System], "one rental per batch, the batch that delivered and the one that found nothing, each taken as the system");
         handlerCallers.Should().Equal([null], "the handler still runs with no caller: the system is the poller's own, for its bookkeeping");
-        Callers.Ambient.Should().BeNull("the caller is gone again after the round");
+        BegunUser.Should().BeNull("the caller is gone again after the round");
 
         using var check = _db.CreateLibraryContext();
         (await check.Outbox.SingleAsync(Cancellation)).ProcessedAt.Should().NotBeNull();
@@ -959,9 +959,9 @@ public sealed class PooledContextSaveTests : IDisposable
     /// A host whose poller's context comes from a factory the host registered by hand, as one that chooses a
     /// pool by who is calling would be: it writes down who the caller was at every rental.
     /// </summary>
-    private ServiceProvider PollerHost(bool requireExplicitCallers, out List<Caller?> rentals, out EventRecorder recorder)
+    private ServiceProvider PollerHost(bool requireExplicitCallers, out List<CurrentUserSnapshot?> rentals, out EventRecorder recorder)
     {
-        var seen = new List<Caller?>();
+        var seen = new List<CurrentUserSnapshot?>();
         var events = new EventRecorder();
 
         var services = new ServiceCollection();
@@ -975,7 +975,7 @@ public sealed class PooledContextSaveTests : IDisposable
 
         if (requireExplicitCallers)
         {
-            services.RequireExplicitCallers();
+            services.RequireExplicitCurrentUser();
         }
 
         services.AddSingleton<IDbContextFactory<LibraryContext>>(root => new RentalsByCaller(new PooledDbContextFactory<LibraryContext>(PoolOptions(root)), seen));
@@ -1229,13 +1229,13 @@ public sealed class PooledContextSaveTests : IDisposable
     }
 
     /// <summary>A factory over a pooled one that writes down who the caller was at each rental.</summary>
-    private sealed class RentalsByCaller(IDbContextFactory<LibraryContext> pool, List<Caller?> rentals) : IDbContextFactory<LibraryContext>
+    private sealed class RentalsByCaller(IDbContextFactory<LibraryContext> pool, List<CurrentUserSnapshot?> rentals) : IDbContextFactory<LibraryContext>
     {
         public LibraryContext CreateDbContext()
         {
             lock (rentals)
             {
-                rentals.Add(Callers.Ambient);
+                rentals.Add(BegunUser);
             }
 
             return pool.CreateDbContext();

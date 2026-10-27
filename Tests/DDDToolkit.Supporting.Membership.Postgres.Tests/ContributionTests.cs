@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using System.Security.Cryptography;
 using System.Text;
 using DDDToolkit.Abstractions.Attributes;
@@ -452,7 +453,7 @@ public sealed class ContributionTests(FilingPostgres postgres)
         var owner = UserId.CreateSequential();
         var reader = UserId.CreateSequential();
         var id = DocumentId.CreateSequential();
-        await filing.Services.AsAsync(Caller.System, async provider =>
+        await filing.Services.AsAsync(CurrentUserSnapshot.System, async provider =>
         {
             var document = new Document(id, "Night shift", owner, DateTimeOffset.UtcNow.AddDays(-2));
             document.ShareWith(reader, new NamedRole("o'brien {night}"), MemberPeriod.Open(DateTimeOffset.UtcNow.AddDays(-1)), DateTimeOffset.UtcNow, by: owner);

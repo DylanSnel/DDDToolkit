@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Access;
 using DDDToolkit.Supporting.Membership.Access;
 using DDDToolkit.Supporting.Tenancy.Access;
@@ -603,9 +604,9 @@ public class RequirementAttributeGenerationTests
 
             public static class Probe
             {
-                public static async System.Threading.Tasks.Task<string> SendAsync(ICallerAccessor callers)
+                public static async System.Threading.Tasks.Task<string> SendAsync(DDDToolkit.Abstractions.Access.ICurrentUser user)
                 {
-                    var behavior = new BillingAccessBehavior<MyInvoices, Mediator.Unit>(new AccessChecks<IBillingRequest>(new IAccessCheck[] { new CallerAccessCheck(callers) }));
+                    var behavior = new BillingAccessBehavior<MyInvoices, Mediator.Unit>(new AccessChecks<IBillingRequest>(new IAccessCheck[] { new CurrentUserAccessCheck(user) }));
                     try
                     {
                         await behavior.Handle(new MyInvoices(), (message, cancellationToken) => new System.Threading.Tasks.ValueTask<Mediator.Unit>(Mediator.Unit.Value), System.Threading.CancellationToken.None);
@@ -622,19 +623,23 @@ public class RequirementAttributeGenerationTests
 
         result.ShouldCompile();
         var emitted = result.Emit();
-        var signedIn = (Task<string>)emitted.CallStatic("Shop.Billing.Probe", "SendAsync", new Answering(DDDToolkit.Abstractions.Access.Caller.User(Guid.NewGuid())))!;
-        var anonymous = (Task<string>)emitted.CallStatic("Shop.Billing.Probe", "SendAsync", new Answering(DDDToolkit.Abstractions.Access.Caller.Anonymous))!;
-        var system = (Task<string>)emitted.CallStatic("Shop.Billing.Probe", "SendAsync", new Answering(DDDToolkit.Abstractions.Access.Caller.System))!;
+        var signedIn = (Task<string>)emitted.CallStatic("Shop.Billing.Probe", "SendAsync", Answering(DDDToolkit.Abstractions.Access.CurrentUserSnapshot.User(Guid.NewGuid())))!;
+        var anonymous = (Task<string>)emitted.CallStatic("Shop.Billing.Probe", "SendAsync", Answering(DDDToolkit.Abstractions.Access.CurrentUserSnapshot.Anonymous))!;
+        var system = (Task<string>)emitted.CallStatic("Shop.Billing.Probe", "SendAsync", Answering(DDDToolkit.Abstractions.Access.CurrentUserSnapshot.System))!;
 
         (await signedIn).Should().Be("handled");
         (await anonymous).Should().Be("access.not-signed-in");
         (await system).Should().Be("access.not-signed-in", "the application's own work is nobody's sign-in");
     }
 
-    /// <summary>An accessor that answers the caller a test gives it.</summary>
-    public sealed class Answering(DDDToolkit.Abstractions.Access.Caller caller) : ICallerAccessor
+    /// <summary>A current user whose host answers the user a test gives it, where nothing was begun.</summary>
+    public static DDDToolkit.Abstractions.Access.ICurrentUser Answering(DDDToolkit.Abstractions.Access.CurrentUserSnapshot user)
+        => new DDDToolkit.Access.CurrentUser(source: new Fixed(user));
+
+    /// <summary>A host that answers one user.</summary>
+    private sealed class Fixed(DDDToolkit.Abstractions.Access.CurrentUserSnapshot user) : DDDToolkit.Access.ICurrentUserSource
     {
         /// <inheritdoc />
-        public DDDToolkit.Abstractions.Access.Caller Current => caller;
+        public DDDToolkit.Abstractions.Access.CurrentUserSnapshot? Current => user;
     }
 }

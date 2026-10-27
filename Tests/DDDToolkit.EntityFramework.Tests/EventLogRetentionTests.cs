@@ -202,7 +202,7 @@ public sealed class EventLogRetentionTests(ExplicitCallersPostgres postgres) : I
         await using (var scope = host.CreateAsyncScope())
         {
             var byHand = () => scope.ServiceProvider.GetRequiredService<DomainEventRetention<ApiaryContext>>().DeleteExpiredAsync(Cancellation);
-            await byHand.Should().ThrowAsync<NoCallerException>();
+            await byHand.Should().ThrowAsync<NoCurrentUserException>();
         }
 
         // No caller a request runs as may delete a row of the log: the privilege is the bookkeeping role's alone.

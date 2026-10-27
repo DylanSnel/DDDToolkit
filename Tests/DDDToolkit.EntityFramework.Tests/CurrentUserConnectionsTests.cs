@@ -17,7 +17,7 @@ namespace DDDToolkit.EntityFramework.Tests;
 /// one.
 /// </summary>
 [Collection(SettingsPerTransaction.Name)]
-public sealed class CallerConnectionsTests(PoolerFixture database) : IAsyncLifetime
+public sealed class CurrentUserConnectionsTests(PoolerFixture database) : IAsyncLifetime
 {
     private const string SetsTheRole = "set_config('role'";
 
@@ -63,9 +63,9 @@ public sealed class CallerConnectionsTests(PoolerFixture database) : IAsyncLifet
     {
         database.Require();
         await using var dataSource = Direct(RowLevelSecurityScope.Connection);
-        var connections = new CallerConnections(dataSource, Interceptor(RowLevelSecurityScope.Connection));
+        var connections = new CurrentUserConnections(dataSource, Interceptor(RowLevelSecurityScope.Connection));
 
-        _caller.Current = Callers.FromClaims(ClaimsOf(Alice));
+        _caller.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
         int backend;
         await using (var connection = await connections.OpenAsync(Cancellation))
         {
@@ -75,7 +75,7 @@ public sealed class CallerConnectionsTests(PoolerFixture database) : IAsyncLifet
         }
 
         // Another caller, another connection; the pool's one backend, which kept nothing of the first.
-        _caller.Current = Caller.Anonymous;
+        _caller.Current = CurrentUserSnapshot.Anonymous;
         _tenant.Current = null;
         await using (var connection = await connections.OpenAsync(Cancellation))
         {
@@ -97,9 +97,9 @@ public sealed class CallerConnectionsTests(PoolerFixture database) : IAsyncLifet
         // Through the pooler where the settings last a transaction, whose one server connection every client shares.
         var perTransaction = scope == RowLevelSecurityScope.Transaction;
         await using var dataSource = perTransaction ? _sent.DataSource(database.Pooled(_pool)) : Direct(scope);
-        var connections = new CallerConnections(dataSource, Interceptor(scope));
+        var connections = new CurrentUserConnections(dataSource, Interceptor(scope));
 
-        _caller.Current = Callers.FromClaims(ClaimsOf(Alice));
+        _caller.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
         BackendState state;
         await using (var transaction = await connections.BeginTransactionAsync(Cancellation))
         await using (var connection = transaction.Connection!)
@@ -140,13 +140,13 @@ public sealed class CallerConnectionsTests(PoolerFixture database) : IAsyncLifet
     {
         database.Require();
         await using var dataSource = Direct(RowLevelSecurityScope.Transaction);
-        var connections = new CallerConnections(dataSource, Interceptor(RowLevelSecurityScope.Transaction));
-        _caller.Current = Callers.FromClaims(ClaimsOf(Alice));
+        var connections = new CurrentUserConnections(dataSource, Interceptor(RowLevelSecurityScope.Transaction));
+        _caller.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
 
         var open = async () => await connections.OpenAsync(Cancellation);
 
         (await open.Should().ThrowAsync<InvalidOperationException>("nothing may live on a session where a pooler hands it to the next client"))
-            .WithMessage("The caller's settings last one transaction here (RowLevelSecurityScope.Transaction), so a connection cannot carry a caller for its session*Use BeginTransactionAsync, which sets the caller for one transaction.");
+            .WithMessage("The caller's settings last one transaction here (RowLevelSecurityScope.Transaction), so a connection cannot carry a user for its session*Use BeginTransactionAsync, which sets the user for one transaction.");
         _sent.Sent.Should().BeEmpty("nothing was opened");
     }
 
@@ -155,8 +155,8 @@ public sealed class CallerConnectionsTests(PoolerFixture database) : IAsyncLifet
     {
         database.Require();
         await using var dataSource = _sent.DataSource(database.Direct(_pool));
-        var connections = new CallerConnections(dataSource, Interceptor(RowLevelSecurityScope.Connection));
-        _caller.Current = Callers.FromClaims(ClaimsOf(Alice));
+        var connections = new CurrentUserConnections(dataSource, Interceptor(RowLevelSecurityScope.Connection));
+        _caller.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
 
         var open = async () => await connections.OpenAsync(Cancellation);
         var begin = async () => await connections.BeginTransactionAsync(Cancellation);
@@ -167,21 +167,21 @@ public sealed class CallerConnectionsTests(PoolerFixture database) : IAsyncLifet
     }
 
     [Fact]
-    public async Task Nobody_calling_is_NoCallerException_with_explicit_callers()
+    public async Task Nobody_calling_is_NoCurrentUserException_with_an_explicit_current_user()
     {
         database.Require();
         await using var dataSource = Direct(RowLevelSecurityScope.Connection);
-        var required = new CallerOptions { RequireExplicitCallers = true };
-        var connections = new CallerConnections(dataSource, PoolerFixture.Interceptor(new AmbientCallerAccessor(required), RowLevelSecurityScope.Connection, [_tenant], required));
+        var required = new CurrentUserOptions { RequireExplicitCurrentUser = true };
+        var connections = new CurrentUserConnections(dataSource, PoolerFixture.Interceptor(new CurrentUser(required), RowLevelSecurityScope.Connection, [_tenant], required));
 
         var open = async () => await connections.OpenAsync(Cancellation);
         var begin = async () => await connections.BeginTransactionAsync(Cancellation);
 
-        await open.Should().ThrowAsync<NoCallerException>();
-        await begin.Should().ThrowAsync<NoCallerException>();
+        await open.Should().ThrowAsync<NoCurrentUserException>();
+        await begin.Should().ThrowAsync<NoCurrentUserException>();
         _sent.Sent.Should().BeEmpty("nothing connects for nobody");
 
-        using (Callers.Begin(Callers.FromClaims(ClaimsOf(Bob))))
+        using (TestUser.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Bob))))
         {
             await using var connection = await connections.OpenAsync(Cancellation);
             (await ScalarAsync(connection, Who)).Should().StartWith($"authenticated|{Bob}|north|");
@@ -196,9 +196,9 @@ public sealed class CallerConnectionsTests(PoolerFixture database) : IAsyncLifet
             "DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'beyond_the_grants') THEN CREATE ROLE beyond_the_grants NOLOGIN NOINHERIT; END IF; END $$; SELECT 1");
 
         await using var dataSource = Direct(RowLevelSecurityScope.Connection);
-        var beyond = new CallerConnections(dataSource, PoolerFixture.Interceptor(_caller, RowLevelSecurityScope.Connection, [_tenant], configure: options => options.SystemInRole = "beyond_the_grants"));
+        var beyond = new CurrentUserConnections(dataSource, PoolerFixture.Interceptor(_caller, RowLevelSecurityScope.Connection, [_tenant], configure: options => options.SystemInRole = "beyond_the_grants"));
 
-        _caller.Current = Caller.SystemIn("tenancy");
+        _caller.Current = CurrentUserSnapshot.SystemIn("tenancy");
         var open = async () => await beyond.OpenAsync(Cancellation);
         var begin = async () => await beyond.BeginTransactionAsync(Cancellation);
 
@@ -206,8 +206,8 @@ public sealed class CallerConnectionsTests(PoolerFixture database) : IAsyncLifet
         (await begin.Should().ThrowAsync<PostgresException>()).Which.SqlState.Should().Be(PostgresErrorCodes.InsufficientPrivilege);
 
         // The pool's one connection came back each time, so the next caller gets it, and gets it clean.
-        _caller.Current = Callers.FromClaims(ClaimsOf(Alice));
-        var connections = new CallerConnections(dataSource, Interceptor(RowLevelSecurityScope.Connection));
+        _caller.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
+        var connections = new CurrentUserConnections(dataSource, Interceptor(RowLevelSecurityScope.Connection));
         await using var connection = await connections.OpenAsync(Cancellation);
         (await ScalarAsync(connection, Who)).Should().Be($"authenticated|{Alice}|north|300ms|Alice's");
     }
@@ -217,8 +217,8 @@ public sealed class CallerConnectionsTests(PoolerFixture database) : IAsyncLifet
     {
         database.Require();
         await using var dataSource = Direct(RowLevelSecurityScope.Connection);
-        var connections = new CallerConnections(dataSource, Interceptor(RowLevelSecurityScope.Connection));
-        _caller.Current = Callers.FromClaims(ClaimsOf(Alice));
+        var connections = new CurrentUserConnections(dataSource, Interceptor(RowLevelSecurityScope.Connection));
+        _caller.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
 
         await using var connection = await connections.OpenAsync(Cancellation);
         _sent.Count(SetsTheRole).Should().Be(1);
@@ -229,7 +229,7 @@ public sealed class CallerConnectionsTests(PoolerFixture database) : IAsyncLifet
         _sent.Count(SetsTheRole).Should().Be(1, "what the caller connection set is remembered where the interceptor remembers it");
 
         // And it follows a caller that changes afterwards, as on any connection it holds.
-        _caller.Current = Callers.FromClaims(ClaimsOf(Bob));
+        _caller.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Bob));
         (await context.Notes.Select(note => note.Text).ToListAsync(Cancellation)).Should().Equal("Bob's");
         _sent.Count(SetsTheRole).Should().Be(2);
     }
@@ -241,11 +241,11 @@ public sealed class CallerConnectionsTests(PoolerFixture database) : IAsyncLifet
     {
         database.Require();
         await using var dataSource = Direct(scope);
-        var required = new CallerOptions { RequireExplicitCallers = true };
-        PostgresRowLevelSecurityInterceptor Strict() => PoolerFixture.Interceptor(new AmbientCallerAccessor(required), scope, [_tenant], required, configure: Timed);
-        var connections = new CallerConnections(dataSource, Strict());
+        var required = new CurrentUserOptions { RequireExplicitCurrentUser = true };
+        PostgresRowLevelSecurityInterceptor Strict() => PoolerFixture.Interceptor(new CurrentUser(required), scope, [_tenant], required, configure: Timed);
+        var connections = new CurrentUserConnections(dataSource, Strict());
 
-        using var alice = Callers.Begin(Callers.FromClaims(ClaimsOf(Alice)));
+        using var alice = TestUser.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Alice)));
         await using var transaction = await connections.BeginTransactionAsync(Cancellation);
         await using var connection = transaction.Connection!;
         _sent.Count(SetsTheRole).Should().Be(1);
@@ -255,15 +255,15 @@ public sealed class CallerConnectionsTests(PoolerFixture database) : IAsyncLifet
         (await context.Notes.Select(note => note.Text).ToListAsync(Cancellation)).Should().Equal("Alice's");
         _sent.Count(SetsTheRole).Should().Be(1, "the transaction carries the caller already, in either scope, and the context asked the server instead of setting it again");
 
-        using (Callers.Begin(Callers.FromClaims(ClaimsOf(Bob))))
+        using (TestUser.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Bob))))
         {
             var asBob = () => context.Notes.Select(note => note.Text).ToListAsync(Cancellation);
-            (await asBob.Should().ThrowAsync<InvalidOperationException>()).WithMessage($"The caller changed from authenticated {Alice} to authenticated {Bob} while a transaction was open on this connection.*");
+            (await asBob.Should().ThrowAsync<InvalidOperationException>()).WithMessage($"The current user changed from authenticated {Alice} to authenticated {Bob} while a transaction was open on this connection.*");
         }
     }
 
     [Fact]
-    public async Task AddCallerConnections_registers_them_over_the_data_source_it_is_given()
+    public async Task AddCurrentUserConnections_registers_them_over_the_data_source_it_is_given()
     {
         database.Require();
         await using var dataSource = Direct(RowLevelSecurityScope.Connection);
@@ -271,13 +271,13 @@ public sealed class CallerConnectionsTests(PoolerFixture database) : IAsyncLifet
         await using var services = new ServiceCollection()
             .AddPostgresRowLevelSecurity<CallerOfTheTest>(Timed)
             .AddRowLevelSecuritySettings<TenantSetting>()
-            .AddCallerConnections(_ => throw new InvalidOperationException("Replaced by the registration after it."))
-            .AddCallerConnections(_ => dataSource)
+            .AddCurrentUserConnections(_ => throw new InvalidOperationException("Replaced by the registration after it."))
+            .AddCurrentUserConnections(_ => dataSource)
             .BuildServiceProvider();
 
-        ((CallerOfTheTest)services.GetRequiredService<ICallerAccessor>()).Current = Callers.FromClaims(ClaimsOf(Bob));
-        var connections = services.GetRequiredService<CallerConnections>();
-        connections.Should().BeSameAs(services.GetRequiredService<CallerConnections>(), "one for the application, as the interceptor is");
+        ((CallerOfTheTest)services.GetRequiredService<ICurrentUserSource>()).Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Bob));
+        var connections = services.GetRequiredService<CurrentUserConnections>();
+        connections.Should().BeSameAs(services.GetRequiredService<CurrentUserConnections>(), "one for the application, as the interceptor is");
 
         await using (var connection = await connections.OpenAsync(Cancellation))
         {
@@ -285,11 +285,11 @@ public sealed class CallerConnectionsTests(PoolerFixture database) : IAsyncLifet
         }
 
         // Without row level security there is no interceptor to set a caller with.
-        await using var bare = new ServiceCollection().AddCallerConnections(_ => dataSource).BuildServiceProvider();
-        var resolve = () => bare.GetRequiredService<CallerConnections>();
+        await using var bare = new ServiceCollection().AddCurrentUserConnections(_ => dataSource).BuildServiceProvider();
+        var resolve = () => bare.GetRequiredService<CurrentUserConnections>();
         resolve.Should().Throw<InvalidOperationException>().WithMessage("Row level security is not registered. Call services.AddPostgresRowLevelSecurity() first.");
 
-        var none = () => new ServiceCollection().AddCallerConnections(null!);
+        var none = () => new ServiceCollection().AddCurrentUserConnections(null!);
         none.Should().Throw<ArgumentNullException>();
     }
 
@@ -301,7 +301,7 @@ public sealed class CallerConnectionsTests(PoolerFixture database) : IAsyncLifet
         => PoolerFixture.Interceptor(_caller, scope, [_tenant], configure: Timed);
 
     /// <summary>A user's statements get 300 milliseconds; the other kinds get the login role's own.</summary>
-    private static void Timed(PostgresRowLevelSecurityOptions options) => options.StatementTimeouts[CallerKind.User] = TimeSpan.FromMilliseconds(300);
+    private static void Timed(PostgresRowLevelSecurityOptions options) => options.StatementTimeouts[CurrentUserKind.User] = TimeSpan.FromMilliseconds(300);
 
     private static async Task<string?> ScalarAsync(DbConnection connection, string sql, DbTransaction? transaction = null)
     {

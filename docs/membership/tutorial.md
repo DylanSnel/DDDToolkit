@@ -750,14 +750,14 @@ namespace Harbor.Boards.Infrastructure.Access;
 [RowAccess<Board>(RowOperations.Read, To = [RowAccessRoles.User])]
 public static partial class SeatsReadTheBoardsTheySee
 {
-    public static bool Allows(Board board, Caller caller) => BoardsISee.Ids().Contains(board.Id);
+    public static bool Allows(Board board, ICurrentUser user) => BoardsISee.Ids().Contains(board.Id);
 }
 
 // A seat opens a board where it holds boards.create, and as its own.
 [RowAccess<Board>(RowOperations.Create, To = [RowAccessRoles.User])]
 public static partial class SeatsOpenBoardsWhereTheyMay
 {
-    public static bool Allows(Board board, Caller caller)
+    public static bool Allows(Board board, ICurrentUser user)
         => TenancyRowAccess.UnitsWhereIHold<OrganizationUnitId>(BoardPermissions.Create).Contains(board.UnitId)
             && board.OwnerSeatId == TenancyRowAccess.CallerSeatId<SeatId>();
 }
@@ -766,7 +766,7 @@ public static partial class SeatsOpenBoardsWhereTheyMay
 [RowAccess<Board>(RowOperations.Change, To = [RowAccessRoles.User])]
 public static partial class SeatsChangeTheBoardsTheyWorkOn
 {
-    public static bool Allows(Board board, Caller caller)
+    public static bool Allows(Board board, ICurrentUser user)
         => BoardsWhereIHold.Ids(BoardPermissions.Edit).Contains(board.Id)
             || BoardsWhereIHold.Ids(BoardPermissions.ManageMembers).Contains(board.Id);
 }
@@ -791,14 +791,14 @@ namespace Harbor.Boards.Infrastructure.Access;
 [RowAccess<BoardRole>(RowOperations.Read, To = [RowAccessRoles.User])]
 public static partial class SeatsReadTheirTenantsBoardRoles
 {
-    public static bool Allows(BoardRole role, Caller caller) => role.TenantId == TenancyRowAccess.CallerTenant<TenantId>();
+    public static bool Allows(BoardRole role, ICurrentUser user) => role.TenantId == TenancyRowAccess.CallerTenant<TenantId>();
 }
 
 // A role's row decides what everybody who holds it may do: only who manages the roles of boards writes one.
 [RowAccess<BoardRole>(RowOperations.Create | RowOperations.Change, To = [RowAccessRoles.User])]
 public static partial class RoleManagersWriteBoardRoles
 {
-    public static bool Allows(BoardRole role, Caller caller) => TenancyRowAccess.HoldsAtTenant(BoardPermissions.ManageRoles);
+    public static bool Allows(BoardRole role, ICurrentUser user) => TenancyRowAccess.HoldsAtTenant(BoardPermissions.ManageRoles);
 }
 ```
 

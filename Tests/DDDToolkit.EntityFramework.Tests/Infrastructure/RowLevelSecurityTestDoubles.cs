@@ -89,7 +89,7 @@ public sealed class TenantSetting : IRowLevelSecuritySettings
 
     public IReadOnlyCollection<string> Names { get; } = [Tenant, Unit];
 
-    public IEnumerable<KeyValuePair<string, string>> For(Caller caller)
+    public IEnumerable<KeyValuePair<string, string>> For(CurrentUserSnapshot caller)
         => Current is { } tenant ? [new(Tenant, tenant)] : [];
 }
 
@@ -98,5 +98,5 @@ public sealed class DeclaredSettings(IReadOnlyCollection<string> names, params K
 {
     public IReadOnlyCollection<string> Names { get; } = names;
 
-    public IEnumerable<KeyValuePair<string, string>> For(Caller caller) => values;
+    public IEnumerable<KeyValuePair<string, string>> For(CurrentUserSnapshot caller) => values;
 }

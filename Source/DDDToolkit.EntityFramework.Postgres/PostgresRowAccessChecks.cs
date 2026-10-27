@@ -32,14 +32,17 @@ namespace DDDToolkit.EntityFramework.Postgres;
 /// </summary>
 /// <remarks>
 /// The ones that ask the database read its catalogs on the context's own connection, outside any ambient
-/// transaction: as the system caller, begun around the check alone, or for the question whether the login role
-/// may switch to the system caller's role among the others, as the login role itself. The catalogs answer every
+/// transaction: as system work, begun around the check alone, or for the question whether the login role
+/// may switch to the system role among the others, as the login role itself. The catalogs answer every
 /// role, and what they are asked is about the session's user, the role the application logged in as, whichever
 /// role the connection runs as at that moment. Each names every finding with the statement that fixes it, in one
 /// exception.
 /// </remarks>
 public static class PostgresRowAccessChecks
 {
+    /// <summary>Begins system work around a question. What it begins does not depend on the instance.</summary>
+    private static readonly ICurrentUser Users = new CurrentUser();
+
     /// <summary>
     /// The start-up check that every registered context on Postgres runs its commands as the caller, but one
     /// configured with <c>UseDDDToolkitCore</c> and left without row level security on purpose
@@ -51,7 +54,7 @@ public static class PostgresRowAccessChecks
     /// <summary>
     /// The start-up check that the role the host logs in as may become every caller of every context that runs as
     /// its caller (<see cref="EnsureLoginRoleMaySwitchToCallersAsync"/>). It runs in the stage of the login, before
-    /// every check that asks as the system caller and so switches to the system caller's role.
+    /// every check that asks as system work and so switches to the system role.
     /// </summary>
     public const string LoginRoleMaySwitchToCallersCheck = "postgres.login-role-may-switch-to-callers";
 
@@ -98,7 +101,7 @@ public static class PostgresRowAccessChecks
     /// A role it may switch to counts when that role is past the policies itself: a superuser, a role that
     /// bypasses row level security, or the owner of a table, a function or a schema there. Whether it may switch
     /// is what <c>SET ROLE</c> asks, said per membership since Postgres 16 and by membership alone before it. The
-    /// role the question itself runs as is the system caller's, and where the host chose one that bypasses row
+    /// role the question itself runs as is the system role's, and where the host chose one that bypasses row
     /// level security, Supabase's <c>service_role</c> for one, that is the host's own decision and no finding.
     /// A superuser may switch to any role, and is named as a superuser alone. The role that owns the database
     /// is <c>pg_database_owner</c> without a grant, which owns the schema <c>public</c> since Postgres 15: it is
@@ -269,7 +272,7 @@ public static class PostgresRowAccessChecks
     /// each held to its policies and its privileges, and nothing besides.
     /// </para>
     /// <para>
-    /// One role it may switch to is not asked whether it bypasses row level security: the one the system caller
+    /// One role it may switch to is not asked whether it bypasses row level security: the one system work
     /// runs as, <see cref="PostgresRowLevelSecurityOptions.SystemRole"/>, which is the role this check runs as.
     /// A host that names a bypassing role there, Supabase's <c>service_role</c> for one, chose that its
     /// background work reads past the policies. That role is still named when it is a superuser or owns
@@ -311,7 +314,7 @@ public static class PostgresRowAccessChecks
 
     /// <summary>
     /// Throws unless the role the application logs in as may switch to every role <paramref name="context"/>'s
-    /// callers run as: the user's, the anonymous caller's, the scoped system role, the role the system caller runs
+    /// callers run as: the user's, the anonymous caller's, the scoped system role, the role system work runs
     /// as, and the role of every mapped token role, as its row level security interceptor was configured. Where the
     /// settings last one transaction (<see cref="RowLevelSecurityScope.Transaction"/>), it also throws unless the
     /// login role may call <c>"ddd".use_caller</c>, which sets them.
@@ -319,7 +322,7 @@ public static class PostgresRowAccessChecks
     /// A role is switched to when a caller of that kind connects, not when the application starts. Without this,
     /// an application whose login role was never granted one of them starts, passes its other checks, and fails the
     /// first request of such a caller, a token role nobody holds in testing, or the background work, which runs as
-    /// the system caller's role. The login role holding nothing (<see cref="EnsureLoginRoleOwnsNothingAsync"/>)
+    /// the system role. The login role holding nothing (<see cref="EnsureLoginRoleOwnsNothingAsync"/>)
     /// is half of the bargain; this is the other half.
     /// </para>
     /// <para>
@@ -333,9 +336,9 @@ public static class PostgresRowAccessChecks
     /// </para>
     /// <para>
     /// Unlike the other checks, this one asks as the login role itself, on the context's connection opened past the
-    /// interceptor: the system caller's role is one of those it asks about, and switching to a role the login role
+    /// interceptor: the system role is one of those it asks about, and switching to a role the login role
     /// may not switch to would fail the question before it was asked. The catalogs answer every role, and nothing
-    /// is set on the connection. So call it before the checks that run as the system caller, which would otherwise
+    /// is set on the connection. So call it before the checks that run as system work, which would otherwise
     /// fail first, on the switch, without saying why.
     /// </para>
     /// </summary>
@@ -546,7 +549,7 @@ public static class PostgresRowAccessChecks
     /// <summary>
     /// Every role <paramref name="options"/> switches a caller to, each once, with what it is to a message and the
     /// pair of <c>SupabaseRowAccessRoles</c> that maps it: the user's, the anonymous caller's, the scoped system role
-    /// and the system caller's where there are those, and the roles of the mapped token roles. A role that is two of
+    /// and the system role's where there are those, and the roles of the mapped token roles. A role that is two of
     /// these is said as the first.
     /// </summary>
     private static List<(string Role, string What, string Pair)> CallerRolesOf(PostgresRowLevelSecurityOptions options)
@@ -564,7 +567,7 @@ public static class PostgresRowAccessChecks
 
         if (options.SystemRole is { } system)
         {
-            roles.Add((system, "the role the system caller runs as", $"system={system}"));
+            roles.Add((system, "the system role", $"system={system}"));
         }
 
         foreach (var mapped in options.TokenRoles.GroupBy(pair => pair.Value, StringComparer.Ordinal).OrderBy(group => group.Key, StringComparer.Ordinal))
@@ -615,13 +618,13 @@ public static class PostgresRowAccessChecks
 
     /// <summary>
     /// The rows <paramref name="sql"/> answers about the schemas of <paramref name="context"/>, its one parameter,
-    /// each as text: asked on the context's own connection, as the system caller begun around the question
-    /// alone, outside any ambient transaction.
+    /// each as text: asked on the context's own connection, as system work begun around the question alone,
+    /// outside any ambient transaction.
     /// </summary>
     private static async Task<List<string[]>> AskAsync(DbContext context, string sql, CancellationToken cancellationToken)
     {
         using var suppressed = new TransactionScope(TransactionScopeOption.Suppress, TransactionScopeAsyncFlowOption.Enabled);
-        using var system = Callers.Begin(Caller.System);
+        using var system = Users.BeginSystem();
 
         await context.Database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         try

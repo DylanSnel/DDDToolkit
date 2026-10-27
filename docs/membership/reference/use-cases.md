@@ -928,7 +928,7 @@ public interface IMembershipStorage<TResource, TResourceId>
 
 What a storage package answers about one kind of resource, for the current caller: the part of the access manager that reads where the resources are kept. An application never takes it: it takes the access manager of the resource, [`MembershipAccessManager<TResource>`](#membershipaccessmanagertresource), which a storage package registers over this ([`MembershipAccessManager.Over<TResource, TResourceId>`](#overimembershipstoragetresource-tresourceid)).
 
-A caller holds a permission on a resource through its members: it is a member now, and holds a role there, now, that gives the permission. A role counts only inside its membership, and only for the permissions a member's role can give ([`MembershipRules.RolePermissions`](rules.md#membershiprules)). Being a member gives one permission by itself, when the rules name one ([`MembershipRules.EveryMemberPermission`](rules.md#membershiprules)). The owner of a resource holds the permissions marked `Owner` ([`MembershipRules.OwnerPermissions`](rules.md#membershiprules)), by owning it, and nothing through a role, and the application's own work holds every permission: the application itself, and its work in a scope the rules name ([`MembershipRules.IsOwnWork`](rules.md#isownworkcaller)). Where the rules say so ([`MembershipRules.ReachFromAbove`](rules.md#membershiprules)), a permission held where the resource sits, or above it, is held on the resource as well, by a caller that is no member of it. A resource the caller reaches in no way does not exist for it.
+A caller holds a permission on a resource through its members: it is a member now, and holds a role there, now, that gives the permission. A role counts only inside its membership, and only for the permissions a member's role can give ([`MembershipRules.RolePermissions`](rules.md#membershiprules)). Being a member gives one permission by itself, when the rules name one ([`MembershipRules.EveryMemberPermission`](rules.md#membershiprules)). The owner of a resource holds the permissions marked `Owner` ([`MembershipRules.OwnerPermissions`](rules.md#membershiprules)), by owning it, and nothing through a role, and the application's own work holds every permission: the application itself, and its work in a scope the rules name ([`MembershipRules.IsOwnWork`](rules.md#isownworkcurrentusersnapshot)). Where the rules say so ([`MembershipRules.ReachFromAbove`](rules.md#membershiprules)), a permission held where the resource sits, or above it, is held on the resource as well, by a caller that is no member of it. A resource the caller reaches in no way does not exist for it.
 
 The storage answers, because whether a membership and a role apply now is compared where the rows are, inside one statement. What is refused, and in which order, is not the storage's: the access manager decides that over [`HoldAsync`](#holdasynctresourceid-string-cancellationtoken), the same for every storage.
 
@@ -952,7 +952,7 @@ The storage answers, because whether a membership and a role apply now is compar
 void RequireCaller()
 ```
 
-Refuses a caller nothing can be answered for at all, with that caller's own refusal. Where the caller's member id is its own id or a claim there is no such caller: one that is nobody's member simply reaches nothing, so this returns for everybody. Where the application resolves who a caller is as a member ([`MemberSource.Resolved`](rules.md#resolveddatabasefunction)), a caller the application refuses outright is refused here, before anything is read ([`ICallerMember.Require`](rules.md#requirecaller)).
+Refuses a caller nothing can be answered for at all, with that caller's own refusal. Where the caller's member id is its own id or a claim there is no such caller: one that is nobody's member simply reaches nothing, so this returns for everybody. Where the application resolves who a caller is as a member ([`MemberSource.Resolved`](rules.md#resolveddatabasefunction)), a caller the application refuses outright is refused here, before anything is read ([`ICallerMember.Require`](rules.md#requirecurrentusersnapshot)).
 
 **Exceptions**
 
@@ -1324,17 +1324,17 @@ It decides the cases of its own resource only. A module with two kinds of resour
 
 | Member | Summary |
 |---|---|
-| [`MemberAccessCheck(MembershipAccessManager<TResource>, Checked<MemberHold<TResourceId>>, ICallerAccessor)`](#memberaccesscheckmembershipaccessmanagertresource-checkedmemberholdtresourceid-icalleraccessor) | The primary constructor: the type's summary says what it makes. |
+| [`MemberAccessCheck(MembershipAccessManager<TResource>, Checked<MemberHold<TResourceId>>, ICurrentUser)`](#memberaccesscheckmembershipaccessmanagertresource-checkedmemberholdtresourceid-icurrentuser) | The primary constructor: the type's summary says what it makes. |
 | [`Decides(AccessRequirement)`](#decidesaccessrequirement) | Whether `requirement` is one of this check's cases. |
 | [`RequireAsync(AccessRequirement, IRequireAccess, CancellationToken)`](#requireasyncaccessrequirement-irequireaccess-cancellationtoken) | Holds the caller to `requirement`: returns when the caller meets it, and throws when it does not. |
 
-#### `MemberAccessCheck(MembershipAccessManager<TResource>, Checked<MemberHold<TResourceId>>, ICallerAccessor)`
+#### `MemberAccessCheck(MembershipAccessManager<TResource>, Checked<MemberHold<TResourceId>>, ICurrentUser)`
 
 ```csharp
 public MemberAccessCheck(
     MembershipAccessManager<TResource> access,
     Checked<MemberHold<TResourceId>> kept,
-    ICallerAccessor callers)
+    ICurrentUser user)
 ```
 
 The primary constructor: the type's summary says what it makes.
@@ -1343,7 +1343,7 @@ The primary constructor: the type's summary says what it makes.
 
 - `access`: The access manager of this kind of resource.
 - `kept`: Where what was read of a request's resource is kept, for the expert hold.
-- `callers`: Who is calling: what tells a caller who did not sign in.
+- `user`: Who is calling: what tells a caller who did not sign in.
 
 #### `Decides(AccessRequirement)`
 
@@ -1414,11 +1414,11 @@ public static partial class PeopleOnMyProjects
 }
 
 // A rule of Inspections, and one of Projects' own, alike
-public static bool Allows(Inspection inspection, Caller caller) => ProjectsISee.Ids().Contains(inspection.ProjectId);
-public static bool Allows(Project project, Caller caller) => ProjectsWhereIHold.Ids(ProjectPermissionNames.Edit).Contains(project.Id);
+public static bool Allows(Inspection inspection, ICurrentUser user) => ProjectsISee.Ids().Contains(inspection.ProjectId);
+public static bool Allows(Project project, ICurrentUser user) => ProjectsWhereIHold.Ids(ProjectPermissionNames.Edit).Contains(project.Id);
 
 // A read rule on the application's seat class
-public static bool Allows(Seat seat, Caller caller) => PeopleOnMyProjects.Ids().Contains(seat.Id);
+public static bool Allows(Seat seat, ICurrentUser user) => PeopleOnMyProjects.Ids().Contains(seat.Id);
 ```
 
 **Type parameters**

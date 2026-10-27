@@ -21,13 +21,16 @@ public static class SampleTokenRoles
     public const string Operator = "tenancy_operator";
 
     /// <summary>
-    /// Whether <paramref name="caller"/> is one of the application's operators: a signed-in user whose token carries
+    /// Whether <paramref name="user"/> is one of the application's operators: a signed-in user whose token carries
     /// <see cref="Operator"/>. The host's own policy for the operators' routes asks this. A request of the
     /// operators' own is held to the same rule by the Tenancy package, which the Tenants module told that this is
     /// the operators' token role, so both mean the same caller by it. System work is never one, whoever it is
     /// recorded as.
     /// </summary>
-    /// <param name="caller">Who is calling, as the host verified it.</param>
-    public static bool IsOperator(Caller? caller)
-        => caller is { Kind: CallerKind.User, UserId: not null } && string.Equals(caller.Role, Operator, StringComparison.Ordinal);
+    /// <param name="user">Who is calling, as the host verified it.</param>
+    public static bool IsOperator(ICurrentUser user)
+    {
+        ArgumentNullException.ThrowIfNull(user);
+        return user.Kind == CurrentUserKind.User && user.Id is not null && string.Equals(user.Role, Operator, StringComparison.Ordinal);
+    }
 }

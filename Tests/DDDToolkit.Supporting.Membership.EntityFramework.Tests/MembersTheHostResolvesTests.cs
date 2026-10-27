@@ -1,3 +1,5 @@
+using DDDToolkit.Abstractions.Access;
+
 namespace DDDToolkit.Supporting.Membership.EntityFramework.Tests;
 
 /// <summary>
@@ -15,7 +17,7 @@ public sealed class MembersTheHostResolvesTests
     {
         using var depot = await SqliteDepot.SeededAsync();
         var data = depot.Scenario;
-        var pears = await depot.Services.AsAsync(Caller.System, provider => provider.GetRequiredService<DepotContext>().Pallets.AsNoTracking().SingleAsync(pallet => pallet.Id == data.Pears, Cancellation));
+        var pears = await depot.Services.AsAsync(CurrentUserSnapshot.System, provider => provider.GetRequiredService<DepotContext>().Pallets.AsNoTracking().SingleAsync(pallet => pallet.Id == data.Pears, Cancellation));
 
         // As a member: a loader loads, and holds no permission its role does not give.
         (await depot.Services.PalletsAsync(data.Bo, access => access.HoldAsync(data.Pears, PalletPermissions.Load, Cancellation)))
@@ -106,7 +108,7 @@ public sealed class MembersTheHostResolvesTests
         (await depot.Services.PalletsAsync(data.Ned, access => access.HoldAsync(data.Pears, PalletPermissions.Load, Cancellation)))!.Via.Should().Be(MemberVia.Members);
 
         // And nobody the depot counts is put on a pallet in the first place: the admission asks the depot.
-        await depot.Services.AsAsync(Caller.System, async provider =>
+        await depot.Services.AsAsync(CurrentUserSnapshot.System, async provider =>
         {
             var admission = provider.GetRequiredService<MemberAdmission<PalletId, PorterId, NamedRole>>();
             await Refused.WithCodeAsync(PalletMembership.Codes, MembershipRefusals.MemberNotActive, () => admission.RequireMemberAsync(PorterId.CreateSequential(), Cancellation).AsTask());
@@ -147,7 +149,7 @@ public sealed class MembersTheHostResolvesTests
         (await depot.Services.PalletsAsync(data.Ivo, access => access.HoldAsync(data.Limes, PalletPermissions.Load, Cancellation)))!.Via.Should().Be(MemberVia.Members);
 
         // Only a signed-in user is asked about at all: the host is not asked who an anonymous caller is.
-        (await depot.Services.AsAsync(Caller.Anonymous, provider => provider.GetRequiredService<MembershipAccessManager<Pallet>>().HoldAsync(data.Limes, PalletPermissions.See, Cancellation))).Should().BeNull();
+        (await depot.Services.AsAsync(CurrentUserSnapshot.Anonymous, provider => provider.GetRequiredService<MembershipAccessManager<Pallet>>().HoldAsync(data.Limes, PalletPermissions.See, Cancellation))).Should().BeNull();
     }
 
     [Fact]

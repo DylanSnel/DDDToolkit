@@ -530,7 +530,7 @@ public sealed class InMemoryTenancyStore
     private void Record(string call)
     {
         _calls.Add(call);
-        _observed.Add(new StoreCall(call, TenancyCallers.Ambient, Callers.Ambient));
+        _observed.Add(new StoreCall(call, TenancyCallers.Ambient, BegunUser));
     }
 
     private void AddToUnitOfWork(object aggregate)
@@ -668,4 +668,4 @@ public sealed class InMemoryTenancyStore
 /// <param name="Name">The call.</param>
 /// <param name="Tenancy">The Tenancy caller then.</param>
 /// <param name="Core">The toolkit's caller then.</param>
-public sealed record StoreCall(string Name, ITenancyCaller? Tenancy, Caller? Core);
+public sealed record StoreCall(string Name, ITenancyCaller? Tenancy, CurrentUserSnapshot? Core);

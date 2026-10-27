@@ -210,18 +210,18 @@ public sealed class CratesInTheDepot(DepotDesk desk, DepotContext db)
       IRolesWithPermission<CrateId, DepotRoleId>, IPlacesReached<CrateId, BayId>
 {
     // The caller's member id, or null. Uses only what is already known of the caller.
-    public PorterId? Find(Caller caller) => desk.ActivePorterOf(caller);
+    public PorterId? Find(CurrentUserSnapshot user) => desk.ActivePorterOf(user);
 
     // The roles that give a permission, as a query that runs inside the statement that asks
-    public IQueryable<DepotRoleId> RolesWith(DbContext context, Caller caller, string permission)
+    public IQueryable<DepotRoleId> RolesWith(DbContext context, CurrentUserSnapshot user, string permission)
         => context.Set<DepotRolePermission>().Where(given => given.Permission == permission).Select(given => given.RoleId);
 
     // The places where the caller holds a permission, and every place below them
-    public IQueryable<BayId> PlacesReached(DbContext context, Caller caller, string permission)
+    public IQueryable<BayId> PlacesReached(DbContext context, CurrentUserSnapshot user, string permission)
     {
-        var user = caller.UserId;
+        var id = user.Id;
         return from porter in context.Set<Porter>()
-               where porter.UserId == user && porter.Active     // a porter the depot let go holds nothing
+               where porter.UserId == id && porter.Active       // a porter the depot let go holds nothing
                join hold in context.Set<BayHold>() on porter.Id equals hold.PorterId
                where hold.Permission == permission
                join path in context.Set<BayPath>() on hold.BayId equals path.AboveId

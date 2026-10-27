@@ -270,7 +270,7 @@ public sealed class ExpectVersionPostgresTests(PalletDepotDatabase database) : I
 {
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
-    private static Caller Alice => PalletDepotDatabase.Alice;
+    private static CurrentUserSnapshot Alice => PalletDepotDatabase.Alice;
 
     public ValueTask InitializeAsync() => ValueTask.CompletedTask;
 

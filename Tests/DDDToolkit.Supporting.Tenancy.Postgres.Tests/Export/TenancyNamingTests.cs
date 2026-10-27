@@ -172,7 +172,7 @@ public sealed partial class TenancyNamingTests(TenancyPostgres postgres)
         var secured = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, TenancyNaming.SnakeCase);
         await using (var services = new TenancyServices(secured))
         {
-            TenancyPostgresChecks.EnsureExplicitCallers(services.Provider);
+            TenancyPostgresChecks.EnsureExplicitCurrentUser(services.Provider);
             await TenancyPostgresChecks.EnsureSystemInRoleIsConfinedAsync(services.Provider, Cancellation);
             await TenancyPostgresChecks.EnsureSystemReadsAcrossTenantsAsync(services.Provider, Cancellation);
             await TenancyPostgresChecks.EnsurePoliciesAreInPlaceAsync(services.Provider, Cancellation);

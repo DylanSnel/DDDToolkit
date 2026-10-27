@@ -7,7 +7,7 @@ sidebar_label: Access manager and callers
 
 # Tenancy API: Access manager and callers
 
-`TenancyAccessManager` says who acts (`CurrentUser`) and which tenant and seat the work acts in (`CurrentTenant`). Its `Begin` methods start system work. Below it: the callers it reads, the actor a change records, the selection of a seat in the tenant a request names, and the requirements a request states with an attribute, `[Operator]` among them.
+`TenancyAccessManager` says who acts (`CurrentUser`, the toolkit's `ICurrentUser`) and which tenant and seat the work acts in (`CurrentTenant`). Its `Begin` methods start system work. Below it: the callers it reads, the actor a change records, the selection of a seat in the tenant a request names, and the requirements a request states with an attribute, `[Operator]` among them.
 
 Your code takes `TenancyAccessManager` with no type arguments. The generator writes it into the global namespace of the project that declares the application's Tenancy classes. A project of another module says which of its ids are Tenancy's with `[assembly: TenancyIds<TenantId, SeatId, OrganizationUnitId, RoleId>]`, and gets the class in its root namespace. The class derives from `TenancyAccessManager<…>` closed over the four ids:
 
@@ -49,7 +49,7 @@ The project that declares Tenancy's classes gets that class in the global namesp
 
 It keeps no state of its own. [`CurrentUser`](#currentuser) and [`CurrentTenant`](#currenttenant) read the current flow of work each time they are asked, so they follow every `Begin` made after the manager was handed out.
 
-Each `Begin` method starts work that is not the caller's own, for one `using`. It begins the tenant the work acts in and the kind of work together: the kind decides how the work is recorded, and which database role it runs as. When the result is disposed, the caller before it is current again. Begin as narrow as possible: around the one call that needs it.
+Each `Begin` method starts work that is not the caller's own, for one `using`. It begins the tenant the work acts in and the kind of work together: the kind decides how the work is recorded, and which database role it runs as. When the result is disposed, the user before it is current again. Begin as narrow as possible: around the one call that needs it.
 
 Tenancy's queries for the current caller come from the context you query: `db.Tenancy()`, which `DDDToolkit.Supporting.Tenancy.EntityFramework` writes for your ids. A read source that is not Entity Framework asks [`In`](#initenancyreadsourcettenantid-tseatid-tunitid-troleid-iqueryexecutor).
 
@@ -86,7 +86,7 @@ The access manager over the application's services. The container makes it; your
 
 - `catalogue`: The catalogue every permission asked about is checked against.
 - `clock`: What "now" is, for whether a grant applies.
-- `services`: The services of the scope: where [`CurrentUser`](#currentuser) finds who the application acts for, the host's `ICallerAccessor`, and the storage package's read of the tenants to visit.
+- `services`: The services of the scope: where [`CurrentUser`](#currentuser) comes from, the application's `ICurrentUser`, and the storage package's read of the tenants to visit.
 
 **Exceptions**
 
@@ -95,10 +95,10 @@ The access manager over the application's services. The container makes it; your
 #### `CurrentUser`
 
 ```csharp
-public CurrentUser CurrentUser { get; }
+public ICurrentUser CurrentUser { get; }
 ```
 
-Who acts: a signed-in user, somebody who has not signed in, or system work. It reads the current flow of work each time it is asked.
+Who acts: a signed-in user, somebody who has not signed in, or system work. It is the toolkit's `ICurrentUser`, the one code takes from dependency injection, and it reads the current flow of work each time it is asked. So inside [`BeginSystem`](#beginsystem) it answers system work, and after the `using` the user again.
 
 **Example**
 
@@ -128,11 +128,11 @@ public IDisposable BeginSystem()
 
 Begins system work outside any tenant, for provisioning a tenant: when no tenant exists yet, so there is no tenant to begin in and no seat whose rights could do it. Only provisioning accepts it. The work reads nothing inside a tenant, and is recorded as the system. It ends when the result is disposed.
 
-**Returns**: The work, which ends when it is disposed. The caller before it is current again then.
+**Returns**: The work, which ends when it is disposed. The user before it is current again then.
 
 **Remarks**
 
-It does what [`TenancyWork.BeginSystem<TTenantId, TSeatId>`](#beginsystem-1) does. On Postgres the work runs as the toolkit's scoped system caller in the scope `tenancy`. Under Tenancy's policies that caller reads and writes nothing until provisioning narrows it to the tenant it makes.
+It does what [`TenancyWork.BeginSystem<TTenantId, TSeatId>`](#beginsystem-1) does. On Postgres the work runs as the toolkit's scoped system work in the scope `tenancy`. Under Tenancy's policies that work reads and writes nothing until provisioning narrows it to the tenant it makes.
 
 **Example**
 
@@ -167,7 +167,7 @@ Take the tenant, and what the work changes, from the current tenant or from your
 - `actingSeat`: The seat of the person who asked for the work. It is only recorded in the history, and adds no rights.
 - `scope`: The scope of the work: Tenancy's own, which writes Tenancy's tables, unless a module's own work passes its name. Lower case letters, digits, `_` and `-`.
 
-**Returns**: The work, which ends when it is disposed. The caller before it is current again then.
+**Returns**: The work, which ends when it is disposed. The user before it is current again then.
 
 **Exceptions**
 
@@ -175,7 +175,7 @@ Take the tenant, and what the work changes, from the current tenant or from your
 
 **Remarks**
 
-It does what [`TenancyWork.BeginSystemIn<TTenantId, TSeatId>`](#beginsysteminttenantid-tseatid-string-1) does. The work is recorded as the system in `scope`, and `actingSeat` as who placed or granted. On Postgres it runs as the toolkit's scoped system caller, a database role that cannot bypass the policies, so it reads and writes the rows of that tenant alone.
+It does what [`TenancyWork.BeginSystemIn<TTenantId, TSeatId>`](#beginsysteminttenantid-tseatid-string-1) does. The work is recorded as the system in `scope`, and `actingSeat` as who placed or granted. On Postgres it runs as the toolkit's scoped system work, a database role that cannot bypass the policies, so it reads and writes the rows of that tenant alone.
 
 **Example**
 
@@ -203,7 +203,7 @@ Begins system work inside one tenant that answers a link carrying a token a seat
 - `seat`: The seat the token stands for.
 - `scope`: The scope of the work, the module's name: lower case letters, digits, `_` and `-`.
 
-**Returns**: The work, which ends when it is disposed. The caller before it is current again then.
+**Returns**: The work, which ends when it is disposed. The user before it is current again then.
 
 **Exceptions**
 
@@ -211,7 +211,7 @@ Begins system work inside one tenant that answers a link carrying a token a seat
 
 **Remarks**
 
-It does what [`TenancyWork.BeginTokenIn<TTenantId, TSeatId>`](#begintokeninttenantid-tseatid-string-1) does. On Postgres it runs as the toolkit's scoped system caller in `scope`, as [`BeginSystemIn`](#beginsysteminttenantid-tseatid-string) does.
+It does what [`TenancyWork.BeginTokenIn<TTenantId, TSeatId>`](#begintokeninttenantid-tseatid-string-1) does. On Postgres it runs as the toolkit's scoped system work in `scope`, as [`BeginSystemIn`](#beginsysteminttenantid-tseatid-string) does.
 
 **Example**
 
@@ -289,74 +289,6 @@ var queries = access.In(readSource, executor);
 var editable = await executor.ListAsync(queries.UnitsWhereIHold("projects.edit"), cancellationToken);
 ```
 
-### `CurrentUser`
-
-```csharp
-public sealed class CurrentUser
-```
-
-Who acts: a signed-in user, somebody who has not signed in, or system work. It is a view over the toolkit's own caller, which the host says, and it reads that caller each time it is asked. So inside `access.BeginSystem()` it answers system work, and after the `using` the user again.
-
-```csharp
-var admin = access.CurrentUser.Id
-    ?? throw new InvalidOperationException("[SignedIn] lets only a signed-in user through.");
-```
-
-| Member | Summary |
-|---|---|
-| [`Id`](#id) | The signed-in user's id, the `sub` of their token. |
-| [`IsAuthenticated`](#isauthenticated) | Whether a user signed in. |
-| [`IsSystem`](#issystem) | Whether this is system work: the application's own, or work begun on purpose, such as `access.BeginSystemIn(tenant)` or an operator's command. |
-| [`Role`](#role) | The role the user's token carries, `authenticated` or `anon`, or a role of its own that the identity provider gave the user. |
-
-#### `Id`
-
-```csharp
-public Guid? Id { get; }
-```
-
-The signed-in user's id, the `sub` of their token. `null` for system work, for somebody who has not signed in, and for a token whose `sub` is no `Guid`.
-
-**Exceptions**
-
-- `NoCallerException`: Nobody is calling, and the host requires every flow of work to say who it runs as.
-
-#### `IsAuthenticated`
-
-```csharp
-public bool IsAuthenticated { get; }
-```
-
-Whether a user signed in.
-
-**Exceptions**
-
-- `NoCallerException`: Nobody is calling, and the host requires every flow of work to say who it runs as.
-
-#### `IsSystem`
-
-```csharp
-public bool IsSystem { get; }
-```
-
-Whether this is system work: the application's own, or work begun on purpose, such as `access.BeginSystemIn(tenant)` or an operator's command.
-
-**Exceptions**
-
-- `NoCallerException`: Nobody is calling, and the host requires every flow of work to say who it runs as.
-
-#### `Role`
-
-```csharp
-public string? Role { get; }
-```
-
-The role the user's token carries, `authenticated` or `anon`, or a role of its own that the identity provider gave the user. `null` for system work, and for a token without a role claim.
-
-**Exceptions**
-
-- `NoCallerException`: Nobody is calling, and the host requires every flow of work to say who it runs as.
-
 ### `CurrentTenant<TTenantId, TSeatId>`
 
 ```csharp
@@ -379,7 +311,7 @@ board.AddMember(command.Seat, command.Role, MemberPeriod.Open(now), now, addedBy
 | Member | Summary |
 |---|---|
 | [`IsAvailable`](#isavailable) | Whether the current work acts in a tenant: through a seat, or as system work in the tenant. |
-| [`Id`](#id-1) | The tenant the current work acts in; `null` when it acts in none. |
+| [`Id`](#id) | The tenant the current work acts in; `null` when it acts in none. |
 | [`Seat`](#seat) | The caller's seat in the tenant. |
 | [`Require()`](#require) | The tenant the current work acts in, with the seat, for work that only makes sense inside one. |
 
@@ -667,7 +599,7 @@ A [`TenancyCaller<TTenantId, TSeatId>`](#tenancycallerttenantid-tseatid) without
 public static class TenancyCallers
 ```
 
-The Tenancy caller of the current flow of work, which every manager, access question and tenant filter reads. It is kept apart from the toolkit's own `Callers`: that one says which person or which system is calling, this one which seat in which tenant, and a system caller there is never a system caller here.
+The Tenancy caller of the current flow of work, which every manager, access question and tenant filter reads. It is kept apart from the toolkit's current user, `ICurrentUser`: that one says which person or which system is calling, this one which seat in which tenant, and system work there is never system work here.
 
 It is stored without its id types, so a query filter that only compares the tenant can read it without knowing the application's classes. It follows the flow the way an `AsyncLocal<T>` does: into awaited calls and tasks started inside, not back out.
 
@@ -729,7 +661,7 @@ The tenant the current caller acts in, boxed, for a seat or system work in a ten
 public static class TenancyWork
 ```
 
-The ways system power in Tenancy is meant to be begun. Nothing becomes system work in Tenancy by itself, whatever the toolkit's own caller says: a person reaches Tenancy through a seat, and system work is begun here, on purpose, each method beginning Tenancy's caller together with the toolkit's scoped system caller.
+The ways system power in Tenancy is meant to be begun. Nothing becomes system work in Tenancy by itself, whatever the toolkit's current user says. A person reaches Tenancy through a seat, and system work is begun here, on purpose. Each method begins Tenancy's caller together with the toolkit's scoped system work.
 
 ```csharp
 using (TenancyWork.BeginSystemIn(tenant, actingSeat))
@@ -740,11 +672,11 @@ using (TenancyWork.BeginSystemIn(tenant, actingSeat))
 
 Every method is generic over the application's tenant and seat ids. C# infers both where both are arguments, as above. Where one is not, as for [`BeginSystem<TTenantId, TSeatId>`](#beginsystem-1) or system work in a tenant for no seat, the ids are written: `TenancyWork.BeginSystemIn<TenantId, SeatId>(tenant)`. An application calls the same methods closed over its ids on the access manager its code takes, `access.BeginSystem()` and `access.BeginSystemIn(tenant)` ([`TenancyAccessManager<TTenantId, TSeatId, TUnitId, TRoleId>`](#tenancyaccessmanagerttenantid-tseatid-tunitid-troleid)), and writes no id.
 
-Who may send a request is not what its handler runs with. A handler that provisions a tenant begins system work here itself, in trusted code, whatever its request requires: `[AllowAnonymous]` for a registration form anyone may fill in, `[SignedIn]` for a signed-in user who registers an organization. A tool only the application runs is trusted code itself: it begins the work here and calls the manager, or sends its request inside it. The requirement decides who gets as far as the handler; what the work may then do is what is begun here, and nothing of the caller's. System work is no requirement a request declares: it is this scope, and once its result is disposed the caller before it is current again.
+Who may send a request is not what its handler runs with. A handler that provisions a tenant begins system work here itself, in trusted code, whatever its request requires: `[AllowAnonymous]` for a registration form anyone may fill in, `[SignedIn]` for a signed-in user who registers an organization. A tool only the application runs is trusted code itself: it begins the work here and calls the manager, or sends its request inside it. The requirement decides who gets as far as the handler; what the work may then do is what is begun here, and nothing of the caller's. System work is no requirement a request declares: it is this scope, and once its result is disposed the user before it is current again.
 
-Each method begins two callers, and ends both when its result is disposed: the Tenancy caller, which says in which tenant the work acts, and the toolkit's scoped system caller, `Caller.SystemIn(scope)`, which says what kind of work it is. Keeping them in one scope keeps them from drifting apart. Neither begins the toolkit's `Caller.System`: that one stands for the application itself, which row level security lets past every policy, while system work in a tenant must stay inside that tenant. On Postgres the scoped caller runs as a role that cannot bypass the policies, and the tenant reaches them next to it; Tenancy's own policies come with `DDDToolkit.Supporting.Tenancy.Postgres`.
+Each method begins two things, and ends both when its result is disposed. The Tenancy caller says in which tenant the work acts. The toolkit's scoped system work, `ICurrentUser.BeginSystem(scope)`, says what kind of work it is. Keeping them in one scope keeps them from drifting apart. Neither begins system work without a scope, which row level security lets past every policy, while system work in a tenant must stay inside that tenant. On Postgres scoped system work runs as a role that cannot bypass the policies, and the tenant reaches them next to it. Tenancy's own policies come with `DDDToolkit.Supporting.Tenancy.Postgres`.
 
-They are not the only way. [`TenancyCallers.Begin`](#beginitenancycaller) with a caller made by [`TenancyCaller.System`](#tenancycallerttenantid-tseatid), `SystemIn` or `SystemBy` begins Tenancy's caller alone, a handle for tests and for code that begins the toolkit's caller itself: it leaves the toolkit's caller, and so the role the database runs as, as it is.
+They are not the only way. [`TenancyCallers.Begin`](#beginitenancycaller) with a caller made by [`TenancyCaller.System`](#tenancycallerttenantid-tseatid), `SystemIn` or `SystemBy` begins Tenancy's caller alone, a handle for tests and for code that begins the toolkit's current user itself. It leaves the toolkit's current user, and so the role the database runs as, as it is.
 
 Each also says who the work is recorded as ([`TenancyCaller.Actor`](#tenancycallerttenantid-tseatid)): the system in its scope, unless the work answers a link that carries a seat's token ([`BeginTokenIn<TTenantId, TSeatId>`](#begintokeninttenantid-tseatid-string-1)).
 
@@ -752,7 +684,7 @@ An operator's work is begun by none of them. A command marked [`OperatorAttribut
 
 | Member | Summary |
 |---|---|
-| `SystemScope = "tenancy"` | The scope of the toolkit's scoped system caller for Tenancy's own work. Under the policies of `DDDToolkit.Supporting.Tenancy.Postgres`, only work in this scope writes Tenancy's tables; work in another scope may read them. |
+| `SystemScope = "tenancy"` | The scope of Tenancy's own system work. Under the policies of `DDDToolkit.Supporting.Tenancy.Postgres`, only work in this scope writes Tenancy's tables; work in another scope may read them. |
 | [`BeginSystem()`](#beginsystem-1) | Begins system work outside any tenant, for provisioning a tenant. |
 | [`BeginSystemIn(TTenantId, TSeatId?, string)`](#beginsysteminttenantid-tseatid-string-1) | Begins system work inside one tenant, such as an import or seeding: it holds every permission there, and nothing in any other tenant. |
 | [`BeginSystemIn(TTenantId, TSeatId, string)`](#beginsysteminttenantid-tseatid-string-2) | Begins system work inside one tenant for a seat: [`BeginSystemIn<TTenantId, TSeatId>`](#beginsysteminttenantid-tseatid-string-1) with the seat given, so C# infers both ids from the arguments and the call names neither, `TenancyWork.BeginSystemIn(tenant, seat, "projects")`, in a module that sees only the ids as much as in one that sees the classes. |
@@ -766,7 +698,7 @@ public static IDisposable BeginSystem<TTenantId, TSeatId>()
     where TSeatId : struct, IEntityId, IEquatable<TSeatId>
 ```
 
-Begins system work outside any tenant, for provisioning a tenant. It reads nothing inside one: every tenant filter matches nothing for it. The toolkit's caller is the scoped system caller in [`SystemScope`](#tenancywork), which under the policies of `DDDToolkit.Supporting.Tenancy.Postgres` reads and writes nothing until provisioning narrows it to the tenant it makes.
+Begins system work outside any tenant, for provisioning a tenant. It reads nothing inside one: every tenant filter matches nothing for it. The toolkit's current user is scoped system work in [`SystemScope`](#tenancywork), which under the policies of `DDDToolkit.Supporting.Tenancy.Postgres` reads and writes nothing until provisioning narrows it to the tenant it makes.
 
 #### `BeginSystemIn(TTenantId, TSeatId?, string)`
 
@@ -787,7 +719,7 @@ Work that calls Tenancy's managers keeps the default scope. A module's own syste
 
 - `tenant`: The tenant.
 - `actingSeat`: The seat the work is done for, recorded as who placed or granted; it adds no rights.
-- `scope`: The scope of the toolkit's scoped system caller: lower case letters, digits, `_` and `-`.
+- `scope`: The scope of the system work: lower case letters, digits, `_` and `-`.
 
 **Exceptions**
 
@@ -812,7 +744,7 @@ It yields to that one wherever both apply, which is wherever the type arguments 
 
 - `tenant`: The tenant.
 - `actingSeat`: The seat the work is done for, recorded as who placed or granted; it adds no rights.
-- `scope`: The scope of the toolkit's scoped system caller: lower case letters, digits, `_` and `-`.
+- `scope`: The scope of the system work: lower case letters, digits, `_` and `-`.
 
 **Exceptions**
 
@@ -837,7 +769,7 @@ It is system work, not the seat: it holds what system work in the tenant holds, 
 
 - `tenant`: The tenant.
 - `seat`: The seat the token stands for.
-- `scope`: The scope of the toolkit's scoped system caller, the module's name: lower case letters, digits, `_` and `-`.
+- `scope`: The scope of the system work, the module's name: lower case letters, digits, `_` and `-`.
 
 **Exceptions**
 
@@ -1205,37 +1137,37 @@ Every seat the identity has, in every tenant and in any status, for a tenant pic
 public interface ITenantSelection
 ```
 
-[`TenantSelection<TTenantId, TSeatId>`](#tenantselectionttenantid-tseatid) without its id types, for the code that makes a request's Tenancy caller current and needs no id to do it. A host's middleware takes the caller it is answered and begins it, and [`TenancyCallers.Begin`](#beginitenancycaller) takes any [`ITenancyCaller`](#itenancycaller), so the middleware names neither of the application's ids, and reads the same in every application:
+[`TenantSelection<TTenantId, TSeatId>`](#tenantselectionttenantid-tseatid) without its id types, for the code that makes a request's Tenancy caller current and needs no id to do it. A host's middleware takes the Tenancy caller it is answered and begins it, and [`TenancyCallers.Begin`](#beginitenancycaller) takes any [`ITenancyCaller`](#itenancycaller), so the middleware names neither of the application's ids, and reads the same in every application:
 
 ```csharp
 var seat = await context.RequestServices.GetRequiredService<ITenantSelection>()
-    .ResolveAsync(caller, context.Request.Headers["Tenant"], context.RequestAborted);
+    .ResolveAsync(context.GetSupabaseUser(), context.Request.Headers["Tenant"], context.RequestAborted);
 using (TenancyCallers.Begin(seat))
 {
     await next(context);
 }
 ```
 
-`AddTenancy` registers it per scope as the very selection it registers closed over the ids, so the two answer alike, unless the host registered one of its own before, which then stays. What answers records with the ids in them, a person's own seats for a tenant picker ([`TenantSelection.SeatsOfAsync<TSeat>`](#seatsofasynccaller-cancellationtoken)), is that one's alone.
+`AddTenancy` registers it per scope as the very selection it registers closed over the ids, so the two answer alike, unless the host registered one of its own before, which then stays. What answers records with the ids in them, a person's own seats for a tenant picker ([`TenantSelection.SeatsOfAsync<TSeat>`](#seatsofasynccurrentusersnapshot-cancellationtoken)), is that one's alone.
 
 | Member | Summary |
 |---|---|
-| [`ResolveAsync(Caller, string?, CancellationToken)`](#resolveasynccaller-string-cancellationtoken) | The Tenancy caller for `caller` in the tenant `tenantSlug` names: its active seat there, or nobody and why, as [`TenantSelection.ResolveAsync`](#resolveasynccaller-string-cancellationtoken-1) answers it. |
+| [`ResolveAsync(CurrentUserSnapshot, string?, CancellationToken)`](#resolveasynccurrentusersnapshot-string-cancellationtoken) | The Tenancy caller for `user` in the tenant `tenantSlug` names: its active seat there, or nobody and why, as [`TenantSelection.ResolveAsync`](#resolveasynccurrentusersnapshot-string-cancellationtoken-1) answers it. |
 
-#### `ResolveAsync(Caller, string?, CancellationToken)`
+#### `ResolveAsync(CurrentUserSnapshot, string?, CancellationToken)`
 
 ```csharp
 Task<ITenancyCaller> ResolveAsync(
-    Caller caller,
+    CurrentUserSnapshot user,
     string? tenantSlug,
     CancellationToken cancellationToken)
 ```
 
-The Tenancy caller for `caller` in the tenant `tenantSlug` names: its active seat there, or nobody and why, as [`TenantSelection.ResolveAsync`](#resolveasynccaller-string-cancellationtoken-1) answers it. Every refusal comes back as nobody, with the refusal's code; nothing is thrown for a caller Tenancy does not let in.
+The Tenancy caller for `user` in the tenant `tenantSlug` names: its active seat there, or nobody and why, as [`TenantSelection.ResolveAsync`](#resolveasynccurrentusersnapshot-string-cancellationtoken-1) answers it. Every refusal comes back as nobody, with the refusal's code; nothing is thrown for a caller Tenancy does not let in.
 
 **Parameters**
 
-- `caller`: Who is calling, as the toolkit says.
+- `user`: Who is calling, as the toolkit's current user answers.
 - `tenantSlug`: The tenant the request names, by its slug; trimmed and lowercased.
 - `cancellationToken`: Cancels the lookup.
 
@@ -1247,21 +1179,21 @@ public sealed class TenantSelection<TTenantId, TSeatId> : ITenantSelection
     where TSeatId : struct, IEntityId, IEquatable<TSeatId>
 ```
 
-Turns the toolkit's caller and the tenant a request names into a Tenancy caller: the caller's active seat in that tenant, or nobody and why.
+Turns the toolkit's current user and the tenant a request names into a Tenancy caller: the caller's active seat in that tenant, or nobody and why.
 
-The request names the tenant by its slug only. The tenant's id and the seat's id always come from the directory, found through the caller's verified identity, so nothing a caller sends picks a seat. The toolkit's system caller is nobody here: system work in Tenancy is begun on purpose with [`TenancyWork`](#tenancywork), never inherited from a request.
+The request names the tenant by its slug only. The tenant's id and the seat's id always come from the directory, found through the caller's verified identity, so nothing a caller sends picks a seat. The toolkit's system work is nobody here: system work in Tenancy is begun on purpose with [`TenancyWork`](#tenancywork), never inherited from a request.
 
-A host's middleware, which only makes the caller it is answered current, asks the same of [`ITenantSelection`](#itenantselection), the very instance without its id types, and names no id.
+A host's middleware, which only makes the Tenancy caller it is answered current, asks the same of [`ITenantSelection`](#itenantselection), the very instance without its id types, and names no id.
 
-Only a signed-in user whose token carries a seated role is looked up at all, [`TenantSelectionOptions.SeatedTokenRoles`](#tenantselectionoptions): `authenticated` unless the application lists others. A user with another token role is nobody in every tenant, and is told what a person without a seat is told, so the answer says nothing about the seats their identity has. The list of a person's own seats, [`SeatsOfAsync<TSeat>`](#seatsofasynccaller-cancellationtoken), follows the same rule.
+Only a signed-in user whose token carries a seated role is looked up at all, [`TenantSelectionOptions.SeatedTokenRoles`](#tenantselectionoptions): `authenticated` unless the application lists others. A user with another token role is nobody in every tenant, and is told what a person without a seat is told, so the answer says nothing about the seats their identity has. The list of a person's own seats, [`SeatsOfAsync<TSeat>`](#seatsofasynccurrentusersnapshot-cancellationtoken), follows the same rule.
 
 An operator of the application, a user whose token carries one of `operators`, holds no seat either. The tenant its request names is looked up by its slug alone, and the answer is nobody with that tenant kept ([`TenancyCaller.OperatorNaming`](#operatornamingttenantid)). A command marked `[Operator(Tenant = OperatorTenant.FromRequest)]` acts in that tenant. A request that names no tenant is nobody with `tenancy.tenant-required`, and one that names a tenant nobody has is nobody with `tenancy.not-seated`.
 
 | Member | Summary |
 |---|---|
 | [`TenantSelection(ISeatDirectory<TTenantId, TSeatId>, TenantSelectionOptions?, TenancyOperatorTokenRoles?)`](#tenantselectioniseatdirectoryttenantid-tseatid-tenantselectionoptions-tenancyoperatortokenroles) | The primary constructor: the type's summary says what it makes. |
-| [`ResolveAsync(Caller, string?, CancellationToken)`](#resolveasynccaller-string-cancellationtoken-1) | The Tenancy caller for `caller` in the tenant `tenantSlug` names. |
-| [`SeatsOfAsync(Caller, CancellationToken)`](#seatsofasynccaller-cancellationtoken) | Every seat `caller` has, in every tenant and in any status, for a tenant picker: the application's own seats, whole, each beside its tenant ([`SeatInTenant<TSeat>`](#seatintenanttseat)), so a picker shows a seat by the name the application keeps on its seat class, say, as every other answer about the seat does. |
+| [`ResolveAsync(CurrentUserSnapshot, string?, CancellationToken)`](#resolveasynccurrentusersnapshot-string-cancellationtoken-1) | The Tenancy caller for `user` in the tenant `tenantSlug` names. |
+| [`SeatsOfAsync(CurrentUserSnapshot, CancellationToken)`](#seatsofasynccurrentusersnapshot-cancellationtoken) | Every seat `user` has, in every tenant and in any status, for a tenant picker: the application's own seats, whole, each beside its tenant ([`SeatInTenant<TSeat>`](#seatintenanttseat)), so a picker shows a seat by the name the application keeps on its seat class, say, as every other answer about the seat does. |
 
 #### `TenantSelection(ISeatDirectory<TTenantId, TSeatId>, TenantSelectionOptions?, TenancyOperatorTokenRoles?)`
 
@@ -1280,37 +1212,37 @@ The primary constructor: the type's summary says what it makes.
 - `options`: Which token roles are seated; signed-in users with the role `authenticated` when left out.
 - `operators`: Which token roles are operators'; none when left out.
 
-#### `ResolveAsync(Caller, string?, CancellationToken)`
+#### `ResolveAsync(CurrentUserSnapshot, string?, CancellationToken)`
 
 ```csharp
 public Task<TenancyCaller<TTenantId, TSeatId>> ResolveAsync(
-    Caller caller,
+    CurrentUserSnapshot user,
     string? tenantSlug,
     CancellationToken cancellationToken)
 ```
 
-The Tenancy caller for `caller` in the tenant `tenantSlug` names. Every refusal comes back as nobody, with the refusal's code; nothing is thrown for a caller Tenancy does not let in.
+The Tenancy caller for `user` in the tenant `tenantSlug` names. Every refusal comes back as nobody, with the refusal's code; nothing is thrown for a caller Tenancy does not let in.
 
 **Parameters**
 
-- `caller`: Who is calling, as the toolkit says.
+- `user`: Who is calling, as the toolkit's current user answers.
 - `tenantSlug`: The tenant the request names, by its slug; trimmed and lowercased here.
 - `cancellationToken`: Cancels the lookup.
 
-#### `SeatsOfAsync(Caller, CancellationToken)`
+#### `SeatsOfAsync(CurrentUserSnapshot, CancellationToken)`
 
 ```csharp
 public Task<IReadOnlyList<SeatInTenant<TSeat>>> SeatsOfAsync<TSeat>(
-    Caller caller,
+    CurrentUserSnapshot user,
     CancellationToken cancellationToken)
     where TSeat : class
 ```
 
-Every seat `caller` has, in every tenant and in any status, for a tenant picker: the application's own seats, whole, each beside its tenant ([`SeatInTenant<TSeat>`](#seatintenanttseat)), so a picker shows a seat by the name the application keeps on its seat class, say, as every other answer about the seat does. Looked up by the verified identity of the caller's own token, and by nothing a request could supply. None for a caller that is no signed-in user, and none for a user whose token role holds no seat: nothing is looked up for them, and they are answered what a person without a seat is answered, as in [`ResolveAsync`](#resolveasynccaller-string-cancellationtoken-1).
+Every seat `user` has, in every tenant and in any status, for a tenant picker: the application's own seats, whole, each beside its tenant ([`SeatInTenant<TSeat>`](#seatintenanttseat)), so a picker shows a seat by the name the application keeps on its seat class, say, as every other answer about the seat does. Looked up by the verified identity of the caller's own token, and by nothing a request could supply. None for a caller that is no signed-in user, and none for a user whose token role holds no seat: nothing is looked up for them, and they are answered what a person without a seat is answered, as in [`ResolveAsync`](#resolveasynccurrentusersnapshot-string-cancellationtoken-1).
 
 **Parameters**
 
-- `caller`: Who is calling, as the toolkit says.
+- `user`: Who is calling, as the toolkit's current user answers.
 - `cancellationToken`: Cancels the lookup.
 
 **Type parameters**
@@ -1340,7 +1272,7 @@ services.AddTenancy<ShopTenancyContext>(options =>
 | Member | Summary |
 |---|---|
 | `AuthenticatedTokenRole = "authenticated"` | The role of a signed-in user whose token says nothing else, and of a caller made without a token. |
-| `IList<string> SeatedTokenRoles { get; }` | The token roles whose users are seated, `Caller.Role` as the token spells it: `authenticated` by default. A caller without a role counts as `authenticated`. |
+| `IList<string> SeatedTokenRoles { get; }` | The token roles whose users are seated, `ICurrentUser.Role` as the token spells it: `authenticated` by default. A caller without a role counts as `authenticated`. |
 
 ### `SeatInTenant<TSeat>`
 
@@ -1349,7 +1281,7 @@ public sealed record SeatInTenant<TSeat>
     where TSeat : class
 ```
 
-One of a person's seats, for a tenant picker: the application's own seat, whole, and only what is not on the seat itself, the tenant it is in by what a picker shows of it. The seat carries its id, its tenant's id, its status and every field the application added, such as the name the person is shown by in that tenant, so a picker shows a seat by what the application chose, as every other answer about the seat does ([`TenantSelection.SeatsOfAsync<TSeat>`](#seatsofasynccaller-cancellationtoken)).
+One of a person's seats, for a tenant picker: the application's own seat, whole, and only what is not on the seat itself, the tenant it is in by what a picker shows of it. The seat carries its id, its tenant's id, its status and every field the application added, such as the name the person is shown by in that tenant, so a picker shows a seat by what the application chose, as every other answer about the seat does ([`TenantSelection.SeatsOfAsync<TSeat>`](#seatsofasynccurrentusersnapshot-cancellationtoken)).
 
 **Type parameters**
 
@@ -1869,7 +1801,7 @@ The caller is one of the application's operators: a signed-in user whose token c
 
 **Remarks**
 
-On a command, the pipeline runs the handler as operator work recorded as the operator. The work acts in no tenant, or, with [`OperatorTenant.FromRequest`](#operatortenant), in the tenant the request names. On a query nothing begins. It is the toolkit's own caller that is asked, never the Tenancy caller, which is nobody for an operator in every tenant.
+On a command, the pipeline runs the handler as operator work recorded as the operator. The work acts in no tenant, or, with [`OperatorTenant.FromRequest`](#operatortenant), in the tenant the request names. On a query nothing begins. It is the toolkit's current user that is asked, never the Tenancy caller, which is nobody for an operator in every tenant.
 
 | Member | Summary |
 |---|---|

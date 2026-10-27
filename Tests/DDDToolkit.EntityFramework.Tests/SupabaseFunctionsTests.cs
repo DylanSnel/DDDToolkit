@@ -18,7 +18,7 @@ namespace DDDToolkit.EntityFramework.Tests;
 /// An Azure Function on the isolated worker, through <see cref="SupabaseAuthMiddleware"/>: the invocation's
 /// token decides who the function's queries run as, against the same Postgres and the same policy as the
 /// ASP.NET Core tests. The worker has no ASP.NET Core pipeline, so the caller is made current with
-/// <see cref="Callers.Begin"/>, and the context asks <see cref="AmbientCallerAccessor"/>.
+/// <see cref="ICurrentUser.BeginAs(CurrentUserSnapshot)"/>, and the context asks <see cref="CurrentUser"/>.
 /// </summary>
 public sealed class SupabaseFunctionsTests(SupabaseRowLevelSecurityDatabase database)
     : IClassFixture<SupabaseRowLevelSecurityDatabase>, IAsyncLifetime
@@ -43,7 +43,7 @@ public sealed class SupabaseFunctionsTests(SupabaseRowLevelSecurityDatabase data
         // Two notes, written as their owners.
         foreach (var (owner, text) in new[] { (Alice, "Alice's"), (Bob, "Bob's") })
         {
-            await using var context = database.CreateContext(new CallerOfTheTest { Current = Callers.FromClaims(ClaimsOf(owner)) });
+            await using var context = database.CreateContext(new CallerOfTheTest { Current = CurrentUserSnapshot.FromClaims(ClaimsOf(owner)) });
             context.Notes.Add(new PrivateNote { Id = Guid.CreateVersion7(), Text = text });
             await context.SaveChangesAsync(Cancellation);
         }
@@ -60,8 +60,8 @@ public sealed class SupabaseFunctionsTests(SupabaseRowLevelSecurityDatabase data
         var seen = await InvokeAsync(invocation);
 
         seen.Should().Equal("Alice's");
-        invocation.GetSupabaseCaller().Kind.Should().Be(CallerKind.User);
-        Callers.Ambient.Should().BeNull("the caller ends with the invocation");
+        invocation.GetSupabaseUser().Kind.Should().Be(CurrentUserKind.User);
+        BegunUser.Should().BeNull("the caller ends with the invocation");
     }
 
     [Fact]
@@ -71,7 +71,7 @@ public sealed class SupabaseFunctionsTests(SupabaseRowLevelSecurityDatabase data
 
         (await InvokeAsync(WorkerInvocation.Http(authorization: null))).Should().BeEmpty();
         (await InvokeAsync(WorkerInvocation.Http("Bearer " + Local(Alice, secret: "somebody-else's-secret-that-is-also-32-characters-long")))).Should().BeEmpty();
-        WorkerInvocation.Http(authorization: null).GetSupabaseCaller().Should().BeSameAs(Caller.System, "nothing ran through the middleware yet");
+        WorkerInvocation.Http(authorization: null).GetSupabaseUser().Should().BeSameAs(CurrentUserSnapshot.System, "nothing ran through the middleware yet");
     }
 
     [Fact]
@@ -85,7 +85,7 @@ public sealed class SupabaseFunctionsTests(SupabaseRowLevelSecurityDatabase data
         // A message queued on Bob's behalf, carrying his claims: the function makes him the caller.
         var asBob = await InvokeAsync(WorkerInvocation.Queue(), options, async read =>
         {
-            using (Callers.Begin(Callers.FromClaims(ClaimsOf(Bob))))
+            using (TestUser.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Bob))))
             {
                 return await read();
             }
@@ -97,26 +97,26 @@ public sealed class SupabaseFunctionsTests(SupabaseRowLevelSecurityDatabase data
     [Fact]
     public void Outside_an_http_trigger_with_explicit_callers_required_GetSupabaseCaller_throws()
     {
-        using var strict = new ServiceCollection().RequireExplicitCallers().BuildServiceProvider();
+        using var strict = new ServiceCollection().RequireExplicitCurrentUser().BuildServiceProvider();
         using var plain = new ServiceCollection().BuildServiceProvider();
 
         var queued = WorkerInvocation.Queue();
         queued.InstanceServices = strict;
 
-        ((Func<Caller>)(() => queued.GetSupabaseCaller())).Should().Throw<NoCallerException>()
-            .WithMessage("*not an HTTP request and began no caller*RequireExplicitCallers*");
+        ((Func<CurrentUserSnapshot>)(() => queued.GetSupabaseUser())).Should().Throw<NoCurrentUserException>()
+            .WithMessage("*not an HTTP request and began no user*RequireExplicitCurrentUser*");
 
-        using (Callers.Begin(Caller.System))
+        using (TestUser.BeginSystem())
         {
-            queued.GetSupabaseCaller().Should().BeSameAs(Caller.System, "a function that begins a caller runs as it");
+            queued.GetSupabaseUser().Should().BeSameAs(CurrentUserSnapshot.System, "a function that begins a caller runs as it");
         }
 
         var unstrict = WorkerInvocation.Queue();
         unstrict.InstanceServices = plain;
-        unstrict.GetSupabaseCaller().Should().BeSameAs(Caller.System, "without the option it answers the system, as it always did");
+        unstrict.GetSupabaseUser().Should().BeSameAs(CurrentUserSnapshot.System, "without the option it answers the system, as it always did");
     }
 
-    /// <summary>Runs a function that reads the notes through a context on <see cref="AmbientCallerAccessor"/>.</summary>
+    /// <summary>Runs a function that reads the notes through a context on <see cref="CurrentUser"/>.</summary>
     private async Task<IReadOnlyList<string>> InvokeAsync(
         FunctionContext invocation,
         PostgresRowLevelSecurityOptions? options = null,
@@ -126,7 +126,7 @@ public sealed class SupabaseFunctionsTests(SupabaseRowLevelSecurityDatabase data
 
         async Task<IReadOnlyList<string>> ReadAsync()
         {
-            await using var context = database.CreateContext(new AmbientCallerAccessor(), options);
+            await using var context = database.CreateContext(new CurrentUser(), options);
             return await context.Notes.OrderBy(note => note.Text).Select(note => note.Text).ToListAsync(Cancellation);
         }
 

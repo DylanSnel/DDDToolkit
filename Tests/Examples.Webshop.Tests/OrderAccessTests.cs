@@ -27,9 +27,9 @@ public class OrderAccessTests
     {
         var alices = PlacedBy(Alice);
 
-        ACustomerHasTheirOrders.Allows(alices, Caller.User(Alice)).Should().BeTrue();
-        ACustomerHasTheirOrders.Allows(alices, Caller.User(Bob)).Should().BeFalse();
-        ACustomerHasTheirOrders.Allows(alices, Caller.Anonymous).Should().BeFalse();
+        ACustomerHasTheirOrders.Allows(alices, Answering(CurrentUserSnapshot.User(Alice))).Should().BeTrue();
+        ACustomerHasTheirOrders.Allows(alices, Answering(CurrentUserSnapshot.User(Bob))).Should().BeFalse();
+        ACustomerHasTheirOrders.Allows(alices, Answering(CurrentUserSnapshot.Anonymous)).Should().BeFalse();
     }
 
     [Fact]
@@ -37,26 +37,26 @@ public class OrderAccessTests
     {
         var guests = PlacedBy(null);
 
-        ACustomerHasTheirOrders.Allows(guests, Caller.Anonymous).Should().BeTrue();
-        ACustomerHasTheirOrders.Allows(guests, Caller.User(Bob)).Should().BeTrue();
+        ACustomerHasTheirOrders.Allows(guests, Answering(CurrentUserSnapshot.Anonymous)).Should().BeTrue();
+        ACustomerHasTheirOrders.Allows(guests, Answering(CurrentUserSnapshot.User(Bob))).Should().BeTrue();
     }
 
     [Fact]
     public void An_order_is_placed_in_the_callers_own_name_or_as_a_guests_by_somebody_who_has_not_signed_in()
     {
-        NobodyOrdersForSomebodyElse.Allows(PlacedBy(Alice), Caller.User(Alice)).Should().BeTrue();
-        NobodyOrdersForSomebodyElse.Allows(PlacedBy(null), Caller.Anonymous).Should().BeTrue();
+        NobodyOrdersForSomebodyElse.Allows(PlacedBy(Alice), Answering(CurrentUserSnapshot.User(Alice))).Should().BeTrue();
+        NobodyOrdersForSomebodyElse.Allows(PlacedBy(null), Answering(CurrentUserSnapshot.Anonymous)).Should().BeTrue();
 
-        NobodyOrdersForSomebodyElse.Allows(PlacedBy(Bob), Caller.User(Alice)).Should().BeFalse("nobody places an order for somebody else");
-        NobodyOrdersForSomebodyElse.Allows(PlacedBy(Alice), Caller.Anonymous).Should().BeFalse();
+        NobodyOrdersForSomebodyElse.Allows(PlacedBy(Bob), Answering(CurrentUserSnapshot.User(Alice))).Should().BeFalse("nobody places an order for somebody else");
+        NobodyOrdersForSomebodyElse.Allows(PlacedBy(Alice), Answering(CurrentUserSnapshot.Anonymous)).Should().BeFalse();
     }
 
     [Fact]
     public void The_customer_of_a_caller_is_their_user_and_a_guest_has_none()
     {
-        CustomerId.From(Caller.User(Alice)).Should().Be(new CustomerId(Alice));
-        CustomerId.From(Caller.Anonymous).Should().BeNull();
-        CustomerId.From(Caller.System).Should().BeNull();
+        CustomerId.From(Answering(CurrentUserSnapshot.User(Alice))).Should().Be(new CustomerId(Alice));
+        CustomerId.From(Answering(CurrentUserSnapshot.Anonymous)).Should().BeNull();
+        CustomerId.From(Answering(CurrentUserSnapshot.System)).Should().BeNull();
     }
 
     [Fact]

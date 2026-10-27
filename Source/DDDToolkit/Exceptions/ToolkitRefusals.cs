@@ -49,7 +49,7 @@ public static class ToolkitRefusals
     /// A request is about the caller's own (<see cref="Access.AccessRequirement.Own{TValue}"/>, <see cref="Access.OwnAttribute"/>)
     /// and names a value the caller does not have: another person's seat, another user. It is
     /// <see cref="RefusalKind.NotPermitted"/>, and the same request gets the same answer from the same caller. The core's
-    /// <c>CallerAccessCheck</c> makes it, before the handler runs, for anyone the value is not the own of: a caller who did
+    /// <c>CurrentUserAccessCheck</c> makes it, before the handler runs, for anyone the value is not the own of: a caller who did
     /// not sign in and the application's own work too. No arguments: the value is the request's, and the caller sent it.
     /// <para>
     /// A request about the owner of an aggregate (<see cref="Access.AccessRequirement.OwnerOf{TId}"/>) is refused with it
@@ -64,7 +64,7 @@ public static class ToolkitRefusals
     /// or <see cref="Access.OrOwnAttribute"/> on the id of an aggregate whose owner is marked <c>[Owner]</c>), and names one
     /// there is no row of for the caller: none was ever made, it is gone, or row level security, or a query filter, keeps
     /// it from the caller. It is <see cref="RefusalKind.NotFound"/>, and one the caller may not see reads the same as one
-    /// that does not exist. The core's <c>CallerAccessCheck</c> makes it, before the handler runs, as Membership makes its
+    /// that does not exist. The core's <c>CurrentUserAccessCheck</c> makes it, before the handler runs, as Membership makes its
     /// own <c>not-found</c> for a resource the caller does not see. No arguments: the id is the request's.
     /// </summary>
     public const string NotFound = "access.not-found";
@@ -82,13 +82,13 @@ public static class ToolkitRefusals
     /// A request requires a signed-in user (<c>AccessRequirement.SignedIn()</c>), and the caller is not one: it
     /// did not sign in, or it is the application's own work, which is nobody's sign-in. It is
     /// <see cref="RefusalKind.NotPermitted"/>, and the same caller gets the same answer until it signs in. The
-    /// core's <c>CallerAccessCheck</c> makes it, before the handler runs. No arguments.
+    /// core's <c>CurrentUserAccessCheck</c> makes it, before the handler runs. No arguments.
     /// </summary>
     public const string NotSignedIn = "access.not-signed-in";
 
     /// <summary>
     /// What only the application's own work may do, and the caller is not that work: a signed-in user, whatever
-    /// they hold, a caller who did not sign in, or work nobody began a caller for. It is
+    /// they hold, a caller who did not sign in, or work that began no user. It is
     /// <see cref="RefusalKind.NotPermitted"/>, and no permission or role gives it. System work is a scope trusted code
     /// begins around the work, not a requirement a request declares, so this is made past the door: by a
     /// supporting domain's use case that only system work may call, such as Tenancy's provisioning of a tenant,

@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using System.Buffers.Text;
 using System.Globalization;
 using System.Text;
@@ -29,7 +30,7 @@ namespace DDDToolkit.Supporting.Tenancy.Managers;
 /// <param name="catalogue">The starter roles a new tenant is given.</param>
 /// <param name="clock">What "now" is.</param>
 /// <param name="options">Which token roles are operators', for the tenants an operator lists.</param>
-/// <param name="callers">Who is calling, as the toolkit says: the operator that lists the tenants.</param>
+/// <param name="user">Who is calling, as the toolkit says: the operator that lists the tenants.</param>
 /// <param name="starterRoleTexts">
 /// The starter roles' names and descriptions in a tenant's language, when the application registered some;
 /// otherwise every role made from a starter role gets the catalogue's texts, but the role of the default
@@ -50,7 +51,7 @@ public class TenantManager<
     TenancyCatalogue catalogue,
     TimeProvider clock,
     TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId> options,
-    ICallerAccessor callers,
+    ICurrentUser user,
     IStarterRoleTexts? starterRoleTexts = null)
     where TTenant : TenantAggregate<TTenantId>
     where TOrganization : OrganizationAggregate<TTenantId, TUnit, TUnitId>
@@ -287,7 +288,7 @@ public class TenantManager<
     /// <para>
     /// Only an operator asks: a signed-in user whose token carries one of
     /// <see cref="TenancyOptions{TTenantId, TSeatId, TUnitId, TRoleId}.OperatorTokenRoles"/>. An operator holds no
-    /// seat and acts in no tenant, so this is the one read that asks the toolkit's own caller rather than the
+    /// seat and acts in no tenant, so this is the one read that asks the toolkit's current user rather than the
     /// Tenancy caller. It reads as that caller, never as the system: on a database that keeps tenants apart by
     /// itself, such as Postgres with row level security, the operator's own database role and its policies decide
     /// what it reads, and a host that mapped no such role reads nothing.
@@ -322,7 +323,7 @@ public class TenantManager<
     /// </example>
     public async Task<TenantPage> ListAsync(string? after, int size, CancellationToken cancellationToken)
     {
-        if (!options.IsOperator(callers.Current))
+        if (!options.IsOperator(user.Snapshot))
         {
             throw TenancyRefusals.Refuse(TenancyRefusals.OperatorsOnly);
         }

@@ -115,7 +115,7 @@ public sealed class ForcedRowLevelSecurityTests(ExplicitCallersPostgres postgres
 
         // Both hives are closed to visitors, and one carries honey. The policy asks the function, the function
         // reads the boxes as its owner, and its owner may bypass row level security, forced or not.
-        await ApiaryDatabase.AsAsync(host, Caller.Anonymous, async context =>
+        await ApiaryDatabase.AsAsync(host, CurrentUserSnapshot.Anonymous, async context =>
         {
             (await context.Hives.Select(hive => hive.Label).ToListAsync(Cancellation)).Should().Equal("With honey");
         });
@@ -146,7 +146,7 @@ public sealed class ForcedRowLevelSecurityTests(ExplicitCallersPostgres postgres
 
         // Without a word: the function now reads the forced tables under its owner's policies, of which there are
         // none, and answers that no hive carries honey.
-        await ApiaryDatabase.AsAsync(host, Caller.Anonymous, async context =>
+        await ApiaryDatabase.AsAsync(host, CurrentUserSnapshot.Anonymous, async context =>
         {
             (await context.Hives.CountAsync(Cancellation)).Should().Be(0, "the visitors' rule still stands, and asks a function that finds no row");
         });
@@ -162,7 +162,7 @@ public sealed class ForcedRowLevelSecurityTests(ExplicitCallersPostgres postgres
 
         // Once the owner may bypass, the function answers again, and the check passes.
         await database.RunAsOwnerAsync($"ALTER ROLE {owner} BYPASSRLS;", Cancellation);
-        await ApiaryDatabase.AsAsync(host, Caller.Anonymous, async context =>
+        await ApiaryDatabase.AsAsync(host, CurrentUserSnapshot.Anonymous, async context =>
         {
             (await context.Hives.Select(hive => hive.Label).ToListAsync(Cancellation)).Should().Equal("With honey");
         });
@@ -197,7 +197,7 @@ public sealed class ForcedRowLevelSecurityTests(ExplicitCallersPostgres postgres
         try
         {
             // The function reads the boxes as their owner, which Postgres exempts from their policies: it answers.
-            await ApiaryDatabase.AsAsync(host, Caller.Anonymous, async context =>
+            await ApiaryDatabase.AsAsync(host, CurrentUserSnapshot.Anonymous, async context =>
             {
                 (await context.Hives.Select(hive => hive.Label).ToListAsync(Cancellation)).Should().Equal("With honey");
             });
@@ -208,7 +208,7 @@ public sealed class ForcedRowLevelSecurityTests(ExplicitCallersPostgres postgres
 
             // One forced table is enough: the function now reads it under its owner's policies.
             await database.RunAsOwnerAsync("""ALTER TABLE apiary."HiveBox" FORCE ROW LEVEL SECURITY;""", Cancellation);
-            await ApiaryDatabase.AsAsync(host, Caller.Anonymous, async context =>
+            await ApiaryDatabase.AsAsync(host, CurrentUserSnapshot.Anonymous, async context =>
             {
                 (await context.Hives.CountAsync(Cancellation)).Should().Be(0, "the function finds no box");
             });

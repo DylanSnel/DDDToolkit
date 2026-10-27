@@ -18,8 +18,8 @@ public sealed class RowAccessExport
     private readonly RowAccessRoleNames _roles = RowAccessRoleNames.Default;
 
     /// <summary>
-    /// How a policy asks about the caller, which is what a rule's <c>caller.UserId</c>, <c>caller.Role</c> and
-    /// <c>caller.Claim(...)</c> become. <see cref="PostgresCallerFunctions.Toolkit"/> by default.
+    /// How a policy asks about the caller, which is what a rule's <c>user.Id</c>, <c>user.Role</c> and
+    /// <c>user.FindClaim(...)</c> become. <see cref="PostgresCallerFunctions.Toolkit"/> by default.
     /// </summary>
     /// <exception cref="ArgumentNullException">Set to null.</exception>
     public PostgresCallerFunctions CallerFunctions

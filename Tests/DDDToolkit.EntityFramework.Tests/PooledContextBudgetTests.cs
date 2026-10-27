@@ -46,7 +46,7 @@ public sealed class PooledContextBudgetTests(SupabaseRowLevelSecurityDatabase da
         await Task.WhenAll(users.Select(user => Task.Run(
             async () =>
             {
-                using (Callers.Begin(PooledNotesHost.User(user.Id, user.Team)))
+                using (TestUser.BeginAs(PooledNotesHost.User(user.Id, user.Team)))
                 {
                     await using var context = await host.Factory.CreateDbContextAsync(Cancellation);
                     instances.TryAdd(context, true);
@@ -84,14 +84,14 @@ public sealed class PooledContextBudgetTests(SupabaseRowLevelSecurityDatabase da
 
         // One context holds the only connection, in a transaction.
         NotesContext holder;
-        using (Callers.Begin(PooledNotesHost.User(Alice)))
+        using (TestUser.BeginAs(PooledNotesHost.User(Alice)))
         {
             holder = await host.Factory.CreateDbContextAsync(Cancellation);
             await holder.Database.BeginTransactionAsync(Cancellation);
             (await PooledNotesHost.WhoAsync(holder, cancellationToken: Cancellation)).Should().Be($"{Alice}|authenticated|");
         }
 
-        using (Callers.Begin(PooledNotesHost.User(Bob)))
+        using (TestUser.BeginAs(PooledNotesHost.User(Bob)))
         {
             await using var waiting = await host.Factory.CreateDbContextAsync(Cancellation);
             waiting.Should().NotBeSameAs(holder, "the context pool hands out another context; it is the connection there is no second of");
@@ -111,7 +111,7 @@ public sealed class PooledContextBudgetTests(SupabaseRowLevelSecurityDatabase da
         // The holder goes back, transaction and all, and with it the connection.
         await holder.DisposeAsync();
 
-        using (Callers.Begin(PooledNotesHost.User(Bob, "teal")))
+        using (TestUser.BeginAs(PooledNotesHost.User(Bob, "teal")))
         {
             await using var next = await host.Factory.CreateDbContextAsync(Cancellation);
             (await PooledNotesHost.WhoAsync(next, cancellationToken: Cancellation)).Should().Be($"{Bob}|authenticated|teal", "the next read gets the connection, as its own caller");
@@ -133,7 +133,7 @@ public sealed class PooledContextBudgetTests(SupabaseRowLevelSecurityDatabase da
         await Task.WhenAll(Enumerable.Range(0, Burst).Select(_ => Task.Run(
             async () =>
             {
-                using (Callers.Begin(PooledNotesHost.User(Guid.NewGuid())))
+                using (TestUser.BeginAs(PooledNotesHost.User(Guid.NewGuid())))
                 {
                     await using var context = await host.Factory.CreateDbContextAsync(Cancellation);
                     used.TryAdd(context, true);

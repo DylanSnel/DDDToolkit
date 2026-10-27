@@ -11,7 +11,7 @@ namespace DDDToolkit.Access;
 /// <code>
 /// public sealed class CallersUser : ICallersOwn&lt;UserId&gt;
 /// {
-///     public UserId? Find(Caller caller) =&gt; caller.UserId is { } id ? new UserId(id) : null;
+///     public UserId? Find(ICurrentUser user) =&gt; user.Id is { } id ? new UserId(id) : null;
 /// }
 ///
 /// services.AddCallersOwn&lt;UserId, CallersUser&gt;();
@@ -34,9 +34,9 @@ public interface ICallersOwn<TValue>
     where TValue : struct, IEquatable<TValue>
 {
     /// <summary>
-    /// The value <paramref name="caller"/> has of <typeparamref name="TValue"/>, or <see langword="null"/> when it has
+    /// The value <paramref name="user"/> has of <typeparamref name="TValue"/>, or <see langword="null"/> when it has
     /// none.
     /// </summary>
-    /// <param name="caller">Who is calling, as the host says it.</param>
-    TValue? Find(Caller caller);
+    /// <param name="user">Who is calling.</param>
+    TValue? Find(ICurrentUser user);
 }

@@ -229,10 +229,10 @@ them to a name that reads differently.
 ## DDD00038
 
 Error. A `[RowAccess<TAggregate>]` rule has the wrong shape. Make the class `static partial` and give it
-exactly one `public static bool Allows(TAggregate x, Caller caller)` whose body is one expression (after
-`=>`, or a single `return`). `Caller` is `DDDToolkit.Abstractions.Access.Caller`. The same shape holds for
-an `[AccessFunction]`, which may take `string`, `bool`, `int`, `long`, `Guid` or id parameters after the
-caller, and needs a one-column permission with `Shape = AccessFunctionShape.Set`. A contract declares nothing, or
+exactly one `public static bool Allows(TAggregate x, ICurrentUser user)` whose body is one expression (after
+`=>`, or a single `return`). `ICurrentUser` is `DDDToolkit.Abstractions.Access.ICurrentUser`. The same shape holds
+for an `[AccessFunction]`, which may take `string`, `bool`, `int`, `long`, `Guid` or id parameters after the
+user, and needs a one-column permission with `Shape = AccessFunctionShape.Set`. A contract declares nothing, or
 one `static partial bool Allows(TKey permission, ...)` or `static partial AccessSet<TKey> Ids(...)`. A
 `[ResourceAccessContract<TKey>]` is keyed by the id of the resource's aggregate (`[EntityId<T>]`, the id
 `[AggregateRoot<Guid>]` has the toolkit write in the same project, or one a switch such as
@@ -246,8 +246,8 @@ returns `AccessSet<T>`, `[AccessScalar]` a value. A name is `schema.name`, `owne
 ## DDD00039
 
 Error. Part of `Allows` cannot become SQL. A rule may use the aggregate's properties (including `.Value`
-of a typed id and properties of a value object), constants, `caller.UserId`, `caller.IsSignedIn`,
-`caller.Role` and `caller.Claim("path")`, `DateTimeOffset.UtcNow` (the database's `now()`), access
+of a typed id and properties of a value object), constants, `user.Id`, `user.IsAuthenticated`,
+`user.Role` and `user.FindClaim("path")`, `DateTimeOffset.UtcNow` (the database's `now()`), access
 functions, `[AccessFunctions]` questions and the `Ids` of a `[ResourceAccessContract]`, compared with `==`, `!=`, `<`, `<=`, `>`, `>=` and combined
 with `&&`, `||`, `!`. A set-shaped question is asked only with `.Contains(...)`. Replace method calls,
 locals and other objects: store the value as a property of the aggregate, or read it from a claim in
@@ -264,7 +264,7 @@ the rule on the application's class declared with the parent's template.
 Error. A `[RowAccess]` rule reads the aggregate's entities itself, `project.Members.Any(...)`. A policy on
 the aggregate's table cannot: the entities' policies ask that table back, and Postgres stops with infinite
 recursion. Move the expression into an `[AccessFunction<Project>("schema.name")]` class with the same
-`Allows(Project, Caller)` shape, and have the rule call `ThatClass.Allows(project, caller)`.
+`Allows(Project, ICurrentUser)` shape, and have the rule call `ThatClass.Allows(project, user)`.
 
 ## DDD00042
 
@@ -758,7 +758,7 @@ primary constructor parameter or a private property: mark a property with a publ
 
 Error, at `[OrOwn]` or `[Own]`: nothing says what the caller's own value of the member's type is, or the member may be
 null. A `Guid` is the caller's verified identity (the core), the application's seat id the caller's seat (Tenancy).
-For a type of the application's own, write a small `ICallersOwn<T>` beside the requests (`T? Find(Caller caller)`,
+For a type of the application's own, write a small `ICallersOwn<T>` beside the requests (`T? Find(ICurrentUser user)`,
 public where another project declares it) and register it in the host, `services.AddCallersOwn<T, TCallersOwn>()`.
 A nullable member: compute the requirement as `RequiredAccess`. A `string`, a class or an enum never has an own (the
 case compares a struct that is `IEquatable` of itself): mark the member that names the caller's id instead. The id of

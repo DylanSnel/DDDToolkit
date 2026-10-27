@@ -24,7 +24,7 @@ internal abstract class MemberQueriesOf<TResource>
 /// <summary><see cref="MemberQueriesOf{TResource}"/> closed over every type of the resource.</summary>
 /// <param name="registration">The resource, with its rules.</param>
 /// <param name="asMember">Who a caller is as a member, as the rules say; <see langword="null"/> where the application resolves it.</param>
-internal sealed class MemberQueriesOf<TContext, TResource, TResourceId, TMember, TId, TMemberId, TRoleId>(MembershipRegistration registration, Func<Caller, TMemberId?>? asMember)
+internal sealed class MemberQueriesOf<TContext, TResource, TResourceId, TMember, TId, TMemberId, TRoleId>(MembershipRegistration registration, Func<CurrentUserSnapshot, TMemberId?>? asMember)
     : MemberQueriesOf<TResource>
     where TContext : DbContext
     where TResource : AggregateRoot<TResourceId>

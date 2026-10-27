@@ -66,14 +66,14 @@ public partial class PalletStamp
 [RowAccess<Pallet>(RowOperations.All)]
 public static partial class OwnersHaveTheirPallets
 {
-    public static bool Allows(Pallet pallet, Caller caller) => caller.IsSignedIn && pallet.Owner == caller.UserId;
+    public static bool Allows(Pallet pallet, ICurrentUser user) => user.IsAuthenticated && pallet.Owner == user.Id;
 }
 
 /// <summary>Whoever signed in reads every pallet, so a pallet somebody may not change is still one they see.</summary>
 [RowAccess<Pallet>(RowOperations.Read)]
 public static partial class SignedInCallersReadEveryPallet
 {
-    public static bool Allows(Pallet pallet, Caller caller) => caller.IsSignedIn;
+    public static bool Allows(Pallet pallet, ICurrentUser user) => user.IsAuthenticated;
 }
 
 /// <summary>The depot's rules, each as the export takes it.</summary>

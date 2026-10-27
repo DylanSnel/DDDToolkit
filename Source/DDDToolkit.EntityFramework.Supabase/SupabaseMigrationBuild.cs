@@ -530,15 +530,15 @@ public static partial class SupabaseMigrationBuild
 
     /// <summary>
     /// What the build says where the access files write no privileges and <c>SupabaseRowAccessRoles</c> leaves the
-    /// system caller its default, the bookkeeping role <c>ddd_system</c>: no access file then makes that role or gives
-    /// it the toolkit's tables, unless a rule is for it, so the application's system caller would switch to a role the
+    /// system work its default, the bookkeeping role <c>ddd_system</c>: no access file then makes that role or gives
+    /// it the toolkit's tables, unless a rule is for it, so the application's system work would switch to a role the
     /// files never made. <see langword="null"/> where there is nothing to say.
     /// </summary>
     private static string? BookkeepingRoleNobodyMakes(SupabaseMigrationOptions options, SupabaseCallerRoles roles)
         => options.WriteGrants || roles.SystemSaid || roles.Names.System is not { } system
             ? null
-            : $"{GrantsProperty} is None, so no access file makes the bookkeeping role {system} or gives it the outbox, the inbox and the migration history, and the system caller switches to it unless {RolesProperty} says otherwise. " +
-              $"Add system={SupabaseCallerRoles.LoginRole} to {RolesProperty} where the system caller runs as the role the application logs in as, or system=<role> for a role a migration of your own makes and grants.";
+            : $"{GrantsProperty} is None, so no access file makes the bookkeeping role {system} or gives it the outbox, the inbox and the migration history, and system work switches to it unless {RolesProperty} says otherwise. " +
+              $"Add system={SupabaseCallerRoles.LoginRole} to {RolesProperty} where system work runs as the role the application logs in as, or system=<role> for a role a migration of your own makes and grants.";
 
     /// <summary>
     /// Sets <paramref name="options"/>' login role from the build's property, once the roles callers run as are

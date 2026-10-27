@@ -37,22 +37,22 @@ public sealed class TokenRoleTests
     [Fact]
     public void A_token_without_a_role_claim_counts_as_authenticated()
     {
-        var withoutAClaim = Callers.FromClaims(ClaimsOf(role: null));
+        var withoutAClaim = CurrentUserSnapshot.FromClaims(ClaimsOf(role: null));
         withoutAClaim.Role.Should().BeNull("the token says nothing about a role");
 
         SetFor(withoutAClaim, new()).Should().Be(("authenticated", ClaimsOf(role: null)), "it is a signed-in user, with the claims it was signed with");
-        SetFor(Caller.User(Ada), new()).Should().Be(("authenticated", $$"""{"sub":"{{Ada}}","role":"authenticated"}"""), "and so is a user made without a token");
-        SetFor(Callers.FromClaims(ClaimsOf("authenticated")), new()).Role.Should().Be("authenticated");
+        SetFor(CurrentUserSnapshot.User(Ada), new()).Should().Be(("authenticated", $$"""{"sub":"{{Ada}}","role":"authenticated"}"""), "and so is a user made without a token");
+        SetFor(CurrentUserSnapshot.FromClaims(ClaimsOf("authenticated")), new()).Role.Should().Be("authenticated");
 
         // PostgREST's name for a signed-in user means the host's role for one, whatever the host calls it.
         var renamed = new PostgresRowLevelSecurityOptions { UserRole = "members" };
         SetFor(withoutAClaim, renamed).Role.Should().Be("members");
-        SetFor(Callers.FromClaims(ClaimsOf("authenticated")), renamed).Role.Should().Be("members");
+        SetFor(CurrentUserSnapshot.FromClaims(ClaimsOf("authenticated")), renamed).Role.Should().Be("members");
 
         // Mapped, authenticated is a token role like any other, and no claim still counts as it.
         var mapped = new PostgresRowLevelSecurityOptions { TokenRoles = { ["authenticated"] = "desk_member" } };
         SetFor(withoutAClaim, mapped).Role.Should().Be("desk_member");
-        SetFor(Callers.FromClaims(ClaimsOf("authenticated")), mapped).Role.Should().Be("desk_member");
+        SetFor(CurrentUserSnapshot.FromClaims(ClaimsOf("authenticated")), mapped).Role.Should().Be("desk_member");
     }
 
     [Fact]
@@ -62,14 +62,14 @@ public sealed class TokenRoleTests
         options.TokenRoles.Should().BeEmpty();
         options.UnknownTokenRole.Should().Be(UnknownTokenRole.Refuse);
 
-        SetFor(Callers.FromClaims(ClaimsOf("authenticated")), options).Should().Be(("authenticated", ClaimsOf("authenticated")));
-        SetFor(Caller.Anonymous, options).Should().Be(("anon", """{"role":"anon"}"""));
-        SetFor(Caller.System, options).Should().Be(("service_role", """{"role":"service_role"}"""));
-        SetFor(Caller.System, new()).Should().Be(("none", ""), "without a system role, background work stays the login role");
-        SetFor(Caller.SystemIn("desk"), options).Should().Be(("ddd_system_in", """{"role":"ddd_system_in","scope":"desk"}"""));
+        SetFor(CurrentUserSnapshot.FromClaims(ClaimsOf("authenticated")), options).Should().Be(("authenticated", ClaimsOf("authenticated")));
+        SetFor(CurrentUserSnapshot.Anonymous, options).Should().Be(("anon", """{"role":"anon"}"""));
+        SetFor(CurrentUserSnapshot.System, options).Should().Be(("service_role", """{"role":"service_role"}"""));
+        SetFor(CurrentUserSnapshot.System, new()).Should().Be(("none", ""), "without a system role, background work stays the login role");
+        SetFor(CurrentUserSnapshot.SystemIn("desk"), options).Should().Be(("ddd_system_in", """{"role":"ddd_system_in","scope":"desk"}"""));
 
         var connection = new RecordedConnection();
-        var interceptor = new PostgresRowLevelSecurityInterceptor(new CallerOfTheTest { Current = Caller.User(Ada) }, new PostgresRowLevelSecurityOptions());
+        var interceptor = new PostgresRowLevelSecurityInterceptor(new CallerOfTheTest { Current = CurrentUserSnapshot.User(Ada) }, new PostgresRowLevelSecurityOptions());
         interceptor.ConnectionOpened(connection, null!);
         connection.Statements.Should().ContainSingle().Which.Sql.Should().Be(
             "SELECT set_config('role', $1, false), set_config('request.jwt.claims', $2, false), " +
@@ -83,10 +83,10 @@ public sealed class TokenRoleTests
     {
         var options = new PostgresRowLevelSecurityOptions { TokenRoles = { [Analyst] = AnalystRole, ["examiner"] = AnalystRole } };
 
-        SetFor(Callers.FromClaims(ClaimsOf(Analyst)), options).Should().Be((AnalystRole, ClaimsOf(Analyst)), "the role is the mapped one, and the claims say what the token says");
-        SetFor(Caller.User(Ada, Analyst), options).Should().Be((AnalystRole, $$"""{"sub":"{{Ada}}","role":"analyst"}"""));
-        SetFor(Callers.FromClaims(ClaimsOf("examiner")), options).Role.Should().Be(AnalystRole, "two token roles may run as one role");
-        SetFor(Callers.FromClaims(ClaimsOf("authenticated")), options).Role.Should().Be("authenticated", "a map leaves the signed-in user as it was");
+        SetFor(CurrentUserSnapshot.FromClaims(ClaimsOf(Analyst)), options).Should().Be((AnalystRole, ClaimsOf(Analyst)), "the role is the mapped one, and the claims say what the token says");
+        SetFor(CurrentUserSnapshot.User(Ada, Analyst), options).Should().Be((AnalystRole, $$"""{"sub":"{{Ada}}","role":"analyst"}"""));
+        SetFor(CurrentUserSnapshot.FromClaims(ClaimsOf("examiner")), options).Role.Should().Be(AnalystRole, "two token roles may run as one role");
+        SetFor(CurrentUserSnapshot.FromClaims(ClaimsOf("authenticated")), options).Role.Should().Be("authenticated", "a map leaves the signed-in user as it was");
     }
 
     [Fact]
@@ -94,13 +94,13 @@ public sealed class TokenRoleTests
     {
         var renamed = new PostgresRowLevelSecurityOptions { UserRole = "members", AnonymousRole = "visitors" };
 
-        SetFor(Callers.FromClaims(ClaimsOf("members")), renamed).Should().Be(("members", ClaimsOf("members")), "the role is on the list as the user's own");
-        SetFor(Callers.FromClaims(ClaimsOf("visitors")), renamed).Should().Be(("visitors", ClaimsOf("visitors")), "the least any caller gets, with the token's own claims as PostgREST would send them");
-        SetFor(Callers.FromClaims(ClaimsOf("anon")), renamed).Role.Should().Be("visitors", "PostgREST's name for a caller who did not sign in means the host's role for one");
-        SetFor(Callers.FromClaims(ClaimsOf("anon")), new()).Should().Be(("anon", ClaimsOf("anon")));
+        SetFor(CurrentUserSnapshot.FromClaims(ClaimsOf("members")), renamed).Should().Be(("members", ClaimsOf("members")), "the role is on the list as the user's own");
+        SetFor(CurrentUserSnapshot.FromClaims(ClaimsOf("visitors")), renamed).Should().Be(("visitors", ClaimsOf("visitors")), "the least any caller gets, with the token's own claims as PostgREST would send them");
+        SetFor(CurrentUserSnapshot.FromClaims(ClaimsOf("anon")), renamed).Role.Should().Be("visitors", "PostgREST's name for a caller who did not sign in means the host's role for one");
+        SetFor(CurrentUserSnapshot.FromClaims(ClaimsOf("anon")), new()).Should().Be(("anon", ClaimsOf("anon")));
 
         // A token never runs as more than the list gives it: naming the anonymous role is never the user's role.
-        SetFor(Callers.FromClaims(ClaimsOf("anon")), new()).Role.Should().NotBe("authenticated");
+        SetFor(CurrentUserSnapshot.FromClaims(ClaimsOf("anon")), new()).Role.Should().NotBe("authenticated");
     }
 
     public static TheoryData<string> RolesOnNoList() => new(
@@ -131,7 +131,7 @@ public sealed class TokenRoleTests
         // Every role a token could name to get more than a signed-in user gets: the system's, the scoped
         // system's, the login role, a mapped role by its database name, and near misses of the ones listed.
         var options = new PostgresRowLevelSecurityOptions { SystemRole = SupabaseRowLevelSecurity.ServiceRole, TokenRoles = { [Analyst] = AnalystRole } };
-        var caller = new CallerOfTheTest { Current = Callers.FromClaims(ClaimsOf(forged)) };
+        var caller = new CallerOfTheTest { Current = CurrentUserSnapshot.FromClaims(ClaimsOf(forged)) };
         var interceptor = new PostgresRowLevelSecurityInterceptor(caller, options);
 
         // Through a context: the query never connects.
@@ -164,7 +164,7 @@ public sealed class TokenRoleTests
         // A list of roles, an object, a number: whatever an identity provider or a forger puts there, it is not
         // read as a token without a role claim, which would be a signed-in user.
         var options = new PostgresRowLevelSecurityOptions { TokenRoles = { [Analyst] = AnalystRole } };
-        var caller = Callers.FromClaims($$"""{"sub":"{{Ada}}","role":{{role}}}""");
+        var caller = CurrentUserSnapshot.FromClaims($$"""{"sub":"{{Ada}}","role":{{role}}}""");
         var interceptor = new PostgresRowLevelSecurityInterceptor(new CallerOfTheTest { Current = caller }, options);
 
         var connection = new RecordedConnection();
@@ -173,7 +173,7 @@ public sealed class TokenRoleTests
         refused.Code.Should().Be(ToolkitRefusals.RoleNotAllowed);
         refused.Arguments["Role"].Should().Be(role);
         connection.Statements.Should().BeEmpty();
-        SetFor(Callers.FromClaims($$"""{"sub":"{{Ada}}","role":null}"""), options).Role.Should().Be("authenticated", "null is no claim at all");
+        SetFor(CurrentUserSnapshot.FromClaims($$"""{"sub":"{{Ada}}","role":null}"""), options).Role.Should().Be("authenticated", "null is no claim at all");
     }
 
     [Fact]
@@ -181,13 +181,13 @@ public sealed class TokenRoleTests
     {
         var options = new PostgresRowLevelSecurityOptions { UnknownTokenRole = UnknownTokenRole.Anonymous, TokenRoles = { [Analyst] = AnalystRole } };
 
-        SetFor(Callers.FromClaims(ClaimsOf("intern")), options).Should().Be(("anon", """{"role":"anon"}"""), "the database sees a caller who did not sign in: no user id, no claim of the token's");
-        SetFor(Callers.FromClaims(ClaimsOf("service_role")), options).Should().Be(("anon", """{"role":"anon"}"""), "a role that names the system's is unknown like any other");
-        SetFor(Callers.FromClaims(ClaimsOf(Analyst)), options).Role.Should().Be(AnalystRole, "a role on the list is not unknown");
-        SetFor(Callers.FromClaims(ClaimsOf("authenticated")), options).Role.Should().Be("authenticated");
+        SetFor(CurrentUserSnapshot.FromClaims(ClaimsOf("intern")), options).Should().Be(("anon", """{"role":"anon"}"""), "the database sees a caller who did not sign in: no user id, no claim of the token's");
+        SetFor(CurrentUserSnapshot.FromClaims(ClaimsOf("service_role")), options).Should().Be(("anon", """{"role":"anon"}"""), "a role that names the system's is unknown like any other");
+        SetFor(CurrentUserSnapshot.FromClaims(ClaimsOf(Analyst)), options).Role.Should().Be(AnalystRole, "a role on the list is not unknown");
+        SetFor(CurrentUserSnapshot.FromClaims(ClaimsOf("authenticated")), options).Role.Should().Be("authenticated");
 
         var renamed = new PostgresRowLevelSecurityOptions { UnknownTokenRole = UnknownTokenRole.Anonymous, AnonymousRole = "visitors" };
-        SetFor(Callers.FromClaims(ClaimsOf("intern")), renamed).Should().Be(("visitors", """{"role":"visitors"}"""));
+        SetFor(CurrentUserSnapshot.FromClaims(ClaimsOf("intern")), renamed).Should().Be(("visitors", """{"role":"visitors"}"""));
     }
 
     [Fact]
@@ -196,7 +196,7 @@ public sealed class TokenRoleTests
         // A module's setting made from the caller, as a policy of that module would read it. A user who runs as
         // an anonymous caller must not reach the database through it either.
         var options = new PostgresRowLevelSecurityOptions { UnknownTokenRole = UnknownTokenRole.Anonymous, TokenRoles = { [Analyst] = AnalystRole } };
-        var caller = new CallerOfTheTest { Current = Callers.FromClaims(ClaimsOf("intern")) };
+        var caller = new CallerOfTheTest { Current = CurrentUserSnapshot.FromClaims(ClaimsOf("intern")) };
         var interceptor = new PostgresRowLevelSecurityInterceptor(caller, options, [new SettingOfTheCaller()]);
 
         var connection = new RecordedConnection();
@@ -212,12 +212,12 @@ public sealed class TokenRoleTests
         connection.Statements.Should().ContainSingle("the caller is the one the connection was opened for, and still an anonymous one to the settings");
 
         // A role on a list is the user it names, to the settings as to the database.
-        caller.Current = Callers.FromClaims(ClaimsOf(Analyst));
+        caller.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Analyst));
         var mapped = new RecordedConnection();
         interceptor.ConnectionOpened(mapped, null!);
         mapped.Statements.Should().ContainSingle().Which.Parameters.Should().Equal(AnalystRole, ClaimsOf(Analyst), SettingOfTheCaller.Name, $"User of {Ada}");
 
-        caller.Current = Caller.Anonymous;
+        caller.Current = CurrentUserSnapshot.Anonymous;
         var nobody = new RecordedConnection();
         interceptor.ConnectionOpened(nobody, null!);
         nobody.Statements.Should().ContainSingle().Which.Parameters.Should().Equal(
@@ -278,7 +278,7 @@ public sealed class TokenRoleTests
     {
         var options = new PostgresRowLevelSecurityOptions { TokenRoles = { ["member"] = "authenticated", [Analyst] = AnalystRole, ["examiner"] = AnalystRole } };
 
-        SetFor(Callers.FromClaims(ClaimsOf("member")), options).Role.Should().Be("authenticated");
+        SetFor(CurrentUserSnapshot.FromClaims(ClaimsOf("member")), options).Role.Should().Be("authenticated");
 
         // The user's role is the host's to make, and no check of a role of its own is written for it.
         var setup = PostgresRowAccess.SetupScript(options);
@@ -484,7 +484,7 @@ public sealed class TokenRoleTests
     public void The_interceptor_keeps_the_roles_it_was_built_with()
     {
         var options = new PostgresRowLevelSecurityOptions { TokenRoles = { [Analyst] = AnalystRole } };
-        var caller = new CallerOfTheTest { Current = Callers.FromClaims(ClaimsOf(Analyst)) };
+        var caller = new CallerOfTheTest { Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Analyst)) };
         var interceptor = new PostgresRowLevelSecurityInterceptor(caller, options);
 
         // Whatever is done to the host's options afterwards, checked or not, reaches no connection.
@@ -497,9 +497,9 @@ public sealed class TokenRoleTests
         interceptor.ConnectionOpened(connection, null!);
         connection.Statements.Should().ContainSingle().Which.Parameters[0].Should().Be(AnalystRole);
 
-        caller.Current = Callers.FromClaims(ClaimsOf("intern"));
+        caller.Current = CurrentUserSnapshot.FromClaims(ClaimsOf("intern"));
         FluentActions.Invoking(() => interceptor.ConnectionOpened(new RecordedConnection(), null!)).Should().Throw<RefusalException>("the map, and what an unknown role gets, are those it was built with");
-        caller.Current = Caller.User(Ada);
+        caller.Current = CurrentUserSnapshot.User(Ada);
         var user = new RecordedConnection();
         interceptor.ConnectionOpened(user, null!);
         user.Statements.Should().ContainSingle().Which.Parameters[0].Should().Be("authenticated");
@@ -525,7 +525,7 @@ public sealed class TokenRoleTests
     }
 
     /// <summary>The role and the claims the interceptor sets on a connection it opened for <paramref name="caller"/>.</summary>
-    private static (string Role, string Claims) SetFor(Caller caller, PostgresRowLevelSecurityOptions options)
+    private static (string Role, string Claims) SetFor(CurrentUserSnapshot caller, PostgresRowLevelSecurityOptions options)
     {
         var interceptor = new PostgresRowLevelSecurityInterceptor(new CallerOfTheTest { Current = caller }, options);
         var connection = new RecordedConnection();
@@ -557,8 +557,8 @@ public sealed class TokenRoleTests
 
         public IReadOnlyCollection<string> Names { get; } = [Name];
 
-        public IEnumerable<KeyValuePair<string, string>> For(Caller caller)
-            => [new(Name, $"{caller.Kind} of {caller.UserId?.ToString() ?? "nobody"}")];
+        public IEnumerable<KeyValuePair<string, string>> For(CurrentUserSnapshot caller)
+            => [new(Name, $"{caller.Kind} of {caller.Id?.ToString() ?? "nobody"}")];
     }
 
     /// <summary>A contribution, as a package would write one, whose policy is for the analysts token role.</summary>

@@ -64,14 +64,14 @@ public sealed class OutboxTests(ExplicitCallersPostgres postgres) : IDisposable
         await using (var scope = work.Services.CreateAsyncScope())
         {
             var read = () => scope.ServiceProvider.GetRequiredService<CallerOutboxContext>().Outbox.CountAsync(cancellation);
-            await read.Should().ThrowAsync<NoCallerException>("nothing said who a read of the outbox runs as");
+            await read.Should().ThrowAsync<NoCurrentUserException>("nothing said who a read of the outbox runs as");
         }
 
         var poller = work.Services.GetServices<IHostedService>().OfType<OutboxBackgroundService<CallerOutboxContext>>().Single();
         await poller.DrainAsync(cancellation);
 
         (await work.OutboxAsync()).Should().HaveCount(2).And.OnlyContain(row => row.ProcessedAt != null && row.LastError == null);
-        work.Seen.Callers.Should().Equal([Caller.System, Caller.System], "the module said its handlers run as the system, and only then do they");
+        work.Seen.Callers.Should().Equal([CurrentUserSnapshot.System, CurrentUserSnapshot.System], "the module said its handlers run as the system, and only then do they");
     }
 
     [Fact]

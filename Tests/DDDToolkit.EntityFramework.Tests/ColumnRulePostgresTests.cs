@@ -23,16 +23,16 @@ public sealed class ColumnRulePostgresTests(PostgresRowAccessDatabase database) 
 
     private const string StatusHeldByTheOwners = "The column rule 'Owners close their tickets' does not let this caller change \"Status\" of \"desk\".\"Tickets\".";
 
-    private static readonly Caller Alice = Callers.FromClaims(PostgresRowAccessDatabase.ClaimsOf(PostgresRowAccessDatabase.Alice, team: "north"));
+    private static readonly CurrentUserSnapshot Alice = CurrentUserSnapshot.FromClaims(PostgresRowAccessDatabase.ClaimsOf(PostgresRowAccessDatabase.Alice, team: "north"));
 
-    private static readonly Caller Bob = Callers.FromClaims(PostgresRowAccessDatabase.ClaimsOf(PostgresRowAccessDatabase.Bob, team: "north"));
+    private static readonly CurrentUserSnapshot Bob = CurrentUserSnapshot.FromClaims(PostgresRowAccessDatabase.ClaimsOf(PostgresRowAccessDatabase.Bob, team: "north"));
 
     /// <summary>Bob, as the north team's lead.</summary>
-    private static readonly Caller BobLeading = Callers.FromClaims(
+    private static readonly CurrentUserSnapshot BobLeading = CurrentUserSnapshot.FromClaims(
         $$$"""{"sub":"{{{PostgresRowAccessDatabase.Bob}}}","role":"authenticated","app_metadata":{"team":"north","lead":"yes"}}""");
 
     /// <summary>What the desk's own work runs as when it stays inside the policies.</summary>
-    private static readonly Caller DeskWork = Caller.SystemIn("desk");
+    private static readonly CurrentUserSnapshot DeskWork = CurrentUserSnapshot.SystemIn("desk");
 
     /// <summary>The desk's own work changes any ticket: a rule for the scoped system role.</summary>
     private static readonly RowAccessRule DeskWorkChangesTickets = RowAccessRule.For<Ticket>("The desks own work changes tickets", RowOperations.Read | RowOperations.Change, "TRUE", RowAccessRoles.SystemIn);
@@ -111,7 +111,7 @@ public sealed class ColumnRulePostgresTests(PostgresRowAccessDatabase database) 
                 .Should().Be(1, "the application's own work has checked already");
 
             // The application as the tables' owner, which no policy holds either.
-            (await database.RunAsAsync(Caller.System, """UPDATE desk."Tickets" SET "Status" = 0 WHERE "Title" = {0}""", Cancellation, AlicesTicket))
+            (await database.RunAsAsync(CurrentUserSnapshot.System, """UPDATE desk."Tickets" SET "Status" = 0 WHERE "Title" = {0}""", Cancellation, AlicesTicket))
                 .Should().Be(1);
 
             // A column rule that names the scoped system role holds it: the desk's own work has no user, so it is no owner.

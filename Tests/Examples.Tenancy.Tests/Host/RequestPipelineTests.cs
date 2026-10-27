@@ -67,7 +67,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
         // Nobody, a caller who did not sign in: the access check refuses before the handler sees the permission, which it would
         // have refused. The host requires every flow to say who it runs as, so the test says so too.
         RefusalException asNobody;
-        using (Callers.Begin(Caller.Anonymous))
+        using (TestUser.BeginAs(CurrentUserSnapshot.Anonymous))
         {
             asNobody = await RefusalOfAsync(host, notAPermission);
         }
@@ -252,7 +252,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
             refused.Kind.Should().Be(RefusalKind.NotPermitted);
         }
 
-        using (Callers.Begin(Caller.Anonymous))
+        using (TestUser.BeginAs(CurrentUserSnapshot.Anonymous))
         {
             (await RefusalOfAsync(host, new MarkTenantAsDemo())).Code.Should().Be(TenancyRefusals.NotSeated, "a caller who did not sign in works in no tenant, so the door refuses it");
         }
@@ -262,7 +262,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
         await using (var unasked = host.Services.CreateAsyncScope())
         {
             var send = async () => await unasked.ServiceProvider.GetRequiredService<ISender>().Send(new MarkTenantAsDemo(), Cancellation);
-            await send.Should().ThrowAsync<NoCallerException>();
+            await send.Should().ThrowAsync<NoCurrentUserException>();
         }
 
         // No use case of the package stands between this command and the tenant, so its handler asks again, and
@@ -359,7 +359,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
         }
 
         // Nobody, a caller who did not sign in, is refused as nobody, before anything is read.
-        using (Callers.Begin(Caller.Anonymous))
+        using (TestUser.BeginAs(CurrentUserSnapshot.Anonymous))
         {
             await using var scope = host.Services.CreateAsyncScope();
             var handle = async () => await ArchiveHandlerOf(scope).Handle(archive, Cancellation);
@@ -730,7 +730,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
         const string Blank = "   ";
 
         // Nobody, a caller who did not sign in, whatever the project and the title.
-        using (Callers.Begin(Caller.Anonymous))
+        using (TestUser.BeginAs(CurrentUserSnapshot.Anonymous))
         {
             (await RefusalOfAsync(host, new RecordInspection(outOfSight, Blank))).Code.Should().Be(TenancyRefusals.NotSeated);
         }
@@ -1286,7 +1286,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
 
         async Task<IReadOnlyList<SeatInTenant<Seat>>> OwnSeatsAsync(string claims)
         {
-            using (Callers.Begin(Callers.FromClaims(claims)))
+            using (TestUser.BeginAs(CurrentUserSnapshot.FromClaims(claims)))
             {
                 await using var scope = host.Services.CreateAsyncScope();
                 return await scope.ServiceProvider.GetRequiredService<ISender>().Send(new SeatsOfMine(), Cancellation);

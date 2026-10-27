@@ -12,7 +12,7 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework.Tests;
 /// A read across tenants that Tenancy makes runs as a caller begun around that one query, on another context and
 /// connection than the caller's: whatever the caller holds open cannot narrow it, and it does not reach into the
 /// caller's work. Where nothing but the save keeps the rights, as on SQLite, that caller is the application itself,
-/// <see cref="Caller.System"/>, reading the tables; where the database keeps them, it is scoped system work in no
+/// <see cref="CurrentUserSnapshot.System"/>, reading the tables; where the database keeps them, it is scoped system work in no
 /// tenant, asking the database's function.
 /// </summary>
 public sealed class SystemReadTests
@@ -51,13 +51,13 @@ public sealed class SystemReadTests
             unknown.Should().Equal([PolishPermission], "meadow's permission is read, and harbor's uncommitted change is not");
 
             var read = after.Commands.Sent.Should().ContainSingle("the read is one query").Which;
-            read.Caller.Should().BeSameAs(Caller.System, "the read runs as the application itself");
+            read.Caller.Should().BeSameAs(CurrentUserSnapshot.System, "the read runs as the application itself");
             read.Context.Should().NotBeNull().And.NotBeSameAs(context, "it runs on a context of its own");
             read.Connection.Should().NotBeSameAs(callers, "and on another connection than the caller's");
             read.Transaction.Should().BeNull("outside the caller's transaction");
 
             // The caller's work is as it was: its transaction open, and nobody begun around it.
-            Callers.Ambient.Should().BeNull();
+            BegunUser.Should().BeNull();
             context.Database.CurrentTransaction.Should().BeSameAs(transaction);
             await transaction.RollbackAsync(Cancellation);
         });
@@ -80,7 +80,7 @@ public sealed class SystemReadTests
 
             unknown.Should().BeEmpty();
             var read = services.Commands.Sent.Should().ContainSingle().Which;
-            read.Caller.Should().BeSameAs(Caller.System);
+            read.Caller.Should().BeSameAs(CurrentUserSnapshot.System);
             read.InAmbientTransaction.Should().BeFalse("a read of its own does not join the caller's transaction");
             System.Transactions.Transaction.Current.Should().NotBeNull("and the caller's transaction is still the caller's");
         });
@@ -104,7 +104,7 @@ public sealed class SystemReadTests
 
             tenants.Should().BeEquivalentTo([harbor.Tenant, meadow.Tenant], "a suspended tenant is still visited, and a closed one is not");
             var read = services.Commands.Sent.Should().ContainSingle("the read is one query").Which;
-            read.Caller.Should().BeSameAs(Caller.System, "nothing holds anyone to a tenant here but the filter, which the application itself reads past");
+            read.Caller.Should().BeSameAs(CurrentUserSnapshot.System, "nothing holds anyone to a tenant here but the filter, which the application itself reads past");
             read.Context.Should().NotBeNull().And.NotBeSameAs(scoped.TenancyContext(), "it runs on a context of its own");
             Regex.Match(read.Text, @"^SELECT (.+?)\s+FROM", RegexOptions.Singleline).Groups[1].Value.Trim()
                 .Should().MatchRegex(@"^""\w+""\.""Id""$", "it projects the ids and nothing else of any tenant");
@@ -141,7 +141,7 @@ public sealed class SystemReadTests
 
             // The seat's own work goes on as it was.
             TenancyCallers.Ambient.Should().Be(HostCaller.InSeat(harbor.Tenant, harbor.AdminSeat));
-            Callers.Ambient.Should().BeNull();
+            BegunUser.Should().BeNull();
         });
     }
 }

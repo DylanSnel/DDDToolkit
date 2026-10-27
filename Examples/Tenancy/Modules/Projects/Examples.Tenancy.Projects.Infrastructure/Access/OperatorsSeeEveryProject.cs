@@ -18,5 +18,5 @@ namespace Examples.Tenancy.Projects.Infrastructure.Access;
 public static partial class OperatorsSeeEveryProject
 {
     /// <summary>Whether an operator may read <paramref name="project"/>: every one of them.</summary>
-    public static bool Allows(Project project, Caller caller) => true;
+    public static bool Allows(Project project, ICurrentUser user) => true;
 }

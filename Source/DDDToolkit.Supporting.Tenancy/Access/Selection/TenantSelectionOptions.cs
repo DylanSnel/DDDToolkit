@@ -20,7 +20,7 @@ public sealed class TenantSelectionOptions
     public const string AuthenticatedTokenRole = "authenticated";
 
     /// <summary>
-    /// The token roles whose users are seated, <see cref="Caller.Role"/> as the token spells it:
+    /// The token roles whose users are seated, <see cref="ICurrentUser.Role"/> as the token spells it:
     /// <c>authenticated</c> by default. A caller without a role counts as <c>authenticated</c>.
     /// </summary>
     public IList<string> SeatedTokenRoles { get; } = [AuthenticatedTokenRole];

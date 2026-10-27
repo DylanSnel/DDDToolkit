@@ -49,20 +49,20 @@ public abstract class SystemReadFunctionTests(TenancyPostgres postgres, TenancyN
         await using var services = new TenancyServices(database, contexts: options => options.AddInterceptors(recorder, sessions));
 
         // Asked at start-up, before anyone calls: the package begins its own scoped system work for that one query.
-        Callers.Ambient.Should().BeNull();
+        BegunUser.Should().BeNull();
         var unknown = await services.InScopeAsync(scoped => TenancyChecks.UnknownStoredPermissionsAsync<HostRole, RoleId, TenantId>(
             scoped.TenancyContext(), scoped.GetRequiredService<TenancyCatalogue>(), Cancellation));
 
         unknown.Should().Equal("widget.paint", "widget.polish");
         var read = recorder.Sent.Should().ContainSingle("one query, on a context of its own").Subject;
-        read.Caller!.Kind.Should().Be(CallerKind.SystemIn, "scoped system work, which the policies hold, and not the application itself");
-        read.Caller.Scope.Should().Be(TenancyWork.SystemScope, "the scope of Tenancy's work");
+        read.Caller!.Kind.Should().Be(CurrentUserKind.SystemIn, "scoped system work, which the policies hold, and not the application itself");
+        read.Caller.SystemScope.Should().Be(TenancyWork.SystemScope, "the scope of Tenancy's work");
         read.TenancyCaller.Should().BeNull("in no tenant");
         read.Text.Trim().Should().Be(PermissionsInUse, "it asks the function, which answers permissions and nothing else of any role, and names no table");
         sessions.Seen.Should().Equal([new RecordedSession(PermissionsInUse, ScopedRole, Tenant: "", TenancyWork.SystemScope)], "and so the database saw it");
 
         // The caller's own work is untouched by it.
-        Callers.Ambient.Should().BeNull();
+        BegunUser.Should().BeNull();
 
         // By a query, as that work: the function answers every tenant's permissions, each once, on a connection the policies
         // show no role at all.
@@ -152,8 +152,8 @@ public abstract class SystemReadFunctionTests(TenancyPostgres postgres, TenancyN
 
         // A host may make a context for whoever is calling: another data source, say. What is current when a
         // context's options are built is what such a host would see, and a scope builds them as it takes the context.
-        var taken = new List<(Caller? Caller, ITenancyCaller? Tenancy)>();
-        await using var services = new TenancyServices(database, contexts: _ => taken.Add((Callers.Ambient, TenancyCallers.Ambient)));
+        var taken = new List<(CurrentUserSnapshot? Caller, ITenancyCaller? Tenancy)>();
+        await using var services = new TenancyServices(database, contexts: _ => taken.Add((BegunUser, TenancyCallers.Ambient)));
 
         // In the middle of Oli's work: the read's own context is taken as scoped system work in no tenant, not as Oli.
         (await services.BySeat(Oli.Identity, Harbor, Oli.Seat, scoped =>
@@ -173,11 +173,11 @@ public abstract class SystemReadFunctionTests(TenancyPostgres postgres, TenancyN
         taken.Clear();
         await TenancyPostgresChecks.EnsureSystemInRoleIsConfinedAsync(services.Provider, Cancellation);
         await TenancyPostgresChecks.EnsurePoliciesAreInPlaceAsync(services.Provider, Cancellation);
-        taken.Should().NotBeEmpty().And.OnlyContain(current => current.Caller != null && current.Caller.Kind == CallerKind.System);
+        taken.Should().NotBeEmpty().And.OnlyContain(current => current.Caller != null && current.Caller.Kind == CurrentUserKind.System);
 
         taken.Clear();
         await TenancyPostgresChecks.EnsureSystemReadsAcrossTenantsAsync(services.Provider, Cancellation);
-        taken.Should().NotBeEmpty().And.OnlyContain(current => current.Caller != null && (current.Caller.Kind == CallerKind.System || current.Caller.Kind == CallerKind.SystemIn) && current.Tenancy == null);
+        taken.Should().NotBeEmpty().And.OnlyContain(current => current.Caller != null && (current.Caller.Kind == CurrentUserKind.System || current.Caller.Kind == CurrentUserKind.SystemIn) && current.Tenancy == null);
         taken.Select(current => current.Caller!.ToString()).Should().Contain("system in " + TenancyWork.SystemScope);
     }
 
@@ -306,7 +306,7 @@ public abstract class SystemReadFunctionTests(TenancyPostgres postgres, TenancyN
             var ids = await scoped.Access().TenantsToSweepAsync("widgets", Cancellation);
 
             // His own work goes on as it was: as him, in his seat.
-            Callers.Ambient!.UserId.Should().Be(Oli.Identity);
+            BegunUser!.Id.Should().Be(Oli.Identity);
             TenancyCallers.Ambient.Should().Be(HostCaller.InSeat(Harbor, Oli.Seat));
             (await scoped.TenancyContext().Set<SeatRow<TenantId, SeatId>>().CountAsync(Cancellation)).Should().Be(6, "the seats of Harbor");
             return (permissions, ids);
@@ -383,7 +383,7 @@ public abstract class SystemReadFunctionTests(TenancyPostgres postgres, TenancyN
         var callers = new ObservedCallers();
         await using var services = new TenancyServices(
             database,
-            configure: collection => collection.AddSingleton<ICallerAccessor>(callers),
+            configure: collection => collection.AddSingleton<ICurrentUser>(callers),
             roles: roles => roles.SystemRole = "tenancy_beside_the_tables");
         var catalogue = services.Provider.GetRequiredService<TenancyCatalogue>();
 
@@ -401,7 +401,7 @@ public abstract class SystemReadFunctionTests(TenancyPostgres postgres, TenancyN
             .Should().BeEquivalentTo([Harbor, Orchard, Quay]);
 
         callers.During = Checks;
-        TenancyPostgresChecks.EnsureExplicitCallers(services.Provider);
+        TenancyPostgresChecks.EnsureExplicitCurrentUser(services.Provider);
         await TenancyPostgresChecks.EnsureSystemInRoleIsConfinedAsync(services.Provider, Cancellation);
         await TenancyPostgresChecks.EnsureSystemReadsAcrossTenantsAsync(services.Provider, Cancellation);
         await TenancyPostgresChecks.EnsurePoliciesAreInPlaceAsync(services.Provider, Cancellation);
@@ -410,9 +410,9 @@ public abstract class SystemReadFunctionTests(TenancyPostgres postgres, TenancyN
         // itself was begun by the start-up checks alone, which read Postgres's catalog and no table of Tenancy's: they
         // passed as a role that reaches none.
         callers.Answered.Select(answered => answered.During).Distinct().Should().BeEquivalentTo([Seeding, UseCases, Reads, Checks]);
-        callers.Answered.Where(answered => answered.Caller.IsSystem).Select(answered => answered.During).Distinct().Should().Equal(Checks);
+        callers.Answered.Where(answered => answered.Caller.Kind == CurrentUserKind.System).Select(answered => answered.During).Distinct().Should().Equal(Checks);
         callers.Answered.Where(answered => answered.During != Checks).Select(answered => answered.Caller.Kind).Distinct()
-            .Should().BeEquivalentTo([CallerKind.User, CallerKind.SystemIn]);
+            .Should().BeEquivalentTo([CurrentUserKind.User, CurrentUserKind.SystemIn]);
         callers.Answered.Where(answered => answered.During == Reads).Select(answered => answered.Caller.ToString()).Distinct()
             .Should().BeEquivalentTo(["system in " + TenancyWork.SystemScope, "system in widgets"]);
     }

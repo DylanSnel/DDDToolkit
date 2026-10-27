@@ -34,7 +34,7 @@ public class OwnerRequirementTests
     /// <summary>The application's handle: the caller's own user id is the one over the id its token names.</summary>
     public sealed class CallersUser : ICallersOwn<UserId>
     {
-        public UserId? Find(Caller caller) => caller.UserId is { } id ? new UserId(id) : null;
+        public UserId? Find(ICurrentUser user) => user.Id is { } id ? new UserId(id) : null;
     }
 
     /// <summary>The boards, and who owns each: what a storage reads, kept in a list, and how often it was asked.</summary>
@@ -68,9 +68,9 @@ public class OwnerRequirementTests
     }
 
     /// <summary>An accessor that answers the caller a test gives it.</summary>
-    private sealed class Answering(Caller caller) : ICallerAccessor
+    private sealed class Answering(CurrentUserSnapshot caller) : ICurrentUserSource
     {
-        public Caller Current => caller;
+        public CurrentUserSnapshot? Current => caller;
     }
 
     private static readonly Guid Ann = Guid.Parse("3f9a1e2c-6b7d-4c8e-9a10-5d2e7f4b8c61");
@@ -98,7 +98,7 @@ public class OwnerRequirementTests
     public async Task The_owner_of_a_board_is_let_through_and_anybody_else_is_not_own()
     {
         var boards = UsersBoards();
-        using var provider = Provider(Caller.User(Ann), boards);
+        using var provider = Provider(CurrentUserSnapshot.User(Ann), boards);
         using var scope = provider.CreateScope();
 
         Checks(scope).Decides(AccessRequirement.OwnerOf(AnnsBoard)).Should().BeTrue("a storage reads the owner, and the caller's own of its type is said");
@@ -114,7 +114,7 @@ public class OwnerRequirementTests
     [Fact]
     public async Task A_board_whose_owner_is_null_is_nobody_s_and_the_owner_alone_lets_nobody_through()
     {
-        using var provider = Provider(Caller.User(Ann), UsersBoards());
+        using var provider = Provider(CurrentUserSnapshot.User(Ann), UsersBoards());
         using var scope = provider.CreateScope();
 
         (await RefusedAsync(scope, AccessRequirement.OwnerOf(NobodysBoard))).Code.Should().Be(ToolkitRefusals.NotOwn, "a row whose owner is null is nobody's, and nobody is Ann");
@@ -123,7 +123,7 @@ public class OwnerRequirementTests
     [Fact]
     public async Task A_board_there_is_no_row_of_for_the_caller_is_not_found()
     {
-        using var provider = Provider(Caller.User(Ann), UsersBoards());
+        using var provider = Provider(CurrentUserSnapshot.User(Ann), UsersBoards());
         using var scope = provider.CreateScope();
 
         var refusal = await RefusedAsync(scope, AccessRequirement.OwnerOf(NoBoard));
@@ -140,9 +140,9 @@ public class OwnerRequirementTests
     {
         var caller = kind switch
         {
-            "a caller who did not sign in" => Caller.Anonymous,
-            "the application itself" => Caller.System,
-            _ => Caller.SystemIn("boards"),
+            "a caller who did not sign in" => CurrentUserSnapshot.Anonymous,
+            "the application itself" => CurrentUserSnapshot.System,
+            _ => CurrentUserSnapshot.SystemIn("boards"),
         };
         var boards = UsersBoards();
         using var provider = Provider(caller, boards);
@@ -156,7 +156,7 @@ public class OwnerRequirementTests
     public async Task The_owner_or_the_permission_asks_the_permission_where_the_board_is_somebody_else_s_nobody_s_or_not_found()
     {
         var asked = new List<string>();
-        using var provider = Provider(Caller.User(Ann), UsersBoards(), services => services.AddSingleton(asked).AddAccessCheck<IBoardsRequest, PermissionCheck>());
+        using var provider = Provider(CurrentUserSnapshot.User(Ann), UsersBoards(), services => services.AddSingleton(asked).AddAccessCheck<IBoardsRequest, PermissionCheck>());
         using var scope = provider.CreateScope();
         AccessRequirement OwnerOrThePermission(OwnedBoardId board) => AccessRequirement.Any(AccessRequirement.OwnerOf(board), new HoldsPermission("boards.manage"));
 
@@ -177,7 +177,7 @@ public class OwnerRequirementTests
     [Fact]
     public async Task An_owner_that_is_a_guid_is_the_caller_s_verified_identity_with_nothing_registered()
     {
-        using var provider = Provider(Caller.User(Ann), new Boards<Guid>(new() { [AnnsBoard] = Ann, [BobsBoard] = Bob }));
+        using var provider = Provider(CurrentUserSnapshot.User(Ann), new Boards<Guid>(new() { [AnnsBoard] = Ann, [BobsBoard] = Bob }));
         using var scope = provider.CreateScope();
 
         await Checks(scope).RequireAsync(new EditBoard(AccessRequirement.OwnerOf(AnnsBoard)), Cancellation);
@@ -187,7 +187,7 @@ public class OwnerRequirementTests
     [Fact]
     public async Task Without_a_reader_of_the_owner_nothing_decides_the_case_and_the_registration_is_named()
     {
-        using var provider = Provider(Caller.User(Ann), boards: null);
+        using var provider = Provider(CurrentUserSnapshot.User(Ann), boards: null);
         using var scope = provider.CreateScope();
 
         Checks(scope).Decides(AccessRequirement.OwnerOf(AnnsBoard)).Should().BeFalse("a requirement nothing checks lets nobody through, the owner included");
@@ -196,14 +196,14 @@ public class OwnerRequirementTests
             .WithMessage("*declares 'AccessRequirement.OwnedAggregate<OwnedBoardId>'*services.AddDDDToolkitEntityFramework()*IAggregateOwners<TId>*");
 
         // Nor in a set made by hand without the scope's services, where nothing could be registered.
-        var byHand = new AccessChecks<IBoardsRequest>([new CallerAccessCheck(new Answering(Caller.User(Ann)))]);
+        var byHand = new AccessChecks<IBoardsRequest>([new CurrentUserAccessCheck(new CurrentUser(source: new Answering(CurrentUserSnapshot.User(Ann))))]);
         byHand.Decides(AccessRequirement.OwnerOf(AnnsBoard)).Should().BeFalse();
     }
 
     [Fact]
     public async Task An_owner_of_a_type_nothing_says_the_caller_s_own_of_stops_the_request_and_names_the_registration()
     {
-        using var provider = Provider(Caller.User(Ann), UsersBoards(), withHandle: false);
+        using var provider = Provider(CurrentUserSnapshot.User(Ann), UsersBoards(), withHandle: false);
         using var scope = provider.CreateScope();
 
         (await FluentActions.Awaiting(() => Checks(scope).RequireAsync(new EditBoard(AccessRequirement.OwnerOf(AnnsBoard)), Cancellation).AsTask())
@@ -227,10 +227,10 @@ public class OwnerRequirementTests
 
     private static AccessChecks<IBoardsRequest> Checks(IServiceScope scope) => scope.ServiceProvider.GetRequiredService<AccessChecks<IBoardsRequest>>();
 
-    private static ServiceProvider Provider(Caller caller, IAggregateOwners<OwnedBoardId>? boards, Action<IServiceCollection>? register = null, bool withHandle = true)
+    private static ServiceProvider Provider(CurrentUserSnapshot caller, IAggregateOwners<OwnedBoardId>? boards, Action<IServiceCollection>? register = null, bool withHandle = true)
     {
         var services = new ServiceCollection();
-        services.AddSingleton<ICallerAccessor>(new Answering(caller));
+        services.AddSingleton<ICurrentUser>(new CurrentUser(source: new Answering(caller)));
         if (boards is not null)
         {
             services.AddSingleton(boards);

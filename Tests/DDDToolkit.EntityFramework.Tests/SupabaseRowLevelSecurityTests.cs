@@ -43,7 +43,7 @@ public sealed class SupabaseRowLevelSecurityTests(SupabaseRowLevelSecurityDataba
         await WriteAsAsync(Alice, "Alice's");
         await WriteAsAsync(Bob, "Bob's");
 
-        _caller.Current = Callers.FromClaims(ClaimsOf(Alice));
+        _caller.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
         await using var context = database.CreateContext(_caller);
         var notes = await context.Notes.ToListAsync(Cancellation);
 
@@ -55,7 +55,7 @@ public sealed class SupabaseRowLevelSecurityTests(SupabaseRowLevelSecurityDataba
     {
         database.Require();
 
-        _caller.Current = Callers.FromClaims(ClaimsOf(Alice));
+        _caller.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
         await using var context = database.CreateContext(_caller);
         context.Notes.Add(new PrivateNote { Id = Guid.CreateVersion7(), Text = "Bob's, says Alice", Owner = Bob });
 
@@ -73,7 +73,7 @@ public sealed class SupabaseRowLevelSecurityTests(SupabaseRowLevelSecurityDataba
 
         await WriteAsAsync(Alice, "Alice's");
 
-        _caller.Current = Caller.Anonymous;
+        _caller.Current = CurrentUserSnapshot.Anonymous;
         await using var context = database.CreateContext(_caller);
 
         (await context.Notes.CountAsync(Cancellation)).Should().Be(0, "the policy only lets authenticated users in");
@@ -87,7 +87,7 @@ public sealed class SupabaseRowLevelSecurityTests(SupabaseRowLevelSecurityDataba
     {
         database.Require();
 
-        _caller.Current = Callers.FromClaims(ClaimsOf(Alice, email: "alice@example.com"));
+        _caller.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice, email: "alice@example.com"));
         await using var context = database.CreateContext(_caller);
 
         (await ScalarAsync(context, "SELECT auth.uid()::text")).Should().Be(Alice.ToString());
@@ -104,7 +104,7 @@ public sealed class SupabaseRowLevelSecurityTests(SupabaseRowLevelSecurityDataba
         await WriteAsAsync(Alice, "Alice's");
         await WriteAsAsync(Bob, "Bob's");
 
-        _caller.Current = Caller.System;
+        _caller.Current = CurrentUserSnapshot.System;
         await using var context = database.CreateContext(_caller, new PostgresRowLevelSecurityOptions { SystemRole = SupabaseRowLevelSecurity.ServiceRole });
 
         (await context.Notes.CountAsync(Cancellation)).Should().Be(2, "service_role bypasses row level security, as a secret key does");
@@ -117,7 +117,7 @@ public sealed class SupabaseRowLevelSecurityTests(SupabaseRowLevelSecurityDataba
         database.Require();
 
         await WriteAsAsync(Alice, "Alice's");
-        _caller.Current = Caller.System;
+        _caller.Current = CurrentUserSnapshot.System;
 
         // Logged in as a role that may only switch roles, that fails closed.
         await using (var application = database.CreateContext(_caller))
@@ -152,11 +152,11 @@ public sealed class SupabaseRowLevelSecurityTests(SupabaseRowLevelSecurityDataba
             .AddInterceptors(new PostgresRowLevelSecurityInterceptor(_caller, new PostgresRowLevelSecurityOptions()))
             .Options);
 
-        _caller.Current = Callers.FromClaims(ClaimsOf(Alice));
+        _caller.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
         (await context.Notes.Select(note => note.Text).ToListAsync(Cancellation)).Should().Equal("Alice's");
         var backend = await ScalarAsync(context, "SELECT pg_backend_pid()::text");
 
-        _caller.Current = Callers.FromClaims(ClaimsOf(Bob));
+        _caller.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Bob));
         (await context.Notes.Select(note => note.Text).ToListAsync(Cancellation)).Should().Equal("Bob's");
 
         // Code that does not go through the interceptor gets the very same server connection, and none of it.
@@ -172,7 +172,7 @@ public sealed class SupabaseRowLevelSecurityTests(SupabaseRowLevelSecurityDataba
     [InlineData("Host=aws-0-eu-west-1.pooler.supabase.com:6543;Database=postgres", "6543")]
     public async Task Connection_strings_that_would_hand_a_callers_role_to_someone_else_are_refused_before_connecting(string connectionString, string named)
     {
-        _caller.Current = Callers.FromClaims(ClaimsOf(Alice));
+        _caller.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
         await using var context = new NotesContext(new DbContextOptionsBuilder<NotesContext>()
             .UseNpgsql(connectionString)
             .AddInterceptors(new PostgresRowLevelSecurityInterceptor(_caller, new PostgresRowLevelSecurityOptions()))
@@ -188,7 +188,7 @@ public sealed class SupabaseRowLevelSecurityTests(SupabaseRowLevelSecurityDataba
     {
         database.Require();
 
-        _caller.Current = Caller.SystemIn("tenancy");
+        _caller.Current = CurrentUserSnapshot.SystemIn("tenancy");
         await using var context = database.CreateContext(_caller);
 
         (await ScalarAsync(context, "SELECT current_user")).Should().Be(PostgresRowLevelSecurityOptions.DefaultSystemInRole);
@@ -203,7 +203,7 @@ public sealed class SupabaseRowLevelSecurityTests(SupabaseRowLevelSecurityDataba
     {
         database.Require();
 
-        _caller.Current = Caller.SystemIn("tenancy");
+        _caller.Current = CurrentUserSnapshot.SystemIn("tenancy");
         await using var context = database.CreateContext(_caller, new PostgresRowLevelSecurityOptions { SystemInRole = null });
 
         var read = () => context.Notes.CountAsync(Cancellation);
@@ -212,20 +212,20 @@ public sealed class SupabaseRowLevelSecurityTests(SupabaseRowLevelSecurityDataba
         context.Database.GetDbConnection().State.Should().Be(ConnectionState.Closed, "it failed before connecting, so nothing ran as another role");
     }
 
-    public static TheoryData<CallerKind> EveryKind() => new(Enum.GetValues<CallerKind>());
+    public static TheoryData<CurrentUserKind> EveryKind() => new(Enum.GetValues<CurrentUserKind>());
 
     [Theory]
     [MemberData(nameof(EveryKind))]
-    public async Task No_kind_is_ever_given_the_system_role_by_default(CallerKind kind)
+    public async Task No_kind_is_ever_given_the_system_role_by_default(CurrentUserKind kind)
     {
         database.Require();
 
         _caller.Current = kind switch
         {
-            CallerKind.System => Caller.System,
-            CallerKind.Anonymous => Caller.Anonymous,
-            CallerKind.User => Callers.FromClaims(ClaimsOf(Alice)),
-            CallerKind.SystemIn => Caller.SystemIn("tenancy"),
+            CurrentUserKind.System => CurrentUserSnapshot.System,
+            CurrentUserKind.Anonymous => CurrentUserSnapshot.Anonymous,
+            CurrentUserKind.User => CurrentUserSnapshot.FromClaims(ClaimsOf(Alice)),
+            CurrentUserKind.SystemIn => CurrentUserSnapshot.SystemIn("tenancy"),
             _ => throw new InvalidOperationException(
                 $"This test has no caller of kind {kind}. Add one here, and give the kind a role of its own in PostgresRowLevelSecurityOptions.RoleOf and claims of its own in the interceptor."),
         };
@@ -233,7 +233,7 @@ public sealed class SupabaseRowLevelSecurityTests(SupabaseRowLevelSecurityDataba
         await using var context = database.CreateContext(_caller, new PostgresRowLevelSecurityOptions { SystemRole = SupabaseRowLevelSecurity.ServiceRole });
         var role = await ScalarAsync(context, "SELECT current_user");
 
-        if (kind == CallerKind.System)
+        if (kind == CurrentUserKind.System)
         {
             role.Should().Be(SupabaseRowLevelSecurity.ServiceRole);
         }
@@ -251,7 +251,7 @@ public sealed class SupabaseRowLevelSecurityTests(SupabaseRowLevelSecurityDataba
 
         await WriteAsAsync(Alice, "Alice's");
 
-        _caller.Current = Caller.SystemIn("tenancy");
+        _caller.Current = CurrentUserSnapshot.SystemIn("tenancy");
         await using var context = database.CreateContext(_caller);
 
         (await context.Notes.CountAsync(Cancellation)).Should().Be(0, "it may read the table, but no policy lets it see a row, and it cannot pass by the one there is");
@@ -265,15 +265,15 @@ public sealed class SupabaseRowLevelSecurityTests(SupabaseRowLevelSecurityDataba
 
         await WriteAsAsync(Alice, "Alice's");
         await WriteAsAsync(Bob, "Bob's");
-        await using var context = database.CreateContext(new AmbientCallerAccessor());
+        await using var context = database.CreateContext(new CurrentUser());
 
-        using (Callers.Begin(Callers.FromClaims(ClaimsOf(Alice))))
+        using (TestUser.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Alice))))
         {
             await context.Database.OpenConnectionAsync(Cancellation);
             (await TextsAsync(context)).Should().Equal("Alice's");
             var backend = await ScalarAsync(context, "SELECT pg_backend_pid()::text");
 
-            using (Callers.Begin(Callers.FromClaims(ClaimsOf(Bob))))
+            using (TestUser.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Bob))))
             {
                 (await TextsAsync(context)).Should().Equal(["Bob's"], "the connection stayed open, and the caller that changed was set before the next command");
                 (await ScalarAsync(context, "SELECT pg_backend_pid()::text")).Should().Be(backend);
@@ -292,13 +292,13 @@ public sealed class SupabaseRowLevelSecurityTests(SupabaseRowLevelSecurityDataba
         await WriteAsAsync(Bob, "Bob's");
         await using var context = database.CreateContext(Strict());
 
-        using (Callers.Begin(Callers.FromClaims(ClaimsOf(Alice))))
+        using (TestUser.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Alice))))
         {
             await context.Database.OpenConnectionAsync(Cancellation);
             (await TextsAsync(context)).Should().Equal("Alice's");
         }
 
-        using (Callers.Begin(Callers.FromClaims(ClaimsOf(Bob))))
+        using (TestUser.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Bob))))
         {
             await using var transaction = await context.Database.BeginTransactionAsync(Cancellation);
             (await TextsAsync(context)).Should().Equal(["Bob's"], "the caller changed before the transaction began, which is where it belongs");
@@ -314,17 +314,17 @@ public sealed class SupabaseRowLevelSecurityTests(SupabaseRowLevelSecurityDataba
         await WriteAsAsync(Bob, "Bob's");
         await using var context = database.CreateContext(Strict());
 
-        using (Callers.Begin(Callers.FromClaims(ClaimsOf(Alice))))
+        using (TestUser.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Alice))))
         {
             await using var transaction = await context.Database.BeginTransactionAsync(Cancellation);
             (await TextsAsync(context)).Should().Equal("Alice's");
 
-            using (Callers.Begin(Callers.FromClaims(ClaimsOf(Bob))))
+            using (TestUser.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Bob))))
             {
                 var read = () => TextsAsync(context);
 
                 (await read.Should().ThrowAsync<InvalidOperationException>())
-                    .WithMessage($"The caller changed from authenticated {Alice} to authenticated {Bob} while a transaction was open on this connection.*begin the caller before the transaction*");
+                    .WithMessage($"The current user changed from authenticated {Alice} to authenticated {Bob} while a transaction was open on this connection.*begin the user before the transaction*");
             }
 
             (await TextsAsync(context)).Should().Equal(["Alice's"], "the transaction runs as the caller it began with");
@@ -339,14 +339,14 @@ public sealed class SupabaseRowLevelSecurityTests(SupabaseRowLevelSecurityDataba
         await WriteAsAsync(Alice, "Alice's");
         await WriteAsAsync(Bob, "Bob's");
         var logger = new KeptLogger<PostgresRowLevelSecurityInterceptor>();
-        await using var context = database.CreateContext(new PostgresRowLevelSecurityInterceptor(new AmbientCallerAccessor(), new PostgresRowLevelSecurityOptions(), [], callerOptions: null, logger));
+        await using var context = database.CreateContext(new PostgresRowLevelSecurityInterceptor(new CurrentUser(), new PostgresRowLevelSecurityOptions(), [], userOptions: null, logger));
 
-        using (Callers.Begin(Callers.FromClaims(ClaimsOf(Alice))))
+        using (TestUser.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Alice))))
         {
             await using var transaction = await context.Database.BeginTransactionAsync(Cancellation);
             (await TextsAsync(context)).Should().Equal("Alice's");
 
-            using (Callers.Begin(Callers.FromClaims(ClaimsOf(Bob))))
+            using (TestUser.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Bob))))
             {
                 (await TextsAsync(context)).Should().Equal(["Alice's"], "as before, a transaction goes on as the caller it began with");
                 (await TextsAsync(context)).Should().Equal("Alice's");
@@ -358,7 +358,7 @@ public sealed class SupabaseRowLevelSecurityTests(SupabaseRowLevelSecurityDataba
         logger.Entries.Where(entry => entry.Level == LogLevel.Warning).Should().ContainSingle("it is logged once per connection")
             .Which.Message.Should().Contain($"from authenticated {Alice} to authenticated {Bob} while a transaction was open");
 
-        using (Callers.Begin(Callers.FromClaims(ClaimsOf(Bob))))
+        using (TestUser.BeginAs(CurrentUserSnapshot.FromClaims(ClaimsOf(Bob))))
         {
             (await TextsAsync(context)).Should().Equal(["Bob's"], "outside the transaction the new caller is set");
         }
@@ -370,7 +370,7 @@ public sealed class SupabaseRowLevelSecurityTests(SupabaseRowLevelSecurityDataba
         database.Require();
 
         var tenant = new TenantSetting { Current = "north" };
-        _caller.Current = Callers.FromClaims(ClaimsOf(Alice));
+        _caller.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
         await using var context = database.CreateContext(new PostgresRowLevelSecurityInterceptor(_caller, new PostgresRowLevelSecurityOptions(), [tenant]));
 
         (await ScalarAsync(context, $"SELECT current_setting('{TenantSetting.Tenant}', true)")).Should().Be("north");
@@ -395,7 +395,7 @@ public sealed class SupabaseRowLevelSecurityTests(SupabaseRowLevelSecurityDataba
         await using var pool = new NpgsqlDataSourceBuilder(
             new NpgsqlConnectionStringBuilder(database.ApplicationConnectionString) { MaxPoolSize = 1 }.ConnectionString).Build();
 
-        _caller.Current = Callers.FromClaims(ClaimsOf(Alice));
+        _caller.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
         await using var context = new NotesContext(new DbContextOptionsBuilder<NotesContext>()
             .UseNpgsql(pool)
             .AddInterceptors(new PostgresRowLevelSecurityInterceptor(_caller, new PostgresRowLevelSecurityOptions(), [new TenantSetting { Current = "north" }]))
@@ -440,7 +440,7 @@ public sealed class SupabaseRowLevelSecurityTests(SupabaseRowLevelSecurityDataba
     public async Task A_value_for_an_undeclared_name_throws()
     {
         var provider = new DeclaredSettings([TenantSetting.Tenant], new KeyValuePair<string, string>(TenantSetting.Unit, "north"));
-        _caller.Current = Callers.FromClaims(ClaimsOf(Alice));
+        _caller.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
         await using var context = new NotesContext(new DbContextOptionsBuilder<NotesContext>()
             .UseNpgsql("Host=db.example.com;Database=postgres")
             .AddInterceptors(new PostgresRowLevelSecurityInterceptor(_caller, new PostgresRowLevelSecurityOptions(), [provider]))
@@ -457,7 +457,7 @@ public sealed class SupabaseRowLevelSecurityTests(SupabaseRowLevelSecurityDataba
     {
         database.Require();
 
-        _caller.Current = Callers.FromClaims(ClaimsOf(Alice));
+        _caller.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
         var unpooled = new NpgsqlConnectionStringBuilder(database.ApplicationConnectionString) { Pooling = false }.ConnectionString;
         await using var context = database.CreateContext(
             new PostgresRowLevelSecurityInterceptor(_caller, new PostgresRowLevelSecurityOptions(), [new TenantSetting { Current = "north" }]),
@@ -508,7 +508,7 @@ public sealed class SupabaseRowLevelSecurityTests(SupabaseRowLevelSecurityDataba
             (await read.ExecuteScalarAsync(Cancellation)).Should().Be(Bob.ToString(), "without the interceptor, a session there starts as Bob");
         }
 
-        _caller.Current = Callers.FromClaims(ClaimsOf(Alice, email: "alice@example.com"));
+        _caller.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice, email: "alice@example.com"));
         await using var context = database.CreateContext(_caller, connectionString: application);
 
         (await ScalarAsync(context, "SELECT auth.uid()::text")).Should().Be(Alice.ToString(), "the interceptor empties the setting auth.uid() reads before the claims");
@@ -516,7 +516,7 @@ public sealed class SupabaseRowLevelSecurityTests(SupabaseRowLevelSecurityDataba
         (await ScalarAsync(context, "SELECT auth.email()")).Should().Be("alice@example.com", "and the one auth.email() reads first");
 
         // Without a user the e-mail is nobody's, not the one left on the server connection.
-        _caller.Current = Caller.Anonymous;
+        _caller.Current = CurrentUserSnapshot.Anonymous;
         await using var anonymous = database.CreateContext(_caller, connectionString: application);
         (await ScalarAsync(anonymous, "SELECT coalesce(auth.email(), 'none')")).Should().Be("none");
     }
@@ -536,7 +536,7 @@ public sealed class SupabaseRowLevelSecurityTests(SupabaseRowLevelSecurityDataba
             await create.ExecuteNonQueryAsync(Cancellation);
         }
 
-        _caller.Current = Caller.SystemIn("tenancy");
+        _caller.Current = CurrentUserSnapshot.SystemIn("tenancy");
         await using var context = database.CreateContext(_caller, new PostgresRowLevelSecurityOptions { SystemInRole = "outside_the_grants" });
 
         for (var attempt = 1; attempt <= 2; attempt++)
@@ -558,7 +558,7 @@ public sealed class SupabaseRowLevelSecurityTests(SupabaseRowLevelSecurityDataba
     {
         database.Require();
 
-        _caller.Current = Callers.FromClaims(ClaimsOf(Alice));
+        _caller.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
         await using var context = database.CreateContext(_caller);
 
         using (new TransactionScope(TransactionScopeAsyncFlowOption.Enabled))
@@ -580,16 +580,16 @@ public sealed class SupabaseRowLevelSecurityTests(SupabaseRowLevelSecurityDataba
         database.Require();
 
         // An accessor of the host's own that falls back to the system by itself.
-        var required = new CallerOptions { RequireExplicitCallers = true };
-        _caller.Current = Caller.System;
+        var required = new CurrentUserOptions { RequireExplicitCurrentUser = true };
+        _caller.Current = CurrentUserSnapshot.System;
         await using var context = database.CreateContext(new PostgresRowLevelSecurityInterceptor(_caller, new PostgresRowLevelSecurityOptions(), [], required));
 
         var read = () => ScalarAsync(context, "SELECT current_user");
 
-        (await read.Should().ThrowAsync<NoCallerException>()).WithMessage($"{nameof(CallerOfTheTest)} answered the system, but nothing began Caller.System*RequireExplicitCallers*");
+        (await read.Should().ThrowAsync<NoCurrentUserException>()).WithMessage($"{nameof(CallerOfTheTest)} answered system work that nothing began*RequireExplicitCurrentUser*");
         context.Database.GetDbConnection().State.Should().Be(ConnectionState.Closed, "it failed before connecting");
 
-        using (Callers.Begin(Caller.System))
+        using (TestUser.BeginSystem())
         {
             (await ScalarAsync(context, "SELECT current_user")).Should().Be(LoginRole, "begun on purpose, the system runs as the login role");
         }
@@ -600,21 +600,21 @@ public sealed class SupabaseRowLevelSecurityTests(SupabaseRowLevelSecurityDataba
     {
         using var services = new ServiceCollection()
             .AddPostgresRowLevelSecurity<CallerOfTheTest>()
-            .RequireExplicitCallers()
+            .RequireExplicitCurrentUser()
             .AddSingleton<IRowLevelSecuritySettings>(new DeclaredSettings([TenantSetting.Tenant], new KeyValuePair<string, string>(TenantSetting.Unit, "north")))
             .BuildServiceProvider();
-        var callers = (CallerOfTheTest)services.GetRequiredService<ICallerAccessor>();
+        var callers = (CallerOfTheTest)services.GetRequiredService<ICurrentUserSource>();
         var options = new DbContextOptionsBuilder<NotesContext>().UseNpgsql("Host=db.example.com;Database=postgres");
         options.UsePostgresRowLevelSecurity(services);
         await using var context = new NotesContext(options.Options);
 
         // The caller options: the system, begun by nothing, is refused.
-        callers.Current = Caller.System;
+        callers.Current = CurrentUserSnapshot.System;
         var open = () => context.Database.OpenConnectionAsync(Cancellation);
-        (await open.Should().ThrowAsync<NoCallerException>()).WithMessage("*answered the system, but nothing began Caller.System*");
+        (await open.Should().ThrowAsync<NoCurrentUserException>()).WithMessage("*answered system work that nothing began*");
 
         // The settings: a value for a name the provider did not declare fails, before anything connects.
-        callers.Current = Callers.FromClaims(ClaimsOf(Alice));
+        callers.Current = CurrentUserSnapshot.FromClaims(ClaimsOf(Alice));
         (await open.Should().ThrowAsync<InvalidOperationException>())
             .WithMessage($"{nameof(DeclaredSettings)} gave a value for '{TenantSetting.Unit}', which is not one of its Names*");
     }
@@ -625,14 +625,14 @@ public sealed class SupabaseRowLevelSecurityTests(SupabaseRowLevelSecurityDataba
     [InlineData("[\"a\"]")]
     public void Claims_are_a_json_object(string claims)
     {
-        var act = () => Callers.FromClaims(claims);
+        var act = () => CurrentUserSnapshot.FromClaims(claims);
 
         act.Should().Throw<ArgumentException>();
     }
 
     private async Task WriteAsAsync(Guid user, string text)
     {
-        var caller = new CallerOfTheTest { Current = Callers.FromClaims(ClaimsOf(user)) };
+        var caller = new CallerOfTheTest { Current = CurrentUserSnapshot.FromClaims(ClaimsOf(user)) };
         await using var context = database.CreateContext(caller);
         context.Notes.Add(new PrivateNote { Id = Guid.CreateVersion7(), Text = text });
         await context.SaveChangesAsync(Cancellation);
@@ -641,8 +641,8 @@ public sealed class SupabaseRowLevelSecurityTests(SupabaseRowLevelSecurityDataba
     /// <summary>An interceptor on the ambient caller, in a host that requires explicit callers.</summary>
     private static PostgresRowLevelSecurityInterceptor Strict()
     {
-        var required = new CallerOptions { RequireExplicitCallers = true };
-        return new PostgresRowLevelSecurityInterceptor(new AmbientCallerAccessor(required), new PostgresRowLevelSecurityOptions(), [], required);
+        var required = new CurrentUserOptions { RequireExplicitCurrentUser = true };
+        return new PostgresRowLevelSecurityInterceptor(new CurrentUser(required), new PostgresRowLevelSecurityOptions(), [], required);
     }
 
     private static Task<List<string>> TextsAsync(NotesContext context)

@@ -300,18 +300,18 @@ public static class TenantsAccessBehaviorRegistration
 Each module has its own set of checks, `AccessChecks<TRequests>`, one per request interface. The container makes one
 set per scope. A request is checked only by the set of its own module's interface. A check is registered for one
 interface, so the same check registered for two modules is two registrations, one per interface. The core's
-`CallerAccessCheck` is first in every set, so the cases about who is calling work the same in every module. The checks
+`CurrentUserAccessCheck` is first in every set, so the cases about who is calling work the same in every module. The checks
 a module adds come after it, in the order they were added.
 
 | The Tenants module's set, for `ITenantsRequest` | Added by | Decides |
 |---|---|---|
-| `CallerAccessCheck` | every set, first | `SignedIn()`, `Own(value)`, `OwnerOf(id)` |
+| `CurrentUserAccessCheck` | every set, first | `SignedIn()`, `Own(value)`, `OwnerOf(id)` |
 | Tenancy's check of operators | `services.AddTenancyAccess<ITenantsRequest, TenantsContext>()` | `Operator()`, `Operator(tenant)` |
 | `TenancyAccessCheck` over `TenantsContext` | the same call | every other `TenancyRequirement` |
 
 | The Projects module's set, for `IProjectsRequest` | Added by | Decides |
 |---|---|---|
-| `CallerAccessCheck` | every set, first | `SignedIn()`, `Own(value)`, `OwnerOf(id)` |
+| `CurrentUserAccessCheck` | every set, first | `SignedIn()`, `Own(value)`, `OwnerOf(id)` |
 | Tenancy's check of operators | `services.AddTenancyAccess<IProjectsRequest, ProjectsContext>()` | `Operator()`, `Operator(tenant)` |
 | `TenancyAccessCheck` over `ProjectsContext` | the same call | every other `TenancyRequirement` |
 | `MemberAccessCheck<Project, ProjectId>` | `services.AddProjectMemberAccess<IProjectsRequest>()`, generated for the project's members | `MemberAccess<ProjectId>`: `On`, `Sees`, `SeenWith` |
@@ -321,9 +321,9 @@ Each check's `Decides` method is a type test on the requirement, such as `requir
 nothing. The set asks the checks in order and gives the requirement to the first check that returns `true`. The set
 itself does three things:
 
-- **It asks who is calling, first.** Before any check runs, the set asks the host's `ICallerAccessor` who is calling.
-  In a host that [requires explicit callers](row-level-security.md#requiring-explicit-callers), work without a started caller
-  fails here, whatever the request requires.
+- **It asks who is calling, first.** Before any check runs, the set asks `ICurrentUser` who is calling. In a host that
+  [requires an explicit current user](row-level-security.md#requiring-an-explicit-current-user), work that began no user fails
+  here, whatever the request requires.
 - **It lets `AllowAnonymous()` through itself.** `AccessRequirement.AllowAnonymous()`, which `[AllowAnonymous]` stands
   for, passes without asking any check.
 - **It splits combinations.** For `All` and `Any`, the set gives each case to the check that decides that case. So
@@ -364,7 +364,7 @@ flowchart TB
 services.TryAddScoped(provider => new AccessChecks<TRequests>(
     provider.GetServices<RegisteredAccessCheck<TRequests>>()
         .Select(registered => registered.Check)
-        .Prepend(new CallerAccessCheck(callers, provider))));
+        .Prepend(new CurrentUserAccessCheck(provider.GetRequiredService<ICurrentUser>(), provider))));
 
 // AddAccessCheck<TRequests, TCheck>, which a package's registration calls for the interface it is given
 services.TryAddScoped<TCheck>();
@@ -373,7 +373,7 @@ services.TryAddEnumerable(ServiceDescriptor.Scoped<RegisteredAccessCheck<TReques
 
 ```csharp shortened
 // AccessChecks<TRequests>.RequireAsync, shortened
-_callers?.AskWhoIsCalling();                                     // NoCallerException where nobody was begun
+_currentUser?.AskWhoIsCalling();                                 // NoCurrentUserException where nothing was begun
 
 var requirement = request.RequiredAccess
     ?? throw new InvalidOperationException("... declares no access requirement ...");
@@ -398,9 +398,9 @@ statement is sent. Only four cases read from the database.
 
 | The case | Its check | What it reads | Refused with |
 |---|---|---|---|
-| `SignedIn()` | the core's `CallerAccessCheck` | Nothing. It looks at the caller's token. | `access.not-signed-in`, 403 |
-| `Own(seat)` | the core's `CallerAccessCheck` | Nothing. It compares with the caller's seat in the tenant, found when the request came in. | `access.not-own`, 403 |
-| `OwnerOf(board)` | the core's `CallerAccessCheck` | One statement, sent by the storage: the owner column of the one row, read as the caller. Nothing for a caller who has no value of the owner's type. | `access.not-own`, 403. `access.not-found`, 404, for a row the caller cannot see ([The owner of an aggregate](access-requirements.md#the-owner-of-an-aggregate)) |
+| `SignedIn()` | the core's `CurrentUserAccessCheck` | Nothing. It looks at the caller's token. | `access.not-signed-in`, 403 |
+| `Own(seat)` | the core's `CurrentUserAccessCheck` | Nothing. It compares with the caller's seat in the tenant, found when the request came in. | `access.not-own`, 403 |
+| `OwnerOf(board)` | the core's `CurrentUserAccessCheck` | One statement, sent by the storage: the owner column of the one row, read as the caller. Nothing for a caller who has no value of the owner's type. | `access.not-own`, 403. `access.not-found`, 404, for a row the caller cannot see ([The owner of an aggregate](access-requirements.md#the-owner-of-an-aggregate)) |
 | `InTenant()` | Tenancy's | Nothing. The seat was found when the request came in. | The caller's own reason, such as `tenancy.not-seated`, 403 |
 | `AtTenant(permission)` | Tenancy's | One statement for a seat: the permission at the tenant's root. Nothing for system work in the tenant, which holds every permission there. | `tenancy.not-permitted` with the permission, 403 |
 | `AtUnit(permission, unit)` | Tenancy's | One statement for a seat: the permission at the unit or above it. For system work in the tenant: whether the unit belongs to the tenant. | `tenancy.not-permitted` with the permission and the unit, 403 |
@@ -417,18 +417,18 @@ project since they read it. The check keeps what it read for the request. A save
 <summary>Show the code: the core's check, Tenancy's, Membership's and the combinations'</summary>
 
 ```csharp shortened
-// CallerAccessCheck, the core's, shortened: who is calling, with nothing read
+// CurrentUserAccessCheck, the core's, shortened: who is calling, with nothing read
 public bool Decides(AccessRequirement requirement)
     => requirement is AccessRequirement.SignedInUser || (requirement is IOwnedRequirement owned && owned.CanBeAnswered(services));
 
 switch (requirement)
 {
     case AccessRequirement.SignedInUser:
-        if (!callers.Current.IsSignedIn)                         // a token that names a user
+        if (!user.IsAuthenticated)                               // a token that names a user
             throw ToolkitRefusals.Refuse(ToolkitRefusals.NotSignedIn);
         return;
     case IOwnedRequirement owned:                                // the request names the value, never whose it is
-        if (!owned.IsTheCallers(callers.Current, services))
+        if (!owned.IsTheCallers(user, services))
             throw ToolkitRefusals.Refuse(ToolkitRefusals.NotOwn);
         return;
 }
@@ -463,7 +463,7 @@ switch (requirement)
 public bool Decides(AccessRequirement requirement) => IsOperatorCase(requirement);
 
 // RequireAsync
-if (!options.IsOperator(callers.Current))                        // the token's role, never a seat
+if (!options.IsOperator(user.Snapshot))                         // the token's role, never a seat
     throw TenancyRefusals.Refuse(TenancyRefusals.OperatorsOnly);
 if (requirement is TenancyRequirement.OperatorIn<TTenantId> required
     && TenancyCallers.Current<TTenantId, TSeatId>().NamedTenant is { } named && !named.Equals(required.Tenant))
@@ -605,9 +605,9 @@ the caller, so a seat reads only its own permissions.
 
 ### The caller on the connection
 
-Before a statement runs, the connection is set to the caller. When a request comes in, the host starts two callers:
+Before a statement runs, the connection is set to the caller. When a request comes in, the host starts two things:
 
-- the toolkit's caller, from the validated token;
+- the toolkit's current user, from the validated token;
 - Tenancy's caller: the seat of that identity in the tenant the request names.
 
 When a context opens a connection, the RLS interceptor sends one statement. The statement sets the
@@ -623,7 +623,7 @@ sequenceDiagram
     participant Context
     participant Interceptor
     participant Postgres
-    Host->>Host: starts the caller and the seat
+    Host->>Host: starts the user and the seat
     Context->>Interceptor: opens a connection
     rect rgba(91, 46, 201, 0.12)
     Interceptor->>Postgres: sets role, claims and tenant
@@ -651,14 +651,14 @@ SELECT set_config('role', 'ddd_system_in', false), set_config('request.jwt.claim
 ```
 
 <details>
-<summary>Show the code: where the callers start, and the function that finds the seat</summary>
+<summary>Show the code: where the user and the Tenancy caller start, and the function that finds the seat</summary>
 
 ```csharp shortened
-// The sample's TenantHeader.UseTenantSelection, shortened: both callers begun for the request
-var caller = context.GetSupabaseCaller();                         // from the validated token, or anonymous
-using (Callers.Begin(caller))
+// The sample's TenantHeader.UseTenantSelection, shortened: the user and the Tenancy caller begun for the request
+var requestUser = context.GetSupabaseUser();                      // from the validated token, or anonymous
+using (currentUser.BeginAs(requestUser))                          // currentUser is the application's ICurrentUser
 {
-    var seat = await selection.ResolveAsync(caller, context.Request.Headers["Tenant"], context.RequestAborted);
+    var seat = await selection.ResolveAsync(requestUser, context.Request.Headers["Tenant"], context.RequestAborted);
     using (TenancyCallers.Begin(seat))                            // the seat in harbor, or nobody and why
     {
         await next(context);
@@ -984,8 +984,8 @@ its handler refuses everyone else ([System work](access-requirements.md#system-w
 
 ```csharp shortened
 // RegisterOrganization's handler, from Tenancy's page, shortened
-var caller = callers.Current;                                     // read before the system work begins
-if (caller.UserId is not { } administrator || caller.Claim("is_anonymous") == "true")
+var caller = access.CurrentUser.Snapshot;                         // read before the system work begins
+if (caller.Id is not { } administrator || caller.FindClaim("is_anonymous") == "true")
 {
     throw TenancyRefusals.Refuse(TenancyRefusals.IdentityRequired);
 }

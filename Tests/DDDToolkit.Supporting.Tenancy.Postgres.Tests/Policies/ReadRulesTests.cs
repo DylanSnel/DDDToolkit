@@ -116,9 +116,9 @@ public sealed class ReadRulesTests(TenancyPostgres postgres)
         await using var services = new TenancyServices(database);
         foreach (var (slug, seat) in new[] { ("harbor", Oli.Seat), ("orchard", OliInOrchard) })
         {
-            using (Callers.Begin(Caller.User(Oli.Identity)))
+            using (TestUser.BeginAs(Oli.Identity))
             {
-                (await services.InScopeAsync(scoped => scoped.GetRequiredService<TenantSelection<TenantId, SeatId>>().ResolveAsync(Caller.User(Oli.Identity), slug, Cancellation)))
+                (await services.InScopeAsync(scoped => scoped.GetRequiredService<TenantSelection<TenantId, SeatId>>().ResolveAsync(CurrentUserSnapshot.User(Oli.Identity), slug, Cancellation)))
                     .Seat.Should().Be(seat);
             }
         }
@@ -283,7 +283,7 @@ public sealed class ReadRulesTests(TenancyPostgres postgres)
 public static partial class MembersReadOnlyThemselves
 {
     /// <summary>Whether <paramref name="seat"/> is the calling seat.</summary>
-    public static bool Allows(HostSeat seat, Caller caller) => seat.Id == TenancyRowAccess.CallerSeatId<SeatId>();
+    public static bool Allows(HostSeat seat, ICurrentUser user) => seat.Id == TenancyRowAccess.CallerSeatId<SeatId>();
 }
 
 /// <summary>A member reads the people of its own part of the tree: the seats placed at a unit it is placed at, or below one.</summary>
@@ -291,7 +291,7 @@ public static partial class MembersReadOnlyThemselves
 public static partial class MembersReadThePeopleOfTheirUnits
 {
     /// <summary>Whether <paramref name="seat"/> is placed at a unit the calling seat belongs to.</summary>
-    public static bool Allows(HostSeat seat, Caller caller) => TenancyRowAccess.SeatsInMyUnits<SeatId>().Contains(seat.Id);
+    public static bool Allows(HostSeat seat, ICurrentUser user) => TenancyRowAccess.SeatsInMyUnits<SeatId>().Contains(seat.Id);
 }
 
 /// <summary>A rule that lets every seat through, which Tenancy holds to the calling seat's tenant.</summary>
@@ -299,7 +299,7 @@ public static partial class MembersReadThePeopleOfTheirUnits
 public static partial class MembersReadEverySeat
 {
     /// <summary>Always.</summary>
-    public static bool Allows(HostSeat seat, Caller caller) => true;
+    public static bool Allows(HostSeat seat, ICurrentUser user) => true;
 }
 
 /// <summary>A seat that gives roles at an invitation's unit reads it, as the seats managers there do.</summary>
@@ -307,6 +307,6 @@ public static partial class MembersReadEverySeat
 public static partial class GrantsManagersReadTheInvitationsAtTheirUnits
 {
     /// <summary>Whether the calling seat manages grants at <paramref name="invitation"/>'s unit.</summary>
-    public static bool Allows(HostInvitation invitation, Caller caller)
+    public static bool Allows(HostInvitation invitation, ICurrentUser user)
         => TenancyRowAccess.UnitsWhereIHold<OrganizationUnitId>(TenancyPermissions.GrantsManage).Contains(invitation.UnitId);
 }

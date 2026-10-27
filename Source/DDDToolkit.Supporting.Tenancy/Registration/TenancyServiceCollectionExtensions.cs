@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Abstractions.Interfaces;
 using DDDToolkit.Access;
 using DDDToolkit.Supporting.Tenancy.Access;
@@ -29,7 +30,7 @@ public static class TenancyServiceCollectionExtensions
     /// managers are made per scope. The storage package's <c>AddTenancy</c> registers the application's own
     /// <c>TenancyAccessManager</c>, <c>TenantManager</c>, <c>OrganizationManager</c>, <c>SeatManager</c> and <c>RoleManager</c> beside them. Selection is registered without its id types as well, <see cref="ITenantSelection"/>,
     /// the same instance, unless a host registered its own before: that one stays.</item>
-    /// <item>The toolkit's caller accessor a host registered before stays; otherwise the ambient caller is read.</item>
+    /// <item>The toolkit's <see cref="ICurrentUser"/> a host registered before stays; otherwise <see cref="CurrentUser"/> is registered.</item>
     /// <item>What the caller's own seat is, for a request about it (<c>[OrOwn] SeatId Seat</c>, <c>TenancyAccess.Own(seat)</c>):
     /// the caller's seat in the tenant, unless a host registered its own before with <c>AddCallersOwn</c>.</item>
     /// <item>A <see cref="TimeProvider"/> registered before stays; otherwise the system clock is used.</item>
@@ -73,9 +74,9 @@ public static class TenancyServiceCollectionExtensions
         services.AddSingleton(new TenancyOperatorTokenRoles(options.OperatorTokenRoles));
         services.TryAddSingleton(TimeProvider.System);
 
-        // Who is calling, for the reads and the commands that ask the toolkit's own caller: the operators' tenant list and
-        // accepting an invitation. A host that knows its callers registered its own already.
-        services.TryAddSingleton<ICallerAccessor, AmbientCallerAccessor>();
+        // Who is calling, for the reads and the commands that ask the toolkit's current user: the operators' tenant list and
+        // accepting an invitation. A host says who its requests run as with an ICurrentUserSource.
+        services.AddCurrentUser();
         services.AddSingleton(serviceProvider => TenancyCatalogue.Build(
             options.Catalogue ?? new ApplicationCatalogue(),
             serviceProvider.GetServices<PermissionContribution>().SelectMany(contribution => contribution.Permissions)));

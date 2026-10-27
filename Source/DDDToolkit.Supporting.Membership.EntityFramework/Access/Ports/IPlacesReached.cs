@@ -15,11 +15,11 @@ namespace DDDToolkit.Supporting.Membership.EntityFramework;
 /// subquery next to the resource's row, so what a caller holds stays one statement. It is therefore asked
 /// with the context that statement runs on, and answers over rows that context maps:
 /// <code>
-/// public IQueryable&lt;BayId&gt; PlacesReached(DbContext context, Caller caller, string permission)
+/// public IQueryable&lt;BayId&gt; PlacesReached(DbContext context, CurrentUserSnapshot user, string permission)
 /// {
-///     var user = caller.UserId;
+///     var id = user.Id;
 ///     return from porter in context.Set&lt;Porter&gt;()
-///            where porter.UserId == user &amp;&amp; porter.Active
+///            where porter.UserId == id &amp;&amp; porter.Active
 ///            join hold in context.Set&lt;BayHold&gt;() on porter.Id equals hold.PorterId
 ///            where hold.Key == permission
 ///            join path in context.Set&lt;BayPath&gt;() on hold.BayId equals path.AboveId
@@ -51,12 +51,12 @@ public interface IPlacesReached<TResourceId, TPlaceId>
     where TPlaceId : struct, IEntityId, IEquatable<TPlaceId>
 {
     /// <summary>
-    /// The places <paramref name="caller"/>'s hold of <paramref name="permission"/> reaches now: each place the permission
+    /// The places <paramref name="user"/>'s hold of <paramref name="permission"/> reaches now: each place the permission
     /// is held at, and every place below it. None for a caller that holds the permission nowhere. Not run here: it
     /// goes into the statement that asks.
     /// </summary>
     /// <param name="context">The context the statement runs on: the query is over rows of it.</param>
-    /// <param name="caller">The caller the question is asked for: a signed-in user.</param>
+    /// <param name="user">The caller the question is asked for: a signed-in user.</param>
     /// <param name="permission">A permission.</param>
-    IQueryable<TPlaceId> PlacesReached(DbContext context, Caller caller, string permission);
+    IQueryable<TPlaceId> PlacesReached(DbContext context, CurrentUserSnapshot user, string permission);
 }

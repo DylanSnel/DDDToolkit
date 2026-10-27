@@ -6,7 +6,7 @@ public abstract partial record AccessRequirement
 {
     /// <summary>
     /// What <see cref="Own"/> answers: the request is about the caller's own <typeparamref name="TValue"/>,
-    /// <see cref="Value"/>. Decided by the core's <see cref="CallerAccessCheck"/>, which compares the value with what
+    /// <see cref="Value"/>. Decided by the core's <see cref="CurrentUserAccessCheck"/>, which compares the value with what
     /// the <see cref="ICallersOwn{TValue}"/> registered for <typeparamref name="TValue"/> says is the caller's.
     /// </summary>
     /// <typeparam name="TValue">What the request names: the caller's identity, a seat, a user id of the application's.</typeparam>
@@ -25,10 +25,10 @@ public abstract partial record AccessRequirement
         bool IOwnedRequirement.CanBeAnswered(IServiceProvider? services) => OwnHandle<TValue>.In(services) is not null;
 
         /// <inheritdoc />
-        bool IOwnedRequirement.IsTheCallers(Caller caller, IServiceProvider? services)
+        bool IOwnedRequirement.IsTheCallers(ICurrentUser user, IServiceProvider? services)
             => (OwnHandle<TValue>.In(services) ?? throw new InvalidOperationException(
                     $"Nothing says what the caller's own {WrittenTypeNames.Of(typeof(TValue))} is. Register an ICallersOwn<{WrittenTypeNames.Of(typeof(TValue))}> with services.AddCallersOwn<{WrittenTypeNames.Of(typeof(TValue))}, TCallersOwn>(); a requirement nothing checks lets nobody through."))
-                .Find(caller) is { } own && own.Equals(Value);
+                .Find(user) is { } own && own.Equals(Value);
     }
 }
 
@@ -40,10 +40,10 @@ internal interface IOwnedRequirement
     bool CanBeAnswered(IServiceProvider? services);
 
     /// <summary>Whether the requirement's value is the caller's own.</summary>
-    /// <param name="caller">Who is calling.</param>
+    /// <param name="user">Who is calling.</param>
     /// <param name="services">The scope's services, where a handle is registered; <see langword="null"/> for none.</param>
     /// <exception cref="InvalidOperationException">Nothing says what the caller's own value of the type is.</exception>
-    bool IsTheCallers(Caller caller, IServiceProvider? services);
+    bool IsTheCallers(ICurrentUser user, IServiceProvider? services);
 }
 
 /// <summary>
@@ -56,9 +56,9 @@ internal sealed class CallersIdentity : ICallersOwn<Guid>
     public static CallersIdentity Instance { get; } = new();
 
     /// <inheritdoc />
-    public Guid? Find(Caller caller)
+    public Guid? Find(ICurrentUser user)
     {
-        ArgumentNullException.ThrowIfNull(caller);
-        return caller.UserId;
+        ArgumentNullException.ThrowIfNull(user);
+        return user.Id;
     }
 }

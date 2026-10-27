@@ -14,7 +14,7 @@ public class TenantSelectionTests
     private static readonly TenantId Harbor = new(1);
     private static readonly SeatId AdaAtHarbor = SeatId.CreateSequential();
 
-    private static Task<HostCaller> Resolve(ListedSeats seats, Caller caller, string? slug)
+    private static Task<HostCaller> Resolve(ListedSeats seats, CurrentUserSnapshot caller, string? slug)
         => new TenantSelection<TenantId, SeatId>(seats).ResolveAsync(caller, slug, default);
 
     [Fact]
@@ -22,7 +22,7 @@ public class TenantSelectionTests
     {
         var seats = new ListedSeats().With(Ada, Harbor, "harbor", AdaAtHarbor);
 
-        var caller = await Resolve(seats, Caller.User(Ada), "harbor");
+        var caller = await Resolve(seats, CurrentUserSnapshot.User(Ada), "harbor");
 
         caller.Should().Be(HostCaller.InSeat(Harbor, AdaAtHarbor));
         caller.Kind.Should().Be(TenancyCallerKind.Seat);
@@ -35,9 +35,9 @@ public class TenantSelectionTests
         // What a host's middleware asks, and begins as it is answered, naming no id.
         ITenantSelection selection = new TenantSelection<TenantId, SeatId>(new ListedSeats().With(Ada, Harbor, "harbor", AdaAtHarbor));
 
-        (await selection.ResolveAsync(Caller.User(Ada), "harbor", TestContext.Current.CancellationToken)).Should().Be(HostCaller.InSeat(Harbor, AdaAtHarbor));
-        (await selection.ResolveAsync(Caller.User(Ada), " ", TestContext.Current.CancellationToken)).Should().Be(HostCaller.Nobody(TenancyRefusals.TenantRequired));
-        (await selection.ResolveAsync(Caller.System, "harbor", TestContext.Current.CancellationToken)).Should().Be(HostCaller.Nobody(TenancyRefusals.NotSeated));
+        (await selection.ResolveAsync(CurrentUserSnapshot.User(Ada), "harbor", TestContext.Current.CancellationToken)).Should().Be(HostCaller.InSeat(Harbor, AdaAtHarbor));
+        (await selection.ResolveAsync(CurrentUserSnapshot.User(Ada), " ", TestContext.Current.CancellationToken)).Should().Be(HostCaller.Nobody(TenancyRefusals.TenantRequired));
+        (await selection.ResolveAsync(CurrentUserSnapshot.System, "harbor", TestContext.Current.CancellationToken)).Should().Be(HostCaller.Nobody(TenancyRefusals.NotSeated));
     }
 
     [Fact]
@@ -47,7 +47,7 @@ public class TenantSelectionTests
 
         foreach (var slug in new[] { null, "", "   " })
         {
-            var caller = await Resolve(seats, Caller.User(Ada), slug);
+            var caller = await Resolve(seats, CurrentUserSnapshot.User(Ada), slug);
 
             caller.Kind.Should().Be(TenancyCallerKind.Nobody);
             caller.Refusal.Should().Be(TenancyRefusals.TenantRequired);
@@ -64,8 +64,8 @@ public class TenantSelectionTests
             .With(Ada, Harbor, "harbor", AdaAtHarbor)
             .With(someoneElse, new TenantId(2), "quarry", SeatId.CreateSequential());
 
-        var unknown = await Resolve(seats, Caller.User(Ada), "nowhere");
-        var notMine = await Resolve(seats, Caller.User(Ada), "quarry");
+        var unknown = await Resolve(seats, CurrentUserSnapshot.User(Ada), "nowhere");
+        var notMine = await Resolve(seats, CurrentUserSnapshot.User(Ada), "quarry");
 
         unknown.Should().Be(HostCaller.Nobody(TenancyRefusals.NotSeated));
         notMine.Should().Be(unknown, "whether a slug exists is not told to someone without a seat in it");
@@ -74,8 +74,8 @@ public class TenantSelectionTests
     [Fact]
     public async Task A_suspended_seat_resolves_to_nobody()
     {
-        var suspended = await Resolve(new ListedSeats().With(Ada, Harbor, "harbor", AdaAtHarbor, seatState: SeatStatus.Suspended), Caller.User(Ada), "harbor");
-        var deactivated = await Resolve(new ListedSeats().With(Ada, Harbor, "harbor", AdaAtHarbor, seatState: SeatStatus.Deactivated), Caller.User(Ada), "harbor");
+        var suspended = await Resolve(new ListedSeats().With(Ada, Harbor, "harbor", AdaAtHarbor, seatState: SeatStatus.Suspended), CurrentUserSnapshot.User(Ada), "harbor");
+        var deactivated = await Resolve(new ListedSeats().With(Ada, Harbor, "harbor", AdaAtHarbor, seatState: SeatStatus.Deactivated), CurrentUserSnapshot.User(Ada), "harbor");
 
         suspended.Should().Be(HostCaller.Nobody(TenancyRefusals.SeatSuspended));
         deactivated.Should().Be(HostCaller.Nobody(TenancyRefusals.SeatSuspended));
@@ -86,7 +86,7 @@ public class TenantSelectionTests
     {
         foreach (var status in new[] { TenantStatus.Provisioning, TenantStatus.Suspended, TenantStatus.Closed })
         {
-            var caller = await Resolve(new ListedSeats().With(Ada, Harbor, "harbor", AdaAtHarbor, tenantState: status), Caller.User(Ada), "harbor");
+            var caller = await Resolve(new ListedSeats().With(Ada, Harbor, "harbor", AdaAtHarbor, tenantState: status), CurrentUserSnapshot.User(Ada), "harbor");
 
             caller.Should().Be(HostCaller.Nobody(TenancyRefusals.TenantInactive), status + " is not active");
         }
@@ -97,7 +97,7 @@ public class TenantSelectionTests
     {
         var seats = new ListedSeats().With(Ada, Harbor, "harbor", AdaAtHarbor);
 
-        foreach (var caller in new[] { Caller.Anonymous, Caller.System, Caller.User(userId: null) })
+        foreach (var caller in new[] { CurrentUserSnapshot.Anonymous, CurrentUserSnapshot.System, CurrentUserSnapshot.User(id: null) })
         {
             (await Resolve(seats, caller, "harbor")).Should().Be(HostCaller.Nobody(TenancyRefusals.NotSeated), caller + " has no verified identity");
         }
@@ -116,7 +116,7 @@ public class TenantSelectionTests
         {
             foreach (var slug in new[] { "harbor", "nowhere", null })
             {
-                (await Resolve(seats, Caller.User(Ada, role), slug)).Should().Be(
+                (await Resolve(seats, CurrentUserSnapshot.User(Ada, role), slug)).Should().Be(
                     HostCaller.Nobody(TenancyRefusals.NotSeated),
                     $"'{role}' is not a seated role, and it is told what a person without a seat is told, whatever '{slug}' is");
             }
@@ -125,9 +125,9 @@ public class TenantSelectionTests
         seats.Lookups.Should().BeEmpty("nothing is looked up for a role that holds no seat, so the answer cannot depend on the seats there are");
 
         // A token that says nothing about a role is a signed-in user's, and so is a caller made without a token.
-        (await Resolve(seats, Callers.FromClaims($$"""{"sub":"{{Ada}}"}"""), "harbor")).Should().Be(HostCaller.InSeat(Harbor, AdaAtHarbor));
-        (await Resolve(seats, Caller.User(Ada, role: null), "harbor")).Should().Be(HostCaller.InSeat(Harbor, AdaAtHarbor));
-        (await Resolve(seats, Callers.FromClaims($$"""{"sub":"{{Ada}}","role":"authenticated"}"""), "harbor")).Should().Be(HostCaller.InSeat(Harbor, AdaAtHarbor));
+        (await Resolve(seats, CurrentUserSnapshot.FromClaims($$"""{"sub":"{{Ada}}"}"""), "harbor")).Should().Be(HostCaller.InSeat(Harbor, AdaAtHarbor));
+        (await Resolve(seats, CurrentUserSnapshot.User(Ada, role: null), "harbor")).Should().Be(HostCaller.InSeat(Harbor, AdaAtHarbor));
+        (await Resolve(seats, CurrentUserSnapshot.FromClaims($$"""{"sub":"{{Ada}}","role":"authenticated"}"""), "harbor")).Should().Be(HostCaller.InSeat(Harbor, AdaAtHarbor));
     }
 
     [Fact]
@@ -142,13 +142,13 @@ public class TenantSelectionTests
         var cancellation = TestContext.Current.CancellationToken;
 
         // A signed-in user finds every seat of their own, whatever its status, and nobody else's.
-        (await selection.SeatsOfAsync<string>(Caller.User(Ada), cancellation)).Select(seat => seat.Seat).Should().Equal("Ada", "Ada Lovelace");
+        (await selection.SeatsOfAsync<string>(CurrentUserSnapshot.User(Ada), cancellation)).Select(seat => seat.Seat).Should().Equal("Ada", "Ada Lovelace");
         seats.Listings.Should().Equal(Ada);
 
         // A token of hers with another role holds no seat, and learns nothing of the seats her identity has; nor
         // does a caller that is no signed-in user. Nothing is looked up for either.
         seats.Listings.Clear();
-        foreach (var caller in new[] { Caller.User(Ada, "analyst"), Caller.User(Ada, "service_role"), Caller.User(Ada, ""), Caller.Anonymous, Caller.System, Caller.SystemIn("tenancy") })
+        foreach (var caller in new[] { CurrentUserSnapshot.User(Ada, "analyst"), CurrentUserSnapshot.User(Ada, "service_role"), CurrentUserSnapshot.User(Ada, ""), CurrentUserSnapshot.Anonymous, CurrentUserSnapshot.System, CurrentUserSnapshot.SystemIn("tenancy") })
         {
             (await selection.SeatsOfAsync<string>(caller, cancellation)).Should().BeEmpty("{0} is answered what a person without a seat is answered", caller);
         }
@@ -160,8 +160,8 @@ public class TenantSelectionTests
         membersOnly.SeatedTokenRoles.Clear();
         membersOnly.SeatedTokenRoles.Add("member");
         selection = new TenantSelection<TenantId, SeatId>(seats, membersOnly);
-        (await selection.SeatsOfAsync<string>(Caller.User(Ada, "member"), cancellation)).Should().HaveCount(2);
-        (await selection.SeatsOfAsync<string>(Caller.User(Ada), cancellation)).Should().BeEmpty();
+        (await selection.SeatsOfAsync<string>(CurrentUserSnapshot.User(Ada, "member"), cancellation)).Should().HaveCount(2);
+        (await selection.SeatsOfAsync<string>(CurrentUserSnapshot.User(Ada), cancellation)).Should().BeEmpty();
     }
 
     [Fact]
@@ -174,7 +174,7 @@ public class TenantSelectionTests
         var selection = new TenantSelection<TenantId, SeatId>(seats);
 
         // The application's own seat, as it keeps it in each tenant, and of the tenant only what is not on the seat.
-        var mine = await selection.SeatsOfAsync<string>(Caller.User(Ada), TestContext.Current.CancellationToken);
+        var mine = await selection.SeatsOfAsync<string>(CurrentUserSnapshot.User(Ada), TestContext.Current.CancellationToken);
 
         mine.Should().Equal(
             new SeatInTenant<string>("Ada", "harbor", "Tenant harbor", TenantStatus.Active),
@@ -192,10 +192,10 @@ public class TenantSelectionTests
         both.SeatedTokenRoles.Add("member");
         var selection = new TenantSelection<TenantId, SeatId>(seats, both);
 
-        (await selection.ResolveAsync(Caller.User(Ada, "member"), "harbor", TestContext.Current.CancellationToken)).Should().Be(HostCaller.InSeat(Harbor, AdaAtHarbor));
-        (await selection.ResolveAsync(Caller.User(Ada), "harbor", TestContext.Current.CancellationToken)).Should().Be(HostCaller.InSeat(Harbor, AdaAtHarbor), "the role it had stays seated");
-        (await selection.ResolveAsync(Caller.User(Ada, "Member"), "harbor", TestContext.Current.CancellationToken)).Should().Be(HostCaller.Nobody(TenancyRefusals.NotSeated), "a role is matched as the token spells it");
-        (await selection.ResolveAsync(Caller.User(Ada, "analyst"), "harbor", TestContext.Current.CancellationToken)).Should().Be(HostCaller.Nobody(TenancyRefusals.NotSeated));
+        (await selection.ResolveAsync(CurrentUserSnapshot.User(Ada, "member"), "harbor", TestContext.Current.CancellationToken)).Should().Be(HostCaller.InSeat(Harbor, AdaAtHarbor));
+        (await selection.ResolveAsync(CurrentUserSnapshot.User(Ada), "harbor", TestContext.Current.CancellationToken)).Should().Be(HostCaller.InSeat(Harbor, AdaAtHarbor), "the role it had stays seated");
+        (await selection.ResolveAsync(CurrentUserSnapshot.User(Ada, "Member"), "harbor", TestContext.Current.CancellationToken)).Should().Be(HostCaller.Nobody(TenancyRefusals.NotSeated), "a role is matched as the token spells it");
+        (await selection.ResolveAsync(CurrentUserSnapshot.User(Ada, "analyst"), "harbor", TestContext.Current.CancellationToken)).Should().Be(HostCaller.Nobody(TenancyRefusals.NotSeated));
 
         // A host whose users all carry a role of its own lists that one alone.
         var membersOnly = new TenantSelectionOptions();
@@ -203,14 +203,14 @@ public class TenantSelectionTests
         membersOnly.SeatedTokenRoles.Add("member");
         selection = new TenantSelection<TenantId, SeatId>(seats, membersOnly);
 
-        (await selection.ResolveAsync(Caller.User(Ada, "member"), "harbor", TestContext.Current.CancellationToken)).Should().Be(HostCaller.InSeat(Harbor, AdaAtHarbor));
-        (await selection.ResolveAsync(Caller.User(Ada), "harbor", TestContext.Current.CancellationToken)).Should().Be(HostCaller.Nobody(TenancyRefusals.NotSeated));
-        (await selection.ResolveAsync(Caller.User(Ada, role: null), "harbor", TestContext.Current.CancellationToken)).Should().Be(
+        (await selection.ResolveAsync(CurrentUserSnapshot.User(Ada, "member"), "harbor", TestContext.Current.CancellationToken)).Should().Be(HostCaller.InSeat(Harbor, AdaAtHarbor));
+        (await selection.ResolveAsync(CurrentUserSnapshot.User(Ada), "harbor", TestContext.Current.CancellationToken)).Should().Be(HostCaller.Nobody(TenancyRefusals.NotSeated));
+        (await selection.ResolveAsync(CurrentUserSnapshot.User(Ada, role: null), "harbor", TestContext.Current.CancellationToken)).Should().Be(
             HostCaller.Nobody(TenancyRefusals.NotSeated), "no role counts as authenticated, which this host does not seat");
 
         // The checks that came before still come first, and the ones after still hold.
-        (await selection.ResolveAsync(Caller.Anonymous, "harbor", TestContext.Current.CancellationToken)).Should().Be(HostCaller.Nobody(TenancyRefusals.NotSeated));
-        (await selection.ResolveAsync(Caller.User(Ada, "member"), " ", TestContext.Current.CancellationToken)).Should().Be(HostCaller.Nobody(TenancyRefusals.TenantRequired));
+        (await selection.ResolveAsync(CurrentUserSnapshot.Anonymous, "harbor", TestContext.Current.CancellationToken)).Should().Be(HostCaller.Nobody(TenancyRefusals.NotSeated));
+        (await selection.ResolveAsync(CurrentUserSnapshot.User(Ada, "member"), " ", TestContext.Current.CancellationToken)).Should().Be(HostCaller.Nobody(TenancyRefusals.TenantRequired));
     }
 
     [Fact]
@@ -218,7 +218,7 @@ public class TenantSelectionTests
     {
         var seats = new ListedSeats().With(Ada, Harbor, "harbor", AdaAtHarbor);
 
-        var caller = await Resolve(seats, Caller.User(Ada), "  Harbor ");
+        var caller = await Resolve(seats, CurrentUserSnapshot.User(Ada), "  Harbor ");
 
         seats.Lookups.Should().Equal([(Ada, "harbor")], "the slug is trimmed and lowercased, and the identity is the caller's own");
         caller.Tenant.Should().Be(Harbor);
@@ -291,29 +291,29 @@ public class TenantSelectionTests
     [Fact]
     public void BeginSystemIn_never_begins_a_BYPASSRLS_caller()
     {
-        Callers.Ambient.Should().BeNull();
+        BegunUser.Should().BeNull();
 
         using (TenancyWork.BeginSystem<TenantId, SeatId>())
         {
-            Callers.Ambient!.IsSystem.Should().BeFalse("Tenancy's system work is not the toolkit's system caller");
-            Callers.Ambient.IsSystemIn.Should().BeTrue("it is the scoped system caller, which the policies hold");
+            BegunUser!.Kind.Should().NotBe(CurrentUserKind.System, "Tenancy's system work is not the toolkit's system work without a scope");
+            BegunUser.Kind.Should().Be(CurrentUserKind.SystemIn, "it is the scoped system caller, which the policies hold");
             TenancyCallers.Ambient!.Kind.Should().Be(TenancyCallerKind.System);
         }
 
-        var ada = Caller.User(Ada);
-        using (Callers.Begin(ada))
+        var ada = CurrentUserSnapshot.User(Ada);
+        using (TestUser.BeginAs(ada))
         {
             using (TenancyWork.BeginSystemIn(Harbor, (SeatId?)AdaAtHarbor))
             {
-                Callers.Ambient!.IsSystem.Should().BeFalse("system work in a tenant never runs past the policies");
-                Callers.Ambient.IsSystemIn.Should().BeTrue();
+                BegunUser!.Kind.Should().NotBe(CurrentUserKind.System, "system work in a tenant never runs past the policies");
+                BegunUser.Kind.Should().Be(CurrentUserKind.SystemIn);
                 TenancyCallers.Current<TenantId, SeatId>().Should().Be(HostCaller.SystemIn(Harbor, AdaAtHarbor));
             }
 
-            Callers.Ambient.Should().BeSameAs(ada, "the toolkit's caller is the person it was once the work ends");
+            BegunUser.Should().BeSameAs(ada, "the toolkit's caller is the person it was once the work ends");
         }
 
-        Callers.Ambient.Should().BeNull();
+        BegunUser.Should().BeNull();
         TenancyCallers.Ambient.Should().BeNull();
     }
 }

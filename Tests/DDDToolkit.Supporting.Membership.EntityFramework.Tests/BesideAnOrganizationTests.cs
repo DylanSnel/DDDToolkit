@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using DDDToolkit.EntityFramework;
 using DDDToolkit.Exceptions;
 
@@ -18,7 +19,7 @@ public sealed class BesideAnOrganizationTests
     {
         using var depot = await SqliteDepot.SeededAsync();
         var data = depot.Scenario;
-        var tea = await depot.Services.AsAsync(Caller.System, provider => provider.GetRequiredService<DepotContext>().Crates.AsNoTracking().SingleAsync(crate => crate.Id == data.Tea, Cancellation));
+        var tea = await depot.Services.AsAsync(CurrentUserSnapshot.System, provider => provider.GetRequiredService<DepotContext>().Crates.AsNoTracking().SingleAsync(crate => crate.Id == data.Tea, Cancellation));
 
         // Bo packs on the tea for three days: the packer's role gives labels to print, a permission of another module's.
         (await depot.Services.CratesAsync(data.Bo, access => access.HoldAsync(data.Tea, DepotPermissions.PrintLabels, Cancellation)))
@@ -154,7 +155,7 @@ public sealed class BesideAnOrganizationTests
 
         // A caller that did not sign in is nobody's member and holds nothing anywhere: the depot is not asked
         // where it holds a permission, and no statement is sent to find out.
-        await depot.Services.AsAsync(Caller.Anonymous, async provider =>
+        await depot.Services.AsAsync(CurrentUserSnapshot.Anonymous, async provider =>
         {
             var access = provider.GetRequiredService<MembershipAccessManager<Crate>>();
             (await access.HoldAsync(data.Tea, CratePermissions.See, Cancellation)).Should().BeNull();
@@ -406,7 +407,7 @@ public sealed class BesideAnOrganizationTests
         });
 
         // The application's own work is never asked about: it holds every permission on every crate.
-        (await depot.Services.AsAsync(Caller.System, provider => provider.GetRequiredService<MembershipAccessManager<Crate>>().RequireAsync(data.Tea, CratePermissions.Scrap, Cancellation)))
+        (await depot.Services.AsAsync(CurrentUserSnapshot.System, provider => provider.GetRequiredService<MembershipAccessManager<Crate>>().RequireAsync(data.Tea, CratePermissions.Scrap, Cancellation)))
             .Should().BeEquivalentTo(new { Via = MemberVia.System, Until = (DateTimeOffset?)null });
 
         // A pallet's rules have the depot resolve who a caller is too, and the depot refuses nobody there:
@@ -585,7 +586,7 @@ public sealed class BesideAnOrganizationTests
         using var depot = await SqliteDepot.SeededAsync();
         var data = depot.Scenario;
 
-        await depot.Services.AsAsync(Caller.System, async provider =>
+        await depot.Services.AsAsync(CurrentUserSnapshot.System, async provider =>
         {
             var admission = provider.GetRequiredService<MemberAdmission<CrateId, PorterId, DepotRoleId>>();
 

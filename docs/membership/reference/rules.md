@@ -49,13 +49,13 @@ Three things are said apart from each other, and any of the one goes with any of
 | `RolePermissions RolePermissions { get; }` | Which permissions a member's role can give on the resource, wherever the roles come from. |
 | [`MembersLockPermission`](#memberslockpermission) | The permission the application's own commands require to change the members of a resource, the one marked `LocksMembers`, or `null`. |
 | [`OwnerLockPermission`](#ownerlockpermission) | The permission the application's own command requires to hand a resource to another owner, the one marked `LocksOwner`, or `null`. |
-| `IReadOnlyList<string> SystemScopes { get; }` | The scopes whose work is the application's own for this resource: work that runs as `Caller.SystemIn` in one of them holds every permission on every resource of this kind, as `Caller.System` does. The module's own scope unless the rules say otherwise; work in any other scope holds nothing on a resource, since a scope is a module's own and another module's work is not above this resource's rules. |
+| `IReadOnlyList<string> SystemScopes { get; }` | The scopes whose work is the application's own for this resource: work that runs as `CurrentUserSnapshot.SystemIn` in one of them holds every permission on every resource of this kind, as `CurrentUserSnapshot.System` does. The module's own scope unless the rules say otherwise; work in any other scope holds nothing on a resource, since a scope is a module's own and another module's work is not above this resource's rules. |
 | [`For(Roles, MemberSource?, ReachFromAbove?, IReadOnlyList<string>?)`](#forroles-membersource-reachfromabove-ireadonlyliststring) | The rules of the resource `TResource`. |
 | [`MembershipGives(string)`](#membershipgivesstring) | Whether being a member gives `permission` by itself, whatever roles the member holds: so for [`EveryMemberPermission`](#membershiprules), and for nothing else. |
 | [`OwnerHolds(string)`](#ownerholdsstring) | Whether a resource's owner holds `permission` on it by being its owner: so for every one of [`OwnerPermissions`](#membershiprules), and for no other permission, with no end. |
 | [`MembersHold(string)`](#membersholdstring) | Whether a member can hold `permission` on the resource at all, by being a member or through a role: [`EveryMemberPermission`](#membershiprules), and every permission within [`RolePermissions`](#membershiprules). |
 | [`ReachesFromAbove(string)`](#reachesfromabovestring) | Whether `permission` held where the resource sits, or above it, reaches the resource: where the rules let a resource be reached from above, for every permission but the permissions marked `FromAbove = false`. |
-| [`IsOwnWork(Caller)`](#isownworkcaller) | Whether `caller` is the application's own work for this resource, which holds every permission on every resource of this kind: `Caller.System`, always, and `Caller.SystemIn` in one of [`SystemScopes`](#membershiprules). |
+| [`IsOwnWork(CurrentUserSnapshot)`](#isownworkcurrentusersnapshot) | Whether `user` is system work for this resource, which holds every permission on every resource of this kind: `CurrentUserSnapshot.System`, always, and `CurrentUserSnapshot.SystemIn` in one of [`SystemScopes`](#membershiprules). |
 | [`RolesWith(string)`](#roleswithstring) | The fixed roles that give `permission` on the resource: those that list it, when a member's role can give it at all, in the order they are declared. |
 | [`PermissionsOf(NamedRole)`](#permissionsofnamedrole) | The permissions `role` gives a member on the resource: the permissions it lists that a member's role can give. |
 | [`Knows(NamedRole)`](#knowsnamedrole) | Whether `role` is one of the roles declared in code: a fixed role, or a starter role a customer's roles are made from. |
@@ -98,7 +98,7 @@ The rules of the resource `TResource`.
 - `roles`: Where the roles a member holds come from: [`Roles.Fixed`](#fixedireadonlylistdeclaredrole) in code, [`Roles.Custom`](#customireadonlylistdeclaredrole-otherpermissions) made by a customer, or [`Roles.External`](#externaldatabasefunction-otherpermissions) kept elsewhere.
 - `members`: Who the caller is as a member; left out, it follows from what a member is known by ([`MemberSource.Inferred`](#inferred)): the caller's seat for the seat id of a package that keeps an organization's seats, the caller's user id for an id over a Guid.
 - `reachFromAbove`: Says that a permission held where the resource hangs, or above it, reaches the resource ([`ReachFromAbove`](#reachfromabove)): `true` beside a package that keeps an organization's units, or the function of the application's own that answers where the caller holds a permission. Left out, a resource is reached through its members and by its owner alone. Said, the resource's class marks the place it hangs at `[At]`, and one permission is held by every member ([`OnAttribute.EveryMember`](#everymember)): what is held above sees a resource by that permission.
-- `systemScopes`: The scopes whose system work holds every permission on every resource of this kind ([`SystemScopes`](#membershiprules)). Left out, the scope of the module that declares the resource ([`IMembershipResource.MembershipScope`](resource-and-members.md#imembershipresource)): `boards` for the module `Boards`, so work begun as `Caller.SystemIn("boards")` does what it needs on boards. Said, the scopes named and no other: name the module's own among them to keep it, and say `[]` for no system work in a scope at all.
+- `systemScopes`: The scopes whose system work holds every permission on every resource of this kind ([`SystemScopes`](#membershiprules)). Left out, the scope of the module that declares the resource ([`IMembershipResource.MembershipScope`](resource-and-members.md#imembershipresource)): `boards` for the module `Boards`, so work begun as `CurrentUserSnapshot.SystemIn("boards")` does what it needs on boards. Said, the scopes named and no other: name the module's own among them to keep it, and say `[]` for no system work in a scope at all.
 
 **Type parameters**
 
@@ -157,21 +157,21 @@ Whether `permission` held where the resource sits, or above it, reaches the reso
 
 - `permission`: A permission.
 
-#### `IsOwnWork(Caller)`
+#### `IsOwnWork(CurrentUserSnapshot)`
 
 ```csharp
-public bool IsOwnWork(Caller caller)
+public bool IsOwnWork(CurrentUserSnapshot user)
 ```
 
-Whether `caller` is the application's own work for this resource, which holds every permission on every resource of this kind: `Caller.System`, always, and `Caller.SystemIn` in one of [`SystemScopes`](#membershiprules). Work in any other scope is not, and holds nothing.
+Whether `user` is system work for this resource, which holds every permission on every resource of this kind: `CurrentUserSnapshot.System`, always, and `CurrentUserSnapshot.SystemIn` in one of [`SystemScopes`](#membershiprules). Work in any other scope is not, and holds nothing.
 
 **Parameters**
 
-- `caller`: The caller a question is asked for.
+- `user`: The caller a question is asked for.
 
 **Exceptions**
 
-- `ArgumentNullException`: `caller` is null.
+- `ArgumentNullException`: `user` is null.
 
 #### `RolesWith(string)`
 
@@ -807,32 +807,32 @@ It is asked for by the resource, so two kinds of resource whose members are know
 
 | Member | Summary |
 |---|---|
-| [`Find(Caller)`](#findcaller) | The member id `caller` has, or `null` when it has none that counts now: somebody the application does not know, or knows and no longer counts. |
-| [`Require(Caller)`](#requirecaller) | Refuses a caller the questions cannot be asked about at all, with the application's own refusal: somebody who is nobody in the organization the resources belong to. |
+| [`Find(CurrentUserSnapshot)`](#findcurrentusersnapshot) | The member id `user` has, or `null` when it has none that counts now: somebody the application does not know, or knows and no longer counts. |
+| [`Require(CurrentUserSnapshot)`](#requirecurrentusersnapshot) | Refuses a caller the questions cannot be asked about at all, with the application's own refusal: somebody who is nobody in the organization the resources belong to. |
 
-#### `Find(Caller)`
+#### `Find(CurrentUserSnapshot)`
 
 ```csharp
-TMemberId? Find(Caller caller)
+TMemberId? Find(CurrentUserSnapshot user)
 ```
 
-The member id `caller` has, or `null` when it has none that counts now: somebody the application does not know, or knows and no longer counts. Such a caller is nobody's member, and holds only what reaches a resource from above. It refuses nobody.
+The member id `user` has, or `null` when it has none that counts now: somebody the application does not know, or knows and no longer counts. Such a caller is nobody's member, and holds only what reaches a resource from above. It refuses nobody.
 
 **Parameters**
 
-- `caller`: The caller a question is asked for: a signed-in user.
+- `user`: The caller a question is asked for: a signed-in user.
 
-#### `Require(Caller)`
+#### `Require(CurrentUserSnapshot)`
 
 ```csharp
-void Require(Caller caller)
+void Require(CurrentUserSnapshot user)
 ```
 
 Refuses a caller the questions cannot be asked about at all, with the application's own refusal: somebody who is nobody in the organization the resources belong to. It is asked before anything is read, by the questions that refuse, about every caller that is not the application's own work. It returns for everybody unless the application says otherwise: a caller that is nobody's member then simply reaches nothing.
 
 **Parameters**
 
-- `caller`: The caller a question is asked for.
+- `user`: The caller a question is asked for.
 
 **Exceptions**
 

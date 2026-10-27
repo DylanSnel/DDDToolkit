@@ -68,8 +68,8 @@ public abstract class ProvisioningTests(TenancyPostgres postgres, TenancyNaming 
         recorder.Sent.Should().NotBeEmpty();
         foreach (var command in recorder.Sent)
         {
-            command.Caller!.Kind.Should().Be(CallerKind.SystemIn, "provisioning narrows itself to the tenant it makes");
-            command.Caller.Scope.Should().Be(TenancyWork.SystemScope);
+            command.Caller!.Kind.Should().Be(CurrentUserKind.SystemIn, "provisioning narrows itself to the tenant it makes");
+            command.Caller.SystemScope.Should().Be(TenancyWork.SystemScope);
             command.TenancyCaller.Should().Be(HostCaller.SystemIn(Estuary), command.Text);
         }
 

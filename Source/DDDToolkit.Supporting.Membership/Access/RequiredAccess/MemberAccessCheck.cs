@@ -56,8 +56,8 @@ namespace DDDToolkit.Supporting.Membership.Access;
 /// <typeparam name="TResourceId">The resource's id.</typeparam>
 /// <param name="access">The access manager of this kind of resource.</param>
 /// <param name="kept">Where what was read of a request's resource is kept, for the expert hold.</param>
-/// <param name="callers">Who is calling: what tells a caller who did not sign in.</param>
-public sealed class MemberAccessCheck<TResource, TResourceId>(MembershipAccessManager<TResource> access, Checked<MemberHold<TResourceId>> kept, ICallerAccessor callers) : IAccessCheck
+/// <param name="user">Who is calling: what tells a caller who did not sign in.</param>
+public sealed class MemberAccessCheck<TResource, TResourceId>(MembershipAccessManager<TResource> access, Checked<MemberHold<TResourceId>> kept, ICurrentUser user) : IAccessCheck
     where TResource : class, IEntity<TResourceId>
     where TResourceId : struct, IEntityId, IEquatable<TResourceId>
 {
@@ -117,7 +117,7 @@ public sealed class MemberAccessCheck<TResource, TResourceId>(MembershipAccessMa
                 // nothing under any rules, and the statement is not sent for it: a database that checks every
                 // row may refuse that caller's role the resource's schema outright.
                 access.RequireCaller();
-                if (callers.Current.Kind == CallerKind.Anonymous)
+                if (user.Kind == CurrentUserKind.Anonymous)
                 {
                     throw access.Rules.Codes.Refuse(MembershipRefusals.NotPermitted, ("Permission", required.Permission));
                 }
