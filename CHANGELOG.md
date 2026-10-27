@@ -3017,6 +3017,10 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   - Projects and Inspections keep their answers: a project mutation reads the project's overview again, since the
     overview holds what the caller may do with it. See [What a mutation
     returns](docs/tenancy/sample/graphql.md#what-a-mutation-returns).
+  - The tutorials do the same. In [Tenancy's](docs/tenancy/tutorial.md), `AddUnit` returns the new unit, `CreateRole`
+    the new role, and `AddSeat` and `GrantRole` the seat. In [Membership's](docs/membership/tutorial.md), `OpenBoard`,
+    `AddMember` and `RenameBoard` return the board, and `SetUpBoardRoles` the roles it made. Their routes answer `200`
+    with the object's fields where they answered `204`, an id or a count.
 - **Docs: Tenancy's API reference follows the managers.** [Tenancy API: managers](docs/tenancy/reference/managers.md)
   is the page that was `use-cases.md`, with `TenantManager`, `OrganizationManager`, `SeatManager`, `RoleManager`,
   `InvitationManager`, the stores and the registration. [Tenancy API: access manager and

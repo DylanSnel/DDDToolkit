@@ -102,11 +102,11 @@
     "notPermitted": { "code": "boards.not-permitted", "status": 403 }
   },
   "tried": [
-    { "caller": "rhea", "board": "crane", "permission": "boards.members.manage", "step": "Step 7: members", "item": 5, "status": 204, "code": null },
-    { "caller": "leo", "board": "crane", "permission": "boards.edit", "step": "Step 7: members", "item": 6, "status": 204, "code": null },
+    { "caller": "rhea", "board": "crane", "permission": "boards.members.manage", "step": "Step 7: members", "item": 5, "status": 200, "code": null },
+    { "caller": "leo", "board": "crane", "permission": "boards.edit", "step": "Step 7: members", "item": 6, "status": 200, "code": null },
     { "caller": "leo", "board": "crane", "permission": "boards.members.manage", "step": "Step 7: members", "item": 7, "status": 403, "code": "boards.not-permitted" },
     { "caller": "ada", "board": "crane", "permission": "boards.view", "step": "Step 8: reach from above", "item": 1, "status": 200, "code": null },
     { "caller": "rhea", "board": "quay", "permission": "boards.edit", "step": "Step 8: reach from above", "item": 5, "status": 403, "code": "boards.not-permitted" },
-    { "caller": "ada", "board": "crane", "permission": "boards.members.manage", "step": "Step 8: reach from above", "item": 6, "status": 204, "code": null }
+    { "caller": "ada", "board": "crane", "permission": "boards.members.manage", "step": "Step 8: reach from above", "item": 6, "status": 200, "code": null }
   ]
 }

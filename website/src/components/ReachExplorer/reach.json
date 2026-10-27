@@ -78,9 +78,9 @@
   },
   "tried": [
     { "person": "ada", "permission": "tenancy.units.manage", "unit": "harbor-works", "step": "Step 8: a unit and a seat", "item": 1, "status": 200, "code": null },
-    { "person": "ada", "permission": "tenancy.seats.manage", "unit": "north", "step": "Step 8: a unit and a seat", "item": 3, "status": null, "code": null },
-    { "person": "ada", "permission": "tenancy.roles.manage", "unit": "harbor-works", "step": "Step 9: a role at a unit", "item": 1, "status": null, "code": null },
-    { "person": "ada", "permission": "tenancy.grants.manage", "unit": "north", "step": "Step 9: a role at a unit", "item": 2, "status": null, "code": null },
+    { "person": "ada", "permission": "tenancy.seats.manage", "unit": "north", "step": "Step 8: a unit and a seat", "item": 3, "status": 200, "code": null },
+    { "person": "ada", "permission": "tenancy.roles.manage", "unit": "harbor-works", "step": "Step 9: a role at a unit", "item": 1, "status": 200, "code": null },
+    { "person": "ada", "permission": "tenancy.grants.manage", "unit": "north", "step": "Step 9: a role at a unit", "item": 2, "status": 200, "code": null },
     { "person": "rhea", "permission": "tenancy.units.manage", "unit": "north", "step": "Step 9: a role at a unit", "item": 3, "status": 200, "code": null },
     { "person": "rhea", "permission": "tenancy.units.manage", "unit": "south-bay", "step": "Step 9: a role at a unit", "item": 4, "status": 403, "code": "tenancy.not-permitted" }
   ]

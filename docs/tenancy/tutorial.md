@@ -493,16 +493,15 @@ checks it, and `Handle` runs only when the check passes:
 ```csharp
 [RequiresPermission(TenancyPermissions.SeatsManage)]          // what the caller needs: tenancy.seats.manage
 public sealed record AddSeat(Guid Identity, OrganizationUnitId Unit)
-    : ICommand<SeatId>, ITenancyRequest;                      // ITenancyRequest: the behavior checks this request
+    : ICommand<Seat>, ITenancyRequest;                        // ITenancyRequest: the behavior checks this request
 
-public sealed class AddSeatHandler(SeatManager seats) : ICommandHandler<AddSeat, SeatId>
+public sealed class AddSeatHandler(SeatManager seats) : ICommandHandler<AddSeat, Seat>
 {
     // Runs only for a caller who holds tenancy.seats.manage for the whole tenant.
-    public async ValueTask<SeatId> Handle(AddSeat command, CancellationToken cancellationToken)
+    public async ValueTask<Seat> Handle(AddSeat command, CancellationToken cancellationToken)
     {
         var seat = await seats.AddAsync(command.Identity, cancellationToken);
-        await seats.PlaceAsync(seat.Id, command.Unit, primary: true, cancellationToken);
-        return seat.Id;
+        return await seats.PlaceAsync(seat.Id, command.Unit, primary: true, cancellationToken);
     }
 }
 ```
@@ -1204,19 +1203,20 @@ that lists the units a seat can read.
 
 **`Harbor.Tenancy.Application/Units/AddUnit/AddUnit.cs`**
 
-```csharp {6-7,14-22,24}
+```csharp {3,7-8,15-23,25}
 using DDDToolkit.Supporting.Tenancy;
 using DDDToolkit.Supporting.Tenancy.Catalogue;
+using Harbor.Tenancy.Domain;
 
 namespace Harbor.Tenancy.Application.Units.AddUnit;
 
 [RequiresPermission(TenancyPermissions.UnitsManage)]
-public sealed record AddUnit([AtUnit] OrganizationUnitId Parent, string Name) : ICommand<OrganizationUnitId>, ITenancyRequest;
+public sealed record AddUnit([AtUnit] OrganizationUnitId Parent, string Name) : ICommand<OrganizationUnit>, ITenancyRequest;
 
 public sealed class AddUnitHandler(OrganizationManager organization)
-    : ICommandHandler<AddUnit, OrganizationUnitId>
+    : ICommandHandler<AddUnit, OrganizationUnit>
 {
-    public async ValueTask<OrganizationUnitId> Handle(AddUnit command, CancellationToken cancellationToken)
+    public async ValueTask<OrganizationUnit> Handle(AddUnit command, CancellationToken cancellationToken)
     {
         // Harbor's own rule: no two active units of one name below one parent.
         var name = command.Name.Trim();
@@ -1228,7 +1228,7 @@ public sealed class AddUnitHandler(OrganizationManager organization)
             throw UnitRefusals.NameTakenBelow(name);
         }
 
-        return (await organization.AddUnitAsync(command.Parent, command.Name, cancellationToken)).Id;
+        return await organization.AddUnitAsync(command.Parent, command.Name, cancellationToken);
     }
 }
 ```
@@ -1272,28 +1272,28 @@ public sealed record UnitListing(OrganizationUnitId Id, OrganizationUnitId? Pare
 
 **`Harbor.Tenancy.Application/Seats/AddSeat/AddSeat.cs`**
 
-```csharp {5,12-13}
+```csharp {2,6,13-14}
 using DDDToolkit.Supporting.Tenancy.Catalogue;
+using Harbor.Tenancy.Domain.Aggregates.Seats;
 
 namespace Harbor.Tenancy.Application.Seats.AddSeat;
 
 [RequiresPermission(TenancyPermissions.SeatsManage)]
-public sealed record AddSeat(Guid Identity, OrganizationUnitId Unit) : ICommand<SeatId>, ITenancyRequest;
+public sealed record AddSeat(Guid Identity, OrganizationUnitId Unit) : ICommand<Seat>, ITenancyRequest;
 
-public sealed class AddSeatHandler(SeatManager seats) : ICommandHandler<AddSeat, SeatId>
+public sealed class AddSeatHandler(SeatManager seats) : ICommandHandler<AddSeat, Seat>
 {
-    public async ValueTask<SeatId> Handle(AddSeat command, CancellationToken cancellationToken)
+    public async ValueTask<Seat> Handle(AddSeat command, CancellationToken cancellationToken)
     {
         var seat = await seats.AddAsync(command.Identity, cancellationToken);
-        await seats.PlaceAsync(seat.Id, command.Unit, primary: true, cancellationToken);
-        return seat.Id;
+        return await seats.PlaceAsync(seat.Id, command.Unit, primary: true, cancellationToken);
     }
 }
 ```
 
 **`Harbor.Tenancy.Api/Units/Rest/UnitsEndpoints.cs`**: each route only sends its request.
 
-```csharp {15-16,18-19}
+```csharp {15-16,18-22}
 using Harbor.Tenancy.Application.Units.AddUnit;
 using Harbor.Tenancy.Application.Units.ListUnits;
 using Harbor.Tenancy.Contracts.ValueObjects;
@@ -1311,8 +1311,11 @@ internal static class UnitsEndpoints
         routes.MapGet("/units", async (ISender sender, CancellationToken cancellationToken)
             => Results.Ok(await sender.Send(new ListUnits(), cancellationToken)));
 
-        routes.MapPost("/units", async (NewUnit body, ISender sender, CancellationToken cancellationToken)
-            => Results.Ok(new { unit = await sender.Send(new AddUnit(body.Parent, body.Name), cancellationToken) }));
+        routes.MapPost("/units", async (NewUnit body, ISender sender, CancellationToken cancellationToken) =>
+        {
+            var unit = await sender.Send(new AddUnit(body.Parent, body.Name), cancellationToken);
+            return Results.Ok(new { unit = unit.Id, parent = unit.ParentId, name = unit.Name });
+        });
 
         return routes;
     }
@@ -1323,10 +1326,11 @@ internal static class UnitsEndpoints
 
 **`Harbor.Tenancy.Api/Seats/Rest/SeatsEndpoints.cs`**: adds `POST /seats` next to `GET /me`.
 
-```csharp {1,3,17-18,23}
+```csharp {1,3-4,18-19,24-29,31}
 using Harbor.Tenancy.Application.Seats.AddSeat;
 using Harbor.Tenancy.Application.Seats.WhoAmI;
 using Harbor.Tenancy.Contracts.ValueObjects;
+using Harbor.Tenancy.Domain.Aggregates.Seats;
 using Mediator;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -1341,10 +1345,17 @@ internal static class SeatsEndpoints
         routes.MapGet("/me", async (ISender sender, CancellationToken cancellationToken)
             => Results.Ok(await sender.Send(new WhoAmI(), cancellationToken)));
         routes.MapPost("/seats", async (NewSeat body, ISender sender, CancellationToken cancellationToken)
-            => Results.Ok(new { seat = await sender.Send(new AddSeat(body.Identity, body.Unit), cancellationToken) }));
+            => Results.Ok(Describe(await sender.Send(new AddSeat(body.Identity, body.Unit), cancellationToken))));
 
         return routes;
     }
+
+    // The seat as the routes answer it: its id, and each unit where it is placed with the roles granted there.
+    private static object Describe(Seat seat) => new
+    {
+        seat = seat.Id,
+        placements = seat.Placements.Select(placement => new { unit = placement.UnitId, roles = placement.Grants.Select(grant => grant.RoleId) }),
+    };
 
     public sealed record NewSeat(Guid Identity, OrganizationUnitId Unit);
 }
@@ -1384,25 +1395,30 @@ public static class TenancyModule
 - `[AtUnit] Parent`: Ada needs `tenancy.units.manage` at the parent unit or above it. She holds it at the root, so she
   may add a unit anywhere.
 - `OrganizationManager` and `SeatManager`: Tenancy's managers of the organization with its units, and of seats.
-- `AddUnitAsync` writes the unit and its rows in `OrganizationUnitPaths` in one save, and returns the new unit.
+- `AddUnitAsync` writes the unit and its rows in `OrganizationUnitPaths` in one save, and returns the new unit,
+  your `OrganizationUnit` class. The command returns the unit, and the route answers its id, its parent and its name.
 - `UnitStatus.Active`: a unit is `Active` or `Archived`. Nothing new is added to an archived unit, so Harbor's rule
   compares names with active units only.
 - `new RefusalException(code, kind, message, arguments)`: `RefusalKind.Conflict` becomes `409` (step 5). The
   arguments dictionary carries values a client may show, here the `Name`.
 - `ListUnitsAsync` returns the units this seat can read: the units where it is placed, and every unit below them.
   `Depth` is how deep a unit is in the tree: the root has depth 1, North has depth 2.
-- `AddAsync` adds a seat for a verified identity, and returns it: the user id from the sign-in, here the `X-Dev-User` id. Adding a
-  seat needs `tenancy.seats.manage` for the whole tenant.
-- `PlaceAsync` places the seat at a unit. It needs `tenancy.seats.manage` at that unit. `primary: true` makes this
-  placement the seat's primary one.
+- `AddAsync` adds a seat for a verified identity, and returns it: the user id from the sign-in, here the
+  `X-Dev-User` id. Adding a seat needs `tenancy.seats.manage` for the whole tenant.
+- `PlaceAsync` places the seat at a unit, and returns the seat with its new placement. It needs
+  `tenancy.seats.manage` at that unit. `primary: true` makes this placement the seat's primary one.
+- A command returns the object its manager returns: the new unit, or the seat as the change left it. The route
+  decides which fields leave the API. `Describe` answers a seat's id and its placements, each with the roles granted
+  there.
 
 ### Try it
 
 As Ada (`X-Dev-User` Ada's id, `Tenant: harbor`):
 
-1. `POST /units` with `{ "parent": "<root id>", "name": "North" }`: `200`, North's id.
+1. `POST /units` with `{ "parent": "<root id>", "name": "North" }`: `200`, North with its id.
 2. The same request again: `409`, `units.name-taken`, from Harbor's rule.
-3. `POST /seats` with `{ "identity": "d0000000-0000-4000-8000-000000000002", "unit": "<North's id>" }`: Rhea's seat.
+3. `POST /seats` with `{ "identity": "d0000000-0000-4000-8000-000000000002", "unit": "<North's id>" }`: `200`,
+   Rhea's seat, placed at North with no roles.
 4. `POST /units` with `{ "parent": "<root id>", "name": "South Bay" }`: `200`.
 5. `GET /units`: Harbor Works, with `Harbor Works / North` and `Harbor Works / South Bay` below it.
 
@@ -1436,44 +1452,43 @@ may then add units below North. She may not add units below the root or below So
 
 **`Harbor.Tenancy.Application/Roles/CreateRole/CreateRole.cs`**
 
-```csharp {5-6,10-11}
+```csharp {2,6-7,11-12}
 using DDDToolkit.Supporting.Tenancy.Catalogue;
+using Harbor.Tenancy.Domain;
 
 namespace Harbor.Tenancy.Application.Roles.CreateRole;
 
 [RequiresPermission(TenancyPermissions.RolesManage)]
-public sealed record CreateRole(string Name, string Description, IReadOnlyList<string> Permissions) : ICommand<RoleId>, ITenancyRequest;
+public sealed record CreateRole(string Name, string Description, IReadOnlyList<string> Permissions) : ICommand<Role>, ITenancyRequest;
 
-public sealed class CreateRoleHandler(RoleManager roles) : ICommandHandler<CreateRole, RoleId>
+public sealed class CreateRoleHandler(RoleManager roles) : ICommandHandler<CreateRole, Role>
 {
-    public async ValueTask<RoleId> Handle(CreateRole command, CancellationToken cancellationToken)
-        => (await roles.CreateAsync(command.Name, command.Description, command.Permissions, cancellationToken)).Id;
+    public async ValueTask<Role> Handle(CreateRole command, CancellationToken cancellationToken)
+        => await roles.CreateAsync(command.Name, command.Description, command.Permissions, cancellationToken);
 }
 ```
 
 **`Harbor.Tenancy.Application/Grants/GrantRole/GrantRole.cs`**
 
-```csharp {5-6,12}
+```csharp {2,6-7,11-12}
 using DDDToolkit.Supporting.Tenancy.Catalogue;
+using Harbor.Tenancy.Domain.Aggregates.Seats;
 
 namespace Harbor.Tenancy.Application.Grants.GrantRole;
 
 [RequiresPermission(TenancyPermissions.GrantsManage)]
-public sealed record GrantRole(SeatId Seat, [AtUnit] OrganizationUnitId Unit, RoleId Role) : ICommand, ITenancyRequest;
+public sealed record GrantRole(SeatId Seat, [AtUnit] OrganizationUnitId Unit, RoleId Role) : ICommand<Seat>, ITenancyRequest;
 
-public sealed class GrantRoleHandler(SeatManager seats) : ICommandHandler<GrantRole>
+public sealed class GrantRoleHandler(SeatManager seats) : ICommandHandler<GrantRole, Seat>
 {
-    public async ValueTask<Unit> Handle(GrantRole command, CancellationToken cancellationToken)
-    {
-        await seats.GrantAsync(command.Seat, command.Role, command.Unit, until: null, reason: null, cancellationToken);
-        return Unit.Value;
-    }
+    public async ValueTask<Seat> Handle(GrantRole command, CancellationToken cancellationToken)
+        => await seats.GrantAsync(command.Seat, command.Role, command.Unit, until: null, reason: null, cancellationToken);
 }
 ```
 
 **`Harbor.Tenancy.Api/Roles/Rest/RolesEndpoints.cs`**
 
-```csharp {13-14}
+```csharp {13-17}
 using Harbor.Tenancy.Application.Roles.CreateRole;
 using Mediator;
 using Microsoft.AspNetCore.Builder;
@@ -1486,8 +1501,11 @@ internal static class RolesEndpoints
 {
     public static IEndpointRouteBuilder MapRolesEndpoints(this IEndpointRouteBuilder routes)
     {
-        routes.MapPost("/roles", async (NewRole body, ISender sender, CancellationToken cancellationToken)
-            => Results.Ok(new { role = await sender.Send(new CreateRole(body.Name, body.Description, body.Permissions), cancellationToken) }));
+        routes.MapPost("/roles", async (NewRole body, ISender sender, CancellationToken cancellationToken) =>
+        {
+            var role = await sender.Send(new CreateRole(body.Name, body.Description, body.Permissions), cancellationToken);
+            return Results.Ok(new { role = role.Id, name = role.Name, permissions = role.Permissions });
+        });
 
         return routes;
     }
@@ -1498,11 +1516,12 @@ internal static class RolesEndpoints
 
 **`Harbor.Tenancy.Api/Seats/Rest/SeatsEndpoints.cs`**: `POST /grants` beside the others.
 
-```csharp {1,20-24,31}
+```csharp {1,21-22,36}
 using Harbor.Tenancy.Application.Grants.GrantRole;
 using Harbor.Tenancy.Application.Seats.AddSeat;
 using Harbor.Tenancy.Application.Seats.WhoAmI;
 using Harbor.Tenancy.Contracts.ValueObjects;
+using Harbor.Tenancy.Domain.Aggregates.Seats;
 using Mediator;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -1517,15 +1536,19 @@ internal static class SeatsEndpoints
         routes.MapGet("/me", async (ISender sender, CancellationToken cancellationToken)
             => Results.Ok(await sender.Send(new WhoAmI(), cancellationToken)));
         routes.MapPost("/seats", async (NewSeat body, ISender sender, CancellationToken cancellationToken)
-            => Results.Ok(new { seat = await sender.Send(new AddSeat(body.Identity, body.Unit), cancellationToken) }));
-        routes.MapPost("/grants", async (NewGrant body, ISender sender, CancellationToken cancellationToken) =>
-        {
-            await sender.Send(new GrantRole(body.Seat, body.Unit, body.Role), cancellationToken);
-            return Results.NoContent();
-        });
+            => Results.Ok(Describe(await sender.Send(new AddSeat(body.Identity, body.Unit), cancellationToken))));
+        routes.MapPost("/grants", async (NewGrant body, ISender sender, CancellationToken cancellationToken)
+            => Results.Ok(Describe(await sender.Send(new GrantRole(body.Seat, body.Unit, body.Role), cancellationToken))));
 
         return routes;
     }
+
+    // The seat as the routes answer it: its id, and each unit where it is placed with the roles granted there.
+    private static object Describe(Seat seat) => new
+    {
+        seat = seat.Id,
+        placements = seat.Placements.Select(placement => new { unit = placement.UnitId, roles = placement.Grants.Select(grant => grant.RoleId) }),
+    };
 
     public sealed record NewSeat(Guid Identity, OrganizationUnitId Unit);
 
@@ -1563,7 +1586,8 @@ public static class TenancyModule
 
 ### What it does
 
-- `RoleManager`: Tenancy's manager of roles. `CreateAsync` returns the new role; the handler answers its id.
+- `RoleManager`: Tenancy's manager of roles. `CreateAsync` returns the new role, your `Role` class. The command
+  returns it, and the route answers its id, its name and its permissions.
 - `CreateAsync` refuses a permission the catalogue does not know (`tenancy.unknown-permission`). It also refuses a
   name the tenant already uses (`tenancy.role-name-taken`).
 - `GrantAsync(..., until: null, ...)`: the grant starts now and has no end. A value for `until` ends the grant at
@@ -1572,14 +1596,14 @@ public static class TenancyModule
   grant. `null` stores no reason.
 - The check before the handler requires `tenancy.grants.manage` at the unit. `GrantAsync` checks this again and adds
   the containment rules.
-- `ICommand` without a type argument is a command with no result. Its handler returns `Unit.Value`, Mediator's empty
-  result, and the route returns `204` with `Results.NoContent()`.
+- `GrantAsync` returns the seat with its new grant. The command returns the seat, and the route answers it with
+  `Describe`, as `POST /seats` does.
 
 ### Try it
 
 1. As Ada: `POST /roles` with `{ "name": "Area manager", "description": "Runs an area", "permissions":
-   ["tenancy.units.manage"] }`.
-2. As Ada: `POST /grants` with Rhea's seat, North, and that role.
+   ["tenancy.units.manage"] }`: `200`, the role with its id.
+2. As Ada: `POST /grants` with Rhea's seat, North, and that role: `200`, Rhea's seat, with the role at North.
 3. As Rhea (`X-Dev-User` Rhea's id): `POST /units` below North, "North Coast": `200`.
 4. As Rhea: `POST /units` below South Bay: `403`, `tenancy.not-permitted`. Her grant reaches North and the units
    below it, and South Bay is not below North.
@@ -1729,7 +1753,7 @@ public static class TenancyInfrastructure
 
 **`Harbor.Tenancy.Api/Units/Rest/UnitsEndpoints.cs`**: adds the new route next to the others.
 
-```csharp {3,22-23}
+```csharp {3,25-26}
 using Harbor.Tenancy.Application.Units.AddUnit;
 using Harbor.Tenancy.Application.Units.ListUnits;
 using Harbor.Tenancy.Application.Units.ManageableUnits;
@@ -1748,8 +1772,11 @@ internal static class UnitsEndpoints
         routes.MapGet("/units", async (ISender sender, CancellationToken cancellationToken)
             => Results.Ok(await sender.Send(new ListUnits(), cancellationToken)));
 
-        routes.MapPost("/units", async (NewUnit body, ISender sender, CancellationToken cancellationToken)
-            => Results.Ok(new { unit = await sender.Send(new AddUnit(body.Parent, body.Name), cancellationToken) }));
+        routes.MapPost("/units", async (NewUnit body, ISender sender, CancellationToken cancellationToken) =>
+        {
+            var unit = await sender.Send(new AddUnit(body.Parent, body.Name), cancellationToken);
+            return Results.Ok(new { unit = unit.Id, parent = unit.ParentId, name = unit.Name });
+        });
 
         routes.MapGet("/units/manageable", async (ISender sender, CancellationToken cancellationToken)
             => Results.Ok(await sender.Send(new ManageableUnits(), cancellationToken)));

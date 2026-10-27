@@ -894,18 +894,18 @@ what the checks of this step do. `[RequiresPermission(BoardPermissions.Edit)]` a
 ```csharp
 [RequiresPermission(BoardPermissions.Edit)]                       // what the caller needs: boards.edit
 public sealed record RenameBoard([OnResource] BoardId Board, string Name)  // [OnResource]: on this board
-    : ICommand, IBoardsRequest;                                    // IBoardsRequest: the behavior checks it
+    : ICommand<Board>, IBoardsRequest;                             // IBoardsRequest: the behavior checks it
 
-public sealed class RenameBoardHandler(IBoardRepository boards) : ICommandHandler<RenameBoard>
+public sealed class RenameBoardHandler(IBoardRepository boards) : ICommandHandler<RenameBoard, Board>
 {
     // Runs only for a caller who holds boards.edit on this board.
-    public async ValueTask<Unit> Handle(RenameBoard command, CancellationToken cancellationToken)
+    public async ValueTask<Board> Handle(RenameBoard command, CancellationToken cancellationToken)
     {
         var board = await boards.FindAsync(command.Board, cancellationToken)
             ?? throw Board.Codes.Refuse(MembershipRefusals.NotFound);
         board.Rename(command.Name);
         await boards.SaveAsync(cancellationToken);
-        return Unit.Value;
+        return board;
     }
 }
 ```
@@ -1290,18 +1290,18 @@ caller becomes the owner.
 
 **`Harbor.Boards.Application/Boards/OpenBoard/OpenBoard.cs`**
 
-```csharp {3-4,14-15,17}
+```csharp {3-4,14-15,17,20}
 namespace Harbor.Boards.Application.Boards.OpenBoard;
 
 [RequiresPermission(BoardPermissions.Create)]
-public sealed record OpenBoard([AtUnit] OrganizationUnitId Unit, string Name) : ICommand<BoardId>, IBoardsRequest;
+public sealed record OpenBoard([AtUnit] OrganizationUnitId Unit, string Name) : ICommand<Board>, IBoardsRequest;
 
 public sealed class OpenBoardHandler(
     IBoardRepository boards,
     TenancyAccessManager access,
-    TimeProvider clock) : ICommandHandler<OpenBoard, BoardId>
+    TimeProvider clock) : ICommandHandler<OpenBoard, Board>
 {
-    public async ValueTask<BoardId> Handle(OpenBoard command, CancellationToken cancellationToken)
+    public async ValueTask<Board> Handle(OpenBoard command, CancellationToken cancellationToken)
     {
         // The caller's tenant and seat: the board is the tenant's, and the caller owns it.
         var scope = access.CurrentTenant.Require();
@@ -1310,7 +1310,7 @@ public sealed class OpenBoardHandler(
         var board = new Board(BoardId.Create(), scope.Id, command.Unit, command.Name, owner, clock.GetUtcNow());
         boards.Add(board);
         await boards.SaveAsync(cancellationToken);
-        return board.Id;
+        return board;
     }
 }
 ```
@@ -1371,14 +1371,16 @@ public sealed record BoardListing(BoardId Id, string Name, OrganizationUnitId Un
 ```
 
 **The routes.** **Why:** each route only sends its request. The behavior checks the request before the handler runs.
+A command returns the board, and the route decides which of its fields leave the API.
 
 **`Harbor.Boards.Api/Boards/Rest/BoardsEndpoints.cs`**
 
-```csharp {17-22}
+```csharp {5,18-23,28-35}
 using Harbor.Boards.Application.Boards.ListBoards;
 using Harbor.Boards.Application.Boards.OpenBoard;
 using Harbor.Boards.Application.Boards.SeeBoard;
 using Harbor.Boards.Contracts.ValueObjects;
+using Harbor.Boards.Domain.Aggregates.Boards;
 using Harbor.Tenancy.Contracts.ValueObjects;
 using Mediator;
 using Microsoft.AspNetCore.Builder;
@@ -1392,7 +1394,7 @@ internal static class BoardsEndpoints
     public static IEndpointRouteBuilder MapBoardsEndpoints(this IEndpointRouteBuilder routes)
     {
         routes.MapPost("/boards", async (NewBoard body, ISender sender, CancellationToken cancellationToken)
-            => Results.Ok(new { board = await sender.Send(new OpenBoard(body.Unit, body.Name), cancellationToken) }));
+            => Results.Ok(Describe(await sender.Send(new OpenBoard(body.Unit, body.Name), cancellationToken))));
         routes.MapGet("/boards", async (ISender sender, CancellationToken cancellationToken)
             => Results.Ok(await sender.Send(new ListBoards(), cancellationToken)));
         routes.MapGet("/boards/{board}", async (BoardId board, ISender sender, CancellationToken cancellationToken)
@@ -1400,6 +1402,15 @@ internal static class BoardsEndpoints
 
         return routes;
     }
+
+    // The board as a command returns it: its id, its name, its unit, and each member with the roles it holds.
+    private static object Describe(Board board) => new
+    {
+        board = board.Id,
+        name = board.Name,
+        unit = board.UnitId,
+        members = board.People.Select(member => new { seat = member.MemberId, roles = member.Roles.Select(role => role.RoleId) }),
+    };
 
     public sealed record NewBoard(OrganizationUnitId Unit, string Name);
 }
@@ -1438,6 +1449,8 @@ public static class BoardsModule
 - `TimeProvider`: .NET's clock. Tenancy registers `TimeProvider.System` unless the host registered another one, such
   as a fixed clock in a test. The handler passes `clock.GetUtcNow()` to the board, because the board reads no clock.
 - `BoardId.Create()` makes the new board's id in code, before the save.
+- `OpenBoard` returns the new board. The route answers it with `Describe`: the board's id, its name, its unit, and
+  each member row with its roles.
 - `[OnResource] Board`: before the handler runs, the check reads that board. It refuses a caller who does not see the
   board, and a caller who sees it without the permission.
 - `Board.Codes.Refuse(MembershipRefusals.NotFound)`: for a board deleted between the check and the load. The refusal
@@ -1464,7 +1477,7 @@ Content-Type: application/json
 
 1. As Ada: `POST /grants` with Rhea's seat, North, and that role.
 2. As Rhea (`X-Dev-User` ending in `0002`): `POST /boards` with `{ "unit": "<North's id>", "name": "Crane schedule" }`:
-   `200`, the board's id. Keep it.
+   `200`, the board with its id. Keep the id.
 3. As Rhea: `POST /boards` at the root: `403`, `tenancy.not-permitted`, "You lack the permission boards.create."
 4. As Rhea: `GET /boards`: Crane schedule, with her seat as its owner.
 5. As Rhea: `GET /boards/<id>`: `version` 1, one member, Rhea, `isOwner: true`, no roles.
@@ -1640,30 +1653,33 @@ tenant. The rules say which roles to make.
 
 **`Harbor.Boards.Application/BoardRoles/SetUpBoardRoles/SetUpBoardRoles.cs`**
 
-```csharp {5-6,16,19}
+```csharp {5-6,16-17,20-22,26}
 using DDDToolkit.Supporting.Membership.UseCases;
 
 namespace Harbor.Boards.Application.BoardRoles.SetUpBoardRoles;
 
 [RequiresPermission(BoardPermissions.ManageRoles)]
-public sealed record SetUpBoardRoles : ICommand<int>, IBoardsRequest;
+public sealed record SetUpBoardRoles : ICommand<IReadOnlyList<BoardRole>>, IBoardsRequest;
 
 public sealed class SetUpBoardRolesHandler(
     IBoardRoleRepository roles,
-    TenancyAccessManager access) : ICommandHandler<SetUpBoardRoles, int>
+    TenancyAccessManager access) : ICommandHandler<SetUpBoardRoles, IReadOnlyList<BoardRole>>
 {
-    public async ValueTask<int> Handle(SetUpBoardRoles command, CancellationToken cancellationToken)
+    public async ValueTask<IReadOnlyList<BoardRole>> Handle(SetUpBoardRoles command, CancellationToken cancellationToken)
     {
         // The starter roles this tenant does not have yet; a role made from one before is not made again.
         var tenant = access.CurrentTenant.Require().Id;
         var missing = StarterRoles.Missing(BoardMembership.Rules, await roles.ListAsync(cancellationToken));
+        var made = new List<BoardRole>();
         foreach (var draft in missing)
         {
-            roles.Add(new BoardRole(BoardRoleId.Create(), tenant, draft, BoardMembership.Rules));
+            var role = new BoardRole(BoardRoleId.Create(), tenant, draft, BoardMembership.Rules);
+            roles.Add(role);
+            made.Add(role);
         }
 
         await roles.SaveAsync(cancellationToken);
-        return missing.Count;
+        return made;
     }
 }
 ```
@@ -1692,22 +1708,22 @@ cannot know. The board makes the change.
 
 **`Harbor.Boards.Application/Boards/AddMember/AddMember.cs`**
 
-```csharp {6-7,18-19,24}
+```csharp {6-7,18-19,24,26}
 using DDDToolkit.Supporting.Membership;
 using DDDToolkit.Supporting.Membership.UseCases;
 
 namespace Harbor.Boards.Application.Boards.AddMember;
 
 [RequiresPermission(BoardPermissions.ManageMembers)]
-public sealed record AddMember([OnResource] BoardId Board, SeatId Seat, BoardRoleId Role) : ICommand, IBoardsRequest;
+public sealed record AddMember([OnResource] BoardId Board, SeatId Seat, BoardRoleId Role) : ICommand<Board>, IBoardsRequest;
 
 public sealed class AddMemberHandler(
     IBoardRepository boards,
     MemberAdmission<BoardId, SeatId, BoardRoleId> admission,
     TenancyAccessManager access,
-    TimeProvider clock) : ICommandHandler<AddMember>
+    TimeProvider clock) : ICommandHandler<AddMember, Board>
 {
-    public async ValueTask<Unit> Handle(AddMember command, CancellationToken cancellationToken)
+    public async ValueTask<Board> Handle(AddMember command, CancellationToken cancellationToken)
     {
         // An active seat of this tenant, and a board role of this tenant in use.
         await admission.RequireMemberAsync(command.Seat, cancellationToken);
@@ -1718,7 +1734,7 @@ public sealed class AddMemberHandler(
         var now = clock.GetUtcNow();
         board.AddMember(command.Seat, command.Role, MemberPeriod.Open(now), now, addedBy: access.CurrentTenant.Require().Seat);
         await boards.SaveAsync(cancellationToken);
-        return Unit.Value;
+        return board;
     }
 }
 ```
@@ -1728,23 +1744,23 @@ it.
 
 **`Harbor.Boards.Application/Boards/RenameBoard/RenameBoard.cs`**
 
-```csharp {5-6}
+```csharp {5-6,8,10,16}
 using DDDToolkit.Supporting.Membership;
 
 namespace Harbor.Boards.Application.Boards.RenameBoard;
 
 [RequiresPermission(BoardPermissions.Edit)]
-public sealed record RenameBoard([OnResource] BoardId Board, string Name) : ICommand, IBoardsRequest;
+public sealed record RenameBoard([OnResource] BoardId Board, string Name) : ICommand<Board>, IBoardsRequest;
 
-public sealed class RenameBoardHandler(IBoardRepository boards) : ICommandHandler<RenameBoard>
+public sealed class RenameBoardHandler(IBoardRepository boards) : ICommandHandler<RenameBoard, Board>
 {
-    public async ValueTask<Unit> Handle(RenameBoard command, CancellationToken cancellationToken)
+    public async ValueTask<Board> Handle(RenameBoard command, CancellationToken cancellationToken)
     {
         var board = await boards.FindAsync(command.Board, cancellationToken)
             ?? throw Board.Codes.Refuse(MembershipRefusals.NotFound);
         board.Rename(command.Name);
         await boards.SaveAsync(cancellationToken);
-        return Unit.Value;
+        return board;
     }
 }
 ```
@@ -1753,7 +1769,7 @@ public sealed class RenameBoardHandler(IBoardRepository boards) : ICommandHandle
 
 **`Harbor.Boards.Api/BoardRoles/Rest/BoardRolesEndpoints.cs`**
 
-```csharp {14-17}
+```csharp {14-20}
 using Harbor.Boards.Application.BoardRoles.ListBoardRoles;
 using Harbor.Boards.Application.BoardRoles.SetUpBoardRoles;
 using Mediator;
@@ -1767,8 +1783,11 @@ internal static class BoardRolesEndpoints
 {
     public static IEndpointRouteBuilder MapBoardRolesEndpoints(this IEndpointRouteBuilder routes)
     {
-        routes.MapPost("/board-roles/starter", async (ISender sender, CancellationToken cancellationToken)
-            => Results.Ok(new { made = await sender.Send(new SetUpBoardRoles(), cancellationToken) }));
+        routes.MapPost("/board-roles/starter", async (ISender sender, CancellationToken cancellationToken) =>
+        {
+            var made = await sender.Send(new SetUpBoardRoles(), cancellationToken);
+            return Results.Ok(made.Select(role => new { role = role.Id, name = role.Name, permissions = role.Permissions }));
+        });
         routes.MapGet("/board-roles", async (ISender sender, CancellationToken cancellationToken)
             => Results.Ok(await sender.Send(new ListBoardRoles(), cancellationToken)));
 
@@ -1780,7 +1799,7 @@ internal static class BoardRolesEndpoints
 **`Harbor.Boards.Api/Boards/Rest/BoardsEndpoints.cs`**: adds routes to rename a board and to add a member, next to
 the others.
 
-```csharp {1,4,7,26-35,42,44}
+```csharp {1,4,7,27-30,46,48}
 using Harbor.Boards.Application.Boards.AddMember;
 using Harbor.Boards.Application.Boards.ListBoards;
 using Harbor.Boards.Application.Boards.OpenBoard;
@@ -1788,6 +1807,7 @@ using Harbor.Boards.Application.Boards.RenameBoard;
 using Harbor.Boards.Application.Boards.SeeBoard;
 using Harbor.Boards.Contracts.ValueObjects;
 using Harbor.Boards.Domain.Aggregates.BoardRoles.ValueObjects;
+using Harbor.Boards.Domain.Aggregates.Boards;
 using Harbor.Tenancy.Contracts.ValueObjects;
 using Mediator;
 using Microsoft.AspNetCore.Builder;
@@ -1801,24 +1821,27 @@ internal static class BoardsEndpoints
     public static IEndpointRouteBuilder MapBoardsEndpoints(this IEndpointRouteBuilder routes)
     {
         routes.MapPost("/boards", async (NewBoard body, ISender sender, CancellationToken cancellationToken)
-            => Results.Ok(new { board = await sender.Send(new OpenBoard(body.Unit, body.Name), cancellationToken) }));
+            => Results.Ok(Describe(await sender.Send(new OpenBoard(body.Unit, body.Name), cancellationToken))));
         routes.MapGet("/boards", async (ISender sender, CancellationToken cancellationToken)
             => Results.Ok(await sender.Send(new ListBoards(), cancellationToken)));
         routes.MapGet("/boards/{board}", async (BoardId board, ISender sender, CancellationToken cancellationToken)
             => Results.Ok(await sender.Send(new SeeBoard(board), cancellationToken)));
-        routes.MapPut("/boards/{board}/name", async (BoardId board, NewName body, ISender sender, CancellationToken cancellationToken) =>
-        {
-            await sender.Send(new RenameBoard(board, body.Name), cancellationToken);
-            return Results.NoContent();
-        });
-        routes.MapPost("/boards/{board}/members", async (BoardId board, NewMember body, ISender sender, CancellationToken cancellationToken) =>
-        {
-            await sender.Send(new AddMember(board, body.Seat, body.Role), cancellationToken);
-            return Results.NoContent();
-        });
+        routes.MapPut("/boards/{board}/name", async (BoardId board, NewName body, ISender sender, CancellationToken cancellationToken)
+            => Results.Ok(Describe(await sender.Send(new RenameBoard(board, body.Name), cancellationToken))));
+        routes.MapPost("/boards/{board}/members", async (BoardId board, NewMember body, ISender sender, CancellationToken cancellationToken)
+            => Results.Ok(Describe(await sender.Send(new AddMember(board, body.Seat, body.Role), cancellationToken))));
 
         return routes;
     }
+
+    // The board as a command returns it: its id, its name, its unit, and each member with the roles it holds.
+    private static object Describe(Board board) => new
+    {
+        board = board.Id,
+        name = board.Name,
+        unit = board.UnitId,
+        members = board.People.Select(member => new { seat = member.MemberId, roles = member.Roles.Select(role => role.RoleId) }),
+    };
 
     public sealed record NewBoard(OrganizationUnitId Unit, string Name);
 
@@ -1853,7 +1876,10 @@ public static class BoardsModule
 
 ### What it does
 
-- `ICommand<int>`: the command returns the number of roles it made.
+- `ICommand<IReadOnlyList<BoardRole>>`: the command returns the roles it made. It returns an empty list for a tenant
+  that has every starter role.
+- `AddMember` and `RenameBoard` return the board as the change left it. Their routes answer it with `Describe` from
+  step 6.
 - `StarterRoles.Missing(...)` returns a `CustomRoleDraft` for each starter role the tenant does not have. It compares
   `MadeFrom`, so a renamed role still counts as made.
 - `[OnResource] Board` with `boards.members.manage`: the owner passes the check. A member fails it, whatever role the
@@ -1866,12 +1892,14 @@ public static class BoardsModule
 ### Try it
 
 1. As Rhea: `POST /board-roles/starter`: `403`, `tenancy.not-permitted`. She does not hold `boards.roles.manage`.
-2. As Ada: `POST /board-roles/starter`: `{ "made": 1 }`. Again: `{ "made": 0 }`.
+2. As Ada: `POST /board-roles/starter`: `200`, one role, `editor`, with its id and its permissions. Again: `[]`.
 3. As Ada: `GET /board-roles`: `editor`, its id, `["boards.edit", "boards.view"]`. Keep the id.
 4. As Ada: `POST /seats` with `{ "identity": "d0000000-0000-4000-8000-000000000003", "unit": "<North's id>" }`: Leo's
    seat.
-5. As Rhea: `POST /boards/<id>/members` with `{ "seat": "<Leo's seat>", "role": "<editor's id>" }`: `204`.
-6. As Leo: `GET /boards`: Crane schedule. `PUT /boards/<id>/name` with `{ "name": "Crane schedule, week 44" }`: `204`.
+5. As Rhea: `POST /boards/<id>/members` with `{ "seat": "<Leo's seat>", "role": "<editor's id>" }`: `200`, the board,
+   with Leo and `editor` among its members.
+6. As Leo: `GET /boards`: Crane schedule. `PUT /boards/<id>/name` with `{ "name": "Crane schedule, week 44" }`: `200`,
+   the board with its new name.
 7. As Leo: `POST /boards/<id>/members` with Ada's seat: `403`, `boards.not-permitted`, "Doing this needs the permission
    boards.members.manage."
 8. As Rhea: Leo again: `409`, `boards.already-member`.
@@ -2066,7 +2094,7 @@ Build the host, run `npx supabase migration up --local`, and start the host agai
 4. As Leo: `GET /boards`: Crane schedule only. He holds no permission in the organization.
 5. As Rhea: `PUT /boards/<Quay plan's id>/name`: `403`, `boards.not-permitted`, "Doing this needs the permission
    boards.edit." Board keeper gives only `boards.create` and `boards.view`.
-6. As Ada: `POST /boards/<Crane schedule's id>/members` with her own seat and `editor`: `204`. Ada is not a member or
+6. As Ada: `POST /boards/<Crane schedule's id>/members` with her own seat and `editor`: `200`. Ada is not a member or
    the owner of the board. Her `boards.members.manage` at the root reaches it.
 7. As Ada: `GET /boards/<Crane schedule's id>`: three members. Rhea is first, as the owner. Leo and Ada follow, each
    with `editor`.
