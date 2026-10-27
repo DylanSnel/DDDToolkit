@@ -17,18 +17,18 @@ namespace DDDToolkit.Supporting.Tenancy;
 /// </para>
 /// <para>
 /// Nor does a seat have a name. No rule of Tenancy reads one, so what a person is shown by is the application's
-/// to say: a name per tenant on its own seat class, set in the callback of the use case that makes the seat; the
+/// to say: a name per tenant on its own seat class, set in the callback of <c>SeatManager.AddAsync</c>; the
 /// person's own name, from the identity provider; or a profile of its own, found by <see cref="Identity"/>. The
-/// directory answers the application's own seat, whole, and the application selects what a screen shows of it.
+/// <c>SeatManager</c>'s reads return the application's own seat, whole, and the application selects what a screen shows of it.
 /// </para>
 /// <para>
 /// Placements and grants are the seat's own: it checks every change to them, and hands them out as
-/// read-only views. What a role grants is not the seat's to know; the use case reads the role and passes its
+/// read-only views. What a role grants is not the seat's to know; the manager reads the role and passes its
 /// <see cref="RoleFacts"/> in.
 /// </para>
 /// <para>
 /// Every method that changes the seat takes who makes the change, <c>by</c>, and puts it on the event it
-/// raises; the use cases pass the actor of their caller. It is a record of the change and decides nothing: the
+/// raises; the managers pass the actor of their caller. It is a record of the change and decides nothing: the
 /// rules about a seat acting on itself read the seat a placement or a grant keeps, <c>placedBy</c> and
 /// <c>grantedBy</c>.
 /// </para>
@@ -116,7 +116,7 @@ public abstract partial class SeatAggregate<TSeatId, TTenantId, TUnitId, TRoleId
     }
 
     /// <summary>
-    /// Places the seat in a unit. Whether the unit is an active unit of the organization is the use case's to
+    /// Places the seat in a unit. Whether the unit is an active unit of the organization is the manager's to
     /// check: the organization is another aggregate.
     /// </summary>
     /// <param name="unit">The unit.</param>
@@ -202,12 +202,12 @@ public abstract partial class SeatAggregate<TSeatId, TTenantId, TUnitId, TRoleId
     /// <summary>
     /// Grants the seat a role at a unit where it is placed. Whether the granting seat may give the role (its
     /// permissions that manage access, held there long enough, and never a role that manages access to itself) is the
-    /// use case's to check, because it needs the catalogue and another seat's rights. A host that calls
+    /// manager's to check, because it needs the catalogue and another seat's rights. A host that calls
     /// <see cref="Grant"/> directly gets neither. A seat may be recorded as its own granter.
     /// </summary>
     /// <param name="unit">The unit of one of the seat's placements.</param>
     /// <param name="role">The role.</param>
-    /// <param name="facts">What the use case read about the role.</param>
+    /// <param name="facts">What the manager read about the role.</param>
     /// <param name="period">When the grant applies.</param>
     /// <param name="grantedBy">The seat granting it, or <see langword="null"/> for system work with no seat acting.</param>
     /// <param name="reason">Why, at most <see cref="MaxReasonLength"/> characters, or <see langword="null"/>.</param>

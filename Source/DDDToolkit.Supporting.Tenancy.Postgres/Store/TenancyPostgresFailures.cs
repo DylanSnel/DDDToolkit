@@ -7,17 +7,17 @@ namespace DDDToolkit.Supporting.Tenancy.Postgres;
 
 /// <summary>
 /// Turns the one thing Postgres refuses in a save of Tenancy's store that no index states into the refusal the
-/// use case gives for the same rule: a tenant's last administrator, which the trigger keeps at commit. The
+/// manager gives for the same rule: a tenant's last administrator, which the trigger keeps at commit. The
 /// unique indexes need no translation here, since each says in the mapping what a save that breaks it is refused
 /// with. A row a policy denies, and a statement an access guard refuses, such as the trigger on a seat's status
-/// when the calling seat lost a permission between the use case's check and its save, are refused with the toolkit's
+/// when the calling seat lost a permission between the manager's check and its save, are refused with the toolkit's
 /// <c>access.refused</c>, by its own interceptor. Anything else, the other triggers, which hold what may never
-/// be, included, is not a refusal: it is a write the use cases never make, and goes on as the failure it is.
+/// be, included, is not a refusal: it is a write the managers never make, and goes on as the failure it is.
 /// </summary>
 /// <remarks>
 /// It sees what fails in the store's save. The trigger that keeps an administrator checks when the transaction
 /// commits, so its refusal is translated when the save commits it: the store's own transaction, or the one it
-/// begins around a two-step save. A use case run inside a transaction the host began gets the failure at the
+/// begins around a two-step save. A manager run inside a transaction the host began gets the failure at the
 /// host's commit instead, as the <see cref="PostgresException"/> it is, with the constraint name
 /// <c>tenancy_administrator_remains</c>.
 /// </remarks>

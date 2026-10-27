@@ -85,12 +85,12 @@ public partial class Order { }
 | [Tenancy sample: design choices](docs/tenancy/sample/design-choices.md) | Every Tenancy design choice with its code, something to try in the sample, and the test that holds it |
 | [Tenancy: design and limits](docs/tenancy/design.md) | Why Tenancy is shaped the way it is, what it does not do, and upgrading from key to permission |
 | [Tenancy API: aggregates and entities](docs/tenancy/reference/aggregates.md) | Generated from the code: the templates of tenant, organization, unit, seat, role and invitation, with their value objects, invariants and events |
-| [Tenancy API: use cases](docs/tenancy/reference/use-cases.md) | Generated from the code: `TenancyUseCases` and every command, directory and record nested in it, and the registration a host calls |
-| [Tenancy API: catalogue and role packs](docs/tenancy/reference/catalogue.md) | Generated from the code: permissions, the catalogue, role packs and their sync |
-| [Tenancy API: callers and requirements](docs/tenancy/reference/callers.md) | Generated from the code: the Tenancy caller, actors, tenant selection and the requirement attributes |
-| [Tenancy API: ITenancy, its queries and row access](docs/tenancy/reference/queries.md) | Generated from the code: `ITenancy` and its queries, the read model, the projection and the row access rules |
+| [Tenancy API: managers](docs/tenancy/reference/managers.md) | Generated from the code: `TenantManager`, `OrganizationManager`, `SeatManager`, `RoleManager` and `InvitationManager`, the stores a storage package implements, and the registration a host calls |
+| [Tenancy API: catalogue and starter roles](docs/tenancy/reference/catalogue.md) | Generated from the code: permissions, the catalogue, starter roles and their sync |
+| [Tenancy API: access manager and callers](docs/tenancy/reference/callers.md) | Generated from the code: `TenancyAccessManager`, the Tenancy caller, actors, tenant selection and the requirement attributes, `[Operator]` among them |
+| [Tenancy API: queries and row access](docs/tenancy/reference/queries.md) | Generated from the code: `db.Tenancy()` and its queries, the read model, the projection and the row access rules |
 | [Tenancy API: refusals](docs/tenancy/reference/refusals.md) | Generated from the code: every refusal code and what it means |
-| [Tenancy API: Entity Framework](docs/tenancy/reference/entity-framework.md) | Generated from the code: the public API of the Entity Framework package |
+| [Tenancy API: Entity Framework](docs/tenancy/reference/entity-framework.md) | Generated from the code: the public API of the Entity Framework package, with `[OfTenant]` and the mapping of a context |
 | [Tenancy API: Postgres](docs/tenancy/reference/postgres.md) | Generated from the code: the public API of the Postgres package |
 | [Membership](docs/membership/overview.md) | The second supporting domain: access to one thing through the people on it, what it does and does not do, how its pieces connect, and what the application decides |
 | [Membership: the tutorial](docs/membership/tutorial.md) | Membership built into the Harbor application step by step: a board with its members, owner and roles, its database rules, and reach from above |

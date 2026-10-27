@@ -281,7 +281,7 @@ The context is a plain `DbContext` of your module that calls `modelBuilder.AddTe
 | `TenantSelection.SeatedTokenRoles` | `authenticated` | Your tokens give people with seats another role |
 | `OperatorTokenRoles` | Empty | You have [operators](operators-and-history.md#operators) |
 
-[`TenancyOptions`](reference/use-cases.md#tenancyoptionsttenantid-tseatid-tunitid-troleid) lists every option.
+[`TenancyOptions`](reference/managers.md#tenancyoptionsttenantid-tseatid-tunitid-troleid) lists every option.
 
 - `services.AddTenancy<TContext>()` and `modelBuilder.AddTenancy()` are generated, closed over your classes and ids
   ([A registration closed over your classes](../writing-a-supporting-domain.md#a-registration-closed-over-your-classes)).
@@ -295,7 +295,7 @@ The context is a plain `DbContext` of your module that calls `modelBuilder.AddTe
 ## Calling a use case
 
 Tenancy's use cases and their records are nested in one generic class,
-[`TenancyUseCases<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>`](reference/use-cases.md#tenancyusecasesttenant-ttenantid-torganization-tunit-tunitid-tseat-tseatid-trole-troleid).
+[`TenancyUseCases<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>`](reference/managers.md).
 In the project that declares your classes, the generator writes `TenancyUseCases` without type parameters, closed over
 your classes. The class is in the global namespace, whatever your module is called. Every project that references the
 declaring project names the use cases through `TenancyUseCases`:
@@ -555,10 +555,10 @@ flowchart TB
 
 - Your class's rules check the field in that save. When the callback throws, a later save in the same scope does not
   add the unit either. Set the root's kind through `ConfigureRoot`.
-- **Showing the kind.** [`ListUnitsAsync`](reference/use-cases.md#listunitsasynccancellationtoken) returns the units
+- **Showing the kind.** [`ListUnitsAsync`](reference/managers.md#listunitsasynccancellationtoken) returns the units
   the caller reads. Each unit is your unit class with all its fields, in a `UnitInTree` with its path and depth. A
   plain `Select` shows your field.
-- **By id.** [`UnitsByIdAsync`](reference/use-cases.md#unitsbyidasyncireadonlycollectiontunitid-cancellationtoken)
+- **By id.** [`UnitsByIdAsync`](reference/managers.md#unitsbyidasyncireadonlycollectiontunitid-cancellationtoken)
   returns a `NamedUnit` with the name, path and depth. A seat that may not read the rest of a unit still gets the
   unit's name this way. Use it when another module shows units by id.
 

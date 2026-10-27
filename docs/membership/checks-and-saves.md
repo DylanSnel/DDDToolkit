@@ -105,7 +105,7 @@ The default path has three limits:
 
 ## Access in your own queries
 
-[`IMemberQuestions<DocumentId>`](reference/use-cases.md#imemberquestionstresourceid) has methods about one resource
+[`IMemberQuestions<DocumentId>`](reference/use-cases.md#membershipaccessmanagertresource) has methods about one resource
 (`HoldAsync`, `RequireAsync`, `ViaAsync`) and a method about up to 200 resources (`PermissionsOnAsync`). Each method
 runs one statement. For your own queries, `Reach(permission)` returns a **reach**. You put the reach into your query,
 so a list runs as one statement and fetches no ids first ([tutorial step 6](tutorial.md#step-6-open-a-board-see-it-list-them)).

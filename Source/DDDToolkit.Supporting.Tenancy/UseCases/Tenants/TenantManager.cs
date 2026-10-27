@@ -107,6 +107,19 @@ public class TenantManager<
     /// <exception cref="Exceptions.InvalidValueObjectException">The slug does not follow <see cref="TenantSlug.Pattern"/>.</exception>
     /// <exception cref="ArgumentException">The command's role ids name a starter role the tenant is not given, or give one id twice.</exception>
     /// <exception cref="InvalidOperationException">The caller is system work in a tenant rather than outside any.</exception>
+    /// <example>
+    /// An operator's command that names no tenant runs as operator work in no tenant, which provisioning needs. A
+    /// sign-up form begins <c>access.BeginSystem()</c> around the call instead.
+    /// <code>
+    /// [Operator]
+    /// public sealed record ProvisionTenant(string Slug, string Name, Guid Administrator) : ICommand&lt;Tenant&gt;, ITenancyRequest;
+    ///
+    /// // In its handler:
+    /// return await tenants.ProvisionAsync(
+    ///     new TenantToProvision(command.Slug, command.Name, TenantShape.Hierarchical, RootName: command.Name, AdminIdentity: command.Administrator),
+    ///     cancellationToken);
+    /// </code>
+    /// </example>
     public async Task<TTenant> ProvisionAsync(
         TenantToProvision<TTenant, TTenantId, TUnit, TUnitId, TSeat, TSeatId, TRoleId> command,
         CancellationToken cancellationToken)
@@ -157,6 +170,11 @@ public class TenantManager<
     /// role's name, <c>tenancy.name-invalid</c> for a starter role's translated name or description.
     /// </exception>
     /// <exception cref="ArgumentException"><paramref name="roleIds"/> names a starter role of no role that would be made, or gives one id twice.</exception>
+    /// <example>
+    /// <code>
+    /// var tenant = await tenants.ChangeShapeAsync(TenantShape.Hierarchical, roleIds: null, language: null, cancellationToken);
+    /// </code>
+    /// </example>
     public async Task<TTenant> ChangeShapeAsync(
         TenantShape to,
         IReadOnlyDictionary<string, TRoleId>? roleIds,
@@ -212,6 +230,17 @@ public class TenantManager<
     /// <c>access.system-only</c> for a seat, <c>tenancy.tenant-state</c>, <c>tenancy.reason-required</c>.
     /// </exception>
     /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>
+    /// <example>
+    /// An operator's command. <c>[Operator]</c> runs its handler as operator work in the tenant of the
+    /// <c>[ForTenant]</c> member:
+    /// <code>
+    /// [Operator]
+    /// public sealed record SuspendTenant([ForTenant] TenantId Tenant, string Reason) : ICommand&lt;Tenant&gt;, ITenancyRequest;
+    ///
+    /// // In its handler:
+    /// return await tenants.SuspendAsync(command.Reason, cancellationToken);
+    /// </code>
+    /// </example>
     public Task<TTenant> SuspendAsync(string reason, CancellationToken cancellationToken)
         => ChangeStatusAsync((tenant, by) => tenant.Suspend(reason, by), cancellationToken);
 
@@ -220,6 +249,15 @@ public class TenantManager<
     /// <returns>The tenant, active again.</returns>
     /// <exception cref="Exceptions.RefusalException"><c>access.system-only</c> for a seat, <c>tenancy.tenant-state</c>.</exception>
     /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>
+    /// <example>
+    /// A job that puts a tenant back in use once its invoice is paid:
+    /// <code>
+    /// using (access.BeginSystemIn(invoice.Tenant))
+    /// {
+    ///     await tenants.ReactivateAsync(cancellationToken);
+    /// }
+    /// </code>
+    /// </example>
     public Task<TTenant> ReactivateAsync(CancellationToken cancellationToken)
         => ChangeStatusAsync((tenant, by) => tenant.Reactivate(by), cancellationToken);
 
@@ -231,6 +269,12 @@ public class TenantManager<
     /// <c>access.system-only</c> for a seat, <c>tenancy.tenant-state</c>, <c>tenancy.reason-required</c>.
     /// </exception>
     /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>
+    /// <example>
+    /// In the handler of an operator's command marked <c>[Operator]</c>, with the tenant on a <c>[ForTenant]</c> member:
+    /// <code>
+    /// return await tenants.CloseAsync(command.Reason, cancellationToken);
+    /// </code>
+    /// </example>
     public Task<TTenant> CloseAsync(string reason, CancellationToken cancellationToken)
         => ChangeStatusAsync((tenant, by) => tenant.Close(reason, by), cancellationToken);
 
@@ -259,12 +303,23 @@ public class TenantManager<
     /// </param>
     /// <param name="size">How many tenants the page holds: 1 to <see cref="MostPerPage"/>.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>
+    /// The page: each tenant with its name and its number of active seats, and the marker of the next page, or
+    /// <see langword="null"/> on the last page.
+    /// </returns>
     /// <exception cref="Exceptions.RefusalException">
-    /// <c>tenancy.operators-only</c> for anyone but an operator, asked before anything else, so nobody else
+    /// <c>tenancy.operators-only</c> for anyone but an operator, checked before anything else, so nobody else
     /// learns what a page holds; <c>tenancy.page-size-invalid</c>, with <c>Max</c>; <c>tenancy.cursor-invalid</c>
     /// for a marker the manager did not make. Each of the last two names its input in the argument
     /// <c>Field</c>: <c>size</c> and <c>after</c>.
     /// </exception>
+    /// <example>
+    /// The handler of an operator's query marked <c>[Operator]</c>:
+    /// <code>
+    /// var page = await tenants.ListAsync(query.After, size: 50, cancellationToken);
+    /// // page.Items: each listing's Tenant, Name and ActiveSeats; page.Next: the marker of the next page
+    /// </code>
+    /// </example>
     public async Task<TenantPage> ListAsync(string? after, int size, CancellationToken cancellationToken)
     {
         if (!options.IsOperator(callers.Current))

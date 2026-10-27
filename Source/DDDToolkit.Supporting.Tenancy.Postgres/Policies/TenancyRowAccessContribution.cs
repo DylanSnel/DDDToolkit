@@ -151,7 +151,7 @@ namespace DDDToolkit.Supporting.Tenancy.Postgres;
 /// <para>
 /// A signed-in user is found as the active seat of the verified identity in the tenant the connection names,
 /// in an active tenant; the tenant is the application's word and cannot reach a seat the identity does not
-/// have. This is a second lock behind the application, against its own queries that forget a condition, not
+/// have. RLS backs up the application against its own queries that forget a condition. It does not protect
 /// against SQL an attacker runs on its connection, which can switch roles and set anything.
 /// </para>
 /// </remarks>

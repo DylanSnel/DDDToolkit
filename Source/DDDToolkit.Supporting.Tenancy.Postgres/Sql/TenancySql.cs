@@ -827,7 +827,7 @@ internal static class TenancySql
     /// <para>
     /// They answer access facts only: ids, permissions, periods, statuses, a unit's parent, and a role's starter role and permissions.
     /// None answers what a seat, a unit or a role is called, so a module that reads Tenancy through them has no
-    /// name to show, and asks the directory for one, by id.
+    /// name to show, and asks the managers' reads for one, by id.
     /// </para>
     /// </summary>
     private static IEnumerable<ContributedFunction> ReadFunctions(TenancyTables tenancy)
@@ -1220,9 +1220,9 @@ internal static class TenancySql
     /// <summary>
     /// The policies on Tenancy's own tables. Signed-in users read their tenant's rows, except the rights, of which
     /// a seat reads its own, and the grants, which their own seat reads, a seat that manages grants, seats or units
-    /// where they are, and a seat that manages roles for the whole tenant; and they write where the use case asks the
+    /// where they are, and a seat that manages roles for the whole tenant; and they write where the manager asks the
     /// permission: at the unit for units, placements and grants, and held somewhere or for the whole tenant elsewhere; a seat
-    /// also takes away its own grants and placements, as the use cases let it. System work reads its tenant, and
+    /// also takes away its own grants and placements, as the managers let it. System work reads its tenant, and
     /// writes it in Tenancy's own scope. Nobody writes the rights: the database keeps them itself. Every table is kept
     /// to its tenant for system work and closed to anonymous callers, and kept to this contribution.
     /// <para>
@@ -1403,8 +1403,8 @@ internal static class TenancySql
 
     /// <summary>
     /// The policies on the invitations and on the digests of their tokens, where the model maps them
-    /// (<c>AddTenancyInvitations</c>). An invitation is read by the seats that manage seats at its unit, as the use
-    /// case lists it, and by whoever else a read rule of the application's on its invitation class lets read it, in
+    /// (<c>AddTenancyInvitations</c>). An invitation is read by the seats that manage seats at its unit, as the
+    /// manager lists it, and by whoever else a read rule of the application's on its invitation class lets read it, in
     /// the tenant: that read is a default. It is added by a seat that could add the seat and make the grant itself: one that manages
     /// seats for the whole tenant and grants at the unit, and for a role that manages access holds each of its permissions
     /// that do there while containment is on, as the policy on the grants asks; open, as its own, and never as system work's, which the
@@ -1841,9 +1841,9 @@ internal static class TenancySql
     /// transaction either. A grant reaches the rights of its seat, unit and role; a seat's status every right of
     /// the seat; a role's status, permissions or tenant every right the role gives. Whichever of the three a save writes
     /// last completes the rows, whatever order it writes them in. Only what differs is written. It runs as its
-    /// owner, since no caller may write a right, and for every writer, a statement past the use cases included.
+    /// owner, since no caller may write a right, and for every writer, a statement past the managers included.
     /// <para>
-    /// It takes no lock of its own. The use cases write a tenant's access one command after the other, so each
+    /// It takes no lock of its own. The managers write a tenant's access one command after the other, so each
     /// reads what the one before stored. Two transactions past them that write at once do not see each other: a
     /// right written from a role's permissions while another transaction takes the permission away is refused when the second
     /// of the two commits, by the check that every right comes from a grant; a right left unwritten because the
@@ -2231,14 +2231,14 @@ internal static class TenancySql
 
     /// <summary>
     /// The trigger on what a seat is: its id, the verified identity it belongs to, and its tenant, which none of
-    /// Tenancy's use cases changes once the seat is made. The identity links the seat to a person's account: a seat
+    /// Tenancy's managers changes once the seat is made. The identity links the seat to a person's account: a seat
     /// that wrote another one into it would hand the seat, and every permission it holds, to that account. A seat moved to
     /// another tenant would leave its placements, grants and rights in the one it came from, and a seat given another
     /// id would leave every row that names it, Tenancy's and the modules', naming none. The policy on the seats lets a
     /// seat change its own row, and a seats or a grants manager anywhere in the tenant change any seat's row, since
     /// every save of a seat writes its version; a policy cannot say which columns.
     /// <para>
-    /// No use case of Tenancy changes them once the seat is made: provisioning, adding a seat, accepting an invitation
+    /// No manager of Tenancy changes them once the seat is made: provisioning, adding a seat, accepting an invitation
     /// and an import write all three as they make it, which is an insert and none of this trigger's business. So every
     /// role but the scoped system role is refused: every seat, whatever it manages, background work as the
     /// application itself, and the tables' owner, so a migration or the SQL editor too. Tenancy's system work in a
@@ -2283,7 +2283,7 @@ internal static class TenancySql
     /// suspended or deactivated loses them. The policy on the seats lets a seats or a grants manager anywhere, and
     /// the seat itself, change the row, since every save of a seat writes its version. So a change of status by a
     /// seat is held here to what giving and taking away those grants one by one is held to: the calling seat holds
-    /// <see cref="TenancyPermissions.SeatsManage"/> for the whole tenant, as the use cases ask, and for every grant of
+    /// <see cref="TenancyPermissions.SeatsManage"/> for the whole tenant, as the managers ask, and for every grant of
     /// the seat that has not ended, of an active role, each permission of that role that manages access at the grant's
     /// unit. Its own grants that apply now are its own hold, so a seat that manages seats suspends itself. The
     /// second part is containment, which asks <c>permission_is_contained</c>: once the application turns containment off,
@@ -2291,11 +2291,11 @@ internal static class TenancySql
     /// <para>
     /// Only a seat is held to it. System work, which the policies keep to Tenancy's own scope, and the tables'
     /// owner are no seat: the function that finds the calling seat answers them nothing. How long the caller
-    /// holds each permission against the end of each grant stays the use case's to check.
+    /// holds each permission against the end of each grant stays the manager's to check.
     /// </para>
     /// <para>
     /// It refuses as a policy does, with <c>42501</c> and the toolkit's hint (<see cref="RowAccessModel.Refusal"/>),
-    /// since it is an access guard, holding who may and not what may be: a use case whose seat lost a permission between
+    /// since it is an access guard, holding who may and not what may be: a manager whose seat lost a permission between
     /// its check and its save is refused with <c>access.refused</c>. The triggers that hold what may never be, a
     /// tenant's last administrator, the rights, the paths and the rows that stay fixed, are no access guards and
     /// refuse with <c>check_violation</c>, whoever writes.

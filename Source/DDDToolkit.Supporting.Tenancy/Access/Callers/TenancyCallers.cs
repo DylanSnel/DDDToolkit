@@ -3,7 +3,7 @@ using DDDToolkit.Abstractions.Interfaces;
 namespace DDDToolkit.Supporting.Tenancy.Access;
 
 /// <summary>
-/// The Tenancy caller of the current flow of work, which every use case, access question and tenant filter
+/// The Tenancy caller of the current flow of work, which every manager, access question and tenant filter
 /// reads. It is kept apart from the toolkit's own <c>Callers</c>: that one says which person or which system
 /// is calling, this one which seat in which tenant, and a system caller there is never a system caller here.
 /// <para>

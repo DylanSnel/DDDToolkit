@@ -7,7 +7,7 @@ sidebar_label: Entity Framework
 
 # Membership API: Entity Framework
 
-The public API of `DDDToolkit.Supporting.Membership.EntityFramework`, by folder: the registration a host calls for each kind of resource, the mapping of a resource's member tables into the application's own context, the steps that put what the access questions decided into a module's own statements, and what an application answers for a resource whose roles or places it keeps itself.
+The public API of `DDDToolkit.Supporting.Membership.EntityFramework`, by folder: the registration a host calls for each kind of resource, the mapping of a resource's member tables into the application's own context, the queries on the resource's own set, `db.Boards.WhereIHold(permission)`, that put what the access manager decides into a module's own statements, and what an application answers for a resource whose roles or places it keeps itself.
 
 ## Registration
 
@@ -50,7 +50,8 @@ services.AddDocumentMembership<DocumentsContext>(DocumentMembership.Rules);
 
 What it registers is asked for by the resource, so there is one for each kind of resource an application has members on, its documents and its folders, in one container, and none gets another's rules:
 
-- [`IMemberQuestions<TResourceId>`](use-cases.md#imemberquestionstresourceid), the access questions of the resource, answered inside the context's own statements, which is what [`MemberAccessCheck<TResource, TResourceId>`](use-cases.md#memberaccesschecktresource-tresourceid) asks before a handler runs. That check is added for the module's request interface by the registration generated beside this one: `services.AddDocumentMemberAccess<IDocumentsRequest>()` ([`AddMemberAccess<TResource, TResourceId, TRequests>`](#addmemberaccessiservicecollection)).
+- [`MembershipAccessManager<TResource>`](use-cases.md#membershipaccessmanagertresource), the access manager of the resource, per scope, answered inside the context's own statements, which is what [`MemberAccessCheck<TResource, TResourceId>`](use-cases.md#memberaccesschecktresource-tresourceid) asks before a handler runs. That check is added for the module's request interface by the registration generated beside this one: `services.AddDocumentMemberAccess<IDocumentsRequest>()` ([`AddMemberAccess<TResource, TResourceId, TRequests>`](#addmemberaccessiservicecollection)).
+- What the queries on the resource's own set ask, `db.Documents.WhereIHold(permission)` ([`MemberQueryableExtensions`](#memberqueryableextensions)): they find it in the services the context was made with.
 - [`MemberAdmission<TResourceId, TMemberId, TRoleId>`](use-cases.md#memberadmissiontresourceid-tmemberid-troleid), what a handler asks before it changes the members, over the roles the rules declare ([`NamedRoles<TResourceId>`](use-cases.md#namedrolestresourceid)) or the rows of the roles kept for the resource, with the application's [`IMemberDirectory<TResourceId, TMemberId>`](use-cases.md#imemberdirectorytresourceid-tmemberid) and [`IMemberRolePolicy<TResourceId, TRoleId>`](use-cases.md#imemberrolepolicytresourceid-troleid) where it registered them.
 - A [`MembershipRegistration`](#membershipregistration), which a start-up check reads.
 - The `MemberHoldInterceptor`, one for every resource registered, which nothing uses until a context asks for the expert hold with [`MemberHoldDbContextOptionsExtensions.UseMemberHolds`](#usememberholdsdbcontextoptionsbuilder-iserviceprovider).
@@ -355,7 +356,11 @@ The role class stays the application's aggregate: its table, its other columns, 
 
 What it maps is the package's part of a role: the id, which the application makes; the name, the description and the starter role it was made from, each no longer than the role allows; the status as its name; and the permissions as a collection of texts in one column, which is what the access questions and the database's functions read. The id is stored by the application's generated converter, like the ids of its other entities. The starter role a role was made from is fixed once the row is there (`IsFixedAfterInsert`): the starter roles a customer lacks are found by it, so a save that changed it is refused, and the privileges a Postgres export writes leave the column out of what a caller may update.
 
-It leaves a mark on the role's entity type ([`MembershipModel`](#membershipmodel)) that names the resource the roles are of, as the class's template names it. That is how the access questions registered for the resource, and a package that writes database functions, find the roles of this resource and of no other: nothing else has to be registered for them. A uniqueness the application wants, a name used once among one customer's roles, is an index it declares with its own columns, as above; the package knows of no such column.
+It leaves a mark on the role's entity type ([`MembershipModel`](#membershipmodel)) that names the resource the roles are of, as the class's template names it. That is how the access questions registered for the resource, and a package that writes database functions, find the roles of this resource and of no other: nothing else has to be registered for them.
+
+A class that marks the organization its rows are of, with the marker the organization's package gives a domain class for it, gets two unique indexes over that property from this mapping. A name is used once in an organization, and an organization has each starter role once, which also keeps two set-ups of one organization at the same moment apart. Entity Framework names them, `IX_{table}_{property}_Name` and `IX_{table}_{property}_MadeFrom`. A context that wants a refusal of its own for a name used twice says it on the same index: `role.HasIndex(row => new { row.OrganizationId, row.Name }).RefusesAs(...)`. A customer of another kind, a garden say, is a column the package knows nothing of, and its indexes are the application's to declare, as above.
+
+A context that calls `AddDDDToolkitConventions()` needs no call of this: the role template names Membership's convention, which maps the class the same way. Call it for a class the context maps otherwise.
 
 **Parameters**
 
@@ -516,76 +521,194 @@ Namespace `DDDToolkit.Supporting.Membership.EntityFramework`.
 public static class MemberQueryableExtensions
 ```
 
-Puts what the access questions of a resource decided into a statement of the module's own, so "the documents I may see", "this document, and how I hold the permission on it" and "the permissions I hold on these documents" are each one statement of the module's context, and never a list of ids fetched first:
+Asks Membership inside a statement of your own, on the resource's own set: "the boards I may see" and "the permissions I hold on these boards" are each one statement of the context, and never a list of ids fetched first.
 
 ```csharp
-var seen = access.Reach(DocumentPermissions.View);
-var page = await db.Documents.Within(seen).OrderBy(document => document.Title).Take(20).ToListAsync(cancellationToken);
+var boards = await db.Boards.WhereIHold(BoardPermissions.View).OrderBy(board => board.Name).ToListAsync(cancellationToken);
 ```
 
-Each takes a reach the access questions registered for the resource made, for the caller the request runs as, and adds its conditions to the query it is called on: subqueries over the resource's own member rows. The query stays the module's, on whichever context it is running, the request's own or one made for one reading. A reach somebody else made is refused: what a statement is filtered by is always what the rules decided.
+The caller is the one current when the query is made, and the moment is fixed then: every part of one query answers for the same caller at the same moment. The rules, and what they ask of the application, come from the services the context was made with: the scope it is bound to (`PooledContexts.BindToScope<TContext>`, which `PooledContexts.AddScopedFromPool<TContext>` does for a scope's own context), or else the services its options were built with, which for `AddDbContext` are the scope's.
 
-A reach whose rules have rows say which roles give a permission, the resource's own role table or roles the application keeps elsewhere, or have the application say where a permission is held above, puts that into the query as well, as a subquery over the context the query runs on. On the request's own context nothing more is said. A query on another context, one made for one reading, hands that context over, as the last argument:
+What a query is filtered by puts subqueries over the resource's own member rows into it, and, where the rules have rows say which roles give a permission or have the application say where a permission is held above, queries of the context the statement runs on. A query on the set finds its context itself. A query that does not start at a set, one composed of others, hands its context over, as the last argument:
 
 ```csharp
-await using var db = await contexts.CreateDbContextAsync(cancellationToken);
-var page = await db.Crates.Within(seen, db).OrderBy(crate => crate.Label).Take(20).ToListAsync(cancellationToken);
+var open = db.Boards.Where(board => !board.Archived).WhereIHold(BoardPermissions.View, db);
 ```
+
+[`Within<TResource>`](#withiniqueryabletresource-memberreachtresource-dbcontext) and [`Reached<TResource>`](#reachediqueryabletresource-memberreachtresource-dbcontext) are the lower level, for a statement that reads how each resource is held: they take a reach the resource's access manager made ([`MembershipAccessManager.Reach`](use-cases.md#reachstring)).
 
 | Member | Summary |
 |---|---|
-| [`Within(IQueryable<TResource>, MemberReach<TResourceId>, DbContext?)`](#withiniqueryabletresource-memberreachtresourceid-dbcontext) | Those of `resources` that `reach` reaches: every one for the application's own work, none for a caller that is nobody's member. |
-| [`Reached(IQueryable<TResource>, MemberReach<TResourceId>, DbContext?)`](#reachediqueryabletresource-memberreachtresourceid-dbcontext) | Each of `resources` with how `reach` reaches it, as a step the query goes on from: for a statement that answers a resource's own columns next to whether the caller holds a permission on it. |
-| [`PermissionsOn(IQueryable<TResource>, MemberPermissionReach<TResourceId>, DbContext?)`](#permissionsoniqueryabletresource-memberpermissionreachtresourceid-dbcontext) | The permissions of `reach` the caller holds on those of `resources` it sees, one row for each permission held on a resource, for a statement that reads what its caller may do with each row of a list. |
+| [`WhereIHold(DbSet<TResource>, string)`](#whereiholddbsettresource-string) | The resources of the set the caller holds `permission` on: those it is a member of now with a role that gives the permission, for a permission that being a member gives those it is a member of at all, for a permission of the resource those it owns, and, where the rules let a resource be reached from above, those that sit where the caller holds the permission, or below. |
+| [`WhereIHold(IQueryable<TResource>, string, DbContext)`](#whereiholdiqueryabletresource-string-dbcontext) | Those of `resources` the caller holds `permission` on, as [`WhereIHold<TResource>`](#whereiholddbsettresource-string) answers it, for a query that does not start at the set. |
+| [`WhereIHold(DbSet<TResource>, IReadOnlyCollection<string>)`](#whereiholddbsettresource-ireadonlycollectionstring) | Which of `permissions` the caller holds on which resources of the set: one pair of resource and permission for each permission held on a resource it sees, for a list that shows what its caller may do with each row, in one statement. |
+| [`WhereIHold(IQueryable<TResource>, IReadOnlyCollection<string>, DbContext)`](#whereiholdiqueryabletresource-ireadonlycollectionstring-dbcontext) | Which of `permissions` the caller holds on which of `resources`, as [`WhereIHold<TResource>`](#whereiholddbsettresource-ireadonlycollectionstring) answers it, for a query that does not start at the set. |
+| [`Within(IQueryable<TResource>, MemberReach<TResource>, DbContext?)`](#withiniqueryabletresource-memberreachtresource-dbcontext) | Those of `resources` that `reach` reaches: every one for the application's own work, none for a caller that is nobody's member. |
+| [`Reached(IQueryable<TResource>, MemberReach<TResource>, DbContext?)`](#reachediqueryabletresource-memberreachtresource-dbcontext) | Each of `resources` with how `reach` reaches it, as a step the query goes on from: for a statement that answers a resource's own columns next to whether the caller holds a permission on it. |
 
-#### `Within(IQueryable<TResource>, MemberReach<TResourceId>, DbContext?)`
+#### `WhereIHold(DbSet<TResource>, string)`
 
 ```csharp
-public static IQueryable<TResource> Within<TResource, TResourceId>(
-    this IQueryable<TResource> resources,
-    MemberReach<TResourceId> reach,
-    DbContext? context = null)
+public static IQueryable<TResource> WhereIHold<TResource>(
+    this DbSet<TResource> resources,
+    string permission)
     where TResource : class
-    where TResourceId : struct, IEntityId, IEquatable<TResourceId>
 ```
 
-Those of `resources` that `reach` reaches: every one for the application's own work, none for a caller that is nobody's member.
+The resources of the set the caller holds `permission` on: those it is a member of now with a role that gives the permission, for a permission that being a member gives those it is a member of at all, for a permission of the resource those it owns, and, where the rules let a resource be reached from above, those that sit where the caller holds the permission, or below. Every resource for the application's own work; none for a caller that is nobody.
 
 **Parameters**
 
-- `resources`: A query over the resources, of the module's own context.
-- `reach`: A reach made by the access questions of this kind of resource.
+- `resources`: The resource's set on a context.
+- `permission`: A permission.
+
+**Type parameters**
+
+- `TResource`: The resource's aggregate.
+
+**Exceptions**
+
+- `ArgumentNullException`: `resources` is null.
+- `ArgumentException`: `permission` is blank.
+- `InvalidOperationException`: The resource is not registered with Membership in the services the context was made with, or with another context; or what its rules ask of the application is registered per scope, and the context is in none.
+
+#### `WhereIHold(IQueryable<TResource>, string, DbContext)`
+
+```csharp
+public static IQueryable<TResource> WhereIHold<TResource>(
+    this IQueryable<TResource> resources,
+    string permission,
+    DbContext context)
+    where TResource : class
+```
+
+Those of `resources` the caller holds `permission` on, as [`WhereIHold<TResource>`](#whereiholddbsettresource-string) answers it, for a query that does not start at the set.
+
+**Parameters**
+
+- `resources`: A query over the resources, of `context`.
+- `permission`: A permission.
+- `context`: The context the query runs on.
+
+**Type parameters**
+
+- `TResource`: The resource's aggregate.
+
+**Exceptions**
+
+- `ArgumentNullException`: `resources` or `context` is null.
+- `ArgumentException`: `permission` is blank.
+- `InvalidOperationException`: The resource is not registered with Membership in the services `context` was made with; what its rules ask of the application is registered per scope, and the context is in none; or the query runs on another context than `context`.
+
+#### `WhereIHold(DbSet<TResource>, IReadOnlyCollection<string>)`
+
+```csharp
+public static IQueryable<PermissionOn<TResource>> WhereIHold<TResource>(
+    this DbSet<TResource> resources,
+    IReadOnlyCollection<string> permissions)
+    where TResource : class
+```
+
+Which of `permissions` the caller holds on which resources of the set: one pair of resource and permission for each permission held on a resource it sees, for a list that shows what its caller may do with each row, in one statement. A resource the caller does not see is in no pair; the application's own work holds every permission on every resource.
+
+```csharp
+var held = await db.Boards.WhereIHold([BoardPermissions.Edit, BoardPermissions.Archive])
+    .Select(pair => new { pair.Resource.Id, pair.Permission })
+    .ToListAsync(cancellationToken);
+```
+
+**Parameters**
+
+- `resources`: The resource's set on a context.
+- `permissions`: Permissions, none of them blank.
+
+**Type parameters**
+
+- `TResource`: The resource's aggregate.
+
+**Exceptions**
+
+- `ArgumentNullException`: `resources` or `permissions` is null.
+- `ArgumentException`: A permission is blank.
+- `InvalidOperationException`: The resource is not registered with Membership in the services the context was made with, or with another context; or what its rules ask of the application is registered per scope, and the context is in none.
+
+#### `WhereIHold(IQueryable<TResource>, IReadOnlyCollection<string>, DbContext)`
+
+```csharp
+public static IQueryable<PermissionOn<TResource>> WhereIHold<TResource>(
+    this IQueryable<TResource> resources,
+    IReadOnlyCollection<string> permissions,
+    DbContext context)
+    where TResource : class
+```
+
+Which of `permissions` the caller holds on which of `resources`, as [`WhereIHold<TResource>`](#whereiholddbsettresource-ireadonlycollectionstring) answers it, for a query that does not start at the set.
+
+**Parameters**
+
+- `resources`: A query over the resources asked about, of `context`.
+- `permissions`: Permissions, none of them blank.
+- `context`: The context the query runs on.
+
+**Type parameters**
+
+- `TResource`: The resource's aggregate.
+
+**Exceptions**
+
+- `ArgumentNullException`: An argument is null.
+- `ArgumentException`: A permission is blank.
+- `InvalidOperationException`: The resource is not registered with Membership in the services `context` was made with; what its rules ask of the application is registered per scope, and the context is in none; or the query runs on another context than `context`.
+
+#### `Within(IQueryable<TResource>, MemberReach<TResource>, DbContext?)`
+
+```csharp
+public static IQueryable<TResource> Within<TResource>(
+    this IQueryable<TResource> resources,
+    MemberReach<TResource> reach,
+    DbContext? context = null)
+    where TResource : class
+```
+
+Those of `resources` that `reach` reaches: every one for the application's own work, none for a caller that is nobody's member. The lower level under [`WhereIHold<TResource>`](#whereiholdiqueryabletresource-string-dbcontext), for a reach made once and put into several statements, or made in one place and put into a statement in another.
+
+```csharp
+var seen = boardAccess.Reach(BoardPermissions.View);
+var page = await db.Boards.Within(seen).OrderBy(board => board.Name).Take(20).ToListAsync(cancellationToken);
+```
+
+**Parameters**
+
+- `resources`: A query over the resources.
+- `reach`: A reach made by the access manager of this kind of resource.
 - `context`: The context the query runs on, for a query that does not run on the request's own and a reach that puts a query of its own into it: the rows of the roles kept for the resource, or what the application answers. Left out otherwise.
 
 **Type parameters**
 
 - `TResource`: The resource's aggregate.
-- `TResourceId`: The resource's id.
 
 **Exceptions**
 
 - `ArgumentNullException`: `resources` or `reach` is null.
-- `ArgumentException`: `reach` was not made by the access questions registered for `TResource`.
+- `ArgumentException`: `reach` was not made by the access manager registered for `TResource`.
 - `InvalidOperationException`: The reach puts a query of its own into the query, the roles' rows or what the application answers, and the query runs on another context than `context`, or than the request's own when none is handed over.
 
-#### `Reached(IQueryable<TResource>, MemberReach<TResourceId>, DbContext?)`
+#### `Reached(IQueryable<TResource>, MemberReach<TResource>, DbContext?)`
 
 ```csharp
-public static IQueryable<MemberFound<TResource>> Reached<TResource, TResourceId>(
+public static IQueryable<MemberFound<TResource>> Reached<TResource>(
     this IQueryable<TResource> resources,
-    MemberReach<TResourceId> reach,
+    MemberReach<TResource> reach,
     DbContext? context = null)
     where TResource : class
-    where TResourceId : struct, IEntityId, IEquatable<TResourceId>
 ```
 
-Each of `resources` with how `reach` reaches it, as a step the query goes on from: for a statement that answers a resource's own columns next to whether the caller holds a permission on it. Nothing is left out here; put [`Within<TResource, TResourceId>`](#withiniqueryabletresource-memberreachtresourceid-dbcontext) in front, with the reach that sees, so a caller is answered only about what it may see:
+Each of `resources` with how `reach` reaches it, as a step the query goes on from: for a statement that answers a resource's own columns next to whether the caller holds a permission on it. Nothing is left out here; put [`WhereIHold<TResource>`](#whereiholdiqueryabletresource-string-dbcontext) or [`Within<TResource>`](#withiniqueryabletresource-memberreachtresource-dbcontext) in front, with the permission that sees, so a caller is answered only about what it may see:
 
 ```csharp
-var see = access.Reach(DocumentPermissions.View);
-var act = access.Reach(DocumentPermissions.Edit);
-var answer = await db.Documents.Where(document => document.Id == id)
-    .Within(see)
+var act = boardAccess.Reach(BoardPermissions.Edit);
+var answer = await db.Boards.Where(board => board.Id == id)
+    .WhereIHold(BoardPermissions.View, db)
     .Reached(act)
     .Select(found => new { found.Resource.Archived, found.AsMember, found.FromAbove, found.Until })
     .FirstOrDefaultAsync(cancellationToken);
@@ -596,50 +719,45 @@ var via = answer is null ? null : act.Via(answer.AsMember, answer.FromAbove);
 
 **Parameters**
 
-- `resources`: A query over the resources, of the module's own context.
-- `reach`: A reach made by the access questions of this kind of resource.
-- `context`: The context the query runs on, for a query that does not run on the request's own and a reach that puts a query of its own into it: the rows of the roles kept for the resource, or what the application answers. Left out otherwise.
+- `resources`: A query over the resources.
+- `reach`: A reach made by the access manager of this kind of resource.
+- `context`: The context the query runs on, for a query that does not run on the request's own and a reach that puts a query of its own into it. Left out otherwise.
 
 **Type parameters**
 
 - `TResource`: The resource's aggregate.
-- `TResourceId`: The resource's id.
 
 **Exceptions**
 
 - `ArgumentNullException`: `resources` or `reach` is null.
-- `ArgumentException`: `reach` was not made by the access questions registered for `TResource`.
-- `InvalidOperationException`: The reach puts a query of its own into the query, the roles' rows or what the application answers, and the query runs on another context than `context`, or than the request's own when none is handed over.
+- `ArgumentException`: `reach` was not made by the access manager registered for `TResource`.
+- `InvalidOperationException`: The reach puts a query of its own into the query, and the query runs on another context than `context`, or than the request's own when none is handed over.
 
-#### `PermissionsOn(IQueryable<TResource>, MemberPermissionReach<TResourceId>, DbContext?)`
+### `PermissionOn<TResource>`
 
 ```csharp
-public static IQueryable<MemberPermissionOn<TResourceId>> PermissionsOn<TResource, TResourceId>(
-    this IQueryable<TResource> resources,
-    MemberPermissionReach<TResourceId> reach,
-    DbContext? context = null)
+public sealed class PermissionOn<TResource>
     where TResource : class
-    where TResourceId : struct, IEntityId, IEquatable<TResourceId>
 ```
 
-The permissions of `reach` the caller holds on those of `resources` it sees, one row for each permission held on a resource, for a statement that reads what its caller may do with each row of a list. A permission is one row on a resource however many ways it is held there.
+A permission the caller holds on a resource: one row of what `db.Boards.WhereIHold([BoardPermissions.Edit, BoardPermissions.Archive])` answers, for a list that shows what its caller may do with each row. A permission is one row on a resource, however many ways the caller holds it there, and a resource the caller does not see is in no row.
 
-**Parameters**
+```csharp
+var buttons = await db.Boards.WhereIHold([BoardPermissions.Edit, BoardPermissions.Archive])
+    .Select(pair => new { pair.Resource.Id, pair.Permission })
+    .ToListAsync(cancellationToken);
+```
 
-- `resources`: A query over the resources asked about, of the module's own context.
-- `reach`: A reach made by the access questions of this kind of resource, for the permissions asked about.
-- `context`: The context the query runs on, for a query that does not run on the request's own and a reach that puts a query of its own into it: the rows of the roles kept for the resource, or what the application answers. Left out otherwise.
+A row is part of a statement: a query goes on from it to what it reads of the resource, as above.
 
 **Type parameters**
 
 - `TResource`: The resource's aggregate.
-- `TResourceId`: The resource's id.
 
-**Exceptions**
-
-- `ArgumentNullException`: `resources` or `reach` is null.
-- `ArgumentException`: `reach` was not made by the access questions registered for `TResource`.
-- `InvalidOperationException`: The reach puts a query of its own into the query, the roles' rows or what the application answers, and the query runs on another context than `context`, or than the request's own when none is handed over.
+| Member | Summary |
+|---|---|
+| `required TResource Resource { get; init; }` | The resource. |
+| `required string Permission { get; init; }` | The permission held on it. |
 
 ### `MemberFound<TResource>`
 
@@ -666,24 +784,6 @@ It is made by setting its members, which Entity Framework reads back as columns,
 | `required bool AsMember { get; init; }` | Whether the caller holds the permission on the resource as one of its members: it is a member now, with what the reach asks of a membership, a role that gives the permission, held now, or nothing more for a permission that being a member gives; or it owns the resource, and the permission is one its owner holds by owning it. |
 | `required DateTimeOffset? Until { get; init; }` | The first moment the caller no longer holds the permission on the resource that way, as its membership and its roles stand now, or `null` when that has no end, as for the resource's owner, and when [`AsMember`](#memberfoundtresource) is `false`. The end of the membership for a permission that being a member gives; for a permission a role gives, the end of the last role that gives it now, or of the membership if that ends sooner. It says nothing of a hold from above ([`FromAbove`](#memberfoundtresource)), which has no end the package knows: a caller that holds the permission that way as well keeps it past this moment, for as long as it sees the resource. The access questions say that in the hold they answer ([`MemberHold.Until`](use-cases.md#until)). |
 | `required bool FromAbove { get; init; }` | Whether the permission is held where the resource sits, or above it, as the application answers it. Always `false` for a resource whose rules do not let it be reached from above. |
-
-### `MemberPermissionOn<TResourceId>`
-
-```csharp
-public sealed class MemberPermissionOn<TResourceId>
-    where TResourceId : struct, IEntityId, IEquatable<TResourceId>
-```
-
-A permission the caller holds on a resource: one row of a statement that answers which permissions are held on which resources. A permission is one row on a resource, however many ways the caller holds it there.
-
-**Type parameters**
-
-- `TResourceId`: The resource's id.
-
-| Member | Summary |
-|---|---|
-| `required TResourceId Resource { get; init; }` | The resource. |
-| `required string Permission { get; init; }` | The permission held on it. |
 
 ## Answered by the application
 

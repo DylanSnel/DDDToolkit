@@ -11,7 +11,7 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// public sealed record SuspendTenant([ForTenant] TenantId Tenant, string Reason) : ICommand&lt;Tenant&gt;, ITenancyRequest;
 ///
 /// [Operator]
-/// public sealed record AllTenants(string? After) : IQuery&lt;TenantPage&gt;, ITenancyRequest;
+/// public sealed record AllTenants(string? After) : IQuery&lt;TenantManager.TenantPage&gt;, ITenancyRequest;
 /// </code>
 /// </summary>
 /// <remarks>
@@ -48,11 +48,24 @@ public sealed class OperatorAttribute : Attribute
     /// names with a <see cref="ForTenantAttribute"/> member, or no tenant where it names none.
     /// <see cref="OperatorTenant.FromRequest"/> is the tenant the request names beside the command.
     /// </summary>
+    /// <example>
+    /// A command that acts in the tenant the request names beside it, as tenant selection reads it:
+    /// <code>
+    /// [Operator(Tenant = OperatorTenant.FromRequest)]
+    /// public sealed record ReopenTenant(string Note) : ICommand&lt;Tenant&gt;, ITenancyRequest;
+    /// </code>
+    /// </example>
     public OperatorTenant Tenant { get; set; }
 
     /// <summary>
     /// The scope a command's operator work runs in. It is Tenancy's own, <c>tenancy</c>, by default. A module's own command
     /// names its module's scope, <c>projects</c> say. A scope has lower case letters, digits, <c>_</c> and <c>-</c>.
     /// </summary>
+    /// <example>
+    /// <code>
+    /// [Operator(Scope = "projects")]
+    /// public sealed record RenameTenantProject([ForTenant] TenantId Tenant, ProjectId Project, string Name) : ICommand, IProjectsRequest;
+    /// </code>
+    /// </example>
     public string Scope { get; set; } = TenancyWork.SystemScope;
 }

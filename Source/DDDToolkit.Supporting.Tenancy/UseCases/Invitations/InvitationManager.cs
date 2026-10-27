@@ -107,6 +107,12 @@ public class InvitationManager<
     /// <c>tenancy.unit-not-active</c>, <c>tenancy.role-not-active</c>, <c>tenancy.address-invalid</c>,
     /// <c>tenancy.invitation-grant-ends-first</c>.
     /// </exception>
+    /// <example>
+    /// <code>
+    /// var issued = await invitations.IssueAsync(command.Address, command.Unit, command.Role, command.Until, lifetime: null, cancellationToken);
+    /// // Send issued.Token to the address. Tenancy keeps only its digest.
+    /// </code>
+    /// </example>
     public async Task<IssuedInvitation> IssueAsync(
         string address,
         TUnitId unit,
@@ -171,6 +177,12 @@ public class InvitationManager<
     /// with the ids of the unit and the role.
     /// </summary>
     /// <inheritdoc cref="IssueAsync(string, TUnitId, TRoleId, DateTimeOffset?, TimeSpan?, CancellationToken, TInvitationId?)"/>
+    /// <example>
+    /// Tove is invited as Surveyor at North Coast. The invitation stays open for a week:
+    /// <code>
+    /// var issued = await invitations.IssueAsync("tove@example.com", northCoast, surveyor, grantUntil: null, lifetime: TimeSpan.FromDays(7), cancellationToken);
+    /// </code>
+    /// </example>
     public Task<IssuedInvitation> IssueAsync(
         string address,
         TUnit unit,
@@ -200,6 +212,11 @@ public class InvitationManager<
     /// <c>tenancy.invitation-not-found</c>, <c>tenancy.invitation-state</c> for one that was accepted or
     /// cancelled already.
     /// </exception>
+    /// <example>
+    /// <code>
+    /// var cancelled = await invitations.CancelAsync(command.Invitation, cancellationToken);
+    /// </code>
+    /// </example>
     public async Task<TInvitation> CancelAsync(TInvitationId invitation, CancellationToken cancellationToken)
     {
         var gate = Gate();
@@ -219,6 +236,11 @@ public class InvitationManager<
 
     /// <summary>Cancels an open invitation, as <see cref="CancelAsync(TInvitationId, CancellationToken)"/> does with its id.</summary>
     /// <inheritdoc cref="CancelAsync(TInvitationId, CancellationToken)"/>
+    /// <example>
+    /// <code>
+    /// var cancelled = await invitations.CancelAsync(issued.Invitation, cancellationToken);
+    /// </code>
+    /// </example>
     public Task<TInvitation> CancelAsync(TInvitation invitation, CancellationToken cancellationToken)
         => CancelAsync((invitation ?? throw new ArgumentNullException(nameof(invitation))).Id, cancellationToken);
 
@@ -270,6 +292,13 @@ public class InvitationManager<
     /// its issuer may no longer give what it offers.
     /// </exception>
     /// <exception cref="ConcurrencyConflictException">Another change of access in the tenant, another acceptance included, was saved first.</exception>
+    /// <example>
+    /// The handler of a request marked <c>[SignedIn]</c>, which names no tenant:
+    /// <code>
+    /// var accepted = await invitations.AcceptAsync(command.Token, verifiedAddress: null, cancellationToken, configure: seat =&gt; seat.Rename(command.DisplayName));
+    /// // accepted.Tenant.Slug selects the tenant on the next request
+    /// </code>
+    /// </example>
     public async Task<AcceptedInvitation> AcceptAsync(
         string token,
         string? verifiedAddress,
@@ -302,6 +331,14 @@ public class InvitationManager<
     /// no token: the store keeps its digest apart.
     /// </summary>
     /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The open invitations the caller manages, the soonest to end first.</returns>
+    /// <exception cref="RefusalException">The caller is nobody.</exception>
+    /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>
+    /// <example>
+    /// <code>
+    /// var open = await invitations.ListOpenAsync(cancellationToken);
+    /// </code>
+    /// </example>
     public async Task<IReadOnlyList<TInvitation>> ListOpenAsync(CancellationToken cancellationToken)
     {
         var gate = Gate();

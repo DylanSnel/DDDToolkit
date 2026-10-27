@@ -25,12 +25,12 @@ namespace DDDToolkit.Supporting.Tenancy;
 /// Whoever holds <see cref="TenancyPermissions.RolesManage"/> may put any permission into any role. That is on purpose:
 /// that permission is the administrator's permission, and an administrator can give themselves anything already. A permission
 /// added to a role reaches every seat that holds the role, seats that gave themselves the role included, so
-/// the use case lets an administrator alone add or take out a permission that manages access, or archive a role that
+/// the manager lets an administrator alone add or take out a permission that manages access, or archive a role that
 /// holds one.
 /// </para>
 /// <para>
 /// Every method that changes the role takes who makes the change, <c>by</c>, and puts it on the event it
-/// raises. The use cases pass the actor of their caller. A role is declared without the seat class and does not
+/// raises. The managers pass the actor of their caller. A role is declared without the seat class and does not
 /// know the seat id's type, so the methods take it: it follows from a caller's actor
 /// (<c>role.Archive(caller.Actor)</c>), and code that names nobody, an import or a test, names the type instead
 /// (<c>role.Archive&lt;SeatId&gt;()</c>).
@@ -175,7 +175,7 @@ public abstract partial class RoleAggregate<TRoleId, TTenantId>
 
     /// <summary>
     /// The permissions <see cref="SetPermissions{TSeatId}"/> would leave the role with, refused the same way, and nothing changed:
-    /// a use case decides on the role's future before it changes it.
+    /// a manager decides on the role's future before it changes it.
     /// </summary>
     internal IReadOnlyList<string> PermissionsAfterSetting(IReadOnlyCollection<string> permissions, TenancyCatalogue catalogue)
     {
@@ -274,7 +274,7 @@ public abstract partial class RoleAggregate<TRoleId, TTenantId>
 
     /// <summary>
     /// The permissions <see cref="FollowStarterRole{TSeatId}"/> would leave the role with, and what it would remember of its starter role,
-    /// refused the same way and nothing changed: a use case decides on the role's future before it changes it.
+    /// refused the same way and nothing changed: a manager decides on the role's future before it changes it.
     /// <see langword="null"/> for a role with no starter role to follow: made by hand, or made from a starter role the catalogue no
     /// longer has.
     /// </summary>

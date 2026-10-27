@@ -13,7 +13,7 @@ language. The words are defined in the [overview](overview.md).
 
 Tenancy stores the name of each unit and each role. It stores no name for a seat. You choose how a seat is shown
 ([How a seat is shown](#how-a-seat-is-shown)). A screen reads names from the **directory**, `TenancyDirectory`.
-[TenancyDirectory](reference/use-cases.md#tenancyusecasestenancydirectory) in the reference lists every member.
+[TenancyDirectory](reference/managers.md) in the reference lists every member.
 
 | Method | Returns |
 |---|---|

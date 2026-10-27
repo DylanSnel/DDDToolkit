@@ -49,13 +49,13 @@ namespace DDDToolkit.Supporting.Tenancy.Catalogue;
 /// On Postgres the database holds a seat, behind every query of its own, to the part a single statement shows:
 /// which roles that manage access it gives, changes and takes away at a unit, never to itself, the same for an
 /// invitation, and which seats holding one it stops. How long against its own hold, the administrator, and moves
-/// stay with the use cases, as they do for every rule of Tenancy's that a policy cannot see.
+/// stay with the managers, as they do for every rule of Tenancy's that a policy cannot see.
 /// <para>
 /// Off, a role or a permission that manages access goes as one that manages none: a seat that holds
 /// <see cref="TenancyPermissions.GrantsManage"/> at a unit gives every role there, to anyone placed there for as long as
 /// it says, and to itself for no longer than it holds that permission there; so in practice whoever holds a permission that
 /// manages access administers everything that permission reaches. Roles that manage no access go as they always do, and
-/// a move still gives the mover nothing. What keeps the access model sound stays either way: each use case asks
+/// a move still gives the mover nothing. What keeps the access model sound stays either way: each manager asks
 /// its permission where it acts, a tenant keeps an administrator, and a seat keeps its identity and its tenant. Leave it
 /// on when the database can be reached without the application's handlers, through Supabase's Data API say.
 /// </para>

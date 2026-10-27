@@ -7,7 +7,7 @@ sidebar_label: Aggregates and entities
 
 # Tenancy API: Aggregates and entities
 
-The templates the application's own classes derive from, in the order of the tree: the tenant, its organization and units, the seat with its placements and grants, the role, the invitation. Each section opens with the name the application sees, the template in brackets, and the attribute that declares the application's class; its value objects, invariants and events follow it.
+The templates the application's own classes derive from, in the order of the tree: the tenant, its organization and units, the seat with its placements and grants, the role, the invitation. Each section opens with the name the application sees, the template in brackets, and the attribute that declares the application's class. Its value objects, invariants and events follow it.
 
 ## Declaring the classes
 
@@ -26,7 +26,7 @@ Has the generator write Tenancy's classes this project does not declare, as the 
 [assembly: GenerateTenancyClasses]
 ```
 
-The project then has a `Tenant`, an `Organization`, an `OrganizationUnit`, a `Role` and a `Seat`, each declared with its template, and a `TenantId`, an `OrganizationUnitId`, a `RoleId` and a `SeatId`, each an `[EntityId<Guid>]`: public, in the project's root namespace, with everything the toolkit's generators write for a class and an id declared by hand, `modelBuilder.AddTenancy()` and the class the use cases are named through, `TenancyUseCases`, among them, and Membership's member list over a written `SeatId`. An organization shares its tenant's id, so there is no `OrganizationId`.
+The project then has a `Tenant`, an `Organization`, an `OrganizationUnit`, a `Role` and a `Seat`, each declared with its template, and a `TenantId`, an `OrganizationUnitId`, a `RoleId` and a `SeatId`, each an `[EntityId<Guid>]`: public, in the project's root namespace, with everything the toolkit's generators write for a class and an id declared by hand, `modelBuilder.AddTenancy()` and the managers, `SeatManager` and the others, among them, and Membership's member list over a written `SeatId`. An organization shares its tenant's id, so there is no `OrganizationId`.
 
 **Seen from the next project up.** Other generators of this project, HotChocolate's for one, do not see what the switch wrote: a module of one project with an `[ObjectType<Role>]` declares that class itself. Code outside the root namespace imports the written types with a `global using` of the root namespace, since a file's using does not reach the parts the generators write.
 
@@ -53,17 +53,47 @@ The project then has a `TenantId`, an `OrganizationUnitId`, a `RoleId` and a `Se
 
 It is an attribute apart, rather than an option of [`GenerateTenancyClassesAttribute`](#generatetenancyclassesattribute), so each project says in its own words what it gets, and a contracts project cannot be handed aggregates by a word left out.
 
+### `TenancyIdsAttribute<TTenantId, TSeatId, TUnitId, TRoleId>`
+
+```csharp
+[AttributeUsage(AttributeTargets.Assembly, Inherited = false)]
+public sealed class TenancyIdsAttribute<TTenantId, TSeatId, TUnitId, TRoleId> : Attribute
+    where TTenantId : struct, IEntityId, IEquatable<TTenantId>
+    where TSeatId : struct, IEntityId, IEquatable<TSeatId>
+    where TUnitId : struct, IEntityId, IEquatable<TUnitId>
+    where TRoleId : struct, IEntityId, IEquatable<TRoleId>
+```
+
+Says which of a project's ids are Tenancy's, for a module that sees Tenancy's ids and none of its classes. Write it once, in the module's application project:
+
+```csharp
+using DDDToolkit.Supporting.Tenancy;
+
+[assembly: TenancyIds<TenantId, SeatId, OrganizationUnitId, RoleId>]
+```
+
+The generator then writes Tenancy's names for those ids into the module, as it writes them into the module that declares the classes. The project with the line gets `TenancyAccessManager`, in its root namespace, so the module's code under that namespace names it without a using. The module's project that holds its context, below the one with the line, gets `db.Tenancy()`, `services.AddTenancyAccess<TRequests, TContext>()`, which registers that `TenancyAccessManager` too, and `modelBuilder.AddTenancyReadFunctions()`. None of them names an id again.
+
+The module that declares Tenancy's classes needs no line: the generator reads the ids from the classes. A class the module declares with one of Tenancy's templates wins over the line.
+
+**Type parameters**
+
+- `TTenantId`: The id of the application's tenant class.
+- `TSeatId`: The id of the application's seat class.
+- `TUnitId`: The id of the application's organization unit class.
+- `TRoleId`: The id of the application's role class.
+
 ### `TenancyInstances`
 
 ```csharp
 public static class TenancyInstances
 ```
 
-Makes new instances of the application's own Tenancy classes, which the package cannot name, and puts them in their first state with their creation event raised. The use cases create through these, and so can tests, seeding and imports.
+Makes new instances of the application's own Tenancy classes, which the package cannot name, and puts them in their first state with their creation event raised. The managers create through these, and so can tests, seeding and imports.
 
 There are no factories to write. Each class is made through the parameterless constructor the generator writes on every class declared with a template, and the parent does what a constructor would. A field the application added starts at its default; set it in a method of the class after creation, or in a handler of the creation event.
 
-Each takes who makes the instance, `by`, for its creation event: the use cases pass the actor of their caller, and seeding or an import that names nobody leaves it out.
+Each takes who makes the instance, `by`, for its creation event: the managers pass the actor of their caller, and seeding or an import that names nobody leaves it out.
 
 ```csharp
 var seat = TenancyInstances.NewSeat<ShopSeat, SeatId, TenantId, OrganizationUnitId, RoleId>(
@@ -196,13 +226,13 @@ public static TRole NewRole<TRole, TRoleId, TTenantId, TSeatId>(
     where TSeatId : struct, IEntityId, IEquatable<TSeatId>
 ```
 
-A new active role, its permissions expanded from the catalogue, with [`RoleCreated<TTenantId, TRoleId, TSeatId>`](#rolecreatedttenantid-troleid-tseatid) raised. A role made from a pack remembers the pack's permissions as the catalogue builds it, whatever permissions the draft gives the role: an import's own permissions are the tenant's, and a later sync of the packs leaves them as they are.
+A new active role, its permissions expanded from the catalogue, with [`RoleCreated<TTenantId, TRoleId, TSeatId>`](#rolecreatedttenantid-troleid-tseatid) raised. A role made from a starter role remembers the starter role's permissions as the catalogue builds it, whatever permissions the draft gives the role: an import's own permissions are the tenant's, and a later sync of the starter roles leaves them as they are.
 
 **Parameters**
 
 - `id`: Its id.
 - `tenantId`: The tenant it belongs to.
-- `draft`: Its name, description, permissions and the pack it comes from.
+- `draft`: Its name, description, permissions and the starter role it comes from.
 - `catalogue`: The catalogue its permissions come from.
 - `by`: Who makes it, for its creation event; `null` when nobody is named.
 
@@ -240,7 +270,7 @@ public static TInvitation NewInvitation<TInvitation, TInvitationId, TTenantId, T
     where TSeatId : struct, IEntityId, IEquatable<TSeatId>
 ```
 
-A new open invitation, with [`InvitationIssued<TTenantId, TInvitationId, TUnitId, TRoleId, TSeatId>`](#invitationissuedttenantid-tinvitationid-tunitid-troleid-tseatid) raised. It has no token: the use case that issues an invitation makes one and hands its digest to the store with the invitation, so an invitation made here and saved by hand is one nobody can accept.
+A new open invitation, with [`InvitationIssued<TTenantId, TInvitationId, TUnitId, TRoleId, TSeatId>`](#invitationissuedttenantid-tinvitationid-tunitid-troleid-tseatid) raised. It has no token: the manager that issues an invitation makes one and hands its digest to the store with the invitation, so an invitation made here and saved by hand is one nobody can accept.
 
 **Parameters**
 
@@ -289,7 +319,7 @@ Its status moves one way: provisioned, active, suspended and active again as oft
 
 Nothing here is virtual. A class declared with the template adds fields, methods, entities and rules of its own, and reacts to this tenant's domain events; it does not change what the package decides.
 
-Every method that changes the tenant takes who makes the change, `by`, and puts it on the event it raises. The use cases pass the actor of their caller. A tenant is declared without the seat class and does not know the seat id's type, so the methods take it: it follows from a caller's actor (`tenant.Suspend(reason, caller.Actor)`), and code that names nobody, an import or a test, names the type instead (`tenant.Activate<SeatId>()`).
+Every method that changes the tenant takes who makes the change, `by`, and puts it on the event it raises. The managers pass the actor of their caller. A tenant is declared without the seat class and does not know the seat id's type, so the methods take it: it follows from a caller's actor (`tenant.Suspend(reason, caller.Actor)`), and code that names nobody, an import or a test, names the type instead (`tenant.Activate<SeatId>()`).
 
 **Type parameters**
 
@@ -675,7 +705,7 @@ A tenant became active.
 |---|---|
 | [`TenantActivated(TTenantId, TenancyActor<TSeatId>?)`](#tenantactivatedttenantid-tenancyactortseatid) | The primary constructor: the type's summary says what it makes. |
 | `TTenantId TenantId { get; init; }` | The tenant activated. |
-| `TenancyActor<TSeatId>? By { get; init; }` | Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's use cases, with no actor handed to it. |
+| `TenancyActor<TSeatId>? By { get; init; }` | Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's managers, with no actor handed to it. |
 
 #### `TenantActivated(TTenantId, TenancyActor<TSeatId>?)`
 
@@ -688,7 +718,7 @@ The primary constructor: the type's summary says what it makes.
 **Parameters**
 
 - `TenantId`: The tenant activated.
-- `By`: Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's use cases, with no actor handed to it.
+- `By`: Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's managers, with no actor handed to it.
 
 ### `TenantClosed<TTenantId, TSeatId>`
 
@@ -705,7 +735,7 @@ A tenant was closed, for good.
 | [`TenantClosed(TTenantId, string, TenancyActor<TSeatId>?)`](#tenantclosedttenantid-string-tenancyactortseatid) | The primary constructor: the type's summary says what it makes. |
 | `TTenantId TenantId { get; init; }` | The tenant closed. |
 | `string Reason { get; init; }` | Why it was closed, as the command gave it. |
-| `TenancyActor<TSeatId>? By { get; init; }` | Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's use cases, with no actor handed to it. |
+| `TenancyActor<TSeatId>? By { get; init; }` | Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's managers, with no actor handed to it. |
 
 #### `TenantClosed(TTenantId, string, TenancyActor<TSeatId>?)`
 
@@ -719,7 +749,7 @@ The primary constructor: the type's summary says what it makes.
 
 - `TenantId`: The tenant closed.
 - `Reason`: Why it was closed, as the command gave it.
-- `By`: Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's use cases, with no actor handed to it.
+- `By`: Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's managers, with no actor handed to it.
 
 ### `TenantProvisioned<TTenantId, TSeatId>`
 
@@ -737,7 +767,7 @@ A tenant was provisioned: it exists, and is not active yet.
 | `TTenantId TenantId { get; init; }` | The tenant provisioned. |
 | `string Slug { get; init; }` | The slug it is known by. |
 | `TenantShape Shape { get; init; }` | Its shape: [`TenantShape.Flat`](#tenantshape), the root alone, or [`TenantShape.Hierarchical`](#tenantshape), a tree of units below it. |
-| `TenancyActor<TSeatId>? By { get; init; }` | Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's use cases, with no actor handed to it. |
+| `TenancyActor<TSeatId>? By { get; init; }` | Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's managers, with no actor handed to it. |
 
 #### `TenantProvisioned(TTenantId, string, TenantShape, TenancyActor<TSeatId>?)`
 
@@ -756,7 +786,7 @@ The primary constructor: the type's summary says what it makes.
 - `TenantId`: The tenant provisioned.
 - `Slug`: The slug it is known by.
 - `Shape`: Its shape: [`TenantShape.Flat`](#tenantshape), the root alone, or [`TenantShape.Hierarchical`](#tenantshape), a tree of units below it.
-- `By`: Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's use cases, with no actor handed to it.
+- `By`: Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's managers, with no actor handed to it.
 
 ### `TenantReactivated<TTenantId, TSeatId>`
 
@@ -772,7 +802,7 @@ A suspended tenant became active again.
 |---|---|
 | [`TenantReactivated(TTenantId, TenancyActor<TSeatId>?)`](#tenantreactivatedttenantid-tenancyactortseatid) | The primary constructor: the type's summary says what it makes. |
 | `TTenantId TenantId { get; init; }` | The tenant reactivated. |
-| `TenancyActor<TSeatId>? By { get; init; }` | Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's use cases, with no actor handed to it. |
+| `TenancyActor<TSeatId>? By { get; init; }` | Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's managers, with no actor handed to it. |
 
 #### `TenantReactivated(TTenantId, TenancyActor<TSeatId>?)`
 
@@ -785,7 +815,7 @@ The primary constructor: the type's summary says what it makes.
 **Parameters**
 
 - `TenantId`: The tenant reactivated.
-- `By`: Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's use cases, with no actor handed to it.
+- `By`: Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's managers, with no actor handed to it.
 
 ### `TenantShapeChanged<TTenantId, TSeatId>`
 
@@ -803,7 +833,7 @@ A tenant's shape changed, which only ever goes from flat to hierarchical.
 | `TTenantId TenantId { get; init; }` | The tenant. |
 | `TenantShape From { get; init; }` | The shape it had. |
 | `TenantShape To { get; init; }` | The shape it has now. |
-| `TenancyActor<TSeatId>? By { get; init; }` | Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's use cases, with no actor handed to it. |
+| `TenancyActor<TSeatId>? By { get; init; }` | Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's managers, with no actor handed to it. |
 
 #### `TenantShapeChanged(TTenantId, TenantShape, TenantShape, TenancyActor<TSeatId>?)`
 
@@ -822,7 +852,7 @@ The primary constructor: the type's summary says what it makes.
 - `TenantId`: The tenant.
 - `From`: The shape it had.
 - `To`: The shape it has now.
-- `By`: Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's use cases, with no actor handed to it.
+- `By`: Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's managers, with no actor handed to it.
 
 ### `TenantSuspended<TTenantId, TSeatId>`
 
@@ -839,7 +869,7 @@ A tenant was suspended.
 | [`TenantSuspended(TTenantId, string, TenancyActor<TSeatId>?)`](#tenantsuspendedttenantid-string-tenancyactortseatid) | The primary constructor: the type's summary says what it makes. |
 | `TTenantId TenantId { get; init; }` | The tenant suspended. |
 | `string Reason { get; init; }` | Why it was suspended, as the command gave it. |
-| `TenancyActor<TSeatId>? By { get; init; }` | Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's use cases, with no actor handed to it. |
+| `TenancyActor<TSeatId>? By { get; init; }` | Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's managers, with no actor handed to it. |
 
 #### `TenantSuspended(TTenantId, string, TenancyActor<TSeatId>?)`
 
@@ -853,7 +883,7 @@ The primary constructor: the type's summary says what it makes.
 
 - `TenantId`: The tenant suspended.
 - `Reason`: Why it was suspended, as the command gave it.
-- `By`: Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's use cases, with no actor handed to it.
+- `By`: Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's managers, with no actor handed to it.
 
 ## Organization
 
@@ -876,7 +906,7 @@ The tree is one aggregate so that its rules hold for the whole of it at once: ex
 
 The walks over the tree keep a visited set, and the walks up and down by level stop one step past [`MaxDepth`](#organization-organizationaggregatettenantid-tunit-tunitid), so a tree that is broken all the same (written by hand into the database, say) never makes them loop; the invariants report what is wrong with it.
 
-Every method that changes the organization takes who makes the change, `by`, and puts it on the event it raises. The use cases pass the actor of their caller. An organization is declared without the seat class and does not know the seat id's type, so the methods take it: it follows from a caller's actor (`organization.ArchiveUnit(unit, caller.Actor)`), and code that names nobody, an import or a test, names the type instead (`organization.ArchiveUnit<SeatId>(unit)`).
+Every method that changes the organization takes who makes the change, `by`, and puts it on the event it raises. The managers pass the actor of their caller. An organization is declared without the seat class and does not know the seat id's type, so the methods take it: it follows from a caller's actor (`organization.ArchiveUnit(unit, caller.Actor)`), and code that names nobody, an import or a test, names the type instead (`organization.ArchiveUnit<SeatId>(unit)`).
 
 **Type parameters**
 
@@ -1015,7 +1045,7 @@ public void MoveUnit<TSeatId>(TUnitId id, TUnitId newParentId, TenancyActor<TSea
     where TSeatId : struct, IEntityId, IEquatable<TSeatId>
 ```
 
-Moves a unit, and everything below it, under another active unit. What a permission held above the unit reaches changes with it, which is why the use case also guards the move against concurrent grants.
+Moves a unit, and everything below it, under another active unit. What a permission held above the unit reaches changes with it, which is why the manager also guards the move against concurrent grants.
 
 **Parameters**
 
@@ -1038,7 +1068,7 @@ public void ArchiveUnit<TSeatId>(TUnitId id, TenancyActor<TSeatId>? by = null)
     where TSeatId : struct, IEntityId, IEquatable<TSeatId>
 ```
 
-Archives a unit that has no active unit below it. Seats placed there and rights granted there keep working. Nothing new goes to it: no unit is added below it or moved under it here, and the use cases place no seat and grant no role there.
+Archives a unit that has no active unit below it. Seats placed there and rights granted there keep working. Nothing new goes to it: no unit is added below it or moved under it here, and the managers place no seat and grant no role there.
 
 **Parameters**
 
@@ -1180,7 +1210,7 @@ One unit of a tenant's organization: a company, a region, a site, whatever the a
 
 A unit belongs to its organization, and nothing else changes it: every mutator here is internal, and the organization checks the tree before it calls one.
 
-It has no kind. Nothing about access reads what kind of unit a unit is, so Tenancy keeps none: an application that tells regions from sites adds a field of its own to its class, an enum say, and sets it in the callback the use cases take when they make a unit (`TenantToProvision.ConfigureRoot` and the `configure` of `OrganizationCommands.AddUnitAsync`).
+It has no kind. Nothing about access reads what kind of unit a unit is, so Tenancy keeps none: an application that tells regions from sites adds a field of its own to its class, an enum say, and sets it in the callback the managers take when they make a unit (`TenantToProvision.ConfigureRoot` and the `configure` of `OrganizationManager.AddUnitAsync`).
 
 **Type parameters**
 
@@ -1446,7 +1476,7 @@ The organization's name changed.
 |---|---|
 | [`OrganizationRenamed(TTenantId, TenancyActor<TSeatId>?)`](#organizationrenamedttenantid-tenancyactortseatid) | The primary constructor: the type's summary says what it makes. |
 | `TTenantId TenantId { get; init; }` | The tenant whose organization it is. |
-| `TenancyActor<TSeatId>? By { get; init; }` | Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's use cases, with no actor handed to it. |
+| `TenancyActor<TSeatId>? By { get; init; }` | Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's managers, with no actor handed to it. |
 
 #### `OrganizationRenamed(TTenantId, TenancyActor<TSeatId>?)`
 
@@ -1459,7 +1489,7 @@ The primary constructor: the type's summary says what it makes.
 **Parameters**
 
 - `TenantId`: The tenant whose organization it is.
-- `By`: Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's use cases, with no actor handed to it.
+- `By`: Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's managers, with no actor handed to it.
 
 ### `OrganizationUnitAdded<TTenantId, TUnitId, TSeatId>`
 
@@ -1478,7 +1508,7 @@ A unit was added: the root when the organization was made, or a unit below an ex
 | `TTenantId TenantId { get; init; }` | The tenant. |
 | `TUnitId UnitId { get; init; }` | The unit added. |
 | `TUnitId? ParentId { get; init; }` | The unit it was added below, or `null` for the root. |
-| `TenancyActor<TSeatId>? By { get; init; }` | Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's use cases, with no actor handed to it. |
+| `TenancyActor<TSeatId>? By { get; init; }` | Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's managers, with no actor handed to it. |
 
 #### `OrganizationUnitAdded(TTenantId, TUnitId, TUnitId?, TenancyActor<TSeatId>?)`
 
@@ -1497,7 +1527,7 @@ The primary constructor: the type's summary says what it makes.
 - `TenantId`: The tenant.
 - `UnitId`: The unit added.
 - `ParentId`: The unit it was added below, or `null` for the root.
-- `By`: Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's use cases, with no actor handed to it.
+- `By`: Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's managers, with no actor handed to it.
 
 ### `OrganizationUnitArchived<TTenantId, TUnitId, TSeatId>`
 
@@ -1515,7 +1545,7 @@ A unit was archived.
 | [`OrganizationUnitArchived(TTenantId, TUnitId, TenancyActor<TSeatId>?)`](#organizationunitarchivedttenantid-tunitid-tenancyactortseatid) | The primary constructor: the type's summary says what it makes. |
 | `TTenantId TenantId { get; init; }` | The tenant. |
 | `TUnitId UnitId { get; init; }` | The unit archived. |
-| `TenancyActor<TSeatId>? By { get; init; }` | Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's use cases, with no actor handed to it. |
+| `TenancyActor<TSeatId>? By { get; init; }` | Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's managers, with no actor handed to it. |
 
 #### `OrganizationUnitArchived(TTenantId, TUnitId, TenancyActor<TSeatId>?)`
 
@@ -1529,7 +1559,7 @@ The primary constructor: the type's summary says what it makes.
 
 - `TenantId`: The tenant.
 - `UnitId`: The unit archived.
-- `By`: Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's use cases, with no actor handed to it.
+- `By`: Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's managers, with no actor handed to it.
 
 ### `OrganizationUnitMoved<TTenantId, TUnitId, TSeatId>`
 
@@ -1549,7 +1579,7 @@ A unit, and everything below it, moved under another parent.
 | `TUnitId UnitId { get; init; }` | The unit that moved, with everything below it. |
 | `TUnitId FromParentId { get; init; }` | The parent it hung under before. |
 | `TUnitId ToParentId { get; init; }` | The parent it hangs under now. |
-| `TenancyActor<TSeatId>? By { get; init; }` | Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's use cases, with no actor handed to it. |
+| `TenancyActor<TSeatId>? By { get; init; }` | Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's managers, with no actor handed to it. |
 
 #### `OrganizationUnitMoved(TTenantId, TUnitId, TUnitId, TUnitId, TenancyActor<TSeatId>?)`
 
@@ -1570,7 +1600,7 @@ The primary constructor: the type's summary says what it makes.
 - `UnitId`: The unit that moved, with everything below it.
 - `FromParentId`: The parent it hung under before.
 - `ToParentId`: The parent it hangs under now.
-- `By`: Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's use cases, with no actor handed to it.
+- `By`: Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's managers, with no actor handed to it.
 
 ### `OrganizationUnitRenamed<TTenantId, TUnitId, TSeatId>`
 
@@ -1588,7 +1618,7 @@ A unit's name changed.
 | [`OrganizationUnitRenamed(TTenantId, TUnitId, TenancyActor<TSeatId>?)`](#organizationunitrenamedttenantid-tunitid-tenancyactortseatid) | The primary constructor: the type's summary says what it makes. |
 | `TTenantId TenantId { get; init; }` | The tenant. |
 | `TUnitId UnitId { get; init; }` | The unit renamed. |
-| `TenancyActor<TSeatId>? By { get; init; }` | Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's use cases, with no actor handed to it. |
+| `TenancyActor<TSeatId>? By { get; init; }` | Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's managers, with no actor handed to it. |
 
 #### `OrganizationUnitRenamed(TTenantId, TUnitId, TenancyActor<TSeatId>?)`
 
@@ -1602,7 +1632,7 @@ The primary constructor: the type's summary says what it makes.
 
 - `TenantId`: The tenant.
 - `UnitId`: The unit renamed.
-- `By`: Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's use cases, with no actor handed to it.
+- `By`: Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's managers, with no actor handed to it.
 
 ## Seat
 
@@ -1624,11 +1654,11 @@ A person's seat in one tenant: the verified identity it belongs to, the units it
 
 The identity is the subject of a verified token, set when the seat is made and never changed. A seat is never linked to a person by an e-mail address, and none is kept here; an application that wants contact details adds them to its own class.
 
-Nor does a seat have a name. No rule of Tenancy reads one, so what a person is shown by is the application's to say: a name per tenant on its own seat class, set in the callback of the use case that makes the seat; the person's own name, from the identity provider; or a profile of its own, found by [`Identity`](#seat-seataggregatetseatid-ttenantid-tunitid-troleid). The directory answers the application's own seat, whole, and the application selects what a screen shows of it.
+Nor does a seat have a name. No rule of Tenancy reads one, so what a person is shown by is the application's to say: a name per tenant on its own seat class, set in the callback of `SeatManager.AddAsync`; the person's own name, from the identity provider; or a profile of its own, found by [`Identity`](#seat-seataggregatetseatid-ttenantid-tunitid-troleid). The `SeatManager`'s reads return the application's own seat, whole, and the application selects what a screen shows of it.
 
-Placements and grants are the seat's own: it checks every change to them, and hands them out as read-only views. What a role grants is not the seat's to know; the use case reads the role and passes its [`RoleFacts`](#rolefacts) in.
+Placements and grants are the seat's own: it checks every change to them, and hands them out as read-only views. What a role grants is not the seat's to know; the manager reads the role and passes its [`RoleFacts`](#rolefacts) in.
 
-Every method that changes the seat takes who makes the change, `by`, and puts it on the event it raises; the use cases pass the actor of their caller. It is a record of the change and decides nothing: the rules about a seat acting on itself read the seat a placement or a grant keeps, `placedBy` and `grantedBy`.
+Every method that changes the seat takes who makes the change, `by`, and puts it on the event it raises; the managers pass the actor of their caller. It is a record of the change and decides nothing: the rules about a seat acting on itself read the seat a placement or a grant keeps, `placedBy` and `grantedBy`.
 
 **Type parameters**
 
@@ -1726,7 +1756,7 @@ public Placement<TSeatId, TUnitId, TRoleId> Place(
     TenancyActor<TSeatId>? by = null)
 ```
 
-Places the seat in a unit. Whether the unit is an active unit of the organization is the use case's to check: the organization is another aggregate.
+Places the seat in a unit. Whether the unit is an active unit of the organization is the manager's to check: the organization is another aggregate.
 
 **Parameters**
 
@@ -1787,13 +1817,13 @@ public void Grant(
     TenancyActor<TSeatId>? by = null)
 ```
 
-Grants the seat a role at a unit where it is placed. Whether the granting seat may give the role (its permissions that manage access, held there long enough, and never a role that manages access to itself) is the use case's to check, because it needs the catalogue and another seat's rights. A host that calls [`Grant`](#granttunitid-troleid-rolefacts-grantperiod-tseatid-string-tenancyactortseatid) directly gets neither. A seat may be recorded as its own granter.
+Grants the seat a role at a unit where it is placed. Whether the granting seat may give the role (its permissions that manage access, held there long enough, and never a role that manages access to itself) is the manager's to check, because it needs the catalogue and another seat's rights. A host that calls [`Grant`](#granttunitid-troleid-rolefacts-grantperiod-tseatid-string-tenancyactortseatid) directly gets neither. A seat may be recorded as its own granter.
 
 **Parameters**
 
 - `unit`: The unit of one of the seat's placements.
 - `role`: The role.
-- `facts`: What the use case read about the role.
+- `facts`: What the manager read about the role.
 - `period`: When the grant applies.
 - `grantedBy`: The seat granting it, or `null` for system work with no seat acting.
 - `reason`: Why, at most [`MaxReasonLength`](#seat-seataggregatetseatid-ttenantid-tunitid-troleid) characters, or `null`.
@@ -2169,7 +2199,7 @@ A role a seat held at a unit was revoked, on its own or because the placement wa
 | `TSeatId SeatId { get; init; }` | The seat that held the role. |
 | `TUnitId UnitId { get; init; }` | The unit it held the role at. |
 | `TRoleId RoleId { get; init; }` | The role revoked. |
-| `TenancyActor<TSeatId>? By { get; init; }` | Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's use cases, with no actor handed to it. |
+| `TenancyActor<TSeatId>? By { get; init; }` | Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's managers, with no actor handed to it. |
 
 #### `OrganizationRoleRevoked(TTenantId, TSeatId, TUnitId, TRoleId, TenancyActor<TSeatId>?)`
 
@@ -2190,7 +2220,7 @@ The primary constructor: the type's summary says what it makes.
 - `SeatId`: The seat that held the role.
 - `UnitId`: The unit it held the role at.
 - `RoleId`: The role revoked.
-- `By`: Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's use cases, with no actor handed to it.
+- `By`: Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's managers, with no actor handed to it.
 
 ### `PrimaryPlacementChanged<TTenantId, TSeatId, TUnitId>`
 
@@ -2209,7 +2239,7 @@ A seat's primary placement is now the one in this unit.
 | `TTenantId TenantId { get; init; }` | The tenant. |
 | `TSeatId SeatId { get; init; }` | The seat. |
 | `TUnitId UnitId { get; init; }` | The unit of its primary placement from now on. |
-| `TenancyActor<TSeatId>? By { get; init; }` | Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's use cases, with no actor handed to it. |
+| `TenancyActor<TSeatId>? By { get; init; }` | Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's managers, with no actor handed to it. |
 
 #### `PrimaryPlacementChanged(TTenantId, TSeatId, TUnitId, TenancyActor<TSeatId>?)`
 
@@ -2228,7 +2258,7 @@ The primary constructor: the type's summary says what it makes.
 - `TenantId`: The tenant.
 - `SeatId`: The seat.
 - `UnitId`: The unit of its primary placement from now on.
-- `By`: Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's use cases, with no actor handed to it.
+- `By`: Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's managers, with no actor handed to it.
 
 ### `SeatAdded<TTenantId, TSeatId>`
 
@@ -2245,7 +2275,7 @@ A seat was added to a tenant.
 | [`SeatAdded(TTenantId, TSeatId, TenancyActor<TSeatId>?)`](#seataddedttenantid-tseatid-tenancyactortseatid) | The primary constructor: the type's summary says what it makes. |
 | `TTenantId TenantId { get; init; }` | The tenant the seat was added to. |
 | `TSeatId SeatId { get; init; }` | The seat added. |
-| `TenancyActor<TSeatId>? By { get; init; }` | Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)); for a seat an invitation made, the system, for the seat that issued the invitation, as on `InvitationAccepted`. `null` only where the aggregate was changed outside the package's use cases, with no actor handed to it. |
+| `TenancyActor<TSeatId>? By { get; init; }` | Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)); for a seat an invitation made, the system, for the seat that issued the invitation, as on `InvitationAccepted`. `null` only where the aggregate was changed outside the package's managers, with no actor handed to it. |
 
 #### `SeatAdded(TTenantId, TSeatId, TenancyActor<TSeatId>?)`
 
@@ -2259,7 +2289,7 @@ The primary constructor: the type's summary says what it makes.
 
 - `TenantId`: The tenant the seat was added to.
 - `SeatId`: The seat added.
-- `By`: Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)); for a seat an invitation made, the system, for the seat that issued the invitation, as on `InvitationAccepted`. `null` only where the aggregate was changed outside the package's use cases, with no actor handed to it.
+- `By`: Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)); for a seat an invitation made, the system, for the seat that issued the invitation, as on `InvitationAccepted`. `null` only where the aggregate was changed outside the package's managers, with no actor handed to it.
 
 ### `SeatDeactivated<TTenantId, TSeatId>`
 
@@ -2276,7 +2306,7 @@ A seat was deactivated, for good.
 | [`SeatDeactivated(TTenantId, TSeatId, TenancyActor<TSeatId>?)`](#seatdeactivatedttenantid-tseatid-tenancyactortseatid) | The primary constructor: the type's summary says what it makes. |
 | `TTenantId TenantId { get; init; }` | The tenant. |
 | `TSeatId SeatId { get; init; }` | The seat deactivated. |
-| `TenancyActor<TSeatId>? By { get; init; }` | Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's use cases, with no actor handed to it. |
+| `TenancyActor<TSeatId>? By { get; init; }` | Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's managers, with no actor handed to it. |
 
 #### `SeatDeactivated(TTenantId, TSeatId, TenancyActor<TSeatId>?)`
 
@@ -2290,7 +2320,7 @@ The primary constructor: the type's summary says what it makes.
 
 - `TenantId`: The tenant.
 - `SeatId`: The seat deactivated.
-- `By`: Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's use cases, with no actor handed to it.
+- `By`: Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's managers, with no actor handed to it.
 
 ### `SeatPlaced<TTenantId, TSeatId, TUnitId>`
 
@@ -2310,7 +2340,7 @@ A seat was placed in a unit.
 | `TSeatId SeatId { get; init; }` | The seat placed. |
 | `TUnitId UnitId { get; init; }` | The unit it was placed in. |
 | `bool IsPrimary { get; init; }` | Whether the placement is the seat's primary one from now on. |
-| `TenancyActor<TSeatId>? By { get; init; }` | Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)); for a seat an invitation made, the system, for the seat that issued the invitation, as on `InvitationAccepted`. `null` only where the aggregate was changed outside the package's use cases, with no actor handed to it. |
+| `TenancyActor<TSeatId>? By { get; init; }` | Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)); for a seat an invitation made, the system, for the seat that issued the invitation, as on `InvitationAccepted`. `null` only where the aggregate was changed outside the package's managers, with no actor handed to it. |
 
 #### `SeatPlaced(TTenantId, TSeatId, TUnitId, bool, TenancyActor<TSeatId>?)`
 
@@ -2331,7 +2361,7 @@ The primary constructor: the type's summary says what it makes.
 - `SeatId`: The seat placed.
 - `UnitId`: The unit it was placed in.
 - `IsPrimary`: Whether the placement is the seat's primary one from now on.
-- `By`: Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)); for a seat an invitation made, the system, for the seat that issued the invitation, as on `InvitationAccepted`. `null` only where the aggregate was changed outside the package's use cases, with no actor handed to it.
+- `By`: Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)); for a seat an invitation made, the system, for the seat that issued the invitation, as on `InvitationAccepted`. `null` only where the aggregate was changed outside the package's managers, with no actor handed to it.
 
 ### `SeatReactivated<TTenantId, TSeatId>`
 
@@ -2348,7 +2378,7 @@ A suspended seat became active again.
 | [`SeatReactivated(TTenantId, TSeatId, TenancyActor<TSeatId>?)`](#seatreactivatedttenantid-tseatid-tenancyactortseatid) | The primary constructor: the type's summary says what it makes. |
 | `TTenantId TenantId { get; init; }` | The tenant. |
 | `TSeatId SeatId { get; init; }` | The seat reactivated. |
-| `TenancyActor<TSeatId>? By { get; init; }` | Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's use cases, with no actor handed to it. |
+| `TenancyActor<TSeatId>? By { get; init; }` | Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's managers, with no actor handed to it. |
 
 #### `SeatReactivated(TTenantId, TSeatId, TenancyActor<TSeatId>?)`
 
@@ -2362,7 +2392,7 @@ The primary constructor: the type's summary says what it makes.
 
 - `TenantId`: The tenant.
 - `SeatId`: The seat reactivated.
-- `By`: Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's use cases, with no actor handed to it.
+- `By`: Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's managers, with no actor handed to it.
 
 ### `SeatSuspended<TTenantId, TSeatId>`
 
@@ -2379,7 +2409,7 @@ A seat was suspended.
 | [`SeatSuspended(TTenantId, TSeatId, TenancyActor<TSeatId>?)`](#seatsuspendedttenantid-tseatid-tenancyactortseatid) | The primary constructor: the type's summary says what it makes. |
 | `TTenantId TenantId { get; init; }` | The tenant. |
 | `TSeatId SeatId { get; init; }` | The seat suspended. |
-| `TenancyActor<TSeatId>? By { get; init; }` | Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's use cases, with no actor handed to it. |
+| `TenancyActor<TSeatId>? By { get; init; }` | Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's managers, with no actor handed to it. |
 
 #### `SeatSuspended(TTenantId, TSeatId, TenancyActor<TSeatId>?)`
 
@@ -2393,7 +2423,7 @@ The primary constructor: the type's summary says what it makes.
 
 - `TenantId`: The tenant.
 - `SeatId`: The seat suspended.
-- `By`: Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's use cases, with no actor handed to it.
+- `By`: Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's managers, with no actor handed to it.
 
 ### `SeatWithdrawn<TTenantId, TSeatId, TUnitId>`
 
@@ -2412,7 +2442,7 @@ A seat's placement in a unit was withdrawn, after every role it held there was r
 | `TTenantId TenantId { get; init; }` | The tenant. |
 | `TSeatId SeatId { get; init; }` | The seat. |
 | `TUnitId UnitId { get; init; }` | The unit its placement was withdrawn from. |
-| `TenancyActor<TSeatId>? By { get; init; }` | Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's use cases, with no actor handed to it. |
+| `TenancyActor<TSeatId>? By { get; init; }` | Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's managers, with no actor handed to it. |
 
 #### `SeatWithdrawn(TTenantId, TSeatId, TUnitId, TenancyActor<TSeatId>?)`
 
@@ -2427,7 +2457,7 @@ The primary constructor: the type's summary says what it makes.
 - `TenantId`: The tenant.
 - `SeatId`: The seat.
 - `UnitId`: The unit its placement was withdrawn from.
-- `By`: Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's use cases, with no actor handed to it.
+- `By`: Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's managers, with no actor handed to it.
 
 ## Role
 
@@ -2445,13 +2475,13 @@ public abstract class RoleAggregate<TRoleId, TTenantId> : AggregateRoot<TRoleId>
 
 A tenant's role: a name, and the permissions it grants wherever it is granted. The application declares its own class with [`RoleAggregateAttribute<TRoleId>`](#roleaggregateattributetroleid).
 
-Its permissions come from the catalogue only, with the permissions they imply added, and are kept distinct and sorted. A permission the catalogue later retires, or no longer knows at all, may stay on the role; it grants nothing, and is only refused when someone adds it anew. A role made from a pack remembers which one in [`FromPack`](#role-roleaggregatetroleid-ttenantid), and only when it is made.
+Its permissions come from the catalogue only, with the permissions they imply added, and are kept distinct and sorted. A permission the catalogue later retires, or no longer knows at all, may stay on the role; it grants nothing, and is only refused when someone adds it anew. A role made from a starter role remembers which one in [`FromStarterRole`](#role-roleaggregatetroleid-ttenantid), and only when it is made.
 
-A role made from a pack follows it ([`FollowPack<TSeatId>`](#followpacktenancycatalogue-tenancyactortseatid)): it remembers what the pack gave it ([`PermissionsFromPack`](#role-roleaggregatetroleid-ttenantid)), so a permission the pack gains later is added to it, a permission the pack loses is taken out, and what the tenant changed itself stays as the tenant left it. The application runs that for every tenant with `services.SyncRolePacks()`; nothing else changes a role behind the tenant's back.
+A role made from a starter role follows it ([`FollowStarterRole<TSeatId>`](#followstarterroletenancycatalogue-tenancyactortseatid)): it remembers what the starter role gave it ([`PermissionsFromStarterRole`](#role-roleaggregatetroleid-ttenantid)), so a permission the starter role gains later is added to it, a permission the starter role loses is taken out, and what the tenant changed itself stays as the tenant left it. The application runs that for every tenant with `services.SyncStarterRoles()`; nothing else changes a role behind the tenant's back.
 
-Whoever holds [`TenancyPermissions.RolesManage`](catalogue.md#tenancypermissions) may put any permission into any role. That is on purpose: that permission is the administrator's permission, and an administrator can give themselves anything already. A permission added to a role reaches every seat that holds the role, seats that gave themselves the role included, so the use case lets an administrator alone add or take out a permission that manages access, or archive a role that holds one.
+Whoever holds [`TenancyPermissions.RolesManage`](catalogue.md#tenancypermissions) may put any permission into any role. That is on purpose: that permission is the administrator's permission, and an administrator can give themselves anything already. A permission added to a role reaches every seat that holds the role, seats that gave themselves the role included, so the manager lets an administrator alone add or take out a permission that manages access, or archive a role that holds one.
 
-Every method that changes the role takes who makes the change, `by`, and puts it on the event it raises. The use cases pass the actor of their caller. A role is declared without the seat class and does not know the seat id's type, so the methods take it: it follows from a caller's actor (`role.Archive(caller.Actor)`), and code that names nobody, an import or a test, names the type instead (`role.Archive<SeatId>()`).
+Every method that changes the role takes who makes the change, `by`, and puts it on the event it raises. The managers pass the actor of their caller. A role is declared without the seat class and does not know the seat id's type, so the methods take it: it follows from a caller's actor (`role.Archive(caller.Actor)`), and code that names nobody, an import or a test, names the type instead (`role.Archive<SeatId>()`).
 
 **Type parameters**
 
@@ -2466,14 +2496,14 @@ Every method that changes the role takes who makes the change, `by`, and puts it
 | `TTenantId TenantId { get; }` | The tenant the role belongs to. |
 | `string Name { get; }` | The role's name, unique in its tenant. |
 | `string Description { get; }` | What the role is for. |
-| `string? FromPack { get; }` | The key of the pack the role was copied from, or `null` for a role made by hand. Set when it is made. |
+| `string? FromStarterRole { get; }` | The key of the starter role the role was copied from, or `null` for a role made by hand. Set when it is made. |
 | `RoleStatus Status { get; }` | Whether the role is in use. An archived role grants nothing. |
 | `IReadOnlyList<string> Permissions { get; }` | The permissions the role grants: expanded, distinct and in ordinal order. |
-| `IReadOnlyList<string>? PermissionsFromPack { get; }` | The permissions its pack gave the role, as the pack held them when the role was made from it or last followed it: what the next [`FollowPack<TSeatId>`](#followpacktenancycatalogue-tenancyactortseatid) compares the pack with, to tell a permission the pack gained or lost from one the tenant added or took out itself. Expanded, distinct and in ordinal order: the pack's permissions, whatever permissions the role was made with. `null` for a role made by hand, and for one made before roles remembered it or from a pack the catalogue did not have then, which follows its pack as if the pack had given it nothing yet. |
+| `IReadOnlyList<string>? PermissionsFromStarterRole { get; }` | The permissions its starter role gave the role, as the starter role held them when the role was made from it or last followed it: what the next [`FollowStarterRole<TSeatId>`](#followstarterroletenancycatalogue-tenancyactortseatid) compares the starter role with, to tell a permission the starter role gained or lost from one the tenant added or took out itself. Expanded, distinct and in ordinal order: the starter role's permissions, whatever permissions the role was made with. `null` for a role made by hand, and for one made before roles remembered it or from a starter role the catalogue did not have then, which follows its starter role as if the starter role had given it nothing yet. |
 | `RoleFacts Facts { get; }` | This role's status and permissions as a snapshot, for a seat's rules. |
 | [`Rename(string, string, TenancyActor<TSeatId>?)`](#renamestring-string-tenancyactortseatid) | Renames the role and describes it again. |
 | [`SetPermissions(IReadOnlyCollection<string>, TenancyCatalogue, TenancyActor<TSeatId>?)`](#setpermissionsireadonlycollectionstring-tenancycatalogue-tenancyactortseatid) | Sets the permissions the role grants. |
-| [`FollowPack(TenancyCatalogue, TenancyActor<TSeatId>?)`](#followpacktenancycatalogue-tenancyactortseatid) | Follows the pack the role was made from, as `catalogue` builds it now. |
+| [`FollowStarterRole(TenancyCatalogue, TenancyActor<TSeatId>?)`](#followstarterroletenancycatalogue-tenancyactortseatid) | Follows the starter role the role was made from, as `catalogue` builds it now. |
 | [`Archive(TenancyActor<TSeatId>?)`](#archivetenancyactortseatid) | Archives the role. |
 | [`Holds(string)`](#holdsstring) | Whether the role holds `permission`, live or not. |
 | [`GetOwnInvariantViolations()`](#getowninvariantviolations-4) | Runs the rules and `CheckInvariants()` seam of this aggregate, and returns every rule that is broken, without throwing. |
@@ -2538,29 +2568,29 @@ Sets the permissions the role grants. A permission the role already holds that t
 
 - `RefusalException`: `tenancy.role-archived`, `tenancy.unknown-permission` for a permission that is new to the role and not live.
 
-#### `FollowPack(TenancyCatalogue, TenancyActor<TSeatId>?)`
+#### `FollowStarterRole(TenancyCatalogue, TenancyActor<TSeatId>?)`
 
 ```csharp
-public bool FollowPack<TSeatId>(TenancyCatalogue catalogue, TenancyActor<TSeatId>? by = null)
+public bool FollowStarterRole<TSeatId>(TenancyCatalogue catalogue, TenancyActor<TSeatId>? by = null)
     where TSeatId : struct, IEntityId, IEquatable<TSeatId>
 ```
 
-Follows the pack the role was made from, as `catalogue` builds it now. What the pack gave the role the last time ([`PermissionsFromPack`](#role-roleaggregatetroleid-ttenantid)) is compared with what the pack holds now: a permission the pack gained is added to the role, and a permission it lost is taken out. What the tenant changed itself stays: a permission it took out of the role stays out while the pack still holds it, and a permission it added stays while the pack never held it. The pack's permissions are remembered for the next time.
+Follows the starter role the role was made from, as `catalogue` builds it now. What the starter role gave the role the last time ([`PermissionsFromStarterRole`](#role-roleaggregatetroleid-ttenantid)) is compared with what the starter role holds now: a permission the starter role gained is added to the role, and a permission it lost is taken out. What the tenant changed itself stays: a permission it took out of the role stays out while the starter role still holds it, and a permission it added stays while the starter role never held it. The starter role's permissions are remembered for the next time.
 
-Four things the comparison cannot tell apart are settled this way. A permission the tenant added by hand that the pack gains later is the pack's from then on, and goes when the pack loses it. A permission the tenant took out that the pack loses, and gains again later, comes back as a permission the pack gained: once the pack lost it, the record no longer holds it, and the event names it, among the permissions that manage access when it manages access. A permission that is not live, retired or no longer known, is never taken out: it grants nothing, and retiring a permission changes no role. And a role that has no record yet, made before roles remembered their pack's permissions, follows as if the pack had given it nothing: it gets every permission the pack holds that it lacks, and loses none. A live permission the role keeps brings the permissions it implies, as everywhere a role's permissions are set.
+Four things the comparison cannot tell apart are settled this way. A permission the tenant added by hand that the starter role gains later is the starter role's from then on, and goes when the starter role loses it. A permission the tenant took out that the starter role loses, and gains again later, comes back as a permission the starter role gained: once the starter role lost it, the record no longer holds it, and the event names it, among the permissions that manage access when it manages access. A permission that is not live, retired or no longer known, is never taken out: it grants nothing, and retiring a permission changes no role. And a role that has no record yet, made before roles remembered their starter role's permissions, follows as if the starter role had given it nothing: it gets every permission the starter role holds that it lacks, and loses none. A live permission the role keeps brings the permissions it implies, as everywhere a role's permissions are set.
 
-A permission that manages access follows the same rule, whoever runs this: only the application's code puts a permission in a pack. The event says which of the permissions that came in or went out manage access, so whoever is told about the change, the tenant's administrators say, can see it.
+A permission that manages access follows the same rule, whoever runs this: only the application's code puts a permission in a starter role. The event says which of the permissions that came in or went out manage access, so whoever is told about the change, the tenant's administrators say, can see it.
 
 **Parameters**
 
-- `catalogue`: The catalogue the pack is read from, as the application runs with it now.
+- `catalogue`: The catalogue the starter role is read from, as the application runs with it now.
 - `by`: Who makes the change, for the event; `null` when nobody is named.
 
 **Type parameters**
 
 - `TSeatId`: The application's seat id, which the actor is closed over: a role does not know it by itself.
 
-**Returns**: Whether the role changed: its permissions, which raises [`RoleFollowedItsPack<TTenantId, TRoleId, TSeatId>`](#rolefolloweditspackttenantid-troleid-tseatid), or only what it remembers of its pack, or the order its permissions were stored in, which raises nothing. `false` for a role made by hand, one whose pack the catalogue no longer has, and one that follows its pack already.
+**Returns**: Whether the role changed: its permissions, which raises [`RoleFollowedItsStarterRole<TTenantId, TRoleId, TSeatId>`](#rolefolloweditsstarterrolettenantid-troleid-tseatid), or only what it remembers of its starter role, or the order its permissions were stored in, which raises nothing. `false` for a role made by hand, one whose starter role the catalogue no longer has, and one that follows its starter role already.
 
 **Exceptions**
 
@@ -2659,7 +2689,7 @@ What a new role is made from.
 | `string Name { get; init; }` | The role's name, 1 to 120 characters, unique in its tenant. |
 | `string Description { get; init; }` | What the role is for, at most 1000 characters. |
 | `IReadOnlyCollection<string> Permissions { get; init; }` | The permissions it grants; the permissions they imply are added. |
-| `string? FromPack { get; init; }` | The key of the pack it was copied from, or `null` for a role made by hand. |
+| `string? FromStarterRole { get; init; }` | The key of the starter role it was copied from, or `null` for a role made by hand. |
 
 #### `RoleDraft(string, string, IReadOnlyCollection<string>, string?)`
 
@@ -2668,7 +2698,7 @@ public RoleDraft(
     string Name,
     string Description,
     IReadOnlyCollection<string> Permissions,
-    string? FromPack = null)
+    string? FromStarterRole = null)
 ```
 
 The primary constructor: the type's summary says what it makes.
@@ -2678,7 +2708,7 @@ The primary constructor: the type's summary says what it makes.
 - `Name`: The role's name, 1 to 120 characters, unique in its tenant.
 - `Description`: What the role is for, at most 1000 characters.
 - `Permissions`: The permissions it grants; the permissions they imply are added.
-- `FromPack`: The key of the pack it was copied from, or `null` for a role made by hand.
+- `FromStarterRole`: The key of the starter role it was copied from, or `null` for a role made by hand.
 
 ### `RoleFacts`
 
@@ -2686,7 +2716,7 @@ The primary constructor: the type's summary says what it makes.
 public sealed record RoleFacts
 ```
 
-The two things about a role that the seat's rules depend on: whether the role is active, and its permissions. Seats and roles are separate aggregates; the use case reads the role and passes this snapshot to the seat.
+The two things about a role that the seat's rules depend on: whether the role is active, and its permissions. Seats and roles are separate aggregates; the manager reads the role and passes this snapshot to the seat.
 
 | Member | Summary |
 |---|---|
@@ -2790,7 +2820,7 @@ A role was archived, and grants nothing from now on.
 | [`RoleArchived(TTenantId, TRoleId, TenancyActor<TSeatId>?)`](#rolearchivedttenantid-troleid-tenancyactortseatid) | The primary constructor: the type's summary says what it makes. |
 | `TTenantId TenantId { get; init; }` | The tenant the role belongs to. |
 | `TRoleId RoleId { get; init; }` | The role archived. |
-| `TenancyActor<TSeatId>? By { get; init; }` | Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's use cases, with no actor handed to it. |
+| `TenancyActor<TSeatId>? By { get; init; }` | Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's managers, with no actor handed to it. |
 
 #### `RoleArchived(TTenantId, TRoleId, TenancyActor<TSeatId>?)`
 
@@ -2804,7 +2834,7 @@ The primary constructor: the type's summary says what it makes.
 
 - `TenantId`: The tenant the role belongs to.
 - `RoleId`: The role archived.
-- `By`: Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's use cases, with no actor handed to it.
+- `By`: Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's managers, with no actor handed to it.
 
 ### `RoleCreated<TTenantId, TRoleId, TSeatId>`
 
@@ -2815,20 +2845,24 @@ public sealed record RoleCreated<TTenantId, TRoleId, TSeatId> : DomainEvent
     where TSeatId : struct, IEntityId, IEquatable<TSeatId>
 ```
 
-A role was created, by hand or copied from a pack.
+A role was created, by hand or copied from a starter role.
 
 | Member | Summary |
 |---|---|
 | [`RoleCreated(TTenantId, TRoleId, string?, TenancyActor<TSeatId>?)`](#rolecreatedttenantid-troleid-string-tenancyactortseatid) | The primary constructor: the type's summary says what it makes. |
 | `TTenantId TenantId { get; init; }` | The tenant the role belongs to. |
 | `TRoleId RoleId { get; init; }` | The role created. |
-| `string? FromPack { get; init; }` | The permission of the catalogue's pack it was copied from, or `null` for a role made by hand. |
-| `TenancyActor<TSeatId>? By { get; init; }` | Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's use cases, with no actor handed to it. |
+| `string? FromStarterRole { get; init; }` | The permission of the catalogue's starter role it was copied from, or `null` for a role made by hand. |
+| `TenancyActor<TSeatId>? By { get; init; }` | Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's managers, with no actor handed to it. |
 
 #### `RoleCreated(TTenantId, TRoleId, string?, TenancyActor<TSeatId>?)`
 
 ```csharp
-public RoleCreated(TTenantId TenantId, TRoleId RoleId, string? FromPack, TenancyActor<TSeatId>? By)
+public RoleCreated(
+    TTenantId TenantId,
+    TRoleId RoleId,
+    string? FromStarterRole,
+    TenancyActor<TSeatId>? By)
 ```
 
 The primary constructor: the type's summary says what it makes.
@@ -2837,38 +2871,38 @@ The primary constructor: the type's summary says what it makes.
 
 - `TenantId`: The tenant the role belongs to.
 - `RoleId`: The role created.
-- `FromPack`: The permission of the catalogue's pack it was copied from, or `null` for a role made by hand.
-- `By`: Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's use cases, with no actor handed to it.
+- `FromStarterRole`: The permission of the catalogue's starter role it was copied from, or `null` for a role made by hand.
+- `By`: Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's managers, with no actor handed to it.
 
-### `RoleFollowedItsPack<TTenantId, TRoleId, TSeatId>`
+### `RoleFollowedItsStarterRole<TTenantId, TRoleId, TSeatId>`
 
 ```csharp
-public sealed record RoleFollowedItsPack<TTenantId, TRoleId, TSeatId> : DomainEvent
+public sealed record RoleFollowedItsStarterRole<TTenantId, TRoleId, TSeatId> : DomainEvent
     where TTenantId : struct, IEntityId, IEquatable<TTenantId>
     where TRoleId : struct, IEntityId, IEquatable<TRoleId>
     where TSeatId : struct, IEntityId, IEquatable<TSeatId>
 ```
 
-A role made from a pack followed it, because the pack changed since the role was made or last followed it: every seat that holds the role gained `Added` and lost `Removed`, wherever it holds the role. The application's code changed the pack, so the tenant did not choose this: it is what a host tells the tenant's administrators about. The package sends no message itself.
+A role made from a starter role followed it, because the starter role changed since the role was made or last followed it: every seat that holds the role gained `Added` and lost `Removed`, wherever it holds the role. The application's code changed the starter role, so the tenant did not choose this: it is what a host tells the tenant's administrators about. The package sends no message itself.
 
 | Member | Summary |
 |---|---|
-| [`RoleFollowedItsPack(TTenantId, TRoleId, string, IReadOnlyList<string>, IReadOnlyList<string>, IReadOnlyList<string>, TenancyActor<TSeatId>?)`](#rolefolloweditspackttenantid-troleid-string-ireadonlyliststring-ireadonlyliststring-ireadonlyliststring-tenancyactortseatid) | The primary constructor: the type's summary says what it makes. |
+| [`RoleFollowedItsStarterRole(TTenantId, TRoleId, string, IReadOnlyList<string>, IReadOnlyList<string>, IReadOnlyList<string>, TenancyActor<TSeatId>?)`](#rolefolloweditsstarterrolettenantid-troleid-string-ireadonlyliststring-ireadonlyliststring-ireadonlyliststring-tenancyactortseatid) | The primary constructor: the type's summary says what it makes. |
 | `TTenantId TenantId { get; init; }` | The tenant the role belongs to. |
 | `TRoleId RoleId { get; init; }` | The role. |
-| `string Pack { get; init; }` | The key of the pack the role was made from, and followed. |
+| `string StarterRole { get; init; }` | The key of the starter role the role was made from, and followed. |
 | `IReadOnlyList<string> Added { get; init; }` | The permissions the role grants from now on and did not before, the permissions they imply included, in ordinal order. |
 | `IReadOnlyList<string> Removed { get; init; }` | The permissions the role granted before and no longer does, in ordinal order. |
 | `IReadOnlyList<string> ManagingAccess { get; init; }` | The permissions of `Added` and `Removed` that manage access, as the catalogue marked them at the time, in ordinal order: empty when the change gives and takes no power over other people's access. A seat's own change of such a permission is an administrator's alone; this one the application made. |
 | `TenancyActor<TSeatId>? By { get; init; }` | Who made the change: system work, the application's own, unless it was begun for an operator. |
 
-#### `RoleFollowedItsPack(TTenantId, TRoleId, string, IReadOnlyList<string>, IReadOnlyList<string>, IReadOnlyList<string>, TenancyActor<TSeatId>?)`
+#### `RoleFollowedItsStarterRole(TTenantId, TRoleId, string, IReadOnlyList<string>, IReadOnlyList<string>, IReadOnlyList<string>, TenancyActor<TSeatId>?)`
 
 ```csharp
-public RoleFollowedItsPack(
+public RoleFollowedItsStarterRole(
     TTenantId TenantId,
     TRoleId RoleId,
-    string Pack,
+    string StarterRole,
     IReadOnlyList<string> Added,
     IReadOnlyList<string> Removed,
     IReadOnlyList<string> ManagingAccess,
@@ -2881,7 +2915,7 @@ The primary constructor: the type's summary says what it makes.
 
 - `TenantId`: The tenant the role belongs to.
 - `RoleId`: The role.
-- `Pack`: The key of the pack the role was made from, and followed.
+- `StarterRole`: The key of the starter role the role was made from, and followed.
 - `Added`: The permissions the role grants from now on and did not before, the permissions they imply included, in ordinal order.
 - `Removed`: The permissions the role granted before and no longer does, in ordinal order.
 - `ManagingAccess`: The permissions of `Added` and `Removed` that manage access, as the catalogue marked them at the time, in ordinal order: empty when the change gives and takes no power over other people's access. A seat's own change of such a permission is an administrator's alone; this one the application made.
@@ -2944,7 +2978,7 @@ A role's name or description changed.
 | [`RoleRenamed(TTenantId, TRoleId, TenancyActor<TSeatId>?)`](#rolerenamedttenantid-troleid-tenancyactortseatid) | The primary constructor: the type's summary says what it makes. |
 | `TTenantId TenantId { get; init; }` | The tenant the role belongs to. |
 | `TRoleId RoleId { get; init; }` | The role renamed or described anew. |
-| `TenancyActor<TSeatId>? By { get; init; }` | Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's use cases, with no actor handed to it. |
+| `TenancyActor<TSeatId>? By { get; init; }` | Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's managers, with no actor handed to it. |
 
 #### `RoleRenamed(TTenantId, TRoleId, TenancyActor<TSeatId>?)`
 
@@ -2958,7 +2992,7 @@ The primary constructor: the type's summary says what it makes.
 
 - `TenantId`: The tenant the role belongs to.
 - `RoleId`: The role renamed or described anew.
-- `By`: Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's use cases, with no actor handed to it.
+- `By`: Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's managers, with no actor handed to it.
 
 ## Invitation
 
@@ -2983,11 +3017,11 @@ No seat exists until the invitation is accepted. Accepting it makes the seat for
 
 It is for an address, the one it is sent to, and that is all the address is: where to send it, and what the people who manage seats recognize it by. It never finds a person. What accepts an invitation is its token and a verified identity; an application that knows the verified address of that identity may pass it along, and an invitation sent elsewhere is then refused. The address is forgotten once the invitation is accepted or cancelled.
 
-It suggests no name for the seat: a seat has none in Tenancy. What the seat is shown by is the application's, set in the callback of the use case that accepts.
+It suggests no name for the seat: a seat has none in Tenancy. What the seat is shown by is the application's, set in the callback of `InvitationManager.AcceptAsync`.
 
 The token is not here, and neither is its digest: the store keeps the digest apart from the invitation, so reading invitations never reads it.
 
-What it offers does not change after it was issued: the tenant, the unit, the role, the end of the grant, when it ends itself and who issued it. An issuer's rights are asked again when it is accepted, by the use case.
+What it offers does not change after it was issued: the tenant, the unit, the role, the end of the grant, when it ends itself and who issued it. An issuer's rights are asked again when it is accepted, by the manager.
 
 **Type parameters**
 
@@ -3245,7 +3279,7 @@ An open invitation was cancelled, and can no longer be accepted.
 | [`InvitationCancelled(TTenantId, TInvitationId, TenancyActor<TSeatId>?)`](#invitationcancelledttenantid-tinvitationid-tenancyactortseatid) | The primary constructor: the type's summary says what it makes. |
 | `TTenantId TenantId { get; init; }` | The tenant the invitation was into. |
 | `TInvitationId InvitationId { get; init; }` | The invitation. |
-| `TenancyActor<TSeatId>? By { get; init; }` | Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's use cases, with no actor handed to it. |
+| `TenancyActor<TSeatId>? By { get; init; }` | Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's managers, with no actor handed to it. |
 
 #### `InvitationCancelled(TTenantId, TInvitationId, TenancyActor<TSeatId>?)`
 
@@ -3262,7 +3296,7 @@ The primary constructor: the type's summary says what it makes.
 
 - `TenantId`: The tenant the invitation was into.
 - `InvitationId`: The invitation.
-- `By`: Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's use cases, with no actor handed to it.
+- `By`: Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an operator or a token the work was begun for ([`TenancyActor<TSeatId>`](callers.md#tenancyactortseatid)). `null` only where the aggregate was changed outside the package's managers, with no actor handed to it.
 
 ### `InvitationIssued<TTenantId, TInvitationId, TUnitId, TRoleId, TSeatId>`
 

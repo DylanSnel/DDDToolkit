@@ -84,7 +84,7 @@ public sealed partial class TenancyCatalogue
     /// <summary>
     /// Whether a seat hands on the permissions of <see cref="AccessManagingPermissions"/> only where it holds them itself, as
     /// the application says in <see cref="ApplicationCatalogue.ContainAccessManagingPermissions"/>: on unless it turns it
-    /// off. The use cases ask it before every rule of containment, and the export writes it into the database's
+    /// off. The managers ask it before every rule of containment, and the export writes it into the database's
     /// access files with the rest of the catalogue. It changes which permissions are marked in nothing:
     /// <see cref="AccessManagingPermissions"/> and <see cref="ManagesAccess"/> answer the same either way.
     /// </summary>

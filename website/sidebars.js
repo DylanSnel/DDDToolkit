@@ -78,7 +78,7 @@ const sidebars = {
               label: 'API reference',
               items: [
                 'tenancy/reference/aggregates',
-                'tenancy/reference/use-cases',
+                'tenancy/reference/managers',
                 'tenancy/reference/catalogue',
                 'tenancy/reference/callers',
                 'tenancy/reference/queries',

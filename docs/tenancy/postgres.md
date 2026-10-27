@@ -69,7 +69,7 @@ Tenancy's save check.
 
 ### The registration
 
-`AddTenancyPostgres()` ([reference](reference/use-cases.md#addtenancypostgresiservicecollection)) does four things:
+`AddTenancyPostgres()` ([reference](reference/managers.md#addtenancypostgresiservicecollection)) does four things:
 
 - Sets the caller's tenant on every connection ([Passing the tenant to Postgres](#passing-the-tenant-to-postgres)).
 - Requires explicit callers. Work that never says who it runs as fails. Without this rule, that work would run
@@ -544,7 +544,7 @@ the result, through an index when the table is large enough. The function never 
 ## Read functions for modules
 
 On Postgres, a module reads no table of Tenancy's. The module's context maps the read model to six functions with
-[`AddTenancyReadFunctions`](reference/use-cases.md#addtenancyreadfunctionsmodelbuilder-string). On another database,
+[`AddTenancyReadFunctions`](reference/entity-framework.md#addtenancyreadfunctionsmodelbuilder-string). On another database,
 `AddTenancyReadModel` maps views over the tables instead.
 
 ```csharp
@@ -984,7 +984,7 @@ function that returns only ids or permissions. No signed-in user and no `anon` c
 | Function | Returns | Runs for | Used by |
 |---|---|---|---|
 | `role_permissions_in_use()` | The permissions stored on the roles of every tenant, each once. | Tenancy's system work | `TenancyChecks.UnknownStoredPermissionsAsync` |
-| `seats_of_identity(identity)` | The tenant and seat of every seat a person has, of any status. | Tenancy's system work | [`TenancySystemReads`](reference/entity-framework.md#tenancysystemreads) |
+| `seats_of_identity(identity)` | The tenant and seat of every seat a person has, of any status. | Tenancy's system work | [`TenancySystemReads`](reference/entity-framework.md#tenancystoreoptions) |
 | `tenants_to_sweep()` | The ids of the active and suspended tenants. | System work of any scope. Each round then works in each tenant under its own scope. | `TenancySystemReads.TenantsToSweepAsync` |
 | `invitation_of_digest(digest)`, where invitations are mapped | The tenant, the invitation and the issuing seat for a token's digest. | Tenancy's system work | Accepting an [invitation](invitations.md) |
 
@@ -1026,7 +1026,7 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
 
 - **The convention** names everything that is left to it: every column, key and index, and your modules' tables, in
   every context, pooled or not. EFCore.NamingConventions 10 needs Entity Framework 10.0.1 or later.
-- **[`TenancyTableNames.SnakeCase`](reference/use-cases.md#tenancytablenames)** names Tenancy's ten tables, the two
+- **[`TenancyTableNames.SnakeCase`](reference/entity-framework.md#tenancytablenames)** names Tenancy's ten tables, the two
   tables of the [invitations](invitations.md), and the two indexes that `AddTenancy` names. For another naming, pass
   your own `TenancyTableNames`. Set `RootIndex` and `PrimaryIndex` if the indexes should not follow the names of their
   tables. A module on views (not on Postgres) passes the same names to `AddTenancyReadModel`. A module on the

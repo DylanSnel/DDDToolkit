@@ -13,7 +13,7 @@ namespace DDDToolkit.Supporting.Tenancy;
 /// An argument a message shows is a value, such as a permission or an id, never a word: the English and the Dutch
 /// texts are whole sentences of their own. Where a client wants to say more, it reads the stable tokens the
 /// arguments carry. A refusal of kind <see cref="RefusalKind.Invalid"/> that is about one input names it in
-/// the argument <see cref="RefusalException.FieldArgument"/>, in the word the use cases call that input by,
+/// the argument <see cref="RefusalException.FieldArgument"/>, in the word the managers call that input by,
 /// such as <c>name</c> or <c>until</c>, so a form puts the text under the input; an edge whose input is
 /// called otherwise maps the word. <c>tenancy.tenant-required</c> carries none, because the tenant is no
 /// input of the command: a request names it beside the command, in a header or in its address.
@@ -82,7 +82,7 @@ public static class TenancyRefusals
     public const string StartSystemOnly = "tenancy.start-system-only";
 
     /// <summary>
-    /// Only an operator of the application reads the tenants' directory, or sends a request that requires one
+    /// Only an operator of the application lists the tenants (<c>TenantManager.ListAsync</c>), or sends a request that requires one
     /// (<c>[Operator]</c>, <c>TenancyAccess.Operator()</c>).
     /// </summary>
     public const string OperatorsOnly = "tenancy.operators-only";
@@ -258,13 +258,13 @@ public static class TenancyRefusals
     public const string TooManyIds = "tenancy.too-many-ids";
 
     /// <summary>
-    /// A page of the tenants' directory would hold no tenant, or more than a page holds. Arguments: <c>Max</c>,
+    /// A page of the tenants an operator lists would hold no tenant, or more than a page holds. Arguments: <c>Max</c>,
     /// and <c>Field</c>, which is <c>size</c>.
     /// </summary>
     public const string PageSizeInvalid = "tenancy.page-size-invalid";
 
     /// <summary>
-    /// The marker a page of the tenants' directory continues from is not one the directory gave. Argument:
+    /// The marker a page of the tenants an operator lists continues from is not one <c>TenantManager.ListAsync</c> gave. Argument:
     /// <c>Field</c>, which is <c>after</c>.
     /// </summary>
     public const string CursorInvalid = "tenancy.cursor-invalid";
@@ -359,7 +359,7 @@ public static class TenancyRefusals
         });
 
     /// <summary>
-    /// The input each code is about, where a code is always about the same one, in the word the use cases call
+    /// The input each code is about, where a code is always about the same one, in the word the managers call
     /// it by. <see cref="Refuse"/> and <see cref="Failure"/> add it as the argument
     /// <see cref="RefusalException.FieldArgument"/>, so the place that refuses does not have to remember to.
     /// <para>

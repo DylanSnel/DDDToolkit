@@ -28,7 +28,7 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 /// <item>A role's permissions are a primitive collection, a JSON document on SQLite and SQL Server.</item>
 /// <item>Columns are named after the properties.</item>
 /// <item>Every row that has a tenant gets the tenant filter, through <see cref="TenancyModelBuilderExtensions.ScopeToTenant"/>.</item>
-/// <item>Every unique index says which of Tenancy's refusals a save that breaks it gets, so a rule the use case
+/// <item>Every unique index says which of Tenancy's refusals a save that breaks it gets, so a rule the manager
 /// checked first and a racing save broke anyway is answered the same way, on any database.</item>
 /// </list>
 /// The ids are converted by the application's own converters, which its context registers in
@@ -556,8 +556,8 @@ internal static class TenancyMapping
 
     /// <summary>
     /// Says which of Tenancy's refusals a save that breaks the unique <paramref name="index"/> is answered with:
-    /// the code, its kind and its English text as <see cref="TenancyRefusals"/> has them, so the index and the use
-    /// case that checks the same rule first give one answer. What the text names, <c>{Slug}</c> or <c>{Name}</c>,
+    /// the code, its kind and its English text as <see cref="TenancyRefusals"/> has them, so the index and the
+    /// manager that checks the same rule first give one answer. What the text names, <c>{Slug}</c> or <c>{Name}</c>,
     /// is filled from the row that broke the index.
     /// </summary>
     private static void Refuses(IndexBuilder index, string code)

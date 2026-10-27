@@ -3,7 +3,7 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// <summary>
 /// The rule every write of a tenant's row passes, whatever wrote it: a seat and system work in a tenant only
 /// write their own tenant's rows, and nobody writes any. The storage applies it to every changed row that
-/// belongs to a tenant, before anything is written, so a use case that loaded the wrong row cannot save it.
+/// belongs to a tenant, before anything is written, so a handler that loaded the wrong row cannot save it.
 /// <para>
 /// System work outside any tenant writes no tenant's rows either. It acts in no tenant, so every tenant's row
 /// is another tenant's to it. Provisioning, the one thing it starts, saves as system work inside the tenant it

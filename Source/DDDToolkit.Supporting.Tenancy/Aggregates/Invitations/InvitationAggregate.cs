@@ -24,7 +24,7 @@ namespace DDDToolkit.Supporting.Tenancy;
 /// </para>
 /// <para>
 /// It suggests no name for the seat: a seat has none in Tenancy. What the seat is shown by is the application's,
-/// set in the callback of the use case that accepts.
+/// set in the callback of <c>InvitationManager.AcceptAsync</c>.
 /// </para>
 /// <para>
 /// The token is not here, and neither is its digest: the store keeps the digest apart from the invitation, so
@@ -32,7 +32,7 @@ namespace DDDToolkit.Supporting.Tenancy;
 /// </para>
 /// <para>
 /// What it offers does not change after it was issued: the tenant, the unit, the role, the end of the grant, when
-/// it ends itself and who issued it. An issuer's rights are asked again when it is accepted, by the use case.
+/// it ends itself and who issued it. An issuer's rights are asked again when it is accepted, by the manager.
 /// </para>
 /// </summary>
 /// <typeparam name="TInvitationId">The application's invitation id.</typeparam>
@@ -183,7 +183,7 @@ public abstract partial class InvitationAggregate<TInvitationId, TTenantId, TUni
 
     /// <summary>
     /// Marks the invitation as accepted by the seat it made, and forgets the address it was for. Whether it may be
-    /// accepted, by whom, and making the seat are the use case's: this is its last step, in the same save.
+    /// accepted, by whom, and making the seat are the manager's: this is its last step, in the same save.
     /// </summary>
     /// <param name="seat">The seat the acceptance made.</param>
     /// <param name="at">When.</param>

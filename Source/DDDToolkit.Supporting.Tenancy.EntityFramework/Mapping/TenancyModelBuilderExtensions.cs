@@ -325,9 +325,6 @@ public static class TenancyModelBuilderExtensions
     /// query filter that sits next to the entity's other named filters rather than replacing them, and marks
     /// the entity for Tenancy's save check, which <c>UseDDDToolkit</c> adds: a row of another tenant is refused before anything is
     /// written, whoever loaded or made it.
-    /// <code>
-    /// modelBuilder.Entity&lt;Project&gt;().ScopeToTenant(project =&gt; project.TenantId);
-    /// </code>
     /// <para>
     /// The tenant of a row is fixed once the row is there (<c>IsFixedAfterInsert</c>): a save that changed it is
     /// refused, by the save check first, and where privileges are written from the policies its column is left
@@ -348,8 +345,19 @@ public static class TenancyModelBuilderExtensions
     /// <typeparam name="TTenantId">The application's tenant id.</typeparam>
     /// <param name="entity">The entity's builder.</param>
     /// <param name="tenant">The property that holds the entity's tenant, as <c>entity =&gt; entity.TenantId</c>.</param>
+    /// <returns>The entity's builder, for further calls.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="entity"/> or <paramref name="tenant"/> is null.</exception>
     /// <exception cref="ArgumentException"><paramref name="tenant"/> is not a property of the entity.</exception>
+    /// <example>
+    /// A table the module maps by hand, whose class has no <c>[OfTenant]</c> and keeps its tenant in
+    /// <c>CompanyId</c>, a property of the application's tenant id:
+    /// <code>
+    /// protected override void OnModelCreating(ModelBuilder modelBuilder)
+    /// {
+    ///     modelBuilder.Entity&lt;ImportedTimesheet&gt;().ScopeToTenant(sheet =&gt; sheet.CompanyId);
+    /// }
+    /// </code>
+    /// </example>
     public static EntityTypeBuilder<TEntity> ScopeToTenant<TEntity, TTenantId>(
         this EntityTypeBuilder<TEntity> entity,
         Expression<Func<TEntity, TTenantId>> tenant)

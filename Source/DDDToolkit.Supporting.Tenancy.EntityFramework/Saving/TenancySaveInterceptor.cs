@@ -16,7 +16,7 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 /// <summary>
 /// Tenancy's part of every save, in Tenancy's own context and in every context with an entity kept to a tenant:
 /// the save check. Every row the save adds, changes or deletes that belongs to a tenant must belong to the
-/// current Tenancy caller's, so a use case that loaded or made the wrong row cannot write it.
+/// current Tenancy caller's, so a handler that loaded or made the wrong row cannot write it.
 /// <list type="table">
 /// <listheader><term>Caller</term><description>What the check does</description></listheader>
 /// <item><term>A seat, or system work in a tenant</term><description>Refuses a row of another tenant with <c>tenancy.other-tenant</c>.</description></item>
@@ -35,7 +35,7 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 /// <para>
 /// In Tenancy's own context it then writes, in the same save, what the access questions read: the closure of
 /// every organization whose tree changed and the rights of every seat the save reaches, a role's holders
-/// included. The rights the use cases check are therefore never behind the aggregates they were saved with.
+/// included. The rights the managers check are therefore never behind the aggregates they were saved with.
 /// Where the database keeps the rights itself (<see cref="TenancyStoreOptions.DatabaseKeepsRights"/>), it writes
 /// them, in the same transaction, and the save writes the closure alone.
 /// </para>

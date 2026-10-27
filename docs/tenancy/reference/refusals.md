@@ -7,7 +7,7 @@ sidebar_label: Refusals
 
 # Tenancy API: Refusals
 
-Every code Tenancy refuses a command with, in the members of `TenancyRefusals`, and the resources that hold their texts.
+Every refusal code of Tenancy, in the members of `TenancyRefusals`, and the resources that hold their texts.
 
 ## Refusal codes
 
@@ -21,7 +21,7 @@ public static class TenancyRefusals
 
 Every way Tenancy refuses a command, as codes a caller branches on, and the one place their kind and English text are written down.
 
-An argument a message shows is a value, such as a permission or an id, never a word: the English and the Dutch texts are whole sentences of their own. Where a client wants to say more, it reads the stable tokens the arguments carry. A refusal of kind `RefusalKind.Invalid` that is about one input names it in the argument `RefusalException.FieldArgument`, in the word the use cases call that input by, such as `name` or `until`, so a form puts the text under the input; an edge whose input is called otherwise maps the word. `tenancy.tenant-required` carries none, because the tenant is no input of the command: a request names it beside the command, in a header or in its address.
+An argument a message shows is a value, such as a permission or an id, never a word: the English and the Dutch texts are whole sentences of their own. Where a client wants to say more, it reads the stable tokens the arguments carry. A refusal of kind `RefusalKind.Invalid` that is about one input names it in the argument `RefusalException.FieldArgument`, in the word the managers call that input by, such as `name` or `until`, so a form puts the text under the input; an edge whose input is called otherwise maps the word. `tenancy.tenant-required` carries none, because the tenant is no input of the command: a request names it beside the command, in a header or in its address.
 
 The Dutch texts have no word for the reader. Dutch makes a writer choose between a familiar and a formal word for "you", and that choice is the application's, so a Dutch sentence says what is the case or what is needed and leaves the word out. An application that wants another tone, or other words, registers a resx of its own in front of this one.
 
@@ -44,7 +44,8 @@ services.AddDDDToolkitLocalization(options => options.AddResource<TenancyFailure
 | `SelfAppointment = "tenancy.self-appointment"` | A seat would give itself a role that manages access. Argument: `Role`. |
 | `OtherTenant = "tenancy.other-tenant"` | A change would write a row of another tenant. |
 | `StartSystemOnly = "tenancy.start-system-only"` | Only system work chooses when a grant starts. |
-| `OperatorsOnly = "tenancy.operators-only"` | Only an operator of the application reads the tenants' directory, or sends a request that requires one (`TenancyAccess.RequiresOperator()`). |
+| `OperatorsOnly = "tenancy.operators-only"` | Only an operator of the application lists the tenants (`TenantManager.ListAsync`), or sends a request that requires one (`[Operator]`, `TenancyAccess.Operator()`). |
+| `TenantMismatch = "tenancy.tenant-mismatch"` | An operator's request names one tenant with its `[ForTenant]` member and another beside it, as tenant selection reads it. It carries no field, since the tenant beside the request is no input of the command. |
 | `AddressMismatch = "tenancy.address-mismatch"` | The invitation is for another address than the one the application says the accepting identity has. It names neither address. |
 | `UnitNotFound = "tenancy.unit-not-found"` | The unit is not one of the tenant's. |
 | `SeatNotFound = "tenancy.seat-not-found"` | The seat is not one of the tenant's, or belongs to another tenant. |
@@ -87,8 +88,8 @@ services.AddDDDToolkitLocalization(options => options.AddResource<TenancyFailure
 | `IdentityRequired = "tenancy.identity-required"` | A seat would have no verified identity. Argument: `Field`, which is `identity`. |
 | `PermissionsNotNormalized = "tenancy.permissions-not-normalized"` | A role's permissions are not expanded, or hold duplicates, or are out of order. Argument: `Field`, which is `permissions`. |
 | `TooManyIds = "tenancy.too-many-ids"` | A question by id asks about more ids than one question takes. Arguments: `Max`, and `Field`, which is `ids`. |
-| `PageSizeInvalid = "tenancy.page-size-invalid"` | A page of the tenants' directory would hold no tenant, or more than a page holds. Arguments: `Max`, and `Field`, which is `size`. |
-| `CursorInvalid = "tenancy.cursor-invalid"` | The marker a page of the tenants' directory continues from is not one the directory gave. Argument: `Field`, which is `after`. |
+| `PageSizeInvalid = "tenancy.page-size-invalid"` | A page of the tenants an operator lists would hold no tenant, or more than a page holds. Arguments: `Max`, and `Field`, which is `size`. |
+| `CursorInvalid = "tenancy.cursor-invalid"` | The marker a page of the tenants an operator lists continues from is not one `TenantManager.ListAsync` gave. Argument: `Field`, which is `after`. |
 | `AddressInvalid = "tenancy.address-invalid"` | An invitation is not for one address a message can be sent to. Arguments: `Max`, the most characters an address has, and `Field`, which is `address`. |
 | `InvitationLifetime = "tenancy.invitation-lifetime"` | An invitation would stay open for less or for longer than an invitation may. Arguments: `Min` and `Max`, in minutes, and `Field`, which is `lifetime`. |
 | `InvitationGrantEndsFirst = "tenancy.invitation-grant-ends-first"` | The grant an invitation offers would end before the invitation does, so it could be accepted for a role that is already over. Argument: `Field`, which is `grantUntil`. |

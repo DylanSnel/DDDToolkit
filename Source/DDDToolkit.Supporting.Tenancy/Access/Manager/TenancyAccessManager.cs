@@ -81,10 +81,26 @@ public class TenancyAccessManager<
         CurrentTenant = new CurrentTenant<TTenantId, TSeatId>();
     }
 
-    /// <summary>Who acts: a signed-in user, somebody who has not signed in, or system work.</summary>
+    /// <summary>
+    /// Who acts: a signed-in user, somebody who has not signed in, or system work. It reads the current flow of work
+    /// each time it is asked.
+    /// </summary>
+    /// <example>
+    /// <code>
+    /// var identity = access.CurrentUser.Id;   // null for system work and for somebody who has not signed in
+    /// </code>
+    /// </example>
     public CurrentUser CurrentUser { get; }
 
-    /// <summary>The tenant the current work acts in, and the seat in it.</summary>
+    /// <summary>
+    /// The tenant the current work acts in, and the seat in it. It reads the current flow of work each time it is
+    /// asked. <c>Require()</c> returns the tenant, or throws the refusal the request got.
+    /// </summary>
+    /// <example>
+    /// <code>
+    /// var current = access.CurrentTenant.Require();   // current.Id is the tenant, current.Seat the caller's seat
+    /// </code>
+    /// </example>
     public CurrentTenant<TTenantId, TSeatId> CurrentTenant { get; }
 
     /// <summary>
@@ -92,7 +108,24 @@ public class TenancyAccessManager<
     /// tenant to begin in and no seat whose rights could do it. Only provisioning accepts it. The work reads nothing
     /// inside a tenant, and is recorded as the system. It ends when the result is disposed.
     /// </summary>
-    /// <remarks>It does what <see cref="TenancyWork.BeginSystem{TTenantId, TSeatId}"/> does.</remarks>
+    /// <remarks>
+    /// It does what <see cref="TenancyWork.BeginSystem{TTenantId, TSeatId}"/> does. On Postgres the work runs as the
+    /// toolkit's scoped system caller in the scope <c>tenancy</c>. Under Tenancy's policies that caller reads and writes
+    /// nothing until provisioning narrows it to the tenant it makes.
+    /// </remarks>
+    /// <returns>The work, which ends when it is disposed. The caller before it is current again then.</returns>
+    /// <example>
+    /// Read the signed-in user's id before the work begins: inside it, <see cref="CurrentUser"/> reports system work and has no id.
+    /// <code>
+    /// var ada = access.CurrentUser.Id ?? throw new InvalidOperationException("[SignedIn] lets only a signed-in user through.");
+    /// using (access.BeginSystem())
+    /// {
+    ///     var tenant = await tenants.ProvisionAsync(
+    ///         new TenantToProvision("harbor-works", "Harbor Works", TenantShape.Hierarchical, "Harbor Works", ada),
+    ///         cancellationToken);
+    /// }
+    /// </code>
+    /// </example>
     public IDisposable BeginSystem() => TenancyWork.BeginSystem<TTenantId, TSeatId>();
 
     /// <summary>
@@ -100,18 +133,36 @@ public class TenancyAccessManager<
     /// condition. The work holds every permission in that tenant and nothing in another. The last-administrator rule
     /// still applies to it. It ends when the result is disposed.
     /// <para>
-    /// Take the tenant, and what the work changes, from the current tenant or from your own records, never from the
-    /// request: system work does what it is told.
+    /// Take the tenant, and what the work changes, from the current tenant or from your own records. Never take them
+    /// from the request: system work holds every permission in the tenant, so it changes whatever the request names.
     /// </para>
     /// </summary>
-    /// <remarks>It does what <see cref="TenancyWork.BeginSystemIn{TTenantId, TSeatId}(TTenantId, TSeatId?, string)"/> does.</remarks>
+    /// <remarks>
+    /// It does what <see cref="TenancyWork.BeginSystemIn{TTenantId, TSeatId}(TTenantId, TSeatId?, string)"/> does. The work
+    /// is recorded as the system in <paramref name="scope"/>, and <paramref name="actingSeat"/> as who placed or
+    /// granted. On Postgres it runs as the toolkit's scoped system caller, a database role that cannot bypass the
+    /// policies, so it reads and writes the rows of that tenant alone.
+    /// </remarks>
     /// <param name="tenant">The tenant.</param>
     /// <param name="actingSeat">The seat of the person who asked for the work. It is only recorded in the history, and adds no rights.</param>
     /// <param name="scope">
     /// The scope of the work: Tenancy's own, which writes Tenancy's tables, unless a module's own work passes its name.
     /// Lower case letters, digits, <c>_</c> and <c>-</c>.
     /// </param>
+    /// <returns>The work, which ends when it is disposed. The caller before it is current again then.</returns>
     /// <exception cref="ArgumentException"><paramref name="scope"/> is not a scope. Nothing is begun then.</exception>
+    /// <example>
+    /// A seat that passed a course gets the role the course gives. The seat holds no <c>tenancy.grants.manage</c>, so
+    /// the handler grants the role as system work, for the calling seat and with the role from the application's own
+    /// records:
+    /// <code>
+    /// var current = access.CurrentTenant.Require();
+    /// using (access.BeginSystemIn(current.Id, actingSeat: current.Seat))
+    /// {
+    ///     await seats.GrantAsync(current.Seat!.Value, course.Role, course.Unit, until: null, reason: "Course passed", cancellationToken);
+    /// }
+    /// </code>
+    /// </example>
     public IDisposable BeginSystemIn(TTenantId tenant, TSeatId? actingSeat = null, string scope = TenancyWork.SystemScope)
         => TenancyWork.BeginSystemIn<TTenantId, TSeatId>(tenant, actingSeat, scope);
 
@@ -121,17 +172,41 @@ public class TenancyAccessManager<
     /// the tenant holds, so your code narrows what it reads to that seat. Begin it only once the token was checked and
     /// found to be that seat's, and the seat to be in use. It ends when the result is disposed.
     /// </summary>
-    /// <remarks>It does what <see cref="TenancyWork.BeginTokenIn{TTenantId, TSeatId}"/> does.</remarks>
+    /// <remarks>
+    /// It does what <see cref="TenancyWork.BeginTokenIn{TTenantId, TSeatId}"/> does. On Postgres it runs as the toolkit's
+    /// scoped system caller in <paramref name="scope"/>, as <see cref="BeginSystemIn"/> does.
+    /// </remarks>
     /// <param name="tenant">The tenant.</param>
     /// <param name="seat">The seat the token stands for.</param>
     /// <param name="scope">The scope of the work, the module's name: lower case letters, digits, <c>_</c> and <c>-</c>.</param>
+    /// <returns>The work, which ends when it is disposed. The caller before it is current again then.</returns>
     /// <exception cref="ArgumentException"><paramref name="scope"/> is not a scope. Nothing is begun then.</exception>
+    /// <example>
+    /// A calendar feed whose address carries a token Leo made. The handler checks the token first, with the
+    /// application's own records, and then reads Leo's inspections alone:
+    /// <code>
+    /// var link = await feeds.FindByTokenAsync(token, cancellationToken) ?? throw new FeedNotFoundException();
+    /// using (access.BeginTokenIn(link.Tenant, link.Seat, scope: "inspections"))
+    /// {
+    ///     var due = await db.Inspections.Where(inspection => inspection.Inspector == link.Seat).ToListAsync(cancellationToken);
+    /// }
+    /// </code>
+    /// </example>
     public IDisposable BeginTokenIn(TTenantId tenant, TSeatId seat, string scope)
         => TenancyWork.BeginTokenIn<TTenantId, TSeatId>(tenant, seat, scope);
 
     /// <summary>
     /// The ids of the tenants a round of system work visits: the active and the suspended ones, in no order. A job asks
-    /// this first, and then begins system work in each tenant in turn, in its own scope:
+    /// this first, and then begins system work in each tenant in turn, in its own scope. The read returns ids alone,
+    /// which name no person and no row. It runs on a context of its own, outside the work around it, as the system in
+    /// <paramref name="scope"/>.
+    /// </summary>
+    /// <param name="scope">The scope of the work that asks, the module's name: lower case letters, digits, <c>_</c> and <c>-</c>.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The ids of the active and the suspended tenants.</returns>
+    /// <exception cref="ArgumentException"><paramref name="scope"/> is not a scope. Nothing is read then.</exception>
+    /// <example>
+    /// A nightly job closes overdue inspections in every tenant:
     /// <code>
     /// foreach (var tenant in await access.TenantsToSweepAsync("inspections", cancellationToken))
     /// {
@@ -141,12 +216,7 @@ public class TenancyAccessManager<
     ///     }
     /// }
     /// </code>
-    /// The ids are all it learns. They name no person and no row. The read runs on a context of its own, so it does not
-    /// reach into the work around it.
-    /// </summary>
-    /// <param name="scope">The scope of the work that asks, the module's name: lower case letters, digits, <c>_</c> and <c>-</c>.</param>
-    /// <param name="cancellationToken">Cancels the read.</param>
-    /// <exception cref="ArgumentException"><paramref name="scope"/> is not a scope. Nothing is read then.</exception>
+    /// </example>
     /// <exception cref="InvalidOperationException">
     /// No storage package registered the read: Tenancy is not registered with <c>AddTenancy</c> of
     /// <c>DDDToolkit.Supporting.Tenancy.EntityFramework</c>, or of another storage package that reads the tenants.
@@ -168,7 +238,17 @@ public class TenancyAccessManager<
     /// </summary>
     /// <param name="source">The rows to ask over.</param>
     /// <param name="executor">Runs the queries that answer yes or no.</param>
+    /// <returns>
+    /// The queries, for the caller of the current flow of work at this moment. They are composed over
+    /// <paramref name="source"/> and run by whoever runs the query they end up in.
+    /// </returns>
     /// <exception cref="ArgumentNullException"><paramref name="source"/> or <paramref name="executor"/> is null.</exception>
+    /// <example>
+    /// <code>
+    /// var queries = access.In(readSource, executor);
+    /// var editable = await executor.ListAsync(queries.UnitsWhereIHold("projects.edit"), cancellationToken);
+    /// </code>
+    /// </example>
     public ITenancyQueries<TTenantId, TSeatId, TUnitId, TRoleId> In(
         ITenancyReadSource<TTenantId, TSeatId, TUnitId, TRoleId> source,
         IQueryExecutor executor)

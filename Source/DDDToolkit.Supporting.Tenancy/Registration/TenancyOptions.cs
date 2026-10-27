@@ -54,7 +54,7 @@ public sealed class TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId>
 
     /// <summary>
     /// Whether <paramref name="caller"/> is one of the application's operators: a signed-in user whose token
-    /// carries one of <see cref="OperatorTokenRoles"/>. The one place that says so: the tenants' directory and
+    /// carries one of <see cref="OperatorTokenRoles"/>. The one place that says so: <c>TenantManager.ListAsync</c> and
     /// the check of <see cref="OperatorAttribute"/> both ask here, so they mean the same caller by it. System work is never one, whoever it is recorded as, and neither is anyone without an identity.
     /// </summary>
     /// <param name="caller">Who is calling, as the toolkit says: the caller of the request, not the Tenancy caller.</param>
