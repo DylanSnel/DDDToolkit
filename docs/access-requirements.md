@@ -962,47 +962,30 @@ flowchart LR
     class Refused bad
 ```
 
-The database can still require the permission for the save. A resource can mark a permission `LocksMembers`. This is
-the permission that the commands which change the members require. Membership then adds a restrictive policy on the
-member tables, the lock. A member row changes only for a caller who holds that permission, and no row rule of the
-application widens this. A caller who takes themselves off passes the access check, and then the database refuses
+The database can still require the permission for the save. A resource can mark a permission `ManagesMembers`. This
+is the permission that the member manager requires to change the members. Membership then adds a restrictive policy
+on the member tables, the lock. A member row changes only for a caller who holds that permission, and no row rule of
+the application widens this. A caller who takes themselves off passes the access check, and then the database refuses
 their row.
 
-So the handler saves the caller's own place as system work, started for that one save. It does this only when the
-request is the one in hand, because then its check let it through in this handling. The handler saves anybody else's
-place as the caller, and the database checks that save like every other save. The Tenancy sample's
-`OwnPlaceOnTheCrew.BeginSave` does this for a seat, in its module's own scope.
+So the member manager saves the caller's own place as the resource's own work, begun for that one save. It does this
+only when the request in hand is the one whose check read the resource, because then its check let it through in
+this handling. It saves anybody else's place as the caller, and the database checks that save like every other save
+([The caller's own place](membership/resources-and-members.md#the-callers-own-place)).
 
 <details>
-<summary>Show the code: taking yourself off, saved as system work</summary>
+<summary>Show the code: taking yourself off, saved as the document's own work</summary>
 
 ```csharp
 [RequiresPermission(DocumentPermissions.Share)]                                            // take yourself off, or anybody with the permission
 public sealed record LeaveDocument([OnResource] DocumentId Document, [OrOwn] UserId Member, [ExpectedVersion] long? ExpectedVersion = null) : IDocumentsRequest;
 
-public sealed class LeaveDocumentHandler(DocumentsContext context, ICurrentUser user)
+public sealed class LeaveDocumentHandler(DocumentShareManager shares, ICurrentUser user)
 {
-    public async Task HandleAsync(LeaveDocument command, CancellationToken cancellationToken)
-    {
-        var document = await context.Documents.AsTracking().SingleOrDefaultAsync(each => each.Id == command.Document, cancellationToken)
-            ?? throw DocumentRefusals.Membership.Refuse(MembershipRefusals.NotFound);
-        context.ExpectVersion(document, command.ExpectedVersion);
-        if (document.Shares.All(share => share.MemberId != command.Member))
-        {
-            throw DocumentRefusals.Membership.Refuse(MembershipRefusals.MemberNotFound);   // acts on itself, not anywhere
-        }
-
-        document.Unshare(command.Member);
-
-        // The caller's own place, allowed by the access check: system work for this one save, and only for the
-        // request whose check let it through in this handling. Anybody else's place is saved as the caller.
-        var own = user.Id is { } id && new UserId(id) == command.Member
-            && ReferenceEquals(RequestInHand.Current?.Request, command);
-        using (own ? user.BeginSystem() : null)
-        {
-            await context.SaveChangesAsync(cancellationToken);
-        }
-    }
+    public Task<Document> HandleAsync(LeaveDocument command, CancellationToken cancellationToken)
+        => user.Id is { } id && new UserId(id) == command.Member
+            ? shares.LeaveAsync(command.Document, cancellationToken, command.ExpectedVersion)                    // the caller's own place: no permission, saved as the document's own work
+            : shares.RemoveAsync(command.Document, command.Member, cancellationToken, command.ExpectedVersion);  // anybody else's: documents.share, saved as the caller
 }
 ```
 

@@ -101,17 +101,38 @@ public class MembershipDocsExampleTests
         rules.OwnerPermissions.Should().Equal("documents.view", "documents.edit", "documents.share");
         rules.SystemScopes.Should().Equal(["filing"], "the scope of the document's module");
 
-        // The owner holds no role: it opens the document with nothing else to say.
+        // The owner holds no role: it opens the document with nothing else to say. A share is added the way the member
+        // manager adds one, through the members the generator writes onto the document, behind the document's hook.
         var document = emitted.New("Filing.Document", emitted.CallStatic("Filing.DocumentId", "CreateSequential"), owner, now);
-        emitted.Call(document, "ShareWith", reader, new NamedRole("contributor"), MemberPeriod.Open(now), now, owner);
+        object? Share(string role) => Managed(document).GetMethod("AddMember")!.Invoke(document, [reader, new NamedRole(role), MemberPeriod.Open(now), now, owner]);
+        Share("contributor");
 
         ((System.Collections.IEnumerable)emitted.Property(document, "Shares")!).Cast<object>().Should().HaveCount(2);
         rules.PermissionsOf(new NamedRole("contributor")).Should().Equal("documents.view", "documents.edit");
 
-        var twice = FluentActions.Invoking(() => emitted.Call(document, "ShareWith", reader, new NamedRole("onlooker"), MemberPeriod.Open(now), now, owner))
+        var twice = FluentActions.Invoking(() => Share("onlooker"))
             .Should().Throw<TargetInvocationException>().WithInnerException<RefusalException>().Which;
         twice.Code.Should().Be("documents.already-member");
     }
+
+    [Fact]
+    public void The_examples_hook_keeps_an_archived_document_from_taking_a_share()
+    {
+        // The hook the example implements is the guard the member manager has run in front of every change.
+        var emitted = Run().Emit();
+        var now = DateTimeOffset.UtcNow;
+        var owner = emitted.CallStatic("Filing.UserId", "CreateUnique");
+        var document = emitted.New("Filing.Document", emitted.CallStatic("Filing.DocumentId", "CreateSequential"), owner, now);
+        document.GetType().GetProperty("Archived")!.SetValue(document, true);
+
+        FluentActions.Invoking(() => Managed(document).GetMethod("AddMember")!.Invoke(document, [emitted.CallStatic("Filing.UserId", "CreateUnique"), new NamedRole("onlooker"), MemberPeriod.Open(now), now, owner]))
+            .Should().Throw<TargetInvocationException>().WithInnerException<RefusalException>().Which.Code.Should().Be("documents.archived");
+        ((System.Collections.IEnumerable)emitted.Property(document, "Shares")!).Cast<object>().Should().ContainSingle("the owner alone");
+    }
+
+    /// <summary>The way to a resource's members the generator writes for its member manager, as explicit members of the interface.</summary>
+    private static Type Managed(object resource)
+        => resource.GetType().GetInterfaces().Single(face => face.IsGenericType && face.GetGenericTypeDefinition() == typeof(IMembershipResource<,,>));
 
     [Fact]
     public void The_first_examples_permissions_say_which_the_database_lock_is_written_from()
@@ -120,7 +141,7 @@ public class MembershipDocsExampleTests
         // and no warning at start-up that the rules leave them to whoever may change a document.
         var rules = (MembershipRules)Run().Emit().StaticProperty("Filing.DocumentMembership", "Rules")!;
 
-        (rules.ManagesMembersPermission, rules.NamesOwnerPermission).Should().Be(("documents.share", "documents.share"), "the permission the example's command that shares requires");
+        (rules.ManagesMembersPermission, rules.NamesOwnerPermission).Should().Be(("documents.share", "documents.share"), "the permission the example's member manager requires to share");
     }
 
     [Fact]
@@ -134,6 +155,7 @@ public class MembershipDocsExampleTests
         var documentIdType = emitted.Type("Filing.DocumentId");
         services.Should().Contain(descriptor => descriptor.ServiceType == emitted.Type("Filing.FilingContext"), "the context the questions and the handlers ask for is registered, by the page's own line");
         services.Should().Contain(descriptor => descriptor.ServiceType == typeof(MembershipAccessManager<>).MakeGenericType(emitted.Type("Filing.Document")));
+        services.Should().Contain(descriptor => descriptor.ServiceType == emitted.Type("DocumentShareManager"), "the member manager the handlers take, written into the global namespace");
         services.Should().Contain(descriptor => descriptor.ServiceType == typeof(MemberAccessCheck<,>).MakeGenericType(emitted.Type("Filing.Document"), documentIdType));
         services.Should().Contain(descriptor => descriptor.ServiceType == typeof(DDDToolkit.Access.AccessChecks<>).MakeGenericType(emitted.Type("Filing.IFilingRequest")));
         services.Should().Contain(descriptor => descriptor.ServiceType == typeof(FailureTexts), "the texts come with the registration, with no line of the page's");

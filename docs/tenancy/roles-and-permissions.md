@@ -584,12 +584,12 @@ public static class ShopCatalogue
 // that passed is the caller, and the role and the unit come from the quiz. System work gives whatever it is told, so
 // the client chooses neither.
 [InTenant]
-public sealed record PassQuiz(QuizId Quiz, QuizAnswers Answers) : ICommand, ITenantsRequest;
+public sealed record PassQuiz(QuizId Quiz, QuizAnswers Answers) : ICommand<Seat>, ITenantsRequest;
 
 public sealed class PassQuizHandler(SeatManager seats, TenancyAccessManager access, IQuizzes quizzes)
-    : ICommandHandler<PassQuiz>
+    : ICommandHandler<PassQuiz, Seat>
 {
-    public async ValueTask<Unit> Handle(PassQuiz command, CancellationToken cancellationToken)
+    public async ValueTask<Seat> Handle(PassQuiz command, CancellationToken cancellationToken)
     {
         // The tenant the request names, and the caller's seat in it. System work in the tenant has no seat here.
         var current = access.CurrentTenant.Require();
@@ -602,13 +602,11 @@ public sealed class PassQuizHandler(SeatManager seats, TenancyAccessManager acce
         }
 
         // An administrator set the quiz's role and unit when making the quiz. No person asks for this grant, so
-        // the system work names no acting seat. The reason says why the role was given.
+        // the system work names no acting seat. The reason says why the role was given. The seat comes back with it.
         using (access.BeginSystemIn(current.Id))
         {
-            await seats.GrantAsync(seat, quiz.Role, quiz.Unit, until: null, reason: "passed " + quiz.Name, cancellationToken);
+            return await seats.GrantAsync(seat, quiz.Role, quiz.Unit, until: null, reason: "passed " + quiz.Name, cancellationToken);
         }
-
-        return Unit.Value;
     }
 }
 ```

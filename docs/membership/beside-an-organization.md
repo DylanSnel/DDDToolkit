@@ -53,8 +53,8 @@ each resource. It also keeps a resource reachable after its owner has left, so s
 ## With Tenancy
 
 The two packages do not reference each other. In a project that references both, Membership's generator writes two
-things for each member class whose members are seats: a class that returns what the rules need from Tenancy, and the
-registration `Add{Resource}MembershipWithTenancy`. The tutorial uses both throughout:
+things for each member class whose members are seats: a class that returns what the rules and the managers need from
+Tenancy, and the registration `Add{Resource}MembershipWithTenancy`. The tutorial uses both throughout:
 
 - the member class over `SeatId` ([step 1](tutorial.md#step-1-the-board-its-members-and-its-roles));
 - the context ([step 3](tutorial.md#step-3-where-it-is-stored));
@@ -74,7 +74,7 @@ project roles that each tenant makes from three starter roles.
 - **System work is nobody's member.** It holds every permission where the rules let its scope
   through. So Tenancy's own work, in the `tenancy` scope, holds nothing on a board
   ([System work](checks-and-saves.md#system-work)).
-- **A new member's seat must be active in the caller's tenant.** Otherwise `MemberAdmission` refuses with
+- **A new member's seat must be active in the caller's tenant.** Otherwise the member manager refuses with
   `boards.member-not-active`. The class reads the seats the caller can read. That is every seat of the tenant, unless
   a [read rule on your seat class](../tenancy/postgres.md#default-read-policies-for-seats-and-invitations) narrows them.
 - **A permission held at the resource's unit or above reaches the resource**, with `Via` set to `Above`. Only a
@@ -85,6 +85,12 @@ project roles that each tenant makes from three starter roles.
   so a rule that needs that moment reads it from Tenancy.
 - **The tenant's roles.** When the member class holds the tenant's roles, the class returns which roles in use give
   a permission, and whether a role exists. An archived role gives nothing, even where it is still held.
+- **The permission that changes the custom roles** (`Roles.Custom(managedWith: ...)`) is held for the whole tenant
+  or not at all. The role manager refuses a caller without it with `tenancy.not-permitted`, and a caller without an
+  active seat with Tenancy's own code. A permission that is not in Tenancy's catalogue is held by nobody.
+- **A change to the caller's own place** is saved as system work in the caller's tenant, in the resource's scope, for
+  the caller's seat ([The caller's own place](resources-and-members.md#the-callers-own-place)). The history names the
+  seat.
 - **Rules that take the member from the token are refused** when you register: `MemberSource.CallerId` and
   `MemberSource.Claim(...)`. A seat id is over the same type of value as a user id, so the registration would read a
   user id as a seat id.
@@ -145,7 +151,7 @@ roles instead:
   class `[OfTenant]`, from `Supporting.Tenancy.Abstractions`. Tenancy's convention keeps both classes inside their
   tenant, and Membership's mapping gives the role class its two unique indexes per tenant
   ([Which customer a role belongs to](permissions-and-roles.md#which-customer-a-role-belongs-to)). You make the
-  starter roles when you set up a tenant.
+  starter roles with the role manager when you set up a tenant.
 - **Handlers that need the caller's tenant or seat** take Tenancy's access manager, `TenancyAccessManager`, as the
   tutorial's `OpenBoard` does. It also begins system work in the module's scope
   ([System work](checks-and-saves.md#system-work)).
@@ -228,7 +234,7 @@ public sealed class CratesInTheDepot(DepotDesk desk, DepotContext db)
                select path.BayId;
     }
 
-    // Whether a role exists. The admission calls this before a role is given.
+    // Whether a role exists. The member manager calls this before a role is given.
     public async ValueTask<bool> ExistsAsync(DepotRoleId role, CancellationToken cancellationToken)
         => await db.Roles.AnyAsync(kept => kept.Id == role && kept.InUse, cancellationToken);
 }

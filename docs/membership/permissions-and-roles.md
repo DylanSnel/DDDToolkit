@@ -6,7 +6,8 @@ sidebar_label: Permissions and roles
 # Membership: permissions and roles
 
 Read this page when you declare permissions or write the commands that give roles. It covers the settings of a
-permission, who holds a permission, who may give a role, and roles a customer makes.
+permission, who holds a permission, who may give a role, and roles a customer makes and changes through the role
+manager.
 [Tutorial step 2](tutorial.md#step-2-the-permissions-and-the-rules) introduces the levels and a first set of
 permissions.
 
@@ -25,8 +26,8 @@ One class may mix levels. On a resource, `[On<T>]` also says how the permission 
 | `Owner` | The owner holds the permission by owning the resource. | Set `false` when the owner should hold it only the way anybody else does, through a role or from above. Use it for a permission such as naming another owner. |
 | `EveryMember` | Being a member gives nothing. | Set `true` to let every member hold it, whatever their roles. This is usually the permission that sees the resource. One permission at most. |
 | `InRoles` | A role may give it. | Set `false` when only the owner and reach from above may hold it. Use it for a permission a customer must never hand out. A fixed role that lists it is refused when the rules are made. |
-| `LocksMembers` | It locks nothing. | Set `true` on the permission your commands require to change the members. On Postgres, a policy then lets only callers with this permission write the member rows ([Who writes the member rows](postgres.md#who-writes-the-member-rows)). One permission at most. |
-| `LocksOwner` | It locks nothing. | Set `true` on the permission your command requires to hand the resource on. On Postgres, a trigger then lets only callers with this permission change the owner column. One permission at most. |
+| `ManagesMembers` | It manages nothing. | Set `true` on the permission that adds and removes members and gives and takes their roles. The [member manager](resources-and-members.md#the-member-manager) requires it. On Postgres, a policy also lets only callers with this permission write the member rows ([Who writes the member rows](postgres.md#who-writes-the-member-rows)). One permission at most. |
+| `NamesOwner` | It names nobody. | Set `true` on the permission that hands the resource to another owner. The member manager requires it. On Postgres, a trigger also lets only callers with this permission change the owner column. One permission at most. |
 | `FromAbove` | The permission reaches from above, where the rules allow reach from above. | Set `false` when holding it where the resource hangs should give nothing on the resource ([Reach from above](beside-an-organization.md#reach-from-above)). When the rules reach from above, the `EveryMember` permission must keep `FromAbove = true`. |
 
 Every level also takes these settings:
@@ -43,9 +44,9 @@ Every level also takes these settings:
 | Mistake | Reported as |
 |---|---|
 | A `[Permissions]` class that is not static, a constant without a level, or a permission declared twice | [DDD00092](../diagnostics.md#ddd00092) |
-| `[On<T>]` on a type that is not a resource with members, or two permissions marked `EveryMember`, `LocksMembers` or `LocksOwner` | [DDD00093](../diagnostics.md#ddd00093) |
+| `[On<T>]` on a type that is not a resource with members, or two permissions marked `EveryMember`, `ManagesMembers` or `NamesOwner` | [DDD00093](../diagnostics.md#ddd00093) |
 | Rules for a resource with no permission declared on it | [DDD00094](../diagnostics.md#ddd00094), where the rules are made |
-| A locking permission that nobody could hold: not the owner, not every member, no role and nothing above | An `ArgumentException` when the rules are made |
+| A permission marked `ManagesMembers` or `NamesOwner` that nobody could hold: not the owner, not every member, no role and nothing above | An `ArgumentException` when the rules are made |
 
 ## Who holds a permission
 
@@ -71,36 +72,35 @@ The five ways a caller holds a permission are listed in the
 
 ## Who may give a role
 
-The package has no permission of its own for adding a member, giving or taking a role, or naming another owner. It
-also has no rule about who gives what to whom. Each of your commands requires the permission you choose.
+The member manager requires one permission for adding a member, giving or taking a role, and taking a member off:
+the one you mark `ManagesMembers`. Naming another owner requires the one you mark `NamesOwner`. The package has no
+rule about who gives what to whom.
 
-- **Usually the command requires a permission on the resource.**
+- **The request usually requires the same permission on the resource.**
   [`ShareDocument`](resources-and-members.md#a-document-and-the-people-it-is-shared-with) requires
-  `documents.share`. A caller with that permission shares with anyone, in any role, for any period. The owner holds
-  it by owning. A member holds it when a role gives it.
-- **Write any further rule in the handler**, over what the resource's access manager returns in one statement. The
-  handler takes `MembershipAccessManager<Folder>`, and asks about the folder it loaded. This handler refuses to put
-  staff on a folder for longer than the caller holds `folders.staff`:
+  `documents.share`, the permission marked `ManagesMembers`. The manager then uses the check's answer. A caller with
+  that permission shares with anyone, in any role, for any period. The owner holds it by owning. A member holds it
+  when a role gives it.
+- **Write any further rule in the handler**, over what the resource's access manager returns in one statement, and
+  call the manager after it. The handler takes `MembershipAccessManager<Folder>` and `FolderMemberManager`. This
+  handler refuses to put staff on a folder for longer than the caller holds `folders.staff`:
 
 ```csharp
 [RequiresPermission("folders.staff")]
 public sealed record AdmitStaff([OnResource] FolderId Folder, StaffCode Staff, NamedRole Role, DateTimeOffset? Until, [ExpectedVersion] long? ExpectedVersion = null) : IFilingRequest;
 
-// In the handler, with the folder loaded. folderAccess is the MembershipAccessManager<Folder> the handler takes.
-var hold = await folderAccess.RequireAsync(folder, "folders.staff", cancellationToken);
+// In the handler. folderAccess is the MembershipAccessManager<Folder>, and staff the FolderMemberManager, the handler takes.
+var hold = await folderAccess.RequireAsync(command.Folder, "folders.staff", cancellationToken);
 if (hold.Until is { } mine && (command.Until is not { } theirs || theirs > mine))
 {
     throw new RefusalException("folders.longer-than-held", RefusalKind.NotPermitted,
         "Nobody is put on a folder for longer than you hold the permission to put them there.");
 }
 
-await admission.RequireMemberAsync(command.Staff, cancellationToken);   // MemberAdmission<FolderId, StaffCode, NamedRole>
-await admission.RequireRoleAsync(command.Role, cancellationToken);
-var now = clock.GetUtcNow();
-folder.Admit(command.Staff, command.Role, MemberPeriod.Between(now, command.Until), now, by);
+return await staff.AddAsync(command.Folder, command.Staff, command.Role, command.Until, cancellationToken, command.ExpectedVersion);
 ```
 
-- **[`MemberHold.Until`](reference/use-cases.md#until)** is the first moment the caller no longer holds the
+- **[`MemberHold.Until`](reference/managers.md#until)** is the first moment the caller no longer holds the
   permission, as things stand now. It is `null` for the owner, for system work, and when the
   permission is not held.
   - Through membership alone, `Until` is the end of the membership.
@@ -123,16 +123,17 @@ folder.Admit(command.Staff, command.Role, MemberPeriod.Between(now, command.Unti
 
 A custom role is given on one resource and counts there alone. The tutorial writes the role class
 ([step 1](tutorial.md#step-1-the-board-its-members-and-its-roles)), leaves its mapping and unique indexes to the
-conventions ([step 3](tutorial.md#step-3-where-it-is-stored)), and makes the starter roles
+conventions ([step 3](tutorial.md#step-3-where-it-is-stored)), and makes the starter roles through the role manager
 ([step 7](tutorial.md#step-7-members)).
 
 ### Starter roles
 
 - **Starter roles are the roles a scope begins with.** You name them in `Roles.Custom(starters: [...])`. A scope is a
-  tenant, a customer of yours, or the whole application. `StarterRoles.Missing(rules, existing)` returns the starter
-  roles a scope does not have yet, as drafts for your constructor.
-- **Each starter role is made once.** `StarterRoles.Missing` recognises a role that was made from a starter role by
-  its `MadeFrom` value. A renamed or archived role keeps that value, so it is not made again. A unique index over the
+  tenant, a customer of yours, or the whole application. The role manager's `CreateStarterRolesAsync(make)` makes
+  the starter roles a scope does not have yet. It passes your function a draft for each, and saves the roles your
+  constructor makes from them.
+- **Each starter role is made once.** The role manager recognises a role that was made from a starter role by its
+  `MadeFrom` value. A renamed or archived role keeps that value, so it is not made again. A unique index over the
   scope column and `MadeFrom` stops two requests at the same moment from both making it
   ([Which customer a role belongs to](#which-customer-a-role-belongs-to)).
 - **No starter role is reserved for the owner.** The owner holds no role. A customer may rename, archive and change
@@ -140,16 +141,22 @@ conventions ([step 3](tutorial.md#step-3-where-it-is-stored)), and makes the sta
 
 ### Changing a role
 
-A role has three operations. Each returns what happened, so you can raise your own events:
+The role manager has three changes. Each loads the role, checks the caller, changes the role, saves it and returns
+it:
 
 ```csharp
-bool renamed = role.Rename("Lead editor", "Edits and plans a board.", BoardMembership.Rules);              // pass the name and the description as they should be
-RolePermissionsSet set = role.SetPermissions([BoardPermissions.View, BoardPermissions.Edit], BoardMembership.Rules);   // set.Added, set.Removed
-role.Archive(BoardMembership.Rules);
+// roles is the BoardRoleManager the handler takes
+var renamed = await roles.RenameAsync(command.Role, "Lead editor", "Edits and plans a board.", cancellationToken);   // the name and the description as they should be
+var narrowed = await roles.SetPermissionsAsync(command.Role, [BoardPermissions.View, BoardPermissions.Edit], cancellationToken);
+var archived = await roles.ArchiveAsync(command.Role, cancellationToken);
 ```
 
-- **Each operation takes the rules.** A role row does not store them. The rules say what a role may give, and which
-  codes it refuses with.
+- **Who may change a role** is the permission the rules name in `managedWith`
+  ([The role manager](resources-and-members.md#the-role-manager)). Without it, only system work changes roles.
+- **For your own events, implement the role's hooks**: `OnRenamed()`, `OnPermissionsSet(set)` with `set.Added` and
+  `set.Removed`, and `OnArchived()`. Each runs only when the role changed.
+- **The role checks every change against the rules.** A role row does not store them. The rules say what a role may
+  give, and which codes it refuses with.
 - **A role gives only permissions a role may give** (`InRoles`). Other permissions are refused with
   `boards.permission-not-for-members`, which names them. The rules are checked again whenever a role is read. So a
   permission later marked `InRoles = false` is given by no role, whatever the row holds.
@@ -159,8 +166,8 @@ role.Archive(BoardMembership.Rules);
   marked `InRoles = false` ([`OtherPermissions`](reference/rules.md#otherpermissions)). `OtherPermissions.All` names
   no permission to leave out.
 - **A name is trimmed and has 1 to 120 characters.** A description has at most 1000. Both are refused with
-  `boards.role-name-invalid`, which names the field. `Rename` takes both values as they should be, so `null` clears
-  the description.
+  `boards.role-name-invalid`, which names the field. `RenameAsync` takes both values as they should be, so `null`
+  clears the description.
 - **A name is unique through a unique index** over the scope column and `Name`
   ([Which customer a role belongs to](#which-customer-a-role-belongs-to)). `RefusesAs` on that index gives a second
   role with the same name your refusal code, for example
@@ -170,8 +177,8 @@ role.Archive(BoardMembership.Rules);
   deleted.
 - **`MadeFrom` cannot change after insert** (`IsFixedAfterInsert`). A save that changes it is refused, and the
   exported privileges leave the column out of `UPDATE`.
-- **Who may make, change or archive a role** is a requirement on your command, the same as for
-  [giving one](#who-may-give-a-role).
+- **A role that is not there for the caller** is refused with `boards.role-not-found`, the same as a role that does
+  not exist.
 
 ### Which customer a role belongs to
 
@@ -194,7 +201,7 @@ role.Archive(BoardMembership.Rules);
   });
   ```
 
-- **The admission reads through the request's context**, so your filter applies. Another customer's role does not
+- **The managers read through the request's context**, so your filter applies. Another customer's role does not
   exist there. Your filter also applies where a role's permissions are read
   ([Access in your own queries](checks-and-saves.md#access-in-your-own-queries)).
 - **Without customers**, there is one set of roles. Declare the two unique indexes over `Name` alone and `MadeFrom`

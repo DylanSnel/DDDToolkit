@@ -105,6 +105,7 @@ problem, and the fix.
 | [DDD00103](#ddd00103) | Error | An operator's command takes its tenant from the request or from itself |
 | [DDD00104](#ddd00104) | Error | [Operator] stands beside no requirement an operator cannot meet |
 | [DDD00105](#ddd00105) | Warning | [Operator] on a query names no tenant and no scope |
+| [DDD00106](#ddd00106) | Info | A member or role manager is not written |
 
 The Meaning column is the title the IDE shows for each id.
 
@@ -151,6 +152,8 @@ rules, by topic:
 - [DDD00059](#ddd00059) and [DDD00060](#ddd00060): the
   [member list of a resource](membership/resources-and-members.md#the-generated-member-list). They report what
   the Membership generator could not tell, and a member class that names the wrong resource.
+  [DDD00106](#ddd00106) reports a [manager](membership/resources-and-members.md#the-managers) the generator does not
+  write.
 - [DDD00092](#ddd00092) to [DDD00095](#ddd00095) and [DDD00099](#ddd00099):
   [permissions declared once](membership/permissions-and-roles.md#the-settings-of-a-permission). They catch a
   permission that is read as something else, that is declared twice, that never reaches the rules or the
@@ -2186,7 +2189,7 @@ public sealed partial class Document                    // DDD00059: no property
 
 For a class declared with [Membership](membership/overview.md)'s member template, the package's generator writes
 the member list on the resource that the template names. The member list is a private property `Members`. The
-resource's own methods change its members through it. The generator writes it from three things the resource
+member manager changes the members through it, and no manager is written without it ([DDD00106](#ddd00106)). The generator writes it from three things the resource
 declares and from the member class's own id. It writes the list only when it can tell each of them without a
 guess:
 
@@ -3577,8 +3580,8 @@ Of the permissions on one resource:
 
 - At most one is held by every member (`EveryMember`). That permission is also the one that sees the resource
   from above.
-- At most one locks the members (`LocksMembers`), and at most one locks the owner (`LocksOwner`). The member lock
-  and the owner lock each ask for one permission.
+- At most one manages the members (`ManagesMembers`), and at most one names the owner (`NamesOwner`). The member
+  manager requires each of them, and the database's lock checks each of them, as one permission.
 
 A permission declared on one resource by two constants is reported as well. Each case is reported where the
 permission is declared, among the permissions that the project sees.
@@ -3905,6 +3908,36 @@ public sealed record AllTenants(string? After) : IQuery<TenantManager.TenantPage
 
 `[ForTenant]` on a query is not reported. It still refuses a request that names another tenant than the query does,
 with `tenancy.tenant-mismatch`.
+
+## DDD00106
+
+**A member or role manager is not written.**
+
+```csharp
+namespace Filing.Sharing;
+
+public sealed class DocumentShareManager;               // DDD00106, information: the generated manager would hide it
+
+[Member<DocumentShareId, UserId, NamedRole, Document>]
+public sealed partial class DocumentShare;
+```
+
+Membership's generator writes the [managers](membership/resources-and-members.md#the-managers) in the global
+namespace. The member manager is named after the member class, `DocumentShareManager` for `DocumentShare`. The role
+manager is named after the role class, `BoardRoleManager` for `BoardRole`. The generator writes a manager only where
+the name is free and the manager can do its work. This information names the manager and says why it is not written:
+
+| Why | Fix |
+|---|---|
+| The project declares a type of that name in a namespace. The manager in the global namespace would hide it in every file that imports the namespace. | Rename your type, or move it to the global namespace if it is your own manager. |
+| Two member classes, or two role classes, have the same name in different namespaces. Their managers would be one class. | Rename one of them. |
+| The resource's owner property has no setter the manager can use when it names another owner. | Give the `[Owner]` property a `private set`. |
+| The resource's id cannot be told. | Declare the resource with `[AggregateRoot<TId>]` over an id the project can see. |
+| The role class's resource is declared in another project. The resource's registration cannot name the manager. | Declare the role class in the resource's project. |
+
+A type of the manager's name in the global namespace is your own manager, and the generator writes none and reports
+nothing. A resource whose member list is not written gets no manager either. [DDD00059](#ddd00059) or
+[DDD00060](#ddd00060) says why.
 
 ## Building the model fails: the owned type must carry the key part
 

@@ -36,8 +36,10 @@ module name of its folder ([A module named by its folder](../../modules.md#a-mod
   Application projects of Inspections also reference `Projects.Contracts`.
 - **Two ports.** [`ProjectsInfrastructure.cs`](../../../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/ProjectsInfrastructure.cs)
   registers both:
-  - A command loads, changes and saves a project through `IProjectStore`. The store works on the request's context,
-    which is the request's unit of work.
+  - A command that changes the project itself loads, changes and saves it through `IProjectStore`. The store works
+    on the request's context, which is the request's unit of work. A command on the crew or on the project roles
+    calls the managers the Membership package writes, `CrewMemberManager` and `ProjectRoleManager`. They load and
+    save on the same context.
   - A query reads through `IProjectReads`, on a context of its own. The queries of one request may run at the same
     time, and a context runs one query at a time.
 - A read uses Tenancy's queries as `IQueryable` sets. So "the projects a seat may see" stays one SQL statement. A read
@@ -148,14 +150,14 @@ not reach. It refuses nobody for seeing nothing.
 | `PermissionsHeldAtRoot`, `TenantProjectRoles`, `ProjectRolesById` | In a tenant, the module default. | A role's permissions are returned only to a caller with `tenancy.roles.manage` for the whole tenant. |
 | `TenantProjects` | An operator only. | |
 | `RenameTenantProject` | An operator only, in the tenant its `[ForTenant]` member names. | The project exists and is open. The handler runs as operator work in that tenant. |
-| `OpenProject` | `projects.open` at the unit. A request that names an owner also needs one of these: the owner is the caller's own seat, or the caller holds `projects.owner.change` at the unit (`AccessRequirement.All`, `Any`, `Own`). | The unit is active. The crew rules admit the owner's seat. The number is free in the tenant (`projects.number-taken`). |
+| `OpenProject` | `projects.open` at the unit. A request that names an owner also needs one of these: the owner is the caller's own seat, or the caller holds `projects.owner.change` at the unit (`AccessRequirement.All`, `Any`, `Own`). | The unit is active. The number is free in the tenant (`projects.number-taken`). The crew manager admits the owner's seat. |
 | `ChangeProjectName`, `PlanProject` | `projects.edit` on the project. | |
 | `MoveProjectToUnit` | `projects.edit` on the project and `projects.open` at the new unit (`AccessRequirement.All`). | The new unit is active. |
 | `CloseProject`, `ReopenProject` | `projects.close` on the project. | |
-| `AddCrewMember`, `GiveCrewRole` | `projects.crew.manage` on the project. | A new member's seat is active. A role is one of the tenant's project roles in use. |
-| `TakeCrewRole`, `RemoveCrewMember` | `projects.crew.manage` on the project. | When a seat changes its own place on the crew, the store saves the change as the module's work (`OwnPlaceOnTheCrew`). |
+| `AddCrewMember`, `GiveCrewRole` | `projects.crew.manage` on the project. | The crew manager checks that a new member's seat is active, and that a role is one of the tenant's project roles in use. An end that has passed is `projects.invalid-period`. |
+| `TakeCrewRole`, `RemoveCrewMember` | `projects.crew.manage` on the project. | When a seat changes its own place on the crew, the crew manager saves the change as the module's work. |
 | `ChangeProjectOwner` | `projects.owner.change` on the project. | The new owner's seat is active. The old owner stays on the crew in the project role that `FormerOwnerRole` names, or leaves the crew. |
-| `MakeProjectRole`, `RenameProjectRole`, `SetProjectRolePermissions`, `ArchiveProjectRole` | `tenancy.roles.manage` for the whole tenant. | |
+| `MakeProjectRole`, `RenameProjectRole`, `SetProjectRolePermissions`, `ArchiveProjectRole` | `tenancy.roles.manage` for the whole tenant. | The role manager asks the same permission, the one the projects' rules name in `managedWith`. |
 | `SetUpProjectRoles` | In a tenant. No route sends it. | The handler accepts only system work in the tenant it sets up. Anyone else gets `access.system-only`. |
 
 | Inspections request | Declares | The handler also checks |

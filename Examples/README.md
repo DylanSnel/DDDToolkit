@@ -744,9 +744,10 @@ The host runs on Postgres, as Supabase runs it, at the connection string it is g
   application knows nothing of, and a query is withheld the rows by the database.
 - **One save is the application's work for a seat.** A seat that takes its own role on a crew, or itself off
   it, gives up the right the change was allowed by, and the database, which judges each statement of a save
-  by the rows as they are then, would refuse the seat the rest of that save. It is that only for the command
-  whose check let it through, the request in hand; a handler reached around its check saves as the caller
-  (`Crew/OwnPlaceOnTheCrew.cs` in the Projects application project).
+  by the rows as they are then, would refuse the seat the rest of that save. The crew manager the Membership
+  package writes, `CrewMemberManager`, saves it as the module's work for that seat, and only for the command whose
+  check let it through, the request in hand. A handler reached around its check gets no such save: the manager asks
+  the seat's permission itself and refuses it.
 
 `SampleOnPostgresTests` proves it on Supabase's Postgres image: it applies the files in order as the role that
 owns the database, turns the login on and starts the host. The next section runs it by hand, on the stack the

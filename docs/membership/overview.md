@@ -19,8 +19,9 @@ North and every unit below it. Many applications also need access to **one thing
 - Leo can edit that board. He gets no permissions at North, and none on other boards.
 - Rhea owns the board. She decides who is on it, and nobody can remove her from it.
 
-Membership stores the members and their roles, and checks each request against them before your handler runs. Your
-application keeps the board itself, its names, and the rule for who may add whom.
+Membership stores the members and their roles, changes them through two managers, and checks each request against
+them before your handler runs. Your application keeps the board itself, its names, and which permission changes the
+members.
 
 ## What it does
 
@@ -28,6 +29,9 @@ application keeps the board itself, its names, and the rule for who may add whom
 - **Roles on a resource**: a member holds roles there, each for its own period. A role counts only on that resource.
 - **One owner**: the owner is always a member. The owner stays on the resource until somebody else becomes owner.
 - **Rules for the member list**: a person is on the list once, holds each role once, and the owner cannot be removed.
+- **Two managers per resource**, written by the generator. `BoardMemberManager` opens a board, adds and removes
+  members, gives and takes roles, names an owner, and lists who is on a board. `BoardRoleManager` makes and changes
+  the roles a tenant keeps. Each manager checks the caller, loads, changes and saves in one call.
 - **The check before a handler**: does the caller hold this permission on this board? If not, the handler does not
   run.
 - **Lists in one query**: `db.Boards.WhereIHold(BoardPermissions.View)` makes the boards a caller holds a permission
@@ -41,7 +45,7 @@ application keeps the board itself, its names, and the rule for who may add whom
 
 ## What it does not do
 
-- **Decide who may add a member or give a role**: each of your commands requires the permission you choose.
+- **Choose the permission that changes the members**: you mark one of yours, and the managers require it.
 - **Store the resource**: the board is your aggregate, with your fields, in your context.
 - **Store an organization**: use [Tenancy](../tenancy/overview.md), or your own. Membership also works without one.
 - **Write your RLS policies**: your row access rules say what a caller reads and changes of a board.
@@ -57,13 +61,16 @@ application keeps the board itself, its names, and the rule for who may add whom
 
 ## How the classes connect
 
-The classes of a board with members, and how they connect. The board (purple) is your aggregate. The access manager
-is the package's service, which your handlers take:
+The classes of a board with members, and how they connect. The board (purple) is your aggregate. The two managers
+(green) are generated for it, and your handlers take them. The access manager is the package's service, which your
+handlers take too:
 
 - a board has many members;
 - a member holds roles, each for a period;
 - each role is one of the tenant's board roles;
-- the rules read your permissions, and create the board roles from your starter roles;
+- the member manager changes the members through the board's member list;
+- the role manager makes the board roles, from your starter roles, and changes them;
+- the rules read your permissions;
 - the access manager answers questions about the caller and boards, by the rules.
 
 ```mermaid
@@ -74,6 +81,7 @@ classDiagram
         UnitId, marked At
         OwnerSeatId, marked Owner
         People
+        hooks, such as OnChangingMembers
     }
     class MemberList {
         Members, generated
@@ -81,6 +89,22 @@ classDiagram
         Add()
         Remove()
         NameOwner()
+    }
+    class BoardMemberManager {
+        generated
+        OpenAsync()
+        AddAsync()
+        GiveRoleAsync()
+        RemoveAsync()
+        NameOwnerAsync()
+        ListAsync()
+    }
+    class BoardRoleManager {
+        generated
+        CreateStarterRolesAsync()
+        RenameAsync()
+        SetPermissionsAsync()
+        ListAsync()
     }
     class BoardMember {
         MemberId, a seat
@@ -114,29 +138,38 @@ classDiagram
         PermissionsOnAsync()
     }
     Board *-- BoardMember : many members, in People
-    Board ..> MemberList : changes members through
+    Board *-- MemberList : keeps, private
     BoardMember *-- MemberRole : many roles, each for a period
     MemberRole --> BoardRole : of one role
+    BoardMemberManager ..> MemberList : changes members through
+    BoardMemberManager ..> MembershipAccessManager : asks the caller's permission
+    BoardRoleManager ..> BoardRole : makes and changes
     MembershipRules ..> BoardPermissions : reads
-    MembershipRules ..> BoardRole : creates from starter roles
     MembershipAccessManager ..> MembershipRules : answers by
     class Board:::strong
+    class BoardMemberManager:::good
+    class BoardRoleManager:::good
     classDef strong fill:#5b2ec933,stroke:#5b2ec9,stroke-width:2px
+    classDef good fill:#1f8a5b26,stroke:#1f8a5b
 ```
 
 | Class | What it is | In Harbor |
 |---|---|---|
 | **Resource** | The one thing access is about: an aggregate of yours that has members. | A board: Crane schedule |
 | **Member** (`BoardMember`) | Someone on the resource, for a period. With Tenancy, a seat. You declare it in one line, from the package's template. | Leo's seat, on Crane schedule |
-| **Member list** (`Members`) | The rules for the members, over your collection: each person once, and the owner stays. The generator adds it to your aggregate. | `Members.Add(...)`, inside the board |
+| **Member list** (`Members`) | The rules for the members, over your collection: each person once, and the owner stays. The generator adds it to your aggregate. | `Members.Open(now)`, in the board's constructor |
+| **Member manager** (`BoardMemberManager`) | The class your handlers change members through. It checks the caller, loads the resource, calls your hooks and the member list, and saves. The generator writes it, named after the member class. | `AddAsync(board, leo, editor, until: null)` |
+| **Hook** | A `partial` method the generator declares on your aggregate. The member manager calls it, for a guard of yours before a change or an event of yours after one. | none: Harbor needs no hook |
 | **Owner** (`[Owner]`) | One per resource, and always a member. The owner holds no role. The owner holds every permission marked for the owner. | Rhea |
 | **Role** | A named set of permissions, given to a member on one resource. | editor |
 | **Role hold** (`MemberRole`) | One role held by one member. It starts at a set time, and ends at a set time or never. It counts only while the membership lasts. | Leo holds editor on Crane schedule |
 | **Custom role** (`BoardRole`) | A role stored as a row of the tenant. The tenant can rename it and change its permissions. A **starter role** is one every tenant gets a copy of. | The tenant's editor, made from the starter role `editor` |
+| **Role manager** (`BoardRoleManager`) | The class your handlers make and change custom roles through. It requires the permission the rules name in `managedWith`. The generator writes it, named after the role class. | `CreateStarterRolesAsync(...)`, for Harbor Works |
 | **Permission** and its **level** | One thing a caller may do, as a string, with the level where the check asks for it: on one resource (`[On<Board>]`), at a unit (`[AtUnit]`), or for the whole tenant (`[AtTenant]`). | `boards.edit` on a board, `boards.create` at North |
 | **Rules** (`MembershipRules`) | One declaration per kind of resource: where the roles come from, and whether a permission held above reaches the resource. The C# check and the database functions read the same rules. | `BoardMembership.Rules` |
 | **Access manager** (`MembershipAccessManager<Board>`) | The service your handlers ask what the current caller holds on one kind of resource. Each question takes the resource, or its id. | `PermissionsOnAsync([board], ...)`, for the buttons of a board's screen |
 | **Reach from above** | A permission held at the unit where a resource hangs (`[At]`), or above it, counts on the resource for a caller who is not a member. | Ada's Administrator role at the root reaches every board |
+| **The permission that manages the members** | The permission you mark `ManagesMembers`. The member manager requires it for every change to the members. A permission marked `NamesOwner` does the same for handing a resource on. | `boards.members.manage` |
 | **Lock** | A database check: only a caller who holds the permission you mark can change a member row or the owner column. | Only a caller with `boards.members.manage` can write Crane schedule's member rows |
 
 ## Who holds a permission on a board
@@ -197,11 +230,12 @@ Most choices have a default. The smallest application decides only where the rol
 | Choice | Default | What you can do instead |
 |---|---|---|
 | Where the roles come from | No default: the rules must say it. | `Roles.Fixed([...])`: roles in code, the same for every tenant. `Roles.Custom(starters: [...])`: rows the tenant keeps and changes, as in the tutorial. `Roles.External(...)`: roles stored elsewhere, such as Tenancy's ([Beside an organization](beside-an-organization.md#three-settings-of-the-rules)). |
-| Who may add a member, give a role or name an owner | You decide per command. The package has no permission for it. | Require a permission on the board, such as the tutorial's `boards.members.manage`, and write further rules in the handler ([Who may give a role](permissions-and-roles.md#who-may-give-a-role)). |
+| Who may add a member, give a role or name an owner | Only system work, because no permission is marked for it. | `ManagesMembers = true` and `NamesOwner = true` on a permission on the board, such as the tutorial's `boards.members.manage`. Write further rules in the handler ([Who may give a role](permissions-and-roles.md#who-may-give-a-role)). |
+| Who may change the custom roles | Only system work. | `Roles.Custom(managedWith: ...)` names the permission. With Tenancy, the caller holds it for the whole tenant ([The role manager](resources-and-members.md#the-role-manager)). |
 | What the owner holds | Every permission on the board. | Mark a permission `Owner = false` to keep it from the owner. |
 | What every member holds | Nothing. | Mark one permission `EveryMember = true`, usually the one that shows the board. Reach from above needs it. |
 | What a role may give | Every permission on the board. | `InRoles = false` keeps a permission out of every role. `otherPermissions` lets permissions of other modules in. |
-| The lock on the member rows and the owner | Off. Any caller your row rules let change a board can write them, and the start-up check warns. | `LocksMembers = true` and `LocksOwner = true` on the permission your commands require ([Who writes the member rows](postgres.md#who-writes-the-member-rows)). |
+| The lock on the member rows and the owner | Off. Any caller your row rules let change a board can write them, and the start-up check warns. | The same two marks. On Postgres they also lock the member rows and the owner column ([Who writes the member rows](postgres.md#who-writes-the-member-rows)). |
 | Reach from above | Off. Only the members and the owner have access. | `reachFromAbove: true`, and `[At]` on the property that holds the board's unit. |
 | How the caller's member id is found | From the member id's type: the caller's seat for Tenancy's seat id, the user id for an id over a `Guid`. | `members: MemberSource.Claim(...)` reads a claim of the token. `MemberSource.Resolved(...)` uses an id you resolve. |
 | System work | System work in the module's scope, `boards`, holds every permission on every board. | `systemScopes: [...]` names other scopes, `[]` none ([System work](checks-and-saves.md#system-work)). |
@@ -215,7 +249,7 @@ Most choices have a default. The smallest application decides only where the rol
 - **Build it:** the [tutorial](tutorial.md), step by step, on the Harbor application.
 - **Look something up:** one page per topic, with every detail:
   - [Resources and members](resources-and-members.md): the packages, a resource without Tenancy, the member list,
-    names, several kinds of resource.
+    the managers and their hooks, names, several kinds of resource.
   - [Permissions and roles](permissions-and-roles.md): the settings of a permission, who holds one, who may give a
     role, roles a tenant makes.
   - [Checks and saves](checks-and-saves.md): combined requirements, from the check to the save, the access manager

@@ -307,7 +307,7 @@ which no rule takes away. Write it with `TenancyRowAccess`'s functions (`CallerS
 field of the caller's own seat), or a module's `[ResourceAccessContract<ProjectId>(ResourceAccessSet.FellowMembers)]`
 (declaring `static partial AccessSet<SeatId> Ids();`), the people on the caller's projects. It changes what a read of the
 seats returns, a direct read, the managers' reads, `tenant_seats()` and `db.Tenancy().Seats()`, so Membership's
-admission then takes only seats the caller reads (`member-not-active` otherwise); never Tenancy's queries about
+member manager then admits only seats the caller reads (`member-not-active` otherwise); never Tenancy's queries about
 the caller and rights, the placements (every member still reads each seat's id and units), or who writes. A read
 rule on any other class of Tenancy's is refused.
 To take away what Tenancy allows, write a restrictive rule, `[RowAccess<Organization>(RowOperations.Read, Restrictive = true)]`:

@@ -367,7 +367,7 @@ IQueryable<SeatRow<TTenantId, TSeatId>> Seats()
 
 The tenant's seats the caller reads, in any status, as access facts, without a name: whether each counts. What a seat is shown by is the application's, selected from its own seat class, which `SeatManager.ByIdAsync` returns whole, by id.
 
-This reads the seats, where the other queries read rights. By default it returns every seat of the tenant. On Postgres it returns the seats that a read rule of the application's on its seat class lets the caller read, where the application writes one (`tenant_seats()` runs as its caller). A module that admits a seat by asking here, as Membership's admission does, then admits only seats the caller reads.
+This reads the seats, where the other queries read rights. By default it returns every seat of the tenant. On Postgres it returns the seats that a read rule of the application's on its seat class lets the caller read, where the application writes one (`tenant_seats()` runs as its caller). A module that admits a seat by asking here, as Membership's member manager does, then admits only seats the caller reads.
 
 **Returns**: A query of the seats' rows.
 

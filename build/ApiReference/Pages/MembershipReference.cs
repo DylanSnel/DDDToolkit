@@ -81,24 +81,27 @@ internal static class MembershipReference
                             new(Membership, Type: "DeclaredRole"),
                             new(Membership, Type: "RolePermissions"),
                             new(Membership, Type: "OtherPermissions"),
+                            new(Membership, Type: "IMemberRoles"),
                         ]),
                     new("Permissions", [new(Membership, Type: "OnAttribute"), new(Membership, Type: "ResourcePermission")]),
                     new("Reach from above", [new(Membership, Type: "ReachFromAbove")]),
                     new("Who a member is", [new(Membership, Folder: "Access/Callers")], Lead: ["MemberSource", "MemberSourceKind", "ICallerMember"]),
                 ]),
             new(
-                "use-cases.md",
-                "Use cases and access",
-                "What a handler asks before it changes the members, what a caller is shown of them, the starter roles of a "
-                + "resource whose customers make its roles, the access manager of one kind of resource, the requirements a "
-                + "request states, and the contracts that publish a resource's access to row access rules. The access manager "
-                + "is asked for by the resource's class, `MembershipAccessManager<Board>`. The admission and the requirements "
-                + "are asked for by the resource's id. So those of documents never answer for folders. Their registration is "
-                + "with Entity Framework, under [Registration](entity-framework.md#registration).",
+                "managers.md",
+                "Managers and access",
+                "The managers the generator writes for a resource's member class and for its role class, `BoardMemberManager` and "
+                + "`BoardRoleManager`, and what they take; what the application answers about who may be a member and which roles "
+                + "go to one; the access manager of one kind of resource, the requirements a request states, and the contracts that "
+                + "publish a resource's access to row access rules. A generated manager is named after your class and closed over "
+                + "your types: each section shows the package's class it derives from, with the methods it inherits. The access "
+                + "manager is asked for by the resource's class, `MembershipAccessManager<Board>`, and the requirements by the "
+                + "resource's id, so those of documents never answer for folders. Their registration is with Entity Framework, "
+                + "under [Registration](entity-framework.md#registration).",
                 [
-                    new("Admission", [new(Membership, Folder: "UseCases/Admission")], Lead: ["MemberAdmission"]),
-                    new("Overview", [new(Membership, Folder: "UseCases/Overview")], Lead: ["MemberOverviews"]),
-                    new("Starter roles", [new(Membership, Folder: "UseCases/Roles")]),
+                    new("Member manager", [new(Membership, Folder: "Managers/Members")], Lead: ["MemberManager", "IMemberStore", "IOwnPlaceWork"]),
+                    new("Role manager", [new(Membership, Folder: "Managers/Roles")], Lead: ["CustomRoleManager", "ICustomRoleStore", "ICustomRoleAccess"]),
+                    new("Who may be a member", [new(Membership, Folder: "Managers/Admission")], Lead: ["IMemberDirectory", "IMemberRolePolicy"]),
                     new(
                         "Access manager",
                         [new(Membership, Folder: "Access/Questions")],

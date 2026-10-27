@@ -511,7 +511,7 @@ modelBuilder.AddTenancyReadFunctions("tenancy");
 // ... and in its handlers, through the module's own TenancyAccessManager
 using (access.BeginSystemIn(tenant, scope: "billing"))
 {
-    await invoices.SaveOnlyAsync(invoice, cancellationToken);
+    await invoices.SaveAsync(cancellationToken);
 }
 ```
 

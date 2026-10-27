@@ -340,8 +340,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `Any(All(Own(member), MemberAccess.Sees(permission, resource, version)), MemberAccess.On(permission, resource,
   version))`, so the resource is read, refused as `not-found` where the caller does not see it, its version compared and
   its hold kept for the expert hold on either way. `MemberAccess.Sees` is Membership's new case for it, and a resource
-  with a permission marked `LocksMembers` has its member rows locked to it in the database, so the handler saves the
-  caller's own place as the application's own work once the request is the one in hand (the docs show it). `[OwnOnly]`
+  with a permission marked `ManagesMembers` has its member rows locked to it in the database, so the member manager
+  saves the caller's own place as the resource's own work once the request is the one in hand (the docs show it). `[OwnOnly]`
   on the request with `[Own]` on the member is `Own(member)` alone. What the caller's own is, an `ICallersOwn<TValue>`
   says (`TValue? Find(ICurrentUser user)`): the core for a `Guid`, the caller's verified identity, with nothing
   registered;
@@ -2146,15 +2146,16 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 - **Membership**, the toolkit's second supporting domain. `DDDToolkit.Supporting.Membership` is access to one
   resource through its members: a document shared with people, a folder with staff on it. An application
   declares a member class with `[Member<TId, TMemberId, TRoleId, TResource>]`, naming the resource it is a
-  member of, keeps its aggregate as it was, and changes the members through a `MemberList`, which the
-  package's generator writes on that aggregate as a private `Members` property, from the one collection of
-  the member class and the one property the aggregate marks `[Owner]`, of the member's id. It writes the
+  member of, keeps its aggregate as it was, and changes the members through the member manager the package's
+  generator writes for it (below). The manager changes them through a `MemberList`, which the generator writes on
+  that aggregate as a private `Members` property, from the one collection of the member class and the one property
+  the aggregate marks `[Owner]`, of the member's id. It writes the
   resource's codes with it, `Codes`, under the resource's name, the plural of its class's (`Document` is
   `documents`, `[Members("People")]` says another), unless the aggregate declares a static `MembershipCodes` of its
   own. An aggregate that declares a list itself is left alone, and one
   that has none and cannot be given one is told what stands in the way, DDD00059. A member class that names no
   aggregate root, or a resource that keeps its members as another member class, is DDD00060, on the member
-  class; the list of the class the resource keeps is still written, so the resource's own methods compile.
+  class; the list of the class the resource keeps is still written.
   The list keeps the
   rules: a member is on the list once and holds a role once, each for a period of its own, a role counts only
   inside its membership, and the owner stays, with no end, holding no role: it holds what the permissions give an
@@ -2168,18 +2169,18 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   after the resource is handed on. A resource's permissions are declared once, as the constants of a
   `[Permissions]` class marked `[On<TResource>]`, each saying whether the owner holds it by owning (`Owner`, unless
   said), whether every member does (`EveryMember`), whether a role can give it (`InRoles`), whether it reaches from
-  above (`FromAbove`), and whether it is the one the database locks the members or the owner to (`LocksMembers`,
-  `LocksOwner`). The generator hands them to the rules. `MembershipRules.For<TResource>(roles, ...)` declares once,
+  above (`FromAbove`), and whether it is the one that manages the members or names the owner (`ManagesMembers`,
+  `NamesOwner`), which the member manager requires and the database locks the member rows and the owner column to.
+  The generator hands them to the rules. `MembershipRules.For<TResource>(roles, ...)` declares once,
   as data, who holds which permission: the resource's permissions, and where the roles come from. `Roles.Fixed`
   declares them in code, `Roles.Custom` has a customer make them, and `Roles.External` keeps them elsewhere, with
   `OtherPermissions` for permissions of other modules a role may give. `MembershipAccessManager<TResource>`,
-  `MemberAccess.On` and `SeenWith` with their check, and `MemberAdmission` are each asked for by the resource, so an
+  `MemberAccess.On` and `SeenWith` with their check, and the managers are each asked for by the resource, so an
   application has as many kinds of resource with members as it needs, in one project too. A resource is seen by its
   members now, and by its owner from the moment its row names the owner. `SeenWith` refuses nobody for want of the
   permission. It refuses a caller who did not sign in, who reaches nothing under any rules, before the query's
-  statement is sent. Who may add a member or give a role is the application's to decide: the package has no
-  permission of its own for it and no rule about who gives what. A command requires the permission the application
-  chooses. The access manager says until when its caller holds that permission (`HoldAsync`, `MemberHold.Until`, no
+  statement is sent. Which permission adds a member or gives a role is the application's to decide: it marks one of
+  its own `ManagesMembers`, and the package has no rule about who gives what beyond it. The access manager says until when its caller holds that permission (`HoldAsync`, `MemberHold.Until`, no
   end for the owner and for system work), for a rule the application writes itself, such as that nobody gives a role
   for longer than they hold the permission. System work without a scope (`user.BeginSystem()`) holds every permission.
   System work in a scope (`user.BeginSystem(scope)`) holds every permission on a resource whose rules let that scope
@@ -2188,10 +2189,39 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   resource's own codes, in English and Dutch, and registering a resource offers the texts under them, so
   an application that localizes its failures adds no line for them. The package needs no dispatcher and no
   Tenancy: who a member is follows from the member id, the caller's user id for one over a `Guid`, or a claim only
-  the server can change (one in `user_metadata` is refused), unless the application says who else they are. For a screen that lists the
-  members of a resource, `MemberOverviews.From(members, owner, now)` puts them in one order, the owner first,
-  each with its roles and whether they count now, and reads nothing. It comes in four packages, `[At]` in
-  `.Abstractions` among them. See [Membership](docs/membership/overview.md).
+  the server can change (one in `user_metadata` is refused), unless the application says who else they are. For a
+  screen that lists the members of a resource, the member manager's `ListAsync` answers them in one order, the owner
+  first, each with its roles. It comes in four packages, `[At]` in `.Abstractions` among them. See
+  [Membership](docs/membership/overview.md).
+- **Membership: the managers.** Membership's generator writes two classes for a resource, in the global namespace,
+  and the resource's registration adds both per scope. The member manager is named after the member class,
+  `BoardMemberManager` for `BoardMember`, over `MemberManager<TResource, TResourceId, TMember, TId, TMemberId,
+  TRoleId>`: `OpenAsync` adds a new resource with its owner on it, `AddAsync`, `GiveRoleAsync`, `TakeRoleAsync`,
+  `RemoveAsync`, `LeaveAsync` and `NameOwnerAsync` change the members, and `ListAsync` answers the members of one
+  resource, or of up to 200 in one statement, the owner first. The role manager is named after a role class of
+  `[CustomRole<TRoleId, TResource>]`, `BoardRoleManager` for `BoardRole`, over `CustomRoleManager<TRole, TRoleId,
+  TResource>`: `CreateAsync`, `CreateStarterRolesAsync`, `RenameAsync`, `SetPermissionsAsync`, `ArchiveAsync`,
+  `ListAsync` and `ByIdAsync`. The base classes are in `DDDToolkit.Supporting.Membership.Managers`, with the ports a
+  storage package implements, `IMemberStore`, `ICustomRoleStore` and `IOwnPlaceWork`, and the ports an application
+  or the join with Tenancy implements, `IMemberDirectory`, `IMemberRolePolicy` and `ICustomRoleAccess<TResource>`.
+  Each change takes the resource or its id, and the version the caller read, loads, checks, changes, saves, and
+  returns what it saved. A change of the members requires the permission marked `ManagesMembers`, and naming an owner
+  the one marked `NamesOwner`; where the request in hand was checked for that permission on that resource, the
+  manager takes the check's answer and sends no statement, and where the rules mark none only system work makes the
+  change. Then the member and the role are admitted, the resource's guard runs and the member list keeps its rules.
+  A change to the caller's own place, a role taken from itself, itself taken off, leaving, or an owner handing on its
+  own resource, is saved as the resource's own work in its scope for the caller, where a database that checks every
+  row would refuse the rest of the save, and only when the request in hand is the one whose check read the resource
+  and the unit of work holds nothing else. A role change requires the permission the rules name in
+  `Roles.Custom(managedWith: ...)`; rules that name none let only system work change the roles. A role that is not
+  there for the caller is the new refusal `role-not-found`, under the resource's codes. The resource writes no
+  member-changing method: the generator declares `partial` hooks on it, `OnChangingMembers()` for a guard of its own,
+  and `OnMemberAdded`, `OnMemberRemoved`, `OnRoleGiven`, `OnRoleTaken` and `OnOwnerNamed` for its events, and on a
+  role class `OnRenamed`, `OnPermissionsSet` and `OnArchived`, which run only when the role changed. A manager the
+  generator does not write is the new DDD00106, information: a type of its name in a namespace of the project, two
+  classes that would give one name, an owner property without a setter, a resource whose id cannot be told, or a
+  role class whose resource is another project's. A type of the name in the global namespace is the project's own
+  manager, and nothing is written or reported. See [The managers](docs/membership/resources-and-members.md#the-managers).
 - **Membership: `MembershipAccessManager<Board>` says what the current caller may do on the resources of one kind.**
   Your code takes `MembershipAccessManager<Board>`, generic over the resource alone, which the resource's registration
   adds per scope. Its methods take the resource, and an overload of each takes its id, for a caller that has only the
@@ -2302,11 +2332,11 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   caller, and the two that take a permission are never asked without one. The application's own row access rules
   ask the functions, and the member tables follow the resource's rules. Since those rules let whoever may
   change a resource write its member rows and its owner column, past the application, the permissions mark the
-  ones the application's commands require for that, and a lock is written from them for every role that may ask
-  the functions: `LocksMembers` gives a restrictive policy on both member tables, and `LocksOwner`
+  ones the member manager requires for that, and a lock is written from them for every role that may ask
+  the functions: `ManagesMembers` gives a restrictive policy on both member tables, and `NamesOwner`
   a trigger that keeps the owner column as it was unless the caller held the permission, refusing as the toolkit's
   access guards do, so a save it refuses is `access.refused` rather than a failure of the server. Where a customer
-  makes the roles, `LocksMembers` gives a second restrictive policy, on the table of the roles a member
+  makes the roles, `ManagesMembers` gives a second restrictive policy, on the table of the roles a member
   holds: a role added or changed there is one the caller sees in the application's role table, asked as the
   caller, so the application's own rule on that table, which shows a caller its own customer's roles, keeps
   another customer's off a member list written past the application. All of it only narrows what the
@@ -2351,13 +2381,14 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `[CustomRole<TRoleId, TResource>]`, an aggregate of its own named for the resource it is a role of, so several kinds
   of resource in one project each have theirs, and a member holds a role by that class's id. A role has a name, a
   description and the permissions it gives, and is in use or archived. It is made with the application's constructor,
-  from a `CustomRoleDraft`, and changed with `Rename`, `SetPermissions` and `Archive`, each under the resource's rules
-  and each returning what happened (`RolePermissionsSet`), so the application raises its own events. A permission must
+  from a `CustomRoleDraft`, and changed through the role manager, which calls `Rename`, `SetPermissions` and `Archive`
+  under the resource's rules; the role's hooks say what happened (`RolePermissionsSet`), so the application raises
+  its own events. A permission must
   be one the rules let a member's role give (`InRoles`, `OtherPermissions`), which is asked again where the permissions
   are read; a name is trimmed and not empty; an archived role gives nothing from then on, is not given again and stays
   on the members that hold it. No role is the owner's, so every role is archived alike. Its refusals come with it, under
-  the resource's codes, in English and Dutch. The starter roles: `StarterRoles.Missing(rules, rolesOfTheScope)` answers
-  the ones a scope does not have yet, each made once and told by what it was made from (`MadeFrom`). Whose a role is, is
+  the resource's codes, in English and Dutch. The starter roles: the role manager's `CreateStarterRolesAsync(make)`
+  makes the ones a scope does not have yet, each made once and told by what it was made from (`MadeFrom`). Whose a role is, is
   the application's: it adds its own column, keeps the rows apart by its own rule, and declares its own unique indexes
   over that column with `Name` and with `MadeFrom`. The package assumes no customer, except that it adds the two indexes
   itself where the role class marks its tenant with Tenancy's `[OfTenant]` (above). `IsCustomRole()` maps the package's
@@ -2376,7 +2407,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   application's seat class, writes `services.AddCourseMembershipWithTenancy<TContext>(rules)` and the class it
   registers: a member is the caller's seat, somebody is made a member while their seat is active, a permission held at
   an organization unit reaches the resources at that unit and below it, and, where a member holds roles by Tenancy's
-  role id, the roles are the tenant's own. Who a member is follows from the seat id; the rules say where the roles come
+  role id, the roles are the tenant's own. The permission that changes the custom roles is held for the whole tenant,
+  and a change to the caller's own place is saved as system work in the tenant for the caller's seat. Who a member is follows from the seat id; the rules say where the roles come
   from and, with `reachFromAbove: true`, that a permission held at a unit reaches. Tenancy's functions answer both in
   the database without being named, except for the tenant's roles,
   `Roles.External(TenancyFunctions.RolesWithPermission)`. The one registration refuses rules that take a member from the
@@ -2394,10 +2426,10 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   [Names](docs/membership/resources-and-members.md#names).
 - **Permissions on a resource, declared once.** `[On<TResource>]` is the level of a permission asked on a resource
   with members, a constant of a `[Permissions]` class: `Owner` (the owner holds it by owning, unless `Owner =
-  false`), `EveryMember`, `InRoles`, `LocksMembers`, `LocksOwner` and `FromAbove` say how it is held there, and every
+  false`), `EveryMember`, `InRoles`, `ManagesMembers`, `NamesOwner` and `FromAbove` say how it is held there, and every
   level's `Description`, `Implies` and `Retired` what it is. The package's generator hands each project's
   permissions to `MembershipRules.For<TResource>` when the project is first used. A level on a class that is no
-  resource with members, and a second permission that says `EveryMember`, `LocksMembers` or `LocksOwner` on one
+  resource with members, and a second permission that says `EveryMember`, `ManagesMembers` or `NamesOwner` on one
   resource, are DDD00093; rules made for a resource no permission is declared on, DDD00094. See
   [The settings of a permission](docs/membership/permissions-and-roles.md#the-settings-of-a-permission).
 - **Where an aggregate hangs: `[At]`, in `Temp.DDDToolkit.Supporting.Membership.Abstractions`.** `[At]` marks the one
@@ -2862,8 +2894,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 - **Tenancy sample: a seat's own place on a crew.** A seat that takes its own role on a crew, or itself off
   the crew, is saved as the application's work for the seat: the save removes the rows its right comes from
   before it writes the project's own row, which the database would refuse a seat. The two commands,
-  `TakeCrewRole` and `RemoveCrewMember`, save through `IProjectStore.SaveOnlyAsync`, which refuses when the
-  unit of work holds a change to anything but that project.
+  `TakeCrewRole` and `RemoveCrewMember`, call the crew manager, `CrewMemberManager`, which saves so only for the
+  request whose check read the project, and only when the unit of work holds no change to anything else.
 - **Every project fits a path budget.** The longest path a build writes for a project is at most 200
   characters below the repository's root, held for every project of the repository by
   `SourceTreeTests.Every_project_of_the_repository_fits_the_path_budget` in the Tenancy sample's tests. Visual
@@ -3025,7 +3057,9 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   is the page that was `use-cases.md`, with `TenantManager`, `OrganizationManager`, `SeatManager`, `RoleManager`,
   `InvitationManager`, the stores and the registration. [Tenancy API: access manager and
   callers](docs/tenancy/reference/callers.md) opens with `TenancyAccessManager`, and [Tenancy API: queries and row
-  access](docs/tenancy/reference/queries.md) with `db.Tenancy()`. Membership's reference names its access manager.
+  access](docs/tenancy/reference/queries.md) with `db.Tenancy()`. Membership's [managers and
+  access](docs/membership/reference/managers.md) is the page that was its `use-cases.md`, with the member manager, the
+  role manager, who may be a member, and the access manager.
 - **The Tenancy sample's classes mark their tenant in the domain.** `Project`, `ProjectRole` and `Inspection` mark their
   `TenantId` `[OfTenant]`, and `ProjectsContext` and `InspectionsContext` drop their `ScopeToTenant` calls: the
   toolkit's conventions keep them to the caller's tenant. The Projects and Inspections domain projects reference
@@ -3168,7 +3202,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     `tenancy.explicit-current-user`.
 - **For the 3.2.0 previews: Tenancy and Membership as 3.2.0 ships them.** After 3.2.0-preview.5 the API of the two
   supporting domains was regrouped. Tenancy has a manager per aggregate and an access manager, Membership has an
-  access manager per kind of resource, an operator's command says `[Operator]`, the markers for domain classes are in
+  access manager, a member manager and a role manager per kind of resource, an operator's command says `[Operator]`, the markers for domain classes are in
   packages of their own, and the code calls a starter role a starter role, as the docs do. Added, under Core, Tenancy
   and Membership, describes the result. Nobody uses the packages yet, so the old names are gone with no alias.
   - **Breaking.** From 3.2.0-preview.5, was, now:
@@ -3288,6 +3322,34 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
         `MemberHold<TResourceId>`, of what was asked about.
       - `MemberAccessCheck<TResource, TResourceId>` takes the access manager. What a storage returns is
         `IMembershipStorage<TResource, TResourceId>`, which an application never takes.
+    - Membership's managers:
+      - A resource's own methods that changed its members go. A handler that loaded the resource, called such a
+        method and saved calls the member manager the generator writes, `BoardMemberManager`:
+        `members.AddAsync(board, seat, role, until, cancellationToken)`, and `GiveRoleAsync`, `TakeRoleAsync`,
+        `RemoveAsync`, `LeaveAsync` and `NameOwnerAsync`. A new resource is added with `members.OpenAsync(resource)`.
+        The guard the method held goes into `partial void OnChangingMembers()`, and its events into `OnMemberAdded`,
+        `OnMemberRemoved`, `OnRoleGiven`, `OnRoleTaken` and `OnOwnerNamed`. A type of the manager's name that the
+        project declares in a namespace is renamed (DDD00106).
+      - `[On<T>(LocksMembers = true, LocksOwner = true)]`: `ManagesMembers = true, NamesOwner = true`, which the member
+        manager requires as well as the database. `ResourcePermission`'s `LocksMembers` and `LocksOwner`:
+        `ManagesMembers` and `NamesOwner`. `rules.MembersLockPermission` and `rules.OwnerLockPermission`:
+        `rules.ManagesMembersPermission` and `rules.NamesOwnerPermission`. A resource that marks none changes its
+        members only as system work.
+      - A role's `Rename`, `SetPermissions` and `Archive`, called by a handler: the role manager the generator writes,
+        `BoardRoleManager`, with `RenameAsync`, `SetPermissionsAsync` and `ArchiveAsync`, which require the
+        permission `Roles.Custom(managedWith: ...)` names. Rules without `managedWith` let only system work change a
+        role. Events go into the role's `OnRenamed`, `OnPermissionsSet` and `OnArchived`.
+      - The namespace `DDDToolkit.Supporting.Membership.UseCases` is gone. `IMemberDirectory` and
+        `IMemberRolePolicy` are in `DDDToolkit.Supporting.Membership.Managers`, and `IMemberRoles` in
+        `DDDToolkit.Supporting.Membership.Access`. `MemberAdmission<TResourceId, TMemberId, TRoleId>`: the member
+        manager admits the member and the role itself, and the class is internal. `NamedRoles<TResourceId>` is
+        internal. `StarterRoles.Missing(rules, roles)`: `roles.CreateStarterRolesAsync(make)` on the role manager,
+        and the class is internal. `MemberOverviews.From(members, owner, now)`, `MemberOverview<TMemberId, TRoleId>`
+        and `MemberRoleOverview<TRoleId>`: `members.ListAsync(resource)`, which answers your member rows in the same
+        order, with `member.AppliesAt(now)` and `member.HoldsAt(role, now)` for what counts now.
+      - The API reference page `membership/reference/use-cases.md`: `membership/reference/managers.md`.
+      - DDD00093 and the Postgres start-up check's warning name `ManagesMembers` and `NamesOwner`. The SQL the export
+        writes is the same.
   - The Tenancy sample follows:
     - The modules take the managers and `TenancyAccessManager`. Projects and Inspections name Tenancy's ids once,
       with `[assembly: TenancyIds<...>]`. The alias `SampleAnswers` is gone, `SampleQuestions` is
@@ -3301,6 +3363,15 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
       field `fromPack` is `fromStarterRole`, in the REST bodies as well. `PackOverview` is `StarterRoleOverview`.
     - The Tenants module has a migration, `StarterRolesRenamed`, and so has the Projects module, whose model reads the
       roles through the renamed function and changes no table.
+    - The Projects module changes its crews through `CrewMemberManager` and its project roles through
+      `ProjectRoleManager`. `Project` loses `AddToCrew`, `GiveCrewRole`, `TakeCrewRole`, `RemoveFromCrew` and
+      `ChangeOwner`, and raises its events from the hooks; `ProjectRole` raises its events from its hooks.
+      `OwnPlaceOnTheCrew`, `CrewPeriod`, and `IProjectStore`'s `Add`, `SaveOnlyAsync` and role methods are gone.
+      `ProjectMembership.Rules` names `managedWith: TenancyPermissions.RolesManage`. An end that has passed is
+      `projects.invalid-period`, the crew's own code, where it was `tenancy.invalid-period`. A crew handler reached
+      around its check is refused by the crew manager, `projects.not-permitted`, before the expert hold would refuse
+      the save. A seat's own place with another change in the unit of work is saved as the seat, where the store
+      refused it.
   - **Upgrading.** Rebuild. Add one migration to the context that maps Tenancy's tables. Entity Framework writes it as
     `RenameColumn` for `"FromPack"` and `"PermissionsFromPack"`, so no row is lost. On Postgres, add to it by hand the
     drop of the two old triggers and their functions, which still fire on the renamed columns:
@@ -3381,8 +3452,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     `TenancyRefusals.Of` is `TenancyRefusals.Refuse`, `MembershipCodes.Of` is `MembershipCodes.Refuse`
     (`throw Document.Codes.Refuse(MembershipRefusals.NotFound)`), `ActedBy.Of(caller)` is `ActedBy.From(caller)`,
     `RowAccessRoleNames.Of(options)` is `RowAccessRoleNames.From(options)`, `TenancyActorKinds.Of(kind)` is
-    `TenancyActorKinds.From(kind)`, `MemberOverviews.Of(members, owner, now)` is `MemberOverviews.From(members,
-    owner, now)`, and `MembershipModel.Of(model, memberClass)` is `MembershipModel.For(model, memberClass)`.
+    `TenancyActorKinds.From(kind)`, `MemberOverviews.Of(members, owner, now)` is the member manager's `ListAsync` (see
+    Membership's managers above), and `MembershipModel.Of(model, memberClass)` is `MembershipModel.For(model, memberClass)`.
   - The samples follow, so code copied from them reads the same. A module's own refusal class makes its refusal
     with `Refuse`: `ProjectRefusals.Refuse(ProjectRefusals.NotFound)`, `InspectionRefusals.Refuse(...)`. The
     Webshop's `CustomerId.Of(caller)` is `CustomerId.From(caller)`. The Tenancy sample's `DateRange.Of(day)` is
@@ -4055,8 +4126,9 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     - `members: MemberSource.Resolved("tenancy/caller_seat")`: left out, since who a member is follows from the
       seat id (`MemberSource.Inferred`); `MemberSource.Resolved("depot/caller_porter")`:
       `MemberSource.Resolved(DepotFunctions.CallerPorter)`, a `DatabaseFunction`.
-    - `changeMembersKey:` and `changeOwnerKey:`: `[On<Document>(LocksMembers = true)]` and `LocksOwner = true`;
-      `rules.ChangeMembersKey` and `rules.ChangeOwnerKey`: `rules.MembersLockPermission` and `rules.OwnerLockPermission`.
+    - `changeMembersKey:` and `changeOwnerKey:`: `[On<Document>(ManagesMembers = true)]` and `NamesOwner = true`;
+      `rules.ChangeMembersKey` and `rules.ChangeOwnerKey`: `rules.ManagesMembersPermission` and
+      `rules.NamesOwnerPermission`.
     - `grantTo: [...]`: gone; the roles the application's row access rules on the resource are written for, never
       `anon`, and `ddd_system_in` while the rules let a scope through.
     - `functions: new MembershipFunctions(...)`: gone; the functions are named after the resource, and

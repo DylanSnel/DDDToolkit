@@ -28,7 +28,7 @@ public static MembershipRules Rules { get; } = MembershipRules.For<Board>(
 
 Made through the resource's type, which says its name and its codes ([`IMembershipResource`](resource-and-members.md#imembershipresource)), and from the permissions declared on it, the constants of a `[Permissions]` class marked [`OnAttribute<TResource>`](#onattributetresource): the owner holds those marked `Owner`, every member the one marked `EveryMember`, and a role those marked `InRoles`. So nothing of the resource is said twice.
 
-They say who holds a permission: the owner by owning the resource, a member by being one and through its roles. They do not say who may add a member, give or take a role, or hand the resource to another owner. That is the application's to decide, command by command: each of its commands requires what the application chooses, usually one of the resource's permissions held on it, and whatever further rule it has it writes itself.
+They say who holds a permission: the owner by owning the resource, a member by being one and through its roles. They also name the permission that manages the members and the one that names the owner (`ManagesMembers`, `NamesOwner`), which the resource's member manager requires, and, where a customer makes the roles, the permission that manages those roles ([`Roles.ManagedWith`](#roles-1)). A rule of the application's own beyond those, such as that nobody gives a role for longer than they hold the permission, it writes itself.
 
 It is data, checked once when it is made, so everything that decides access reads the same thing: the questions asked in C# before a handler runs, the functions that answer the same questions in the database, and whatever writes those functions. Declare one per kind of resource. Nothing here is shared between two resources, so an application with documents and folders declares two, and neither touches the other.
 
@@ -47,8 +47,8 @@ Three things are said apart from each other, and any of the one goes with any of
 | `IReadOnlyList<string> OwnerPermissions { get; }` | The permissions the owner holds by owning the resource, those marked `Owner`, in the order they are declared. The owner holds no role, so this is all it holds by owning it. |
 | `string? EveryMemberPermission { get; }` | The permission every member holds by being one, whatever roles it holds, or `null`: usually the one that sees the resource. Without one a resource is still seen by its members, and by its owner, and that is all membership alone gives. Where a resource is reached from above ([`ReachFromAbove`](#membershiprules)) it is the permission that sees it from there as well. |
 | `RolePermissions RolePermissions { get; }` | Which permissions a member's role can give on the resource, wherever the roles come from. |
-| [`MembersLockPermission`](#memberslockpermission) | The permission the application's own commands require to change the members of a resource, the one marked `LocksMembers`, or `null`. |
-| [`OwnerLockPermission`](#ownerlockpermission) | The permission the application's own command requires to hand a resource to another owner, the one marked `LocksOwner`, or `null`. |
+| [`ManagesMembersPermission`](#managesmemberspermission) | The permission that manages the members of a resource, the one marked `ManagesMembers`, or `null`. |
+| [`NamesOwnerPermission`](#namesownerpermission) | The permission that names the owner of a resource, the one marked `NamesOwner`, or `null`. |
 | `IReadOnlyList<string> SystemScopes { get; }` | The scopes whose work is the application's own for this resource: work that runs as `CurrentUserSnapshot.SystemIn` in one of them holds every permission on every resource of this kind, as `CurrentUserSnapshot.System` does. The module's own scope unless the rules say otherwise; work in any other scope holds nothing on a resource, since a scope is a module's own and another module's work is not above this resource's rules. |
 | [`For(Roles, MemberSource?, ReachFromAbove?, IReadOnlyList<string>?)`](#forroles-membersource-reachfromabove-ireadonlyliststring) | The rules of the resource `TResource`. |
 | [`MembershipGives(string)`](#membershipgivesstring) | Whether being a member gives `permission` by itself, whatever roles the member holds: so for [`EveryMemberPermission`](#membershiprules), and for nothing else. |
@@ -60,23 +60,23 @@ Three things are said apart from each other, and any of the one goes with any of
 | [`PermissionsOf(NamedRole)`](#permissionsofnamedrole) | The permissions `role` gives a member on the resource: the permissions it lists that a member's role can give. |
 | [`Knows(NamedRole)`](#knowsnamedrole) | Whether `role` is one of the roles declared in code: a fixed role, or a starter role a customer's roles are made from. |
 
-#### `MembersLockPermission`
+#### `ManagesMembersPermission`
 
 ```csharp
-public string? MembersLockPermission { get; }
+public string? ManagesMembersPermission { get; }
 ```
 
-The permission the application's own commands require to change the members of a resource, the one marked `LocksMembers`, or `null`. It is here for a database that checks every row itself, and for nothing else: whatever writes the database's policies holds both member tables to it, for every role the functions are granted to, and a row is written only by a caller that holds it on the resource, or the permission that locks the owner. No code of the package gates a command by it.
+The permission that manages the members of a resource, the one marked `ManagesMembers`, or `null`. The resource's member manager requires it on the resource to add or remove a member and to give or take a role, and lets only system work make those changes where it is `null`. A database that checks every row itself holds both member tables to it as well: whatever writes the database's policies writes a row only for a caller that holds it on the resource, or the permission that names the owner.
 
 The database asks what the caller holds when each statement runs. Mark it `Owner`, as the default is, where a caller opens a resource as itself: the owner's own first rows are then its to write.
 
-#### `OwnerLockPermission`
+#### `NamesOwnerPermission`
 
 ```csharp
-public string? OwnerLockPermission { get; }
+public string? NamesOwnerPermission { get; }
 ```
 
-The permission the application's own command requires to hand a resource to another owner, the one marked `LocksOwner`, or `null`. As [`MembersLockPermission`](#memberslockpermission), it is here for a database that checks every row itself: a change of a resource leaves its owner as it was unless the caller holds it there.
+The permission that names the owner of a resource, the one marked `NamesOwner`, or `null`. The resource's member manager requires it on the resource to hand the resource to another owner, and lets only system work do that where it is `null`. A database that checks every row itself holds the owner column to it as well: a change of a resource leaves its owner as it was unless the caller holds it there.
 
 Whoever holds it by owning the resource alone holds it no longer once the owner has changed, and what a hand-over writes after that is then not its to write. A hand-over by the owner itself is saved as the application's own work; one by somebody who holds it through a role, or from above, as the caller.
 
@@ -95,7 +95,7 @@ The rules of the resource `TResource`.
 
 **Parameters**
 
-- `roles`: Where the roles a member holds come from: [`Roles.Fixed`](#fixedireadonlylistdeclaredrole) in code, [`Roles.Custom`](#customireadonlylistdeclaredrole-otherpermissions) made by a customer, or [`Roles.External`](#externaldatabasefunction-otherpermissions) kept elsewhere.
+- `roles`: Where the roles a member holds come from: [`Roles.Fixed`](#fixedireadonlylistdeclaredrole) in code, [`Roles.Custom`](#customireadonlylistdeclaredrole-otherpermissions-string) made by a customer, or [`Roles.External`](#externaldatabasefunction-otherpermissions) kept elsewhere.
 - `members`: Who the caller is as a member; left out, it follows from what a member is known by ([`MemberSource.Inferred`](#inferred)): the caller's seat for the seat id of a package that keeps an organization's seats, the caller's user id for an id over a Guid.
 - `reachFromAbove`: Says that a permission held where the resource hangs, or above it, reaches the resource ([`ReachFromAbove`](#reachfromabove)): `true` beside a package that keeps an organization's units, or the function of the application's own that answers where the caller holds a permission. Left out, a resource is reached through its members and by its owner alone. Said, the resource's class marks the place it hangs at `[At]`, and one permission is held by every member ([`OnAttribute.EveryMember`](#everymember)): what is held above sees a resource by that permission.
 - `systemScopes`: The scopes whose system work holds every permission on every resource of this kind ([`SystemScopes`](#membershiprules)). Left out, the scope of the module that declares the resource ([`IMembershipResource.MembershipScope`](resource-and-members.md#imembershipresource)): `boards` for the module `Boards`, so work begun as `CurrentUserSnapshot.SystemIn("boards")` does what it needs on boards. Said, the scopes named and no other: name the module's own among them to keep it, and say `[]` for no system work in a scope at all.
@@ -309,7 +309,7 @@ Roles.External(OrganizationFunctions.RolesWithPermission)
 
 - **Fixed**: roles in code, the same for everybody, changed with a deploy. A member holds one by its name, as a [`NamedRole`](resource-and-members.md#namedrole).
 - **Custom**: rows a customer makes for itself while the application runs, of the application's role class ([`CustomRoleAttribute<TRoleId, TResource>`](resource-and-members.md#customroleattributetroleid-tresource)), with a name, permissions of the resource's and an archive. A member holds one by the class's id. The starter roles are what a customer's first rows are made from.
-- **External**: roles the application keeps in a store of its own, the roles of its organization say, which it answers for through [`IMemberRoles<TResourceId, TRoleId>`](use-cases.md#imemberrolestresourceid-troleid) and, in a database that answers the questions itself, through a function. A member holds one by that store's id.
+- **External**: roles the application keeps in a store of its own, the roles of its organization say, which it answers for through [`IMemberRoles<TResourceId, TRoleId>`](#imemberrolestresourceid-troleid) and, in a database that answers the questions itself, through a function. A member holds one by that store's id.
 
 Whichever it is, what a role gives a member is held to the resource's permissions: only a permission marked `InRoles` ([`OnAttribute.InRoles`](#inroles)), and, where the roles take them, permissions of other modules ([`OtherPermissions`](#roles-1)). The owner holds no role: it holds the permissions marked `Owner` by owning the resource.
 
@@ -319,8 +319,9 @@ Whichever it is, what a role gives a member is held to the resource's permission
 | `IReadOnlyList<DeclaredRole> Declared { get; }` | The roles declared in code: the roles a member holds, for [`RolesKind.Fixed`](#roleskind); the starter roles a customer's first rows are made from, for [`RolesKind.Custom`](#roleskind); none for [`RolesKind.External`](#roleskind). |
 | `DatabaseFunction? Function { get; }` | For [`RolesKind.External`](#roleskind), the function that answers in the database which of the application's roles give a permission, or `null` where the database does not answer the questions itself. |
 | `OtherPermissions? OtherPermissions { get; }` | Which permissions of other modules a role gives on the resource besides its permissions, or `null` for none: then a role gives the resource's permissions marked `InRoles` and nothing else. |
+| `string? ManagedWith { get; }` | For [`RolesKind.Custom`](#roleskind), the permission that makes, renames, gives permissions to and archives the roles, or `null`. The roles are a customer's as a whole, not one resource's, so it is held for the whole of what they are kept for: the role manager the generator writes for the role class, `BoardRoleManager`, asks it of what the application registered for that, which the join with an organization's package answers for the whole organization. Where nothing answers, and where it is `null`, only system work changes the roles. |
 | [`Fixed(IReadOnlyList<DeclaredRole>)`](#fixedireadonlylistdeclaredrole) | Roles in code, each with the permissions it gives on the resource, held by name: the same for every resource of the kind, and changed with a deploy. |
-| [`Custom(IReadOnlyList<DeclaredRole>?, OtherPermissions?)`](#customireadonlylistdeclaredrole-otherpermissions) | Roles a customer makes for itself while the application runs: rows of the application's role class ([`CustomRoleAttribute<TRoleId, TResource>`](resource-and-members.md#customroleattributetroleid-tresource)), each with a name and the permissions it gives, which a customer renames, gives other permissions and archives, held by the class's id. |
+| [`Custom(IReadOnlyList<DeclaredRole>?, OtherPermissions?, string?)`](#customireadonlylistdeclaredrole-otherpermissions-string) | Roles a customer makes for itself while the application runs: rows of the application's role class ([`CustomRoleAttribute<TRoleId, TResource>`](resource-and-members.md#customroleattributetroleid-tresource)), each with a name and the permissions it gives, which a customer renames, gives other permissions and archives, held by the class's id. |
 | [`External(DatabaseFunction?, OtherPermissions?)`](#externaldatabasefunction-otherpermissions) | Roles the application keeps in a store of its own, such as the roles of its organization, held by that store's id. |
 
 #### `Fixed(IReadOnlyList<DeclaredRole>)`
@@ -339,24 +340,30 @@ Roles in code, each with the permissions it gives on the resource, held by name:
 
 - `ArgumentException`: `roles` is empty, or a role has no name, the name of another, or a permission twice.
 
-#### `Custom(IReadOnlyList<DeclaredRole>?, OtherPermissions?)`
+#### `Custom(IReadOnlyList<DeclaredRole>?, OtherPermissions?, string?)`
 
 ```csharp
 public static Roles Custom(
     IReadOnlyList<DeclaredRole>? starters = null,
-    OtherPermissions? otherPermissions = null)
+    OtherPermissions? otherPermissions = null,
+    string? managedWith = null)
 ```
 
 Roles a customer makes for itself while the application runs: rows of the application's role class ([`CustomRoleAttribute<TRoleId, TResource>`](resource-and-members.md#customroleattributetroleid-tresource)), each with a name and the permissions it gives, which a customer renames, gives other permissions and archives, held by the class's id.
 
+```csharp
+Roles.Custom(starters: [new("editor", [BoardPermissions.View, BoardPermissions.Edit])], managedWith: BoardPermissions.ManageRoles)
+```
+
 **Parameters**
 
-- `starters`: The roles a customer starts with: what its first rows are made from ([`StarterRoles`](use-cases.md#starterroles)), none when left out. A starter role is no role a member holds; the row made from it is.
+- `starters`: The roles a customer starts with: what its first rows are made from (the role manager's `CreateStarterRolesAsync`), none when left out. A starter role is no role a member holds; the row made from it is.
 - `otherPermissions`: Which permissions of other modules a role may hold besides the resource's permissions; none when left out.
+- `managedWith`: The permission that changes the roles, held for the whole of what they are kept for ([`ManagedWith`](#roles-1)). Left out, only system work changes them.
 
 **Exceptions**
 
-- `ArgumentException`: A starter role has no name, the name of another, or a permission twice.
+- `ArgumentException`: A starter role has no name, the name of another, or a permission twice; or `managedWith` is blank.
 
 #### `External(DatabaseFunction?, OtherPermissions?)`
 
@@ -384,7 +391,7 @@ The kinds of [`Roles`](#roles-1).
 | Member | Summary |
 |---|---|
 | `Fixed = 0` | Roles in code, held by name: [`Roles.Fixed`](#fixedireadonlylistdeclaredrole). |
-| `Custom = 1` | Rows a customer makes: [`Roles.Custom`](#customireadonlylistdeclaredrole-otherpermissions). |
+| `Custom = 1` | Rows a customer makes: [`Roles.Custom`](#customireadonlylistdeclaredrole-otherpermissions-string). |
 | `External = 2` | The application's own store of roles: [`Roles.External`](#externaldatabasefunction-otherpermissions). |
 
 ### `DeclaredRole`
@@ -399,7 +406,7 @@ A role declared in code: a name, and the permissions a member that holds it has 
 new DeclaredRole("contributor", [DocumentPermissions.View, DocumentPermissions.Edit])
 ```
 
-Of a customer's roles ([`Roles.Custom`](#customireadonlylistdeclaredrole-otherpermissions)) it is a starter role instead: what a first role is made from, with this name and these permissions, and nothing a member holds.
+Of a customer's roles ([`Roles.Custom`](#customireadonlylistdeclaredrole-otherpermissions-string)) it is a starter role instead: what a first role is made from, with this name and these permissions, and nothing a member holds.
 
 | Member | Summary |
 |---|---|
@@ -484,6 +491,40 @@ A role gives every permission of another module it holds but these.
 
 - `ArgumentException`: One of `permissions` is blank.
 
+### `IMemberRoles<TResourceId, TRoleId>`
+
+```csharp
+public interface IMemberRoles<TResourceId, TRoleId>
+    where TResourceId : struct, IEntityId, IEquatable<TResourceId>
+    where TRoleId : struct, IEntityId, IEquatable<TRoleId>
+```
+
+The roles there are for the members of one kind of resource: whether a role exists, which the member manager asks before it gives one.
+
+Where the roles are fixed ([`Roles.Fixed`](#fixedireadonlylistdeclaredrole)), the package answers it from the rules. Where a customer makes them ([`Roles.Custom`](#customireadonlylistdeclaredrole-otherpermissions-string)), the package that stores them answers it from their rows: a role in use. Where they are kept elsewhere ([`Roles.External`](#externaldatabasefunction-otherpermissions)), the roles an organization makes for itself say, the application answers it from there, registered with the resource, or the join with that organization's package answers it.
+
+**Type parameters**
+
+- `TResourceId`: The id of the kind of resource the members are of.
+- `TRoleId`: What a role is known by.
+
+| Member | Summary |
+|---|---|
+| [`ExistsAsync(TRoleId, CancellationToken)`](#existsasynctroleid-cancellationtoken) | Whether `role` is a role in use that a member can be given. |
+
+#### `ExistsAsync(TRoleId, CancellationToken)`
+
+```csharp
+ValueTask<bool> ExistsAsync(TRoleId role, CancellationToken cancellationToken)
+```
+
+Whether `role` is a role in use that a member can be given.
+
+**Parameters**
+
+- `role`: The role.
+- `cancellationToken`: Cancels the lookup.
+
 ## Permissions
 
 Namespace `DDDToolkit.Supporting.Membership.Access`.
@@ -511,7 +552,7 @@ public static class BoardPermissions
     public const string Edit = "boards.edit";
 
     /// <summary>Say who is on a board, and in which role.</summary>
-    [On<Board>(InRoles = false, LocksMembers = true, LocksOwner = true)]
+    [On<Board>(InRoles = false, ManagesMembers = true, NamesOwner = true)]
     public const string ManageMembers = "boards.members.manage";
 }
 ```
@@ -522,17 +563,17 @@ public static class BoardPermissions
 
 **Remarks**
 
-The package's generator collects every permission on a resource into its rules, `MembershipRules.For<Board>`, in the project that makes them, from the classes of that project and of the projects it references. So the C# check in front of a handler and the functions in the database answer from the same declaration. The defaults are what most permissions of a resource are: the owner holds it, a role can give it, nobody holds it by being a member alone, and it locks nothing.
+The package's generator collects every permission on a resource into its rules, `MembershipRules.For<Board>`, in the project that makes them, from the classes of that project and of the projects it references. So the C# check in front of a handler and the functions in the database answer from the same declaration. The defaults are what most permissions of a resource are: the owner holds it, a role can give it, nobody holds it by being a member alone, and it neither manages the members nor names the owner.
 
-`TResource` is the aggregate root a member class names, `[Member<..., Board>]`; another class is DDD00093. Of the permissions on one resource, one at most is held by every member, one at most locks the members, and one at most locks the owner (DDD00093).
+`TResource` is the aggregate root a member class names, `[Member<..., Board>]`; another class is DDD00093. Of the permissions on one resource, one at most is held by every member, one at most manages the members, and one at most names the owner (DDD00093).
 
 | Member | Summary |
 |---|---|
 | [`Owner`](#owner) | Whether the resource's owner holds the permission by owning it: the member its `[Owner]` property names, with no role, from the moment the resource names it and for as long as it does. |
 | [`EveryMember`](#everymember) | Whether every member holds the permission by being a member, whatever roles it holds, or none. |
 | [`InRoles`](#inroles) | Whether a role can give the permission to a member. |
-| [`LocksMembers`](#locksmembers) | Whether this is the permission the application's commands require to add or remove a member and to give or take a role, so a database that checks every row itself holds the member rows to it. |
-| [`LocksOwner`](#locksowner) | Whether this is the permission the application's command requires to hand the resource to another owner, so a database that checks every row itself holds the owner column to it. |
+| [`ManagesMembers`](#managesmembers) | Whether this is the permission that manages the members: the one the resource's member manager requires to add or remove a member and to give or take a role. |
+| [`NamesOwner`](#namesowner) | Whether this is the permission that names the owner: the one the resource's member manager requires to hand the resource to another owner. |
 | [`FromAbove`](#fromabove) | Whether the permission reaches the resource from above, where its rules let a resource be reached so: held where the resource sits, or above it. |
 
 #### `Owner`
@@ -567,25 +608,25 @@ Whether a role can give the permission to a member. `true` unless said.
 
 `InRoles = false`: no role can contain this permission, so only the owner (and reach from above) holds it. A role declared in code that lists it is refused when the rules are made, and a role a customer makes that lists it is refused with `permission-not-for-members`; a role that holds it from before the rules changed gives nothing with it. Say it of a permission a customer must never hand out, such as the one that says who is on the resource.
 
-#### `LocksMembers`
+#### `ManagesMembers`
 
 ```csharp
-public bool LocksMembers { get; set; }
+public bool ManagesMembers { get; set; }
 ```
 
-Whether this is the permission the application's commands require to add or remove a member and to give or take a role, so a database that checks every row itself holds the member rows to it. `false` unless said; one permission of a resource at most.
+Whether this is the permission that manages the members: the one the resource's member manager requires to add or remove a member and to give or take a role. `false` unless said; one permission of a resource at most.
 
-`LocksMembers = true`: whatever writes the database's policies adds a lock to both member tables, and a member row is written only by a caller that holds this permission on the resource, or the one that locks the owner. Without it, whoever may change a resource in any way writes its member rows, a role for itself included, by a statement that never went through a command. No code of the package gates a command by it: the commands still say what they require.
+`ManagesMembers = true`: the manager the generator writes for the resource's member class, `BoardMemberManager`, requires it on the resource for each of those changes, and a resource that marks no permission so lets only system work change its members there. Whatever writes the database's policies adds a lock to both member tables as well, and a member row is written only by a caller that holds this permission on the resource, or the one that names the owner. Without it, whoever may change a resource in any way writes its member rows, a role for itself included, by a statement that never went through a command.
 
-#### `LocksOwner`
+#### `NamesOwner`
 
 ```csharp
-public bool LocksOwner { get; set; }
+public bool NamesOwner { get; set; }
 ```
 
-Whether this is the permission the application's command requires to hand the resource to another owner, so a database that checks every row itself holds the owner column to it. `false` unless said; one permission of a resource at most.
+Whether this is the permission that names the owner: the one the resource's member manager requires to hand the resource to another owner. `false` unless said; one permission of a resource at most.
 
-`LocksOwner = true`: whatever writes the database's policies pins the owner column, and a change of a resource leaves its owner as it was unless the caller holds this permission on it. The owner holds what it holds by owning, so whoever may write that column could make itself everything.
+`NamesOwner = true`: the member manager requires it on the resource to name an owner, and a resource that marks no permission so lets only system work name one there. Whatever writes the database's policies pins the owner column as well, and a change of a resource leaves its owner as it was unless the caller holds this permission on it. The owner holds what it holds by owning, so whoever may write that column could make itself everything.
 
 #### `FromAbove`
 
@@ -612,8 +653,8 @@ One permission on a resource with members, as a constant marked [`OnAttribute<TR
 | `bool Owner { get; init; }` | Whether the owner holds it by owning the resource ([`OnAttribute.Owner`](#owner)). |
 | `bool EveryMember { get; init; }` | Whether every member holds it by being one ([`OnAttribute.EveryMember`](#everymember)). |
 | `bool InRoles { get; init; }` | Whether a role can give it ([`OnAttribute.InRoles`](#inroles)). |
-| `bool LocksMembers { get; init; }` | Whether the database holds the member rows to it ([`OnAttribute.LocksMembers`](#locksmembers)). |
-| `bool LocksOwner { get; init; }` | Whether the database holds the owner column to it ([`OnAttribute.LocksOwner`](#locksowner)). |
+| `bool ManagesMembers { get; init; }` | Whether the database holds the member rows to it ([`OnAttribute.ManagesMembers`](#managesmembers)). |
+| `bool NamesOwner { get; init; }` | Whether the database holds the owner column to it ([`OnAttribute.NamesOwner`](#namesowner)). |
 | `bool FromAbove { get; init; }` | Whether it reaches the resource from above ([`OnAttribute.FromAbove`](#fromabove)). |
 
 #### `ResourcePermission(string, bool, bool, bool, bool, bool, bool)`
@@ -624,8 +665,8 @@ public ResourcePermission(
     bool Owner = true,
     bool EveryMember = false,
     bool InRoles = true,
-    bool LocksMembers = false,
-    bool LocksOwner = false,
+    bool ManagesMembers = false,
+    bool NamesOwner = false,
     bool FromAbove = true)
 ```
 
@@ -637,8 +678,8 @@ The primary constructor: the type's summary says what it makes.
 - `Owner`: Whether the owner holds it by owning the resource ([`OnAttribute.Owner`](#owner)).
 - `EveryMember`: Whether every member holds it by being one ([`OnAttribute.EveryMember`](#everymember)).
 - `InRoles`: Whether a role can give it ([`OnAttribute.InRoles`](#inroles)).
-- `LocksMembers`: Whether the database holds the member rows to it ([`OnAttribute.LocksMembers`](#locksmembers)).
-- `LocksOwner`: Whether the database holds the owner column to it ([`OnAttribute.LocksOwner`](#locksowner)).
+- `ManagesMembers`: Whether the database holds the member rows to it ([`OnAttribute.ManagesMembers`](#managesmembers)).
+- `NamesOwner`: Whether the database holds the owner column to it ([`OnAttribute.NamesOwner`](#namesowner)).
 - `FromAbove`: Whether it reaches the resource from above ([`OnAttribute.FromAbove`](#fromabove)).
 
 ## Reach from above
@@ -668,7 +709,7 @@ Why it matters: whoever runs a part of an organization sees and acts on what han
 
 A resource the caller does not see does not exist for it, whatever it holds there. So rules that let a resource be reached from above have a permission every member holds ([`OnAttribute.EveryMember`](#everymember), which is required then): whoever holds that permission where the resource hangs sees the resource, as its members do, and without one nobody above would.
 
-A permission held from above is not cut by what a role gives ([`OnAttribute.InRoles`](#inroles)): that is about a member's roles on the resource, and a permission held above is held through the place, by a role of the organization, a permission marked `InRoles = false` included. Only a permission marked `FromAbove = false` is not reached this way. A caller that holds a permission both ways holds it as a member ([`MemberVia.Members`](use-cases.md#membervia)).
+A permission held from above is not cut by what a role gives ([`OnAttribute.InRoles`](#inroles)): that is about a member's roles on the resource, and a permission held above is held through the place, by a role of the organization, a permission marked `InRoles = false` included. Only a permission marked `FromAbove = false` is not reached this way. A caller that holds a permission both ways holds it as a member ([`MemberVia.Members`](managers.md#membervia)).
 
 Where a caller holds a permission is the application's to answer, or the organization package's: in C# through an `IPlacesReached<TResourceId, TPlaceId>` registered with the resource, which the package that stores the resources asks inside its own statement, and which such a package's join with this one writes; in a database that answers the questions itself, through a function. Beside such a package that function is its own, found by the type of the place, its unit id; beside a place of the application's own it is the one named here. The package keeps no places and no tree of them.
 

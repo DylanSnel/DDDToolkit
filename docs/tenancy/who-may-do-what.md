@@ -276,12 +276,12 @@ involves two separate decisions: who may send the request, and what the work run
 
 ```csharp
 [SignedIn]
-public sealed record RegisterOrganization(string Slug, string Name, string AdministratorName) : ICommand<TenantId>, ITenantsRequest;
+public sealed record RegisterOrganization(string Slug, string Name, string AdministratorName) : ICommand<Tenant>, ITenantsRequest;
 
 public sealed class RegisterOrganizationHandler(TenantManager tenants, TenancyAccessManager access)
-    : ICommandHandler<RegisterOrganization, TenantId>
+    : ICommandHandler<RegisterOrganization, Tenant>
 {
-    public async ValueTask<TenantId> Handle(RegisterOrganization command, CancellationToken cancellationToken)
+    public async ValueTask<Tenant> Handle(RegisterOrganization command, CancellationToken cancellationToken)
     {
         // Read the user before the system work begins. Inside the system work, the current user is system work.
         if (access.CurrentUser.Id is not { } administrator
@@ -292,12 +292,11 @@ public sealed class RegisterOrganizationHandler(TenantManager tenants, TenancyAc
 
         using (access.BeginSystem())
         {
-            var tenant = await tenants.ProvisionAsync(
+            return await tenants.ProvisionAsync(
                 new TenantToProvision(
                     command.Slug, command.Name, TenantShape.Flat, command.Name, administrator,
                     ConfigureFirstSeat: seat => seat.Rename(command.AdministratorName)),
                 cancellationToken);
-            return tenant.Id;
         }
     }
 }

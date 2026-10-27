@@ -821,7 +821,7 @@ constant.
 
 Error, on a constant marked `[On<TResource>]`: `TResource` is no resource with members (no
 `[Member<TId, TMemberId, TRoleId, TResource>]` class names it), or a second permission of that resource says
-`EveryMember`, `LocksMembers` or `LocksOwner`, or a permission is declared twice on it. Name the aggregate root whose members
+`EveryMember`, `ManagesMembers` or `NamesOwner`, or a permission is declared twice on it. Name the aggregate root whose members
 hold it, and keep one permission per setting.
 
 ## DDD00094
@@ -903,6 +903,17 @@ the request refuses every caller. Keep one. For a request an operator or a seat 
 Warning, at `[Operator(Tenant = ...)]` or `[Operator(Scope = ...)]` on a query of Mediator's: nothing begins for a
 query, so the arguments say nothing. Take them off. An operator's query reads across tenants through its token's
 database role.
+
+## DDD00106
+
+Info, on the member class, the role class, or a type of the manager's name: Membership's generator writes the
+member manager (`DocumentShareManager` for `DocumentShare`) and the role manager (`BoardRoleManager` for
+`BoardRole`) in the global namespace, and did not write this one. The message says why: a type of that name the
+project declares in a namespace (rename it; one in the global namespace is the project's own manager and silences
+it), two member or role classes of one name (rename one), an `[Owner]` property without a setter (give it
+`{ get; private set; }`), a resource whose id cannot be told (declare it `[AggregateRoot<TId>]`), or a role class
+whose resource is declared in another project (declare it beside the resource). Handlers take the managers to
+change members and roles; never add member-changing methods to the resource instead.
 
 ## Not a diagnostic: the owned type must carry the key part
 

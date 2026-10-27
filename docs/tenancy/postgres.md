@@ -342,7 +342,7 @@ Replace a default with a read rule on your class. Write it like any
 |---|---|
 | Your queries, the seats that `SeatManager` reads, `tenant_seats()` and `ITenancyQueries.Seats()`. | Tenancy's queries about the caller and about rights (`caller_seat`, `seats_in_my_units`, `seats_holding_permission_at` …). These functions run as their owner. |
 | Your entities on the seat class. | Placements and grants. Every member still reads every seat's id and units. Your rule hides the seat's row (the identity and your fields), and other members still see that the seat exists. |
-| Admission checks that read the seats. [Membership](../membership/overview.md) refuses a seat outside your rule with `member-not-active`, the same as a seat that does not exist. A module's rule on `tenant_seats()` does the same. | Writes, which stay Tenancy's. A [column rule](#who-may-change-a-seats-columns) still guards your fields. System work and operators. |
+| Checks that read the seats. [Membership](../membership/overview.md)'s member manager refuses a seat outside your rule with `member-not-active`, the same as a seat that does not exist. A module's rule on `tenant_seats()` does the same. | Writes, which stay Tenancy's. A [column rule](#who-may-change-a-seats-columns) still guards your fields. System work and operators. |
 
 <details>
 <summary>Show the code: two read rules, their building blocks, and the policy the export writes</summary>

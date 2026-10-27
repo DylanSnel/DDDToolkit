@@ -1,103 +1,1102 @@
 ---
-title: "Membership API: Use cases and access"
-sidebar_label: Use cases and access
+title: "Membership API: Managers and access"
+sidebar_label: Managers and access
 ---
 
 <!-- Generated from the packages' code and XML documentation by build/ApiReference; do not edit by hand. Regenerate with build/generate-api-reference.sh. -->
 
-# Membership API: Use cases and access
+# Membership API: Managers and access
 
-What a handler asks before it changes the members, what a caller is shown of them, the starter roles of a resource whose customers make its roles, the access manager of one kind of resource, the requirements a request states, and the contracts that publish a resource's access to row access rules. The access manager is asked for by the resource's class, `MembershipAccessManager<Board>`. The admission and the requirements are asked for by the resource's id. So those of documents never answer for folders. Their registration is with Entity Framework, under [Registration](entity-framework.md#registration).
+The managers the generator writes for a resource's member class and for its role class, `BoardMemberManager` and `BoardRoleManager`, and what they take; what the application answers about who may be a member and which roles go to one; the access manager of one kind of resource, the requirements a request states, and the contracts that publish a resource's access to row access rules. A generated manager is named after your class and closed over your types: each section shows the package's class it derives from, with the methods it inherits. The access manager is asked for by the resource's class, `MembershipAccessManager<Board>`, and the requirements by the resource's id, so those of documents never answer for folders. Their registration is with Entity Framework, under [Registration](entity-framework.md#registration).
 
-## Admission
+## Member manager
 
-Namespace `DDDToolkit.Supporting.Membership.UseCases`.
+Namespace `DDDToolkit.Supporting.Membership.Managers`.
 
-### `MemberAdmission<TResourceId, TMemberId, TRoleId>`
+### `MemberManager<TResource, TResourceId, TMember, TId, TMemberId, TRoleId>`
 
 ```csharp
-public sealed class MemberAdmission<TResourceId, TMemberId, TRoleId>
+public class MemberManager<TResource, TResourceId, TMember, TId, TMemberId, TRoleId>
+    where TResource : AggregateRoot<TResourceId>, IMembershipResource, IMembershipResource<TMember, TMemberId, TRoleId>
     where TResourceId : struct, IEntityId, IEquatable<TResourceId>
+    where TMember : MemberEntity<TId, TMemberId, TRoleId>
+    where TId : struct, IEntityId, IEquatable<TId>
     where TMemberId : struct, IEntityId, IEquatable<TMemberId>
     where TRoleId : struct, IEntityId, IEquatable<TRoleId>
 ```
 
-What a use case asks before it changes the members of one kind of resource, where the answer is not the member list's to give: whether the one to be made a member is known, whether a role is one there is for this resource. A handler asks, and passes the answer to the aggregate:
+The members of one kind of resource: adding them, giving and taking their roles, removing them, leaving, naming another owner, opening a new resource, and listing who is on one. Your code takes it as `BoardMemberManager`, a class the package's generator writes for your member class, closed over your resource and its ids, and the container makes per scope.
 
 ```csharp
-await admission.RequireMemberAsync(command.With, cancellationToken);
-await admission.RequireRoleAsync(command.Role, cancellationToken);
-document.ShareWith(command.With, command.Role, MemberPeriod.Between(clock.GetUtcNow(), command.Until), by);
+public sealed class AddMemberHandler(BoardMemberManager members) : ICommandHandler<AddMember, Board>
+{
+    public async ValueTask<Board> Handle(AddMember command, CancellationToken cancellationToken)
+        => await members.AddAsync(command.Board, command.Seat, command.Role, until: null, cancellationToken);
+}
 ```
 
-It asks what makes a change well formed, whoever makes it: a member that exists, a role that exists. It does not ask who may make the change. Who may add a member or give a role, which roles and for how long, is the application's to decide: by the permission its command requires, and by any rule of its own in the handler, in front of these.
+Each change takes the resource, or its id. Both do the same: the manager loads the resource itself, tracked, and answers it as it changed and saved it. A member and a role are ids, since a member is somebody of another module and a role is a row of your role class or a name the rules declare. After the cancellation token comes the version the caller last read, for a command that names one: a resource at another version is a lost race.
 
-One per kind of resource, asked for by the resource's id, and it refuses under that resource's codes. It keeps nothing between two questions.
+**What a change checks, in order.** The caller's right first, as the access manager refuses: the caller's own refusal when it is nobody, `not-found` for a resource it may not see, `not-permitted` naming the permission. A change of the members needs the permission the rules mark `ManagesMembers`, and naming an owner the one marked `NamesOwner`; a resource that marks none lets only system work make the change. Where the request in hand was checked for that permission on that resource, the manager takes the check's answer and asks nothing again. Then whether the member and the role may go on the list: an active member where the application registered an [`IMemberDirectory<TResourceId, TMemberId>`](#imemberdirectorytresourceid-tmemberid), a role in use that goes to a member. Then the resource's guard, `OnChangingMembers()`, and the member list's rules, then the save.
+
+**The caller's own place.** A caller that takes a role from itself, takes itself off, leaves, or hands on the resource it owns can lose the very right the save needs, where a database checks every row. Such a save runs as the resource's own work in its scope, for the caller ([`IOwnPlaceWork<TResourceId, TMemberId>`](#iownplaceworktresourceid-tmemberid)), when the request in hand is the one whose check read the resource and the unit of work holds nothing but the resource. Otherwise every save runs as the caller.
+
+**What stays yours.** The resource, its fields and its constructor, which opens its member list. The hooks the generator declares on it: the guard, `OnChangingMembers()`, and the events, `OnMemberAdded`, `OnMemberRemoved`, `OnRoleGiven`, `OnRoleTaken` and `OnOwnerNamed`. A rule of your own, such as that nobody gives a role for longer than they hold the permission, asked with the access manager before the call.
 
 **Type parameters**
 
-- `TResourceId`: The id of the kind of resource the members are of.
+- `TResource`: The resource's aggregate.
+- `TResourceId`: The resource's id.
+- `TMember`: The application's member class.
+- `TId`: The member class's own id.
 - `TMemberId`: What a member is known by.
 - `TRoleId`: What a role is known by.
 
 | Member | Summary |
 |---|---|
-| [`MemberAdmission(MembershipRules, IMemberRoles<TResourceId, TRoleId>, IMemberDirectory<TResourceId, TMemberId>?, IMemberRolePolicy<TResourceId, TRoleId>?)`](#memberadmissionmembershiprules-imemberrolestresourceid-troleid-imemberdirectorytresourceid-tmemberid-imemberrolepolicytresourceid-troleid) | The admission of one kind of resource. |
-| [`RequireMemberAsync(TMemberId, CancellationToken)`](#requirememberasynctmemberid-cancellationtoken) | Requires `member` to be somebody who may be made a member, or named owner: known and active, as the application's directory says. |
-| [`RequireRoleAsync(TRoleId, CancellationToken)`](#requireroleasynctroleid-cancellationtoken) | Requires `role` to be one that goes to a member: a role there is for this resource, which the application's own rule, where it registered one ([`IMemberRolePolicy<TResourceId, TRoleId>`](#imemberrolepolicytresourceid-troleid)), does not keep off a member list. |
+| `MostResources = 200` | The most resources one list of several is asked about. |
+| [`MemberManager(MembershipAccessManager<TResource>, IMemberStore<TResource, TResourceId, TMemberId>, ICurrentUser, TimeProvider, IMemberRoles<TResourceId, TRoleId>?, IMemberDirectory<TResourceId, TMemberId>?, IMemberRolePolicy<TResourceId, TRoleId>?, IOwnPlaceWork<TResourceId, TMemberId>?)`](#membermanagermembershipaccessmanagertresource-imemberstoretresource-tresourceid-tmemberid-icurrentuser-timeprovider-imemberrolestresourceid-troleid-imemberdirectorytresourceid-tmemberid-imemberrolepolicytresourceid-troleid-iownplaceworktresourceid-tmemberid) | The member manager of one kind of resource. |
+| `MembershipRules Rules { get; }` | The rules of the resource, with the codes it refuses under. |
+| [`OpenAsync(TResource, CancellationToken)`](#openasynctresource-cancellationtoken) | Opens a new resource: the owner its constructor put on its member list is admitted, and the resource is added and saved. |
+| [`AddAsync(TResourceId, TMemberId, TRoleId?, DateTimeOffset?, CancellationToken, long?)`](#addasynctresourceid-tmemberid-troleid-datetimeoffset-cancellationtoken-long) | Adds a member, from now until `until` or for good, with `role` for the same period where one is given. |
+| [`AddAsync(TResource, TMemberId, TRoleId?, DateTimeOffset?, CancellationToken, long?)`](#addasynctresource-tmemberid-troleid-datetimeoffset-cancellationtoken-long) | Adds a member, as [`AddAsync`](#addasynctresourceid-tmemberid-troleid-datetimeoffset-cancellationtoken-long) does with the resource's id. |
+| [`GiveRoleAsync(TResourceId, TMemberId, TRoleId, DateTimeOffset?, CancellationToken, long?)`](#giveroleasynctresourceid-tmemberid-troleid-datetimeoffset-cancellationtoken-long) | Gives a member a role, from now until `until` or for good, next to whatever roles it holds. |
+| [`GiveRoleAsync(TResource, TMemberId, TRoleId, DateTimeOffset?, CancellationToken, long?)`](#giveroleasynctresource-tmemberid-troleid-datetimeoffset-cancellationtoken-long) | Gives a member a role, as [`GiveRoleAsync`](#giveroleasynctresourceid-tmemberid-troleid-datetimeoffset-cancellationtoken-long) does with the resource's id. |
+| [`TakeRoleAsync(TResourceId, TMemberId, TRoleId, CancellationToken, long?)`](#takeroleasynctresourceid-tmemberid-troleid-cancellationtoken-long) | Takes a role from a member, who stays a member with whatever else it holds. |
+| [`TakeRoleAsync(TResource, TMemberId, TRoleId, CancellationToken, long?)`](#takeroleasynctresource-tmemberid-troleid-cancellationtoken-long) | Takes a role from a member, as [`TakeRoleAsync`](#takeroleasynctresourceid-tmemberid-troleid-cancellationtoken-long) does with the resource's id. |
+| [`RemoveAsync(TResourceId, TMemberId, CancellationToken, long?)`](#removeasynctresourceid-tmemberid-cancellationtoken-long) | Takes a member off the resource, with every role it holds. |
+| [`RemoveAsync(TResource, TMemberId, CancellationToken, long?)`](#removeasynctresource-tmemberid-cancellationtoken-long) | Takes a member off the resource, as [`RemoveAsync`](#removeasynctresourceid-tmemberid-cancellationtoken-long) does with the resource's id. |
+| [`LeaveAsync(TResourceId, CancellationToken, long?)`](#leaveasynctresourceid-cancellationtoken-long) | Takes the caller off the resource, with every role it holds there. |
+| [`LeaveAsync(TResource, CancellationToken, long?)`](#leaveasynctresource-cancellationtoken-long) | Takes the caller off the resource, as [`LeaveAsync`](#leaveasynctresourceid-cancellationtoken-long) does with the resource's id. |
+| [`NameOwnerAsync(TResourceId, TMemberId, FormerOwner<TRoleId>, CancellationToken, long?)`](#nameownerasynctresourceid-tmemberid-formerownertroleid-cancellationtoken-long) | Names another owner: a member from now on and with no end, added when not a member yet, holding no role. |
+| [`NameOwnerAsync(TResource, TMemberId, FormerOwner<TRoleId>, CancellationToken, long?)`](#nameownerasynctresource-tmemberid-formerownertroleid-cancellationtoken-long) | Names another owner, as [`NameOwnerAsync`](#nameownerasynctresourceid-tmemberid-formerownertroleid-cancellationtoken-long) does with the resource's id. |
+| [`ListAsync(TResourceId, CancellationToken)`](#listasynctresourceid-cancellationtoken) | The members of a resource the caller sees, read for showing: the owner first, then by when each membership starts, then by member, and each member's roles by when each starts, then by role. |
+| [`ListAsync(TResource, CancellationToken)`](#listasynctresource-cancellationtoken) | The members of a resource, as [`ListAsync`](#listasynctresourceid-cancellationtoken) answers them with the resource's id. |
+| [`ListAsync(IReadOnlyCollection<TResourceId>, CancellationToken)`](#listasyncireadonlycollectiontresourceid-cancellationtoken) | The members of each of `resources` the caller sees, in one statement whatever their number, each list in the order [`ListAsync`](#listasynctresourceid-cancellationtoken) answers in. |
 
-#### `MemberAdmission(MembershipRules, IMemberRoles<TResourceId, TRoleId>, IMemberDirectory<TResourceId, TMemberId>?, IMemberRolePolicy<TResourceId, TRoleId>?)`
+#### `MemberManager(MembershipAccessManager<TResource>, IMemberStore<TResource, TResourceId, TMemberId>, ICurrentUser, TimeProvider, IMemberRoles<TResourceId, TRoleId>?, IMemberDirectory<TResourceId, TMemberId>?, IMemberRolePolicy<TResourceId, TRoleId>?, IOwnPlaceWork<TResourceId, TMemberId>?)`
 
 ```csharp
-public MemberAdmission(
-    MembershipRules rules,
-    IMemberRoles<TResourceId, TRoleId> roles,
+public MemberManager(
+    MembershipAccessManager<TResource> access,
+    IMemberStore<TResource, TResourceId, TMemberId> store,
+    ICurrentUser user,
+    TimeProvider clock,
+    IMemberRoles<TResourceId, TRoleId>? roles = null,
     IMemberDirectory<TResourceId, TMemberId>? directory = null,
-    IMemberRolePolicy<TResourceId, TRoleId>? policy = null)
+    IMemberRolePolicy<TResourceId, TRoleId>? policy = null,
+    IOwnPlaceWork<TResourceId, TMemberId>? ownPlace = null)
 ```
 
-The admission of one kind of resource.
+The member manager of one kind of resource. The container makes it; the generated class has the same constructor.
 
 **Parameters**
 
-- `rules`: The resource's rules, for the codes it refuses under.
-- `roles`: The roles there are for its members.
+- `access`: The resource's access manager, which asks what the caller holds.
+- `store`: Where the resource is loaded and saved.
+- `user`: Who is calling.
+- `clock`: What "now" is.
+- `roles`: Which roles there are; the rules answer it themselves where the roles are fixed.
 - `directory`: Who may be made a member, or `null` when everybody may.
-- `policy`: Which of the roles may go to a member, or `null` when every one may.
+- `policy`: Which roles may go to a member, or `null` when every one may.
+- `ownPlace`: How the save of a change to the caller's own place begins, or `null` for system work in the resource's scope.
 
-#### `RequireMemberAsync(TMemberId, CancellationToken)`
+#### `OpenAsync(TResource, CancellationToken)`
 
 ```csharp
-public ValueTask RequireMemberAsync(TMemberId member, CancellationToken cancellationToken)
+public Task<TResource> OpenAsync(TResource resource, CancellationToken cancellationToken)
 ```
 
-Requires `member` to be somebody who may be made a member, or named owner: known and active, as the application's directory says. Admitted without a question where there is no directory.
+Opens a new resource: the owner its constructor put on its member list is admitted, and the resource is added and saved. Who may open one is the request's to say: there is no resource yet to hold a permission on.
 
 **Parameters**
 
-- `member`: The one to be made a member.
-- `cancellationToken`: Cancels the lookup.
+- `resource`: The resource, just made, with its member list opened in its constructor.
+- `cancellationToken`: Cancels the work.
+
+**Returns**: The resource, saved.
 
 **Exceptions**
 
-- `RefusalException`: `member-not-active`, with the `Member`, under the resource's codes.
+- `RefusalException`: `member-not-active` for an owner the application's directory does not admit.
 
-#### `RequireRoleAsync(TRoleId, CancellationToken)`
+**Example**
 
 ```csharp
-public ValueTask RequireRoleAsync(TRoleId role, CancellationToken cancellationToken)
+var board = await members.OpenAsync(new Board(BoardId.Create(), command.Name, owner, clock.GetUtcNow()), cancellationToken);
 ```
 
-Requires `role` to be one that goes to a member: a role there is for this resource, which the application's own rule, where it registered one ([`IMemberRolePolicy<TResourceId, TRoleId>`](#imemberrolepolicytresourceid-troleid)), does not keep off a member list. What the role gives is not asked, and neither is who gives it.
+#### `AddAsync(TResourceId, TMemberId, TRoleId?, DateTimeOffset?, CancellationToken, long?)`
+
+```csharp
+public Task<TResource> AddAsync(
+    TResourceId resource,
+    TMemberId member,
+    TRoleId? role,
+    DateTimeOffset? until,
+    CancellationToken cancellationToken,
+    long? expectedVersion = null)
+```
+
+Adds a member, from now until `until` or for good, with `role` for the same period where one is given. Who adds it is the caller, as a member of the resource.
 
 **Parameters**
 
-- `role`: The role to be given.
-- `cancellationToken`: Cancels the lookup.
+- `resource`: The resource.
+- `member`: The member.
+- `role`: The role it holds from the start, or `null` for none.
+- `until`: When the membership ends, or `null` for no end.
+- `cancellationToken`: Cancels the work.
+- `expectedVersion`: The version of the resource the caller last read, or `null`.
+
+**Returns**: The resource, with the member on it.
 
 **Exceptions**
 
-- `RefusalException`: `role-not-for-members`, with the `Role`, under the resource's codes.
+- `RefusalException`: `not-found`, `not-permitted` without the permission that manages the members, `member-not-active`, `role-not-for-members`, what the resource's guard refuses, `invalid-period` and `already-member`, under the resource's codes.
+- `ConcurrencyConflictException`: The resource is not at `expectedVersion`, or changed while this was saved.
+
+**Example**
+
+```csharp
+var board = await members.AddAsync(command.Board, command.Seat, command.Role, until: null, cancellationToken);
+```
+
+#### `AddAsync(TResource, TMemberId, TRoleId?, DateTimeOffset?, CancellationToken, long?)`
+
+```csharp
+public Task<TResource> AddAsync(
+    TResource resource,
+    TMemberId member,
+    TRoleId? role,
+    DateTimeOffset? until,
+    CancellationToken cancellationToken,
+    long? expectedVersion = null)
+```
+
+Adds a member, as [`AddAsync`](#addasynctresourceid-tmemberid-troleid-datetimeoffset-cancellationtoken-long) does with the resource's id.
+
+**Parameters**
+
+- `resource`: The resource.
+- `member`: The member.
+- `role`: The role it holds from the start, or `null` for none.
+- `until`: When the membership ends, or `null` for no end.
+- `cancellationToken`: Cancels the work.
+- `expectedVersion`: The version of the resource the caller last read, or `null`.
+
+**Returns**: The resource, with the member on it.
+
+**Exceptions**
+
+- `RefusalException`: `not-found`, `not-permitted` without the permission that manages the members, `member-not-active`, `role-not-for-members`, what the resource's guard refuses, `invalid-period` and `already-member`, under the resource's codes.
+- `ConcurrencyConflictException`: The resource is not at `expectedVersion`, or changed while this was saved.
+
+**Example**
+
+```csharp
+var board = await members.AddAsync(command.Board, command.Seat, command.Role, until: null, cancellationToken);
+```
+
+#### `GiveRoleAsync(TResourceId, TMemberId, TRoleId, DateTimeOffset?, CancellationToken, long?)`
+
+```csharp
+public Task<TResource> GiveRoleAsync(
+    TResourceId resource,
+    TMemberId member,
+    TRoleId role,
+    DateTimeOffset? until,
+    CancellationToken cancellationToken,
+    long? expectedVersion = null)
+```
+
+Gives a member a role, from now until `until` or for good, next to whatever roles it holds. Who gives it is the caller, as a member of the resource.
+
+**Parameters**
+
+- `resource`: The resource.
+- `member`: The member.
+- `role`: The role.
+- `until`: When the role ends, or `null` for no end.
+- `cancellationToken`: Cancels the work.
+- `expectedVersion`: The version of the resource the caller last read, or `null`.
+
+**Returns**: The resource, with the role given.
+
+**Exceptions**
+
+- `RefusalException`: `not-found`, `not-permitted` without the permission that manages the members, `role-not-for-members`, what the resource's guard refuses, `invalid-period`, `member-not-found`, `role-held`, and `owner-protected` for the owner, under the resource's codes.
+- `ConcurrencyConflictException`: The resource is not at `expectedVersion`, or changed while this was saved.
+
+#### `GiveRoleAsync(TResource, TMemberId, TRoleId, DateTimeOffset?, CancellationToken, long?)`
+
+```csharp
+public Task<TResource> GiveRoleAsync(
+    TResource resource,
+    TMemberId member,
+    TRoleId role,
+    DateTimeOffset? until,
+    CancellationToken cancellationToken,
+    long? expectedVersion = null)
+```
+
+Gives a member a role, as [`GiveRoleAsync`](#giveroleasynctresourceid-tmemberid-troleid-datetimeoffset-cancellationtoken-long) does with the resource's id.
+
+**Parameters**
+
+- `resource`: The resource.
+- `member`: The member.
+- `role`: The role.
+- `until`: When the role ends, or `null` for no end.
+- `cancellationToken`: Cancels the work.
+- `expectedVersion`: The version of the resource the caller last read, or `null`.
+
+**Returns**: The resource, with the role given.
+
+**Exceptions**
+
+- `RefusalException`: `not-found`, `not-permitted` without the permission that manages the members, `role-not-for-members`, what the resource's guard refuses, `invalid-period`, `member-not-found`, `role-held`, and `owner-protected` for the owner, under the resource's codes.
+- `ConcurrencyConflictException`: The resource is not at `expectedVersion`, or changed while this was saved.
+
+#### `TakeRoleAsync(TResourceId, TMemberId, TRoleId, CancellationToken, long?)`
+
+```csharp
+public Task<TResource> TakeRoleAsync(
+    TResourceId resource,
+    TMemberId member,
+    TRoleId role,
+    CancellationToken cancellationToken,
+    long? expectedVersion = null)
+```
+
+Takes a role from a member, who stays a member with whatever else it holds. Any role can be taken, one that is no longer in use too. A role the caller takes from itself is saved as the resource's own work (see the class).
+
+**Parameters**
+
+- `resource`: The resource.
+- `member`: The member.
+- `role`: The role.
+- `cancellationToken`: Cancels the work.
+- `expectedVersion`: The version of the resource the caller last read, or `null`.
+
+**Returns**: The resource, with the role taken.
+
+**Exceptions**
+
+- `RefusalException`: `not-found`, `not-permitted` without the permission that manages the members, what the resource's guard refuses, `member-not-found` and `role-not-held`, under the resource's codes.
+- `ConcurrencyConflictException`: The resource is not at `expectedVersion`, or changed while this was saved.
+
+#### `TakeRoleAsync(TResource, TMemberId, TRoleId, CancellationToken, long?)`
+
+```csharp
+public Task<TResource> TakeRoleAsync(
+    TResource resource,
+    TMemberId member,
+    TRoleId role,
+    CancellationToken cancellationToken,
+    long? expectedVersion = null)
+```
+
+Takes a role from a member, as [`TakeRoleAsync`](#takeroleasynctresourceid-tmemberid-troleid-cancellationtoken-long) does with the resource's id.
+
+**Parameters**
+
+- `resource`: The resource.
+- `member`: The member.
+- `role`: The role.
+- `cancellationToken`: Cancels the work.
+- `expectedVersion`: The version of the resource the caller last read, or `null`.
+
+**Returns**: The resource, with the role taken.
+
+**Exceptions**
+
+- `RefusalException`: `not-found`, `not-permitted` without the permission that manages the members, what the resource's guard refuses, `member-not-found` and `role-not-held`, under the resource's codes.
+- `ConcurrencyConflictException`: The resource is not at `expectedVersion`, or changed while this was saved.
+
+#### `RemoveAsync(TResourceId, TMemberId, CancellationToken, long?)`
+
+```csharp
+public Task<TResource> RemoveAsync(
+    TResourceId resource,
+    TMemberId member,
+    CancellationToken cancellationToken,
+    long? expectedVersion = null)
+```
+
+Takes a member off the resource, with every role it holds. The owner stays until somebody else is named owner. A caller that takes itself off is saved as the resource's own work (see the class).
+
+**Parameters**
+
+- `resource`: The resource.
+- `member`: The member.
+- `cancellationToken`: Cancels the work.
+- `expectedVersion`: The version of the resource the caller last read, or `null`.
+
+**Returns**: The resource, without the member.
+
+**Exceptions**
+
+- `RefusalException`: `not-found`, `not-permitted` without the permission that manages the members, what the resource's guard refuses, `member-not-found` and `owner-protected`, under the resource's codes.
+- `ConcurrencyConflictException`: The resource is not at `expectedVersion`, or changed while this was saved.
+
+#### `RemoveAsync(TResource, TMemberId, CancellationToken, long?)`
+
+```csharp
+public Task<TResource> RemoveAsync(
+    TResource resource,
+    TMemberId member,
+    CancellationToken cancellationToken,
+    long? expectedVersion = null)
+```
+
+Takes a member off the resource, as [`RemoveAsync`](#removeasynctresourceid-tmemberid-cancellationtoken-long) does with the resource's id.
+
+**Parameters**
+
+- `resource`: The resource.
+- `member`: The member.
+- `cancellationToken`: Cancels the work.
+- `expectedVersion`: The version of the resource the caller last read, or `null`.
+
+**Returns**: The resource, without the member.
+
+**Exceptions**
+
+- `RefusalException`: `not-found`, `not-permitted` without the permission that manages the members, what the resource's guard refuses, `member-not-found` and `owner-protected`, under the resource's codes.
+- `ConcurrencyConflictException`: The resource is not at `expectedVersion`, or changed while this was saved.
+
+#### `LeaveAsync(TResourceId, CancellationToken, long?)`
+
+```csharp
+public Task<TResource> LeaveAsync(
+    TResourceId resource,
+    CancellationToken cancellationToken,
+    long? expectedVersion = null)
+```
+
+Takes the caller off the resource, with every role it holds there. It needs no permission: the caller sees the resource, is a member of it and is not its owner. Saved as the resource's own work (see the class).
+
+**Parameters**
+
+- `resource`: The resource.
+- `cancellationToken`: Cancels the work.
+- `expectedVersion`: The version of the resource the caller last read, or `null`.
+
+**Returns**: The resource, without the caller.
+
+**Exceptions**
+
+- `RefusalException`: The caller's own refusal when it is nobody; `not-found` for a resource it does not see; what the resource's guard refuses; `member-not-found` for a caller that is no member; `owner-protected` for the owner. Under the resource's codes.
+- `ConcurrencyConflictException`: The resource is not at `expectedVersion`, or changed while this was saved.
+
+#### `LeaveAsync(TResource, CancellationToken, long?)`
+
+```csharp
+public Task<TResource> LeaveAsync(
+    TResource resource,
+    CancellationToken cancellationToken,
+    long? expectedVersion = null)
+```
+
+Takes the caller off the resource, as [`LeaveAsync`](#leaveasynctresourceid-cancellationtoken-long) does with the resource's id.
+
+**Parameters**
+
+- `resource`: The resource.
+- `cancellationToken`: Cancels the work.
+- `expectedVersion`: The version of the resource the caller last read, or `null`.
+
+**Returns**: The resource, without the caller.
+
+**Exceptions**
+
+- `RefusalException`: The caller's own refusal when it is nobody; `not-found` for a resource it does not see; what the resource's guard refuses; `member-not-found` for a caller that is no member; `owner-protected` for the owner. Under the resource's codes.
+- `ConcurrencyConflictException`: The resource is not at `expectedVersion`, or changed while this was saved.
+
+#### `NameOwnerAsync(TResourceId, TMemberId, FormerOwner<TRoleId>, CancellationToken, long?)`
+
+```csharp
+public Task<TResource> NameOwnerAsync(
+    TResourceId resource,
+    TMemberId owner,
+    FormerOwner<TRoleId> formerOwner,
+    CancellationToken cancellationToken,
+    long? expectedVersion = null)
+```
+
+Names another owner: a member from now on and with no end, added when not a member yet, holding no role. The owner before becomes what `formerOwner` says: a member in a role, or nobody on the list. The resource's `OnOwnerNamed` hook hears everything that changed. An owner that hands on its own resource is saved as the resource's own work (see the class).
+
+**Parameters**
+
+- `resource`: The resource.
+- `owner`: The member that is to own the resource.
+- `formerOwner`: `FormerOwner.StaysAs(role)`, or `FormerOwner.Leaves`.
+- `cancellationToken`: Cancels the work.
+- `expectedVersion`: The version of the resource the caller last read, or `null`.
+
+**Returns**: The resource, with its new owner.
+
+**Exceptions**
+
+- `RefusalException`: `not-found`, `not-permitted` without the permission that names the owner, `member-not-active` for the new owner, `role-not-for-members` for the role the owner before stays in, what the resource's guard refuses, and `already-owner`, under the resource's codes.
+- `ConcurrencyConflictException`: The resource is not at `expectedVersion`, or changed while this was saved.
+
+#### `NameOwnerAsync(TResource, TMemberId, FormerOwner<TRoleId>, CancellationToken, long?)`
+
+```csharp
+public Task<TResource> NameOwnerAsync(
+    TResource resource,
+    TMemberId owner,
+    FormerOwner<TRoleId> formerOwner,
+    CancellationToken cancellationToken,
+    long? expectedVersion = null)
+```
+
+Names another owner, as [`NameOwnerAsync`](#nameownerasynctresourceid-tmemberid-formerownertroleid-cancellationtoken-long) does with the resource's id.
+
+**Parameters**
+
+- `resource`: The resource.
+- `owner`: The member that is to own the resource.
+- `formerOwner`: `FormerOwner.StaysAs(role)`, or `FormerOwner.Leaves`.
+- `cancellationToken`: Cancels the work.
+- `expectedVersion`: The version of the resource the caller last read, or `null`.
+
+**Returns**: The resource, with its new owner.
+
+**Exceptions**
+
+- `RefusalException`: `not-found`, `not-permitted` without the permission that names the owner, `member-not-active` for the new owner, `role-not-for-members` for the role the owner before stays in, what the resource's guard refuses, and `already-owner`, under the resource's codes.
+- `ConcurrencyConflictException`: The resource is not at `expectedVersion`, or changed while this was saved.
+
+#### `ListAsync(TResourceId, CancellationToken)`
+
+```csharp
+public Task<IReadOnlyList<TMember>> ListAsync(
+    TResourceId resource,
+    CancellationToken cancellationToken)
+```
+
+The members of a resource the caller sees, read for showing: the owner first, then by when each membership starts, then by member, and each member's roles by when each starts, then by role. Members whose membership has ended, or is still to start, are in it too; `member.AppliesAt(now)` and `member.HoldsAt(role, now)` say what counts at a moment.
+
+**Parameters**
+
+- `resource`: The resource.
+- `cancellationToken`: Cancels the query.
+
+**Returns**: Its members, your member class, as they were read.
+
+**Exceptions**
+
+- `RefusalException`: The caller's own refusal when it is nobody; `not-found` for a resource it does not see.
+
+#### `ListAsync(TResource, CancellationToken)`
+
+```csharp
+public Task<IReadOnlyList<TMember>> ListAsync(
+    TResource resource,
+    CancellationToken cancellationToken)
+```
+
+The members of a resource, as [`ListAsync`](#listasynctresourceid-cancellationtoken) answers them with the resource's id.
+
+**Parameters**
+
+- `resource`: The resource.
+- `cancellationToken`: Cancels the query.
+
+**Returns**: Its members, your member class, as they were read.
+
+**Exceptions**
+
+- `RefusalException`: The caller's own refusal when it is nobody; `not-found` for a resource it does not see.
+
+#### `ListAsync(IReadOnlyCollection<TResourceId>, CancellationToken)`
+
+```csharp
+public Task<IReadOnlyDictionary<TResourceId, IReadOnlyList<TMember>>> ListAsync(
+    IReadOnlyCollection<TResourceId> resources,
+    CancellationToken cancellationToken)
+```
+
+The members of each of `resources` the caller sees, in one statement whatever their number, each list in the order [`ListAsync`](#listasynctresourceid-cancellationtoken) answers in. A resource the caller does not see is not in the answer.
+
+**Parameters**
+
+- `resources`: The resources, at most [`MostResources`](#membermanagertresource-tresourceid-tmember-tid-tmemberid-troleid) different ones.
+- `cancellationToken`: Cancels the query.
+
+**Returns**: The members of each resource the caller sees, by its id.
+
+**Exceptions**
+
+- `ArgumentException`: More than [`MostResources`](#membermanagertresource-tresourceid-tmember-tid-tmemberid-troleid) different resources are asked about.
+- `RefusalException`: The caller's own refusal when it is nobody.
+
+### `IMemberStore<TResource, TResourceId, TMemberId>`
+
+```csharp
+public interface IMemberStore<TResource, TResourceId, TMemberId>
+    where TResource : class, IEntity<TResourceId>
+    where TResourceId : struct, IEntityId, IEquatable<TResourceId>
+    where TMemberId : struct, IEntityId, IEquatable<TMemberId>
+```
+
+Where the member manager of one kind of resource loads, adds and saves the resource: the unit of work of the scope. A storage package implements it and registers it with the resource; an application never takes it.
+
+**Type parameters**
+
+- `TResource`: The resource's aggregate.
+- `TResourceId`: The resource's id.
+- `TMemberId`: What a member is known by.
+
+| Member | Summary |
+|---|---|
+| `TMemberId? CurrentMember { get; }` | Who the current caller is as a member of the resource, as its rules say, or `null` for a caller that is nobody's member, system work among them: who a change is recorded as made by. |
+| [`FindAsync(TResourceId, long?, CancellationToken)`](#findasynctresourceid-long-cancellationtoken) | The resource with its members, tracked by the unit of work for a change and its save; or `null` when it is not there for the caller. |
+| [`ReadAsync(IReadOnlyCollection<TResourceId>, MemberReach<TResource>, CancellationToken)`](#readasyncireadonlycollectiontresourceid-memberreachtresource-cancellationtoken) | The resources of `resources` within `reach`, each with its members, read for showing: the unit of work does not track them. |
+| [`Add(TResource)`](#addtresource) | Adds a new resource to the unit of work. |
+| [`ChangedBesides(IReadOnlySet<object>)`](#changedbesidesireadonlysetobject) | What the unit of work would write besides `parts`: the name of each kind of thing it holds a change to that is none of them, or none. |
+| [`SaveAsync(CancellationToken)`](#saveasynccancellationtoken) | Saves everything the unit of work holds, with the domain events raised, in one transaction. |
+
+#### `FindAsync(TResourceId, long?, CancellationToken)`
+
+```csharp
+Task<TResource?> FindAsync(
+    TResourceId resource,
+    long? expectedVersion,
+    CancellationToken cancellationToken)
+```
+
+The resource with its members, tracked by the unit of work for a change and its save; or `null` when it is not there for the caller.
+
+**Parameters**
+
+- `resource`: The resource.
+- `expectedVersion`: The version the caller last read, or `null` to change the resource as it is now: a resource at another version is a lost race.
+- `cancellationToken`: Cancels the query.
+
+**Exceptions**
+
+- `ConcurrencyConflictException`: The resource is not at `expectedVersion`.
+
+#### `ReadAsync(IReadOnlyCollection<TResourceId>, MemberReach<TResource>, CancellationToken)`
+
+```csharp
+Task<IReadOnlyList<TResource>> ReadAsync(
+    IReadOnlyCollection<TResourceId> resources,
+    MemberReach<TResource> reach,
+    CancellationToken cancellationToken)
+```
+
+The resources of `resources` within `reach`, each with its members, read for showing: the unit of work does not track them.
+
+**Parameters**
+
+- `resources`: The resources asked about.
+- `reach`: The resources the caller sees, as the resource's access manager made it.
+- `cancellationToken`: Cancels the query.
+
+#### `Add(TResource)`
+
+```csharp
+void Add(TResource resource)
+```
+
+Adds a new resource to the unit of work.
+
+**Parameters**
+
+- `resource`: The resource, just made.
+
+#### `ChangedBesides(IReadOnlySet<object>)`
+
+```csharp
+IReadOnlyList<string> ChangedBesides(IReadOnlySet<object> parts)
+```
+
+What the unit of work would write besides `parts`: the name of each kind of thing it holds a change to that is none of them, or none.
+
+**Parameters**
+
+- `parts`: The resource, its members and the roles they hold, each by reference.
+
+#### `SaveAsync(CancellationToken)`
+
+```csharp
+Task SaveAsync(CancellationToken cancellationToken)
+```
+
+Saves everything the unit of work holds, with the domain events raised, in one transaction.
+
+**Parameters**
+
+- `cancellationToken`: Cancels the save.
+
+**Exceptions**
+
+- `ConcurrencyConflictException`: Somebody else saved the same resource first.
+
+### `IOwnPlaceWork<TResourceId, TMemberId>`
+
+```csharp
+public interface IOwnPlaceWork<TResourceId, TMemberId>
+    where TResourceId : struct, IEntityId, IEquatable<TResourceId>
+    where TMemberId : struct, IEntityId, IEquatable<TMemberId>
+```
+
+Begins the resource's own work for the save of a change to the caller's own place on it: a role it takes from itself, itself taken off, leaving, or handing on the resource it owns. Such a change can take away the very right the save needs where a database checks every row, so the member manager saves it as the resource's own work in its scope, for the request in hand whose check read the resource, when the unit of work holds nothing else.
+
+Optional. Without one the manager begins system work in that scope for the current user, `user.BeginSystem(scope)`. The join with an organization's package registers one that begins it in the caller's organization, for the caller's seat.
+
+**Type parameters**
+
+- `TResourceId`: The id of the kind of resource the members are of.
+- `TMemberId`: What a member is known by.
+
+| Member | Summary |
+|---|---|
+| [`Begin(TMemberId, string?)`](#begintmemberid-string) | Begins the resource's own work in `scope`, for `member`, the caller. |
+
+#### `Begin(TMemberId, string?)`
+
+```csharp
+IDisposable Begin(TMemberId member, string? scope)
+```
+
+Begins the resource's own work in `scope`, for `member`, the caller.
+
+**Parameters**
+
+- `member`: The caller, as a member of the resource.
+- `scope`: The scope of the resource's own work, one its rules name; `null` for rules that name none, whose own work is the application's without a scope.
+
+**Returns**: What ends the work when disposed.
+
+## Role manager
+
+Namespace `DDDToolkit.Supporting.Membership.Managers`.
+
+### `CustomRoleManager<TRole, TRoleId, TResource>`
+
+```csharp
+public class CustomRoleManager<TRole, TRoleId, TResource>
+    where TRole : CustomRoleAggregate<TRoleId>
+    where TRoleId : struct, IEntityId, IEquatable<TRoleId>
+    where TResource : class
+```
+
+The roles a customer makes for one kind of resource: making them, the starter roles among them, renaming them, setting their permissions and archiving them, and reading them. Your code takes it as `BoardRoleManager`, a class the package's generator writes for your role class, closed over it and the resource, and the container makes per scope.
+
+```csharp
+public sealed class RenameBoardRoleHandler(BoardRoleManager roles) : ICommandHandler<RenameBoardRole, BoardRole>
+{
+    public async ValueTask<BoardRole> Handle(RenameBoardRole command, CancellationToken cancellationToken)
+        => await roles.RenameAsync(command.Role, command.Name, command.Description, cancellationToken);
+}
+```
+
+Each change takes the role, or its id; both load the role and answer it as it was changed and saved. The manager hands the role the resource's rules, so no handler does. Each change needs the permission the rules name for it ([`Roles.ManagedWith`](rules.md#roles-1)), held for the whole of what the roles are kept for: the manager asks it of what the application registered for that ([`ICustomRoleAccess<TResource>`](#icustomroleaccesstresource)), which the join with an organization's package answers for the whole organization. Where the rules name none, or nothing answers, only system work changes the roles.
+
+**What stays yours.** The role class, its constructor and the fields it adds, such as the customer a role is of. Its events: the generator declares the partial methods `OnRenamed()`, `OnPermissionsSet(set)` and `OnArchived()` on it, and the role calls each after a change that changed something. A role class kept per a scope of your own, a garden say, passes that scope to the reads and to the starter roles: `scope: role => role.GardenId == garden`.
+
+The reads answer the roles there are for the caller: what the context's own rules let through, the roles of the caller's organization for a class marked with the organization package's marker. They ask no permission.
+
+**Type parameters**
+
+- `TRole`: The application's role class.
+- `TRoleId`: The role class's id.
+- `TResource`: The resource the roles are of.
+
+| Member | Summary |
+|---|---|
+| `MostIds = 200` | How many ids one question by id takes. |
+| [`CustomRoleManager(ICustomRoleStore<TRole, TRoleId>, MembershipAccessManager<TResource>, ICurrentUser, ICustomRoleAccess<TResource>?)`](#customrolemanagericustomrolestoretrole-troleid-membershipaccessmanagertresource-icurrentuser-icustomroleaccesstresource) | The role manager of one role class. |
+| `MembershipRules Rules { get; }` | The rules of the resource the roles are of: what a role's constructor takes. |
+| [`CreateAsync(TRole, CancellationToken)`](#createasynctrole-cancellationtoken) | Adds a role made with your class's constructor, and saves it. |
+| [`CreateStarterRolesAsync(Func<CustomRoleDraft, TRole>, CancellationToken, Expression<Func<TRole, bool>>?)`](#createstarterrolesasyncfunccustomroledraft-trole-cancellationtoken-expressionfunctrole-bool) | Makes the starter roles the rules declare that the roles there are for the caller do not have yet, each through `make`, and saves them. |
+| [`RenameAsync(TRoleId, string, string?, CancellationToken)`](#renameasynctroleid-string-string-cancellationtoken) | Renames a role and says again what it is for. |
+| [`RenameAsync(TRole, string, string?, CancellationToken)`](#renameasynctrole-string-string-cancellationtoken) | Renames a role, as [`RenameAsync`](#renameasynctroleid-string-string-cancellationtoken) does with its id. |
+| [`SetPermissionsAsync(TRoleId, IReadOnlyCollection<string>, CancellationToken)`](#setpermissionsasynctroleid-ireadonlycollectionstring-cancellationtoken) | Sets the permissions a role gives, for every member that holds it. |
+| [`SetPermissionsAsync(TRole, IReadOnlyCollection<string>, CancellationToken)`](#setpermissionsasynctrole-ireadonlycollectionstring-cancellationtoken) | Sets the permissions a role gives, as [`SetPermissionsAsync`](#setpermissionsasynctroleid-ireadonlycollectionstring-cancellationtoken) does with its id. |
+| [`ArchiveAsync(TRoleId, CancellationToken)`](#archiveasynctroleid-cancellationtoken) | Archives a role: it stays on every member that holds it, gives nothing from now on, and is not given again. |
+| [`ArchiveAsync(TRole, CancellationToken)`](#archiveasynctrole-cancellationtoken) | Archives a role, as [`ArchiveAsync`](#archiveasynctroleid-cancellationtoken) does with its id. |
+| [`ListAsync(CancellationToken, Expression<Func<TRole, bool>>?)`](#listasynccancellationtoken-expressionfunctrole-bool) | Every role there is for the caller, archived ones included, by name: your class, whole, read for showing. |
+| [`ByIdAsync(IReadOnlyCollection<TRoleId>, CancellationToken)`](#byidasyncireadonlycollectiontroleid-cancellationtoken) | The roles of `roles` there are for the caller, read for showing: for a list that names the roles its rows hold by id. |
+
+#### `CustomRoleManager(ICustomRoleStore<TRole, TRoleId>, MembershipAccessManager<TResource>, ICurrentUser, ICustomRoleAccess<TResource>?)`
+
+```csharp
+public CustomRoleManager(
+    ICustomRoleStore<TRole, TRoleId> store,
+    MembershipAccessManager<TResource> access,
+    ICurrentUser user,
+    ICustomRoleAccess<TResource>? roleAccess = null)
+```
+
+The role manager of one role class. The container makes it; the generated class has the same constructor.
+
+**Parameters**
+
+- `store`: Where the roles are loaded and saved.
+- `access`: The access manager of the resource the roles are of, for its rules.
+- `user`: Who is calling.
+- `roleAccess`: Whether the caller may change the roles, or `null` where only system work may.
+
+#### `CreateAsync(TRole, CancellationToken)`
+
+```csharp
+public Task<TRole> CreateAsync(TRole role, CancellationToken cancellationToken)
+```
+
+Adds a role made with your class's constructor, and saves it.
+
+**Parameters**
+
+- `role`: The role, just made.
+- `cancellationToken`: Cancels the work.
+
+**Returns**: The role, saved.
+
+**Exceptions**
+
+- `RefusalException`: `not-permitted` without the permission that changes the roles; whatever your context refuses a second role of one name with.
+
+**Example**
+
+```csharp
+var role = await roles.CreateAsync(new BoardRole(BoardRoleId.Create(), organization, new CustomRoleDraft(command.Name, command.Description, command.Permissions)), cancellationToken);
+```
+
+#### `CreateStarterRolesAsync(Func<CustomRoleDraft, TRole>, CancellationToken, Expression<Func<TRole, bool>>?)`
+
+```csharp
+public Task<IReadOnlyList<TRole>> CreateStarterRolesAsync(
+    Func<CustomRoleDraft, TRole> make,
+    CancellationToken cancellationToken,
+    Expression<Func<TRole, bool>>? scope = null)
+```
+
+Makes the starter roles the rules declare that the roles there are for the caller do not have yet, each through `make`, and saves them. A starter role is told by what it was made from, so one a customer renamed or archived is not made again, and asking twice makes nothing the second time.
+
+**Parameters**
+
+- `make`: Makes a role of your class from a starter role's draft: its name, its permissions and the starter role it is made from.
+- `cancellationToken`: Cancels the work.
+- `scope`: The roles of one scope of your own, for a role class kept per that scope; left out, every role there is for the caller.
+
+**Returns**: The roles it made, in the order the rules declare them; none when every one is there.
+
+**Exceptions**
+
+- `RefusalException`: `not-permitted` without the permission that changes the roles.
+
+**Example**
+
+```csharp
+var made = await roles.CreateStarterRolesAsync(draft => new BoardRole(BoardRoleId.Create(), organization, draft), cancellationToken);
+```
+
+#### `RenameAsync(TRoleId, string, string?, CancellationToken)`
+
+```csharp
+public Task<TRole> RenameAsync(
+    TRoleId role,
+    string name,
+    string? description,
+    CancellationToken cancellationToken)
+```
+
+Renames a role and says again what it is for. The same name and description again change nothing.
+
+**Parameters**
+
+- `role`: The role.
+- `name`: Its name, as it is to be.
+- `description`: What it is for, as it is to be; `null` clears it.
+- `cancellationToken`: Cancels the work.
+
+**Returns**: The role, renamed.
+
+**Exceptions**
+
+- `RefusalException`: `not-permitted` without the permission that changes the roles; `role-not-found`, `role-archived`, `role-name-invalid`, under the resource's codes; whatever your context refuses a second role of one name with.
+
+#### `RenameAsync(TRole, string, string?, CancellationToken)`
+
+```csharp
+public Task<TRole> RenameAsync(
+    TRole role,
+    string name,
+    string? description,
+    CancellationToken cancellationToken)
+```
+
+Renames a role, as [`RenameAsync`](#renameasynctroleid-string-string-cancellationtoken) does with its id.
+
+**Parameters**
+
+- `role`: The role.
+- `name`: Its name, as it is to be.
+- `description`: What it is for, as it is to be; `null` clears it.
+- `cancellationToken`: Cancels the work.
+
+**Returns**: The role, renamed.
+
+**Exceptions**
+
+- `RefusalException`: `not-permitted` without the permission that changes the roles; `role-not-found`, `role-archived`, `role-name-invalid`, under the resource's codes; whatever your context refuses a second role of one name with.
+
+#### `SetPermissionsAsync(TRoleId, IReadOnlyCollection<string>, CancellationToken)`
+
+```csharp
+public Task<TRole> SetPermissionsAsync(
+    TRoleId role,
+    IReadOnlyCollection<string> permissions,
+    CancellationToken cancellationToken)
+```
+
+Sets the permissions a role gives, for every member that holds it. The same permissions again change nothing.
+
+**Parameters**
+
+- `role`: The role.
+- `permissions`: Every permission it gives from now on.
+- `cancellationToken`: Cancels the work.
+
+**Returns**: The role, with its new permissions.
+
+**Exceptions**
+
+- `RefusalException`: `not-permitted` without the permission that changes the roles; `role-not-found`, `role-archived`, `permission-not-for-members`, under the resource's codes.
+
+#### `SetPermissionsAsync(TRole, IReadOnlyCollection<string>, CancellationToken)`
+
+```csharp
+public Task<TRole> SetPermissionsAsync(
+    TRole role,
+    IReadOnlyCollection<string> permissions,
+    CancellationToken cancellationToken)
+```
+
+Sets the permissions a role gives, as [`SetPermissionsAsync`](#setpermissionsasynctroleid-ireadonlycollectionstring-cancellationtoken) does with its id.
+
+**Parameters**
+
+- `role`: The role.
+- `permissions`: Every permission it gives from now on.
+- `cancellationToken`: Cancels the work.
+
+**Returns**: The role, with its new permissions.
+
+**Exceptions**
+
+- `RefusalException`: `not-permitted` without the permission that changes the roles; `role-not-found`, `role-archived`, `permission-not-for-members`, under the resource's codes.
+
+#### `ArchiveAsync(TRoleId, CancellationToken)`
+
+```csharp
+public Task<TRole> ArchiveAsync(TRoleId role, CancellationToken cancellationToken)
+```
+
+Archives a role: it stays on every member that holds it, gives nothing from now on, and is not given again.
+
+**Parameters**
+
+- `role`: The role.
+- `cancellationToken`: Cancels the work.
+
+**Returns**: The role, archived.
+
+**Exceptions**
+
+- `RefusalException`: `not-permitted` without the permission that changes the roles; `role-not-found` and `role-archived`, under the resource's codes.
+
+#### `ArchiveAsync(TRole, CancellationToken)`
+
+```csharp
+public Task<TRole> ArchiveAsync(TRole role, CancellationToken cancellationToken)
+```
+
+Archives a role, as [`ArchiveAsync`](#archiveasynctroleid-cancellationtoken) does with its id.
+
+**Parameters**
+
+- `role`: The role.
+- `cancellationToken`: Cancels the work.
+
+**Returns**: The role, archived.
+
+**Exceptions**
+
+- `RefusalException`: `not-permitted` without the permission that changes the roles; `role-not-found` and `role-archived`, under the resource's codes.
+
+#### `ListAsync(CancellationToken, Expression<Func<TRole, bool>>?)`
+
+```csharp
+public Task<IReadOnlyList<TRole>> ListAsync(
+    CancellationToken cancellationToken,
+    Expression<Func<TRole, bool>>? scope = null)
+```
+
+Every role there is for the caller, archived ones included, by name: your class, whole, read for showing.
+
+**Parameters**
+
+- `cancellationToken`: Cancels the query.
+- `scope`: The roles of one scope of your own; left out, every role there is for the caller.
+
+#### `ByIdAsync(IReadOnlyCollection<TRoleId>, CancellationToken)`
+
+```csharp
+public Task<IReadOnlyList<TRole>> ByIdAsync(
+    IReadOnlyCollection<TRoleId> roles,
+    CancellationToken cancellationToken)
+```
+
+The roles of `roles` there are for the caller, read for showing: for a list that names the roles its rows hold by id. A role that is not there for the caller is not in the answer.
+
+**Parameters**
+
+- `roles`: The roles, at most [`MostIds`](#customrolemanagertrole-troleid-tresource) different ones.
+- `cancellationToken`: Cancels the query.
+
+**Exceptions**
+
+- `ArgumentException`: More than [`MostIds`](#customrolemanagertrole-troleid-tresource) different roles are asked about.
+
+### `ICustomRoleStore<TRole, TRoleId>`
+
+```csharp
+public interface ICustomRoleStore<TRole, TRoleId>
+    where TRole : CustomRoleAggregate<TRoleId>
+    where TRoleId : struct, IEntityId, IEquatable<TRoleId>
+```
+
+Where the role manager of one role class loads, adds and saves roles: the unit of work of the scope, under the rules the application's context keeps its rows to, such as the customer a role is of. A storage package implements it and registers it with the resource the roles are of; an application never takes it.
+
+**Type parameters**
+
+- `TRole`: The application's role class.
+- `TRoleId`: The role class's id.
+
+| Member | Summary |
+|---|---|
+| [`FindAsync(TRoleId, CancellationToken)`](#findasynctroleid-cancellationtoken) | The role, tracked for a change and its save; or `null` when it is not there for the caller. |
+| [`ListAsync(Expression<Func<TRole, bool>>?, bool, CancellationToken)`](#listasyncexpressionfunctrole-bool-bool-cancellationtoken) | The roles there are for the caller, archived ones included, within `scope` where one is given: tracked, for the starter roles made beside them, or read for showing. |
+| [`ByIdAsync(IReadOnlyCollection<TRoleId>, CancellationToken)`](#byidasyncireadonlycollectiontroleid-cancellationtoken-1) | The roles of `roles` there are for the caller, read for showing. |
+| [`Add(TRole)`](#addtrole) | Adds a new role to the unit of work. |
+| [`SaveAsync(CancellationToken)`](#saveasynccancellationtoken-1) | Saves everything the unit of work holds, with the domain events raised, in one transaction. |
+
+#### `FindAsync(TRoleId, CancellationToken)`
+
+```csharp
+Task<TRole?> FindAsync(TRoleId role, CancellationToken cancellationToken)
+```
+
+The role, tracked for a change and its save; or `null` when it is not there for the caller.
+
+**Parameters**
+
+- `role`: The role.
+- `cancellationToken`: Cancels the query.
+
+#### `ListAsync(Expression<Func<TRole, bool>>?, bool, CancellationToken)`
+
+```csharp
+Task<IReadOnlyList<TRole>> ListAsync(
+    Expression<Func<TRole, bool>>? scope,
+    bool tracked,
+    CancellationToken cancellationToken)
+```
+
+The roles there are for the caller, archived ones included, within `scope` where one is given: tracked, for the starter roles made beside them, or read for showing.
+
+**Parameters**
+
+- `scope`: The roles of one scope of the application's own, or `null` for every role there is for the caller.
+- `tracked`: Whether the unit of work tracks them.
+- `cancellationToken`: Cancels the query.
+
+#### `ByIdAsync(IReadOnlyCollection<TRoleId>, CancellationToken)`
+
+```csharp
+Task<IReadOnlyList<TRole>> ByIdAsync(
+    IReadOnlyCollection<TRoleId> roles,
+    CancellationToken cancellationToken)
+```
+
+The roles of `roles` there are for the caller, read for showing.
+
+**Parameters**
+
+- `roles`: The roles asked about.
+- `cancellationToken`: Cancels the query.
+
+#### `Add(TRole)`
+
+```csharp
+void Add(TRole role)
+```
+
+Adds a new role to the unit of work.
+
+**Parameters**
+
+- `role`: The role, just made.
+
+#### `SaveAsync(CancellationToken)`
+
+```csharp
+Task SaveAsync(CancellationToken cancellationToken)
+```
+
+Saves everything the unit of work holds, with the domain events raised, in one transaction.
+
+**Parameters**
+
+- `cancellationToken`: Cancels the save.
+
+### `ICustomRoleAccess<TResource>`
+
+```csharp
+public interface ICustomRoleAccess<TResource>
+    where TResource : class
+```
+
+Whether the caller may change the roles a customer makes for one kind of resource: holds the permission the rules name for it ([`Roles.ManagedWith`](rules.md#roles-1)) for the whole of what the roles are kept for. The roles are a customer's as a whole, not one resource's, so Membership cannot answer it from a resource's members: the role manager asks this.
+
+Optional. Without one only system work changes the roles. The join with an organization's package registers one that asks the organization whether the caller holds the permission for the whole of it.
+
+**Type parameters**
+
+- `TResource`: The resource the roles are of.
+
+| Member | Summary |
+|---|---|
+| [`RequireAsync(string, CancellationToken)`](#requireasyncstring-cancellationtoken) | Requires the caller to hold `permission` for the whole of what the roles are kept for. |
+
+#### `RequireAsync(string, CancellationToken)`
+
+```csharp
+ValueTask RequireAsync(string permission, CancellationToken cancellationToken)
+```
+
+Requires the caller to hold `permission` for the whole of what the roles are kept for.
+
+**Parameters**
+
+- `permission`: The permission the rules name for changing the roles.
+- `cancellationToken`: Cancels the question.
+
+**Exceptions**
+
+- `RefusalException`: The caller does not hold it.
+
+## Who may be a member
+
+Namespace `DDDToolkit.Supporting.Membership.Managers`.
 
 ### `IMemberDirectory<TResourceId, TMemberId>`
 
@@ -107,9 +1106,9 @@ public interface IMemberDirectory<TResourceId, TMemberId>
     where TMemberId : struct, IEntityId, IEquatable<TMemberId>
 ```
 
-Says whether somebody can be made a member of one kind of resource: whether the id is one the application knows, and whoever it stands for is active. An application implements it where it keeps its users, and the admission of that kind of resource asks it before a member is added or an owner named.
+Says whether somebody can be made a member of one kind of resource: whether the id is one the application knows, and whoever it stands for is active. An application implements it where it keeps its users, and the member manager of that kind of resource asks it before a member is added, an owner named or a resource opened.
 
-Optional. Without one every id is admitted: a resource whose members are users of an identity provider often has nowhere to ask.
+Optional. Without one every id is admitted: a resource whose members are users of an identity provider often has nowhere to ask. The join with an organization's package answers it for members that are seats.
 
 It is asked for by the resource, so two kinds of resource whose members are known by the same id each have their own, or share one registered for both.
 
@@ -143,9 +1142,9 @@ public interface IMemberRolePolicy<TResourceId, TRoleId>
     where TRoleId : struct, IEntityId, IEquatable<TRoleId>
 ```
 
-Says whether a role that exists may go to a member of one kind of resource: a rule of the application's own on top of the roles there are, such as roles an organization keeps for itself and never gives on a resource. The admission of that kind of resource asks it when a role is given; what was given once can always be taken back, so it is not asked when a role is taken.
+Says whether a role that exists may go to a member of one kind of resource: a rule of the application's own on top of the roles there are, such as roles an organization keeps for itself and never gives on a resource. The member manager of that kind of resource asks it when a role is given; what was given once can always be taken back, so it is not asked when a role is taken.
 
-Optional. Without one every role there is may go to a member. It is asked about the role alone: whether this caller may give it is for the application's command to decide, where the caller is known.
+Optional. Without one every role there is may go to a member. It is asked about the role alone: whether this caller may give it is the manager's to check by the permission that manages the members, and a rule of the application's own beyond that is asked in its handler, before the manager is called.
 
 **Type parameters**
 
@@ -168,268 +1167,6 @@ Whether `role` may be given to a member of the resource.
 
 - `role`: A role that exists.
 - `cancellationToken`: Cancels the lookup.
-
-### `IMemberRoles<TResourceId, TRoleId>`
-
-```csharp
-public interface IMemberRoles<TResourceId, TRoleId>
-    where TResourceId : struct, IEntityId, IEquatable<TResourceId>
-    where TRoleId : struct, IEntityId, IEquatable<TRoleId>
-```
-
-The roles there are for the members of one kind of resource, as the admission asks about them: whether a role exists.
-
-Where the roles are fixed ([`Roles.Fixed`](rules.md#fixedireadonlylistdeclaredrole)), the package answers it from the rules ([`NamedRoles<TResourceId>`](#namedrolestresourceid)). Where a customer makes them ([`Roles.Custom`](rules.md#customireadonlylistdeclaredrole-otherpermissions)), the package that stores them answers it from their rows: a role in use. Where they are kept elsewhere ([`Roles.External`](rules.md#externaldatabasefunction-otherpermissions)), the roles an organization makes for itself say, the application answers it from there, registered with the resource.
-
-**Type parameters**
-
-- `TResourceId`: The id of the kind of resource the members are of.
-- `TRoleId`: What a role is known by.
-
-| Member | Summary |
-|---|---|
-| [`ExistsAsync(TRoleId, CancellationToken)`](#existsasynctroleid-cancellationtoken) | Whether `role` is a role in use that a member can be given. |
-
-#### `ExistsAsync(TRoleId, CancellationToken)`
-
-```csharp
-ValueTask<bool> ExistsAsync(TRoleId role, CancellationToken cancellationToken)
-```
-
-Whether `role` is a role in use that a member can be given.
-
-**Parameters**
-
-- `role`: The role.
-- `cancellationToken`: Cancels the lookup.
-
-### `NamedRoles<TResourceId>`
-
-```csharp
-public sealed class NamedRoles<TResourceId> : IMemberRoles<TResourceId, NamedRole>
-    where TResourceId : struct, IEntityId, IEquatable<TResourceId>
-```
-
-The fixed roles a resource's rules declare, as the admission asks about them: for a resource whose members hold [`NamedRole`](resource-and-members.md#namedrole)s. It reads nothing but the rules.
-
-**Type parameters**
-
-- `TResourceId`: The id of the kind of resource the members are of.
-
-| Member | Summary |
-|---|---|
-| [`NamedRoles(MembershipRules)`](#namedrolesmembershiprules) | The primary constructor: the type's summary says what it makes. |
-| [`ExistsAsync(NamedRole, CancellationToken)`](#existsasyncnamedrole-cancellationtoken) | Whether `role` is a role in use that a member can be given. |
-
-#### `NamedRoles(MembershipRules)`
-
-```csharp
-public NamedRoles(MembershipRules rules)
-```
-
-The primary constructor: the type's summary says what it makes.
-
-**Parameters**
-
-- `rules`: The resource's rules.
-
-#### `ExistsAsync(NamedRole, CancellationToken)`
-
-```csharp
-public ValueTask<bool> ExistsAsync(NamedRole role, CancellationToken cancellationToken)
-```
-
-Whether `role` is a role in use that a member can be given.
-
-**Parameters**
-
-- `role`: The role.
-- `cancellationToken`: Cancels the lookup.
-
-## Overview
-
-Namespace `DDDToolkit.Supporting.Membership.UseCases`.
-
-### `MemberOverviews`
-
-```csharp
-public static class MemberOverviews
-```
-
-What turns the members a query read into what a caller is shown, in the one order every answer lists members in. It reads nothing, so it costs no statement.
-
-| Member | Summary |
-|---|---|
-| [`From(IEnumerable<MemberEntity<TId, TMemberId, TRoleId>>, TMemberId, DateTimeOffset)`](#fromienumerablememberentitytid-tmemberid-troleid-tmemberid-datetimeoffset) | The members of a resource: the owner first, then by when each membership starts, then by member, and each member's roles by when each starts, then by role. |
-
-#### `From(IEnumerable<MemberEntity<TId, TMemberId, TRoleId>>, TMemberId, DateTimeOffset)`
-
-```csharp
-public static IReadOnlyList<MemberOverview<TMemberId, TRoleId>> From<TId, TMemberId, TRoleId>(
-    IEnumerable<MemberEntity<TId, TMemberId, TRoleId>> members,
-    TMemberId owner,
-    DateTimeOffset now)
-    where TId : struct, IEntityId, IEquatable<TId>
-    where TMemberId : struct, IEntityId, IEquatable<TMemberId>, IComparable<TMemberId>
-    where TRoleId : struct, IEntityId, IEquatable<TRoleId>, IComparable<TRoleId>
-```
-
-The members of a resource: the owner first, then by when each membership starts, then by member, and each member's roles by when each starts, then by role.
-
-An order of the members' own facts, the same every time: the package has no names to order by, and a screen that shows names orders by them itself. An id over a text, such as a named role, is ordered by its characters and not by the language of whoever asks, so a list reads the same for every reader. A role is said to count now only when its own period applies and the membership it is held in does.
-
-**Parameters**
-
-- `members`: The members, as a query read them: the resource's own member collection.
-- `owner`: The resource's owner.
-- `now`: The moment a membership, and a role held in it, must apply at to count now.
-
-**Type parameters**
-
-- `TId`: The member class's own id.
-- `TMemberId`: What a member is known by.
-- `TRoleId`: What a role is known by.
-
-### `MemberOverview<TMemberId, TRoleId>`
-
-```csharp
-public sealed record MemberOverview<TMemberId, TRoleId>
-    where TMemberId : struct, IEntityId, IEquatable<TMemberId>
-    where TRoleId : struct, IEntityId, IEquatable<TRoleId>
-```
-
-A member of a resource as a caller is shown it: who, for which period, and the roles it holds, each by its id.
-
-**Type parameters**
-
-- `TMemberId`: What a member is known by.
-- `TRoleId`: What a role is known by.
-
-| Member | Summary |
-|---|---|
-| [`MemberOverview(TMemberId, bool, DateTimeOffset, DateTimeOffset?, bool, IReadOnlyList<MemberRoleOverview<TRoleId>>)`](#memberoverviewtmemberid-bool-datetimeoffset-datetimeoffset-bool-ireadonlylistmemberroleoverviewtroleid) | The primary constructor: the type's summary says what it makes. |
-| `TMemberId Member { get; init; }` | Who the member is. |
-| `bool IsOwner { get; init; }` | Whether the member owns the resource. |
-| `DateTimeOffset StartsAt { get; init; }` | When the membership starts to count. |
-| `DateTimeOffset? EndsAt { get; init; }` | When it stops, or `null`. |
-| `bool AppliesNow { get; init; }` | Whether it counts now. |
-| `IReadOnlyList<MemberRoleOverview<TRoleId>> Roles { get; init; }` | The roles the member holds, each with its own period: by when each starts, then by role. |
-
-#### `MemberOverview(TMemberId, bool, DateTimeOffset, DateTimeOffset?, bool, IReadOnlyList<MemberRoleOverview<TRoleId>>)`
-
-```csharp
-public MemberOverview(
-    TMemberId Member,
-    bool IsOwner,
-    DateTimeOffset StartsAt,
-    DateTimeOffset? EndsAt,
-    bool AppliesNow,
-    IReadOnlyList<MemberRoleOverview<TRoleId>> Roles)
-```
-
-The primary constructor: the type's summary says what it makes.
-
-**Parameters**
-
-- `Member`: Who the member is.
-- `IsOwner`: Whether the member owns the resource.
-- `StartsAt`: When the membership starts to count.
-- `EndsAt`: When it stops, or `null`.
-- `AppliesNow`: Whether it counts now.
-- `Roles`: The roles the member holds, each with its own period: by when each starts, then by role.
-
-### `MemberRoleOverview<TRoleId>`
-
-```csharp
-public sealed record MemberRoleOverview<TRoleId>
-    where TRoleId : struct, IEntityId, IEquatable<TRoleId>
-```
-
-A role a member holds, by its id, with the period it holds it for.
-
-**Type parameters**
-
-- `TRoleId`: What a role is known by.
-
-| Member | Summary |
-|---|---|
-| [`MemberRoleOverview(TRoleId, DateTimeOffset, DateTimeOffset?, bool)`](#memberroleoverviewtroleid-datetimeoffset-datetimeoffset-bool) | The primary constructor: the type's summary says what it makes. |
-| `TRoleId Role { get; init; }` | The role. |
-| `DateTimeOffset StartsAt { get; init; }` | When the role starts to count. |
-| `DateTimeOffset? EndsAt { get; init; }` | When it stops, or `null`. |
-| `bool AppliesNow { get; init; }` | Whether it counts now: its own period applies, and so does the membership it is held in. |
-
-#### `MemberRoleOverview(TRoleId, DateTimeOffset, DateTimeOffset?, bool)`
-
-```csharp
-public MemberRoleOverview(
-    TRoleId Role,
-    DateTimeOffset StartsAt,
-    DateTimeOffset? EndsAt,
-    bool AppliesNow)
-```
-
-The primary constructor: the type's summary says what it makes.
-
-**Parameters**
-
-- `Role`: The role.
-- `StartsAt`: When the role starts to count.
-- `EndsAt`: When it stops, or `null`.
-- `AppliesNow`: Whether it counts now: its own period applies, and so does the membership it is held in.
-
-## Starter roles
-
-Namespace `DDDToolkit.Supporting.Membership.UseCases`.
-
-### `StarterRoles`
-
-```csharp
-public static class StarterRoles
-```
-
-The first roles of a resource whose roles a customer makes ([`Roles.Custom`](rules.md#customireadonlylistdeclaredrole-otherpermissions)): the starter roles its rules declare, each made once into a row a customer can rename, give other permissions and archive.
-
-Roles are kept in scopes the package does not know: one set for each customer of an application, or one for the whole of it. So the application says which scope it means by handing over the roles that scope has, and makes the ones that are missing with its own constructor, which sets what it added:
-
-```csharp
-var existing = await db.PlotRoles.Where(role => role.GardenId == garden).ToListAsync(cancellationToken);
-foreach (var draft in StarterRoles.Missing(PlotMembership.Rules, existing))
-{
-    db.PlotRoles.Add(new PlotRole(PlotRoleId.Create(), garden, draft));
-}
-```
-
-Asked again for the same scope, it answers nothing: a starter role is made once, and is told by what it was made from ([`CustomRoleAggregate.MadeFrom`](resource-and-members.md#customrole-customroleaggregatetroleid)), not by its name, so a role a customer renamed or archived is not made a second time. Two requests that ask at the same moment are kept apart by a unique index the application declares over its scope and that property.
-
-| Member | Summary |
-|---|---|
-| [`Missing(MembershipRules, IEnumerable<CustomRoleAggregate<TRoleId>>)`](#missingmembershiprules-ienumerablecustomroleaggregatetroleid) | The starter roles a scope does not have yet, each as the draft its role is made from: its name as the rules declare it, the permissions the rules let it give, and the starter role it is, in the order the rules declare them. |
-
-#### `Missing(MembershipRules, IEnumerable<CustomRoleAggregate<TRoleId>>)`
-
-```csharp
-public static IReadOnlyList<CustomRoleDraft> Missing<TRoleId>(
-    MembershipRules rules,
-    IEnumerable<CustomRoleAggregate<TRoleId>> rolesOfTheScope)
-    where TRoleId : struct, IEntityId, IEquatable<TRoleId>
-```
-
-The starter roles a scope does not have yet, each as the draft its role is made from: its name as the rules declare it, the permissions the rules let it give, and the starter role it is, in the order the rules declare them.
-
-**Parameters**
-
-- `rules`: The rules of the resource the roles are of.
-- `rolesOfTheScope`: Every role the scope has, archived ones included.
-
-**Type parameters**
-
-- `TRoleId`: The application's id of a role.
-
-**Exceptions**
-
-- `ArgumentNullException`: `rules` or `rolesOfTheScope` is null.
-- `ArgumentException`: The rules do not say a customer makes the resource's roles.
 
 ## Access manager
 
@@ -1223,7 +1960,7 @@ public sealed record LeaveCrew([OnResource] ProjectId Project, [OrOwn] SeatId Se
 
 is `AccessRequirement.Any(AccessRequirement.All(AccessRequirement.Own(request.Seat), MemberAccess.Sees(ProjectPermissionNames.ManageCrew, request.Project)), MemberAccess.On(ProjectPermissionNames.ManageCrew, request.Project))`. Either way the project's check reads the project, a caller on its own needs only to see it, compares the version [`ExpectedVersionAttribute`](#expectedversionattribute) marks, and keeps what the expert hold holds the save to. The handler still finds the seat on that resource, and refuses one that is not: the caller's own lets it act on itself, not on a resource it has nothing to do with.
 
-Where a permission on the resource locks the members ([`MembershipRules.MembersLockPermission`](rules.md#memberslockpermission)), a database that checks every row lets a member row change only for a caller that holds that permission, so a caller who takes itself off without it is refused there. The handler then saves the caller's own place as the application's own work, begun for that caller once its request is the one in hand (`RequestInHand`): the check decided it.
+Where a permission on the resource manages the members ([`MembershipRules.ManagesMembersPermission`](rules.md#managesmemberspermission)), a database that checks every row lets a member row change only for a caller that holds that permission, so a caller who takes itself off without it is refused there. The handler then saves the caller's own place as the application's own work, begun for that caller once its request is the one in hand (`RequestInHand`): the check decided it.
 
 ### `ExpectedVersionAttribute`
 

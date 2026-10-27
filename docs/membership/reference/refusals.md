@@ -42,6 +42,7 @@ The texts say "member" and "role" and never what the resource is: a resource tha
 | `OwnerProtected = "membership.owner-protected"` | The change would take the owner off the member list, or give the owner a role: the owner stays a member, with no end, and holds what it holds by owning the resource, not through a role. |
 | `AlreadyOwner = "membership.already-owner"` | The member named owner is the owner already. |
 | `InvalidPeriod = "membership.invalid-period"` | A membership, or a role, would end at or before its start. Argument: `Field`, which is `until`. |
+| `RoleNotFound = "membership.role-not-found"` | The role is not one the caller may see among the roles kept for the resource: it does not exist, or is another customer's. Argument: `Role`. |
 | `RoleIsArchived = "membership.role-archived"` | The role is archived: it gives nothing, and it is not renamed, given permissions or archived again. |
 | `RoleNameInvalid = "membership.role-name-invalid"` | A role's name is blank or too long, or its description is too long. Arguments: `Min`, `Max`, and `Field`, which is `name` or `description`. |
 | `PermissionNotForMembers = "membership.permission-not-for-members"` | A role would give a permission the resource's rules do not let a member's role give. Arguments: `Permissions`, the permissions refused, and `Field`, which is `permissions`. |
@@ -110,7 +111,7 @@ And a resource that has a word of its own for a member has a client read the mem
 MembershipCodes.Under("folders").WithMemberArgument("Staff");
 ```
 
-A resource has its own codes because an application may have several kinds of resource with members, and a client should read from a code which one refused it. The member list of a resource refuses with them ([`MemberList<TMember, TId, TMemberId, TRoleId>`](resource-and-members.md#memberlisttmember-tid-tmemberid-troleid)), and so do the access questions and the admission of that resource, which read them from its rules. Declare them once, where the aggregate can reach them, and hand the same instance to both: a static property of the aggregate, which the member list the package's generator writes there is made with, and which the rules take as their `codes`.
+A resource has its own codes because an application may have several kinds of resource with members, and a client should read from a code which one refused it. The member list of a resource refuses with them ([`MemberList<TMember, TId, TMemberId, TRoleId>`](resource-and-members.md#memberlisttmember-tid-tmemberid-troleid)), and so do the access questions and the member manager of that resource, which read them from its rules. Declare them once, where the aggregate can reach them, and hand the same instance to both: a static property of the aggregate, which the member list the package's generator writes there is made with, and which the rules take as their `codes`.
 
 The kind and the English text of a refusal are the package's whatever its code. For the reader's language the package ships its texts in English and Dutch, and whatever registers the resource offers them under this resource's codes ([`TextKeys`](#membershipcodes)), so an application that localizes its failures adds no line for them. A resource file of the application's own for these codes, in its own words, is asked first.
 
@@ -186,7 +187,7 @@ public MembershipCodes WithMemberArgument(string name)
 
 The same codes, for a resource whose refusals carry the member in an argument called `name` instead of [`DefaultMemberArgument`](#membershipcodes): a resource that has a word of its own for a member, or whose clients read that argument already. What a client reads from a refusal is its code and its arguments, so a resource's own words go for both.
 
-Every refusal of this resource then carries the member under that name, whoever makes it: the member list, the admission, the two checks of the whole list. The one rule a member checks by itself keeps [`DefaultMemberArgument`](#membershipcodes), as it keeps the package's name for the rule: a member does not know whose it is.
+Every refusal of this resource then carries the member under that name, whoever makes it: the member list, the member manager, the two checks of the whole list. The one rule a member checks by itself keeps [`DefaultMemberArgument`](#membershipcodes), as it keeps the package's name for the rule: a member does not know whose it is.
 
 **Parameters**
 

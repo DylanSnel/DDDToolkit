@@ -117,7 +117,7 @@ const sidebars = {
               items: [
                 'membership/reference/resource-and-members',
                 'membership/reference/rules',
-                'membership/reference/use-cases',
+                'membership/reference/managers',
                 'membership/reference/refusals',
                 'membership/reference/entity-framework',
                 'membership/reference/postgres',

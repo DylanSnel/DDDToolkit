@@ -102,7 +102,7 @@ public partial class Order { }
 | [Membership: design and limits](docs/membership/design.md) | Why each piece of a resource with members is yours to write, and what the package does not do |
 | [Membership API: resource and members](docs/membership/reference/resource-and-members.md) | Generated from the code: the member template and its member list, periods and roles held, what the resource's class says, and the custom role template |
 | [Membership API: rules and permissions](docs/membership/reference/rules.md) | Generated from the code: `MembershipRules`, where the roles come from, the permissions on a resource and their settings, reach from above, and who a member is |
-| [Membership API: use cases and access](docs/membership/reference/use-cases.md) | Generated from the code: the admission, the overviews, starter roles, `MembershipAccessManager`, the requirements and the resource access contracts |
+| [Membership API: managers and access](docs/membership/reference/managers.md) | Generated from the code: the member manager, the role manager, who may be a member, `MembershipAccessManager`, the requirements and the resource access contracts |
 | [Membership API: refusals](docs/membership/reference/refusals.md) | Generated from the code: every refusal code, the codes of one resource, and their texts |
 | [Membership API: Entity Framework](docs/membership/reference/entity-framework.md) | Generated from the code: the public API of the Entity Framework package |
 | [Membership API: Postgres](docs/membership/reference/postgres.md) | Generated from the code: the public API of the Postgres package |

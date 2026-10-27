@@ -111,31 +111,31 @@ The check stops the host from starting when any of these is true:
 - A lock policy is missing for a role, or the owner trigger is missing or disabled.
 - The role table of roles a customer makes has no RLS, and a role that may call the functions may write it.
 
-The check logs a warning for a resource whose rules mark no `LocksMembers` permission, no `LocksOwner` permission, or
-neither.
+The check logs a warning for a resource whose rules mark no `ManagesMembers` permission, no `NamesOwner` permission,
+or neither.
 
 ### Who writes the member rows
 
 The database cannot tell which command wrote a row. A caller whom your rule lets change a resource could write its
 member rows and its owner column with a statement of its own. That caller could give itself a role, or take the
-resource. So you mark the permissions your commands require (`documents.share` on
-[the document](resources-and-members.md#a-document-and-the-people-it-is-shared-with)), and the package writes a lock
-from the marks:
+resource. The permissions the member manager requires (`documents.share` on
+[the document](resources-and-members.md#a-document-and-the-people-it-is-shared-with)) are marked, and the package
+writes a lock from the same marks:
 
 | The permissions mark | The database then has |
 |---|---|
-| `LocksMembers` | A restrictive policy on both member tables. A row changes only on a resource where the caller holds that permission, or the permission that locks the owner, because naming an owner writes member rows too. |
-| `LocksMembers`, where a [customer makes the roles](permissions-and-roles.md#roles-a-customer-makes) | A second policy, on the roles a member holds. A role that is added or changed must be one the caller sees in your role table, read as the caller. |
-| `LocksOwner` | A trigger. A statement that leaves a row with another owner is refused, unless the caller held that permission before the statement. A new row had no owner, so your create rule decides whom it names. |
+| `ManagesMembers` | A restrictive policy on both member tables. A row changes only on a resource where the caller holds that permission, or the permission marked `NamesOwner`, because naming an owner writes member rows too. |
+| `ManagesMembers`, where a [customer makes the roles](permissions-and-roles.md#roles-a-customer-makes) | A second policy, on the roles a member holds. A role that is added or changed must be one the caller sees in your role table, read as the caller. |
+| `NamesOwner` | A trigger. A statement that leaves a row with another owner is refused, unless the caller held that permission before the statement. A new row had no owner, so your create rule decides whom it names. |
 | either mark, with `reachFromAbove` | Nothing extra about where a resource hangs. The lock checks what the caller holds there when the statement runs. |
 
-- **You still decide who may change the members.** No code of the package gates a command by the marks.
-- **When your command allows a change that the lock refuses, the handler makes the change as system work and names
-  who acts.** Leaving a document is an example. The command requires `documents.leave`, marked
-  `EveryMember = true`. The lock refuses the member a write to its own row. So the handler removes the row as system
-  work begun for the member. With Tenancy, the handler calls
-  `access.BeginSystemIn(tenant, actingSeat: caller, scope: "documents")` on `TenancyAccessManager`. The history then
-  names who left. The sample's `OwnPlaceOnTheCrew` does this.
+- **The member manager and the lock check the same permission.** The manager refuses a caller without it before
+  anything is written. The lock refuses a statement that went round the manager.
+- **A change the lock would refuse to the caller itself is saved as the resource's own work.** Leaving a document is
+  an example. The lock refuses the member a write to its own row, because the member does not hold `documents.share`.
+  So the member manager saves the leave as system work in the resource's scope, begun for the member, when the request
+  in hand was checked for this document ([The caller's own place](resources-and-members.md#the-callers-own-place)).
+  With Tenancy, that work names the member's seat, so the history names who left.
 - **Three columns need a rule of yours:**
   - *The owner of a new resource.* Your create rule says whom a caller may name as owner. That is the caller itself,
     unless the caller may name owners (tutorial step 4, and the sample's `SeatsOpenProjectsWhereTheyMay`).
@@ -152,10 +152,10 @@ from the marks:
 - **The lock policies are restrictive.** They narrow what your rules allow and grant nothing on their own. They apply
   to every database role that may call the functions. Work in a scope the rules do not name writes no member row and
   names no owner. System work and the table owner are not checked.
-- **Without either mark**, the member rows follow your rule for changing the resource, and the start-up check warns
-  for each resource. That is safe when your rule admits only those who may change the members and the owner, or when
-  no caller reaches the database past your application. `LocksMembers` without `LocksOwner` leaves a gap. A caller who
-  makes itself owner then holds the other permissions by owning.
+- **Without either mark**, the member manager changes the members only for system work. The member rows follow your
+  rule for changing the resource, and the start-up check warns for each resource. `ManagesMembers` without
+  `NamesOwner` leaves a gap. A caller who makes itself owner by a statement of its own then holds the other
+  permissions by owning.
 - **A refusal is `access.refused`, a 403.** The trigger refuses the way the toolkit's guards do: SQL state `42501`,
   the trigger's name as the constraint (`documents_owner_stays`), and the toolkit's hint
   ([When the database refuses](../row-level-security.md#when-the-database-refuses)).
@@ -164,9 +164,9 @@ from the marks:
     row names the owner. So a rule over `DocumentsISee.Ids()` lets the owner write the member rows of a resource it
     has just opened. Where callers open resources as themselves, let the owner hold the locking permission.
   - An owner who holds the permissions only by owning loses them once the owner column changes. The rest of that
-    hand-over is then no longer the old owner's to write. So save an owner's own hand-over as system work, once your
-    command's check passed (`RequestInHand.Current.Request` is the command). A caller who holds the permission
-    through a role or from above saves the hand-over as itself.
+    hand-over is then no longer the old owner's to write. So the member manager saves an owner's own hand-over as
+    the resource's own work, once the command's check passed. A caller who holds the permission through a role or
+    from above saves the hand-over as itself.
 - **The lock is written only for a resource with row access rules.** Without rules, no role may call the functions
   and nobody reads a member row.
 
@@ -176,8 +176,8 @@ The functions run as their owner and find a role by its id, past your query filt
 another customer's resource behaves differently in two places. In your application it gives nothing. In the database
 functions it gives its permissions. Each writer is checked as follows:
 
-- **Your application** calls the admission, `RequireRoleAsync`, under your filter.
-- **A caller who writes rows directly** is checked by the lock, where a permission is marked `LocksMembers`. A role
+- **Your application** gives roles through the member manager, which checks the role under your filter.
+- **A caller who writes rows directly** is checked by the lock, where a permission is marked `ManagesMembers`. A role
   the caller gives must be one it sees in your role table. So your read rule on that table says which customer a
   role belongs to, from the token or from a function of yours. Your rules also keep the resources a caller may change
   inside the same customer. Callers that change members need to read the roles they give and the roles on the rows
